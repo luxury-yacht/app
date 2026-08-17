@@ -179,16 +179,15 @@ func (r *recordingGovernorExecutor) teardown(clusterID string) bool {
 }
 
 // governorTestApp returns an app whose open-cluster set is exactly the supplied
-// selections, with the governor initialised and a known visible cluster.
+// live cluster runtimes, with the governor initialised and a known visible cluster.
 func governorTestApp(t *testing.T, selections []kubeconfigSelection, keepWarm int) (*App, []string) {
 	t.Helper()
 	app := newTestAppWithDefaults(t)
 	app.initGovernor()
 	app.governorPolicy = system.GovernorPolicy{KeepWarm: keepWarm}
 
-	// openClusterIDs derives the open set from selectedKubeconfigSelections, which
-	// validates each selection against availableKubeconfigs. Register them FIRST so
-	// the IDs derived here match those resolved during reconcile.
+	// Register discovery metadata first so clusterMetaForSelection derives the same
+	// stable IDs as the runtime entries consumed by RefreshCoordinator.
 	available := make([]KubeconfigInfo, 0, len(selections))
 	selStrings := make([]string, 0, len(selections))
 	for _, sel := range selections {
@@ -201,7 +200,13 @@ func governorTestApp(t *testing.T, selections []kubeconfigSelection, keepWarm in
 
 	clusterIDs := make([]string, 0, len(selections))
 	for _, sel := range selections {
-		clusterIDs = append(clusterIDs, app.clusterMetaForSelection(sel).ID)
+		meta := app.clusterMetaForSelection(sel)
+		clusterIDs = append(clusterIDs, meta.ID)
+		app.clusterClients[meta.ID] = &clusterClients{
+			meta:              meta,
+			kubeconfigPath:    sel.Path,
+			kubeconfigContext: sel.Context,
+		}
 	}
 	app.selectedKubeconfigs = selStrings
 	return app, clusterIDs

@@ -30,7 +30,7 @@ type mergedWatchedPath struct {
 }
 
 type kubeconfigWatcher struct {
-	app       *App
+	logger    *Logger
 	watcher   *fsnotify.Watcher
 	onChange  func([]string)
 	stopCh    chan struct{}
@@ -41,14 +41,14 @@ type kubeconfigWatcher struct {
 	fileFilters map[string]map[string]struct{}
 }
 
-func newKubeconfigWatcher(app *App, onChange func([]string)) (*kubeconfigWatcher, error) {
+func newKubeconfigWatcher(logger *Logger, onChange func([]string)) (*kubeconfigWatcher, error) {
 	fsWatcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
 	}
 
 	w := &kubeconfigWatcher{
-		app:         app,
+		logger:      logger,
 		watcher:     fsWatcher,
 		onChange:    onChange,
 		stopCh:      make(chan struct{}),
@@ -91,8 +91,8 @@ func (w *kubeconfigWatcher) eventLoop() {
 }
 
 func (w *kubeconfigWatcher) logWatcherError() {
-	if w.app != nil {
-		w.app.appLogs.logger.Warn("kubeconfig watcher error", logsources.KubeconfigWatcher)
+	if w.logger != nil {
+		w.logger.Warn("kubeconfig watcher error", logsources.KubeconfigWatcher)
 	}
 }
 
@@ -221,8 +221,8 @@ func (w *kubeconfigWatcher) reconcileWatchedDirectories(currentDirs, desiredDirs
 		if _, ok := currentDirs[dir]; ok {
 			continue
 		}
-		if err := w.watcher.Add(dir); err != nil && w.app != nil {
-			w.app.appLogs.logger.Warn("Failed to watch directory: "+dir, logsources.KubeconfigWatcher)
+		if err := w.watcher.Add(dir); err != nil && w.logger != nil {
+			w.logger.Warn("Failed to watch directory: "+dir, logsources.KubeconfigWatcher)
 		}
 	}
 }

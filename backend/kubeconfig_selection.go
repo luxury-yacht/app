@@ -74,7 +74,7 @@ func parseKubeconfigSelection(selection string) (kubeconfigSelection, error) {
 }
 
 // normalizeKubeconfigSelection ensures a selection has an explicit context when available.
-func (a *App) normalizeKubeconfigSelection(selection string) (kubeconfigSelection, error) {
+func (a *ClusterRuntimeManager) normalizeKubeconfigSelection(selection string) (kubeconfigSelection, error) {
 	parsed, err := parseKubeconfigSelection(selection)
 	if err != nil {
 		return kubeconfigSelection{}, err
@@ -83,8 +83,8 @@ func (a *App) normalizeKubeconfigSelection(selection string) (kubeconfigSelectio
 		return parsed, nil
 	}
 
-	a.kubeconfigsMu.RLock()
-	defer a.kubeconfigsMu.RUnlock()
+	a.discoveryMu.RLock()
+	defer a.discoveryMu.RUnlock()
 	for _, kc := range a.availableKubeconfigs {
 		if kc.Path == parsed.Path {
 			parsed.Context = kc.Context
@@ -96,9 +96,9 @@ func (a *App) normalizeKubeconfigSelection(selection string) (kubeconfigSelectio
 }
 
 // validateKubeconfigSelection ensures the selection matches a discovered kubeconfig context.
-func (a *App) validateKubeconfigSelection(selection kubeconfigSelection) error {
-	a.kubeconfigsMu.RLock()
-	defer a.kubeconfigsMu.RUnlock()
+func (a *ClusterRuntimeManager) validateKubeconfigSelection(selection kubeconfigSelection) error {
+	a.discoveryMu.RLock()
+	defer a.discoveryMu.RUnlock()
 	for _, kc := range a.availableKubeconfigs {
 		if kc.Path == selection.Path && kc.Context == selection.Context {
 			return nil
@@ -108,23 +108,23 @@ func (a *App) validateKubeconfigSelection(selection kubeconfigSelection) error {
 }
 
 // clusterMetaForSelection returns the cluster identity derived from a selection.
-func (a *App) clusterMetaForSelection(selection kubeconfigSelection) ClusterMeta {
+func (a *ClusterRuntimeManager) clusterMetaForSelection(selection kubeconfigSelection) ClusterMeta {
 	if selection.Path == "" {
 		return ClusterMeta{}
 	}
 
 	if selection.Context != "" {
-		a.kubeconfigsMu.RLock()
+		a.discoveryMu.RLock()
 		for _, kc := range a.availableKubeconfigs {
 			if kc.Path == selection.Path && kc.Context == selection.Context {
-				a.kubeconfigsMu.RUnlock()
+				a.discoveryMu.RUnlock()
 				return ClusterMeta{
 					ID:   fmt.Sprintf("%s:%s", kc.Name, kc.Context),
 					Name: kc.Context,
 				}
 			}
 		}
-		a.kubeconfigsMu.RUnlock()
+		a.discoveryMu.RUnlock()
 	}
 
 	filename := filepath.Base(selection.Path)
@@ -144,7 +144,7 @@ func (a *App) clusterMetaForSelection(selection kubeconfigSelection) ClusterMeta
 }
 
 // selectedKubeconfigSelections resolves the active kubeconfig selections with context names.
-func (a *App) selectedKubeconfigSelections() ([]kubeconfigSelection, error) {
+func (a *WorkspaceCoordinator) selectedKubeconfigSelections() ([]kubeconfigSelection, error) {
 	rawSelections := a.GetSelectedKubeconfigs()
 	if len(rawSelections) == 0 {
 		return nil, nil

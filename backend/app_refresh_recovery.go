@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -12,7 +13,27 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
 
-func (a *App) teardownRefreshSubsystem() {
+// ResetRuntimeState unpublishes refresh transports before clearing transient
+// resource caches and the app-owned cache tree. It is safe to call repeatedly.
+func (a *RefreshCoordinator) ResetRuntimeState() error {
+	if a == nil {
+		return nil
+	}
+	a.teardownRefreshSubsystem()
+	if a.resources != nil {
+		a.resources.clearCaches()
+	}
+	if a.preferences == nil {
+		return nil
+	}
+	cacheRoot, err := a.preferences.cacheDirPath()
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(cacheRoot)
+}
+
+func (a *RefreshCoordinator) teardownRefreshSubsystem() {
 	a.stopObjectCatalog()
 
 	a.stopRefreshRuntimeContext()
@@ -30,13 +51,10 @@ func (a *App) teardownRefreshSubsystem() {
 		a.shutdownRefreshSubsystem(subsystem)
 	}
 
-	a.refreshManager = nil
-
-	a.sharedInformerFactory = nil
-	a.apiExtensionsInformerFactory = nil
+	a.setTelemetryRecorder(nil)
 }
 
-func (a *App) shutdownRefreshSubsystem(subsystem *system.Subsystem) {
+func (a *RefreshCoordinator) shutdownRefreshSubsystem(subsystem *system.Subsystem) {
 	if subsystem == nil {
 		return
 	}
@@ -60,7 +78,7 @@ func (a *App) shutdownRefreshSubsystem(subsystem *system.Subsystem) {
 	}
 }
 
-func (a *App) stopRefreshPermissionRevalidation(clusterID string) {
+func (a *RefreshCoordinator) stopRefreshPermissionRevalidation(clusterID string) {
 	if a == nil || clusterID == "" {
 		return
 	}
@@ -71,7 +89,7 @@ func (a *App) stopRefreshPermissionRevalidation(clusterID string) {
 	delete(a.refreshPermissionCancels, clusterID)
 }
 
-func (a *App) clearRefreshPermissionCancels() {
+func (a *RefreshCoordinator) clearRefreshPermissionCancels() {
 	if a == nil || len(a.refreshPermissionCancels) == 0 {
 		return
 	}
@@ -83,12 +101,15 @@ func (a *App) clearRefreshPermissionCancels() {
 	}
 }
 
-func (a *App) handlePermissionIssues(issues []system.PermissionIssue) {
+func (a *RefreshCoordinator) handlePermissionIssues(issues []system.PermissionIssue) {
+	if a == nil || a.appLogs == nil || a.appLogs.Logger() == nil {
+		return
+	}
 	for _, issue := range issues {
 		if issue.Err == nil {
 			continue
 		}
-		a.appLogs.logger.Warn(
+		a.appLogs.Logger().Warn(
 			fmt.Sprintf("Refresh domain %s unavailable (%s): %v", issue.Domain, issue.Resource, issue.Err),
 			"Refresh",
 		)
@@ -110,27 +131,27 @@ type transportFailureState struct {
 // getTransportState returns the transport failure state for a given cluster,
 // creating a new one if it doesn't exist. This method is thread-safe and
 // lazily initializes the transportStates map if needed.
-func (a *App) getTransportState(clusterID string) *transportFailureState {
-	a.transportStatesMu.Lock()
-	defer a.transportStatesMu.Unlock()
-	if a.transportStates == nil {
-		a.transportStates = make(map[string]*transportFailureState)
+func (m *ClusterRuntimeManager) getTransportState(clusterID string) *transportFailureState {
+	m.transportStatesMu.Lock()
+	defer m.transportStatesMu.Unlock()
+	if m.transportStates == nil {
+		m.transportStates = make(map[string]*transportFailureState)
 	}
-	if a.transportStates[clusterID] == nil {
-		a.transportStates[clusterID] = &transportFailureState{}
+	if m.transportStates[clusterID] == nil {
+		m.transportStates[clusterID] = &transportFailureState{}
 	}
-	return a.transportStates[clusterID]
+	return m.transportStates[clusterID]
 }
 
 // recordClusterTransportFailure records a transport failure for a specific cluster.
 // If the failure threshold is reached within the time window, it triggers a
 // per-cluster rebuild. This isolates failures so one cluster's problems don't
 // affect others.
-func (a *App) recordClusterTransportFailure(clusterID, reason string, err error) {
-	if a == nil {
+func (m *ClusterRuntimeManager) recordClusterTransportFailure(clusterID, reason string, err error) {
+	if m == nil {
 		return
 	}
-	state := a.getTransportState(clusterID)
+	state := m.getTransportState(clusterID)
 	state.mu.Lock()
 
 	now := time.Now()
@@ -152,18 +173,27 @@ func (a *App) recordClusterTransportFailure(clusterID, reason string, err error)
 	state.mu.Unlock()
 
 	if shouldTrigger {
-		a.appLogs.logger.Warn(fmt.Sprintf("Transport connectivity degraded for cluster %s (%s); rebuilding", clusterID, reason), logsources.KubernetesClient, clusterID, a.clusterNameForID(clusterID))
-		go a.runClusterTransportRebuild(clusterID, reason, err)
+		m.logger.Warn(fmt.Sprintf("Transport connectivity degraded for cluster %s (%s); rebuilding", clusterID, reason), logsources.KubernetesClient, clusterID, m.clusterNameForID(clusterID))
+		cause := ""
+		if err != nil {
+			cause = err.Error()
+		}
+		m.intents.Publish(ClusterRuntimeIntent{
+			Kind:       ClusterRuntimeIntentTransportRebuild,
+			ClusterID:  clusterID,
+			Generation: m.intentGeneration.Add(1),
+			Cause:      reason + ": " + cause,
+		})
 	}
 }
 
 // recordClusterTransportSuccess records a successful transport operation for
 // a specific cluster, resetting its failure count.
-func (a *App) recordClusterTransportSuccess(clusterID string) {
-	if a == nil {
+func (m *ClusterRuntimeManager) recordClusterTransportSuccess(clusterID string) {
+	if m == nil {
 		return
 	}
-	state := a.getTransportState(clusterID)
+	state := m.getTransportState(clusterID)
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	state.failureCount = 0
@@ -171,7 +201,7 @@ func (a *App) recordClusterTransportSuccess(clusterID string) {
 
 // runClusterTransportRebuild performs a transport rebuild for a specific cluster.
 // It uses the existing rebuildClusterSubsystem which rebuilds only that cluster.
-func (a *App) runClusterTransportRebuild(clusterID, reason string, cause error) {
+func (a *WorkspaceCoordinator) runClusterTransportRebuild(clusterID, reason string, cause error) {
 	if err := a.runSelectionMutation(
 		fmt.Sprintf("cluster-transport-rebuild:%s", clusterID),
 		func(_ *selectionMutation) error {
@@ -182,7 +212,7 @@ func (a *App) runClusterTransportRebuild(clusterID, reason string, cause error) 
 	}
 }
 
-func (a *App) rebuildClusterTransport(clusterID, reason string, cause error) error {
+func (a *WorkspaceCoordinator) rebuildClusterTransport(clusterID, reason string, cause error) error {
 	state := a.getTransportState(clusterID)
 	defer func() {
 		state.mu.Lock()
@@ -192,8 +222,8 @@ func (a *App) rebuildClusterTransport(clusterID, reason string, cause error) err
 		state.mu.Unlock()
 	}()
 
-	if a.telemetryRecorder != nil {
-		a.telemetryRecorder.RecordTransportRebuild(fmt.Sprintf("cluster:%s - %s", clusterID, reason))
+	if recorder := a.currentTelemetryRecorder(); recorder != nil {
+		recorder.RecordTransportRebuild(fmt.Sprintf("cluster:%s - %s", clusterID, reason))
 	}
 	a.appLogs.logger.Info(fmt.Sprintf("Starting transport rebuild for cluster %s", clusterID), logsources.KubernetesClient, clusterID, a.clusterNameForID(clusterID))
 

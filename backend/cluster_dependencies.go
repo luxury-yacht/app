@@ -11,34 +11,36 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-type appResourceResolver struct {
-	app       *App
-	clusterID string
+type clusterRuntimeResourceResolver struct {
+	runtime        *ClusterRuntimeManager
+	clusterID      string
+	catalogService func(string) *objectcatalog.Service
 }
 
-func (r appResourceResolver) ResolveResourceForGVK(ctx context.Context, gvk schema.GroupVersionKind) (common.ResolvedResource, bool, error) {
-	if r.app == nil {
+func (r clusterRuntimeResourceResolver) ResolveResourceForGVK(ctx context.Context, gvk schema.GroupVersionKind) (common.ResolvedResource, bool, error) {
+	if r.catalogService != nil {
+		if service := r.catalogService(r.clusterID); service != nil {
+			return service.ResolveResourceForGVK(ctx, gvk)
+		}
+	}
+	if r.runtime == nil {
 		return common.ResolvedResource{}, false, nil
 	}
-	svc := r.app.objectCatalogServiceForCluster(r.clusterID)
-	if svc == nil {
-		resolver, ok := r.app.fallbackResourceResolverForCluster(r.clusterID)
-		if !ok {
-			return common.ResolvedResource{}, false, nil
-		}
-		return resolver.ResolveResourceForGVK(ctx, gvk)
+	resolver, ok := r.runtime.fallbackResourceResolverForCluster(r.clusterID)
+	if !ok {
+		return common.ResolvedResource{}, false, nil
 	}
-	return svc.ResolveResourceForGVK(ctx, gvk)
+	return resolver.ResolveResourceForGVK(ctx, gvk)
 }
 
-func (a *App) fallbackResourceResolverForCluster(clusterID string) (common.ResourceResolver, bool) {
-	if a == nil || strings.TrimSpace(clusterID) == "" {
+func (m *ClusterRuntimeManager) fallbackResourceResolverForCluster(clusterID string) (common.ResourceResolver, bool) {
+	if m == nil || strings.TrimSpace(clusterID) == "" {
 		return nil, false
 	}
-	a.clusterClientsMu.Lock()
-	defer a.clusterClientsMu.Unlock()
+	m.clusterClientsMu.Lock()
+	defer m.clusterClientsMu.Unlock()
 
-	clients := a.clusterClients[clusterID]
+	clients := m.clusterClients[clusterID]
 	if clients == nil {
 		return nil, false
 	}
@@ -50,7 +52,7 @@ func (a *App) fallbackResourceResolverForCluster(clusterID string) (common.Resou
 		Path:    clients.kubeconfigPath,
 		Context: clients.kubeconfigContext,
 	}
-	deps := a.resourceDependenciesForSelection(selection, clients, clusterID)
+	deps := m.resourceDependenciesForSelection(selection, clients, clusterID)
 	deps.ResourceResolver = nil
 	resolver := objectcatalog.NewResourceResolver(deps, deps.Logger)
 	clients.fallbackResourceResolver = resolver
@@ -58,12 +60,12 @@ func (a *App) fallbackResourceResolverForCluster(clusterID string) (common.Resou
 }
 
 // resourceDependenciesForClusterID resolves dependencies for a specific cluster selection.
-func (a *App) resourceDependenciesForClusterID(clusterID string) (common.Dependencies, bool) {
-	if a == nil || strings.TrimSpace(clusterID) == "" {
+func (m *ClusterRuntimeManager) resourceDependenciesForClusterID(clusterID string) (common.Dependencies, bool) {
+	if m == nil || strings.TrimSpace(clusterID) == "" {
 		return common.Dependencies{}, false
 	}
 
-	clients := a.clusterClientsForID(clusterID)
+	clients := m.clusterClientsForID(clusterID)
 	if clients == nil {
 		return common.Dependencies{}, false
 	}
@@ -73,11 +75,11 @@ func (a *App) resourceDependenciesForClusterID(clusterID string) (common.Depende
 		Context: clients.kubeconfigContext,
 	}
 
-	return a.resourceDependenciesForSelection(selection, clients, clusterID), true
+	return m.resourceDependenciesForSelection(selection, clients, clusterID), true
 }
 
 // resolveClusterDependencies ensures callers operate on a specific active cluster.
-func (a *App) resolveClusterDependencies(clusterID string) (common.Dependencies, string, error) {
+func (m *ClusterRuntimeManager) resolveClusterDependencies(clusterID string) (common.Dependencies, string, error) {
 	trimmed := strings.TrimSpace(clusterID)
 	if trimmed == "" {
 		return common.Dependencies{}, "", fmt.Errorf("cluster id is required")
@@ -85,7 +87,7 @@ func (a *App) resolveClusterDependencies(clusterID string) (common.Dependencies,
 
 	// Check auth state before returning dependencies.
 	// This prevents making requests to clusters with invalid auth.
-	clients := a.clusterClientsForID(trimmed)
+	clients := m.clusterClientsForID(trimmed)
 	if clients != nil && clients.authManager != nil && !clients.authManager.IsValid() {
 		clusterName := trimmed
 		if clients.meta.Name != "" {
@@ -94,11 +96,15 @@ func (a *App) resolveClusterDependencies(clusterID string) (common.Dependencies,
 		return common.Dependencies{}, "", fmt.Errorf("auth failed for %s: check your kubeconfig credentials", clusterName)
 	}
 
-	deps, ok := a.resourceDependenciesForClusterID(trimmed)
+	deps, ok := m.resourceDependenciesForClusterID(trimmed)
 	if !ok {
 		return common.Dependencies{}, "", fmt.Errorf("cluster %s not active", trimmed)
 	}
 	deps.Logger = applog.OperationScoped(deps.Logger, applog.NextOperationID("wails"))
 
 	return deps, trimmed, nil
+}
+
+func (m *ClusterRuntimeManager) ResolveClusterDependencies(clusterID string) (common.Dependencies, string, error) {
+	return m.resolveClusterDependencies(clusterID)
 }

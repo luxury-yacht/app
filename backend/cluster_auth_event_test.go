@@ -18,6 +18,7 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	reporter := &recordingErrorReporter{}
 	app.appLogs = NewAppLogService(NewLogger(100, reporter))
+	app.ClusterRuntimeManager.logger = app.appLogs.Logger()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	setTestAppRuntimeReady(t, app, ctx)
@@ -28,7 +29,7 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 		data ClusterAuthEvent
 	}
 	var mu sync.Mutex
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.ClusterRuntimeManager.emitEvent = func(name string, args ...interface{}) {
 		mu.Lock()
 		defer mu.Unlock()
 		var data ClusterAuthEvent
@@ -102,7 +103,7 @@ func TestHandleClusterAuthStateChange_RecoveringEmitsEvent(t *testing.T) {
 		data ClusterAuthEvent
 	}
 	var mu sync.Mutex
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.ClusterRuntimeManager.emitEvent = func(name string, args ...interface{}) {
 		mu.Lock()
 		defer mu.Unlock()
 		var data ClusterAuthEvent
@@ -162,7 +163,7 @@ func TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent(t *testing.T) {
 		data ClusterAuthEvent
 	}
 	var mu sync.Mutex
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.ClusterRuntimeManager.emitEvent = func(name string, args ...interface{}) {
 		mu.Lock()
 		defer mu.Unlock()
 		var data ClusterAuthEvent
@@ -207,6 +208,7 @@ func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundClust
 	app := newTestAppWithDefaults(t)
 	reporter := &recordingErrorReporter{}
 	app.appLogs = NewAppLogService(NewLogger(100, reporter))
+	app.ClusterRuntimeManager.logger = app.appLogs.Logger()
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.governorVisible = "cluster-foreground"
 	app.clusterLifecycle = newClusterLifecycle(nil)
@@ -218,7 +220,7 @@ func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundClust
 	}
 
 	var failedPayload ClusterAuthEvent
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.ClusterRuntimeManager.emitEvent = func(name string, args ...interface{}) {
 		if name == "cluster:auth:failed" && len(args) == 1 {
 			failedPayload, _ = args[0].(ClusterAuthEvent)
 		}
@@ -256,6 +258,9 @@ func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundClust
 func TestHandleClusterAuthStateChange_QueuesRecoveringMutationOutsideManagerLock(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	setTestAppRuntimeReady(t, app, context.Background())
+	consumerCtx, cancelConsumer := context.WithCancel(context.Background())
+	t.Cleanup(cancelConsumer)
+	go app.ClusterRuntimeManager.intents.Consume(consumerCtx, app.WorkspaceCoordinator.consumeClusterRuntimeIntent)
 	app.selectionMutationMu.Lock()
 	selectionLocked := true
 	defer func() {
@@ -299,7 +304,7 @@ func TestHandleClusterAuthStateChange_QueuesRecoveringMutationOutsideManagerLock
 func TestHandleClusterAuthStateChange_UnknownStateNoOp(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.eventEmitter = func(context.Context, string, ...interface{}) {
+	app.ClusterRuntimeManager.emitEvent = func(string, ...interface{}) {
 		require.Fail(t, "unknown auth state emitted an event")
 	}
 
@@ -323,9 +328,9 @@ func TestExecuteClusterAuthMutationRejectsCancelledAndUnknownCommands(t *testing
 
 // TestHandleClusterAuthStateChange_NilAppNoOp verifies the nil-receiver guard.
 func TestHandleClusterAuthStateChange_NilAppNoOp(t *testing.T) {
-	var app *App
+	var manager *ClusterRuntimeManager
 	// Should not panic.
-	app.handleClusterAuthStateChange("any-cluster", authstate.StateInvalid, authstate.FailureDiagnostic{Reason: "reason"})
+	manager.handleClusterAuthStateChange("any-cluster", authstate.StateInvalid, authstate.FailureDiagnostic{Reason: "reason"})
 }
 
 // TestHandleClusterAuthStateChange_EmptyClusterIDNoOp verifies the empty clusterID guard.
@@ -336,7 +341,7 @@ func TestHandleClusterAuthStateChange_EmptyClusterIDNoOp(t *testing.T) {
 	setTestAppRuntimeReady(t, app, ctx)
 
 	eventCalled := false
-	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
+	app.ClusterRuntimeManager.emitEvent = func(string, ...interface{}) {
 		eventCalled = true
 	}
 

@@ -517,11 +517,11 @@ func TestWailsTransportEventsAndPeerHooksHaveOneCompositionOwner(t *testing.T) {
 			owners: []string{"backend/events.go"},
 		},
 		"degraded health event producer": {
-			marker: "a.emitEvent(clusterHealthDegradedEventName",
+			marker: "m.emitEvent(clusterHealthDegradedEventName",
 			owners: []string{"backend/app_heartbeat.go"},
 		},
 		"healthy health event producer": {
-			marker: "a.emitEvent(clusterHealthHealthyEventName",
+			marker: "m.emitEvent(clusterHealthHealthyEventName",
 			owners: []string{"backend/app_heartbeat.go"},
 		},
 		"scope event producer": {

@@ -21,8 +21,10 @@ checker, so the SSAR cache resets with it
 `allowedNamespaces` section: it owns the shared settings document, file lock,
 and atomic persistence. Namespace validation, `Get/SetClusterAllowedNamespaces`,
 scope revision/health replay, coalescing, and the persist-before-rebuild
-workflow remain workspace/refresh responsibilities. Repository ownership must
-not turn Preferences into the namespace-scope orchestrator.
+workflow belong to `WorkspaceCoordinator`, with replay state stored in the leaf
+`ClusterWorkspaceProjection` and subsystem work delegated to
+`RefreshCoordinator`. Repository ownership must not turn Preferences into the
+namespace-scope orchestrator.
 
 ## The source-scope rule
 
@@ -121,8 +123,9 @@ not turn Preferences into the namespace-scope orchestrator.
 
 ## Scope-change convergence (the `cluster:scope:changed` event)
 
-A scope edit persists first, then rebuilds the cluster's subsystem through
-the coordinated selection-mutation path (rapid edits coalesce: a queued
+A scope edit is sequenced by `WorkspaceCoordinator`: it persists through
+`PreferencesService` first, then rebuilds the cluster's subsystem through the
+coordinated selection-mutation path (rapid edits coalesce: a queued
 rebuild absorbs later edits; one that already started queues a fresh one).
 The frontend must NOT refetch on save — the rebuild takes seconds and an
 immediate fetch caches the stale pre-rebuild snapshot. Instead the backend

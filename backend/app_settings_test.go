@@ -1108,9 +1108,9 @@ func TestSettingsEffectDispatcherAllowsMissingReporter(t *testing.T) {
 }
 
 func TestApplyContainerLogsGlobalLimitSideEffectAllowsMissingLimiter(t *testing.T) {
-	var app *App
+	var refreshCoordinator *RefreshCoordinator
 	require.NotPanics(t, func() {
-		app.SetContainerLogsGlobalLimit(2)
+		refreshCoordinator.SetContainerLogsGlobalLimit(2)
 	})
 }
 

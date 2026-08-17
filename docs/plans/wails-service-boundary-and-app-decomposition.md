@@ -1093,21 +1093,21 @@ inside a subphase with split ownership.
 
 ### Phase 5A — Cluster runtime
 
-- [ ] Introduce `ClusterRuntimeManager` as the sole owner of kubeconfig
+- [x] Introduce `ClusterRuntimeManager` as the sole owner of kubeconfig
   discovery and watcher-path retargeting, cluster clients, auth state/recovery,
   cluster lifecycle, transport failure state, API metrics, cluster dependency
   resolution, heartbeat scheduling/probing, and typed health-event publication.
   It writes health changes through a projection sink and does not own replayable
   projection state.
-- [ ] Extract `ClusterWorkspaceProjection` as the leaf owner of
+- [x] Extract `ClusterWorkspaceProjection` as the leaf owner of
   `clusterWorkspaceMu`, `clusterWorkspaceRevision`, `clusterHealth`, and
   `clusterScopeRevisions`. Give current cluster, selection, governor, lifecycle,
   and scope workflows narrow change/health/scope/cleanup sinks; move no source
   owner's clients, selections, or subsystem state into the projection.
-- [ ] Promote the existing `clusterLifecycle` and
+- [x] Promote the existing `clusterLifecycle` and
   `kubernetesAPIMetricsRegistry` into that owner rather than duplicating their
   state machines or registries.
-- [ ] Replace the watcher/auth/transport callbacks that re-enter workspace
+- [x] Replace the watcher/auth/transport callbacks that re-enter workspace
   selection with the owner-local typed `ClusterRuntimeIntent` queue. Emit the
   three ledgered intent kinds with complete cluster identity, generation, paths,
   and cause/diagnostic data as applicable. Publication must remain non-blocking
@@ -1118,23 +1118,23 @@ inside a subphase with split ownership.
   existing serialized selection workflow in this phase; the cluster owner
   stores no App/workspace callback or back-pointer, and Phase 5C swaps only the
   consumer.
-- [ ] Replace the Phase 3 App-backed Kubernetes client rate-limit sink with
+- [x] Replace the Phase 3 App-backed Kubernetes client rate-limit sink with
   `ClusterRuntimeManager`. Supply the loaded QPS/burst as construction input for
   future clients and apply later settings-effect pushes to every existing
   client's mutable limiter, metrics registry entry, and REST configuration.
   The cluster owner must not read or call back into `PreferencesService`.
-- [ ] Keep `clusterOperationCoordinator` as an independent per-cluster
+- [x] Keep `clusterOperationCoordinator` as an independent per-cluster
   serialization primitive injected into the workflows that require it; do not
   turn it into a composition-root or owner back-pointer.
-- [ ] Expose one narrow rediscover-and-retarget operation for the current App
+- [x] Expose one narrow rediscover-and-retarget operation for the current App
   search-path workflow. It reports discovery/watcher outcomes without pruning
   workspace selections or calling refresh/operations/projection owners; Phase
   5C makes `WorkspaceCoordinator` its final caller.
-- [ ] Let the current `App` orchestrate the extracted cluster owner until Phase
+- [x] Let the current `App` orchestrate the extracted cluster owner until Phase
   5C, but delete every displaced cluster field, lock, and implementation method
   from `App` in this subphase. Delete the displaced projection fields and lock
   too; no client, auth, health, or scope-revision state may be mirrored.
-- [ ] Replace every App-backed cluster-runtime collaborator already held by an
+- [x] Replace every App-backed cluster-runtime collaborator already held by an
   extracted component, not only the settings sink or `DesktopService`: rewire
   `OperationsCoordinator` dependency resolution/retry, `ResourceGateway`
   dependency resolution and transport-health recording, and every additional
@@ -1143,18 +1143,18 @@ inside a subphase with split ownership.
   to call those same manager interfaces rather than implementing cluster
   behavior itself. Refresh construction/readiness is the only permitted
   cluster-runtime consumer deferred to Phase 5B.
-- [ ] Replace every App-backed `DesktopService` collaborator assigned to
+- [x] Replace every App-backed `DesktopService` collaborator assigned to
   `ClusterRuntimeManager` in the Phase 0 command ledger; record an explicit
   empty set if no frontend command belongs directly to this owner.
-- [ ] Preserve the readiness gate that blocks dependent refresh/resource work
+- [x] Preserve the readiness gate that blocks dependent refresh/resource work
   before clients are ready while allowing discovery, client construction, and
   auth recovery needed to reach readiness.
-- [ ] Preserve lock ordering and keep client construction, callbacks, and
+- [x] Preserve lock ordering and keep client construction, callbacks, and
   teardown outside unrelated state locks.
-- [ ] Move affected direct-App cluster tests and test-only entry points to a
+- [x] Move affected direct-App cluster tests and test-only entry points to a
   `ClusterRuntimeManager` fixture, retaining explicit composition tests for the
   readiness boundary, and record the remaining counts.
-- [ ] Update `docs/architecture/multi-cluster.md` with
+- [x] Update `docs/architecture/multi-cluster.md` with
   `ClusterRuntimeManager` and `ClusterWorkspaceProjection` ownership,
   dependency readiness, auth recovery, lifecycle/metrics/heartbeat ownership,
   kubeconfig discovery/watcher retargeting, initial/live client rate-limit
@@ -1163,7 +1163,7 @@ inside a subphase with split ownership.
   collaborators. Update
   `docs/architecture/application-lifecycle.md` with heartbeat/projection startup
   and teardown ordering.
-- [ ] Prove discovery, no-selection startup, dependency readiness, transport
+- [x] Prove discovery, no-selection startup, dependency readiness, transport
   failure, health classification/events/replay, aggregate revision consistency,
   auth failure/recovery, non-blocking publication while the auth-manager lock is
   held, bounded/coalesced intent delivery, cancellation, stale-generation input,
@@ -1182,71 +1182,71 @@ cluster dependencies. Phase 5A is independently shippable.
 
 ### Phase 5B — Refresh runtime
 
-- [ ] Introduce `RefreshCoordinator` as the sole owner of the refresh manager,
+- [x] Introduce `RefreshCoordinator` as the sole owner of the refresh manager,
   atomically published service handler, subsystem maps, streams, governor,
   spill state, catalog runtimes, published refresh-domain `telemetryRecorder`,
   process-wide `containerLogsTargetLimiter` and
   `containerLogsTargetLimiterMu`, and refresh teardown.
-- [ ] Promote the existing `refreshServiceHandler` into that owner rather than
+- [x] Promote the existing `refreshServiceHandler` into that owner rather than
   adding a second handler-publication mechanism.
-- [ ] Inject narrow cluster-runtime dependencies from
+- [x] Inject narrow cluster-runtime dependencies from
   `ClusterRuntimeManager`, replacing every refresh construction/readiness
   collaborator explicitly deferred by Phase 5A, and inject the cache invalidator
   from `ResourceGateway`.
   Preserve the one-way flow `RefreshCoordinator` → `ResourceGateway`
   invalidation; `ResourceGateway` must not call back into refresh.
-- [ ] Inject the read-only `ContainerLogsSelectionPolicy` used by both pod-log
+- [x] Inject the read-only `ContainerLogsSelectionPolicy` used by both pod-log
   reads and live streams. It remains an independent leaf owner so this shared
   policy does not create a reverse `ResourceGateway` → `RefreshCoordinator`
   dependency alongside refresh-to-resource cache invalidation.
-- [ ] Let the current `App` orchestrate the extracted refresh owner until Phase
+- [x] Let the current `App` orchestrate the extracted refresh owner until Phase
   5C, but delete every displaced refresh, stream, governor, catalog-runtime,
   handler, limiter, and teardown field from `App` in this subphase. No
   subsystem, publication, or limiter state may be mirrored.
-- [ ] Replace every App-backed `DesktopService` lifecycle, HTTP, or command
+- [x] Replace every App-backed `DesktopService` lifecycle, HTTP, or command
   collaborator assigned to `RefreshCoordinator` in the Phase 0 ledger; record
   an explicit empty command set if refresh has no directly callable command.
-- [ ] Preserve atomic handler publication and stream-generation replacement
+- [x] Preserve atomic handler publication and stream-generation replacement
   before old producers stop, including unpublication before producer release.
-- [ ] Replace both Phase 3 App-backed refresh settings sinks with
+- [x] Replace both Phase 3 App-backed refresh settings sinks with
   `RefreshCoordinator`: global container target limit updates mutate the one
   shared limiter, while metrics-interval updates retime every connected
   subsystem. Supply the loaded metrics interval during future subsystem
   construction; neither sink reads or calls back into `PreferencesService`.
-- [ ] Replace the Phase 3 App-backed refresh/cache reset collaborator used by
+- [x] Replace the Phase 3 App-backed refresh/cache reset collaborator used by
   `DataManagementCoordinator`. It must stop/unpublish refresh producers before
   clearing refresh-owned spill/cache state, remain safe when called repeatedly,
   and expose no general refresh or filesystem interface.
-- [ ] Move `sharedContainerLogsTargetLimiter` with the limiter fields. Every
+- [x] Move `sharedContainerLogsTargetLimiter` with the limiter fields. Every
   subsystem receives the same process-wide instance; lazy construction starts
   at `defaultObjPanelLogsTargetGlobalLimit`; and the Phase 3 preferences sink
   immediately pushes the selected configured/default value after
   `EnsureLoaded`, atomic startup fallback, or update whether that happens
   before or after the first subsystem build.
-- [ ] Keep `containerLogsTargetLimiterMu` a leaf init lock. The accessor and
+- [x] Keep `containerLogsTargetLimiterMu` a leaf init lock. The accessor and
   `SetLimit` sink must not read settings, call `PreferencesService`, or acquire
   refresh/subsystem locks while it is held. `PreferencesService` releases its
   own lock before invoking the sink, and Refresh never pulls preferences.
-- [ ] Implement the metrics-interval sink by snapshotting subsystem pointers
+- [x] Implement the metrics-interval sink by snapshotting subsystem pointers
   under the refresh registry read lock, releasing that lock, and then calling
   each manager. It must not hold the subsystem-map lock across manager calls or
   call another settings-effect owner.
-- [ ] Move refresh-domain telemetry publication with the subsystem lifecycle and
+- [x] Move refresh-domain telemetry publication with the subsystem lifecycle and
   inject narrow telemetry recorder/snapshot collaborators into
   `ResourceGateway` and other consumers; do not put refresh telemetry under
   `ErrorReportingService` merely because both areas report diagnostics.
-- [ ] Replace current App-owned Attention synchronization with one-way
+- [x] Replace current App-owned Attention synchronization with one-way
   registration: `RefreshCoordinator` registers and unregisters each live
   cluster Attention-index target with `ClusterAttentionService`, which applies
   persisted and subsequent rules without retaining or calling refresh.
-- [ ] Route auth recovery through the same cluster/refresh lifecycle contracts;
+- [x] Route auth recovery through the same cluster/refresh lifecycle contracts;
   do not add a recovery-only subsystem-construction path.
-- [ ] Preserve lock ordering and keep informer/catalog startup, callbacks, and
+- [x] Preserve lock ordering and keep informer/catalog startup, callbacks, and
   teardown outside unrelated state locks.
-- [ ] Move affected direct-App refresh tests and test-only entry points to a
+- [x] Move affected direct-App refresh tests and test-only entry points to a
   `RefreshCoordinator` fixture, retaining explicit composition tests for
   cluster readiness and cache invalidation, and record the remaining counts.
-- [ ] Update `docs/architecture/refresh-system.md` with
+- [x] Update `docs/architecture/refresh-system.md` with
   `RefreshCoordinator` ownership, atomic handler/stream replacement, teardown,
   cluster dependencies, initial/live metrics cadence, settings-sink lock
   direction, refresh telemetry, Attention-target registration, and
@@ -1259,7 +1259,7 @@ cluster dependencies. Phase 5A is independently shippable.
   `docs/workflows/logs/container-logs.md` with the final global-limiter owner,
   the independent selection-policy dependency, shared instance,
   default-then-push startup, and lock-order contract.
-- [ ] Prove initial publication, refresh rebuild, stream replacement, auth
+- [x] Prove initial publication, refresh rebuild, stream replacement, auth
   recovery, cache invalidation, telemetry replacement, Attention target
   registration/removal, one shared limiter under concurrent subsystem builds,
   settings-load/update limit propagation in both startup orders, live and
@@ -1277,23 +1277,23 @@ explicit and acyclic. Phase 5B is independently shippable.
 
 ### Phase 5C — Workspace orchestration
 
-- [ ] Introduce `WorkspaceCoordinator` as the sole owner of peer-window
+- [x] Introduce `WorkspaceCoordinator` as the sole owner of peer-window
   selection sets, serialized selection mutations, generations/supersession,
   foreground intent, selection diagnostics, and aggregate workspace-state
   assembly. Move `selectionDiag` with all readers/writers and compose cluster,
   refresh, selection, foreground, and `ClusterWorkspaceProjection` snapshots
   without copying their state into the coordinator.
-- [ ] Assign `GetSelectionDiagnostics`, `GetClusterAllowedNamespaces`, and
+- [x] Assign `GetSelectionDiagnostics`, `GetClusterAllowedNamespaces`, and
   `SetClusterAllowedNamespaces`, and `SetKubeconfigSearchPaths` to the
   `WorkspaceCoordinator` command collaborator. Namespace-scope and search-path
   reads/writes use narrow repositories owned by `PreferencesService`; the
   coordinator owns their cross-owner mutation contracts.
-- [ ] Move `requestClusterScopeRebuildFn` and `scopeRebuildQueued` into the
+- [x] Move `requestClusterScopeRebuildFn` and `scopeRebuildQueued` into the
   workspace scope-change workflow. Preserve persist-before-rebuild, rapid-edit
   coalescing, serialized cluster operations, refresh teardown/rebuild, scope
   revision advancement through `ClusterWorkspaceProjection`, and final
   `cluster:scope:changed` emission in that order.
-- [ ] Replace the Phase 3 App-backed search-path workflow used by both
+- [x] Replace the Phase 3 App-backed search-path workflow used by both
   `SetKubeconfigSearchPaths` and settings import. Preserve serialized validation
   and persist-before-rediscovery, ask `ClusterRuntimeManager` to rediscover and
   retarget the watcher, classify removed selections, and then sequence refresh
@@ -1302,44 +1302,44 @@ explicit and acyclic. Phase 5B is independently shippable.
   Neither `PreferencesService`, `ClusterRuntimeManager`, nor
   `DataManagementCoordinator` may duplicate that sequence or call back into the
   workspace owner.
-- [ ] Make `WorkspaceCoordinator` call `ClusterRuntimeManager` and
+- [x] Make `WorkspaceCoordinator` call `ClusterRuntimeManager` and
   `RefreshCoordinator` in the documented order. Neither owner may call back
   into the coordinator or store a pointer to the other.
-- [ ] Replace the Phase 5A App intent consumer with `WorkspaceCoordinator` as the
+- [x] Replace the Phase 5A App intent consumer with `WorkspaceCoordinator` as the
   sole consumer of `ClusterRuntimeIntent`. Drain/coalesce kubeconfig-source,
   auth rebuild/teardown, and transport rebuild requests into the same serialized
   selection-mutation path used by commands; reject stale generations before
   side effects, retain `clusterId` through cleanup, and stop consumption before
   cluster-runtime shutdown. Do not replace the typed owner-local queue with a
   generic event bus or a callback stored by `ClusterRuntimeManager`.
-- [ ] Move selected-cluster startup onto the Phase 3 Preferences contract, not
+- [x] Move selected-cluster startup onto the Phase 3 Preferences contract, not
   the old raw loader: call atomic `EnsureLoadedForStartup()` before acquiring the
   selection-mutation lock, then restore the immutable selected-kubeconfig
   snapshot inside the serialized mutation. Do not reintroduce preference
   locking, a two-call fallback protocol, or load-effect dispatch inside
   Workspace.
-- [ ] Replace the Phase 3 App-backed workspace reset collaborator used by
+- [x] Replace the Phase 3 App-backed workspace reset collaborator used by
   `DataManagementCoordinator`. The workspace reset operation serializes against
   selection changes and sequences cluster, refresh, operation, and projection
   cleanup before durable owner reset begins; it does not delete persistence
   files itself.
-- [ ] Preserve per-window foreground demand and cluster-tab ownership; a shared
+- [x] Preserve per-window foreground demand and cluster-tab ownership; a shared
   cluster remains alive until its final peer releases it.
-- [ ] Preserve lock ordering and ensure no callbacks, client construction,
+- [x] Preserve lock ordering and ensure no callbacks, client construction,
   informer/catalog startup, or teardown occur while an unrelated state lock is
   held.
-- [ ] Route `ApplicationLifecycle` startup and shutdown through the extracted
+- [x] Route `ApplicationLifecycle` startup and shutdown through the extracted
   owners in the existing order, including operation cleanup before cluster
   teardown and refresh unpublication before producer release.
-- [ ] Delete the displaced workspace selection/generation state and remaining
+- [x] Delete the displaced workspace selection/generation state and remaining
   cluster/refresh orchestration methods from `App`; do not retain forwarding
   methods except the permanent `DesktopService` collaborator boundary.
-- [ ] Replace every App-backed `DesktopService` collaborator assigned to
+- [x] Replace every App-backed `DesktopService` collaborator assigned to
   `WorkspaceCoordinator` in the Phase 0 command ledger.
-- [ ] Move affected direct-App workspace tests and test-only entry points to a
+- [x] Move affected direct-App workspace tests and test-only entry points to a
   `WorkspaceCoordinator` fixture, retaining full runtime fixtures only for
   lifecycle and cross-owner ordering, and record the remaining counts.
-- [ ] Update `docs/architecture/application-lifecycle.md` and
+- [x] Update `docs/architecture/application-lifecycle.md` and
   `docs/architecture/multi-cluster.md` with `WorkspaceCoordinator` ownership,
   peer release, selection diagnostics, aggregate projection reads, selection
   ordering, kubeconfig-search-path persist/rediscover/prune ordering, atomic
@@ -1348,7 +1348,7 @@ explicit and acyclic. Phase 5B is independently shippable.
   cleanup, readiness, and application-shutdown sequencing. Update
   `docs/architecture/namespace-scope.md` with the preferences repository,
   workspace rebuild/coalescing owner, and unchanged convergence ordering.
-- [ ] Prove concurrent peer selection, superseded selection, foreground demand,
+- [x] Prove concurrent peer selection, superseded selection, foreground demand,
   selection diagnostics, namespace-scope persist/rebuild/event convergence,
   rapid-edit coalescing, search-path update/import discovery/watcher/pruning
   convergence, configured/default startup settings before selection, total-reset

@@ -154,8 +154,9 @@ type DesktopServiceLifecycle interface {
 }
 
 // DesktopServiceDependencies names every owner-shaped collaborator used by the
-// Wails transport boundary. The current App satisfies these independently until
-// each target owner is extracted in its planned phase.
+// Wails transport boundary. Commands, HTTP, and streams are supplied directly
+// by their focused owners; only process lifecycle remains on the composition
+// shell until that shell is retired.
 type DesktopServiceDependencies struct {
 	Favorites      FavoritesCommands
 	UIState        UIStateCommands

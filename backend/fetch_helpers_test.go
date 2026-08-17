@@ -175,7 +175,7 @@ func TestFetchClusterResourceRequiresObjectName(t *testing.T) {
 func TestFetchResourceRetriesOnTransientError(t *testing.T) {
 	fixture := newResourceGatewayFixture()
 	gateway := fixture.gateway
-	fixture.telemetry = telemetry.NewRecorder()
+	fixture.setTelemetryRecorder(telemetry.NewRecorder())
 
 	originalSleep := fetchRetrySleep
 	fetchRetrySleep = func(time.Duration) {}
@@ -203,7 +203,7 @@ func TestFetchResourceRetriesOnTransientError(t *testing.T) {
 func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
 	fixture := newResourceGatewayFixture()
 	gateway := fixture.gateway
-	fixture.telemetry = telemetry.NewRecorder()
+	fixture.setTelemetryRecorder(telemetry.NewRecorder())
 	var emitted *BackendErrorEvent
 	fixture.emitEvent = func(name string, args ...interface{}) {
 		if name == "backend-error" && len(args) > 0 {

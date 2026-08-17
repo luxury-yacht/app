@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -35,7 +36,7 @@ func TestKubeconfigWatcher_DetectsFileCreation(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	var called atomic.Int32
-	w, err := newKubeconfigWatcher(app, func(_ []string) {
+	w, err := newKubeconfigWatcher(app.appLogs.Logger(), func(_ []string) {
 		called.Add(1)
 	})
 	require.NoError(t, err)
@@ -52,7 +53,7 @@ func TestKubeconfigWatcher_FilenameFilter(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	changesCh := make(chan []string, 4)
-	w, err := newKubeconfigWatcher(app, func(paths []string) {
+	w, err := newKubeconfigWatcher(app.appLogs.Logger(), func(paths []string) {
 		changesCh <- paths
 	})
 	require.NoError(t, err)
@@ -93,7 +94,7 @@ func TestKubeconfigWatcher_DebounceAccumulatesPaths(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	changesCh := make(chan []string, 2)
-	w, err := newKubeconfigWatcher(app, func(paths []string) {
+	w, err := newKubeconfigWatcher(app.appLogs.Logger(), func(paths []string) {
 		changesCh <- paths
 	})
 	require.NoError(t, err)
@@ -287,6 +288,11 @@ func TestDeselectClusters_AbortsOnReconciliationFailure(t *testing.T) {
 	app.refreshAggregates.Store(nil)
 	app.refreshService.Store(nil)
 	setRefreshRuntimeContextForTest(app, nil)
+	originalBuilder := newRefreshSubsystemWithServices
+	newRefreshSubsystemWithServices = func(system.Config) (*system.Subsystem, error) {
+		return nil, errors.New("forced refresh reconciliation failure")
+	}
+	t.Cleanup(func() { newRefreshSubsystemWithServices = originalBuilder })
 
 	app.selectionMutationMu.Lock()
 	app.deselectClusters([]string{"b:ctx-b"})

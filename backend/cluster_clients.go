@@ -71,59 +71,59 @@ type clusterClientBuilder func(
 
 // setClusterClientLocked commits one client-map entry and its workspace
 // revision together. The caller must hold clusterClientsMu.
-func (a *App) setClusterClientLocked(clusterID string, clients *clusterClients) {
+func (a *ClusterRuntimeManager) setClusterClientLocked(clusterID string, clients *clusterClients) {
 	if a.clusterClients == nil {
 		a.clusterClients = make(map[string]*clusterClients)
 	}
 	a.clusterClients[clusterID] = clients
-	a.markClusterWorkspaceChanged()
+	a.projection.markClusterWorkspaceChanged()
 }
 
 // removeClusterClientLocked removes one client-map entry. The caller must hold
 // clusterClientsMu.
-func (a *App) removeClusterClientLocked(clusterID string) (*clusterClients, bool) {
+func (a *ClusterRuntimeManager) removeClusterClientLocked(clusterID string) (*clusterClients, bool) {
 	clients, ok := a.clusterClients[clusterID]
 	if !ok {
 		return nil, false
 	}
 	delete(a.clusterClients, clusterID)
-	a.markClusterWorkspaceChanged()
+	a.projection.markClusterWorkspaceChanged()
 	return clients, true
 }
 
 // clearClusterClientsLocked removes every client-map entry. The caller must
 // hold clusterClientsMu.
-func (a *App) clearClusterClientsLocked() {
+func (a *ClusterRuntimeManager) clearClusterClientsLocked() {
 	if len(a.clusterClients) == 0 {
 		return
 	}
 	a.clusterClients = make(map[string]*clusterClients)
-	a.markClusterWorkspaceChanged()
+	a.projection.markClusterWorkspaceChanged()
 }
 
-func (a *App) clusterClientsForID(clusterID string) *clusterClients {
-	if a == nil || clusterID == "" {
+func (m *ClusterRuntimeManager) clusterClientsForID(clusterID string) *clusterClients {
+	if m == nil || clusterID == "" {
 		return nil
 	}
-	a.clusterClientsMu.Lock()
-	defer a.clusterClientsMu.Unlock()
-	return a.clusterClients[clusterID]
+	m.clusterClientsMu.Lock()
+	defer m.clusterClientsMu.Unlock()
+	return m.clusterClients[clusterID]
 }
 
 // clusterClientsForSelection finds stored clients by matching the kubeconfig path
 // and context, regardless of what ID was derived. This handles cases where
 // clusterMetaForSelection re-derives a different ID than what was used at build time.
-func (a *App) clusterClientsForSelection(selection kubeconfigSelection) *clusterClients {
-	if a == nil {
+func (m *ClusterRuntimeManager) clusterClientsForSelection(selection kubeconfigSelection) *clusterClients {
+	if m == nil {
 		return nil
 	}
-	a.clusterClientsMu.Lock()
-	defer a.clusterClientsMu.Unlock()
-	return a.clusterClientsForSelectionLocked(selection)
+	m.clusterClientsMu.Lock()
+	defer m.clusterClientsMu.Unlock()
+	return m.clusterClientsForSelectionLocked(selection)
 }
 
-func (a *App) clusterClientsForSelectionLocked(selection kubeconfigSelection) *clusterClients {
-	for _, c := range a.clusterClients {
+func (m *ClusterRuntimeManager) clusterClientsForSelectionLocked(selection kubeconfigSelection) *clusterClients {
+	for _, c := range m.clusterClients {
 		if c != nil && c.kubeconfigPath == selection.Path && c.kubeconfigContext == selection.Context {
 			return c
 		}
@@ -132,21 +132,24 @@ func (a *App) clusterClientsForSelectionLocked(selection kubeconfigSelection) *c
 }
 
 // syncClusterClientPool builds missing clients for the provided selections and drops stale entries.
-func (a *App) syncClusterClientPool(selections []kubeconfigSelection) error {
+func (a *WorkspaceCoordinator) syncClusterClientPool(selections []kubeconfigSelection) error {
 	return a.syncClusterClientPoolWithContext(context.Background(), selections)
 }
 
 // syncClusterClientPoolWithContext builds missing clients for the provided selections and drops stale entries.
-func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections []kubeconfigSelection) error {
+func (a *WorkspaceCoordinator) syncClusterClientPoolWithContext(ctx context.Context, selections []kubeconfigSelection) error {
+	if a == nil {
+		return fmt.Errorf("workspace coordinator is nil")
+	}
 	return a.syncClusterClientPoolWithBuilder(ctx, selections, a.buildClusterClientsWithContext)
 }
 
-func (a *App) syncClusterClientPoolWithBuilder(
+func (a *WorkspaceCoordinator) syncClusterClientPoolWithBuilder(
 	ctx context.Context,
 	selections []kubeconfigSelection,
 	build clusterClientBuilder,
 ) error {
-	ctx, err := validateClusterClientSync(a, ctx, build)
+	ctx, err := validateClusterClientSync(a.ClusterRuntimeManager, ctx, build)
 	if err != nil {
 		return err
 	}
@@ -159,6 +162,31 @@ func (a *App) syncClusterClientPoolWithBuilder(
 	return nil
 }
 
+func (m *ClusterRuntimeManager) ensureClusterClientsForSelections(ctx context.Context, selections []kubeconfigSelection) error {
+	if m == nil {
+		return fmt.Errorf("cluster runtime manager is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	desired := m.desiredClusterClientSelections(selections)
+	tasks := m.clusterClientCreateTasks(desired)
+	return m.createClusterClients(ctx, tasks, m.buildClusterClientsWithContext)
+}
+
+func (m *ClusterRuntimeManager) snapshotClusterIDs() []string {
+	if m == nil {
+		return nil
+	}
+	m.clusterClientsMu.Lock()
+	defer m.clusterClientsMu.Unlock()
+	ids := make([]string, 0, len(m.clusterClients))
+	for clusterID := range m.clusterClients {
+		ids = append(ids, clusterID)
+	}
+	return ids
+}
+
 type clusterClientCreateTask struct {
 	selection kubeconfigSelection
 	meta      ClusterMeta
@@ -169,9 +197,9 @@ type removedClusterClient struct {
 	authManager interface{ Shutdown() }
 }
 
-func validateClusterClientSync(a *App, ctx context.Context, build clusterClientBuilder) (context.Context, error) {
-	if a == nil {
-		return nil, fmt.Errorf("app is nil")
+func validateClusterClientSync(runtime *ClusterRuntimeManager, ctx context.Context, build clusterClientBuilder) (context.Context, error) {
+	if runtime == nil {
+		return nil, fmt.Errorf("cluster runtime manager is nil")
 	}
 	if build == nil {
 		return nil, fmt.Errorf("cluster client builder is nil")
@@ -182,7 +210,7 @@ func validateClusterClientSync(a *App, ctx context.Context, build clusterClientB
 	return ctx, nil
 }
 
-func (a *App) desiredClusterClientSelections(selections []kubeconfigSelection) map[string]kubeconfigSelection {
+func (a *ClusterRuntimeManager) desiredClusterClientSelections(selections []kubeconfigSelection) map[string]kubeconfigSelection {
 	desired := make(map[string]kubeconfigSelection, len(selections))
 	for _, selection := range selections {
 		if existing := a.clusterClientsForSelection(selection); existing != nil {
@@ -197,7 +225,7 @@ func (a *App) desiredClusterClientSelections(selections []kubeconfigSelection) m
 	return desired
 }
 
-func (a *App) clusterClientCreateTasks(desired map[string]kubeconfigSelection) []clusterClientCreateTask {
+func (a *ClusterRuntimeManager) clusterClientCreateTasks(desired map[string]kubeconfigSelection) []clusterClientCreateTask {
 	a.clusterClientsMu.Lock()
 	missing := make([]kubeconfigSelection, 0, len(desired))
 	for id, selection := range desired {
@@ -217,7 +245,7 @@ func (a *App) clusterClientCreateTasks(desired map[string]kubeconfigSelection) [
 	return tasks
 }
 
-func (a *App) createClusterClients(ctx context.Context, tasks []clusterClientCreateTask, build clusterClientBuilder) error {
+func (a *ClusterRuntimeManager) createClusterClients(ctx context.Context, tasks []clusterClientCreateTask, build clusterClientBuilder) error {
 	a.markClusterClientTasksConnecting(tasks)
 	limit := clusterClientBuildConcurrencyLimit(len(tasks))
 	return parallel.ForEach(ctx, tasks, limit, func(taskCtx context.Context, task clusterClientCreateTask) error {
@@ -227,7 +255,7 @@ func (a *App) createClusterClients(ctx context.Context, tasks []clusterClientCre
 	})
 }
 
-func (a *App) markClusterClientTasksConnecting(tasks []clusterClientCreateTask) {
+func (a *ClusterRuntimeManager) markClusterClientTasksConnecting(tasks []clusterClientCreateTask) {
 	if a.clusterLifecycle == nil {
 		return
 	}
@@ -236,7 +264,7 @@ func (a *App) markClusterClientTasksConnecting(tasks []clusterClientCreateTask) 
 	}
 }
 
-func (a *App) buildAndInstallClusterClient(ctx context.Context, task clusterClientCreateTask, build clusterClientBuilder) error {
+func (a *ClusterRuntimeManager) buildAndInstallClusterClient(ctx context.Context, task clusterClientCreateTask, build clusterClientBuilder) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -264,7 +292,7 @@ func (a *App) buildAndInstallClusterClient(ctx context.Context, task clusterClie
 	return nil
 }
 
-func (a *App) clusterClientAlreadyInstalled(task clusterClientCreateTask) bool {
+func (a *ClusterRuntimeManager) clusterClientAlreadyInstalled(task clusterClientCreateTask) bool {
 	return a.clusterClientsForID(task.meta.ID) != nil || a.clusterClientsForSelection(task.selection) != nil
 }
 
@@ -274,7 +302,7 @@ func shutdownClusterClientAuthManager(clients *clusterClients) {
 	}
 }
 
-func (a *App) installClusterClient(task clusterClientCreateTask, clients *clusterClients) bool {
+func (a *ClusterRuntimeManager) installClusterClient(task clusterClientCreateTask, clients *clusterClients) bool {
 	a.clusterClientsMu.Lock()
 	defer a.clusterClientsMu.Unlock()
 	if a.clusterClients[task.meta.ID] != nil || a.clusterClientsForSelectionLocked(task.selection) != nil {
@@ -284,7 +312,7 @@ func (a *App) installClusterClient(task clusterClientCreateTask, clients *cluste
 	return true
 }
 
-func (a *App) removeUndesiredClusterClients(desired map[string]kubeconfigSelection) []removedClusterClient {
+func (a *ClusterRuntimeManager) removeUndesiredClusterClients(desired map[string]kubeconfigSelection) []removedClusterClient {
 	a.clusterClientsMu.Lock()
 	defer a.clusterClientsMu.Unlock()
 	var removed []removedClusterClient
@@ -305,7 +333,7 @@ func clusterClientAuthManager(clients *clusterClients) interface{ Shutdown() } {
 	return clients.authManager
 }
 
-func (a *App) cleanupRemovedClusterClients(removed []removedClusterClient) {
+func (a *WorkspaceCoordinator) cleanupRemovedClusterClients(removed []removedClusterClient) {
 	for _, item := range removed {
 		if item.authManager != nil {
 			item.authManager.Shutdown()
@@ -338,23 +366,27 @@ func clusterClientBuildConcurrencyLimit(taskCount int) int {
 	return limit
 }
 
-func (a *App) applyKubernetesClientRateLimits(qps, burst int) {
-	if a == nil {
+func (m *ClusterRuntimeManager) applyKubernetesClientRateLimits(qps, burst int) {
+	if m == nil {
 		return
 	}
 	qps = clampKubernetesClientQPS(qps)
 	burst = clampKubernetesClientBurst(burst)
+	m.rateLimitMu.Lock()
+	m.kubernetesQPS = qps
+	m.kubernetesBurst = burst
+	m.rateLimitMu.Unlock()
 
-	a.clusterClientsMu.Lock()
-	clients := make([]*clusterClients, 0, len(a.clusterClients))
-	for _, item := range a.clusterClients {
+	m.clusterClientsMu.Lock()
+	clients := make([]*clusterClients, 0, len(m.clusterClients))
+	for _, item := range m.clusterClients {
 		if item != nil {
 			clients = append(clients, item)
 		}
 	}
-	a.clusterClientsMu.Unlock()
+	m.clusterClientsMu.Unlock()
 
-	registry := a.ensureKubernetesAPIMetricsRegistry()
+	registry := m.ensureKubernetesAPIMetricsRegistry()
 	for _, item := range clients {
 		if item.rateLimiter != nil {
 			item.rateLimiter.Set(qps, burst)
@@ -367,9 +399,18 @@ func (a *App) applyKubernetesClientRateLimits(qps, burst int) {
 	}
 }
 
+func (m *ClusterRuntimeManager) kubernetesClientRateLimits() (int, int) {
+	if m == nil {
+		return defaultKubernetesClientQPS, defaultKubernetesClientBurst
+	}
+	m.rateLimitMu.RLock()
+	defer m.rateLimitMu.RUnlock()
+	return m.kubernetesQPS, m.kubernetesBurst
+}
+
 // buildClusterClientsWithContext initializes client-go dependencies for a specific kubeconfig selection.
 // The preflight check is context-bound so superseding selection generations can preempt stale work.
-func (a *App) buildClusterClientsWithContext(
+func (a *ClusterRuntimeManager) buildClusterClientsWithContext(
 	ctx context.Context,
 	selection kubeconfigSelection,
 	meta ClusterMeta,
@@ -382,7 +423,7 @@ func (a *App) buildClusterClientsWithContext(
 // clients' transports are wired to it so auth failures keep reaching the manager
 // the app tracks; otherwise a fresh per-cluster manager is created. A reused
 // manager is never shut down here — the previous clients still reference it.
-func (a *App) buildClusterClientsWithManager(
+func (a *ClusterRuntimeManager) buildClusterClientsWithManager(
 	ctx context.Context,
 	selection kubeconfigSelection,
 	meta ClusterMeta,
@@ -439,7 +480,7 @@ func shutdownClusterAuthManagerIfOwned(manager *authstate.Manager, owned bool) {
 	}
 }
 
-func (a *App) buildClusterClientDependencies(
+func (a *ClusterRuntimeManager) buildClusterClientDependencies(
 	ctx context.Context,
 	config *rest.Config,
 	typedConfig *rest.Config,
@@ -477,16 +518,16 @@ func (a *App) buildClusterClientDependencies(
 	}, nil
 }
 
-func (a *App) buildMetricsClient(config *rest.Config, meta ClusterMeta) *metricsclient.Clientset {
+func (a *ClusterRuntimeManager) buildMetricsClient(config *rest.Config, meta ClusterMeta) *metricsclient.Clientset {
 	client, err := metricsclient.NewForConfig(config)
 	if err != nil {
-		a.appLogs.logger.Info(fmt.Sprintf("Metrics client not available for cluster %s: %v", meta.ID, err), logsources.KubernetesClient, meta.ID, meta.Name)
+		a.logger.Info(fmt.Sprintf("Metrics client not available for cluster %s: %v", meta.ID, err), logsources.KubernetesClient, meta.ID, meta.Name)
 		return nil
 	}
 	return client
 }
 
-func (a *App) buildGatewayClients(
+func (a *ClusterRuntimeManager) buildGatewayClients(
 	ctx context.Context,
 	config *rest.Config,
 	clientset kubernetes.Interface,
@@ -494,7 +535,7 @@ func (a *App) buildGatewayClients(
 ) (*gatewayapi.Presence, gatewayversioned.Interface, gatewayinformers.SharedInformerFactory, error) {
 	presence, discoverErr := gatewayapi.DiscoverViaDiscovery(ctx, clientset.Discovery())
 	if discoverErr != nil {
-		a.appLogs.logger.Warn(fmt.Sprintf("Gateway API discovery failed for cluster %s: %v", meta.Name, discoverErr), logsources.KubernetesClient, meta.ID, meta.Name)
+		a.logger.Warn(fmt.Sprintf("Gateway API discovery failed for cluster %s: %v", meta.Name, discoverErr), logsources.KubernetesClient, meta.ID, meta.Name)
 	}
 	if !presence.AnyPresent() {
 		return presence, nil, nil, nil
@@ -538,7 +579,7 @@ func configureClusterRecoveryTest(manager *authstate.Manager, selection kubeconf
 	})
 }
 
-func (a *App) clusterAuthFailedOnPreflight(
+func (a *ClusterRuntimeManager) clusterAuthFailedOnPreflight(
 	ctx context.Context,
 	client kubernetes.Interface,
 	config *rest.Config,
@@ -547,22 +588,22 @@ func (a *App) clusterAuthFailedOnPreflight(
 ) bool {
 	err := a.preflightClusterClientWithContext(ctx, client)
 	if err == nil {
-		a.appLogs.logger.Info(fmt.Sprintf("Pre-flight check passed for cluster %s", meta.Name), logsources.Auth, meta.ID, meta.Name)
+		a.logger.Info(fmt.Sprintf("Pre-flight check passed for cluster %s", meta.Name), logsources.Auth, meta.ID, meta.Name)
 		return false
 	}
 
-	a.appLogs.logger.Warn(fmt.Sprintf("Pre-flight check failed for cluster %s: %v", meta.Name, err), logsources.Auth, meta.ID, meta.Name)
+	a.logger.Warn(fmt.Sprintf("Pre-flight check failed for cluster %s: %v", meta.Name, err), logsources.Auth, meta.ID, meta.Name)
 	diagnostic := credentialerrors.Classify(err, credentialerrors.Context{ExecCommand: execDisplayCommand(config)})
 	if !diagnostic.IsAuth() {
 		return false
 	}
 
-	a.appLogs.logger.Warn(fmt.Sprintf("Detected credential error for cluster %s, reporting auth failure", meta.Name), logsources.Auth, meta.ID, meta.Name)
+	a.logger.Warn(fmt.Sprintf("Detected credential error for cluster %s, reporting auth failure", meta.Name), logsources.Auth, meta.ID, meta.Name)
 	manager.ReportFailureDiagnostic(authstate.NewFailureDiagnostic(err, diagnostic))
 	return true
 }
 
-func (a *App) preflightClusterClientWithContext(ctx context.Context, client kubernetes.Interface) error {
+func (a *ClusterRuntimeManager) preflightClusterClientWithContext(ctx context.Context, client kubernetes.Interface) error {
 	if client == nil || client.Discovery() == nil {
 		return fmt.Errorf("discovery client unavailable")
 	}
@@ -585,7 +626,7 @@ func (a *App) preflightClusterClientWithContext(ctx context.Context, client kube
 }
 
 // createClusterAuthManager creates a new auth state manager for a specific cluster.
-func (a *App) createClusterAuthManager(meta ClusterMeta) *authstate.Manager {
+func (m *ClusterRuntimeManager) createClusterAuthManager(meta ClusterMeta) *authstate.Manager {
 	return authstate.New(authstate.Config{
 		MaxAttempts:               authstate.DefaultMaxAttempts,
 		BackoffSchedule:           authstate.DefaultBackoffSchedule,
@@ -593,12 +634,12 @@ func (a *App) createClusterAuthManager(meta ClusterMeta) *authstate.Manager {
 		ConnectivityRetryInterval: appconfig.ClusterAuthConnectivityRetryInterval,
 		SteadyRetryInterval:       appconfig.ClusterAuthSteadyRetryInterval,
 		OnStateChange: func(state authstate.State, diag authstate.FailureDiagnostic) {
-			a.handleClusterAuthStateChange(meta.ID, state, diag)
+			m.handleClusterAuthStateChange(meta.ID, state, diag)
 		},
 		OnRecoveryProgress: func(progress authstate.RecoveryProgress) {
-			a.handleClusterAuthRecoveryProgress(meta.ID, progress)
+			m.handleClusterAuthRecoveryProgress(meta.ID, progress)
 		},
-		OnSnapshotChange: a.markClusterWorkspaceChanged,
+		OnSnapshotChange: m.projection.markClusterWorkspaceChanged,
 		// RecoveryTest is set later once we have the clientset
 	})
 }
@@ -637,7 +678,7 @@ func protobufRestConfig(base *rest.Config) *rest.Config {
 }
 
 // the transport for auth state tracking.
-func (a *App) buildRestConfigForSelection(selection kubeconfigSelection, meta ClusterMeta, clusterAuthMgr *authstate.Manager) (*rest.Config, error) {
+func (a *ClusterRuntimeManager) buildRestConfigForSelection(selection kubeconfigSelection, meta ClusterMeta, clusterAuthMgr *authstate.Manager) (*rest.Config, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	loadingRules.ExplicitPath = selection.Path
 	overrides := &clientcmd.ConfigOverrides{}
@@ -655,7 +696,7 @@ func (a *App) buildRestConfigForSelection(selection kubeconfigSelection, meta Cl
 		wrapExecProviderForWindows(config)
 	}
 
-	qps, burst := a.preferences.kubernetesClientRateLimits()
+	qps, burst := a.kubernetesClientRateLimits()
 	config.QPS = float32(qps)
 	config.Burst = burst
 	config.RateLimiter = newMutableKubernetesRateLimiter(qps, burst)

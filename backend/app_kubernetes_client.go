@@ -6,7 +6,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
 
-func (a *App) initializeSelectedClustersAtStartup() (int, error) {
+func (a *WorkspaceCoordinator) initializeSelectedClustersAtStartup() (int, error) {
 	snapshot, settingsErr := a.preferences.EnsureLoadedForStartup()
 	if settingsErr != nil {
 		return 0, settingsErr
@@ -35,7 +35,7 @@ func (a *App) initializeSelectedClustersAtStartup() (int, error) {
 	return selectedCount, err
 }
 
-func (a *App) initKubernetesClient() (err error) {
+func (a *WorkspaceCoordinator) initKubernetesClient() (err error) {
 	a.appLogs.logger.Info("Initializing Kubernetes client", logsources.KubernetesClient)
 
 	selections, err := a.selectedKubeconfigSelections()
@@ -68,7 +68,7 @@ func (a *App) initKubernetesClient() (err error) {
 	return nil
 }
 
-func (a *App) restoreKubeconfigSelection() {
+func (a *WorkspaceCoordinator) restoreKubeconfigSelection() {
 	savedSelections := a.preferences.SelectedKubeconfigs()
 
 	var normalized []string

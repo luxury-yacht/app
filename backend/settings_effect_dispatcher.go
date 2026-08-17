@@ -95,8 +95,10 @@ func allSettingsSideEffects() settingsSideEffects {
 
 func loadSettingsSideEffects() settingsSideEffects {
 	return settingsSideEffects{
+		kubernetesClientRateLimits: true,
 		permissionFetchConcurrency: true,
 		containerLogsPerScopeLimit: true,
 		containerLogsGlobalLimit:   true,
+		metricsInterval:            true,
 	}
 }

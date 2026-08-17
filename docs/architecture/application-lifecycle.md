@@ -16,8 +16,12 @@ concrete shell; there is no generic desktop adapter.
 
 `backend.DesktopService.ServiceStartup` runs synchronously before Wails creates
 a native window and delegates to the application-lifecycle collaborator
-(currently `backend.App`). It may initialize process services and return an
-error to abort startup, but it must not access the window or emit runtime events.
+(`backend.App`, now only the lifecycle/composition shell). It installs the
+application cancellation signal, starts the single cluster-runtime intent
+consumer owned by `WorkspaceCoordinator`, and initializes
+`ClusterRuntimeManager` lifecycle projection hooks. The first selected refresh
+setup starts the heartbeat under the refresh runtime context. Startup may return
+an error to abort, but it must not access the window or emit runtime events.
 
 Interactive initialization starts from the first workspace window's
 `WindowRuntimeReady` event. Process initialization is once-only; every peer
@@ -36,9 +40,11 @@ and the six-hour scheduler. Peer windows project and act on the same state.
 
 Production registers one `backend.DesktopService` at `/api/v2`. Its twelve
 command interfaces match the target-owner table one-for-one; lifecycle and HTTP
-are separate collaborators. During staged extraction the same `*backend.App`
-value may satisfy several interfaces, but the service has no general backend
-interface or implementation back-pointer.
+are separate collaborators. Workspace commands are backed by
+`WorkspaceCoordinator`, cluster-runtime commands by `ClusterRuntimeManager`,
+HTTP and named stream handlers by `RefreshCoordinator`, and leaf commands by
+their focused services. The service has no general backend interface or
+implementation back-pointer.
 
 Generated bindings are transport output, not a frontend permission surface:
 application code imports DesktopService methods only through the explicit
@@ -158,9 +164,11 @@ invokes Wails restart so the detached helper owns replacement and relaunch.
 The next process reconciles the recorded source/target version and helper log;
 it reports success, restored-source failure, or a superseding manual install.
 
-Leaf shutdown ordering is explicit: the update owner stops first, then cluster
-auth recovery and runtime operations, then the kubeconfig watcher, then refresh
-subsystems. The application log remains available through those steps and the
+Leaf shutdown ordering is explicit: the update owner stops first; the typed
+cluster-runtime intent consumer stops before auth callbacks can publish more
+work; auth recovery stops; runtime operations shut down; the kubeconfig watcher
+stops; and `RefreshCoordinator` unpublishes and tears down refresh/catalog
+producers. The application log remains available through those steps and the
 application context is cleared last.
 
 ## Factory Reset

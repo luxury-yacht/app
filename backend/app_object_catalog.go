@@ -95,7 +95,7 @@ type catalogTarget struct {
 }
 
 // catalogTargets returns the ordered set of cluster selections to catalogue.
-func (a *App) catalogTargets() []catalogTarget {
+func (a *WorkspaceCoordinator) catalogTargets() []catalogTarget {
 	selections, err := a.selectedKubeconfigSelections()
 	if err != nil {
 		selections = nil
@@ -117,7 +117,7 @@ func (a *App) catalogTargets() []catalogTarget {
 }
 
 // objectCatalogServiceForCluster returns the catalog service for a specific cluster ID.
-func (a *App) objectCatalogServiceForCluster(clusterID string) *objectcatalog.Service {
+func (a *RefreshCoordinator) objectCatalogServiceForCluster(clusterID string) *objectcatalog.Service {
 	if a == nil {
 		return nil
 	}
@@ -133,12 +133,12 @@ func (a *App) objectCatalogServiceForCluster(clusterID string) *objectcatalog.Se
 	return entry.service
 }
 
-func (a *App) startObjectCatalog() {
+func (a *WorkspaceCoordinator) startObjectCatalog() {
 	if a == nil || !a.runtimeAvailable() {
 		return
 	}
 
-	a.stopObjectCatalog()
+	a.RefreshCoordinator.stopObjectCatalog()
 
 	targets := a.catalogTargets()
 	if len(targets) == 0 {
@@ -146,7 +146,7 @@ func (a *App) startObjectCatalog() {
 	}
 
 	for _, target := range targets {
-		if err := a.startObjectCatalogForTarget(target); err != nil {
+		if err := a.RefreshCoordinator.startObjectCatalogForTarget(target); err != nil {
 			a.appLogs.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", target.meta.ID, err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 			continue
 		}
@@ -156,29 +156,31 @@ func (a *App) startObjectCatalog() {
 // ensureObjectCatalogForCluster makes the object catalog part of the live-tier
 // invariant. Rebuild normally starts it, but this also repairs a live subsystem
 // left catalog-less by an interrupted or previously mis-ordered transition.
-func (a *App) ensureObjectCatalogForCluster(clusterID string) error {
+func (a *RefreshCoordinator) ensureObjectCatalogForCluster(clusterID string) error {
 	if a == nil || clusterID == "" {
 		return fmt.Errorf("cluster identifier missing")
 	}
 	if a.objectCatalogServiceForCluster(clusterID) != nil {
 		return nil
 	}
-	for _, target := range a.catalogTargets() {
-		if target.meta.ID != clusterID {
-			continue
-		}
-		if err := a.startObjectCatalogForTarget(target); err != nil {
-			return err
-		}
-		if a.objectCatalogServiceForCluster(clusterID) == nil {
-			return fmt.Errorf("object catalog did not start")
-		}
-		return nil
+	clients := a.clusterClientsForID(clusterID)
+	if clients == nil || clients.kubeconfigPath == "" {
+		return fmt.Errorf("cluster selection unavailable")
 	}
-	return fmt.Errorf("cluster selection unavailable")
+	target := catalogTarget{
+		selection: kubeconfigSelection{Path: clients.kubeconfigPath, Context: clients.kubeconfigContext},
+		meta:      clients.meta,
+	}
+	if err := a.startObjectCatalogForTarget(target); err != nil {
+		return err
+	}
+	if a.objectCatalogServiceForCluster(clusterID) == nil {
+		return fmt.Errorf("object catalog did not start")
+	}
+	return nil
 }
 
-func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
+func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) error {
 	if target.meta.ID == "" {
 		return fmt.Errorf("cluster identifier missing")
 	}
@@ -203,8 +205,8 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 	telemetryRecorder := objectcatalog.TelemetryRecorder(nil)
 	if subsystem.Telemetry != nil {
 		telemetryRecorder = subsystem.Telemetry
-	} else if a.telemetryRecorder != nil {
-		telemetryRecorder = a.telemetryRecorder
+	} else if recorder := a.currentTelemetryRecorder(); recorder != nil {
+		telemetryRecorder = recorder
 	}
 
 	deps := objectcatalog.Dependencies{
@@ -228,7 +230,7 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 		ClusterID: target.meta.ID,
 		// The cluster's namespace scope (docs/plans/namespace-scope.md):
 		// namespaced collection fans out per configured namespace.
-		AllowedNamespaces: a.allowedNamespacesForCluster(target.meta.ID),
+		AllowedNamespaces: a.refreshAllowedNamespaces(target.meta.ID),
 		// The catalog waits for informer caches INSIDE sync, between the RBAC
 		// preflight and the collect, so discovery + preflight overlap the factory's
 		// initial sync instead of running after it (see Dependencies.WaitForCaches).
@@ -320,7 +322,7 @@ func runCatalogDoorbellBridge(ctx context.Context, updates <-chan objectcatalog.
 	}
 }
 
-func (a *App) stopObjectCatalog() {
+func (a *RefreshCoordinator) stopObjectCatalog() {
 	entries := a.clearObjectCatalogEntries()
 	for _, entry := range entries {
 		if entry == nil {
@@ -334,12 +336,12 @@ func (a *App) stopObjectCatalog() {
 		a.waitForObjectCatalogDone(entry)
 	}
 
-	if a.telemetryRecorder != nil {
-		a.telemetryRecorder.RecordCatalog(false, 0, 0, 0, nil)
+	if recorder := a.currentTelemetryRecorder(); recorder != nil {
+		recorder.RecordCatalog(false, 0, 0, 0, nil)
 	}
 }
 
-func (a *App) waitForCatalogInformerCaches(ctx context.Context, factory *refreshinformer.Factory) error {
+func (a *RefreshCoordinator) waitForCatalogInformerCaches(ctx context.Context, factory *refreshinformer.Factory) error {
 	if factory == nil {
 		return fmt.Errorf("informer factory not initialised")
 	}
@@ -352,38 +354,41 @@ func (a *App) waitForCatalogInformerCaches(ctx context.Context, factory *refresh
 	return nil
 }
 
-func (a *App) storeObjectCatalogEntry(clusterID string, entry *objectCatalogEntry) {
+func (a *RefreshCoordinator) storeObjectCatalogEntry(clusterID string, entry *objectCatalogEntry) {
 	if clusterID == "" || entry == nil {
 		return
 	}
 	a.objectCatalogMu.Lock()
-	defer a.objectCatalogMu.Unlock()
 	if a.objectCatalogEntries == nil {
 		a.objectCatalogEntries = make(map[string]*objectCatalogEntry)
 	}
 	a.objectCatalogEntries[clusterID] = entry
+	a.objectCatalogMu.Unlock()
+	a.resourceProjection.publishCatalogEntry(clusterID, entry)
 }
 
-func (a *App) clearObjectCatalogEntries() []*objectCatalogEntry {
+func (a *RefreshCoordinator) clearObjectCatalogEntries() []*objectCatalogEntry {
 	a.objectCatalogMu.Lock()
-	defer a.objectCatalogMu.Unlock()
 	entries := make([]*objectCatalogEntry, 0, len(a.objectCatalogEntries))
 	for _, entry := range a.objectCatalogEntries {
 		entries = append(entries, entry)
 	}
 	a.objectCatalogEntries = make(map[string]*objectCatalogEntry)
+	a.objectCatalogMu.Unlock()
+	a.resourceProjection.clearCatalogEntries()
 	return entries
 }
 
-func (a *App) removeObjectCatalogEntry(clusterID string) *objectCatalogEntry {
+func (a *RefreshCoordinator) removeObjectCatalogEntry(clusterID string) *objectCatalogEntry {
 	a.objectCatalogMu.Lock()
-	defer a.objectCatalogMu.Unlock()
 	entry := a.objectCatalogEntries[clusterID]
 	delete(a.objectCatalogEntries, clusterID)
+	a.objectCatalogMu.Unlock()
+	a.resourceProjection.removeCatalogEntry(clusterID)
 	return entry
 }
 
-func (a *App) stopObjectCatalogForCluster(clusterID string) {
+func (a *RefreshCoordinator) stopObjectCatalogForCluster(clusterID string) {
 	if a == nil || clusterID == "" {
 		return
 	}
@@ -397,7 +402,7 @@ func (a *App) stopObjectCatalogForCluster(clusterID string) {
 	a.waitForObjectCatalogDone(entry)
 }
 
-func (a *App) waitForObjectCatalogDone(entry *objectCatalogEntry) {
+func (a *RefreshCoordinator) waitForObjectCatalogDone(entry *objectCatalogEntry) {
 	if entry == nil || entry.done == nil {
 		return
 	}
@@ -417,7 +422,7 @@ func (a *App) waitForObjectCatalogDone(entry *objectCatalogEntry) {
 	}
 }
 
-func (a *App) snapshotObjectCatalogEntries() []*objectCatalogEntry {
+func (a *RefreshCoordinator) snapshotObjectCatalogEntries() []*objectCatalogEntry {
 	a.objectCatalogMu.Lock()
 	defer a.objectCatalogMu.Unlock()
 	entries := make([]*objectCatalogEntry, 0, len(a.objectCatalogEntries))
@@ -434,7 +439,7 @@ func (a *App) snapshotObjectCatalogEntries() []*objectCatalogEntry {
 }
 
 // catalogNamespaceGroups returns per-cluster namespace listings for catalog snapshots.
-func (a *App) catalogNamespaceGroups() []snapshot.CatalogNamespaceGroup {
+func (a *RefreshCoordinator) catalogNamespaceGroups() []snapshot.CatalogNamespaceGroup {
 	entries := a.snapshotObjectCatalogEntries()
 	if len(entries) == 0 {
 		return nil
@@ -449,7 +454,7 @@ func (a *App) catalogNamespaceGroups() []snapshot.CatalogNamespaceGroup {
 		// A scoped cluster's namespace list is synthesized from the
 		// configured scope (docs/plans/namespace-scope.md) so Browse agrees
 		// with the sidebar even before anything is catalogued.
-		if scope := a.allowedNamespacesForCluster(entry.meta.ID); len(scope) > 0 {
+		if scope := a.allowedNamespaces(entry.meta.ID); len(scope) > 0 {
 			namespaces = append([]string(nil), scope...)
 			sort.Strings(namespaces)
 		}

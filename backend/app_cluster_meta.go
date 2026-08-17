@@ -6,11 +6,11 @@ type ClusterMeta struct {
 	Name string
 }
 
-func (a *App) clusterNameForID(clusterID string) string {
-	if a == nil || clusterID == "" {
+func (m *ClusterRuntimeManager) clusterNameForID(clusterID string) string {
+	if m == nil || clusterID == "" {
 		return ""
 	}
-	if clients := a.clusterClientsForID(clusterID); clients != nil {
+	if clients := m.clusterClientsForID(clusterID); clients != nil {
 		return clients.meta.Name
 	}
 	return ""

@@ -78,11 +78,11 @@ func TestBuildSubsystemsInSelectionOrderRunsConcurrentlyAndPreservesOrder(t *tes
 // limiter without ever calling back into settings loading — containerLogsTargetLimiterMu
 // is a LEAF lock; the settings paths push the configured limit via SetLimit after load.
 func TestSharedContainerLogsTargetLimiterDoesNotDeadlockBeforeSettingsLoad(t *testing.T) {
-	app := &App{} // appSettings == nil: the pre-settings-load startup state
+	refreshCoordinator := newRefreshCoordinator() // settings are not yet loaded
 
 	done := make(chan *containerlogsstream.GlobalTargetLimiter, 1)
 	go func() {
-		done <- app.sharedContainerLogsTargetLimiter()
+		done <- refreshCoordinator.sharedContainerLogsTargetLimiter()
 	}()
 
 	select {

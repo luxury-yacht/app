@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
@@ -14,12 +15,102 @@ import (
 )
 
 // resourceRetryTelemetry is the retry-only telemetry seam used by resource
-// requests. Refresh currently supplies the implementation; Phase 5B moves that
-// implementation without changing the resource boundary.
+// requests. Refresh supplies the current recorder without widening the resource
+// boundary to refresh lifecycle state.
 type resourceRetryTelemetry interface {
 	RecordRetryAttempt(error)
 	RecordRetrySuccess()
 	RecordRetryExhausted(error)
+}
+
+// refreshResourceProjection is a leaf publication seam shared by refresh
+// producers and resource consumers. Refresh pushes immutable references into
+// it; resource requests never call back into RefreshCoordinator.
+type refreshResourceProjection struct {
+	mu        sync.RWMutex
+	entries   map[string]*objectCatalogEntry
+	telemetry *telemetry.Recorder
+}
+
+func newRefreshResourceProjection() *refreshResourceProjection {
+	return &refreshResourceProjection{entries: make(map[string]*objectCatalogEntry)}
+}
+
+func (p *refreshResourceProjection) publishCatalogEntry(clusterID string, entry *objectCatalogEntry) {
+	if p == nil || clusterID == "" || entry == nil {
+		return
+	}
+	p.mu.Lock()
+	p.entries[clusterID] = entry
+	p.mu.Unlock()
+}
+
+func (p *refreshResourceProjection) removeCatalogEntry(clusterID string) {
+	if p == nil || clusterID == "" {
+		return
+	}
+	p.mu.Lock()
+	delete(p.entries, clusterID)
+	p.mu.Unlock()
+}
+
+func (p *refreshResourceProjection) clearCatalogEntries() {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.entries = make(map[string]*objectCatalogEntry)
+	p.mu.Unlock()
+}
+
+func (p *refreshResourceProjection) objectCatalogServiceForCluster(clusterID string) *objectcatalog.Service {
+	if p == nil || clusterID == "" {
+		return nil
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	entry := p.entries[clusterID]
+	if entry == nil {
+		return nil
+	}
+	return entry.service
+}
+
+func (p *refreshResourceProjection) snapshotObjectCatalogEntries() []*objectCatalogEntry {
+	if p == nil {
+		return nil
+	}
+	p.mu.RLock()
+	entries := make([]*objectCatalogEntry, 0, len(p.entries))
+	for _, entry := range p.entries {
+		entries = append(entries, entry)
+	}
+	p.mu.RUnlock()
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i] == nil || entries[j] == nil {
+			return entries[i] != nil
+		}
+		return entries[i].meta.ID < entries[j].meta.ID
+	})
+	return entries
+}
+
+func (p *refreshResourceProjection) publishTelemetry(recorder *telemetry.Recorder) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.telemetry = recorder
+	p.mu.Unlock()
+}
+
+func (p *refreshResourceProjection) currentTelemetry() *telemetry.Recorder {
+	if p == nil {
+		return nil
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.telemetry
 }
 
 type resourceGatewayDependencies struct {
@@ -31,11 +122,8 @@ type resourceGatewayDependencies struct {
 	clusterName                      func(string) string
 	recordTransportSuccess           func(string)
 	recordTransportFailure           func(string, string, error)
-	retryTelemetry                   func() resourceRetryTelemetry
-	catalogServiceForCluster         func(string) *objectcatalog.Service
 	resourceResolverForCluster       func(string) common.ResourceResolver
-	catalogEntries                   func() []*objectCatalogEntry
-	catalogTelemetry                 func() telemetry.Summarizer
+	refreshProjection                *refreshResourceProjection
 	permissionFetchPolicy            *PermissionFetchPolicy
 	containerLogsSelectionPolicy     *ContainerLogsSelectionPolicy
 	operations                       *OperationsCoordinator
@@ -54,11 +142,8 @@ type ResourceGateway struct {
 	clusterNameFn                      func(string) string
 	recordTransportSuccessFn           func(string)
 	recordTransportFailureFn           func(string, string, error)
-	retryTelemetryFn                   func() resourceRetryTelemetry
-	catalogServiceForClusterFn         func(string) *objectcatalog.Service
 	resourceResolverForClusterFn       func(string) common.ResourceResolver
-	catalogEntriesFn                   func() []*objectCatalogEntry
-	catalogTelemetryFn                 func() telemetry.Summarizer
+	refreshProjection                  *refreshResourceProjection
 	permissionFetchPolicy              *PermissionFetchPolicy
 	containerLogsSelectionPolicy       *ContainerLogsSelectionPolicy
 	operations                         *OperationsCoordinator
@@ -81,6 +166,10 @@ func newResourceGateway(dependencies resourceGatewayDependencies) *ResourceGatew
 	if containerLogsPolicy == nil {
 		containerLogsPolicy = NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit)
 	}
+	refreshProjection := dependencies.refreshProjection
+	if refreshProjection == nil {
+		refreshProjection = newRefreshResourceProjection()
+	}
 	return &ResourceGateway{
 		resolveClusterDependenciesFn:       dependencies.resolveClusterDependencies,
 		resourceDependenciesForClusterIDFn: dependencies.resourceDependenciesForClusterID,
@@ -90,11 +179,8 @@ func newResourceGateway(dependencies resourceGatewayDependencies) *ResourceGatew
 		clusterNameFn:                      dependencies.clusterName,
 		recordTransportSuccessFn:           dependencies.recordTransportSuccess,
 		recordTransportFailureFn:           dependencies.recordTransportFailure,
-		retryTelemetryFn:                   dependencies.retryTelemetry,
-		catalogServiceForClusterFn:         dependencies.catalogServiceForCluster,
 		resourceResolverForClusterFn:       dependencies.resourceResolverForCluster,
-		catalogEntriesFn:                   dependencies.catalogEntries,
-		catalogTelemetryFn:                 dependencies.catalogTelemetry,
+		refreshProjection:                  refreshProjection,
 		permissionFetchPolicy:              permissionPolicy,
 		containerLogsSelectionPolicy:       containerLogsPolicy,
 		operations:                         dependencies.operations,
@@ -165,24 +251,24 @@ func (r resourceGatewayCatalogResolver) ResolveResourceForGVK(
 }
 
 func (g *ResourceGateway) objectCatalogServiceForCluster(clusterID string) *objectcatalog.Service {
-	if g == nil || g.catalogServiceForClusterFn == nil {
+	if g == nil {
 		return nil
 	}
-	return g.catalogServiceForClusterFn(clusterID)
+	return g.refreshProjection.objectCatalogServiceForCluster(clusterID)
 }
 
 func (g *ResourceGateway) snapshotObjectCatalogEntries() []*objectCatalogEntry {
-	if g == nil || g.catalogEntriesFn == nil {
+	if g == nil {
 		return nil
 	}
-	return g.catalogEntriesFn()
+	return g.refreshProjection.snapshotObjectCatalogEntries()
 }
 
 func (g *ResourceGateway) telemetrySummary() (telemetry.Summary, bool) {
-	if g == nil || g.catalogTelemetryFn == nil {
+	if g == nil {
 		return telemetry.Summary{}, false
 	}
-	summarizer := g.catalogTelemetryFn()
+	summarizer := g.refreshProjection.currentTelemetry()
 	if summarizer == nil {
 		return telemetry.Summary{}, false
 	}
@@ -215,10 +301,10 @@ func (g *ResourceGateway) recordClusterTransportFailure(clusterID, reason string
 }
 
 func (g *ResourceGateway) retryTelemetry() resourceRetryTelemetry {
-	if g == nil || g.retryTelemetryFn == nil {
+	if g == nil {
 		return nil
 	}
-	return g.retryTelemetryFn()
+	return g.refreshProjection.currentTelemetry()
 }
 
 func (g *ResourceGateway) resourceRetryDependencies() resourceRetryDependencies {

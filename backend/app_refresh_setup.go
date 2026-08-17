@@ -20,21 +20,36 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
-func (a *App) resolveMetricsInterval() time.Duration {
-	return time.Duration(a.preferences.MetricsRefreshIntervalMs()) * time.Millisecond
+func (r *RefreshCoordinator) resolveMetricsInterval() time.Duration {
+	if r == nil {
+		return time.Duration(defaultMetricsIntervalMs()) * time.Millisecond
+	}
+	r.metricsIntervalMu.RLock()
+	defer r.metricsIntervalMu.RUnlock()
+	return r.metricsInterval
 }
 
-func (a *App) setupRefreshSubsystem() error {
+func (a *WorkspaceCoordinator) setupRefreshSubsystem() error {
+	if !a.runtimeAvailable() {
+		return errors.New("application context not initialised")
+	}
+	selections, err := a.selectedKubeconfigSelections()
+	if err != nil {
+		return err
+	}
+	if err := a.syncClusterClientPool(selections); err != nil {
+		return err
+	}
+	return a.RefreshCoordinator.setupRefreshSubsystemForSelections(selections)
+}
+
+func (a *RefreshCoordinator) setupRefreshSubsystemForSelections(selections []kubeconfigSelection) error {
 	if !a.runtimeAvailable() {
 		return errors.New("application context not initialised")
 	}
 
 	ctx := a.beginRefreshRuntimeContext()
 
-	selections, err := a.selectedKubeconfigSelections()
-	if err != nil {
-		return err
-	}
 	subsystems, clusterOrder, err := a.buildRefreshSubsystems(selections)
 	if err != nil {
 		return err
@@ -72,7 +87,7 @@ func (a *App) setupRefreshSubsystem() error {
 // beginRefreshRuntimeContext explicitly opens the process refresh lifetime for a
 // new selection setup. It is the only path that may reopen a deliberately stopped
 // runtime after global teardown.
-func (a *App) beginRefreshRuntimeContext() context.Context {
+func (a *RefreshCoordinator) beginRefreshRuntimeContext() context.Context {
 	return a.refreshRuntimeContext(true)
 }
 
@@ -81,11 +96,11 @@ func (a *App) beginRefreshRuntimeContext() context.Context {
 // selected cluster can fail auth before normal setup runs; its later auth recovery
 // may initialise the runtime, but a late recovery/governor callback may not reopen
 // one that global teardown deliberately stopped.
-func (a *App) ensureRefreshRuntimeContext() context.Context {
+func (a *RefreshCoordinator) ensureRefreshRuntimeContext() context.Context {
 	return a.refreshRuntimeContext(false)
 }
 
-func (a *App) refreshRuntimeContext(reopen bool) context.Context {
+func (a *RefreshCoordinator) refreshRuntimeContext(reopen bool) context.Context {
 	if a == nil || !a.runtimeAvailable() {
 		return nil
 	}
@@ -112,7 +127,7 @@ func (a *App) refreshRuntimeContext(reopen bool) context.Context {
 	return ctx
 }
 
-func (a *App) currentRefreshRuntimeContext() context.Context {
+func (a *RefreshCoordinator) currentRefreshRuntimeContext() context.Context {
 	if a == nil {
 		return nil
 	}
@@ -124,7 +139,7 @@ func (a *App) currentRefreshRuntimeContext() context.Context {
 	return lifecycle.Context(a.refreshDone)
 }
 
-func (a *App) stopRefreshRuntimeContext() {
+func (a *RefreshCoordinator) stopRefreshRuntimeContext() {
 	if a == nil {
 		return
 	}
@@ -187,7 +202,7 @@ func buildSubsystemsInSelectionOrder(
 
 // buildRefreshSubsystems creates refresh subsystems for the active cluster selections.
 // All clusters are treated equally - there is no "primary" or "host" cluster.
-func (a *App) buildRefreshSubsystems(
+func (a *RefreshCoordinator) buildRefreshSubsystems(
 	selections []kubeconfigSelection,
 ) (map[string]*system.Subsystem, []string, error) {
 	subsystems := make(map[string]*system.Subsystem)
@@ -195,11 +210,6 @@ func (a *App) buildRefreshSubsystems(
 
 	if len(selections) == 0 {
 		return nil, nil, errors.New("no kubeconfig selections available")
-	}
-
-	// Align the client pool to the selected cluster set before building managers.
-	if err := a.syncClusterClientPool(selections); err != nil {
-		return nil, nil, err
 	}
 
 	// Subsystem construction (informer wiring, permission preflight, spill restore)
@@ -231,7 +241,7 @@ func (a *App) buildRefreshSubsystems(
 	return subsystems, clusterOrder, nil
 }
 
-func (a *App) buildRefreshSubsystemOutcome(selection kubeconfigSelection) (subsystemBuildOutcome, error) {
+func (a *RefreshCoordinator) buildRefreshSubsystemOutcome(selection kubeconfigSelection) (subsystemBuildOutcome, error) {
 	clusterMeta := a.clusterMetaForSelection(selection)
 	if clusterMeta.ID == "" {
 		return subsystemBuildOutcome{}, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
@@ -254,7 +264,7 @@ func (a *App) buildRefreshSubsystemOutcome(selection kubeconfigSelection) (subsy
 	return subsystemBuildOutcome{id: clusterMeta.ID, subsystem: subsystem}, nil
 }
 
-func (a *App) clusterClientsAllowRefresh(clients *clusterClients, meta ClusterMeta) bool {
+func (a *RefreshCoordinator) clusterClientsAllowRefresh(clients *clusterClients, meta ClusterMeta) bool {
 	if clients.authFailedOnInit {
 		a.appLogs.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", meta.Name), logsources.Refresh, meta.ID, meta.Name)
 		return false
@@ -271,7 +281,7 @@ func (a *App) clusterClientsAllowRefresh(clients *clusterClients, meta ClusterMe
 	return false
 }
 
-func (a *App) buildRefreshSubsystemForSelection(
+func (a *RefreshCoordinator) buildRefreshSubsystemForSelection(
 	selection kubeconfigSelection,
 	clients *clusterClients,
 	clusterMeta ClusterMeta,
@@ -293,7 +303,7 @@ func (a *App) buildRefreshSubsystemForSelection(
 		ContainerLogsPerScopeLimit: a.containerLogsPolicy.Limit(),
 		ClusterID:                  clusterMeta.ID,
 		ClusterName:                clusterMeta.Name,
-		AllowedNamespaces:          a.allowedNamespacesForCluster(clusterMeta.ID),
+		AllowedNamespaces:          a.refreshAllowedNamespaces(clusterMeta.ID),
 		AttentionIgnoreRules:       a.attention.attentionIgnoreRulesForCluster(clusterMeta.ID),
 		AttentionIgnoredObjectPruner: func(ref resourcemodel.ResourceRef) {
 			if err := a.attention.pruneClusterAttentionIgnoredObject(clusterMeta.ID, ref); err != nil {
@@ -339,7 +349,7 @@ func (a *App) buildRefreshSubsystemForSelection(
 }
 
 // startRefreshSubsystems runs the manager loops and permission revalidation for each subsystem.
-func (a *App) startRefreshSubsystems(ctx context.Context, subsystems map[string]*system.Subsystem) {
+func (a *RefreshCoordinator) startRefreshSubsystems(ctx context.Context, subsystems map[string]*system.Subsystem) {
 	for clusterID, subsystem := range subsystems {
 		manager := subsystem.Manager
 		if manager == nil {
@@ -367,7 +377,7 @@ func (a *App) startRefreshSubsystems(ctx context.Context, subsystems map[string]
 	}
 }
 
-func (a *App) storeRefreshPermissionCancel(clusterID string, cancel context.CancelFunc) {
+func (a *RefreshCoordinator) storeRefreshPermissionCancel(clusterID string, cancel context.CancelFunc) {
 	if a == nil || clusterID == "" || cancel == nil {
 		return
 	}
@@ -387,23 +397,23 @@ func (a *App) storeRefreshPermissionCancel(clusterID string, cancel context.Canc
 // that settingsMu-to-limiter direction and permit a cross-goroutine ABBA deadlock.
 // The limiter therefore starts at the default limit; successful settings load/update
 // pushes the configured value through SetLimit afterwards.
-func (a *App) sharedContainerLogsTargetLimiter() *containerlogsstream.GlobalTargetLimiter {
-	if a == nil {
+func (r *RefreshCoordinator) sharedContainerLogsTargetLimiter() *containerlogsstream.GlobalTargetLimiter {
+	if r == nil {
 		return nil
 	}
 	// Guard the lazy init: per-cluster subsystem builds call this concurrently.
-	a.containerLogsTargetLimiterMu.Lock()
-	defer a.containerLogsTargetLimiterMu.Unlock()
-	if a.containerLogsTargetLimiter == nil {
-		a.containerLogsTargetLimiter = containerlogsstream.NewGlobalTargetLimiter(defaultObjPanelLogsTargetGlobalLimit)
+	r.containerLogsTargetLimiterMu.Lock()
+	defer r.containerLogsTargetLimiterMu.Unlock()
+	if r.containerLogsTargetLimiter == nil {
+		r.containerLogsTargetLimiter = containerlogsstream.NewGlobalTargetLimiter(defaultObjPanelLogsTargetGlobalLimit)
 	}
-	return a.containerLogsTargetLimiter
+	return r.containerLogsTargetLimiter
 }
 
 // buildRefreshMux wires the aggregate refresh routes on top of the core API endpoints.
 // All clusters are treated equally - telemetry and registry are taken from
 // the first available cluster, but no single cluster is "special".
-func (a *App) buildRefreshMux(
+func (a *RefreshCoordinator) buildRefreshMux(
 	subsystems map[string]*system.Subsystem,
 	clusterOrder []string,
 ) (*http.ServeMux, *refreshAggregateHandlers, error) {
@@ -514,7 +524,7 @@ func (h *refreshAggregateHandlers) Update(clusterOrder []string, subsystems map[
 // never left the screen. Readiness is re-verified anyway: the rebuilt
 // subsystem's namespaces notifier re-arms until its stores resettle, and the
 // readiness self-build no-ops on an already-ready cluster.
-func (a *App) transitionClusterToLoading(clusterID string) {
+func (a *RefreshCoordinator) transitionClusterToLoading(clusterID string) {
 	if a == nil || a.clusterLifecycle == nil || clusterID == "" {
 		return
 	}
@@ -535,7 +545,7 @@ func (a *App) transitionClusterToLoading(clusterID string) {
 // it on an empty observer slot and wedge in loading until visited. The
 // aggregate service is resolved at ring time: it is (re)built after
 // subsystems exist.
-func (a *App) wireNamespacesReadinessObserver(clusterID string, subsystem *system.Subsystem) {
+func (a *RefreshCoordinator) wireNamespacesReadinessObserver(clusterID string, subsystem *system.Subsystem) {
 	if a == nil || subsystem == nil || subsystem.NamespacesDoorbell == nil || clusterID == "" {
 		return
 	}
@@ -544,7 +554,7 @@ func (a *App) wireNamespacesReadinessObserver(clusterID string, subsystem *syste
 	})
 }
 
-func (a *App) namespacesReadinessSelfBuild(clusterID string) {
+func (a *RefreshCoordinator) namespacesReadinessSelfBuild(clusterID string) {
 	// Atomic load: this runs on doorbell goroutines while setup/teardown
 	// (re)assign the aggregates.
 	aggregates := a.refreshAggregates.Load()
@@ -559,7 +569,7 @@ func (a *App) namespacesReadinessSelfBuild(clusterID string) {
 // after a.refreshAggregates is (re)assigned: any settle ring that fired while
 // aggregates were still nil — or before an observer was attached — is healed
 // here instead of being lost (the notifier stops re-arming once settled).
-func (a *App) sweepNamespacesReadiness(subsystems map[string]*system.Subsystem) {
+func (a *RefreshCoordinator) sweepNamespacesReadiness(subsystems map[string]*system.Subsystem) {
 	for clusterID, subsystem := range subsystems {
 		a.wireNamespacesReadinessObserver(clusterID, subsystem)
 		go a.namespacesReadinessSelfBuild(clusterID)
@@ -567,7 +577,7 @@ func (a *App) sweepNamespacesReadiness(subsystems map[string]*system.Subsystem) 
 }
 
 // buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.
-func (a *App) buildRefreshSubsystem(cfg system.Config) (*system.Subsystem, error) {
+func (a *RefreshCoordinator) buildRefreshSubsystem(cfg system.Config) (*system.Subsystem, error) {
 	subsystem, err := newRefreshSubsystemWithServices(cfg)
 	if err != nil {
 		return nil, err

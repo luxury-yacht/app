@@ -26,20 +26,28 @@ import (
 //
 // NOTE: This is called from the auth manager with the mutex held, so heavy
 // operations must be run asynchronously to avoid blocking other auth operations.
-func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.State, diag authstate.FailureDiagnostic) {
-	if a == nil || clusterID == "" {
+func (m *ClusterRuntimeManager) handleClusterAuthStateChange(clusterID string, state authstate.State, diag authstate.FailureDiagnostic) {
+	if m == nil || clusterID == "" {
 		return
 	}
 
-	command, ok := newClusterAuthStateCommand(clusterID, a.clusterAuthDisplayName(clusterID), state, diag)
+	command, ok := newClusterAuthStateCommand(clusterID, m.clusterAuthDisplayName(clusterID), state, diag)
 	if !ok {
 		return
 	}
 
-	a.reportClusterAuthState(command)
-	a.emitEvent(command.eventName, command.eventPayload)
-	a.applyClusterAuthLifecycle(command)
-	a.dispatchClusterAuthMutation(command)
+	m.reportClusterAuthState(command)
+	m.emitEvent(command.eventName, command.eventPayload)
+	m.applyClusterAuthLifecycle(command)
+	if command.mutation != clusterAuthMutationNone {
+		m.intents.Publish(ClusterRuntimeIntent{
+			Kind:       ClusterRuntimeIntentAuthRebuild,
+			ClusterID:  clusterID,
+			Generation: m.intentGeneration.Add(1),
+			AuthState:  state,
+			Diagnostic: diag,
+		})
+	}
 }
 
 type clusterAuthMutation string
@@ -60,8 +68,8 @@ type clusterAuthStateCommand struct {
 	mutation     clusterAuthMutation
 }
 
-func (a *App) clusterAuthDisplayName(clusterID string) string {
-	clients := a.clusterClientsForID(clusterID)
+func (m *ClusterRuntimeManager) clusterAuthDisplayName(clusterID string) string {
+	clients := m.clusterClientsForID(clusterID)
 	if clients == nil {
 		return clusterID
 	}
@@ -99,50 +107,53 @@ func newClusterAuthStateCommand(
 	return command, true
 }
 
-func (a *App) reportClusterAuthState(command clusterAuthStateCommand) {
+func (m *ClusterRuntimeManager) reportClusterAuthState(command clusterAuthStateCommand) {
 	switch command.state {
 	case authstate.StateValid:
-		a.appLogs.logger.Info(fmt.Sprintf("Cluster %s: auth recovered", command.clusterName), logsources.Auth, command.clusterID, command.clusterName)
+		m.logger.Info(fmt.Sprintf("Cluster %s: auth recovered", command.clusterName), logsources.Auth, command.clusterID, command.clusterName)
 	case authstate.StateRecovering:
-		a.appLogs.logger.Warn(fmt.Sprintf("Cluster %s: auth recovering - %s", command.clusterName, command.diagnostic.Reason), logsources.Auth, command.clusterID, command.clusterName)
+		m.logger.Warn(fmt.Sprintf("Cluster %s: auth recovering - %s", command.clusterName, command.diagnostic.Reason), logsources.Auth, command.clusterID, command.clusterName)
 	case authstate.StateInvalid:
-		a.reportInvalidClusterAuthState(command)
+		m.reportInvalidClusterAuthState(command)
 	}
 }
 
-func (a *App) reportInvalidClusterAuthState(command clusterAuthStateCommand) {
-	a.appLogs.logger.Warn(fmt.Sprintf("Cluster %s: auth failed - %s", command.clusterName, command.diagnostic.Reason), logsources.Auth, command.clusterID, command.clusterName)
+func (m *ClusterRuntimeManager) reportInvalidClusterAuthState(command clusterAuthStateCommand) {
+	m.logger.Warn(fmt.Sprintf("Cluster %s: auth failed - %s", command.clusterName, command.diagnostic.Reason), logsources.Auth, command.clusterID, command.clusterName)
 	errorcapture.CaptureWithCluster(command.clusterID, fmt.Sprintf("auth failed: %s", command.diagnostic.Reason))
 }
 
-func (a *App) applyClusterAuthLifecycle(command clusterAuthStateCommand) {
-	if command.state != authstate.StateInvalid || a.clusterLifecycle == nil {
+func (m *ClusterRuntimeManager) applyClusterAuthLifecycle(command clusterAuthStateCommand) {
+	if command.state != authstate.StateInvalid || m.clusterLifecycle == nil {
 		return
 	}
-	a.clusterLifecycle.SetState(command.clusterID, ClusterStateAuthFailed)
+	m.clusterLifecycle.SetState(command.clusterID, ClusterStateAuthFailed)
 }
 
-func (a *App) dispatchClusterAuthMutation(command clusterAuthStateCommand) {
+func (a *WorkspaceCoordinator) dispatchClusterAuthMutation(intent ClusterRuntimeIntent, command clusterAuthStateCommand) {
 	if command.mutation == clusterAuthMutationNone {
 		return
 	}
 	reason := fmt.Sprintf("cluster-auth-%s:%s", command.mutation, command.clusterID)
 	a.runSelectionMutationAsync(reason, func(_ *selectionMutation) error {
+		if !a.clusterRuntimeIntentIsCurrent(intent) {
+			return nil
+		}
 		return a.runClusterOperation(context.Background(), command.clusterID, func(opCtx context.Context) error {
 			return a.executeClusterAuthMutation(opCtx, command)
 		})
 	})
 }
 
-func (a *App) executeClusterAuthMutation(ctx context.Context, command clusterAuthStateCommand) error {
+func (a *WorkspaceCoordinator) executeClusterAuthMutation(ctx context.Context, command clusterAuthStateCommand) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	switch command.mutation {
 	case clusterAuthMutationRebuild:
-		a.rebuildClusterSubsystem(command.clusterID)
+		a.RefreshCoordinator.rebuildClusterSubsystem(command.clusterID)
 	case clusterAuthMutationTeardown:
-		a.teardownClusterSubsystem(command.clusterID)
+		a.RefreshCoordinator.teardownClusterSubsystem(command.clusterID)
 	default:
 		return fmt.Errorf("unsupported cluster auth mutation %q", command.mutation)
 	}
@@ -174,7 +185,7 @@ func authEventPayload(clusterID, clusterName string, diag authstate.FailureDiagn
 //
 // The subsystem must be the one currently registered for clusterID; the caller passes it so
 // cool can act on the same subsystem it will keep serving.
-func (a *App) stopClusterFeeds(clusterID string, subsystem *system.Subsystem) {
+func (a *RefreshCoordinator) stopClusterFeeds(clusterID string, subsystem *system.Subsystem) {
 	if a == nil || clusterID == "" || subsystem == nil {
 		return
 	}
@@ -221,7 +232,7 @@ func (a *App) stopClusterFeeds(clusterID string, subsystem *system.Subsystem) {
 
 // teardownClusterSubsystem stops the refresh subsystem for a specific cluster
 // without affecting other clusters.
-func (a *App) teardownClusterSubsystem(clusterID string) {
+func (a *RefreshCoordinator) teardownClusterSubsystem(clusterID string) {
 	if a == nil || clusterID == "" {
 		return
 	}
@@ -258,7 +269,7 @@ func (a *App) teardownClusterSubsystem(clusterID string) {
 // rebuildClusterSubsystem rebuilds the cluster clients and refresh subsystem
 // for a specific cluster after auth recovery. This rebuilds everything with
 // fresh credentials from the kubeconfig to pick up refreshed SSO tokens.
-func (a *App) rebuildClusterSubsystem(clusterID string) {
+func (a *RefreshCoordinator) rebuildClusterSubsystem(clusterID string) {
 	if a == nil || clusterID == "" {
 		return
 	}
@@ -282,28 +293,28 @@ func (r clusterSubsystemRebuild) run() {
 	if !r.activateSubsystem(newClients, subsystem) {
 		return
 	}
-	r.app.appLogs.logger.Info(fmt.Sprintf("Successfully rebuilt subsystem for cluster %s", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
+	r.refresh.appLogs.logger.Info(fmt.Sprintf("Successfully rebuilt subsystem for cluster %s", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
 }
 
 func (r clusterSubsystemRebuild) activateSubsystem(newClients *clusterClients, subsystem *system.Subsystem) bool {
 	if !r.startManager(subsystem) {
 		// A subsystem that cannot start has not been published, but all resources
 		// constructed for that generation still need an owner to stop them.
-		r.app.stopRefreshSubsystem(subsystem)
+		r.refresh.stopRefreshSubsystem(subsystem)
 		return false
 	}
 
-	previous := r.app.getRefreshSubsystem(r.clusterID)
-	r.app.setRefreshSubsystem(r.clusterID, subsystem)
-	subsystems, clusterOrder := refreshSubsystemTopology(r.app.snapshotRefreshSubsystems())
+	previous := r.refresh.getRefreshSubsystem(r.clusterID)
+	r.refresh.setRefreshSubsystem(r.clusterID, subsystem)
+	subsystems, clusterOrder := refreshSubsystemTopology(r.refresh.snapshotRefreshSubsystems())
 	if !r.updateRefreshRouting(subsystems, clusterOrder) {
 		if previous == nil {
-			r.app.takeRefreshSubsystem(r.clusterID)
+			r.refresh.takeRefreshSubsystem(r.clusterID)
 		} else {
-			r.app.setRefreshSubsystem(r.clusterID, previous)
+			r.refresh.setRefreshSubsystem(r.clusterID, previous)
 		}
 		if previous != subsystem {
-			r.app.stopRefreshSubsystem(subsystem)
+			r.refresh.stopRefreshSubsystem(subsystem)
 		}
 		return false
 	}
@@ -311,57 +322,43 @@ func (r clusterSubsystemRebuild) activateSubsystem(newClients *clusterClients, s
 	// Commit the clients only after the matching subsystem is started and every
 	// aggregate consumer routes to it. Until this point the previous generation
 	// remains available if activation fails.
-	r.app.clusterClientsMu.Lock()
-	r.app.setClusterClientLocked(r.clusterID, newClients)
-	r.app.clusterClientsMu.Unlock()
+	r.refresh.clusterClientsMu.Lock()
+	r.refresh.setClusterClientLocked(r.clusterID, newClients)
+	r.refresh.clusterClientsMu.Unlock()
 	if previous != nil && previous != subsystem {
-		r.app.stopRefreshSubsystem(previous)
+		r.refresh.stopRefreshSubsystem(previous)
 	}
 	r.startObjectCatalog(newClients)
 	return true
 }
 
 type clusterSubsystemRebuild struct {
-	app         *App
+	refresh     *RefreshCoordinator
 	clusterID   string
 	clusterName string
 	selection   kubeconfigSelection
 	oldClients  *clusterClients
 }
 
-func (a *App) prepareClusterSubsystemRebuild(clusterID string) (clusterSubsystemRebuild, bool) {
+func (a *RefreshCoordinator) prepareClusterSubsystemRebuild(clusterID string) (clusterSubsystemRebuild, bool) {
 	oldClients := a.clusterClientsForID(clusterID)
 	if oldClients == nil {
 		a.appLogs.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: clients not found", clusterID), logsources.Auth, clusterID, clusterID)
 		return clusterSubsystemRebuild{}, false
 	}
-	selections, err := a.selectedKubeconfigSelections()
-	if err != nil {
-		a.appLogs.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, oldClients.meta.Name)
-		return clusterSubsystemRebuild{}, false
-	}
-	selection, found := a.findClusterKubeconfigSelection(clusterID, selections)
-	if !found {
+	selection := kubeconfigSelection{Path: oldClients.kubeconfigPath, Context: oldClients.kubeconfigContext}
+	if selection.Path == "" {
 		a.appLogs.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: selection not found", clusterID), logsources.Auth, clusterID, oldClients.meta.Name)
 		return clusterSubsystemRebuild{}, false
 	}
 	return clusterSubsystemRebuild{
-		app: a, clusterID: clusterID, clusterName: oldClients.meta.Name,
+		refresh: a, clusterID: clusterID, clusterName: oldClients.meta.Name,
 		selection: selection, oldClients: oldClients,
 	}, true
 }
 
-func (a *App) findClusterKubeconfigSelection(clusterID string, selections []kubeconfigSelection) (kubeconfigSelection, bool) {
-	for _, selection := range selections {
-		if a.clusterMetaForSelection(selection).ID == clusterID {
-			return selection, true
-		}
-	}
-	return kubeconfigSelection{}, false
-}
-
 func (r clusterSubsystemRebuild) rebuildClients() (*clusterClients, bool) {
-	clients, err := r.app.buildClusterClientsWithManager(
+	clients, err := r.refresh.buildClusterClientsWithManager(
 		context.Background(), r.selection, r.oldClients.meta, r.oldClients.authManager,
 	)
 	if err != nil {
@@ -369,7 +366,7 @@ func (r clusterSubsystemRebuild) rebuildClients() (*clusterClients, bool) {
 		return nil, false
 	}
 	if clusterClientsAuthInvalid(clients) {
-		r.app.appLogs.logger.Warn(fmt.Sprintf("Skipping subsystem rebuild for cluster %s: auth not valid after client rebuild", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
+		r.refresh.appLogs.logger.Warn(fmt.Sprintf("Skipping subsystem rebuild for cluster %s: auth not valid after client rebuild", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
 		return nil, false
 	}
 	return clients, true
@@ -380,7 +377,7 @@ func clusterClientsAuthInvalid(clients *clusterClients) bool {
 }
 
 func (r clusterSubsystemRebuild) buildSubsystem(clients *clusterClients) (*system.Subsystem, bool) {
-	subsystem, err := r.app.buildRefreshSubsystemForSelection(r.selection, clients, clients.meta)
+	subsystem, err := r.refresh.buildRefreshSubsystemForSelection(r.selection, clients, clients.meta)
 	if err != nil {
 		r.reportBuildError("subsystem", "subsystem rebuild failed", err)
 		return nil, false
@@ -389,7 +386,7 @@ func (r clusterSubsystemRebuild) buildSubsystem(clients *clusterClients) (*syste
 }
 
 func (r clusterSubsystemRebuild) reportBuildError(component, capturePrefix string, err error) {
-	r.app.appLogs.logger.ErrorWithCause(
+	r.refresh.appLogs.logger.ErrorWithCause(
 		err, fmt.Sprintf("Failed to rebuild %s for cluster %s", component, r.clusterID),
 		logsources.Auth, r.clusterID, r.clusterName,
 	)
@@ -397,10 +394,10 @@ func (r clusterSubsystemRebuild) reportBuildError(component, capturePrefix strin
 }
 
 func (r clusterSubsystemRebuild) startManager(subsystem *system.Subsystem) bool {
-	if r.app == nil || subsystem == nil || subsystem.Manager == nil {
+	if r.refresh == nil || subsystem == nil || subsystem.Manager == nil {
 		return false
 	}
-	refreshCtx := r.app.ensureRefreshRuntimeContext()
+	refreshCtx := r.refresh.ensureRefreshRuntimeContext()
 	if refreshCtx == nil {
 		return false
 	}
@@ -410,7 +407,7 @@ func (r clusterSubsystemRebuild) startManager(subsystem *system.Subsystem) bool 
 
 func (r clusterSubsystemRebuild) runManager(ctx context.Context, subsystem *system.Subsystem) {
 	if err := subsystem.Manager.Start(ctx); err != nil {
-		r.app.appLogs.logger.Warn(fmt.Sprintf("Refresh manager for cluster %s stopped: %v", r.clusterID, err), logsources.Auth, r.clusterID, r.clusterName)
+		r.refresh.appLogs.logger.Warn(fmt.Sprintf("Refresh manager for cluster %s stopped: %v", r.clusterID, err), logsources.Auth, r.clusterID, r.clusterName)
 		return
 	}
 	if subsystem.Registry != nil {
@@ -427,44 +424,44 @@ func refreshSubsystemTopology(subsystems map[string]*system.Subsystem) (map[stri
 }
 
 func (r clusterSubsystemRebuild) updateRefreshRouting(subsystems map[string]*system.Subsystem, clusterOrder []string) bool {
-	if r.app.refreshService.Load() == nil || r.app.refreshAggregates.Load() == nil {
+	if r.refresh.refreshService.Load() == nil || r.refresh.refreshAggregates.Load() == nil {
 		return r.bootstrapRefreshRouting(subsystems, clusterOrder)
 	}
-	if err := r.app.refreshAggregates.Load().Update(clusterOrder, subsystems); err != nil {
-		r.app.appLogs.logger.ErrorWithCause(err, fmt.Sprintf("Failed to update aggregates for cluster %s", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
+	if err := r.refresh.refreshAggregates.Load().Update(clusterOrder, subsystems); err != nil {
+		r.refresh.appLogs.logger.ErrorWithCause(err, fmt.Sprintf("Failed to update aggregates for cluster %s", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
 		return false
 	}
 	return true
 }
 
 func (r clusterSubsystemRebuild) bootstrapRefreshRouting(subsystems map[string]*system.Subsystem, clusterOrder []string) bool {
-	mux, aggregates, err := r.app.buildRefreshMux(subsystems, clusterOrder)
+	mux, aggregates, err := r.refresh.buildRefreshMux(subsystems, clusterOrder)
 	if err != nil {
-		r.app.appLogs.logger.ErrorWithCause(err, fmt.Sprintf("Failed to build refresh mux after cluster %s recovery", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
+		r.refresh.appLogs.logger.ErrorWithCause(err, fmt.Sprintf("Failed to build refresh mux after cluster %s recovery", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
 		return false
 	}
-	r.app.refreshAggregates.Store(aggregates)
-	r.app.sweepNamespacesReadiness(subsystems)
-	r.app.publishRefreshService(mux, subsystems)
-	r.app.appLogs.logger.Info(fmt.Sprintf("Published refresh service after cluster %s recovery", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
+	r.refresh.refreshAggregates.Store(aggregates)
+	r.refresh.sweepNamespacesReadiness(subsystems)
+	r.refresh.publishRefreshService(mux, subsystems)
+	r.refresh.appLogs.logger.Info(fmt.Sprintf("Published refresh service after cluster %s recovery", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
 	return true
 }
 
 func (r clusterSubsystemRebuild) startObjectCatalog(clients *clusterClients) {
 	target := catalogTarget{selection: r.selection, meta: clients.meta}
-	if err := r.app.startObjectCatalogForTarget(target); err != nil {
-		r.app.appLogs.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", r.clusterID, err), logsources.Auth, r.clusterID, r.clusterName)
+	if err := r.refresh.startObjectCatalogForTarget(target); err != nil {
+		r.refresh.appLogs.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", r.clusterID, err), logsources.Auth, r.clusterID, r.clusterName)
 	}
 }
 
 // RetryClusterAuth triggers a manual authentication recovery attempt for a specific cluster.
 // Called when user clicks "Retry" for a specific cluster after re-authenticating externally.
-func (a *App) RetryClusterAuth(clusterID string) {
-	if a == nil || clusterID == "" {
+func (m *ClusterRuntimeManager) RetryClusterAuth(clusterID string) {
+	if m == nil || clusterID == "" {
 		return
 	}
 
-	clients := a.clusterClientsForID(clusterID)
+	clients := m.clusterClientsForID(clusterID)
 	if clients == nil || clients.authManager == nil {
 		return
 	}
@@ -473,12 +470,12 @@ func (a *App) RetryClusterAuth(clusterID string) {
 }
 
 // GetClusterAuthState returns the current auth state for a specific cluster.
-func (a *App) GetClusterAuthState(clusterID string) (string, string) {
-	if a == nil || clusterID == "" {
+func (m *ClusterRuntimeManager) GetClusterAuthState(clusterID string) (string, string) {
+	if m == nil || clusterID == "" {
 		return "unknown", ""
 	}
 
-	clients := a.clusterClientsForID(clusterID)
+	clients := m.clusterClientsForID(clusterID)
 	if clients == nil || clients.authManager == nil {
 		return "unknown", ""
 	}
@@ -489,8 +486,8 @@ func (a *App) GetClusterAuthState(clusterID string) (string, string) {
 
 // handleClusterAuthRecoveryProgress handles recovery progress updates for a specific cluster.
 // This is called periodically during recovery to allow the frontend to show countdowns.
-func (a *App) handleClusterAuthRecoveryProgress(clusterID string, progress authstate.RecoveryProgress) {
-	if a == nil || clusterID == "" {
+func (m *ClusterRuntimeManager) handleClusterAuthRecoveryProgress(clusterID string, progress authstate.RecoveryProgress) {
+	if m == nil || clusterID == "" {
 		return
 	}
 
@@ -499,7 +496,7 @@ func (a *App) handleClusterAuthRecoveryProgress(clusterID string, progress auths
 	// releases it), so this cannot deadlock.
 	clusterName := clusterID
 	var diag authstate.FailureDiagnostic
-	if clients := a.clusterClientsForID(clusterID); clients != nil {
+	if clients := m.clusterClientsForID(clusterID); clients != nil {
 		clusterName = clients.meta.Name
 		if clients.authManager != nil {
 			diag = clients.authManager.FailureDiagnostic()
@@ -512,7 +509,7 @@ func (a *App) handleClusterAuthRecoveryProgress(clusterID string, progress auths
 	// The typed diagnostic fields let a late-subscribing UI render exec-helper
 	// copy without having seen the failed/recovering event.
 	payload := authEventPayload(clusterID, clusterName, diag)
-	a.emitEvent(clusterAuthProgressEventName, ClusterAuthProgressEvent{
+	m.emitEvent(clusterAuthProgressEventName, ClusterAuthProgressEvent{
 		ClusterID:         payload.ClusterID,
 		ClusterName:       payload.ClusterName,
 		Reason:            payload.Reason,

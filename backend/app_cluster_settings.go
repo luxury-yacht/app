@@ -18,7 +18,7 @@ import (
 
 // GetClusterAllowedNamespaces returns the persisted namespace scope for the
 // cluster in the order the user saved it. Empty means no scope.
-func (a *App) GetClusterAllowedNamespaces(clusterID string) ([]string, error) {
+func (a *WorkspaceCoordinator) GetClusterAllowedNamespaces(clusterID string) ([]string, error) {
 	if clusterID == "" {
 		return nil, fmt.Errorf("clusterID is required")
 	}
@@ -31,7 +31,7 @@ func (a *App) GetClusterAllowedNamespaces(clusterID string) ([]string, error) {
 // persists but does not rebuild. It returns the normalized list. An
 // empty/nil list clears the scope. The whole batch is rejected on the first
 // invalid name: nothing is persisted and no rebuild is requested.
-func (a *App) SetClusterAllowedNamespaces(clusterID string, namespaces []string) ([]string, error) {
+func (a *WorkspaceCoordinator) SetClusterAllowedNamespaces(clusterID string, namespaces []string) ([]string, error) {
 	if clusterID == "" {
 		return nil, fmt.Errorf("clusterID is required")
 	}
@@ -63,7 +63,7 @@ func clusterSettingsSectionEmpty(section settingsClusterSection) bool {
 // persisted scope. A settings read failure degrades to cluster-wide (empty)
 // with a warning — the same degradation every settings consumer applies when
 // settings.json is unreadable — rather than failing the whole cluster build.
-func (a *App) allowedNamespacesForCluster(clusterID string) []string {
+func (a *WorkspaceCoordinator) allowedNamespacesForCluster(clusterID string) []string {
 	namespaces, err := a.GetClusterAllowedNamespaces(clusterID)
 	if err != nil {
 		a.appLogs.logger.Warn(
@@ -84,7 +84,7 @@ func (a *App) allowedNamespacesForCluster(clusterID string) []string {
 // rebuild recreates the permission checker, so the SSAR cache resets with
 // it. A cluster that is not currently connected has nothing to rebuild; its
 // persisted scope applies on the next connect.
-func (a *App) requestClusterScopeRebuild(clusterID string) {
+func (a *WorkspaceCoordinator) requestClusterScopeRebuild(clusterID string) {
 	if a.requestClusterScopeRebuildFn != nil {
 		a.requestClusterScopeRebuildFn(clusterID)
 		return
@@ -112,14 +112,14 @@ func (a *App) requestClusterScopeRebuild(clusterID string) {
 // tryQueueScopeRebuild reports whether the caller should enqueue a scope
 // rebuild for the cluster: false while one is already queued (the pending
 // rebuild will read the caller's just-persisted scope anyway).
-func (a *App) tryQueueScopeRebuild(clusterID string) bool {
+func (a *WorkspaceCoordinator) tryQueueScopeRebuild(clusterID string) bool {
 	_, alreadyQueued := a.scopeRebuildQueued.LoadOrStore(clusterID, struct{}{})
 	return !alreadyQueued
 }
 
 // markScopeRebuildStarted releases the cluster's queued slot at rebuild
 // start, so edits landing mid-rebuild queue a fresh one.
-func (a *App) markScopeRebuildStarted(clusterID string) {
+func (a *WorkspaceCoordinator) markScopeRebuildStarted(clusterID string) {
 	a.scopeRebuildQueued.Delete(clusterID)
 }
 
@@ -128,7 +128,7 @@ func (a *App) markScopeRebuildStarted(clusterID string) {
 // frontend restarts the cluster's streams and refetches its domains — without
 // this event the sidebar would keep serving the pre-rebuild snapshot (the
 // namespaces list would never show a newly added scope entry).
-func (a *App) performClusterScopeRebuild(clusterID string) {
+func (a *WorkspaceCoordinator) performClusterScopeRebuild(clusterID string) {
 	a.teardownClusterSubsystem(clusterID)
 	a.rebuildClusterSubsystem(clusterID)
 	a.incrementClusterScopeRevision(clusterID)

@@ -45,18 +45,30 @@ validation errors. Frontend refresh code should not produce them.
 
 ## Ownership
 
-- Backend cluster clients and metadata: `backend/cluster_clients.go`,
-  `backend/kubeconfig_selection.go`
-- Backend cluster-workspace snapshot and combined selection/visibility command:
-  `backend/cluster_workspace.go`
+- `backend.ClusterRuntimeManager` owns kubeconfig discovery and watcher
+  retargeting, cluster clients and metadata, authentication and recovery,
+  transport-health state, cluster lifecycle, Kubernetes API metrics, mutable
+  client rate limits, dependency resolution, and heartbeat probes.
+- `backend.ClusterWorkspaceProjection` is the leaf owner of replayable health,
+  namespace-scope revisions, and the aggregate workspace revision. Source
+  owners write through its narrow methods; it owns no clients, selections, or
+  refresh subsystem.
+- `backend.WorkspaceCoordinator` owns peer-window selection sets, the
+  serialized selection-mutation boundary, supersession generations,
+  diagnostics, namespace-scope rebuild coalescing, foreground demand, and
+  authoritative workspace-state assembly.
+- `backend.RefreshCoordinator` owns per-cluster refresh and catalog lifecycles,
+  aggregate routing, streams, governor state, spill state, and publication.
 - Cluster Attention rules, persistence transactions, six Ignore/Restore
   commands, and the cluster-indexed live target registry:
   `backend.ClusterAttentionService` in `backend/cluster_attention_service.go`
   and `backend/app_cluster_attention.go`. The service owns the Attention lock;
   it uses a narrow `PreferencesService` repository for persistence and never
   reaches through the refresh owner.
-- Cluster lifecycle and refresh subsystem setup: `backend/app_refresh_*.go`
-- Object catalog lifecycle: `backend/app_object_catalog.go`
+- Cluster and workspace implementation: `backend/cluster_clients.go`,
+  `backend/kubeconfigs.go`, `backend/cluster_workspace.go`
+- Refresh and object-catalog implementation: `backend/app_refresh_*.go`,
+  `backend/app_object_catalog.go`
 - Frontend cluster-workspace state and runtime-event reconciliation:
   `frontend/src/core/cluster-workspace/clusterWorkspaceStore.ts`
 - Frontend selection/navigation UI:
@@ -65,6 +77,21 @@ validation errors. Frontend refresh code should not produce them.
 - Cluster tab UI state: `frontend/src/ui/layout/ClusterTabs.tsx`
 - Global/per-cluster workspace navigation:
   `frontend/src/core/contexts/ViewStateContext.tsx`
+
+The dependency direction is one-way: Workspace sequences Cluster Runtime and
+Refresh; Refresh reads Cluster Runtime and invalidates `ResourceGateway`; the
+cluster and refresh owners never call back into Workspace. Watcher, auth, and
+transport producers instead publish typed `ClusterRuntimeIntent` values to an
+owner-local queue. Publication is non-blocking and pending work is coalesced by
+intent kind plus `clusterId`. Workspace is the single consumer: it rejects
+stale generations per kind/cluster and routes accepted work through the same
+serialized selection boundary as frontend commands. Shutdown stops that
+consumer before auth recovery and the watcher can publish more work.
+
+Preferences pushes initial and live Kubernetes QPS/burst values through the
+write-only cluster-runtime settings sink. `ClusterRuntimeManager` stores those
+values for future clients and retimes existing mutable limiters and API-metrics
+entries; it never reads Preferences.
 
 ## Cluster Workspace State Plane
 
@@ -92,6 +119,13 @@ different window's tab mutation, and `ApplyClusterWorkspace` captures an
 applied command's snapshot before releasing that boundary. Do not add a
 workspace-visible state writer without advancing the revision in the same
 locked commit.
+
+Startup calls `PreferencesService.EnsureLoadedForStartup` before entering the
+selection mutation, then restores the immutable selected-kubeconfig snapshot
+inside that boundary. Search-path changes persist first, ask Cluster Runtime to
+rediscover and retarget the watcher, classify removed selections, and only then
+reconcile refresh, selections, clients/auth, operations, projection state, and
+the persisted remaining selection.
 
 The React-free `clusterWorkspaceStore` subscribes to runtime events before its
 initial hydration. Live fields win only over hydration responses that were

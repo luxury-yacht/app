@@ -54,6 +54,7 @@ users:
 		KubernetesClientQPS:   250,
 		KubernetesClientBurst: 500,
 	}
+	app.ClusterRuntimeManager.SetKubernetesClientRateLimits(250, 500)
 	cfg, err = app.buildRestConfigForSelection(kubeconfigSelection{
 		Path:    configPath,
 		Context: "test-context",
@@ -243,12 +244,12 @@ func TestSyncClusterClientPool_EmptySelections(t *testing.T) {
 	require.Len(t, app.clusterClients, 0, "all clients should be removed with empty selections")
 }
 
-// TestSyncClusterClientPool_NilAppReturnsError verifies the nil-receiver guard.
-func TestSyncClusterClientPool_NilAppReturnsError(t *testing.T) {
-	var app *App
-	err := app.syncClusterClientPoolWithContext(context.Background(), nil)
+// TestSyncClusterClientPool_NilWorkspaceReturnsError verifies the nil-receiver guard.
+func TestSyncClusterClientPool_NilWorkspaceReturnsError(t *testing.T) {
+	var workspace *WorkspaceCoordinator
+	err := workspace.syncClusterClientPoolWithContext(context.Background(), nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "app is nil")
+	require.Contains(t, err.Error(), "workspace coordinator is nil")
 }
 
 // TestSyncClusterClientPool_CancelledContextSkipsCreation verifies that a

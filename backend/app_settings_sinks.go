@@ -2,27 +2,30 @@ package backend
 
 import "time"
 
-func (a *App) SetKubernetesClientRateLimits(qps, burst int) {
-	if a != nil {
-		a.applyKubernetesClientRateLimits(qps, burst)
+func (m *ClusterRuntimeManager) SetKubernetesClientRateLimits(qps, burst int) {
+	if m != nil {
+		m.applyKubernetesClientRateLimits(qps, burst)
 	}
 }
 
-func (a *App) SetContainerLogsGlobalLimit(limit int) {
-	if a == nil {
+func (r *RefreshCoordinator) SetContainerLogsGlobalLimit(limit int) {
+	if r == nil {
 		return
 	}
-	if limiter := a.sharedContainerLogsTargetLimiter(); limiter != nil {
+	if limiter := r.sharedContainerLogsTargetLimiter(); limiter != nil {
 		limiter.SetLimit(limit)
 	}
 }
 
-func (a *App) SetMetricsRefreshInterval(intervalMs int) {
-	if a == nil {
+func (r *RefreshCoordinator) SetMetricsRefreshInterval(intervalMs int) {
+	if r == nil {
 		return
 	}
 	interval := time.Duration(intervalMs) * time.Millisecond
-	for _, subsystem := range a.snapshotRefreshSubsystems() {
+	r.metricsIntervalMu.Lock()
+	r.metricsInterval = interval
+	r.metricsIntervalMu.Unlock()
+	for _, subsystem := range r.snapshotRefreshSubsystems() {
 		setSubsystemMetricsInterval(subsystem, interval)
 	}
 }

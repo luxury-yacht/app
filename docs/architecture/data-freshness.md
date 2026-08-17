@@ -200,6 +200,10 @@ application transport between them.
   sibling may not delay it. After a cluster enters `loading`, `loading_slow`, or
   `ready`, a late `connecting`/`connected` result cannot move it back behind the
   frontend serving gate.
+- `RefreshCoordinator` owns subsystem/catalog replacement, refresh telemetry,
+  Attention-target registration, and handler/stream publication. Replacement
+  publishes new routing before stopping old producers; teardown unpublishes
+  before releasing producers.
 - When a cluster subsystem is replaced, queued or running manual work moves to
   its replacement queue. Succeeded, failed, and cancelled jobs remain terminal
   and are never re-enqueued.

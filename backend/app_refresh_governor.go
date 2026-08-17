@@ -17,7 +17,7 @@ import (
 
 // initGovernor seeds the process-wide resource governor with its default policy
 // and memory budget. Called once from NewApp.
-func (a *App) initGovernor() {
+func (a *RefreshCoordinator) initGovernor() {
 	if a == nil {
 		return
 	}
@@ -35,10 +35,10 @@ func (a *App) initGovernor() {
 	a.governorNow = time.Now
 }
 
-// ensureGovernorStateLocked lazily initializes governor state for App instances
-// built without NewApp (e.g. test fixtures), so the governor never assigns to a
+// ensureGovernorStateLocked lazily initializes governor state for coordinator
+// fixtures built without the constructor, so the governor never assigns to a
 // nil map. Callers must hold governorMu.
-func (a *App) ensureGovernorStateLocked() {
+func (a *RefreshCoordinator) ensureGovernorStateLocked() {
 	if a.governorWindows == nil {
 		a.governorWindows = make(map[string]string)
 	}
@@ -53,7 +53,7 @@ func (a *App) ensureGovernorStateLocked() {
 	}
 }
 
-func (a *App) governorTime() time.Time {
+func (a *RefreshCoordinator) governorTime() time.Time {
 	if a == nil {
 		return time.Now()
 	}
@@ -71,7 +71,7 @@ func (a *App) governorTime() time.Time {
 // before lifecycle work starts: cooling closes the catalog gate before feeds stop,
 // while re-warming opens it before the fresh catalog starts. governorApplied is
 // deliberately separate because it records only completed lifecycle work.
-func (a *App) governorKeepsClusterCold(clusterID string) bool {
+func (a *RefreshCoordinator) governorKeepsClusterCold(clusterID string) bool {
 	if a == nil || clusterID == "" {
 		return false
 	}
@@ -83,7 +83,7 @@ func (a *App) governorKeepsClusterCold(clusterID string) bool {
 
 // setGovernorVisibleLocked commits foreground intent and its workspace
 // revision together. The caller must hold governorMu.
-func (a *App) setGovernorVisibleLocked(clusterID string) {
+func (a *RefreshCoordinator) setGovernorVisibleLocked(clusterID string) {
 	if a.governorVisible == clusterID {
 		return
 	}
@@ -98,7 +98,7 @@ func (a *App) setGovernorVisibleLocked(clusterID string) {
 // Moving the cluster to the front of the MRU keeps the most-recently-viewed
 // clusters warm; the governor policy then decides which stay Background and
 // which go Cold.
-func (a *App) SetVisibleCluster(clusterID string) {
+func (a *RefreshCoordinator) SetVisibleCluster(clusterID string) {
 	if a == nil || clusterID == "" {
 		return
 	}
@@ -116,7 +116,7 @@ func (a *App) SetVisibleCluster(clusterID string) {
 
 // SetWindowVisibleCluster records one peer window's foreground demand. Multiple
 // windows may therefore keep different clusters in the Foreground tier.
-func (a *App) SetWindowVisibleCluster(windowID, clusterID string) {
+func (a *RefreshCoordinator) SetWindowVisibleCluster(windowID, clusterID string) {
 	windowID = strings.TrimSpace(windowID)
 	clusterID = strings.TrimSpace(clusterID)
 	if a == nil || windowID == "" {
@@ -156,7 +156,7 @@ func (a *App) SetWindowVisibleCluster(windowID, clusterID string) {
 // releaseWorkspaceWindowForeground removes a closed peer window's foreground
 // demand. Cluster-tab ownership is released by ReleaseWorkspaceWindow at the
 // serialized selection boundary.
-func (a *App) releaseWorkspaceWindowForeground(windowID string) {
+func (a *RefreshCoordinator) releaseWorkspaceWindowForeground(windowID string) {
 	windowID = strings.TrimSpace(windowID)
 	if a == nil || windowID == "" {
 		return
@@ -174,7 +174,7 @@ func (a *App) releaseWorkspaceWindowForeground(windowID string) {
 	}
 }
 
-func (a *App) visibleClustersLocked() map[string]bool {
+func (a *RefreshCoordinator) visibleClustersLocked() map[string]bool {
 	visible := make(map[string]bool, len(a.governorWindows)+1)
 	if a.governorVisible != "" {
 		visible[a.governorVisible] = true
@@ -217,7 +217,7 @@ type governorExecutor interface {
 // reconcileGovernor computes the desired tier for every open cluster and applies
 // the transitions needed to reach it. It is idempotent and safe to call
 // repeatedly: clusters already at their desired tier produce no action.
-func (a *App) reconcileGovernor() {
+func (a *RefreshCoordinator) reconcileGovernor() {
 	a.reconcileGovernorWith(a.realGovernorExecutor())
 }
 
@@ -226,7 +226,7 @@ func (a *App) reconcileGovernor() {
 // calls run outside governorMu so newer visibility and pressure intent can still be
 // recorded; governorReconcileMu orders their application so executor calls cannot
 // overlap on an intermediate subsystem state.
-func (a *App) reconcileGovernorWith(exec governorExecutor) {
+func (a *RefreshCoordinator) reconcileGovernorWith(exec governorExecutor) {
 	if a == nil || exec == nil {
 		return
 	}
@@ -291,14 +291,10 @@ func (a *App) reconcileGovernorWith(exec governorExecutor) {
 // openClusterIDs returns the set of clusters that are currently open. A cluster
 // is open if it has selected kubeconfig clients OR a live refresh subsystem (the
 // latter covers clusters whose subsystem is up before the governor first runs).
-func (a *App) openClusterIDs() map[string]bool {
+func (a *RefreshCoordinator) openClusterIDs() map[string]bool {
 	open := make(map[string]bool)
-	if selections, err := a.selectedKubeconfigSelections(); err == nil {
-		for _, sel := range selections {
-			if meta := a.clusterMetaForSelection(sel); meta.ID != "" {
-				open[meta.ID] = true
-			}
-		}
+	for _, clusterID := range a.snapshotClusterIDs() {
+		open[clusterID] = true
 	}
 	for id := range a.snapshotRefreshSubsystems() {
 		open[id] = true
@@ -329,18 +325,18 @@ func intersectOrdered(ids []string, open map[string]bool) []string {
 
 // realGovernorExecutor wires the governor's tier transitions to the existing
 // per-cluster build/teardown APIs.
-func (a *App) realGovernorExecutor() governorExecutor {
-	return &appGovernorExecutor{app: a}
+func (a *RefreshCoordinator) realGovernorExecutor() governorExecutor {
+	return &refreshGovernorExecutor{refresh: a}
 }
 
-type appGovernorExecutor struct {
-	app *App
+type refreshGovernorExecutor struct {
+	refresh *RefreshCoordinator
 }
 
 // ensureRunning builds+starts the subsystem if absent, reusing the existing
 // per-cluster rebuild path. Metrics demand is routed separately by cluster ID.
-func (e *appGovernorExecutor) ensureRunning(clusterID string) bool {
-	a := e.app
+func (e *refreshGovernorExecutor) ensureRunning(clusterID string) bool {
+	a := e.refresh
 	if a == nil {
 		return false
 	}
@@ -381,7 +377,7 @@ func (e *appGovernorExecutor) ensureRunning(clusterID string) bool {
 //  3. closeCooledClosers takes the closers (exactly once) and runs them. Each store-level
 //     closer waits for the store's write lock, so it serializes after any straggler in-flight
 //     Build that was already reconstructing rows when the swap happened — only then unmapping.
-func (a *App) rewarmCooledClusterSubsystem(clusterID string) {
+func (a *RefreshCoordinator) rewarmCooledClusterSubsystem(clusterID string) {
 	if a == nil || clusterID == "" {
 		return
 	}
@@ -402,8 +398,8 @@ func (a *App) rewarmCooledClusterSubsystem(clusterID string) {
 // keeping the subsystem registered so it still serves Build queries — and only falls back to a
 // full teardown (heap fully reclaimed, blank until re-warm) if cooling fails at any step. Either
 // way the cluster's informer/metrics heap is reclaimed.
-func (e *appGovernorExecutor) teardown(clusterID string) bool {
-	a := e.app
+func (e *refreshGovernorExecutor) teardown(clusterID string) bool {
+	a := e.refresh
 	if a == nil {
 		return false
 	}
@@ -446,7 +442,7 @@ const (
 	coldPreparationPressureGrace = config.RefreshInformerSyncTimeout + 5*time.Second
 )
 
-func (a *App) shouldForceColdTeardown(subsystem *system.Subsystem) (time.Duration, uint64, bool) {
+func (a *RefreshCoordinator) shouldForceColdTeardown(subsystem *system.Subsystem) (time.Duration, uint64, bool) {
 	if a == nil || subsystem == nil {
 		return 0, 0, false
 	}
@@ -464,7 +460,7 @@ func (a *App) shouldForceColdTeardown(subsystem *system.Subsystem) (time.Duratio
 // startColdPreparation waits for and builds the retained snapshots needed by
 // surfaces that remain visible while a cluster is Cold. The work is server-owned
 // and independent of frontend leases: until it succeeds, the subsystem stays live.
-func (a *App) startColdPreparation(clusterID string, subsystem *system.Subsystem) {
+func (a *RefreshCoordinator) startColdPreparation(clusterID string, subsystem *system.Subsystem) {
 	if a == nil || clusterID == "" || subsystem == nil || subsystem.SnapshotService == nil || a.clusterLifecycle == nil {
 		return
 	}
@@ -552,7 +548,7 @@ func buildColdPreparationSnapshot(
 // (always-settled) informer hub so the SnapshotBuilder keeps serving, marks the subsystem
 // cooled, stops the object catalog, and reclaims the freed heap. On ANY cooling error it falls
 // back to the existing full teardown so a cluster is never left half-cooled.
-func (a *App) coolClusterToMmapServing(clusterID string) {
+func (a *RefreshCoordinator) coolClusterToMmapServing(clusterID string) {
 	if a == nil || clusterID == "" {
 		return
 	}
@@ -614,7 +610,7 @@ func (a *App) coolClusterToMmapServing(clusterID string) {
 // once the initial subsystems have been built and their manager starts launched.
 // A Cold assignment remains live while its retained baseline settles. The first open cluster is treated
 // as visible if none has been set yet, so a fresh start lands one Foreground.
-func (a *App) seedGovernorFromOpenClusters() {
+func (a *RefreshCoordinator) seedGovernorFromOpenClusters() {
 	if a == nil {
 		return
 	}
@@ -639,7 +635,7 @@ func (a *App) seedGovernorFromOpenClusters() {
 // handleGovernorPressureSample records the latest heap sample. Every sample that
 // remains over budget re-drives reconciliation so a Cold transition deferred for
 // retained-baseline preparation can reach its bounded pressure fallback.
-func (a *App) handleGovernorPressureSample(heapInuse uint64) {
+func (a *RefreshCoordinator) handleGovernorPressureSample(heapInuse uint64) {
 	if a == nil {
 		return
 	}
@@ -658,7 +654,7 @@ func (a *App) handleGovernorPressureSample(heapInuse uint64) {
 
 // startGovernorPressureLoop periodically samples heap usage. It stops when ctx
 // is cancelled (bound to the refresh context, so no goroutine leak on shutdown).
-func (a *App) startGovernorPressureLoop(ctx context.Context) {
+func (a *RefreshCoordinator) startGovernorPressureLoop(ctx context.Context) {
 	if a == nil || ctx == nil {
 		return
 	}

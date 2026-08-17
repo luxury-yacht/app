@@ -102,7 +102,7 @@ func (c *clusterOperationCoordinator) end(
 	slot.cancel = nil
 }
 
-func (a *App) runClusterOperation(
+func (m *ClusterRuntimeManager) runClusterOperation(
 	ctx context.Context,
 	clusterID string,
 	fn func(context.Context) error,
@@ -116,14 +116,14 @@ func (a *App) runClusterOperation(
 	opCtx, cancel := context.WithTimeout(ctx, config.ClusterOperationTimeout)
 	defer cancel()
 
-	if a == nil || a.clusterOps == nil {
+	if m == nil || m.clusterOps == nil {
 		err := fn(opCtx)
 		if errors.Is(err, context.Canceled) {
 			return nil
 		}
 		return err
 	}
-	err := a.clusterOps.run(opCtx, clusterID, fn)
+	err := m.clusterOps.run(opCtx, clusterID, fn)
 	if errors.Is(err, context.Canceled) {
 		return nil
 	}

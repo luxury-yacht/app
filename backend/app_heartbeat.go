@@ -28,18 +28,18 @@ const (
 // IMPORTANT: This function does NOT call:
 // - recordTransportFailure() - this triggers global recovery
 // - updateConnectionStatus() - this updates global state
-func (a *App) runHeartbeatIteration() {
-	if a == nil {
+func (m *ClusterRuntimeManager) runHeartbeatIteration() {
+	if m == nil {
 		return
 	}
 
 	// Take a snapshot of cluster clients under lock to avoid holding the lock during health checks
-	a.clusterClientsMu.Lock()
-	clients := make(map[string]*clusterClients, len(a.clusterClients))
-	for k, v := range a.clusterClients {
+	m.clusterClientsMu.Lock()
+	clients := make(map[string]*clusterClients, len(m.clusterClients))
+	for k, v := range m.clusterClients {
 		clients[k] = v
 	}
-	a.clusterClientsMu.Unlock()
+	m.clusterClientsMu.Unlock()
 
 	for clusterID, cc := range clients {
 		// Skip if cluster has no clients
@@ -51,12 +51,12 @@ func (a *App) runHeartbeatIteration() {
 		// cluster's transport are blocked in that state, and the auth
 		// manager's recovery loop keeps probing on its own cadence.
 		if cc.authManager != nil && !cc.authManager.IsValid() {
-			a.appLogs.logger.Debug("Skipping heartbeat for cluster "+cc.meta.Name+" (auth invalid)", logsources.Heartbeat, clusterID, cc.meta.Name)
+			m.logger.Debug("Skipping heartbeat for cluster "+cc.meta.Name+" (auth invalid)", logsources.Heartbeat, clusterID, cc.meta.Name)
 			continue
 		}
 
 		// Check health and distinguish failure type
-		status := a.checkClusterHealth(cc)
+		status := m.checkClusterHealth(cc)
 
 		// Build event data with cluster info
 		eventData := ClusterHealthEvent{
@@ -66,17 +66,17 @@ func (a *App) runHeartbeatIteration() {
 
 		switch status {
 		case healthOK:
-			a.setClusterHealth(clusterID, ClusterHealthHealthy)
-			a.emitEvent(clusterHealthHealthyEventName, eventData)
+			m.projection.setClusterHealth(clusterID, ClusterHealthHealthy)
+			m.emitEvent(clusterHealthHealthyEventName, eventData)
 
-			a.appLogs.logger.Debug("Heartbeat healthy for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
+			m.logger.Debug("Heartbeat healthy for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
 
 		case healthAuthFailure:
-			a.setClusterHealth(clusterID, ClusterHealthDegraded)
+			m.projection.setClusterHealth(clusterID, ClusterHealthDegraded)
 			eventData.Reason = "auth"
-			a.emitEvent(clusterHealthDegradedEventName, eventData)
+			m.emitEvent(clusterHealthDegradedEventName, eventData)
 
-			a.appLogs.logger.Warn("Heartbeat auth failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
+			m.logger.Warn("Heartbeat auth failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
 
 			// Only report to auth manager for genuine auth failures.
 			if cc.authManager != nil {
@@ -84,11 +84,11 @@ func (a *App) runHeartbeatIteration() {
 			}
 
 		case healthConnectivityFailure:
-			a.setClusterHealth(clusterID, ClusterHealthDegraded)
+			m.projection.setClusterHealth(clusterID, ClusterHealthDegraded)
 			eventData.Reason = "connectivity"
-			a.emitEvent(clusterHealthDegradedEventName, eventData)
+			m.emitEvent(clusterHealthDegradedEventName, eventData)
 
-			a.appLogs.logger.Warn("Heartbeat connectivity failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
+			m.logger.Warn("Heartbeat connectivity failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
 			// Do NOT report to auth manager — this is a network issue, not an auth issue.
 		}
 	}
@@ -96,7 +96,7 @@ func (a *App) runHeartbeatIteration() {
 
 // checkClusterHealth checks if a cluster is healthy by calling the /readyz endpoint.
 // Returns healthOK, healthAuthFailure, or healthConnectivityFailure.
-func (a *App) checkClusterHealth(cc *clusterClients) healthStatus {
+func (m *ClusterRuntimeManager) checkClusterHealth(cc *clusterClients) healthStatus {
 	if cc == nil || cc.client == nil {
 		return healthConnectivityFailure
 	}
@@ -112,7 +112,7 @@ func (a *App) checkClusterHealth(cc *clusterClients) healthStatus {
 	}
 
 	// Create a context with timeout for the health check
-	ctx, cancel := context.WithTimeout(a.CtxOrBackground(), config.ClusterHealthHeartbeatTimeout)
+	ctx, cancel := context.WithTimeout(m.context(), config.ClusterHealthHeartbeatTimeout)
 	defer cancel()
 
 	// Call /readyz endpoint to check cluster health
@@ -136,9 +136,9 @@ func (a *App) checkClusterHealth(cc *clusterClients) healthStatus {
 // It fires once immediately so the frontend gets cluster health on startup,
 // then repeats every config.ClusterHealthHeartbeatInterval.
 // The loop exits when ctx is cancelled (via a.refreshCancel).
-func (a *App) startHeartbeatLoop(ctx context.Context) {
+func (m *ClusterRuntimeManager) startHeartbeatLoop(ctx context.Context) {
 	// Run immediately so the frontend has status before the first tick.
-	a.runHeartbeatIteration()
+	m.runHeartbeatIteration()
 
 	ticker := time.NewTicker(config.ClusterHealthHeartbeatInterval)
 	defer ticker.Stop()
@@ -148,7 +148,7 @@ func (a *App) startHeartbeatLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			a.runHeartbeatIteration()
+			m.runHeartbeatIteration()
 		}
 	}
 }

@@ -21,6 +21,7 @@ type wailsMigrationLedger struct {
 	Phase2Checkpoint           wailsPhase2Checkpoint        `json:"phase2Checkpoint"`
 	Phase3Checkpoint           wailsPhase3Checkpoint        `json:"phase3Checkpoint"`
 	Phase4Checkpoint           wailsPhase4Checkpoint        `json:"phase4Checkpoint"`
+	Phase5Checkpoint           wailsPhase5Checkpoint        `json:"phase5Checkpoint"`
 	AppFieldGroups             []wailsAppFieldLedgerGroup   `json:"appFieldGroups"`
 	CommandGroups              []wailsCommandLedgerGroup    `json:"commandGroups"`
 	AppBackpointerGroups       []wailsSignatureLedgerGroup  `json:"appBackpointerGroups"`
@@ -72,6 +73,14 @@ type wailsPhase4Checkpoint struct {
 	RemainingDirectAppTests        int `json:"remainingDirectAppTests"`
 	RemainingTestOnlyAppMethods    int `json:"remainingTestOnlyAppMethods"`
 	ResourceAppBackpointers        int `json:"resourceAppBackpointers"`
+}
+
+type wailsPhase5Checkpoint struct {
+	AppFields                      int `json:"appFields"`
+	RemainingAppParameterFunctions int `json:"remainingAppParameterFunctions"`
+	RemainingDirectAppTests        int `json:"remainingDirectAppTests"`
+	RemainingTestOnlyAppMethods    int `json:"remainingTestOnlyAppMethods"`
+	AppBackpointers                int `json:"appBackpointers"`
 }
 
 type wailsAppFieldLedgerGroup struct {
@@ -319,11 +328,20 @@ func TestWailsMigrationLedgerRecordsPhase3LeafExtraction(t *testing.T) {
 
 func TestWailsMigrationLedgerRecordsPhase4ResourceExtraction(t *testing.T) {
 	checkpoint := readWailsMigrationLedger(t).Phase4Checkpoint
+	require.Equal(t, 79, checkpoint.AppFields)
+	require.Equal(t, 7, checkpoint.RemainingAppParameterFunctions)
+	require.Equal(t, 39, checkpoint.RemainingDirectAppTests)
+	require.Zero(t, checkpoint.RemainingTestOnlyAppMethods)
+	require.Zero(t, checkpoint.ResourceAppBackpointers)
+}
+
+func TestWailsMigrationLedgerRecordsPhase5RuntimeOwnerExtraction(t *testing.T) {
+	checkpoint := readWailsMigrationLedger(t).Phase5Checkpoint
 	require.Equal(t, len(currentAppFieldNames(t)), checkpoint.AppFields)
 	require.Equal(t, len(currentAppParameterFunctions(t)), checkpoint.RemainingAppParameterFunctions)
 	require.Equal(t, len(currentDirectAppTestFiles(t)), checkpoint.RemainingDirectAppTests)
 	require.Equal(t, len(currentTestOnlyAppMethods(t)), checkpoint.RemainingTestOnlyAppMethods)
-	require.Zero(t, checkpoint.ResourceAppBackpointers)
+	require.Equal(t, len(currentAppBackpointers(t)), checkpoint.AppBackpointers)
 }
 
 func TestWailsMigrationLedgerCoversConcreteAppCouplingExactlyOnce(t *testing.T) {

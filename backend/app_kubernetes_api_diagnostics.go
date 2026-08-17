@@ -206,22 +206,22 @@ func (t *kubernetesAPIMetricsTransport) RoundTrip(req *http.Request) (*http.Resp
 	return resp, err
 }
 
-func (a *App) ensureKubernetesAPIMetricsRegistry() *kubernetesAPIMetricsRegistry {
-	if a == nil {
+func (m *ClusterRuntimeManager) ensureKubernetesAPIMetricsRegistry() *kubernetesAPIMetricsRegistry {
+	if m == nil {
 		return nil
 	}
-	if a.kubeAPIMetrics != nil {
-		return a.kubeAPIMetrics
+	if m.kubeAPIMetrics != nil {
+		return m.kubeAPIMetrics
 	}
-	a.kubeAPIMetrics = newKubernetesAPIMetricsRegistry()
-	return a.kubeAPIMetrics
+	m.kubeAPIMetrics = newKubernetesAPIMetricsRegistry()
+	return m.kubeAPIMetrics
 }
 
 // GetKubernetesAPIClientDiagnostics returns per-cluster Kubernetes API client usage.
-func (a *App) GetKubernetesAPIClientDiagnostics() ([]KubernetesAPIClientDiagnostics, error) {
-	if a == nil {
+func (m *ClusterRuntimeManager) GetKubernetesAPIClientDiagnostics() ([]KubernetesAPIClientDiagnostics, error) {
+	if m == nil {
 		return nil, nil
 	}
-	registry := a.ensureKubernetesAPIMetricsRegistry()
+	registry := m.ensureKubernetesAPIMetricsRegistry()
 	return registry.snapshot(time.Now()), nil
 }

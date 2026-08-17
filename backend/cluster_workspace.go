@@ -56,77 +56,80 @@ type ClusterWorkspaceResult struct {
 // workspace snapshot. Callers invoke it while still holding the lock that owns
 // the changed source so a reader cannot observe the new value under the old
 // revision.
-func (a *App) markClusterWorkspaceChanged() {
-	if a != nil {
-		a.clusterWorkspaceRevision.Add(1)
+func (p *ClusterWorkspaceProjection) markClusterWorkspaceChanged() {
+	if p != nil {
+		p.clusterWorkspaceRevision.Add(1)
 	}
 }
 
-func (a *App) setClusterHealth(clusterID string, health ClusterHealthState) {
-	if a == nil || strings.TrimSpace(clusterID) == "" {
+func (p *ClusterWorkspaceProjection) setClusterHealth(clusterID string, health ClusterHealthState) {
+	if p == nil || strings.TrimSpace(clusterID) == "" {
 		return
 	}
-	a.clusterWorkspaceMu.Lock()
-	if a.clusterHealth == nil {
-		a.clusterHealth = make(map[string]ClusterHealthState)
+	p.clusterWorkspaceMu.Lock()
+	if p.clusterHealth == nil {
+		p.clusterHealth = make(map[string]ClusterHealthState)
 	}
-	if a.clusterHealth[clusterID] != health {
-		a.clusterHealth[clusterID] = health
-		a.markClusterWorkspaceChanged()
+	if p.clusterHealth[clusterID] != health {
+		p.clusterHealth[clusterID] = health
+		p.markClusterWorkspaceChanged()
 	}
-	a.clusterWorkspaceMu.Unlock()
+	p.clusterWorkspaceMu.Unlock()
 }
 
-func (a *App) incrementClusterScopeRevision(clusterID string) {
-	if a == nil || strings.TrimSpace(clusterID) == "" {
+func (p *ClusterWorkspaceProjection) incrementClusterScopeRevision(clusterID string) {
+	if p == nil || strings.TrimSpace(clusterID) == "" {
 		return
 	}
-	a.clusterWorkspaceMu.Lock()
-	if a.clusterScopeRevisions == nil {
-		a.clusterScopeRevisions = make(map[string]uint64)
+	p.clusterWorkspaceMu.Lock()
+	if p.clusterScopeRevisions == nil {
+		p.clusterScopeRevisions = make(map[string]uint64)
 	}
-	a.clusterScopeRevisions[clusterID]++
-	a.markClusterWorkspaceChanged()
-	a.clusterWorkspaceMu.Unlock()
+	p.clusterScopeRevisions[clusterID]++
+	p.markClusterWorkspaceChanged()
+	p.clusterWorkspaceMu.Unlock()
 }
 
-func (a *App) removeClusterWorkspaceRuntimeState(clusterID string) {
-	if a == nil || clusterID == "" {
+func (p *ClusterWorkspaceProjection) removeClusterWorkspaceRuntimeState(clusterID string) {
+	if p == nil || clusterID == "" {
 		return
 	}
-	a.clusterWorkspaceMu.Lock()
-	_, hadHealth := a.clusterHealth[clusterID]
-	_, hadScopeRevision := a.clusterScopeRevisions[clusterID]
-	delete(a.clusterHealth, clusterID)
-	delete(a.clusterScopeRevisions, clusterID)
+	p.clusterWorkspaceMu.Lock()
+	_, hadHealth := p.clusterHealth[clusterID]
+	_, hadScopeRevision := p.clusterScopeRevisions[clusterID]
+	delete(p.clusterHealth, clusterID)
+	delete(p.clusterScopeRevisions, clusterID)
 	if hadHealth || hadScopeRevision {
-		a.markClusterWorkspaceChanged()
+		p.markClusterWorkspaceChanged()
 	}
-	a.clusterWorkspaceMu.Unlock()
+	p.clusterWorkspaceMu.Unlock()
 }
 
-func (a *App) removeClusterWorkspaceState(clusterID string) {
+func (a *WorkspaceCoordinator) removeClusterWorkspaceState(clusterID string) {
+	if a == nil {
+		return
+	}
 	a.removeClusterWorkspaceRuntimeState(clusterID)
-	if a != nil && a.clusterLifecycle != nil {
+	if a.clusterLifecycle != nil {
 		a.clusterLifecycle.Remove(clusterID)
 	}
 }
 
-func (a *App) clusterWorkspaceRuntimeState() (map[string]ClusterHealthState, map[string]uint64) {
-	a.clusterWorkspaceMu.RLock()
-	defer a.clusterWorkspaceMu.RUnlock()
-	health := make(map[string]ClusterHealthState, len(a.clusterHealth))
-	for clusterID, state := range a.clusterHealth {
+func (p *ClusterWorkspaceProjection) clusterWorkspaceRuntimeState() (map[string]ClusterHealthState, map[string]uint64) {
+	p.clusterWorkspaceMu.RLock()
+	defer p.clusterWorkspaceMu.RUnlock()
+	health := make(map[string]ClusterHealthState, len(p.clusterHealth))
+	for clusterID, state := range p.clusterHealth {
 		health[clusterID] = state
 	}
-	revisions := make(map[string]uint64, len(a.clusterScopeRevisions))
-	for clusterID, revision := range a.clusterScopeRevisions {
+	revisions := make(map[string]uint64, len(p.clusterScopeRevisions))
+	for clusterID, revision := range p.clusterScopeRevisions {
 		revisions[clusterID] = revision
 	}
 	return health, revisions
 }
 
-func (a *App) clusterWorkspaceAuthStates() map[string]ClusterWorkspaceClusterState {
+func (a *WorkspaceCoordinator) clusterWorkspaceAuthStates() map[string]ClusterWorkspaceClusterState {
 	states := make(map[string]ClusterWorkspaceClusterState)
 	if a == nil {
 		return states
@@ -181,7 +184,7 @@ func readConsistentClusterWorkspaceState(
 // GetClusterWorkspaceState returns one revision-consistent snapshot of the
 // cluster-indexed state used by selection, lifecycle, auth, health, and
 // namespace-scope consumers.
-func (a *App) GetClusterWorkspaceState() ClusterWorkspaceState {
+func (a *WorkspaceCoordinator) GetClusterWorkspaceState() ClusterWorkspaceState {
 	if a == nil {
 		return ClusterWorkspaceState{Clusters: make(map[string]ClusterWorkspaceClusterState)}
 	}
@@ -192,7 +195,7 @@ func (a *App) GetClusterWorkspaceState() ClusterWorkspaceState {
 
 // GetClusterWorkspaceStateForWindow projects process-wide cluster state with
 // the visible cluster belonging to the requesting peer window.
-func (a *App) GetClusterWorkspaceStateForWindow(windowID string) ClusterWorkspaceState {
+func (a *WorkspaceCoordinator) GetClusterWorkspaceStateForWindow(windowID string) ClusterWorkspaceState {
 	if a == nil {
 		return ClusterWorkspaceState{Clusters: make(map[string]ClusterWorkspaceClusterState)}
 	}
@@ -206,13 +209,13 @@ func (a *App) GetClusterWorkspaceStateForWindow(windowID string) ClusterWorkspac
 // captureClusterWorkspaceState requires the caller to hold the serialized
 // selection-mutation boundary. Independent workspace sources remain protected
 // by the revision retry below.
-func (a *App) captureClusterWorkspaceState(windowID string) ClusterWorkspaceState {
+func (a *WorkspaceCoordinator) captureClusterWorkspaceState(windowID string) ClusterWorkspaceState {
 	return readConsistentClusterWorkspaceState(a.clusterWorkspaceRevision.Load, func() ClusterWorkspaceState {
 		return a.buildClusterWorkspaceState(windowID)
 	})
 }
 
-func (a *App) buildClusterWorkspaceState(windowID string) ClusterWorkspaceState {
+func (a *WorkspaceCoordinator) buildClusterWorkspaceState(windowID string) ClusterWorkspaceState {
 	state := ClusterWorkspaceState{
 		SelectedKubeconfigs: a.selectedKubeconfigsForWorkspaceLocked(windowID),
 		Clusters:            a.clusterWorkspaceAuthStates(),
@@ -272,7 +275,7 @@ func clusterWorkspaceStateWithDefaults(clusterID string, cluster ClusterWorkspac
 // ensureWorkspaceSelectionsLocked gives a newly observed peer the current
 // process selection as its initial tab set. The caller must hold
 // selectionMutationMu.
-func (a *App) ensureWorkspaceSelectionsLocked(windowID string) {
+func (a *WorkspaceCoordinator) ensureWorkspaceSelectionsLocked(windowID string) {
 	if a == nil || windowID == "" {
 		return
 	}
@@ -289,14 +292,14 @@ func (a *App) ensureWorkspaceSelectionsLocked(windowID string) {
 // selectedKubeconfigsForWorkspaceLocked projects the process union for legacy
 // callers and one peer's owned tabs for window-aware callers. The caller must
 // hold selectionMutationMu.
-func (a *App) selectedKubeconfigsForWorkspaceLocked(windowID string) []string {
+func (a *WorkspaceCoordinator) selectedKubeconfigsForWorkspaceLocked(windowID string) []string {
 	if windowID == "" {
 		return a.GetSelectedKubeconfigs()
 	}
 	return append([]string(nil), a.workspaceSelections[windowID]...)
 }
 
-func (a *App) setWorkspaceSelectionsLocked(windowID string, selections []string) {
+func (a *WorkspaceCoordinator) setWorkspaceSelectionsLocked(windowID string, selections []string) {
 	if a.workspaceSelections == nil {
 		a.workspaceSelections = make(map[string][]string)
 	}
@@ -311,7 +314,7 @@ func (a *App) setWorkspaceSelectionsLocked(windowID string, selections []string)
 // retainWorkspaceSelectionsLocked removes selections that an external source
 // (for example kubeconfig discovery) removed from the process selection. The
 // caller must hold selectionMutationMu.
-func (a *App) retainWorkspaceSelectionsLocked(remaining []string) {
+func (a *WorkspaceCoordinator) retainWorkspaceSelectionsLocked(remaining []string) {
 	allowed := make(map[string]struct{}, len(remaining))
 	for _, selection := range remaining {
 		allowed[selection] = struct{}{}
@@ -330,7 +333,7 @@ func (a *App) retainWorkspaceSelectionsLocked(remaining []string) {
 // replaceWorkspaceSelectionsLocked projects a process-level selection restore
 // into peers that registered before startup settings finished loading. The
 // caller must hold selectionMutationMu.
-func (a *App) replaceWorkspaceSelectionsLocked(selections []string) {
+func (a *WorkspaceCoordinator) replaceWorkspaceSelectionsLocked(selections []string) {
 	for windowID := range a.workspaceSelections {
 		a.setWorkspaceSelectionsLocked(windowID, selections)
 	}
@@ -339,7 +342,7 @@ func (a *App) replaceWorkspaceSelectionsLocked(selections []string) {
 // aggregateWorkspaceSelectionsLocked returns a deterministic union while
 // preserving the current process order for tabs that remain owned. The caller
 // must hold selectionMutationMu.
-func (a *App) aggregateWorkspaceSelectionsLocked() []string {
+func (a *WorkspaceCoordinator) aggregateWorkspaceSelectionsLocked() []string {
 	wanted := make(map[string]struct{})
 	for _, selections := range a.workspaceSelections {
 		for _, selection := range selections {
@@ -376,7 +379,7 @@ func (a *App) aggregateWorkspaceSelectionsLocked() []string {
 	return union
 }
 
-func (a *App) applyWorkspaceSelections(
+func (a *WorkspaceCoordinator) applyWorkspaceSelections(
 	mutation *selectionMutation,
 	windowID string,
 	selections []string,
@@ -400,7 +403,7 @@ func (a *App) applyWorkspaceSelections(
 // ReleaseWorkspaceWindow relinquishes both foreground demand and every cluster
 // tab owned by a closed peer. Shared cluster runtime state survives while any
 // other peer still owns the same selection.
-func (a *App) ReleaseWorkspaceWindow(windowID string) {
+func (a *WorkspaceCoordinator) ReleaseWorkspaceWindow(windowID string) {
 	windowID = strings.TrimSpace(windowID)
 	if a == nil || windowID == "" {
 		return
@@ -427,7 +430,7 @@ func (a *App) ReleaseWorkspaceWindow(windowID string) {
 
 // ApplyClusterWorkspace serializes selection mutation before foreground
 // activation and returns the resulting authoritative workspace snapshot.
-func (a *App) ApplyClusterWorkspace(command ClusterWorkspaceCommand) ClusterWorkspaceResult {
+func (a *WorkspaceCoordinator) ApplyClusterWorkspace(command ClusterWorkspaceCommand) ClusterWorkspaceResult {
 	windowID := strings.TrimSpace(command.WindowID)
 	var state ClusterWorkspaceState
 	captured := false
@@ -448,7 +451,7 @@ func (a *App) ApplyClusterWorkspace(command ClusterWorkspaceCommand) ClusterWork
 	return clusterWorkspaceResult(state, err)
 }
 
-func (a *App) runClusterWorkspaceMutation(
+func (a *WorkspaceCoordinator) runClusterWorkspaceMutation(
 	windowID string,
 	apply func(*selectionMutation) error,
 ) error {
@@ -458,7 +461,7 @@ func (a *App) runClusterWorkspaceMutation(
 	return a.runSelectionMutation("apply-cluster-workspace", apply)
 }
 
-func (a *App) applyClusterWorkspaceMutation(
+func (a *WorkspaceCoordinator) applyClusterWorkspaceMutation(
 	mutation *selectionMutation,
 	windowID string,
 	command ClusterWorkspaceCommand,
@@ -473,7 +476,7 @@ func (a *App) applyClusterWorkspaceMutation(
 	return nil
 }
 
-func (a *App) updateClusterWorkspaceSelections(
+func (a *WorkspaceCoordinator) updateClusterWorkspaceSelections(
 	mutation *selectionMutation,
 	windowID string,
 	command ClusterWorkspaceCommand,
@@ -490,7 +493,7 @@ func (a *App) updateClusterWorkspaceSelections(
 	return a.setSelectedKubeconfigs(mutation, command.SelectedKubeconfigs)
 }
 
-func (a *App) updateClusterWorkspaceVisibility(windowID string, command ClusterWorkspaceCommand) {
+func (a *WorkspaceCoordinator) updateClusterWorkspaceVisibility(windowID string, command ClusterWorkspaceCommand) {
 	clusterID := strings.TrimSpace(command.VisibleClusterID)
 	if windowID != "" && command.UpdateSelectedKubeconfigs {
 		a.SetWindowVisibleCluster(windowID, clusterID)
@@ -506,7 +509,7 @@ func (a *App) updateClusterWorkspaceVisibility(windowID string, command ClusterW
 	a.SetVisibleCluster(clusterID)
 }
 
-func (a *App) latestClusterWorkspaceState(windowID string) ClusterWorkspaceState {
+func (a *WorkspaceCoordinator) latestClusterWorkspaceState(windowID string) ClusterWorkspaceState {
 	if windowID != "" {
 		return a.GetClusterWorkspaceStateForWindow(windowID)
 	}

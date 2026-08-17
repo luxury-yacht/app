@@ -41,7 +41,8 @@ const beforeCloseSelectionFlushTimeout = 2 * time.Second
 // windows start. Interactive startup waits for WindowRuntimeReady.
 func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.setApplicationContext(ctx)
-	a.initializeClusterLifecycle()
+	go a.ClusterRuntimeManager.intents.Consume(ctx, a.WorkspaceCoordinator.consumeClusterRuntimeIntent)
+	a.ClusterRuntimeManager.initializeClusterLifecycle()
 	a.appLogs.logger.Info("Application startup initiated", logsources.App)
 	a.startDiagnosticDumpHandler(ctx)
 	a.configureStartupErrorCapture()
@@ -49,6 +50,22 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 	a.setupEnvironment()
 	a.appLogs.logger.Debug("Environment setup completed", logsources.App)
 	return nil
+}
+
+func (a *WorkspaceCoordinator) consumeClusterRuntimeIntent(intent ClusterRuntimeIntent) {
+	if !a.acceptClusterRuntimeIntent(intent) {
+		return
+	}
+	switch intent.Kind {
+	case ClusterRuntimeIntentKubeconfigSourceChanged:
+		a.handleKubeconfigChange(intent.Paths)
+	case ClusterRuntimeIntentAuthRebuild:
+		if command, ok := newClusterAuthStateCommand(intent.ClusterID, a.clusterAuthDisplayName(intent.ClusterID), intent.AuthState, intent.Diagnostic); ok {
+			a.dispatchClusterAuthMutation(intent, command)
+		}
+	case ClusterRuntimeIntentTransportRebuild:
+		a.runClusterTransportRebuild(intent.ClusterID, intent.Cause, nil)
+	}
 }
 
 // WindowRuntimeReady runs interactive initialization once the webview runtime
@@ -79,17 +96,17 @@ func (a *App) WindowRuntimeReady(windowName string, restoreGeometry bool) bool {
 	return true
 }
 
-func (a *App) initializeClusterLifecycle() {
+func (m *ClusterRuntimeManager) initializeClusterLifecycle() {
 	lifecycle := newClusterLifecycle(func(clusterID string, state, previousState ClusterLifecycleState) {
 		// An empty previousState means "no previous state" (first transition).
-		a.emitEvent(clusterLifecycleEventName, ClusterLifecycleEvent{
+		m.emitEvent(clusterLifecycleEventName, ClusterLifecycleEvent{
 			ClusterID:     clusterID,
 			State:         state,
 			PreviousState: string(previousState),
 		})
 	})
-	lifecycle.setSnapshotChangeObserver(a.markClusterWorkspaceChanged)
-	a.clusterLifecycle = lifecycle
+	lifecycle.setSnapshotChangeObserver(m.projection.markClusterWorkspaceChanged)
+	m.clusterLifecycle = lifecycle
 }
 
 func (a *App) configureStartupErrorCapture() {
@@ -209,7 +226,8 @@ func (a *App) initializeStartupClusters() {
 	if err := a.discoverKubeconfigs(); err != nil {
 		a.appLogs.logger.ErrorWithCause(err, "Failed to discover kubeconfigs", logsources.App)
 	} else {
-		a.appLogs.logger.Info(fmt.Sprintf("Found %d kubeconfig file(s)", len(a.availableKubeconfigs)), logsources.App)
+		result, _ := a.ClusterRuntimeManager.GetKubeconfigs()
+		a.appLogs.logger.Info(fmt.Sprintf("Found %d kubeconfig file(s)", len(result.Kubeconfigs)), logsources.App)
 	}
 
 	// The window is already visible, so settings restore and client initialization
@@ -297,23 +315,19 @@ func (a *App) ServiceShutdown() error {
 		a.updates.Stop()
 	}
 
-	// Shutdown all per-cluster auth managers to stop any recovery goroutines.
-	a.clusterClientsMu.Lock()
-	for _, clients := range a.clusterClients {
-		if clients != nil && clients.authManager != nil {
-			clients.authManager.Shutdown()
-		}
-	}
-	a.clusterClientsMu.Unlock()
+	// Stop cross-owner intent consumption before auth callbacks and watcher
+	// producers are shut down.
+	a.ClusterRuntimeManager.stopIntentConsumption()
+	a.ClusterRuntimeManager.stopAuthRecovery()
 
 	if a.operations != nil {
 		a.operations.Shutdown()
 	}
 
 	// Stop the kubeconfig directory watcher before tearing down cluster state.
-	a.stopKubeconfigWatcher()
+	a.ClusterRuntimeManager.stopKubeconfigWatcher()
 
-	a.teardownRefreshSubsystem()
+	a.RefreshCoordinator.teardownRefreshSubsystem()
 
 	a.appLogs.logger.Info("Application shutdown completed", logsources.App)
 	a.clearApplicationContext()
@@ -322,7 +336,7 @@ func (a *App) ServiceShutdown() error {
 
 // anyClusterAuthInvalid returns true if any cluster has an auth state that is not Valid.
 // Used to suppress auth error logging when we know auth issues exist.
-func (a *App) anyClusterAuthInvalid() bool {
+func (a *ClusterRuntimeManager) anyClusterAuthInvalid() bool {
 	if a == nil {
 		return false
 	}

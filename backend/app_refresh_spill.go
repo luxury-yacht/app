@@ -21,8 +21,8 @@ import (
 // clears it at startup so a re-warm only restores what THIS session wrote.
 
 // spillRootDir is the directory under which each cluster's spill files live. It sits under
-// the user cache dir (transient data). Tests override it via App.spillRoot.
-func (a *App) spillRootDir() (string, error) {
+// the user cache dir (transient data). Tests override the coordinator spillRoot.
+func (a *RefreshCoordinator) spillRootDir() (string, error) {
 	if a.spillRoot != "" {
 		return a.spillRoot, nil
 	}
@@ -36,7 +36,7 @@ func (a *App) spillRootDir() (string, error) {
 // clusterSpillDir is the per-cluster spill directory. The clusterID is hashed so an
 // arbitrary identifier is filesystem-safe and one cluster's files never collide with
 // another's.
-func (a *App) clusterSpillDir(clusterID string) (string, error) {
+func (a *RefreshCoordinator) clusterSpillDir(clusterID string) (string, error) {
 	root, err := a.spillRootDir()
 	if err != nil {
 		return "", err
@@ -47,7 +47,7 @@ func (a *App) clusterSpillDir(clusterID string) (string, error) {
 // clusterIngestSpillDir is the per-cluster directory for the ingest stores' Bundle spill — a
 // subdir of clusterSpillDir, so the stage-2 format-version guard (which clears the whole spill
 // root on an app upgrade) covers it too, keeping the maintained and ingest spills in lockstep.
-func (a *App) clusterIngestSpillDir(clusterID string) (string, error) {
+func (a *RefreshCoordinator) clusterIngestSpillDir(clusterID string) (string, error) {
 	dir, err := a.clusterSpillDir(clusterID)
 	if err != nil {
 		return "", err
@@ -68,7 +68,7 @@ const spillFormatMarkerFile = "format-version"
 
 // resetSpillRoot unconditionally clears the spill root. It is the discard primitive
 // resetSpillRootForFormat uses; best-effort, since the spill is transient cache.
-func (a *App) resetSpillRoot() {
+func (a *RefreshCoordinator) resetSpillRoot() {
 	if a == nil {
 		return
 	}
@@ -81,8 +81,8 @@ func (a *App) resetSpillRoot() {
 
 // spillFormatVersion is the version the current build's spill files are written with. A
 // change between sessions (an app upgrade that may have changed a row struct) invalidates
-// the on-disk spill. Tests override via App.spillFormat.
-func (a *App) spillFormatVersion() string {
+// the on-disk spill. Tests override the coordinator spillFormat.
+func (a *RefreshCoordinator) spillFormatVersion() string {
 	if a.spillFormat != "" {
 		return a.spillFormat
 	}
@@ -96,7 +96,7 @@ func (a *App) spillFormatVersion() string {
 // spill is discarded and the current format stamped, so incompatible rows are never restored.
 // Any residual decode mismatch within a version is still skipped per-store on restore, so
 // this guard is the proactive layer, not the only safety. Best-effort.
-func (a *App) resetSpillRootForFormat() {
+func (a *RefreshCoordinator) resetSpillRootForFormat() {
 	if a == nil {
 		return
 	}
@@ -119,7 +119,7 @@ func (a *App) resetSpillRootForFormat() {
 // spillClusterStores flushes a cluster's maintained stores to its spill directory before
 // its heap is reclaimed on Cold, so a re-warm can re-paint them fast. Best-effort: a spill
 // failure must not block teardown (the cluster simply re-syncs from scratch on re-warm).
-func (a *App) spillClusterStores(clusterID string, reg *domain.Registry) {
+func (a *RefreshCoordinator) spillClusterStores(clusterID string, reg *domain.Registry) {
 	if a == nil || reg == nil {
 		return
 	}
@@ -137,7 +137,7 @@ func (a *App) spillClusterStores(clusterID string, reg *domain.Registry) {
 // may be stale; they are reconciled after the subsystem syncs (ReconcileMaintainedStores)
 // and by the fresh reflectors' initial Replace. Best-effort: a restore failure just means a
 // cold (blank-until-synced) re-warm.
-func (a *App) restoreClusterStores(clusterID string, reg *domain.Registry) {
+func (a *RefreshCoordinator) restoreClusterStores(clusterID string, reg *domain.Registry) {
 	if a == nil || reg == nil {
 		return
 	}
@@ -153,7 +153,7 @@ func (a *App) restoreClusterStores(clusterID string, reg *domain.Registry) {
 // spillClusterIngestStores flushes a cluster's ingest stores (the projected Bundles + their
 // per-GVR resourceVersion) on Cold, so a re-warm can resume each watch from the persisted RV
 // (delta) instead of a full re-LIST. Best-effort: a failure just means that kind full-syncs.
-func (a *App) spillClusterIngestStores(clusterID string, im *ingest.IngestManager) {
+func (a *RefreshCoordinator) spillClusterIngestStores(clusterID string, im *ingest.IngestManager) {
 	if a == nil || im == nil {
 		return
 	}
@@ -170,7 +170,7 @@ func (a *App) spillClusterIngestStores(clusterID string, im *ingest.IngestManage
 // start, setting each kind's resume RV so Start resumes the watch from it. Best-effort: a
 // missing/corrupt spill leaves that kind to full-sync (no regression). Must be called before
 // the manager starts.
-func (a *App) restoreClusterIngestStores(clusterID string, im *ingest.IngestManager) {
+func (a *RefreshCoordinator) restoreClusterIngestStores(clusterID string, im *ingest.IngestManager) {
 	if a == nil || im == nil {
 		return
 	}
@@ -185,7 +185,7 @@ func (a *App) restoreClusterIngestStores(clusterID string, im *ingest.IngestMana
 // files live in. It is a subdir of clusterSpillDir, so the stage-2 format-version guard (which
 // clears the whole spill root on app upgrade) covers it too, and it never collides with the
 // columnar warm-paint spill files in the parent directory.
-func (a *App) clusterCooledMmapDir(clusterID string) (string, error) {
+func (a *RefreshCoordinator) clusterCooledMmapDir(clusterID string) (string, error) {
 	dir, err := a.clusterSpillDir(clusterID)
 	if err != nil {
 		return "", err
@@ -195,7 +195,7 @@ func (a *App) clusterCooledMmapDir(clusterID string) (string, error) {
 
 // setCooledClosers records the mmap closers for a cooled cluster so the re-warm/teardown path
 // can release the mappings exactly once. Guarded by cooledMu.
-func (a *App) setCooledClosers(clusterID string, closers []func() error) {
+func (a *RefreshCoordinator) setCooledClosers(clusterID string, closers []func() error) {
 	if a == nil || clusterID == "" {
 		return
 	}
@@ -210,7 +210,7 @@ func (a *App) setCooledClosers(clusterID string, closers []func() error) {
 // takeCooledClosers removes and returns a cooled cluster's mmap closers, returning nil after
 // the first call — so a re-warm followed by a teardown (or vice versa) closes each mapping
 // exactly once and never double-unmaps. Guarded by cooledMu.
-func (a *App) takeCooledClosers(clusterID string) []func() error {
+func (a *RefreshCoordinator) takeCooledClosers(clusterID string) []func() error {
 	if a == nil || clusterID == "" {
 		return nil
 	}
@@ -225,7 +225,7 @@ func (a *App) takeCooledClosers(clusterID string) []func() error {
 // cooled or already re-warmed). Each store-level closer waits for any in-flight Query and
 // unmaps once, so this is safe to call only AFTER the cooled subsystem is unrouted (no new
 // Build can reach the mmap stores). Best-effort: a closer error is logged, not propagated.
-func (a *App) closeCooledClosers(clusterID string) {
+func (a *RefreshCoordinator) closeCooledClosers(clusterID string) {
 	for _, closer := range a.takeCooledClosers(clusterID) {
 		if closer == nil {
 			continue

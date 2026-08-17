@@ -1102,26 +1102,6 @@ func setSubsystemMetricsInterval(subsystem *system.Subsystem, interval time.Dura
 	subsystem.Manager.SetMetricsInterval(interval)
 }
 
-func (p *PreferencesService) kubernetesClientRateLimits() (qps int, burst int) {
-	if p == nil {
-		return defaultKubernetesClientQPS, defaultKubernetesClientBurst
-	}
-	p.settingsMu.Lock()
-	defer p.settingsMu.Unlock()
-	if p.appSettings == nil {
-		return defaultKubernetesClientQPS, defaultKubernetesClientBurst
-	}
-	qps = p.appSettings.KubernetesClientQPS
-	if qps <= 0 {
-		qps = defaultKubernetesClientQPS
-	}
-	burst = p.appSettings.KubernetesClientBurst
-	if burst <= 0 {
-		burst = defaultKubernetesClientBurst
-	}
-	return clampKubernetesClientQPS(qps), clampKubernetesClientBurst(burst)
-}
-
 func (p *PreferencesService) SetAppearanceMode(mode string) error {
 	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceAppearanceMode, Value: mode}}})
 	return err

@@ -43,27 +43,27 @@ type discoveredSelectionPrune struct {
 }
 
 // discoverKubeconfigs scans configured kubeconfig search paths for kubeconfig files.
-func (a *App) discoverKubeconfigs() error {
-	a.kubeconfigsMu.Lock()
-	defer a.kubeconfigsMu.Unlock()
-	return a.discoverKubeconfigsLocked()
+func (m *ClusterRuntimeManager) discoverKubeconfigs() error {
+	m.discoveryMu.Lock()
+	defer m.discoveryMu.Unlock()
+	return m.discoverKubeconfigsLocked()
 }
 
-func (a *App) discoverKubeconfigsLocked() error {
-	a.appLogs.logger.Debug("Starting kubeconfig discovery", logsources.KubeconfigManager)
-	a.availableKubeconfigs = []KubeconfigInfo{}
-	a.preferences.SetDiscoveredKubeconfigSearchPaths(nil)
-	a.kubeconfigDiscoveryState = KubeconfigDiscoveryStateNoKubeconfigs
+func (m *ClusterRuntimeManager) discoverKubeconfigsLocked() error {
+	m.logger.Debug("Starting kubeconfig discovery", logsources.KubeconfigManager)
+	m.availableKubeconfigs = []KubeconfigInfo{}
+	m.discoveryRepository.SetDiscoveredKubeconfigSearchPaths(nil)
+	m.kubeconfigDiscoveryState = KubeconfigDiscoveryStateNoKubeconfigs
 
-	searchPaths, err := a.loadKubeconfigSearchPaths()
+	searchPaths, err := m.loadKubeconfigSearchPaths()
 	if err != nil {
-		a.appLogs.logger.ErrorWithCause(err, "Failed to load kubeconfig search paths", logsources.KubeconfigManager)
+		m.logger.ErrorWithCause(err, "Failed to load kubeconfig search paths", logsources.KubeconfigManager)
 		return err
 	}
-	a.preferences.SetDiscoveredKubeconfigSearchPaths(searchPaths)
+	m.discoveryRepository.SetDiscoveredKubeconfigSearchPaths(searchPaths)
 	if len(searchPaths) == 0 {
-		a.appLogs.logger.Warn("No kubeconfig search paths configured", logsources.KubeconfigManager)
-		a.kubeconfigDiscoveryState = KubeconfigDiscoveryStateSearchPathsMissing
+		m.logger.Warn("No kubeconfig search paths configured", logsources.KubeconfigManager)
+		m.kubeconfigDiscoveryState = KubeconfigDiscoveryStateSearchPathsMissing
 		return nil
 	}
 
@@ -72,62 +72,62 @@ func (a *App) discoverKubeconfigsLocked() error {
 	seenFiles := make(map[string]struct{})
 
 	for _, entry := range searchPaths {
-		foundRoot = a.discoverKubeconfigsAtPath(entry, defaultConfigPath, seenFiles) || foundRoot
+		foundRoot = m.discoverKubeconfigsAtPath(entry, defaultConfigPath, seenFiles) || foundRoot
 	}
 
 	if !foundRoot {
-		a.kubeconfigDiscoveryState = KubeconfigDiscoveryStateSearchPathsMissing
+		m.kubeconfigDiscoveryState = KubeconfigDiscoveryStateSearchPathsMissing
 		return nil
 	}
-	if len(a.availableKubeconfigs) > 0 {
-		a.kubeconfigDiscoveryState = KubeconfigDiscoveryStateAvailable
+	if len(m.availableKubeconfigs) > 0 {
+		m.kubeconfigDiscoveryState = KubeconfigDiscoveryStateAvailable
 	}
 
 	return nil
 }
 
-func (a *App) discoverKubeconfigsAtPath(entry, defaultConfigPath string, seenFiles map[string]struct{}) bool {
+func (m *ClusterRuntimeManager) discoverKubeconfigsAtPath(entry, defaultConfigPath string, seenFiles map[string]struct{}) bool {
 	resolved := resolveKubeconfigSearchPath(entry)
 	if resolved == "" {
 		return false
 	}
 	info, err := os.Stat(resolved)
 	if err != nil {
-		a.logKubeconfigPathReadError(resolved, err)
+		m.logKubeconfigPathReadError(resolved, err)
 		return false
 	}
 	if !info.IsDir() {
-		a.appendKubeconfigFromFile(resolved, filepath.Base(resolved), defaultConfigPath, false, seenFiles)
+		m.appendKubeconfigFromFile(resolved, filepath.Base(resolved), defaultConfigPath, false, seenFiles)
 		return true
 	}
 
-	a.appLogs.logger.Debug(fmt.Sprintf("Scanning directory: %s", resolved), logsources.KubeconfigManager)
+	m.logger.Debug(fmt.Sprintf("Scanning directory: %s", resolved), logsources.KubeconfigManager)
 	entries, err := os.ReadDir(resolved)
 	if err != nil {
-		a.appLogs.logger.Warn(fmt.Sprintf("Failed to read kubeconfig directory %s: %v", resolved, err), logsources.KubeconfigManager)
+		m.logger.Warn(fmt.Sprintf("Failed to read kubeconfig directory %s: %v", resolved, err), logsources.KubeconfigManager)
 		return true
 	}
-	a.appLogs.logger.Debug(fmt.Sprintf("Found %d items in %s", len(entries), resolved), logsources.KubeconfigManager)
+	m.logger.Debug(fmt.Sprintf("Found %d items in %s", len(entries), resolved), logsources.KubeconfigManager)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 		path := filepath.Join(resolved, entry.Name())
-		a.appendKubeconfigFromFile(path, entry.Name(), defaultConfigPath, true, seenFiles)
+		m.appendKubeconfigFromFile(path, entry.Name(), defaultConfigPath, true, seenFiles)
 	}
 	return true
 }
 
-func (a *App) logKubeconfigPathReadError(path string, err error) {
+func (m *ClusterRuntimeManager) logKubeconfigPathReadError(path string, err error) {
 	if os.IsNotExist(err) {
-		a.appLogs.logger.Warn(fmt.Sprintf("Kubeconfig path not found: %s", path), logsources.KubeconfigManager)
+		m.logger.Warn(fmt.Sprintf("Kubeconfig path not found: %s", path), logsources.KubeconfigManager)
 		return
 	}
-	a.appLogs.logger.Warn(fmt.Sprintf("Failed to read kubeconfig path %s: %v", path, err), logsources.KubeconfigManager)
+	m.logger.Warn(fmt.Sprintf("Failed to read kubeconfig path %s: %v", path, err), logsources.KubeconfigManager)
 }
 
 // appendKubeconfigFromFile validates a kubeconfig file and appends its contexts.
-func (a *App) appendKubeconfigFromFile(path string, name string, defaultConfigPath string, applyHeuristics bool, seenFiles map[string]struct{}) {
+func (m *ClusterRuntimeManager) appendKubeconfigFromFile(path string, name string, defaultConfigPath string, applyHeuristics bool, seenFiles map[string]struct{}) {
 	cleanedPath := filepath.Clean(path)
 	if applyHeuristics && shouldSkipKubeconfigName(name) {
 		return
@@ -140,23 +140,23 @@ func (a *App) appendKubeconfigFromFile(path string, name string, defaultConfigPa
 	seenFiles[key] = struct{}{}
 
 	// Parse the file as a kubeconfig to validate it.
-	a.appLogs.logger.Debug(fmt.Sprintf("Validating kubeconfig file: %s", cleanedPath), logsources.KubeconfigManager)
+	m.logger.Debug(fmt.Sprintf("Validating kubeconfig file: %s", cleanedPath), logsources.KubeconfigManager)
 	config, err := clientcmd.LoadFromFile(cleanedPath)
 	if err != nil {
-		a.appLogs.logger.Debug(fmt.Sprintf("Skipping %s - not a valid kubeconfig: %v", cleanedPath, err), logsources.KubeconfigManager)
+		m.logger.Debug(fmt.Sprintf("Skipping %s - not a valid kubeconfig: %v", cleanedPath, err), logsources.KubeconfigManager)
 		return
 	}
 
 	// Additional validation: ensure it has clusters and contexts.
 	if len(config.Clusters) == 0 || len(config.Contexts) == 0 {
-		a.appLogs.logger.Debug(fmt.Sprintf("Skipping %s - no clusters or contexts found", cleanedPath), logsources.KubeconfigManager)
+		m.logger.Debug(fmt.Sprintf("Skipping %s - no clusters or contexts found", cleanedPath), logsources.KubeconfigManager)
 		return
 	}
 
 	isDefault := pathsEqual(cleanedPath, defaultConfigPath)
 	displayName := name
 
-	a.appLogs.logger.Info(fmt.Sprintf("Found valid kubeconfig: %s (%d clusters, %d contexts)", cleanedPath, len(config.Clusters), len(config.Contexts)), logsources.KubeconfigManager)
+	m.logger.Info(fmt.Sprintf("Found valid kubeconfig: %s (%d clusters, %d contexts)", cleanedPath, len(config.Clusters), len(config.Contexts)), logsources.KubeconfigManager)
 
 	// Create an entry for each context in the kubeconfig. Validate each context
 	// structurally (references an existing cluster + user) via ConfirmUsable —
@@ -169,7 +169,7 @@ func (a *App) appendKubeconfigFromFile(path string, name string, defaultConfigPa
 			invalid = true
 			invalidReason = err.Error()
 		}
-		a.availableKubeconfigs = append(a.availableKubeconfigs, KubeconfigInfo{
+		m.availableKubeconfigs = append(m.availableKubeconfigs, KubeconfigInfo{
 			Name:             displayName,
 			Path:             cleanedPath,
 			Context:          contextName,
@@ -209,12 +209,12 @@ func shouldSkipKubeconfigName(name string) bool {
 }
 
 // loadKubeconfigSearchPaths reads and normalizes the kubeconfig search paths.
-func (a *App) loadKubeconfigSearchPaths() ([]string, error) {
-	return a.preferences.KubeconfigSearchPaths()
+func (m *ClusterRuntimeManager) loadKubeconfigSearchPaths() ([]string, error) {
+	return m.discoveryRepository.KubeconfigSearchPaths()
 }
 
 // SetKubeconfigSearchPaths persists the search paths and refreshes kubeconfig discovery.
-func (a *App) SetKubeconfigSearchPaths(paths []string) error {
+func (a *WorkspaceCoordinator) SetKubeconfigSearchPaths(paths []string) error {
 	return a.runSelectionMutation("set-kubeconfig-search-paths", func(mutation *selectionMutation) error {
 		normalized := normalizeKubeconfigSearchPaths(paths)
 		if len(normalized) == 0 {
@@ -230,7 +230,7 @@ func (a *App) SetKubeconfigSearchPaths(paths []string) error {
 	})
 }
 
-func (a *App) refreshKubeconfigDiscoveryAfterSearchPathChange() {
+func (a *WorkspaceCoordinator) refreshKubeconfigDiscoveryAfterSearchPathChange() {
 	if err := a.discoverKubeconfigs(); err != nil {
 		a.appLogs.logger.Warn(fmt.Sprintf("Failed to refresh kubeconfig discovery: %v", err), logsources.KubeconfigManager)
 	}
@@ -363,34 +363,34 @@ func pathsEqual(left, right string) bool {
 }
 
 // GetKubeconfigs returns the available kubeconfigs and the current discovery state.
-func (a *App) GetKubeconfigs() (KubeconfigDiscoveryResult, error) {
-	a.kubeconfigsMu.RLock()
-	if len(a.availableKubeconfigs) > 0 {
+func (m *ClusterRuntimeManager) GetKubeconfigs() (KubeconfigDiscoveryResult, error) {
+	m.discoveryMu.RLock()
+	if len(m.availableKubeconfigs) > 0 {
 		result := KubeconfigDiscoveryResult{
-			Kubeconfigs: append([]KubeconfigInfo(nil), a.availableKubeconfigs...),
+			Kubeconfigs: append([]KubeconfigInfo(nil), m.availableKubeconfigs...),
 			State:       KubeconfigDiscoveryStateAvailable,
-			SearchPaths: a.preferences.DiscoveredKubeconfigSearchPaths(),
+			SearchPaths: m.discoveryRepository.DiscoveredKubeconfigSearchPaths(),
 		}
-		a.kubeconfigsMu.RUnlock()
+		m.discoveryMu.RUnlock()
 		return result, nil
 	}
-	a.kubeconfigsMu.RUnlock()
+	m.discoveryMu.RUnlock()
 
-	if err := a.discoverKubeconfigs(); err != nil {
+	if err := m.discoverKubeconfigs(); err != nil {
 		return KubeconfigDiscoveryResult{}, err
 	}
 
-	a.kubeconfigsMu.RLock()
-	defer a.kubeconfigsMu.RUnlock()
+	m.discoveryMu.RLock()
+	defer m.discoveryMu.RUnlock()
 	return KubeconfigDiscoveryResult{
-		Kubeconfigs: append([]KubeconfigInfo(nil), a.availableKubeconfigs...),
-		State:       a.kubeconfigDiscoveryState,
-		SearchPaths: a.preferences.DiscoveredKubeconfigSearchPaths(),
+		Kubeconfigs: append([]KubeconfigInfo(nil), m.availableKubeconfigs...),
+		State:       m.kubeconfigDiscoveryState,
+		SearchPaths: m.discoveryRepository.DiscoveredKubeconfigSearchPaths(),
 	}, nil
 }
 
 // GetSelectedKubeconfigs returns the active kubeconfig selections for multi-cluster support.
-func (a *App) GetSelectedKubeconfigs() []string {
+func (a *WorkspaceCoordinator) GetSelectedKubeconfigs() []string {
 	a.kubeconfigsMu.RLock()
 	defer a.kubeconfigsMu.RUnlock()
 	if len(a.selectedKubeconfigs) > 0 {
@@ -401,14 +401,14 @@ func (a *App) GetSelectedKubeconfigs() []string {
 
 // setSelectedKubeconfigsLocked updates the selection snapshot. The caller must
 // hold kubeconfigsMu so the value and workspace revision commit together.
-func (a *App) setSelectedKubeconfigsLocked(selections []string) {
+func (a *WorkspaceCoordinator) setSelectedKubeconfigsLocked(selections []string) {
 	a.selectedKubeconfigs = append([]string(nil), selections...)
 	a.markClusterWorkspaceChanged()
 }
 
 // SetKubeconfig switches to a different kubeconfig file and context
 // The parameter should be in the format "path:context"
-func (a *App) SetKubeconfig(selection string) error {
+func (a *WorkspaceCoordinator) SetKubeconfig(selection string) error {
 	a.appLogs.logger.Info(fmt.Sprintf("Switching kubeconfig to: %s", selection), logsources.KubeconfigManager)
 
 	if strings.TrimSpace(selection) == "" {
@@ -451,13 +451,13 @@ type selectionChangeIntent struct {
 // IMPORTANT: This function is called at runtime when the user changes their cluster selection,
 // which is different from app startup where initKubernetesClient() handles the initial setup.
 // Both code paths must perform the same initialization steps to ensure consistent behavior.
-func (a *App) SetSelectedKubeconfigs(selections []string) error {
+func (a *WorkspaceCoordinator) SetSelectedKubeconfigs(selections []string) error {
 	return a.runSelectionMutation("set-selected-kubeconfigs", func(mutation *selectionMutation) error {
 		return a.setSelectedKubeconfigs(mutation, selections)
 	})
 }
 
-func (a *App) setSelectedKubeconfigs(mutation *selectionMutation, selections []string) error {
+func (a *WorkspaceCoordinator) setSelectedKubeconfigs(mutation *selectionMutation, selections []string) error {
 	intentStart := time.Now()
 	intent, err := a.buildSelectionChangeIntent(selections, mutation.generation)
 	mutation.phases.intent = time.Since(intentStart)
@@ -477,7 +477,7 @@ func (a *App) setSelectedKubeconfigs(mutation *selectionMutation, selections []s
 
 // CloseCluster atomically tears down runtime operations for a selected cluster
 // and removes that cluster from the selected kubeconfig set.
-func (a *App) CloseCluster(selectionOrClusterID string) error {
+func (a *WorkspaceCoordinator) CloseCluster(selectionOrClusterID string) error {
 	target := strings.TrimSpace(selectionOrClusterID)
 	if target == "" {
 		return fmt.Errorf("cluster selection or ID is required")
@@ -508,7 +508,7 @@ func (a *App) CloseCluster(selectionOrClusterID string) error {
 	return a.SetSelectedKubeconfigs(remainingSelections)
 }
 
-func (a *App) clusterIDForSelection(selection string) string {
+func (a *WorkspaceCoordinator) clusterIDForSelection(selection string) string {
 	parsed, err := parseKubeconfigSelection(selection)
 	if err != nil {
 		return ""
@@ -520,7 +520,7 @@ func (a *App) clusterIDForSelection(selection string) string {
 }
 
 // buildSelectionChangeIntent parses and validates a requested selection set.
-func (a *App) buildSelectionChangeIntent(selections []string, generation uint64) (selectionChangeIntent, error) {
+func (a *WorkspaceCoordinator) buildSelectionChangeIntent(selections []string, generation uint64) (selectionChangeIntent, error) {
 	intent := selectionChangeIntent{generation: generation}
 	if len(selections) == 0 {
 		intent.clearSelection = true
@@ -542,7 +542,7 @@ func (a *App) buildSelectionChangeIntent(selections []string, generation uint64)
 	return intent, nil
 }
 
-func (a *App) normalizeSelectionSet(selections []string) ([]kubeconfigSelection, []string, error) {
+func (a *WorkspaceCoordinator) normalizeSelectionSet(selections []string) ([]kubeconfigSelection, []string, error) {
 	normalized := make([]kubeconfigSelection, 0, len(selections))
 	normalizedStrings := make([]string, 0, len(selections))
 	seenContexts := make(map[string]struct{}, len(selections))
@@ -580,7 +580,7 @@ func selectionSetsEqual(left, right []string) bool {
 }
 
 // commitSelectionChangeIntent applies validated selection state in-memory and to settings.
-func (a *App) commitSelectionChangeIntent(intent selectionChangeIntent) {
+func (a *WorkspaceCoordinator) commitSelectionChangeIntent(intent selectionChangeIntent) {
 	a.kubeconfigsMu.Lock()
 	a.setSelectedKubeconfigsLocked(intent.normalizedSelectionText)
 	a.kubeconfigsMu.Unlock()
@@ -591,7 +591,7 @@ func (a *App) commitSelectionChangeIntent(intent selectionChangeIntent) {
 }
 
 // executeSelectionChangeWork performs client and refresh work for an already-committed intent.
-func (a *App) executeSelectionChangeWork(
+func (a *WorkspaceCoordinator) executeSelectionChangeWork(
 	workCtx context.Context,
 	intent selectionChangeIntent,
 	phases *selectionMutationPhases,
@@ -650,7 +650,7 @@ func (a *App) executeSelectionChangeWork(
 	return nil
 }
 
-func (a *App) reconcileRefreshSubsystemSelections(selections []kubeconfigSelection) error {
+func (a *WorkspaceCoordinator) reconcileRefreshSubsystemSelections(selections []kubeconfigSelection) error {
 	if a.refreshService.Load() == nil || a.refreshAggregates.Load() == nil || a.currentRefreshRuntimeContext() == nil {
 		return a.setupRefreshSubsystem()
 	}
@@ -658,7 +658,7 @@ func (a *App) reconcileRefreshSubsystemSelections(selections []kubeconfigSelecti
 }
 
 // clearKubeconfigSelection clears the active selection and resets client state.
-func (a *App) clearKubeconfigSelection() error {
+func (a *WorkspaceCoordinator) clearKubeconfigSelection() error {
 	a.appLogs.logger.Info("Clearing kubeconfig selection", logsources.KubeconfigManager)
 	a.retainWorkspaceSelectionsLocked(nil)
 	a.kubeconfigsMu.Lock()
@@ -694,38 +694,44 @@ func (a *App) clearKubeconfigSelection() error {
 }
 
 // startKubeconfigWatcher creates and starts the kubeconfig directory watcher.
-func (a *App) startKubeconfigWatcher() error {
-	if a.kubeconfigWatcher != nil {
+func (m *ClusterRuntimeManager) startKubeconfigWatcher() error {
+	if m.kubeconfigWatcher != nil {
 		return nil
 	}
 
-	w, err := newKubeconfigWatcher(a, a.handleKubeconfigChange)
+	w, err := newKubeconfigWatcher(m.logger, func(paths []string) {
+		m.intents.Publish(ClusterRuntimeIntent{
+			Kind:       ClusterRuntimeIntentKubeconfigSourceChanged,
+			Generation: m.intentGeneration.Add(1),
+			Paths:      paths,
+		})
+	})
 	if err != nil {
 		return err
 	}
-	a.kubeconfigWatcher = w
+	m.kubeconfigWatcher = w
 
-	watchPaths := a.resolvedKubeconfigWatchPaths()
+	watchPaths := m.resolvedKubeconfigWatchPaths()
 	if err := w.updateWatchedPaths(watchPaths); err != nil {
-		a.appLogs.logger.Warn(fmt.Sprintf("Failed to set watched paths: %v", err), logsources.KubeconfigWatcher)
+		m.logger.Warn(fmt.Sprintf("Failed to set watched paths: %v", err), logsources.KubeconfigWatcher)
 	}
 
-	a.appLogs.logger.Info(fmt.Sprintf("Kubeconfig watcher started, watching %d path(s)", len(watchPaths)), logsources.KubeconfigWatcher)
+	m.logger.Info(fmt.Sprintf("Kubeconfig watcher started, watching %d path(s)", len(watchPaths)), logsources.KubeconfigWatcher)
 	return nil
 }
 
 // stopKubeconfigWatcher stops the kubeconfig directory watcher if running.
-func (a *App) stopKubeconfigWatcher() {
-	if a.kubeconfigWatcher == nil {
+func (m *ClusterRuntimeManager) stopKubeconfigWatcher() {
+	if m.kubeconfigWatcher == nil {
 		return
 	}
-	a.kubeconfigWatcher.stop()
-	a.kubeconfigWatcher = nil
+	m.kubeconfigWatcher.stop()
+	m.kubeconfigWatcher = nil
 }
 
 // resolvedKubeconfigWatchPaths returns watchedPath entries for configured search paths.
-func (a *App) resolvedKubeconfigWatchPaths() []watchedPath {
-	searchPaths, err := a.loadKubeconfigSearchPaths()
+func (m *ClusterRuntimeManager) resolvedKubeconfigWatchPaths() []watchedPath {
+	searchPaths, err := m.loadKubeconfigSearchPaths()
 	if err != nil {
 		return nil
 	}
@@ -784,7 +790,7 @@ func kubeconfigWatchedPaths(dirMap map[string]*kubeconfigWatchDirectory) []watch
 }
 
 // handleKubeconfigChange is called (debounced) when file changes are detected.
-func (a *App) handleKubeconfigChange(changedPaths []string) {
+func (a *WorkspaceCoordinator) handleKubeconfigChange(changedPaths []string) {
 	if len(changedPaths) == 0 {
 		return
 	}
@@ -798,7 +804,7 @@ func (a *App) handleKubeconfigChange(changedPaths []string) {
 }
 
 // handleKubeconfigChangeLocked processes file watcher mutations under the selection mutation boundary.
-func (a *App) handleKubeconfigChangeLocked(changedPaths []string, generation uint64) {
+func (a *WorkspaceCoordinator) handleKubeconfigChangeLocked(changedPaths []string, generation uint64) {
 	a.appLogs.logger.Info(
 		fmt.Sprintf("Kubeconfig file change detected (%d file(s)), refreshing... (generation=%d)", len(changedPaths), generation),
 		"KubeconfigWatcher",
@@ -850,7 +856,7 @@ func changedKubeconfigPathSet(paths []string) map[string]struct{} {
 	return changed
 }
 
-func (a *App) affectedKubeconfigClusters(changedPaths map[string]struct{}) []string {
+func (a *WorkspaceCoordinator) affectedKubeconfigClusters(changedPaths map[string]struct{}) []string {
 	a.clusterClientsMu.Lock()
 	defer a.clusterClientsMu.Unlock()
 	var affected []string
@@ -866,18 +872,18 @@ func (a *App) affectedKubeconfigClusters(changedPaths map[string]struct{}) []str
 	return affected
 }
 
-func (a *App) logKubeconfigDiscoveryComplete() {
-	a.kubeconfigsMu.RLock()
-	count := len(a.availableKubeconfigs)
-	a.kubeconfigsMu.RUnlock()
+func (a *WorkspaceCoordinator) logKubeconfigDiscoveryComplete() {
+	a.ClusterRuntimeManager.discoveryMu.RLock()
+	count := len(a.ClusterRuntimeManager.availableKubeconfigs)
+	a.ClusterRuntimeManager.discoveryMu.RUnlock()
 	a.appLogs.logger.Info(fmt.Sprintf("Re-discovery complete, found %d kubeconfig(s)", count), logsources.KubeconfigWatcher)
 }
 
-func (a *App) discoverableKubeconfigSelections() map[kubeconfigSelectionKey]struct{} {
-	a.kubeconfigsMu.RLock()
-	defer a.kubeconfigsMu.RUnlock()
-	discoverable := make(map[kubeconfigSelectionKey]struct{}, len(a.availableKubeconfigs))
-	for _, kubeconfig := range a.availableKubeconfigs {
+func (a *WorkspaceCoordinator) discoverableKubeconfigSelections() map[kubeconfigSelectionKey]struct{} {
+	a.ClusterRuntimeManager.discoveryMu.RLock()
+	defer a.ClusterRuntimeManager.discoveryMu.RUnlock()
+	discoverable := make(map[kubeconfigSelectionKey]struct{}, len(a.ClusterRuntimeManager.availableKubeconfigs))
+	for _, kubeconfig := range a.ClusterRuntimeManager.availableKubeconfigs {
 		discoverable[newKubeconfigSelectionKey(kubeconfig.Path, kubeconfig.Context)] = struct{}{}
 	}
 	return discoverable
@@ -887,7 +893,7 @@ func newKubeconfigSelectionKey(path, contextName string) kubeconfigSelectionKey 
 	return kubeconfigSelectionKey{path: kubeconfigPathKey(filepath.Clean(path)), context: contextName}
 }
 
-func (a *App) classifyChangedKubeconfigClusters(clusterIDs []string) ([]string, []string) {
+func (a *WorkspaceCoordinator) classifyChangedKubeconfigClusters(clusterIDs []string) ([]string, []string) {
 	a.appLogs.logger.Info(fmt.Sprintf("Processing %d affected cluster(s)", len(clusterIDs)), logsources.KubeconfigWatcher)
 	discoverable := a.discoverableKubeconfigSelections()
 	inspector := kubeconfigFileInspector{cache: make(map[string]kubeconfigFileInspection)}
@@ -904,7 +910,7 @@ func (a *App) classifyChangedKubeconfigClusters(clusterIDs []string) ([]string, 
 	return rebuild, deselect
 }
 
-func (a *App) classifyChangedKubeconfigCluster(
+func (a *WorkspaceCoordinator) classifyChangedKubeconfigCluster(
 	clusterID string,
 	discoverable map[kubeconfigSelectionKey]struct{},
 	inspector *kubeconfigFileInspector,
@@ -919,7 +925,7 @@ func (a *App) classifyChangedKubeconfigCluster(
 	return a.classifyInspectedKubeconfig(clients, inspector.inspect(clients.kubeconfigPath))
 }
 
-func (a *App) classifyInspectedKubeconfig(clients *clusterClients, inspection kubeconfigFileInspection) changedKubeconfigAction {
+func (a *WorkspaceCoordinator) classifyInspectedKubeconfig(clients *clusterClients, inspection kubeconfigFileInspection) changedKubeconfigAction {
 	switch {
 	case inspection.missing:
 		a.appLogs.logger.Info(fmt.Sprintf("Kubeconfig file deleted/renamed for cluster %s, deselecting", clients.meta.Name), logsources.KubeconfigWatcher)
@@ -974,7 +980,7 @@ func inspectKubeconfigFile(path string) kubeconfigFileInspection {
 	return kubeconfigFileInspection{contexts: contexts}
 }
 
-func (a *App) reconnectChangedKubeconfigClusters(clusterIDs []string) {
+func (a *WorkspaceCoordinator) reconnectChangedKubeconfigClusters(clusterIDs []string) {
 	for _, clusterID := range clusterIDs {
 		clients := a.clusterClientsForID(clusterID)
 		if clients == nil {
@@ -988,7 +994,7 @@ func (a *App) reconnectChangedKubeconfigClusters(clusterIDs []string) {
 
 // deselectClusters removes the specified cluster IDs from the active selection.
 // Caller must run within a coordinated selection mutation boundary.
-func (a *App) deselectClusters(clusterIDs []string) {
+func (a *WorkspaceCoordinator) deselectClusters(clusterIDs []string) {
 	if len(clusterIDs) == 0 {
 		return
 	}
@@ -1035,7 +1041,7 @@ func (a *App) deselectClusters(clusterIDs []string) {
 
 // pruneSelectionsAgainstDiscoveredKubeconfigs drops active selections that are no longer discoverable.
 // Caller must already hold the coordinated selection mutation boundary.
-func (a *App) pruneSelectionsAgainstDiscoveredKubeconfigs() {
+func (a *WorkspaceCoordinator) pruneSelectionsAgainstDiscoveredKubeconfigs() {
 	currentSelections := a.GetSelectedKubeconfigs()
 	if len(currentSelections) == 0 {
 		return
@@ -1049,7 +1055,7 @@ func (a *App) pruneSelectionsAgainstDiscoveredKubeconfigs() {
 	a.applySelectionPrune(prune.remainingSelections, prune.remainingParsed, prune.removedClusterIDs, logsources.KubeconfigManager)
 }
 
-func (a *App) classifyDiscoveredSelections(currentSelections []string) discoveredSelectionPrune {
+func (a *WorkspaceCoordinator) classifyDiscoveredSelections(currentSelections []string) discoveredSelectionPrune {
 	result := discoveredSelectionPrune{
 		remainingSelections: make([]string, 0, len(currentSelections)),
 		remainingParsed:     make([]kubeconfigSelection, 0, len(currentSelections)),
@@ -1071,7 +1077,7 @@ func (a *App) classifyDiscoveredSelections(currentSelections []string) discovere
 	return result
 }
 
-func (a *App) clusterIDForRemovedSelection(selection kubeconfigSelection) string {
+func (a *WorkspaceCoordinator) clusterIDForRemovedSelection(selection kubeconfigSelection) string {
 	if clients := a.clusterClientsForSelection(selection); clients != nil && clients.meta.ID != "" {
 		return clients.meta.ID
 	}
@@ -1091,7 +1097,7 @@ func appendUniqueClusterID(clusterIDs *[]string, seen map[string]struct{}, clust
 
 // applySelectionPrune commits an already-computed selection prune and tears down removed cluster state.
 // Caller must already hold the coordinated selection mutation boundary.
-func (a *App) applySelectionPrune(
+func (a *WorkspaceCoordinator) applySelectionPrune(
 	remainingSelections []string,
 	remainingParsed []kubeconfigSelection,
 	removedClusterIDs []string,

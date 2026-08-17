@@ -221,71 +221,6 @@
       "phase": "3"
     },
     {
-      "id": "refresh-runtime",
-      "fields": [
-        "refreshManager",
-        "refreshService",
-        "refreshRuntimeMu",
-        "refreshDone",
-        "refreshCancel",
-        "refreshRuntimeStopped",
-        "telemetryRecorder",
-        "sharedInformerFactory",
-        "apiExtensionsInformerFactory",
-        "refreshSubsystemsMu",
-        "refreshSubsystems",
-        "refreshAggregates",
-        "refreshPermissionCancels"
-      ],
-      "readers": [
-        "backend/app_refresh_setup.go",
-        "backend/app_refresh_transport.go",
-        "backend/app_refresh_subsystems.go",
-        "backend/app_refresh_update.go",
-        "backend/app_refresh_recovery.go"
-      ],
-      "writers": [
-        "backend/app_refresh_setup.go setup/publication",
-        "backend/app_refresh_subsystems.go replacement",
-        "backend/app_refresh_recovery.go teardown/rebuild"
-      ],
-      "mutex": "refreshRuntimeMu owns process refresh cancellation; refreshSubsystemsMu owns subsystem topology; atomic pointers publish handler/aggregates",
-      "startup": "cluster selection builds and publishes refresh runtime after readiness",
-      "shutdown": "unpublish and cancel before stopping subsystem producers",
-      "tests": [
-        "backend/app_refresh_setup_test.go",
-        "backend/app_refresh_service_test.go",
-        "backend/app_refresh_subsystems_swap_test.go",
-        "backend/app_refresh_recovery_test.go"
-      ],
-      "owner": "RefreshCoordinator",
-      "phase": "5B"
-    },
-    {
-      "id": "refresh-global-container-log-limiter",
-      "fields": [
-        "containerLogsTargetLimiterMu",
-        "containerLogsTargetLimiter"
-      ],
-      "readers": [
-        "backend/app_refresh_setup.go sharedContainerLogsTargetLimiter",
-        "backend/app_settings.go settings side effects"
-      ],
-      "writers": [
-        "backend/app_refresh_setup.go lazy construction",
-        "backend/app_settings.go load/update SetLimit"
-      ],
-      "mutex": "containerLogsTargetLimiterMu is a leaf initialization lock and may not nest settings or subsystem locks",
-      "startup": "construct at default, then push configured/default settings value",
-      "shutdown": "released with refresh owner; no independent lifecycle",
-      "tests": [
-        "backend/app_settings_test.go",
-        "backend/app_refresh_setup_test.go"
-      ],
-      "owner": "RefreshCoordinator",
-      "phase": "5B"
-    },
-    {
       "id": "container-logs-selection-policy",
       "fields": [
         "containerLogsPolicy"
@@ -307,218 +242,6 @@
       ],
       "owner": "ContainerLogsSelectionPolicy",
       "phase": "3"
-    },
-    {
-      "id": "refresh-governor",
-      "fields": [
-        "governorReconcileMu",
-        "governorMu",
-        "governorPolicy",
-        "governorMRU",
-        "governorVisible",
-        "governorWindows",
-        "governorPlanned",
-        "governorApplied",
-        "governorPressure",
-        "governorHeapInuse",
-        "governorBudget",
-        "governorNow"
-      ],
-      "readers": [
-        "backend/app_refresh_governor.go planning/diagnostics"
-      ],
-      "writers": [
-        "backend/app_refresh_governor.go demand, pressure, reconciliation, reset"
-      ],
-      "mutex": "governorMu owns intent/state; governorReconcileMu serializes slow tier application",
-      "startup": "NewApp initializes policy/maps and refresh startup seeds selected clusters",
-      "shutdown": "refresh context cancellation stops pressure loop and teardown releases tiers",
-      "tests": [
-        "backend/app_refresh_governor_test.go"
-      ],
-      "owner": "RefreshCoordinator",
-      "phase": "5B"
-    },
-    {
-      "id": "refresh-spill-and-cooled-state",
-      "fields": [
-        "spillRoot",
-        "spillFormat",
-        "cooledMu",
-        "cooledMmapClosers"
-      ],
-      "readers": [
-        "backend/app_refresh_spill.go",
-        "backend/app_refresh_governor.go"
-      ],
-      "writers": [
-        "backend/app_refresh_spill.go spill/rewarm/cleanup",
-        "backend/app_refresh_governor.go cooled transitions"
-      ],
-      "mutex": "cooledMu guards per-cluster mmap closers independently of governorMu",
-      "startup": "roots/formats resolve when maintained stores spill or rewarm",
-      "shutdown": "unroute readers before taking and closing mmap mappings; Factory Reset clears spill artifacts after teardown",
-      "tests": [
-        "backend/app_refresh_spill_test.go",
-        "backend/app_refresh_governor_test.go"
-      ],
-      "owner": "RefreshCoordinator",
-      "phase": "5B"
-    },
-    {
-      "id": "catalog-runtime",
-      "fields": [
-        "objectCatalogMu",
-        "objectCatalogEntries"
-      ],
-      "readers": [
-        "backend/app_object_catalog.go",
-        "backend/app_refresh_setup.go catalog wiring"
-      ],
-      "writers": [
-        "backend/app_object_catalog.go create/start/stop/cleanup"
-      ],
-      "mutex": "objectCatalogMu guards per-cluster catalog runtime entries",
-      "startup": "built with cluster refresh runtime after client readiness",
-      "shutdown": "cluster and process teardown stop catalog producers",
-      "tests": [
-        "backend/app_object_catalog_test.go"
-      ],
-      "owner": "RefreshCoordinator",
-      "phase": "5B"
-    },
-    {
-      "id": "cluster-discovery",
-      "fields": [
-        "availableKubeconfigs",
-        "kubeconfigDiscoveryState",
-        "kubeconfigWatcher"
-      ],
-      "readers": [
-        "backend/kubeconfigs.go discovery queries",
-        "backend/kubeconfig_watcher.go"
-      ],
-      "writers": [
-        "backend/kubeconfigs.go discover/rediscover",
-        "backend/kubeconfig_watcher.go start/retarget/stop"
-      ],
-      "mutex": "currently shares kubeconfigsMu; extraction introduces cluster-runtime-owned discovery synchronization",
-      "startup": "first runtime-ready window discovers kubeconfigs and starts watcher",
-      "shutdown": "watcher stops before cluster teardown",
-      "tests": [
-        "backend/kubeconfigs_test.go",
-        "backend/kubeconfig_watcher_test.go"
-      ],
-      "owner": "ClusterRuntimeManager",
-      "phase": "5A"
-    },
-    {
-      "id": "workspace-selection",
-      "fields": [
-        "selectedKubeconfigs",
-        "kubeconfigsMu",
-        "selectionMutationMu",
-        "workspaceSelections",
-        "selectionMutationDrainMu",
-        "selectionMutationDrainCond",
-        "selectionMutationPending",
-        "kubeconfigChangeMu",
-        "selectionGeneration",
-        "selectionGenCtxMu",
-        "selectionGenCancel",
-        "selectionDiag",
-        "requestClusterScopeRebuildFn",
-        "scopeRebuildQueued"
-      ],
-      "readers": [
-        "backend/kubeconfigs.go",
-        "backend/kubeconfig_selection_coordinator.go",
-        "backend/cluster_workspace.go",
-        "backend/app_selection_diagnostics.go",
-        "backend/app_cluster_settings.go"
-      ],
-      "writers": [
-        "backend/kubeconfigs.go selection commits",
-        "backend/kubeconfig_selection_coordinator.go generation/drain",
-        "backend/cluster_workspace.go peer changes",
-        "backend/app_cluster_settings.go scope rebuild queue"
-      ],
-      "mutex": "selectionMutationMu serializes workflows; kubeconfigChangeMu and selection generation locks preserve documented order; kubeconfigsMu is narrowed after discovery moves",
-      "startup": "preferences-backed selected clusters restore through serialized mutation",
-      "shutdown": "pre-quit waits for mutation drain; peer/process shutdown releases selections and cancels active generation",
-      "tests": [
-        "backend/kubeconfig_selection_coordinator_test.go",
-        "backend/cluster_workspace_test.go",
-        "backend/app_selection_diagnostics_test.go",
-        "backend/app_cluster_settings_test.go"
-      ],
-      "owner": "WorkspaceCoordinator",
-      "phase": "5C"
-    },
-    {
-      "id": "cluster-runtime",
-      "fields": [
-        "clusterClientsMu",
-        "clusterClients",
-        "clusterOps",
-        "clusterLifecycle",
-        "kubeAPIMetrics",
-        "transportStatesMu",
-        "transportStates",
-        "kubeClientInitializer"
-      ],
-      "readers": [
-        "backend/cluster_clients.go",
-        "backend/cluster_auth.go",
-        "backend/app_refresh_recovery.go",
-        "backend/fetch_helpers.go",
-        "backend/shell_sessions.go",
-        "backend/portforward_ports.go"
-      ],
-      "writers": [
-        "backend/cluster_clients.go build/remove",
-        "backend/cluster_auth.go recovery",
-        "backend/app_refresh_recovery.go transport state",
-        "backend/app_lifecycle.go initialization/shutdown"
-      ],
-      "mutex": "clusterClientsMu owns client map; transportStatesMu owns per-cluster failure trackers; clusterOps serializes cluster work",
-      "startup": "selection creates clients/lifecycle/metrics and dependency readiness",
-      "shutdown": "auth managers stop, operations clean up, clients are removed after refresh teardown",
-      "tests": [
-        "backend/cluster_clients_test.go",
-        "backend/cluster_auth_event_test.go",
-        "backend/app_refresh_recovery_test.go",
-        "backend/cluster_lifecycle_test.go"
-      ],
-      "owner": "ClusterRuntimeManager",
-      "phase": "5A"
-    },
-    {
-      "id": "cluster-workspace-projection",
-      "fields": [
-        "clusterWorkspaceMu",
-        "clusterWorkspaceRevision",
-        "clusterHealth",
-        "clusterScopeRevisions"
-      ],
-      "readers": [
-        "backend/cluster_workspace.go aggregate replay"
-      ],
-      "writers": [
-        "backend/app_heartbeat.go health",
-        "backend/app_cluster_settings.go scope revision",
-        "backend/cluster_workspace.go cleanup"
-      ],
-      "mutex": "clusterWorkspaceMu plus atomic aggregate revision provide one consistent replay snapshot",
-      "startup": "empty projection initialized in NewApp and populated by cluster/scope owners",
-      "shutdown": "per-cluster cleanup removes projection state before final replay",
-      "tests": [
-        "backend/cluster_workspace_test.go",
-        "backend/app_heartbeat_test.go",
-        "backend/app_cluster_settings_test.go"
-      ],
-      "owner": "ClusterWorkspaceProjection",
-      "phase": "5A"
     },
     {
       "id": "cluster-attention",
@@ -876,26 +599,7 @@
       "phase": "3"
     }
   ],
-  "appBackpointerGroups": [
-    {
-      "id": "refresh-backpointers",
-      "entries": [
-        "app_refresh_governor.go:appGovernorExecutor.app"
-      ],
-      "replacement": "RefreshCoordinator-owned executor state",
-      "phase": "5B"
-    },
-    {
-      "id": "cluster-runtime-backpointers",
-      "entries": [
-        "cluster_auth.go:clusterSubsystemRebuild.app",
-        "cluster_dependencies.go:appResourceResolver.app",
-        "kubeconfig_watcher.go:kubeconfigWatcher.app"
-      ],
-      "replacement": "ClusterRuntimeManager collaborators for subsystem rebuild and discovery",
-      "phase": "5A"
-    }
-  ],
+  "appBackpointerGroups": [],
   "appParameterFunctionGroups": [
     {
       "id": "test-support-app-parameters",
@@ -908,15 +612,6 @@
       ],
       "replacement": "component-specific test builders and options",
       "phase": "6"
-    },
-    {
-      "id": "cluster-runtime-app-parameters",
-      "entries": [
-        "cluster_clients.go:validateClusterClientSync:a",
-        "kubeconfig_watcher.go:newKubeconfigWatcher:app"
-      ],
-      "replacement": "ClusterRuntimeManager state and narrow discovery collaborators",
-      "phase": "5A"
     }
   ],
   "directAppTestGroups": [
@@ -973,7 +668,6 @@
         "app_object_catalog_test.go",
         "app_refresh_governor_test.go",
         "app_refresh_service_test.go",
-        "app_refresh_setup_test.go",
         "app_refresh_spill_test.go",
         "app_refresh_subsystems_swap_test.go",
         "refresh_aggregate_snapshot_test.go"
@@ -1094,6 +788,15 @@
       "classification": "full-composition-lifecycle",
       "owner": "ApplicationRuntime",
       "phase": "6"
+    },
+    {
+      "id": "phase5-owner-composition-test",
+      "files": [
+        "phase5_ownership_contract_test.go"
+      ],
+      "classification": "component",
+      "owner": "Phase5RuntimeOwners",
+      "phase": "5C"
     }
   ],
   "testOnlyAppMethodGroups": [],
@@ -1759,5 +1462,12 @@
     "remainingDirectAppTests": 39,
     "remainingTestOnlyAppMethods": 0,
     "resourceAppBackpointers": 0
+  },
+  "phase5Checkpoint": {
+    "appFields": 17,
+    "remainingAppParameterFunctions": 5,
+    "remainingDirectAppTests": 39,
+    "remainingTestOnlyAppMethods": 0,
+    "appBackpointers": 0
   }
 }

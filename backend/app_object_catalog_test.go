@@ -113,6 +113,8 @@ func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterClients[clusterID] = &clusterClients{
 		meta:                ClusterMeta{ID: clusterID, Name: "Cluster A"},
+		kubeconfigPath:      "/p/a",
+		kubeconfigContext:   "context-a",
 		client:              kubeClient,
 		apiextensionsClient: apiExtensionsClient,
 		dynamicClient:       fake.NewSimpleDynamicClient(runtime.NewScheme()),
@@ -252,7 +254,7 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 		cancel:  func() { cancelCalled++ },
 		done:    done,
 	})
-	app.telemetryRecorder = telemetry.NewRecorder()
+	app.setTelemetryRecorder(telemetry.NewRecorder())
 
 	app.stopObjectCatalog()
 
@@ -263,7 +265,7 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 		t.Fatalf("expected catalog references to be cleared")
 	}
 
-	summary := app.telemetryRecorder.SnapshotSummary()
+	summary := app.currentTelemetryRecorder().SnapshotSummary()
 	if summary.Catalog != nil && summary.Catalog.Enabled {
 		t.Fatalf("expected catalog telemetry to be disabled")
 	}
@@ -350,9 +352,9 @@ func TestGetCatalogDiagnosticsCombinesTelemetryAndServiceState(t *testing.T) {
 	app.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
 		service: &objectcatalog.Service{},
 	})
-	app.telemetryRecorder = telemetry.NewRecorder()
+	app.setTelemetryRecorder(telemetry.NewRecorder())
 
-	app.telemetryRecorder.RecordCatalog(true, 7, 3, 1500*time.Millisecond, nil)
+	app.currentTelemetryRecorder().RecordCatalog(true, 7, 3, 1500*time.Millisecond, nil)
 
 	diag, err := app.resources.GetCatalogDiagnostics()
 	if err != nil {
@@ -488,7 +490,7 @@ func TestGetCatalogDiagnosticsFromTelemetryRecorder(t *testing.T) {
 	})
 
 	app := NewApp(nil)
-	app.telemetryRecorder = recorder
+	app.setTelemetryRecorder(recorder)
 
 	diag, err := app.resources.GetCatalogDiagnostics()
 	require.NoError(t, err)

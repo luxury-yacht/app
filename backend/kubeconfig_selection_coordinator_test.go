@@ -102,6 +102,9 @@ func TestHandleClusterAuthStateChangeUsesSelectionMutationBoundary(t *testing.T)
 	before := app.selectionGeneration.Load()
 
 	app.handleClusterAuthStateChange("cluster-a", authstate.StateRecovering, authstate.FailureDiagnostic{Reason: "unit-test"})
+	for _, intent := range app.ClusterRuntimeManager.intents.Drain() {
+		app.WorkspaceCoordinator.consumeClusterRuntimeIntent(intent)
+	}
 
 	require.Eventually(t, func() bool {
 		return app.selectionGeneration.Load() >= before+1

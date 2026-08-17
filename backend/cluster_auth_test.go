@@ -127,8 +127,8 @@ func TestRebuildClusterSubsystemPreservesAuthManagerWiring(t *testing.T) {
 }
 
 func TestRebuildClusterSubsystemGuardsMissingInputs(t *testing.T) {
-	var nilApp *App
-	nilApp.rebuildClusterSubsystem("cluster-a")
+	var nilRefresh *RefreshCoordinator
+	nilRefresh.rebuildClusterSubsystem("cluster-a")
 
 	app := newTestAppWithDefaults(t)
 	app.rebuildClusterSubsystem("")
@@ -142,7 +142,7 @@ func TestRebuildClusterSubsystemGuardsMissingInputs(t *testing.T) {
 func TestClusterSubsystemRebuildHelperPaths(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	rebuild := clusterSubsystemRebuild{
-		app: app, clusterID: "cluster-a", clusterName: "Cluster A",
+		refresh: app.RefreshCoordinator, clusterID: "cluster-a", clusterName: "Cluster A",
 		selection:  kubeconfigSelection{Path: "/missing/config", Context: "ctx"},
 		oldClients: &clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Cluster A"}},
 	}
@@ -225,7 +225,7 @@ func TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness(t *te
 	require.NoError(t, err)
 	require.Equal(t, ClusterStateLoading, app.clusterLifecycle.GetState(clusterID))
 
-	rebuild := clusterSubsystemRebuild{app: app, clusterID: clusterID, clusterName: "Cluster A"}
+	rebuild := clusterSubsystemRebuild{refresh: app.RefreshCoordinator, clusterID: clusterID, clusterName: "Cluster A"}
 	require.True(t, rebuild.startManager(subsystem))
 	require.Eventually(t, hub.isStarted, time.Second, 10*time.Millisecond,
 		"auth recovery must start the rebuilt manager even when refresh setup never ran")
@@ -246,7 +246,7 @@ func TestClusterSubsystemRebuildDoesNotPublishWhenRefreshRuntimeStopped(t *testi
 
 	hub := &recoveryStartInformerHub{started: make(chan struct{})}
 	subsystem := &system.Subsystem{Manager: refresh.NewManager(nil, hub, nil, nil, nil)}
-	rebuild := clusterSubsystemRebuild{app: app, clusterID: "cluster-a", clusterName: "Cluster A"}
+	rebuild := clusterSubsystemRebuild{refresh: app.RefreshCoordinator, clusterID: "cluster-a", clusterName: "Cluster A"}
 	published := rebuild.activateSubsystem(&clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Cluster A"}}, subsystem)
 
 	require.False(t, published)
@@ -268,7 +268,7 @@ func TestClusterSubsystemRebuildPublishesAfterManagerStartIsScheduled(t *testing
 	hub := &recoveryStartInformerHub{started: make(chan struct{})}
 	subsystem := &system.Subsystem{Manager: refresh.NewManager(nil, hub, nil, nil, nil)}
 	clients := &clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Cluster A"}}
-	rebuild := clusterSubsystemRebuild{app: app, clusterID: "cluster-a", clusterName: "Cluster A"}
+	rebuild := clusterSubsystemRebuild{refresh: app.RefreshCoordinator, clusterID: "cluster-a", clusterName: "Cluster A"}
 
 	require.True(t, rebuild.activateSubsystem(clients, subsystem))
 	require.Same(t, subsystem, app.getRefreshSubsystem("cluster-a"))
@@ -309,7 +309,7 @@ func TestClusterSubsystemRebuildRoutesReplacementBeforeStoppingPrevious(t *testi
 
 	newManager := refresh.NewManager(nil, nil, nil, nil, nil)
 	next := &system.Subsystem{Manager: newManager, ResourceStream: newStream}
-	rebuild := clusterSubsystemRebuild{app: app, clusterID: clusterID, clusterName: "Cluster A"}
+	rebuild := clusterSubsystemRebuild{refresh: app.RefreshCoordinator, clusterID: clusterID, clusterName: "Cluster A"}
 	result := make(chan bool, 1)
 	go func() {
 		result <- rebuild.activateSubsystem(&clusterClients{meta: ClusterMeta{ID: clusterID}}, next)

@@ -13,7 +13,7 @@ func copyRefreshSubsystems(subsystems map[string]*system.Subsystem) map[string]*
 	return copied
 }
 
-func (a *App) getRefreshSubsystem(clusterID string) *system.Subsystem {
+func (a *RefreshCoordinator) getRefreshSubsystem(clusterID string) *system.Subsystem {
 	if a == nil || clusterID == "" {
 		return nil
 	}
@@ -22,7 +22,7 @@ func (a *App) getRefreshSubsystem(clusterID string) *system.Subsystem {
 	return a.refreshSubsystems[clusterID]
 }
 
-func (a *App) setRefreshSubsystem(clusterID string, subsystem *system.Subsystem) {
+func (a *RefreshCoordinator) setRefreshSubsystem(clusterID string, subsystem *system.Subsystem) {
 	if a == nil || clusterID == "" {
 		return
 	}
@@ -40,7 +40,7 @@ func (a *App) setRefreshSubsystem(clusterID string, subsystem *system.Subsystem)
 // swapRefreshSubsystem stores next as clusterID's subsystem and stops the
 // previous one. It is only suitable when no live aggregate route still points
 // at previous; routed rebuilds must update that route before stopping it.
-func (a *App) swapRefreshSubsystem(clusterID string, next *system.Subsystem) {
+func (a *RefreshCoordinator) swapRefreshSubsystem(clusterID string, next *system.Subsystem) {
 	if a == nil || clusterID == "" {
 		return
 	}
@@ -52,7 +52,7 @@ func (a *App) swapRefreshSubsystem(clusterID string, next *system.Subsystem) {
 	a.stopRefreshSubsystem(previous)
 }
 
-func (a *App) takeRefreshSubsystem(clusterID string) *system.Subsystem {
+func (a *RefreshCoordinator) takeRefreshSubsystem(clusterID string) *system.Subsystem {
 	if a == nil || clusterID == "" {
 		return nil
 	}
@@ -66,16 +66,16 @@ func (a *App) takeRefreshSubsystem(clusterID string) *system.Subsystem {
 	return subsystem
 }
 
-func (a *App) snapshotRefreshSubsystems() map[string]*system.Subsystem {
-	if a == nil {
+func (r *RefreshCoordinator) snapshotRefreshSubsystems() map[string]*system.Subsystem {
+	if r == nil {
 		return make(map[string]*system.Subsystem)
 	}
-	a.refreshSubsystemsMu.RLock()
-	defer a.refreshSubsystemsMu.RUnlock()
-	return copyRefreshSubsystems(a.refreshSubsystems)
+	r.refreshSubsystemsMu.RLock()
+	defer r.refreshSubsystemsMu.RUnlock()
+	return copyRefreshSubsystems(r.refreshSubsystems)
 }
 
-func (a *App) replaceRefreshSubsystems(next map[string]*system.Subsystem) map[string]*system.Subsystem {
+func (a *RefreshCoordinator) replaceRefreshSubsystems(next map[string]*system.Subsystem) map[string]*system.Subsystem {
 	if a == nil {
 		return make(map[string]*system.Subsystem)
 	}

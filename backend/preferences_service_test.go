@@ -36,6 +36,7 @@ func (s *recordingContainerLogsPolicySink) SetContainerLogsPerScopeLimit(value i
 type recordingRefreshSettingsSink struct {
 	mu           sync.Mutex
 	globalLimits []int
+	metrics      []int
 }
 
 func (s *recordingRefreshSettingsSink) SetContainerLogsGlobalLimit(value int) {
@@ -44,14 +45,30 @@ func (s *recordingRefreshSettingsSink) SetContainerLogsGlobalLimit(value int) {
 	s.mu.Unlock()
 }
 
-func (*recordingRefreshSettingsSink) SetMetricsRefreshInterval(int) {}
+func (s *recordingRefreshSettingsSink) SetMetricsRefreshInterval(value int) {
+	s.mu.Lock()
+	s.metrics = append(s.metrics, value)
+	s.mu.Unlock()
+}
+
+type recordingClusterRateLimitSink struct {
+	mu     sync.Mutex
+	values [][2]int
+}
+
+func (s *recordingClusterRateLimitSink) SetKubernetesClientRateLimits(qps, burst int) {
+	s.mu.Lock()
+	s.values = append(s.values, [2]int{qps, burst})
+	s.mu.Unlock()
+}
 
 func TestEnsureLoadedCoalescesConcurrentStartupFallbackAndPublishesAfterDefaultPushes(t *testing.T) {
 	permission := &recordingPermissionPolicySink{}
 	containerLogs := &recordingContainerLogsPolicySink{}
 	refresh := &recordingRefreshSettingsSink{}
+	cluster := &recordingClusterRateLimitSink{}
 	preferences := NewPreferencesService(nil, NewSettingsEffectDispatcher(
-		nil, nil, permission, containerLogs, refresh, nil,
+		nil, cluster, permission, containerLogs, refresh, nil,
 	), nil)
 	loadStarted := make(chan struct{})
 	releaseLoad := make(chan struct{})
@@ -93,6 +110,8 @@ func TestEnsureLoadedCoalescesConcurrentStartupFallbackAndPublishesAfterDefaultP
 	require.Equal(t, []int{defaults.PermissionSSRRFetchConcurrency}, permission.values)
 	require.Equal(t, []int{defaults.ObjPanelLogsTargetPerScopeLimit}, containerLogs.values)
 	require.Equal(t, []int{defaults.ObjPanelLogsTargetGlobalLimit}, refresh.globalLimits)
+	require.Equal(t, [][2]int{{defaults.KubernetesClientQPS, defaults.KubernetesClientBurst}}, cluster.values)
+	require.Equal(t, []int{defaults.MetricsRefreshIntervalMs}, refresh.metrics)
 }
 
 func TestEnsureLoadedFailureInstallsNothingAndCanRetry(t *testing.T) {

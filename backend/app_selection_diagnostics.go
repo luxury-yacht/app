@@ -81,7 +81,7 @@ type SelectionDiagnostics struct {
 	CatalogP95Ms    int64 `json:"catalogP95Ms,omitempty"`
 }
 
-func (a *App) selectionDiagnosticsEnqueue() {
+func (a *WorkspaceCoordinator) selectionDiagnosticsEnqueue() {
 	if a == nil {
 		return
 	}
@@ -95,7 +95,7 @@ func (a *App) selectionDiagnosticsEnqueue() {
 	}
 }
 
-func (a *App) selectionDiagnosticsFinalize(sample selectionMutationSample) {
+func (a *WorkspaceCoordinator) selectionDiagnosticsFinalize(sample selectionMutationSample) {
 	if a == nil {
 		return
 	}
@@ -139,7 +139,7 @@ func (a *App) selectionDiagnosticsFinalize(sample selectionMutationSample) {
 }
 
 // GetSelectionDiagnostics returns rolling selection mutation timing and outcome stats.
-func (a *App) GetSelectionDiagnostics() (*SelectionDiagnostics, error) {
+func (a *WorkspaceCoordinator) GetSelectionDiagnostics() (*SelectionDiagnostics, error) {
 	diag := &SelectionDiagnostics{}
 	if a == nil {
 		return diag, nil

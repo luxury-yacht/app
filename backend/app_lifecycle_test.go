@@ -65,10 +65,10 @@ func TestSetupRefreshSubsystemRequiresContext(t *testing.T) {
 }
 
 func TestEnsureRefreshRuntimeContextGuardsMissingContextAndReusesLiveRuntime(t *testing.T) {
-	var nilApp *App
-	require.Nil(t, nilApp.ensureRefreshRuntimeContext())
-	require.Nil(t, nilApp.currentRefreshRuntimeContext())
-	nilApp.stopRefreshRuntimeContext()
+	var nilRefresh *RefreshCoordinator
+	require.Nil(t, nilRefresh.ensureRefreshRuntimeContext())
+	require.Nil(t, nilRefresh.currentRefreshRuntimeContext())
+	nilRefresh.stopRefreshRuntimeContext()
 
 	app := newTestAppWithDefaults(t)
 	require.Nil(t, app.ensureRefreshRuntimeContext())
@@ -183,8 +183,8 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	require.Equal(t, dynamicClient, capturedCfg.DynamicClient)
 	require.NotNil(t, capturedCfg.ObjectDetailsProvider)
 
-	require.NotNil(t, app.telemetryRecorder)
-	summary := app.telemetryRecorder.SnapshotSummary()
+	require.NotNil(t, app.currentTelemetryRecorder())
+	summary := app.currentTelemetryRecorder().SnapshotSummary()
 	require.Nil(t, summary.Catalog)
 }
 
@@ -315,7 +315,7 @@ users:
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to initialise refresh subsystem")
 	require.Nil(t, app.objectCatalogServiceForCluster(""))
-	require.Nil(t, app.telemetryRecorder)
+	require.Nil(t, app.currentTelemetryRecorder())
 	// Note: clusterClients were pre-seeded by this test and are not cleared on refresh failure.
 	// The test verifies that an error is returned and no object catalog is created.
 }

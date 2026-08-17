@@ -17,11 +17,11 @@ import (
 )
 
 func TestUpdateRefreshSubsystemSelectionsValidatesReceiverAndAllowsEmptySelection(t *testing.T) {
-	var nilApp *App
-	require.EqualError(t, nilApp.updateRefreshSubsystemSelections(nil), "app is nil")
+	var nilRefresh *RefreshCoordinator
+	require.EqualError(t, nilRefresh.updateRefreshSubsystemSelections(nil), "refresh coordinator is nil")
 
-	app := &App{}
-	require.NoError(t, app.updateRefreshSubsystemSelections(nil))
+	refreshCoordinator := newRefreshCoordinator()
+	require.NoError(t, refreshCoordinator.updateRefreshSubsystemSelections(nil))
 }
 
 func TestApplyRefreshSelectionUpdateReportsClustersWhenRuntimeUnavailable(t *testing.T) {

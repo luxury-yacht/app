@@ -290,7 +290,10 @@ func TestWireNamespacesReadinessObserverFlipsReadyForLateSubsystems(t *testing.T
 			},
 		},
 	}
-	app := &App{clusterLifecycle: lifecycle}
+	runtimeManager := &ClusterRuntimeManager{clusterLifecycle: lifecycle}
+	refreshCoordinator := newRefreshCoordinator()
+	refreshCoordinator.ClusterRuntimeManager = runtimeManager
+	app := &App{ClusterRuntimeManager: runtimeManager, RefreshCoordinator: refreshCoordinator}
 	app.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
 	aggregate.onNamespaceSnapshot = func(clusterID string) {
 		state := lifecycle.GetState(clusterID)
@@ -336,7 +339,10 @@ func TestNamespacesReadinessSweepHealsDroppedSettleRing(t *testing.T) {
 			},
 		},
 	}
-	app := &App{clusterLifecycle: lifecycle}
+	runtimeManager := &ClusterRuntimeManager{clusterLifecycle: lifecycle}
+	refreshCoordinator := newRefreshCoordinator()
+	refreshCoordinator.ClusterRuntimeManager = runtimeManager
+	app := &App{ClusterRuntimeManager: runtimeManager, RefreshCoordinator: refreshCoordinator}
 	app.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
 	aggregate.onNamespaceSnapshot = func(clusterID string) {
 		if lifecycle.GetState(clusterID) == ClusterStateLoading {
@@ -364,7 +370,10 @@ func TestNamespacesReadinessSweepHealsDroppedSettleRing(t *testing.T) {
 func TestTransitionClusterToLoadingKeepsReadyClustersReady(t *testing.T) {
 	emitter, _ := collectingEmitter()
 	lifecycle := newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
-	app := &App{clusterLifecycle: lifecycle}
+	runtimeManager := &ClusterRuntimeManager{clusterLifecycle: lifecycle}
+	refreshCoordinator := newRefreshCoordinator()
+	refreshCoordinator.ClusterRuntimeManager = runtimeManager
+	app := &App{ClusterRuntimeManager: runtimeManager, RefreshCoordinator: refreshCoordinator}
 
 	// Re-warm of a ready cluster: no demotion.
 	lifecycle.SetState("cluster-ready", ClusterStateReady)

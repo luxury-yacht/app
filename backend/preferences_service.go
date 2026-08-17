@@ -3,7 +3,6 @@ package backend
 import (
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -163,7 +162,6 @@ func (p *PreferencesService) Reset() error {
 			p.settingsMu.Lock()
 			var errs []error
 			errs = appendPathRemovalError(errs, p.getSettingsFilePath, removeFileIfExists)
-			errs = appendPathRemovalError(errs, p.cacheDirPath, os.RemoveAll)
 			p.appSettings = nil
 			p.windowSettings = nil
 			p.kubeconfigSearchPaths = nil

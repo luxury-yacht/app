@@ -226,7 +226,7 @@ func TestIsolation_RecoveryOnlyAffectsOneCluster(t *testing.T) {
 // TestIsolation_TransportFailureOnlyAffectsOneCluster verifies that transport
 // failure tracking is isolated per cluster.
 func TestIsolation_TransportFailureOnlyAffectsOneCluster(t *testing.T) {
-	app := &App{}
+	app := newTestAppWithDefaults(t)
 
 	// Record transport failures for cluster A (up to threshold)
 	app.recordClusterTransportFailure("cluster-a", "test failure 1", nil)

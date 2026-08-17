@@ -114,18 +114,18 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 		Preferences:    backendApp.PreferencesService(),
 		DataManagement: backendApp.DataManagementCoordinator(),
 		Attention:      backendApp.ClusterAttentionService(),
-		Workspace:      backendApp,
-		ClusterRuntime: backendApp,
+		Workspace:      backendApp.WorkspaceCoordinator,
+		ClusterRuntime: backendApp.ClusterRuntimeManager,
 		Resources:      backendApp.ResourceGateway(),
 		Operations:     operationsCoordinator,
 		Updates:        backendApp.UpdateCoordinator(),
 		Logs:           backendApp.AppLogService(),
 		DesktopShell:   desktopShell,
 		Lifecycle:      backendApp,
-		HTTP:           backendApp,
+		HTTP:           backendApp.RefreshCoordinator,
 	})
-	wailsApp.HandleStream(backend.RefreshResourceStreamName, backendApp.HandleResourceStream)
-	wailsApp.HandleStream(backend.RefreshContainerLogsStreamName, backendApp.HandleContainerLogsStream)
+	wailsApp.HandleStream(backend.RefreshResourceStreamName, backendApp.RefreshCoordinator.HandleResourceStream)
+	wailsApp.HandleStream(backend.RefreshContainerLogsStreamName, backendApp.RefreshCoordinator.HandleContainerLogsStream)
 	wailsApp.RegisterService(application.NewServiceWithOptions(
 		desktopService,
 		application.ServiceOptions{Route: "/api/v2"},

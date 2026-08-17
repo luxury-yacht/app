@@ -88,8 +88,10 @@ resolution, capability queries, typed details, YAML, object actions, Helm and
 node-log operations, response caching, and permission-aware cache validation.
 It receives narrow cluster-client, context, transport-health, event, logging,
 catalog, and telemetry collaborators; it never stores `*App`. The current
-cluster-client and transport implementations are composed from `App` only until
-`ClusterRuntimeManager` replaces them.
+cluster-client, dependency-resolution, and transport-health collaborators point
+directly to `ClusterRuntimeManager`. Catalog and refresh-telemetry reads use a
+shared leaf `refreshResourceProjection` that Refresh publishes into, so resource
+requests never call `RefreshCoordinator`.
 
 The object catalog is the only production GVK-to-GVR and object-existence
 resolver used by `ResourceGateway`. The generated resource-kind registry remains
@@ -99,7 +101,7 @@ discovery, infer a cluster, or read preferences.
 Response and SSRR caches live inside `ResourceGateway`. Refresh construction
 registers gateway-owned invalidation callbacks, so the dependency points from
 refresh to resources. Resource code does not acquire refresh/subsystem state or
-call back through the composition root. `ResourceGateway` reads the shared
+call back through the composition root or coordinator. `ResourceGateway` reads the shared
 `ContainerLogsSelectionPolicy` and `PermissionFetchPolicy`; successful settings
 operations push new values into those policies in the opposite direction.
 

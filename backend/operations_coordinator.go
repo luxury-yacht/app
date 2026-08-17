@@ -13,9 +13,9 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-// OperationsClusterAccess is the temporary App-backed seam for resolving
-// cluster-scoped clients and preserving transport retry accounting. Phase 5A
-// replaces its implementation with ClusterRuntimeManager.
+// OperationsClusterAccess is the narrow seam for cluster-scoped clients and
+// transport retry accounting. Production composes it from ClusterRuntimeManager
+// plus the refresh-owned retry telemetry projection.
 type OperationsClusterAccess interface {
 	ResolveClusterDependencies(string) (common.Dependencies, string, error)
 	FetchPodWithRetry(context.Context, string, string, func(context.Context) (*corev1.Pod, error)) (*corev1.Pod, error)
@@ -236,21 +236,19 @@ func (a *App) initializeOperationsCoordinator() {
 	if a == nil {
 		return
 	}
+	runtimeManager := a.ClusterRuntimeManager
+	refreshProjection := a.RefreshCoordinator.resourceProjection
+	logger := a.appLogs.logger
 	a.operations = NewOperationsCoordinator(OperationsCoordinatorDependencies{
 		ClusterAccess: operationsClusterAccessFuncs{
-			resolve: a.resolveClusterDependencies,
+			resolve: runtimeManager.resolveClusterDependencies,
 			fetchPod: func(ctx context.Context, clusterID, target string, fetch func(context.Context) (*corev1.Pod, error)) (*corev1.Pod, error) {
 				return executeWithRetry(ctx, resourceRetryDependencies{
-					recordSuccess: a.recordClusterTransportSuccess,
-					recordFailure: a.recordClusterTransportFailure,
-					telemetry: func() resourceRetryTelemetry {
-						if a.telemetryRecorder == nil {
-							return nil
-						}
-						return a.telemetryRecorder
-					},
-					logger:      a.appLogs.logger,
-					clusterName: a.clusterNameForID,
+					recordSuccess: runtimeManager.recordClusterTransportSuccess,
+					recordFailure: runtimeManager.recordClusterTransportFailure,
+					telemetry:     func() resourceRetryTelemetry { return refreshProjection.currentTelemetry() },
+					logger:        logger,
+					clusterName:   runtimeManager.clusterNameForID,
 				}, clusterID, "pod-shell", target, fetch)
 			},
 		},

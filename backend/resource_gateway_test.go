@@ -10,6 +10,7 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	cgofake "k8s.io/client-go/kubernetes/fake"
@@ -33,6 +34,9 @@ func TestResourceGatewayNarrowCollaboratorDefaultsAndDelegation(t *testing.T) {
 		Common:    common.Dependencies{KubernetesClient: cgofake.NewClientset()},
 		ClusterID: "cluster-a",
 	}, nil)
+	refreshProjection := newRefreshResourceProjection()
+	refreshProjection.publishCatalogEntry("cluster-a", &objectCatalogEntry{service: catalog, meta: ClusterMeta{ID: "cluster-a"}})
+	refreshProjection.publishTelemetry(recorder)
 	var (
 		eventCalled            bool
 		transportSuccessCalled bool
@@ -57,13 +61,10 @@ func TestResourceGatewayNarrowCollaboratorDefaultsAndDelegation(t *testing.T) {
 		recordTransportFailure: func(string, string, error) {
 			transportFailureCalled = true
 		},
-		retryTelemetry:           func() resourceRetryTelemetry { return recorder },
-		catalogServiceForCluster: func(string) *objectcatalog.Service { return catalog },
 		resourceResolverForCluster: func(clusterID string) common.ResourceResolver {
 			return resourceGatewayCatalogResolver{clusterID: clusterID, lookup: func(string) *objectcatalog.Service { return catalog }}
 		},
-		catalogEntries:   func() []*objectCatalogEntry { return []*objectCatalogEntry{} },
-		catalogTelemetry: func() telemetry.Summarizer { return recorder },
+		refreshProjection: refreshProjection,
 	})
 
 	if gateway.CtxOrBackground() == nil {
@@ -105,6 +106,26 @@ func TestResourceGatewayNarrowCollaboratorDefaultsAndDelegation(t *testing.T) {
 	if _, ok, err := resolver.ResolveResourceForGVK(context.Background(), corev1.SchemeGroupVersion.WithKind("Pod")); err != nil || ok {
 		t.Fatalf("resolver without catalog = (ok=%t, err=%v)", ok, err)
 	}
+}
+
+func TestRefreshCoordinatorPublishesCatalogAndTelemetryToResourceProjection(t *testing.T) {
+	refresh := newRefreshCoordinator()
+	catalog := objectcatalog.NewService(objectcatalog.Dependencies{
+		Common:    common.Dependencies{KubernetesClient: cgofake.NewClientset()},
+		ClusterID: "cluster-a",
+	}, nil)
+	entry := &objectCatalogEntry{service: catalog, meta: ClusterMeta{ID: "cluster-a"}}
+	recorder := telemetry.NewRecorder()
+
+	refresh.storeObjectCatalogEntry("cluster-a", entry)
+	refresh.setTelemetryRecorder(recorder)
+	require.Same(t, catalog, refresh.resourceProjection.objectCatalogServiceForCluster("cluster-a"))
+	require.Same(t, recorder, refresh.resourceProjection.currentTelemetry())
+
+	refresh.removeObjectCatalogEntry("cluster-a")
+	refresh.setTelemetryRecorder(nil)
+	require.Nil(t, refresh.resourceProjection.objectCatalogServiceForCluster("cluster-a"))
+	require.Nil(t, refresh.resourceProjection.currentTelemetry())
 }
 
 func TestResourceGatewayUsesDefaultAndLiveRuntimePolicies(t *testing.T) {

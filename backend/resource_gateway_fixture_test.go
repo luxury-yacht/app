@@ -21,7 +21,6 @@ type resourceGatewayFixture struct {
 	clustersMu       sync.Mutex
 	clusters         map[string]*clusterClients
 	resolvers        map[string]common.ResourceResolver
-	catalogs         map[string]*objectcatalog.Service
 	context          context.Context
 	logger           *Logger
 	telemetry        *telemetry.Recorder
@@ -34,11 +33,12 @@ func newResourceGatewayFixture() *resourceGatewayFixture {
 	fixture := &resourceGatewayFixture{
 		clusters:  make(map[string]*clusterClients),
 		resolvers: make(map[string]common.ResourceResolver),
-		catalogs:  make(map[string]*objectcatalog.Service),
 		context:   context.Background(),
 		logger:    NewLogger(1000),
 		telemetry: telemetry.NewRecorder(),
 	}
+	refreshProjection := newRefreshResourceProjection()
+	refreshProjection.publishTelemetry(fixture.telemetry)
 	fixture.gateway = newResourceGateway(resourceGatewayDependencies{
 		resolveClusterDependencies:       fixture.ResolveClusterDependencies,
 		resourceDependenciesForClusterID: fixture.resourceDependenciesForClusterID,
@@ -60,12 +60,10 @@ func newResourceGatewayFixture() *resourceGatewayFixture {
 				fixture.transportFailure(clusterID, reason, err)
 			}
 		},
-		retryTelemetry:           func() resourceRetryTelemetry { return fixture.telemetry },
-		catalogServiceForCluster: func(clusterID string) *objectcatalog.Service { return fixture.catalogs[clusterID] },
 		resourceResolverForCluster: func(clusterID string) common.ResourceResolver {
 			return fixture.resourceResolver(clusterID)
 		},
-		catalogTelemetry:             func() telemetry.Summarizer { return fixture.telemetry },
+		refreshProjection:            refreshProjection,
 		permissionFetchPolicy:        NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency),
 		containerLogsSelectionPolicy: NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit),
 	})
@@ -81,6 +79,11 @@ func newResourceGatewayFixture() *resourceGatewayFixture {
 		Logger: fixture.logger,
 	})
 	return fixture
+}
+
+func (f *resourceGatewayFixture) setTelemetryRecorder(recorder *telemetry.Recorder) {
+	f.telemetry = recorder
+	f.gateway.refreshProjection.publishTelemetry(recorder)
 }
 
 func (f *resourceGatewayFixture) setCluster(clusterID string, clients *clusterClients) {

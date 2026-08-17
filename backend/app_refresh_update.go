@@ -11,7 +11,7 @@ import (
 )
 
 // updateRefreshSubsystemSelections updates active refresh subsystems without restarting the HTTP server.
-func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection) error {
+func (a *RefreshCoordinator) updateRefreshSubsystemSelections(selections []kubeconfigSelection) error {
 	if err := a.validateRefreshSelectionUpdate(); err != nil {
 		return err
 	}
@@ -19,7 +19,7 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 		return nil
 	}
 	if a.refreshSelectionUpdateNeedsSetup() {
-		return a.setupRefreshSubsystem()
+		return a.setupRefreshSubsystemForSelections(selections)
 	}
 	plan, err := a.planRefreshSelectionUpdate(selections)
 	if err != nil {
@@ -32,14 +32,14 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 	return a.applyRefreshSelectionUpdate(plan, update)
 }
 
-func (a *App) validateRefreshSelectionUpdate() error {
+func (a *RefreshCoordinator) validateRefreshSelectionUpdate() error {
 	if a == nil {
-		return fmt.Errorf("app is nil")
+		return fmt.Errorf("refresh coordinator is nil")
 	}
 	return nil
 }
 
-func (a *App) refreshSelectionUpdateNeedsSetup() bool {
+func (a *RefreshCoordinator) refreshSelectionUpdateNeedsSetup() bool {
 	return a.refreshService.Load() == nil || a.refreshAggregates.Load() == nil || a.currentRefreshRuntimeContext() == nil
 }
 
@@ -49,7 +49,7 @@ type refreshSelectionPlan struct {
 	metaByID     map[string]ClusterMeta
 }
 
-func (a *App) planRefreshSelectionUpdate(selections []kubeconfigSelection) (refreshSelectionPlan, error) {
+func (a *RefreshCoordinator) planRefreshSelectionUpdate(selections []kubeconfigSelection) (refreshSelectionPlan, error) {
 	plan := refreshSelectionPlan{
 		clusterOrder: make([]string, 0, len(selections)),
 		desired:      make(map[string]kubeconfigSelection, len(selections)),
@@ -71,7 +71,7 @@ func (a *App) planRefreshSelectionUpdate(selections []kubeconfigSelection) (refr
 	return plan, nil
 }
 
-func (a *App) canonicalClusterMeta(selection kubeconfigSelection, meta ClusterMeta) ClusterMeta {
+func (a *RefreshCoordinator) canonicalClusterMeta(selection kubeconfigSelection, meta ClusterMeta) ClusterMeta {
 	if clients := a.clusterClientsForID(meta.ID); clients != nil {
 		return clients.meta
 	}
@@ -86,7 +86,7 @@ type refreshSelectionUpdate struct {
 	new  map[string]*system.Subsystem
 }
 
-func (a *App) buildRefreshSelectionUpdate(
+func (a *RefreshCoordinator) buildRefreshSelectionUpdate(
 	plan refreshSelectionPlan,
 	selections []kubeconfigSelection,
 ) (refreshSelectionUpdate, error) {
@@ -107,7 +107,7 @@ func (a *App) buildRefreshSelectionUpdate(
 	return update, nil
 }
 
-func (a *App) buildNewRefreshSubsystem(
+func (a *RefreshCoordinator) buildNewRefreshSubsystem(
 	update *refreshSelectionUpdate,
 	plan refreshSelectionPlan,
 	selections []kubeconfigSelection,
@@ -130,12 +130,12 @@ func (a *App) buildNewRefreshSubsystem(
 	return nil
 }
 
-func (a *App) ensureClusterClients(id string, selections []kubeconfigSelection) (*clusterClients, error) {
+func (a *RefreshCoordinator) ensureClusterClients(id string, selections []kubeconfigSelection) (*clusterClients, error) {
 	clients := a.clusterClientsForID(id)
 	if clients != nil {
 		return clients, nil
 	}
-	if err := a.syncClusterClientPool(selections); err != nil {
+	if err := a.ensureClusterClientsForSelections(a.CtxOrBackground(), selections); err != nil {
 		return nil, err
 	}
 	clients = a.clusterClientsForID(id)
@@ -145,7 +145,7 @@ func (a *App) ensureClusterClients(id string, selections []kubeconfigSelection) 
 	return clients, nil
 }
 
-func (a *App) canBuildRefreshSubsystem(id string, meta ClusterMeta, clients *clusterClients) bool {
+func (a *RefreshCoordinator) canBuildRefreshSubsystem(id string, meta ClusterMeta, clients *clusterClients) bool {
 	if clients.authFailedOnInit {
 		a.appLogs.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", meta.Name), logsources.Refresh, id, meta.Name)
 		return false
@@ -160,7 +160,7 @@ func (a *App) canBuildRefreshSubsystem(id string, meta ClusterMeta, clients *clu
 	return false
 }
 
-func (a *App) applyRefreshSelectionUpdate(plan refreshSelectionPlan, update refreshSelectionUpdate) error {
+func (a *RefreshCoordinator) applyRefreshSelectionUpdate(plan refreshSelectionPlan, update refreshSelectionUpdate) error {
 	refreshCtx := a.currentRefreshRuntimeContext()
 	if refreshCtx == nil {
 		return fmt.Errorf("refresh runtime unavailable while applying selection update for clusters %s", strings.Join(plan.clusterOrder, ", "))
@@ -176,7 +176,7 @@ func (a *App) applyRefreshSelectionUpdate(plan refreshSelectionPlan, update refr
 	return nil
 }
 
-func (a *App) startNewObjectCatalogs(plan refreshSelectionPlan, subsystems map[string]*system.Subsystem) {
+func (a *RefreshCoordinator) startNewObjectCatalogs(plan refreshSelectionPlan, subsystems map[string]*system.Subsystem) {
 	for id := range subsystems {
 		target := catalogTarget{selection: plan.desired[id], meta: plan.metaByID[id]}
 		if err := a.startObjectCatalogForTarget(target); err != nil {
@@ -185,7 +185,7 @@ func (a *App) startNewObjectCatalogs(plan refreshSelectionPlan, subsystems map[s
 	}
 }
 
-func (a *App) stopRemovedRefreshSubsystems(
+func (a *RefreshCoordinator) stopRemovedRefreshSubsystems(
 	previous, next map[string]*system.Subsystem,
 ) {
 	for id, subsystem := range previous {
@@ -198,14 +198,14 @@ func (a *App) stopRemovedRefreshSubsystems(
 	}
 }
 
-func (a *App) stopRefreshSubsystems(subsystems map[string]*system.Subsystem) {
+func (a *RefreshCoordinator) stopRefreshSubsystems(subsystems map[string]*system.Subsystem) {
 	for clusterID, subsystem := range subsystems {
 		a.stopRefreshPermissionRevalidation(clusterID)
 		a.stopRefreshSubsystem(subsystem)
 	}
 }
 
-func (a *App) stopRefreshSubsystem(subsystem *system.Subsystem) {
+func (a *RefreshCoordinator) stopRefreshSubsystem(subsystem *system.Subsystem) {
 	if subsystem == nil {
 		return
 	}
@@ -216,14 +216,14 @@ func (a *App) stopRefreshSubsystem(subsystem *system.Subsystem) {
 	ctx, cancel := context.WithTimeout(context.Background(), config.RefreshShutdownTimeout)
 	defer cancel()
 	if err := subsystem.Manager.Shutdown(ctx); err != nil {
-		a.appLogs.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), logsources.Refresh, subsystem.ClusterMeta.ClusterID, subsystem.ClusterMeta.ClusterName)
+		a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), logsources.Refresh, subsystem.ClusterMeta.ClusterID, subsystem.ClusterMeta.ClusterName)
 	}
 }
 
 // stopRefreshSubsystemResources cancels work owned directly by a subsystem
 // generation. These resources can exist before Manager construction succeeds,
 // so every teardown path must stop them independently of Manager availability.
-func (a *App) stopRefreshSubsystemResources(subsystem *system.Subsystem) {
+func (a *RefreshCoordinator) stopRefreshSubsystemResources(subsystem *system.Subsystem) {
 	if subsystem == nil {
 		return
 	}

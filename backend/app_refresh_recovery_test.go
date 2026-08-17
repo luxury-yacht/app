@@ -3,6 +3,8 @@ package backend
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -81,11 +83,26 @@ func TestTeardownRefreshSubsystemCoordinatesWithConcurrentRuntimeEnsure(t *testi
 		"teardown must remain authoritative over a concurrent late runtime ensure")
 }
 
+func TestRefreshCoordinatorResetRuntimeStateUnpublishesAndClearsCache(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+	setRefreshServiceReadyForTest(app)
+	cacheRoot, err := app.preferences.cacheDirPath()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(cacheRoot, "spill"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cacheRoot, "spill", "cached"), []byte("x"), 0o600))
+
+	require.NoError(t, app.RefreshCoordinator.ResetRuntimeState())
+	require.Nil(t, app.refreshService.Load())
+	require.NoDirExists(t, cacheRoot)
+
+	require.NoError(t, app.RefreshCoordinator.ResetRuntimeState(), "reset must be repeatable")
+}
+
 // TestHandlePermissionIssuesLogsWarning verifies that permission issues are logged
 // without triggering global auth recovery (per-cluster recovery is now used).
 func TestHandlePermissionIssuesLogsWarning(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.appLogs = NewAppLogService(NewLogger(10))
 
 	issues := []system.PermissionIssue{{Domain: "namespace", Resource: "pods", Err: errors.New("forbidden")}}
 	app.handlePermissionIssues(issues)
@@ -99,7 +116,6 @@ func TestHandlePermissionIssuesLogsWarning(t *testing.T) {
 // with nil errors are skipped without logging.
 func TestHandlePermissionIssuesSkipsNilErrors(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.appLogs = NewAppLogService(NewLogger(10))
 
 	issues := []system.PermissionIssue{{Domain: "namespace", Resource: "pods", Err: nil}}
 	app.handlePermissionIssues(issues)
@@ -111,7 +127,7 @@ func TestHandlePermissionIssuesSkipsNilErrors(t *testing.T) {
 // TestPerClusterTransportFailure verifies that transport failure tracking is
 // isolated per cluster. Failures in one cluster should not affect another.
 func TestPerClusterTransportFailure(t *testing.T) {
-	app := &App{appLogs: NewAppLogService(NewLogger(100))}
+	app := newTestAppWithDefaults(t)
 
 	// Record failures for cluster A
 	app.recordClusterTransportFailure("cluster-a", "test failure", nil)
@@ -128,7 +144,7 @@ func TestPerClusterTransportFailure(t *testing.T) {
 // TestPerClusterTransportSuccessResets verifies that recording a success for
 // one cluster resets its failure count without affecting other clusters.
 func TestPerClusterTransportSuccessResets(t *testing.T) {
-	app := &App{appLogs: NewAppLogService(NewLogger(100))}
+	app := newTestAppWithDefaults(t)
 
 	// Record failures for both clusters
 	app.recordClusterTransportFailure("cluster-a", "failure", nil)
@@ -148,7 +164,7 @@ func TestPerClusterTransportSuccessResets(t *testing.T) {
 // TestPerClusterTransportStateInitialization verifies that getTransportState
 // lazily initializes state for new clusters.
 func TestPerClusterTransportStateInitialization(t *testing.T) {
-	app := &App{appLogs: NewAppLogService(NewLogger(100))}
+	app := newTestAppWithDefaults(t)
 
 	state := app.getTransportState("new-cluster")
 	require.NotNil(t, state)
@@ -159,7 +175,7 @@ func TestPerClusterTransportStateInitialization(t *testing.T) {
 // TestPerClusterTransportWindowReset verifies that the failure window resets
 // after the window duration expires.
 func TestPerClusterTransportWindowReset(t *testing.T) {
-	app := &App{appLogs: NewAppLogService(NewLogger(100))}
+	app := newTestAppWithDefaults(t)
 
 	// Record a failure
 	app.recordClusterTransportFailure("cluster-a", "failure", nil)
@@ -186,7 +202,7 @@ func TestPerClusterTransportWindowReset(t *testing.T) {
 // TestPerClusterTransportRebuildTriggersAtThreshold verifies that reaching
 // the failure threshold triggers a rebuild for that specific cluster.
 func TestPerClusterTransportRebuildTriggersAtThreshold(t *testing.T) {
-	app := &App{appLogs: NewAppLogService(NewLogger(100))}
+	app := newTestAppWithDefaults(t)
 
 	// Record 3 failures (threshold) for cluster A
 	app.recordClusterTransportFailure("cluster-a", "test", nil)
@@ -206,7 +222,7 @@ func TestPerClusterTransportRebuildTriggersAtThreshold(t *testing.T) {
 // TestPerClusterTransportRebuildCooldown verifies that the cooldown period
 // prevents rapid successive rebuilds for the same cluster.
 func TestPerClusterTransportRebuildCooldown(t *testing.T) {
-	app := &App{appLogs: NewAppLogService(NewLogger(100))}
+	app := newTestAppWithDefaults(t)
 
 	stateA := app.getTransportState("cluster-a")
 	// Simulate a recent rebuild

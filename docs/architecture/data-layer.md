@@ -16,8 +16,10 @@ the completed `v2` rewrite plan.
 - **Per-domain serve + maintained stores:** `backend/refresh/snapshot/` —
   `querypage_typed.go` (`resolveTypedSnapshotPageViaStore`, `resolveMaintainedDirect`,
   `typedMaintainedStore`); `backend/objectcatalog/` for Browse.
-- **Lifecycle / memory:** `backend/refresh/system/governor.go` +
-  `backend/app_refresh_governor.go`; spill in `backend/refresh/domain/maintained_stores.go`.
+- **Lifecycle / memory:** `backend.RefreshCoordinator` in
+  `backend/app_refresh_*.go`, with governor policy in
+  `backend/refresh/system/governor.go` and spill in
+  `backend/refresh/domain/maintained_stores.go`.
 
 ## Invariants
 

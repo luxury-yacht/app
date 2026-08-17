@@ -19,7 +19,10 @@ func TestAppResourceResolverReusesColdStartResolver(t *testing.T) {
 		},
 	}
 
-	resolver := appResourceResolver{app: app, clusterID: clusterID}
+	resolver := clusterRuntimeResourceResolver{
+		runtime: app.ClusterRuntimeManager, clusterID: clusterID,
+		catalogService: app.RefreshCoordinator.objectCatalogServiceForCluster,
+	}
 	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
 
 	firstResolved, ok, err := resolver.ResolveResourceForGVK(context.Background(), gvk)
@@ -61,7 +64,10 @@ func TestAppResourceResolverUsesCatalogServiceWhenAvailable(t *testing.T) {
 		meta:    ClusterMeta{ID: clusterID, Name: "ctx"},
 	})
 
-	resolver := appResourceResolver{app: app, clusterID: clusterID}
+	resolver := clusterRuntimeResourceResolver{
+		runtime: app.ClusterRuntimeManager, clusterID: clusterID,
+		catalogService: app.RefreshCoordinator.objectCatalogServiceForCluster,
+	}
 	resolved, ok, err := resolver.ResolveResourceForGVK(context.Background(), schema.GroupVersionKind{
 		Group:   "apps",
 		Version: "v1",
