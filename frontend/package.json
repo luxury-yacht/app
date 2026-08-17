@@ -52,7 +52,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.7",
     "@sentry/vite-plugin": "^5.4.0",
-    "@storybook/react": "^10.5.7",
+    "@storybook/react": "^10.5.8",
     "@storybook/react-vite": "^10.5.7",
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
