@@ -135,7 +135,7 @@ func TestCheckBetaExpiryValidations(t *testing.T) {
 	t.Cleanup(func() {
 		Version, BetaExpiry, IsBetaBuild = origVersion, origBeta, origIsBeta
 	})
-	lifecycle := &ApplicationLifecycle{appLogs: NewAppLogService(NewLogger(5))}
+	lifecycle := &ApplicationLifecycle{logger: NewLogger(5)}
 
 	// invalid format
 	BetaExpiry = "not-a-time"

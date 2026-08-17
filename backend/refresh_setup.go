@@ -43,7 +43,7 @@ func (a *RefreshCoordinator) setupRefreshSubsystemForSelections(selections []kub
 
 	// Handle case where no subsystems were created (all auth failed).
 	if len(subsystems) == 0 {
-		a.appLogs.logger.Warn("No refresh subsystems created (all clusters may have auth failures)", logsources.Refresh)
+		a.logger.Warn("No refresh subsystems created (all clusters may have auth failures)", logsources.Refresh)
 		// Initialize empty state but don't fail - clusters may recover later.
 		a.replaceRefreshSubsystems(nil)
 		return nil
@@ -109,7 +109,7 @@ func (a *RefreshCoordinator) refreshRuntimeContext(reopen bool) context.Context 
 
 	// The heartbeat reads a.clusterClients directly and must exist even when the
 	// runtime is first established by auth recovery rather than normal setup.
-	go a.startHeartbeatLoop(ctx)
+	go a.clusterRuntime.startHeartbeatLoop(ctx)
 	return ctx
 }
 
@@ -228,13 +228,13 @@ func (a *RefreshCoordinator) buildRefreshSubsystems(
 }
 
 func (a *RefreshCoordinator) buildRefreshSubsystemOutcome(selection kubeconfigSelection) (subsystemBuildOutcome, error) {
-	clusterMeta := a.clusterMetaForSelection(selection)
+	clusterMeta := a.clusterRuntime.clusterMetaForSelection(selection)
 	if clusterMeta.ID == "" {
 		return subsystemBuildOutcome{}, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
 	}
-	clients := a.clusterClientsForID(clusterMeta.ID)
+	clients := a.clusterRuntime.clusterClientsForID(clusterMeta.ID)
 	if clients == nil {
-		clients = a.clusterClientsForSelection(selection)
+		clients = a.clusterRuntime.clusterClientsForSelection(selection)
 	}
 	if clients == nil {
 		return subsystemBuildOutcome{}, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
@@ -252,18 +252,18 @@ func (a *RefreshCoordinator) buildRefreshSubsystemOutcome(selection kubeconfigSe
 
 func (a *RefreshCoordinator) clusterClientsAllowRefresh(clients *clusterClients, meta ClusterMeta) bool {
 	if clients.authFailedOnInit {
-		a.appLogs.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", meta.Name), logsources.Refresh, meta.ID, meta.Name)
+		a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", meta.Name), logsources.Refresh, meta.ID, meta.Name)
 		return false
 	}
 	if clients.authManager == nil {
 		return true
 	}
 	state, reason := clients.authManager.State()
-	a.appLogs.logger.Info(fmt.Sprintf("Auth state for cluster %s: %s (reason: %s)", meta.Name, state.String(), reason), logsources.Refresh, meta.ID, meta.Name)
+	a.logger.Info(fmt.Sprintf("Auth state for cluster %s: %s (reason: %s)", meta.Name, state.String(), reason), logsources.Refresh, meta.ID, meta.Name)
 	if clients.authManager.IsValid() {
 		return true
 	}
-	a.appLogs.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", meta.Name, state.String()), logsources.Refresh, meta.ID, meta.Name)
+	a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", meta.Name, state.String()), logsources.Refresh, meta.ID, meta.Name)
 	return false
 }
 
@@ -284,16 +284,17 @@ func (a *RefreshCoordinator) buildRefreshSubsystemForSelection(
 		GatewayAPIPresence:         clients.gatewayAPIPresence,
 		DynamicClient:              clients.dynamicClient,
 		ObjectDetailsProvider:      a.resources.objectDetailProvider(),
-		Logger:                     a.appLogs.logger,
+		Logger:                     a.logger,
 		ContainerLogsTargetLimiter: a.sharedContainerLogsTargetLimiter(),
 		ContainerLogsPerScopeLimit: a.containerLogsPolicy.Limit(),
+		NodeMaintenanceStore:       a.nodeMaintenanceStore,
 		ClusterID:                  clusterMeta.ID,
 		ClusterName:                clusterMeta.Name,
 		AllowedNamespaces:          a.refreshAllowedNamespaces(clusterMeta.ID),
 		AttentionIgnoreRules:       a.attention.attentionIgnoreRulesForCluster(clusterMeta.ID),
 		AttentionIgnoredObjectPruner: func(ref resourcemodel.ResourceRef) {
 			if err := a.attention.pruneClusterAttentionIgnoredObject(clusterMeta.ID, ref); err != nil {
-				a.appLogs.logger.Warn(fmt.Sprintf("Could not prune obsolete Attention ignore for cluster %s: %v", clusterMeta.ID, err), logsources.Settings, clusterMeta.ID, clusterMeta.ID)
+				a.logger.Warn(fmt.Sprintf("Could not prune obsolete Attention ignore for cluster %s: %v", clusterMeta.ID, err), logsources.Settings, clusterMeta.ID, clusterMeta.ID)
 			}
 		},
 	}
@@ -341,11 +342,11 @@ func (a *RefreshCoordinator) startRefreshSubsystems(ctx context.Context, subsyst
 		if manager == nil {
 			continue
 		}
-		clusterName := a.clusterNameForID(clusterID)
+		clusterName := a.clusterRuntime.clusterNameForID(clusterID)
 		registry := subsystem.Registry
 		go func(mgr *refresh.Manager, registry *domain.Registry, clusterID, clusterName string) {
 			if err := mgr.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				a.appLogs.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), logsources.Refresh, clusterID, clusterName)
+				a.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), logsources.Refresh, clusterID, clusterName)
 				return
 			}
 			// Start blocks until the factory-backed informer caches have synced. Reconcile
@@ -422,17 +423,14 @@ func (a *RefreshCoordinator) buildRefreshMux(
 	// Wire the lifecycle transition: when a cluster's namespace domain serves
 	// data successfully, move it from loading/loading_slow to ready.
 	aggregateService.onNamespaceSnapshot = func(clusterID string) {
-		if a.clusterLifecycle == nil {
-			return
-		}
-		state := a.clusterLifecycle.GetState(clusterID)
+		state := a.clusterRuntime.clusterLifecycleState(clusterID)
 		if state == ClusterStateLoading || state == ClusterStateLoadingSlow {
-			a.clusterLifecycle.SetState(clusterID, ClusterStateReady)
+			a.clusterRuntime.setClusterLifecycleState(clusterID, ClusterStateReady)
 		}
 	}
 	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)
 	aggregateContainerLogs := newAggregateContainerLogsStreamHandler(subsystems)
-	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.appLogs.logger, sharedTelemetry)
+	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.logger, sharedTelemetry)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -511,13 +509,13 @@ func (h *refreshAggregateHandlers) Update(clusterOrder []string, subsystems map[
 // subsystem's namespaces notifier re-arms until its stores resettle, and the
 // readiness self-build no-ops on an already-ready cluster.
 func (a *RefreshCoordinator) transitionClusterToLoading(clusterID string) {
-	if a == nil || a.clusterLifecycle == nil || clusterID == "" {
+	if a == nil || clusterID == "" {
 		return
 	}
-	if a.clusterLifecycle.GetState(clusterID) == ClusterStateReady {
+	if a.clusterRuntime.clusterLifecycleState(clusterID) == ClusterStateReady {
 		return
 	}
-	a.clusterLifecycle.SetState(clusterID, ClusterStateLoading)
+	a.clusterRuntime.setClusterLifecycleState(clusterID, ClusterStateLoading)
 }
 
 // wireNamespacesReadinessObserver closes the cluster-Ready loop server-side
@@ -547,7 +545,7 @@ func (a *RefreshCoordinator) namespacesReadinessSelfBuild(clusterID string) {
 	if aggregates == nil {
 		return
 	}
-	runNamespacesReadinessSelfBuild(a.clusterLifecycle, aggregates.snapshot, clusterID)
+	a.clusterRuntime.buildNamespacesReadiness(aggregates.snapshot, clusterID)
 }
 
 // sweepNamespacesReadiness wires the readiness observer on every subsystem

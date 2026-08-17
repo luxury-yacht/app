@@ -20,7 +20,7 @@ func TestUpdateRefreshSubsystemSelectionsValidatesReceiverAndAllowsEmptySelectio
 	var nilRefresh *RefreshCoordinator
 	require.EqualError(t, nilRefresh.updateRefreshSubsystemSelections(nil), "refresh coordinator is nil")
 
-	refreshCoordinator := newRefreshCoordinator(RefreshCoordinatorDependencies{})
+	refreshCoordinator := newRefreshCoordinatorTestFixture(t).Refresh
 	require.NoError(t, refreshCoordinator.updateRefreshSubsystemSelections(nil))
 }
 

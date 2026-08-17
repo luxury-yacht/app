@@ -101,13 +101,20 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	}
 	wailsApp := application.New(applicationOptions)
 
-	backendRuntime = backend.NewApplicationRuntime(wailsApp, reporter)
+	backendRuntime = backend.NewApplicationRuntime(wailsApp, backend.ApplicationRuntimeOptions{
+		Reporter: reporter,
+		ApplicationUpdates: backend.ApplicationUpdateOptions{
+			TempRoot:       options.UpdateTempRoot,
+			TempSetupError: options.UpdateTempSetupError,
+		},
+		CreateWorkspaceWindow: func() {
+			if windows != nil {
+				windows.Create(false)
+			}
+		},
+	})
 	operationsCoordinator := backendRuntime.Operations
 	desktopShell := backendRuntime.DesktopShell
-	backend.ConfigureApplicationUpdates(backendRuntime.Updates, backend.ApplicationUpdateOptions{
-		TempRoot:       options.UpdateTempRoot,
-		TempSetupError: options.UpdateTempSetupError,
-	})
 	desktopService = backend.NewDesktopService(backend.DesktopServiceDependencies{
 		Favorites:      backendRuntime.Favorites,
 		UIState:        backendRuntime.UIState,
@@ -135,7 +142,6 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	wailsApp.Menu.SetApplicationMenu(nativeMenu)
 
 	windows = appwindow.NewRegistry(wailsApp, backendRuntime.Lifecycle, nativeMenu)
-	backend.ConfigureWorkspaceWindowCreator(desktopShell, func() { windows.Create(false) })
 	windows.Create(true)
 
 	return &applicationComposition{

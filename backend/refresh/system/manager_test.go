@@ -10,6 +10,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
@@ -51,7 +52,8 @@ func TestNewSubsystemRequiresDynamicClient(t *testing.T) {
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
 		},
-		Logger: applog.Noop,
+		Logger:               applog.Noop,
+		NodeMaintenanceStore: nodemaintenance.NewStore(5),
 	}
 
 	manager, handler, recorder, _, cache, _, err := NewSubsystem(cfg)
@@ -83,7 +85,8 @@ func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T)
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
 		},
-		Logger: applog.Noop,
+		Logger:               applog.Noop,
+		NodeMaintenanceStore: nodemaintenance.NewStore(5),
 	}
 
 	manager, handler, recorder, issues, cache, factory, err := NewSubsystem(cfg)

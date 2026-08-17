@@ -27,6 +27,7 @@ import (
 	cgotesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -104,7 +105,7 @@ func TestServiceDeleteReturnsEnsureClientError(t *testing.T) {
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsEnsureClient(func(string) error { return errors.New("ensure failed") }),
 	)
-	service := nodes.NewService(deps)
+	service := nodes.NewService(deps, nodemaintenance.NewStore(5))
 
 	err := service.Delete(context.Background(), "node-1", false)
 	require.Error(t, err)
@@ -372,7 +373,7 @@ func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node
 		testsupport.WithDepsLogger(applog.Noop),
 	)
 
-	service := nodes.NewService(deps)
+	service := nodes.NewService(deps, nodemaintenance.NewStore(5))
 	return service, client, node
 }
 

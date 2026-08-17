@@ -31,10 +31,6 @@ type menuController interface {
 	bringAllWindowsToFront()
 }
 
-type workspaceWindowCreatorConfigurer interface {
-	configureWorkspaceWindowCreator(func())
-}
-
 func addMenuText(menu *application.Menu, label, accelerator string, click func()) {
 	item := menu.Add(label)
 	if accelerator != "" {
@@ -89,15 +85,6 @@ func addFileMenu(appMenu *application.Menu, app menuController) {
 	addMenuText(fileMenu, "Close Cluster", "CmdOrCtrl+w", emitMenuEventWhenReady(app, "menu:close"))
 	if runtime.GOOS != "darwin" {
 		addDesktopFileMenuItems(fileMenu, app)
-	}
-}
-
-// ConfigureWorkspaceWindowCreator connects the native New Window command to
-// the process-owned peer window registry without exposing composition wiring as
-// a frontend service method.
-func ConfigureWorkspaceWindowCreator(target workspaceWindowCreatorConfigurer, create func()) {
-	if target != nil {
-		target.configureWorkspaceWindowCreator(create)
 	}
 }
 
@@ -273,10 +260,6 @@ func addDesktopHelpMenu(appMenu *application.Menu, app menuController) {
 
 func (s *DesktopShell) setApplicationMenu(menu *application.Menu) {
 	s.menu = menu
-}
-
-func (s *DesktopShell) configureWorkspaceWindowCreator(create func()) {
-	s.createWorkspaceWindow = create
 }
 
 func (s *DesktopShell) createWorkspaceWindowFromMenu() {

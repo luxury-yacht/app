@@ -88,7 +88,7 @@ func (a *RefreshCoordinator) setGovernorVisibleLocked(clusterID string) {
 		return
 	}
 	a.governorVisible = clusterID
-	a.markClusterWorkspaceChanged()
+	a.clusterWorkspace.markClusterWorkspaceChanged()
 }
 
 // SetVisibleCluster records the cluster the user is currently viewing and
@@ -109,9 +109,19 @@ func (a *RefreshCoordinator) SetVisibleCluster(clusterID string) {
 	a.governorMu.Unlock()
 
 	a.reconcileGovernor()
-	if a.clusterLifecycle != nil {
-		a.clusterLifecycle.Replay(clusterID)
+	a.clusterRuntime.replayClusterLifecycle(clusterID)
+}
+
+func (a *RefreshCoordinator) visibleClusterForWindow(windowID string) string {
+	if a == nil {
+		return ""
 	}
+	a.governorMu.Lock()
+	defer a.governorMu.Unlock()
+	if windowID != "" {
+		return a.governorWindows[windowID]
+	}
+	return a.governorVisible
 }
 
 // SetWindowVisibleCluster records one peer window's foreground demand. Multiple
@@ -128,7 +138,7 @@ func (a *RefreshCoordinator) SetWindowVisibleCluster(windowID, clusterID string)
 		_, existed := a.governorWindows[windowID]
 		if existed {
 			delete(a.governorWindows, windowID)
-			a.markClusterWorkspaceChanged()
+			a.clusterWorkspace.markClusterWorkspaceChanged()
 		}
 		a.governorMu.Unlock()
 		if existed {
@@ -138,19 +148,17 @@ func (a *RefreshCoordinator) SetWindowVisibleCluster(windowID, clusterID string)
 	}
 	if len(a.governorWindows) == 0 && a.governorVisible != "" {
 		a.governorVisible = ""
-		a.markClusterWorkspaceChanged()
+		a.clusterWorkspace.markClusterWorkspaceChanged()
 	}
 	if a.governorWindows[windowID] != clusterID {
 		a.governorWindows[windowID] = clusterID
-		a.markClusterWorkspaceChanged()
+		a.clusterWorkspace.markClusterWorkspaceChanged()
 	}
 	a.governorMRU = moveToFront(a.governorMRU, clusterID)
 	a.governorMu.Unlock()
 
 	a.reconcileGovernor()
-	if a.clusterLifecycle != nil {
-		a.clusterLifecycle.Replay(clusterID)
-	}
+	a.clusterRuntime.replayClusterLifecycle(clusterID)
 }
 
 // releaseWorkspaceWindowForeground removes a closed peer window's foreground
@@ -166,7 +174,7 @@ func (a *RefreshCoordinator) releaseWorkspaceWindowForeground(windowID string) {
 	_, existed := a.governorWindows[windowID]
 	if existed {
 		delete(a.governorWindows, windowID)
-		a.markClusterWorkspaceChanged()
+		a.clusterWorkspace.markClusterWorkspaceChanged()
 	}
 	a.governorMu.Unlock()
 	if existed {
@@ -293,7 +301,7 @@ func (a *RefreshCoordinator) reconcileGovernorWith(exec governorExecutor) {
 // latter covers clusters whose subsystem is up before the governor first runs).
 func (a *RefreshCoordinator) openClusterIDs() map[string]bool {
 	open := make(map[string]bool)
-	for _, clusterID := range a.snapshotClusterIDs() {
+	for _, clusterID := range a.clusterRuntime.snapshotClusterIDs() {
 		open[clusterID] = true
 	}
 	for id := range a.snapshotRefreshSubsystems() {
@@ -357,8 +365,8 @@ func (e *refreshGovernorExecutor) ensureRunning(clusterID string) bool {
 		return false
 	}
 	if err := a.ensureObjectCatalogForCluster(clusterID); err != nil {
-		if a.appLogs.logger != nil {
-			a.appLogs.logger.Warn(fmt.Sprintf("Governor could not complete live tier for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+		if a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Governor could not complete live tier for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 		}
 		return false
 	}
@@ -383,8 +391,8 @@ func (a *RefreshCoordinator) rewarmCooledClusterSubsystem(clusterID string) {
 	}
 	// (1) unroute the cooled subsystem so no new Build can reach its mmap stores.
 	a.takeRefreshSubsystem(clusterID)
-	if a.appLogs.logger != nil {
-		a.appLogs.logger.Info(fmt.Sprintf("Governor re-warming cooled cluster %s", clusterID), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+	if a.logger != nil {
+		a.logger.Info(fmt.Sprintf("Governor re-warming cooled cluster %s", clusterID), logsources.Refresh, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 	}
 	// (2) build + start a fresh live subsystem and re-point the aggregate router at it.
 	a.rebuildClusterSubsystem(clusterID)
@@ -410,13 +418,13 @@ func (e *refreshGovernorExecutor) teardown(clusterID string) bool {
 	if !subsystem.ColdServingReady() {
 		a.startColdPreparation(clusterID, subsystem)
 		if pendingFor, heapInuse, force := a.shouldForceColdTeardown(subsystem); force {
-			if a.appLogs.logger != nil {
-				a.appLogs.logger.Warn(fmt.Sprintf(
+			if a.logger != nil {
+				a.logger.Warn(fmt.Sprintf(
 					"Governor cold preparation for cluster %s remained unsettled for %s under sustained memory pressure; forcing full teardown (heap in use: %d bytes)",
 					clusterID,
 					pendingFor.Round(time.Second),
 					heapInuse,
-				), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+				), logsources.Refresh, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 			}
 			// Use the normal full-teardown path so feeds stop, the generation-owned
 			// preparation is canceled, and every available store is spilled before
@@ -461,7 +469,7 @@ func (a *RefreshCoordinator) shouldForceColdTeardown(subsystem *system.Subsystem
 // surfaces that remain visible while a cluster is Cold. The work is server-owned
 // and independent of frontend leases: until it succeeds, the subsystem stays live.
 func (a *RefreshCoordinator) startColdPreparation(clusterID string, subsystem *system.Subsystem) {
-	if a == nil || clusterID == "" || subsystem == nil || subsystem.SnapshotService == nil || a.clusterLifecycle == nil {
+	if a == nil || clusterID == "" || subsystem == nil || subsystem.SnapshotService == nil {
 		return
 	}
 	refreshCtx := a.currentRefreshRuntimeContext()
@@ -474,7 +482,7 @@ func (a *RefreshCoordinator) startColdPreparation(clusterID string, subsystem *s
 	}
 	go func() {
 		namespaceBaselineReady := func() bool {
-			if a.clusterLifecycle.GetState(clusterID) != ClusterStateReady {
+			if a.clusterRuntime.clusterLifecycleState(clusterID) != ClusterStateReady {
 				return false
 			}
 			// The aggregate lifecycle may still carry Ready from a subsystem this
@@ -582,15 +590,15 @@ func (a *RefreshCoordinator) coolClusterToMmapServing(clusterID string) {
 		// Cooling failed at some step (mkdir or a store swap). CoolMaintainedStoresToMmap already
 		// closed any mapping it opened, so nothing is left half-mapped. Fall back to a full
 		// teardown: the subsystem is discarded and its heap fully reclaimed.
-		if a.appLogs.logger != nil {
-			a.appLogs.logger.Warn(fmt.Sprintf("Governor cool failed for cluster %s, falling back to full teardown: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+		if a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Governor cool failed for cluster %s, falling back to full teardown: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 		}
 		a.teardownClusterSubsystem(clusterID)
 		a.stopObjectCatalogForCluster(clusterID)
 		runtime.GC()
 		debug.FreeOSMemory()
-		if a.appLogs.logger != nil {
-			a.appLogs.logger.Info(fmt.Sprintf("Governor cooled cluster %s (heap reclaimed)", clusterID), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+		if a.logger != nil {
+			a.logger.Info(fmt.Sprintf("Governor cooled cluster %s (heap reclaimed)", clusterID), logsources.Refresh, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 		}
 		return
 	}
@@ -600,8 +608,8 @@ func (a *RefreshCoordinator) coolClusterToMmapServing(clusterID string) {
 	a.stopObjectCatalogForCluster(clusterID)
 	runtime.GC()
 	debug.FreeOSMemory()
-	if a.appLogs.logger != nil {
-		a.appLogs.logger.Info(fmt.Sprintf("Governor cooled cluster %s (serving from mmap, heap reclaimed)", clusterID), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+	if a.logger != nil {
+		a.logger.Info(fmt.Sprintf("Governor cooled cluster %s (serving from mmap, heap reclaimed)", clusterID), logsources.Refresh, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 	}
 }
 

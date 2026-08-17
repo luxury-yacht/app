@@ -3,6 +3,7 @@ package backend
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/appupdates"
@@ -10,6 +11,42 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+type updateCheckPort struct {
+	mu     sync.RWMutex
+	target func() error
+}
+
+func (p *updateCheckPort) check() error {
+	if p == nil {
+		return fmt.Errorf("update check is not available")
+	}
+	p.mu.RLock()
+	target := p.target
+	p.mu.RUnlock()
+	if target == nil {
+		return fmt.Errorf("update check is not available")
+	}
+	return target()
+}
+
+func (p *updateCheckPort) bind(target func() error) {
+	if p == nil || target == nil {
+		panic("update check port requires a target")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.target != nil {
+		panic("update check port already bound")
+	}
+	p.target = target
+}
+
+type DesktopShellBindings struct {
+	UpdateCheck           func() error
+	KubeconfigSearchPaths func() ([]string, error)
+	CreateWorkspaceWindow func()
+}
 
 // DesktopShell is the concrete owner of native Wails access and process-wide,
 // non-persisted shell projection state.
@@ -38,6 +75,7 @@ func NewDesktopShell(
 	runtimeAvailable func() bool,
 	fallbackEmitter func(string, ...interface{}),
 	logger *Logger,
+	bindings ...DesktopShellBindings,
 ) *DesktopShell {
 	shell := &DesktopShell{
 		application:        wailsApplication,
@@ -45,6 +83,11 @@ func NewDesktopShell(
 		fallbackEmitter:    fallbackEmitter,
 		logger:             logger,
 		sidebarVisible:     true,
+	}
+	if len(bindings) > 0 {
+		shell.checkForUpdates = bindings[0].UpdateCheck
+		shell.kubeconfigSearchPaths = bindings[0].KubeconfigSearchPaths
+		shell.createWorkspaceWindow = bindings[0].CreateWorkspaceWindow
 	}
 	shell.openApplicationURL = func(url string) error {
 		if wailsApplication == nil || wailsApplication.Browser == nil {
@@ -75,16 +118,35 @@ func (s *DesktopShell) UpdateClient() appupdates.Client {
 	return s.application.Updater
 }
 
-func (s *DesktopShell) ConfigureUpdateCheck(check func() error) {
-	if s != nil {
-		s.checkForUpdates = check
+func (s *DesktopShell) hasWindowGeometry() bool {
+	return s != nil && s.windowGeometry != nil
+}
+
+func (s *DesktopShell) OpenApplicationURL(url string) error {
+	if s == nil || s.openApplicationURL == nil {
+		return nil
+	}
+	return s.openApplicationURL(url)
+}
+
+func (s *DesktopShell) QuitApplication() {
+	if s != nil && s.quitApplication != nil {
+		s.quitApplication()
 	}
 }
 
-func (s *DesktopShell) ConfigureKubeconfigSearchPaths(read func() ([]string, error)) {
-	if s != nil {
-		s.kubeconfigSearchPaths = read
+func (s *DesktopShell) ShowExpiredBetaPrompt(prompt expiredBetaPrompt) {
+	if s != nil && s.showExpiredBetaPrompt != nil {
+		s.showExpiredBetaPrompt(prompt)
 	}
+}
+
+func (s *DesktopShell) WindowWorkAreas() []WindowWorkArea {
+	return s.windowWorkAreas()
+}
+
+func (s *DesktopShell) WorkspaceWindow(name string) (application.Window, error) {
+	return s.workspaceWindow(name)
 }
 
 func (s *DesktopShell) ResetProcessState() {

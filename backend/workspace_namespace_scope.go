@@ -14,7 +14,7 @@ import (
 // docs/architecture/namespace-scope.md). The scope is persisted in the Clusters
 // section of settings.json keyed by clusterId and, when non-empty, makes all
 // namespaced data paths for that cluster run per-namespace instead of
-// cluster-wide (enforcement lands in later plan phases).
+// cluster-wide.
 
 // GetClusterAllowedNamespaces returns the persisted namespace scope for the
 // cluster in the order the user saved it. Empty means no scope.
@@ -66,7 +66,7 @@ func clusterSettingsSectionEmpty(section settingsClusterSection) bool {
 func (a *WorkspaceCoordinator) allowedNamespacesForCluster(clusterID string) []string {
 	namespaces, err := a.GetClusterAllowedNamespaces(clusterID)
 	if err != nil {
-		a.appLogs.logger.Warn(
+		a.logger.Warn(
 			fmt.Sprintf("Could not read allowed namespaces for cluster %s (running cluster-wide): %v", clusterID, err),
 			logsources.Settings, clusterID, clusterID,
 		)
@@ -89,14 +89,14 @@ func (a *WorkspaceCoordinator) requestClusterScopeRebuild(clusterID string) {
 		a.requestClusterScopeRebuildFn(clusterID)
 		return
 	}
-	if a.clusterClientsForID(clusterID) == nil {
+	if a.clusterRuntime.clusterClientsForID(clusterID) == nil {
 		return
 	}
 	if !a.tryQueueScopeRebuild(clusterID) {
 		return
 	}
 	a.runSelectionMutationAsync(fmt.Sprintf("cluster-scope-rebuild:%s", clusterID), func(_ *selectionMutation) error {
-		return a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
+		return a.clusterRuntime.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
 			// From here on this rebuild may already be reading the previous
 			// scope, so a new edit must queue a fresh rebuild.
 			a.markScopeRebuildStarted(clusterID)
@@ -129,9 +129,9 @@ func (a *WorkspaceCoordinator) markScopeRebuildStarted(clusterID string) {
 // this event the sidebar would keep serving the pre-rebuild snapshot (the
 // namespaces list would never show a newly added scope entry).
 func (a *WorkspaceCoordinator) performClusterScopeRebuild(clusterID string) {
-	a.teardownClusterSubsystem(clusterID)
-	a.rebuildClusterSubsystem(clusterID)
-	a.incrementClusterScopeRevision(clusterID)
+	a.refresh.teardownClusterSubsystem(clusterID)
+	a.refresh.rebuildClusterSubsystem(clusterID)
+	a.clusterWorkspace.incrementClusterScopeRevision(clusterID)
 	a.emitEvent(clusterScopeChangedEventName, ClusterScopeChangedEvent{ClusterID: clusterID})
 }
 

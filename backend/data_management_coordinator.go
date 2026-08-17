@@ -4,17 +4,58 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
+type dataManagementPreferences interface {
+	DispatchDefaults()
+	Reset() error
+	exportSettingsDocument() (*settingsFile, error)
+	importSettingsDocument(*settingsDataFile, settingsSideEffects) error
+}
+
+type dataManagementFavorites interface {
+	Reset() error
+	exportSnapshot() ([]Favorite, error)
+	importSnapshot([]Favorite) error
+}
+
+type dataManagementResetter interface {
+	Reset() error
+}
+
+type dataManagementUpdates interface {
+	Reset(context.Context) error
+}
+
+type dataManagementAttention interface {
+	ResetProjection()
+}
+
+type dataManagementErrorReporting interface {
+	WithInstallationTelemetryQuiesced(func() error) error
+}
+
+type dataManagementLogs interface {
+	ClearAppLogs() error
+}
+
+type dataManagementDesktopShell interface {
+	ResetProcessState()
+	promptForOpenFile(*application.OpenFileDialogOptions) (string, error)
+	promptForSaveFile(*application.SaveFileDialogOptions) (string, error)
+}
+
 type DataManagementDependencies struct {
-	Preferences        *PreferencesService
-	Favorites          *FavoritesService
-	UIState            *UIStateStore
-	Updates            *UpdateCoordinator
-	Attention          *ClusterAttentionService
-	ErrorReporting     *ErrorReportingService
-	AppLogs            *AppLogService
-	DesktopShell       *DesktopShell
+	Preferences        dataManagementPreferences
+	Favorites          dataManagementFavorites
+	UIState            dataManagementResetter
+	Updates            dataManagementUpdates
+	Attention          dataManagementAttention
+	ErrorReporting     dataManagementErrorReporting
+	AppLogs            dataManagementLogs
+	DesktopShell       dataManagementDesktopShell
 	RuntimeAvailable   func() bool
 	Context            func() context.Context
 	WorkspaceMutation  func(string, func() error) error
@@ -26,14 +67,14 @@ type DataManagementDependencies struct {
 // reset orchestration. Collaborators are concrete leaf owners or narrow
 // functions; it never retains the application composition root.
 type DataManagementCoordinator struct {
-	preferences        *PreferencesService
-	favorites          *FavoritesService
-	uiState            *UIStateStore
-	updates            *UpdateCoordinator
-	attention          *ClusterAttentionService
-	errorReporting     *ErrorReportingService
-	appLogs            *AppLogService
-	desktopShell       *DesktopShell
+	preferences        dataManagementPreferences
+	favorites          dataManagementFavorites
+	uiState            dataManagementResetter
+	updates            dataManagementUpdates
+	attention          dataManagementAttention
+	errorReporting     dataManagementErrorReporting
+	appLogs            dataManagementLogs
+	desktopShell       dataManagementDesktopShell
 	runtimeAvailable   func() bool
 	context            func() context.Context
 	workspaceMutation  func(string, func() error) error

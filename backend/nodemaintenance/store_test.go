@@ -259,16 +259,6 @@ func TestJobForClusterReturnsClusterScopedClone(t *testing.T) {
 	}
 }
 
-func TestGlobalStoreDefault(t *testing.T) {
-	s := GlobalStore()
-	if s == nil {
-		t.Fatalf("expected global store")
-	}
-	if GlobalStore() != s {
-		t.Fatalf("expected singleton global store")
-	}
-}
-
 func TestNilJobGuards(t *testing.T) {
 	var job *DrainJob
 	job.AddInfo("phase", "msg")

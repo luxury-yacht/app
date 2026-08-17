@@ -10,14 +10,20 @@ type attentionIgnoreRulesSetter interface {
 	SetIgnoreRules(snapshot.AttentionIgnoreRules)
 }
 
+type clusterAttentionRepository interface {
+	readAttentionRules(string) (snapshot.AttentionIgnoreRules, error)
+	updateClusterAttentionRules(string, func(*settingsClusterAttentionRules)) (snapshot.AttentionIgnoreRules, error)
+	updateGlobalAttentionRules(string, []string, func(*settingsGlobalAttentionRules)) (snapshot.AttentionIgnoreRules, map[string]snapshot.AttentionIgnoreRules, error)
+}
+
 type ClusterAttentionService struct {
 	mu          sync.Mutex
-	preferences *PreferencesService
+	preferences clusterAttentionRepository
 	logger      *Logger
 	targets     map[string]attentionIgnoreRulesSetter
 }
 
-func NewClusterAttentionService(preferences *PreferencesService, logger *Logger) *ClusterAttentionService {
+func NewClusterAttentionService(preferences clusterAttentionRepository, logger *Logger) *ClusterAttentionService {
 	return &ClusterAttentionService{
 		preferences: preferences,
 		logger:      logger,

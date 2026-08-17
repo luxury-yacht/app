@@ -118,7 +118,7 @@ func TestResourceGatewayRetryTelemetryIsNilUntilRefreshPublishesRecorder(t *test
 }
 
 func TestRefreshCoordinatorPublishesCatalogAndTelemetryToResourceProjection(t *testing.T) {
-	refresh := newRefreshCoordinator(RefreshCoordinatorDependencies{})
+	refresh := newRefreshCoordinatorTestFixture(t).Refresh
 	catalog := objectcatalog.NewService(objectcatalog.Dependencies{
 		Common:    common.Dependencies{KubernetesClient: cgofake.NewClientset()},
 		ClusterID: "cluster-a",

@@ -8,6 +8,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -125,7 +126,18 @@ type resourceGatewayDependencies struct {
 	refreshProjection                *refreshResourceProjection
 	permissionFetchPolicy            *PermissionFetchPolicy
 	containerLogsSelectionPolicy     *ContainerLogsSelectionPolicy
-	operations                       *OperationsCoordinator
+	nodeMaintenanceStore             *nodemaintenance.Store
+	operations                       resourceGatewayOperations
+}
+
+type resourceGatewayOperations interface {
+	CancelDrainNodeJob(string, string) error
+	cancelDrainForClusterLifecycle(string, string, string)
+	clusterOperationEpoch(string) uint64
+	drainOperationFinished(string, string) bool
+	registerDrainOperation(*nodemaintenance.DrainJob, uint64) bool
+	startPortForwardAction(ObjectActionTargetRef, ObjectActionPortForwardOptions) (string, error)
+	unregisterRuntimeOperation(string)
 }
 
 // ResourceGateway is the request-shaped owner for Kubernetes resource reads,
@@ -145,7 +157,8 @@ type ResourceGateway struct {
 	refreshProjection                  *refreshResourceProjection
 	permissionFetchPolicy              *PermissionFetchPolicy
 	containerLogsSelectionPolicy       *ContainerLogsSelectionPolicy
-	operations                         *OperationsCoordinator
+	nodeMaintenanceStore               *nodemaintenance.Store
+	operations                         resourceGatewayOperations
 
 	responseCache *responseCache
 	ssrrCachesMu  sync.Mutex
@@ -182,6 +195,7 @@ func newResourceGateway(dependencies resourceGatewayDependencies) *ResourceGatew
 		refreshProjection:                  refreshProjection,
 		permissionFetchPolicy:              permissionPolicy,
 		containerLogsSelectionPolicy:       containerLogsPolicy,
+		nodeMaintenanceStore:               dependencies.nodeMaintenanceStore,
 		operations:                         dependencies.operations,
 		responseCache:                      newDefaultResponseCache(),
 		ssrrCaches:                         make(map[string]*capabilities.SSRRCache),

@@ -52,7 +52,6 @@ vi.mock('@ui/settings/sections/AdvancedSection', () => ({
 
 vi.mock('@core/backend-api', () => ({
   GetAppSettings: vi.fn().mockResolvedValue({ useShortResourceNames: false }),
-  GetAppearanceModeInfo: vi.fn().mockResolvedValue({ currentMode: 'dark', userMode: 'dark' }),
   GetAppInfo: vi.fn().mockResolvedValue({ version: '4.2.1' }),
 }));
 

@@ -27,15 +27,18 @@ be visible in the app shell and cleaned up when their cluster goes away.
 
 - `backend.OperationsCoordinator` owns the runtime registry, shell-session map,
   port-forward map, their locks, Wails command implementations, executor
-  factories, typed list/status publication, and all per-cluster/process cleanup.
+  factories, typed list/status publication, drain-operation registration, and
+  all per-cluster/process cleanup.
 - `backend/runtime_operations.go` implements the coordinator's active-operation
   envelope and the `runtime-operations:list` event.
 - `backend/shell_sessions*.go` implements coordinator-owned shell lifecycle and
   backlog behavior.
 - `backend/portforward*.go` implements coordinator-owned forwarding lifecycle
   and status behavior.
-- Node maintenance and drain state: `backend/nodemaintenance`,
-  `backend/refresh/snapshot/node_maintenance.go`
+- The single process-composed `backend/nodemaintenance.Store` owns cluster-keyed
+  drain jobs, cancellation handles, bounded history, and its lock. Node resource
+  actions write it, Operations cancels through it, and
+  `backend/refresh/snapshot/node_maintenance.go` reads it for live snapshots.
 - Frontend status rows: `frontend/src/ui/status`
 - Cluster selection transition:
   [../architecture/multi-cluster.md](../architecture/multi-cluster.md)

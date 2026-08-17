@@ -15,6 +15,13 @@ type ClusterWorkspaceProjection struct {
 	clusterScopeRevisions    map[string]uint64
 }
 
+func (p *ClusterWorkspaceProjection) revision() uint64 {
+	if p == nil {
+		return 0
+	}
+	return p.clusterWorkspaceRevision.Load()
+}
+
 func newClusterWorkspaceProjection() *ClusterWorkspaceProjection {
 	return &ClusterWorkspaceProjection{
 		clusterHealth:         make(map[string]ClusterHealthState),

@@ -321,7 +321,7 @@ func TestClosingAWindowsLastTabClearsItsForegroundDemand(t *testing.T) {
 	app.Workspace.setSelectedKubeconfigsLocked([]string{selection})
 	app.Workspace.kubeconfigsMu.Unlock()
 	app.Workspace.GetClusterWorkspaceStateForWindow("workspace-1")
-	app.Workspace.SetWindowVisibleCluster("workspace-1", "cluster-a")
+	app.Refresh.SetWindowVisibleCluster("workspace-1", "cluster-a")
 
 	result := app.Workspace.ApplyClusterWorkspace(ClusterWorkspaceCommand{
 		WindowID:                  "workspace-1",

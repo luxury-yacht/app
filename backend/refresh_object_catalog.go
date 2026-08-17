@@ -121,7 +121,7 @@ func (a *RefreshCoordinator) ensureObjectCatalogForCluster(clusterID string) err
 	if a.objectCatalogServiceForCluster(clusterID) != nil {
 		return nil
 	}
-	clients := a.clusterClientsForID(clusterID)
+	clients := a.clusterRuntime.clusterClientsForID(clusterID)
 	if clients == nil || clients.kubeconfigPath == "" {
 		return fmt.Errorf("cluster selection unavailable")
 	}
@@ -149,7 +149,7 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 		return nil
 	}
 
-	clients := a.clusterClientsForID(target.meta.ID)
+	clients := a.clusterRuntime.clusterClientsForID(target.meta.ID)
 	if clients == nil {
 		return fmt.Errorf("cluster clients unavailable")
 	}
@@ -159,7 +159,7 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 		return fmt.Errorf("refresh subsystem informers unavailable")
 	}
 
-	commonDeps := a.resourceDependenciesForSelection(target.selection, clients, target.meta.ID)
+	commonDeps := a.clusterRuntime.resourceDependenciesForSelection(target.selection, clients, target.meta.ID)
 	telemetryRecorder := objectcatalog.TelemetryRecorder(nil)
 	if subsystem.Telemetry != nil {
 		telemetryRecorder = subsystem.Telemetry
@@ -169,7 +169,7 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 
 	deps := objectcatalog.Dependencies{
 		Common:                       commonDeps,
-		Logger:                       applog.ClusterScoped(a.appLogs.logger, target.meta.ID, target.meta.Name),
+		Logger:                       applog.ClusterScoped(a.logger, target.meta.ID, target.meta.Name),
 		Telemetry:                    telemetryRecorder,
 		InformerFactory:              subsystem.InformerFactory.SharedInformerFactory(),
 		APIExtensionsInformerFactory: subsystem.InformerFactory.APIExtensionsInformerFactory(),
@@ -232,7 +232,7 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 		// RBAC preflight overlap the informer factory's initial sync; sync() itself
 		// waits for caches just before the collect (deps.WaitForCaches above).
 		if err := svc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			a.appLogs.logger.Warn(fmt.Sprintf("Object catalog terminated unexpectedly: %v", err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
+			a.logger.Warn(fmt.Sprintf("Object catalog terminated unexpectedly: %v", err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 		}
 	}()
 
@@ -374,8 +374,8 @@ func (a *RefreshCoordinator) waitForObjectCatalogDone(entry *objectCatalogEntry)
 	select {
 	case <-entry.done:
 	case <-timer.C:
-		if a != nil && a.appLogs.logger != nil {
-			a.appLogs.logger.Warn("Timed out waiting for object catalog shutdown", logsources.ObjectCatalog, entry.meta.ID, entry.meta.Name)
+		if a != nil && a.logger != nil {
+			a.logger.Warn("Timed out waiting for object catalog shutdown", logsources.ObjectCatalog, entry.meta.ID, entry.meta.Name)
 		}
 	}
 }

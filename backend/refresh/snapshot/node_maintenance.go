@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -9,8 +10,10 @@ import (
 )
 
 // RegisterNodeMaintenanceDomain wires the object-maintenance domain into the registry.
-func RegisterNodeMaintenanceDomain(reg *domain.Registry) error {
-	store := nodemaintenance.GlobalStore()
+func RegisterNodeMaintenanceDomain(reg *domain.Registry, store *nodemaintenance.Store) error {
+	if store == nil {
+		return fmt.Errorf("node maintenance store is required")
+	}
 	return reg.Register(refresh.DomainConfig{
 		Name: "object-maintenance",
 		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {

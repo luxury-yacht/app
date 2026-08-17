@@ -112,9 +112,10 @@ Applies to Go code under `backend/`.
   `ClusterRuntimeManager`, `PermissionFetchPolicy`,
   `ContainerLogsSelectionPolicy`, and `RefreshCoordinator`. Effect targets do
   not read Preferences or dispatch to one another.
-- Existing one-off settings setters are compatibility wrappers around the
-  common update path. Do not add new preference-specific Wails setters unless a
-  separate workflow needs a distinct command contract.
+- Do not add preference-specific compatibility setters. Frontend preference
+  mutations use `UpdateAppPreferences`; a genuinely separate workflow needs a
+  separately justified command contract and must still reuse the common
+  validation, persistence, and side-effect machinery.
 - Defaults for persisted object panel position and layout belong in the backend
   settings contract, not frontend-only hydration fallbacks.
 - Regenerate Wails bindings when settings DTOs, schema fields, or response

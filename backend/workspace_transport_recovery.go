@@ -17,12 +17,12 @@ func (a *WorkspaceCoordinator) runClusterTransportRebuild(clusterID, reason stri
 			return a.rebuildClusterTransport(clusterID, reason, cause)
 		},
 	); err != nil {
-		a.appLogs.logger.Warn(fmt.Sprintf("Transport rebuild coordination failed for cluster %s: %v", clusterID, err), logsources.KubernetesClient, clusterID, a.clusterNameForID(clusterID))
+		a.logger.Warn(fmt.Sprintf("Transport rebuild coordination failed for cluster %s: %v", clusterID, err), logsources.KubernetesClient, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 	}
 }
 
 func (a *WorkspaceCoordinator) rebuildClusterTransport(clusterID, reason string, cause error) error {
-	state := a.getTransportState(clusterID)
+	state := a.clusterRuntime.getTransportState(clusterID)
 	defer func() {
 		state.mu.Lock()
 		state.failureCount = 0
@@ -31,27 +31,27 @@ func (a *WorkspaceCoordinator) rebuildClusterTransport(clusterID, reason string,
 		state.mu.Unlock()
 	}()
 
-	if recorder := a.currentTelemetryRecorder(); recorder != nil {
+	if recorder := a.refresh.currentTelemetryRecorder(); recorder != nil {
 		recorder.RecordTransportRebuild(fmt.Sprintf("cluster:%s - %s", clusterID, reason))
 	}
-	a.appLogs.logger.Info(fmt.Sprintf("Starting transport rebuild for cluster %s", clusterID), logsources.KubernetesClient, clusterID, a.clusterNameForID(clusterID))
+	a.logger.Info(fmt.Sprintf("Starting transport rebuild for cluster %s", clusterID), logsources.KubernetesClient, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 
-	if err := a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
+	if err := a.clusterRuntime.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
 		if err := opCtx.Err(); err != nil {
 			return err
 		}
-		a.rebuildClusterSubsystem(clusterID)
+		a.refresh.rebuildClusterSubsystem(clusterID)
 		return opCtx.Err()
 	}); err != nil {
 		return err
 	}
 
-	if a.appLogs.logger != nil {
+	if a.logger != nil {
 		message := fmt.Sprintf("Transport rebuild complete for cluster %s", clusterID)
 		if cause != nil {
 			message = fmt.Sprintf("%s after %v", message, cause)
 		}
-		a.appLogs.logger.Info(message, logsources.KubernetesClient, clusterID, a.clusterNameForID(clusterID))
+		a.logger.Info(message, logsources.KubernetesClient, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 	}
 	return nil
 }

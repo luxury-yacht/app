@@ -4,20 +4,101 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+
+	"github.com/luxury-yacht/app/backend/internal/authstate"
+	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resources/common"
 )
+
+type workspaceClusterRuntime interface {
+	affectedKubeconfigClusters(map[string]struct{}) []string
+	availableKubeconfigCount() int
+	buildClusterClientsWithContext(context.Context, kubeconfigSelection, ClusterMeta) (*clusterClients, error)
+	buildClusterClientsWithManager(context.Context, kubeconfigSelection, ClusterMeta, *authstate.Manager) (*clusterClients, error)
+	buildNamespacesReadiness(*aggregateSnapshotService, string)
+	clearClusterClientPool() []removedClusterClient
+	clusterAuthDisplayName(string) string
+	clusterClientCreateTasks(map[string]kubeconfigSelection) []clusterClientCreateTask
+	clusterClientsForID(string) *clusterClients
+	clusterClientsForSelection(kubeconfigSelection) *clusterClients
+	clusterLifecycleState(string) ClusterLifecycleState
+	clusterLifecycleStates() map[string]ClusterLifecycleState
+	clusterMetaForSelection(kubeconfigSelection) ClusterMeta
+	clusterNameForID(string) string
+	clusterWorkspaceAuthStates() map[string]ClusterWorkspaceClusterState
+	createClusterClients(context.Context, []clusterClientCreateTask, clusterClientBuilder) error
+	desiredClusterClientSelections([]kubeconfigSelection) map[string]kubeconfigSelection
+	discoverKubeconfigs() error
+	discoverableKubeconfigSelections() map[kubeconfigSelectionKey]struct{}
+	ensureClusterClientsForSelections(context.Context, []kubeconfigSelection) error
+	ensureKubernetesAPIMetricsRegistry() *kubernetesAPIMetricsRegistry
+	getTransportState(string) *transportFailureState
+	normalizeKubeconfigSelection(string) (kubeconfigSelection, error)
+	refreshKubeconfigDiscoveryAndWatch() error
+	removeClusterClients([]string) []removedClusterClient
+	removeClusterLifecycleState(string)
+	removeUndesiredClusterClients(map[string]kubeconfigSelection) []removedClusterClient
+	replaceClusterClient(string, *clusterClients)
+	replayClusterLifecycle(string)
+	resourceDependenciesForSelection(kubeconfigSelection, *clusterClients, string) common.Dependencies
+	runClusterOperation(context.Context, string, func(context.Context) error) error
+	selectionsForClusterIDs([]string) []kubeconfigSelection
+	setClusterLifecycleState(string, ClusterLifecycleState)
+	snapshotClusterIDs() []string
+	startHeartbeatLoop(context.Context)
+	validateKubeconfigSelection(kubeconfigSelection) error
+}
+
+type workspaceClusterProjection interface {
+	clusterWorkspaceRuntimeState() (map[string]ClusterHealthState, map[string]uint64)
+	incrementClusterScopeRevision(string)
+	markClusterWorkspaceChanged()
+	removeClusterWorkspaceRuntimeState(string)
+	revision() uint64
+	setClusterHealth(string, ClusterHealthState)
+}
+
+type workspaceRefresh interface {
+	SetVisibleCluster(string)
+	SetWindowVisibleCluster(string, string)
+	currentTelemetryRecorder() *telemetry.Recorder
+	rebuildClusterSubsystem(string)
+	releaseWorkspaceWindowForeground(string)
+	setupRefreshSubsystemForSelections([]kubeconfigSelection) error
+	startObjectCatalogForTarget(catalogTarget) error
+	stopObjectCatalog()
+	teardownClusterSubsystem(string)
+	teardownRefreshSubsystem()
+	updateRefreshSubsystemSelections([]kubeconfigSelection) error
+	visibleClusterForWindow(string) string
+}
+
+type workspacePreferences interface {
+	EnsureLoadedForStartup() (PreferencesSnapshot, error)
+	SaveKubeconfigSearchPaths([]string) error
+	SaveSelectedKubeconfigs([]string) error
+	SelectedKubeconfigs() []string
+	SetSelectedKubeconfigsSnapshot([]string)
+	cacheDirPath() (string, error)
+	clusterAllowedNamespaces(string) ([]string, error)
+	saveClusterAllowedNamespaces(string, []string) ([]string, error)
+}
+
+type workspaceOperations interface {
+	StopCluster(string)
+}
 
 // WorkspaceCoordinator is the sole state owner for peer-window selections,
 // serialized selection mutations, supersession generations, selection
 // diagnostics, and namespace-scope rebuild coalescing.
 type WorkspaceCoordinator struct {
-	*ClusterRuntimeManager
-	*ClusterWorkspaceProjection
-	*RefreshCoordinator
+	clusterRuntime   workspaceClusterRuntime
+	clusterWorkspace workspaceClusterProjection
+	refresh          workspaceRefresh
 
-	preferences           *PreferencesService
-	operations            *OperationsCoordinator
-	resources             *ResourceGateway
-	appLogs               *AppLogService
+	preferences           workspacePreferences
+	operations            workspaceOperations
+	logger                *Logger
 	context               func() context.Context
 	runtimeAvailableFn    func() bool
 	emitEventFn           func(string, ...interface{})
@@ -46,64 +127,57 @@ type WorkspaceCoordinator struct {
 }
 
 type WorkspaceCoordinatorDependencies struct {
-	ClusterRuntime   *ClusterRuntimeManager
-	ClusterWorkspace *ClusterWorkspaceProjection
-	Refresh          *RefreshCoordinator
-	Preferences      *PreferencesService
-	Operations       *OperationsCoordinator
-	Resources        *ResourceGateway
-	AppLogs          *AppLogService
+	ClusterRuntime   workspaceClusterRuntime
+	ClusterWorkspace workspaceClusterProjection
+	Refresh          workspaceRefresh
+	Preferences      workspacePreferences
+	Operations       workspaceOperations
+	Logger           *Logger
 	Context          func() context.Context
 	RuntimeAvailable func() bool
 	EmitEvent        func(string, ...interface{})
 }
 
 func newWorkspaceCoordinator(dependencies WorkspaceCoordinatorDependencies) *WorkspaceCoordinator {
-	appLogs := dependencies.AppLogs
-	if appLogs == nil {
-		appLogs = NewAppLogService(NewLogger(1000))
-	}
-	clusterWorkspace := dependencies.ClusterWorkspace
-	if clusterWorkspace == nil {
-		clusterWorkspace = newClusterWorkspaceProjection()
-	}
-	clusterRuntime := dependencies.ClusterRuntime
-	if clusterRuntime == nil {
-		clusterRuntime = newClusterRuntimeManager(ClusterRuntimeManagerDependencies{
-			Logger: appLogs.Logger(), Projection: clusterWorkspace,
-		})
-	}
-	preferences := dependencies.Preferences
-	if preferences == nil {
-		preferences = NewPreferencesService(nil, nil, appLogs.Logger())
-	}
-	refresh := dependencies.Refresh
-	if refresh == nil {
-		refresh = newRefreshCoordinator(RefreshCoordinatorDependencies{
-			ClusterRuntime: clusterRuntime, ClusterWorkspace: clusterWorkspace,
-			Preferences: preferences, AppLogs: appLogs,
-		})
-	}
-	contextProvider := dependencies.Context
-	if contextProvider == nil {
-		contextProvider = context.Background
-	}
+	requireWorkspaceCoordinatorDependencies(dependencies)
 	workspace := &WorkspaceCoordinator{
-		ClusterRuntimeManager:      clusterRuntime,
-		ClusterWorkspaceProjection: clusterWorkspace,
-		RefreshCoordinator:         refresh,
-		preferences:                preferences,
-		operations:                 dependencies.Operations,
-		resources:                  dependencies.Resources,
-		appLogs:                    appLogs,
-		context:                    contextProvider,
-		runtimeAvailableFn:         dependencies.RuntimeAvailable,
-		emitEventFn:                dependencies.EmitEvent,
-		workspaceSelections:        make(map[string][]string),
-		clusterIntentLatest:        make(map[clusterRuntimeIntentKey]uint64),
+		clusterRuntime:      dependencies.ClusterRuntime,
+		clusterWorkspace:    dependencies.ClusterWorkspace,
+		refresh:             dependencies.Refresh,
+		preferences:         dependencies.Preferences,
+		operations:          dependencies.Operations,
+		logger:              dependencies.Logger,
+		context:             dependencies.Context,
+		runtimeAvailableFn:  dependencies.RuntimeAvailable,
+		emitEventFn:         dependencies.EmitEvent,
+		workspaceSelections: make(map[string][]string),
+		clusterIntentLatest: make(map[clusterRuntimeIntentKey]uint64),
 	}
 	workspace.kubeClientInitializer = workspace.initKubernetesClient
 	return workspace
+}
+
+func requireWorkspaceCoordinatorDependencies(dependencies WorkspaceCoordinatorDependencies) {
+	switch {
+	case dependencies.ClusterRuntime == nil:
+		panic("newWorkspaceCoordinator: ClusterRuntime is required")
+	case dependencies.ClusterWorkspace == nil:
+		panic("newWorkspaceCoordinator: ClusterWorkspace is required")
+	case dependencies.Refresh == nil:
+		panic("newWorkspaceCoordinator: Refresh is required")
+	case dependencies.Preferences == nil:
+		panic("newWorkspaceCoordinator: Preferences is required")
+	case dependencies.Operations == nil:
+		panic("newWorkspaceCoordinator: Operations is required")
+	case dependencies.Logger == nil:
+		panic("newWorkspaceCoordinator: Logger is required")
+	case dependencies.Context == nil:
+		panic("newWorkspaceCoordinator: Context is required")
+	case dependencies.RuntimeAvailable == nil:
+		panic("newWorkspaceCoordinator: RuntimeAvailable is required")
+	case dependencies.EmitEvent == nil:
+		panic("newWorkspaceCoordinator: EmitEvent is required")
+	}
 }
 
 func (w *WorkspaceCoordinator) CtxOrBackground() context.Context {

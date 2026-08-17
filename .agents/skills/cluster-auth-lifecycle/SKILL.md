@@ -28,9 +28,12 @@ add/remove behavior.
 - `backend/refresh_coordinator.go`
 - `backend/workspace_coordinator.go`
 - `backend/cluster_runtime_intent.go`
-- `backend/cluster_workspace.go`
+- `backend/cluster_runtime_clients.go`
+- `backend/cluster_runtime_auth.go`
+- `backend/workspace_auth.go`
 - `backend/workspace_cluster_clients.go`
-- `backend/kubeconfigs.go`
+- `backend/workspace_kubeconfigs.go`
+- `backend/workspace_state.go`
 - `backend/refresh_setup.go`
 - `backend/refresh_update.go`
 - `backend/refresh_subsystems.go`

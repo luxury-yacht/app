@@ -116,9 +116,8 @@ func NewOperationsCoordinator(dependencies OperationsCoordinatorDependencies) *O
 	if contextProvider == nil {
 		contextProvider = context.Background
 	}
-	drainStore := dependencies.DrainStore
-	if drainStore == nil {
-		drainStore = nodemaintenance.GlobalStore()
+	if dependencies.DrainStore == nil {
+		panic("NewOperationsCoordinator: DrainStore is required")
 	}
 	spdyExecutor := dependencies.SPDYExecutorFactory
 	if spdyExecutor == nil {
@@ -134,7 +133,7 @@ func NewOperationsCoordinator(dependencies OperationsCoordinatorDependencies) *O
 		context:             contextProvider,
 		emitEvent:           dependencies.EmitEvent,
 		logger:              dependencies.Logger,
-		drainStore:          drainStore,
+		drainStore:          dependencies.DrainStore,
 		spdyExecutor:        spdyExecutor,
 		websocketExec:       websocketExecutor,
 		shellSessions:       make(map[string]*shellSession),
@@ -228,6 +227,7 @@ func (a operationsClusterAccessFuncs) FetchPodWithRetry(
 func newApplicationOperationsCoordinator(
 	runtimeManager *ClusterRuntimeManager,
 	refreshProjection *refreshResourceProjection,
+	drainStore *nodemaintenance.Store,
 	contextProvider func() context.Context,
 	emitEvent func(string, ...interface{}),
 	logger *Logger,
@@ -249,6 +249,6 @@ func newApplicationOperationsCoordinator(
 		Context:     contextProvider,
 		EmitEvent:   emitEvent,
 		Logger:      logger,
-		DrainStore:  nodemaintenance.GlobalStore(),
+		DrainStore:  drainStore,
 	})
 }

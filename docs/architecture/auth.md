@@ -19,8 +19,10 @@ must not poison other selected clusters.
 ## Ownership
 
 - Backend auth state manager: `backend/internal/authstate`
-- Cluster client auth wiring: `backend/cluster_clients.go`
-- Auth events and recovery lifecycle: `backend/cluster_auth.go`, backend app
+- Cluster client auth wiring: `backend/cluster_runtime_clients.go` and
+  `backend/cluster_client_contract.go`
+- Auth events and recovery lifecycle: `backend/cluster_runtime_auth.go`,
+  `backend/refresh_auth.go`, `backend/workspace_auth.go`, and application
   lifecycle/refresh setup paths
 - Frontend cluster/auth state: the cluster-workspace store in
   `frontend/src/core/cluster-workspace`; `AuthErrorContext.tsx` is its React
@@ -53,7 +55,7 @@ Recovery must prove both sides of the gate:
 
 One continuous recovery loop owns the retry cadence; it exits only on a
 successful probe or cancellation. Probe failures are classified
-(`authstate.ErrorClass`, classifier in `backend/cluster_clients.go`):
+(`authstate.ErrorClass`, classifier in `backend/cluster_client_contract.go`):
 
 - **auth** — the cluster rejected the credentials (HTTP 401/403) or the exec
   credential plugin failed. The initial burst probes on the backoff schedule;

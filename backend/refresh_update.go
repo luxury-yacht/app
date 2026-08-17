@@ -56,7 +56,7 @@ func (a *RefreshCoordinator) planRefreshSelectionUpdate(selections []kubeconfigS
 		metaByID:     make(map[string]ClusterMeta, len(selections)),
 	}
 	for _, selection := range selections {
-		meta := a.clusterMetaForSelection(selection)
+		meta := a.clusterRuntime.clusterMetaForSelection(selection)
 		if meta.ID == "" {
 			return refreshSelectionPlan{}, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
 		}
@@ -72,10 +72,10 @@ func (a *RefreshCoordinator) planRefreshSelectionUpdate(selections []kubeconfigS
 }
 
 func (a *RefreshCoordinator) canonicalClusterMeta(selection kubeconfigSelection, meta ClusterMeta) ClusterMeta {
-	if clients := a.clusterClientsForID(meta.ID); clients != nil {
+	if clients := a.clusterRuntime.clusterClientsForID(meta.ID); clients != nil {
 		return clients.meta
 	}
-	if clients := a.clusterClientsForSelection(selection); clients != nil {
+	if clients := a.clusterRuntime.clusterClientsForSelection(selection); clients != nil {
 		return clients.meta
 	}
 	return meta
@@ -131,14 +131,14 @@ func (a *RefreshCoordinator) buildNewRefreshSubsystem(
 }
 
 func (a *RefreshCoordinator) ensureClusterClients(id string, selections []kubeconfigSelection) (*clusterClients, error) {
-	clients := a.clusterClientsForID(id)
+	clients := a.clusterRuntime.clusterClientsForID(id)
 	if clients != nil {
 		return clients, nil
 	}
-	if err := a.ensureClusterClientsForSelections(a.CtxOrBackground(), selections); err != nil {
+	if err := a.clusterRuntime.ensureClusterClientsForSelections(a.CtxOrBackground(), selections); err != nil {
 		return nil, err
 	}
-	clients = a.clusterClientsForID(id)
+	clients = a.clusterRuntime.clusterClientsForID(id)
 	if clients == nil {
 		return nil, fmt.Errorf("cluster clients unavailable for %s", id)
 	}
@@ -147,15 +147,15 @@ func (a *RefreshCoordinator) ensureClusterClients(id string, selections []kubeco
 
 func (a *RefreshCoordinator) canBuildRefreshSubsystem(id string, meta ClusterMeta, clients *clusterClients) bool {
 	if clients.authFailedOnInit {
-		a.appLogs.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", meta.Name), logsources.Refresh, id, meta.Name)
+		a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", meta.Name), logsources.Refresh, id, meta.Name)
 		return false
 	}
 	if clients.authManager == nil || clients.authManager.IsValid() {
 		return true
 	}
-	if a.appLogs.logger != nil {
+	if a.logger != nil {
 		state, _ := clients.authManager.State()
-		a.appLogs.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", meta.Name, state.String()), logsources.Refresh, id, meta.Name)
+		a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", meta.Name, state.String()), logsources.Refresh, id, meta.Name)
 	}
 	return false
 }
@@ -180,7 +180,7 @@ func (a *RefreshCoordinator) startNewObjectCatalogs(plan refreshSelectionPlan, s
 	for id := range subsystems {
 		target := catalogTarget{selection: plan.desired[id], meta: plan.metaByID[id]}
 		if err := a.startObjectCatalogForTarget(target); err != nil {
-			a.appLogs.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", id, err), logsources.ObjectCatalog, id, plan.metaByID[id].Name)
+			a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", id, err), logsources.ObjectCatalog, id, plan.metaByID[id].Name)
 		}
 	}
 }

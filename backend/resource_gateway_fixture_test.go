@@ -7,6 +7,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -14,7 +15,7 @@ import (
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
-// resourceGatewayFixture implements the temporary cluster-runtime seams used by
+// resourceGatewayFixture implements the cluster-runtime capabilities used by
 // ResourceGateway without constructing the application composition root.
 type resourceGatewayFixture struct {
 	gateway          *ResourceGateway
@@ -27,6 +28,7 @@ type resourceGatewayFixture struct {
 	emitEvent        func(string, ...interface{})
 	transportSuccess func(string)
 	transportFailure func(string, string, error)
+	nodeMaintenance  *nodemaintenance.Store
 }
 
 func newResourceGatewayFixture() *resourceGatewayFixture {
@@ -39,6 +41,19 @@ func newResourceGatewayFixture() *resourceGatewayFixture {
 	}
 	refreshProjection := newRefreshResourceProjection()
 	refreshProjection.publishTelemetry(fixture.telemetry)
+	fixture.nodeMaintenance = nodemaintenance.NewStore(5)
+	operations := NewOperationsCoordinator(OperationsCoordinatorDependencies{
+		ClusterAccess: fixture,
+		Permissions:   defaultOperationsPermissionChecker{},
+		Context:       func() context.Context { return fixture.context },
+		EmitEvent: func(name string, args ...interface{}) {
+			if fixture.emitEvent != nil {
+				fixture.emitEvent(name, args...)
+			}
+		},
+		Logger:     fixture.logger,
+		DrainStore: fixture.nodeMaintenance,
+	})
 	fixture.gateway = newResourceGateway(resourceGatewayDependencies{
 		resolveClusterDependencies:       fixture.ResolveClusterDependencies,
 		resourceDependenciesForClusterID: fixture.resourceDependenciesForClusterID,
@@ -66,17 +81,8 @@ func newResourceGatewayFixture() *resourceGatewayFixture {
 		refreshProjection:            refreshProjection,
 		permissionFetchPolicy:        NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency),
 		containerLogsSelectionPolicy: NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit),
-	})
-	fixture.gateway.operations = NewOperationsCoordinator(OperationsCoordinatorDependencies{
-		ClusterAccess: fixture,
-		Permissions:   defaultOperationsPermissionChecker{},
-		Context:       func() context.Context { return fixture.context },
-		EmitEvent: func(name string, args ...interface{}) {
-			if fixture.emitEvent != nil {
-				fixture.emitEvent(name, args...)
-			}
-		},
-		Logger: fixture.logger,
+		nodeMaintenanceStore:         fixture.nodeMaintenance,
+		operations:                   operations,
 	})
 	return fixture
 }

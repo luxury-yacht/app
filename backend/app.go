@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/luxury-yacht/app/backend/internal/appupdates"
-	"github.com/luxury-yacht/app/backend/internal/errorcapture"
+	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -32,6 +31,7 @@ type ApplicationRuntime struct {
 	ErrorReporting        *ErrorReportingService
 	ContainerLogsPolicy   *ContainerLogsSelectionPolicy
 	PermissionFetchPolicy *PermissionFetchPolicy
+	NodeMaintenance       *nodemaintenance.Store
 	DataManagement        *DataManagementCoordinator
 	Attention             *ClusterAttentionService
 	Resources             *ResourceGateway
@@ -39,28 +39,28 @@ type ApplicationRuntime struct {
 	Updates               *UpdateCoordinator
 }
 
-type applicationUpdateCoordinator interface {
-	Snapshot() appupdates.Snapshot
-	RuntimeReady()
-	Stop()
-	Check(context.Context) (appupdates.Snapshot, error)
-	Download(context.Context, string) (appupdates.Snapshot, error)
-	Restart(context.Context) (appupdates.Snapshot, error)
-	Skip(context.Context, string) (appupdates.Snapshot, error)
-	RemoveSkip(context.Context) (appupdates.Snapshot, error)
+// ApplicationRuntimeOptions contains composition-time dependencies that are
+// known only by the process entry point. Owners receive them before their
+// constructors return; the runtime is never configured afterward.
+type ApplicationRuntimeOptions struct {
+	Reporter              sentryreporting.Reporter
+	ApplicationUpdates    ApplicationUpdateOptions
+	CreateWorkspaceWindow func()
 }
 
 // NewApplicationRuntime composes focused backend owners around the concrete
 // Wails application without retaining behavior on the composition result.
-func NewApplicationRuntime(wailsApplication *application.App, reporters ...sentryreporting.Reporter) *ApplicationRuntime {
-	// Process-global Kubernetes logging must be installed before any owner can
-	// start a client or informer. Both installers are idempotent.
-	errorcapture.Init()
-	errorcapture.InstallUnhandledErrorDedup()
-
-	var reporter sentryreporting.Reporter
-	if len(reporters) > 0 {
-		reporter = reporters[0]
+func NewApplicationRuntime(wailsApplication *application.App, configured ...ApplicationRuntimeOptions) *ApplicationRuntime {
+	if len(configured) > 1 {
+		panic("application runtime accepts at most one options value")
+	}
+	var options ApplicationRuntimeOptions
+	if len(configured) == 1 {
+		options = configured[0]
+	}
+	var reporters []sentryreporting.Reporter
+	if options.Reporter != nil {
+		reporters = append(reporters, options.Reporter)
 	}
 	appLogs := NewAppLogService(NewLogger(1000, reporters...))
 	signals := newApplicationRuntimeSignals(
@@ -73,37 +73,44 @@ func NewApplicationRuntime(wailsApplication *application.App, reporters ...sentr
 	clusterWorkspace := newClusterWorkspaceProjection()
 	containerLogsPolicy := NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit)
 	permissionFetchPolicy := NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency)
-	desktopShell := NewDesktopShell(wailsApplication, signals.runtimeAvailable, signals.emitEvent, appLogs.Logger())
-	updates := NewUpdateCoordinator(desktopShell, signals.CtxOrBackground, signals.emitEvent, appLogs.Logger())
-	desktopShell.ConfigureUpdateCheck(func() error {
-		_, err := updates.CheckForUpdates()
-		return err
-	})
-	errorReporting := NewErrorReportingService(reporter, signals.CtxOrBackground, appLogs.Logger())
+	updateCheck := &updateCheckPort{}
+	kubeconfigSearchPaths := &kubeconfigSearchPathPort{}
+	desktopShell := NewDesktopShell(
+		wailsApplication, signals.runtimeAvailable, signals.emitEvent, appLogs.Logger(),
+		DesktopShellBindings{
+			UpdateCheck: updateCheck.check, KubeconfigSearchPaths: kubeconfigSearchPaths.read,
+			CreateWorkspaceWindow: options.CreateWorkspaceWindow,
+		},
+	)
+	updates := NewUpdateCoordinator(
+		desktopShell, signals.CtxOrBackground, signals.emitEvent, appLogs.Logger(),
+		options.ApplicationUpdates, updateCheck,
+	)
+	installationTelemetry := &installationTelemetryPort{}
+	errorReporting := NewErrorReportingService(options.Reporter, signals.CtxOrBackground, appLogs.Logger(), installationTelemetry)
 	refreshSettings := newRefreshSettingBridge(
 		defaultObjPanelLogsTargetGlobalLimit,
 		defaultMetricsIntervalMs(),
 	)
-	clusterRuntime := newClusterRuntimeManager(ClusterRuntimeManagerDependencies{
-		Logger: appLogs.Logger(), ContainerLogsPolicy: containerLogsPolicy,
-		Projection: clusterWorkspace, EmitEvent: signals.emitEvent, Context: signals.CtxOrBackground,
-	})
-
-	// Preferences pushes live settings to Cluster Runtime, while Cluster Runtime
-	// reads the persisted kubeconfig search-path repository. The manager starts
-	// with an explicit unavailable repository and is bound here before any
-	// discovery or settings load can run.
+	clusterRateLimits := newClusterRateLimitBridge(defaultKubernetesClientQPS, defaultKubernetesClientBurst)
 	preferences := NewPreferencesService(
 		desktopShell,
-		NewSettingsEffectDispatcher(errorReporting, clusterRuntime, permissionFetchPolicy, containerLogsPolicy, refreshSettings, appLogs.Logger()),
+		NewSettingsEffectDispatcher(errorReporting, clusterRateLimits, permissionFetchPolicy, containerLogsPolicy, refreshSettings, appLogs.Logger()),
 		appLogs.Logger(),
+		kubeconfigSearchPaths,
+		installationTelemetry,
 	)
-	clusterRuntime.configureDiscoveryRepository(preferences)
-	desktopShell.ConfigureKubeconfigSearchPaths(preferences.KubeconfigSearchPaths)
+	clusterRuntime := newClusterRuntimeManager(ClusterRuntimeManagerDependencies{
+		DiscoveryRepository: preferences, Logger: appLogs.Logger(), ContainerLogsPolicy: containerLogsPolicy,
+		Projection: clusterWorkspace, EmitEvent: signals.emitEvent, Context: signals.CtxOrBackground,
+		RateLimitsBridge: clusterRateLimits,
+	})
 	attention := NewClusterAttentionService(preferences, appLogs.Logger())
 	resourceProjection := newRefreshResourceProjection()
+	nodeMaintenanceStore := nodemaintenance.NewStore(5)
 	operations := newApplicationOperationsCoordinator(
-		clusterRuntime, resourceProjection, signals.CtxOrBackground, signals.emitEvent, appLogs.Logger(),
+		clusterRuntime, resourceProjection, nodeMaintenanceStore,
+		signals.CtxOrBackground, signals.emitEvent, appLogs.Logger(),
 	)
 	resources := newResourceGateway(resourceGatewayDependencies{
 		resolveClusterDependencies:       clusterRuntime.resolveClusterDependencies,
@@ -123,6 +130,7 @@ func NewApplicationRuntime(wailsApplication *application.App, reporters ...sentr
 		refreshProjection:            resourceProjection,
 		permissionFetchPolicy:        permissionFetchPolicy,
 		containerLogsSelectionPolicy: containerLogsPolicy,
+		nodeMaintenanceStore:         nodeMaintenanceStore,
 		operations:                   operations,
 	})
 	refresh := newRefreshCoordinator(RefreshCoordinatorDependencies{
@@ -138,15 +146,15 @@ func NewApplicationRuntime(wailsApplication *application.App, reporters ...sentr
 		},
 		Preferences: preferences, ContainerLogsPolicy: containerLogsPolicy,
 		PermissionFetchPolicy: permissionFetchPolicy, Resources: resources,
-		AppLogs: appLogs, Context: signals.CtxOrBackground,
+		Context:          signals.CtxOrBackground,
 		RuntimeAvailable: signals.runtimeAvailable, EmitEvent: signals.emitEvent,
-		ResourceProjection: resourceProjection,
+		ResourceProjection:   resourceProjection,
+		NodeMaintenanceStore: nodeMaintenanceStore,
+		SettingsBridge:       refreshSettings,
 	})
-
-	refreshSettings.Bind(refresh)
 	workspace := newWorkspaceCoordinator(WorkspaceCoordinatorDependencies{
 		ClusterRuntime: clusterRuntime, ClusterWorkspace: clusterWorkspace, Refresh: refresh,
-		Preferences: preferences, Operations: operations, Resources: resources, AppLogs: appLogs,
+		Preferences: preferences, Operations: operations, Logger: appLogs.Logger(),
 		Context: signals.CtxOrBackground, RuntimeAvailable: signals.runtimeAvailable, EmitEvent: signals.emitEvent,
 	})
 	favorites := NewFavoritesService()
@@ -168,12 +176,10 @@ func NewApplicationRuntime(wailsApplication *application.App, reporters ...sentr
 		SearchPathsChanged: workspace.refreshKubeconfigDiscoveryAfterSearchPathChange,
 	})
 	lifecycle := newApplicationLifecycle(signals, ApplicationLifecycleDependencies{
-		DesktopShell: desktopShell, AppLogs: appLogs, Preferences: preferences,
+		DesktopShell: desktopShell, Logger: appLogs.Logger(), Preferences: preferences,
 		ErrorReporting: errorReporting, ClusterRuntime: clusterRuntime, Refresh: refresh,
 		Workspace: workspace, Operations: operations, Updates: updates,
 	})
-	errorReporting.ConfigureInstallationTelemetry(preferences)
-	lifecycle.setupEnvironment()
 	refresh.initGovernor()
 
 	return &ApplicationRuntime{
@@ -181,21 +187,8 @@ func NewApplicationRuntime(wailsApplication *application.App, reporters ...sentr
 		Refresh: refresh, Workspace: workspace, DesktopShell: desktopShell, AppLogs: appLogs,
 		Favorites: favorites, UIState: uiState, Preferences: preferences,
 		ErrorReporting: errorReporting, ContainerLogsPolicy: containerLogsPolicy,
-		PermissionFetchPolicy: permissionFetchPolicy, DataManagement: dataManagement,
-		Attention: attention, Resources: resources, Operations: operations, Updates: updates,
-	}
-}
-
-// RetryAuth triggers a manual authentication recovery attempt for ALL clusters.
-// Called when user clicks "Retry" after re-authenticating externally.
-// For per-cluster retry, use RetryClusterAuth instead.
-func (a *ClusterRuntimeManager) RetryAuth() {
-	a.clusterClientsMu.Lock()
-	defer a.clusterClientsMu.Unlock()
-
-	for _, clients := range a.clusterClients {
-		if clients != nil && clients.authManager != nil {
-			clients.authManager.TriggerRetry()
-		}
+		PermissionFetchPolicy: permissionFetchPolicy, NodeMaintenance: nodeMaintenanceStore,
+		DataManagement: dataManagement,
+		Attention:      attention, Resources: resources, Operations: operations, Updates: updates,
 	}
 }

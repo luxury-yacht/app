@@ -8,7 +8,7 @@ func (a *WorkspaceCoordinator) consumeClusterRuntimeIntent(intent ClusterRuntime
 	case ClusterRuntimeIntentKubeconfigSourceChanged:
 		a.handleKubeconfigChange(intent.Paths)
 	case ClusterRuntimeIntentAuthRebuild:
-		if command, ok := newClusterAuthStateCommand(intent.ClusterID, a.clusterAuthDisplayName(intent.ClusterID), intent.AuthState, intent.Diagnostic); ok {
+		if command, ok := newClusterAuthStateCommand(intent.ClusterID, a.clusterRuntime.clusterAuthDisplayName(intent.ClusterID), intent.AuthState, intent.Diagnostic); ok {
 			a.dispatchClusterAuthMutation(intent, command)
 		}
 	case ClusterRuntimeIntentTransportRebuild:

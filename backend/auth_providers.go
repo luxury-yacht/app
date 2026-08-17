@@ -38,15 +38,15 @@ func (a *ApplicationLifecycle) setupEnvironment() {
 	if a == nil {
 		return
 	}
-	if a.appLogs.logger == nil {
-		a.appLogs.logger = NewLogger(1000)
+	if a.logger == nil {
+		a.logger = NewLogger(1000)
 	}
 	envSetupOnce.Do(func() {
 		current := os.Getenv("PATH")
 
 		loginPath, err := readLoginShellPath(envSetupTimeout)
 		if err != nil {
-			a.appLogs.logger.Warn("Login shell PATH probe failed", logsources.Auth)
+			a.logger.Warn("Login shell PATH probe failed", logsources.Auth)
 		}
 
 		merged := mergePathLists(loginPath, current)

@@ -19,7 +19,7 @@ func (a *WorkspaceCoordinator) catalogTargets() []catalogTarget {
 
 	targets := make([]catalogTarget, 0, len(selections))
 	for _, selection := range selections {
-		meta := a.clusterMetaForSelection(selection)
+		meta := a.clusterRuntime.clusterMetaForSelection(selection)
 		if meta.ID == "" {
 			continue
 		}
@@ -33,7 +33,7 @@ func (a *WorkspaceCoordinator) startObjectCatalog() {
 		return
 	}
 
-	a.RefreshCoordinator.stopObjectCatalog()
+	a.refresh.stopObjectCatalog()
 
 	targets := a.catalogTargets()
 	if len(targets) == 0 {
@@ -41,8 +41,8 @@ func (a *WorkspaceCoordinator) startObjectCatalog() {
 	}
 
 	for _, target := range targets {
-		if err := a.RefreshCoordinator.startObjectCatalogForTarget(target); err != nil {
-			a.appLogs.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", target.meta.ID, err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
+		if err := a.refresh.startObjectCatalogForTarget(target); err != nil {
+			a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", target.meta.ID, err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 			continue
 		}
 	}

@@ -19,12 +19,16 @@ concrete shell; there is no generic desktop adapter.
 
 `backend.DesktopService.ServiceStartup` runs synchronously before Wails creates
 a native window and delegates to `backend.ApplicationLifecycle`. That owner
-installs the
-application cancellation signal, starts the single cluster-runtime intent
-consumer owned by `WorkspaceCoordinator`, and initializes
-`ClusterRuntimeManager` lifecycle projection hooks. The first selected refresh
-setup starts the heartbeat under the refresh runtime context. Startup may return
-an error to abort, but it must not access the window or emit runtime events.
+first installs process-wide Kubernetes stderr capture and unhandled-error
+deduplication. Only then does it install the application cancellation signal,
+start the single cluster-runtime intent consumer owned by
+`WorkspaceCoordinator`, and initialize `ClusterRuntimeManager` lifecycle
+projection hooks. This ordering prevents a client, watcher, or informer from
+starting before its errors can be captured. `NewApplicationRuntime` itself does
+not replace process stderr or mutate the process environment. The first selected
+refresh setup starts the heartbeat under the refresh runtime context. Startup
+may return an error to abort, but it must not access the window or emit runtime
+events.
 
 Interactive initialization starts from the first workspace window's
 `WindowRuntimeReady` event. Process initialization is once-only; every peer
@@ -34,8 +38,10 @@ the initial window restores saved geometry. Keep native hooks registered before
 
 Application-update staging requires a process-owned temp root. Configure that
 root before exec-wrapper dispatch, Wails composition, or any child process so
-Wails staging, helper logs, and inherited children resolve the same root. The
-single process update coordinator is composed before `application.Run`; only
+Wails staging, helper logs, and inherited children resolve the same root.
+`main.go` passes that root through `ApplicationRuntimeOptions`, so the single
+process update coordinator is fully initialized when `NewApplicationRuntime`
+returns and before `application.Run`; only
 the first runtime-ready window starts reconciliation, the initial silent check,
 and the six-hour scheduler. Peer windows project and act on the same state.
 
@@ -63,7 +69,9 @@ Process-owned leaf state is split by responsibility: `PreferencesService` owns
 `UIStateStore` own their independent documents; `ClusterAttentionService` owns
 live Attention rules and targets; `ErrorReportingService` owns reporter and
 installation-registration state; `UpdateCoordinator` owns updater lifecycle;
-and `AppLogService` owns the process log buffer. None of these owners retains
+`AppLogService` owns the process log buffer; and the injected
+`nodemaintenance.Store` owns cluster-keyed drain state shared by resource
+actions, refresh snapshots, and operation cleanup. None of these owners retains
 the composition root.
 
 `DesktopShell` owns the process-wide, unpersisted sidebar, diagnostics-panel,
@@ -104,7 +112,7 @@ callback, or frontend owner and must not gain a second event subscription.
 | Ordinary focus changes | Peer `events.Common.WindowFocus` listener | No | Updates only the registry's most-recent ordering | Focus does not trigger refresh or cluster selection. It chooses the peer used by subsequent-launch focus and explicit application-quit geometry persistence. |
 | System appearance changes | Browser `matchMedia('(prefers-color-scheme: dark)')`; persisted preference changes use the frontend settings event bus | No | The React subscription exists only after the runtime mounts; system changes apply only while the preference is `system` | Process preference, not cluster data. The React effect removes the media-query and settings-event subscriptions on unmount. Proof: `frontend/src/core/contexts/AppearanceModeContext.tsx`. |
 | Dynamic menu labels | `backend.DesktopShell.UpdateMenu`; no Wails application event | No | Runs only after runtime-ready state changes such as sidebar or panel visibility | Mutates the persistent menu. Linux updates it in place, macOS resets the application menu, and Windows reinstalls it on every peer. Proof: `backend/desktop_shell_ui.go` and `backend/desktop_shell_ui_test.go`. |
-| Peer-window close | Every peer's `events.Common.WindowClosing` cancellable hook decrements the workspace-window lifecycle | Yes | Non-last closes release that window's foreground demand and cluster-tab ownership; shared cluster teardown occurs only when no remaining peer owns the selection. Zero remaining windows enter the process quit flush while the closing peer remains queryable | There is no privileged close hook or main window. The last peer keeps its tab union for next-start persistence; a cancelled last-close restores the peer to the registry. Proof: `internal/appwindow/registry.go`, `backend/cluster_workspace.go`, `backend/cluster_workspace_test.go`, and `internal/appwindow/lifecycle_test.go`. |
+| Peer-window close | Every peer's `events.Common.WindowClosing` cancellable hook decrements the workspace-window lifecycle | Yes | Non-last closes release that window's foreground demand and cluster-tab ownership; shared cluster teardown occurs only when no remaining peer owns the selection. Zero remaining windows enter the process quit flush while the closing peer remains queryable | There is no privileged close hook or main window. The last peer keeps its tab union for next-start persistence; a cancelled last-close restores the peer to the registry. Proof: `internal/appwindow/registry.go`, `backend/workspace_state.go`, `backend/cluster_workspace_test.go`, and `internal/appwindow/lifecycle_test.go`. |
 | Application quit | `application.Options.ShouldQuit` asks the peer registry to prepare application quit | Yes | Covers menu, shortcut, programmatic, and OS quit requests without creating a second persistence path | The most recently focused live peer supplies geometry. The backend flush shares the same `sync.Once` as last-window close. Proof: `main.go`, `internal/appwindow/registry.go`, and `backend/application_lifecycle.go`. |
 | Service cancellation and shutdown | Wails cancels the service context, then calls `backend.DesktopService.ServiceShutdown`, which delegates to the lifecycle owner | No | Occurs after quit is accepted and after pre-quit persistence | Process-scoped teardown stops auth recovery, runtime operations, kubeconfig watching, and refresh before clearing the application context. Proof: `backend/desktop_service.go`, `backend/application_lifecycle.go`, and the pinned framework's `pkg/application/application.go`. |
 | Initial hidden-window workaround | `windowOptionsForPlatform`; no event | No | macOS/Windows peers start hidden until runtime ready; Linux starts visible because its native window/menu construction differs | Applies equally to every `workspace-N` peer. Option mapping proof: `internal/appwindow/registry.go` and `internal/appwindow/registry_test.go`. |

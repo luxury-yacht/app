@@ -107,16 +107,9 @@ type Store struct {
 	maxHistory int
 }
 
-var defaultStore = NewStore(5)
-
 type drainHistoryKey struct {
 	clusterID string
 	nodeName  string
-}
-
-// GlobalStore exposes the process-wide drain store.
-func GlobalStore() *Store {
-	return defaultStore
 }
 
 // NewStore builds a new drain store with the provided history length.

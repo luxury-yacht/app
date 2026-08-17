@@ -45,27 +45,76 @@ type ApplicationLifecycle struct {
 	signals     *applicationRuntimeSignals
 	preQuitOnce sync.Once
 
-	desktopShell   *DesktopShell
-	appLogs        *AppLogService
-	preferences    *PreferencesService
-	errorReporting *ErrorReportingService
-	clusterRuntime *ClusterRuntimeManager
-	refresh        *RefreshCoordinator
-	workspace      *WorkspaceCoordinator
-	operations     *OperationsCoordinator
-	updates        *UpdateCoordinator
+	desktopShell   lifecycleDesktopShell
+	logger         *Logger
+	preferences    lifecyclePreferences
+	errorReporting lifecycleErrorReporting
+	clusterRuntime lifecycleClusterRuntime
+	refresh        lifecycleRefresh
+	workspace      lifecycleWorkspace
+	operations     lifecycleOperations
+	updates        lifecycleUpdates
+}
+
+type lifecycleDesktopShell interface {
+	OpenApplicationURL(string) error
+	QuitApplication()
+	ShowExpiredBetaPrompt(expiredBetaPrompt)
+	WindowWorkAreas() []WindowWorkArea
+	WorkspaceWindow(string) (application.Window, error)
+}
+
+type lifecyclePreferences interface {
+	LoadWindowSettings() (*WindowSettings, error)
+	SaveWindowSettingsForWindow(string) error
+}
+
+type lifecycleErrorReporting interface {
+	scheduleInstallationMetricRegistration(context.Context)
+}
+
+type lifecycleClusterRuntime interface {
+	GetKubeconfigs() (KubeconfigDiscoveryResult, error)
+	anyClusterAuthInvalid() bool
+	consumeIntents(context.Context, func(ClusterRuntimeIntent))
+	discoverKubeconfigs() error
+	initializeClusterLifecycle()
+	startKubeconfigWatcher() error
+	stopAuthRecovery()
+	stopIntentConsumption()
+	stopKubeconfigWatcher()
+}
+
+type lifecycleRefresh interface {
+	teardownRefreshSubsystem()
+}
+
+type lifecycleWorkspace interface {
+	ReleaseWorkspaceWindow(string)
+	consumeClusterRuntimeIntent(ClusterRuntimeIntent)
+	initializeSelectedClustersAtStartup() (int, error)
+	waitForSelectionMutationIdle(time.Duration) bool
+}
+
+type lifecycleOperations interface {
+	Shutdown()
+}
+
+type lifecycleUpdates interface {
+	RuntimeReady()
+	Stop()
 }
 
 type ApplicationLifecycleDependencies struct {
-	DesktopShell   *DesktopShell
-	AppLogs        *AppLogService
-	Preferences    *PreferencesService
-	ErrorReporting *ErrorReportingService
-	ClusterRuntime *ClusterRuntimeManager
-	Refresh        *RefreshCoordinator
-	Workspace      *WorkspaceCoordinator
-	Operations     *OperationsCoordinator
-	Updates        *UpdateCoordinator
+	DesktopShell   lifecycleDesktopShell
+	Logger         *Logger
+	Preferences    lifecyclePreferences
+	ErrorReporting lifecycleErrorReporting
+	ClusterRuntime lifecycleClusterRuntime
+	Refresh        lifecycleRefresh
+	Workspace      lifecycleWorkspace
+	Operations     lifecycleOperations
+	Updates        lifecycleUpdates
 }
 
 func newApplicationLifecycle(
@@ -75,14 +124,14 @@ func newApplicationLifecycle(
 	if signals == nil {
 		signals = newApplicationRuntimeSignals(nil)
 	}
-	appLogs := dependencies.AppLogs
-	if appLogs == nil {
-		appLogs = NewAppLogService(NewLogger(1000))
+	logger := dependencies.Logger
+	if logger == nil {
+		logger = NewLogger(1000)
 	}
 	return &ApplicationLifecycle{
 		signals:        signals,
 		desktopShell:   dependencies.DesktopShell,
-		appLogs:        appLogs,
+		logger:         logger,
 		preferences:    dependencies.Preferences,
 		errorReporting: dependencies.ErrorReporting,
 		clusterRuntime: dependencies.ClusterRuntime,
@@ -96,15 +145,19 @@ func newApplicationLifecycle(
 // ServiceStartup performs bounded, non-UI process initialization before native
 // windows start. Interactive startup waits for WindowRuntimeReady.
 func (a *ApplicationLifecycle) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+	// Process-global Kubernetes logging must be installed before any owner can
+	// start a client or informer. Both installers are idempotent.
+	errorcapture.Init()
+	errorcapture.InstallUnhandledErrorDedup()
 	a.setApplicationContext(ctx)
-	go a.clusterRuntime.intents.Consume(ctx, a.workspace.consumeClusterRuntimeIntent)
+	go a.clusterRuntime.consumeIntents(ctx, a.workspace.consumeClusterRuntimeIntent)
 	a.clusterRuntime.initializeClusterLifecycle()
-	a.appLogs.logger.Info("Application startup initiated", logsources.App)
+	a.logger.Info("Application startup initiated", logsources.App)
 	a.startDiagnosticDumpHandler(ctx)
 	a.configureStartupErrorCapture()
 	a.configureStartupLogging()
 	a.setupEnvironment()
-	a.appLogs.logger.Debug("Environment setup completed", logsources.App)
+	a.logger.Debug("Environment setup completed", logsources.App)
 	return nil
 }
 
@@ -118,16 +171,16 @@ func (a *ApplicationLifecycle) WindowRuntimeReady(windowName string, restoreGeom
 	if restoreGeometry {
 		a.restoreStartupWindow(windowName)
 	}
-	if window, err := a.desktopShell.workspaceWindow(windowName); err == nil {
+	if window, err := a.desktopShell.WorkspaceWindow(windowName); err == nil {
 		window.Show()
 	}
 	if !firstReadyWindow {
 		return false
 	}
-	a.appLogs.logger.Info("Luxury Yacht - Sail the Seas of Kubernetes In Style", logsources.App)
+	a.logger.Info("Luxury Yacht - Sail the Seas of Kubernetes In Style", logsources.App)
 	a.initializeStartupClusters()
 	if err := a.clusterRuntime.startKubeconfigWatcher(); err != nil {
-		a.appLogs.logger.Warn(fmt.Sprintf("Kubeconfig directory watcher not available: %v", err), logsources.App)
+		a.logger.Warn(fmt.Sprintf("Kubeconfig directory watcher not available: %v", err), logsources.App)
 	}
 	if a.updates != nil {
 		a.updates.RuntimeReady()
@@ -165,38 +218,34 @@ func (a *ApplicationLifecycle) configureStartupErrorCapture() {
 		}
 		switch level {
 		case logclassify.LevelError:
-			a.appLogs.logger.Error(message, logsources.ErrorCapture)
+			a.logger.Error(message, logsources.ErrorCapture)
 		case logclassify.LevelWarn:
-			a.appLogs.logger.Warn(message, logsources.ErrorCapture)
+			a.logger.Warn(message, logsources.ErrorCapture)
 		case logclassify.LevelDebug:
-			a.appLogs.logger.Debug(message, logsources.ErrorCapture)
+			a.logger.Debug(message, logsources.ErrorCapture)
 		default:
-			a.appLogs.logger.Info(message, logsources.ErrorCapture)
+			a.logger.Info(message, logsources.ErrorCapture)
 		}
 	})
 }
 
 func (a *ApplicationLifecycle) checkStartupBetaExpiry(windowName string) bool {
 	if err := a.checkBetaExpiry(); err != nil {
-		applog.ReportError(a.appLogs.logger, err, "Beta version expired", logsources.App)
-		if a.desktopShell != nil && a.desktopShell.showExpiredBetaPrompt != nil {
-			a.desktopShell.showExpiredBetaPrompt(expiredBetaPrompt{
+		applog.ReportError(a.logger, err, "Beta version expired", logsources.App)
+		if a.desktopShell != nil {
+			a.desktopShell.ShowExpiredBetaPrompt(expiredBetaPrompt{
 				Title:         "Beta Version Expired",
 				Message:       err.Error(),
 				WindowName:    windowName,
 				DownloadLabel: "Download Latest Version",
 				QuitLabel:     "Quit",
 				OnDownload: func() {
-					if a.desktopShell.openApplicationURL != nil {
-						if openErr := a.desktopShell.openApplicationURL(applicationDownloadsURL); openErr != nil {
-							a.appLogs.logger.Warn(fmt.Sprintf("Could not open the latest-version download page: %v", openErr), logsources.App)
-						}
+					if openErr := a.desktopShell.OpenApplicationURL(applicationDownloadsURL); openErr != nil {
+						a.logger.Warn(fmt.Sprintf("Could not open the latest-version download page: %v", openErr), logsources.App)
 					}
-					if a.desktopShell.quitApplication != nil {
-						a.desktopShell.quitApplication()
-					}
+					a.desktopShell.QuitApplication()
 				},
-				OnQuit: a.desktopShell.quitApplication,
+				OnQuit: a.desktopShell.QuitApplication,
 			})
 		}
 		return false
@@ -205,23 +254,23 @@ func (a *ApplicationLifecycle) checkStartupBetaExpiry(windowName string) bool {
 }
 
 func (a *ApplicationLifecycle) configureStartupLogging() {
-	a.appLogs.logger.SetEventEmitter(func(eventName string, args ...interface{}) {
+	a.logger.SetEventEmitter(func(eventName string, args ...interface{}) {
 		a.emitEvent(eventName, args...)
 	})
 
 	log.SetFlags(0)
-	log.SetOutput(&stdLogBridge{logger: a.appLogs.logger})
+	log.SetOutput(&stdLogBridge{logger: a.logger})
 }
 
 func (a *ApplicationLifecycle) restoreStartupWindow(windowName string) {
 	if settings, err := a.preferences.LoadWindowSettings(); err != nil {
-		a.appLogs.logger.Warn(fmt.Sprintf("Failed to load window settings: %v", err), logsources.App)
+		a.logger.Warn(fmt.Sprintf("Failed to load window settings: %v", err), logsources.App)
 	} else if settings != nil {
-		window, windowErr := a.desktopShell.workspaceWindow(windowName)
+		window, windowErr := a.desktopShell.WorkspaceWindow(windowName)
 		if windowErr != nil {
 			return
 		}
-		geometry, restorePosition := resolveWindowRestore(*settings, a.desktopShell.windowWorkAreas())
+		geometry, restorePosition := resolveWindowRestore(*settings, a.desktopShell.WindowWorkAreas())
 		window.SetSize(geometry.Width, geometry.Height)
 		if restorePosition {
 			window.SetPosition(geometry.X, geometry.Y)
@@ -233,12 +282,12 @@ func (a *ApplicationLifecycle) restoreStartupWindow(windowName string) {
 }
 
 func (a *ApplicationLifecycle) initializeStartupClusters() {
-	a.appLogs.logger.Info("Discovering kubeconfig files...", logsources.App)
+	a.logger.Info("Discovering kubeconfig files...", logsources.App)
 	if err := a.clusterRuntime.discoverKubeconfigs(); err != nil {
-		a.appLogs.logger.ErrorWithCause(err, "Failed to discover kubeconfigs", logsources.App)
+		a.logger.ErrorWithCause(err, "Failed to discover kubeconfigs", logsources.App)
 	} else {
 		result, _ := a.clusterRuntime.GetKubeconfigs()
-		a.appLogs.logger.Info(fmt.Sprintf("Found %d kubeconfig file(s)", len(result.Kubeconfigs)), logsources.App)
+		a.logger.Info(fmt.Sprintf("Found %d kubeconfig file(s)", len(result.Kubeconfigs)), logsources.App)
 	}
 
 	// The window is already visible, so settings restore and client initialization
@@ -246,12 +295,12 @@ func (a *ApplicationLifecycle) initializeStartupClusters() {
 	selectedCount, err := a.workspace.initializeSelectedClustersAtStartup()
 	if selectedCount > 0 {
 		if err != nil {
-			a.appLogs.logger.ErrorWithCause(err, "Failed to connect to cluster(s)", logsources.App)
+			a.logger.ErrorWithCause(err, "Failed to connect to cluster(s)", logsources.App)
 		} else {
-			a.appLogs.logger.Info("Successfully connected to Kubernetes cluster(s)", logsources.App)
+			a.logger.Info("Successfully connected to Kubernetes cluster(s)", logsources.App)
 		}
 	} else {
-		a.appLogs.logger.Warn("No kubeconfig selections found - please select a cluster", logsources.App)
+		a.logger.Warn("No kubeconfig selections found - please select a cluster", logsources.App)
 	}
 }
 
@@ -303,15 +352,15 @@ func (a *ApplicationLifecycle) prepareQuitFromWindow(windowName string) bool {
 		return true
 	}
 	a.preQuitOnce.Do(func() {
-		a.appLogs.logger.Info("Application close requested", logsources.App)
+		a.logger.Info("Application close requested", logsources.App)
 		if !a.workspace.waitForSelectionMutationIdle(beforeCloseSelectionFlushTimeout) {
-			a.appLogs.logger.Warn("Timed out waiting for cluster selection persistence before close", logsources.App)
+			a.logger.Warn("Timed out waiting for cluster selection persistence before close", logsources.App)
 		}
 		if windowName != "" {
 			if err := a.preferences.SaveWindowSettingsForWindow(windowName); err != nil {
-				a.appLogs.logger.Warn(fmt.Sprintf("Failed to save window settings: %v", err), logsources.App)
+				a.logger.Warn(fmt.Sprintf("Failed to save window settings: %v", err), logsources.App)
 			} else {
-				a.appLogs.logger.Debug("Window settings saved successfully", logsources.App)
+				a.logger.Debug("Window settings saved successfully", logsources.App)
 			}
 		}
 	})
@@ -321,7 +370,7 @@ func (a *ApplicationLifecycle) prepareQuitFromWindow(windowName string) bool {
 // ServiceShutdown tears down process resources after the application context is
 // cancelled and does not access the frontend runtime.
 func (a *ApplicationLifecycle) ServiceShutdown() error {
-	a.appLogs.logger.Info("Application shutdown initiated", logsources.App)
+	a.logger.Info("Application shutdown initiated", logsources.App)
 	if a.updates != nil {
 		a.updates.Stop()
 	}
@@ -340,7 +389,7 @@ func (a *ApplicationLifecycle) ServiceShutdown() error {
 
 	a.refresh.teardownRefreshSubsystem()
 
-	a.appLogs.logger.Info("Application shutdown completed", logsources.App)
+	a.logger.Info("Application shutdown completed", logsources.App)
 	a.clearApplicationContext()
 	return nil
 }

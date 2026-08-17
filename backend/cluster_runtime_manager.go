@@ -19,7 +19,7 @@ type ClusterRuntimeManager struct {
 	discoveryRepository      kubeconfigDiscoveryRepository
 	logger                   *Logger
 	containerLogsPolicy      *ContainerLogsSelectionPolicy
-	projection               *ClusterWorkspaceProjection
+	projection               clusterWorkspaceProjectionSink
 	emitEvent                func(string, ...interface{})
 	context                  func() context.Context
 
@@ -37,6 +37,11 @@ type ClusterRuntimeManager struct {
 
 	intents          *clusterRuntimeIntentQueue
 	intentGeneration atomic.Uint64
+}
+
+type clusterWorkspaceProjectionSink interface {
+	markClusterWorkspaceChanged()
+	setClusterHealth(string, ClusterHealthState)
 }
 
 type kubeconfigDiscoveryRepository interface {
@@ -65,9 +70,10 @@ type ClusterRuntimeManagerDependencies struct {
 	DiscoveryRepository kubeconfigDiscoveryRepository
 	Logger              *Logger
 	ContainerLogsPolicy *ContainerLogsSelectionPolicy
-	Projection          *ClusterWorkspaceProjection
+	Projection          clusterWorkspaceProjectionSink
 	EmitEvent           func(string, ...interface{})
 	Context             func() context.Context
+	RateLimitsBridge    *clusterRateLimitBridge
 }
 
 func newClusterRuntimeManager(dependencies ClusterRuntimeManagerDependencies) *ClusterRuntimeManager {
@@ -91,7 +97,7 @@ func newClusterRuntimeManager(dependencies ClusterRuntimeManagerDependencies) *C
 	if contextProvider == nil {
 		contextProvider = context.Background
 	}
-	return &ClusterRuntimeManager{
+	manager := &ClusterRuntimeManager{
 		discoveryRepository: repository,
 		logger:              logger,
 		containerLogsPolicy: containerLogsPolicy,
@@ -105,17 +111,21 @@ func newClusterRuntimeManager(dependencies ClusterRuntimeManagerDependencies) *C
 		kubernetesBurst:     defaultKubernetesClientBurst,
 		intents:             newClusterRuntimeIntentQueue(),
 	}
-}
-
-func (m *ClusterRuntimeManager) configureDiscoveryRepository(repository kubeconfigDiscoveryRepository) {
-	if m != nil && repository != nil {
-		m.discoveryRepository = repository
+	if dependencies.RateLimitsBridge != nil {
+		dependencies.RateLimitsBridge.bind(manager)
 	}
+	return manager
 }
 
 func (m *ClusterRuntimeManager) stopIntentConsumption() {
 	if m != nil && m.intents != nil {
 		m.intents.Stop()
+	}
+}
+
+func (m *ClusterRuntimeManager) consumeIntents(ctx context.Context, handler func(ClusterRuntimeIntent)) {
+	if m != nil && m.intents != nil {
+		m.intents.Consume(ctx, handler)
 	}
 }
 

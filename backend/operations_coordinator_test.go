@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/stretchr/testify/require"
 )
 
@@ -13,7 +14,8 @@ func TestOperationsCoordinatorStopClusterIsIdempotentAndPreventsLatePortForwardR
 		Context: func() context.Context { return context.Background() },
 		EmitEvent: func(string, ...interface{}) {
 		},
-		Logger: NewLogger(10),
+		Logger:     NewLogger(10),
+		DrainStore: nodemaintenance.NewStore(5),
 	})
 	session := &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{
@@ -51,6 +53,7 @@ func TestOperationsCoordinatorStartupListingAndLiveEventUseTheRegistryEnvelope(t
 	}
 	var events []emittedEvent
 	coordinator := NewOperationsCoordinator(OperationsCoordinatorDependencies{
+		DrainStore: nodemaintenance.NewStore(5),
 		EmitEvent: func(name string, args ...interface{}) {
 			events = append(events, emittedEvent{name: name, args: args})
 		},
@@ -78,9 +81,10 @@ func TestOperationsCoordinatorStartupListingAndLiveEventUseTheRegistryEnvelope(t
 
 func TestOperationsCoordinatorShutdownCleansEveryClusterExactlyOnce(t *testing.T) {
 	coordinator := NewOperationsCoordinator(OperationsCoordinatorDependencies{
-		Context:   func() context.Context { return context.Background() },
-		EmitEvent: func(string, ...interface{}) {},
-		Logger:    NewLogger(10),
+		Context:    func() context.Context { return context.Background() },
+		EmitEvent:  func(string, ...interface{}) {},
+		Logger:     NewLogger(10),
+		DrainStore: nodemaintenance.NewStore(5),
 	})
 
 	cleanupCounts := map[string]int{}

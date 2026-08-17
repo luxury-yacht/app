@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 type PreferencesLoadProvenance string
@@ -27,6 +28,51 @@ type preferencesLoadAttempt struct {
 	err                      error
 }
 
+type preferencesWindowShell interface {
+	hasWindowGeometry() bool
+	currentWindowWhenReady() (application.Window, error)
+	runtimeAvailable() bool
+	readWindowGeometry(string) (WindowGeometry, error)
+}
+
+type kubeconfigSearchPathRepository interface {
+	KubeconfigSearchPaths() ([]string, error)
+}
+
+type kubeconfigSearchPathPort struct {
+	mu     sync.RWMutex
+	target kubeconfigSearchPathRepository
+}
+
+func (p *kubeconfigSearchPathPort) read() ([]string, error) {
+	if p == nil {
+		return nil, fmt.Errorf("kubeconfig search paths are not available")
+	}
+	p.mu.RLock()
+	target := p.target
+	p.mu.RUnlock()
+	if target == nil {
+		return nil, fmt.Errorf("kubeconfig search paths are not available")
+	}
+	return target.KubeconfigSearchPaths()
+}
+
+func (p *kubeconfigSearchPathPort) bind(target kubeconfigSearchPathRepository) {
+	if p == nil || target == nil {
+		panic("kubeconfig search-path port requires a target")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.target != nil {
+		panic("kubeconfig search-path port already bound")
+	}
+	p.target = target
+}
+
+type preferencesPublisher interface {
+	publishPreferences(*PreferencesService)
+}
+
 // PreferencesService is the sole owner of settings.json, its lock, lazy-load
 // readiness, window state, and kubeconfig search-path repository.
 type PreferencesService struct {
@@ -40,13 +86,26 @@ type PreferencesService struct {
 	resetDone             chan struct{}
 	provenance            PreferencesLoadProvenance
 	effects               *SettingsEffectDispatcher
-	shell                 *DesktopShell
+	shell                 preferencesWindowShell
 	logger                *Logger
 	loadSnapshot          func() (*AppSettings, error)
 }
 
-func NewPreferencesService(shell *DesktopShell, effects *SettingsEffectDispatcher, logger *Logger) *PreferencesService {
-	return &PreferencesService{shell: shell, effects: effects, logger: logger}
+func NewPreferencesService(
+	shell preferencesWindowShell,
+	effects *SettingsEffectDispatcher,
+	logger *Logger,
+	publishers ...preferencesPublisher,
+) *PreferencesService {
+	preferences := &PreferencesService{shell: shell, effects: effects, logger: logger}
+	for _, publisher := range publishers {
+		publisher.publishPreferences(preferences)
+	}
+	return preferences
+}
+
+func (p *kubeconfigSearchPathPort) publishPreferences(preferences *PreferencesService) {
+	p.bind(preferences)
 }
 
 func (p *PreferencesService) EnsureLoaded() (PreferencesSnapshot, error) {

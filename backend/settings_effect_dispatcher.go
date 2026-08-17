@@ -28,6 +28,46 @@ type RefreshSettingSink interface {
 	SetMetricsRefreshInterval(int)
 }
 
+type clusterRateLimitBridge struct {
+	mu     sync.Mutex
+	target KubernetesClientRateLimitsSetter
+	qps    int
+	burst  int
+}
+
+func newClusterRateLimitBridge(qps, burst int) *clusterRateLimitBridge {
+	return &clusterRateLimitBridge{qps: qps, burst: burst}
+}
+
+func (b *clusterRateLimitBridge) SetKubernetesClientRateLimits(qps, burst int) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	b.qps = qps
+	b.burst = burst
+	target := b.target
+	b.mu.Unlock()
+	if target != nil {
+		target.SetKubernetesClientRateLimits(qps, burst)
+	}
+}
+
+func (b *clusterRateLimitBridge) bind(target KubernetesClientRateLimitsSetter) {
+	if b == nil || target == nil {
+		panic("cluster rate-limit bridge requires a target")
+	}
+	b.mu.Lock()
+	if b.target != nil {
+		b.mu.Unlock()
+		panic("cluster rate-limit bridge already bound")
+	}
+	b.target = target
+	qps, burst := b.qps, b.burst
+	b.mu.Unlock()
+	target.SetKubernetesClientRateLimits(qps, burst)
+}
+
 // refreshSettingBridge breaks the composition cycle between Preferences and
 // Refresh without exposing a partially configured owner. Values are retained
 // until the refresh target is constructed, then pushed before composition
@@ -35,6 +75,7 @@ type RefreshSettingSink interface {
 type refreshSettingBridge struct {
 	mu          sync.Mutex
 	target      RefreshSettingSink
+	bound       bool
 	globalLimit int
 	metricsMs   int
 }
@@ -69,12 +110,17 @@ func (b *refreshSettingBridge) SetMetricsRefreshInterval(intervalMs int) {
 	}
 }
 
-func (b *refreshSettingBridge) Bind(target RefreshSettingSink) {
+func (b *refreshSettingBridge) bind(target RefreshSettingSink) {
 	if b == nil || target == nil {
-		return
+		panic("refresh setting bridge requires a target")
 	}
 	b.mu.Lock()
+	if b.bound {
+		b.mu.Unlock()
+		panic("refresh setting bridge already bound")
+	}
 	b.target = target
+	b.bound = true
 	globalLimit := b.globalLimit
 	metricsMs := b.metricsMs
 	b.mu.Unlock()

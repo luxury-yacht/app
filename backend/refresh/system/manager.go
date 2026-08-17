@@ -31,6 +31,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
@@ -75,6 +76,7 @@ type Config struct {
 	ObjectCatalogNamespaces      func() []snapshot.CatalogNamespaceGroup  // Function to get the object catalog namespaces.
 	ContainerLogsTargetLimiter   *containerlogsstream.GlobalTargetLimiter // Shared global limiter for container logs stream targets.
 	ContainerLogsPerScopeLimit   int                                      // Captured per-scope target cap for direct and streaming log selection.
+	NodeMaintenanceStore         *nodemaintenance.Store                   // Shared process-owned, cluster-keyed drain state.
 	ClusterID                    string                                   // stable identifier for cluster-scoped keys
 	ClusterName                  string                                   // display name for cluster in payloads
 	AttentionIgnoreRules         snapshot.AttentionIgnoreRules

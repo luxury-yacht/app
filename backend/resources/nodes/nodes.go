@@ -33,13 +33,18 @@ import (
 )
 
 type Service struct {
-	deps common.Dependencies
+	deps       common.Dependencies
+	drainStore *nodemaintenance.Store
 }
 
 const maxNodeDrainGracePeriodSeconds = 900
 
-func NewService(deps common.Dependencies) *Service {
-	return &Service{deps: deps}
+func NewService(deps common.Dependencies, stores ...*nodemaintenance.Store) *Service {
+	service := &Service{deps: deps}
+	if len(stores) > 0 {
+		service.drainStore = stores[0]
+	}
+	return service
 }
 
 // Node returns detailed information about a single node.
@@ -99,7 +104,10 @@ func (s *Service) Drain(ctx context.Context, nodeName string, options restypes.D
 	if err := ValidateDrainOptions(options); err != nil {
 		return err
 	}
-	store := nodemaintenance.GlobalStore()
+	store, err := s.requireDrainStore()
+	if err != nil {
+		return err
+	}
 	job, err := store.StartDrainForClusterIfIdle(nodeName, options, s.deps.ClusterID, s.deps.ClusterName)
 	if err != nil {
 		return err
@@ -113,7 +121,10 @@ func (s *Service) StartDrainWithCompletion(ctx context.Context, nodeName string,
 	if err := ValidateDrainOptions(options); err != nil {
 		return nil, err
 	}
-	store := nodemaintenance.GlobalStore()
+	store, err := s.requireDrainStore()
+	if err != nil {
+		return nil, err
+	}
 	job, err := store.StartDrainForClusterIfIdle(nodeName, options, s.deps.ClusterID, s.deps.ClusterName)
 	if err != nil {
 		return nil, err
@@ -128,10 +139,17 @@ func (s *Service) StartDrainWithCompletion(ctx context.Context, nodeName string,
 		if onComplete != nil {
 			defer onComplete(job.ID)
 		}
-		_ = NewService(deps).runDrainJob(ctx, job, nodeName, options)
+		_ = NewService(deps, store).runDrainJob(ctx, job, nodeName, options)
 	}()
 
 	return job, nil
+}
+
+func (s *Service) requireDrainStore() (*nodemaintenance.Store, error) {
+	if s == nil || s.drainStore == nil {
+		return nil, fmt.Errorf("node maintenance store is not configured")
+	}
+	return s.drainStore, nil
 }
 
 func (s *Service) runDrainJob(ctx context.Context, job *nodemaintenance.DrainJob, nodeName string, options restypes.DrainNodeOptions) (err error) {

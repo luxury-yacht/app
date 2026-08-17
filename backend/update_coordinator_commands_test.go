@@ -342,16 +342,20 @@ func TestResolveApplicationUpdateEligibilityUsesReleaseAndInstallIdentity(t *tes
 	require.Equal(t, updateidentity.BuildDisabledDevelopment, development.Status)
 }
 
-func TestConfigureApplicationUpdatesDisablesOnTempSetupFailure(t *testing.T) {
-	app := newUpdateCoordinatorTestFixture(t)
-
-	app.Updates.configureApplicationUpdates(ApplicationUpdateOptions{
+func TestNewUpdateCoordinatorDisablesOnTempSetupFailure(t *testing.T) {
+	app := newUpdateCoordinatorTestFixture(t, ApplicationUpdateOptions{
 		TempSetupError: errors.New("owned temp root unavailable"),
 	})
 
 	require.NotNil(t, app.Updates.coordinator)
 	require.Equal(t, appupdates.StatusDisabled, app.Updates.coordinator.Snapshot().Status)
 	require.False(t, app.Updates.coordinator.Snapshot().CanInstall)
+}
+
+func TestNewUpdateCoordinatorWithoutStateStopsCleanly(t *testing.T) {
+	app := newUpdateCoordinatorTestFixture(t)
+
+	require.NotPanics(t, app.Updates.Stop)
 }
 
 func TestPrepareApplicationUpdateStateReconcilesBeforeSweepingOrphans(t *testing.T) {
@@ -405,7 +409,7 @@ func TestPrepareApplicationUpdateStateReconcilesBeforeSweepingOrphans(t *testing
 	require.Empty(t, document.ProtectedPaths())
 }
 
-func TestConfigureApplicationUpdatesProjectsAndLogsFailedApply(t *testing.T) {
+func TestNewUpdateCoordinatorProjectsAndLogsFailedApply(t *testing.T) {
 	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
 		t.Skip("updater supports amd64 and arm64")
 	}
@@ -456,9 +460,7 @@ func TestConfigureApplicationUpdatesProjectsAndLogsFailedApply(t *testing.T) {
 		[]byte("replacement failed safely"),
 		0o600,
 	))
-	app := newUpdateCoordinatorTestFixture(t)
-
-	app.Updates.configureApplicationUpdates(ApplicationUpdateOptions{
+	app := newUpdateCoordinatorTestFixture(t, ApplicationUpdateOptions{
 		TempRoot: root, StatePath: statePath,
 	})
 

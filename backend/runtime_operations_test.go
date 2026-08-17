@@ -39,7 +39,7 @@ func TestCleanupClusterRuntimeOperationsStopsSessionsAndCancelsActiveDrains(t *t
 		return operations.portForwardLifecycle().stopForRuntime("pf-a", reason)
 	})
 
-	store := nodemaintenance.GlobalStore()
+	store := fixture.runtime.NodeMaintenanceStore
 	activeDrain, err := store.StartDrainForClusterIfIdle("node-a-"+t.Name(), types.DrainNodeOptions{}, clusterID, "Cluster A")
 	require.NoError(t, err)
 	cancelled := false
@@ -93,7 +93,7 @@ func TestShutdownCleansRuntimeOperationsForActiveClusters(t *testing.T) {
 	operations.registerRuntimeOperation(runtimeOperationFromPortForward(operations.portForwardSessions["pf-a"]), func(reason string) error {
 		return operations.portForwardLifecycle().stopForRuntime("pf-a", reason)
 	})
-	store := nodemaintenance.GlobalStore()
+	store := fixture.runtime.NodeMaintenanceStore
 	activeDrain, err := store.StartDrainForClusterIfIdle("node-a-"+t.Name(), types.DrainNodeOptions{}, clusterID, "Cluster")
 	require.NoError(t, err)
 	operations.registerRuntimeOperation(runtimeOperationFromDrainJob(activeDrain), func(reason string) error {

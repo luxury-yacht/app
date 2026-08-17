@@ -6,179 +6,12 @@ import (
 	"strings"
 )
 
-type ClusterHealthState string
-
-const (
-	ClusterHealthUnknown  ClusterHealthState = "unknown"
-	ClusterHealthHealthy  ClusterHealthState = "healthy"
-	ClusterHealthDegraded ClusterHealthState = "degraded"
-)
-
-type ClusterWorkspaceAuthState struct {
-	State             string `json:"state"`
-	Reason            string `json:"reason"`
-	ErrorClass        string `json:"errorClass"`
-	SecondsUntilRetry int    `json:"secondsUntilRetry"`
-	DiagnosticClass   string `json:"class"`
-	DiagnosticKind    string `json:"kind"`
-	DiagnosticSummary string `json:"summary"`
-	ExecCommand       string `json:"execCommand"`
-}
-
-type ClusterWorkspaceClusterState struct {
-	ClusterID     string                    `json:"clusterId"`
-	ClusterName   string                    `json:"clusterName"`
-	Lifecycle     ClusterLifecycleState     `json:"lifecycle"`
-	Auth          ClusterWorkspaceAuthState `json:"auth"`
-	Health        ClusterHealthState        `json:"health"`
-	ScopeRevision uint64                    `json:"scopeRevision"`
-}
-
-type ClusterWorkspaceState struct {
-	SelectedKubeconfigs []string                                `json:"selectedKubeconfigs"`
-	VisibleClusterID    string                                  `json:"visibleClusterId"`
-	Clusters            map[string]ClusterWorkspaceClusterState `json:"clusters"`
-}
-
-type ClusterWorkspaceCommand struct {
-	WindowID                  string   `json:"windowId"`
-	SelectedKubeconfigs       []string `json:"selectedKubeconfigs"`
-	UpdateSelectedKubeconfigs bool     `json:"updateSelectedKubeconfigs"`
-	VisibleClusterID          string   `json:"visibleClusterId"`
-}
-
-type ClusterWorkspaceResult struct {
-	State ClusterWorkspaceState `json:"state"`
-	Error string                `json:"error,omitempty"`
-}
-
-// markClusterWorkspaceChanged commits a mutation that can affect the aggregate
-// workspace snapshot. Callers invoke it while still holding the lock that owns
-// the changed source so a reader cannot observe the new value under the old
-// revision.
-func (p *ClusterWorkspaceProjection) markClusterWorkspaceChanged() {
-	if p != nil {
-		p.clusterWorkspaceRevision.Add(1)
-	}
-}
-
-func (p *ClusterWorkspaceProjection) setClusterHealth(clusterID string, health ClusterHealthState) {
-	if p == nil || strings.TrimSpace(clusterID) == "" {
-		return
-	}
-	p.clusterWorkspaceMu.Lock()
-	if p.clusterHealth == nil {
-		p.clusterHealth = make(map[string]ClusterHealthState)
-	}
-	if p.clusterHealth[clusterID] != health {
-		p.clusterHealth[clusterID] = health
-		p.markClusterWorkspaceChanged()
-	}
-	p.clusterWorkspaceMu.Unlock()
-}
-
-func (p *ClusterWorkspaceProjection) incrementClusterScopeRevision(clusterID string) {
-	if p == nil || strings.TrimSpace(clusterID) == "" {
-		return
-	}
-	p.clusterWorkspaceMu.Lock()
-	if p.clusterScopeRevisions == nil {
-		p.clusterScopeRevisions = make(map[string]uint64)
-	}
-	p.clusterScopeRevisions[clusterID]++
-	p.markClusterWorkspaceChanged()
-	p.clusterWorkspaceMu.Unlock()
-}
-
-func (p *ClusterWorkspaceProjection) removeClusterWorkspaceRuntimeState(clusterID string) {
-	if p == nil || clusterID == "" {
-		return
-	}
-	p.clusterWorkspaceMu.Lock()
-	_, hadHealth := p.clusterHealth[clusterID]
-	_, hadScopeRevision := p.clusterScopeRevisions[clusterID]
-	delete(p.clusterHealth, clusterID)
-	delete(p.clusterScopeRevisions, clusterID)
-	if hadHealth || hadScopeRevision {
-		p.markClusterWorkspaceChanged()
-	}
-	p.clusterWorkspaceMu.Unlock()
-}
-
 func (a *WorkspaceCoordinator) removeClusterWorkspaceState(clusterID string) {
 	if a == nil {
 		return
 	}
-	a.removeClusterWorkspaceRuntimeState(clusterID)
-	if a.clusterLifecycle != nil {
-		a.clusterLifecycle.Remove(clusterID)
-	}
-}
-
-func (p *ClusterWorkspaceProjection) clusterWorkspaceRuntimeState() (map[string]ClusterHealthState, map[string]uint64) {
-	p.clusterWorkspaceMu.RLock()
-	defer p.clusterWorkspaceMu.RUnlock()
-	health := make(map[string]ClusterHealthState, len(p.clusterHealth))
-	for clusterID, state := range p.clusterHealth {
-		health[clusterID] = state
-	}
-	revisions := make(map[string]uint64, len(p.clusterScopeRevisions))
-	for clusterID, revision := range p.clusterScopeRevisions {
-		revisions[clusterID] = revision
-	}
-	return health, revisions
-}
-
-func (a *WorkspaceCoordinator) clusterWorkspaceAuthStates() map[string]ClusterWorkspaceClusterState {
-	states := make(map[string]ClusterWorkspaceClusterState)
-	if a == nil {
-		return states
-	}
-	// Do not hold the client-map lock while reading an auth manager. Auth state
-	// callbacks run with the manager lock held and look up their cluster client,
-	// so holding these locks in the opposite order would deadlock.
-	a.clusterClientsMu.Lock()
-	clientsByCluster := make(map[string]*clusterClients, len(a.clusterClients))
-	for clusterID, clients := range a.clusterClients {
-		clientsByCluster[clusterID] = clients
-	}
-	a.clusterClientsMu.Unlock()
-	for clusterID, clients := range clientsByCluster {
-		state := ClusterWorkspaceClusterState{
-			ClusterID: clusterID,
-			Auth:      ClusterWorkspaceAuthState{State: "unknown"},
-			Health:    ClusterHealthUnknown,
-		}
-		if clients != nil {
-			state.ClusterName = clients.meta.Name
-			if clients.authManager != nil {
-				authState, _ := clients.authManager.State()
-				diagnostic := clients.authManager.FailureDiagnostic()
-				recovery := clients.authManager.RecoveryInfo()
-				state.Auth = ClusterWorkspaceAuthState{
-					State: authState.String(), Reason: diagnostic.Reason,
-					ErrorClass: string(recovery.ErrorClass), SecondsUntilRetry: recovery.SecondsUntilRetry,
-					DiagnosticClass: diagnostic.Class, DiagnosticKind: diagnostic.Kind,
-					DiagnosticSummary: diagnostic.Summary, ExecCommand: diagnostic.ExecCommand,
-				}
-			}
-		}
-		states[clusterID] = state
-	}
-	return states
-}
-
-func readConsistentClusterWorkspaceState(
-	revision func() uint64,
-	build func() ClusterWorkspaceState,
-) ClusterWorkspaceState {
-	for {
-		before := revision()
-		state := build()
-		if before == revision() {
-			return state
-		}
-	}
+	a.clusterWorkspace.removeClusterWorkspaceRuntimeState(clusterID)
+	a.clusterRuntime.removeClusterLifecycleState(clusterID)
 }
 
 // GetClusterWorkspaceState returns one revision-consistent snapshot of the
@@ -210,7 +43,7 @@ func (a *WorkspaceCoordinator) GetClusterWorkspaceStateForWindow(windowID string
 // selection-mutation boundary. Independent workspace sources remain protected
 // by the revision retry below.
 func (a *WorkspaceCoordinator) captureClusterWorkspaceState(windowID string) ClusterWorkspaceState {
-	return readConsistentClusterWorkspaceState(a.clusterWorkspaceRevision.Load, func() ClusterWorkspaceState {
+	return readConsistentClusterWorkspaceState(a.clusterWorkspace.revision, func() ClusterWorkspaceState {
 		return a.buildClusterWorkspaceState(windowID)
 	})
 }
@@ -218,58 +51,15 @@ func (a *WorkspaceCoordinator) captureClusterWorkspaceState(windowID string) Clu
 func (a *WorkspaceCoordinator) buildClusterWorkspaceState(windowID string) ClusterWorkspaceState {
 	state := ClusterWorkspaceState{
 		SelectedKubeconfigs: a.selectedKubeconfigsForWorkspaceLocked(windowID),
-		Clusters:            a.clusterWorkspaceAuthStates(),
+		Clusters:            a.clusterRuntime.clusterWorkspaceAuthStates(),
 	}
-	a.governorMu.Lock()
-	if windowID != "" {
-		state.VisibleClusterID = a.governorWindows[windowID]
-	} else {
-		state.VisibleClusterID = a.governorVisible
-	}
-	a.governorMu.Unlock()
+	state.VisibleClusterID = a.refresh.visibleClusterForWindow(windowID)
 
-	if a.clusterLifecycle != nil {
-		mergeClusterLifecycleStates(state.Clusters, a.clusterLifecycle.GetAllStates())
-	}
-	health, revisions := a.clusterWorkspaceRuntimeState()
+	mergeClusterLifecycleStates(state.Clusters, a.clusterRuntime.clusterLifecycleStates())
+	health, revisions := a.clusterWorkspace.clusterWorkspaceRuntimeState()
 	mergeClusterHealthStates(state.Clusters, health)
 	mergeClusterScopeRevisions(state.Clusters, revisions)
 	return state
-}
-
-func mergeClusterLifecycleStates(clusters map[string]ClusterWorkspaceClusterState, states map[string]ClusterLifecycleState) {
-	for clusterID, lifecycle := range states {
-		cluster := clusterWorkspaceStateWithDefaults(clusterID, clusters[clusterID])
-		cluster.Lifecycle = lifecycle
-		clusters[clusterID] = cluster
-	}
-}
-
-func mergeClusterHealthStates(clusters map[string]ClusterWorkspaceClusterState, states map[string]ClusterHealthState) {
-	for clusterID, healthState := range states {
-		cluster := clusterWorkspaceStateWithDefaults(clusterID, clusters[clusterID])
-		cluster.Health = healthState
-		clusters[clusterID] = cluster
-	}
-}
-
-func mergeClusterScopeRevisions(clusters map[string]ClusterWorkspaceClusterState, revisions map[string]uint64) {
-	for clusterID, revision := range revisions {
-		cluster := clusterWorkspaceStateWithDefaults(clusterID, clusters[clusterID])
-		cluster.ScopeRevision = revision
-		clusters[clusterID] = cluster
-	}
-}
-
-func clusterWorkspaceStateWithDefaults(clusterID string, cluster ClusterWorkspaceClusterState) ClusterWorkspaceClusterState {
-	cluster.ClusterID = clusterID
-	if cluster.Auth.State == "" {
-		cluster.Auth.State = "unknown"
-	}
-	if cluster.Health == "" {
-		cluster.Health = ClusterHealthUnknown
-	}
-	return cluster
 }
 
 // ensureWorkspaceSelectionsLocked gives a newly observed peer the current
@@ -286,7 +76,7 @@ func (a *WorkspaceCoordinator) ensureWorkspaceSelectionsLocked(windowID string) 
 		return
 	}
 	a.workspaceSelections[windowID] = a.GetSelectedKubeconfigs()
-	a.markClusterWorkspaceChanged()
+	a.clusterWorkspace.markClusterWorkspaceChanged()
 }
 
 // selectedKubeconfigsForWorkspaceLocked projects the process union for legacy
@@ -308,7 +98,7 @@ func (a *WorkspaceCoordinator) setWorkspaceSelectionsLocked(windowID string, sel
 		return
 	}
 	a.workspaceSelections[windowID] = append([]string(nil), selections...)
-	a.markClusterWorkspaceChanged()
+	a.clusterWorkspace.markClusterWorkspaceChanged()
 }
 
 // retainWorkspaceSelectionsLocked removes selections that an external source
@@ -408,20 +198,20 @@ func (a *WorkspaceCoordinator) ReleaseWorkspaceWindow(windowID string) {
 	if a == nil || windowID == "" {
 		return
 	}
-	a.releaseWorkspaceWindowForeground(windowID)
+	a.refresh.releaseWorkspaceWindowForeground(windowID)
 	if err := a.runOrderedSelectionMutation("release-workspace-window", func(mutation *selectionMutation) error {
 		if _, tracked := a.workspaceSelections[windowID]; !tracked {
 			return nil
 		}
 		delete(a.workspaceSelections, windowID)
-		a.markClusterWorkspaceChanged()
+		a.clusterWorkspace.markClusterWorkspaceChanged()
 		union := a.aggregateWorkspaceSelectionsLocked()
 		if selectionSetsEqual(union, a.GetSelectedKubeconfigs()) {
 			return nil
 		}
 		return a.setSelectedKubeconfigs(mutation, union)
-	}); err != nil && a.appLogs.logger != nil {
-		a.appLogs.logger.Warn(
+	}); err != nil && a.logger != nil {
+		a.logger.Warn(
 			fmt.Sprintf("Failed to release cluster tabs for workspace window %s: %v", windowID, err),
 			"KubeconfigManager",
 		)
@@ -496,17 +286,17 @@ func (a *WorkspaceCoordinator) updateClusterWorkspaceSelections(
 func (a *WorkspaceCoordinator) updateClusterWorkspaceVisibility(windowID string, command ClusterWorkspaceCommand) {
 	clusterID := strings.TrimSpace(command.VisibleClusterID)
 	if windowID != "" && command.UpdateSelectedKubeconfigs {
-		a.SetWindowVisibleCluster(windowID, clusterID)
+		a.refresh.SetWindowVisibleCluster(windowID, clusterID)
 		return
 	}
 	if clusterID == "" {
 		return
 	}
 	if windowID != "" {
-		a.SetWindowVisibleCluster(windowID, clusterID)
+		a.refresh.SetWindowVisibleCluster(windowID, clusterID)
 		return
 	}
-	a.SetVisibleCluster(clusterID)
+	a.refresh.SetVisibleCluster(clusterID)
 }
 
 func (a *WorkspaceCoordinator) latestClusterWorkspaceState(windowID string) ClusterWorkspaceState {
@@ -514,12 +304,4 @@ func (a *WorkspaceCoordinator) latestClusterWorkspaceState(windowID string) Clus
 		return a.GetClusterWorkspaceStateForWindow(windowID)
 	}
 	return a.GetClusterWorkspaceState()
-}
-
-func clusterWorkspaceResult(state ClusterWorkspaceState, err error) ClusterWorkspaceResult {
-	result := ClusterWorkspaceResult{State: state}
-	if err != nil {
-		result.Error = err.Error()
-	}
-	return result
 }

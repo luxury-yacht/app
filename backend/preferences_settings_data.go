@@ -108,8 +108,15 @@ func enumPreference(key, defaultValue, label string, options []string, sideEffec
 
 // colorPreference declares an optional #rrggbb color preference.
 func colorPreference(key string, field func(*AppSettings) *string) preferenceDescriptor {
+	logText := map[string]string{
+		appPreferenceAccentColorLight: "Accent color light changed to",
+		appPreferenceAccentColorDark:  "Accent color dark changed to",
+		appPreferenceLinkColorLight:   "Link color light changed to",
+		appPreferenceLinkColorDark:    "Link color dark changed to",
+	}[key]
 	return preferenceDescriptor{
 		key: key, valueType: "color", defaultValue: "", validation: "#rrggbb-or-empty",
+		logText: logText, logsValue: true,
 		current: func(s *AppSettings) any { return *field(s) },
 		apply: func(settings *AppSettings, key string, raw any, _ *settingsSideEffects) error {
 			color, err := stringPreferenceValue(raw)
@@ -267,27 +274,27 @@ func appPreferenceDescriptors() []preferenceDescriptor {
 			func(s *AppSettings) *int { return &s.ObjectPanelFloatingY }),
 
 		intPreference(appPreferencePaletteHueLight, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteHue), maxValue: intPtr(maxPaletteHue)}, false,
-			"", clampRange(minPaletteHue, maxPaletteHue), nil,
+			"Palette hue light changed to", clampRange(minPaletteHue, maxPaletteHue), nil,
 			func(s *AppSettings) *int { return &s.PaletteHueLight }),
 
 		intPreference(appPreferencePaletteSaturationLight, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteSaturation), maxValue: intPtr(maxPaletteSaturation)}, false,
-			"", clampRange(minPaletteSaturation, maxPaletteSaturation), nil,
+			"Palette saturation light changed to", clampRange(minPaletteSaturation, maxPaletteSaturation), nil,
 			func(s *AppSettings) *int { return &s.PaletteSaturationLight }),
 
 		intPreference(appPreferencePaletteBrightnessLight, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteBrightness), maxValue: intPtr(maxPaletteBrightness)}, false,
-			"", clampRange(minPaletteBrightness, maxPaletteBrightness), nil,
+			"Palette brightness light changed to", clampRange(minPaletteBrightness, maxPaletteBrightness), nil,
 			func(s *AppSettings) *int { return &s.PaletteBrightnessLight }),
 
 		intPreference(appPreferencePaletteHueDark, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteHue), maxValue: intPtr(maxPaletteHue)}, false,
-			"", clampRange(minPaletteHue, maxPaletteHue), nil,
+			"Palette hue dark changed to", clampRange(minPaletteHue, maxPaletteHue), nil,
 			func(s *AppSettings) *int { return &s.PaletteHueDark }),
 
 		intPreference(appPreferencePaletteSaturationDark, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteSaturation), maxValue: intPtr(maxPaletteSaturation)}, false,
-			"", clampRange(minPaletteSaturation, maxPaletteSaturation), nil,
+			"Palette saturation dark changed to", clampRange(minPaletteSaturation, maxPaletteSaturation), nil,
 			func(s *AppSettings) *int { return &s.PaletteSaturationDark }),
 
 		intPreference(appPreferencePaletteBrightnessDark, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteBrightness), maxValue: intPtr(maxPaletteBrightness)}, false,
-			"", clampRange(minPaletteBrightness, maxPaletteBrightness), nil,
+			"Palette brightness dark changed to", clampRange(minPaletteBrightness, maxPaletteBrightness), nil,
 			func(s *AppSettings) *int { return &s.PaletteBrightnessDark }),
 
 		colorPreference(appPreferenceAccentColorLight, func(s *AppSettings) *string { return &s.AccentColorLight }),

@@ -637,7 +637,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			)
 		}),
 		directRegistration("object-maintenance", func() error {
-			return snapshot.RegisterNodeMaintenanceDomain(deps.registry)
+			return snapshot.RegisterNodeMaintenanceDomain(deps.registry, deps.cfg.NodeMaintenanceStore)
 		}),
 	}
 }

@@ -21,7 +21,6 @@ const wailsMocks = vi.hoisted(() => ({
   }),
   SetSidebarVisible: vi.fn(),
   GetCatalogDiagnostics: vi.fn().mockResolvedValue({ enabled: false }),
-  GetAppearanceModeInfo: vi.fn().mockResolvedValue({ userMode: 'system' }),
 }));
 
 vi.mock('@core/backend-api', () => ({
@@ -30,7 +29,6 @@ vi.mock('@core/backend-api', () => ({
     wailsMocks.GetClusterWorkspaceStateForWindow(...args),
   SetSidebarVisible: (...args: unknown[]) => wailsMocks.SetSidebarVisible(...args),
   GetCatalogDiagnostics: (...args: unknown[]) => wailsMocks.GetCatalogDiagnostics(...args),
-  GetAppearanceModeInfo: (...args: unknown[]) => wailsMocks.GetAppearanceModeInfo(...args),
 }));
 
 vi.mock('@core/backend-api/models', () => ({

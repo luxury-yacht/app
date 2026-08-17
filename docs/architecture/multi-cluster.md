@@ -65,8 +65,10 @@ validation errors. Frontend refresh code should not produce them.
   and `backend/cluster_attention_rules.go`. The service owns the Attention lock;
   it uses a narrow `PreferencesService` repository for persistence and never
   reaches through the refresh owner.
-- Cluster and workspace implementation: `backend/cluster_clients.go`,
-  `backend/kubeconfigs.go`, `backend/cluster_workspace.go`
+- Cluster and workspace implementation: `backend/cluster_runtime_clients.go`,
+  `backend/cluster_runtime_kubeconfig_discovery.go`,
+  `backend/workspace_cluster_clients.go`, `backend/workspace_kubeconfigs.go`,
+  and `backend/workspace_state.go`
 - Refresh and object-catalog implementation: `backend/refresh_*.go`,
   `backend/refresh_object_catalog.go`
 - Frontend cluster-workspace state and runtime-event reconciliation:

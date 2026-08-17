@@ -10,13 +10,14 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
-	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/internal/appstate"
 )
 
 const settingsSchemaVersion = 1
+
+var validHexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 const (
 	defaultThemeID   = "default"
@@ -149,7 +150,7 @@ func (p *settingsPreferences) UnmarshalJSON(data []byte) error {
 	if decoded.AppearanceMode == "" {
 		// Migration from settings files written before the appearance-mode rename.
 		// Old files used preferences.theme for the light/dark/system mode value.
-		// TODO: Remove after the old preferences.theme settings format is no longer supported.
+		// Keep this read-only compatibility path while schema version 1 settings remain supported.
 		var raw map[string]json.RawMessage
 		if err := json.Unmarshal(data, &raw); err != nil {
 			return err
@@ -630,7 +631,7 @@ func writeFileAtomicWithReplace(
 }
 
 func (p *PreferencesService) SaveWindowSettings() error {
-	if p != nil && p.shell != nil && p.shell.windowGeometry != nil {
+	if p != nil && p.shell != nil && p.shell.hasWindowGeometry() {
 		return p.SaveWindowSettingsForWindow("")
 	}
 	window, err := p.shell.currentWindowWhenReady()
@@ -1102,118 +1103,6 @@ func setSubsystemMetricsInterval(subsystem *system.Subsystem, interval time.Dura
 	subsystem.Manager.SetMetricsInterval(interval)
 }
 
-func (p *PreferencesService) SetAppearanceMode(mode string) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceAppearanceMode, Value: mode}}})
-	return err
-}
-
-func (p *PreferencesService) SetUseShortResourceNames(useShort bool) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceUseShortResourceNames, Value: useShort}}})
-	return err
-}
-
-func (p *PreferencesService) SetDimInactiveNamespaces(enabled bool) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceDimInactiveNamespaces, Value: enabled}}})
-	return err
-}
-
-func (p *PreferencesService) SetExclusiveNamespaces(enabled bool) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceExclusiveNamespaces, Value: enabled}}})
-	return err
-}
-
-// SetAutoRefreshEnabled persists the auto-refresh preference.
-func (p *PreferencesService) SetAutoRefreshEnabled(enabled bool) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceAutoRefreshEnabled, Value: enabled}}})
-	return err
-}
-
-// SetBackgroundRefreshEnabled persists the background refresh preference.
-func (p *PreferencesService) SetBackgroundRefreshEnabled(enabled bool) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceRefreshBackgroundClustersEnabled, Value: enabled}}})
-	return err
-}
-
-func (p *PreferencesService) SetKubernetesClientQPS(qps int) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceKubernetesClientQPS, Value: qps}}})
-	return err
-}
-
-func (p *PreferencesService) SetKubernetesClientBurst(burst int) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceKubernetesClientBurst, Value: burst}}})
-	return err
-}
-
-func (p *PreferencesService) SetPermissionSSRRFetchConcurrency(limit int) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferencePermissionSSRRFetchConcurrency, Value: limit}}})
-	return err
-}
-
-// SetObjPanelLogsBufferMaxSize persists the max container log entries each
-// Object Panel Logs Tab keeps in memory.
-// Values are clamped to [minObjPanelLogsBufferMaxSize, maxObjPanelLogsBufferMaxSize].
-func (p *PreferencesService) SetObjPanelLogsBufferMaxSize(size int) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsBufferMaxSize, Value: size}}})
-	return err
-}
-
-func (p *PreferencesService) SetObjPanelLogsTargetPerScopeLimit(limit int) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsTargetPerScopeLimit, Value: limit}}})
-	return err
-}
-
-func (p *PreferencesService) SetObjPanelLogsTargetGlobalLimit(limit int) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsTargetGlobalLimit, Value: limit}}})
-	return err
-}
-
-func (p *PreferencesService) SetObjPanelLogsAPITimestampFormat(format string) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsAPITimestampFormat, Value: format}}})
-	return err
-}
-
-func (p *PreferencesService) SetObjPanelLogsAPITimestampUseLocalTimeZone(enabled bool) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone, Value: enabled}}})
-	return err
-}
-
-// SetGridTablePersistenceMode persists the grid table persistence mode.
-func (p *PreferencesService) SetGridTablePersistenceMode(mode string) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceGridTablePersistenceMode, Value: mode}}})
-	return err
-}
-
-// SetDefaultObjectPanelPosition persists the default object panel position.
-func (p *PreferencesService) SetDefaultObjectPanelPosition(position string) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceDefaultObjectPanelPosition, Value: position}}})
-	return err
-}
-
-// SetObjectPanelLayout persists the default object panel dimensions and floating position.
-func (p *PreferencesService) SetObjectPanelLayout(dockedRightWidth, dockedBottomHeight, floatingWidth, floatingHeight, floatingX, floatingY int) error {
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
-		{Key: appPreferenceObjectPanelDockedRightWidth, Value: dockedRightWidth},
-		{Key: appPreferenceObjectPanelDockedBottomHeight, Value: dockedBottomHeight},
-		{Key: appPreferenceObjectPanelFloatingWidth, Value: floatingWidth},
-		{Key: appPreferenceObjectPanelFloatingHeight, Value: floatingHeight},
-		{Key: appPreferenceObjectPanelFloatingX, Value: floatingX},
-		{Key: appPreferenceObjectPanelFloatingY, Value: floatingY},
-	}})
-	return err
-}
-
-func (p *PreferencesService) GetAppearanceModeInfo() (*AppearanceModeInfo, error) {
-	settings, err := p.GetAppSettings()
-	if err != nil {
-		return nil, err
-	}
-
-	return &AppearanceModeInfo{
-		CurrentMode: settings.AppearanceMode,
-		UserMode:    settings.AppearanceMode,
-	}, nil
-}
-
 // GetZoomLevel returns the persisted zoom level (50-200), defaulting to 100.
 func (p *PreferencesService) GetZoomLevel() int {
 	settings, err := p.loadSettingsFile()
@@ -1247,86 +1136,9 @@ func (p *PreferencesService) SetZoomLevel(level int) error {
 	return p.saveSettingsFile(settings)
 }
 
-// SetPaletteTint persists the palette hue (0-360), saturation (0-100), and brightness (-50 to +50) preferences
-// for the specified resolved appearance mode ("light" or "dark"). Values are clamped to their valid ranges.
-func (p *PreferencesService) SetPaletteTint(mode string, hue, saturation, brightness int) error {
-	if mode != "light" && mode != "dark" {
-		return fmt.Errorf("invalid palette mode: %s", mode)
-	}
-	hueKey := appPreferencePaletteHueDark
-	saturationKey := appPreferencePaletteSaturationDark
-	brightnessKey := appPreferencePaletteBrightnessDark
-	if mode == "light" {
-		hueKey = appPreferencePaletteHueLight
-		saturationKey = appPreferencePaletteSaturationLight
-		brightnessKey = appPreferencePaletteBrightnessLight
-	}
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
-		{Key: hueKey, Value: hue},
-		{Key: saturationKey, Value: saturation},
-		{Key: brightnessKey, Value: brightness},
-	}})
-	if err == nil {
-		p.logger.Info(
-			fmt.Sprintf(
-				"Palette tint (%s) changed to hue=%d saturation=%d brightness=%d",
-				mode,
-				clampInt(hue, minPaletteHue, maxPaletteHue),
-				clampInt(saturation, minPaletteSaturation, maxPaletteSaturation),
-				clampInt(brightness, minPaletteBrightness, maxPaletteBrightness),
-			),
-			logsources.Settings,
-		)
-	}
-	return err
-}
-
-// validHexColorRe matches a 7-character hex color string (#rrggbb).
-var validHexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
-
-// SetLinkColor persists a custom link color for the specified resolved appearance mode ("light" or "dark").
-// The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
-func (p *PreferencesService) SetLinkColor(mode, color string) error {
-	if mode != "light" && mode != "dark" {
-		return fmt.Errorf("invalid link color mode: %s", mode)
-	}
-	key := appPreferenceLinkColorDark
-	if mode == "light" {
-		key = appPreferenceLinkColorLight
-	}
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: key, Value: color}}})
-	if err != nil && color != "" && !validHexColorRe.MatchString(color) {
-		return fmt.Errorf("invalid link color format: %s (expected #rrggbb)", color)
-	}
-	if err == nil {
-		p.logger.Info(fmt.Sprintf("Link color (%s) changed to: %s", mode, color), logsources.Settings)
-	}
-	return err
-}
-
-// SetAccentColor persists a custom accent color for the specified resolved appearance mode ("light" or "dark").
-// The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
-func (p *PreferencesService) SetAccentColor(mode, color string) error {
-	if mode != "light" && mode != "dark" {
-		return fmt.Errorf("invalid accent color mode: %s", mode)
-	}
-	key := appPreferenceAccentColorDark
-	if mode == "light" {
-		key = appPreferenceAccentColorLight
-	}
-	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: key, Value: color}}})
-	if err != nil && color != "" && !validHexColorRe.MatchString(color) {
-		return fmt.Errorf("invalid accent color format: %s (expected #rrggbb)", color)
-	}
-	if err == nil {
-		p.logger.Info(fmt.Sprintf("Accent color (%s) changed to: %s", mode, color), logsources.Settings)
-	}
-	return err
-}
-
 // syncThemesCacheLocked updates the in-memory appSettings cache with the current
-// themes list so that saveAppSettings (used by SetPaletteTint, SetAccentColor,
-// etc.) does not overwrite disk-persisted themes with stale cached data.
+// themes list so that preference updates do not overwrite disk-persisted
+// themes with stale cached data.
 func (p *PreferencesService) syncThemesCacheLocked(themes []Theme) {
 	if p.appSettings != nil {
 		p.appSettings.Themes = append([]Theme(nil), themes...)

@@ -3,8 +3,27 @@ package backend
 import (
 	"context"
 
+	"github.com/luxury-yacht/app/backend/internal/appupdates"
 	"github.com/luxury-yacht/app/internal/updatestate"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+type applicationUpdateShell interface {
+	Application() *application.App
+	ShowAbout()
+	UpdateClient() appupdates.Client
+}
+
+type applicationUpdateCoordinator interface {
+	Snapshot() appupdates.Snapshot
+	RuntimeReady()
+	Stop()
+	Check(context.Context) (appupdates.Snapshot, error)
+	Download(context.Context, string) (appupdates.Snapshot, error)
+	Restart(context.Context) (appupdates.Snapshot, error)
+	Skip(context.Context, string) (appupdates.Snapshot, error)
+	RemoveSkip(context.Context) (appupdates.Snapshot, error)
+}
 
 // UpdateCoordinator owns the complete application-update lifecycle, including
 // framework event subscriptions and shutdown.
@@ -14,18 +33,28 @@ type UpdateCoordinator struct {
 	context       func() context.Context
 	emit          func(string, ...interface{})
 	logger        *Logger
-	shell         *DesktopShell
+	shell         applicationUpdateShell
 	resetState    *updatestate.Store
 	resetStateErr error
 }
 
 func NewUpdateCoordinator(
-	shell *DesktopShell,
+	shell applicationUpdateShell,
 	contextProvider func() context.Context,
 	emit func(string, ...interface{}),
 	logger *Logger,
+	options ApplicationUpdateOptions,
+	ports ...*updateCheckPort,
 ) *UpdateCoordinator {
-	return &UpdateCoordinator{shell: shell, context: contextProvider, emit: emit, logger: logger}
+	coordinator := &UpdateCoordinator{shell: shell, context: contextProvider, emit: emit, logger: logger}
+	coordinator.initializeApplicationUpdates(options)
+	for _, port := range ports {
+		port.bind(func() error {
+			_, err := coordinator.CheckForUpdates()
+			return err
+		})
+	}
+	return coordinator
 }
 
 func (u *UpdateCoordinator) RuntimeReady() {

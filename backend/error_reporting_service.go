@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -25,22 +26,62 @@ type installationTelemetryRepository interface {
 	acknowledgeInstallationTelemetry(string) error
 }
 
+type installationTelemetryPort struct {
+	mu     sync.RWMutex
+	target installationTelemetryRepository
+}
+
+func (p *installationTelemetryPort) prepareInstallationTelemetry() (string, bool, error) {
+	p.mu.RLock()
+	target := p.target
+	p.mu.RUnlock()
+	if target == nil {
+		return "", false, fmt.Errorf("installation telemetry repository is not available")
+	}
+	return target.prepareInstallationTelemetry()
+}
+
+func (p *installationTelemetryPort) acknowledgeInstallationTelemetry(id string) error {
+	p.mu.RLock()
+	target := p.target
+	p.mu.RUnlock()
+	if target == nil {
+		return fmt.Errorf("installation telemetry repository is not available")
+	}
+	return target.acknowledgeInstallationTelemetry(id)
+}
+
+func (p *installationTelemetryPort) bind(target installationTelemetryRepository) {
+	if p == nil || target == nil {
+		panic("installation telemetry port requires a target")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.target != nil {
+		panic("installation telemetry port already bound")
+	}
+	p.target = target
+}
+
+func (p *installationTelemetryPort) publishPreferences(preferences *PreferencesService) {
+	p.bind(preferences)
+}
+
 func NewErrorReportingService(
 	reporter sentryreporting.Reporter,
 	contextProvider func() context.Context,
 	logger *Logger,
+	repositories ...installationTelemetryRepository,
 ) *ErrorReportingService {
-	return &ErrorReportingService{
+	service := &ErrorReportingService{
 		reporter: reporter,
 		context:  contextProvider,
 		logger:   logger,
 	}
-}
-
-func (s *ErrorReportingService) ConfigureInstallationTelemetry(repository installationTelemetryRepository) {
-	if s != nil {
-		s.telemetryRepository = repository
+	if len(repositories) > 0 {
+		service.telemetryRepository = repositories[0]
 	}
+	return service
 }
 
 func (s *ErrorReportingService) SetErrorReportingEnabled(enabled bool) error {

@@ -196,7 +196,7 @@ func TestCancelDrainNodeJobRequiresNodeMaintenancePermission(t *testing.T) {
 
 	fixture := newResourcePermissionFixture(clusterID, client, nil)
 
-	job := nodemaintenance.GlobalStore().StartDrainForCluster(
+	job := fixture.nodeMaintenance.StartDrainForCluster(
 		nodeName,
 		DrainNodeOptions{},
 		clusterID,
@@ -207,7 +207,7 @@ func TestCancelDrainNodeJobRequiresNodeMaintenancePermission(t *testing.T) {
 		t.Fatalf("expected permission denial, got %v", err)
 	}
 
-	stored, ok := nodemaintenance.GlobalStore().JobForCluster(job.ID, clusterID)
+	stored, ok := fixture.nodeMaintenance.JobForCluster(job.ID, clusterID)
 	if !ok {
 		t.Fatal("expected drain job to remain in the store")
 	}

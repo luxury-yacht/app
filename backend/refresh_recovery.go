@@ -67,14 +67,14 @@ func (a *RefreshCoordinator) shutdownRefreshSubsystem(subsystem *system.Subsyste
 		ctx, cancel := context.WithTimeout(context.Background(), config.RefreshShutdownTimeout)
 		defer cancel()
 		if err := manager.Shutdown(ctx); err != nil {
-			a.appLogs.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), logsources.Refresh)
+			a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), logsources.Refresh)
 		}
 		close(done)
 	}(subsystem.Manager)
 	select {
 	case <-done:
 	case <-time.After(config.RefreshShutdownTimeout):
-		a.appLogs.logger.Warn("Timed out waiting for refresh manager shutdown", logsources.Refresh)
+		a.logger.Warn("Timed out waiting for refresh manager shutdown", logsources.Refresh)
 	}
 }
 
@@ -102,14 +102,14 @@ func (a *RefreshCoordinator) clearRefreshPermissionCancels() {
 }
 
 func (a *RefreshCoordinator) handlePermissionIssues(issues []system.PermissionIssue) {
-	if a == nil || a.appLogs == nil || a.appLogs.Logger() == nil {
+	if a == nil || a.logger == nil {
 		return
 	}
 	for _, issue := range issues {
 		if issue.Err == nil {
 			continue
 		}
-		a.appLogs.Logger().Warn(
+		a.logger.Warn(
 			fmt.Sprintf("Refresh domain %s unavailable (%s): %v", issue.Domain, issue.Resource, issue.Err),
 			"Refresh",
 		)

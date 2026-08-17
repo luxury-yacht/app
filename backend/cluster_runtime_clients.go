@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"runtime"
 
+	"github.com/luxury-yacht/app/backend/internal/authstate"
 	appconfig "github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/credentialerrors"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	informerpkg "github.com/luxury-yacht/app/backend/refresh/informer"
-	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
@@ -20,54 +20,7 @@ import (
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
-
-	"github.com/luxury-yacht/app/backend/internal/authstate"
-	"github.com/luxury-yacht/app/backend/internal/credentialerrors"
 )
-
-// clusterClients stores Kubernetes clients scoped to a specific cluster selection.
-type clusterClients struct {
-	meta                   ClusterMeta
-	kubeconfigPath         string
-	kubeconfigContext      string
-	client                 kubernetes.Interface
-	gatewayClient          gatewayversioned.Interface
-	gatewayInformerFactory gatewayinformers.SharedInformerFactory
-	gatewayAPIPresence     common.GatewayAPIPresence
-	gatewayVersionResolver common.VersionResolver
-	apiextensionsClient    apiextensionsclientset.Interface
-	dynamicClient          dynamic.Interface
-	metricsClient          *metricsclient.Clientset
-	restConfig             *rest.Config
-	rateLimiter            *mutableKubernetesRateLimiter
-	// authManager provides per-cluster auth state tracking and recovery.
-	// Each cluster has its own auth manager so that auth failures in one
-	// cluster don't affect other clusters.
-	authManager *authstate.Manager
-	// authFailedOnInit is true if the pre-flight credential check failed
-	// during client initialization. Used to skip subsystem creation.
-	authFailedOnInit bool
-	// fallbackResourceResolver is used only before the object catalog service is
-	// available. It avoids rebuilding the built-in identity seed on every
-	// cold-start lookup.
-	fallbackResourceResolver common.ResourceResolver
-}
-
-type builtClusterClientDependencies struct {
-	client                 kubernetes.Interface
-	gatewayClient          gatewayversioned.Interface
-	gatewayInformerFactory gatewayinformers.SharedInformerFactory
-	gatewayAPIPresence     *gatewayapi.Presence
-	apiextensionsClient    apiextensionsclientset.Interface
-	dynamicClient          dynamic.Interface
-	metricsClient          *metricsclient.Clientset
-}
-
-type clusterClientBuilder func(
-	context.Context,
-	kubeconfigSelection,
-	ClusterMeta,
-) (*clusterClients, error)
 
 // setClusterClientLocked commits one client-map entry and its workspace
 // revision together. The caller must hold clusterClientsMu.
@@ -110,6 +63,15 @@ func (m *ClusterRuntimeManager) clusterClientsForID(clusterID string) *clusterCl
 	return m.clusterClients[clusterID]
 }
 
+func (m *ClusterRuntimeManager) replaceClusterClient(clusterID string, clients *clusterClients) {
+	if m == nil || clusterID == "" || clients == nil {
+		return
+	}
+	m.clusterClientsMu.Lock()
+	m.setClusterClientLocked(clusterID, clients)
+	m.clusterClientsMu.Unlock()
+}
+
 // clusterClientsForSelection finds stored clients by matching the kubeconfig path
 // and context, regardless of what ID was derived. This handles cases where
 // clusterMetaForSelection re-derives a different ID than what was used at build time.
@@ -128,37 +90,6 @@ func (m *ClusterRuntimeManager) clusterClientsForSelectionLocked(selection kubec
 			return c
 		}
 	}
-	return nil
-}
-
-// syncClusterClientPool builds missing clients for the provided selections and drops stale entries.
-func (a *WorkspaceCoordinator) syncClusterClientPool(selections []kubeconfigSelection) error {
-	return a.syncClusterClientPoolWithContext(context.Background(), selections)
-}
-
-// syncClusterClientPoolWithContext builds missing clients for the provided selections and drops stale entries.
-func (a *WorkspaceCoordinator) syncClusterClientPoolWithContext(ctx context.Context, selections []kubeconfigSelection) error {
-	if a == nil {
-		return fmt.Errorf("workspace coordinator is nil")
-	}
-	return a.syncClusterClientPoolWithBuilder(ctx, selections, a.buildClusterClientsWithContext)
-}
-
-func (a *WorkspaceCoordinator) syncClusterClientPoolWithBuilder(
-	ctx context.Context,
-	selections []kubeconfigSelection,
-	build clusterClientBuilder,
-) error {
-	ctx, err := validateClusterClientSync(a.ClusterRuntimeManager, ctx, build)
-	if err != nil {
-		return err
-	}
-	desired := a.desiredClusterClientSelections(selections)
-	tasks := a.clusterClientCreateTasks(desired)
-	if err := a.createClusterClients(ctx, tasks, build); err != nil {
-		return err
-	}
-	a.cleanupRemovedClusterClients(a.removeUndesiredClusterClients(desired))
 	return nil
 }
 
@@ -187,27 +118,60 @@ func (m *ClusterRuntimeManager) snapshotClusterIDs() []string {
 	return ids
 }
 
-type clusterClientCreateTask struct {
-	selection kubeconfigSelection
-	meta      ClusterMeta
+func (m *ClusterRuntimeManager) selectionsForClusterIDs(clusterIDs []string) []kubeconfigSelection {
+	if m == nil {
+		return nil
+	}
+	m.clusterClientsMu.Lock()
+	defer m.clusterClientsMu.Unlock()
+	selections := make([]kubeconfigSelection, 0, len(clusterIDs))
+	for _, clusterID := range clusterIDs {
+		clients := m.clusterClients[clusterID]
+		if clients == nil {
+			continue
+		}
+		selections = append(selections, kubeconfigSelection{Path: clients.kubeconfigPath, Context: clients.kubeconfigContext})
+	}
+	return selections
 }
 
-type removedClusterClient struct {
-	clusterID   string
-	authManager interface{ Shutdown() }
+func (m *ClusterRuntimeManager) removeClusterLifecycleState(clusterID string) {
+	if m != nil && m.clusterLifecycle != nil {
+		m.clusterLifecycle.Remove(clusterID)
+	}
 }
 
-func validateClusterClientSync(runtime *ClusterRuntimeManager, ctx context.Context, build clusterClientBuilder) (context.Context, error) {
-	if runtime == nil {
-		return nil, fmt.Errorf("cluster runtime manager is nil")
+func (m *ClusterRuntimeManager) clusterLifecycleStates() map[string]ClusterLifecycleState {
+	if m == nil || m.clusterLifecycle == nil {
+		return nil
 	}
-	if build == nil {
-		return nil, fmt.Errorf("cluster client builder is nil")
+	return m.clusterLifecycle.GetAllStates()
+}
+
+func (m *ClusterRuntimeManager) replayClusterLifecycle(clusterID string) {
+	if m != nil && m.clusterLifecycle != nil {
+		m.clusterLifecycle.Replay(clusterID)
 	}
-	if ctx == nil {
-		ctx = context.Background()
+}
+
+func (m *ClusterRuntimeManager) clusterLifecycleState(clusterID string) ClusterLifecycleState {
+	if m == nil || m.clusterLifecycle == nil {
+		return ""
 	}
-	return ctx, nil
+	return m.clusterLifecycle.GetState(clusterID)
+}
+
+func (m *ClusterRuntimeManager) setClusterLifecycleState(clusterID string, state ClusterLifecycleState) {
+	if m != nil && m.clusterLifecycle != nil {
+		m.clusterLifecycle.SetState(clusterID, state)
+	}
+}
+
+func (m *ClusterRuntimeManager) buildNamespacesReadiness(service *aggregateSnapshotService, clusterID string) {
+	if m == nil {
+		return
+	}
+	runNamespacesReadinessSelfBuild(m.clusterLifecycle, service, clusterID)
 }
 
 func (a *ClusterRuntimeManager) desiredClusterClientSelections(selections []kubeconfigSelection) map[string]kubeconfigSelection {
@@ -296,12 +260,6 @@ func (a *ClusterRuntimeManager) clusterClientAlreadyInstalled(task clusterClient
 	return a.clusterClientsForID(task.meta.ID) != nil || a.clusterClientsForSelection(task.selection) != nil
 }
 
-func shutdownClusterClientAuthManager(clients *clusterClients) {
-	if clients != nil && clients.authManager != nil {
-		clients.authManager.Shutdown()
-	}
-}
-
 func (a *ClusterRuntimeManager) installClusterClient(task clusterClientCreateTask, clients *clusterClients) bool {
 	a.clusterClientsMu.Lock()
 	defer a.clusterClientsMu.Unlock()
@@ -326,44 +284,41 @@ func (a *ClusterRuntimeManager) removeUndesiredClusterClients(desired map[string
 	return removed
 }
 
-func clusterClientAuthManager(clients *clusterClients) interface{ Shutdown() } {
-	if clients == nil || clients.authManager == nil {
+func (a *ClusterRuntimeManager) removeClusterClients(clusterIDs []string) []removedClusterClient {
+	if a == nil {
 		return nil
 	}
-	return clients.authManager
+	a.clusterClientsMu.Lock()
+	defer a.clusterClientsMu.Unlock()
+	removed := make([]removedClusterClient, 0, len(clusterIDs))
+	for _, clusterID := range clusterIDs {
+		clients, ok := a.removeClusterClientLocked(clusterID)
+		if !ok {
+			continue
+		}
+		removed = append(removed, removedClusterClient{
+			clusterID:   clusterID,
+			authManager: clusterClientAuthManager(clients),
+		})
+	}
+	return removed
 }
 
-func (a *WorkspaceCoordinator) cleanupRemovedClusterClients(removed []removedClusterClient) {
-	for _, item := range removed {
-		if item.authManager != nil {
-			item.authManager.Shutdown()
-		}
+func (a *ClusterRuntimeManager) clearClusterClientPool() []removedClusterClient {
+	if a == nil {
+		return nil
 	}
-	for _, item := range removed {
-		if a.operations != nil {
-			a.operations.StopCluster(item.clusterID)
-		}
+	a.clusterClientsMu.Lock()
+	defer a.clusterClientsMu.Unlock()
+	removed := make([]removedClusterClient, 0, len(a.clusterClients))
+	for clusterID, clients := range a.clusterClients {
+		removed = append(removed, removedClusterClient{
+			clusterID:   clusterID,
+			authManager: clusterClientAuthManager(clients),
+		})
 	}
-	for _, item := range removed {
-		a.ensureKubernetesAPIMetricsRegistry().remove(item.clusterID)
-		a.removeClusterWorkspaceState(item.clusterID)
-	}
-}
-
-// clusterClientBuildConcurrencyLimit derives a bounded parallelism level for
-// per-selection client initialization. Work is network-bound (discovery/auth).
-func clusterClientBuildConcurrencyLimit(taskCount int) int {
-	if taskCount <= 1 {
-		return taskCount
-	}
-	limit := runtime.GOMAXPROCS(0)
-	if limit <= 0 {
-		limit = 1
-	}
-	if taskCount < limit {
-		return taskCount
-	}
-	return limit
+	a.clearClusterClientsLocked()
+	return removed
 }
 
 func (m *ClusterRuntimeManager) applyKubernetesClientRateLimits(qps, burst int) {
@@ -474,12 +429,6 @@ func (a *ClusterRuntimeManager) buildClusterClientsWithManager(
 	}, nil
 }
 
-func shutdownClusterAuthManagerIfOwned(manager *authstate.Manager, owned bool) {
-	if owned {
-		manager.Shutdown()
-	}
-}
-
 func (a *ClusterRuntimeManager) buildClusterClientDependencies(
 	ctx context.Context,
 	config *rest.Config,
@@ -553,32 +502,6 @@ func (a *ClusterRuntimeManager) buildGatewayClients(
 	return presence, client, factory, nil
 }
 
-// configureClusterRecoveryTest rebuilds credentials rather than probing with a
-// clientset that may still cache credentials from the failed request.
-func configureClusterRecoveryTest(manager *authstate.Manager, selection kubeconfigSelection) {
-	manager.SetRecoveryTest(func() error {
-		loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-		loadingRules.ExplicitPath = selection.Path
-		overrides := &clientcmd.ConfigOverrides{}
-		if selection.Context != "" {
-			overrides.CurrentContext = selection.Context
-		}
-		clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
-		freshConfig, err := clientConfig.ClientConfig()
-		if err != nil {
-			return fmt.Errorf("failed to load kubeconfig: %w", err)
-		}
-		freshConfig.Timeout = appconfig.ClusterAuthRecoveryProbeTimeout
-
-		freshClient, err := kubernetes.NewForConfig(freshConfig)
-		if err != nil {
-			return fmt.Errorf("failed to create client: %w", err)
-		}
-		_, err = freshClient.Discovery().ServerVersion()
-		return err
-	})
-}
-
 func (a *ClusterRuntimeManager) clusterAuthFailedOnPreflight(
 	ctx context.Context,
 	client kubernetes.Interface,
@@ -642,39 +565,6 @@ func (m *ClusterRuntimeManager) createClusterAuthManager(meta ClusterMeta) *auth
 		OnSnapshotChange: m.projection.markClusterWorkspaceChanged,
 		// RecoveryTest is set later once we have the clientset
 	})
-}
-
-// classifyRecoveryError maps a recovery probe failure to an auth or
-// connectivity verdict. Only errors proving the cluster rejected the
-// credentials — an HTTP 401/403 or a failed exec credential plugin — are
-// auth-class and consume recovery attempts. Everything else (connection
-// refused, timeouts, DNS, TLS) means the cluster could not be reached, which
-// says nothing about credential validity, so the recovery loop keeps probing.
-func classifyRecoveryError(err error) authstate.ErrorClass {
-	switch credentialerrors.Classify(err, credentialerrors.Context{}).Class {
-	case credentialerrors.ClassAuth:
-		return authstate.ErrorClassAuth
-	case credentialerrors.ClassConnectivity:
-		return authstate.ErrorClassConnectivity
-	default:
-		return authstate.ErrorClassUnknown
-	}
-}
-
-// buildRestConfigForSelection loads a REST config for the provided kubeconfig path/context.
-// The clusterAuthMgr parameter is the per-cluster auth manager that will be used to wrap
-// protobufRestConfig returns a COPY of base that negotiates Protobuf for built-in
-// kinds: the Accept header offers protobuf-then-JSON, so the server picks protobuf
-// where it can (every conformant apiserver serves it for built-ins — the control
-// plane itself speaks it) and answers JSON where it cannot (third-party aggregated
-// APIs) — the fallback is byte-for-byte the old behavior. Copying keeps the shared
-// base config pristine for the dynamic and gateway clients, whose custom resources
-// are JSON-only.
-func protobufRestConfig(base *rest.Config) *rest.Config {
-	cfg := rest.CopyConfig(base)
-	cfg.AcceptContentTypes = "application/vnd.kubernetes.protobuf,application/json"
-	cfg.ContentType = "application/vnd.kubernetes.protobuf"
-	return cfg
 }
 
 // the transport for auth state tracking.

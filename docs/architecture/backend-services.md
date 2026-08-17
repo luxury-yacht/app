@@ -8,17 +8,37 @@ behavior.
 ## Composition and transport
 
 `main.go` creates the Wails application, passes that concrete application to
-`backend.NewApplicationRuntime`, constructs `DesktopService` from the returned
-owners, and registers only that service with Wails. `ApplicationRuntime` is a
+`backend.NewApplicationRuntime`, passing updater and peer-window dependencies
+through `ApplicationRuntimeOptions`, constructs `DesktopService` from the
+returned owners, and registers only that service with Wails. `ApplicationRuntime` is a
 reference-only composition result: it owns no behavior or mutable state, and no
 owner may retain a pointer to it.
 
-`NewApplicationRuntime` creates each stateful owner through a dependency
-constructor. The composition root must not create an empty owner and fill its
-private fields afterward. Cycles are broken with explicit one-way seams: Cluster
-Runtime starts with an unavailable discovery repository that Preferences replaces
-before startup work can run, and the refresh settings bridge retains values until
-Refresh is bound. Those are construction-time links, not general owner back-pointers.
+`NewApplicationRuntime` creates each stateful owner once through a dependency
+constructor. The composition root must not create an empty owner, fill private
+fields afterward, or call a post-construction `Configure`/`Bind` method.
+`RefreshCoordinator` and `WorkspaceCoordinator` reject incomplete dependency
+graphs instead of manufacturing substitute owners. Focused tests use the shared
+owner fixtures rather than weakening those production constructors.
+Update configuration and the peer-window creation callback are also supplied at
+construction; `main.go` must not configure either owner after the runtime has
+been returned.
+
+Five explicit bind-once ports resolve construction-order edges without making
+an owner partially configurable:
+
+| Port | Direction | Before its target exists |
+| --- | --- | --- |
+| Update check | `DesktopShell` to `UpdateCoordinator` | Returns an unavailable error |
+| Kubeconfig search-path read | `DesktopShell` to `PreferencesService` | Returns an unavailable error |
+| Installation telemetry repository | `ErrorReportingService` to `PreferencesService` | Returns an unavailable error |
+| Kubernetes client rate-limit settings | `PreferencesService` to `ClusterRuntimeManager` | Retains the latest QPS/burst values, then pushes them at bind |
+| Refresh settings | `PreferencesService` to `RefreshCoordinator` | Retains the latest global-log limit and metrics interval, then pushes them at bind |
+
+Every port rejects a missing target and a second bind. Retaining bridges call
+their target only after releasing the bridge lock. These ports are composed and
+bound inside owner constructors; they are not general owner back-pointers or a
+license for later rewiring.
 
 `DesktopService` owns the Wails command names, generated-binding reachability,
 the `/api/v2` transport entry point, and lifecycle delegation. It does not own
@@ -60,7 +80,8 @@ permission for an owner to call `DesktopService`.
 | `RefreshCoordinator` | Per-cluster refresh/catalog lifecycles, HTTP/streams, publication, governor/spill state, and global log limiter |
 | `WorkspaceCoordinator` | Peer selections, serialized selection mutations, namespace-scope rebuilds, foreground demand, and workspace assembly |
 | `ResourceGateway` | Request-shaped resource reads/actions, permission and response caches, YAML, details, and logs |
-| `OperationsCoordinator` | Shell, port-forward, drain, active-operation registry, and cleanup |
+| `nodemaintenance.Store` | Process-wide, cluster-keyed node-drain jobs, cancellation handles, bounded history, and its lock |
+| `OperationsCoordinator` | Shell, port-forward, drain-operation registration, active-operation registry, and cleanup |
 | `DataManagementCoordinator` | Import/export and owner-directed live factory reset |
 | `ContainerLogsSelectionPolicy` | Shared per-scope container-log selection limit |
 | `PermissionFetchPolicy` | Shared SSRR fetch-concurrency limit |
@@ -90,6 +111,11 @@ Dependencies point toward capabilities, never back toward the composition root:
   of depending back on `RefreshCoordinator`.
 - `OperationsCoordinator` uses narrow cluster, permission, event, logging, and
   projection collaborators. It owns all operation cleanup.
+- Composition creates one `nodemaintenance.Store`. Node resource actions write
+  drain execution state, Refresh reads it for `object-maintenance` snapshots,
+  and Operations performs cluster/process cancellation through the same store.
+  The store is a shared leaf: it is keyed by `clusterId`, owns its lock, and
+  does not call any of those consumers.
 - `DataManagementCoordinator` may sequence owner reset methods and narrow
   Workspace/Refresh functions. It does not become the owner of the state it
   resets.
@@ -99,6 +125,21 @@ Dependencies point toward capabilities, never back toward the composition root:
 Cross-owner callbacks must be narrow and direction-specific. A shared leaf
 projection may be read by multiple owners, but it must have one writer and may
 not call those readers.
+
+## Source placement
+
+Production files are named for their owner or for a dependency contract. A file
+may contain methods for only one state owner; cross-owner workflows belong to
+the coordinator that sequences them. `resource_details_generated.go` is the
+single deliberate exception because one generator emits internal
+`ResourceGateway` wrappers and the `DesktopService` model anchor from the same
+resource-kind registry.
+
+`application_runtime_contract_test.go` enforces owner-oriented filenames,
+single-owner files, no owner embedding, interface-only cross-owner fields,
+composition-only `app.go`, and the absence of post-construction configuration.
+Do not replace those dependency and placement guards with exact method or field
+counts.
 
 ## Settings effects
 

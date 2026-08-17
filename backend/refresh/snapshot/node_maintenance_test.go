@@ -17,13 +17,13 @@ func TestNodeMaintenanceDomainFiltersDrainsByClusterAndScope(t *testing.T) {
 	clusterA := fmt.Sprintf("phase8-cluster-a-%d", suffix)
 	clusterB := fmt.Sprintf("phase8-cluster-b-%d", suffix)
 	nodeName := fmt.Sprintf("phase8-worker-%d", suffix)
-	store := nodemaintenance.GlobalStore()
+	store := nodemaintenance.NewStore(5)
 
 	jobA := store.StartDrainForCluster(nodeName, restypes.DrainNodeOptions{Force: true}, clusterA, "Phase8 A")
 	_ = store.StartDrainForCluster(nodeName, restypes.DrainNodeOptions{}, clusterB, "Phase8 B")
 
 	reg := domain.New()
-	if err := RegisterNodeMaintenanceDomain(reg); err != nil {
+	if err := RegisterNodeMaintenanceDomain(reg, store); err != nil {
 		t.Fatalf("RegisterNodeMaintenanceDomain returned error: %v", err)
 	}
 	cfg, ok := reg.Get("object-maintenance")

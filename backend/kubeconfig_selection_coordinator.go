@@ -106,7 +106,7 @@ func (a *WorkspaceCoordinator) runSelectionMutationWithQueuePolicy(
 		}
 	})
 
-	a.appLogs.logger.Debug(
+	a.logger.Debug(
 		fmt.Sprintf("Selection mutation start (reason=%s generation=%d)", mutation.reason, mutation.generation),
 		"KubeconfigManager",
 	)
@@ -129,7 +129,7 @@ func (a *WorkspaceCoordinator) runSelectionMutationWithQueuePolicy(
 		sample.errorText = err.Error()
 	}
 	a.selectionDiagnosticsFinalize(sample)
-	if a.appLogs.logger != nil {
+	if a.logger != nil {
 		status := "ok"
 		if sample.superseded {
 			status = "superseded"
@@ -138,7 +138,7 @@ func (a *WorkspaceCoordinator) runSelectionMutationWithQueuePolicy(
 		} else if sample.failed {
 			status = "failed"
 		}
-		a.appLogs.logger.Debug(
+		a.logger.Debug(
 			fmt.Sprintf(
 				"Selection mutation complete (reason=%s generation=%d status=%s queueMs=%d totalMs=%d intentMs=%d clientSyncMs=%d refreshMs=%d catalogMs=%d)",
 				reason,
@@ -169,7 +169,7 @@ func (a *WorkspaceCoordinator) runSelectionMutationAsync(reason string, fn func(
 	}
 	go func() {
 		if err := a.runSelectionMutation(reason, fn); err != nil {
-			a.appLogs.logger.Warn(
+			a.logger.Warn(
 				fmt.Sprintf("Selection mutation failed (reason=%s): %v", reason, err),
 				"KubeconfigManager",
 			)

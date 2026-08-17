@@ -38,23 +38,21 @@ type applicationUpdateRuntime struct {
 	PackageMarkerPath string
 }
 
-// ConfigureApplicationUpdates constructs the one process-owned update
-// coordinator before application.Run without adding a frontend service method.
-func ConfigureApplicationUpdates(coordinator *UpdateCoordinator, options ApplicationUpdateOptions) {
-	coordinator.configureApplicationUpdates(options)
-}
-
-func (u *UpdateCoordinator) configureApplicationUpdates(options ApplicationUpdateOptions) {
+func (u *UpdateCoordinator) initializeApplicationUpdates(options ApplicationUpdateOptions) {
 	if u == nil {
 		return
 	}
 	u.resetState, u.resetStateErr = newApplicationUpdateStateStore(options)
 	configuration := u.prepareApplicationUpdateConfiguration(options)
+	var updateState appupdates.UpdateState
+	if configuration.updateState != nil {
+		updateState = configuration.updateState
+	}
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: configuration.client, Provider: configuration.provider,
 		Eligibility: configuration.eligibility, PublicKey: applicationUpdatePublicKey,
 		Platform: runtime.GOOS, Architecture: runtime.GOARCH,
-		TempRoot: options.TempRoot, UpdateState: configuration.updateState,
+		TempRoot: options.TempRoot, UpdateState: updateState,
 		Reconciled: configuration.reconciled, SkippedVersion: configuration.skippedVersion,
 		OnChange: u.storeApplicationUpdateSnapshot,
 	})

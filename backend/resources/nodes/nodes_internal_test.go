@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -43,7 +44,7 @@ func TestStartDrainWithCompletionPassesCreatedJobID(t *testing.T) {
 	deps := testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(cgofake.NewClientset()))
 	deps.ClusterID = "cluster-a-" + t.Name()
 	deps.ClusterName = "Cluster A"
-	service := NewService(deps)
+	service := NewService(deps, nodemaintenance.NewStore(5))
 	completed := make(chan string, 1)
 
 	job, err := service.StartDrainWithCompletion(context.Background(), "missing-"+t.Name(), restypes.DrainNodeOptions{}, func(jobID string) {

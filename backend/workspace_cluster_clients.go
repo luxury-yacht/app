@@ -12,9 +12,9 @@ func (a *WorkspaceCoordinator) initializeSelectedClustersAtStartup() (int, error
 		return 0, settingsErr
 	}
 	if snapshot.Provenance == PreferencesStartupDefault {
-		a.appLogs.logger.Info("Initialized app settings with defaults", logsources.App)
+		a.logger.Info("Initialized app settings with defaults", logsources.App)
 	} else {
-		a.appLogs.logger.Debug("Application settings loaded successfully", logsources.App)
+		a.logger.Debug("Application settings loaded successfully", logsources.App)
 	}
 
 	selectedCount := 0
@@ -25,7 +25,7 @@ func (a *WorkspaceCoordinator) initializeSelectedClustersAtStartup() (int, error
 			return nil
 		}
 
-		a.appLogs.logger.Info(fmt.Sprintf("Connecting to %d selected cluster(s)", selectedCount), logsources.App)
+		a.logger.Info(fmt.Sprintf("Connecting to %d selected cluster(s)", selectedCount), logsources.App)
 		initializer := a.kubeClientInitializer
 		if initializer == nil {
 			initializer = a.initKubernetesClient
@@ -36,7 +36,7 @@ func (a *WorkspaceCoordinator) initializeSelectedClustersAtStartup() (int, error
 }
 
 func (a *WorkspaceCoordinator) initKubernetesClient() (err error) {
-	a.appLogs.logger.Info("Initializing Kubernetes client", logsources.KubernetesClient)
+	a.logger.Info("Initializing Kubernetes client", logsources.KubernetesClient)
 
 	selections, err := a.selectedKubeconfigSelections()
 	if err != nil {
@@ -50,18 +50,14 @@ func (a *WorkspaceCoordinator) initKubernetesClient() (err error) {
 		return err
 	}
 
-	if a.refreshService.Load() == nil || a.refreshAggregates.Load() == nil || a.currentRefreshRuntimeContext() == nil {
-		if err := a.setupRefreshSubsystem(); err != nil {
-			a.appLogs.logger.ErrorWithCause(err, "Failed to initialise refresh subsystem", logsources.Refresh)
-			return fmt.Errorf("failed to initialise refresh subsystem: %w", err)
-		}
-	} else if err := a.updateRefreshSubsystemSelections(selections); err != nil {
-		return err
+	if err := a.refresh.updateRefreshSubsystemSelections(selections); err != nil {
+		a.logger.ErrorWithCause(err, "Failed to initialise refresh subsystem", logsources.Refresh)
+		return fmt.Errorf("failed to initialise refresh subsystem: %w", err)
 	}
 
 	a.startObjectCatalog()
 
-	a.appLogs.logger.Info(fmt.Sprintf("Successfully established Kubernetes clients for %d cluster(s)", len(selections)), logsources.KubernetesClient)
+	a.logger.Info(fmt.Sprintf("Successfully established Kubernetes clients for %d cluster(s)", len(selections)), logsources.KubernetesClient)
 	// Note: Global connection status tracking has been removed. Connection health
 	// is now tracked per-cluster via cluster:health:* and cluster:auth:* events.
 
@@ -75,11 +71,11 @@ func (a *WorkspaceCoordinator) restoreKubeconfigSelection() {
 	if len(savedSelections) > 0 {
 		normalized = make([]string, 0, len(savedSelections))
 		for _, selection := range savedSelections {
-			parsed, err := a.normalizeKubeconfigSelection(selection)
+			parsed, err := a.clusterRuntime.normalizeKubeconfigSelection(selection)
 			if err != nil {
 				continue
 			}
-			if err := a.validateKubeconfigSelection(parsed); err != nil {
+			if err := a.clusterRuntime.validateKubeconfigSelection(parsed); err != nil {
 				continue
 			}
 			normalized = append(normalized, parsed.String())

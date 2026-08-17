@@ -536,7 +536,7 @@ func TestStartupBetaExpiryReportsAndStopsInteractiveStartup(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	reporter := &recordingErrorReporter{}
-	app := NewApplicationRuntime(nil, reporter)
+	app := NewApplicationRuntime(nil, ApplicationRuntimeOptions{Reporter: reporter})
 	app.Lifecycle.signalState().eventEmitter = func(context.Context, string, ...interface{}) {}
 	updates := &fakeApplicationUpdateCoordinator{}
 	app.Updates.coordinator = updates

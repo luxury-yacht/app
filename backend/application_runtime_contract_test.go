@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -65,6 +66,95 @@ func TestBackendOwnersDoNotRetainTheCompositionRoot(t *testing.T) {
 	require.Empty(t, violations, "backend owners must receive focused collaborators, never the composition root")
 }
 
+func TestBackendOwnersDoNotEmbedOtherOwners(t *testing.T) {
+	ownerTypes := []reflect.Type{
+		reflect.TypeOf(ApplicationLifecycle{}),
+		reflect.TypeOf(AppLogService{}),
+		reflect.TypeOf(ClusterAttentionService{}),
+		reflect.TypeOf(ClusterRuntimeManager{}),
+		reflect.TypeOf(ClusterWorkspaceProjection{}),
+		reflect.TypeOf(DataManagementCoordinator{}),
+		reflect.TypeOf(DesktopService{}),
+		reflect.TypeOf(DesktopShell{}),
+		reflect.TypeOf(ErrorReportingService{}),
+		reflect.TypeOf(FavoritesService{}),
+		reflect.TypeOf(OperationsCoordinator{}),
+		reflect.TypeOf(PreferencesService{}),
+		reflect.TypeOf(RefreshCoordinator{}),
+		reflect.TypeOf(ResourceGateway{}),
+		reflect.TypeOf(UIStateStore{}),
+		reflect.TypeOf(UpdateCoordinator{}),
+		reflect.TypeOf(WorkspaceCoordinator{}),
+	}
+	ownersByType := make(map[reflect.Type]struct{}, len(ownerTypes))
+	for _, owner := range ownerTypes {
+		ownersByType[owner] = struct{}{}
+	}
+
+	var violations []string
+	for _, owner := range ownerTypes {
+		for index := 0; index < owner.NumField(); index++ {
+			field := owner.Field(index)
+			if !field.Anonymous {
+				continue
+			}
+			fieldType := field.Type
+			if fieldType.Kind() == reflect.Pointer {
+				fieldType = fieldType.Elem()
+			}
+			if _, isOwner := ownersByType[fieldType]; isOwner {
+				violations = append(violations, owner.Name()+" embeds "+fieldType.Name())
+			}
+		}
+	}
+
+	sort.Strings(violations)
+	require.Empty(t, violations, "owners must depend on narrow capabilities, never embed another owner")
+}
+
+func TestBackendOwnersReferenceOtherOwnersOnlyThroughInterfaces(t *testing.T) {
+	ownerTypes := []reflect.Type{
+		reflect.TypeOf(ApplicationLifecycle{}),
+		reflect.TypeOf(AppLogService{}),
+		reflect.TypeOf(ClusterAttentionService{}),
+		reflect.TypeOf(ClusterRuntimeManager{}),
+		reflect.TypeOf(ClusterWorkspaceProjection{}),
+		reflect.TypeOf(DataManagementCoordinator{}),
+		reflect.TypeOf(DesktopService{}),
+		reflect.TypeOf(DesktopShell{}),
+		reflect.TypeOf(ErrorReportingService{}),
+		reflect.TypeOf(FavoritesService{}),
+		reflect.TypeOf(OperationsCoordinator{}),
+		reflect.TypeOf(PreferencesService{}),
+		reflect.TypeOf(RefreshCoordinator{}),
+		reflect.TypeOf(ResourceGateway{}),
+		reflect.TypeOf(UIStateStore{}),
+		reflect.TypeOf(UpdateCoordinator{}),
+		reflect.TypeOf(WorkspaceCoordinator{}),
+	}
+	ownersByType := make(map[reflect.Type]struct{}, len(ownerTypes))
+	for _, owner := range ownerTypes {
+		ownersByType[owner] = struct{}{}
+	}
+
+	var violations []string
+	for _, owner := range ownerTypes {
+		for index := 0; index < owner.NumField(); index++ {
+			field := owner.Field(index)
+			fieldType := field.Type
+			if fieldType.Kind() != reflect.Pointer {
+				continue
+			}
+			if _, isOwner := ownersByType[fieldType.Elem()]; isOwner {
+				violations = append(violations, owner.Name()+"."+field.Name+" references "+fieldType.Elem().Name())
+			}
+		}
+	}
+
+	sort.Strings(violations)
+	require.Empty(t, violations, "owner dependencies must be consumer-defined interfaces")
+}
+
 func TestApplicationRuntimeUsesOwnerConstructorsInsteadOfFieldPoking(t *testing.T) {
 	parsed, err := parser.ParseFile(token.NewFileSet(), "app.go", nil, 0)
 	require.NoError(t, err)
@@ -108,6 +198,153 @@ func TestApplicationRuntimeUsesOwnerConstructorsInsteadOfFieldPoking(t *testing.
 	require.Empty(t, violations, "owners must receive dependencies through constructors")
 }
 
+func TestApplicationRuntimeHasNoPostConstructionBinding(t *testing.T) {
+	parsed, err := parser.ParseFile(token.NewFileSet(), "app.go", nil, 0)
+	require.NoError(t, err)
+
+	var violations []string
+	ast.Inspect(parsed, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		name := selector.Sel.Name
+		if name == "Bind" || strings.HasPrefix(name, "Configure") || strings.HasPrefix(name, "configure") {
+			violations = append(violations, name)
+		}
+		return true
+	})
+
+	sort.Strings(violations)
+	require.Empty(t, violations, "production owners must be complete when their constructors return")
+}
+
+func TestMainDoesNotConfigureOwnersAfterRuntimeConstruction(t *testing.T) {
+	source, err := os.ReadFile("../main.go")
+	require.NoError(t, err)
+
+	for _, forbidden := range []string{
+		"ConfigureApplicationUpdates",
+		"ConfigureWorkspaceWindowCreator",
+	} {
+		require.NotContains(t, string(source), forbidden,
+			"composition options must be supplied before NewApplicationRuntime returns")
+	}
+}
+
+func TestProductionDoesNotUseProcessGlobalNodeMaintenanceState(t *testing.T) {
+	var violations []string
+	err := filepath.Walk(".", func(path string, info os.FileInfo, walkErr error) error {
+		require.NoError(t, walkErr)
+		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		source, readErr := os.ReadFile(path)
+		require.NoError(t, readErr)
+		if strings.Contains(string(source), "GlobalStore") {
+			violations = append(violations, path)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	sort.Strings(violations)
+	require.Empty(t, violations, "node-maintenance state must be composed once and injected into every producer and consumer")
+}
+
+func TestOwnerFixturesDoNotConfigureOwnersByPrivateFieldAssignment(t *testing.T) {
+	source, err := os.ReadFile("owner_fixtures_test.go")
+	require.NoError(t, err)
+
+	for _, forbidden := range []string{
+		".Lifecycle.clusterRuntime =",
+		".Lifecycle.refresh =",
+		".Lifecycle.workspace =",
+		".Lifecycle.operations =",
+		".Lifecycle.preferences =",
+		".Lifecycle.errorReporting =",
+		".Lifecycle.updates =",
+		".Preferences.effects =",
+		".Preferences.logger =",
+	} {
+		require.NotContains(t, string(source), forbidden,
+			"shared fixtures must mirror production constructor wiring")
+	}
+}
+
+func TestAppGoContainsCompositionOnly(t *testing.T) {
+	parsed, err := parser.ParseFile(token.NewFileSet(), "app.go", nil, 0)
+	require.NoError(t, err)
+
+	var violations []string
+	for _, declaration := range parsed.Decls {
+		switch declaration := declaration.(type) {
+		case *ast.FuncDecl:
+			if declaration.Recv != nil || declaration.Name.Name != "NewApplicationRuntime" {
+				violations = append(violations, "function "+declaration.Name.Name)
+			}
+		case *ast.GenDecl:
+			if declaration.Tok != token.TYPE {
+				continue
+			}
+			for _, specification := range declaration.Specs {
+				typeSpec, ok := specification.(*ast.TypeSpec)
+				if ok && typeSpec.Name.Name != "ApplicationRuntime" && typeSpec.Name.Name != "ApplicationRuntimeOptions" {
+					violations = append(violations, "type "+typeSpec.Name.Name)
+				}
+			}
+		}
+	}
+
+	sort.Strings(violations)
+	require.Empty(t, violations, "app.go must contain only the composition result and composition function")
+}
+
+func TestLegacyPreferenceCompatibilityMethodsRemainAbsent(t *testing.T) {
+	forbidden := map[string]struct{}{
+		"GetAppearanceModeInfo":                       {},
+		"SetAccentColor":                              {},
+		"SetAppearanceMode":                           {},
+		"SetAutoRefreshEnabled":                       {},
+		"SetBackgroundRefreshEnabled":                 {},
+		"SetDefaultObjectPanelPosition":               {},
+		"SetDimInactiveNamespaces":                    {},
+		"SetExclusiveNamespaces":                      {},
+		"SetGridTablePersistenceMode":                 {},
+		"SetKubernetesClientBurst":                    {},
+		"SetKubernetesClientQPS":                      {},
+		"SetLinkColor":                                {},
+		"SetObjPanelLogsAPITimestampFormat":           {},
+		"SetObjPanelLogsAPITimestampUseLocalTimeZone": {},
+		"SetObjPanelLogsBufferMaxSize":                {},
+		"SetObjPanelLogsTargetGlobalLimit":            {},
+		"SetObjPanelLogsTargetPerScopeLimit":          {},
+		"SetObjectPanelLayout":                        {},
+		"SetPaletteTint":                              {},
+		"SetPermissionSSRRFetchConcurrency":           {},
+		"SetUseShortResourceNames":                    {},
+	}
+
+	parsed, err := parser.ParseFile(token.NewFileSet(), "preferences_settings.go", nil, 0)
+	require.NoError(t, err)
+	var violations []string
+	for _, declaration := range parsed.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Recv == nil {
+			continue
+		}
+		if _, forbiddenMethod := forbidden[function.Name.Name]; forbiddenMethod {
+			violations = append(violations, function.Name.Name)
+		}
+	}
+
+	sort.Strings(violations)
+	require.Empty(t, violations, "tests must exercise UpdateAppPreferences instead of production-only compatibility methods")
+}
+
 func TestLegacyAppPrefixedProductionFilesRemainAbsent(t *testing.T) {
 	paths, err := filepath.Glob("app_*.go")
 	require.NoError(t, err)
@@ -129,92 +366,60 @@ func TestLegacyAppPrefixedProductionFilesRemainAbsent(t *testing.T) {
 	require.Empty(t, violations, "production files must be named for their focused owner")
 }
 
-type ownerSize struct {
-	Fields  int
-	Methods int
-}
-
-func TestBackendOwnerSizeDistributionRemainsReviewed(t *testing.T) {
-	ceilings := map[string]ownerSize{
-		"ApplicationLifecycle":         {Fields: 13, Methods: 23},
-		"AppLogService":                {Fields: 1, Methods: 7},
-		"ClusterAttentionService":      {Fields: 4, Methods: 17},
-		"ClusterRuntimeManager":        {Fields: 22, Methods: 70},
-		"ClusterWorkspaceProjection":   {Fields: 4, Methods: 5},
-		"ContainerLogsSelectionPolicy": {Fields: 1, Methods: 2},
-		"DataManagementCoordinator":    {Fields: 13, Methods: 14},
-		"DesktopService":               {Fields: 14, Methods: 91},
-		"DesktopShell":                 {Fields: 17, Methods: 44},
-		"ErrorReportingService":        {Fields: 7, Methods: 7},
-		"FavoritesService":             {Fields: 1, Methods: 11},
-		"OperationsCoordinator":        {Fields: 17, Methods: 41},
-		"PreferencesService":           {Fields: 13, Methods: 68},
-		"PermissionFetchPolicy":        {Fields: 1, Methods: 2},
-		"RefreshCoordinator":           {Fields: 47, Methods: 108},
-		"ResourceGateway":              {Fields: 16, Methods: 140},
-		"UIStateStore":                 {Fields: 1, Methods: 12},
-		"UpdateCoordinator":            {Fields: 8, Methods: 21},
-		"WorkspaceCoordinator":         {Fields: 27, Methods: 91},
+func TestProductionFilesBelongToOneStateOwner(t *testing.T) {
+	ownerNames := map[string]struct{}{
+		"ApplicationLifecycle": {}, "AppLogService": {}, "ClusterAttentionService": {},
+		"ClusterRuntimeManager": {}, "ClusterWorkspaceProjection": {}, "DataManagementCoordinator": {},
+		"DesktopService": {}, "DesktopShell": {}, "ErrorReportingService": {}, "FavoritesService": {},
+		"OperationsCoordinator": {}, "PreferencesService": {}, "RefreshCoordinator": {},
+		"ResourceGateway": {}, "UIStateStore": {}, "UpdateCoordinator": {}, "WorkspaceCoordinator": {},
 	}
-	measured := measuredOwnerSizes(t, ceilings)
-	for owner, ceiling := range ceilings {
-		actual := measured[owner]
-		require.Positivef(t, actual.Fields+actual.Methods, "tracked owner %s must exist", owner)
-		require.LessOrEqualf(t, actual.Fields, ceiling.Fields, "%s field count grew and needs review", owner)
-		require.LessOrEqualf(t, actual.Methods, ceiling.Methods, "%s method count grew and needs review", owner)
-	}
-}
-
-func measuredOwnerSizes(t testing.TB, owners map[string]ownerSize) map[string]ownerSize {
-	t.Helper()
-	result := make(map[string]ownerSize, len(owners))
-	for owner := range owners {
-		result[owner] = ownerSize{}
+	allowed := map[string]struct{}{
+		// The generator deliberately emits the internal resource owner and its
+		// sole Wails transport projection from one resource-kind registry.
+		"resource_details_generated.go": {},
 	}
 	paths, err := filepath.Glob("*.go")
 	require.NoError(t, err)
+	var violations []string
 	for _, path := range paths {
 		if strings.HasSuffix(path, "_test.go") {
 			continue
 		}
+		if _, ok := allowed[filepath.Base(path)]; ok {
+			continue
+		}
 		parsed, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 		require.NoError(t, parseErr)
+		owners := make(map[string]struct{})
 		for _, declaration := range parsed.Decls {
-			switch declaration := declaration.(type) {
-			case *ast.GenDecl:
-				for _, specification := range declaration.Specs {
-					typeSpec, ok := specification.(*ast.TypeSpec)
-					if !ok {
-						continue
-					}
-					size, tracked := result[typeSpec.Name.Name]
-					structure, isStruct := typeSpec.Type.(*ast.StructType)
-					if !tracked || !isStruct {
-						continue
-					}
-					for _, field := range structure.Fields.List {
-						if len(field.Names) == 0 {
-							size.Fields++
-						} else {
-							size.Fields += len(field.Names)
-						}
-					}
-					result[typeSpec.Name.Name] = size
-				}
-			case *ast.FuncDecl:
-				if declaration.Recv == nil || len(declaration.Recv.List) != 1 {
-					continue
-				}
-				owner := receiverIdentifier(declaration.Recv.List[0].Type)
-				size, tracked := result[owner]
-				if tracked {
-					size.Methods++
-					result[owner] = size
-				}
+			function, ok := declaration.(*ast.FuncDecl)
+			if !ok || function.Recv == nil || len(function.Recv.List) != 1 {
+				continue
+			}
+			receiver := function.Recv.List[0].Type
+			if pointer, ok := receiver.(*ast.StarExpr); ok {
+				receiver = pointer.X
+			}
+			identifier, _ := receiver.(*ast.Ident)
+			if identifier == nil {
+				continue
+			}
+			if _, isOwner := ownerNames[identifier.Name]; isOwner {
+				owners[identifier.Name] = struct{}{}
 			}
 		}
+		if len(owners) > 1 {
+			names := make([]string, 0, len(owners))
+			for owner := range owners {
+				names = append(names, owner)
+			}
+			sort.Strings(names)
+			violations = append(violations, filepath.Base(path)+": "+strings.Join(names, ", "))
+		}
 	}
-	return result
+	sort.Strings(violations)
+	require.Empty(t, violations, "each production file must have one state owner")
 }
 
 func isPointerToIdentifier(expression ast.Expr, name string) bool {
@@ -226,23 +431,13 @@ func isPointerToIdentifier(expression ast.Expr, name string) bool {
 	return ok && identifier.Name == name
 }
 
-func receiverIdentifier(expression ast.Expr) string {
-	if pointer, ok := expression.(*ast.StarExpr); ok {
-		expression = pointer.X
-	}
-	identifier, _ := expression.(*ast.Ident)
-	if identifier == nil {
-		return ""
-	}
-	return identifier.Name
-}
-
 func TestApplicationRuntimeIsReservedForCompositionAndLifecycleTests(t *testing.T) {
 	allowed := map[string]struct{}{
-		"application_lifecycle_init_test.go":   {},
-		"application_lifecycle_test.go":        {},
-		"desktop_shell_runtime_test.go":        {},
-		"application_runtime_contract_test.go": {},
+		"application_lifecycle_init_test.go":       {},
+		"application_lifecycle_test.go":            {},
+		"desktop_shell_runtime_test.go":            {},
+		"application_runtime_contract_test.go":     {},
+		"application_runtime_construction_test.go": {},
 	}
 	paths, err := filepath.Glob("*_test.go")
 	require.NoError(t, err)

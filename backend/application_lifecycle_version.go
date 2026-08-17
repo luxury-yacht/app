@@ -35,10 +35,10 @@ func (a *ApplicationLifecycle) checkBetaExpiry() error {
 
 	// Calculate days until expiry for logging
 	daysLeft := int(time.Until(expiryTime).Hours() / 24)
-	if daysLeft <= 7 && a != nil && a.appLogs.logger != nil {
+	if daysLeft <= 7 && a != nil && a.logger != nil {
 		// Warning if expiring soon
 		message := fmt.Sprintf("Beta build expires in %d day(s) on %s", daysLeft, expiryTime.Format("January 2, 2006"))
-		a.appLogs.logger.Warn(message, logsources.App)
+		a.logger.Warn(message, logsources.App)
 	}
 
 	return nil

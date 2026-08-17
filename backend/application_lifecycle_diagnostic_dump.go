@@ -112,6 +112,6 @@ func (a *ApplicationLifecycle) startDiagnosticDumpHandler(ctx context.Context) {
 		return
 	}
 	startGoroutineDumpOnSignal(ctx, diagnosticsDumpDir(), func(msg string) {
-		a.appLogs.logger.Info(msg, logsources.App)
+		a.logger.Info(msg, logsources.App)
 	})
 }
