@@ -34,8 +34,8 @@ func TestResponseCacheEvictsOnLimit(t *testing.T) {
 }
 
 func TestResponseCacheKeyScopesSelection(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	gateway := newResourceGatewayFixture().gateway
 
-	key := app.responseCacheKey("config:ctx", "detail::pod")
+	key := gateway.responseCacheKey("config:ctx", "detail::pod")
 	require.Equal(t, "config:ctx|detail::pod", key)
 }

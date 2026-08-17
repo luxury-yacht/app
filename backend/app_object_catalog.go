@@ -500,14 +500,13 @@ func waitForAPIExtensionsFactorySync(ctx context.Context, factory apiextinformer
 }
 
 // GetCatalogDiagnostics returns the latest catalog telemetry snapshot for diagnostics tools.
-func (a *App) GetCatalogDiagnostics() (*CatalogDiagnostics, error) {
-	entries := a.snapshotObjectCatalogEntries()
+func (g *ResourceGateway) GetCatalogDiagnostics() (*CatalogDiagnostics, error) {
+	entries := g.snapshotObjectCatalogEntries()
 	diag := &CatalogDiagnostics{Enabled: len(entries) > 0}
-	if a.telemetryRecorder == nil {
+	summary, ok := g.telemetrySummary()
+	if !ok {
 		return diag, nil
 	}
-
-	summary := a.telemetryRecorder.SnapshotSummary()
 	if summary.Catalog == nil {
 		return diag, nil
 	}
@@ -601,11 +600,11 @@ func mergeCatalogHealth(diag *CatalogDiagnostics, health *CatalogHealth) {
 
 // FindCatalogObjectMatch resolves a single catalog object in the requested
 // cluster by canonical identity.
-func (a *App) FindCatalogObjectMatch(
+func (g *ResourceGateway) FindCatalogObjectMatch(
 	clusterID, namespace, group, version, kind, name string,
 ) (*objectcatalog.Summary, error) {
-	if a == nil {
-		return nil, fmt.Errorf("app is not initialised")
+	if g == nil {
+		return nil, fmt.Errorf("resource gateway is not initialised")
 	}
 
 	trimmedClusterID := clusterID
@@ -622,7 +621,7 @@ func (a *App) FindCatalogObjectMatch(
 		return nil, fmt.Errorf("name is required")
 	}
 
-	svc := a.objectCatalogServiceForCluster(trimmedClusterID)
+	svc := g.objectCatalogServiceForCluster(trimmedClusterID)
 	if svc == nil {
 		return nil, fmt.Errorf("object catalog service unavailable for cluster %q", trimmedClusterID)
 	}
@@ -637,9 +636,9 @@ func (a *App) FindCatalogObjectMatch(
 
 // FindCatalogObjectByUID resolves a single catalog object in the requested
 // cluster by resource UID.
-func (a *App) FindCatalogObjectByUID(clusterID, uid string) (*objectcatalog.Summary, error) {
-	if a == nil {
-		return nil, fmt.Errorf("app is not initialised")
+func (g *ResourceGateway) FindCatalogObjectByUID(clusterID, uid string) (*objectcatalog.Summary, error) {
+	if g == nil {
+		return nil, fmt.Errorf("resource gateway is not initialised")
 	}
 
 	trimmedClusterID := clusterID
@@ -651,7 +650,7 @@ func (a *App) FindCatalogObjectByUID(clusterID, uid string) (*objectcatalog.Summ
 		return nil, fmt.Errorf("uid is required")
 	}
 
-	svc := a.objectCatalogServiceForCluster(trimmedClusterID)
+	svc := g.objectCatalogServiceForCluster(trimmedClusterID)
 	if svc == nil {
 		return nil, fmt.Errorf("object catalog service unavailable for cluster %q", trimmedClusterID)
 	}
@@ -676,8 +675,8 @@ type catalogHydrationRequest struct {
 // current catalog page. It intentionally works only on caller-provided page
 // rows so production Custom tables keep catalog-backed paging without starting
 // the legacy full CRD fanout domains.
-func (a *App) HydrateCatalogCustomRows(clusterID string, rows []snapshot.ResourceQueryRow) ([]snapshot.CustomResourceSummary, error) {
-	ctx, client, meta, requests, err := a.prepareCatalogHydration(clusterID, rows)
+func (g *ResourceGateway) HydrateCatalogCustomRows(clusterID string, rows []snapshot.ResourceQueryRow) ([]snapshot.CustomResourceSummary, error) {
+	ctx, client, meta, requests, err := g.prepareCatalogHydration(clusterID, rows)
 	if err != nil {
 		return nil, err
 	}
@@ -688,20 +687,23 @@ func (a *App) HydrateCatalogCustomRows(clusterID string, rows []snapshot.Resourc
 	return compactCatalogHydrationResults(result, included), nil
 }
 
-func (a *App) prepareCatalogHydration(clusterID string, rows []snapshot.ResourceQueryRow) (context.Context, dynamic.Interface, snapshot.ClusterMeta, []catalogHydrationRequest, error) {
-	if a == nil {
-		return nil, nil, snapshot.ClusterMeta{}, nil, fmt.Errorf("app is not initialised")
+func (g *ResourceGateway) prepareCatalogHydration(clusterID string, rows []snapshot.ResourceQueryRow) (context.Context, dynamic.Interface, snapshot.ClusterMeta, []catalogHydrationRequest, error) {
+	if g == nil {
+		return nil, nil, snapshot.ClusterMeta{}, nil, fmt.Errorf("resource gateway is not initialised")
 	}
 	trimmedClusterID := strings.TrimSpace(clusterID)
 	if trimmedClusterID == "" {
 		return nil, nil, snapshot.ClusterMeta{}, nil, fmt.Errorf("cluster ID is required")
 	}
-	clients := a.clusterClientsForID(trimmedClusterID)
-	if clients == nil || clients.dynamicClient == nil {
+	deps, _, err := g.resolveClusterDependencies(trimmedClusterID)
+	if err != nil {
+		return nil, nil, snapshot.ClusterMeta{}, nil, err
+	}
+	if deps.DynamicClient == nil {
 		return nil, nil, snapshot.ClusterMeta{}, nil, fmt.Errorf("dynamic client unavailable for cluster %q", trimmedClusterID)
 	}
-	meta := snapshot.ClusterMeta{ClusterID: clients.meta.ID, ClusterName: clients.meta.Name}
-	ctx := a.CtxOrBackground()
+	meta := snapshot.ClusterMeta{ClusterID: deps.ClusterID, ClusterName: deps.ClusterName}
+	ctx := g.CtxOrBackground()
 	requests := make([]catalogHydrationRequest, 0, len(rows))
 	for _, row := range rows {
 		request, err := catalogHydrationRequestForRow(trimmedClusterID, row)
@@ -710,7 +712,7 @@ func (a *App) prepareCatalogHydration(clusterID string, rows []snapshot.Resource
 		}
 		requests = append(requests, request)
 	}
-	return ctx, clients.dynamicClient, meta, requests, nil
+	return ctx, deps.DynamicClient, meta, requests, nil
 }
 
 func catalogHydrationRequestForRow(clusterID string, row snapshot.ResourceQueryRow) (catalogHydrationRequest, error) {

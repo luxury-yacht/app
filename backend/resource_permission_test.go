@@ -21,6 +21,14 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
+func newResourcePermissionFixture(clusterID string, client *cgofake.Clientset, dynamicClient *dynamicfake.FakeDynamicClient) *resourceGatewayFixture {
+	fixture := newResourceGatewayFixture()
+	fixture.setCluster(clusterID, &clusterClients{
+		meta: ClusterMeta{ID: clusterID, Name: clusterID}, client: client, dynamicClient: dynamicClient,
+	})
+	return fixture
+}
+
 func TestRestartWorkloadRequiresPatchPermission(t *testing.T) {
 	client := cgofake.NewClientset(&appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
@@ -32,16 +40,9 @@ func TestRestartWorkloadRequiresPatchPermission(t *testing.T) {
 	})
 	denySelfSubjectAccessReviews(client, "no patch deployments")
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
-		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
-		kubeconfigPath:    "/path",
-		kubeconfigContext: "ctx",
-		client:            client,
-	})
+	gateway := newResourcePermissionFixture("cluster-a", client, nil).gateway
 
-	err := app.restartWorkload("cluster-a", "default", "apps", "v1", "Deployment", "demo")
+	err := gateway.restartWorkload("cluster-a", "default", "apps", "v1", "Deployment", "demo")
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}
@@ -57,17 +58,9 @@ func TestDeleteResourceByGVKRequiresDeletePermission(t *testing.T) {
 	denySelfSubjectAccessReviews(client, "no delete pods")
 	dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
-		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
-		kubeconfigPath:    "/path",
-		kubeconfigContext: "ctx",
-		client:            client,
-		dynamicClient:     dynamicClient,
-	})
+	gateway := newResourcePermissionFixture("cluster-a", client, dynamicClient).gateway
 
-	err := app.deleteResourceByGVK("cluster-a", "v1", "Pod", "default", "demo")
+	err := gateway.deleteResourceByGVK("cluster-a", "v1", "Pod", "default", "demo")
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}
@@ -95,16 +88,9 @@ func TestTriggerCronJobRequiresJobCreatePermission(t *testing.T) {
 	})
 	denySelfSubjectAccessReviews(client, "no create jobs")
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
-		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
-		kubeconfigPath:    "/path",
-		kubeconfigContext: "ctx",
-		client:            client,
-	})
+	gateway := newResourcePermissionFixture("cluster-a", client, nil).gateway
 
-	_, err := app.triggerCronJob("cluster-a", "default", "backup")
+	_, err := gateway.triggerCronJob("cluster-a", "default", "backup")
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}
@@ -121,16 +107,9 @@ func TestSuspendCronJobRequiresPatchPermission(t *testing.T) {
 	})
 	denySelfSubjectAccessReviews(client, "no patch cronjobs")
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
-		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
-		kubeconfigPath:    "/path",
-		kubeconfigContext: "ctx",
-		client:            client,
-	})
+	gateway := newResourcePermissionFixture("cluster-a", client, nil).gateway
 
-	err := app.suspendCronJob("cluster-a", "default", "backup", true)
+	err := gateway.suspendCronJob("cluster-a", "default", "backup", true)
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}
@@ -184,13 +163,13 @@ func TestDrainPodPermissionFollowsEvictionSupport(t *testing.T) {
 				return true, review, nil
 			})
 
-			app := NewApp(nil)
+			gateway := newResourceGatewayFixture().gateway
 			deps := common.Dependencies{
 				KubernetesClient: client,
 				ClusterID:        "cluster-a",
 			}
 			deps.ResourceResolver = objectcatalog.NewResourceResolver(deps, nil)
-			err := app.requireDrainPodPermission(context.Background(), deps, DrainNodeOptions{DisableEviction: tc.disableEviction})
+			err := gateway.requireDrainPodPermission(context.Background(), deps, DrainNodeOptions{DisableEviction: tc.disableEviction})
 			if err != nil {
 				t.Fatalf("requireDrainPodPermission: %v", err)
 			}
@@ -212,14 +191,7 @@ func TestCancelDrainNodeJobRequiresNodeMaintenancePermission(t *testing.T) {
 	})
 	denySelfSubjectAccessReviews(client, "no node maintenance")
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	registerTestClusterWithClients(app, clusterID, &clusterClients{
-		meta:              ClusterMeta{ID: clusterID, Name: clusterID},
-		kubeconfigPath:    "/path",
-		kubeconfigContext: "ctx",
-		client:            client,
-	})
+	fixture := newResourcePermissionFixture(clusterID, client, nil)
 
 	job := nodemaintenance.GlobalStore().StartDrainForCluster(
 		nodeName,
@@ -227,7 +199,7 @@ func TestCancelDrainNodeJobRequiresNodeMaintenancePermission(t *testing.T) {
 		clusterID,
 		clusterID,
 	)
-	err := app.operations.CancelDrainNodeJob(clusterID, job.ID)
+	err := fixture.gateway.operations.CancelDrainNodeJob(clusterID, job.ID)
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}

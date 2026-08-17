@@ -581,7 +581,7 @@ func TestSetSelectedKubeconfigsKeepsResponseCacheClusterScopedDuringChurn(t *tes
 	setRefreshRuntimeContextForTest(app, context.Background())
 	setRefreshServiceReadyForTest(app)
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
-	app.responseCache = newResponseCache(time.Minute, 64)
+	app.resources.responseCache = newResponseCache(time.Minute, 64)
 
 	selectionA := kubeconfigSelection{Path: "/path/a", Context: "ctx-a"}
 	selectionB := kubeconfigSelection{Path: "/path/b", Context: "ctx-b"}
@@ -613,19 +613,19 @@ func TestSetSelectedKubeconfigsKeepsResponseCacheClusterScopedDuringChurn(t *tes
 	}
 
 	const cacheKey = "pod-detailed:default:nginx"
-	app.responseCacheStore(clusterA, cacheKey, "cluster-a-value")
-	app.responseCacheStore(clusterB, cacheKey, "cluster-b-value")
+	app.resources.responseCacheStore(clusterA, cacheKey, "cluster-a-value")
+	app.resources.responseCacheStore(clusterB, cacheKey, "cluster-b-value")
 
 	require.NoError(t, app.SetSelectedKubeconfigs([]string{selectionB.String()}))
 
-	valueB, ok := app.responseCacheLookup(clusterB, cacheKey)
+	valueB, ok := app.resources.responseCacheLookup(clusterB, cacheKey)
 	require.True(t, ok, "remaining cluster cache entry should still be available")
 	require.Equal(t, "cluster-b-value", valueB)
 
-	valueA, ok := app.responseCacheLookup(clusterA, cacheKey)
+	valueA, ok := app.resources.responseCacheLookup(clusterA, cacheKey)
 	require.True(t, ok, "removed cluster cache entry should stay cluster-scoped")
 	require.Equal(t, "cluster-a-value", valueA)
 
-	_, ok = app.responseCacheLookup("cluster-c", cacheKey)
+	_, ok = app.resources.responseCacheLookup("cluster-c", cacheKey)
 	require.False(t, ok, "other clusters must not see cached values for different cluster IDs")
 }

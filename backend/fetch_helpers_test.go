@@ -20,10 +20,10 @@ import (
 )
 
 func TestFetchResourceErrorEmits(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newResourceGatewayFixture()
+	gateway := fixture.gateway
 	var emitted *BackendErrorEvent
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	fixture.emitEvent = func(name string, args ...interface{}) {
 		if name == "backend-error" && len(args) > 0 {
 			if payload, ok := args[0].(BackendErrorEvent); ok {
 				emitted = &payload
@@ -31,7 +31,7 @@ func TestFetchResourceErrorEmits(t *testing.T) {
 		}
 	}
 
-	value, err := FetchResource(app, "cacheKey", "Widget", "default/foo", func() (string, error) {
+	value, err := FetchResource(gateway, "cacheKey", "Widget", "default/foo", func() (string, error) {
 		return "", errors.New("boom")
 	})
 
@@ -44,13 +44,14 @@ func TestFetchResourceErrorEmits(t *testing.T) {
 }
 
 func TestFetchResourceSuccess(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newResourceGatewayFixture()
+	gateway := fixture.gateway
 	called := false
-	app.eventEmitter = func(context.Context, string, ...interface{}) {
+	fixture.emitEvent = func(string, ...interface{}) {
 		called = true
 	}
 
-	value, err := FetchResource(app, "cache", "Widget", "id", func() (string, error) {
+	value, err := FetchResource(gateway, "cache", "Widget", "id", func() (string, error) {
 		return "hello", nil
 	})
 
@@ -60,18 +61,19 @@ func TestFetchResourceSuccess(t *testing.T) {
 }
 
 func TestFetchResourceUsesCache(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.responseCache = newResponseCache(time.Minute, 10)
+	fixture := newResourceGatewayFixture()
+	gateway := fixture.gateway
+	gateway.responseCache = newResponseCache(time.Minute, 10)
 	callCount := 0
 
-	value, err := FetchResource(app, "cache-key", "Widget", "id", func() (string, error) {
+	value, err := FetchResource(gateway, "cache-key", "Widget", "id", func() (string, error) {
 		callCount++
 		return "cached", nil
 	})
 	require.NoError(t, err)
 	require.Equal(t, "cached", value)
 
-	value, err = FetchResource(app, "cache-key", "Widget", "id", func() (string, error) {
+	value, err = FetchResource(gateway, "cache-key", "Widget", "id", func() (string, error) {
 		callCount++
 		return "fresh", nil
 	})
@@ -81,17 +83,18 @@ func TestFetchResourceUsesCache(t *testing.T) {
 }
 
 func TestFetchResourceSkipsCacheWhenKeyEmpty(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.responseCache = newResponseCache(time.Minute, 10)
+	fixture := newResourceGatewayFixture()
+	gateway := fixture.gateway
+	gateway.responseCache = newResponseCache(time.Minute, 10)
 	callCount := 0
 
-	_, err := FetchResource(app, "", "Widget", "id", func() (string, error) {
+	_, err := FetchResource(gateway, "", "Widget", "id", func() (string, error) {
 		callCount++
 		return "first", nil
 	})
 	require.NoError(t, err)
 
-	_, err = FetchResource(app, "", "Widget", "id", func() (string, error) {
+	_, err = FetchResource(gateway, "", "Widget", "id", func() (string, error) {
 		callCount++
 		return "second", nil
 	})
@@ -100,17 +103,17 @@ func TestFetchResourceSkipsCacheWhenKeyEmpty(t *testing.T) {
 }
 
 func TestFetchResourceListErrorEmits(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	fixture := newResourceGatewayFixture()
+	gateway := fixture.gateway
 	var emitted *BackendErrorEvent
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	fixture.emitEvent = func(name string, args ...interface{}) {
 		if name == "backend-error" && len(args) > 0 {
 			payload := args[0].(BackendErrorEvent)
 			emitted = &payload
 		}
 	}
 
-	_, err := FetchResourceList(app, "test-cluster", "Widget", "default", func() ([]string, error) {
+	_, err := FetchResourceList(gateway, "test-cluster", "Widget", "default", func() ([]string, error) {
 		return nil, errors.New("boom")
 	})
 
@@ -122,7 +125,8 @@ func TestFetchResourceListErrorEmits(t *testing.T) {
 }
 
 func TestFetchNamespacedResourceRequiresObjectIdentity(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newResourceGatewayFixture()
+	gateway := fixture.gateway
 
 	tests := []struct {
 		name      string
@@ -139,7 +143,7 @@ func TestFetchNamespacedResourceRequiresObjectIdentity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			called := false
-			_, err := FetchNamespacedResource(app, common.Dependencies{}, "cluster-1", "Widget", tt.namespace, tt.object, func(context.Context) (string, error) {
+			_, err := FetchNamespacedResource(gateway, common.Dependencies{}, "cluster-1", "Widget", tt.namespace, tt.object, func(context.Context) (string, error) {
 				called = true
 				return "unexpected", nil
 			})
@@ -151,12 +155,13 @@ func TestFetchNamespacedResourceRequiresObjectIdentity(t *testing.T) {
 }
 
 func TestFetchClusterResourceRequiresObjectName(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newResourceGatewayFixture()
+	gateway := fixture.gateway
 
 	for _, name := range []string{"", "  "} {
 		t.Run("name="+name, func(t *testing.T) {
 			called := false
-			_, err := FetchClusterResource(app, common.Dependencies{}, "cluster-1", "Widget", name, func(context.Context) (string, error) {
+			_, err := FetchClusterResource(gateway, common.Dependencies{}, "cluster-1", "Widget", name, func(context.Context) (string, error) {
 				called = true
 				return "unexpected", nil
 			})
@@ -168,17 +173,16 @@ func TestFetchClusterResourceRequiresObjectName(t *testing.T) {
 }
 
 func TestFetchResourceRetriesOnTransientError(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.telemetryRecorder = telemetry.NewRecorder()
-	app.appLogs = NewAppLogService(NewLogger(100))
-	setTestAppRuntimeReady(t, app, context.Background())
+	fixture := newResourceGatewayFixture()
+	gateway := fixture.gateway
+	fixture.telemetry = telemetry.NewRecorder()
 
 	originalSleep := fetchRetrySleep
 	fetchRetrySleep = func(time.Duration) {}
 	t.Cleanup(func() { fetchRetrySleep = originalSleep })
 
 	callCount := 0
-	value, err := FetchResource(app, "", "Widget", "default/foo", func() (string, error) {
+	value, err := FetchResource(gateway, "", "Widget", "default/foo", func() (string, error) {
 		callCount++
 		if callCount == 1 {
 			return "", &url.Error{Err: errors.New("connection refused"), Op: "GET", URL: "https://cluster"}
@@ -190,19 +194,18 @@ func TestFetchResourceRetriesOnTransientError(t *testing.T) {
 	require.Equal(t, "ok", value)
 	require.Equal(t, 2, callCount)
 
-	summary := app.telemetryRecorder.SnapshotSummary()
+	summary := fixture.telemetry.SnapshotSummary()
 	require.Equal(t, uint64(1), summary.Connection.RetryAttempts)
 	require.Equal(t, uint64(1), summary.Connection.RetrySuccesses)
 	require.Equal(t, uint64(0), summary.Connection.RetryExhausted)
 }
 
 func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.telemetryRecorder = telemetry.NewRecorder()
-	app.appLogs = NewAppLogService(NewLogger(100))
-	setTestAppRuntimeReady(t, app, context.Background())
+	fixture := newResourceGatewayFixture()
+	gateway := fixture.gateway
+	fixture.telemetry = telemetry.NewRecorder()
 	var emitted *BackendErrorEvent
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	fixture.emitEvent = func(name string, args ...interface{}) {
 		if name == "backend-error" && len(args) > 0 {
 			payload := args[0].(BackendErrorEvent)
 			emitted = &payload
@@ -214,7 +217,7 @@ func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
 	t.Cleanup(func() { fetchRetrySleep = originalSleep })
 
 	callCount := 0
-	value, err := FetchResource(app, "", "Widget", "default/foo", func() (string, error) {
+	value, err := FetchResource(gateway, "", "Widget", "default/foo", func() (string, error) {
 		callCount++
 		return "", &url.Error{Err: errors.New("connection refused"), Op: "GET", URL: "https://cluster"}
 	})
@@ -224,7 +227,7 @@ func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
 	require.Equal(t, config.ResourceFetchMaxAttempts, callCount)
 	require.NotNil(t, emitted)
 
-	summary := app.telemetryRecorder.SnapshotSummary()
+	summary := fixture.telemetry.SnapshotSummary()
 	require.Equal(t, uint64(config.ResourceFetchMaxAttempts-1), summary.Connection.RetryAttempts)
 	require.Equal(t, uint64(0), summary.Connection.RetrySuccesses)
 	require.Equal(t, uint64(1), summary.Connection.RetryExhausted)
@@ -234,10 +237,10 @@ func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
 }
 
 func TestExecuteWithRetryValidatesInputs(t *testing.T) {
-	_, err := executeWithRetry[string](context.Background(), nil, "", "Widget", "", nil)
+	_, err := executeWithRetry[string](context.Background(), resourceRetryDependencies{}, "", "Widget", "", nil)
 	require.ErrorContains(t, err, "fetch function not provided")
 
-	value, err := executeWithRetry[string](context.Background(), nil, "", "Widget", "", func(context.Context) (string, error) {
+	value, err := executeWithRetry[string](context.Background(), resourceRetryDependencies{}, "", "Widget", "", func(context.Context) (string, error) {
 		return "ok", nil
 	})
 	require.NoError(t, err)
@@ -251,7 +254,7 @@ func TestExecuteWithRetryWithoutAppUsesConfiguredSleep(t *testing.T) {
 	t.Cleanup(func() { fetchRetrySleep = originalSleep })
 
 	attempts := 0
-	value, err := executeWithRetry(context.Background(), nil, "cluster-a", "Widget", "demo", func(context.Context) (string, error) {
+	value, err := executeWithRetry(context.Background(), resourceRetryDependencies{}, "cluster-a", "Widget", "demo", func(context.Context) (string, error) {
 		attempts++
 		if attempts == 1 {
 			return "", io.EOF
@@ -265,24 +268,24 @@ func TestExecuteWithRetryWithoutAppUsesConfiguredSleep(t *testing.T) {
 }
 
 func TestExecuteWithRetryReturnsContextSleepFailure(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newResourceGatewayFixture()
+	gateway := fixture.gateway
 	sleepErr := errors.New("sleep interrupted")
 	originalSleep := contextSleep
 	contextSleep = func(context.Context, time.Duration) error { return sleepErr }
 	t.Cleanup(func() { contextSleep = originalSleep })
 
-	_, err := executeWithRetry(context.Background(), app, "cluster-a", "Widget", "demo", func(context.Context) (string, error) {
+	_, err := executeWithRetry(context.Background(), gateway.resourceRetryDependencies(), "cluster-a", "Widget", "demo", func(context.Context) (string, error) {
 		return "", io.EOF
 	})
 	require.ErrorIs(t, err, sleepErr)
 }
 
 func TestFetchResourcePropagatesConfiguredDeadline(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-
+	fixture := newResourceGatewayFixture()
+	gateway := fixture.gateway
 	startedAt := time.Now()
-	_, err := FetchResourceWithSelection(app, "cluster-a", "", "Widget", "demo", func(ctx context.Context) (string, error) {
+	_, err := FetchResourceWithSelection(gateway, "cluster-a", "", "Widget", "demo", func(ctx context.Context) (string, error) {
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
 		require.WithinDuration(t, startedAt.Add(config.ResourceFetchCallTimeout), deadline, time.Second)
@@ -297,7 +300,7 @@ func TestExecuteWithRetryAbortsSlowFetcherAtDeadline(t *testing.T) {
 	defer cancel()
 
 	startedAt := time.Now()
-	_, err := executeWithRetry(ctx, nil, "cluster-a", "Widget", "demo", func(fetchCtx context.Context) (string, error) {
+	_, err := executeWithRetry(ctx, resourceRetryDependencies{}, "cluster-a", "Widget", "demo", func(fetchCtx context.Context) (string, error) {
 		<-fetchCtx.Done()
 		return "", fetchCtx.Err()
 	})
@@ -309,7 +312,7 @@ func TestExecuteWithRetryAbortsSlowFetcherAtDeadline(t *testing.T) {
 func TestExecuteWithRetryDoesNotRetryPermanentErrorWithoutApp(t *testing.T) {
 	attempts := 0
 	permanent := errors.New("validation failed")
-	_, err := executeWithRetry(context.Background(), nil, "cluster-a", "Widget", "demo", func(context.Context) (string, error) {
+	_, err := executeWithRetry(context.Background(), resourceRetryDependencies{}, "cluster-a", "Widget", "demo", func(context.Context) (string, error) {
 		attempts++
 		return "", permanent
 	})

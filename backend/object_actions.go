@@ -48,7 +48,7 @@ var frontendObjectActions = backendActionSet(objectaction.FrontendBackendActions
 var backendOnlyObjectActions = backendActionSet(objectaction.BackendOnlyActions)
 
 type objectActionInvocation struct {
-	app     *App
+	gateway *ResourceGateway
 	action  string
 	target  ObjectActionTargetRef
 	request ObjectActionRequest
@@ -160,26 +160,26 @@ func errUnsupportedActionTarget(action string, target ObjectActionTargetRef, api
 	return fmt.Errorf("%s requires %s %s target, got %s %s", action, apiVersion, kind, objectActionTargetGVK(target).GroupVersion().String(), target.Kind)
 }
 
-func (a *App) deleteObjectAction(target ObjectActionTargetRef, force bool) error {
+func (g *ResourceGateway) deleteObjectAction(target ObjectActionTargetRef, force bool) error {
 	switch {
 	case target.Group == "" && target.Version == "v1" && target.Kind == pods.Identity.Kind:
-		return a.deletePodAction(target)
+		return g.deletePodAction(target)
 	case target.Group == "" && target.Version == "v1" && target.Kind == nodes.Identity.Kind:
-		return a.deleteNodeAction(target, force)
+		return g.deleteNodeAction(target, force)
 	case target.Group == "helm.sh" && target.Version == "v3" && strings.EqualFold(target.Kind, "HelmRelease"):
-		return a.deleteHelmReleaseAction(target)
+		return g.deleteHelmReleaseAction(target)
 	default:
 		if force {
 			return fmt.Errorf("force delete is only supported for core/v1 Node")
 		}
-		return a.deleteGenericResourceAction(target)
+		return g.deleteGenericResourceAction(target)
 	}
 }
 
 // RunObjectAction is the single Wails mutation contract for Kubernetes object
 // actions. The target always carries clusterId + full GVK + name, and namespace
 // when the target is namespaced.
-func (a *App) RunObjectAction(req ObjectActionRequest) (ObjectActionResponse, error) {
+func (g *ResourceGateway) RunObjectAction(req ObjectActionRequest) (ObjectActionResponse, error) {
 	action := strings.TrimSpace(req.Action)
 	if err := validateObjectActionName(action); err != nil {
 		return ObjectActionResponse{}, err
@@ -192,11 +192,11 @@ func (a *App) RunObjectAction(req ObjectActionRequest) (ObjectActionResponse, er
 	if !ok {
 		return ObjectActionResponse{}, fmt.Errorf("object action %q has no backend handler", action)
 	}
-	return handler(objectActionInvocation{app: a, action: action, target: target, request: req})
+	return handler(objectActionInvocation{gateway: g, action: action, target: target, request: req})
 }
 
 func runDeleteObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
-	return ObjectActionResponse{}, invocation.app.deleteObjectAction(invocation.target, false)
+	return ObjectActionResponse{}, invocation.gateway.deleteObjectAction(invocation.target, false)
 }
 
 func runRemoveFinalizerObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
@@ -214,18 +214,18 @@ func runRemoveFinalizerObjectAction(invocation objectActionInvocation) (ObjectAc
 	if path != objectFinalizerPathMetadata && path != objectFinalizerPathSpec {
 		return ObjectActionResponse{}, fmt.Errorf("unsupported finalizer path %q", path)
 	}
-	return ObjectActionResponse{}, invocation.app.removeObjectFinalizerAction(invocation.target, finalizer, path)
+	return ObjectActionResponse{}, invocation.gateway.removeObjectFinalizerAction(invocation.target, finalizer, path)
 }
 
 func runForceDeleteObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
-	return ObjectActionResponse{}, invocation.app.deleteObjectAction(invocation.target, true)
+	return ObjectActionResponse{}, invocation.gateway.deleteObjectAction(invocation.target, true)
 }
 
 func runRestartObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
 	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
 		return ObjectActionResponse{}, err
 	}
-	return ObjectActionResponse{}, invocation.app.restartWorkloadAction(invocation.target)
+	return ObjectActionResponse{}, invocation.gateway.restartWorkloadAction(invocation.target)
 }
 
 func runScaleObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
@@ -236,14 +236,14 @@ func runScaleObjectAction(invocation objectActionInvocation) (ObjectActionRespon
 	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
 		return ObjectActionResponse{}, err
 	}
-	return ObjectActionResponse{}, invocation.app.scaleWorkloadAction(invocation.target, replicas)
+	return ObjectActionResponse{}, invocation.gateway.scaleWorkloadAction(invocation.target, replicas)
 }
 
 func runTriggerObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
 	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
 		return ObjectActionResponse{}, err
 	}
-	name, err := invocation.app.triggerCronJobAction(invocation.target)
+	name, err := invocation.gateway.triggerCronJobAction(invocation.target)
 	return ObjectActionResponse{Name: name}, err
 }
 
@@ -255,23 +255,23 @@ func runSuspendObjectAction(invocation objectActionInvocation) (ObjectActionResp
 	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
 		return ObjectActionResponse{}, err
 	}
-	return ObjectActionResponse{}, invocation.app.suspendCronJobAction(invocation.target, suspend)
+	return ObjectActionResponse{}, invocation.gateway.suspendCronJobAction(invocation.target, suspend)
 }
 
 func runCordonObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
-	return ObjectActionResponse{}, invocation.app.cordonNodeAction(invocation.target)
+	return ObjectActionResponse{}, invocation.gateway.cordonNodeAction(invocation.target)
 }
 
 func runUncordonObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
-	return ObjectActionResponse{}, invocation.app.uncordonNodeAction(invocation.target)
+	return ObjectActionResponse{}, invocation.gateway.uncordonNodeAction(invocation.target)
 }
 
 func runDrainObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
-	return ObjectActionResponse{}, invocation.app.drainNodeAction(invocation.target, objectActionDrainOptions(invocation.request))
+	return ObjectActionResponse{}, invocation.gateway.drainNodeAction(invocation.target, objectActionDrainOptions(invocation.request))
 }
 
 func runStartDrainObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
-	jobID, err := invocation.app.startDrainNodeAction(invocation.target, objectActionDrainOptions(invocation.request))
+	jobID, err := invocation.gateway.startDrainNodeAction(invocation.target, objectActionDrainOptions(invocation.request))
 	return ObjectActionResponse{JobID: jobID}, err
 }
 
@@ -290,10 +290,10 @@ func runStartPortForwardObjectAction(invocation objectActionInvocation) (ObjectA
 	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
 		return ObjectActionResponse{}, err
 	}
-	if invocation.app.operations == nil {
+	if invocation.gateway.operations == nil {
 		return ObjectActionResponse{}, fmt.Errorf("operations coordinator not initialized")
 	}
-	sessionID, err := invocation.app.operations.startPortForwardAction(invocation.target, options)
+	sessionID, err := invocation.gateway.operations.startPortForwardAction(invocation.target, options)
 	return ObjectActionResponse{SessionID: sessionID}, err
 }
 
@@ -305,7 +305,7 @@ func runCreateDebugContainerObjectAction(invocation objectActionInvocation) (Obj
 	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
 		return ObjectActionResponse{}, err
 	}
-	response, err := invocation.app.createDebugContainerAction(invocation.target, options)
+	response, err := invocation.gateway.createDebugContainerAction(invocation.target, options)
 	return ObjectActionResponse{DebugContainer: response}, err
 }
 
@@ -317,5 +317,5 @@ func runRollbackObjectAction(invocation objectActionInvocation) (ObjectActionRes
 	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
 		return ObjectActionResponse{}, err
 	}
-	return ObjectActionResponse{}, invocation.app.rollbackWorkloadAction(invocation.target, revision)
+	return ObjectActionResponse{}, invocation.gateway.rollbackWorkloadAction(invocation.target, revision)
 }

@@ -25,11 +25,11 @@ import (
 const helmReleaseAPIGroup = "helm.sh"
 
 type objectDetailProvider struct {
-	app *App
+	gateway *ResourceGateway
 }
 
-func (a *App) objectDetailProvider() snapshot.ObjectDetailProvider {
-	return &objectDetailProvider{app: a}
+func (g *ResourceGateway) objectDetailProvider() snapshot.ObjectDetailProvider {
+	return &objectDetailProvider{gateway: g}
 }
 
 type resolvedObjectDetailContext struct {
@@ -152,18 +152,18 @@ func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schem
 	}
 
 	cacheKey := objectDetailCacheKeyForGVK(gvk, namespace, name)
-	if p != nil && p.app != nil {
-		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
+	if p != nil && p.gateway != nil {
+		if cached, ok := p.gateway.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
 			// Avoid serving cached details when permission checks deny access.
-			if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk, namespace, name) {
+			if p.gateway.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk, namespace, name) {
 				return cached, nil
 			}
-			p.app.responseCacheDelete(resolved.selectionKey, cacheKey)
+			p.gateway.responseCacheDelete(resolved.selectionKey, cacheKey)
 		}
 	}
 	detail, err := fetcher.withDeps(ctx, resolved.deps, namespace, name)
-	if err == nil && p != nil && p.app != nil {
-		p.app.responseCacheStore(resolved.selectionKey, cacheKey, detail)
+	if err == nil && p != nil && p.gateway != nil {
+		p.gateway.responseCacheStore(resolved.selectionKey, cacheKey, detail)
 	}
 	return detail, err
 }
@@ -182,13 +182,13 @@ func (p *objectDetailProvider) FetchObjectHeaderMetadata(ctx context.Context, gv
 	}
 
 	cacheKey := objectHeaderMetadataCacheKey(gvk, namespace, name)
-	if p != nil && p.app != nil {
-		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
+	if p != nil && p.gateway != nil {
+		if cached, ok := p.gateway.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
 			if value, ok := cached.(snapshot.ObjectHeaderMetadata); ok &&
-				p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk, namespace, name) {
+				p.gateway.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk, namespace, name) {
 				return value, nil
 			}
-			p.app.responseCacheDelete(resolved.selectionKey, cacheKey)
+			p.gateway.responseCacheDelete(resolved.selectionKey, cacheKey)
 		}
 	}
 
@@ -209,8 +209,8 @@ func (p *objectDetailProvider) FetchObjectHeaderMetadata(ctx context.Context, gv
 			Finalizers:        append([]string(nil), obj.GetFinalizers()...),
 		}
 	}
-	if p != nil && p.app != nil {
-		p.app.responseCacheStore(resolved.selectionKey, cacheKey, meta)
+	if p != nil && p.gateway != nil {
+		p.gateway.responseCacheStore(resolved.selectionKey, cacheKey, meta)
 	}
 	return meta, nil
 }
@@ -245,13 +245,13 @@ func objectHeaderMetadataCacheKey(gvk schema.GroupVersionKind, namespace, name s
 
 // resolveDetailContext ensures object detail fetches use the cluster scoped to the snapshot request.
 func (p *objectDetailProvider) resolveDetailContext(ctx context.Context) resolvedObjectDetailContext {
-	if p == nil || p.app == nil {
+	if p == nil || p.gateway == nil {
 		return resolvedObjectDetailContext{}
 	}
 
 	meta := snapshot.ClusterMetaFromContext(ctx)
 	if meta.ClusterID != "" {
-		if deps, ok := p.app.resourceDependenciesForClusterID(meta.ClusterID); ok {
+		if deps, ok := p.gateway.resourceDependenciesForClusterID(meta.ClusterID); ok {
 			return resolvedObjectDetailContext{
 				deps:         deps.WithOperationContext(ctx),
 				selectionKey: meta.ClusterID,
@@ -314,8 +314,8 @@ func (p *objectDetailProvider) FetchHelmManifest(ctx context.Context, namespace,
 	if err != nil {
 		return "", 0, err
 	}
-	if p != nil && p.app != nil {
-		p.app.responseCacheStore(resolved.selectionKey, manifestCacheKey, manifest)
+	if p != nil && p.gateway != nil {
+		p.gateway.responseCacheStore(resolved.selectionKey, manifestCacheKey, manifest)
 	}
 	return manifest, helmRevisionOrZero(ctx, p, resolved, service, namespace, name), nil
 }
@@ -344,8 +344,8 @@ func (p *objectDetailProvider) FetchHelmValues(ctx context.Context, namespace, n
 	if err != nil {
 		return nil, 0, err
 	}
-	if p != nil && p.app != nil {
-		p.app.responseCacheStore(resolved.selectionKey, valuesCacheKey, values)
+	if p != nil && p.gateway != nil {
+		p.gateway.responseCacheStore(resolved.selectionKey, valuesCacheKey, values)
 	}
 	return values, helmRevisionOrZero(ctx, p, resolved, service, namespace, name), nil
 }
@@ -358,16 +358,16 @@ func cachedHelmDetail[T any](
 	kind, namespace, name string,
 ) (T, int, bool) {
 	var zero T
-	if p == nil || p.app == nil {
+	if p == nil || p.gateway == nil {
 		return zero, 0, false
 	}
 	cacheKey := objectDetailCacheKey(kind, namespace, name)
-	cached, ok := p.app.responseCacheLookup(resolved.selectionKey, cacheKey)
+	cached, ok := p.gateway.responseCacheLookup(resolved.selectionKey, cacheKey)
 	if !ok {
 		return zero, 0, false
 	}
 	detail, typeOK := cached.(T)
-	allowed := typeOK && p.app.canServeCachedResponse(
+	allowed := typeOK && p.gateway.canServeCachedResponse(
 		ctx,
 		resolved.deps,
 		resolved.selectionKey,
@@ -376,7 +376,7 @@ func cachedHelmDetail[T any](
 		name,
 	)
 	if !allowed {
-		p.app.responseCacheDelete(resolved.selectionKey, cacheKey)
+		p.gateway.responseCacheDelete(resolved.selectionKey, cacheKey)
 		return zero, 0, false
 	}
 	return detail, helmRevisionOrZero(ctx, p, resolved, service, namespace, name), true
@@ -412,8 +412,8 @@ func (p *objectDetailProvider) helmReleaseRevisionWithCache(
 	if err != nil || details == nil {
 		return 0, err
 	}
-	if p != nil && p.app != nil {
-		p.app.responseCacheStore(resolved.selectionKey, detailsCacheKey, details)
+	if p != nil && p.gateway != nil {
+		p.gateway.responseCacheStore(resolved.selectionKey, detailsCacheKey, details)
 	}
 	return details.Revision, nil
 }
@@ -423,15 +423,15 @@ func (p *objectDetailProvider) cachedHelmReleaseRevision(
 	resolved resolvedObjectDetailContext,
 	detailsCacheKey, namespace, name string,
 ) (int, bool) {
-	if p == nil || p.app == nil {
+	if p == nil || p.gateway == nil {
 		return 0, false
 	}
-	cached, ok := p.app.responseCacheLookup(resolved.selectionKey, detailsCacheKey)
+	cached, ok := p.gateway.responseCacheLookup(resolved.selectionKey, detailsCacheKey)
 	if !ok {
 		return 0, false
 	}
 	details, ok := cached.(*HelmReleaseDetails)
-	if ok && details != nil && p.app.canServeCachedResponse(
+	if ok && details != nil && p.gateway.canServeCachedResponse(
 		ctx,
 		resolved.deps,
 		resolved.selectionKey,
@@ -441,6 +441,6 @@ func (p *objectDetailProvider) cachedHelmReleaseRevision(
 	) {
 		return details.Revision, true
 	}
-	p.app.responseCacheDelete(resolved.selectionKey, detailsCacheKey)
+	p.gateway.responseCacheDelete(resolved.selectionKey, detailsCacheKey)
 	return 0, false
 }

@@ -17,9 +17,25 @@ import (
 	cgotesting "k8s.io/client-go/testing"
 )
 
+func newPermissionResourceFixture(
+	clusterID, clusterName string,
+	client *cgofake.Clientset,
+	apiextensionsClient *apiextensionsfake.Clientset,
+) *resourceGatewayFixture {
+	fixture := newResourceGatewayFixture()
+	fixture.setCluster(clusterID, &clusterClients{
+		meta:                ClusterMeta{ID: clusterID, Name: clusterName},
+		kubeconfigPath:      "/path",
+		kubeconfigContext:   "ctx",
+		client:              client,
+		apiextensionsClient: apiextensionsClient,
+	})
+	return fixture
+}
+
 func TestQueryPermissions_EmptyBatch(t *testing.T) {
-	app := &App{}
-	resp, err := app.QueryPermissions(nil)
+	gateway := newResourceGatewayFixture().gateway
+	resp, err := gateway.QueryPermissions(nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -57,17 +73,8 @@ func TestQueryPermissions_FetchesNamespaceSSRRsConcurrently(t *testing.T) {
 		}, nil
 	}
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = map[string]*clusterClients{
-		clusterID: {
-			meta:              ClusterMeta{ID: clusterID, Name: "Concurrent"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-			client:            client,
-		},
-	}
-	app.ssrrCaches = map[string]*capabilities.SSRRCache{
+	gateway := newPermissionResourceFixture(clusterID, "Concurrent", client, nil).gateway
+	gateway.ssrrCaches = map[string]*capabilities.SSRRCache{
 		clusterID: capabilities.NewSSRRCache(clusterID, time.Minute, 0, fetchRules, nil),
 	}
 
@@ -84,7 +91,7 @@ func TestQueryPermissions_FetchesNamespaceSSRRsConcurrently(t *testing.T) {
 		})
 	}
 
-	resp, err := app.QueryPermissions(queries)
+	resp, err := gateway.QueryPermissions(queries)
 	if err != nil {
 		t.Fatalf("QueryPermissions returned error: %v", err)
 	}
@@ -127,18 +134,9 @@ func TestQueryPermissions_UsesConfiguredSSRRFetchConcurrency(t *testing.T) {
 		}, nil
 	}
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.permissionFetchPolicy.SetPermissionFetchConcurrency(1)
-	app.clusterClients = map[string]*clusterClients{
-		clusterID: {
-			meta:              ClusterMeta{ID: clusterID, Name: "Serial"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-			client:            client,
-		},
-	}
-	app.ssrrCaches = map[string]*capabilities.SSRRCache{
+	gateway := newPermissionResourceFixture(clusterID, "Serial", client, nil).gateway
+	gateway.permissionFetchPolicy.SetPermissionFetchConcurrency(1)
+	gateway.ssrrCaches = map[string]*capabilities.SSRRCache{
 		clusterID: capabilities.NewSSRRCache(clusterID, time.Minute, 0, fetchRules, nil),
 	}
 
@@ -155,7 +153,7 @@ func TestQueryPermissions_UsesConfiguredSSRRFetchConcurrency(t *testing.T) {
 		})
 	}
 
-	resp, err := app.QueryPermissions(queries)
+	resp, err := gateway.QueryPermissions(queries)
 	if err != nil {
 		t.Fatalf("QueryPermissions returned error: %v", err)
 	}
@@ -168,7 +166,7 @@ func TestQueryPermissions_UsesConfiguredSSRRFetchConcurrency(t *testing.T) {
 }
 
 func TestQueryPermissions_ValidationErrors(t *testing.T) {
-	app := &App{}
+	gateway := newResourceGatewayFixture().gateway
 
 	checks := []capabilities.PermissionQuery{
 		{ID: "", Verb: "list", ResourceKind: "Pod", ClusterId: "c1"},
@@ -177,7 +175,7 @@ func TestQueryPermissions_ValidationErrors(t *testing.T) {
 		{ID: "3", Verb: "list", ResourceKind: "Pod", ClusterId: ""},
 	}
 
-	resp, err := app.QueryPermissions(checks)
+	resp, err := gateway.QueryPermissions(checks)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -214,16 +212,7 @@ func TestQueryPermissions_BuiltinPodBypassesDiscovery(t *testing.T) {
 		return true, review, nil
 	})
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = map[string]*clusterClients{
-		clusterID: {
-			meta:              ClusterMeta{ID: clusterID, Name: "Pods"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-			client:            client,
-		},
-	}
+	gateway := newPermissionResourceFixture(clusterID, "Pods", client, nil).gateway
 
 	queries := []capabilities.PermissionQuery{
 		{ID: "pod-list", ClusterId: clusterID, Group: "", Version: "v1", ResourceKind: "Pod", Verb: "list", Namespace: "default"},
@@ -232,7 +221,7 @@ func TestQueryPermissions_BuiltinPodBypassesDiscovery(t *testing.T) {
 		{ID: "pod-portforward", ClusterId: clusterID, Group: "", Version: "v1", ResourceKind: "Pod", Verb: "create", Namespace: "default", Subresource: "portforward"},
 	}
 
-	resp, err := app.QueryPermissions(queries)
+	resp, err := gateway.QueryPermissions(queries)
 	if err != nil {
 		t.Fatalf("QueryPermissions returned error: %v", err)
 	}
@@ -269,18 +258,9 @@ func TestQueryPermissions_NamespacedResourceWithoutNamespaceUsesSSAR(t *testing.
 		return true, review, nil
 	})
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = map[string]*clusterClients{
-		clusterID: {
-			meta:              ClusterMeta{ID: clusterID, Name: "Drain"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-			client:            client,
-		},
-	}
+	gateway := newPermissionResourceFixture(clusterID, "Drain", client, nil).gateway
 
-	resp, err := app.QueryPermissions([]capabilities.PermissionQuery{{
+	resp, err := gateway.QueryPermissions([]capabilities.PermissionQuery{{
 		ID:           "drain-pods",
 		ClusterId:    clusterID,
 		Group:        "",
@@ -340,24 +320,14 @@ func TestQueryPermissions_CachesCRDResolutionWithinBatch(t *testing.T) {
 		return false, nil, nil
 	})
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = map[string]*clusterClients{
-		clusterID: {
-			meta:                ClusterMeta{ID: clusterID, Name: "CRD"},
-			kubeconfigPath:      "/path",
-			kubeconfigContext:   "ctx",
-			client:              client,
-			apiextensionsClient: apiextClient,
-		},
-	}
+	gateway := newPermissionResourceFixture(clusterID, "CRD", client, apiextClient).gateway
 
 	queries := []capabilities.PermissionQuery{
 		{ID: "widget-get", ClusterId: clusterID, Group: "example.com", Version: "v1", ResourceKind: "Widget", Verb: "get", Namespace: "default"},
 		{ID: "widget-delete", ClusterId: clusterID, Group: "example.com", Version: "v1", ResourceKind: "Widget", Verb: "delete", Namespace: "default"},
 	}
 
-	resp, err := app.QueryPermissions(queries)
+	resp, err := gateway.QueryPermissions(queries)
 	if err != nil {
 		t.Fatalf("QueryPermissions returned error: %v", err)
 	}

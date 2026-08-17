@@ -18,7 +18,7 @@ const (
 
 // canServeCachedResponse guards cached detail/helm responses against RBAC changes.
 // It returns true when permissions are allowed or cannot be checked, and false on explicit deny.
-func (a *App) canServeCachedResponse(
+func (g *ResourceGateway) canServeCachedResponse(
 	ctx context.Context,
 	deps common.Dependencies,
 	selectionKey string,
@@ -26,10 +26,10 @@ func (a *App) canServeCachedResponse(
 	namespace string,
 	name string,
 ) bool {
-	if a == nil {
+	if g == nil {
 		return true
 	}
-	checker := a.permissionCheckerForSelection(selectionKey, deps)
+	checker := g.permissionCheckerForSelection(selectionKey, deps)
 	if checker == nil {
 		return true
 	}
@@ -48,21 +48,17 @@ func (a *App) canServeCachedResponse(
 		// objectYAMLCacheKey was retired with App.GetObjectYAML — the
 		// GVK-aware fetch path does not populate the response cache,
 		// so there is nothing to evict here for YAML.
-		a.responseCacheDelete(selectionKey, objectDetailCacheKey(gvk.Kind, namespace, name))
+		g.responseCacheDelete(selectionKey, objectDetailCacheKey(gvk.Kind, namespace, name))
 	}
 	return decision.Allowed
 }
 
-// permissionCheckerForSelection returns the refresh subsystem checker when available,
-// falling back to a lightweight checker for the current Kubernetes client.
-func (a *App) permissionCheckerForSelection(selectionKey string, deps common.Dependencies) *permissions.Checker {
-	if a == nil {
+// permissionCheckerForSelection constructs a request-bound checker from the
+// resolved cluster client. Resource cache validation does not reach into refresh
+// subsystem state; refresh depends on this gateway only through invalidation.
+func (g *ResourceGateway) permissionCheckerForSelection(selectionKey string, deps common.Dependencies) *permissions.Checker {
+	if g == nil {
 		return nil
-	}
-	if selectionKey != "" {
-		if subsystem := a.getRefreshSubsystem(selectionKey); subsystem != nil && subsystem.RuntimePerms != nil {
-			return subsystem.RuntimePerms
-		}
 	}
 	if deps.KubernetesClient == nil {
 		return nil

@@ -27,13 +27,13 @@ type ContainerPortInfo struct {
 }
 
 // GetTargetPorts returns the TCP ports a target can be forwarded on.
-func (a *App) GetTargetPorts(clusterID, namespace, targetKind, targetGroup, targetVersion, targetName string) ([]ContainerPortInfo, error) {
+func (g *ResourceGateway) GetTargetPorts(clusterID, namespace, targetKind, targetGroup, targetVersion, targetName string) ([]ContainerPortInfo, error) {
 	target, err := portForwardTargetFromParts(namespace, targetKind, targetGroup, targetVersion, targetName)
 	if err != nil {
 		return nil, err
 	}
 
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve cluster: %w", err)
 	}

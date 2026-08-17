@@ -16,38 +16,38 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/pods"
 )
 
-func (a *App) FetchContainerLogs(clusterID string, req ContainerLogsFetchRequest) ContainerLogsFetchResponse {
+func (g *ResourceGateway) FetchContainerLogs(clusterID string, req ContainerLogsFetchRequest) ContainerLogsFetchResponse {
 	if err := requireMatchingContainerLogsScopeCluster(clusterID, req.Scope); err != nil {
 		return ContainerLogsFetchResponse{Error: err.Error()}
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return ContainerLogsFetchResponse{Error: err.Error()}
 	}
 	service := pods.NewService(deps)
-	return service.FetchContainerLogs(a.CtxOrBackground(), req)
+	return service.FetchContainerLogs(g.CtxOrBackground(), req)
 }
-func (a *App) GetPodContainers(clusterID, namespace, podName string) ([]string, error) {
+func (g *ResourceGateway) GetPodContainers(clusterID, namespace, podName string) ([]string, error) {
 	if err := requirePodObject(namespace, podName); err != nil {
 		return nil, err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
 	service := pods.NewService(deps)
-	return service.PodContainers(a.CtxOrBackground(), namespace, podName)
+	return service.PodContainers(g.CtxOrBackground(), namespace, podName)
 }
-func (a *App) GetContainerLogsScopeContainers(clusterID, scope string) ([]string, error) {
+func (g *ResourceGateway) GetContainerLogsScopeContainers(clusterID, scope string) ([]string, error) {
 	if err := requireMatchingContainerLogsScopeCluster(clusterID, scope); err != nil {
 		return nil, err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
 	service := pods.NewService(deps)
-	return service.ContainerLogsScopeContainers(a.CtxOrBackground(), scope)
+	return service.ContainerLogsScopeContainers(g.CtxOrBackground(), scope)
 }
 
 func requireMatchingContainerLogsScopeCluster(clusterID, scope string) error {

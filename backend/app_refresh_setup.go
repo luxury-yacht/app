@@ -287,7 +287,7 @@ func (a *App) buildRefreshSubsystemForSelection(
 		GatewayInformerFactory:     clients.gatewayInformerFactory,
 		GatewayAPIPresence:         clients.gatewayAPIPresence,
 		DynamicClient:              clients.dynamicClient,
-		ObjectDetailsProvider:      a.objectDetailProvider(),
+		ObjectDetailsProvider:      a.resources.objectDetailProvider(),
 		Logger:                     a.appLogs.logger,
 		ContainerLogsTargetLimiter: a.sharedContainerLogsTargetLimiter(),
 		ContainerLogsPerScopeLimit: a.containerLogsPolicy.Limit(),
@@ -320,7 +320,7 @@ func (a *App) buildRefreshSubsystemForSelection(
 	a.transitionClusterToLoading(clusterMeta.ID)
 
 	// Watch informer updates to invalidate cached detail/YAML/helm responses.
-	a.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
+	a.resources.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
 
 	// Cluster-Ready self-build rides the namespaces doorbell; wired here so
 	// selector-opened and auth-recovery subsystems get it too.

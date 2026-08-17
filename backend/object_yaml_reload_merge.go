@@ -53,16 +53,16 @@ type ObjectYAMLReloadMergeResponse struct {
 // applies the user's local edits onto it using the same patch family kubectl
 // edit uses: strategic merge for registered built-ins, JSON merge patch
 // fallback otherwise.
-func (a *App) MergeObjectYamlWithLatest(
+func (g *ResourceGateway) MergeObjectYamlWithLatest(
 	clusterID string,
 	req ObjectYAMLReloadMergeRequest,
 ) (*ObjectYAMLReloadMergeResponse, error) {
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, cancel := a.mutationContext()
+	ctx, cancel := g.mutationContext()
 	defer cancel()
 
 	baseObj, draftObj, currentObj, err := prepareReloadMergeContext(

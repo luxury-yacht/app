@@ -16,7 +16,7 @@ import (
 )
 
 func TestRunObjectActionRequiresFullTargetIdentity(t *testing.T) {
-	app := NewApp(nil)
+	gateway := newResourceGatewayFixture().gateway
 
 	tests := []struct {
 		name    string
@@ -59,7 +59,7 @@ func TestRunObjectActionRequiresFullTargetIdentity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := app.RunObjectAction(tt.req)
+			_, err := gateway.RunObjectAction(tt.req)
 			if err == nil {
 				t.Fatalf("expected error containing %q", tt.wantErr)
 			}
@@ -71,7 +71,7 @@ func TestRunObjectActionRequiresFullTargetIdentity(t *testing.T) {
 }
 
 func TestRunObjectActionValidatesActionSpecificRequirements(t *testing.T) {
-	app := NewApp(nil)
+	gateway := newResourceGatewayFixture().gateway
 	replicas := 2
 	suspend := true
 	revision := int64(3)
@@ -103,7 +103,7 @@ func TestRunObjectActionValidatesActionSpecificRequirements(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := app.RunObjectAction(tt.req)
+			_, err := gateway.RunObjectAction(tt.req)
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
 			}
@@ -123,9 +123,9 @@ func actionRequestWithFinalizerTarget(finalizer, path, group, version, kind stri
 }
 
 func TestRunObjectActionInvokesStartDrainAndDebugHandlers(t *testing.T) {
-	app := NewApp(nil)
+	gateway := newResourceGatewayFixture().gateway
 
-	drainResponse, err := app.RunObjectAction(ObjectActionRequest{
+	drainResponse, err := gateway.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionStartDrain,
 		Target: objectActionTarget("missing-cluster", "", "v1", "Node", "", "worker-a"),
 	})
@@ -136,7 +136,7 @@ func TestRunObjectActionInvokesStartDrainAndDebugHandlers(t *testing.T) {
 		t.Fatalf("unexpected drain job ID %q", drainResponse.JobID)
 	}
 
-	debugResponse, err := app.RunObjectAction(ObjectActionRequest{
+	debugResponse, err := gateway.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionCreateDebugContainer,
 		Target: objectActionTarget("missing-cluster", "", "v1", "Pod", "default", "api"),
 		DebugContainer: &ObjectActionDebugContainerOptions{

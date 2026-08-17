@@ -82,8 +82,8 @@ type mutationContext struct {
 	patchType    types.PatchType
 }
 
-func (a *App) mutationContext() (context.Context, context.CancelFunc) {
-	base := a.CtxOrBackground()
+func (g *ResourceGateway) mutationContext() (context.Context, context.CancelFunc) {
+	base := g.CtxOrBackground()
 	if base == nil {
 		base = context.Background()
 	}
@@ -96,20 +96,20 @@ func (a *App) mutationContext() (context.Context, context.CancelFunc) {
 }
 
 // ValidateObjectYaml performs a dry-run kubectl-edit-style patch to ensure the YAML is valid and safe to apply.
-func (a *App) ValidateObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+func (g *ResourceGateway) ValidateObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
+	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, cancel := a.mutationContext()
+	ctx, cancel := g.mutationContext()
 	defer cancel()
 
 	mc, err := prepareMutationContextWithDependencies(ctx, deps, selectionKey, req)
 	if err != nil {
 		return nil, err
 	}
-	if err := a.requireResolvedResourcePermission(ctx, deps, mc.gvr, mc.isNamespaced, resourcePermissionCheck{
+	if err := g.requireResolvedResourcePermission(ctx, deps, mc.gvr, mc.isNamespaced, resourcePermissionCheck{
 		Kind:      req.Kind,
 		Namespace: req.Namespace,
 		Name:      req.Name,
@@ -139,20 +139,20 @@ func (a *App) ValidateObjectYaml(clusterID string, req ObjectYAMLMutationRequest
 
 // ApplyObjectYaml performs a kubectl-edit-style patch using the original editor
 // baseline plus the user's edited YAML.
-func (a *App) ApplyObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+func (g *ResourceGateway) ApplyObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
+	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, cancel := a.mutationContext()
+	ctx, cancel := g.mutationContext()
 	defer cancel()
 
 	mc, err := prepareMutationContextWithDependencies(ctx, deps, selectionKey, req)
 	if err != nil {
 		return nil, err
 	}
-	if err := a.requireResolvedResourcePermission(ctx, deps, mc.gvr, mc.isNamespaced, resourcePermissionCheck{
+	if err := g.requireResolvedResourcePermission(ctx, deps, mc.gvr, mc.isNamespaced, resourcePermissionCheck{
 		Kind:      req.Kind,
 		Namespace: req.Namespace,
 		Name:      req.Name,
@@ -174,7 +174,7 @@ func (a *App) ApplyObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (
 		return nil, wrapKubernetesError(err, "apply failed")
 	}
 
-	a.invalidateResponseCacheForGVK(selectionKey, schema.FromAPIVersionAndKind(req.APIVersion, req.Kind), req.Namespace, req.Name)
+	g.invalidateResponseCacheForGVK(selectionKey, schema.FromAPIVersionAndKind(req.APIVersion, req.Kind), req.Namespace, req.Name)
 
 	return &ObjectYAMLMutationResponse{
 		ResourceVersion: result.GetResourceVersion(),

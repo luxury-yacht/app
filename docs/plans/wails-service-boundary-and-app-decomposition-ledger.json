@@ -171,14 +171,12 @@
       "phase": "3"
     },
     {
-      "id": "resource-cache-and-permissions",
+      "id": "resource-gateway",
       "fields": [
-        "responseCache",
-        "ssrrCachesMu",
-        "ssrrCaches",
-        "permissionFetchPolicy"
+        "resources"
       ],
       "readers": [
+        "backend/desktop_service.go resource command delegation",
         "backend/fetch_helpers.go",
         "backend/app_permissions.go",
         "backend/response_cache_invalidation.go"
@@ -189,8 +187,8 @@
         "backend/app_permissions.go SSRR cache creation/refresh",
         "backend/response_cache_invalidation.go"
       ],
-      "mutex": "responseCache owns its lock; ssrrCachesMu guards the per-cluster SSRR cache map",
-      "startup": "NewApp constructs response cache and SSRR map lazily populates",
+      "mutex": "ResourceGateway owns the response-cache lock and SSRR cache-map mutex internally",
+      "startup": "NewApp constructs ResourceGateway after cluster and operations collaborators are available",
       "shutdown": "cluster cleanup and Factory Reset invalidate caches",
       "tests": [
         "backend/response_cache_test.go",
@@ -199,6 +197,28 @@
       ],
       "owner": "ResourceGateway",
       "phase": "4"
+    },
+    {
+      "id": "permission-fetch-policy",
+      "fields": [
+        "permissionFetchPolicy"
+      ],
+      "readers": [
+        "backend/app_permissions.go ResourceGateway SSRR namespace fan-out"
+      ],
+      "writers": [
+        "backend/app.go NewApp",
+        "backend/settings_effect_dispatcher.go post-commit settings effects"
+      ],
+      "mutex": "PermissionFetchPolicy stores its clamped concurrency atomically",
+      "startup": "construct at default, then push configured or fallback settings after preference loading",
+      "shutdown": "released with process composition; Factory Reset pushes the default",
+      "tests": [
+        "backend/app_permissions_test.go",
+        "backend/app_settings_test.go"
+      ],
+      "owner": "PermissionFetchPolicy",
+      "phase": "3"
     },
     {
       "id": "refresh-runtime",
@@ -245,8 +265,7 @@
       "id": "refresh-global-container-log-limiter",
       "fields": [
         "containerLogsTargetLimiterMu",
-        "containerLogsTargetLimiter",
-        "containerLogsPolicy"
+        "containerLogsTargetLimiter"
       ],
       "readers": [
         "backend/app_refresh_setup.go sharedContainerLogsTargetLimiter",
@@ -265,6 +284,29 @@
       ],
       "owner": "RefreshCoordinator",
       "phase": "5B"
+    },
+    {
+      "id": "container-logs-selection-policy",
+      "fields": [
+        "containerLogsPolicy"
+      ],
+      "readers": [
+        "backend/resource_gateway.go direct container-log dependencies",
+        "backend/app_refresh_setup.go live stream construction"
+      ],
+      "writers": [
+        "backend/app.go NewApp",
+        "backend/settings_effect_dispatcher.go post-commit settings effects"
+      ],
+      "mutex": "ContainerLogsSelectionPolicy stores its clamped per-scope target limit atomically",
+      "startup": "construct at default, then push configured or fallback settings after preference loading",
+      "shutdown": "released with process composition; Factory Reset pushes the default",
+      "tests": [
+        "backend/app_settings_test.go",
+        "backend/resources/pods/logs_test.go"
+      ],
+      "owner": "ContainerLogsSelectionPolicy",
+      "phase": "3"
     },
     {
       "id": "refresh-governor",
@@ -847,22 +889,11 @@
       "id": "cluster-runtime-backpointers",
       "entries": [
         "cluster_auth.go:clusterSubsystemRebuild.app",
+        "cluster_dependencies.go:appResourceResolver.app",
         "kubeconfig_watcher.go:kubeconfigWatcher.app"
       ],
       "replacement": "ClusterRuntimeManager collaborators for subsystem rebuild and discovery",
       "phase": "5A"
-    },
-    {
-      "id": "resource-backpointers",
-      "entries": [
-        "cluster_dependencies.go:appResourceResolver.app",
-        "fetch_helpers.go:fetchRetryOperation.app",
-        "object_actions.go:objectActionInvocation.app",
-        "object_detail_provider.go:objectDetailProvider.app",
-        "response_cache_invalidation.go:ingestResponseCacheSink.app"
-      ],
-      "replacement": "ResourceGateway-owned clients, cache, permissions and invalidation collaborators",
-      "phase": "4"
     }
   ],
   "appParameterFunctionGroups": [
@@ -886,18 +917,6 @@
       ],
       "replacement": "ClusterRuntimeManager state and narrow discovery collaborators",
       "phase": "5A"
-    },
-    {
-      "id": "resource-app-parameters",
-      "entries": [
-        "fetch_helpers.go:FetchClusterResource:a",
-        "fetch_helpers.go:FetchNamespacedResource:a",
-        "fetch_helpers.go:FetchResourceWithSelection:a",
-        "fetch_helpers.go:ensureDependenciesInitialized:a",
-        "fetch_helpers.go:executeWithRetry:a"
-      ],
-      "replacement": "ResourceGateway methods and narrow client/readiness collaborators",
-      "phase": "4"
     }
   ],
   "directAppTestGroups": [
@@ -991,29 +1010,6 @@
       "phase": "5C"
     },
     {
-      "id": "resource-component-tests",
-      "files": [
-        "app_permissions_test.go",
-        "autoscaling_details_test.go",
-        "fetch_helpers_test.go",
-        "object_actions_test.go",
-        "object_detail_provider_test.go",
-        "object_finalizer_actions_test.go",
-        "object_yaml_collision_test.go",
-        "object_yaml_mutation_test.go",
-        "portforward_ports_test.go",
-        "resource_bindings_test.go",
-        "resource_permission_test.go",
-        "response_cache_permissions_test.go",
-        "response_cache_test.go",
-        "workload_actions_test.go",
-        "workload_rollback_test.go"
-      ],
-      "classification": "component",
-      "owner": "ResourceGateway",
-      "phase": "4"
-    },
-    {
       "id": "operations-coordinator-fixture-test",
       "files": [
         "operations_coordinator_fixture_test.go"
@@ -1064,8 +1060,7 @@
       "id": "refresh-replacement-workflow-tests",
       "files": [
         "app_refresh_recovery_test.go",
-        "app_refresh_update_test.go",
-        "response_cache_invalidation_test.go"
+        "app_refresh_update_test.go"
       ],
       "classification": "cross-component-workflow",
       "owner": "RefreshCoordinator",
@@ -1101,31 +1096,7 @@
       "phase": "6"
     }
   ],
-  "testOnlyAppMethodGroups": [
-    {
-      "id": "resource-test-entrypoints",
-      "entries": [
-        "test_entrypoints_test.go:App.cordonNode",
-        "test_entrypoints_test.go:App.createDebugContainer",
-        "test_entrypoints_test.go:App.deleteHelmRelease",
-        "test_entrypoints_test.go:App.deleteNode",
-        "test_entrypoints_test.go:App.deletePod",
-        "test_entrypoints_test.go:App.deleteResourceByGVK",
-        "test_entrypoints_test.go:App.drainNode",
-        "test_entrypoints_test.go:App.forceDeleteNode",
-        "test_entrypoints_test.go:App.getGVRForGVK",
-        "test_entrypoints_test.go:App.invalidateResponseCacheForObject",
-        "test_entrypoints_test.go:App.restartWorkload",
-        "test_entrypoints_test.go:App.rollbackWorkload",
-        "test_entrypoints_test.go:App.scaleWorkload",
-        "test_entrypoints_test.go:App.suspendCronJob",
-        "test_entrypoints_test.go:App.triggerCronJob",
-        "test_entrypoints_test.go:App.uncordonNode"
-      ],
-      "replacement": "ResourceGateway test helpers against focused resource collaborators",
-      "phase": "4"
-    }
-  ],
+  "testOnlyAppMethodGroups": [],
   "settingsEffectRoutes": [
     {
       "route": "errorReporting",
@@ -1765,7 +1736,7 @@
       "id": "test-support",
       "entries": [
         "five backend/app_testing.go functions accepting *App",
-        "19 backend/test_entrypoints_test.go App methods",
+        "16 former App resource methods moved to ResourceGateway test entry points in Phase 4",
         "newTestAppWithDefaults and full-App fixtures"
       ],
       "caller": "backend tests",
@@ -1781,5 +1752,12 @@
     "remainingTestOnlyAppMethods": 16,
     "leafOwnerAppBackpointers": 0,
     "packageGlobalContainerLogPolicies": 0
+  },
+  "phase4Checkpoint": {
+    "appFields": 79,
+    "remainingAppParameterFunctions": 7,
+    "remainingDirectAppTests": 39,
+    "remainingTestOnlyAppMethods": 0,
+    "resourceAppBackpointers": 0
   }
 }

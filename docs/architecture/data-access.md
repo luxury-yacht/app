@@ -83,14 +83,33 @@ Frontend code imports generated commands only through
 registered service, so its exported implementation and test methods need no
 `//wails:ignore` directives.
 
+`ResourceGateway` owns request-shaped Kubernetes resource work: exact catalog
+resolution, capability queries, typed details, YAML, object actions, Helm and
+node-log operations, response caching, and permission-aware cache validation.
+It receives narrow cluster-client, context, transport-health, event, logging,
+catalog, and telemetry collaborators; it never stores `*App`. The current
+cluster-client and transport implementations are composed from `App` only until
+`ClusterRuntimeManager` replaces them.
+
+The object catalog is the only production GVK-to-GVR and object-existence
+resolver used by `ResourceGateway`. The generated resource-kind registry remains
+the per-kind vocabulary. Resource requests do not fall back to kind-only
+discovery, infer a cluster, or read preferences.
+
+Response and SSRR caches live inside `ResourceGateway`. Refresh construction
+registers gateway-owned invalidation callbacks, so the dependency points from
+refresh to resources. Resource code does not acquire refresh/subsystem state or
+call back through the composition root. `ResourceGateway` reads the shared
+`ContainerLogsSelectionPolicy` and `PermissionFetchPolicy`; successful settings
+operations push new values into those policies in the opposite direction.
+
 The generated internal `BindingModelAnchor` method belongs to
 `*DesktopService`. Its type-level `wails:inject` directive keeps every resource
-detail DTO reachable even though the implementation-only `App.Get<Kind>`
-wrappers are not commands. Both `DesktopService` and the generated anchor must
-remain in package `backend`: `genappbindings.Render` currently emits
-`package backend`, and Go cannot attach a generated method to a type declared in
-another package. Moving the service requires first adding and testing a target-
-package option in that generator.
+detail DTO reachable even though the implementation-only
+`ResourceGateway.Get<Kind>` wrappers are not commands. `genappbindings.Render`
+emits the anchor and those wrappers in package `backend`, so `DesktopService`,
+`ResourceGateway`, and the generated file must remain there. Moving either type
+requires first adding and testing a target-package option in that generator.
 
 ## Settings Rule
 

@@ -42,23 +42,23 @@ var objectYAMLOwnershipManagerPattern = regexp.MustCompile(`conflict with "([^"]
 // ownership of from other field managers. It is advisory: the caller decides
 // whether to proceed, and the save itself never goes through server-side
 // apply (which would make this editor co-owner of the entire document).
-func (a *App) CheckObjectYamlOwnership(
+func (g *ResourceGateway) CheckObjectYamlOwnership(
 	clusterID string,
 	req ObjectYAMLMutationRequest,
 ) (*ObjectYAMLOwnershipCheckResponse, error) {
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, cancel := a.mutationContext()
+	ctx, cancel := g.mutationContext()
 	defer cancel()
 
 	mc, err := prepareMutationContextWithDependencies(ctx, deps, selectionKey, req)
 	if err != nil {
 		return nil, err
 	}
-	if err := a.requireResolvedResourcePermission(ctx, deps, mc.gvr, mc.isNamespaced, resourcePermissionCheck{
+	if err := g.requireResolvedResourcePermission(ctx, deps, mc.gvr, mc.isNamespaced, resourcePermissionCheck{
 		Kind:      req.Kind,
 		Namespace: req.Namespace,
 		Name:      req.Name,

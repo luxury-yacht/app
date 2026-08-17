@@ -22,15 +22,15 @@ import (
 // namespace targets the specified workload GVK + name. Used by the object panel
 // to switch HPA-managed workloads from arbitrary scaling to fixed zero/resume
 // actions.
-func (a *App) IsWorkloadHPAManaged(clusterID, namespace, group, version, kind, name string) (bool, error) {
+func (g *ResourceGateway) IsWorkloadHPAManaged(clusterID, namespace, group, version, kind, name string) (bool, error) {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return false, err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return false, err
 	}
-	ctx := a.CtxOrBackground()
+	ctx := g.CtxOrBackground()
 
 	return isWorkloadHPAManaged(ctx, deps, namespace, group, version, kind, name)
 }

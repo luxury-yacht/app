@@ -14,15 +14,15 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 )
 
-func (a *App) GetCustomResourceDefinition(clusterID, name string) (*CustomResourceDefinitionDetails, error) {
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+func (g *ResourceGateway) GetCustomResourceDefinition(clusterID, name string) (*CustomResourceDefinitionDetails, error) {
+	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
 	if deps.APIExtensionsClient == nil {
 		return nil, fmt.Errorf("apiextensions client not initialized")
 	}
-	return FetchClusterResource(a, deps, selectionKey, "CustomResourceDefinition", name, func(ctx context.Context) (*CustomResourceDefinitionDetails, error) {
+	return FetchClusterResource(g, deps, selectionKey, "CustomResourceDefinition", name, func(ctx context.Context) (*CustomResourceDefinitionDetails, error) {
 		return apiextensions.NewService(deps).CustomResourceDefinition(ctx, name)
 	})
 }

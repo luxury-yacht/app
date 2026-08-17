@@ -38,9 +38,9 @@ func TestRunObjectActionRemovesMetadataFinalizerWithExactPatchPermission(t *test
 		Name: "configmaps", SingularName: "configmap", Namespaced: true, Kind: "ConfigMap",
 		Verbs: metav1.Verbs{"get", "list", "watch", "patch"},
 	}))
-	app := finalizerActionTestApp(t, kubeClient, dynamicClient)
+	gateway := finalizerActionTestApp(t, kubeClient, dynamicClient)
 
-	_, err := app.RunObjectAction(ObjectActionRequest{
+	_, err := gateway.RunObjectAction(ObjectActionRequest{
 		Action:    ObjectActionRemoveFinalizer,
 		Target:    objectActionTarget("cluster-a", "", "v1", "ConfigMap", "default", "sample"),
 		Finalizer: "example.com/remove", FinalizerPath: "metadata.finalizers",
@@ -77,9 +77,9 @@ func TestRunObjectActionRemovesNamespaceSpecFinalizerWithFinalizePermission(t *t
 		Name: "namespaces", SingularName: "namespace", Namespaced: false, Kind: "Namespace",
 		Verbs: metav1.Verbs{"get", "list", "watch", "update"},
 	}))
-	app := finalizerActionTestApp(t, kubeClient, nil)
+	gateway := finalizerActionTestApp(t, kubeClient, nil)
 
-	_, err := app.RunObjectAction(ObjectActionRequest{
+	_, err := gateway.RunObjectAction(ObjectActionRequest{
 		Action:    ObjectActionRemoveFinalizer,
 		Target:    objectActionTarget("cluster-a", "", "v1", "Namespace", "", namespace.Name),
 		Finalizer: string(corev1.FinalizerKubernetes), FinalizerPath: "spec.finalizers",
@@ -115,9 +115,9 @@ func TestRunObjectActionDoesNotPatchFinalizerWhenPermissionDenied(t *testing.T) 
 	testsupport.SeedAPIResources(t, kubeClient, testsupport.NewAPIResourceList("v1", metav1.APIResource{
 		Name: "configmaps", Namespaced: true, Kind: "ConfigMap", Verbs: metav1.Verbs{"get", "list", "watch", "patch"},
 	}))
-	app := finalizerActionTestApp(t, kubeClient, dynamicClient)
+	gateway := finalizerActionTestApp(t, kubeClient, dynamicClient)
 
-	_, err := app.RunObjectAction(ObjectActionRequest{
+	_, err := gateway.RunObjectAction(ObjectActionRequest{
 		Action:    ObjectActionRemoveFinalizer,
 		Target:    objectActionTarget("cluster-a", "", "v1", "ConfigMap", "default", "sample"),
 		Finalizer: "example.com/remove", FinalizerPath: "metadata.finalizers",
@@ -134,16 +134,16 @@ func TestRunObjectActionDoesNotPatchFinalizerWhenPermissionDenied(t *testing.T) 
 
 func TestRemoveObjectFinalizerActionRejectsInvalidDirectPathsAndMissingClusters(t *testing.T) {
 	kubeClient := cgofake.NewClientset()
-	app := finalizerActionTestApp(t, kubeClient, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()))
+	gateway := finalizerActionTestApp(t, kubeClient, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()))
 	target := objectActionTarget("cluster-a", "", "v1", "ConfigMap", "default", "sample")
 
-	if err := app.removeObjectFinalizerAction(target, "example.com/remove", "status.finalizers"); err == nil {
+	if err := gateway.removeObjectFinalizerAction(target, "example.com/remove", "status.finalizers"); err == nil {
 		t.Fatal("expected unsupported path error")
 	}
-	if err := app.removeObjectFinalizerAction(target, "example.com/remove", objectFinalizerPathSpec); err == nil {
+	if err := gateway.removeObjectFinalizerAction(target, "example.com/remove", objectFinalizerPathSpec); err == nil {
 		t.Fatal("expected Namespace target error")
 	}
-	if err := NewApp(nil).removeObjectFinalizerAction(
+	if err := newResourceGatewayFixture().gateway.removeObjectFinalizerAction(
 		objectActionTarget("missing", "", "v1", "ConfigMap", "default", "sample"),
 		"example.com/remove",
 		objectFinalizerPathMetadata,
@@ -152,15 +152,14 @@ func TestRemoveObjectFinalizerActionRejectsInvalidDirectPathsAndMissingClusters(
 	}
 }
 
-func finalizerActionTestApp(t testing.TB, kubeClient *cgofake.Clientset, dynamicClient *dynamicfake.FakeDynamicClient) *App {
+func finalizerActionTestApp(t testing.TB, kubeClient *cgofake.Clientset, dynamicClient *dynamicfake.FakeDynamicClient) *ResourceGateway {
 	t.Helper()
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
+	fixture := newResourceGatewayFixture()
+	fixture.setCluster("cluster-a", &clusterClients{
 		meta: ClusterMeta{ID: "cluster-a", Name: "cluster-a"}, kubeconfigPath: "/path", kubeconfigContext: "ctx",
 		client: kubeClient, dynamicClient: dynamicClient,
 	})
-	return app
+	return fixture.gateway
 }
 
 func assertFinalizerPermission(t testing.TB, actions []cgotesting.Action, want authorizationv1.ResourceAttributes) {

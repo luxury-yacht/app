@@ -30,6 +30,20 @@ func TestWailsBindingsUseInterfaces(t *testing.T) {
 	require.Contains(t, commandLine, " -i")
 }
 
+func TestResourceBoundaryIsOwnedByResourceGateway(t *testing.T) {
+	appSource := readTestFile(t, repositoryPath("backend", "app.go"))
+	gatewaySource := readTestFile(t, repositoryPath("backend", "resource_gateway.go"))
+	generatorSource := readTestFile(t, repositoryPath("backend", "internal", "genappbindings", "render.go"))
+	mainSource := readTestFile(t, repositoryPath("main.go"))
+
+	require.Contains(t, gatewaySource, "type ResourceGateway struct {")
+	require.NotContains(t, gatewaySource, "*App")
+	require.NotContains(t, appSource, "responseCache *responseCache")
+	require.Contains(t, generatorSource, "func (g *ResourceGateway) Get")
+	require.NotContains(t, generatorSource, "func (a *App) Get%")
+	require.Regexp(t, `Resources:\s+backendApp\.ResourceGateway\(\)`, mainSource)
+}
+
 func TestWailsProjectUsesFreshInitBuildDefaults(t *testing.T) {
 	rootTaskfile, err := os.ReadFile(repositoryPath("Taskfile.yml"))
 	require.NoError(t, err)

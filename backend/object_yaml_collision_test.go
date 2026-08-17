@@ -126,11 +126,9 @@ func collidingDBInstanceDiscoveryLists() []*metav1.APIResourceList {
 //
 // The dynamic-client objects carry a distinguishing spec.source field so tests
 // can tell which one came back.
-func newCollidingDBInstanceCluster(t *testing.T, clusterID string) *App {
+func newCollidingDBInstanceCluster(t *testing.T, clusterID string) *resourceGatewayFixture {
 	t.Helper()
-
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	fixture := newResourceGatewayFixture()
 
 	kubeClient := kubernetesfake.NewClientset()
 	allowSelfSubjectAccessReviews(kubeClient)
@@ -171,7 +169,7 @@ func newCollidingDBInstanceCluster(t *testing.T, clusterID string) *App {
 
 	dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), ackObj, kindaRocksObj)
 
-	registerTestClusterWithClients(app, clusterID, &clusterClients{
+	fixture.setCluster(clusterID, &clusterClients{
 		meta:                ClusterMeta{ID: clusterID, Name: "ctx"},
 		kubeconfigPath:      "/path",
 		kubeconfigContext:   "ctx",
@@ -179,7 +177,7 @@ func newCollidingDBInstanceCluster(t *testing.T, clusterID string) *App {
 		dynamicClient:       dynamicClient,
 		apiextensionsClient: apiExtClient,
 	})
-	return app
+	return fixture
 }
 
 // TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs is a GREEN guardrail
@@ -193,7 +191,7 @@ func TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs(t *testing.T) {
 	const clusterID = "collision-gvk"
 	app := newCollidingDBInstanceCluster(t, clusterID)
 
-	deps, _, err := app.resolveClusterDependencies(clusterID)
+	deps, _, err := app.gateway.resolveClusterDependencies(clusterID)
 	if err != nil {
 		t.Fatalf("resolveClusterDependencies: %v", err)
 	}
@@ -263,7 +261,7 @@ func TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 	app := newCollidingDBInstanceCluster(t, clusterID)
 
 	t.Run("ACK DBInstance returns ack-rds YAML", func(t *testing.T) {
-		yamlStr, err := app.GetObjectYAMLByGVK(clusterID, "rds.services.k8s.aws/v1alpha1", "DBInstance", "default", "my-db")
+		yamlStr, err := app.gateway.GetObjectYAMLByGVK(clusterID, "rds.services.k8s.aws/v1alpha1", "DBInstance", "default", "my-db")
 		if err != nil {
 			t.Fatalf("GetObjectYAMLByGVK returned error for ACK: %v", err)
 		}
@@ -276,7 +274,7 @@ func TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 	})
 
 	t.Run("kinda.rocks DbInstance returns db-operator YAML", func(t *testing.T) {
-		yamlStr, err := app.GetObjectYAMLByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "my-db")
+		yamlStr, err := app.gateway.GetObjectYAMLByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "my-db")
 		if err != nil {
 			t.Fatalf("GetObjectYAMLByGVK returned error for kinda.rocks: %v", err)
 		}
@@ -289,7 +287,7 @@ func TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 	})
 
 	t.Run("missing name returns boundary error", func(t *testing.T) {
-		_, err := app.GetObjectYAMLByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "")
+		_, err := app.gateway.GetObjectYAMLByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "")
 		if err == nil {
 			t.Fatal("expected error when name is empty")
 		}
@@ -322,7 +320,7 @@ func TestQueryPermissionsDisambiguatesCollidingDBInstances(t *testing.T) {
 	const clusterID = "collision-capabilities"
 	app := newCollidingDBInstanceCluster(t, clusterID)
 
-	kubeClient := app.clusterClients[clusterID].client.(*kubernetesfake.Clientset)
+	kubeClient := app.clusters[clusterID].client.(*kubernetesfake.Clientset)
 
 	// Force SSAR fallback for every query: SSRR returns Incomplete so no
 	// query matches a cached rule, and Incomplete=true routes through SSAR.
@@ -376,7 +374,7 @@ func TestQueryPermissionsDisambiguatesCollidingDBInstances(t *testing.T) {
 		},
 	}
 
-	resp, err := app.QueryPermissions(queries)
+	resp, err := app.gateway.QueryPermissions(queries)
 	if err != nil {
 		t.Fatalf("QueryPermissions returned error: %v", err)
 	}
@@ -440,20 +438,20 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 	t.Run("ACK DBInstance", func(t *testing.T) {
 		const clusterID = "collision-delete-ack"
 		app := newCollidingDBInstanceCluster(t, clusterID)
-		app.responseCache = newResponseCache(time.Minute, 10)
-		dynamicClient := app.clusterClients[clusterID].dynamicClient.(*dynamicfake.FakeDynamicClient)
+		app.gateway.responseCache = newResponseCache(time.Minute, 10)
+		dynamicClient := app.clusters[clusterID].dynamicClient.(*dynamicfake.FakeDynamicClient)
 		ackCacheKey := objectDetailCacheKeyForGVK(ackDBInstanceGVK, "default", "my-db")
 		kindaCacheKey := objectDetailCacheKeyForGVK(kindaRocksDBInstanceGVK, "default", "my-db")
-		app.responseCacheStore(clusterID, ackCacheKey, "stale-ack")
-		app.responseCacheStore(clusterID, kindaCacheKey, "fresh-kinda")
+		app.gateway.responseCacheStore(clusterID, ackCacheKey, "stale-ack")
+		app.gateway.responseCacheStore(clusterID, kindaCacheKey, "fresh-kinda")
 
-		if err := app.deleteResourceByGVK(clusterID, "rds.services.k8s.aws/v1alpha1", "DBInstance", "default", "my-db"); err != nil {
+		if err := app.gateway.deleteResourceByGVK(clusterID, "rds.services.k8s.aws/v1alpha1", "DBInstance", "default", "my-db"); err != nil {
 			t.Fatalf("deleteResourceByGVK returned error for ACK: %v", err)
 		}
-		if _, ok := app.responseCacheLookup(clusterID, ackCacheKey); ok {
+		if _, ok := app.gateway.responseCacheLookup(clusterID, ackCacheKey); ok {
 			t.Fatalf("expected ACK detail cache to be evicted")
 		}
-		if _, ok := app.responseCacheLookup(clusterID, kindaCacheKey); !ok {
+		if _, ok := app.gateway.responseCacheLookup(clusterID, kindaCacheKey); !ok {
 			t.Fatalf("expected sibling CRD detail cache to remain")
 		}
 
@@ -476,20 +474,20 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 	t.Run("kinda.rocks DbInstance", func(t *testing.T) {
 		const clusterID = "collision-delete-kinda-rocks"
 		app := newCollidingDBInstanceCluster(t, clusterID)
-		app.responseCache = newResponseCache(time.Minute, 10)
-		dynamicClient := app.clusterClients[clusterID].dynamicClient.(*dynamicfake.FakeDynamicClient)
+		app.gateway.responseCache = newResponseCache(time.Minute, 10)
+		dynamicClient := app.clusters[clusterID].dynamicClient.(*dynamicfake.FakeDynamicClient)
 		ackCacheKey := objectDetailCacheKeyForGVK(ackDBInstanceGVK, "default", "my-db")
 		kindaCacheKey := objectDetailCacheKeyForGVK(kindaRocksDBInstanceGVK, "default", "my-db")
-		app.responseCacheStore(clusterID, ackCacheKey, "fresh-ack")
-		app.responseCacheStore(clusterID, kindaCacheKey, "stale-kinda")
+		app.gateway.responseCacheStore(clusterID, ackCacheKey, "fresh-ack")
+		app.gateway.responseCacheStore(clusterID, kindaCacheKey, "stale-kinda")
 
-		if err := app.deleteResourceByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "my-db"); err != nil {
+		if err := app.gateway.deleteResourceByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "my-db"); err != nil {
 			t.Fatalf("deleteResourceByGVK returned error for kinda.rocks: %v", err)
 		}
-		if _, ok := app.responseCacheLookup(clusterID, kindaCacheKey); ok {
+		if _, ok := app.gateway.responseCacheLookup(clusterID, kindaCacheKey); ok {
 			t.Fatalf("expected kinda.rocks detail cache to be evicted")
 		}
-		if _, ok := app.responseCacheLookup(clusterID, ackCacheKey); !ok {
+		if _, ok := app.gateway.responseCacheLookup(clusterID, ackCacheKey); !ok {
 			t.Fatalf("expected sibling CRD detail cache to remain")
 		}
 
@@ -513,7 +511,7 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		const clusterID = "collision-delete-missing-version"
 		app := newCollidingDBInstanceCluster(t, clusterID)
 
-		err := app.deleteResourceByGVK(clusterID, "", "DBInstance", "default", "my-db")
+		err := app.gateway.deleteResourceByGVK(clusterID, "", "DBInstance", "default", "my-db")
 		if err == nil {
 			t.Fatal("expected error when apiVersion is empty")
 		}
@@ -526,7 +524,7 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		const clusterID = "collision-delete-missing-name"
 		app := newCollidingDBInstanceCluster(t, clusterID)
 
-		err := app.deleteResourceByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "")
+		err := app.gateway.deleteResourceByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "")
 		if err == nil {
 			t.Fatal("expected error when name is empty")
 		}

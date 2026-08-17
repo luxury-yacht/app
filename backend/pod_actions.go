@@ -10,19 +10,19 @@ package backend
 
 import "github.com/luxury-yacht/app/backend/resources/pods"
 
-func (a *App) deletePodAction(target ObjectActionTargetRef) error {
+func (g *ResourceGateway) deletePodAction(target ObjectActionTargetRef) error {
 	if target.Group != "" || target.Version != "v1" || target.Kind != pods.Identity.Kind {
 		return errUnsupportedActionTarget(ObjectActionDelete, target, "/v1", pods.Identity.Kind)
 	}
 	if err := requirePodObject(target.Namespace, target.Name); err != nil {
 		return err
 	}
-	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
-	ctx := a.CtxOrBackground()
-	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	ctx := g.CtxOrBackground()
+	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:     target.Group,
 		Version:   target.Version,
 		Kind:      target.Kind,
@@ -35,23 +35,23 @@ func (a *App) deletePodAction(target ObjectActionTargetRef) error {
 	if err := pods.DeletePod(ctx, deps, target.Namespace, target.Name); err != nil {
 		return err
 	}
-	a.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
+	g.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
 	return nil
 }
 
-func (a *App) createDebugContainerAction(target ObjectActionTargetRef, options ObjectActionDebugContainerOptions) (*DebugContainerResponse, error) {
+func (g *ResourceGateway) createDebugContainerAction(target ObjectActionTargetRef, options ObjectActionDebugContainerOptions) (*DebugContainerResponse, error) {
 	if target.Group != "" || target.Version != "v1" || target.Kind != pods.Identity.Kind {
 		return nil, errUnsupportedActionTarget(ObjectActionCreateDebugContainer, target, "/v1", pods.Identity.Kind)
 	}
 	if err := requirePodObject(target.Namespace, target.Name); err != nil {
 		return nil, err
 	}
-	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return nil, err
 	}
-	ctx := a.CtxOrBackground()
-	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	ctx := g.CtxOrBackground()
+	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:       target.Group,
 		Version:     target.Version,
 		Kind:        target.Kind,
@@ -67,6 +67,6 @@ func (a *App) createDebugContainerAction(target ObjectActionTargetRef, options O
 	if err != nil {
 		return nil, err
 	}
-	a.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
+	g.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
 	return response, nil
 }

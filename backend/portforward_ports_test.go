@@ -116,29 +116,26 @@ func TestResolvePortForwardDestination_ServiceMapsServicePortToPodTargetPort(t *
 }
 
 func TestGetTargetPorts_ServiceUsesServicePortsAndFiltersNonTCP(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = map[string]*clusterClients{
-		portForwardClusterID: {
-			meta:              ClusterMeta{ID: portForwardClusterID, Name: "ctx"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-			client: fake.NewClientset(&corev1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "api",
-					Namespace: "default",
+	fixture := newResourceGatewayFixture()
+	fixture.setCluster(portForwardClusterID, &clusterClients{
+		meta:              ClusterMeta{ID: portForwardClusterID, Name: "ctx"},
+		kubeconfigPath:    "/path",
+		kubeconfigContext: "ctx",
+		client: fake.NewClientset(&corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "api",
+				Namespace: "default",
+			},
+			Spec: corev1.ServiceSpec{
+				Ports: []corev1.ServicePort{
+					{Name: "http", Port: 80},
+					{Name: "dns", Port: 53, Protocol: corev1.ProtocolUDP},
 				},
-				Spec: corev1.ServiceSpec{
-					Ports: []corev1.ServicePort{
-						{Name: "http", Port: 80},
-						{Name: "dns", Port: 53, Protocol: corev1.ProtocolUDP},
-					},
-				},
-			}),
-		},
-	}
+			},
+		}),
+	})
 
-	ports, err := app.GetTargetPorts(portForwardClusterID, "default", "Service", "", "v1", "api")
+	ports, err := fixture.gateway.GetTargetPorts(portForwardClusterID, "default", "Service", "", "v1", "api")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -151,7 +148,7 @@ func TestGetTargetPorts_ServiceUsesServicePortsAndFiltersNonTCP(t *testing.T) {
 }
 
 func TestGetTargetPortsValidatesTargetBeforeClusterClients(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	gateway := newResourceGatewayFixture().gateway
 
 	tests := []struct {
 		name    string
@@ -182,7 +179,7 @@ func TestGetTargetPortsValidatesTargetBeforeClusterClients(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := app.GetTargetPorts("missing-cluster", tc.args[0], tc.args[1], tc.args[2], tc.args[3], tc.args[4])
+			_, err := gateway.GetTargetPorts("missing-cluster", tc.args[0], tc.args[1], tc.args[2], tc.args[3], tc.args[4])
 			if err == nil || err.Error() != tc.wantErr {
 				t.Fatalf("expected %q, got %v", tc.wantErr, err)
 			}
@@ -191,16 +188,14 @@ func TestGetTargetPortsValidatesTargetBeforeClusterClients(t *testing.T) {
 }
 
 func TestGetTargetPortsRequiresKubernetesClient(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.clusterClients = map[string]*clusterClients{
-		portForwardClusterID: {
-			meta:              ClusterMeta{ID: portForwardClusterID, Name: "ctx"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-		},
-	}
+	fixture := newResourceGatewayFixture()
+	fixture.setCluster(portForwardClusterID, &clusterClients{
+		meta:              ClusterMeta{ID: portForwardClusterID, Name: "ctx"},
+		kubeconfigPath:    "/path",
+		kubeconfigContext: "ctx",
+	})
 
-	_, err := app.GetTargetPorts(portForwardClusterID, "default", "Service", "", "v1", "api")
+	_, err := fixture.gateway.GetTargetPorts(portForwardClusterID, "default", "Service", "", "v1", "api")
 	if err == nil || err.Error() != "kubernetes client not initialized" {
 		t.Fatalf("expected client error, got %v", err)
 	}

@@ -6,12 +6,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/appupdates"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
@@ -40,8 +40,7 @@ type App struct {
 	permissionFetchPolicy    *PermissionFetchPolicy
 	dataManagement           *DataManagementCoordinator
 	attention                *ClusterAttentionService
-	// responseCache stores short-lived detail/YAML/helm GET responses.
-	responseCache *responseCache
+	resources                *ResourceGateway
 
 	refreshManager *refresh.Manager
 	refreshService atomic.Pointer[refreshServiceHandler]
@@ -156,10 +155,6 @@ type App struct {
 	// Tracks auth recovery scheduling per-cluster, allowing isolated
 	// recovery scheduling without affecting other clusters.
 
-	// ssrrCaches holds per-cluster SSRR rule caches for QueryPermissions.
-	ssrrCachesMu sync.Mutex
-	ssrrCaches   map[string]*capabilities.SSRRCache
-
 	// Per-cluster transport failure tracking.
 	// Tracks transport failures per-cluster, allowing isolated
 	// recovery without affecting other clusters.
@@ -201,7 +196,6 @@ func NewApp(wailsApplication *application.App, reporters ...sentryreporting.Repo
 		uiState:                  NewUIStateStore(),
 		containerLogsPolicy:      NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit),
 		permissionFetchPolicy:    NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency),
-		responseCache:            newDefaultResponseCache(),
 		refreshSubsystems:        make(map[string]*system.Subsystem),
 		refreshPermissionCancels: make(map[string]context.CancelFunc),
 		clusterClients:           make(map[string]*clusterClients),
@@ -244,7 +238,9 @@ func NewApp(wailsApplication *application.App, reporters ...sentryreporting.Repo
 			if err := app.clearKubeconfigSelection(); err != nil {
 				return err
 			}
-			app.responseCache.clear()
+			if app.resources != nil {
+				app.resources.clearCaches()
+			}
 			return nil
 		},
 		SearchPathsChanged: app.refreshKubeconfigDiscoveryAfterSearchPathChange,
@@ -256,6 +252,36 @@ func NewApp(wailsApplication *application.App, reporters ...sentryreporting.Repo
 	app.initAuthManager()
 	app.initGovernor()
 	app.initializeOperationsCoordinator()
+	app.resources = newResourceGateway(resourceGatewayDependencies{
+		resolveClusterDependencies:       app.resolveClusterDependencies,
+		resourceDependenciesForClusterID: app.resourceDependenciesForClusterID,
+		context:                          app.CtxOrBackground,
+		emitEvent:                        app.emitEvent,
+		logger:                           app.appLogs.Logger(),
+		clusterName:                      app.clusterNameForID,
+		recordTransportSuccess:           app.recordClusterTransportSuccess,
+		recordTransportFailure:           app.recordClusterTransportFailure,
+		retryTelemetry: func() resourceRetryTelemetry {
+			if app.telemetryRecorder == nil {
+				return nil
+			}
+			return app.telemetryRecorder
+		},
+		catalogServiceForCluster: app.objectCatalogServiceForCluster,
+		resourceResolverForCluster: func(clusterID string) common.ResourceResolver {
+			return resourceGatewayCatalogResolver{clusterID: clusterID, lookup: app.objectCatalogServiceForCluster}
+		},
+		catalogEntries: app.snapshotObjectCatalogEntries,
+		catalogTelemetry: func() telemetry.Summarizer {
+			if app.telemetryRecorder == nil {
+				return nil
+			}
+			return app.telemetryRecorder
+		},
+		permissionFetchPolicy:        app.permissionFetchPolicy,
+		containerLogsSelectionPolicy: app.containerLogsPolicy,
+		operations:                   app.operations,
+	})
 	return app
 }
 
@@ -276,6 +302,8 @@ func (a *App) DataManagementCoordinator() *DataManagementCoordinator { return a.
 func (a *App) ClusterAttentionService() *ClusterAttentionService { return a.attention }
 
 func (a *App) UpdateCoordinator() *UpdateCoordinator { return a.updates }
+
+func (a *App) ResourceGateway() *ResourceGateway { return a.resources }
 
 func (a *App) emitEvent(name string, args ...interface{}) {
 	if a == nil || a.eventEmitter == nil || !a.runtimeAvailable() {

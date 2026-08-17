@@ -96,7 +96,7 @@ func (c *responseCache) clear() {
 }
 
 // responseCacheKey scopes cache keys by cluster selection to avoid cross-cluster reuse.
-func (a *App) responseCacheKey(selectionKey, cacheKey string) string {
+func (g *ResourceGateway) responseCacheKey(selectionKey, cacheKey string) string {
 	cacheKey = strings.TrimSpace(cacheKey)
 	if cacheKey == "" {
 		return ""
@@ -107,35 +107,35 @@ func (a *App) responseCacheKey(selectionKey, cacheKey string) string {
 	return selectionKey + "|" + cacheKey
 }
 
-func (a *App) responseCacheLookup(selectionKey, cacheKey string) (any, bool) {
-	if a == nil || a.responseCache == nil {
+func (g *ResourceGateway) responseCacheLookup(selectionKey, cacheKey string) (any, bool) {
+	if g == nil || g.responseCache == nil {
 		return nil, false
 	}
-	fullKey := a.responseCacheKey(selectionKey, cacheKey)
+	fullKey := g.responseCacheKey(selectionKey, cacheKey)
 	if fullKey == "" {
 		return nil, false
 	}
-	return a.responseCache.get(fullKey)
+	return g.responseCache.get(fullKey)
 }
 
-func (a *App) responseCacheStore(selectionKey, cacheKey string, value any) {
-	if a == nil || a.responseCache == nil {
+func (g *ResourceGateway) responseCacheStore(selectionKey, cacheKey string, value any) {
+	if g == nil || g.responseCache == nil {
 		return
 	}
-	fullKey := a.responseCacheKey(selectionKey, cacheKey)
+	fullKey := g.responseCacheKey(selectionKey, cacheKey)
 	if fullKey == "" {
 		return
 	}
-	a.responseCache.set(fullKey, value)
+	g.responseCache.set(fullKey, value)
 }
 
-func (a *App) responseCacheDelete(selectionKey, cacheKey string) {
-	if a == nil || a.responseCache == nil {
+func (g *ResourceGateway) responseCacheDelete(selectionKey, cacheKey string) {
+	if g == nil || g.responseCache == nil {
 		return
 	}
-	fullKey := a.responseCacheKey(selectionKey, cacheKey)
+	fullKey := g.responseCacheKey(selectionKey, cacheKey)
 	if fullKey == "" {
 		return
 	}
-	a.responseCache.delete(fullKey)
+	g.responseCache.delete(fullKey)
 }

@@ -60,6 +60,13 @@ shape, failure behavior, and diagnostics differ.
   starts at the backend default and receives one-way pushes from successful
   preference load, startup fallback, update, and import. Permission code reads
   the policy and never reaches back into `PreferencesService`.
+- `ResourceGateway` owns UI permission evaluation, its cluster-scoped SSRR
+  caches, and permission-aware validation of cached resource responses. It reads
+  the injected `PermissionFetchPolicy`; it does not read settings or acquire a
+  refresh/subsystem lock.
+- Resource permission and mutation checks resolve exact GVK/GVR identity through
+  the object catalog supplied in the request's cluster-scoped dependencies.
+  Refresh permission state is not a shortcut for request-time mutation checks.
 - Frontend permission specs and feature labels live under
   `frontend/src/core/capabilities`.
 - Visible object action wiring lives in
@@ -87,7 +94,8 @@ shape, failure behavior, and diagnostics differ.
 - Refresh permission checker: `backend/refresh/permissions`
 - Refresh runtime policies: `backend/refresh/domainpermissions`
 - Refresh registration gates: `backend/refresh/system/registrations.go`
-- UI permission endpoint: `backend/app_permissions.go`
+- UI permission endpoint and request cache owner: `backend.ResourceGateway`
+  (`backend/app_permissions.go`, `backend/response_cache_permissions.go`)
 - UI permission fan-out policy: `backend/runtime_setting_policies.go`
 - Capability query types and rule matching: `backend/capabilities`
 - Frontend permission store/specs/hooks: `frontend/src/core/capabilities`

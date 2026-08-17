@@ -46,8 +46,8 @@ type responseCacheInvalidationGuard struct {
 }
 
 // registerResponseCacheInvalidation wires informer-driven cache eviction for cached detail/YAML/helm responses.
-func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, selectionKey string) {
-	if a == nil || a.responseCache == nil || subsystem == nil || subsystem.InformerFactory == nil {
+func (g *ResourceGateway) registerResponseCacheInvalidation(subsystem *system.Subsystem, selectionKey string) {
+	if g == nil || g.responseCache == nil || subsystem == nil || subsystem.InformerFactory == nil {
 		return
 	}
 	shared := subsystem.InformerFactory.SharedInformerFactory()
@@ -72,7 +72,7 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 	// invalidation flows from an ingest Catalog-half sink instead of a factory
 	// informer handler. Register it once for all cut kinds.
 	ingestOwned := kindregistry.IngestOwnedGVRs()
-	a.registerIngestResponseCacheInvalidation(subsystem, selectionKey, ingestOwned)
+	g.registerIngestResponseCacheInvalidation(subsystem, selectionKey, ingestOwned)
 
 	// The ingest Catalog-half sink evicts a cut kind's own detail entry, but the Helm
 	// cache eviction switches on the typed Secret/ConfigMap (release labels/type) the
@@ -80,13 +80,13 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 	// lives only in the dedicated label-filtered helm-storage source — register the Helm
 	// eviction on its informers so a release secret/configmap change still drops the
 	// cached Helm release/manifest/values.
-	a.registerHelmCacheInvalidation(subsystem.InformerFactory.HelmStorage(), selectionKey)
+	g.registerHelmCacheInvalidation(subsystem.InformerFactory.HelmStorage(), selectionKey)
 
-	a.registerDescriptorResponseCacheInvalidation(shared, gateway, apiext, selectionKey, guard, perms, ingestOwned)
-	a.registerCustomResourceCacheInvalidation(subsystem, selectionKey)
+	g.registerDescriptorResponseCacheInvalidation(shared, gateway, apiext, selectionKey, guard, perms, ingestOwned)
+	g.registerCustomResourceCacheInvalidation(subsystem, selectionKey)
 }
 
-func (a *App) registerIngestResponseCacheInvalidation(
+func (g *ResourceGateway) registerIngestResponseCacheInvalidation(
 	subsystem *system.Subsystem,
 	selectionKey string,
 	ingestOwned map[schema.GroupVersionResource]struct{},
@@ -94,13 +94,13 @@ func (a *App) registerIngestResponseCacheInvalidation(
 	if subsystem.IngestManager == nil {
 		return
 	}
-	sink := a.ingestResponseCacheSink(selectionKey)
+	sink := g.ingestResponseCacheSink(selectionKey)
 	for gvr := range ingestOwned {
 		subsystem.IngestManager.AddCatalogSink(gvr, sink)
 	}
 }
 
-func (a *App) registerDescriptorResponseCacheInvalidation(
+func (g *ResourceGateway) registerDescriptorResponseCacheInvalidation(
 	shared informers.SharedInformerFactory,
 	gateway gatewayinformers.SharedInformerFactory,
 	apiext apiextensionsinformers.SharedInformerFactory,
@@ -137,11 +137,11 @@ func (a *App) registerDescriptorResponseCacheInvalidation(
 		default:
 			informer = sharedFactoryInformer(shared, gvr)
 		}
-		a.addResponseCacheInvalidationHandler(informer, selectionKey, d.Identity, guard)
+		g.addResponseCacheInvalidationHandler(informer, selectionKey, d.Identity, guard)
 	}
 }
 
-func (a *App) registerCustomResourceCacheInvalidation(subsystem *system.Subsystem, selectionKey string) {
+func (g *ResourceGateway) registerCustomResourceCacheInvalidation(subsystem *system.Subsystem, selectionKey string) {
 	if subsystem.ResourceStream == nil {
 		return
 	}
@@ -150,7 +150,7 @@ func (a *App) registerCustomResourceCacheInvalidation(subsystem *system.Subsyste
 		if ref.ClusterID == "" || ref.Group == "" || ref.Version == "" || ref.Kind == "" || ref.Name == "" {
 			return
 		}
-		a.invalidateResponseCacheForResource(selectionKey, ref)
+		g.invalidateResponseCacheForResource(selectionKey, ref)
 	})
 }
 
@@ -202,38 +202,38 @@ func apiextensionsFactoryInformer(factory apiextensionsinformers.SharedInformerF
 }
 
 // addResponseCacheInvalidationHandler evicts cached responses when an informer update arrives.
-func (a *App) addResponseCacheInvalidationHandler(
+func (g *ResourceGateway) addResponseCacheInvalidationHandler(
 	informer cache.SharedIndexInformer,
 	selectionKey string,
 	identity resourcekind.Identity,
 	guard responseCacheInvalidationGuard,
 ) {
-	if a == nil || a.responseCache == nil || informer == nil {
+	if g == nil || g.responseCache == nil || informer == nil {
 		return
 	}
 	handler := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			a.invalidateResponseCacheForObjectEvent(selectionKey, identity, obj, responseCacheInvalidationAdd, guard)
+			g.invalidateResponseCacheForObjectEvent(selectionKey, identity, obj, responseCacheInvalidationAdd, guard)
 		},
 		UpdateFunc: func(_, newObj interface{}) {
-			a.invalidateResponseCacheForObjectEvent(selectionKey, identity, newObj, responseCacheInvalidationUpdate, guard)
+			g.invalidateResponseCacheForObjectEvent(selectionKey, identity, newObj, responseCacheInvalidationUpdate, guard)
 		},
 		DeleteFunc: func(obj interface{}) {
-			a.invalidateResponseCacheForObjectEvent(selectionKey, identity, obj, responseCacheInvalidationDelete, guard)
+			g.invalidateResponseCacheForObjectEvent(selectionKey, identity, obj, responseCacheInvalidationDelete, guard)
 		},
 	}
 	informer.AddEventHandler(handler)
 }
 
 // invalidateResponseCacheForObjectEvent clears cached detail/YAML/helm data for the given event.
-func (a *App) invalidateResponseCacheForObjectEvent(
+func (g *ResourceGateway) invalidateResponseCacheForObjectEvent(
 	selectionKey string,
 	identity resourcekind.Identity,
 	obj interface{},
 	eventType responseCacheInvalidationEvent,
 	guard responseCacheInvalidationGuard,
 ) {
-	if a == nil || a.responseCache == nil {
+	if g == nil || g.responseCache == nil {
 		return
 	}
 	if identity.Version == "" || identity.Kind == "" || identity.Resource == "" {
@@ -252,8 +252,8 @@ func (a *App) invalidateResponseCacheForObjectEvent(
 		return
 	}
 	namespace := strings.TrimSpace(metaObj.GetNamespace())
-	a.invalidateResponseCacheForResource(selectionKey, resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: selectionKey, Group: identity.Group, Version: identity.Version, Kind: identity.Kind, Resource: identity.Resource, Namespace: namespace, Name: name, UID: string(metaObj.GetUID())}))
-	a.invalidateHelmCacheIfNeeded(selectionKey, obj)
+	g.invalidateResponseCacheForResource(selectionKey, resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: selectionKey, Group: identity.Group, Version: identity.Version, Kind: identity.Kind, Resource: identity.Resource, Namespace: namespace, Name: name, UID: string(metaObj.GetUID())}))
+	g.invalidateHelmCacheIfNeeded(selectionKey, obj)
 }
 
 // ingestResponseCacheSink returns an ingest Catalog-half sink that evicts a cut
@@ -261,16 +261,19 @@ func (a *App) invalidateResponseCacheForObjectEvent(
 // removed). The reflector delivers the projected catalog Summary, which carries the
 // kind/namespace/name the invalidation keys off — the same identity the
 // shared-informer handler derived from the typed object.
-func (a *App) ingestResponseCacheSink(selectionKey string) ingest.Sink {
-	return ingestResponseCacheSink{app: a, selectionKey: selectionKey}
+func (g *ResourceGateway) ingestResponseCacheSink(selectionKey string) ingest.Sink {
+	return ingestResponseCacheSink{
+		invalidateResource: g.invalidateResponseCacheForResource,
+		selectionKey:       selectionKey,
+	}
 }
 
 // ingestResponseCacheSink adapts response-cache invalidation to an ingest.Sink. It
 // evicts on both Upsert and Delete: a cached detail is stale once the resource
 // changes or disappears.
 type ingestResponseCacheSink struct {
-	app          *App
-	selectionKey string
+	invalidateResource func(string, resourcemodel.ResourceRef)
+	selectionKey       string
 }
 
 func (s ingestResponseCacheSink) Upsert(row interface{}) { s.invalidate(row) }
@@ -281,15 +284,17 @@ func (s ingestResponseCacheSink) invalidate(row interface{}) {
 	if !ok {
 		return
 	}
-	s.app.invalidateResponseCacheForResource(s.selectionKey, summary.Ref)
+	if s.invalidateResource != nil {
+		s.invalidateResource(s.selectionKey, summary.Ref)
+	}
 }
 
 // invalidateResponseCacheForResource clears cached detail/YAML entries for a resource key.
-func (a *App) invalidateResponseCacheForResource(selectionKey string, ref resourcemodel.ResourceRef) {
+func (g *ResourceGateway) invalidateResponseCacheForResource(selectionKey string, ref resourcemodel.ResourceRef) {
 	if ref.ClusterID == "" || ref.Version == "" || ref.Kind == "" || ref.Resource == "" || ref.Name == "" {
 		return
 	}
-	a.invalidateResponseCacheForGVK(
+	g.invalidateResponseCacheForGVK(
 		selectionKey,
 		schema.GroupVersionKind{Group: ref.Group, Version: ref.Version, Kind: ref.Kind},
 		ref.Namespace,
@@ -299,13 +304,13 @@ func (a *App) invalidateResponseCacheForResource(selectionKey string, ref resour
 
 // invalidateResponseCacheForGVK drops the exact GVK detail/header entries and
 // the legacy kind-only detail key used by typed detail fetchers.
-func (a *App) invalidateResponseCacheForGVK(selectionKey string, gvk schema.GroupVersionKind, namespace, name string) {
+func (g *ResourceGateway) invalidateResponseCacheForGVK(selectionKey string, gvk schema.GroupVersionKind, namespace, name string) {
 	if strings.TrimSpace(gvk.Kind) == "" || strings.TrimSpace(name) == "" {
 		return
 	}
-	a.responseCacheDelete(selectionKey, objectDetailCacheKeyForGVK(gvk, namespace, name))
-	a.responseCacheDelete(selectionKey, objectHeaderMetadataCacheKey(gvk, namespace, name))
-	a.responseCacheDelete(selectionKey, objectDetailCacheKey(gvk.Kind, namespace, name))
+	g.responseCacheDelete(selectionKey, objectDetailCacheKeyForGVK(gvk, namespace, name))
+	g.responseCacheDelete(selectionKey, objectHeaderMetadataCacheKey(gvk, namespace, name))
+	g.responseCacheDelete(selectionKey, objectDetailCacheKey(gvk.Kind, namespace, name))
 }
 
 // invalidateResponseCache drops the cached detail entry for the resource, plus
@@ -316,11 +321,11 @@ func (a *App) invalidateResponseCacheForGVK(selectionKey string, gvk schema.Grou
 // with stale content.
 // (The legacy YAML response-cache entry was retired with App.GetObjectYAML —
 // the GVK-aware fetch path doesn't write to the response cache.)
-func (a *App) invalidateResponseCache(selectionKey, kind, namespace, name string) {
-	a.responseCacheDelete(selectionKey, objectDetailCacheKey(kind, namespace, name))
+func (g *ResourceGateway) invalidateResponseCache(selectionKey, kind, namespace, name string) {
+	g.responseCacheDelete(selectionKey, objectDetailCacheKey(kind, namespace, name))
 	if gvk, ok := objectDetailFetcherGVKs[strings.ToLower(strings.TrimSpace(kind))]; ok {
-		a.responseCacheDelete(selectionKey, objectDetailCacheKeyForGVK(gvk, namespace, name))
-		a.responseCacheDelete(selectionKey, objectHeaderMetadataCacheKey(gvk, namespace, name))
+		g.responseCacheDelete(selectionKey, objectDetailCacheKeyForGVK(gvk, namespace, name))
+		g.responseCacheDelete(selectionKey, objectHeaderMetadataCacheKey(gvk, namespace, name))
 	}
 }
 
@@ -330,14 +335,14 @@ func (a *App) invalidateResponseCache(selectionKey, kind, namespace, name string
 // the cutover removed: every release-storage change drops the cached Helm
 // release/manifest/values for that release. A nil source or nil informer (the
 // identity cannot list/watch that kind) is a no-op.
-func (a *App) registerHelmCacheInvalidation(helm *informer.HelmStorageSource, selectionKey string) {
-	if a == nil || a.responseCache == nil || helm == nil {
+func (g *ResourceGateway) registerHelmCacheInvalidation(helm *informer.HelmStorageSource, selectionKey string) {
+	if g == nil || g.responseCache == nil || helm == nil {
 		return
 	}
 	handler := cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { a.invalidateHelmCacheIfNeeded(selectionKey, unwrapCacheTombstone(obj)) },
-		UpdateFunc: func(_, newObj interface{}) { a.invalidateHelmCacheIfNeeded(selectionKey, unwrapCacheTombstone(newObj)) },
-		DeleteFunc: func(obj interface{}) { a.invalidateHelmCacheIfNeeded(selectionKey, unwrapCacheTombstone(obj)) },
+		AddFunc:    func(obj interface{}) { g.invalidateHelmCacheIfNeeded(selectionKey, unwrapCacheTombstone(obj)) },
+		UpdateFunc: func(_, newObj interface{}) { g.invalidateHelmCacheIfNeeded(selectionKey, unwrapCacheTombstone(newObj)) },
+		DeleteFunc: func(obj interface{}) { g.invalidateHelmCacheIfNeeded(selectionKey, unwrapCacheTombstone(obj)) },
 	}
 	if inf := helm.SecretInformer(); inf != nil {
 		inf.AddEventHandler(handler)
@@ -348,29 +353,29 @@ func (a *App) registerHelmCacheInvalidation(helm *informer.HelmStorageSource, se
 }
 
 // invalidateHelmCacheIfNeeded evicts Helm release cache entries when a release secret/configmap changes.
-func (a *App) invalidateHelmCacheIfNeeded(selectionKey string, obj interface{}) {
+func (g *ResourceGateway) invalidateHelmCacheIfNeeded(selectionKey string, obj interface{}) {
 	switch typed := obj.(type) {
 	case *corev1.Secret:
 		if !isHelmReleaseObject(typed.Name, typed.Labels, string(typed.Type)) {
 			return
 		}
-		a.invalidateHelmCache(selectionKey, typed.Namespace, resourcemodel.HelmReleaseName(typed.Name))
+		g.invalidateHelmCache(selectionKey, typed.Namespace, resourcemodel.HelmReleaseName(typed.Name))
 	case *corev1.ConfigMap:
 		if !isHelmReleaseObject(typed.Name, typed.Labels, "") {
 			return
 		}
-		a.invalidateHelmCache(selectionKey, typed.Namespace, resourcemodel.HelmReleaseName(typed.Name))
+		g.invalidateHelmCache(selectionKey, typed.Namespace, resourcemodel.HelmReleaseName(typed.Name))
 	}
 }
 
 // invalidateHelmCache clears cached Helm release details, manifests, and values.
-func (a *App) invalidateHelmCache(selectionKey, namespace, name string) {
+func (g *ResourceGateway) invalidateHelmCache(selectionKey, namespace, name string) {
 	if name == "" {
 		return
 	}
-	a.responseCacheDelete(selectionKey, objectDetailCacheKey("HelmRelease", namespace, name))
-	a.responseCacheDelete(selectionKey, objectDetailCacheKey("HelmManifest", namespace, name))
-	a.responseCacheDelete(selectionKey, objectDetailCacheKey("HelmValues", namespace, name))
+	g.responseCacheDelete(selectionKey, objectDetailCacheKey("HelmRelease", namespace, name))
+	g.responseCacheDelete(selectionKey, objectDetailCacheKey("HelmManifest", namespace, name))
+	g.responseCacheDelete(selectionKey, objectDetailCacheKey("HelmValues", namespace, name))
 }
 
 // unwrapCacheTombstone normalizes deleted informer events to the underlying object.

@@ -17,19 +17,19 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/helm"
 )
 
-func (a *App) deleteHelmReleaseAction(target ObjectActionTargetRef) error {
+func (g *ResourceGateway) deleteHelmReleaseAction(target ObjectActionTargetRef) error {
 	if target.Group != "helm.sh" || target.Version != "v3" || !strings.EqualFold(target.Kind, "HelmRelease") {
 		return errUnsupportedActionTarget(ObjectActionDelete, target, "helm.sh/v3", "HelmRelease")
 	}
 	if err := requireNamespacedObject(target.Namespace, target.Name); err != nil {
 		return err
 	}
-	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
-	ctx := a.CtxOrBackground()
-	if err := a.requireAnyResourcePermission(ctx, deps,
+	ctx := g.CtxOrBackground()
+	if err := g.requireAnyResourcePermission(ctx, deps,
 		resourcePermissionCheck{
 			Version:   "v1",
 			Kind:      secretpkg.Identity.Kind,
@@ -45,13 +45,13 @@ func (a *App) deleteHelmReleaseAction(target ObjectActionTargetRef) error {
 	); err != nil {
 		return err
 	}
-	_, err = FetchResourceWithSelection(a, selectionKey, "", "HelmDelete", target.Namespace+"/"+target.Name, func(context.Context) (struct{}, error) {
+	_, err = FetchResourceWithSelection(g, selectionKey, "", "HelmDelete", target.Namespace+"/"+target.Name, func(context.Context) (struct{}, error) {
 		service := helm.NewService(helm.Dependencies{Common: deps})
 		return struct{}{}, service.DeleteRelease(target.Namespace, target.Name)
 	})
 	if err != nil {
 		return err
 	}
-	a.invalidateHelmCache(selectionKey, target.Namespace, target.Name)
+	g.invalidateHelmCache(selectionKey, target.Namespace, target.Name)
 	return nil
 }

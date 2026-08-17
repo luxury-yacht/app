@@ -29,6 +29,14 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/hpa"
 )
 
+func newObjectDetailResourceGateway(clusters map[string]*clusterClients) *ResourceGateway {
+	fixture := newResourceGatewayFixture()
+	for clusterID, clients := range clusters {
+		fixture.setCluster(clusterID, clients)
+	}
+	return fixture.gateway
+}
+
 func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo-deploy", Namespace: "default"},
@@ -45,21 +53,18 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "demo-ns"}}
 	event := &corev1.Event{ObjectMeta: metav1.ObjectMeta{Name: "demo-event", Namespace: "default"}}
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	// Per-cluster clients are stored in clusterClients, not in global fields.
 	clusterID := "config:ctx"
 	fakeClient := fake.NewClientset(deploy, configMap, clusterRole, namespace, event)
-	app.clusterClients = map[string]*clusterClients{
+	gateway := newObjectDetailResourceGateway(map[string]*clusterClients{
 		clusterID: {
 			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
 			client:            fakeClient,
 		},
-	}
+	})
 
-	provider := app.objectDetailProvider()
+	provider := gateway.objectDetailProvider()
 	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
 		ClusterID:   clusterID,
 		ClusterName: "ctx",
@@ -88,8 +93,7 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 }
 
 func TestObjectDetailProviderUnknownKind(t *testing.T) {
-	app := NewApp(nil)
-	provider := app.objectDetailProvider()
+	provider := newResourceGatewayFixture().gateway.objectDetailProvider()
 
 	_, err := provider.FetchObjectDetails(context.Background(), schema.GroupVersionKind{Kind: "unknown-kind"}, "ns", "name")
 	if err == nil {
@@ -101,8 +105,7 @@ func TestObjectDetailProviderUnknownKind(t *testing.T) {
 }
 
 func TestObjectDetailProviderRejectsKnownKindWithoutGVK(t *testing.T) {
-	app := NewApp(nil)
-	provider := app.objectDetailProvider()
+	provider := newResourceGatewayFixture().gateway.objectDetailProvider()
 
 	_, err := provider.FetchObjectDetails(context.Background(), schema.GroupVersionKind{Kind: "Pod"}, "default", "api")
 	if err != snapshot.ErrObjectDetailNotImplemented {
@@ -111,8 +114,6 @@ func TestObjectDetailProviderRejectsKnownKindWithoutGVK(t *testing.T) {
 }
 
 func TestObjectDetailProviderRejectsKnownKindWithWrongGVK(t *testing.T) {
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
 	clusterID := "config:ctx"
 	client := fake.NewClientset(&corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
@@ -127,16 +128,16 @@ func TestObjectDetailProviderRejectsKnownKindWithWrongGVK(t *testing.T) {
 			Verbs:      metav1.Verbs{"get", "list"},
 		}},
 	}}
-	app.clusterClients = map[string]*clusterClients{
+	gateway := newObjectDetailResourceGateway(map[string]*clusterClients{
 		clusterID: {
 			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
 			client:            client,
 		},
-	}
+	})
 
-	provider := app.objectDetailProvider()
+	provider := gateway.objectDetailProvider()
 	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
 		ClusterID:   clusterID,
 		ClusterName: "ctx",
@@ -229,30 +230,27 @@ func TestObjectDetailProviderCacheKeyIncludesGVK(t *testing.T) {
 		t.Fatalf("expected distinct cache keys for colliding GVKs, got %q", coreKey)
 	}
 
-	app := NewApp(nil)
-	app.responseCache = newResponseCache(time.Minute, 10)
+	gateway := newResourceGatewayFixture().gateway
+	gateway.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
-	app.responseCacheStore(selectionKey, coreKey, "core")
-	app.responseCacheStore(selectionKey, otherKey, "other")
+	gateway.responseCacheStore(selectionKey, coreKey, "core")
+	gateway.responseCacheStore(selectionKey, otherKey, "other")
 
-	app.invalidateResponseCache(selectionKey, "ConfigMap", "default", "demo")
+	gateway.invalidateResponseCache(selectionKey, "ConfigMap", "default", "demo")
 
-	if _, ok := app.responseCacheLookup(selectionKey, coreKey); ok {
+	if _, ok := gateway.responseCacheLookup(selectionKey, coreKey); ok {
 		t.Fatalf("expected built-in GVK cache key to be invalidated")
 	}
-	if got, ok := app.responseCacheLookup(selectionKey, otherKey); !ok || got != "other" {
+	if got, ok := gateway.responseCacheLookup(selectionKey, otherKey); !ok || got != "other" {
 		t.Fatalf("expected unrelated colliding GVK cache entry to remain, got %#v ok=%v", got, ok)
 	}
 }
 
 func TestObjectDetailProviderUsesClusterContext(t *testing.T) {
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-
 	clusterAID := "config-a:ctx-a"
 	clusterBID := "config-b:ctx-b"
 
-	app.clusterClients = map[string]*clusterClients{
+	gateway := newObjectDetailResourceGateway(map[string]*clusterClients{
 		clusterAID: {
 			meta:              ClusterMeta{ID: clusterAID, Name: "ctx-a"},
 			kubeconfigPath:    "/path/a",
@@ -265,9 +263,9 @@ func TestObjectDetailProviderUsesClusterContext(t *testing.T) {
 			kubeconfigContext: "ctx-b",
 			client:            fake.NewClientset(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-b"}}),
 		},
-	}
+	})
 
-	provider := app.objectDetailProvider()
+	provider := gateway.objectDetailProvider()
 	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
 		ClusterID:   clusterBID,
 		ClusterName: "ctx-b",
@@ -297,7 +295,11 @@ func TestObjectDetailProviderFetchObjectHeaderMetadata(t *testing.T) {
 	gvr := schema.GroupVersionResource{
 		Group: "rds.services.k8s.aws", Version: "v1alpha1", Resource: "dbinstances",
 	}
-	resource := app.clusterClients[clusterID].dynamicClient.Resource(gvr).Namespace("default")
+	deps, ok := app.resourceDependenciesForClusterID(clusterID)
+	if !ok {
+		t.Fatal("expected cluster-scoped dependencies")
+	}
+	resource := deps.DynamicClient.Resource(gvr).Namespace("default")
 	object, err := resource.Get(context.Background(), "my-db", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get test object: %v", err)
@@ -309,7 +311,7 @@ func TestObjectDetailProviderFetchObjectHeaderMetadata(t *testing.T) {
 		t.Fatalf("update test object: %v", err)
 	}
 
-	provider, ok := app.objectDetailProvider().(snapshot.ObjectHeaderMetadataProvider)
+	provider, ok := app.gateway.objectDetailProvider().(snapshot.ObjectHeaderMetadataProvider)
 	if !ok {
 		t.Fatal("object detail provider does not implement ObjectHeaderMetadataProvider")
 	}
@@ -350,7 +352,7 @@ func TestObjectDetailProviderFetchObjectHeaderMetadata(t *testing.T) {
 }
 
 func TestObjectDetailProviderFetchObjectHeaderMetadataRequiresClusterScope(t *testing.T) {
-	provider, ok := newTestAppWithDefaults(t).objectDetailProvider().(snapshot.ObjectHeaderMetadataProvider)
+	provider, ok := newResourceGatewayFixture().gateway.objectDetailProvider().(snapshot.ObjectHeaderMetadataProvider)
 	if !ok {
 		t.Fatal("object detail provider does not implement ObjectHeaderMetadataProvider")
 	}
@@ -441,11 +443,8 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 		&apiextensionsv1.CustomResourceDefinition{ObjectMeta: metav1.ObjectMeta{Name: "foos.example.com"}},
 	)
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	// Per-cluster clients are stored in clusterClients, not in global fields.
 	clusterID := "config:ctx"
-	app.clusterClients = map[string]*clusterClients{
+	gateway := newObjectDetailResourceGateway(map[string]*clusterClients{
 		clusterID: {
 			meta:                ClusterMeta{ID: clusterID, Name: "ctx"},
 			kubeconfigPath:      "/path",
@@ -453,8 +452,8 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 			client:              client,
 			apiextensionsClient: apiExtClient,
 		},
-	}
-	provider := app.objectDetailProvider()
+	})
+	provider := gateway.objectDetailProvider()
 	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
 		ClusterID:   clusterID,
 		ClusterName: "ctx",
@@ -528,20 +527,16 @@ func testObjectDetailGVK(kind string) schema.GroupVersionKind {
 // rather than an old cache entry — fail loud instead of silently
 // resolving to whichever colliding CRD discovery returns first.
 func TestObjectDetailProviderFetchObjectYAMLRejectsKindOnly(t *testing.T) {
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.appLogs = NewAppLogService(NewLogger(10))
-
 	clusterID := "config:ctx"
-	app.clusterClients = map[string]*clusterClients{
+	gateway := newObjectDetailResourceGateway(map[string]*clusterClients{
 		clusterID: {
 			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
 		},
-	}
+	})
 
-	provider := app.objectDetailProvider().(*objectDetailProvider)
+	provider := gateway.objectDetailProvider().(*objectDetailProvider)
 	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
 		ClusterID:   clusterID,
 		ClusterName: "ctx",
@@ -572,7 +567,7 @@ func TestObjectDetailProviderFetchObjectYAMLByGVKDisambiguates(t *testing.T) {
 	const clusterID = "collision-provider"
 	app := newCollidingDBInstanceCluster(t, clusterID)
 
-	provider := app.objectDetailProvider().(*objectDetailProvider)
+	provider := app.gateway.objectDetailProvider().(*objectDetailProvider)
 	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
 		ClusterID:   clusterID,
 		ClusterName: "ctx",
@@ -610,18 +605,15 @@ func TestObjectDetailProviderFetchObjectYAMLByGVKDisambiguates(t *testing.T) {
 }
 
 func TestObjectDetailProviderHelmErrorsWhenClientMissing(t *testing.T) {
-	app := NewApp(nil)
-	app.appLogs = NewAppLogService(NewLogger(10))
-	// Bind the test client to a concrete cluster scope for Helm detail fetches.
 	clusterID := "config:ctx"
-	app.clusterClients = map[string]*clusterClients{
+	gateway := newObjectDetailResourceGateway(map[string]*clusterClients{
 		clusterID: {
 			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
 		},
-	}
-	provider := app.objectDetailProvider().(*objectDetailProvider)
+	})
+	provider := gateway.objectDetailProvider().(*objectDetailProvider)
 	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
 		ClusterID:   clusterID,
 		ClusterName: "ctx",

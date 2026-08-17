@@ -25,8 +25,8 @@ func requireNodeActionTarget(action string, target ObjectActionTargetRef) error 
 	}
 	return requireObjectName(target.Name)
 }
-func (a *App) requireNodeMaintenancePermission(ctx context.Context, deps common.Dependencies, nodeName string) error {
-	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+func (g *ResourceGateway) requireNodeMaintenancePermission(ctx context.Context, deps common.Dependencies, nodeName string) error {
+	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Version: "v1",
 		Kind:    nodes.Identity.Kind,
 		Name:    nodeName,
@@ -34,14 +34,14 @@ func (a *App) requireNodeMaintenancePermission(ctx context.Context, deps common.
 	}); err != nil {
 		return err
 	}
-	return a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	return g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Version: "v1",
 		Kind:    nodes.Identity.Kind,
 		Name:    nodeName,
 		Verb:    "patch",
 	})
 }
-func (a *App) requireDrainPodPermission(ctx context.Context, deps common.Dependencies, options DrainNodeOptions) error {
+func (g *ResourceGateway) requireDrainPodPermission(ctx context.Context, deps common.Dependencies, options DrainNodeOptions) error {
 	podCheck := resourcePermissionCheck{
 		Version:     "v1",
 		Kind:        pods.Identity.Kind,
@@ -59,7 +59,7 @@ func (a *App) requireDrainPodPermission(ctx context.Context, deps common.Depende
 			podCheck = resourcePermissionCheck{Version: "v1", Kind: pods.Identity.Kind, Verb: "delete"}
 		}
 	}
-	return a.requireResourcePermission(ctx, deps, podCheck)
+	return g.requireResourcePermission(ctx, deps, podCheck)
 }
 func runtimeOperationFromDrainJob(job *nodemaintenance.DrainJob) RuntimeOperation {
 	if job == nil {
@@ -79,6 +79,6 @@ func runtimeOperationFromDrainJob(job *nodemaintenance.DrainJob) RuntimeOperatio
 		},
 	}
 }
-func (a *App) clearNodeCaches(selectionKey, nodeName string) {
-	a.invalidateResponseCache(selectionKey, nodes.Identity.Kind, "", nodeName)
+func (g *ResourceGateway) clearNodeCaches(selectionKey, nodeName string) {
+	g.invalidateResponseCache(selectionKey, nodes.Identity.Kind, "", nodeName)
 }

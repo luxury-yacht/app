@@ -16,12 +16,12 @@ func isNamespaceFinalizerTarget(target ObjectActionTargetRef) bool {
 	return target.Group == "" && target.Version == "v1" && target.Kind == "Namespace"
 }
 
-func (a *App) removeObjectFinalizerAction(target ObjectActionTargetRef, finalizer, path string) error {
-	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
+func (g *ResourceGateway) removeObjectFinalizerAction(target ObjectActionTargetRef, finalizer, path string) error {
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
-	ctx := a.CtxOrBackground()
+	ctx := g.CtxOrBackground()
 	permission := resourcePermissionCheck{
 		Group: target.Group, Version: target.Version, Kind: target.Kind,
 		Namespace: target.Namespace, Name: target.Name,
@@ -30,7 +30,7 @@ func (a *App) removeObjectFinalizerAction(target ObjectActionTargetRef, finalize
 	switch path {
 	case objectFinalizerPathMetadata:
 		permission.Verb = "patch"
-		if err := a.requireResourcePermission(ctx, deps, permission); err != nil {
+		if err := g.requireResourcePermission(ctx, deps, permission); err != nil {
 			return err
 		}
 		if err := generic.NewService(deps).RemoveMetadataFinalizerByGVK(
@@ -44,7 +44,7 @@ func (a *App) removeObjectFinalizerAction(target ObjectActionTargetRef, finalize
 		}
 		permission.Verb = "update"
 		permission.Subresource = "finalize"
-		if err := a.requireResourcePermission(ctx, deps, permission); err != nil {
+		if err := g.requireResourcePermission(ctx, deps, permission); err != nil {
 			return err
 		}
 		if err := namespaces.NewService(deps).RemoveSpecFinalizer(ctx, target.Name, finalizer); err != nil {
@@ -54,6 +54,6 @@ func (a *App) removeObjectFinalizerAction(target ObjectActionTargetRef, finalize
 		return fmt.Errorf("unsupported finalizer path %q", path)
 	}
 
-	a.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
+	g.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
 	return nil
 }

@@ -418,7 +418,7 @@ func TestFetchResourceReportsOriginalKubernetesError(t *testing.T) {
 	)
 
 	_, err := FetchResourceWithSelection(
-		app,
+		app.resources,
 		"cluster-a",
 		"deployment/default/web",
 		"Deployment",
@@ -442,7 +442,7 @@ func TestFetchResourceDoesNotReportTelemetryHandledErrorAgain(t *testing.T) {
 	cause := errors.New("already reported")
 
 	_, err := FetchResourceWithSelection(
-		app,
+		app.resources,
 		"cluster-a",
 		"deployment/default/web",
 		"Deployment",

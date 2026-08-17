@@ -499,7 +499,7 @@ is 62 of 90 top-level backend test files constructing `App`, plus 19 test-only
   forwarding methods.
 - [ ] Keep a full runtime fixture only for tests that prove composition,
   lifecycle ordering, Wails routing, or cross-owner workflows.
-- [ ] Move or replace each of the 19 test-only `*App` methods with the component
+- [x] Move or replace each of the 19 test-only `*App` methods with the component
   that owns the live behavior it exercises, then delete the App method in that
   same phase.
 - [ ] Record the remaining direct-App test-file and test-entrypoint counts at
@@ -1026,54 +1026,54 @@ trigger a raw load, or separately install startup fallback.
 
 ## Phase 4 — Extract the resource boundary
 
-- [ ] Introduce `ResourceGateway` in package `backend` as the request-shaped
+- [x] Introduce `ResourceGateway` in package `backend` as the request-shaped
   coordinator over the existing catalog, capability, per-kind resource, YAML,
   object-action, node-log, and Helm services. It remains in that package while
   `genappbindings` emits its generated receiver methods there.
-- [ ] Move response-cache ownership and permission-aware cache validation into
+- [x] Move response-cache ownership and permission-aware cache validation into
   that boundary.
-- [ ] Inject the Phase 3 read-only `PermissionFetchPolicy` into
+- [x] Inject the Phase 3 read-only `PermissionFetchPolicy` into
   `ResourceGateway` and make every SSRR namespace fan-out obtain its bounded
   concurrency from that policy. Preserve the Phase 3 removal of
   `permissionSSRRFetchConcurrency()` and any direct resource/permission
   dependency on `PreferencesService`; settings continue to push updates one way
   into the policy.
-- [ ] Introduce a narrow cache-invalidation collaborator owned by
+- [x] Introduce a narrow cache-invalidation collaborator owned by
   `ResourceGateway`. Register it with the current refresh construction in this
   phase; Phase 5B changes only the caller to `RefreshCoordinator`. The
   dependency remains refresh-to-resource and never resource-to-refresh.
-- [ ] Replace the response-cache ingest sink's `*App` back-pointer with that
+- [x] Replace the response-cache ingest sink's `*App` back-pointer with that
   invalidator interface or function, and migrate every invalidation hook that
   currently receives a refresh `*system.Subsystem` without creating a callback
   into the composition root.
-- [ ] Replace helper signatures that accept `*App` with narrow context,
+- [x] Replace helper signatures that accept `*App` with narrow context,
   dependency-resolver, transport-health, lifecycle, logging, event, and cache
   interfaces. Record the cluster resolver/transport-health implementations as
   temporarily App-backed and require Phase 5A to replace them with
   `ClusterRuntimeManager`.
-- [ ] Inject the read-only `ContainerLogsSelectionPolicy` into the pod-log
+- [x] Inject the read-only `ContainerLogsSelectionPolicy` into the pod-log
   resource service. Direct/fallback fetch and live refresh streaming must use
   the same per-scope limit value and warning semantics without
   `ResourceGateway` depending on `RefreshCoordinator`.
-- [ ] Keep generated `Get<Kind>` dispatch internal to `ResourceGateway`; expose
+- [x] Keep generated `Get<Kind>` dispatch internal to `ResourceGateway`; expose
   only commands actually present in `DesktopService`. Make the receiver change
   in `backend/internal/genappbindings/render.go`, run `go generate ./backend`,
   and verify `TestAppBindingsGeneratedInSync`; do not hand-edit
   `backend/resource_details_generated.go`.
-- [ ] Preserve the object catalog as the only existence and GVK/GVR resolver,
+- [x] Preserve the object catalog as the only existence and GVK/GVR resolver,
   and preserve the generated resource-kind registry as the per-kind vocabulary.
-- [ ] Route resource commands directly from `DesktopService` and remove the
+- [x] Route resource commands directly from `DesktopService` and remove the
   displaced `App` methods and fields. Replace the App-backed
   `ResourceGateway` collaborator as one unit.
-- [ ] Move affected direct-App resource tests and test-only entry points to a
+- [x] Move affected direct-App resource tests and test-only entry points to a
   `ResourceGateway` fixture, and record the remaining counts.
-- [ ] Update `docs/architecture/data-access.md` with `ResourceGateway`, catalog
+- [x] Update `docs/architecture/data-access.md` with `ResourceGateway`, catalog
   and permission dependency direction, generated receiver placement, and
   refresh-to-cache invalidation ownership, plus its read-only dependencies on
   the shared container-log selection and permission-fetch policies. Update
   `docs/architecture/permissions.md` with the ResourceGateway-to-policy read
   direction and absence of preference reads.
-- [ ] Prove complete identity, cluster-scoped dependency resolution, permission
+- [x] Prove complete identity, cluster-scoped dependency resolution, permission
   denial, configured/default/live-updated SSRR concurrency, auth retry, cache
   invalidation, YAML ownership/apply, and object-action behavior.
 

@@ -15,105 +15,105 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 )
 
-func (a *App) cordonNodeAction(target ObjectActionTargetRef) error {
+func (g *ResourceGateway) cordonNodeAction(target ObjectActionTargetRef) error {
 	if err := requireNodeActionTarget(ObjectActionCordon, target); err != nil {
 		return err
 	}
-	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
-	ctx := a.CtxOrBackground()
-	if err := a.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
+	ctx := g.CtxOrBackground()
+	if err := g.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
 		return err
 	}
 	if err := nodes.NewService(deps).Cordon(ctx, target.Name); err != nil {
 		return err
 	}
-	a.clearNodeCaches(selectionKey, target.Name)
+	g.clearNodeCaches(selectionKey, target.Name)
 	return nil
 }
-func (a *App) uncordonNodeAction(target ObjectActionTargetRef) error {
+func (g *ResourceGateway) uncordonNodeAction(target ObjectActionTargetRef) error {
 	if err := requireNodeActionTarget(ObjectActionUncordon, target); err != nil {
 		return err
 	}
-	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
-	ctx := a.CtxOrBackground()
-	if err := a.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
+	ctx := g.CtxOrBackground()
+	if err := g.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
 		return err
 	}
 	if err := nodes.NewService(deps).Uncordon(ctx, target.Name); err != nil {
 		return err
 	}
-	a.clearNodeCaches(selectionKey, target.Name)
+	g.clearNodeCaches(selectionKey, target.Name)
 	return nil
 }
-func (a *App) drainNodeAction(target ObjectActionTargetRef, options DrainNodeOptions) error {
+func (g *ResourceGateway) drainNodeAction(target ObjectActionTargetRef, options DrainNodeOptions) error {
 	if err := requireNodeActionTarget(ObjectActionDrain, target); err != nil {
 		return err
 	}
 	if err := nodes.ValidateDrainOptions(options); err != nil {
 		return err
 	}
-	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
-	ctx := a.CtxOrBackground()
-	if err := a.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
+	ctx := g.CtxOrBackground()
+	if err := g.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
 		return err
 	}
-	if err := a.requireDrainPodPermission(ctx, deps, options); err != nil {
+	if err := g.requireDrainPodPermission(ctx, deps, options); err != nil {
 		return err
 	}
 	if err := nodes.NewService(deps).Drain(ctx, target.Name, options); err != nil {
 		return err
 	}
-	a.clearNodeCaches(selectionKey, target.Name)
+	g.clearNodeCaches(selectionKey, target.Name)
 	return nil
 }
-func (a *App) startDrainNodeAction(target ObjectActionTargetRef, options DrainNodeOptions) (string, error) {
+func (g *ResourceGateway) startDrainNodeAction(target ObjectActionTargetRef, options DrainNodeOptions) (string, error) {
 	if err := requireNodeActionTarget(ObjectActionStartDrain, target); err != nil {
 		return "", err
 	}
 	if err := nodes.ValidateDrainOptions(options); err != nil {
 		return "", err
 	}
-	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return "", err
 	}
-	ctx := a.CtxOrBackground()
-	if err := a.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
+	ctx := g.CtxOrBackground()
+	if err := g.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
 		return "", err
 	}
-	if err := a.requireDrainPodPermission(ctx, deps, options); err != nil {
+	if err := g.requireDrainPodPermission(ctx, deps, options); err != nil {
 		return "", err
 	}
-	if a.operations == nil {
+	if g.operations == nil {
 		return "", fmt.Errorf("operations coordinator not initialized")
 	}
-	operationEpoch := a.operations.clusterOperationEpoch(target.ClusterID)
+	operationEpoch := g.operations.clusterOperationEpoch(target.ClusterID)
 	job, err := nodes.NewService(deps).StartDrainWithCompletion(ctx, target.Name, options, func(jobID string) {
-		a.clearNodeCaches(selectionKey, target.Name)
-		if a.operations != nil {
-			a.operations.unregisterRuntimeOperation(jobID)
+		g.clearNodeCaches(selectionKey, target.Name)
+		if g.operations != nil {
+			g.operations.unregisterRuntimeOperation(jobID)
 		}
 	})
 	if err != nil {
 		return "", err
 	}
-	if !a.operations.registerDrainOperation(job, operationEpoch) {
-		a.operations.drainStore.CancelDrainForClusterLifecycle(job.ID, job.ClusterID, "cluster disconnected")
+	if !g.operations.registerDrainOperation(job, operationEpoch) {
+		g.operations.drainStore.CancelDrainForClusterLifecycle(job.ID, job.ClusterID, "cluster disconnected")
 		return "", fmt.Errorf("cluster disconnected before drain operation registered")
 	}
-	if current, ok := a.operations.drainStore.JobForCluster(job.ID, job.ClusterID); ok && current.Status != nodemaintenance.DrainStatusRunning && current.Status != nodemaintenance.DrainStatusCanceling {
-		a.operations.unregisterRuntimeOperation(job.ID)
+	if current, ok := g.operations.drainStore.JobForCluster(job.ID, job.ClusterID); ok && current.Status != nodemaintenance.DrainStatusRunning && current.Status != nodemaintenance.DrainStatusCanceling {
+		g.operations.unregisterRuntimeOperation(job.ID)
 	}
-	a.clearNodeCaches(selectionKey, target.Name)
+	g.clearNodeCaches(selectionKey, target.Name)
 	return job.ID, nil
 }
 func (o *OperationsCoordinator) registerDrainOperation(job *nodemaintenance.DrainJob, operationEpoch uint64) bool {
@@ -161,16 +161,16 @@ func (o *OperationsCoordinator) CancelDrainNodeJob(clusterID, jobID string) erro
 	}
 	return o.drainStore.CancelDrainForCluster(trimmedJobID, deps.ClusterID)
 }
-func (a *App) deleteNodeAction(target ObjectActionTargetRef, force bool) error {
+func (g *ResourceGateway) deleteNodeAction(target ObjectActionTargetRef, force bool) error {
 	if err := requireNodeActionTarget(ObjectActionDelete, target); err != nil {
 		return err
 	}
-	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
-	ctx := a.CtxOrBackground()
-	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	ctx := g.CtxOrBackground()
+	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:   target.Group,
 		Version: target.Version,
 		Kind:    target.Kind,
@@ -182,6 +182,6 @@ func (a *App) deleteNodeAction(target ObjectActionTargetRef, force bool) error {
 	if err := nodes.NewService(deps).Delete(ctx, target.Name, force); err != nil {
 		return err
 	}
-	a.clearNodeCaches(selectionKey, target.Name)
+	g.clearNodeCaches(selectionKey, target.Name)
 	return nil
 }

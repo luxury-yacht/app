@@ -66,7 +66,7 @@ type RevisionEntry struct {
 //
 // Multi-cluster safety: all Kubernetes requests are scoped to the cluster
 // identified by clusterID, preventing cross-cluster data leakage.
-func (a *App) GetRevisionHistory(clusterID, namespace, group, version, workloadKind, name string) ([]RevisionEntry, error) {
+func (g *ResourceGateway) GetRevisionHistory(clusterID, namespace, group, version, workloadKind, name string) ([]RevisionEntry, error) {
 	workloadKind, err := normalizeAppsV1WorkloadKind(group, version, workloadKind, revisionHistoryWorkloadKinds)
 	if err != nil {
 		return nil, fmt.Errorf("revision history not supported: %w", err)
@@ -77,7 +77,7 @@ func (a *App) GetRevisionHistory(clusterID, namespace, group, version, workloadK
 		return nil, fmt.Errorf("revision history not supported for workload kind %q", workloadKind)
 	}
 
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (a *App) GetRevisionHistory(clusterID, namespace, group, version, workloadK
 		return nil, fmt.Errorf("kubernetes client is not initialized")
 	}
 
-	ctx := a.CtxOrBackground()
+	ctx := g.CtxOrBackground()
 
 	revisions, err := ops.RevisionHistory(ctx, deps.KubernetesClient, namespace, name)
 	if err != nil {
@@ -104,11 +104,11 @@ func (a *App) GetRevisionHistory(clusterID, namespace, group, version, workloadK
 	return entries, nil
 }
 
-func (a *App) rollbackWorkloadAction(target ObjectActionTargetRef, toRevision int64) error {
-	return a.rollbackWorkloadInternal(target.ClusterID, target.Namespace, target.Group, target.Version, target.Kind, target.Name, toRevision)
+func (g *ResourceGateway) rollbackWorkloadAction(target ObjectActionTargetRef, toRevision int64) error {
+	return g.rollbackWorkloadInternal(target.ClusterID, target.Namespace, target.Group, target.Version, target.Kind, target.Name, toRevision)
 }
 
-func (a *App) rollbackWorkloadInternal(clusterID, namespace, group, version, workloadKind, name string, toRevision int64) error {
+func (g *ResourceGateway) rollbackWorkloadInternal(clusterID, namespace, group, version, workloadKind, name string, toRevision int64) error {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func (a *App) rollbackWorkloadInternal(clusterID, namespace, group, version, wor
 		return fmt.Errorf("rollback not supported: %w", err)
 	}
 
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
@@ -125,10 +125,10 @@ func (a *App) rollbackWorkloadInternal(clusterID, namespace, group, version, wor
 		return fmt.Errorf("kubernetes client is not initialized")
 	}
 
-	ctx := a.CtxOrBackground()
+	ctx := g.CtxOrBackground()
 
 	// Fetch the full revision history to locate the target revision's pod template.
-	entries, err := a.GetRevisionHistory(clusterID, namespace, group, version, workloadKind, name)
+	entries, err := g.GetRevisionHistory(clusterID, namespace, group, version, workloadKind, name)
 	if err != nil {
 		return fmt.Errorf("failed to get revision history for %s %s/%s: %w", workloadKind, namespace, name, err)
 	}
@@ -144,7 +144,7 @@ func (a *App) rollbackWorkloadInternal(clusterID, namespace, group, version, wor
 	if targetEntry == nil {
 		return fmt.Errorf("revision %d not found for %s %s/%s", toRevision, workloadKind, namespace, name)
 	}
-	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:     group,
 		Version:   version,
 		Kind:      workloadKind,
@@ -176,6 +176,6 @@ func (a *App) rollbackWorkloadInternal(clusterID, namespace, group, version, wor
 		fmt.Sprintf("Rolled back %s %s/%s to revision %d", workloadKind, namespace, name, toRevision),
 		"rollbackWorkload",
 	)
-	a.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
+	g.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
 	return nil
 }

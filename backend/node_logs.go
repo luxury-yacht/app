@@ -11,16 +11,16 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 )
 
-func (a *App) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryResponse {
+func (g *ResourceGateway) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryResponse {
 	if err := requireObjectName(nodeName); err != nil {
 		return NodeLogDiscoveryResponse{Reason: err.Error()}
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return NodeLogDiscoveryResponse{Reason: err.Error()}
 	}
-	ctx := a.CtxOrBackground()
-	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	ctx := g.CtxOrBackground()
+	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Version:     "v1",
 		Kind:        nodes.Identity.Kind,
 		Name:        nodeName,
@@ -31,16 +31,16 @@ func (a *App) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryRespo
 	}
 	return nodes.NewService(deps).DiscoverLogs(ctx, nodeName)
 }
-func (a *App) FetchNodeLogs(clusterID, nodeName string, req NodeLogFetchRequest) NodeLogFetchResponse {
+func (g *ResourceGateway) FetchNodeLogs(clusterID, nodeName string, req NodeLogFetchRequest) NodeLogFetchResponse {
 	if err := requireObjectName(nodeName); err != nil {
 		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
 	}
-	ctx := a.CtxOrBackground()
-	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	ctx := g.CtxOrBackground()
+	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Version:     "v1",
 		Kind:        nodes.Identity.Kind,
 		Name:        nodeName,

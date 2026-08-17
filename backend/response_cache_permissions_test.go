@@ -5,54 +5,49 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luxury-yacht/app/backend/refresh/permissions"
-	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestCanServeCachedResponseDeniedEvictsCaches(t *testing.T) {
-	app := NewApp(nil)
-	app.responseCache = newResponseCache(time.Minute, 10)
+	gateway := newResourceGatewayFixture().gateway
+	gateway.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
-	checker := permissions.NewCheckerWithReview(selectionKey, time.Minute, func(context.Context, string, string, string, string) (bool, error) {
-		return false, nil
-	})
-	app.refreshSubsystems[selectionKey] = &system.Subsystem{RuntimePerms: checker}
+	client := cgofake.NewClientset()
+	denySelfSubjectAccessReviews(client, "no secrets")
 
 	// Use Helm kinds to avoid GVR discovery in the permission gate.
 	detailKey := objectDetailCacheKey("HelmManifest", "default", "demo")
-	app.responseCacheStore(selectionKey, detailKey, "manifest")
+	gateway.responseCacheStore(selectionKey, detailKey, "manifest")
 
-	deps := common.Dependencies{}
-	if allowed := app.canServeCachedResponse(context.Background(), deps, selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmManifest"}, "default", "demo"); allowed {
+	deps := common.Dependencies{KubernetesClient: client}
+	if allowed := gateway.canServeCachedResponse(context.Background(), deps, selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmManifest"}, "default", "demo"); allowed {
 		t.Fatalf("expected permission denial to block cached response")
 	}
-	if _, ok := app.responseCacheLookup(selectionKey, detailKey); ok {
+	if _, ok := gateway.responseCacheLookup(selectionKey, detailKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted on permission deny")
 	}
 }
 
 func TestCanServeCachedResponseAllowedKeepsCaches(t *testing.T) {
-	app := NewApp(nil)
-	app.responseCache = newResponseCache(time.Minute, 10)
+	gateway := newResourceGatewayFixture().gateway
+	gateway.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
-	checker := permissions.NewCheckerWithReview(selectionKey, time.Minute, func(context.Context, string, string, string, string) (bool, error) {
-		return true, nil
-	})
-	app.refreshSubsystems[selectionKey] = &system.Subsystem{RuntimePerms: checker}
+	client := cgofake.NewClientset()
+	allowSelfSubjectAccessReviews(client)
 
 	// Use Helm kinds to avoid GVR discovery in the permission gate.
 	detailKey := objectDetailCacheKey("HelmValues", "default", "demo")
-	app.responseCacheStore(selectionKey, detailKey, "values")
+	gateway.responseCacheStore(selectionKey, detailKey, "values")
 
-	deps := common.Dependencies{}
-	if allowed := app.canServeCachedResponse(context.Background(), deps, selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmValues"}, "default", "demo"); !allowed {
+	deps := common.Dependencies{KubernetesClient: client}
+	if allowed := gateway.canServeCachedResponse(context.Background(), deps, selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmValues"}, "default", "demo"); !allowed {
 		t.Fatalf("expected permission allow to serve cached response")
 	}
-	if _, ok := app.responseCacheLookup(selectionKey, detailKey); !ok {
+	if _, ok := gateway.responseCacheLookup(selectionKey, detailKey); !ok {
 		t.Fatalf("expected detail cache entry to remain on allow")
 	}
 }

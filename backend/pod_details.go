@@ -10,13 +10,13 @@ package backend
 
 import "github.com/luxury-yacht/app/backend/resources/pods"
 
-func (a *App) GetPod(clusterID, namespace, name string, detailed bool) (*PodDetailInfo, error) {
+func (g *ResourceGateway) GetPod(clusterID, namespace, name string, detailed bool) (*PodDetailInfo, error) {
 	if err := requirePodObject(namespace, name); err != nil {
 		return nil, err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return pods.GetPod(a.CtxOrBackground(), deps, namespace, name, detailed)
+	return pods.GetPod(g.CtxOrBackground(), deps, namespace, name, detailed)
 }

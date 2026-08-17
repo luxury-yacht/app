@@ -8,7 +8,6 @@
 package backend
 
 import (
-	"context"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -20,8 +19,7 @@ import (
 )
 
 func TestWorkloadWrappersHappyPath(t *testing.T) {
-	app := wrapperTestApp(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newResourceGatewayFixture()
 	clusterID := "config:ctx"
 
 	labels := map[string]string{"app": "web"}
@@ -138,7 +136,7 @@ func TestWorkloadWrappersHappyPath(t *testing.T) {
 	}
 
 	client := cgofake.NewClientset(deploy, rs, sts, ds, job, cronJob, service, &pods[0], &pods[1], &pods[2], &pods[3])
-	app.clusterClients = map[string]*clusterClients{
+	app.clusters = map[string]*clusterClients{
 		clusterID: {
 			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
@@ -147,22 +145,22 @@ func TestWorkloadWrappersHappyPath(t *testing.T) {
 		},
 	}
 
-	if _, err := app.GetDeployment(clusterID, "apps", "web"); err != nil {
+	if _, err := app.gateway.GetDeployment(clusterID, "apps", "web"); err != nil {
 		t.Fatalf("expected deployment wrapper to succeed: %v", err)
 	}
-	if _, err := app.GetReplicaSet(clusterID, "apps", "web-rs"); err != nil {
+	if _, err := app.gateway.GetReplicaSet(clusterID, "apps", "web-rs"); err != nil {
 		t.Fatalf("expected replicaset wrapper to succeed: %v", err)
 	}
-	if _, err := app.GetStatefulSet(clusterID, "apps", "db"); err != nil {
+	if _, err := app.gateway.GetStatefulSet(clusterID, "apps", "db"); err != nil {
 		t.Fatalf("expected statefulset wrapper to succeed: %v", err)
 	}
-	if _, err := app.GetDaemonSet(clusterID, "apps", "logger"); err != nil {
+	if _, err := app.gateway.GetDaemonSet(clusterID, "apps", "logger"); err != nil {
 		t.Fatalf("expected daemonset wrapper to succeed: %v", err)
 	}
-	if _, err := app.GetJob(clusterID, "apps", "backup"); err != nil {
+	if _, err := app.gateway.GetJob(clusterID, "apps", "backup"); err != nil {
 		t.Fatalf("expected job wrapper to succeed: %v", err)
 	}
-	if _, err := app.GetCronJob(clusterID, "apps", "nightly"); err != nil {
+	if _, err := app.gateway.GetCronJob(clusterID, "apps", "nightly"); err != nil {
 		t.Fatalf("expected cronjob wrapper to succeed: %v", err)
 	}
 }

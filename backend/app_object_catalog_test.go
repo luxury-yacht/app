@@ -354,7 +354,7 @@ func TestGetCatalogDiagnosticsCombinesTelemetryAndServiceState(t *testing.T) {
 
 	app.telemetryRecorder.RecordCatalog(true, 7, 3, 1500*time.Millisecond, nil)
 
-	diag, err := app.GetCatalogDiagnostics()
+	diag, err := app.resources.GetCatalogDiagnostics()
 	if err != nil {
 		t.Fatalf("GetCatalogDiagnostics returned error: %v", err)
 	}
@@ -487,9 +487,10 @@ func TestGetCatalogDiagnosticsFromTelemetryRecorder(t *testing.T) {
 		Duration: 50 * time.Millisecond, TotalItems: 3, BatchIndex: 1, IsFinal: true, TimeToFirstBatchMs: 25,
 	})
 
-	app := &App{telemetryRecorder: recorder}
+	app := NewApp(nil)
+	app.telemetryRecorder = recorder
 
-	diag, err := app.GetCatalogDiagnostics()
+	diag, err := app.resources.GetCatalogDiagnostics()
 	require.NoError(t, err)
 
 	require.True(t, diag.Enabled)
@@ -509,12 +510,12 @@ func TestFindCatalogObjectMatchUsesExactCatalogIdentity(t *testing.T) {
 	})
 	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
 
-	match, err := app.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alpha")
+	match, err := app.resources.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alpha")
 	require.NoError(t, err)
 	require.NotNil(t, match)
 	require.Equal(t, "alpha-uid", match.Ref.UID)
 
-	noMatch, err := app.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alp")
+	noMatch, err := app.resources.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alp")
 	require.NoError(t, err)
 	require.Nil(t, noMatch)
 }
@@ -527,13 +528,13 @@ func TestFindCatalogObjectByUIDUsesCatalogIdentity(t *testing.T) {
 	})
 	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
 
-	match, err := app.FindCatalogObjectByUID("cluster-b", "alpha-uid")
+	match, err := app.resources.FindCatalogObjectByUID("cluster-b", "alpha-uid")
 	require.NoError(t, err)
 	require.NotNil(t, match)
 	require.Equal(t, "Deployment", match.Ref.Kind)
 	require.Equal(t, "apps", match.Ref.Namespace)
 
-	noMatch, err := app.FindCatalogObjectByUID("cluster-b", "missing-uid")
+	noMatch, err := app.resources.FindCatalogObjectByUID("cluster-b", "missing-uid")
 	require.NoError(t, err)
 	require.Nil(t, noMatch)
 }
@@ -573,7 +574,7 @@ func TestHydrateCatalogCustomRowsFetchesOnlyCurrentPageRows(t *testing.T) {
 		dynamicClient: fake.NewSimpleDynamicClient(runtime.NewScheme(), gvrObject),
 	}
 
-	rows, err := app.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
+	rows, err := app.resources.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
 		{
 			ClusterID: clusterID,
 			Group:     "example.com",
@@ -619,7 +620,7 @@ func TestHydrateCatalogCustomRowsReportsCanceledContext(t *testing.T) {
 	cancel()
 	setTestAppRuntimeReady(t, app, canceled)
 
-	_, err := app.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
+	_, err := app.resources.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
 		{
 			ClusterID: clusterID,
 			Group:     "example.com",
@@ -669,7 +670,7 @@ func TestHydrateCatalogCustomRowsKeepsPageOnRowFailure(t *testing.T) {
 		dynamicClient: dynamicClient,
 	}
 
-	rows, err := app.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
+	rows, err := app.resources.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
 		{
 			ClusterID: clusterID,
 			Group:     "example.com",

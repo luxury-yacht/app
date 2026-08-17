@@ -116,7 +116,7 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 		Attention:      backendApp.ClusterAttentionService(),
 		Workspace:      backendApp,
 		ClusterRuntime: backendApp,
-		Resources:      backendApp,
+		Resources:      backendApp.ResourceGateway(),
 		Operations:     operationsCoordinator,
 		Updates:        backendApp.UpdateCoordinator(),
 		Logs:           backendApp.AppLogService(),

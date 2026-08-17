@@ -21,11 +21,14 @@ type resourcePermissionCheck struct {
 	Subresource string
 }
 
-func (a *App) requireResourcePermission(ctx context.Context, deps common.Dependencies, check resourcePermissionCheck) error {
+func (g *ResourceGateway) requireResourcePermission(ctx context.Context, deps common.Dependencies, check resourcePermissionCheck) error {
 	return requireResourcePermission(ctx, deps, check)
 }
 
 func requireResourcePermission(ctx context.Context, deps common.Dependencies, check resourcePermissionCheck) error {
+	if deps.KubernetesClient == nil {
+		return fmt.Errorf("kubernetes client is not initialized")
+	}
 	gvr, isNamespaced, err := resolvePermissionGVR(ctx, deps, check)
 	if err != nil {
 		return err
@@ -33,7 +36,7 @@ func requireResourcePermission(ctx context.Context, deps common.Dependencies, ch
 	return requireResolvedResourcePermission(ctx, deps, gvr, isNamespaced, check)
 }
 
-func (a *App) requireResolvedResourcePermission(
+func (g *ResourceGateway) requireResolvedResourcePermission(
 	ctx context.Context,
 	deps common.Dependencies,
 	gvr schema.GroupVersionResource,
@@ -105,7 +108,7 @@ func requireResolvedResourcePermission(
 	return nil
 }
 
-func (a *App) requireAnyResourcePermission(ctx context.Context, deps common.Dependencies, checks ...resourcePermissionCheck) error {
+func (g *ResourceGateway) requireAnyResourcePermission(ctx context.Context, deps common.Dependencies, checks ...resourcePermissionCheck) error {
 	return requireAnyResourcePermission(ctx, deps, checks...)
 }
 

@@ -1,13 +1,20 @@
 package backend
 
 import (
-	"context"
 	"testing"
 
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	cgofake "k8s.io/client-go/kubernetes/fake"
 )
+
+func newAutoscalingResourceGateway(client *cgofake.Clientset) *ResourceGateway {
+	fixture := newResourceGatewayFixture()
+	fixture.setCluster("cluster-a", &clusterClients{
+		meta: ClusterMeta{ID: "cluster-a", Name: "cluster-a"}, client: client,
+	})
+	return fixture.gateway
+}
 
 func TestIsWorkloadHPAManagedMatchesFullGVK(t *testing.T) {
 	client := cgofake.NewClientset(&autoscalingv1.HorizontalPodAutoscaler{
@@ -20,16 +27,9 @@ func TestIsWorkloadHPAManagedMatchesFullGVK(t *testing.T) {
 			},
 		},
 	})
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
-		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
-		kubeconfigPath:    "/path",
-		kubeconfigContext: "ctx",
-		client:            client,
-	})
+	gateway := newAutoscalingResourceGateway(client)
 
-	managed, err := app.IsWorkloadHPAManaged("cluster-a", "default", "apps", "v1", "Deployment", "web")
+	managed, err := gateway.IsWorkloadHPAManaged("cluster-a", "default", "apps", "v1", "Deployment", "web")
 	if err != nil {
 		t.Fatalf("IsWorkloadHPAManaged returned error: %v", err)
 	}
@@ -49,16 +49,9 @@ func TestIsWorkloadHPAManagedDoesNotMatchKindOnlyCollision(t *testing.T) {
 			},
 		},
 	})
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
-		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
-		kubeconfigPath:    "/path",
-		kubeconfigContext: "ctx",
-		client:            client,
-	})
+	gateway := newAutoscalingResourceGateway(client)
 
-	managed, err := app.IsWorkloadHPAManaged("cluster-a", "default", "apps", "v1", "Deployment", "web")
+	managed, err := gateway.IsWorkloadHPAManaged("cluster-a", "default", "apps", "v1", "Deployment", "web")
 	if err != nil {
 		t.Fatalf("IsWorkloadHPAManaged returned error: %v", err)
 	}
@@ -68,23 +61,23 @@ func TestIsWorkloadHPAManagedDoesNotMatchKindOnlyCollision(t *testing.T) {
 }
 
 func TestIsWorkloadHPAManagedRejectsUnsupportedGVK(t *testing.T) {
-	app := NewApp(nil)
+	gateway := newResourceGatewayFixture().gateway
 
-	_, err := app.IsWorkloadHPAManaged("cluster-a", "default", "example.com", "v1", "Deployment", "web")
+	_, err := gateway.IsWorkloadHPAManaged("cluster-a", "default", "example.com", "v1", "Deployment", "web")
 	if err == nil {
 		t.Fatalf("expected unsupported GVK error")
 	}
 }
 
 func TestIsWorkloadHPAManagedRequiresNamespacedObjectIdentity(t *testing.T) {
-	app := NewApp(nil)
+	gateway := newResourceGatewayFixture().gateway
 
-	_, err := app.IsWorkloadHPAManaged("cluster-a", "", "apps", "v1", "Deployment", "web")
+	_, err := gateway.IsWorkloadHPAManaged("cluster-a", "", "apps", "v1", "Deployment", "web")
 	if err == nil || err.Error() != "namespace is required" {
 		t.Fatalf("expected namespace error, got %v", err)
 	}
 
-	_, err = app.IsWorkloadHPAManaged("cluster-a", "default", "apps", "v1", "Deployment", "")
+	_, err = gateway.IsWorkloadHPAManaged("cluster-a", "default", "apps", "v1", "Deployment", "")
 	if err == nil || err.Error() != "name is required" {
 		t.Fatalf("expected name error, got %v", err)
 	}

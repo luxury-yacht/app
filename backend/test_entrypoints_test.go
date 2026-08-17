@@ -28,11 +28,11 @@ func objectActionTargetFromGVK(clusterID string, gvk schema.GroupVersionKind, na
 
 // restartWorkload performs a rollout restart by patching the pod template metadata on the target workload.
 // Supported workload kinds: Deployment, StatefulSet, DaemonSet.
-func (a *App) restartWorkload(clusterID, namespace, group, version, workloadKind, name string) error {
+func (g *ResourceGateway) restartWorkload(clusterID, namespace, group, version, workloadKind, name string) error {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return err
 	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
+	_, err := g.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionRestart,
 		Target: objectActionTarget(
 			clusterID,
@@ -48,7 +48,7 @@ func (a *App) restartWorkload(clusterID, namespace, group, version, workloadKind
 
 // scaleWorkload updates the replica count on a scalable workload.
 // Supported workload kinds: Deployment, StatefulSet, ReplicaSet.
-func (a *App) scaleWorkload(clusterID, namespace, group, version, workloadKind, name string, replicas int) error {
+func (g *ResourceGateway) scaleWorkload(clusterID, namespace, group, version, workloadKind, name string, replicas int) error {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func (a *App) scaleWorkload(clusterID, namespace, group, version, workloadKind, 
 	if replicas > maxScaleReplicas {
 		return fmt.Errorf("replicas must be less than or equal to %d", maxScaleReplicas)
 	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
+	_, err := g.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionScale,
 		Target: objectActionTarget(
 			clusterID,
@@ -75,11 +75,11 @@ func (a *App) scaleWorkload(clusterID, namespace, group, version, workloadKind, 
 
 // triggerCronJob creates a Job immediately from a CronJob's jobTemplate spec.
 // Returns the name of the created Job on success.
-func (a *App) triggerCronJob(clusterID, namespace, name string) (string, error) {
+func (g *ResourceGateway) triggerCronJob(clusterID, namespace, name string) (string, error) {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return "", err
 	}
-	resp, err := a.RunObjectAction(ObjectActionRequest{
+	resp, err := g.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionTrigger,
 		Target: objectActionTarget(
 			clusterID,
@@ -95,11 +95,11 @@ func (a *App) triggerCronJob(clusterID, namespace, name string) (string, error) 
 
 // suspendCronJob sets the suspend field on a CronJob.
 // When suspended, the CronJob will not create new Jobs on schedule.
-func (a *App) suspendCronJob(clusterID, namespace, name string, suspend bool) error {
+func (g *ResourceGateway) suspendCronJob(clusterID, namespace, name string, suspend bool) error {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return err
 	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
+	_, err := g.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionSuspend,
 		Target: objectActionTarget(
 			clusterID,
@@ -122,11 +122,11 @@ func (a *App) suspendCronJob(clusterID, namespace, name string, suspend bool) er
 //
 // Multi-cluster safety: all Kubernetes requests are scoped to the cluster identified
 // by clusterID, preventing cross-cluster data leakage or modification.
-func (a *App) rollbackWorkload(clusterID, namespace, group, version, workloadKind, name string, toRevision int64) error {
+func (g *ResourceGateway) rollbackWorkload(clusterID, namespace, group, version, workloadKind, name string, toRevision int64) error {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return err
 	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
+	_, err := g.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionRollback,
 		Target: objectActionTarget(
 			clusterID,
@@ -141,11 +141,11 @@ func (a *App) rollbackWorkload(clusterID, namespace, group, version, workloadKin
 	return err
 }
 
-func (a *App) deletePod(clusterID, namespace, name string) error {
+func (g *ResourceGateway) deletePod(clusterID, namespace, name string) error {
 	if err := requirePodObject(namespace, name); err != nil {
 		return err
 	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
+	_, err := g.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionDelete,
 		Target: objectActionTarget(
 			clusterID,
@@ -160,11 +160,11 @@ func (a *App) deletePod(clusterID, namespace, name string) error {
 }
 
 // createDebugContainer adds an ephemeral debug container to a running pod.
-func (a *App) createDebugContainer(clusterID string, req DebugContainerRequest) (*DebugContainerResponse, error) {
+func (g *ResourceGateway) createDebugContainer(clusterID string, req DebugContainerRequest) (*DebugContainerResponse, error) {
 	if err := requirePodObject(req.Namespace, req.PodName); err != nil {
 		return nil, err
 	}
-	resp, err := a.RunObjectAction(ObjectActionRequest{
+	resp, err := g.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionCreateDebugContainer,
 		Target: objectActionTarget(
 			clusterID,
@@ -185,33 +185,33 @@ func (a *App) createDebugContainer(clusterID string, req DebugContainerRequest) 
 	return resp.DebugContainer, nil
 }
 
-func (a *App) cordonNode(clusterID, nodeName string) error {
+func (g *ResourceGateway) cordonNode(clusterID, nodeName string) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err
 	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
+	_, err := g.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionCordon,
 		Target: objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
 	})
 	return err
 }
 
-func (a *App) uncordonNode(clusterID, nodeName string) error {
+func (g *ResourceGateway) uncordonNode(clusterID, nodeName string) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err
 	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
+	_, err := g.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionUncordon,
 		Target: objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
 	})
 	return err
 }
 
-func (a *App) drainNode(clusterID, nodeName string, options DrainNodeOptions) error {
+func (g *ResourceGateway) drainNode(clusterID, nodeName string, options DrainNodeOptions) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err
 	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
+	_, err := g.RunObjectAction(ObjectActionRequest{
 		Action:       ObjectActionDrain,
 		Target:       objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
 		DrainOptions: &options,
@@ -219,33 +219,33 @@ func (a *App) drainNode(clusterID, nodeName string, options DrainNodeOptions) er
 	return err
 }
 
-func (a *App) deleteNode(clusterID, nodeName string) error {
+func (g *ResourceGateway) deleteNode(clusterID, nodeName string) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err
 	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
+	_, err := g.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionDelete,
 		Target: objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
 	})
 	return err
 }
 
-func (a *App) forceDeleteNode(clusterID, nodeName string) error {
+func (g *ResourceGateway) forceDeleteNode(clusterID, nodeName string) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err
 	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
+	_, err := g.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionForceDelete,
 		Target: objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
 	})
 	return err
 }
 
-func (a *App) deleteHelmRelease(clusterID, namespace, name string) error {
+func (g *ResourceGateway) deleteHelmRelease(clusterID, namespace, name string) error {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return err
 	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
+	_, err := g.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionDelete,
 		Target: objectActionTarget(
 			clusterID,
@@ -265,7 +265,7 @@ func (a *App) deleteHelmRelease(clusterID, namespace, name string) error {
 // like "v1"). Unlike DeleteResource, this path resolves the GVR strictly
 // through the cluster's resource resolver so two CRDs that share a Kind don't
 // get conflated.
-func (a *App) deleteResourceByGVK(clusterID, apiVersion, kind, namespace, name string) error {
+func (g *ResourceGateway) deleteResourceByGVK(clusterID, apiVersion, kind, namespace, name string) error {
 	gvk := schema.FromAPIVersionAndKind(strings.TrimSpace(apiVersion), strings.TrimSpace(kind))
 	if gvk.Kind == "" {
 		return fmt.Errorf("kind is required")
@@ -276,15 +276,15 @@ func (a *App) deleteResourceByGVK(clusterID, apiVersion, kind, namespace, name s
 	if err := requireObjectName(name); err != nil {
 		return err
 	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
+	_, err := g.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionDelete,
 		Target: objectActionTargetFromGVK(clusterID, gvk, namespace, name),
 	})
 	return err
 }
 
-func (a *App) getGVRForGVK(ctx context.Context, clusterID string, gvk schema.GroupVersionKind) (schema.GroupVersionResource, bool, error) {
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+func (g *ResourceGateway) getGVRForGVK(ctx context.Context, clusterID string, gvk schema.GroupVersionKind) (schema.GroupVersionResource, bool, error) {
+	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return schema.GroupVersionResource{}, false, err
 	}
@@ -319,8 +319,8 @@ func (o *OperationsCoordinator) closeShellSessionForRuntime(sessionID, reason st
 }
 
 // invalidateResponseCacheForObject clears cached detail/YAML/helm data for the given resource.
-func (a *App) invalidateResponseCacheForObject(selectionKey string, identity resourcekind.Identity, obj interface{}) {
-	a.invalidateResponseCacheForObjectEvent(
+func (g *ResourceGateway) invalidateResponseCacheForObject(selectionKey string, identity resourcekind.Identity, obj interface{}) {
+	g.invalidateResponseCacheForObjectEvent(
 		selectionKey,
 		identity,
 		obj,
@@ -333,13 +333,13 @@ func (a *App) invalidateResponseCacheForObject(selectionKey string, identity res
 // additional diagnostic information. It uses a short-lived response cache for
 // non-informer GETs to avoid repeated requests for the same resource.
 func FetchResource[T any](
-	a *App,
+	g *ResourceGateway,
 	cacheKey string,
 	resourceKind string,
 	identifier string,
 	fetchFunc func() (T, error),
 ) (T, error) {
-	return FetchResourceWithSelection(a, "", cacheKey, resourceKind, identifier, func(context.Context) (T, error) {
+	return FetchResourceWithSelection(g, "", cacheKey, resourceKind, identifier, func(context.Context) (T, error) {
 		return fetchFunc()
 	})
 }
@@ -347,7 +347,7 @@ func FetchResource[T any](
 // FetchResourceList executes a list fetch function for a given resource kind
 // and namespace. No caching is performed.
 func FetchResourceList[T any](
-	a *App,
+	g *ResourceGateway,
 	clusterID string,
 	resourceKind string,
 	namespace string,
@@ -359,21 +359,21 @@ func FetchResourceList[T any](
 		scope = fmt.Sprintf("namespace %s", namespace)
 	}
 
-	ctx := a.CtxOrBackground()
+	ctx := g.CtxOrBackground()
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, config.ResourceFetchCallTimeout)
 		defer cancel()
 	}
 
-	result, err := executeWithRetry(ctx, a, clusterID, resourceKind, scope, func(context.Context) (T, error) {
+	result, err := executeWithRetry(ctx, g.resourceRetryDependencies(), clusterID, resourceKind, scope, func(context.Context) (T, error) {
 		return fetchFunc()
 	})
 	if err != nil {
-		a.appLogs.logger.Error(fmt.Sprintf("Failed to list %s in %s: %v", resourceKind, scope, err), logsources.ResourceLoader, clusterID, a.clusterNameForID(clusterID))
+		g.logger.Error(fmt.Sprintf("Failed to list %s in %s: %v", resourceKind, scope, err), logsources.ResourceLoader, clusterID, g.clusterNameForID(clusterID))
 		// Include clusterId in error payload so frontend can identify which cluster
 		// the error belongs to.
-		a.emitEvent(backendErrorEventName, BackendErrorEvent{
+		g.emitEvent(backendErrorEventName, BackendErrorEvent{
 			ClusterID:    clusterID,
 			ResourceKind: resourceKind,
 			Identifier:   scope,

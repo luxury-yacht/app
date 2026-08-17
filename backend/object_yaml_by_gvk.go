@@ -39,7 +39,7 @@ import (
 // on bare kind. That's the whole point of the fix — callers that know
 // which CRD they want can get exactly that one, even when another CRD
 // registers the same Kind under a different group.
-func (a *App) GetObjectYAMLByGVK(clusterID, apiVersion, kind, namespace, name string) (string, error) {
+func (g *ResourceGateway) GetObjectYAMLByGVK(clusterID, apiVersion, kind, namespace, name string) (string, error) {
 	gvk := schema.FromAPIVersionAndKind(strings.TrimSpace(apiVersion), strings.TrimSpace(kind))
 	if gvk.Kind == "" {
 		return "", fmt.Errorf("kind is required")
@@ -51,11 +51,11 @@ func (a *App) GetObjectYAMLByGVK(clusterID, apiVersion, kind, namespace, name st
 		return "", err
 	}
 
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return "", err
 	}
-	return fetchObjectYAMLByGVK(a.CtxOrBackground(), deps, gvk, namespace, name)
+	return fetchObjectYAMLByGVK(g.CtxOrBackground(), deps, gvk, namespace, name)
 }
 
 // fetchObjectYAMLByGVK is the shared core: given already-resolved

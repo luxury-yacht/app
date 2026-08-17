@@ -14,19 +14,18 @@ import (
 	cgofake "k8s.io/client-go/kubernetes/fake"
 )
 
-// buildRevisionHistoryApp creates an App with a fake Kubernetes client pre-populated with the given objects.
-func buildRevisionHistoryApp(client *cgofake.Clientset) *App {
+// buildRevisionHistoryGateway creates a focused resource gateway with a fake
+// Kubernetes client pre-populated with the given objects.
+func buildRevisionHistoryGateway(client *cgofake.Clientset) *ResourceGateway {
 	allowSelfSubjectAccessReviews(client)
-	app := &App{appLogs: NewAppLogService(NewLogger(100))}
-	app.clusterClients = map[string]*clusterClients{
-		"config:ctx": {
-			meta:              ClusterMeta{ID: "config:ctx", Name: "ctx"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-			client:            client,
-		},
-	}
-	return app
+	fixture := newResourceGatewayFixture()
+	fixture.setCluster("config:ctx", &clusterClients{
+		meta:              ClusterMeta{ID: "config:ctx", Name: "ctx"},
+		kubeconfigPath:    "/path",
+		kubeconfigContext: "ctx",
+		client:            client,
+	})
+	return fixture.gateway
 }
 
 func TestGetRevisionHistoryDeployment(t *testing.T) {
@@ -161,7 +160,7 @@ func TestGetRevisionHistoryDeployment(t *testing.T) {
 	}
 
 	client := cgofake.NewClientset(deploy, rs1, rs2, rs3, rsOther)
-	app := buildRevisionHistoryApp(client)
+	app := buildRevisionHistoryGateway(client)
 
 	entries, err := app.GetRevisionHistory("config:ctx", "default", "apps", "v1", "Deployment", "myapp")
 	require.NoError(t, err)
@@ -192,7 +191,7 @@ func TestGetRevisionHistoryUnsupportedKind(t *testing.T) {
 	t.Helper()
 
 	client := cgofake.NewClientset()
-	app := buildRevisionHistoryApp(client)
+	app := buildRevisionHistoryGateway(client)
 
 	_, err := app.GetRevisionHistory("config:ctx", "default", "apps", "v1", "ReplicaSet", "myapp")
 	require.Error(t, err)
@@ -203,17 +202,15 @@ func TestGetRevisionHistoryNilClient(t *testing.T) {
 	t.Helper()
 
 	// clusterClients entry exists but has no kubernetes client set.
-	app := &App{appLogs: NewAppLogService(NewLogger(10))}
-	app.clusterClients = map[string]*clusterClients{
-		"config:ctx": {
-			meta:              ClusterMeta{ID: "config:ctx", Name: "ctx"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-			// client intentionally omitted (nil)
-		},
-	}
+	fixture := newResourceGatewayFixture()
+	fixture.setCluster("config:ctx", &clusterClients{
+		meta:              ClusterMeta{ID: "config:ctx", Name: "ctx"},
+		kubeconfigPath:    "/path",
+		kubeconfigContext: "ctx",
+		// client intentionally omitted (nil)
+	})
 
-	_, err := app.GetRevisionHistory("config:ctx", "default", "apps", "v1", "Deployment", "myapp")
+	_, err := fixture.gateway.GetRevisionHistory("config:ctx", "default", "apps", "v1", "Deployment", "myapp")
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }
 
@@ -318,7 +315,7 @@ func TestGetRevisionHistoryStatefulSet(t *testing.T) {
 	}
 
 	client := cgofake.NewClientset(sts, cr1, cr2, cr3)
-	app := buildRevisionHistoryApp(client)
+	app := buildRevisionHistoryGateway(client)
 
 	entries, err := app.GetRevisionHistory("config:ctx", "default", "apps", "v1", "StatefulSet", "db")
 	require.NoError(t, err)
@@ -413,7 +410,7 @@ func TestGetRevisionHistoryDaemonSet(t *testing.T) {
 	}
 
 	client := cgofake.NewClientset(ds, cr1, cr2)
-	app := buildRevisionHistoryApp(client)
+	app := buildRevisionHistoryGateway(client)
 
 	entries, err := app.GetRevisionHistory("config:ctx", "kube-system", "apps", "v1", "DaemonSet", "logging-agent")
 	require.NoError(t, err)
@@ -524,7 +521,7 @@ func TestRollbackWorkloadDeployment(t *testing.T) {
 	}
 
 	client := cgofake.NewClientset(deploy, rs1, rs2)
-	app := buildRevisionHistoryApp(client)
+	app := buildRevisionHistoryGateway(client)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	detailKey := objectDetailCacheKey("Deployment", "default", "webapp")
 	app.responseCacheStore("config:ctx", detailKey, "stale")
@@ -622,7 +619,7 @@ func TestRollbackWorkloadStatefulSet(t *testing.T) {
 	}
 
 	client := cgofake.NewClientset(sts, cr1, cr2)
-	app := buildRevisionHistoryApp(client)
+	app := buildRevisionHistoryGateway(client)
 
 	err := app.rollbackWorkload("config:ctx", "default", "apps", "v1", "StatefulSet", "cache", 1)
 	require.NoError(t, err)
@@ -688,7 +685,7 @@ func TestRollbackWorkloadRevisionNotFound(t *testing.T) {
 	}
 
 	client := cgofake.NewClientset(deploy, rs1)
-	app := buildRevisionHistoryApp(client)
+	app := buildRevisionHistoryGateway(client)
 
 	// Revision 99 does not exist — expect an error.
 	err := app.rollbackWorkload("config:ctx", "default", "apps", "v1", "Deployment", "api", 99)
@@ -702,7 +699,7 @@ func TestRollbackWorkloadUnsupportedKind(t *testing.T) {
 	t.Helper()
 
 	client := cgofake.NewClientset()
-	app := buildRevisionHistoryApp(client)
+	app := buildRevisionHistoryGateway(client)
 
 	err := app.rollbackWorkload("config:ctx", "default", "apps", "v1", "ReplicaSet", "myset", 1)
 	require.Error(t, err)
@@ -710,14 +707,14 @@ func TestRollbackWorkloadUnsupportedKind(t *testing.T) {
 }
 
 func TestRollbackWorkloadRequiresNamespacedObjectIdentity(t *testing.T) {
-	app := NewApp(nil)
+	gateway := newResourceGatewayFixture().gateway
 
 	require.EqualError(t,
-		app.rollbackWorkload("config:ctx", "", "apps", "v1", "Deployment", "webapp", 1),
+		gateway.rollbackWorkload("config:ctx", "", "apps", "v1", "Deployment", "webapp", 1),
 		"namespace is required",
 	)
 	require.EqualError(t,
-		app.rollbackWorkload("config:ctx", "default", "apps", "v1", "Deployment", "", 1),
+		gateway.rollbackWorkload("config:ctx", "default", "apps", "v1", "Deployment", "", 1),
 		"name is required",
 	)
 }

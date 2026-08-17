@@ -11,16 +11,16 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/generic"
 )
 
-func (a *App) deleteGenericResourceAction(target ObjectActionTargetRef) error {
+func (g *ResourceGateway) deleteGenericResourceAction(target ObjectActionTargetRef) error {
 	if err := requireObjectName(target.Name); err != nil {
 		return err
 	}
-	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
-	ctx := a.CtxOrBackground()
-	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	ctx := g.CtxOrBackground()
+	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:     target.Group,
 		Version:   target.Version,
 		Kind:      target.Kind,
@@ -34,6 +34,6 @@ func (a *App) deleteGenericResourceAction(target ObjectActionTargetRef) error {
 	if err := service.DeleteByGVK(ctx, objectActionTargetGVK(target), target.Namespace, target.Name); err != nil {
 		return err
 	}
-	a.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
+	g.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
 	return nil
 }

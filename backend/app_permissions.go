@@ -29,14 +29,14 @@ import (
 // PermissionQuery.Group/Version; a missing Version here is a programming bug,
 // so we fail loud rather than falling back to the retired kind-only resolver,
 // which was first-match-wins across colliding CRDs.
-func (a *App) resolveGVRForPermissionQuery(ctx context.Context, q capabilities.PermissionQuery) (schema.GroupVersionResource, bool, error) {
+func (g *ResourceGateway) resolveGVRForPermissionQuery(ctx context.Context, q capabilities.PermissionQuery) (schema.GroupVersionResource, bool, error) {
 	if q.Version == "" {
 		return schema.GroupVersionResource{}, false, fmt.Errorf(
 			"permission query for kind %q requires apiVersion (group+version); kind-only resolution was retired to fix the kind-only-objects bug",
 			q.ResourceKind,
 		)
 	}
-	deps, _, err := a.resolveClusterDependencies(q.ClusterId)
+	deps, _, err := g.resolveClusterDependencies(q.ClusterId)
 	if err != nil {
 		return schema.GroupVersionResource{}, false, err
 	}
@@ -118,20 +118,20 @@ type permissionQueryBatch struct {
 
 // QueryPermissions evaluates a batch of permission queries using SSRR caching
 // with SSAR fallback. All errors are per-item; the top-level error is always nil.
-func (a *App) QueryPermissions(queries []capabilities.PermissionQuery) (*capabilities.QueryPermissionsResponse, error) {
-	ctx := a.CtxOrBackground()
+func (g *ResourceGateway) QueryPermissions(queries []capabilities.PermissionQuery) (*capabilities.QueryPermissionsResponse, error) {
+	ctx := g.CtxOrBackground()
 	startedAt := time.Now()
 	batch := newPermissionQueryBatch(len(queries))
-	a.preparePermissionQueries(ctx, queries, batch)
+	g.preparePermissionQueries(ctx, queries, batch)
 
 	ssrrStart := time.Now()
-	ssrrResults := a.fetchSSRRRulesForNamespaces(ctx, batch.ssrrFetchesByKey)
+	ssrrResults := g.fetchSSRRRulesForNamespaces(ctx, batch.ssrrFetchesByKey)
 	batch.ssrrDuration = time.Since(ssrrStart)
-	a.evaluatePermissionQueries(batch, ssrrResults)
-	a.executePermissionSSARBatches(ctx, batch)
+	g.evaluatePermissionQueries(batch, ssrrResults)
+	g.executePermissionSSARBatches(ctx, batch)
 
-	diagnostics := a.buildDiagnostics(batch.nsDiag, batch.ssarByCluster)
-	a.logQueryPermissionsBatch(queryPermissionsBatchLog{
+	diagnostics := g.buildDiagnostics(batch.nsDiag, batch.ssarByCluster)
+	g.logQueryPermissionsBatch(queryPermissionsBatchLog{
 		checkCount:       len(queries),
 		resolutionCount:  len(batch.resolutionCache),
 		namespaceCount:   len(batch.nsDiag),
@@ -173,12 +173,12 @@ func normalizePermissionQuery(q capabilities.PermissionQuery) capabilities.Permi
 	return q
 }
 
-func (a *App) preparePermissionQueries(ctx context.Context, queries []capabilities.PermissionQuery, batch *permissionQueryBatch) {
+func (g *ResourceGateway) preparePermissionQueries(ctx context.Context, queries []capabilities.PermissionQuery, batch *permissionQueryBatch) {
 	for index, raw := range queries {
 		query := normalizePermissionQuery(raw)
 		queries[index] = query
 		batch.results[index] = capabilities.ResultFromQuery(query)
-		prepared, duration, err := a.preparePermissionQuery(ctx, query, index, batch.resolutionCache)
+		prepared, duration, err := g.preparePermissionQuery(ctx, query, index, batch.resolutionCache)
 		batch.resolveDuration += duration
 		if err != nil {
 			batch.results[index].Source = "error"
@@ -189,7 +189,7 @@ func (a *App) preparePermissionQueries(ctx context.Context, queries []capabiliti
 	}
 }
 
-func (a *App) preparePermissionQuery(
+func (g *ResourceGateway) preparePermissionQuery(
 	ctx context.Context,
 	query capabilities.PermissionQuery,
 	resultIndex int,
@@ -199,7 +199,7 @@ func (a *App) preparePermissionQuery(
 		return preparedPermissionQuery{}, 0, fmt.Errorf("missing required field (id, verb, resourceKind, or clusterId)")
 	}
 	startedAt := time.Now()
-	gvr, isNamespaced, err := a.resolveGVRForPermissionQueryCached(ctx, query, resolutionCache)
+	gvr, isNamespaced, err := g.resolveGVRForPermissionQueryCached(ctx, query, resolutionCache)
 	duration := time.Since(startedAt)
 	if err != nil {
 		return preparedPermissionQuery{}, duration, fmt.Errorf("failed to resolve resource kind %q: %w", query.ResourceKind, err)
@@ -229,13 +229,13 @@ func (b *permissionQueryBatch) registerPreparedQuery(prepared preparedPermission
 	b.preparedQueries = append(b.preparedQueries, prepared)
 }
 
-func (a *App) evaluatePermissionQueries(batch *permissionQueryBatch, ssrrResults map[string]ssrrNamespaceResult) {
+func (g *ResourceGateway) evaluatePermissionQueries(batch *permissionQueryBatch, ssrrResults map[string]ssrrNamespaceResult) {
 	for _, prepared := range batch.preparedQueries {
-		a.evaluatePermissionQuery(batch, prepared, ssrrResults)
+		g.evaluatePermissionQuery(batch, prepared, ssrrResults)
 	}
 }
 
-func (a *App) evaluatePermissionQuery(
+func (g *ResourceGateway) evaluatePermissionQuery(
 	batch *permissionQueryBatch,
 	prepared preparedPermissionQuery,
 	ssrrResults map[string]ssrrNamespaceResult,
@@ -292,15 +292,15 @@ func (b *permissionQueryBatch) enqueueSSAR(prepared preparedPermissionQuery) {
 	})
 }
 
-func (a *App) executePermissionSSARBatches(ctx context.Context, batch *permissionQueryBatch) {
+func (g *ResourceGateway) executePermissionSSARBatches(ctx context.Context, batch *permissionQueryBatch) {
 	for clusterID, items := range batch.ssarByCluster {
 		startedAt := time.Now()
-		a.executeSSARFallback(ctx, clusterID, items, batch.results)
+		g.executeSSARFallback(ctx, clusterID, items, batch.results)
 		batch.ssarDuration += time.Since(startedAt)
 	}
 }
 
-func (a *App) fetchSSRRRulesForNamespaces(
+func (g *ResourceGateway) fetchSSRRRulesForNamespaces(
 	ctx context.Context,
 	keysByDiagnostic map[string]ssrrNamespaceKey,
 ) map[string]ssrrNamespaceResult {
@@ -319,8 +319,8 @@ func (a *App) fetchSSRRRulesForNamespaces(
 	}
 
 	results := make([]ssrrNamespaceResult, len(fetches))
-	_ = parallel.ForEach(ctx, fetches, a.permissionFetchPolicy.Concurrency(), func(ctx context.Context, fetch ssrrNamespaceFetch) error {
-		cache := a.getOrCreateSSRRCache(fetch.key.clusterID)
+	_ = parallel.ForEach(ctx, fetches, g.permissionFetchPolicy.Concurrency(), func(ctx context.Context, fetch ssrrNamespaceFetch) error {
+		cache := g.getOrCreateSSRRCache(fetch.key.clusterID)
 		if cache == nil {
 			results[fetch.index] = ssrrNamespaceResult{
 				err: fmt.Errorf("failed to create SSRR cache for cluster %s", fetch.key.clusterID),
@@ -365,12 +365,12 @@ func countSSARItems(itemsByCluster map[string][]ssarItem) int {
 	return total
 }
 
-func (a *App) logQueryPermissionsBatch(batch queryPermissionsBatchLog) {
-	if a == nil || a.appLogs == nil {
+func (g *ResourceGateway) logQueryPermissionsBatch(batch queryPermissionsBatchLog) {
+	if g == nil || g.logger == nil {
 		return
 	}
 	applog.Debug(
-		a.appLogs.logger,
+		g.logger,
 		fmt.Sprintf(
 			"QueryPermissions batch checks=%d uniqueGVKs=%d namespaces=%d ssarFallbacks=%d diagnostics=%d total=%s resolve=%s ssrr=%s ssar=%s",
 			batch.checkCount,
@@ -387,7 +387,7 @@ func (a *App) logQueryPermissionsBatch(batch queryPermissionsBatchLog) {
 	)
 }
 
-func (a *App) resolveGVRForPermissionQueryCached(
+func (g *ResourceGateway) resolveGVRForPermissionQueryCached(
 	ctx context.Context,
 	q capabilities.PermissionQuery,
 	cache map[string]permissionResolutionResult,
@@ -396,7 +396,7 @@ func (a *App) resolveGVRForPermissionQueryCached(
 	if cached, ok := cache[key]; ok {
 		return cached.gvr, cached.isNamespaced, cached.err
 	}
-	gvr, isNamespaced, err := a.resolveGVRForPermissionQuery(ctx, q)
+	gvr, isNamespaced, err := g.resolveGVRForPermissionQuery(ctx, q)
 	cache[key] = permissionResolutionResult{
 		gvr:          gvr,
 		isNamespaced: isNamespaced,
@@ -417,8 +417,8 @@ func permissionResolutionCacheKey(q capabilities.PermissionQuery) string {
 // executeSSARFallback resolves cluster dependencies, creates a capabilities
 // Service, and runs SSAR checks for the given items. Results are written
 // directly into the results slice at each item's index.
-func (a *App) executeSSARFallback(ctx context.Context, clusterID string, items []ssarItem, results []capabilities.PermissionResult) {
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+func (g *ResourceGateway) executeSSARFallback(ctx context.Context, clusterID string, items []ssarItem, results []capabilities.PermissionResult) {
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		for _, item := range items {
 			results[item.resultIdx].Source = "error"
@@ -461,7 +461,7 @@ func (a *App) executeSSARFallback(ctx context.Context, clusterID string, items [
 
 // buildDiagnostics assembles NamespaceDiagnostics from the per-namespace
 // tracking map and cluster-scoped SSAR batch counts.
-func (a *App) buildDiagnostics(nsDiag map[string]*nsDiagEntry, ssarByCluster map[string][]ssarItem) []capabilities.NamespaceDiagnostics {
+func (g *ResourceGateway) buildDiagnostics(nsDiag map[string]*nsDiagEntry, ssarByCluster map[string][]ssarItem) []capabilities.NamespaceDiagnostics {
 	var diagnostics []capabilities.NamespaceDiagnostics
 
 	// Namespace-scoped diagnostics from nsDiag map.
@@ -502,19 +502,19 @@ func (a *App) buildDiagnostics(nsDiag map[string]*nsDiagEntry, ssarByCluster map
 
 // getOrCreateSSRRCache returns the SSRR cache for a cluster, creating it
 // lazily if needed. Returns nil if cluster dependencies cannot be resolved.
-func (a *App) getOrCreateSSRRCache(clusterID string) *capabilities.SSRRCache {
-	a.ssrrCachesMu.Lock()
-	defer a.ssrrCachesMu.Unlock()
+func (g *ResourceGateway) getOrCreateSSRRCache(clusterID string) *capabilities.SSRRCache {
+	g.ssrrCachesMu.Lock()
+	defer g.ssrrCachesMu.Unlock()
 
-	if a.ssrrCaches == nil {
-		a.ssrrCaches = make(map[string]*capabilities.SSRRCache)
+	if g.ssrrCaches == nil {
+		g.ssrrCaches = make(map[string]*capabilities.SSRRCache)
 	}
 
-	if cache, ok := a.ssrrCaches[clusterID]; ok {
+	if cache, ok := g.ssrrCaches[clusterID]; ok {
 		return cache
 	}
 
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil
 	}
@@ -525,28 +525,28 @@ func (a *App) getOrCreateSSRRCache(clusterID string) *capabilities.SSRRCache {
 
 	fetchFunc := capabilities.NewSSRRFetchFunc(deps.KubernetesClient, config.SSRRFetchTimeout)
 	cache := capabilities.NewSSRRCache(clusterID, config.PermissionCacheTTL, config.PermissionCacheStaleGracePeriod, fetchFunc, nil)
-	a.ssrrCaches[clusterID] = cache
+	g.ssrrCaches[clusterID] = cache
 	return cache
 }
 
 // ClearSSRRCache removes the cached SSRR rules for a specific cluster.
-func (a *App) ClearSSRRCache(clusterID string) {
-	a.ssrrCachesMu.Lock()
-	defer a.ssrrCachesMu.Unlock()
+func (g *ResourceGateway) ClearSSRRCache(clusterID string) {
+	g.ssrrCachesMu.Lock()
+	defer g.ssrrCachesMu.Unlock()
 
-	if cache, ok := a.ssrrCaches[clusterID]; ok {
+	if cache, ok := g.ssrrCaches[clusterID]; ok {
 		cache.Clear()
-		delete(a.ssrrCaches, clusterID)
+		delete(g.ssrrCaches, clusterID)
 	}
 }
 
 // ClearAllSSRRCaches removes all cached SSRR rules for every cluster.
-func (a *App) ClearAllSSRRCaches() {
-	a.ssrrCachesMu.Lock()
-	defer a.ssrrCachesMu.Unlock()
+func (g *ResourceGateway) ClearAllSSRRCaches() {
+	g.ssrrCachesMu.Lock()
+	defer g.ssrrCachesMu.Unlock()
 
-	for _, cache := range a.ssrrCaches {
+	for _, cache := range g.ssrrCaches {
 		cache.Clear()
 	}
-	a.ssrrCaches = make(map[string]*capabilities.SSRRCache)
+	g.ssrrCaches = make(map[string]*capabilities.SSRRCache)
 }

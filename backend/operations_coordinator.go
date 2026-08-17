@@ -240,7 +240,18 @@ func (a *App) initializeOperationsCoordinator() {
 		ClusterAccess: operationsClusterAccessFuncs{
 			resolve: a.resolveClusterDependencies,
 			fetchPod: func(ctx context.Context, clusterID, target string, fetch func(context.Context) (*corev1.Pod, error)) (*corev1.Pod, error) {
-				return executeWithRetry(ctx, a, clusterID, "pod-shell", target, fetch)
+				return executeWithRetry(ctx, resourceRetryDependencies{
+					recordSuccess: a.recordClusterTransportSuccess,
+					recordFailure: a.recordClusterTransportFailure,
+					telemetry: func() resourceRetryTelemetry {
+						if a.telemetryRecorder == nil {
+							return nil
+						}
+						return a.telemetryRecorder
+					},
+					logger:      a.appLogs.logger,
+					clusterName: a.clusterNameForID,
+				}, clusterID, "pod-shell", target, fetch)
 			},
 		},
 		Permissions: defaultOperationsPermissionChecker{},
