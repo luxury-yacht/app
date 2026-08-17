@@ -144,15 +144,16 @@ func matchUpdaterReleaseAsset(
 	request updater.CheckRequest,
 	assets []githubprovider.ReleaseAsset,
 ) int {
+	platform := strings.ToLower(strings.TrimSpace(request.Platform))
 	extension := map[string]string{
 		"darwin":  ".zip",
 		"windows": ".exe",
-		"linux":   ".tar.gz",
-	}[strings.ToLower(strings.TrimSpace(request.Platform))]
+		"linux":   "-updater.tar.gz",
+	}[platform]
 	if extension == "" {
 		return -1
 	}
-	suffix := "-" + strings.ToLower(strings.TrimSpace(request.Platform)) +
+	suffix := "-" + platform +
 		"-" + strings.ToLower(strings.TrimSpace(request.Arch)) + extension
 	for index, asset := range assets {
 		name := strings.ToLower(strings.TrimSpace(asset.Name))

@@ -1191,9 +1191,9 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
     the portable payloads in `updater.json`.
   - [x] Linux-native tests prove portable install, interrupted-install
     recovery, collision refusal, executable-only Wails extraction, and
-    uninstall; package-manager drills prove both dpkg and rpm install and remove
-    their distinct marker while runtime contract tests keep them
-    notification-only.
+    uninstall; the repeatable `linux:drill:packages` container drill proves
+    both dpkg and rpm install and remove their distinct marker while runtime
+    contract tests keep them notification-only.
   - [ ] Publish an arm64/amd64 Linux beta and complete the portable update,
     rollback, dependency, relaunch, and UI smoke matrix before checking off the
     stage.

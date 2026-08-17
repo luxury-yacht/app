@@ -37,7 +37,7 @@ Release discovery and in-place installation are separate capabilities:
 | macOS app bundle | Yes when installed as an app bundle | Yes when the volume and bundle parent are writable | Otherwise open the authenticated macOS download path. |
 | Windows NSIS, per-user | Yes | Yes | A valid adjacent `luxury-yacht.install.json` marker with product ID, `nsis`, and `user` scope. |
 | Windows NSIS, machine | Yes | No | Offer the per-user migration path; do not request elevation or stage an update. |
-| Linux portable, per-user | Yes | Yes when target and parent are writable | A valid adjacent marker with `portable` and `user` scope; otherwise offer the portable download. |
+| Linux portable, per-user | Yes | Yes when the target's parent supports create-and-rename | A valid adjacent marker with `portable` and `user` scope; otherwise offer the portable download. The running Linux executable itself cannot be opened for write (`ETXTBSY`), and Wails replaces it only after the parent process exits. |
 | Linux DEB/RPM | Yes with a valid system package marker | No | Explain package-manager ownership and open package choices. |
 | Development, invalid, or unknown distribution | No | No | Explain that automatic updates are unavailable and offer download choices. |
 
@@ -63,12 +63,13 @@ verified portable installation. The portable runtime requires GTK 4 and
 WebKitGTK 6.0; the archive README lists Debian/Ubuntu and Fedora/RHEL package
 names.
 
-The similarly versioned Linux archive without the `-portable` suffix is a
-single-entry tar containing only the executable. It is the sole Linux artifact
-accepted into `updater.json`; the installer tar, DEB, RPM, and AppImage are
-manual artifacts only. Wails extraction conformance runs before release
-publication and must yield exactly one executable regular file with the
-configured binary name.
+The similarly versioned Linux archive ending in `-updater.tar.gz` is a
+single-entry tar containing only the executable. The explicit suffix prevents
+users from mistaking this internal swap payload for the manual portable
+installer. It is the sole Linux artifact accepted into `updater.json`; the
+installer tar, DEB, RPM, and AppImage are manual artifacts only. Wails
+extraction conformance runs before release publication and must yield exactly
+one executable regular file with the configured binary name.
 
 ## Release and trust contract
 
@@ -105,7 +106,11 @@ branch, mutable channel manifest, or cache invalidation participates.
 
 `internal/updatetemp` creates and validates a private, user-specific root before
 any Wails or child-process dispatch and sets the platform temp environment to
-that root. Wails staging and helper logs therefore stay below a bounded parent.
+that root. Portable Linux installations place this root beside the installation
+directory under the same XDG data home so Wails' final rename does not cross
+from the system temporary filesystem into the portable target filesystem.
+Other distributions retain the system temporary base. Wails staging and helper
+logs therefore stay below a bounded parent.
 Startup cleanup may inspect only validated `wails-update-*` children there and
 must preserve paths recorded by `internal/updatestate`.
 

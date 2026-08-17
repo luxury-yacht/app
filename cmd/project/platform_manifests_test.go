@@ -117,8 +117,8 @@ func TestRenderedLinuxMarkersMatchRuntimeInstallationIdentity(t *testing.T) {
 				executable := "/home/alice/.local/share/luxury-yacht/luxury-yacht"
 				return updateidentity.InstallationProbe{
 					Platform: updateidentity.PlatformLinux, Architecture: "amd64", TargetPath: executable,
-					TargetWritable: true, ParentWritable: true,
-					Marker: &updateidentity.MarkerCandidate{Path: filepath.Join(filepath.Dir(executable), updateidentity.InstallationMarkerName), Data: data},
+					ParentWritable: true,
+					Marker:         &updateidentity.MarkerCandidate{Path: filepath.Join(filepath.Dir(executable), updateidentity.InstallationMarkerName), Data: data},
 				}
 			},
 			distribution: updateidentity.DistributionLinuxPortable,

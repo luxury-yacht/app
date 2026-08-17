@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -146,13 +147,13 @@ func createLinuxPortableArtifacts(config linuxPortableArtifactsConfig) (linuxPor
 	}
 	installerRoot := strings.TrimSuffix(installerName, ".tar.gz")
 	entries := []portableArchiveEntry{
-		{mode: 0o644, name: filepath.Join(installerRoot, "LICENSE"), source: config.LicensePath},
-		{contents: readme, mode: 0o644, name: filepath.Join(installerRoot, "README.txt")},
-		{contents: installer, mode: 0o755, name: filepath.Join(installerRoot, "install.sh")},
-		{mode: 0o755, name: filepath.Join(installerRoot, binaryName), source: config.BinaryPath},
-		{contents: desktop, mode: 0o644, name: filepath.Join(installerRoot, binaryName+".desktop")},
-		{contents: marker, mode: 0o644, name: filepath.Join(installerRoot, updateidentity.InstallationMarkerName)},
-		{mode: 0o644, name: filepath.Join(installerRoot, binaryName+".png"), source: config.IconPath},
+		{mode: 0o644, name: path.Join(installerRoot, "LICENSE"), source: config.LicensePath},
+		{contents: readme, mode: 0o644, name: path.Join(installerRoot, "README.txt")},
+		{contents: installer, mode: 0o755, name: path.Join(installerRoot, "install.sh")},
+		{mode: 0o755, name: path.Join(installerRoot, binaryName), source: config.BinaryPath},
+		{contents: desktop, mode: 0o644, name: path.Join(installerRoot, binaryName+".desktop")},
+		{contents: marker, mode: 0o644, name: path.Join(installerRoot, updateidentity.InstallationMarkerName)},
+		{mode: 0o644, name: path.Join(installerRoot, binaryName+".png"), source: config.IconPath},
 	}
 	if err := writePortableTarGz(artifacts.InstallerArchive, entries); err != nil {
 		_ = os.Remove(artifacts.UpdaterArchive)
@@ -206,7 +207,6 @@ func validateRenderedPortableMarker(marker []byte, binaryName string) error {
 		Platform:       updateidentity.PlatformLinux,
 		Architecture:   "amd64",
 		TargetPath:     executable,
-		TargetWritable: true,
 		ParentWritable: true,
 		Marker: &updateidentity.MarkerCandidate{
 			Path: filepath.Join(filepath.Dir(executable), updateidentity.InstallationMarkerName),

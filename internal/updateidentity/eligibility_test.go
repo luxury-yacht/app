@@ -81,7 +81,6 @@ func TestResolveInstallationSupportsEachApprovedDistribution(t *testing.T) {
 					Platform:       updateidentity.PlatformLinux,
 					Architecture:   "arm64",
 					TargetPath:     executable,
-					TargetWritable: true,
 					ParentWritable: true,
 					Marker:         validMarker(executable, "portable", "user"),
 				}
@@ -210,10 +209,20 @@ func TestResolveInstallationRejectsUnverifiedOrUnreplaceableTargets(t *testing.T
 			},
 		},
 		{
-			name: "Linux portable non-writable target",
+			name: "Linux portable running target needs only a writable parent",
 			probe: updateidentity.InstallationProbe{
 				Platform: updateidentity.PlatformLinux, Architecture: "arm64", TargetPath: linuxExecutable,
 				Marker: portableMarker, ParentWritable: true,
+			},
+			want: updateidentity.InstallationEligibility{
+				CanCheck: true, CanInstall: true, Distribution: updateidentity.DistributionLinuxPortable,
+			},
+		},
+		{
+			name: "Linux portable unwritable parent",
+			probe: updateidentity.InstallationProbe{
+				Platform: updateidentity.PlatformLinux, Architecture: "arm64", TargetPath: linuxExecutable,
+				Marker: portableMarker,
 			},
 			want: updateidentity.InstallationEligibility{
 				CanCheck: true, Distribution: updateidentity.DistributionLinuxPortable,
@@ -224,7 +233,7 @@ func TestResolveInstallationRejectsUnverifiedOrUnreplaceableTargets(t *testing.T
 			name: "Linux package-owned target cannot claim portable identity",
 			probe: updateidentity.InstallationProbe{
 				Platform: updateidentity.PlatformLinux, Architecture: "arm64", TargetPath: linuxExecutable,
-				Marker: portableMarker, TargetWritable: true, ParentWritable: true, PackageManagedTarget: true,
+				Marker: portableMarker, ParentWritable: true, PackageManagedTarget: true,
 			},
 			want: updateidentity.InstallationEligibility{
 				Reason: updateidentity.ReasonUnsupportedDistribution, Recovery: updateidentity.RecoveryDownloadOptions,
@@ -244,7 +253,7 @@ func TestResolveInstallationRejectsUnverifiedOrUnreplaceableTargets(t *testing.T
 			name: "unsupported architecture",
 			probe: updateidentity.InstallationProbe{
 				Platform: updateidentity.PlatformLinux, Architecture: "386", TargetPath: linuxExecutable,
-				Marker: portableMarker, TargetWritable: true, ParentWritable: true,
+				Marker: portableMarker, ParentWritable: true,
 			},
 			want: updateidentity.InstallationEligibility{
 				Reason: updateidentity.ReasonUnsupportedDistribution, Recovery: updateidentity.RecoveryDownloadOptions,
@@ -302,7 +311,7 @@ func TestResolveInstallationValidatesEveryMarkerIdentityField(t *testing.T) {
 			name: "Linux portable missing marker",
 			probe: updateidentity.InstallationProbe{
 				Platform: updateidentity.PlatformLinux, Architecture: "amd64", TargetPath: linuxExecutable,
-				TargetWritable: true, ParentWritable: true,
+				ParentWritable: true,
 			},
 			want: unsupported,
 		},
@@ -311,7 +320,7 @@ func TestResolveInstallationValidatesEveryMarkerIdentityField(t *testing.T) {
 			probe: updateidentity.InstallationProbe{
 				Platform: updateidentity.PlatformLinux, Architecture: "amd64", TargetPath: linuxExecutable,
 				Marker:         &updateidentity.MarkerCandidate{Path: linuxMarkerPath, Data: []byte(`{`)},
-				TargetWritable: true, ParentWritable: true,
+				ParentWritable: true,
 			},
 			want: unsupported,
 		},
@@ -320,7 +329,7 @@ func TestResolveInstallationValidatesEveryMarkerIdentityField(t *testing.T) {
 			probe: updateidentity.InstallationProbe{
 				Platform: updateidentity.PlatformLinux, Architecture: "amd64", TargetPath: linuxExecutable,
 				Marker:         marker(linuxMarkerPath, "app.example.other", "portable", "user"),
-				TargetWritable: true, ParentWritable: true,
+				ParentWritable: true,
 			},
 			want: unsupported,
 		},
@@ -329,7 +338,7 @@ func TestResolveInstallationValidatesEveryMarkerIdentityField(t *testing.T) {
 			probe: updateidentity.InstallationProbe{
 				Platform: updateidentity.PlatformLinux, Architecture: "amd64", TargetPath: linuxExecutable,
 				Marker:         marker(filepath.Join(filepath.Dir(filepath.Dir(linuxExecutable)), updateidentity.InstallationMarkerName), "app.luxury-yacht.desktop", "portable", "user"),
-				TargetWritable: true, ParentWritable: true,
+				ParentWritable: true,
 			},
 			want: unsupported,
 		},
@@ -395,7 +404,6 @@ func TestResolveInstallationKeepsPortableIdentityWhenAnotherPackageIsInstalled(t
 		Platform:       updateidentity.PlatformLinux,
 		Architecture:   "amd64",
 		TargetPath:     executable,
-		TargetWritable: true,
 		ParentWritable: true,
 		Marker: marker(
 			filepath.Join(filepath.Dir(executable), updateidentity.InstallationMarkerName),

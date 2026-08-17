@@ -245,7 +245,7 @@ func updaterArtifactName(metadata projectMetadata, goos, goarch string) (string,
 	case "windows":
 		return fmt.Sprintf("%s-%s-windows-%s.exe", name, version, goarch), nil
 	case "linux":
-		return fmt.Sprintf("%s-%s-linux-%s.tar.gz", name, version, goarch), nil
+		return fmt.Sprintf("%s-%s-linux-%s-updater.tar.gz", name, version, goarch), nil
 	default:
 		return "", fmt.Errorf("unsupported updater artifact target %s/%s", goos, goarch)
 	}

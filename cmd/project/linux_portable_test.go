@@ -22,7 +22,7 @@ func TestCreateLinuxPortableArtifactsUsesOneProductionBinaryForInstallerAndUpdat
 	artifacts, err := createLinuxPortableArtifacts(config)
 
 	require.NoError(t, err)
-	require.Equal(t, filepath.Join(root, "out", "luxury-yacht-v2.0.0-beta.3-linux-amd64.tar.gz"), artifacts.UpdaterArchive)
+	require.Equal(t, filepath.Join(root, "out", "luxury-yacht-v2.0.0-beta.3-linux-amd64-updater.tar.gz"), artifacts.UpdaterArchive)
 	require.Equal(t, filepath.Join(root, "out", "luxury-yacht-v2.0.0-beta.3-linux-amd64-portable.tar.gz"), artifacts.InstallerArchive)
 
 	updaterEntries := readTarGzEntries(t, artifacts.UpdaterArchive)
@@ -93,13 +93,14 @@ func TestPortableInstallerCreatesAndRemovesAnEligibleUserInstallation(t *testing
 	markerPath := filepath.Join(installationRoot, updateidentity.InstallationMarkerName)
 	require.Equal(t, []byte("production linux binary"), readTestFileBytes(t, executable))
 	require.Equal(t, readTestFileBytes(t, config.MarkerPath), readTestFileBytes(t, markerPath))
+	require.NoFileExists(t, filepath.Join(installationRoot, "installation-marker.expected.json"))
 	require.Contains(t, readTestFile(t, filepath.Join(dataHome, "applications", "luxury-yacht.desktop")), `Exec="`+executable+`" %u`)
 	require.Equal(t, []byte("icon"), readTestFileBytes(t, filepath.Join(dataHome, "icons", "hicolor", "128x128", "apps", "luxury-yacht.png")))
 
 	eligibility := updateidentity.ResolveInstallation(updateidentity.InstallationProbe{
 		Platform: updateidentity.PlatformLinux, Architecture: "amd64", TargetPath: executable,
-		TargetWritable: true, ParentWritable: true,
-		Marker: &updateidentity.MarkerCandidate{Path: markerPath, Data: readTestFileBytes(t, markerPath)},
+		ParentWritable: true,
+		Marker:         &updateidentity.MarkerCandidate{Path: markerPath, Data: readTestFileBytes(t, markerPath)},
 	})
 	require.True(t, eligibility.CanCheck)
 	require.True(t, eligibility.CanInstall)
@@ -147,6 +148,37 @@ func TestPortableInstallerRefusesToClaimAnUnmarkedExistingTarget(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, string(output), "existing installation is not a verified Luxury Yacht portable install")
 	require.Equal(t, []byte("unmanaged binary"), readTestFileBytes(t, executable))
+}
+
+func TestPortableUninstallerRejectsMatchingButInvalidMarkerCopies(t *testing.T) {
+	if testing.Short() {
+		t.Skip("executes the portable installer")
+	}
+	root := t.TempDir()
+	config := testLinuxPortableConfig(t, root)
+	artifacts, err := createLinuxPortableArtifacts(config)
+	require.NoError(t, err)
+
+	extractRoot := filepath.Join(root, "extract")
+	require.NoError(t, extractRegularTarGz(artifacts.InstallerArchive, extractRoot))
+	installerRoot := filepath.Join(extractRoot, "luxury-yacht-v2.0.0-beta.3-linux-amd64-portable")
+	dataHome := filepath.Join(root, "xdg-data")
+	installCommand := exec.Command("sh", filepath.Join(installerRoot, "install.sh"))
+	installCommand.Env = append(os.Environ(), "XDG_DATA_HOME="+dataHome)
+	output, err := installCommand.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	installationRoot := filepath.Join(dataHome, "luxury-yacht")
+	invalidMarker := []byte(`{"schemaVersion":1,"productIdentifier":"other-product","distribution":"portable","scope":"user"}`)
+	require.NoError(t, os.WriteFile(filepath.Join(installationRoot, updateidentity.InstallationMarkerName), invalidMarker, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(installationRoot, "installation-marker.expected.json"), invalidMarker, 0o644))
+
+	uninstallCommand := exec.Command("sh", filepath.Join(installationRoot, "manage-installation"), "uninstall")
+	output, err = uninstallCommand.CombinedOutput()
+
+	require.Error(t, err)
+	require.Contains(t, string(output), "portable installation marker is invalid")
+	require.FileExists(t, filepath.Join(installationRoot, "luxury-yacht"))
 }
 
 func TestPortableInstallerRecoversAnInterruptedMarkerFirstInstall(t *testing.T) {
@@ -268,7 +300,7 @@ func TestRunCreateLinuxPortableArtifactsUsesConfiguredProject(t *testing.T) {
 	t.Setenv("GOARCH", "amd64")
 
 	require.NoError(t, runCreateLinuxPortableArtifacts())
-	require.FileExists(t, filepath.Join(root, "bin", "luxury-yacht-v2.0.0-beta.3-linux-amd64.tar.gz"))
+	require.FileExists(t, filepath.Join(root, "bin", "luxury-yacht-v2.0.0-beta.3-linux-amd64-updater.tar.gz"))
 	require.FileExists(t, filepath.Join(root, "bin", "luxury-yacht-v2.0.0-beta.3-linux-amd64-portable.tar.gz"))
 }
 

@@ -23,6 +23,42 @@ type ProbeOptions struct {
 // ResolveInstallation. Missing or invalid marker files are represented as
 // absent evidence so they resolve to a typed notification-only state.
 func CollectInstallationProbe(options ProbeOptions) (InstallationProbe, error) {
+	probe, err := collectBaseProbe(options)
+	if err != nil {
+		return InstallationProbe{}, err
+	}
+	switch options.Platform {
+	case PlatformDarwin:
+		return collectMacProbe(probe, options.HomeDirectory)
+	case PlatformWindows:
+		marker, err := readMarkerCandidate(filepath.Join(filepath.Dir(probe.TargetPath), InstallationMarkerName))
+		if err != nil {
+			return InstallationProbe{}, err
+		}
+		probe.Marker = marker
+		return probe, nil
+	case PlatformLinux:
+		return collectLinuxProbe(probe, options.PackageMarkerPath)
+	default:
+		return probe, nil
+	}
+}
+
+// CollectLinuxPortableInstallationProbe gathers only the adjacent-marker and
+// writability evidence needed to decide where a portable target may stage an
+// atomic replacement. It deliberately avoids package-manager subprocesses so
+// it is safe to call before Wails dispatches updater helper mode.
+func CollectLinuxPortableInstallationProbe(architecture, executablePath string) (InstallationProbe, error) {
+	probe, err := collectBaseProbe(ProbeOptions{
+		Platform: PlatformLinux, Architecture: architecture, ExecutablePath: executablePath,
+	})
+	if err != nil {
+		return InstallationProbe{}, err
+	}
+	return collectLinuxPortableEvidence(probe)
+}
+
+func collectBaseProbe(options ProbeOptions) (InstallationProbe, error) {
 	executablePath := filepath.Clean(strings.TrimSpace(options.ExecutablePath))
 	if executablePath == "." || !filepath.IsAbs(executablePath) {
 		return InstallationProbe{}, fmt.Errorf("executable path must be absolute: %q", options.ExecutablePath)
@@ -36,21 +72,7 @@ func CollectInstallationProbe(options ProbeOptions) (InstallationProbe, error) {
 		Architecture: strings.ToLower(strings.TrimSpace(options.Architecture)),
 		TargetPath:   executablePath,
 	}
-	switch options.Platform {
-	case PlatformDarwin:
-		return collectMacProbe(probe, options.HomeDirectory)
-	case PlatformWindows:
-		marker, err := readMarkerCandidate(filepath.Join(filepath.Dir(executablePath), InstallationMarkerName))
-		if err != nil {
-			return InstallationProbe{}, err
-		}
-		probe.Marker = marker
-		return probe, nil
-	case PlatformLinux:
-		return collectLinuxProbe(probe, options.PackageMarkerPath)
-	default:
-		return probe, nil
-	}
+	return probe, nil
 }
 
 func collectMacProbe(probe InstallationProbe, homeDirectory string) (InstallationProbe, error) {
@@ -71,11 +93,10 @@ func collectMacProbe(probe InstallationProbe, homeDirectory string) (Installatio
 }
 
 func collectLinuxProbe(probe InstallationProbe, packageMarkerPath string) (InstallationProbe, error) {
-	marker, err := readMarkerCandidate(filepath.Join(filepath.Dir(probe.TargetPath), InstallationMarkerName))
+	probe, err := collectLinuxPortableEvidence(probe)
 	if err != nil {
 		return InstallationProbe{}, err
 	}
-	probe.Marker = marker
 	if packageMarkerPath == "" {
 		packageMarkerPath = defaultLinuxPackageMarkerPath
 	}
@@ -85,7 +106,15 @@ func collectLinuxProbe(probe InstallationProbe, packageMarkerPath string) (Insta
 	}
 	probe.PackageMarker = packageMarker
 	probe.PackageManagedTarget = packageManagerOwns(probe.TargetPath)
-	probe.TargetWritable = probeWritableFile(probe.TargetPath)
+	return probe, nil
+}
+
+func collectLinuxPortableEvidence(probe InstallationProbe) (InstallationProbe, error) {
+	marker, err := readMarkerCandidate(filepath.Join(filepath.Dir(probe.TargetPath), InstallationMarkerName))
+	if err != nil {
+		return InstallationProbe{}, err
+	}
+	probe.Marker = marker
 	probe.ParentWritable = probeWritableParent(filepath.Dir(probe.TargetPath))
 	return probe, nil
 }
@@ -134,14 +163,6 @@ func readMarkerCandidate(path string) (*MarkerCandidate, error) {
 		return nil, fmt.Errorf("read installation marker %s: %w", path, err)
 	}
 	return &MarkerCandidate{Path: path, Data: data}, nil
-}
-
-func probeWritableFile(path string) bool {
-	file, err := os.OpenFile(path, os.O_WRONLY, 0)
-	if err != nil {
-		return false
-	}
-	return file.Close() == nil
 }
 
 func probeWritableParent(parent string) bool {

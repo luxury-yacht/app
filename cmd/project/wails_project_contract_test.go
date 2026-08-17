@@ -818,6 +818,24 @@ func TestLinuxReleasePublishesOnlyPortablePayloadsToTheUpdaterManifest(t *testin
 	require.Contains(t, rootTaskfile, "go run ./cmd/project validate-linux-updater")
 }
 
+func TestLinuxPackageManagerDrillInstallsAndRemovesOwnedMarkers(t *testing.T) {
+	linuxTaskfile := readTestFile(t, repositoryPath("build", "linux", "Taskfile.yml"))
+	drill := readTestFile(t, repositoryPath("build", "linux", "package-manager-drill.sh"))
+
+	require.Contains(t, linuxTaskfile, "drill:packages:")
+	for _, command := range []string{
+		"dpkg --force-architecture --unpack",
+		"dpkg --remove",
+		"rpm --ignorearch --nodeps -i",
+		"rpm -e",
+	} {
+		require.Contains(t, drill, command)
+	}
+	require.Contains(t, drill, "/usr/share/luxury-yacht/install.json")
+	require.Contains(t, drill, `cmp -s "$marker" /packages/install-deb.json`)
+	require.Contains(t, drill, `cmp -s "$marker" /packages/install-rpm.json`)
+}
+
 func TestMacOSReleasePublishesAndValidatesTheWailsUpdaterPayload(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
 	require.Contains(t, workflow, "bin/*-darwin-*.zip")

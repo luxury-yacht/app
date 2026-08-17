@@ -251,7 +251,7 @@ func TestMatchUpdaterReleaseAssetSelectsOnlyReplaceablePlatformPayload(t *testin
 		{Name: "luxury-yacht-v2.0.0-windows-amd64.exe"},
 		{Name: "luxury-yacht-v2.0.0-linux-arm64.deb"},
 		{Name: "luxury-yacht-v2.0.0-linux-arm64-portable.tar.gz"},
-		{Name: "luxury-yacht-v2.0.0-linux-arm64.tar.gz"},
+		{Name: "luxury-yacht-v2.0.0-linux-arm64-updater.tar.gz"},
 	}
 
 	require.Equal(t, 1, matchUpdaterReleaseAsset(updater.CheckRequest{Platform: "darwin", Arch: "arm64"}, assets))

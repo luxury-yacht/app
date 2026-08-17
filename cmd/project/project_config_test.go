@@ -149,7 +149,7 @@ func TestReleaseArtifactNamePreservesVersionPlatformAndArchitecture(t *testing.T
 		{goos: "darwin", arch: "arm64", format: "updater", want: "luxury-yacht-v2.0.0-darwin-arm64.zip"},
 		{goos: "windows", arch: "amd64", format: "updater", want: "luxury-yacht-v2.0.0-windows-amd64.exe"},
 		{goos: "linux", arch: "amd64", format: "portable", want: "luxury-yacht-v2.0.0-linux-amd64-portable.tar.gz"},
-		{goos: "linux", arch: "arm64", format: "updater", want: "luxury-yacht-v2.0.0-linux-arm64.tar.gz"},
+		{goos: "linux", arch: "arm64", format: "updater", want: "luxury-yacht-v2.0.0-linux-arm64-updater.tar.gz"},
 	} {
 		t.Run(test.goos+"-"+test.arch+"-"+test.format, func(t *testing.T) {
 			name, err := releaseArtifactName(metadata, test.goos, test.arch, test.format)
@@ -201,8 +201,8 @@ func TestUpdaterArtifactNameIsExplicitForEverySupportedTarget(t *testing.T) {
 		{goos: "darwin", arch: "arm64", want: "luxury-yacht-v2.0.0-beta.3-darwin-arm64.zip"},
 		{goos: "windows", arch: "amd64", want: "luxury-yacht-v2.0.0-beta.3-windows-amd64.exe"},
 		{goos: "windows", arch: "arm64", want: "luxury-yacht-v2.0.0-beta.3-windows-arm64.exe"},
-		{goos: "linux", arch: "amd64", want: "luxury-yacht-v2.0.0-beta.3-linux-amd64.tar.gz"},
-		{goos: "linux", arch: "arm64", want: "luxury-yacht-v2.0.0-beta.3-linux-arm64.tar.gz"},
+		{goos: "linux", arch: "amd64", want: "luxury-yacht-v2.0.0-beta.3-linux-amd64-updater.tar.gz"},
+		{goos: "linux", arch: "arm64", want: "luxury-yacht-v2.0.0-beta.3-linux-arm64-updater.tar.gz"},
 	} {
 		t.Run(test.goos+"-"+test.arch, func(t *testing.T) {
 			name, err := updaterArtifactName(metadata, test.goos, test.arch)

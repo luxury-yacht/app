@@ -158,6 +158,18 @@ tasks:
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
 
+  drill:packages:
+    summary: Installs and removes the generated DEB and RPM in an isolated Linux container
+    cmds:
+      - >-
+        sh "{{.ROOT_DIR}}/build/linux/package-manager-drill.sh" "{{.ARCH}}"
+        "{{.ROOT_DIR}}/bin/$(GOOS=linux GOARCH={{.ARCH}} RELEASE_FORMAT=deb go run ./cmd/project release-artifact-name)"
+        "{{.ROOT_DIR}}/bin/$(GOOS=linux GOARCH={{.ARCH}} RELEASE_FORMAT=rpm go run ./cmd/project release-artifact-name)"
+        "{{.ROOT_DIR}}/bin/build-manifests/linux/install-deb.json"
+        "{{.ROOT_DIR}}/bin/build-manifests/linux/install-rpm.json"
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+
   generate:aur:
     summary: Creates a arch linux packager package
     cmds:

@@ -12,7 +12,7 @@ import (
 )
 
 func TestValidateLinuxArchiveStagesOneExecutableThroughWails(t *testing.T) {
-	artifact := filepath.Join(t.TempDir(), "luxury-yacht-v2.0.0-linux-amd64.tar.gz")
+	artifact := filepath.Join(t.TempDir(), "luxury-yacht-v2.0.0-linux-amd64-updater.tar.gz")
 	writeLinuxArchive(t, artifact, []linuxTestArchiveEntry{{
 		name: "luxury-yacht", contents: "linux binary", mode: 0o755,
 	}})
@@ -53,7 +53,7 @@ func TestValidateLinuxArchiveRejectsPayloadWailsCannotReplace(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			artifact := filepath.Join(t.TempDir(), "luxury-yacht-v2.0.0-linux-amd64.tar.gz")
+			artifact := filepath.Join(t.TempDir(), "luxury-yacht-v2.0.0-linux-amd64-updater.tar.gz")
 			writeLinuxArchive(t, artifact, test.entries)
 
 			err := ValidateLinuxArchive(context.Background(), artifact, "2.0.0", "amd64", "luxury-yacht")

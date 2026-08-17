@@ -107,12 +107,15 @@ wails3 task linux:generate:portable ARCH=amd64
 
 Use `ARCH=arm64` for the ARM release. The command writes two versioned archives
 under `bin/`: a manual `-portable.tar.gz` installer and a single-binary
-`.tar.gz` updater payload. Validate the updater archive through Wails with:
+`-updater.tar.gz` payload. Validate the updater archive through Wails with:
 
 ```bash
-UPDATER_ARTIFACT=bin/luxury-yacht-<version>-linux-amd64.tar.gz \
+UPDATER_ARTIFACT=bin/luxury-yacht-<version>-linux-amd64-updater.tar.gz \
 GOARCH=amd64 wails3 task release:validate-linux-updater
 ```
+
+After generating the DEB and RPM, repeat the isolated package-manager
+install/remove drill with `wails3 task linux:drill:packages ARCH=amd64`.
 
 The manual install defaults to
 `${XDG_DATA_HOME:-$HOME/.local/share}/luxury-yacht`. It is distinct from the

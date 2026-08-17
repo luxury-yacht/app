@@ -91,8 +91,32 @@ func TestCollectInstallationProbeValidatesPortableLinuxReplaceability(t *testing
 
 	require.NoError(t, err)
 	require.Equal(t, &updateidentity.MarkerCandidate{Path: markerPath, Data: markerData}, probe.Marker)
-	require.True(t, probe.TargetWritable)
 	require.True(t, probe.ParentWritable)
+	require.False(t, probe.PackageManagedTarget)
+	require.Equal(t, updateidentity.InstallationEligibility{
+		CanCheck: true, CanInstall: true, Distribution: updateidentity.DistributionLinuxPortable,
+	}, updateidentity.ResolveInstallation(probe))
+
+	_, err = updateidentity.CollectLinuxPortableInstallationProbe("arm64", "relative")
+	require.ErrorContains(t, err, "executable path must be absolute")
+}
+
+func TestCollectLinuxPortableInstallationProbeSkipsPackageManagerEvidence(t *testing.T) {
+	t.Parallel()
+
+	installDirectory := t.TempDir()
+	executable := filepath.Join(installDirectory, "luxury-yacht")
+	require.NoError(t, os.WriteFile(executable, []byte("binary"), 0o700))
+	markerPath := filepath.Join(installDirectory, updateidentity.InstallationMarkerName)
+	markerData := []byte(`{"schemaVersion":1,"productIdentifier":"app.luxury-yacht.desktop","distribution":"portable","scope":"user"}`)
+	require.NoError(t, os.WriteFile(markerPath, markerData, 0o600))
+
+	probe, err := updateidentity.CollectLinuxPortableInstallationProbe("arm64", executable)
+
+	require.NoError(t, err)
+	require.Equal(t, &updateidentity.MarkerCandidate{Path: markerPath, Data: markerData}, probe.Marker)
+	require.True(t, probe.ParentWritable)
+	require.Nil(t, probe.PackageMarker)
 	require.False(t, probe.PackageManagedTarget)
 	require.Equal(t, updateidentity.InstallationEligibility{
 		CanCheck: true, CanInstall: true, Distribution: updateidentity.DistributionLinuxPortable,

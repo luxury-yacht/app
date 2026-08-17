@@ -5,6 +5,7 @@ set -eu
 app_name='__APP_NAME__'
 app_version='__APP_VERSION__'
 binary_name='__APP_BINARY_NAME__'
+product_identifier='__APP_IDENTIFIER__'
 portable_architecture='__PORTABLE_ARCHITECTURE__'
 marker_name='luxury-yacht.install.json'
 
@@ -43,7 +44,6 @@ esac
 install_root=$data_home/$binary_name
 binary_path=$install_root/$binary_name
 marker_path=$install_root/$marker_name
-expected_marker_path=$install_root/installation-marker.expected.json
 manager_path=$install_root/manage-installation
 readme_path=$install_root/README.txt
 license_path=$install_root/LICENSE
@@ -56,15 +56,23 @@ refresh_desktop_database() {
     fi
 }
 
+portable_marker_is_valid() {
+    candidate=$1
+    if [ ! -f "$candidate" ] || [ -L "$candidate" ]; then
+        return 1
+    fi
+    compact_marker=$(LC_ALL=C tr -d '[:space:]' < "$candidate") || return 1
+    expected_marker=$(printf '{"schemaVersion":1,"productIdentifier":"%s","distribution":"portable","scope":"user"}' "$product_identifier")
+    [ "$compact_marker" = "$expected_marker" ]
+}
+
 uninstall_portable() {
-    if [ ! -f "$marker_path" ] || [ -L "$marker_path" ] ||
-        [ ! -f "$expected_marker_path" ] || [ -L "$expected_marker_path" ] ||
-        ! cmp -s "$marker_path" "$expected_marker_path"; then
-        fail "refusing to remove an installation without the verified portable marker"
+    if ! portable_marker_is_valid "$marker_path"; then
+        fail "portable installation marker is invalid; refusing to remove files"
     fi
 
     rm -f "$binary_path" "$marker_path" "$desktop_path" "$icon_path"
-    rm -f "$expected_marker_path" "$readme_path" "$license_path" "$manager_path"
+    rm -f "$readme_path" "$license_path" "$manager_path"
     rmdir "$install_root" 2>/dev/null || true
     rmdir "$data_home/icons/hicolor/128x128/apps" 2>/dev/null || true
     rmdir "$data_home/icons/hicolor/128x128" 2>/dev/null || true
@@ -96,6 +104,9 @@ for source_file in "$source_binary" "$source_marker" "$source_desktop" "$source_
         fail "portable installer input is missing or unsafe: $source_file"
     fi
 done
+if ! portable_marker_is_valid "$source_marker"; then
+    fail "portable installer marker is invalid"
+fi
 
 if [ -e "$marker_path" ] || [ -L "$marker_path" ]; then
     if [ ! -f "$marker_path" ] || [ -L "$marker_path" ] ||
@@ -116,7 +127,6 @@ install -d -m 0755 "$(dirname "$icon_path")"
 
 temporary_binary=$install_root/.${binary_name}.install.$$
 temporary_marker=$install_root/.${marker_name}.install.$$
-temporary_expected_marker=$install_root/.installation-marker.expected.install.$$
 temporary_manager=$install_root/.manage-installation.install.$$
 temporary_readme=$install_root/.README.install.$$
 temporary_license=$install_root/.LICENSE.install.$$
@@ -124,7 +134,7 @@ temporary_desktop=$(dirname "$desktop_path")/.${binary_name}.desktop.install.$$
 temporary_icon=$(dirname "$icon_path")/.${binary_name}.png.install.$$
 
 cleanup_temporary_files() {
-    rm -f "$temporary_binary" "$temporary_marker" "$temporary_expected_marker" "$temporary_manager"
+    rm -f "$temporary_binary" "$temporary_marker" "$temporary_manager"
     rm -f "$temporary_readme" "$temporary_license" "$temporary_desktop" "$temporary_icon"
 }
 trap cleanup_temporary_files EXIT
@@ -132,7 +142,6 @@ trap 'exit 1' HUP INT TERM
 
 install -m 0755 "$source_binary" "$temporary_binary"
 install -m 0644 "$source_marker" "$temporary_marker"
-install -m 0644 "$source_marker" "$temporary_expected_marker"
 install -m 0755 "$source_directory/install.sh" "$temporary_manager"
 install -m 0644 "$source_readme" "$temporary_readme"
 install -m 0644 "$source_license" "$temporary_license"
@@ -159,7 +168,6 @@ chmod 0644 "$temporary_desktop"
 # remains intact until the final rename.
 mv -f "$temporary_marker" "$marker_path"
 mv -f "$temporary_binary" "$binary_path"
-mv -f "$temporary_expected_marker" "$expected_marker_path"
 mv -f "$temporary_manager" "$manager_path"
 mv -f "$temporary_readme" "$readme_path"
 mv -f "$temporary_license" "$license_path"

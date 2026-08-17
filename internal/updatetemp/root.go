@@ -35,6 +35,15 @@ type Config struct {
 	Environment Environment
 }
 
+type processConfig struct {
+	Platform       string
+	Architecture   string
+	SystemTempDir  string
+	ExecutablePath string
+	UserID         string
+	Environment    Environment
+}
+
 type ownershipMarker struct {
 	SchemaVersion     int    `json:"schemaVersion"`
 	ProductIdentifier string `json:"productIdentifier"`
@@ -59,11 +68,38 @@ func ConfigureProcess() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve current user for updater temp root: %w", err)
 	}
+	executablePath := ""
+	if runtime.GOOS == "linux" {
+		executablePath, err = os.Executable()
+		if err != nil {
+			return "", fmt.Errorf("resolve executable for updater temp root: %w", err)
+		}
+	}
+	return configureProcess(processConfig{
+		Platform: runtime.GOOS, Architecture: runtime.GOARCH,
+		SystemTempDir: os.TempDir(), ExecutablePath: executablePath,
+		UserID: currentUser.Uid, Environment: osEnvironment{},
+	})
+}
+
+func configureProcess(config processConfig) (string, error) {
+	base := config.SystemTempDir
+	if config.Platform == "linux" {
+		probe, err := updateidentity.CollectLinuxPortableInstallationProbe(
+			config.Architecture,
+			config.ExecutablePath,
+		)
+		if err != nil {
+			return "", fmt.Errorf("inspect Linux portable target for updater temp root: %w", err)
+		}
+		eligibility := updateidentity.ResolveInstallation(probe)
+		if eligibility.CanInstall && eligibility.Distribution == updateidentity.DistributionLinuxPortable {
+			base = filepath.Dir(filepath.Dir(probe.TargetPath))
+		}
+	}
 	return Setup(Config{
-		Platform:    runtime.GOOS,
-		BaseTempDir: os.TempDir(),
-		UserID:      currentUser.Uid,
-		Environment: osEnvironment{},
+		Platform: config.Platform, BaseTempDir: base, UserID: config.UserID,
+		Environment: config.Environment,
 	})
 }
 

@@ -39,6 +39,10 @@ the initial window restores saved geometry. Keep native hooks registered before
 Application-update staging requires a process-owned temp root. Configure that
 root before exec-wrapper dispatch, Wails composition, or any child process so
 Wails staging, helper logs, and inherited children resolve the same root.
+For an installable portable Linux target, derive the root's base from the
+target's XDG data home rather than the system temporary directory; Wails'
+Unix helper completes the swap with a same-filesystem rename. Package-managed
+and unverified Linux targets continue to use the system temporary base.
 `main.go` passes that root through `ApplicationRuntimeOptions`, so the single
 process update coordinator is fully initialized when `NewApplicationRuntime`
 returns and before `application.Run`; only

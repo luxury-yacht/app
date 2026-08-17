@@ -69,7 +69,6 @@ type InstallationProbe struct {
 	TargetPath           string
 	MacInstalledBundle   bool
 	VolumeReadOnly       bool
-	TargetWritable       bool
 	ParentWritable       bool
 	PackageManagedTarget bool
 	Marker               *MarkerCandidate
@@ -188,9 +187,6 @@ func resolveLinuxInstallation(probe InstallationProbe) InstallationEligibility {
 			Recovery:     RecoveryLinuxPackages,
 		}
 	}
-	if probe.PackageManagedTarget {
-		return unsupportedInstallation()
-	}
 	return unsupportedInstallation()
 }
 
@@ -203,7 +199,7 @@ func resolveLinuxPortableInstallation(probe InstallationProbe) (InstallationElig
 		CanCheck:     true,
 		Distribution: DistributionLinuxPortable,
 	}
-	if !probe.TargetWritable || !probe.ParentWritable {
+	if !probe.ParentWritable {
 		result.Reason = ReasonLinuxPortableIneligible
 		result.Recovery = RecoveryLinuxPortableDownload
 		return result, true

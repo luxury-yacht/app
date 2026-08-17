@@ -64,7 +64,7 @@ func TestCollectUpdaterArtifactsRequiresOneExactFilePerOrderedTarget(t *testing.
 func TestCollectLinuxUpdaterArtifactIgnoresManualInstallerAndPackages(t *testing.T) {
 	metadata := testProjectMetadata("v2.0.0-beta.4")
 	root := t.TempDir()
-	updaterArchive := filepath.Join(root, "luxury-yacht-v2.0.0-beta.4-linux-amd64.tar.gz")
+	updaterArchive := filepath.Join(root, "luxury-yacht-v2.0.0-beta.4-linux-amd64-updater.tar.gz")
 	for _, name := range []string{
 		filepath.Base(updaterArchive),
 		"luxury-yacht-v2.0.0-beta.4-linux-amd64-portable.tar.gz",
@@ -311,7 +311,7 @@ func TestValidateConfiguredMacOSUpdaterArchiveRejectsWrongNameAndPlatformFailure
 
 func TestValidateConfiguredLinuxUpdaterArchiveUsesExactWailsPayload(t *testing.T) {
 	metadata := testProjectMetadata("v2.0.0")
-	artifact := filepath.Join(t.TempDir(), "luxury-yacht-v2.0.0-linux-arm64.tar.gz")
+	artifact := filepath.Join(t.TempDir(), "luxury-yacht-v2.0.0-linux-arm64-updater.tar.gz")
 	writeLinuxUpdaterArchive(t, artifact, "luxury-yacht", 0o755)
 
 	require.NoError(t, validateConfiguredLinuxUpdaterArchive(
