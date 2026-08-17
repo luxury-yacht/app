@@ -35,13 +35,13 @@ type preferencesWindowShell interface {
 	readWindowGeometry(string) (WindowGeometry, error)
 }
 
-type kubeconfigSearchPathRepository interface {
+type kubeconfigSearchPathsProvider interface {
 	KubeconfigSearchPaths() ([]string, error)
 }
 
 type kubeconfigSearchPathPort struct {
 	mu     sync.RWMutex
-	target kubeconfigSearchPathRepository
+	target kubeconfigSearchPathsProvider
 }
 
 func (p *kubeconfigSearchPathPort) read() ([]string, error) {
@@ -57,7 +57,7 @@ func (p *kubeconfigSearchPathPort) read() ([]string, error) {
 	return target.KubeconfigSearchPaths()
 }
 
-func (p *kubeconfigSearchPathPort) bind(target kubeconfigSearchPathRepository) {
+func (p *kubeconfigSearchPathPort) bind(target kubeconfigSearchPathsProvider) {
 	if p == nil || target == nil {
 		panic("kubeconfig search-path port requires a target")
 	}

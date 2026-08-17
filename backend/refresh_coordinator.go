@@ -46,7 +46,7 @@ type refreshAttention interface {
 	pruneClusterAttentionIgnoredObject(string, resourcemodel.ResourceRef) error
 }
 
-type refreshPreferences interface {
+type cacheDirPathProvider interface {
 	cacheDirPath() (string, error)
 }
 
@@ -59,7 +59,7 @@ type RefreshCoordinator struct {
 	attention             refreshAttention
 	logger                *Logger
 	allowedNamespaces     func(string) []string
-	preferences           refreshPreferences
+	preferences           cacheDirPathProvider
 	containerLogsPolicy   *ContainerLogsSelectionPolicy
 	permissionFetchPolicy *PermissionFetchPolicy
 	resources             refreshResourceGateway
@@ -121,7 +121,7 @@ type RefreshCoordinatorDependencies struct {
 	Attention             refreshAttention
 	Logger                *Logger
 	AllowedNamespaces     func(string) []string
-	Preferences           refreshPreferences
+	Preferences           cacheDirPathProvider
 	ContainerLogsPolicy   *ContainerLogsSelectionPolicy
 	PermissionFetchPolicy *PermissionFetchPolicy
 	Resources             refreshResourceGateway

@@ -48,11 +48,11 @@ type ApplicationLifecycle struct {
 	desktopShell   lifecycleDesktopShell
 	logger         *Logger
 	preferences    lifecyclePreferences
-	errorReporting lifecycleErrorReporting
+	errorReporting installationMetricRegistrationScheduler
 	clusterRuntime lifecycleClusterRuntime
-	refresh        lifecycleRefresh
+	refresh        refreshSubsystemTeardowner
 	workspace      lifecycleWorkspace
-	operations     lifecycleOperations
+	operations     operationsShutdowner
 	updates        lifecycleUpdates
 }
 
@@ -69,7 +69,7 @@ type lifecyclePreferences interface {
 	SaveWindowSettingsForWindow(string) error
 }
 
-type lifecycleErrorReporting interface {
+type installationMetricRegistrationScheduler interface {
 	scheduleInstallationMetricRegistration(context.Context)
 }
 
@@ -85,7 +85,7 @@ type lifecycleClusterRuntime interface {
 	stopKubeconfigWatcher()
 }
 
-type lifecycleRefresh interface {
+type refreshSubsystemTeardowner interface {
 	teardownRefreshSubsystem()
 }
 
@@ -96,7 +96,7 @@ type lifecycleWorkspace interface {
 	waitForSelectionMutationIdle(time.Duration) bool
 }
 
-type lifecycleOperations interface {
+type operationsShutdowner interface {
 	Shutdown()
 }
 
@@ -109,11 +109,11 @@ type ApplicationLifecycleDependencies struct {
 	DesktopShell   lifecycleDesktopShell
 	Logger         *Logger
 	Preferences    lifecyclePreferences
-	ErrorReporting lifecycleErrorReporting
+	ErrorReporting installationMetricRegistrationScheduler
 	ClusterRuntime lifecycleClusterRuntime
-	Refresh        lifecycleRefresh
+	Refresh        refreshSubsystemTeardowner
 	Workspace      lifecycleWorkspace
-	Operations     lifecycleOperations
+	Operations     operationsShutdowner
 	Updates        lifecycleUpdates
 }
 

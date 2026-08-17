@@ -25,19 +25,19 @@ type dataManagementResetter interface {
 	Reset() error
 }
 
-type dataManagementUpdates interface {
+type contextResetter interface {
 	Reset(context.Context) error
 }
 
-type dataManagementAttention interface {
+type projectionResetter interface {
 	ResetProjection()
 }
 
-type dataManagementErrorReporting interface {
+type installationTelemetryQuiescer interface {
 	WithInstallationTelemetryQuiesced(func() error) error
 }
 
-type dataManagementLogs interface {
+type appLogsClearer interface {
 	ClearAppLogs() error
 }
 
@@ -51,10 +51,10 @@ type DataManagementDependencies struct {
 	Preferences        dataManagementPreferences
 	Favorites          dataManagementFavorites
 	UIState            dataManagementResetter
-	Updates            dataManagementUpdates
-	Attention          dataManagementAttention
-	ErrorReporting     dataManagementErrorReporting
-	AppLogs            dataManagementLogs
+	Updates            contextResetter
+	Attention          projectionResetter
+	ErrorReporting     installationTelemetryQuiescer
+	AppLogs            appLogsClearer
 	DesktopShell       dataManagementDesktopShell
 	RuntimeAvailable   func() bool
 	Context            func() context.Context
@@ -70,10 +70,10 @@ type DataManagementCoordinator struct {
 	preferences        dataManagementPreferences
 	favorites          dataManagementFavorites
 	uiState            dataManagementResetter
-	updates            dataManagementUpdates
-	attention          dataManagementAttention
-	errorReporting     dataManagementErrorReporting
-	appLogs            dataManagementLogs
+	updates            contextResetter
+	attention          projectionResetter
+	errorReporting     installationTelemetryQuiescer
+	appLogs            appLogsClearer
 	desktopShell       dataManagementDesktopShell
 	runtimeAvailable   func() bool
 	context            func() context.Context

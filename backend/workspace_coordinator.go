@@ -84,7 +84,7 @@ type workspacePreferences interface {
 	saveClusterAllowedNamespaces(string, []string) ([]string, error)
 }
 
-type workspaceOperations interface {
+type clusterStopper interface {
 	StopCluster(string)
 }
 
@@ -97,7 +97,7 @@ type WorkspaceCoordinator struct {
 	refresh          workspaceRefresh
 
 	preferences           workspacePreferences
-	operations            workspaceOperations
+	operations            clusterStopper
 	logger                *Logger
 	context               func() context.Context
 	runtimeAvailableFn    func() bool
@@ -131,7 +131,7 @@ type WorkspaceCoordinatorDependencies struct {
 	ClusterWorkspace workspaceClusterProjection
 	Refresh          workspaceRefresh
 	Preferences      workspacePreferences
-	Operations       workspaceOperations
+	Operations       clusterStopper
 	Logger           *Logger
 	Context          func() context.Context
 	RuntimeAvailable func() bool
