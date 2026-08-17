@@ -211,6 +211,11 @@ tasks:
     cmds:
       - go run ./cmd/project validate-macos-updater
 
+  release:validate-linux-updater:
+    desc: Validates the portable Linux updater archive through Wails extraction
+    cmds:
+      - go run ./cmd/project validate-linux-updater
+
   release:site:
     desc: Updates the version displayed on the website
     cmds:

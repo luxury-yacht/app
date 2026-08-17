@@ -16,6 +16,16 @@ func runMacOSUpdaterArchiveValidation() error {
 	)
 }
 
+func runLinuxUpdaterArchiveValidation() error {
+	metadata, err := readProjectMetadata(projectConfigPath)
+	if err != nil {
+		return err
+	}
+	return validateConfiguredLinuxUpdaterArchive(
+		context.Background(), metadata, os.Getenv("UPDATER_ARTIFACT"), os.Getenv("GOARCH"),
+	)
+}
+
 func runReleaseUpdaterManifestPreparation() error {
 	metadata, err := readProjectMetadata(projectConfigPath)
 	if err != nil {

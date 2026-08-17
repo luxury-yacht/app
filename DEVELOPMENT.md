@@ -95,6 +95,29 @@ wails3 task install:unsigned
 The task installs to `/Applications` on macOS, `~/.local/bin` on Linux, and the
 current user's `Programs` directory on Windows.
 
+## Build the Linux Portable Distribution
+
+On Linux, build the production binary once and then package that existing
+binary for portable installation and automatic updates:
+
+```bash
+wails3 task linux:build ARCH=amd64
+wails3 task linux:generate:portable ARCH=amd64
+```
+
+Use `ARCH=arm64` for the ARM release. The command writes two versioned archives
+under `bin/`: a manual `-portable.tar.gz` installer and a single-binary
+`.tar.gz` updater payload. Validate the updater archive through Wails with:
+
+```bash
+UPDATER_ARTIFACT=bin/luxury-yacht-<version>-linux-amd64.tar.gz \
+GOARCH=amd64 wails3 task release:validate-linux-updater
+```
+
+The manual install defaults to
+`${XDG_DATA_HOME:-$HOME/.local/share}/luxury-yacht`. It is distinct from the
+developer-only unsigned install task above.
+
 ## Versions
 
 The app version and development-tool versions have separate canonical sources. Scripts and workflows must read these sources rather than resolving versions dynamically.

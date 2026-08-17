@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "productIdentifier": "__APP_IDENTIFIER__",
+  "distribution": "deb",
+  "scope": "system"
+}

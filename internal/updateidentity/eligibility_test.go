@@ -387,6 +387,35 @@ func TestResolveInstallationValidatesEveryMarkerIdentityField(t *testing.T) {
 	}
 }
 
+func TestResolveInstallationKeepsPortableIdentityWhenAnotherPackageIsInstalled(t *testing.T) {
+	t.Parallel()
+	executable := "/home/alice/.local/share/luxury-yacht/luxury-yacht"
+
+	eligibility := updateidentity.ResolveInstallation(updateidentity.InstallationProbe{
+		Platform:       updateidentity.PlatformLinux,
+		Architecture:   "amd64",
+		TargetPath:     executable,
+		TargetWritable: true,
+		ParentWritable: true,
+		Marker: marker(
+			filepath.Join(filepath.Dir(executable), updateidentity.InstallationMarkerName),
+			"app.luxury-yacht.desktop",
+			"portable",
+			"user",
+		),
+		PackageMarker: marker(
+			"/usr/share/luxury-yacht/install.json",
+			"app.luxury-yacht.desktop",
+			"deb",
+			"system",
+		),
+	})
+
+	require.Equal(t, updateidentity.InstallationEligibility{
+		CanCheck: true, CanInstall: true, Distribution: updateidentity.DistributionLinuxPortable,
+	}, eligibility)
+}
+
 func marker(path, product, distribution, scope string) *updateidentity.MarkerCandidate {
 	return &updateidentity.MarkerCandidate{
 		Path: path,

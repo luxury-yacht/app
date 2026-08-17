@@ -1,7 +1,9 @@
 package main
 
 import (
+	"archive/tar"
 	"archive/zip"
+	"compress/gzip"
 	"context"
 	"errors"
 	"os"
@@ -57,6 +59,27 @@ func TestCollectUpdaterArtifactsRequiresOneExactFilePerOrderedTarget(t *testing.
 
 	require.NoError(t, err)
 	require.Equal(t, []string{arm64, amd64}, artifacts)
+}
+
+func TestCollectLinuxUpdaterArtifactIgnoresManualInstallerAndPackages(t *testing.T) {
+	metadata := testProjectMetadata("v2.0.0-beta.4")
+	root := t.TempDir()
+	updaterArchive := filepath.Join(root, "luxury-yacht-v2.0.0-beta.4-linux-amd64.tar.gz")
+	for _, name := range []string{
+		filepath.Base(updaterArchive),
+		"luxury-yacht-v2.0.0-beta.4-linux-amd64-portable.tar.gz",
+		"luxury-yacht_2.0.0-beta.4_linux_amd64.deb",
+		"luxury-yacht-v2.0.0-beta.4-linux-x86_64.rpm",
+	} {
+		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(name), 0o600))
+	}
+
+	artifacts, err := collectUpdaterArtifactsForTargets(metadata, root, []updaterTarget{{
+		Platform: "linux", Architecture: "amd64",
+	}})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{updaterArchive}, artifacts)
 }
 
 func TestCollectUpdaterArtifactsRejectsMissingDuplicateOrNonRegularTarget(t *testing.T) {
@@ -286,6 +309,24 @@ func TestValidateConfiguredMacOSUpdaterArchiveRejectsWrongNameAndPlatformFailure
 	require.ErrorContains(t, err, "signature invalid")
 }
 
+func TestValidateConfiguredLinuxUpdaterArchiveUsesExactWailsPayload(t *testing.T) {
+	metadata := testProjectMetadata("v2.0.0")
+	artifact := filepath.Join(t.TempDir(), "luxury-yacht-v2.0.0-linux-arm64.tar.gz")
+	writeLinuxUpdaterArchive(t, artifact, "luxury-yacht", 0o755)
+
+	require.NoError(t, validateConfiguredLinuxUpdaterArchive(
+		context.Background(), metadata, artifact, "ARM64",
+	))
+
+	wrongName := filepath.Join(t.TempDir(), "wrong.tar.gz")
+	writeLinuxUpdaterArchive(t, wrongName, "luxury-yacht", 0o755)
+	err := validateConfiguredLinuxUpdaterArchive(context.Background(), metadata, wrongName, "arm64")
+	require.ErrorContains(t, err, "does not match expected")
+
+	err = validateConfiguredLinuxUpdaterArchive(context.Background(), metadata, artifact, "386")
+	require.ErrorContains(t, err, "unsupported updater artifact target")
+}
+
 func TestPrepareReleaseUpdaterManifestSignsOneImmutableAssetForStableRelease(t *testing.T) {
 	t.Chdir(repositoryPath())
 	directory := t.TempDir()
@@ -398,5 +439,22 @@ func writeMacAppArchive(t *testing.T, path string, sibling bool) {
 		require.NoError(t, createErr)
 	}
 	require.NoError(t, archive.Close())
+	require.NoError(t, file.Close())
+}
+
+func writeLinuxUpdaterArchive(t *testing.T, path, name string, mode int64) {
+	t.Helper()
+	file, err := os.Create(path)
+	require.NoError(t, err)
+	gzipWriter := gzip.NewWriter(file)
+	tarWriter := tar.NewWriter(gzipWriter)
+	contents := []byte("linux binary")
+	require.NoError(t, tarWriter.WriteHeader(&tar.Header{
+		Name: name, Mode: mode, Size: int64(len(contents)), Typeflag: tar.TypeReg,
+	}))
+	_, err = tarWriter.Write(contents)
+	require.NoError(t, err)
+	require.NoError(t, tarWriter.Close())
+	require.NoError(t, gzipWriter.Close())
 	require.NoError(t, file.Close())
 }

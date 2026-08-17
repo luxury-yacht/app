@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=__APP_NAME__
+Comment=__APP_DESCRIPTION__
+Exec=__PORTABLE_EXECUTABLE__ %u
+Terminal=false
+Type=Application
+Icon=__APP_BINARY_NAME__
+Categories=Utility;
+StartupWMClass=__APP_BINARY_NAME__

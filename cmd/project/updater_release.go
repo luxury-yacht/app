@@ -377,6 +377,37 @@ func validateConfiguredMacOSUpdaterArchive(
 	)
 }
 
+func validateConfiguredLinuxUpdaterArchive(
+	ctx context.Context,
+	metadata projectMetadata,
+	artifactPath, architecture string,
+) error {
+	architecture = strings.ToLower(strings.TrimSpace(architecture))
+	artifactPath = strings.TrimSpace(artifactPath)
+	expected, err := updaterArtifactName(metadata, "linux", architecture)
+	if err != nil {
+		return err
+	}
+	if filepath.Base(artifactPath) != expected {
+		return fmt.Errorf("linux updater artifact name %q does not match expected %q", filepath.Base(artifactPath), expected)
+	}
+	release, err := updateidentity.ParseReleaseVersion(metadata.Info.Version)
+	if err != nil {
+		return err
+	}
+	binaryName, err := projectBinaryName(metadata)
+	if err != nil {
+		return err
+	}
+	return updateconformance.ValidateLinuxArchive(
+		ctx,
+		artifactPath,
+		release.Version,
+		architecture,
+		binaryName,
+	)
+}
+
 func prepareReleaseUpdaterManifest(
 	metadata projectMetadata,
 	facts projectFacts,

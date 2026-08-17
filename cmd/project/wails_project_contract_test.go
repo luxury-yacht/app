@@ -782,6 +782,8 @@ func TestReleaseArtifactsPreserveVersionPlatformAndArchitectureIdentity(t *testi
 	require.Contains(t, workflow, "GOOS=darwin GOARCH=amd64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name")
 	require.Contains(t, workflow, "linux:generate:deb ARCH=${{ matrix.arch }}")
 	require.Contains(t, workflow, "linux:generate:rpm ARCH=${{ matrix.arch }}")
+	require.Contains(t, workflow, "linux:generate:portable ARCH=${{ matrix.arch }}")
+	require.Contains(t, workflow, "bin/*-linux-*.tar.gz")
 
 	linuxTaskfile := readTestFile(t, repositoryPath("build", "linux", "Taskfile.yml"))
 	require.Contains(t, linuxTaskfile, "go run ./cmd/project release-artifact-name")
@@ -791,6 +793,29 @@ func TestReleaseArtifactsPreserveVersionPlatformAndArchitectureIdentity(t *testi
 
 	windowsTaskfile := readTestFile(t, repositoryPath("build", "windows", "Taskfile.yml"))
 	require.Contains(t, windowsTaskfile, `{{.APP_NAME}}-*-windows-{{.ARCH}}-installer.exe`)
+}
+
+func TestLinuxReleasePublishesOnlyPortablePayloadsToTheUpdaterManifest(t *testing.T) {
+	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
+	require.Contains(t, workflow, "UPDATER_TARGETS: darwin/arm64,darwin/amd64,linux/amd64,linux/arm64")
+	createPayload := "wails3 task linux:generate:portable ARCH=${{ matrix.arch }}"
+	validatePayload := "wails3 task release:validate-linux-updater"
+	require.Contains(t, workflow, validatePayload)
+	require.Less(t, strings.Index(workflow, createPayload), strings.Index(workflow, validatePayload))
+
+	linuxTaskfile := readTestFile(t, repositoryPath("build", "linux", "Taskfile.yml"))
+	require.Contains(t, linuxTaskfile, "create:portable:")
+	require.Contains(t, linuxTaskfile, "generate:portable:")
+	require.Contains(t, linuxTaskfile, "go run ./cmd/project create-linux-portable-artifacts")
+
+	nfpm := readTestFile(t, repositoryPath("build", "linux", "nfpm", "nfpm.yaml"))
+	require.Contains(t, nfpm, `dst: "/usr/share/luxury-yacht/install.json"`)
+	require.Contains(t, nfpm, "packager: deb")
+	require.Contains(t, nfpm, "packager: rpm")
+
+	rootTaskfile := readTestFile(t, repositoryPath("Taskfile.yml"))
+	require.Contains(t, rootTaskfile, "release:validate-linux-updater:")
+	require.Contains(t, rootTaskfile, "go run ./cmd/project validate-linux-updater")
 }
 
 func TestMacOSReleasePublishesAndValidatesTheWailsUpdaterPayload(t *testing.T) {

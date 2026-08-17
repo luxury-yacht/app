@@ -86,6 +86,7 @@ jobs:
             artifact_path: |
               bin/*.deb
               bin/*.rpm
+              bin/*-linux-*.tar.gz
           - runner: ubuntu-latest-arm
             goos: linux
             arch: arm64
@@ -93,6 +94,7 @@ jobs:
             artifact_path: |
               bin/*.deb
               bin/*.rpm
+              bin/*-linux-*.tar.gz
 
     runs-on: ${{ matrix.runner }}
     name: Build ${{ matrix.goos }} (${{ matrix.arch }})
@@ -171,6 +173,8 @@ jobs:
           wails3 task linux:build ARCH=${{ matrix.arch }}
           wails3 task linux:generate:deb ARCH=${{ matrix.arch }}
           wails3 task linux:generate:rpm ARCH=${{ matrix.arch }}
+          wails3 task linux:generate:portable ARCH=${{ matrix.arch }}
+          UPDATER_ARTIFACT="bin/$(GOOS=linux GOARCH=${{ matrix.arch }} RELEASE_FORMAT=updater go run ./cmd/project release-artifact-name)" GOARCH=${{ matrix.arch }} wails3 task release:validate-linux-updater
 
       - name: Create package for Windows (unsigned)
         if: matrix.goos == 'windows'
@@ -219,7 +223,7 @@ jobs:
       - name: Prepare signed updater manifest release asset
         env:
           UPDATER_ARTIFACTS_DIR: ./artifacts
-          UPDATER_TARGETS: darwin/arm64,darwin/amd64
+          UPDATER_TARGETS: darwin/arm64,darwin/amd64,linux/amd64,linux/arm64
           UPDATER_PRIVATE_KEY_PATH: ${{ runner.temp }}/updater.key
           UPDATER_PUBLIC_KEY: backend/updater_public_key.pem
         run: wails3 task release:prepare-updater-manifest

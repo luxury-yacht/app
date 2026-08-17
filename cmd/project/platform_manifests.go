@@ -44,6 +44,14 @@ var projectPlatformManifestSpecs = []platformManifestSpec{
 		outputPath: filepath.Join("bin", platformManifestDirectory, "linux", "app.desktop"),
 	},
 	{
+		sourcePath: filepath.Join("build", "linux", "nfpm", "install-deb.json"),
+		outputPath: filepath.Join("bin", platformManifestDirectory, "linux", "install-deb.json"),
+	},
+	{
+		sourcePath: filepath.Join("build", "linux", "nfpm", "install-rpm.json"),
+		outputPath: filepath.Join("bin", platformManifestDirectory, "linux", "install-rpm.json"),
+	},
+	{
 		sourcePath: filepath.Join("build", "windows", "wails.exe.manifest"),
 		outputPath: filepath.Join("bin", platformManifestDirectory, "windows", "wails.exe.manifest"),
 	},

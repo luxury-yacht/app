@@ -148,6 +148,7 @@ func TestReleaseArtifactNamePreservesVersionPlatformAndArchitecture(t *testing.T
 		{goos: "windows", arch: "arm64", format: "exe", want: "luxury-yacht-v2.0.0-windows-arm64-installer.exe"},
 		{goos: "darwin", arch: "arm64", format: "updater", want: "luxury-yacht-v2.0.0-darwin-arm64.zip"},
 		{goos: "windows", arch: "amd64", format: "updater", want: "luxury-yacht-v2.0.0-windows-amd64.exe"},
+		{goos: "linux", arch: "amd64", format: "portable", want: "luxury-yacht-v2.0.0-linux-amd64-portable.tar.gz"},
 		{goos: "linux", arch: "arm64", format: "updater", want: "luxury-yacht-v2.0.0-linux-arm64.tar.gz"},
 	} {
 		t.Run(test.goos+"-"+test.arch+"-"+test.format, func(t *testing.T) {

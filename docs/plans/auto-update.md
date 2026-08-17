@@ -1185,6 +1185,18 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
   distribution and updater payloads for arm64 and amd64, add package-owned
   identity markers to DEB/RPM, prove portable update and rollback behavior, and
   keep DEB/RPM notification-only.
+  - [x] The release pipeline builds versioned portable installer and
+    single-entry updater archives from the same package binary, validates the
+    updater archive through Wails, adds DEB/RPM-owned markers, and includes only
+    the portable payloads in `updater.json`.
+  - [x] Linux-native tests prove portable install, interrupted-install
+    recovery, collision refusal, executable-only Wails extraction, and
+    uninstall; package-manager drills prove both dpkg and rpm install and remove
+    their distinct marker while runtime contract tests keep them
+    notification-only.
+  - [ ] Publish an arm64/amd64 Linux beta and complete the portable update,
+    rollback, dependency, relaunch, and UI smoke matrix before checking off the
+    stage.
 - [ ] **Stage 4 — cross-platform completion:** run release-manifest readback,
   signature verification, failed-draft recovery, stable-to-stable, beta-to-beta,
   beta-to-stable, multi-window, and platform smoke tests across macOS, Windows,

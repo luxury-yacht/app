@@ -23,6 +23,12 @@ contents:
     dst: "/usr/share/icons/hicolor/128x128/apps/__APP_BINARY_NAME__.png"
   - src: "./build/linux/__APP_BINARY_NAME__.desktop"
     dst: "/usr/share/applications/__APP_BINARY_NAME__.desktop"
+  - src: "./bin/build-manifests/linux/install-deb.json"
+    dst: "/usr/share/luxury-yacht/install.json"
+    packager: deb
+  - src: "./bin/build-manifests/linux/install-rpm.json"
+    dst: "/usr/share/luxury-yacht/install.json"
+    packager: rpm
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:

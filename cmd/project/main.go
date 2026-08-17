@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|install-unsigned|prepare-release-updater-manifest|product-name|release-app|release-artifact-name|release-site|reset|validate-macos-updater|validate-release-tag>"
+const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|create-linux-portable-artifacts|fmt|go-mod-update|go-mod-update-check|install-unsigned|prepare-release-updater-manifest|product-name|release-app|release-artifact-name|release-site|reset|validate-linux-updater|validate-macos-updater|validate-release-tag>"
 
 var projectCommands = map[string]func() error{
 	"backend-coverage":                 runBackendCoverage,
@@ -18,6 +18,7 @@ var projectCommands = map[string]func() error{
 	"clean-build":                      func() error { return cleanBuildOutputs(defaultCleanConfig()) },
 	"clean-frontend":                   func() error { return cleanFrontendOutputs(defaultCleanConfig()) },
 	"config":                           func() error { return writeProjectConfig(os.Stdout) },
+	"create-linux-portable-artifacts":  runCreateLinuxPortableArtifacts,
 	"fmt":                              checkGoFormatting,
 	"go-mod-update":                    updateDirectGoModules,
 	"go-mod-update-check":              checkDirectGoModuleUpdates,
@@ -28,6 +29,7 @@ var projectCommands = map[string]func() error{
 	"release-artifact-name":            writeConfiguredReleaseArtifactName,
 	"release-site":                     publishConfiguredSiteVersion,
 	"reset":                            resetConfiguredAppState,
+	"validate-linux-updater":           runLinuxUpdaterArchiveValidation,
 	"validate-macos-updater":           runMacOSUpdaterArchiveValidation,
 	"validate-release-tag":             validateConfiguredReleaseTag,
 }

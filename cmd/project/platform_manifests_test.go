@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/luxury-yacht/app/internal/updateidentity"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,6 +63,75 @@ func TestRenderNFPMManifestUsesConfiguredMaintainer(t *testing.T) {
 	require.Contains(t, manifest, `maintainer: "Luxury Yacht <info@luxury-yacht.app>"`)
 	require.NotContains(t, manifest, appMaintainerPlaceholder)
 	require.NotContains(t, manifest, "GIT_COMMITTER")
+}
+
+func TestRenderedLinuxMarkersMatchRuntimeInstallationIdentity(t *testing.T) {
+	configPath := repositoryPath("build", "config.yml")
+	root := t.TempDir()
+	specs := []platformManifestSpec{
+		{
+			sourcePath: repositoryPath("build", "linux", "nfpm", "install-deb.json"),
+			outputPath: filepath.Join(root, "install-deb.json"),
+		},
+		{
+			sourcePath: repositoryPath("build", "linux", "nfpm", "install-rpm.json"),
+			outputPath: filepath.Join(root, "install-rpm.json"),
+		},
+		{
+			sourcePath: repositoryPath("build", "linux", "portable", "install.json"),
+			outputPath: filepath.Join(root, updateidentity.InstallationMarkerName),
+		},
+	}
+	require.NoError(t, renderProjectPlatformManifests(configPath, specs))
+
+	for _, test := range []struct {
+		name         string
+		markerPath   string
+		candidate    func([]byte) updateidentity.InstallationProbe
+		distribution updateidentity.Distribution
+		canInstall   bool
+	}{
+		{
+			name: "deb", markerPath: specs[0].outputPath,
+			candidate: func(data []byte) updateidentity.InstallationProbe {
+				return updateidentity.InstallationProbe{
+					Platform: updateidentity.PlatformLinux, Architecture: "amd64", TargetPath: "/usr/local/bin/luxury-yacht",
+					PackageMarker: &updateidentity.MarkerCandidate{Path: "/usr/share/luxury-yacht/install.json", Data: data},
+				}
+			},
+			distribution: updateidentity.DistributionLinuxDEB,
+		},
+		{
+			name: "rpm", markerPath: specs[1].outputPath,
+			candidate: func(data []byte) updateidentity.InstallationProbe {
+				return updateidentity.InstallationProbe{
+					Platform: updateidentity.PlatformLinux, Architecture: "arm64", TargetPath: "/usr/local/bin/luxury-yacht",
+					PackageMarker: &updateidentity.MarkerCandidate{Path: "/usr/share/luxury-yacht/install.json", Data: data},
+				}
+			},
+			distribution: updateidentity.DistributionLinuxRPM,
+		},
+		{
+			name: "portable", markerPath: specs[2].outputPath,
+			candidate: func(data []byte) updateidentity.InstallationProbe {
+				executable := "/home/alice/.local/share/luxury-yacht/luxury-yacht"
+				return updateidentity.InstallationProbe{
+					Platform: updateidentity.PlatformLinux, Architecture: "amd64", TargetPath: executable,
+					TargetWritable: true, ParentWritable: true,
+					Marker: &updateidentity.MarkerCandidate{Path: filepath.Join(filepath.Dir(executable), updateidentity.InstallationMarkerName), Data: data},
+				}
+			},
+			distribution: updateidentity.DistributionLinuxPortable,
+			canInstall:   true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			eligibility := updateidentity.ResolveInstallation(test.candidate(readTestFileBytes(t, test.markerPath)))
+			require.True(t, eligibility.CanCheck)
+			require.Equal(t, test.canInstall, eligibility.CanInstall)
+			require.Equal(t, test.distribution, eligibility.Distribution)
+		})
+	}
 }
 
 func TestRenderProjectPlatformManifestsRejectsTemplateWithoutMetadataPlaceholder(t *testing.T) {

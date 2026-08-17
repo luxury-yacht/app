@@ -4,14 +4,12 @@ package updateconformance
 
 import (
 	"context"
-	"crypto/sha512"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/luxury-yacht/app/internal/updateidentity"
 	"github.com/wailsapp/wails/v3/pkg/updater"
 )
 
@@ -23,86 +21,26 @@ func ValidateMacOSArchive(
 	artifactPath, version, architecture string,
 	validateBundle func(string) error,
 ) error {
-	release, err := updateidentity.ParseReleaseVersion(version)
-	if err != nil {
-		return fmt.Errorf("parse macOS updater version: %w", err)
-	}
-	if release.Version != version {
-		return fmt.Errorf("macOS updater version %q is not canonical; use %q", version, release.Version)
-	}
 	if architecture != "amd64" && architecture != "arm64" {
 		return fmt.Errorf("unsupported macOS updater architecture %q", architecture)
 	}
-	info, err := os.Lstat(artifactPath)
+	staged, err := stageLocalUpdaterArtifact(ctx, artifactPath, version, "darwin", architecture)
 	if err != nil {
-		return fmt.Errorf("inspect macOS updater artifact: %w", err)
+		return err
 	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return fmt.Errorf("macOS updater artifact must be a regular non-symlink file: %s", artifactPath)
-	}
-	file, err := os.Open(artifactPath)
-	if err != nil {
-		return fmt.Errorf("open macOS updater artifact: %w", err)
-	}
-	digest := sha512.New()
-	_, digestErr := io.Copy(digest, file)
-	closeErr := file.Close()
-	if digestErr != nil {
-		return fmt.Errorf("digest macOS updater artifact: %w", digestErr)
-	}
-	if closeErr != nil {
-		return fmt.Errorf("close macOS updater artifact: %w", closeErr)
-	}
-	provider := localArtifactProvider{
-		path: artifactPath,
-		release: updater.Release{
-			Version: release.Version,
-			Channel: string(release.Channel),
-			Artifact: updater.Artifact{
-				Filename: filepath.Base(artifactPath), Platform: "darwin", Arch: architecture,
-				Size: info.Size(),
-			},
-			Verification: &updater.Verification{DigestAlgo: "sha512", Digest: digest.Sum(nil)},
-		},
-	}
-	client := updater.New(localUpdaterHost{})
-	if err := client.Init(updater.Config{
-		CurrentVersion: "0.0.0", Providers: []updater.Provider{provider},
-		Platform: "darwin", Arch: architecture, Window: updater.WindowNone,
-	}); err != nil {
-		return fmt.Errorf("configure Wails macOS updater conformance check: %w", err)
-	}
-	if _, err := client.Check(ctx); err != nil {
-		return fmt.Errorf("check Wails macOS updater artifact: %w", err)
-	}
-	if err := client.DownloadAndInstall(ctx); err != nil {
-		return fmt.Errorf("extract Wails macOS updater artifact: %w", err)
-	}
-	downloaded := client.DownloadedPath()
-	stagingDirectory := filepath.Dir(downloaded)
-	defer os.RemoveAll(stagingDirectory)
-	if !strings.HasPrefix(filepath.Base(stagingDirectory), "wails-update-") {
-		return fmt.Errorf("wails extracted macOS payload outside an updater staging directory: %s", downloaded)
-	}
-	payloadInfo, err := os.Lstat(downloaded)
+	defer staged.cleanup()
+	payloadInfo, err := os.Lstat(staged.path)
 	if err != nil {
 		return fmt.Errorf("inspect Wails-extracted macOS payload: %w", err)
 	}
 	if payloadInfo.Mode()&os.ModeSymlink != 0 || !payloadInfo.IsDir() ||
-		!strings.HasSuffix(filepath.Base(downloaded), ".app") {
-		return fmt.Errorf("wails-extracted macOS payload must be one non-symlink .app bundle: %s", downloaded)
-	}
-	entries, err := os.ReadDir(stagingDirectory)
-	if err != nil {
-		return fmt.Errorf("read Wails macOS staging directory: %w", err)
-	}
-	if len(entries) != 1 || entries[0].Name() != filepath.Base(downloaded) {
-		return fmt.Errorf("wails macOS staging directory must contain exactly one .app payload")
+		!strings.HasSuffix(filepath.Base(staged.path), ".app") {
+		return fmt.Errorf("wails-extracted macOS payload must be one non-symlink .app bundle: %s", staged.path)
 	}
 	if validateBundle == nil {
 		return fmt.Errorf("macOS updater bundle validator is required")
 	}
-	if err := validateBundle(downloaded); err != nil {
+	if err := validateBundle(staged.path); err != nil {
 		return fmt.Errorf("validate Wails-extracted macOS bundle: %w", err)
 	}
 	return nil

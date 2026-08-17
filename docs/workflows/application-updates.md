@@ -45,6 +45,31 @@ Do not infer ownership from a path or filename alone. Marker schema, product
 identity, distribution, scope, and exact expected location are all part of the
 eligibility boundary in `internal/updateidentity`.
 
+### Linux distributions
+
+Each Linux architecture is built once. DEB, RPM, the portable installer, and
+the updater archive all consume that same production binary. DEB and RPM own
+`/usr/share/luxury-yacht/install.json`, with `deb` or `rpm` distribution and
+`system` scope. The marker is removed with the package and never makes the
+package-owned executable replaceable by Wails.
+
+The manual portable artifact ends in `-portable.tar.gz`. Its `install.sh`
+installs without elevation below
+`${XDG_DATA_HOME:-$HOME/.local/share}/luxury-yacht`, writes the adjacent
+`luxury-yacht.install.json` marker with `portable` distribution and `user`
+scope, and installs the desktop entry and icon below the same XDG data home.
+The installed `manage-installation uninstall` command removes only that
+verified portable installation. The portable runtime requires GTK 4 and
+WebKitGTK 6.0; the archive README lists Debian/Ubuntu and Fedora/RHEL package
+names.
+
+The similarly versioned Linux archive without the `-portable` suffix is a
+single-entry tar containing only the executable. It is the sole Linux artifact
+accepted into `updater.json`; the installer tar, DEB, RPM, and AppImage are
+manual artifacts only. Wails extraction conformance runs before release
+publication and must yield exactly one executable regular file with the
+configured binary name.
+
 ## Release and trust contract
 
 Each public GitHub Release is the complete update unit. It contains ordinary
@@ -136,6 +161,7 @@ publication; do not rely on an in-band transition signed only by that key.
 - Eligibility and durable state: `internal/updateidentity`, `internal/updatestate`, `internal/updatetemp`
 - Shell surfaces: `frontend/src/ui/status`, `frontend/src/ui/modals/AboutModal.tsx`, `frontend/src/core/backend-api`
 - Release tooling: `cmd/project/updater_release.go`, `cmd/project/release.go`, `.github/workflows/release.yml`
+- Linux distribution: `build/linux/portable`, `build/linux/nfpm/nfpm.yaml`, `cmd/project/linux_portable.go`
 
 Changes must prove channel selection, fail-closed manifest validation, explicit
 consent boundaries, platform eligibility, shutdown/restart ordering, helper

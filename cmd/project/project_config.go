@@ -27,7 +27,7 @@ const (
 	projectReleaseRepo  = "luxury-yacht/app"
 )
 
-var projectReleaseAssets = []string{".deb", ".rpm", ".dmg", ".exe", ".zip"}
+var projectReleaseAssets = []string{".deb", ".rpm", ".dmg", ".exe", ".tar.gz", ".zip"}
 
 type projectMetadata struct {
 	Info struct {
@@ -200,6 +200,9 @@ func darwinReleaseArtifactName(name, version, goarch, format string) string {
 }
 
 func linuxReleaseArtifactName(name, version, goarch, format string) string {
+	if format == "portable" && isReleaseArchitecture(goarch) {
+		return fmt.Sprintf("%s-%s-linux-%s-portable.tar.gz", name, version, goarch)
+	}
 	if format == "deb" && isReleaseArchitecture(goarch) {
 		return fmt.Sprintf("%s_%s_linux_%s.deb", name, version, goarch)
 	}

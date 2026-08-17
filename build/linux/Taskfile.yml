@@ -106,6 +106,30 @@ tasks:
       - task: generate:dotdesktop
       - task: generate:rpm
 
+  create:portable:
+    summary: Creates the user-owned portable installer and updater payload
+    platforms: [linux]
+    deps:
+      - task: build
+        vars:
+          ARCH: '{{.ARCH}}'
+    cmds:
+      - task: generate:portable
+        vars:
+          ARCH: '{{.ARCH}}'
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+
+  generate:portable:
+    summary: Packages the existing Linux binary for portable installation and updates
+    platforms: [linux]
+    cmds:
+      - go run ./cmd/project create-linux-portable-artifacts
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+    env:
+      GOARCH: '{{.ARCH}}'
+
   create:aur:
     summary: Creates a arch linux packager package
     deps:
