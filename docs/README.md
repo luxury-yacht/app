@@ -17,6 +17,7 @@ completed phase plans, or test lists that can be discovered with `rg`.
 
 | Question | Start here |
 | --- | --- |
+| How is the backend decomposed into services, and which dependency directions are allowed? | [architecture/backend-services.md](architecture/backend-services.md) |
 | How is cluster data isolated? | [architecture/multi-cluster.md](architecture/multi-cluster.md) |
 | When should retained data paint, refresh, stream, poll, or create background work? | [architecture/data-freshness.md](architecture/data-freshness.md) |
 | How do refresh domains, snapshots, streams, and scopes work? | [architecture/refresh-system.md](architecture/refresh-system.md) |

@@ -69,6 +69,9 @@ loading spinners.
 
 ## Wails command boundary
 
+The complete backend owner map and permitted dependency directions are
+maintained in [backend-services.md](backend-services.md).
+
 `backend.DesktopService` is the sole registered backend service. It declares
 the stable frontend command signatures and delegates each command to exactly
 one owner-shaped interface: Favorites, UI state, Preferences, Data Management,

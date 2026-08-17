@@ -41,6 +41,9 @@ and the six-hour scheduler. Peer windows project and act on the same state.
 
 ## Service and runtime boundaries
 
+The complete owner map and permitted dependency directions are maintained in
+[backend-services.md](backend-services.md).
+
 Production registers one `backend.DesktopService` at `/api/v2`. Its twelve
 command interfaces match the target-owner table one-for-one; lifecycle and HTTP
 are separate collaborators. Workspace commands are backed by
