@@ -174,7 +174,7 @@ func (s *Service) listResource(ctx context.Context, index int, desc resourceDesc
 }
 
 // scopeNamespaces returns the cluster's configured namespace scope for
-// collection (docs/plans/namespace-scope.md); nil means cluster-wide.
+// collection (docs/architecture/namespace-scope.md); nil means cluster-wide.
 func (s *Service) scopeNamespaces() []string {
 	if s == nil {
 		return nil

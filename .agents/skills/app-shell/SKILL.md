@@ -21,11 +21,13 @@ Read:
 6. `docs/frontend/tabs.md`
 7. `docs/frontend/dockable-panels.md`
 8. `docs/architecture/data-access.md` for app state and persisted reads
+9. `docs/architecture/application-lifecycle.md` for native shell and process UI
+   ownership
 
 Settings-specific contract:
 
 - Persisted app preferences and runtime-enforced settings are backend-owned and
-  described by `readAppSettingsSchema`.
+  owned by `PreferencesService` and described by `readAppSettingsSchema`.
 - `frontend/src/core/settings/appPreferences.ts` owns the frontend schema
   metadata cache and typed metadata helpers. Settings UI sections should consume
   defaults, bounds, enum values, validation hints, and runtime flags through
@@ -43,6 +45,10 @@ Settings-specific contract:
   in the mutation response.
 - Runtime-effect flags are metadata for diagnostics and future UI decisions.
   Do not add user-facing runtime-effect copy unless the workflow calls for it.
+- Settings effects run only after successful persistence and lock release,
+  through the owner-shaped sinks documented in
+  `docs/architecture/data-access.md`; settings UI must not add a direct runtime
+  owner call.
 - Frontend-only or bootstrap state stays local when it is transient or needed
   before Wails is available. Do not move local UI state into the backend just
   because it appears in Settings.
@@ -54,7 +60,13 @@ Settings-specific contract:
 - `frontend/src/ui/settings`
 - `frontend/src/core/settings`
 - `frontend/src/core/app-state-access`
+- `backend/preferences_service.go`
 - `backend/app_settings.go`
+- `backend/runtime_setting_policies.go`
+- `backend/data_management_coordinator.go`
+- `backend/desktop_shell.go`
+- `backend/favorites_service.go`
+- `backend/ui_state_store.go`
 - `frontend/src/ui/command-palette`
 - `frontend/src/ui/shortcuts`
 - `frontend/src/ui/navigation`

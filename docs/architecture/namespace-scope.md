@@ -148,13 +148,14 @@ blocks that scope's streaming (`refresh:resource-stream-permission-denied` →
 `blockStreaming`) instead of resync-looping. All three latches release on a
 namespace-scope change or auth recovery.
 
-## Deliberately cluster-wide (follow-up: scope the factory-backed kinds)
+## Deliberately cluster-wide
 
 The typed shared-informer factory's namespaced informers (events,
 replicasets, HPA v1/v2), the Gateway API informer factory, and the helm-storage
 factory still watch cluster-wide. Under a scope their domains stay
 permission-gated on the cluster-wide check (honest denial). Scoping them
 means N per-namespace client-go factories plus multiplexed listers/handlers
-at each consumer — tracked as the remaining Phase 4 slice in
-`docs/plans/namespace-scope.md`, along with per-namespace GET row enrichment
-(Phase 5) and the SSRR check optimization (reuse `backend/capabilities`).
+at each consumer. Do not claim those domains are namespace-scoped until that
+fan-out, lifecycle, and permission behavior exists end to end. Per-namespace
+GET row enrichment already uses the canonical capability path; it does not
+make the underlying factory-backed watches namespace-scoped.

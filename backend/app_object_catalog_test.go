@@ -756,7 +756,7 @@ func setCatalogServiceItems(
 }
 
 func TestCatalogNamespaceGroupsServesConfiguredScope(t *testing.T) {
-	// Scoped cluster (docs/plans/namespace-scope.md): Browse's namespace
+	// Scoped cluster (docs/architecture/namespace-scope.md): Browse's namespace
 	// list is synthesized from the configured scope — it must not depend on
 	// the catalog having discovered objects (a restricted identity may have
 	// nothing catalogued yet), and it must agree with the sidebar.

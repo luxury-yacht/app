@@ -35,7 +35,7 @@ type NamespaceCustomBuilder struct {
 	dynamic   dynamic.Interface
 	crdLister apiextensionslisters.CustomResourceDefinitionLister
 	logger    containerlogsstream.Logger
-	// scope is the cluster's namespace scope (docs/plans/namespace-scope.md):
+	// scope is the cluster's namespace scope (docs/architecture/namespace-scope.md):
 	// the all-namespaces view fans the per-CRD LIST over these namespaces
 	// instead of one cluster-wide LIST. Empty means cluster-wide (today).
 	scope []string

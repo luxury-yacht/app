@@ -23,6 +23,11 @@ add/remove behavior.
 
 ## Backend Entry Points
 
+- `backend/phase5_owners.go` (`ClusterRuntimeManager`,
+  `ClusterWorkspaceProjection`, `RefreshCoordinator`, and
+  `WorkspaceCoordinator`)
+- `backend/cluster_runtime_intent.go`
+- `backend/cluster_workspace.go`
 - `backend/app_kubernetes_client.go`
 - `backend/kubeconfigs.go`
 - `backend/app_refresh_setup.go`
@@ -51,6 +56,9 @@ add/remove behavior.
       for clusters they display; retained inactive tabs stay passive.
 - [ ] Cluster add/remove updates aggregate refresh handlers and object catalog
       services through the live update path, not only initial setup.
+- [ ] Watcher, auth, and transport callbacks publish non-blocking typed
+      `ClusterRuntimeIntent` values; Workspace is the single consumer and routes
+      accepted generations through the serialized selection mutation.
 - [ ] Auth-failed clusters do not block healthy clusters.
 - [ ] Retry/recovery rebuilds transport, refresh, object catalog, and frontend
       diagnostics consistently.

@@ -45,7 +45,7 @@ func (g *ResourceGateway) canServeCachedResponse(
 		return true
 	}
 	if !decision.Allowed {
-		// objectYAMLCacheKey was retired with App.GetObjectYAML — the
+		// objectYAMLCacheKey was retired with the kind-only YAML fetch — the
 		// GVK-aware fetch path does not populate the response cache,
 		// so there is nothing to evict here for YAML.
 		g.responseCacheDelete(selectionKey, objectDetailCacheKey(gvk.Kind, namespace, name))

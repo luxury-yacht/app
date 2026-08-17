@@ -247,7 +247,7 @@ func TestExecuteWithRetryValidatesInputs(t *testing.T) {
 	require.Equal(t, "ok", value)
 }
 
-func TestExecuteWithRetryWithoutAppUsesConfiguredSleep(t *testing.T) {
+func TestExecuteWithRetryWithoutOptionalCallbacksUsesConfiguredSleep(t *testing.T) {
 	originalSleep := fetchRetrySleep
 	var delays []time.Duration
 	fetchRetrySleep = func(delay time.Duration) { delays = append(delays, delay) }
@@ -309,7 +309,7 @@ func TestExecuteWithRetryAbortsSlowFetcherAtDeadline(t *testing.T) {
 	require.Less(t, time.Since(startedAt), time.Second)
 }
 
-func TestExecuteWithRetryDoesNotRetryPermanentErrorWithoutApp(t *testing.T) {
+func TestExecuteWithRetryWithoutOptionalCallbacksDoesNotRetryPermanentError(t *testing.T) {
 	attempts := 0
 	permanent := errors.New("validation failed")
 	_, err := executeWithRetry(context.Background(), resourceRetryDependencies{}, "cluster-a", "Widget", "demo", func(context.Context) (string, error) {

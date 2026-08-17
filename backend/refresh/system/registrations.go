@@ -315,7 +315,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		// gets an explicit permission-denied snapshot (the sidebar renders
 		// "You do not have permission to list namespaces." plus the scope
 		// editor) instead of an empty list. Scoped
-		// (cfg.AllowedNamespaces non-empty, docs/plans/namespace-scope.md):
+		// (cfg.AllowedNamespaces non-empty, docs/architecture/namespace-scope.md):
 		// rows are synthesized from the configured names, so the domain
 		// needs no cluster permission at all — it registers directly, with
 		// the runtime policy exempted to match its permissionless data

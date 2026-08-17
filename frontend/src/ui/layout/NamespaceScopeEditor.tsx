@@ -2,7 +2,7 @@
  * frontend/src/ui/layout/NamespaceScopeEditor.tsx
  *
  * The sidebar's inline "accessible namespaces" editor
- * (docs/plans/namespace-scope.md): the namespaces section itself is the
+ * (docs/architecture/namespace-scope.md): the namespaces section itself is the
  * editor — an add-namespace affordance plus per-row hover delete (the row
  * buttons live in Sidebar.tsx). No modal, no settings surface; the editing
  * affordances are also the only "scope active" signal the design needs.

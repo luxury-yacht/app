@@ -11,7 +11,7 @@ import (
 
 var clusterRoleGVR = schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"}
 
-// Namespace-scoped ingestion end-to-end (docs/plans/namespace-scope.md): a
+// Namespace-scoped ingestion end-to-end (docs/architecture/namespace-scope.md): a
 // scoped manager runs one reflector per configured namespace through the
 // production LIST/WATCH path and converges each kind's shared store on
 // exactly the scope's objects.

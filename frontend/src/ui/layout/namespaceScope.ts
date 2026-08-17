@@ -2,7 +2,7 @@
  * frontend/src/ui/layout/namespaceScope.ts
  *
  * Logic for the sidebar's inline "accessible namespaces" scope editor
- * (docs/plans/namespace-scope.md). Validation here is syntactic only — the
+ * (docs/architecture/namespace-scope.md). Validation here is syntactic only — the
  * backend re-validates, persists, and rebuilds the cluster's subsystem; after
  * a save the namespaces domain re-serves the synthesized list.
  */

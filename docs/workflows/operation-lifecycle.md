@@ -41,12 +41,12 @@ be visible in the app shell and cleaned up when their cluster goes away.
   [../architecture/multi-cluster.md](../architecture/multi-cluster.md)
 
 `DesktopService` delegates all ten live-operation commands directly to the
-coordinator. The coordinator has no `*App` back-pointer. It receives narrow
-cluster dependency/retry access, permission evaluation, event publication,
-logging, application context, drain-store, and shell-executor dependencies.
-The cluster-access implementation is temporarily App-backed; Phase 5A replaces
-that implementation with `ClusterRuntimeManager` without changing operation
-ownership or Wails commands.
+coordinator. It receives narrow cluster dependency/retry access, permission
+evaluation, event publication, logging, application context, drain-store, and
+shell-executor dependencies. Production cluster access is supplied directly by
+`ClusterRuntimeManager` plus the refresh-owned retry-telemetry projection;
+Operations does not retain the application composition root or call back into
+Workspace or Refresh.
 
 ## Registry And Cleanup Ordering
 

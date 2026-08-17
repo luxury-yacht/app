@@ -2,7 +2,7 @@
  * frontend/src/core/settings/clusterAllowedNamespaces.ts
  *
  * Typed access to the per-cluster namespace scope ("accessible namespaces",
- * docs/plans/namespace-scope.md). Validation, normalization, persistence, and
+ * docs/architecture/namespace-scope.md). Validation, normalization, persistence, and
  * the rebuild side effect are backend-owned; these wrappers add types, the
  * clusterId guard, and null-safety (an unset scope arrives as null).
  */

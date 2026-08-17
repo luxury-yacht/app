@@ -94,7 +94,7 @@ type policySpec struct {
 	Stream  []Resource
 	// RuntimeClusterWide marks the domain's runtime data source as
 	// cluster-wide regardless of any namespace scope
-	// (docs/plans/namespace-scope.md): its runtime checks bypass the scope so
+	// (docs/architecture/namespace-scope.md): its runtime checks bypass the scope so
 	// the gate matches the source.
 	RuntimeClusterWide bool
 }

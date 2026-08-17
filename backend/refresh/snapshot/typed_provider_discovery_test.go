@@ -182,7 +182,7 @@ func structHasField(st *ast.StructType, fieldName string) bool {
 // TestEveryTypedResourceDomainEmbedsTheNormalizedEnvelope replaces the old
 // hardcoded 16-struct reflection test with source discovery. For every
 // typed-resource domain found in the package, it proves both halves of the
-// "non-normalized backend shape is rejected" contract (plan Phase 6):
+// "non-normalized backend shape is rejected" contract:
 //   - the domain's payload embeds ResourceQueryEnvelope with a Rows slice, and
 //   - the builder constructs that envelope via the canonical helper, so it cannot
 //     ship an incompletely-wired (missing provider/capabilities/completeness)

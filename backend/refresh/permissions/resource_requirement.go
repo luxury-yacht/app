@@ -11,7 +11,7 @@ type ResourceRequirement struct {
 	Resource string
 	Verb     string
 	// ClusterWide forces the check to bypass any configured namespace scope
-	// (docs/plans/namespace-scope.md). Set when the requirement gates a data
+	// (docs/architecture/namespace-scope.md). Set when the requirement gates a data
 	// source that reads cluster-wide regardless of scope (e.g. the
 	// helm-storage informer factory), so the gate matches the source.
 	ClusterWide bool

@@ -263,7 +263,7 @@ func registerDBClusterTypes(t testing.TB, scheme *runtime.Scheme) {
 	scheme.AddKnownTypeWithName(gvk.GroupVersion().WithKind("DBClusterList"), &unstructured.UnstructuredList{})
 }
 
-// Scoped clusters (docs/plans/namespace-scope.md): the all-namespaces view
+// Scoped clusters (docs/architecture/namespace-scope.md): the all-namespaces view
 // fans the per-CRD LIST over the configured scope instead of one cluster-wide
 // LIST the identity cannot perform. A namespace outside the scope must never
 // be listed.

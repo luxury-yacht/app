@@ -66,7 +66,7 @@ type Checker struct {
 	sfGroup singleflight.Group // deduplicates concurrent SSAR calls for the same key
 
 	// scope + scopeApplies configure the cluster's namespace scope
-	// (docs/plans/namespace-scope.md); see SetScope.
+	// (docs/architecture/namespace-scope.md); see SetScope.
 	scope        []string
 	scopeApplies func(group, resource string) bool
 }
@@ -145,7 +145,7 @@ func NewCheckerWithReview(clusterID string, ttl time.Duration, review AccessRevi
 }
 
 // SetScope configures the cluster's namespace scope
-// (docs/plans/namespace-scope.md). scopeApplies reports whether a resource's
+// (docs/architecture/namespace-scope.md). scopeApplies reports whether a resource's
 // DATA PATH is namespace-scoped in this build — Can fans out over the scope
 // only for those resources; every other resource keeps cluster-wide checks so
 // a domain can never register against a cluster-wide source it cannot read.

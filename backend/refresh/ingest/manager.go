@@ -78,7 +78,7 @@ type entry struct {
 	store *ProjectingStore
 
 	// parts are the kind's reflectors: one per configured scope namespace for
-	// a namespaced kind under a namespace scope (docs/plans/namespace-scope.md),
+	// a namespaced kind under a namespace scope (docs/architecture/namespace-scope.md),
 	// or a single cluster-wide "" part otherwise — the unscoped path is the
 	// same code with a one-element list. All parts feed the ONE shared store
 	// through per-namespace partition views.
@@ -206,7 +206,7 @@ type IngestManager struct {
 	permissionFilter func(group, resource, namespace string) bool
 
 	// scope is the cluster's configured namespace scope
-	// (docs/plans/namespace-scope.md); empty means cluster-wide reflectors.
+	// (docs/architecture/namespace-scope.md); empty means cluster-wide reflectors.
 	scope []string
 	// namespacedGVR reports which registry kinds are namespaced, so only those
 	// fan out over the scope; cluster-scoped kinds always keep one "" part.

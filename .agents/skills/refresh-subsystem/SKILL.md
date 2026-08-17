@@ -25,6 +25,10 @@ ordinary DTO or local snapshot projection work.
 
 ## Core contracts
 
+- `backend.RefreshCoordinator` owns refresh/catalog lifecycles, aggregate
+  routing, telemetry, governor/spill state, and the shared global container-log
+  limiter. Refresh may read `ClusterRuntimeManager` and invalidate
+  `ResourceGateway`; neither dependency may call back into Refresh.
 - Per-cluster initialization order is informer factory and permission checker,
   permission preflight, ordered domain registration, snapshots/queues/streams,
   manager start, then revalidation. Publish aggregate request/response and
@@ -45,6 +49,10 @@ ordinary DTO or local snapshot projection work.
 - Snapshot cache keys, invalidation, source clocks, signal clocks, and query
   revisions are one ordering contract; trace producer through rendered consumer
   before changing any of them.
+- Metrics-interval and global container-log-limit settings arrive through
+  write-only sinks after the Preferences lock is released. Never read
+  Preferences from refresh code or acquire a subsystem lock while holding the
+  limiter's leaf lock.
 
 ## Workflow
 

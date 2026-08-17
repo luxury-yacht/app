@@ -90,7 +90,7 @@ func TestRuntimeAccessKeepsOptionalAttentionSourcesWhenAllAreDenied(t *testing.T
 
 // The namespace-helm domain reads from the CLUSTER-WIDE helm-storage factory,
 // so its runtime policy must stay a cluster-wide check under a namespace
-// scope (docs/plans/namespace-scope.md): a per-namespace secrets grant must
+// scope (docs/architecture/namespace-scope.md): a per-namespace secrets grant must
 // not register a domain whose source can only 403.
 func TestRuntimeAccessHelmPolicyStaysClusterWideUnderScope(t *testing.T) {
 	access := NewRuntimeAccess()

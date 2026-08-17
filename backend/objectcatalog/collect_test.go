@@ -610,7 +610,7 @@ func TestBuildSummaryClusterScope(t *testing.T) {
 	}
 }
 
-// Scoped clusters (docs/plans/namespace-scope.md): one forbidden namespace
+// Scoped clusters (docs/architecture/namespace-scope.md): one forbidden namespace
 // must not blank the other configured namespaces' results — the Lens dual-path
 // pitfall (b) this plan explicitly avoids.
 func TestListResourceSkipsForbiddenNamespaceTargets(t *testing.T) {

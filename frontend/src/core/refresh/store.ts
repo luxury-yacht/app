@@ -313,7 +313,7 @@ export const resetAllScopedDomainStates = <K extends RefreshDomain>(domain: K): 
  * Drops every scoped domain state latched permission-denied, so those scopes
  * re-ask on their next (non-manual) refresh. Permission-denied is normally
  * settled for the session, but a namespace-scope rebuild
- * (docs/plans/namespace-scope.md) is a real permission epoch change: domains
+ * (docs/architecture/namespace-scope.md) is a real permission epoch change: domains
  * denied cluster-wide may now be served per-namespace. Denied scopes hold no
  * data, so dropping them never blanks a rendered view; every other scope
  * state is untouched.

@@ -7,7 +7,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Namespace-partitioned ingestion (docs/plans/namespace-scope.md): a scoped
+// Namespace-partitioned ingestion (docs/architecture/namespace-scope.md): a scoped
 // cluster runs one reflector per configured namespace against ONE shared
 // ProjectingStore. Each reflector writes through a partition view, so
 // client-go's "Replace fully defines the store" contract holds per

@@ -24,7 +24,7 @@ import (
 
 // preflightNamespaces returns the namespaces a descriptor's RBAC preflight
 // asks about: the configured scope for a namespaced kind under a namespace
-// scope (docs/plans/namespace-scope.md), otherwise the single cluster-wide
+// scope (docs/architecture/namespace-scope.md), otherwise the single cluster-wide
 // "" ask. The check's scope must match the collection's scope — a scoped
 // identity is typically denied cluster-wide but allowed per namespace, and a
 // cluster-wide-only preflight would skip collection for every kind.

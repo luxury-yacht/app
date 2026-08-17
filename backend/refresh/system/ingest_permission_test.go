@@ -45,7 +45,7 @@ func TestIngestPermissionFilterConservative(t *testing.T) {
 }
 
 // TestIngestPermissionFilterChecksThePartNamespace pins the scoped contract
-// (docs/plans/namespace-scope.md): a part's filter decision is made for ITS
+// (docs/architecture/namespace-scope.md): a part's filter decision is made for ITS
 // namespace, so one denied namespace skips one reflector — never the kind.
 func TestIngestPermissionFilterChecksThePartNamespace(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, namespace string) (bool, error) {

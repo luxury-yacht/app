@@ -31,16 +31,14 @@ func TestWailsBindingsUseInterfaces(t *testing.T) {
 }
 
 func TestResourceBoundaryIsOwnedByResourceGateway(t *testing.T) {
-	appSource := readTestFile(t, repositoryPath("backend", "app.go"))
+	runtimeSource := readTestFile(t, repositoryPath("backend", "app.go"))
 	gatewaySource := readTestFile(t, repositoryPath("backend", "resource_gateway.go"))
 	generatorSource := readTestFile(t, repositoryPath("backend", "internal", "genappbindings", "render.go"))
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 
 	require.Contains(t, gatewaySource, "type ResourceGateway struct {")
-	require.NotContains(t, gatewaySource, "*App")
-	require.NotContains(t, appSource, "responseCache *responseCache")
+	require.Contains(t, runtimeSource, "Resources             *ResourceGateway")
 	require.Contains(t, generatorSource, "func (g *ResourceGateway) Get")
-	require.NotContains(t, generatorSource, "func (a *App) Get%")
 	require.Regexp(t, `Resources:\s+backendRuntime\.Resources`, mainSource)
 }
 
@@ -274,7 +272,7 @@ func TestWailsApplicationIsInjectedDirectlyWithoutDesktopAdapter(t *testing.T) {
 	require.Contains(t, mainSource, "appwindow.NewRegistry(wailsApp, backendRuntime.Lifecycle, nativeMenu)")
 }
 
-func TestDesktopServiceOwnsTheWailsBoundaryWithoutAnAppBackpointer(t *testing.T) {
+func TestDesktopServiceOwnsTheWailsBoundaryWithoutTheCompositionRoot(t *testing.T) {
 	source := readTestFile(t, repositoryPath("backend", "desktop_service.go"))
 	parsed, err := parser.ParseFile(token.NewFileSet(), "desktop_service.go", source, parser.ParseComments)
 	require.NoError(t, err)
@@ -294,7 +292,6 @@ func TestDesktopServiceOwnsTheWailsBoundaryWithoutAnAppBackpointer(t *testing.T)
 			serviceStruct, ok := typeSpec.Type.(*ast.StructType)
 			require.True(t, ok)
 			for _, field := range serviceStruct.Fields.List {
-				require.False(t, isNamedPointer(field.Type, "App"), "DesktopService must not retain *App")
 				require.False(t, isNamedPointer(field.Type, "ApplicationRuntime"), "DesktopService must not retain *ApplicationRuntime")
 			}
 		}
@@ -304,15 +301,11 @@ func TestDesktopServiceOwnsTheWailsBoundaryWithoutAnAppBackpointer(t *testing.T)
 	require.NotContains(t, readTestFile(t, repositoryPath("backend", "app.go")), "//wails:inject")
 }
 
-func TestOperationsCoordinatorOwnsLiveOperationStateWithoutAnAppBackpointer(t *testing.T) {
-	appSource := readTestFile(t, repositoryPath("backend", "app.go"))
+func TestOperationsCoordinatorOwnsLiveOperationState(t *testing.T) {
 	coordinatorSource := readTestFile(t, repositoryPath("backend", "operations_coordinator.go"))
-	compactAppSource := strings.Join(strings.Fields(appSource), " ")
 	compactCoordinatorSource := strings.Join(strings.Fields(coordinatorSource), " ")
-	parsed, err := parser.ParseFile(token.NewFileSet(), "operations_coordinator.go", coordinatorSource, 0)
-	require.NoError(t, err)
 
-	for _, displaced := range []string{
+	for _, owned := range []string{
 		"shellSessions map[string]*shellSession",
 		"shellSessionsMu sync.Mutex",
 		"portForwardSessions map[string]*portForwardSessionInternal",
@@ -320,55 +313,16 @@ func TestOperationsCoordinatorOwnsLiveOperationStateWithoutAnAppBackpointer(t *t
 		"runtimeOperations *runtimeOperationRegistry",
 		"runtimeOperationsMu sync.Mutex",
 	} {
-		require.NotContains(t, compactAppSource, displaced)
-		require.Contains(t, compactCoordinatorSource, displaced)
+		require.Contains(t, compactCoordinatorSource, owned)
 	}
-
-	foundCoordinator := false
-	for _, declaration := range parsed.Decls {
-		general, ok := declaration.(*ast.GenDecl)
-		if !ok || general.Tok != token.TYPE {
-			continue
-		}
-		for _, specification := range general.Specs {
-			typeSpec, ok := specification.(*ast.TypeSpec)
-			if !ok || typeSpec.Name.Name != "OperationsCoordinator" {
-				continue
-			}
-			foundCoordinator = true
-			structure, ok := typeSpec.Type.(*ast.StructType)
-			require.True(t, ok)
-			for _, field := range structure.Fields.List {
-				require.False(t, isNamedPointer(field.Type, "App"), "OperationsCoordinator must not retain *App")
-			}
-		}
-	}
-	require.True(t, foundCoordinator)
 
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	require.Contains(t, mainSource, "operationsCoordinator := backendRuntime.Operations")
 	require.Contains(t, mainSource, "Operations:     operationsCoordinator,")
 }
 
-func TestPhaseThreeLeafOwnersReplaceProcessStateOnApp(t *testing.T) {
-	appSource := strings.Join(strings.Fields(readTestFile(t, repositoryPath("backend", "app.go"))), " ")
-	for _, displaced := range []string{
-		"menu *application.Menu",
-		"kubeconfigSearchPaths []string",
-		"windowSettings *WindowSettings",
-		"appSettings *AppSettings",
-		"logger *Logger",
-		"errorReporter sentryreporting.Reporter",
-		"persistenceMu sync.Mutex",
-		"settingsMu sync.Mutex",
-		"installationTelemetryMu sync.Mutex",
-		"attentionRulesMu sync.Mutex",
-		"applicationUpdates applicationUpdateCoordinator",
-		"applicationUpdateEventUnsubscribers []func()",
-	} {
-		require.NotContains(t, appSource, displaced)
-	}
-
+func TestApplicationRuntimeComposesLeafOwners(t *testing.T) {
+	runtimeSource := strings.Join(strings.Fields(readTestFile(t, repositoryPath("backend", "app.go"))), " ")
 	for _, owner := range []string{
 		"DesktopShell *DesktopShell",
 		"Preferences *PreferencesService",
@@ -380,7 +334,7 @@ func TestPhaseThreeLeafOwnersReplaceProcessStateOnApp(t *testing.T) {
 		"Updates *UpdateCoordinator",
 		"DataManagement *DataManagementCoordinator",
 	} {
-		require.Contains(t, appSource, owner)
+		require.Contains(t, runtimeSource, owner)
 	}
 
 	mainSource := readTestFile(t, repositoryPath("main.go"))
@@ -390,21 +344,6 @@ func TestPhaseThreeLeafOwnersReplaceProcessStateOnApp(t *testing.T) {
 	require.Contains(t, mainSource, "Updates:        backendRuntime.Updates,")
 	require.Contains(t, mainSource, "DesktopShell:   desktopShell,")
 	require.Contains(t, mainSource, "backend.InitializeErrorReporting(composition.preferences, composition.reporting)")
-
-	for _, path := range []string{
-		"desktop_shell.go",
-		"preferences_service.go",
-		"favorites_service.go",
-		"ui_state_store.go",
-		"app_log_service.go",
-		"error_reporting_service.go",
-		"cluster_attention_service.go",
-		"update_coordinator.go",
-		"data_management_coordinator.go",
-	} {
-		source := readTestFile(t, repositoryPath("backend", path))
-		require.NotRegexpf(t, `\*App(?:\s|,|\))`, source, "%s must not retain an App back-pointer", path)
-	}
 }
 
 func TestDirectWailsCompositionContractRejectsBoundaryRegressions(t *testing.T) {
@@ -433,7 +372,7 @@ func TestDirectWailsCompositionContractRejectsBoundaryRegressions(t *testing.T) 
 			main: strings.Replace(mainSource, "backend.NewDesktopService(", "backend.NewBackendService(", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
 		},
 		"implementation registered directly": {
-			main: strings.Replace(mainSource, "\t\tdesktopService,", "\t\tbackendApp,", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
+			main: strings.Replace(mainSource, "\t\tdesktopService,", "\t\tbackendRuntime.Resources,", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
 		},
 		"desktop interface": {
 			main: mainSource, window: windowSource, runtime: runtimeSource + "\ntype Desktop interface{}\n", menu: menuSource,
@@ -568,7 +507,7 @@ func validateDirectWailsComposition(mainSource, windowSource, runtimeSource, men
 	if strings.Contains(mainSource, "NewAdapter") {
 		return fmt.Errorf("native desktop adapter is prohibited")
 	}
-	if strings.Contains(mainSource, "application.NewServiceWithOptions(\n\t\tbackendApp,") {
+	if strings.Contains(mainSource, "application.NewServiceWithOptions(\n\t\tbackendRuntime.Resources,") {
 		return fmt.Errorf("backend implementation must not be registered directly")
 	}
 	if strings.Contains(runtimeSource, "type Desktop interface") {

@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Namespace-scoped ingest (docs/plans/namespace-scope.md) runs one reflector
+// Namespace-scoped ingest (docs/architecture/namespace-scope.md) runs one reflector
 // per configured namespace against ONE shared store. Each reflector writes
 // through a partition view, so client-go's "Replace = full state" contract
 // holds per partition: a relist in one namespace must never wipe sibling

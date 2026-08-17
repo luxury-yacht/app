@@ -24,8 +24,9 @@ item only with current repository evidence that overturns its recorded verdict.
 - **Snapshot query consolidation:** `typed_table_query.go` is the query engine;
   `static_table_query.go` contains thin adapters. The remaining overlap is
   limited to numeric sort helpers and similar event adapters.
-- **App mutex consolidation:** App mutexes are independent; the mutation test
-  proves kubeconfig callbacks do not run under the selection lock.
+- **Cross-owner mutex consolidation:** owner mutexes protect independent state;
+  the mutation test proves kubeconfig callbacks do not run under the selection
+  lock. Do not reintroduce a composition-root lock.
 - **Cluster lifecycle state machine:** lifecycle state is centralized in
   `cluster_lifecycle.go`. Residual work is limited to reading that state instead
   of a few inline `authManager.IsValid()` checks.

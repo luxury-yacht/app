@@ -620,7 +620,7 @@ func TestNamespaceBuilderWorkloadSyncReadinessChangesSourceVersion(t *testing.T)
 	}
 }
 
-// --- Scoped ("accessible namespaces") mode, docs/plans/namespace-scope.md ---
+// --- Scoped ("accessible namespaces") mode, docs/architecture/namespace-scope.md ---
 
 func TestNamespaceBuilderScopedSynthesizesConfiguredNames(t *testing.T) {
 	// Pre-Phase-4 restricted cluster: no lister (cluster-wide list denied), no
@@ -806,9 +806,8 @@ func (i *namespaceRegistrationIngest) AddBundleSink(gvr schema.GroupVersionResou
 	return true
 }
 
-// Scoped rows are enriched by a per-namespace GET probe
-// (docs/plans/namespace-scope.md, Phase 5): a real namespace serves its full
-// row; a 404 flags "not-found" (definitive — the GET was permitted); a 403
+// Scoped rows are enriched by a per-namespace GET probe: a real namespace
+// serves its full row; a 404 flags "not-found" (definitive — the GET was permitted); a 403
 // flags "no-access" (a restricted identity cannot distinguish absence from
 // denial, so the label stays honest).
 func TestNamespaceBuilderScopedProbesEnrichAndFlagRows(t *testing.T) {

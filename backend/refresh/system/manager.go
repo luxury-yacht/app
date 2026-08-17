@@ -80,7 +80,7 @@ type Config struct {
 	AttentionIgnoreRules         snapshot.AttentionIgnoreRules
 	AttentionIgnoredObjectPruner func(resourcemodel.ResourceRef)
 	// AllowedNamespaces is the cluster's namespace scope
-	// (docs/plans/namespace-scope.md). Empty means cluster-wide. Enforced by
+	// (docs/architecture/namespace-scope.md). Empty means cluster-wide. Enforced by
 	// the permission checker's scope fan-out, the scoped namespaces domain,
 	// and the ingest manager's per-namespace reflectors.
 	AllowedNamespaces []string
@@ -221,7 +221,7 @@ func (s *Subsystem) ColdPreparationAge(now time.Time) (time.Duration, bool) {
 }
 
 // scopedResourcePredicate reports which resources' permission checks fan out
-// over a configured namespace scope (docs/plans/namespace-scope.md): exactly
+// over a configured namespace scope (docs/architecture/namespace-scope.md): exactly
 // the namespaced, ingest-owned kinds, because only their data path runs
 // per-namespace. A check's scope must match its data source's scope — scoping
 // the check for a cluster-wide source (events, HPA, replicasets, gateway,

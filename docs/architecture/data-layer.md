@@ -19,7 +19,10 @@ the completed `v2` rewrite plan.
 - **Lifecycle / memory:** `backend.RefreshCoordinator` in
   `backend/app_refresh_*.go`, with governor policy in
   `backend/refresh/system/governor.go` and spill in
-  `backend/refresh/domain/maintained_stores.go`.
+  `backend/refresh/domain/maintained_stores.go`. Its reset path unpublishes
+  request/stream routing and stops producers before clearing cache and spill
+  state; offline reset removes the same cache root through
+  `internal/appstate.Manifest`.
 
 ## Invariants
 
@@ -229,4 +232,4 @@ Validated/decided during the rewrite; reasons in git history + the memory record
 The owned-engine bet (columnar + interning + keyset indexes, no SQLite/cgo) was gated by
 **Prototype #1** (1M-object write-path benchmark) and the WatchList fallback by
 **Prototype #3**, both in the throwaway `backend/refresh/storebench/` package. Full
-design history and the migration ledger are in git.
+design history remains available in git.

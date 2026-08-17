@@ -228,7 +228,7 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 		},
 		Now:       time.Now,
 		ClusterID: target.meta.ID,
-		// The cluster's namespace scope (docs/plans/namespace-scope.md):
+		// The cluster's namespace scope (docs/architecture/namespace-scope.md):
 		// namespaced collection fans out per configured namespace.
 		AllowedNamespaces: a.refreshAllowedNamespaces(target.meta.ID),
 		// The catalog waits for informer caches INSIDE sync, between the RBAC
@@ -452,7 +452,7 @@ func (a *RefreshCoordinator) catalogNamespaceGroups() []snapshot.CatalogNamespac
 		}
 		namespaces := entry.service.Namespaces()
 		// A scoped cluster's namespace list is synthesized from the
-		// configured scope (docs/plans/namespace-scope.md) so Browse agrees
+		// configured scope (docs/architecture/namespace-scope.md) so Browse agrees
 		// with the sidebar even before anything is catalogued.
 		if scope := a.allowedNamespaces(entry.meta.ID); len(scope) > 0 {
 			namespaces = append([]string(nil), scope...)

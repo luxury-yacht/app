@@ -22,6 +22,8 @@ gating, delete/scale/restart/trigger/suspend actions, or restricted-RBAC tests.
 ## Backend Entry Points
 
 - `backend/capabilities`
+- `backend/resource_gateway.go`
+- `backend/runtime_setting_policies.go` (`PermissionFetchPolicy`)
 - `backend/resource_permission.go`
 - `backend/refresh/permissions/resource_requirement.go`
 - `backend/refresh/snapshot/permission.go`
@@ -50,6 +52,9 @@ gating, delete/scale/restart/trigger/suspend actions, or restricted-RBAC tests.
 - [ ] Do not guess `resource` from kind; use the injected catalog-backed
       `ResourceResolver` for GVK/GVR/scope resolution.
 - [ ] Backend write/action paths check permission before mutating cluster state.
+- [ ] `ResourceGateway` owns the cluster-scoped SSRR cache and reads only the
+      injected `PermissionFetchPolicy`; permission code does not read
+      Preferences or refresh state.
 - [ ] Resource-stream permission contracts stay aligned with snapshot runtime
       permission requirements.
 - [ ] Permission specs and diagnostics filters use stable

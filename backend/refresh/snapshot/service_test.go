@@ -1100,7 +1100,7 @@ func TestServiceBuildAllowsWhenPermissionsSucceed(t *testing.T) {
 	}
 }
 
-// The scoped namespaces domain (docs/plans/namespace-scope.md) serves
+// The scoped namespaces domain (docs/architecture/namespace-scope.md) serves
 // synthesized rows and needs NO cluster permission — the per-request policy
 // gate must honor the registration's exemption. This is the live-observed
 // failure: the scoped domain was registered and serving, but every fetch got

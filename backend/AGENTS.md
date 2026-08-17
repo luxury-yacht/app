@@ -27,15 +27,18 @@ Applies to Go code under `backend/`.
     status/facts/DTOs live in `backend/resources/<kind>/`. Before adding or
     changing resource status, relationship links, object references, capability
     integration, or fact slots, follow `docs/architecture/shared-resource-model.md`.
-  - The `App.Get<Kind>` detail bindings and the object-panel detail-fetcher
-    dispatch map are generated from each kind's `appbinding.Spec`; run
+  - The implementation-only `ResourceGateway.Get<Kind>` detail methods and the
+    object-panel detail-fetcher dispatch map are generated from each kind's
+    `appbinding.Spec`; run
     `mise exec -- go generate ./backend` after adding or changing a kind, and never hand-edit
     `resource_details_generated.go` / `object_detail_fetchers_generated.go`.
 - Manual refreshes and streaming domains belong to the backend refresh registry + ManualQueue; avoid bespoke refresh/streaming code.
 
 ## Object Catalog
 
-- Service lives in `backend/objectcatalog` (`Service`, `Summary`), started in `backend/app_object_catalog.go`.
+- Service lives in `backend/objectcatalog` (`Service`, `Summary`) and its
+  per-cluster lifecycle is owned by `backend.RefreshCoordinator` in
+  `backend/app_object_catalog.go`.
 - Browse snapshots are exposed through the `catalog` refresh domain in `backend/refresh/snapshot/catalog.go`.
 - Resource identity resolution is owned by `backend/objectcatalog/identity.go`.
   `backend/resources/common/resource_identity.go` contains only the shared
@@ -55,14 +58,26 @@ Applies to Go code under `backend/`.
 	`mise exec -- go generate ./backend`.
 - Permission-gated domains: use `RegisterPermissionDeniedDomain` in `backend/refresh/snapshot/permission.go` and surface `PermissionIssue` entries through the refresh system permission-gate paths.
 - Manual refresh entrypoint: `/api/v2/refresh/{domain}` in `backend/refresh/api/server.go`, backed by `ManualQueue` in `backend/refresh/types.go`.
-- Per-cluster stream endpoints are wired in `backend/refresh/system/streams.go`; aggregate named-stream routing is wired in `backend/app_refresh_setup.go` and registered in `backend/app.go`.
-- Diagnostics/telemetry sources: refresh domain telemetry in `backend/refresh/telemetry/recorder.go`; catalog diagnostics in `backend/app_object_catalog.go`.
+- Per-cluster stream endpoints are wired in `backend/refresh/system/streams.go`;
+  `RefreshCoordinator` builds aggregate named-stream routing in
+  `backend/app_refresh_setup.go`, and `main.go` registers those streams before
+  the sole Wails service.
+- Diagnostics/telemetry sources: refresh domain telemetry in
+  `backend/refresh/telemetry/recorder.go`; `RefreshCoordinator` catalog
+  diagnostics in `backend/app_object_catalog.go`.
 - Wedged backend (views stuck loading, suspected deadlock): capture a SIGUSR1
   goroutine dump before hypothesizing — opt in with
   `ENABLE_GOROUTINE_DUMP=true` at launch; see `docs/workflows/goroutine-dump.md`;
   handler in `backend/app_diagnostic_dump.go`.
-- Lifecycle: refresh subsystem setup in `backend/app_refresh_setup.go`, selection updates in `backend/app_refresh_update.go`, replacement helpers in `backend/app_refresh_subsystems.go`, teardown/rebuild in `backend/app_refresh_recovery.go`, and the atomically published service handler in `backend/app_refresh_transport.go`.
-- Client init: `backend/app_kubernetes_client.go` owns client setup and triggers refresh subsystem + object catalog start.
+- Lifecycle owner: `backend.RefreshCoordinator`, with subsystem setup in
+  `backend/app_refresh_setup.go`, selection updates in
+  `backend/app_refresh_update.go`, replacement helpers in
+  `backend/app_refresh_subsystems.go`, teardown/rebuild in
+  `backend/app_refresh_recovery.go`, and the atomically published service
+  handler in `backend/app_refresh_transport.go`.
+- Client lifecycle is owned by `backend.ClusterRuntimeManager`; selection and
+  client/refresh orchestration belongs to `backend.WorkspaceCoordinator` in
+  `backend/app_kubernetes_client.go`.
 - Multi-cluster refresh behavior is documented in
   `docs/architecture/multi-cluster.md`, `docs/architecture/data-freshness.md`,
   and `docs/architecture/refresh-system.md`.
@@ -81,9 +96,10 @@ Applies to Go code under `backend/`.
 
 ## App Settings
 
-- Persisted app preferences and runtime-enforced settings are backend-owned.
-  Keep defaults, normalization, schema metadata, validation, Wails DTOs, and
-  runtime side effects aligned in `backend/app_settings.go`.
+- `backend.PreferencesService` owns persisted app preferences and their
+  coalesced lazy-load state. Keep defaults, normalization, schema metadata,
+  validation, Wails DTOs, and the six-route post-persistence settings-effect
+  dispatcher aligned in `backend/app_settings.go`.
 - `GetAppSettingsSchema` is the source of truth for backend-owned preference
   defaults, current values, bounds, enum values, validation hints, and
   runtime-side-effect flags. Keep schema coverage tests aligned with every
@@ -92,6 +108,10 @@ Applies to Go code under `backend/`.
   validates the whole batch before mutating in-memory settings, persists the
   normalized settings file before applying runtime side effects, and rejects the
   whole batch on validation or persistence failure.
+- Runtime effects are one-way writes to `ErrorReportingService`,
+  `ClusterRuntimeManager`, `PermissionFetchPolicy`,
+  `ContainerLogsSelectionPolicy`, and `RefreshCoordinator`. Effect targets do
+  not read Preferences or dispatch to one another.
 - Existing one-off settings setters are compatibility wrappers around the
   common update path. Do not add new preference-specific Wails setters unless a
   separate workflow needs a distinct command contract.

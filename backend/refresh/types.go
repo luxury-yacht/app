@@ -41,7 +41,7 @@ type DomainConfig struct {
 	PermissionDenied bool // Set when domain is registered as a permission-denied placeholder.
 	// RuntimePolicyExempt marks a domain whose data source needs no cluster
 	// permission in this configuration (the scoped namespaces domain serves
-	// synthesized names, docs/plans/namespace-scope.md). The snapshot
+	// synthesized names, docs/architecture/namespace-scope.md). The snapshot
 	// service's per-request policy gate skips exempt domains, exactly as the
 	// registration-time gate does — the gate must match the source.
 	RuntimePolicyExempt bool

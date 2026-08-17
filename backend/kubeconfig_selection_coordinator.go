@@ -10,8 +10,8 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/lifecycle"
 )
 
-// selectionMutation carries metadata for a coordinated cluster mutation operation.
-// Phase 1 keeps execution serialized while plumbing generation-aware boundaries.
+// selectionMutation carries metadata for a coordinated cluster mutation
+// operation and keeps execution serialized across generation-aware boundaries.
 type selectionMutation struct {
 	generation uint64
 	reason     string

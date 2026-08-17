@@ -140,12 +140,12 @@ export interface AppLogsAddedEvent {
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -153,12 +153,12 @@ export type AppSettings = types$0.AppSettings;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -289,12 +289,12 @@ export interface ClusterWorkspaceState {
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -302,12 +302,12 @@ export type ContainerLogsFetchRequest = types$0.ContainerLogsFetchRequest;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -324,12 +324,12 @@ export interface ContainerPortInfo {
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -343,12 +343,12 @@ export interface DataManagementResult {
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -356,12 +356,12 @@ export type DebugContainerResponse = types$0.DebugContainerResponse;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -424,12 +424,12 @@ export interface FavoriteTableState {
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -454,12 +454,12 @@ export enum KubeconfigDiscoveryState {
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -503,12 +503,12 @@ export interface LogEntry {
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -516,12 +516,12 @@ export type NodeLogDiscoveryResponse = types$0.NodeLogDiscoveryResponse;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -529,12 +529,12 @@ export type NodeLogFetchRequest = types$0.NodeLogFetchRequest;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -642,12 +642,12 @@ export interface ObjectYAMLReloadMergeResponse {
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -794,12 +794,12 @@ export interface SelectionDiagnostics {
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -807,12 +807,12 @@ export type ShellOutputEvent = types$0.ShellOutputEvent;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -820,12 +820,12 @@ export type ShellSession = types$0.ShellSession;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -833,12 +833,12 @@ export type ShellSessionInfo = types$0.ShellSessionInfo;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -846,12 +846,12 @@ export type ShellSessionRequest = types$0.ShellSessionRequest;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -859,12 +859,12 @@ export type ShellStatusEvent = types$0.ShellStatusEvent;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -872,12 +872,12 @@ export type Theme = types$0.Theme;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -885,12 +885,12 @@ export type ThemeClusterPatternValidationResult = types$0.ThemeClusterPatternVal
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
@@ -898,12 +898,12 @@ export type UpdateAppPreferencesRequest = types$0.UpdateAppPreferencesRequest;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
  * nested sub-type through those parent structs — so no package-backend alias is
  * needed for any kind DTO or its sub-types. What remains is app-level and shared
  * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */

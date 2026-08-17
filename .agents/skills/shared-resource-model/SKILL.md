@@ -31,8 +31,10 @@ refresh rows, streams, object panel details, and object map nodes/edges.
 - `backend/resourcekind`, `backend/resourcecontract`, `backend/kind/kindregistry`
   — identity leaf, the built-in identity contract, and the kind registry
 - `backend/refresh/snapshot`
+- `backend/resource_gateway.go` — request-shaped detail/action owner
 - `backend/resources/types` — shared cross-kind DTO field types
-- `backend/object_detail_provider.go` — detail dispatch (generated bindings)
+- `backend/object_detail_provider.go` — ResourceGateway detail dispatch
+  (generated bindings)
 
 ## Frontend Entry Points
 

@@ -11,8 +11,8 @@ reliably capturable, so SIGQUIT dumps are effectively lost.
   binary's environment). Default off. Because a wedge may not
   reproduce on demand, relaunch with the flag *before* trying to reproduce.
 - Handler: `backend/app_diagnostic_dump.go` (unix-only; Windows no-op in
-  `backend/app_diagnostic_dump_windows.go`), armed in `App.Startup`
-  (`backend/app_lifecycle.go`).
+  `backend/app_diagnostic_dump_windows.go`), armed by
+  `ApplicationLifecycle.ServiceStartup` (`backend/app_lifecycle.go`).
 - Output: `os.UserCacheDir()/luxury-yacht/diagnostics/goroutines-<timestamp>.txt`
   (macOS: `~/Library/Caches/luxury-yacht/diagnostics/`).
 - It takes no application locks (`runtime.Stack` is runtime-level), so it works

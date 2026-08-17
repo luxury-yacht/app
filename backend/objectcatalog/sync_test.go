@@ -1055,7 +1055,7 @@ func TestFailedInitialSyncRetriesWhileReactiveRegistrationBlocks(t *testing.T) {
 	t.Fatalf("no failed-sync retry fired while reactive registration was blocked (sync attempts: %d)", rec.count())
 }
 
-// The user-observed failure (docs/plans/namespace-scope.md): a RoleBindings-only
+// The user-observed failure (docs/architecture/namespace-scope.md): a RoleBindings-only
 // identity gets "catalog RBAC preflight: allowed=0 denied=57" because every
 // preflight check is cluster-scoped, so collection is skipped for every kind
 // and Browse stays empty even though the identity can list in its namespaces.

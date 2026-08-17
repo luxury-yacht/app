@@ -49,7 +49,7 @@ type NamespaceBuilder struct {
 	ingest         namespacePodIngestSource
 	tracker        *NamespaceWorkloadTracker
 	// scope is the cluster's configured namespace scope
-	// (docs/plans/namespace-scope.md). Non-empty means the rows are
+	// (docs/architecture/namespace-scope.md). Non-empty means the rows are
 	// synthesized from these names instead of read from the (cluster-wide,
 	// permission-gated) namespace lister; empty means today's lister path.
 	scope []string

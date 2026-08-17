@@ -68,7 +68,8 @@ type spdyExecutorFactoryFunc func(*rest.Config, string, *url.URL) (remotecommand
 type websocketExecutorFactoryFunc func(*rest.Config, string, string) (remotecommand.Executor, error)
 
 // OperationsCoordinatorDependencies contains only the capabilities needed by
-// live operations. It deliberately does not accept *App.
+// live operations. It deliberately does not accept the application composition
+// root.
 type OperationsCoordinatorDependencies struct {
 	ClusterAccess            OperationsClusterAccess
 	Permissions              OperationsPermissionChecker

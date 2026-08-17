@@ -689,7 +689,7 @@ function Sidebar() {
   const { suppressPassiveLoading } = useAutoRefreshLoadingState();
   const { selectedClusterId, selectedClusterIds } = useKubeconfig();
   // The active cluster's "accessible namespaces" scope
-  // (docs/plans/namespace-scope.md): the namespaces section doubles as its
+  // (docs/architecture/namespace-scope.md): the namespaces section doubles as its
   // inline editor when a scope is set or the cluster-wide list is denied.
   const namespaceScope = useNamespaceScope(optionalClusterId(selectedClusterId));
   const dimInactiveNamespaces = useDimInactiveNamespaces();

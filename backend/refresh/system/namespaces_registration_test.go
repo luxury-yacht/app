@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Scoped clusters (docs/plans/namespace-scope.md) register the namespaces
+// Scoped clusters (docs/architecture/namespace-scope.md) register the namespaces
 // domain directly: rows are synthesized from configuration, so neither the
 // cluster-wide list+watch gate nor the runtime policy may apply — both would
 // deny exactly the restricted user the scope exists for.

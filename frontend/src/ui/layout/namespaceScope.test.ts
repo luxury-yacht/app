@@ -2,7 +2,7 @@
  * frontend/src/ui/layout/namespaceScope.test.ts
  *
  * Tests for the sidebar namespace-scope editor logic
- * (docs/plans/namespace-scope.md).
+ * (docs/architecture/namespace-scope.md).
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';

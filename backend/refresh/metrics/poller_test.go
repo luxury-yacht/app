@@ -638,7 +638,7 @@ func TestDisabledPollerMetadata(t *testing.T) {
 	require.True(t, custom.Metadata().Disabled)
 }
 
-// Scoped clusters (docs/plans/namespace-scope.md): pod metrics are listed per
+// Scoped clusters (docs/architecture/namespace-scope.md): pod metrics are listed per
 // configured namespace — a scoped identity cannot list metrics cluster-wide —
 // and one failing namespace must not blank the others' usage.
 func TestScopedPollerListsPodMetricsPerNamespace(t *testing.T) {

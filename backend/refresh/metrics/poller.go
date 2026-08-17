@@ -138,7 +138,7 @@ type Poller struct {
 	// podLister fans it over the configured scope (injectable in tests).
 	podNamespaceLister func(context.Context, metricsclient.Interface, string) (*metricsv1beta1.PodMetricsList, error)
 	// allowedNamespaces is the cluster's namespace scope
-	// (docs/plans/namespace-scope.md): non-empty makes the pod-metrics list
+	// (docs/architecture/namespace-scope.md): non-empty makes the pod-metrics list
 	// run per configured namespace, with one failing namespace skipped
 	// instead of blanking the others. Node metrics stay cluster-scoped.
 	allowedNamespaces []string
@@ -230,7 +230,7 @@ func NewPoller(client metricsclient.Interface, restConfig *rest.Config, interval
 }
 
 // SetAllowedNamespaces configures the cluster's namespace scope
-// (docs/plans/namespace-scope.md). Call before Start.
+// (docs/architecture/namespace-scope.md). Call before Start.
 func (p *Poller) SetAllowedNamespaces(namespaces []string) {
 	if p == nil {
 		return

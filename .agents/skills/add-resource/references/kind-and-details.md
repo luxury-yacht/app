@@ -69,7 +69,8 @@ var DetailBinding = appbinding.Spec{
 ```
 
 Attach it to the kind descriptor and run `mise exec -- go generate ./backend`.
-Generation owns the `App.Get<Kind>` wrapper and `objectDetailFetchers` dispatch.
+Generation owns the implementation-only `ResourceGateway.Get<Kind>` method and
+the `objectDetailFetchers` dispatch.
 `objectDetailFetcherGVKs` is derived from generated dispatch plus the built-in
 resource contract; do not hand-edit either map or generated wrapper files.
 

@@ -1868,7 +1868,7 @@ class RefreshOrchestrator {
 
   private readonly handleClusterScopeChanged = (payload: { clusterId: string }) => {
     // The cluster's namespace scope changed and the backend finished tearing
-    // down + rebuilding its refresh subsystem (docs/plans/namespace-scope.md):
+    // down + rebuilding its refresh subsystem (docs/architecture/namespace-scope.md):
     // every stream to that subsystem is dead and every cached snapshot is
     // pre-rebuild. Resume exactly as auth recovery does (minus the pause
     // bookkeeping — auth never went invalid).

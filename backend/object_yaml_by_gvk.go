@@ -3,7 +3,7 @@
  *
  * GVK-aware object YAML fetch.
  *
- * Unlike the legacy App.GetObjectYAML, this entry point takes a full
+ * Unlike the retired kind-only GetObjectYAML entry point, this method takes a full
  * apiVersion + kind from the caller and resolves through the cluster's
  * injected resource resolver. That lets the caller choose which of several
  * colliding CRDs to read, instead of getting whichever one the discovery

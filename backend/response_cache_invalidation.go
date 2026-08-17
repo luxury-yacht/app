@@ -319,7 +319,7 @@ func (g *ResourceGateway) invalidateResponseCacheForGVK(selectionKey string, gvk
 // last-modified time; if it outlived the detail, the stale resourceVersion would
 // re-pin the source-version ETag and the Details panel would keep serving 304s
 // with stale content.
-// (The legacy YAML response-cache entry was retired with App.GetObjectYAML —
+// (The legacy YAML response-cache entry was retired with the kind-only YAML fetch —
 // the GVK-aware fetch path doesn't write to the response cache.)
 func (g *ResourceGateway) invalidateResponseCache(selectionKey, kind, namespace, name string) {
 	g.responseCacheDelete(selectionKey, objectDetailCacheKey(kind, namespace, name))

@@ -162,6 +162,20 @@ owner-shaped write-only sinks. Persistence failure dispatches nothing. Sinks
 must not read preferences, call another effect owner, or acquire a refresh lock
 while holding a leaf-policy lock.
 
+| Setting effect | Target owner |
+| --- | --- |
+| Error-reporting enablement | `ErrorReportingService` |
+| Kubernetes client QPS/burst | `ClusterRuntimeManager` |
+| SSRR fetch concurrency | `PermissionFetchPolicy` |
+| Per-scope container-log target limit | `ContainerLogsSelectionPolicy` |
+| Global container-log target limit | `RefreshCoordinator` |
+| Metrics refresh interval | `RefreshCoordinator` |
+
+All six targets start with backend defaults. Successful load, startup-default
+fallback, applicable update, and import publish the relevant values after the
+Preferences lock is released. A target failure is reported without suppressing
+independent targets; no target may reach back into Preferences.
+
 ## Scope Rules
 
 All cluster/resource reads preserve identity:

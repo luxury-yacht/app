@@ -24,7 +24,7 @@ type DataManagementDependencies struct {
 
 // DataManagementCoordinator owns portable-state import/export and total live
 // reset orchestration. Collaborators are concrete leaf owners or narrow
-// functions; it never retains an App back-pointer.
+// functions; it never retains the application composition root.
 type DataManagementCoordinator struct {
 	preferences        *PreferencesService
 	favorites          *FavoritesService

@@ -146,7 +146,7 @@ type Dependencies struct {
 	// instead of running after it. nil skips the wait (tests, no factory).
 	WaitForCaches func(ctx context.Context) error
 	// AllowedNamespaces is the cluster's namespace scope
-	// (docs/plans/namespace-scope.md): when non-empty, collection of
+	// (docs/architecture/namespace-scope.md): when non-empty, collection of
 	// namespaced kinds runs per configured namespace instead of
 	// cluster-wide, and a namespace the identity cannot list is skipped
 	// without blanking the others. Empty means cluster-wide (today).

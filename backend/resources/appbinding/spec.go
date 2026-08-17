@@ -1,6 +1,6 @@
-// Package appbinding defines the per-kind App.Get<Kind> detail-binding
+// Package appbinding defines the per-kind ResourceGateway.Get<Kind> detail
 // declaration. Each kind package declares one Spec; the genappbindings generator
-// aggregates them (like the stream registry) and emits the App.Get wrappers and
+// aggregates them (like the stream registry) and emits the gateway methods and
 // the object-panel detail-fetcher dispatch map. Putting the Spec in the kind
 // package means adding or changing a binding is a one-package edit.
 package appbinding
@@ -8,7 +8,7 @@ package appbinding
 import "github.com/luxury-yacht/app/backend/resourcekind"
 
 // Spec is one kind's detail binding. Identity is the single source of the kind
-// name (the App method is Get<Kind>, the DTO is <Kind>Details) and whether it is
+// name (the gateway method is Get<Kind>, the DTO is <Kind>Details) and whether it is
 // namespaced — no second copy. The remaining fields are codegen metadata for the
 // typed service call.
 type Spec struct {

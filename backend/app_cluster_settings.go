@@ -11,7 +11,7 @@ import (
 )
 
 // Per-cluster namespace scope ("accessible namespaces",
-// docs/plans/namespace-scope.md). The scope is persisted in the Clusters
+// docs/architecture/namespace-scope.md). The scope is persisted in the Clusters
 // section of settings.json keyed by clusterId and, when non-empty, makes all
 // namespaced data paths for that cluster run per-namespace instead of
 // cluster-wide (enforcement lands in later plan phases).

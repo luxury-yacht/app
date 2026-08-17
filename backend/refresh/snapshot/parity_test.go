@@ -114,8 +114,8 @@ func TestSnapshotStreamRowParity(t *testing.T) {
 // (see covered) or an explicit excluded entry documenting why.
 //
 // Helm is excluded because its stream contract is a scope-level COMPLETE that
-// triggers snapshot resync, not per-row projection (Phase 5 of the
-// projection-contract plan; asserted in TestHelmStreamIsScopeLevelComplete).
+// triggers snapshot resync, not per-row projection (asserted in
+// TestHelmStreamIsScopeLevelComplete).
 // The workloads and nodes domains are excluded because their streams carry
 // row-less Ref signals: the query-backed snapshot builder is the only row
 // producer, so there is no second projection to compare.
@@ -136,7 +136,7 @@ func TestSnapshotStreamRowParityCoversAllSupportedDomains(t *testing.T) {
 		"cluster-custom":        {},
 	}
 	excluded := map[string]string{
-		"namespace-helm":      "scope-level COMPLETE contract, not per-row projection (Phase 5 plan decision)",
+		"namespace-helm":      "scope-level COMPLETE contract, not per-row projection",
 		"namespace-workloads": "row-less Ref signal; rows are served only by the query-backed snapshot builder, so there is no per-event stream projection to compare",
 		"nodes":               "row-less Ref signal; rows are served only by the query-backed snapshot builder, so there is no per-event stream projection to compare",
 	}

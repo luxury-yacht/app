@@ -13,7 +13,7 @@ import (
 
 // The helm-storage factory LISTs/WATCHes secrets+configmaps cluster-wide, so
 // its gate must be the cluster-wide check even under a namespace scope
-// (docs/plans/namespace-scope.md): per-namespace grants must not create
+// (docs/architecture/namespace-scope.md): per-namespace grants must not create
 // informers that would only 403.
 func TestHelmStorageGateIsClusterWideUnderNamespaceScope(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, namespace string) (bool, error) {

@@ -374,7 +374,7 @@ body.sidebar-resizing::after {
     col-resize;
 }
 
-/* Inline "accessible namespaces" scope editor (docs/plans/namespace-scope.md).
+/* Inline "accessible namespaces" scope editor (docs/architecture/namespace-scope.md).
    Hover-reveal delete follows the favorites-dropdown pattern. */
 .namespace-scope-remove {
   display: none;

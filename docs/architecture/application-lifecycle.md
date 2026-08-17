@@ -63,6 +63,11 @@ installation-registration state; `UpdateCoordinator` owns updater lifecycle;
 and `AppLogService` owns the process log buffer. None of these owners retains
 the composition root.
 
+`DesktopShell` owns the process-wide, unpersisted sidebar, diagnostics-panel,
+and Application Logs panel visibility used by native menu projection.
+`UIStateStore` owns only persisted UI documents; it is not a second owner of
+those live visibility flags.
+
 `PreferencesService.EnsureLoaded` coalesces concurrent normal callers. Startup
 selection uses the same attempt through `EnsureLoadedForStartup`, which alone
 may install a default snapshot after a load error. Normal errors install
@@ -186,6 +191,14 @@ ephemeral state, pushes defaults through all six settings-effect routes, and
 clears Application Logs. Independent failures are aggregated. The command
 returns success only after every owner completes; only then does the frontend
 clear browser storage and reload. A reset does not promise a native relaunch.
+
+`internal/appstate.Manifest` is the shared, side-effect-free inventory for the
+static config and cache roots, including settings, favorites, UI persistence,
+and update-state paths. Live reset delegates deletion and in-memory cleanup to
+the corresponding owners. Offline reset removes those same static roots.
+Updater staging, attempt, cleanup, protected, and helper-log paths are dynamic:
+only `UpdateCoordinator` resolves and validates them under the configured state
+path and temp root. Resolving a missing artifact must not create directories.
 
 ## Starting points
 

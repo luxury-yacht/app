@@ -92,7 +92,7 @@ type settingsClusterAttentionRules struct {
 // tabs use).
 type settingsClusterSection struct {
 	// AllowedNamespaces is the cluster's namespace scope
-	// (docs/plans/namespace-scope.md). Empty means no scope: every namespaced
+	// (docs/architecture/namespace-scope.md). Empty means no scope: every namespaced
 	// data path runs cluster-wide.
 	AllowedNamespaces []string                       `json:"allowedNamespaces,omitempty"`
 	Attention         *settingsClusterAttentionRules `json:"attention,omitempty"`
@@ -946,7 +946,7 @@ func (p *PreferencesService) GetAppSettings() (*AppSettings, error) {
 // InitializeErrorReporting applies the persisted preference before application
 // startup can produce reportable errors. A settings read failure keeps the
 // reporter disabled. This is a package-level startup function so Wails does not
-// expose it as a frontend-callable App method.
+// expose it as a frontend-callable service method.
 func InitializeErrorReporting(preferences *PreferencesService, reporting *ErrorReportingService) error {
 	if preferences == nil || reporting == nil {
 		return nil

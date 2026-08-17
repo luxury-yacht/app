@@ -564,7 +564,7 @@ func TestLoggerDoesNotReportScrapedThirdPartyOutput(t *testing.T) {
 	require.Equal(t, logsources.ErrorCapture, entries[0].Source)
 }
 
-func TestNewAppPassesErrorReporterToApplicationLogger(t *testing.T) {
+func TestApplicationRuntimePassesErrorReporterToApplicationLogger(t *testing.T) {
 	reporter := &recordingErrorReporter{}
 	app := newWorkspaceCoordinatorTestFixture(t, reporter)
 

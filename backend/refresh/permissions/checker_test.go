@@ -293,7 +293,7 @@ func TestCheckerCanListWatch(t *testing.T) {
 	})
 }
 
-// --- Namespace scope (docs/plans/namespace-scope.md) ---
+// --- Namespace scope (docs/architecture/namespace-scope.md) ---
 
 func scopeAppliesToPods(group, resource string) bool {
 	return group == "" && resource == "pods"

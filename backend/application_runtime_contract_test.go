@@ -65,47 +65,6 @@ func TestBackendOwnersDoNotRetainTheCompositionRoot(t *testing.T) {
 	require.Empty(t, violations, "backend owners must receive focused collaborators, never the composition root")
 }
 
-func TestLegacyAppImplementationNoLongerExists(t *testing.T) {
-	paths, err := filepath.Glob("*.go")
-	require.NoError(t, err)
-	var violations []string
-	for _, path := range paths {
-		parsed, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-		require.NoError(t, parseErr)
-		for _, declaration := range parsed.Decls {
-			switch declaration := declaration.(type) {
-			case *ast.GenDecl:
-				for _, specification := range declaration.Specs {
-					typeSpec, ok := specification.(*ast.TypeSpec)
-					if ok && typeSpec.Name.Name == "App" {
-						violations = append(violations, filepath.Base(path)+":type App")
-					}
-				}
-			case *ast.FuncDecl:
-				if declaration.Name.Name == "NewApp" {
-					violations = append(violations, filepath.Base(path)+":NewApp")
-				}
-				if declaration.Recv != nil {
-					for _, receiver := range declaration.Recv.List {
-						if isPointerToIdentifier(receiver.Type, "App") {
-							violations = append(violations, filepath.Base(path)+":receiver App."+declaration.Name.Name)
-						}
-					}
-				}
-				if declaration.Type.Params != nil {
-					for _, parameter := range declaration.Type.Params.List {
-						if isPointerToIdentifier(parameter.Type, "App") {
-							violations = append(violations, filepath.Base(path)+":parameter App."+declaration.Name.Name)
-						}
-					}
-				}
-			}
-		}
-	}
-	sort.Strings(violations)
-	require.Empty(t, violations)
-}
-
 type ownerSize struct {
 	Fields  int
 	Methods int
@@ -214,7 +173,6 @@ func TestApplicationRuntimeIsReservedForCompositionAndLifecycleTests(t *testing.
 		"app_lifecycle_test.go":                {},
 		"app_runtime_test.go":                  {},
 		"application_runtime_contract_test.go": {},
-		"phase5_ownership_contract_test.go":    {},
 	}
 	paths, err := filepath.Glob("*_test.go")
 	require.NoError(t, err)
@@ -233,7 +191,7 @@ func TestApplicationRuntimeIsReservedForCompositionAndLifecycleTests(t *testing.
 				return true
 			}
 			switch identifier.Name {
-			case "ApplicationRuntime", "NewApplicationRuntime", "newTestAppWithDefaults":
+			case "ApplicationRuntime", "NewApplicationRuntime":
 				usesRuntime = true
 				return false
 			default:

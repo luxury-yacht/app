@@ -163,7 +163,7 @@ type customResourceInformer struct {
 	namespaces []string
 	// informers are the CRD's dynamic informers: one cluster-wide (or one
 	// per configured scope namespace for a namespaced CRD under a namespace
-	// scope, docs/plans/namespace-scope.md). All share stopCh.
+	// scope, docs/architecture/namespace-scope.md). All share stopCh.
 	informers []cache.SharedIndexInformer
 	stopCh    chan struct{}
 	stopOnce  sync.Once
@@ -233,7 +233,7 @@ type Manager struct {
 	cronJobLister    batchlisters.CronJobLister
 
 	// allowedNamespaces is the cluster's namespace scope
-	// (docs/plans/namespace-scope.md); namespaced custom-resource informers
+	// (docs/architecture/namespace-scope.md); namespaced custom-resource informers
 	// fan out over it instead of watching cluster-wide.
 	allowedNamespaces []string
 

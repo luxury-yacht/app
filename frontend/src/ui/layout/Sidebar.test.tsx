@@ -522,7 +522,7 @@ describe('Sidebar', () => {
   it('shows the permission message and the scope editor when listing is denied', () => {
     // Fail-fast design: no catalog inference, no empty list — the user is told
     // exactly why the sidebar has no namespaces, and the inline scope editor
-    // (docs/plans/namespace-scope.md) is the way in for a restricted identity.
+    // (docs/architecture/namespace-scope.md) is the way in for a restricted identity.
     namespaceState.namespacesPermissionDenied = true;
     namespaceState.namespaces = [];
     renderSidebar();

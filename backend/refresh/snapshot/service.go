@@ -358,7 +358,7 @@ func (s *Service) ensurePermissions(ctx context.Context, domainName, scope strin
 	// A runtime-policy-exempt domain's data source needs no cluster
 	// permission in this configuration (the scoped namespaces domain serves
 	// synthesized names) — the serve-time gate must match the source exactly
-	// as the registration-time gate does (docs/plans/namespace-scope.md).
+	// as the registration-time gate does (docs/architecture/namespace-scope.md).
 	if s.registry != nil && s.registry.IsRuntimePolicyExempt(domainName) {
 		return ctx, "", nil
 	}

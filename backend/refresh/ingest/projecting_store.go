@@ -32,7 +32,7 @@ type spilledBundles struct {
 	Rows map[string]Bundle
 	RV   string
 	// PartitionRVs are the per-namespace resource versions of a scoped
-	// store's partitions (docs/plans/namespace-scope.md), so each scoped
+	// store's partitions (docs/architecture/namespace-scope.md), so each scoped
 	// reflector resumes from ITS namespace's persisted RV. Empty for
 	// unscoped spills; gob ignores it when absent from old files.
 	PartitionRVs map[string]string
@@ -157,7 +157,7 @@ type ProjectingStore struct {
 
 	// expectedPartitions/syncedPartitions/partitionRVs support the
 	// namespace-partitioned scoped ingest path (partition.go,
-	// docs/plans/namespace-scope.md). Unset for the classic single-reflector
+	// docs/architecture/namespace-scope.md). Unset for the classic single-reflector
 	// store — every field's zero value preserves pre-scope behavior.
 	expectedPartitions []string
 	syncedPartitions   map[string]struct{}

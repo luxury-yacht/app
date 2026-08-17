@@ -131,7 +131,7 @@ func (f *Factory) newHelmStorageSource() *HelmStorageSource {
 // resource CLUSTER-WIDE — the precondition for creating a filtered informer
 // over it. The helm-storage factory LISTs/WATCHes across all namespaces, so
 // its gate deliberately bypasses any configured namespace scope
-// (docs/plans/namespace-scope.md): a per-namespace grant must not create an
+// (docs/architecture/namespace-scope.md): a per-namespace grant must not create an
 // informer whose cluster-wide watch would only 403.
 func (f *Factory) canListWatchHelmStorage(group, resource string) bool {
 	ctx := context.Background()
