@@ -4,9 +4,12 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -112,6 +115,17 @@ func TestPortableInstallerCreatesAndRemovesAnEligibleUserInstallation(t *testing
 	require.Equal(t, readTestFileBytes(t, config.MarkerPath), readTestFileBytes(t, markerPath))
 	require.FileExists(t, filepath.Join(dataHome, "applications", "luxury-yacht.desktop"))
 	require.FileExists(t, filepath.Join(dataHome, "icons", "hicolor", "128x128", "apps", "luxury-yacht.png"))
+	updaterTempRoot := createOwnedUpdaterTempRoot(t, dataHome)
+	require.NoError(t, os.Mkdir(filepath.Join(updaterTempRoot, "wails-update-stale"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(updaterTempRoot, "wails-update-123.log"), []byte("stale helper log"), 0o600))
+	lookalikeTempRoot := filepath.Join(dataHome, "luxury-yacht-update-unrelated")
+	require.NoError(t, os.Mkdir(lookalikeTempRoot, 0o700))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(lookalikeTempRoot, ".luxury-yacht-temp-root.json"),
+		readTestFileBytes(t, filepath.Join(updaterTempRoot, ".luxury-yacht-temp-root.json")),
+		0o600,
+	))
+	require.NoError(t, os.WriteFile(filepath.Join(lookalikeTempRoot, "keep-me"), []byte("unowned"), 0o600))
 
 	uninstallCommand := exec.Command("sh", filepath.Join(installationRoot, "manage-installation"), "uninstall")
 	uninstallCommand.Env = append(os.Environ(), "XDG_DATA_HOME="+filepath.Join(root, "different data home"))
@@ -121,6 +135,82 @@ func TestPortableInstallerCreatesAndRemovesAnEligibleUserInstallation(t *testing
 	require.NoFileExists(t, markerPath)
 	require.NoFileExists(t, filepath.Join(dataHome, "applications", "luxury-yacht.desktop"))
 	require.NoFileExists(t, filepath.Join(dataHome, "icons", "hicolor", "128x128", "apps", "luxury-yacht.png"))
+	require.NoDirExists(t, updaterTempRoot)
+	require.FileExists(t, filepath.Join(lookalikeTempRoot, "keep-me"))
+}
+
+func TestPortableUninstallerPreservesUpdaterTempRootWithUnknownContents(t *testing.T) {
+	if testing.Short() {
+		t.Skip("executes the portable installer")
+	}
+	root := t.TempDir()
+	config := testLinuxPortableConfig(t, root)
+	artifacts, err := createLinuxPortableArtifacts(config)
+	require.NoError(t, err)
+
+	extractRoot := filepath.Join(root, "extract")
+	require.NoError(t, extractRegularTarGz(artifacts.InstallerArchive, extractRoot))
+	installerRoot := filepath.Join(extractRoot, "luxury-yacht-v2.0.0-beta.3-linux-amd64-portable")
+	dataHome := filepath.Join(root, "xdg-data")
+	installCommand := exec.Command("sh", filepath.Join(installerRoot, "install.sh"))
+	installCommand.Env = append(os.Environ(), "XDG_DATA_HOME="+dataHome)
+	output, err := installCommand.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	updaterTempRoot := createOwnedUpdaterTempRoot(t, dataHome)
+	unknownPath := filepath.Join(updaterTempRoot, "user-notes.txt")
+	require.NoError(t, os.WriteFile(unknownPath, []byte("preserve"), 0o600))
+	installationRoot := filepath.Join(dataHome, "luxury-yacht")
+	uninstallCommand := exec.Command("sh", filepath.Join(installationRoot, "manage-installation"), "uninstall")
+	output, err = uninstallCommand.CombinedOutput()
+
+	require.NoError(t, err, string(output))
+	require.NoFileExists(t, filepath.Join(installationRoot, "luxury-yacht"))
+	require.Equal(t, []byte("preserve"), readTestFileBytes(t, unknownPath))
+}
+
+func TestPortableInstallerUpgradeValidatesInstalledMarker(t *testing.T) {
+	if testing.Short() {
+		t.Skip("executes the portable installer")
+	}
+	root := t.TempDir()
+	config := testLinuxPortableConfig(t, root)
+	artifacts, err := createLinuxPortableArtifacts(config)
+	require.NoError(t, err)
+
+	extractRoot := filepath.Join(root, "extract")
+	require.NoError(t, extractRegularTarGz(artifacts.InstallerArchive, extractRoot))
+	installerRoot := filepath.Join(extractRoot, "luxury-yacht-v2.0.0-beta.3-linux-amd64-portable")
+	installer := filepath.Join(installerRoot, "install.sh")
+	dataHome := filepath.Join(root, "xdg-data")
+	installCommand := exec.Command("sh", installer)
+	installCommand.Env = append(os.Environ(), "XDG_DATA_HOME="+dataHome)
+	output, err := installCommand.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	installationRoot := filepath.Join(dataHome, "luxury-yacht")
+	markerPath := filepath.Join(installationRoot, updateidentity.InstallationMarkerName)
+	reformattedMarker := []byte("{\n  \"schemaVersion\": 1,\n  \"productIdentifier\": \"" + updateidentity.ProductIdentifier + "\",\n  \"distribution\": \"portable\",\n  \"scope\": \"user\"\n}\n")
+	require.NoError(t, os.WriteFile(markerPath, reformattedMarker, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(installerRoot, "luxury-yacht"), []byte("upgraded binary"), 0o755))
+
+	upgradeCommand := exec.Command("sh", installer)
+	upgradeCommand.Env = append(os.Environ(), "XDG_DATA_HOME="+dataHome)
+	output, err = upgradeCommand.CombinedOutput()
+
+	require.NoError(t, err, string(output))
+	require.Equal(t, []byte("upgraded binary"), readTestFileBytes(t, filepath.Join(installationRoot, "luxury-yacht")))
+
+	invalidMarker := []byte(`{"schemaVersion":1,"productIdentifier":"other-product","distribution":"portable","scope":"user"}`)
+	require.NoError(t, os.WriteFile(markerPath, invalidMarker, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(installerRoot, "luxury-yacht"), []byte("must not install"), 0o755))
+	rejectedUpgrade := exec.Command("sh", installer)
+	rejectedUpgrade.Env = append(os.Environ(), "XDG_DATA_HOME="+dataHome)
+	output, err = rejectedUpgrade.CombinedOutput()
+
+	require.Error(t, err)
+	require.Contains(t, string(output), "existing installation is not a verified Luxury Yacht portable install")
+	require.Equal(t, []byte("upgraded binary"), readTestFileBytes(t, filepath.Join(installationRoot, "luxury-yacht")))
 }
 
 func TestPortableInstallerRefusesToClaimAnUnmarkedExistingTarget(t *testing.T) {
@@ -451,6 +541,19 @@ func testLinuxPortableConfig(t *testing.T, root string) linuxPortableArtifactsCo
 		OutputDirectory: filepath.Join(root, "out"),
 		ReadmePath:      repositoryPath("build", "linux", "portable", "README.txt"),
 	}
+}
+
+func createOwnedUpdaterTempRoot(t *testing.T, dataHome string) string {
+	t.Helper()
+	currentUser, err := user.Current()
+	require.NoError(t, err)
+	digest := sha256.Sum256([]byte(currentUser.Uid))
+	userIDHash := hex.EncodeToString(digest[:])
+	root := filepath.Join(dataHome, "luxury-yacht-update-"+userIDHash[:12])
+	require.NoError(t, os.Mkdir(root, 0o700))
+	marker := `{"schemaVersion":1,"productIdentifier":"` + updateidentity.ProductIdentifier + `","userIdHash":"` + userIDHash + `"}` + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".luxury-yacht-temp-root.json"), []byte(marker), 0o600))
+	return root
 }
 
 func readTarGzEntries(t *testing.T, path string) []testTarEntry {

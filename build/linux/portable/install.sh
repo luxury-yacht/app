@@ -10,7 +10,8 @@ portable_architecture='__PORTABLE_ARCHITECTURE__'
 marker_name='luxury-yacht.install.json'
 
 fail() {
-    printf 'Error: %s\n' "$1" >&2
+    error_message=$1
+    printf 'Error: %s\n' "$error_message" >&2
     exit 1
 }
 
@@ -39,6 +40,7 @@ case "$data_home" in
 esac
 case "$data_home" in
     /) fail "refusing to use the filesystem root as XDG_DATA_HOME" ;;
+    *) ;;
 esac
 
 install_root=$data_home/$binary_name
@@ -66,11 +68,80 @@ portable_marker_is_valid() {
     [ "$compact_marker" = "$expected_marker" ]
 }
 
+resolve_owned_updater_temp_root() {
+    current_user_id=$(id -u 2>/dev/null) || return 1
+    case "$current_user_id" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    if command -v sha256sum >/dev/null 2>&1; then
+        user_id_hash_output=$(printf '%s' "$current_user_id" | sha256sum) || return 1
+    elif command -v shasum >/dev/null 2>&1; then
+        user_id_hash_output=$(printf '%s' "$current_user_id" | shasum -a 256) || return 1
+    else
+        return 1
+    fi
+    user_id_hash=${user_id_hash_output%% *}
+    if [ "${#user_id_hash}" -ne 64 ]; then
+        return 1
+    fi
+    case "$user_id_hash" in
+        *[!0-9a-f]*) return 1 ;;
+    esac
+
+    updater_temp_root=$data_home/luxury-yacht-update-$(printf '%.12s' "$user_id_hash")
+    updater_temp_marker=$updater_temp_root/.luxury-yacht-temp-root.json
+    if [ ! -d "$updater_temp_root" ] || [ -L "$updater_temp_root" ] ||
+        [ ! -f "$updater_temp_marker" ] || [ -L "$updater_temp_marker" ]; then
+        return 1
+    fi
+    compact_temp_marker=$(LC_ALL=C tr -d '[:space:]' < "$updater_temp_marker") || return 1
+    expected_temp_marker=$(printf '{"schemaVersion":1,"productIdentifier":"%s","userIdHash":"%s"}' "$product_identifier" "$user_id_hash")
+    [ "$compact_temp_marker" = "$expected_temp_marker" ]
+}
+
+cleanup_owned_updater_temp_root() {
+    if ! resolve_owned_updater_temp_root; then
+        return 0
+    fi
+
+    # Preserve the entire root if it contains anything outside the updater's
+    # owned marker, staging-directory, and helper-log shapes.
+    for candidate in "$updater_temp_root"/* "$updater_temp_root"/.[!.]* "$updater_temp_root"/..?*; do
+        if [ ! -e "$candidate" ] && [ ! -L "$candidate" ]; then
+            continue
+        fi
+        if [ "$candidate" = "$updater_temp_marker" ]; then
+            continue
+        fi
+        candidate_name=${candidate##*/}
+        if [ -d "$candidate" ] && [ ! -L "$candidate" ]; then
+            case "$candidate_name" in
+                wails-update-*) continue ;;
+            esac
+        elif [ -f "$candidate" ] && [ ! -L "$candidate" ]; then
+            case "$candidate_name" in
+                wails-update-*.log)
+                    helper_log_number=${candidate_name#wails-update-}
+                    helper_log_number=${helper_log_number%.log}
+                    case "$helper_log_number" in
+                        ''|*[!0-9]*) return 0 ;;
+                    esac
+                    continue
+                    ;;
+            esac
+        fi
+        return 0
+    done
+
+    rm -rf "$updater_temp_root"
+}
+
 uninstall_portable() {
     if ! portable_marker_is_valid "$marker_path"; then
         fail "portable installation marker is invalid; refusing to remove files"
     fi
 
+    cleanup_owned_updater_temp_root
     rm -f "$binary_path" "$marker_path" "$desktop_path" "$icon_path"
     rm -f "$readme_path" "$license_path" "$manager_path"
     rmdir "$install_root" 2>/dev/null || true
@@ -109,8 +180,7 @@ if ! portable_marker_is_valid "$source_marker"; then
 fi
 
 if [ -e "$marker_path" ] || [ -L "$marker_path" ]; then
-    if [ ! -f "$marker_path" ] || [ -L "$marker_path" ] ||
-        ! cmp -s "$marker_path" "$source_marker"; then
+    if ! portable_marker_is_valid "$marker_path"; then
         fail "existing installation is not a verified Luxury Yacht portable install"
     fi
 elif [ -e "$binary_path" ] || [ -L "$binary_path" ]; then

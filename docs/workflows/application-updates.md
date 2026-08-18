@@ -58,10 +58,15 @@ installs without elevation below
 `${XDG_DATA_HOME:-$HOME/.local/share}/luxury-yacht`, writes the adjacent
 `luxury-yacht.install.json` marker with `portable` distribution and `user`
 scope, and installs the desktop entry and icon below the same XDG data home.
+Portable upgrades validate the installed marker through the same
+schema/product/distribution/scope boundary as fresh installs rather than
+requiring byte-for-byte equality with the next archive's marker.
 The installed `manage-installation uninstall` command removes only that
-verified portable installation. The portable runtime requires GTK 4 and
-WebKitGTK 6.0; the archive README lists Debian/Ubuntu and Fedora/RHEL package
-names.
+verified portable installation. It also removes the one UID-derived updater
+temp root only when the full ownership marker matches and every child has an
+updater-owned staging or helper-log shape; lookalike roots and roots containing
+unknown entries are preserved. The portable runtime requires GTK 4 and WebKitGTK
+6.0; the archive README lists Debian/Ubuntu and Fedora/RHEL package names.
 
 The similarly versioned Linux archive ending in `-updater.tar.gz` is a
 single-entry tar containing only the executable. The explicit suffix prevents
