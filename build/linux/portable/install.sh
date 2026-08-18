@@ -72,6 +72,7 @@ resolve_owned_updater_temp_root() {
     current_user_id=$(id -u 2>/dev/null) || return 1
     case "$current_user_id" in
         ''|*[!0-9]*) return 1 ;;
+        *) ;;
     esac
     if command -v sha256sum >/dev/null 2>&1; then
         user_id_hash_output=$(printf '%s' "$current_user_id" | sha256sum) || return 1
@@ -86,6 +87,7 @@ resolve_owned_updater_temp_root() {
     fi
     case "$user_id_hash" in
         *[!0-9a-f]*) return 1 ;;
+        *) ;;
     esac
 
     updater_temp_root=$data_home/luxury-yacht-update-$(printf '%.12s' "$user_id_hash")
@@ -117,6 +119,7 @@ cleanup_owned_updater_temp_root() {
         if [ -d "$candidate" ] && [ ! -L "$candidate" ]; then
             case "$candidate_name" in
                 wails-update-*) continue ;;
+                *) ;;
             esac
         elif [ -f "$candidate" ] && [ ! -L "$candidate" ]; then
             case "$candidate_name" in
@@ -125,9 +128,11 @@ cleanup_owned_updater_temp_root() {
                     helper_log_number=${helper_log_number%.log}
                     case "$helper_log_number" in
                         ''|*[!0-9]*) return 0 ;;
+                        *) ;;
                     esac
                     continue
                     ;;
+                *) ;;
             esac
         fi
         return 0
