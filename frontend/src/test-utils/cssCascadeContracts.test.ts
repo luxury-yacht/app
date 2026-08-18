@@ -187,4 +187,59 @@ describe('strict CSS cascade contracts', () => {
     expect(motion).toContain('#app *::before');
     expect(motion).toContain('#app *::after');
   });
+
+  describe('modal fade compositing contract', () => {
+    // The backdrop uses backdrop-filter. An ancestor whose opacity animates
+    // below 1 forms a backdrop root (filter-effects-2), and WebKitGTK — the
+    // Linux Wails webview — hoists the filtered layer out of the fading
+    // group, so the dimmed background and the modal container visibly fade
+    // apart. The fade must therefore animate the backdrop's own paint
+    // properties, never group opacity on an ancestor of the backdrop.
+    const modalsCss = () => readProjectFile('styles/components/modals.css');
+
+    const ruleBlock = (css: string, selector: string) => {
+      const marker = `${selector} {`;
+      const start = css.indexOf(marker);
+      if (start === -1) {
+        return null;
+      }
+      return css.slice(start, css.indexOf('}', start) + 1);
+    };
+
+    it('keeps opacity animation off ancestors of the backdrop-filter surface', () => {
+      const css = modalsCss();
+      const overlay = ruleBlock(css, '.modal-overlay');
+      expect(overlay).not.toBeNull();
+      expect(overlay).not.toMatch(/animation|opacity/);
+      const overlayClosing = ruleBlock(css, '.modal-overlay.closing');
+      if (overlayClosing !== null) {
+        expect(overlayClosing).not.toMatch(/animation|opacity/);
+      }
+    });
+
+    it('fades the backdrop through its own paint properties with held end states', () => {
+      const css = modalsCss();
+      expect(ruleBlock(css, '.modal-backdrop')).toMatch(
+        /animation: modal-backdrop-fade-in 200ms ease-out both;/
+      );
+      expect(ruleBlock(css, '.modal-overlay.closing .modal-backdrop')).toMatch(
+        /animation: modal-backdrop-fade-out 200ms ease-out both;/
+      );
+      for (const keyframes of ['modal-backdrop-fade-in', 'modal-backdrop-fade-out']) {
+        const block = css.slice(css.indexOf(`@keyframes ${keyframes}`));
+        const body = block.slice(0, block.indexOf('\n}'));
+        expect(body).toContain('background-color');
+        expect(body).toContain('backdrop-filter');
+        expect(body).not.toContain('opacity');
+      }
+    });
+
+    it('completes closing container motion within the 200ms unmount window and holds its end state', () => {
+      // Modal owners unmount the surface 200ms after adding `closing`
+      // (e.g. AboutModal); a longer or non-filled animation snaps back to
+      // full opacity before removal.
+      const containerClosing = ruleBlock(modalsCss(), '.modal-container.closing');
+      expect(containerClosing).toMatch(/animation: modal-slide-down 200ms [^;]*both;/);
+    });
+  });
 });

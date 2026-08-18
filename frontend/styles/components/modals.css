@@ -2,15 +2,16 @@
    Shared Modal Surface
    ========================================================================== */
 
+/* The overlay is a transparent positioning layer only. It must never animate
+   opacity: the backdrop child uses backdrop-filter, and an ancestor whose
+   opacity drops below 1 forms a backdrop root, which WebKitGTK (the Linux
+   Wails webview) composites outside the fading group — the dim/blur then
+   pops instead of fading. The fade lives on .modal-backdrop's own paint
+   properties instead. */
 .modal-overlay {
   position: fixed;
   inset: 0;
   z-index: var(--z-index-modal, 1050);
-  animation: modal-fade-in 200ms ease-out;
-}
-
-.modal-overlay.closing {
-  animation: modal-fade-out 200ms ease-out;
 }
 
 .modal-window-drag-region {
@@ -37,6 +38,11 @@
   align-items: center;
   justify-content: center;
   padding: 2rem;
+  animation: modal-backdrop-fade-in 200ms ease-out both;
+}
+
+.modal-overlay.closing .modal-backdrop {
+  animation: modal-backdrop-fade-out 200ms ease-out both;
 }
 
 .modal-backdrop-dismiss {
@@ -63,8 +69,12 @@
   overflow: hidden;
 }
 
+/* Closing animations run at 200ms with a held end state because modal owners
+   unmount the surface 200ms after adding `closing`; anything longer gets cut
+   off mid-motion, and without `both` the element snaps back to full opacity
+   for the frames between animation end and unmount. */
 .modal-container.closing {
-  animation: modal-slide-down 300ms cubic-bezier(0.64, 1, 0.34, 1.56);
+  animation: modal-slide-down 200ms cubic-bezier(0.64, 1, 0.34, 1.56) both;
 }
 
 .modal-header {
@@ -272,21 +282,29 @@
    Animations
    ========================================================================== */
 
-@keyframes modal-fade-in {
+@keyframes modal-backdrop-fade-in {
   from {
-    opacity: 0;
+    background-color: transparent;
+    backdrop-filter: blur(0);
+    -webkit-backdrop-filter: blur(0);
   }
   to {
-    opacity: 1;
+    background-color: var(--modal-overlay-bg);
+    backdrop-filter: blur(var(--modal-bg-blur));
+    -webkit-backdrop-filter: blur(var(--modal-bg-blur));
   }
 }
 
-@keyframes modal-fade-out {
+@keyframes modal-backdrop-fade-out {
   from {
-    opacity: 1;
+    background-color: var(--modal-overlay-bg);
+    backdrop-filter: blur(var(--modal-bg-blur));
+    -webkit-backdrop-filter: blur(var(--modal-bg-blur));
   }
   to {
-    opacity: 0;
+    background-color: transparent;
+    backdrop-filter: blur(0);
+    -webkit-backdrop-filter: blur(0);
   }
 }
 
