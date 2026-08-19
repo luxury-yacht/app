@@ -2,17 +2,21 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Installer,
     [Parameter(Mandatory = $true)]
-    [string]$ExpectedVersion
+    [string]$ExpectedVersion,
+    [Parameter(Mandatory = $true)]
+    [string]$ProductName,
+    [Parameter(Mandatory = $true)]
+    [string]$UninstallRegistryPath
 )
 
 $ErrorActionPreference = 'Stop'
 $installerPath = (Resolve-Path -LiteralPath $Installer).Path
-$installRoot = Join-Path $env:LOCALAPPDATA 'Programs\Luxury Yacht'
+$installRoot = Join-Path (Join-Path $env:LOCALAPPDATA 'Programs') $ProductName
 $executablePath = Join-Path $installRoot 'luxury-yacht.exe'
 $markerPath = Join-Path $installRoot 'luxury-yacht.install.json'
 $uninstallerPath = Join-Path $installRoot 'uninstall.exe'
-$userKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Luxury YachtLuxury Yacht'
-$machineKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Luxury YachtLuxury Yacht'
+$userKey = "HKCU:\$UninstallRegistryPath"
+$machineKey = "HKLM:\$UninstallRegistryPath"
 $settingsRoot = Join-Path $env:APPDATA 'luxury-yacht'
 $settingsProbe = Join-Path $settingsRoot 'migration-preservation-probe'
 $machineTempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
@@ -56,7 +60,7 @@ try {
     Assert-Contract ($marker.scope -eq 'user') 'Installation marker scope is incorrect'
 
     $registration = Get-ItemProperty -LiteralPath $userKey
-    Assert-Contract ($registration.DisplayName -eq 'Luxury Yacht') 'Per-user DisplayName is incorrect'
+    Assert-Contract ($registration.DisplayName -eq $ProductName) 'Per-user DisplayName is incorrect'
     Assert-Contract ($registration.DisplayVersion -eq $ExpectedVersion) 'Per-user DisplayVersion is incorrect'
     Assert-Contract ([IO.Path]::GetFullPath($registration.DisplayIcon) -eq [IO.Path]::GetFullPath($executablePath)) 'Per-user DisplayIcon does not own the installed executable'
     Assert-Contract (-not (Test-Path -LiteralPath $machineKey)) 'Per-user installer wrote a machine registration'
@@ -71,7 +75,7 @@ try {
     Set-Content -LiteralPath $machineExecutable -Value 'machine executable' -NoNewline
     Set-Content -LiteralPath $machineUninstaller -Value 'machine uninstaller' -NoNewline
     New-Item -Path $machineKey -Force | Out-Null
-    New-ItemProperty -LiteralPath $machineKey -Name DisplayName -Value 'Luxury Yacht' -PropertyType String -Force | Out-Null
+    New-ItemProperty -LiteralPath $machineKey -Name DisplayName -Value $ProductName -PropertyType String -Force | Out-Null
     New-ItemProperty -LiteralPath $machineKey -Name DisplayIcon -Value $machineExecutable -PropertyType String -Force | Out-Null
     New-ItemProperty -LiteralPath $machineKey -Name UninstallString -Value ('"' + $machineUninstaller + '"') -PropertyType String -Force | Out-Null
     $blocked = Invoke-And-Wait $installerPath '/S'
@@ -87,6 +91,12 @@ finally {
     }
     if (Test-Path -LiteralPath $machineKey) {
         Remove-Item -LiteralPath $machineKey -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $userKey) {
+        Remove-Item -LiteralPath $userKey -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $installRoot) {
+        Remove-Item -LiteralPath $installRoot -Recurse -Force
     }
     if (Test-Path -LiteralPath $settingsProbe) {
         Remove-Item -LiteralPath $settingsProbe -Force

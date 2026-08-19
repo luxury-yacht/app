@@ -26,8 +26,10 @@ func TestResolveBuildGatesUpdaterInitializationAndInstallation(t *testing.T) {
 		want  updateidentity.BuildEligibility
 	}{
 		{
-			name:  "eligible stable desktop",
-			probe: updateidentity.BuildProbe{Version: "v2.0.0", Now: now, Installation: installable},
+			name: "eligible stable desktop",
+			probe: updateidentity.BuildProbe{
+				Version: "v2.0.0", Now: now, Installation: installable, PayloadAvailable: true,
+			},
 			want: updateidentity.BuildEligibility{
 				Status:        updateidentity.BuildEnabled,
 				Release:       updateidentity.ReleaseVersion{Version: "2.0.0", Channel: updateidentity.ChannelStable},
@@ -36,13 +38,26 @@ func TestResolveBuildGatesUpdaterInitializationAndInstallation(t *testing.T) {
 			},
 		},
 		{
-			name:  "valid package installation is notification-only",
-			probe: updateidentity.BuildProbe{Version: "v2.0.0", Now: now, Installation: notificationOnly},
+			name: "valid package installation is notification-only",
+			probe: updateidentity.BuildProbe{
+				Version: "v2.0.0", Now: now, Installation: notificationOnly, PayloadAvailable: true,
+			},
 			want: updateidentity.BuildEligibility{
 				Status:        updateidentity.BuildEnabled,
 				Release:       updateidentity.ReleaseVersion{Version: "2.0.0", Channel: updateidentity.ChannelStable},
 				Installation:  notificationOnly,
 				CanInitialize: true, CanCheck: true,
+			},
+		},
+		{
+			name: "recognized installation without published updater payload",
+			probe: updateidentity.BuildProbe{
+				Version: "v2.0.0", Now: now, Installation: installable,
+			},
+			want: updateidentity.BuildEligibility{
+				Status:       updateidentity.BuildDisabledPayload,
+				Release:      updateidentity.ReleaseVersion{Version: "2.0.0", Channel: updateidentity.ChannelStable},
+				Installation: installable,
 			},
 		},
 		{
@@ -75,7 +90,7 @@ func TestResolveBuildGatesUpdaterInitializationAndInstallation(t *testing.T) {
 		{
 			name: "unverified installation",
 			probe: updateidentity.BuildProbe{
-				Version: "v2.0.0", Now: now,
+				Version: "v2.0.0", Now: now, PayloadAvailable: true,
 				Installation: updateidentity.InstallationEligibility{
 					Reason: updateidentity.ReasonWindowsUnverifiedInstall, Recovery: updateidentity.RecoveryWindowsDownload,
 				},

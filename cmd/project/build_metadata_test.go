@@ -22,6 +22,9 @@ func TestGenerateWritesManifestFromWailsConfigAndEnvironment(t *testing.T) {
   version: "2.0.0-beta.4"
 luxuryYacht:
   betaExpiryDays: 30
+  updaterTargets:
+    - darwin/arm64
+    - linux/amd64
 `), 0o600))
 	require.NoError(t, os.WriteFile(envPath, []byte("SENTRY_BACKEND_DSN=https://public@example.com/1\n"), 0o600))
 	var summary bytes.Buffer
@@ -40,6 +43,7 @@ luxuryYacht:
 	require.True(t, manifest.IsBeta)
 	require.Equal(t, "2026-09-10T12:00:00Z", manifest.BetaExpiry)
 	require.Equal(t, "https://public@example.com/1", manifest.SentryDSN)
+	require.Equal(t, []string{"darwin/arm64", "linux/amd64"}, manifest.UpdaterTargets)
 	require.NotContains(t, summary.String(), manifest.SentryDSN)
 	require.Contains(t, summary.String(), `"sentryDsn": "<configured>"`)
 

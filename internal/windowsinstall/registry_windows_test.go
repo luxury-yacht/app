@@ -22,7 +22,7 @@ func TestWindowsRegistrationOwnershipAndDisplayVersionReconciliation(t *testing.
 	t.Cleanup(func() {
 		require.NoError(t, registry.DeleteKey(registry.CURRENT_USER, registryPath))
 	})
-	require.NoError(t, key.SetStringValue("DisplayName", productName))
+	require.NoError(t, key.SetStringValue("DisplayName", ProductName))
 	require.NoError(t, key.SetStringValue("DisplayIcon", executablePath))
 	require.NoError(t, key.SetStringValue("UninstallString", `"`+uninstallerPath+`"`))
 	require.NoError(t, key.SetStringValue("DisplayVersion", "2.0.0-beta.3"))

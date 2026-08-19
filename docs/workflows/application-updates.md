@@ -19,10 +19,10 @@ About dialog, which is the single surface for release notes, progress,
 failures, and recovery actions. Status copy, badge, tone, and release identity
 come from one shared presentation (`frontend/src/ui/status/updatePresentation.ts`)
 so the header and About can never disagree. **Download Update** is explicit
-consent to download and stage one known version. **Restart to Update** is separate consent to persist
-the handoff, quit all workspace peers through the normal lifecycle, replace
-the application, and relaunch. There is no updater-owned window, background
-download, or forced restart.
+consent to download and stage one known version. **Restart to Update** is
+separate consent to persist the handoff, quit all workspace peers through the
+normal lifecycle, replace the application, and relaunch. There is no
+updater-owned window, background download, or forced restart.
 
 Stable builds accept only newer stable releases. Beta builds may accept a
 newer beta or stable release, allowing beta-to-stable convergence. Skipping a
@@ -35,16 +35,23 @@ Release discovery and in-place installation are separate capabilities:
 
 | Installation | Check | Self-update | Required evidence / fallback |
 | --- | --- | --- | --- |
-| macOS app bundle | Yes when installed as an app bundle | Yes when the volume and bundle parent are writable | Otherwise open the authenticated macOS download path. |
-| Windows NSIS, per-user | Yes | Yes | A valid adjacent `luxury-yacht.install.json` marker with product ID, `nsis`, and `user` scope. |
-| Windows NSIS, machine | Yes | No | Offer the per-user migration path; do not request elevation or stage an update. |
-| Linux portable, per-user | Yes | Yes when the target's parent supports create-and-rename | A valid adjacent marker with `portable` and `user` scope; otherwise offer the portable download. The running Linux executable itself cannot be opened for write (`ETXTBSY`), and Wails replaces it only after the parent process exits. |
-| Linux DEB/RPM | Yes with a valid system package marker | No | Explain package-manager ownership and open package choices. |
+| macOS app bundle | Yes when its platform/architecture payload is enabled | Yes when the volume and bundle parent are writable | Otherwise open the authenticated macOS download path. |
+| Windows NSIS, per-user | Yes only after its signed platform/architecture payload is enabled | Yes | A valid adjacent `luxury-yacht.install.json` marker with product ID, `nsis`, and `user` scope. |
+| Windows NSIS, machine | Yes only after its signed platform/architecture payload is enabled | No | Offer the per-user migration path; do not request elevation or stage an update. |
+| Linux portable, per-user | Yes when its platform/architecture payload is enabled | Yes when the target's parent supports create-and-rename | A valid adjacent marker with `portable` and `user` scope; otherwise offer the portable download. The running Linux executable itself cannot be opened for write (`ETXTBSY`), and Wails replaces it only after the parent process exits. |
+| Linux DEB/RPM | Yes when its platform/architecture payload is enabled and it has a valid system package marker | No | Explain package-manager ownership and open package choices. |
 | Development, invalid, or unknown distribution | No | No | Explain that automatic updates are unavailable and offer download choices. |
 
 Do not infer ownership from a path or filename alone. Marker schema, product
 identity, distribution, scope, and exact expected location are all part of the
 eligibility boundary in `internal/updateidentity`.
+
+`luxuryYacht.updaterTargets` in `build/config.yml` is the single publication
+and runtime-eligibility list. Build metadata embeds it in the application, and
+release tooling uses the same list to require the matching payloads. A build
+whose platform/architecture is absent does not initialize the provider or
+perform update checks, so an unpublished payload cannot become a recurring
+missing-asset error.
 
 ### Windows distribution
 
@@ -56,24 +63,40 @@ discarding the unsigned candidate with the runner workspace.
 
 Legacy all-users installs have no marker. The runtime recognizes them only when
 the exact 64-bit HKLM uninstall registration names the running executable and
-its adjacent uninstaller; they remain notification-only. The per-user installer
-also checks that exact machine product registration before writing files. A
-conflict exits with code 66 and, interactively, offers to open Windows Installed
-Apps. It never uninstalls or elevates on the user's behalf.
+its adjacent uninstaller. Once a signed Windows target is enabled they are
+notification-only; while the target is absent, Windows update checks are
+disabled altogether. The per-user installer also checks that exact machine
+product registration before writing files. A conflict exits with code 66 and,
+interactively, offers to open Windows Installed Apps. It never uninstalls or
+elevates on the user's behalf.
 
 After a successful raw-executable swap, startup first reconciles and clears the
 durable update attempt. It then revalidates the adjacent per-user marker and
 the matching HKCU uninstall registration before updating `DisplayVersion`.
-Metadata failure is logged without reclassifying an already successful swap.
+Both NSIS and post-swap reconciliation retain the configured `v`-prefixed
+release version. Metadata failure is logged without reclassifying an already
+successful swap.
+
+The machine-install recovery action opens the exact GitHub Release for the
+discovered version; it does not depend on an unpublished website route. A
+legacy all-users build that predates both the installation detector and the
+published Windows updater target cannot discover this new behavior in-band.
+Its release/download instructions must tell users to close Luxury Yacht,
+uninstall the all-users copy in Windows Installed Apps, and then install the
+signed per-user release.
 
 The unsigned Windows build job is configured to run Windows-native identity
-tests and a silent install/uninstall drill for amd64 and arm64. The drill
+tests and a silent install/uninstall drill for amd64 and arm64. The package
+task builds once, then copies the updater executable and packages that same
+binary with NSIS. The drill
 proves the per-user marker and registration, removal of installer-owned files,
 preservation of user-profile settings, and machine/per-user side-by-side
-refusal. Until
-Authenticode credentials are provisioned, Windows raw executables are
+refusal, including cleanup after a partial drill failure. The premerge quality
+gate also cross-vets Windows amd64 and arm64 code. Until Authenticode
+credentials are provisioned, Windows raw executables are
 deliberately excluded from both published release artifacts and
-`UPDATER_TARGETS`, and therefore from `updater.json`.
+`luxuryYacht.updaterTargets`, and therefore from `updater.json` and runtime
+checks.
 Signing must cover the built executable before both the raw copy and NSIS
 packaging, followed by separate installer signing, before Windows self-update
 is enabled.
@@ -124,7 +147,8 @@ channel, digest, or signature disagreement fails closed. Wails verifies the
 downloaded payload with the manifest digest/signature and the public key
 embedded in the application.
 
-Release tooling accepts an explicit target list and exact payload names. It
+Release tooling accepts the explicit target list from `build/config.yml` and
+exact payload names. It
 must reject directories, globs, installers/packages in place of updater
 payloads, duplicates, missing targets, and ambiguous files. The release job:
 

@@ -180,16 +180,24 @@ func TestCheckBetaExpirySkippedForNonBeta(t *testing.T) {
 	}
 }
 
-func TestApplyEmbeddedBuildInfoConfiguresBackendSentryDSN(t *testing.T) {
-	original := SentryDSN
-	t.Cleanup(func() { SentryDSN = original })
+func TestApplyEmbeddedBuildInfoConfiguresRuntimeMetadata(t *testing.T) {
+	originalDSN := SentryDSN
+	originalTargets := UpdaterTargets
+	t.Cleanup(func() {
+		SentryDSN = originalDSN
+		UpdaterTargets = originalTargets
+	})
 
 	applyEmbeddedBuildInfo(&embeddedBuildInfo{
-		Version:   "v1.2.3",
-		SentryDSN: "https://public@example.com/1",
+		Version:        "v1.2.3",
+		SentryDSN:      "https://public@example.com/1",
+		UpdaterTargets: []string{"darwin/arm64", "linux/amd64"},
 	})
 
 	if SentryDSN != "https://public@example.com/1" {
 		t.Fatalf("SentryDSN = %q, want embedded value", SentryDSN)
+	}
+	if strings.Join(UpdaterTargets, ",") != "darwin/arm64,linux/amd64" {
+		t.Fatalf("UpdaterTargets = %q, want embedded values", UpdaterTargets)
 	}
 }

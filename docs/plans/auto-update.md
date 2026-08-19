@@ -91,8 +91,8 @@ Owner decisions recorded before implementation:
 - [x] Use an Ed25519 signing key held in a protected CI secret, with
   the public key embedded in the application.
 - [x] Windows Authenticode certificate procurement is in progress. Windows
-  remains notification-only until the certificate is provisioned, and the
-  initiative cannot be declared complete in that state.
+  update checks and self-update remain disabled until signed payload targets
+  are enabled, and the initiative cannot be declared complete in that state.
 - [x] **Skip This Version** survives application restarts as backend-owned update
   state that is not part of portable settings export.
 - [x] Publish exactly one signed `updater.json` as an asset of each GitHub
@@ -150,11 +150,12 @@ updater target:
   through the same code-signing, Gatekeeper, and stapler checks
   (`.github/workflows/release.yml:62-68,118-157`;
   `build/darwin/Taskfile.yml:130-142`);
-- Windows publishes unsigned NSIS installers
-  (`.github/workflows/release.yml:168-171`);
+- Windows builds unsigned per-user NSIS installers for CI validation but does
+  not publish them while the signing rollout is incomplete;
 - Linux publishes DEB and RPM packages
   (`.github/workflows/release.yml:159-166`); and
-- the release helper selects an explicit ordered target set, signs and verifies
+- the release helper selects the ordered target set configured in
+  `build/config.yml`, signs and verifies
   one release-scoped `updater.json`, materializes and removes the protected key
   in a scoped CI step, and publishes it with the installers and updater payloads
   in one draft-then-public GitHub Release (`cmd/project/updater_release.go`;
@@ -167,9 +168,8 @@ packages. See the Wails
 
 Installation ownership is also material:
 
-- the Windows installer defaults to machine scope and installs under Program
-  Files (`build/windows/Taskfile.yml:58-65`,
-  `build/windows/nsis/project.nsi:72-78`); and
+- the Windows release installer uses per-user scope under LocalAppData and
+  identifies the installation with an adjacent ownership marker; and
 - Linux packages install the executable under `/usr/local/bin`
   (`build/linux/nfpm/nfpm.yaml:19-25`).
 
@@ -263,7 +263,7 @@ The shell action contract is:
 6. Notification-only distributions expose the typed reason-specific recovery
    action defined below, falling back to **View Download Options** only for an
    unsupported distribution. Recovery actions open the release/download or
-   migration page and never stage an artifact.
+   migration target and never stage an artifact.
 7. Any permitted About close path, including its close control, `Escape`, or
    backdrop, closes only the presentation. It never cancels a process-owned
    check, download, verification, or staging operation. The status chip keeps
@@ -333,7 +333,7 @@ the one frontend presentation mapping:
 | `unsupported-distribution` | **Automatic updates are not available for this installation.** | **View Download Options** |
 
 Every recovery action opens the immutable release's platform-appropriate
-download or migration page and never starts Wails staging. The status chip uses
+download target and never starts Wails staging. The status chip uses
 compact state text and always opens About for the full explanation; it does not
 duplicate eligibility prose. `apply-error` selects **View macOS Download**,
 **View Windows Download**, or **View Portable Download** from the persisted
@@ -561,14 +561,15 @@ Do not enable full self-update until all of these are resolved:
    rerunning NSIS. Keep uninstaller ownership and registry access limited to the
    known per-user installation contract.
 
-The machine-scope migration experience is part of the Windows stage:
+The machine-scope migration experience is part of the Windows stage after a
+signed Windows updater target is enabled:
 
 1. About explains why the current installation is notification-only and exposes
    **Switch to Per-User Installation**.
-2. That action opens a versioned migration page with the signed per-user
-   installer and the required order: close Luxury Yacht, uninstall the existing
-   all-users copy through Windows Installed Apps, then run the per-user
-   installer and relaunch.
+2. That action opens the exact GitHub Release for the discovered version. Its
+   release notes provide the signed per-user installer and the required order:
+   close Luxury Yacht, uninstall the existing all-users copy through Windows
+   Installed Apps, then run the per-user installer and relaunch.
 3. The per-user installer detects the registered machine-scope product and
    refuses a side-by-side installation. It offers **Open Installed Apps** and
    **Exit** rather than installing a second copy.
@@ -578,6 +579,11 @@ The machine-scope migration experience is part of the Windows stage:
 5. Until the adjacent per-user marker validates, every check remains
    notification-only. The running application never initiates an elevated
    uninstall or silently changes installation scope.
+
+Builds that predate the machine-install detector and signed Windows updater
+target cannot acquire this migration action in-band. Release/download guidance
+is the required out-of-band path for those users; it must give the same
+uninstall-then-install sequence before the first signed per-user rollout.
 
 Do not add a compile-time distribution stamp: the same signed executable is the
 input to both NSIS and the raw updater artifact (`build/windows/Taskfile.yml:85-102`).
@@ -1201,25 +1207,30 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
     manual application smoke test; follow `docs/workflows/application-updates.md`.
 - [ ] **Stage 2 — Windows:** provision Authenticode signing, move the supported
   installer to per-user identity, publish signed raw updater executables for
-  arm64 and amd64, publish the migration page, enforce installer side-by-side
-  refusal, prove settings-preserving migration and the Windows smoke matrix in
-  prerelease and ordinary releases. Existing machine-scope installs remain
-  notification-only until migrated.
+  arm64 and amd64, publish migration instructions with the release, enforce
+  installer side-by-side refusal, prove settings-preserving migration and the
+  Windows smoke matrix in prerelease and ordinary releases. Existing
+  machine-scope installs on target-enabled builds remain notification-only
+  until migrated; earlier builds use the out-of-band release guidance below.
   - [x] Credential-free implementation completed on 2026-08-18: release
     installers default to per-user scope and write scoped adjacent markers;
-    strict legacy HKLM evidence keeps existing machine installs
-    notification-only; the installer refuses side-by-side migration; successful
+    strict legacy HKLM evidence identifies existing machine installs as
+    non-installable; the installer refuses side-by-side migration; successful
     swaps reconcile the validated HKCU `DisplayVersion`; versioned raw amd64 and
     arm64 executables are built and PE-validated; and the Windows workflow
     defines native identity plus install/uninstall/settings-preservation drills.
-  - [x] The machine-install recovery action routes to a versioned Windows
-    migration URL. Windows updater executables remain intentionally absent from
-    published release artifacts and `UPDATER_TARGETS` while they are unsigned.
+  - [x] The machine-install recovery action routes to the exact versioned
+    GitHub Release instead of the unpublished website migration route. Windows
+    updater executables remain intentionally absent from published release
+    artifacts and `luxuryYacht.updaterTargets` while they are unsigned, so
+    Windows update checks remain disabled rather than reporting missing assets.
   - [ ] Provision Authenticode credentials, sign the application executable
     before raw-artifact copying and NSIS packaging, sign the installer
-    separately, and add both Windows architectures to `UPDATER_TARGETS`.
-  - [ ] Publish the matching migration page in the website repository with the
-    signed per-user installer and uninstall-then-install instructions.
+    separately, and add both Windows architectures to
+    `luxuryYacht.updaterTargets`.
+  - [ ] Put the uninstall-then-install migration instructions and signed
+    per-user installer on the matching GitHub Release before enabling either
+    Windows target. This is the out-of-band path for older all-users builds.
   - [ ] Run the Windows amd64 and arm64 beta-to-beta, beta-to-stable,
     multi-window, migration, failure-recovery, and ordinary-release smoke
     matrices before declaring Windows rollout complete.
@@ -1299,9 +1310,10 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
   installation marker and preserves correct uninstall metadata; recursive NSIS
   uninstall removes the complete installation directory, including any
   best-effort Wails `.old.*` or `.bak` leftovers.
-- Machine-scope Windows users receive the defined per-user migration action;
-  the installer prevents side-by-side scope installations and preserves
-  user-profile settings through migration.
+- Machine-scope Windows users running target-enabled builds receive the defined
+  per-user migration action; older builds receive the same sequence through
+  out-of-band release guidance. The installer prevents side-by-side scope
+  installations and preserves user-profile settings through migration.
 - Portable Linux self-update works without elevation only from the approved
   user-owned installation marker and preserves desktop integration and uninstall
   behavior.

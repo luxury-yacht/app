@@ -12,6 +12,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/luxury-yacht/app/internal/updateidentity"
+	"github.com/luxury-yacht/app/internal/windowsinstall"
 	"gopkg.in/yaml.v3"
 )
 
@@ -40,8 +41,9 @@ type projectMetadata struct {
 		Version           string `yaml:"version"`
 	} `yaml:"info"`
 	LuxuryYacht struct {
-		BetaExpiryDays int    `yaml:"betaExpiryDays"`
-		Maintainer     string `yaml:"maintainer"`
+		BetaExpiryDays int      `yaml:"betaExpiryDays"`
+		Maintainer     string   `yaml:"maintainer"`
+		UpdaterTargets []string `yaml:"updaterTargets"`
 	} `yaml:"luxuryYacht"`
 }
 
@@ -53,18 +55,20 @@ type projectFacts struct {
 }
 
 type projectConfigOutput struct {
-	AppShortName  string
-	ArtifactsDir  string
-	BetaExpiry    string
-	BuildDir      string
-	FrontendDir   string
-	Commit        string
-	IsBeta        bool
-	ManifestPath  string
-	PackagePath   string
-	ReleaseAssets []string
-	ReleaseRepo   string
-	Version       string
+	AppShortName                 string
+	ArtifactsDir                 string
+	BetaExpiry                   string
+	BuildDir                     string
+	FrontendDir                  string
+	Commit                       string
+	IsBeta                       bool
+	ManifestPath                 string
+	PackagePath                  string
+	ProductName                  string
+	ReleaseAssets                []string
+	ReleaseRepo                  string
+	Version                      string
+	WindowsUninstallRegistryPath string
 }
 
 func loadDotEnv(path string) error {
@@ -121,27 +125,38 @@ func isBetaVersion(version string) bool {
 }
 
 func writeProjectConfig(output io.Writer) error {
-	facts, err := loadProjectFacts()
+	metadata, err := readProjectMetadata(projectConfigPath)
 	if err != nil {
 		return fmt.Errorf("read app version: %w", err)
 	}
+	facts := deriveProjectFacts(metadata, time.Now().UTC(), gitRevParse())
+	registryPath, err := windowsUninstallRegistryPath(metadata)
+	if err != nil {
+		return fmt.Errorf("derive Windows uninstall registration: %w", err)
+	}
 	config := projectConfigOutput{
-		AppShortName:  projectAppShortName,
-		ArtifactsDir:  projectArtifactsDir,
-		BetaExpiry:    facts.betaExpiry,
-		BuildDir:      projectBuildDir,
-		FrontendDir:   projectFrontendDir,
-		Commit:        facts.commit,
-		IsBeta:        facts.isBeta,
-		ManifestPath:  projectManifestPath,
-		PackagePath:   projectPackagePath,
-		ReleaseAssets: projectReleaseAssets,
-		ReleaseRepo:   projectReleaseRepo,
-		Version:       facts.version,
+		AppShortName:                 projectAppShortName,
+		ArtifactsDir:                 projectArtifactsDir,
+		BetaExpiry:                   facts.betaExpiry,
+		BuildDir:                     projectBuildDir,
+		FrontendDir:                  projectFrontendDir,
+		Commit:                       facts.commit,
+		IsBeta:                       facts.isBeta,
+		ManifestPath:                 projectManifestPath,
+		PackagePath:                  projectPackagePath,
+		ProductName:                  strings.TrimSpace(metadata.Info.ProductName),
+		ReleaseAssets:                projectReleaseAssets,
+		ReleaseRepo:                  projectReleaseRepo,
+		Version:                      facts.version,
+		WindowsUninstallRegistryPath: registryPath,
 	}
 	encoder := json.NewEncoder(output)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(config)
+}
+
+func windowsUninstallRegistryPath(metadata projectMetadata) (string, error) {
+	return windowsinstall.RegistryPath(metadata.Info.CompanyName, metadata.Info.ProductName)
 }
 
 func projectBinaryName(metadata projectMetadata) (string, error) {

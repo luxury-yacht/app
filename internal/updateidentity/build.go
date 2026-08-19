@@ -13,15 +13,17 @@ const (
 	BuildDisabledServer         BuildStatus = "disabled-server"
 	BuildDisabledInvalidVersion BuildStatus = "disabled-invalid-version"
 	BuildDisabledInstallation   BuildStatus = "disabled-installation"
+	BuildDisabledPayload        BuildStatus = "disabled-payload"
 	BuildExpiredBeta            BuildStatus = "expired-beta"
 )
 
 type BuildProbe struct {
-	Version      string
-	Server       bool
-	BetaExpiry   time.Time
-	Now          time.Time
-	Installation InstallationEligibility
+	Version          string
+	Server           bool
+	BetaExpiry       time.Time
+	Now              time.Time
+	PayloadAvailable bool
+	Installation     InstallationEligibility
 }
 
 type BuildEligibility struct {
@@ -59,6 +61,10 @@ func ResolveBuild(probe BuildProbe) BuildEligibility {
 	}
 	if !probe.Installation.CanCheck {
 		result.Status = BuildDisabledInstallation
+		return result
+	}
+	if !probe.PayloadAvailable {
+		result.Status = BuildDisabledPayload
 		return result
 	}
 

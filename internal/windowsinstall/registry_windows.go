@@ -12,19 +12,14 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-const (
-	productName           = "Luxury Yacht"
-	uninstallRegistryPath = `Software\Microsoft\Windows\CurrentVersion\Uninstall\Luxury YachtLuxury Yacht`
-)
-
 func LegacyMachineInstall(executablePath string) bool {
 	return registrationOwnsExecutable(
-		registry.LOCAL_MACHINE, uninstallRegistryPath, executablePath,
+		registry.LOCAL_MACHINE, UninstallRegistryPath, executablePath,
 	)
 }
 
 func SetPerUserDisplayVersion(executablePath, version string) error {
-	return setPerUserDisplayVersionAt(executablePath, version, uninstallRegistryPath)
+	return setPerUserDisplayVersionAt(executablePath, version, UninstallRegistryPath)
 }
 
 func setPerUserDisplayVersionAt(executablePath, version, registryPath string) error {
@@ -63,7 +58,7 @@ func openRegistrationOwnsExecutable(key registry.Key, executablePath string) boo
 	displayName, _, nameErr := key.GetStringValue("DisplayName")
 	displayIcon, _, iconErr := key.GetStringValue("DisplayIcon")
 	uninstall, _, uninstallErr := key.GetStringValue("UninstallString")
-	if nameErr != nil || iconErr != nil || uninstallErr != nil || displayName != productName {
+	if nameErr != nil || iconErr != nil || uninstallErr != nil || displayName != ProductName {
 		return false
 	}
 	cleanExecutable := filepath.Clean(strings.Trim(strings.TrimSpace(executablePath), `"`))

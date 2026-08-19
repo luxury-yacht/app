@@ -394,7 +394,6 @@ func TestPrepareReleaseUpdaterManifestSignsOneImmutableAssetForStableRelease(t *
 	require.NoError(t, os.WriteFile(publicKey, []byte("public"), 0o600))
 	environment := map[string]string{
 		"UPDATER_ARTIFACTS_DIR":    directory,
-		"UPDATER_TARGETS":          "darwin/arm64,darwin/amd64",
 		"UPDATER_PRIVATE_KEY_PATH": privateKey,
 		"UPDATER_PUBLIC_KEY":       publicKey,
 		"GITHUB_RUN_NUMBER":        "42",
@@ -432,24 +431,21 @@ func TestPrepareReleaseUpdaterManifestRejectsMismatchedOrIncompleteConfiguration
 	)
 	require.ErrorContains(t, err, "does not match metadata")
 
+	metadata.LuxuryYacht.UpdaterTargets = nil
 	err = prepareReleaseUpdaterManifest(
 		metadata,
 		projectFacts{version: "v2.0.0-beta.1"},
-		func(name string) string {
-			if name == "UPDATER_TARGETS" {
-				return "darwin/arm64"
-			}
-			return ""
-		},
+		func(string) string { return "" },
 		func(string, ...string) error { return nil },
 	)
-	require.ErrorContains(t, err, "artifact root")
+	require.ErrorContains(t, err, "updater targets")
 }
 
 func testProjectMetadata(version string) projectMetadata {
 	var metadata projectMetadata
 	metadata.Info.ProductName = "Luxury Yacht"
 	metadata.Info.Version = version
+	metadata.LuxuryYacht.UpdaterTargets = []string{"darwin/arm64", "darwin/amd64"}
 	return metadata
 }
 

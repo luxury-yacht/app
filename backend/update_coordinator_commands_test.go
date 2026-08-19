@@ -325,7 +325,7 @@ func TestResolveApplicationUpdateEligibilityUsesReleaseAndInstallIdentity(t *tes
 
 	eligibility, err := resolveApplicationUpdateEligibility(applicationUpdateRuntime{
 		Version: "v2.0.0", Now: now, Platform: "darwin", Architecture: "arm64",
-		ExecutablePath: executable, HomeDirectory: home,
+		ExecutablePath: executable, HomeDirectory: home, UpdaterTargets: []string{"darwin/arm64"},
 	})
 
 	require.NoError(t, err)
@@ -333,6 +333,25 @@ func TestResolveApplicationUpdateEligibilityUsesReleaseAndInstallIdentity(t *tes
 	require.True(t, eligibility.CanInitialize)
 	require.True(t, eligibility.CanInstall)
 	require.Equal(t, updateidentity.DistributionMacBundle, eligibility.Installation.Distribution)
+
+	windowsRoot := t.TempDir()
+	windowsExecutable := filepath.Join(windowsRoot, "luxury-yacht.exe")
+	require.NoError(t, os.WriteFile(windowsExecutable, []byte("binary"), 0o700))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(windowsRoot, updateidentity.InstallationMarkerName),
+		[]byte(`{"schemaVersion":1,"productIdentifier":"app.luxury-yacht.desktop","distribution":"nsis","scope":"user"}`),
+		0o600,
+	))
+	windows, err := resolveApplicationUpdateEligibility(applicationUpdateRuntime{
+		Version: "v2.0.0", Now: now, Platform: "windows", Architecture: "amd64",
+		ExecutablePath: windowsExecutable, UpdaterTargets: []string{"darwin/arm64", "linux/amd64"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, updateidentity.BuildDisabledPayload, windows.Status)
+	require.False(t, windows.CanInitialize)
+	require.False(t, windows.CanCheck)
+	require.False(t, windows.CanInstall)
+	require.Equal(t, updateidentity.DistributionWindowsNSIS, windows.Installation.Distribution)
 
 	development, err := resolveApplicationUpdateEligibility(applicationUpdateRuntime{
 		Version: "dev", Now: now, Platform: "darwin", Architecture: "arm64",

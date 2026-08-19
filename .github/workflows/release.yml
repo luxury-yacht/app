@@ -74,7 +74,7 @@ jobs:
             arch: amd64
             artifact_name: artifacts-windows-amd64
             artifact_path: bin/*-amd64-installer.exe
-          - runner: windows-latest-arm
+          - runner: windows-11-arm
             goos: windows
             arch: arm64
             artifact_name: artifacts-windows-arm64
@@ -181,7 +181,6 @@ jobs:
         run: |
           go test ./internal/updateidentity ./internal/windowsinstall ./backend -run Windows -count=1
           wails3 task windows:package ARCH=${{ matrix.arch }} INSTALL_SCOPE=user
-          wails3 task windows:create:updater ARCH=${{ matrix.arch }}
           $env:GOOS = "windows"
           $env:GOARCH = "${{ matrix.arch }}"
           $env:WINDOWS_ARCH = "${{ matrix.arch }}"
@@ -191,7 +190,7 @@ jobs:
           $config = go run ./cmd/project config | ConvertFrom-Json
           $installer = Get-ChildItem "bin/*-${{ matrix.arch }}-installer.exe" -File -ErrorAction Stop
           if ($installer.Count -ne 1) { throw "Expected exactly one Windows installer" }
-          ./build/windows/package-drill.ps1 -Installer $installer.FullName -ExpectedVersion $config.version
+          ./build/windows/package-drill.ps1 -Installer $installer.FullName -ExpectedVersion $config.version -ProductName $config.productName -UninstallRegistryPath $config.windowsUninstallRegistryPath
 
       - uses: actions/upload-artifact@v7
         with:
@@ -235,7 +234,6 @@ jobs:
       - name: Prepare signed updater manifest release asset
         env:
           UPDATER_ARTIFACTS_DIR: ./artifacts
-          UPDATER_TARGETS: darwin/arm64,darwin/amd64,linux/amd64,linux/arm64
           UPDATER_PRIVATE_KEY_PATH: ${{ runner.temp }}/updater.key
           UPDATER_PUBLIC_KEY: backend/updater_public_key.pem
         run: wails3 task release:prepare-updater-manifest

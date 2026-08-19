@@ -51,7 +51,7 @@ describe('getUpdatePresentation', () => {
     expect(skipped?.secondary).toBeUndefined();
   });
 
-  it('routes machine-scope Windows installs to the discovered version migration page', () => {
+  it('routes machine-scope Windows installs to the exact published release', () => {
     const presentation = getUpdatePresentation(
       update({
         status: appupdates.Status.StatusAvailable,
@@ -65,7 +65,7 @@ describe('getUpdatePresentation', () => {
     expect(presentation?.primary).toEqual({
       kind: 'recovery',
       label: 'Switch to Per-User Installation',
-      url: 'https://luxury-yacht.app/windows/migrate?version=2.0.0-beta.4',
+      url: 'https://github.com/luxury-yacht/app/releases/tag/v2.0.0-beta.4',
     });
   });
 

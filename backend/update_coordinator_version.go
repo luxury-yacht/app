@@ -16,24 +16,26 @@ import (
 // Version variables that can be set at build time
 // These will be set via ldflags during build
 var (
-	Version     = "dev"
-	BuildTime   = "dev"
-	GitCommit   = "dev"
-	BetaExpiry  = ""
-	IsBetaBuild = "false"
-	SentryDSN   = ""
+	Version        = "dev"
+	BuildTime      = "dev"
+	GitCommit      = "dev"
+	BetaExpiry     = ""
+	IsBetaBuild    = "false"
+	SentryDSN      = ""
+	UpdaterTargets []string
 )
 
 //go:embed buildinfo/*.json
 var buildInfoFS embed.FS
 
 type embeddedBuildInfo struct {
-	Version    string `json:"version"`
-	BuildTime  string `json:"buildTime"`
-	GitCommit  string `json:"gitCommit"`
-	IsBeta     bool   `json:"isBeta"`
-	BetaExpiry string `json:"betaExpiry"`
-	SentryDSN  string `json:"sentryDsn,omitempty"`
+	Version        string   `json:"version"`
+	BuildTime      string   `json:"buildTime"`
+	GitCommit      string   `json:"gitCommit"`
+	IsBeta         bool     `json:"isBeta"`
+	BetaExpiry     string   `json:"betaExpiry"`
+	SentryDSN      string   `json:"sentryDsn,omitempty"`
+	UpdaterTargets []string `json:"updaterTargets,omitempty"`
 }
 
 func init() {
@@ -52,6 +54,7 @@ func applyEmbeddedBuildInfo(info *embeddedBuildInfo) {
 	BetaExpiry = info.BetaExpiry
 	IsBetaBuild = strconv.FormatBool(info.IsBeta)
 	SentryDSN = info.SentryDSN
+	UpdaterTargets = append([]string(nil), info.UpdaterTargets...)
 }
 
 // AppInfo contains application version information

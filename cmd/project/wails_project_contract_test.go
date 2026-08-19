@@ -795,11 +795,13 @@ func TestReleaseArtifactsPreserveVersionPlatformAndArchitectureIdentity(t *testi
 	require.Contains(t, windowsTaskfile, `{{.APP_NAME}}-*-windows-{{.ARCH}}-installer.exe`)
 	require.Contains(t, windowsTaskfile, `INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'`)
 	require.Contains(t, windowsTaskfile, "create:updater:")
+	require.Contains(t, windowsTaskfile, "create:updater:\n    deps:\n      - task: build")
+	require.Contains(t, windowsTaskfile, "create:updater:from-built")
 	require.Contains(t, windowsTaskfile, "go run ./cmd/project create-windows-updater-artifact")
 
 	require.NotContains(t, workflow, "bin/*-windows-amd64.exe")
 	require.NotContains(t, workflow, "bin/*-windows-arm64.exe")
-	require.Contains(t, workflow, "wails3 task windows:create:updater ARCH=${{ matrix.arch }}")
+	require.NotContains(t, workflow, "wails3 task windows:create:updater ARCH=${{ matrix.arch }}")
 	require.Contains(t, workflow, "wails3 task release:validate-windows-updater")
 	require.NotContains(t, workflow, "windows/amd64,windows/arm64")
 }
@@ -825,18 +827,26 @@ func TestWindowsReleaseRunsPerUserInstallUninstallAndMigrationDrill(t *testing.T
 	require.Contains(t, workflow, "go test ./internal/updateidentity ./internal/windowsinstall ./backend -run Windows -count=1")
 	for _, contract := range []string{
 		"luxury-yacht.install.json",
-		`HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Luxury YachtLuxury Yacht`,
-		`HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Luxury YachtLuxury Yacht`,
+		"UninstallRegistryPath",
 		"migration-preservation-probe",
 		"ExitCode -ne 66",
+		"Remove-Item -LiteralPath $userKey -Recurse -Force",
+		"Remove-Item -LiteralPath $installRoot -Recurse -Force",
 	} {
 		require.Contains(t, drill, contract)
 	}
+	require.NotContains(t, drill, "Luxury YachtLuxury Yacht")
+	require.Contains(t, workflow, "-UninstallRegistryPath $config.windowsUninstallRegistryPath")
 }
 
-func TestLinuxReleasePublishesOnlyPortablePayloadsToTheUpdaterManifest(t *testing.T) {
+func TestConfiguredUpdaterTargetsPublishOnlyReplaceablePayloads(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
-	require.Contains(t, workflow, "UPDATER_TARGETS: darwin/arm64,darwin/amd64,linux/amd64,linux/arm64")
+	config := readTestFile(t, repositoryPath("build", "config.yml"))
+	require.NotContains(t, workflow, "UPDATER_TARGETS:")
+	for _, target := range []string{"darwin/arm64", "darwin/amd64", "linux/amd64", "linux/arm64"} {
+		require.Contains(t, config, "- "+target)
+	}
+	require.NotContains(t, config, "- windows/")
 	createPayload := "wails3 task linux:generate:portable ARCH=${{ matrix.arch }}"
 	validatePayload := "wails3 task release:validate-linux-updater"
 	require.Contains(t, workflow, validatePayload)
@@ -936,7 +946,7 @@ func TestReleasePublishesSignedUpdaterManifestInsideTheGitHubRelease(t *testing.
 	require.Greater(t, cleanup, prepare)
 	require.Contains(t, workflow, "UPDATER_PRIVATE_KEY_PEM: ${{ secrets.UPDATER_PRIVATE_KEY_PEM }}")
 	require.Contains(t, workflow, `if: ${{ always() }}`)
-	require.Contains(t, workflow, "UPDATER_TARGETS: darwin/arm64,darwin/amd64")
+	require.NotContains(t, workflow, "UPDATER_TARGETS:")
 	require.Contains(t, workflow, "UPDATER_ARTIFACTS_DIR: ./artifacts")
 	require.NotContains(t, workflow, "updater-manifests")
 	require.NotContains(t, workflow, "release:publish-updater-channels")
@@ -945,6 +955,16 @@ func TestReleasePublishesSignedUpdaterManifestInsideTheGitHubRelease(t *testing.
 	rootTaskfile := readTestFile(t, repositoryPath("Taskfile.yml"))
 	require.Contains(t, rootTaskfile, "release:prepare-updater-manifest:")
 	require.NotContains(t, rootTaskfile, "release:publish-updater-channels:")
+}
+
+func TestQualityGateCompilesWindowsCodeAndUsesSupportedHostedRunners(t *testing.T) {
+	rootTaskfile := readTestFile(t, repositoryPath("Taskfile.yml"))
+	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
+
+	require.Contains(t, rootTaskfile, "for: [amd64, arm64]")
+	require.Contains(t, rootTaskfile, "GOOS: windows\n          GOARCH: '{{.ITEM}}'")
+	require.Contains(t, workflow, "runner: windows-11-arm")
+	require.NotContains(t, workflow, "runner: windows-latest-arm")
 }
 
 func TestRefreshTransportUsesOnlyWailsServiceAndNamedStreams(t *testing.T) {

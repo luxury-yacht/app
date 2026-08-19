@@ -24,6 +24,24 @@ type ReleaseVersion struct {
 	Channel Channel
 }
 
+func (version ReleaseVersion) Tag() string {
+	if version.Version == "" {
+		return ""
+	}
+	return "v" + version.Version
+}
+
+func HasUpdaterTarget(targets []string, platform Platform, architecture string) bool {
+	want := strings.ToLower(strings.TrimSpace(string(platform))) + "/" +
+		strings.ToLower(strings.TrimSpace(architecture))
+	for _, target := range targets {
+		if strings.ToLower(strings.TrimSpace(target)) == want {
+			return true
+		}
+	}
+	return false
+}
+
 // ParseReleaseVersion validates the configured release version, removes its
 // conventional tag prefix, and resolves the only channels the application
 // publishes. Development versions and non-beta prereleases are not release

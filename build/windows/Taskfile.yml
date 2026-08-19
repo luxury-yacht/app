@@ -56,12 +56,22 @@ tasks:
       GOARCH: '{{.ARCH | default ARCH}}'
 
   package:
-    summary: Packages the application
-    cmds:
-      - task: create:nsis:installer
+    summary: Builds the application and creates its installer and updater artifact
+    deps:
+      - task: build
         vars:
+          ARCH: '{{.ARCH}}'
+      - task: common:prepare:build-manifests
+    cmds:
+      - task: create:updater:from-built
+        vars:
+          ARCH: '{{.ARCH}}'
+      - task: create:nsis:installer:from-built
+        vars:
+          ARCH: '{{.ARCH}}'
           INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
     vars:
+      ARCH: '{{.ARCH | default ARCH}}'
       INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
 
   install:unsigned:
@@ -84,10 +94,24 @@ tasks:
 
   create:nsis:installer:
     summary: Creates an NSIS installer
-    dir: build/windows/nsis
     deps:
       - task: build
+        vars:
+          ARCH: '{{.ARCH}}'
       - task: common:prepare:build-manifests
+    cmds:
+      - task: create:nsis:installer:from-built
+        vars:
+          ARCH: '{{.ARCH}}'
+          INSTALL_SCOPE: '{{.INSTALL_SCOPE}}'
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+      INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
+
+  create:nsis:installer:from-built:
+    summary: Creates an NSIS installer from the existing Windows binary
+    internal: true
+    dir: build/windows/nsis
     preconditions:
       - sh: '[ "{{.INSTALL_SCOPE}}" = "user" ] || [ "{{.INSTALL_SCOPE}}" = "machine" ]'
         msg: "INSTALL_SCOPE must be 'user' or 'machine', got '{{.INSTALL_SCOPE}}'"
@@ -106,7 +130,21 @@ tasks:
       INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
 
   create:updater:
-    summary: Copies the built executable to its versioned updater artifact name
+    deps:
+      - task: build
+        vars:
+          ARCH: '{{.ARCH}}'
+    summary: Builds and copies the executable to its versioned updater artifact name
+    cmds:
+      - task: create:updater:from-built
+        vars:
+          ARCH: '{{.ARCH}}'
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+
+  create:updater:from-built:
+    summary: Copies the existing executable to its versioned updater artifact name
+    internal: true
     cmds:
       - go run ./cmd/project create-windows-updater-artifact
     env:

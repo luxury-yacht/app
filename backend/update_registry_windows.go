@@ -16,9 +16,9 @@ func reconcileWindowsDisplayVersion(version string) error {
 	if err != nil {
 		return fmt.Errorf("resolve executable for Windows Installed Apps metadata: %w", err)
 	}
-	release, err := updateidentity.ParseReleaseVersion(version)
+	displayVersion, err := windowsDisplayVersion(version)
 	if err != nil {
-		return fmt.Errorf("validate Windows Installed Apps version: %w", err)
+		return err
 	}
 	probe, err := updateidentity.CollectInstallationProbe(updateidentity.ProbeOptions{
 		Platform: updateidentity.PlatformWindows, Architecture: runtime.GOARCH,
@@ -32,5 +32,5 @@ func reconcileWindowsDisplayVersion(version string) error {
 		return fmt.Errorf("refuse Windows Installed Apps metadata update for unverified per-user installation")
 	}
 
-	return windowsinstall.SetPerUserDisplayVersion(executablePath, release.Version)
+	return windowsinstall.SetPerUserDisplayVersion(executablePath, displayVersion)
 }

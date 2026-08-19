@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 includes:
   common: ./build/Taskfile.yml
@@ -13,29 +13,29 @@ vars:
     sh: go run ./cmd/project product-name
   BIN_DIR: "bin"
   PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
-  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
-  GOOS: '{{.GOOS | default OS}}'
+  VITE_PORT: "{{.WAILS_VITE_PORT | default 9245}}"
+  GOOS: "{{.GOOS | default OS}}"
 
 tasks:
   build:
     desc: Builds the application
     cmds:
-      - task: '{{.GOOS}}:build'
+      - task: "{{.GOOS}}:build"
 
   package:
     desc: Packages a production build of the application
     cmds:
-      - task: '{{.GOOS}}:package'
+      - task: "{{.GOOS}}:package"
 
   install:unsigned:
     desc: Builds and installs an unsigned local copy of the application
     cmds:
-      - task: '{{OS}}:install:unsigned'
+      - task: "{{OS}}:install:unsigned"
 
   run:
     desc: Runs the application
     cmds:
-      - task: '{{.GOOS}}:run'
+      - task: "{{.GOOS}}:run"
 
   dev:
     desc: Runs the application in development mode

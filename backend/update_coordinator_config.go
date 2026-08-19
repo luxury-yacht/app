@@ -37,6 +37,7 @@ type applicationUpdateRuntime struct {
 	ExecutablePath    string
 	HomeDirectory     string
 	PackageMarkerPath string
+	UpdaterTargets    []string
 }
 
 func (u *UpdateCoordinator) initializeApplicationUpdates(options ApplicationUpdateOptions) {
@@ -264,12 +265,14 @@ func currentApplicationUpdateEligibility(now time.Time) (updateidentity.BuildEli
 		Version: Version, BetaExpiry: BetaExpiry, Now: now,
 		Server: updateidentity.CurrentBuildIsServer, Platform: runtime.GOOS, Architecture: runtime.GOARCH,
 		ExecutablePath: executablePath, HomeDirectory: homeDirectory,
+		UpdaterTargets: UpdaterTargets,
 	})
 }
 
 func resolveApplicationUpdateEligibility(runtimeInfo applicationUpdateRuntime) (updateidentity.BuildEligibility, error) {
 	preliminary := updateidentity.ResolveBuild(updateidentity.BuildProbe{
 		Version: runtimeInfo.Version, Server: runtimeInfo.Server, Now: runtimeInfo.Now,
+		PayloadAvailable: true,
 	})
 	switch preliminary.Status {
 	case updateidentity.BuildDisabledDevelopment,
@@ -298,6 +301,9 @@ func resolveApplicationUpdateEligibility(runtimeInfo applicationUpdateRuntime) (
 	return updateidentity.ResolveBuild(updateidentity.BuildProbe{
 		Version: runtimeInfo.Version, Server: runtimeInfo.Server, BetaExpiry: betaExpiry,
 		Now: runtimeInfo.Now, Installation: installation,
+		PayloadAvailable: updateidentity.HasUpdaterTarget(
+			runtimeInfo.UpdaterTargets, probe.Platform, probe.Architecture,
+		),
 	}), nil
 }
 

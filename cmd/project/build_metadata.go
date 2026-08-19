@@ -17,12 +17,13 @@ import (
 const sentryBackendDSN = "SENTRY_BACKEND_DSN"
 
 type buildManifest struct {
-	BetaExpiry string `json:"betaExpiry,omitempty"`
-	BuildTime  string `json:"buildTime"`
-	IsBeta     bool   `json:"isBeta"`
-	GitCommit  string `json:"gitCommit"`
-	SentryDSN  string `json:"sentryDsn,omitempty"`
-	Version    string `json:"version"`
+	BetaExpiry     string   `json:"betaExpiry,omitempty"`
+	BuildTime      string   `json:"buildTime"`
+	IsBeta         bool     `json:"isBeta"`
+	GitCommit      string   `json:"gitCommit"`
+	SentryDSN      string   `json:"sentryDsn,omitempty"`
+	UpdaterTargets []string `json:"updaterTargets,omitempty"`
+	Version        string   `json:"version"`
 }
 
 type buildMetadataOptions struct {
@@ -57,12 +58,17 @@ func generateBuildMetadata(options buildMetadataOptions) (buildManifest, error) 
 	buildTime := now().UTC()
 	version := strings.TrimSpace(config.Info.Version)
 	beta := isBetaVersion(version)
+	updaterTargets, err := configuredUpdaterTargets(config)
+	if err != nil && len(config.LuxuryYacht.UpdaterTargets) > 0 {
+		return buildManifest{}, fmt.Errorf("validate configured updater targets: %w", err)
+	}
 	manifest := buildManifest{
-		BuildTime: buildTime.Format(time.RFC3339),
-		IsBeta:    beta,
-		GitCommit: strings.TrimSpace(gitCommit()),
-		SentryDSN: buildMetadataEnvironmentValue(sentryBackendDSN, env),
-		Version:   version,
+		BuildTime:      buildTime.Format(time.RFC3339),
+		IsBeta:         beta,
+		GitCommit:      strings.TrimSpace(gitCommit()),
+		SentryDSN:      buildMetadataEnvironmentValue(sentryBackendDSN, env),
+		UpdaterTargets: updaterTargetNames(updaterTargets),
+		Version:        version,
 	}
 	if beta {
 		manifest.BetaExpiry = buildTime.AddDate(0, 0, config.LuxuryYacht.BetaExpiryDays).Format(time.RFC3339)

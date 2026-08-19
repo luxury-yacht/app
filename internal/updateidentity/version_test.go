@@ -39,6 +39,7 @@ func TestParseReleaseVersionNormalizesVersionAndSelectsChannel(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, test.wantVersion, got.Version)
 			require.Equal(t, test.wantChannel, got.Channel)
+			require.Equal(t, "v"+test.wantVersion, got.Tag())
 		})
 	}
 }

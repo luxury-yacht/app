@@ -67,6 +67,18 @@ func parseUpdaterTargets(raw string) ([]updaterTarget, error) {
 	return targets, nil
 }
 
+func configuredUpdaterTargets(metadata projectMetadata) ([]updaterTarget, error) {
+	return parseUpdaterTargets(strings.Join(metadata.LuxuryYacht.UpdaterTargets, ","))
+}
+
+func updaterTargetNames(targets []updaterTarget) []string {
+	names := make([]string, 0, len(targets))
+	for _, target := range targets {
+		names = append(names, target.Platform+"/"+target.Architecture)
+	}
+	return names
+}
+
 func collectUpdaterArtifactsForTargets(
 	metadata projectMetadata,
 	root string,
@@ -424,7 +436,7 @@ func prepareReleaseUpdaterManifest(
 			metadata.Info.Version,
 		)
 	}
-	targets, err := parseUpdaterTargets(getenv("UPDATER_TARGETS"))
+	targets, err := configuredUpdaterTargets(metadata)
 	if err != nil {
 		return err
 	}
