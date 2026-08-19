@@ -3,7 +3,8 @@
 Luxury Yacht uses Wails v3 for download, verification, staging, replacement,
 and relaunch. Luxury Yacht owns release discovery, installation eligibility,
 user consent, process lifecycle, durable helper reconciliation, and release
-publication. The website is not part of this path.
+publication. The website is not part of release discovery or self-update
+payload delivery; it hosts only manual recovery and migration guidance.
 
 ## Runtime and user contract
 
@@ -44,6 +45,38 @@ Release discovery and in-place installation are separate capabilities:
 Do not infer ownership from a path or filename alone. Marker schema, product
 identity, distribution, scope, and exact expected location are all part of the
 eligibility boundary in `internal/updateidentity`.
+
+### Windows distribution
+
+Release installers use per-user NSIS scope under LocalAppData and write the
+adjacent `luxury-yacht.install.json` marker. The raw updater executable is a
+versioned byte-for-byte copy of the same built executable consumed by NSIS.
+Release jobs validate its exact name, PE signature, and architecture before
+discarding the unsigned candidate with the runner workspace.
+
+Legacy all-users installs have no marker. The runtime recognizes them only when
+the exact 64-bit HKLM uninstall registration names the running executable and
+its adjacent uninstaller; they remain notification-only. The per-user installer
+also checks that exact machine product registration before writing files. A
+conflict exits with code 66 and, interactively, offers to open Windows Installed
+Apps. It never uninstalls or elevates on the user's behalf.
+
+After a successful raw-executable swap, startup first reconciles and clears the
+durable update attempt. It then revalidates the adjacent per-user marker and
+the matching HKCU uninstall registration before updating `DisplayVersion`.
+Metadata failure is logged without reclassifying an already successful swap.
+
+The unsigned Windows build job is configured to run Windows-native identity
+tests and a silent install/uninstall drill for amd64 and arm64. The drill
+proves the per-user marker and registration, removal of installer-owned files,
+preservation of user-profile settings, and machine/per-user side-by-side
+refusal. Until
+Authenticode credentials are provisioned, Windows raw executables are
+deliberately excluded from both published release artifacts and
+`UPDATER_TARGETS`, and therefore from `updater.json`.
+Signing must cover the built executable before both the raw copy and NSIS
+packaging, followed by separate installer signing, before Windows self-update
+is enabled.
 
 ### Linux distributions
 
@@ -185,10 +218,13 @@ publication; do not rely on an in-band transition signed only by that key.
 
 - Runtime composition: `main.go`, `backend/update_coordinator_config.go`
 - Coordinator and GitHub adapter: `backend/internal/appupdates`, `backend/update_provider.go`
-- Eligibility and durable state: `internal/updateidentity`, `internal/updatestate`, `internal/updatetemp`
+- Eligibility and durable state: `internal/updateidentity`, `internal/windowsinstall`,
+  `internal/updatestate`, `internal/updatetemp`
 - Shell surfaces: `frontend/src/ui/status`, `frontend/src/ui/modals/AboutModal.tsx`, `frontend/src/core/backend-api`
 - Release tooling: `cmd/project/updater_release.go`, `cmd/project/release.go`, `.github/workflows/release.yml`
 - Linux distribution: `build/linux/portable`, `build/linux/nfpm/nfpm.yaml`, `cmd/project/linux_portable.go`
+- Windows distribution: `build/windows/Taskfile.yml`, `build/windows/nsis`,
+  `build/windows/package-drill.ps1`, `cmd/project/windows_updater.go`
 
 Changes must prove channel selection, fail-closed manifest validation, explicit
 consent boundaries, platform eligibility, shutdown/restart ordering, helper

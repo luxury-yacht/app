@@ -51,6 +51,24 @@ describe('getUpdatePresentation', () => {
     expect(skipped?.secondary).toBeUndefined();
   });
 
+  it('routes machine-scope Windows installs to the discovered version migration page', () => {
+    const presentation = getUpdatePresentation(
+      update({
+        status: appupdates.Status.StatusAvailable,
+        canInstall: false,
+        availableVersion: '2.0.0-beta.4',
+        eligibilityReason: updateidentity.EligibilityReason.ReasonWindowsMachineScope,
+        recoveryTarget: updateidentity.RecoveryTarget.RecoveryWindowsPerUserMigration,
+      })
+    );
+
+    expect(presentation?.primary).toEqual({
+      kind: 'recovery',
+      label: 'Switch to Per-User Installation',
+      url: 'https://luxury-yacht.app/windows/migrate?version=2.0.0-beta.4',
+    });
+  });
+
   it.each([
     [
       updateidentity.EligibilityReason.ReasonMacNotInstalledBundle,

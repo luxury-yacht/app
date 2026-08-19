@@ -122,6 +122,31 @@ func TestResolveInstallationSupportsEachApprovedDistribution(t *testing.T) {
 	}
 }
 
+func TestResolveInstallationRecognizesStrictLegacyWindowsMachineEvidence(t *testing.T) {
+	t.Parallel()
+
+	probe := updateidentity.InstallationProbe{
+		Platform: updateidentity.PlatformWindows, Architecture: "amd64",
+		TargetPath:                  "/Program Files/Luxury Yacht/luxury-yacht.exe",
+		WindowsLegacyMachineInstall: true,
+	}
+
+	require.Equal(t, updateidentity.InstallationEligibility{
+		CanCheck: true, Distribution: updateidentity.DistributionWindowsNSIS,
+		Reason:   updateidentity.ReasonWindowsMachineScope,
+		Recovery: updateidentity.RecoveryWindowsPerUserMigration,
+	}, updateidentity.ResolveInstallation(probe))
+
+	probe.Marker = &updateidentity.MarkerCandidate{
+		Path: filepath.Join(filepath.Dir(probe.TargetPath), updateidentity.InstallationMarkerName),
+		Data: []byte(`{"schemaVersion":1}`),
+	}
+	require.Equal(t, updateidentity.InstallationEligibility{
+		Reason:   updateidentity.ReasonWindowsUnverifiedInstall,
+		Recovery: updateidentity.RecoveryWindowsDownload,
+	}, updateidentity.ResolveInstallation(probe))
+}
+
 func TestResolveInstallationRejectsUnverifiedOrUnreplaceableTargets(t *testing.T) {
 	t.Parallel()
 

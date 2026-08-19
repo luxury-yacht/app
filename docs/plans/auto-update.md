@@ -1205,6 +1205,26 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
   refusal, prove settings-preserving migration and the Windows smoke matrix in
   prerelease and ordinary releases. Existing machine-scope installs remain
   notification-only until migrated.
+  - [x] Credential-free implementation completed on 2026-08-18: release
+    installers default to per-user scope and write scoped adjacent markers;
+    strict legacy HKLM evidence keeps existing machine installs
+    notification-only; the installer refuses side-by-side migration; successful
+    swaps reconcile the validated HKCU `DisplayVersion`; versioned raw amd64 and
+    arm64 executables are built and PE-validated; and the Windows workflow
+    defines native identity plus install/uninstall/settings-preservation drills.
+  - [x] The machine-install recovery action routes to a versioned Windows
+    migration URL. Windows updater executables remain intentionally absent from
+    published release artifacts and `UPDATER_TARGETS` while they are unsigned.
+  - [ ] Provision Authenticode credentials, sign the application executable
+    before raw-artifact copying and NSIS packaging, sign the installer
+    separately, and add both Windows architectures to `UPDATER_TARGETS`.
+  - [ ] Publish the matching migration page in the website repository with the
+    signed per-user installer and uninstall-then-install instructions.
+  - [ ] Run the Windows amd64 and arm64 beta-to-beta, beta-to-stable,
+    multi-window, migration, failure-recovery, and ordinary-release smoke
+    matrices before declaring Windows rollout complete.
+  - [ ] Confirm the first Windows amd64 and arm64 workflow executions pass the
+    new registry tests and silent NSIS package drill.
 - [ ] **Stage 3 — Linux:** publish the explicitly identified user-owned portable
   distribution and updater payloads for arm64 and amd64, add package-owned
   identity markers to DEB/RPM, prove portable update and rollback behavior, and

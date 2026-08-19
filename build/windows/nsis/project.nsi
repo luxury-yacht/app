@@ -80,6 +80,31 @@ ShowInstDetails show # This will always show the installation details.
 
 Function .onInit
    !insertmacro wails.checkArchitecture
+
+	# A legacy all-users install owns the same product registration. Refuse a
+	# second per-user copy and direct the user to Windows Installed Apps.
+	!if "${WAILS_INSTALL_SCOPE}" == "user"
+		SetRegView 64
+		ReadRegStr $0 HKLM "${UNINST_KEY}" "DisplayName"
+		StrCmp $0 "${INFO_PRODUCTNAME}" 0 legacyMachineNone
+		ReadRegStr $1 HKLM "${UNINST_KEY}" "DisplayIcon"
+		IfFileExists "$1" 0 legacyMachineNone
+		${GetParent} "$1" $3
+		ReadRegStr $2 HKLM "${UNINST_KEY}" "UninstallString"
+		StrCmp $2 "$\"$3\uninstall.exe$\"" 0 legacyMachineNone
+		IfFileExists "$3\uninstall.exe" 0 legacyMachineNone
+		IfSilent legacyMachineSilent legacyMachineInteractive
+		legacyMachineSilent:
+			SetErrorLevel 66
+			Abort
+		legacyMachineInteractive:
+			MessageBox MB_YESNO|MB_ICONSTOP "An all-users copy of ${INFO_PRODUCTNAME} is already installed. Uninstall it from Windows Installed Apps before installing this per-user copy.$\r$\n$\r$\nOpen Installed Apps now?" IDNO legacyMachineExit
+			ExecShell "open" "ms-settings:appsfeatures"
+		legacyMachineExit:
+			SetErrorLevel 66
+			Quit
+		legacyMachineNone:
+	!endif
 FunctionEnd
 
 Section
@@ -90,6 +115,11 @@ Section
     SetOutPath $INSTDIR
     
     !insertmacro wails.files
+	!if "${WAILS_INSTALL_SCOPE}" == "user"
+		File "/oname=luxury-yacht.install.json" "..\..\..\bin\build-manifests\windows\nsis\install-user.json"
+	!else
+		File "/oname=luxury-yacht.install.json" "..\..\..\bin\build-manifests\windows\nsis\install-machine.json"
+	!endif
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"

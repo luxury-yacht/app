@@ -26,6 +26,30 @@ func runLinuxUpdaterArchiveValidation() error {
 	)
 }
 
+func runWindowsUpdaterExecutableValidation() error {
+	metadata, err := readProjectMetadata(projectConfigPath)
+	if err != nil {
+		return err
+	}
+	return validateConfiguredWindowsUpdaterExecutable(
+		metadata, os.Getenv("UPDATER_ARTIFACT"), os.Getenv("WINDOWS_ARCH"),
+	)
+}
+
+func runCreateWindowsUpdaterArtifact() error {
+	metadata, err := readProjectMetadata(projectConfigPath)
+	if err != nil {
+		return err
+	}
+	_, err = createWindowsUpdaterArtifact(
+		metadata,
+		os.Getenv("WINDOWS_BINARY"),
+		os.Getenv("WINDOWS_UPDATER_OUTPUT_DIR"),
+		os.Getenv("WINDOWS_ARCH"),
+	)
+	return err
+}
+
 func runReleaseUpdaterManifestPreparation() error {
 	metadata, err := readProjectMetadata(projectConfigPath)
 	if err != nil {

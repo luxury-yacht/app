@@ -221,6 +221,11 @@ tasks:
     cmds:
       - go run ./cmd/project validate-linux-updater
 
+  release:validate-windows-updater:
+    desc: Validates the raw Windows updater executable identity and architecture
+    cmds:
+      - go run ./cmd/project validate-windows-updater
+
   release:site:
     desc: Updates the version displayed on the website
     cmds:

@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|create-linux-portable-artifacts|fmt|go-mod-update|go-mod-update-check|install-unsigned|prepare-release-updater-manifest|product-name|release-app|release-artifact-name|release-draft-drill|release-site|reset|validate-linux-updater|validate-macos-updater|validate-release-tag>"
+const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|create-linux-portable-artifacts|create-windows-updater-artifact|fmt|go-mod-update|go-mod-update-check|install-unsigned|prepare-release-updater-manifest|product-name|release-app|release-artifact-name|release-draft-drill|release-site|reset|validate-linux-updater|validate-macos-updater|validate-release-tag|validate-windows-updater>"
 
 var projectCommands = map[string]func() error{
 	"backend-coverage":                 runBackendCoverage,
@@ -19,6 +19,7 @@ var projectCommands = map[string]func() error{
 	"clean-frontend":                   func() error { return cleanFrontendOutputs(defaultCleanConfig()) },
 	"config":                           func() error { return writeProjectConfig(os.Stdout) },
 	"create-linux-portable-artifacts":  runCreateLinuxPortableArtifacts,
+	"create-windows-updater-artifact":  runCreateWindowsUpdaterArtifact,
 	"fmt":                              checkGoFormatting,
 	"go-mod-update":                    updateDirectGoModules,
 	"go-mod-update-check":              checkDirectGoModuleUpdates,
@@ -32,6 +33,7 @@ var projectCommands = map[string]func() error{
 	"reset":                            resetConfiguredAppState,
 	"validate-linux-updater":           runLinuxUpdaterArchiveValidation,
 	"validate-macos-updater":           runMacOSUpdaterArchiveValidation,
+	"validate-windows-updater":         runWindowsUpdaterExecutableValidation,
 	"validate-release-tag":             validateConfiguredReleaseTag,
 }
 

@@ -60,9 +60,9 @@ tasks:
     cmds:
       - task: create:nsis:installer
         vars:
-          INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "machine"}}'
+          INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
     vars:
-      INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "machine"}}'
+      INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
 
   install:unsigned:
     summary: Builds and installs the app to the current user's Programs directory
@@ -103,7 +103,16 @@ tasks:
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
       ARG_FLAG: '{{if eq .ARCH "amd64"}}AMD64{{else}}ARM64{{end}}'
-      INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "machine"}}'
+      INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
+
+  create:updater:
+    summary: Copies the built executable to its versioned updater artifact name
+    cmds:
+      - go run ./cmd/project create-windows-updater-artifact
+    env:
+      WINDOWS_ARCH: '{{.ARCH | default ARCH}}'
+      WINDOWS_BINARY: '{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe'
+      WINDOWS_UPDATER_OUTPUT_DIR: '{{.ROOT_DIR}}/{{.BIN_DIR}}'
 
   run:
     cmds:
@@ -134,9 +143,9 @@ tasks:
       - task: create:nsis:installer
         vars:
           ARCH: '{{.ARCH}}'
-          INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "machine"}}'
+          INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
-      INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "machine"}}'
+      INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
     cmds:
       - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}-*-windows-{{.ARCH}}-installer.exe" {{if .SIGN_CERTIFICATE}}--certificate "{{.SIGN_CERTIFICATE}}"{{end}} {{if .SIGN_THUMBPRINT}}--thumbprint "{{.SIGN_THUMBPRINT}}"{{end}} {{if .TIMESTAMP_SERVER}}--timestamp "{{.TIMESTAMP_SERVER}}"{{end}}

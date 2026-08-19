@@ -64,15 +64,16 @@ type MarkerCandidate struct {
 // InstallationProbe contains filesystem evidence gathered for the running
 // target. The resolver remains deterministic and does not access the host.
 type InstallationProbe struct {
-	Platform             Platform
-	Architecture         string
-	TargetPath           string
-	MacInstalledBundle   bool
-	VolumeReadOnly       bool
-	ParentWritable       bool
-	PackageManagedTarget bool
-	Marker               *MarkerCandidate
-	PackageMarker        *MarkerCandidate
+	Platform                    Platform
+	Architecture                string
+	TargetPath                  string
+	MacInstalledBundle          bool
+	VolumeReadOnly              bool
+	ParentWritable              bool
+	PackageManagedTarget        bool
+	WindowsLegacyMachineInstall bool
+	Marker                      *MarkerCandidate
+	PackageMarker               *MarkerCandidate
 }
 
 // InstallationEligibility distinguishes release discovery from in-place
@@ -137,7 +138,19 @@ func resolveMacInstallation(probe InstallationProbe) InstallationEligibility {
 
 func resolveWindowsInstallation(probe InstallationProbe) InstallationEligibility {
 	marker, ok := validAdjacentMarker(probe.Platform, probe.TargetPath, probe.Marker)
-	if !ok || marker.Distribution != "nsis" {
+	if !ok {
+		if probe.Marker == nil && probe.WindowsLegacyMachineInstall {
+			return InstallationEligibility{
+				CanCheck: true, Distribution: DistributionWindowsNSIS,
+				Reason: ReasonWindowsMachineScope, Recovery: RecoveryWindowsPerUserMigration,
+			}
+		}
+		return InstallationEligibility{
+			Reason:   ReasonWindowsUnverifiedInstall,
+			Recovery: RecoveryWindowsDownload,
+		}
+	}
+	if marker.Distribution != "nsis" {
 		return InstallationEligibility{
 			Reason:   ReasonWindowsUnverifiedInstall,
 			Recovery: RecoveryWindowsDownload,

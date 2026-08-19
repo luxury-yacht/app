@@ -21,9 +21,10 @@ import (
 var applicationUpdatePublicKey []byte
 
 type ApplicationUpdateOptions struct {
-	TempRoot       string
-	TempSetupError error
-	StatePath      string
+	TempRoot                       string
+	TempSetupError                 error
+	StatePath                      string
+	ReconcileWindowsDisplayVersion func(string) error
 }
 
 type applicationUpdateRuntime struct {
@@ -123,6 +124,12 @@ func (u *UpdateCoordinator) resolveApplicationUpdateState(
 		return nil, eligibility
 	}
 	u.logApplicationUpdateReconciliation(setup.Reconciled)
+	if setup.MetadataReconcileError != nil {
+		u.logger.Warn(
+			fmt.Sprintf("Automatic update applied, but Windows Installed Apps metadata was not updated: %v", setup.MetadataReconcileError),
+			logsources.UpdateCheck,
+		)
+	}
 	return &setup, eligibility
 }
 
@@ -158,9 +165,10 @@ func (u *UpdateCoordinator) resolveApplicationUpdateProvider(
 }
 
 type applicationUpdateStateSetup struct {
-	Store          *updatestate.Store
-	Reconciled     updatestate.ReconcileResult
-	SkippedVersion string
+	Store                  *updatestate.Store
+	Reconciled             updatestate.ReconcileResult
+	SkippedVersion         string
+	MetadataReconcileError error
 }
 
 func prepareApplicationUpdateState(
@@ -175,6 +183,15 @@ func prepareApplicationUpdateState(
 	if err != nil {
 		return applicationUpdateStateSetup{}, fmt.Errorf("reconcile application update state: %w", err)
 	}
+	var metadataReconcileError error
+	if reconciled.Outcome == updatestate.OutcomeSucceeded &&
+		reconciled.Distribution == updateidentity.DistributionWindowsNSIS {
+		reconcileDisplayVersion := options.ReconcileWindowsDisplayVersion
+		if reconcileDisplayVersion == nil {
+			reconcileDisplayVersion = reconcileWindowsDisplayVersion
+		}
+		metadataReconcileError = reconcileDisplayVersion(reconciled.TargetVersion)
+	}
 	document, err := store.Load()
 	if err != nil {
 		return applicationUpdateStateSetup{}, fmt.Errorf("load reconciled application update state: %w", err)
@@ -184,6 +201,7 @@ func prepareApplicationUpdateState(
 	}
 	return applicationUpdateStateSetup{
 		Store: store, Reconciled: reconciled, SkippedVersion: document.SkippedVersion,
+		MetadataReconcileError: metadataReconcileError,
 	}, nil
 }
 

@@ -409,6 +409,47 @@ func TestPrepareApplicationUpdateStateReconcilesBeforeSweepingOrphans(t *testing
 	require.Empty(t, document.ProtectedPaths())
 }
 
+func TestPrepareApplicationUpdateStateReconcilesWindowsDisplayVersionAfterSuccessfulSwap(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "owned-temp")
+	statePath := filepath.Join(base, "config", "application-update.json")
+	require.NoError(t, os.Mkdir(root, 0o700))
+	store, err := updatestate.New(updatestate.Config{
+		StatePath: statePath, TempRoot: root, PID: func() int { return 4242 },
+	})
+	require.NoError(t, err)
+	staging := filepath.Join(root, "wails-update-success")
+	require.NoError(t, os.Mkdir(staging, 0o700))
+	require.NoError(t, store.RecordPrepared(updatestate.PreparedUpdate{
+		TargetVersion: "2.0.0-beta.3", StagingDir: staging,
+		RecoveryTarget: updateidentity.RecoveryWindowsDownload,
+	}))
+	_, err = store.BeginAttempt(updatestate.AttemptMetadata{
+		SourceVersion: "2.0.0-beta.2", Platform: "windows", Architecture: "amd64",
+		Distribution: updateidentity.DistributionWindowsNSIS,
+	})
+	require.NoError(t, err)
+	wantWarning := errors.New("registry unavailable")
+	var reconciledVersions []string
+
+	setup, err := prepareApplicationUpdateState(ApplicationUpdateOptions{
+		TempRoot: root, StatePath: statePath,
+		ReconcileWindowsDisplayVersion: func(version string) error {
+			reconciledVersions = append(reconciledVersions, version)
+			return wantWarning
+		},
+	}, enabledApplicationUpdateBuild())
+
+	require.NoError(t, err)
+	require.Equal(t, updatestate.OutcomeSucceeded, setup.Reconciled.Outcome)
+	require.Equal(t, []string{"2.0.0-beta.3"}, reconciledVersions)
+	require.ErrorIs(t, setup.MetadataReconcileError, wantWarning)
+	document, err := setup.Store.Load()
+	require.NoError(t, err)
+	require.Nil(t, document.Attempt)
+	require.NoDirExists(t, staging)
+}
+
 func TestNewUpdateCoordinatorProjectsAndLogsFailedApply(t *testing.T) {
 	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
 		t.Skip("updater supports amd64 and arm64")

@@ -63,6 +63,14 @@ var projectPlatformManifestSpecs = []platformManifestSpec{
 		sourcePath: filepath.Join("build", "windows", "nsis", "project_metadata.nsh"),
 		outputPath: filepath.Join("bin", platformManifestDirectory, "windows", "nsis", "project_metadata.nsh"),
 	},
+	{
+		sourcePath: filepath.Join("build", "windows", "nsis", "install-user.json"),
+		outputPath: filepath.Join("bin", platformManifestDirectory, "windows", "nsis", "install-user.json"),
+	},
+	{
+		sourcePath: filepath.Join("build", "windows", "nsis", "install-machine.json"),
+		outputPath: filepath.Join("bin", platformManifestDirectory, "windows", "nsis", "install-machine.json"),
+	},
 }
 
 type platformManifestReplacement struct {

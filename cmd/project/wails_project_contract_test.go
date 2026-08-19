@@ -793,6 +793,45 @@ func TestReleaseArtifactsPreserveVersionPlatformAndArchitectureIdentity(t *testi
 
 	windowsTaskfile := readTestFile(t, repositoryPath("build", "windows", "Taskfile.yml"))
 	require.Contains(t, windowsTaskfile, `{{.APP_NAME}}-*-windows-{{.ARCH}}-installer.exe`)
+	require.Contains(t, windowsTaskfile, `INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'`)
+	require.Contains(t, windowsTaskfile, "create:updater:")
+	require.Contains(t, windowsTaskfile, "go run ./cmd/project create-windows-updater-artifact")
+
+	require.NotContains(t, workflow, "bin/*-windows-amd64.exe")
+	require.NotContains(t, workflow, "bin/*-windows-arm64.exe")
+	require.Contains(t, workflow, "wails3 task windows:create:updater ARCH=${{ matrix.arch }}")
+	require.Contains(t, workflow, "wails3 task release:validate-windows-updater")
+	require.NotContains(t, workflow, "windows/amd64,windows/arm64")
+}
+
+func TestWindowsInstallerWritesScopedMarkerAndRefusesLegacyMachineSideBySideInstall(t *testing.T) {
+	installer := readTestFile(t, repositoryPath("build", "windows", "nsis", "project.nsi"))
+	require.Contains(t, installer, `File "/oname=luxury-yacht.install.json"`)
+	require.Contains(t, installer, `ReadRegStr $0 HKLM "${UNINST_KEY}" "DisplayName"`)
+	require.Contains(t, installer, `ReadRegStr $1 HKLM "${UNINST_KEY}" "DisplayIcon"`)
+	require.Contains(t, installer, `ReadRegStr $2 HKLM "${UNINST_KEY}" "UninstallString"`)
+	require.Contains(t, installer, `${GetParent} "$1" $3`)
+	require.Contains(t, installer, `IfFileExists "$3\uninstall.exe" 0 legacyMachineNone`)
+	require.Contains(t, installer, `ExecShell "open" "ms-settings:appsfeatures"`)
+	require.Contains(t, installer, "SetErrorLevel 66")
+	require.Less(t, strings.Index(installer, "ReadRegStr $0 HKLM"), strings.Index(installer, "!insertmacro wails.files"))
+}
+
+func TestWindowsReleaseRunsPerUserInstallUninstallAndMigrationDrill(t *testing.T) {
+	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
+	drill := readTestFile(t, repositoryPath("build", "windows", "package-drill.ps1"))
+
+	require.Contains(t, workflow, "build/windows/package-drill.ps1")
+	require.Contains(t, workflow, "go test ./internal/updateidentity ./internal/windowsinstall ./backend -run Windows -count=1")
+	for _, contract := range []string{
+		"luxury-yacht.install.json",
+		`HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Luxury YachtLuxury Yacht`,
+		`HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Luxury YachtLuxury Yacht`,
+		"migration-preservation-probe",
+		"ExitCode -ne 66",
+	} {
+		require.Contains(t, drill, contract)
+	}
 }
 
 func TestLinuxReleasePublishesOnlyPortablePayloadsToTheUpdaterManifest(t *testing.T) {

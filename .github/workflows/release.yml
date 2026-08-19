@@ -179,7 +179,19 @@ jobs:
       - name: Create package for Windows (unsigned)
         if: matrix.goos == 'windows'
         run: |
-          wails3 task windows:package ARCH=${{ matrix.arch }}
+          go test ./internal/updateidentity ./internal/windowsinstall ./backend -run Windows -count=1
+          wails3 task windows:package ARCH=${{ matrix.arch }} INSTALL_SCOPE=user
+          wails3 task windows:create:updater ARCH=${{ matrix.arch }}
+          $env:GOOS = "windows"
+          $env:GOARCH = "${{ matrix.arch }}"
+          $env:WINDOWS_ARCH = "${{ matrix.arch }}"
+          $env:RELEASE_FORMAT = "updater"
+          $env:UPDATER_ARTIFACT = "bin/$(go run ./cmd/project release-artifact-name)"
+          wails3 task release:validate-windows-updater
+          $config = go run ./cmd/project config | ConvertFrom-Json
+          $installer = Get-ChildItem "bin/*-${{ matrix.arch }}-installer.exe" -File -ErrorAction Stop
+          if ($installer.Count -ne 1) { throw "Expected exactly one Windows installer" }
+          ./build/windows/package-drill.ps1 -Installer $installer.FullName -ExpectedVersion $config.version
 
       - uses: actions/upload-artifact@v7
         with:

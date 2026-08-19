@@ -35,6 +35,11 @@ export interface UpdatePresentation {
 
 const DOWNLOADS_URL = 'https://luxury-yacht.app/#downloads';
 
+const windowsMigrationURL = (update: backend.UpdateInfo): string =>
+  update.availableVersion
+    ? `https://luxury-yacht.app/windows/migrate?version=${encodeURIComponent(update.availableVersion)}`
+    : DOWNLOADS_URL;
+
 // Release tags carry the conventional `v` prefix; the backend normalizes it off
 // the version it reports (internal/updateidentity ParseReleaseVersion), so it is
 // re-added here rather than assumed present.
@@ -106,7 +111,11 @@ const recoveryActionForTarget = (
     case 'windows-download':
       return { kind: 'recovery', label: 'View Windows Download', url: releaseURL(update) };
     case 'windows-per-user-migration':
-      return { kind: 'recovery', label: 'Switch to Per-User Installation', url: DOWNLOADS_URL };
+      return {
+        kind: 'recovery',
+        label: 'Switch to Per-User Installation',
+        url: windowsMigrationURL(update),
+      };
     case 'linux-packages':
       return { kind: 'recovery', label: 'View Linux Packages', url: DOWNLOADS_URL };
     case 'linux-portable-download':
@@ -145,7 +154,7 @@ const recoveryPresentation = (
         action: action({
           kind: 'recovery',
           label: 'Switch to Per-User Installation',
-          url: DOWNLOADS_URL,
+          url: windowsMigrationURL(update),
         }),
       };
     case 'windows-unverified-install':

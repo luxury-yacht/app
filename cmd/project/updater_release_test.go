@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"compress/gzip"
 	"context"
+	"encoding/binary"
 	"errors"
 	"os"
 	"path/filepath"
@@ -14,6 +15,54 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func writeTestPE(t *testing.T, path, architecture string) {
+	t.Helper()
+	data := make([]byte, 0x86)
+	copy(data, "MZ")
+	binary.LittleEndian.PutUint32(data[0x3c:], 0x80)
+	copy(data[0x80:], "PE\x00\x00")
+	machine := uint16(windowsMachineAMD64)
+	if architecture == "arm64" {
+		machine = windowsMachineARM64
+	}
+	binary.LittleEndian.PutUint16(data[0x84:], machine)
+	require.NoError(t, os.WriteFile(path, data, 0o700))
+}
+
+func TestCreateAndValidateWindowsUpdaterExecutable(t *testing.T) {
+	metadata := testProjectMetadata("v2.0.0-beta.4")
+	root := t.TempDir()
+	binary := filepath.Join(root, "luxury-yacht.exe")
+	writeTestPE(t, binary, "amd64")
+
+	artifact, err := createWindowsUpdaterArtifact(metadata, binary, root, "AMD64")
+
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(root, "luxury-yacht-v2.0.0-beta.4-windows-amd64.exe"), artifact)
+	require.NoError(t, validateConfiguredWindowsUpdaterExecutable(metadata, artifact, "amd64"))
+	require.NoError(t, os.WriteFile(artifact, []byte("stale build output"), 0o600))
+	refreshed, err := createWindowsUpdaterArtifact(metadata, binary, root, "amd64")
+	require.NoError(t, err)
+	require.Equal(t, artifact, refreshed)
+	require.NoError(t, validateConfiguredWindowsUpdaterExecutable(metadata, refreshed, "amd64"))
+}
+
+func TestValidateWindowsUpdaterExecutableRejectsWrongNameArchitectureAndSymlink(t *testing.T) {
+	metadata := testProjectMetadata("v2.0.0")
+	root := t.TempDir()
+	wrongName := filepath.Join(root, "wrong.exe")
+	writeTestPE(t, wrongName, "amd64")
+	require.ErrorContains(t, validateConfiguredWindowsUpdaterExecutable(metadata, wrongName, "amd64"), "does not match expected")
+
+	arm64 := filepath.Join(root, "luxury-yacht-v2.0.0-windows-amd64.exe")
+	writeTestPE(t, arm64, "arm64")
+	require.ErrorContains(t, validateConfiguredWindowsUpdaterExecutable(metadata, arm64, "amd64"), "machine")
+
+	require.NoError(t, os.Remove(arm64))
+	require.NoError(t, os.Symlink(wrongName, arm64))
+	require.ErrorContains(t, validateConfiguredWindowsUpdaterExecutable(metadata, arm64, "amd64"), "regular non-symlink")
+}
 
 type closeErrorWriter struct {
 	err error
