@@ -74,7 +74,7 @@ jobs:
             arch: amd64
             artifact_name: artifacts-windows-amd64
             artifact_path: bin/*-amd64-installer.exe
-          - runner: windows-11-arm
+          - runner: windows-latest-arm
             goos: windows
             arch: arm64
             artifact_name: artifacts-windows-arm64
