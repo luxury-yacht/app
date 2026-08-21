@@ -44,9 +44,16 @@ func TestVisibilityPreservesPlatformStartupContract(t *testing.T) {
 func TestOptionsPreserveTheSharedPeerContract(t *testing.T) {
 	nativeMenu := application.NewMenu()
 
-	for _, goos := range []string{"darwin", "windows", "linux"} {
-		t.Run(goos, func(t *testing.T) {
-			options := windowOptionsForPlatform("workspace-7", nativeMenu, goos)
+	for _, test := range []struct {
+		goos               string
+		wantBackgroundType application.BackgroundType
+	}{
+		{goos: "darwin", wantBackgroundType: application.BackgroundTypeTransparent},
+		{goos: "windows", wantBackgroundType: application.BackgroundTypeSolid},
+		{goos: "linux", wantBackgroundType: application.BackgroundTypeTransparent},
+	} {
+		t.Run(test.goos, func(t *testing.T) {
+			options := windowOptionsForPlatform("workspace-7", nativeMenu, test.goos)
 
 			require.Equal(t, "workspace-7", options.Name)
 			require.Equal(t, "Luxury Yacht", options.Title)
@@ -58,7 +65,7 @@ func TestOptionsPreserveTheSharedPeerContract(t *testing.T) {
 			require.Zero(t, options.MaxHeight)
 			require.Equal(t, "/", options.URL)
 			require.Equal(t, application.NewRGB(30, 30, 30), options.BackgroundColour)
-			require.Equal(t, application.BackgroundTypeTransparent, options.BackgroundType)
+			require.Equal(t, test.wantBackgroundType, options.BackgroundType)
 			require.True(t, options.Mac.TitleBar.AppearsTransparent)
 			require.True(t, options.Mac.TitleBar.FullSizeContent)
 			require.True(t, options.Mac.TitleBar.HideTitle)
@@ -68,7 +75,7 @@ func TestOptionsPreserveTheSharedPeerContract(t *testing.T) {
 			require.True(t, options.UseApplicationMenu)
 			require.Equal(t, 1.0, options.Zoom)
 			require.False(t, options.ZoomControlEnabled)
-			require.Equal(t, goos != "linux", options.Hidden)
+			require.Equal(t, test.goos != "linux", options.Hidden)
 		})
 	}
 }

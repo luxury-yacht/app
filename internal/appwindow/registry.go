@@ -198,6 +198,11 @@ func windowOptions(name string, nativeMenu *application.Menu) application.Webvie
 }
 
 func windowOptionsForPlatform(name string, nativeMenu *application.Menu, goos string) application.WebviewWindowOptions {
+	backgroundType := application.BackgroundTypeTransparent
+	if goos == "windows" {
+		backgroundType = application.BackgroundTypeSolid
+	}
+
 	return application.WebviewWindowOptions{
 		Name:             name,
 		Title:            "Luxury Yacht",
@@ -207,7 +212,7 @@ func windowOptionsForPlatform(name string, nativeMenu *application.Menu, goos st
 		MinHeight:        600,
 		URL:              "/",
 		BackgroundColour: application.NewRGB(30, 30, 30),
-		BackgroundType:   application.BackgroundTypeTransparent,
+		BackgroundType:   backgroundType,
 		Mac: application.MacWindow{
 			TitleBar: application.MacTitleBar{
 				AppearsTransparent:   true,
