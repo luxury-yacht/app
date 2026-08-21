@@ -165,16 +165,17 @@ payloads, duplicates, missing targets, and ambiguous files. The release job:
 A manual **Release** workflow dispatch defaults to a full dry run. Leave
 **Create GitHub release** unchecked to run the tests, every platform build and
 package drill, artifact aggregation, updater-manifest signing and verification,
-GitHub release-existence preflight, release-asset discovery, and release-note
-rendering. The prepared asset set is retained as the
+release-asset discovery, release-note rendering, and construction of the exact
+publication inputs. The prepared asset set is retained as the
 `prepared-release-assets` workflow artifact, but `RELEASE_DRY_RUN=true` stops
-the shared release command before `gh release create`; the downstream website
-update does not run because no release was published. Checking the input, or
-pushing a matching version tag, makes the separately permissioned publication
-job consume that same prepared artifact and create the GitHub Release.
+the shared release command without querying or mutating GitHub Releases; the
+downstream website update does not run because no release was published.
+Checking the input, or pushing a matching version tag, makes the separately
+permissioned publication job consume that same prepared artifact, reject an
+existing release, and create the GitHub Release.
 
-The release command can exercise the same final preflight locally when a
-complete `artifacts/` directory is already present:
+The release command can exercise the same final preparation validation locally
+when a complete `artifacts/` directory is already present:
 
 ```sh
 RELEASE_DRY_RUN=true mise exec -- wails3 task release:app

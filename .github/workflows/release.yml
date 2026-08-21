@@ -250,7 +250,6 @@ jobs:
 
       - name: Validate prepared GitHub release without publishing
         env:
-          GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
           RELEASE_DRY_RUN: "true"
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}

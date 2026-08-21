@@ -81,10 +81,29 @@ func checkGhCli() error {
 // Check if the release already exists.
 func releaseExists(repo, tag string) (bool, error) {
 	fmt.Printf("\n🔎 Checking if release %s exists in repo %s\n", tag, repo)
-	if runCommand("gh", "release", "view", tag, gitHubRepositoryFlag, repo) != nil {
-		return false, nil
+	owner, name, valid := strings.Cut(repo, "/")
+	if !valid || owner == "" || name == "" || strings.Contains(name, "/") {
+		return false, fmt.Errorf("invalid GitHub repository %q", repo)
 	}
-	return true, nil
+	result, err := commandOutput(
+		"gh", "api", "graphql",
+		"-f", "query=query($owner:String!,$name:String!,$tag:String!){repository(owner:$owner,name:$name){release(tagName:$tag){id}}}",
+		"-F", "owner="+owner,
+		"-F", "name="+name,
+		"-F", "tag="+tag,
+		"--jq", ".data.repository.release != null",
+	)
+	if err != nil {
+		return false, fmt.Errorf("check whether release %s exists in repo %s: %w", tag, repo, err)
+	}
+	switch result {
+	case "false":
+		return false, nil
+	case "true":
+		return true, nil
+	default:
+		return false, fmt.Errorf("unexpected GitHub release lookup result %q", result)
+	}
 }
 
 func validateReleaseDoesNotAlreadyExist(exists bool, version string) error {
@@ -278,20 +297,6 @@ func parseReleaseDryRun(value string) (bool, error) {
 
 // publishRelease validates the complete release input and optionally publishes it.
 func publishRelease(cfg releaseConfig, dryRun bool) error {
-	if err := checkGhCli(); err != nil {
-		return err
-	}
-	// Never overwrite or publish an existing release. A previous failed run may
-	// have left a partial draft that requires explicit operator inspection.
-	release, err := releaseExists(cfg.releaseRepo, cfg.version)
-	if err != nil {
-		return err
-	}
-	if err := validateReleaseDoesNotAlreadyExist(release, cfg.version); err != nil {
-		return err
-	}
-	fmt.Println("- Release does not exist. Proceeding.")
-
 	// Find release assets.
 	assets, err := findReleaseAssets(cfg)
 	if err != nil {
@@ -313,9 +318,26 @@ func publishRelease(cfg releaseConfig, dryRun bool) error {
 		return err
 	}
 	defer os.Remove(notesFile)
+	if dryRun {
+		return createRelease(cfg, notesFile, assets, true, runCommand)
+	}
+
+	if err := checkGhCli(); err != nil {
+		return err
+	}
+	// Never overwrite or publish an existing release. A previous failed run may
+	// have left a partial draft that requires explicit operator inspection.
+	release, err := releaseExists(cfg.releaseRepo, cfg.version)
+	if err != nil {
+		return err
+	}
+	if err := validateReleaseDoesNotAlreadyExist(release, cfg.version); err != nil {
+		return err
+	}
+	fmt.Println("- Release does not exist. Proceeding.")
 
 	// Create the release.
-	if err := createRelease(cfg, notesFile, assets, dryRun, runCommand); err != nil {
+	if err := createRelease(cfg, notesFile, assets, false, runCommand); err != nil {
 		return err
 	}
 

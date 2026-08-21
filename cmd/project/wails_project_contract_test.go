@@ -798,6 +798,7 @@ func TestReleaseWorkflowDryRunPreparesTheExactReleaseInputsWithoutPublishing(t *
 	require.Contains(t, prepareJob, `RELEASE_DRY_RUN: "true"`)
 	require.Contains(t, prepareJob, "wails3 task release:app")
 	require.Contains(t, prepareJob, "name: prepared-release-assets")
+	require.NotContains(t, prepareJob, "GH_TOKEN:")
 
 	require.Contains(t, releaseJob, `if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}`)
 	require.Contains(t, releaseJob, "needs: prepare-release")

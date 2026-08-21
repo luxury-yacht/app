@@ -129,6 +129,32 @@ func TestCreateReleaseDryRunStopsBeforeGitHubMutation(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestPublishReleaseDryRunIgnoresExistingGitHubReleases(t *testing.T) {
+	t.Chdir(repositoryPath())
+	artifactDir := t.TempDir()
+	artifact := filepath.Join(artifactDir, "luxury-yacht-v2.0.0-beta.3-darwin-arm64.zip")
+	require.NoError(t, os.WriteFile(artifact, []byte("artifact"), 0o600))
+
+	binDir := t.TempDir()
+	githubCalled := filepath.Join(t.TempDir(), "github-called")
+	gh := filepath.Join(binDir, "gh")
+	require.NoError(t, os.WriteFile(gh, []byte("#!/bin/sh\n: > \"$GH_CALLED_MARKER\"\nexit 0\n"), 0o700))
+	t.Setenv("PATH", binDir)
+	t.Setenv("GH_CALLED_MARKER", githubCalled)
+
+	err := publishRelease(releaseConfig{
+		artifactsDir:  artifactDir,
+		isBeta:        true,
+		packagePath:   "github.com/luxury-yacht/app",
+		releaseAssets: []string{".zip"},
+		releaseRepo:   "luxury-yacht/app",
+		version:       "v2.0.0-beta.3",
+	}, true)
+
+	require.NoError(t, err)
+	require.NoFileExists(t, githubCalled)
+}
+
 func TestCreateReleaseLeavesDraftWhenPublishFails(t *testing.T) {
 	publishFailure := errors.New("publish failed")
 	call := 0
@@ -169,6 +195,35 @@ func TestValidateReleaseDoesNotAlreadyExistBlocksUnsafeRerun(t *testing.T) {
 		validateReleaseDoesNotAlreadyExist(true, "v2.0.0"),
 		"release v2.0.0 already exists; inspect it and remove any failed draft before retrying",
 	)
+}
+
+func TestReleaseExistsDistinguishesMissingReleaseFromLookupFailure(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		gh         string
+		wantExists bool
+		wantError  string
+	}{
+		{name: "existing", gh: "#!/bin/sh\nprintf 'true\\n'\n", wantExists: true},
+		{name: "missing", gh: "#!/bin/sh\nprintf 'false\\n'\n"},
+		{name: "lookup failure", gh: "#!/bin/sh\nexit 42\n", wantError: "check whether release v2.0.0 exists"},
+		{name: "invalid response", gh: "#!/bin/sh\nprintf 'unknown\\n'\n", wantError: "unexpected GitHub release lookup result"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			binDir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(binDir, "gh"), []byte(test.gh), 0o700))
+			t.Setenv("PATH", binDir)
+
+			exists, err := releaseExists("luxury-yacht/app", "v2.0.0")
+
+			if test.wantError != "" {
+				require.ErrorContains(t, err, test.wantError)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, test.wantExists, exists)
+		})
+	}
 }
 
 func TestSelectUpdaterArtifactRequiresOneExplicitRegularFile(t *testing.T) {
