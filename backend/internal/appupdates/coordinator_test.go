@@ -1368,27 +1368,52 @@ func TestCheckRejectsReleaseWithoutRequiredPinnedSignature(t *testing.T) {
 func TestNotificationOnlyDistributionCanCheckButCannotDownload(t *testing.T) {
 	t.Parallel()
 
-	eligibility := enabledBuild()
-	eligibility.Installation = updateidentity.InstallationEligibility{
-		CanCheck: true, Distribution: updateidentity.DistributionLinuxDEB,
-		Reason: updateidentity.ReasonLinuxPackageManaged, Recovery: updateidentity.RecoveryLinuxPackages,
+	for _, test := range []struct {
+		name         string
+		platform     string
+		distribution updateidentity.Distribution
+		reason       updateidentity.EligibilityReason
+		recovery     updateidentity.RecoveryTarget
+	}{
+		{
+			name: "managed Windows installation", platform: "windows",
+			distribution: updateidentity.DistributionWindowsNSIS,
+			reason:       updateidentity.ReasonManagedInstallation, recovery: updateidentity.RecoveryWindowsDownload,
+		},
+		{
+			name: "Linux package installation", platform: "linux",
+			distribution: updateidentity.DistributionLinuxDEB,
+			reason:       updateidentity.ReasonLinuxPackageManaged, recovery: updateidentity.RecoveryLinuxPackages,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			eligibility := enabledBuild()
+			eligibility.Installation = updateidentity.InstallationEligibility{
+				CanCheck: true, Distribution: test.distribution,
+				Reason: test.reason, Recovery: test.recovery,
+			}
+			eligibility.CanInstall = false
+			client := &fakeUpdater{release: signedRelease("2.0.0", "stable", test.platform, "amd64")}
+			coordinator := appupdates.New(appupdates.Dependencies{
+				Client: client, Provider: fakeProvider{}, Eligibility: eligibility,
+				PublicKey: testPublicKey(), Platform: test.platform, Architecture: "amd64",
+				TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{},
+			})
+			coordinator.RuntimeReady()
+
+			snapshot, err := coordinator.Check(context.Background())
+			require.NoError(t, err)
+			require.Equal(t, appupdates.StatusAvailable, snapshot.Status)
+			require.False(t, snapshot.CanInstall)
+			require.Equal(t, test.reason, snapshot.EligibilityReason)
+			require.Equal(t, test.recovery, snapshot.RecoveryTarget)
+
+			_, err = coordinator.Download(context.Background(), "2.0.0")
+			require.ErrorContains(t, err, "not eligible for automatic installation")
+			require.Zero(t, client.downloadCalls)
+		})
 	}
-	eligibility.CanInstall = false
-	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "linux", "amd64")}
-	coordinator := appupdates.New(appupdates.Dependencies{
-		Client: client, Provider: fakeProvider{}, Eligibility: eligibility,
-		PublicKey: testPublicKey(), Platform: "linux", Architecture: "amd64",
-		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{},
-	})
-	coordinator.RuntimeReady()
-
-	snapshot, err := coordinator.Check(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, appupdates.StatusAvailable, snapshot.Status)
-
-	_, err = coordinator.Download(context.Background(), "2.0.0")
-	require.ErrorContains(t, err, "not eligible for automatic installation")
-	require.Zero(t, client.downloadCalls)
 }
 
 func TestRuntimeReadyStartsImmediateAndPeriodicChecksOnceAndStopCancelsScheduler(t *testing.T) {

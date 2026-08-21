@@ -47,7 +47,7 @@ func TestWailsProjectUsesFreshInitBuildDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(rootTaskfile), `BIN_DIR: "bin"`)
 	require.Contains(t, string(rootTaskfile), `PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'`)
-	require.Contains(t, string(rootTaskfile), `VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'`)
+	require.Contains(t, string(rootTaskfile), `VITE_PORT: "{{.WAILS_VITE_PORT | default 9245}}"`)
 
 	config, err := os.ReadFile(repositoryPath("build", "config.yml"))
 	require.NoError(t, err)
@@ -57,7 +57,7 @@ func TestWailsProjectUsesFreshInitBuildDefaults(t *testing.T) {
 func TestUnsignedInstallTaskPreservesExpectedWorkflow(t *testing.T) {
 	rootTaskfile := readTestFile(t, repositoryPath("Taskfile.yml"))
 	require.Contains(t, rootTaskfile, "install:unsigned:")
-	require.Contains(t, rootTaskfile, "task: '{{OS}}:install:unsigned'")
+	require.Contains(t, rootTaskfile, `task: "{{OS}}:install:unsigned"`)
 
 	for platform, buildDependency := range map[string]string{
 		"darwin":  "package",
@@ -152,7 +152,7 @@ func TestPlatformBuildManifestsUseCanonicalProjectMetadata(t *testing.T) {
 	require.Contains(t, windowsTaskfile, "common:prepare:build-manifests")
 	require.Contains(t, windowsTaskfile, "bin/build-manifests/windows/wails.exe.manifest")
 	require.Contains(t, windowsTaskfile, "bin/build-manifests/windows/info.json")
-	require.Contains(t, windowsTaskfile, `--input "{{.BIN_DIR}}/{{.APP_NAME}}-*-windows-{{.ARCH}}-installer.exe"`)
+	require.Contains(t, windowsTaskfile, `--input "{{.BIN_DIR}}/{{.APP_NAME}}-*-windows-{{.ARCH}}-*-installer.exe"`)
 	require.NotContains(t, windowsTaskfile, `--input "build/windows/nsis/{{.APP_NAME}}-installer.exe"`)
 
 	commonTaskfile := readTestFile(t, repositoryPath("build", "Taskfile.yml"))
@@ -734,15 +734,19 @@ func TestReleaseWorkflowUsesConfiguredVVersionTags(t *testing.T) {
 func TestReleasePublishingJobsUseCanonicalMiseToolchain(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
 	setupAction := readTestFile(t, repositoryPath(".github", "actions", "setup-toolchain", "action.yaml"))
+	prepareStart := strings.Index(workflow, "\n  prepare-release:\n")
 	releaseStart := strings.Index(workflow, "\n  release:\n")
 	updateSiteStart := strings.Index(workflow, "\n  update-site:\n")
-	require.GreaterOrEqual(t, releaseStart, 0)
+	require.GreaterOrEqual(t, prepareStart, 0)
+	require.Greater(t, releaseStart, prepareStart)
 	require.Greater(t, updateSiteStart, releaseStart)
+	prepareJob := workflow[prepareStart:releaseStart]
 	releaseJob := workflow[releaseStart:updateSiteStart]
 	updateSiteJob := workflow[updateSiteStart:]
 
+	require.Contains(t, prepareJob, `install-linux-deps: "true"`)
+	require.Contains(t, prepareJob, "wails3 task release:prepare-updater-manifest")
 	require.Contains(t, releaseJob, `install-linux-deps: "true"`)
-	require.Contains(t, releaseJob, "wails3 task release:prepare-updater-manifest")
 	require.Contains(t, updateSiteJob, `install-linux-deps: "true"`)
 	require.Contains(t, updateSiteJob, "wails3 task release:site")
 	require.Contains(t, releaseJob, "wails3 task release:app")
@@ -775,6 +779,35 @@ func TestReleaseWorkflowValidatesTagBeforeTestsAndBuilds(t *testing.T) {
 	)
 }
 
+func TestReleaseWorkflowDryRunPreparesTheExactReleaseInputsWithoutPublishing(t *testing.T) {
+	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
+	prepareStart := strings.Index(workflow, "\n  prepare-release:\n")
+	releaseStart := strings.Index(workflow, "\n  release:\n")
+	updateSiteStart := strings.Index(workflow, "\n  update-site:\n")
+	require.GreaterOrEqual(t, prepareStart, 0)
+	require.Greater(t, releaseStart, prepareStart)
+	require.Greater(t, updateSiteStart, releaseStart)
+
+	prepareJob := workflow[prepareStart:releaseStart]
+	releaseJob := workflow[releaseStart:updateSiteStart]
+	require.Contains(t, workflow, `description: "Create GitHub release (uncheck for full dry run)"`)
+	require.Contains(t, prepareJob, "      - test\n      - build")
+	require.Contains(t, prepareJob, "contents: read")
+	require.Contains(t, prepareJob, "Download all artifacts")
+	require.Contains(t, prepareJob, "wails3 task release:prepare-updater-manifest")
+	require.Contains(t, prepareJob, `RELEASE_DRY_RUN: "true"`)
+	require.Contains(t, prepareJob, "wails3 task release:app")
+	require.Contains(t, prepareJob, "name: prepared-release-assets")
+
+	require.Contains(t, releaseJob, `if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}`)
+	require.Contains(t, releaseJob, "needs: prepare-release")
+	require.Contains(t, releaseJob, "contents: write")
+	require.Contains(t, releaseJob, "name: prepared-release-assets")
+	require.Contains(t, releaseJob, `RELEASE_DRY_RUN: "false"`)
+	require.Contains(t, releaseJob, "wails3 task release:app")
+	require.NotContains(t, releaseJob, "release:prepare-updater-manifest")
+}
+
 func TestReleaseArtifactsPreserveVersionPlatformAndArchitectureIdentity(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
 	require.Contains(t, workflow, "bin/*-macos-*.dmg")
@@ -789,21 +822,22 @@ func TestReleaseArtifactsPreserveVersionPlatformAndArchitectureIdentity(t *testi
 	require.Contains(t, linuxTaskfile, "go run ./cmd/project release-artifact-name")
 
 	windowsInstaller := readTestFile(t, repositoryPath("build", "windows", "nsis", "project.nsi"))
-	require.Contains(t, windowsInstaller, `${INFO_PROJECTNAME}-${INFO_PRODUCTVERSION}-windows-${ARCH}-installer.exe`)
+	require.Contains(t, windowsInstaller, `${INFO_PROJECTNAME}-${INFO_PRODUCTVERSION}-windows-${ARCH}-${WAILS_INSTALL_SCOPE_NAME}-installer.exe`)
 
 	windowsTaskfile := readTestFile(t, repositoryPath("build", "windows", "Taskfile.yml"))
-	require.Contains(t, windowsTaskfile, `{{.APP_NAME}}-*-windows-{{.ARCH}}-installer.exe`)
+	require.Contains(t, windowsTaskfile, `{{.APP_NAME}}-*-windows-{{.ARCH}}-*-installer.exe`)
 	require.Contains(t, windowsTaskfile, `INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'`)
+	require.Contains(t, windowsTaskfile, `INSTALL_SCOPE: user`)
+	require.Contains(t, windowsTaskfile, `INSTALL_SCOPE: machine`)
 	require.Contains(t, windowsTaskfile, "create:updater:")
 	require.Contains(t, windowsTaskfile, "create:updater:\n    deps:\n      - task: build")
 	require.Contains(t, windowsTaskfile, "create:updater:from-built")
 	require.Contains(t, windowsTaskfile, "go run ./cmd/project create-windows-updater-artifact")
 
-	require.NotContains(t, workflow, "bin/*-windows-amd64.exe")
-	require.NotContains(t, workflow, "bin/*-windows-arm64.exe")
+	require.Contains(t, workflow, "bin/*-windows-amd64.exe")
+	require.Contains(t, workflow, "bin/*-windows-arm64.exe")
 	require.NotContains(t, workflow, "wails3 task windows:create:updater ARCH=${{ matrix.arch }}")
 	require.Contains(t, workflow, "wails3 task release:validate-windows-updater")
-	require.NotContains(t, workflow, "windows/amd64,windows/arm64")
 }
 
 func TestWindowsInstallerWritesScopedMarkerAndRefusesLegacyMachineSideBySideInstall(t *testing.T) {
@@ -819,16 +853,22 @@ func TestWindowsInstallerWritesScopedMarkerAndRefusesLegacyMachineSideBySideInst
 	require.Less(t, strings.Index(installer, "ReadRegStr $0 HKLM"), strings.Index(installer, "!insertmacro wails.files"))
 }
 
-func TestWindowsReleaseRunsPerUserInstallUninstallAndMigrationDrill(t *testing.T) {
+func TestWindowsReleasePublishesAndDrillsBothInstallerScopes(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
 	drill := readTestFile(t, repositoryPath("build", "windows", "package-drill.ps1"))
+	releaseNotes := readTestFile(t, repositoryPath("docs", "release", "pending.md"))
 
 	require.Contains(t, workflow, "build/windows/package-drill.ps1")
 	require.Contains(t, workflow, "go test ./internal/updateidentity ./internal/windowsinstall ./backend -run Windows -count=1")
+	require.Contains(t, workflow, "*-windows-${{ matrix.arch }}-user-installer.exe")
+	require.Contains(t, workflow, "*-windows-${{ matrix.arch }}-system-installer.exe")
+	require.Contains(t, workflow, "-UserInstaller $userInstaller.FullName -SystemInstaller $systemInstaller.FullName")
 	for _, contract := range []string{
 		"luxury-yacht.install.json",
 		"UninstallRegistryPath",
-		"migration-preservation-probe",
+		"scope-preservation-probe",
+		"$machineMarker.scope -eq 'machine'",
+		"$marker.scope -eq 'user'",
 		"ExitCode -ne 66",
 		"Remove-Item -LiteralPath $userKey -Recurse -Force",
 		"Remove-Item -LiteralPath $installRoot -Recurse -Force",
@@ -837,16 +877,34 @@ func TestWindowsReleaseRunsPerUserInstallUninstallAndMigrationDrill(t *testing.T
 	}
 	require.NotContains(t, drill, "Luxury YachtLuxury Yacht")
 	require.Contains(t, workflow, "-UninstallRegistryPath $config.windowsUninstallRegistryPath")
+	for _, contract := range []string{
+		"per-user installer is the recommended default",
+		"all-users installer remains available",
+		"use the current installer instead of requesting special updater privileges",
+	} {
+		require.Contains(t, releaseNotes, contract)
+	}
 }
 
 func TestConfiguredUpdaterTargetsPublishOnlyReplaceablePayloads(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
 	config := readTestFile(t, repositoryPath("build", "config.yml"))
 	require.NotContains(t, workflow, "UPDATER_TARGETS:")
-	for _, target := range []string{"darwin/arm64", "darwin/amd64", "linux/amd64", "linux/arm64"} {
+	for _, target := range []string{
+		"darwin/arm64",
+		"darwin/amd64",
+		"windows/amd64",
+		"windows/arm64",
+		"linux/amd64",
+		"linux/arm64",
+	} {
 		require.Contains(t, config, "- "+target)
 	}
-	require.NotContains(t, config, "- windows/")
+	windowsPackage := "wails3 task windows:package ARCH=${{ matrix.arch }}"
+	windowsValidation := "wails3 task release:validate-windows-updater"
+	require.Contains(t, workflow, windowsPackage)
+	require.Contains(t, workflow, windowsValidation)
+	require.Less(t, strings.Index(workflow, windowsPackage), strings.Index(workflow, windowsValidation))
 	createPayload := "wails3 task linux:generate:portable ARCH=${{ matrix.arch }}"
 	validatePayload := "wails3 task release:validate-linux-updater"
 	require.Contains(t, workflow, validatePayload)
@@ -865,6 +923,21 @@ func TestConfiguredUpdaterTargetsPublishOnlyReplaceablePayloads(t *testing.T) {
 	rootTaskfile := readTestFile(t, repositoryPath("Taskfile.yml"))
 	require.Contains(t, rootTaskfile, "release:validate-linux-updater:")
 	require.Contains(t, rootTaskfile, "go run ./cmd/project validate-linux-updater")
+}
+
+func TestMainHasNoCustomApplicationUpdateProcessDispatcher(t *testing.T) {
+	mainSource := readTestFile(t, repositoryPath("main.go"))
+	updateConfigSource := readTestFile(t, repositoryPath("backend", "update_coordinator_config.go"))
+	tempSetup := "updatetemp.ConfigureProcess()"
+	execWrapper := "backend.MaybeRunExecWrapper()"
+	composition := "newApplicationComposition("
+	require.NotContains(t, mainSource, "backend.DispatchProcessMode")
+	require.NotContains(t, mainSource, "backend.RunApplicationUpdateHelper")
+	require.NotContains(t, updateConfigSource, "windowsupdate")
+	require.NotContains(t, updateConfigSource, "machineScopeWindowsRestart")
+	require.Contains(t, mainSource, execWrapper)
+	require.Less(t, strings.Index(mainSource, tempSetup), strings.Index(mainSource, execWrapper))
+	require.Less(t, strings.Index(mainSource, execWrapper), strings.LastIndex(mainSource, composition))
 }
 
 func TestLinuxPackageManagerDrillInstallsAndRemovesOwnedMarkers(t *testing.T) {
@@ -936,14 +1009,23 @@ func TestMacOSBundlesUseTheConfiguredProductName(t *testing.T) {
 
 func TestReleasePublishesSignedUpdaterManifestInsideTheGitHubRelease(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
-	materialize := strings.Index(workflow, "Materialize updater signing key")
-	prepare := strings.Index(workflow, "wails3 task release:prepare-updater-manifest")
-	publishRelease := strings.Index(workflow, "wails3 task release:app")
-	cleanup := strings.Index(workflow, "Remove updater signing key")
+	prepareStart := strings.Index(workflow, "\n  prepare-release:\n")
+	releaseStart := strings.Index(workflow, "\n  release:\n")
+	updateSiteStart := strings.Index(workflow, "\n  update-site:\n")
+	require.GreaterOrEqual(t, prepareStart, 0)
+	require.Greater(t, releaseStart, prepareStart)
+	require.Greater(t, updateSiteStart, releaseStart)
+	prepareJob := workflow[prepareStart:releaseStart]
+	releaseJob := workflow[releaseStart:updateSiteStart]
+	materialize := strings.Index(prepareJob, "Materialize updater signing key")
+	prepare := strings.Index(prepareJob, "wails3 task release:prepare-updater-manifest")
+	cleanup := strings.Index(prepareJob, "Remove updater signing key")
+	dryRun := strings.Index(prepareJob, "wails3 task release:app")
 	require.GreaterOrEqual(t, materialize, 0)
 	require.Greater(t, prepare, materialize)
-	require.Greater(t, publishRelease, prepare)
 	require.Greater(t, cleanup, prepare)
+	require.Greater(t, dryRun, cleanup)
+	require.Contains(t, releaseJob, "wails3 task release:app")
 	require.Contains(t, workflow, "UPDATER_PRIVATE_KEY_PEM: ${{ secrets.UPDATER_PRIVATE_KEY_PEM }}")
 	require.Contains(t, workflow, `if: ${{ always() }}`)
 	require.NotContains(t, workflow, "UPDATER_TARGETS:")
@@ -957,14 +1039,14 @@ func TestReleasePublishesSignedUpdaterManifestInsideTheGitHubRelease(t *testing.
 	require.NotContains(t, rootTaskfile, "release:publish-updater-channels:")
 }
 
-func TestQualityGateCompilesWindowsCodeAndUsesSupportedHostedRunners(t *testing.T) {
+func TestQualityGateCompilesWindowsCodeForBothArchitectures(t *testing.T) {
 	rootTaskfile := readTestFile(t, repositoryPath("Taskfile.yml"))
-	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
 
 	require.Contains(t, rootTaskfile, "for: [amd64, arm64]")
-	require.Contains(t, rootTaskfile, "GOOS: windows\n          GOARCH: '{{.ITEM}}'")
-	require.Contains(t, workflow, "runner: windows-11-arm")
-	require.NotContains(t, workflow, "runner: windows-latest-arm")
+	require.Contains(t, rootTaskfile, "task: qc:vet:windows")
+	require.Contains(t, rootTaskfile, "ARCH: '{{.ITEM}}'")
+	require.Contains(t, rootTaskfile, "qc:vet:windows:\n    internal: true")
+	require.Contains(t, rootTaskfile, "GOOS: windows\n      GOARCH: '{{.ARCH}}'")
 }
 
 func TestRefreshTransportUsesOnlyWailsServiceAndNamedStreams(t *testing.T) {

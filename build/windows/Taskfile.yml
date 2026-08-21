@@ -56,7 +56,7 @@ tasks:
       GOARCH: '{{.ARCH | default ARCH}}'
 
   package:
-    summary: Builds the application and creates its installer and updater artifact
+    summary: Builds the application and creates both installers and the updater artifact
     deps:
       - task: build
         vars:
@@ -69,10 +69,13 @@ tasks:
       - task: create:nsis:installer:from-built
         vars:
           ARCH: '{{.ARCH}}'
-          INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
+          INSTALL_SCOPE: user
+      - task: create:nsis:installer:from-built
+        vars:
+          ARCH: '{{.ARCH}}'
+          INSTALL_SCOPE: machine
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
-      INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
 
   install:unsigned:
     summary: Builds and installs the app to the current user's Programs directory
@@ -186,4 +189,4 @@ tasks:
       ARCH: '{{.ARCH | default ARCH}}'
       INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
     cmds:
-      - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}-*-windows-{{.ARCH}}-installer.exe" {{if .SIGN_CERTIFICATE}}--certificate "{{.SIGN_CERTIFICATE}}"{{end}} {{if .SIGN_THUMBPRINT}}--thumbprint "{{.SIGN_THUMBPRINT}}"{{end}} {{if .TIMESTAMP_SERVER}}--timestamp "{{.TIMESTAMP_SERVER}}"{{end}}
+      - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}-*-windows-{{.ARCH}}-*-installer.exe" {{if .SIGN_CERTIFICATE}}--certificate "{{.SIGN_CERTIFICATE}}"{{end}} {{if .SIGN_THUMBPRINT}}--thumbprint "{{.SIGN_THUMBPRINT}}"{{end}} {{if .TIMESTAMP_SERVER}}--timestamp "{{.TIMESTAMP_SERVER}}"{{end}}

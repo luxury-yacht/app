@@ -113,14 +113,20 @@ func publishConfiguredRelease() error {
 	if err := loadDotEnv(projectEnvPath); err != nil {
 		return err
 	}
-	if err := validateConfiguredReleaseTag(); err != nil {
+	dryRun, err := parseReleaseDryRun(os.Getenv(releaseDryRunEnv))
+	if err != nil {
 		return err
+	}
+	if !dryRun || os.Getenv("RELEASE_TAG") != "" {
+		if err := validateConfiguredReleaseTag(); err != nil {
+			return err
+		}
 	}
 	facts, err := loadProjectFacts()
 	if err != nil {
 		return fmt.Errorf("read app version: %w", err)
 	}
-	return publishRelease(newReleaseConfig(facts))
+	return publishRelease(newReleaseConfig(facts), dryRun)
 }
 
 func publishConfiguredSiteVersion() error {

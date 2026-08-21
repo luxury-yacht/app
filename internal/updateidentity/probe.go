@@ -38,9 +38,7 @@ func CollectInstallationProbe(options ProbeOptions) (InstallationProbe, error) {
 			return InstallationProbe{}, err
 		}
 		probe.Marker = marker
-		if marker == nil {
-			probe.WindowsLegacyMachineInstall = windowsinstall.LegacyMachineInstall(probe.TargetPath)
-		}
+		probe.WindowsMachineRegistered = windowsinstall.LegacyMachineInstall(probe.TargetPath)
 		return probe, nil
 	case PlatformLinux:
 		return collectLinuxProbe(probe, options.PackageMarkerPath)

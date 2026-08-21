@@ -51,24 +51,6 @@ describe('getUpdatePresentation', () => {
     expect(skipped?.secondary).toBeUndefined();
   });
 
-  it('routes machine-scope Windows installs to the exact published release', () => {
-    const presentation = getUpdatePresentation(
-      update({
-        status: appupdates.Status.StatusAvailable,
-        canInstall: false,
-        availableVersion: '2.0.0-beta.4',
-        eligibilityReason: updateidentity.EligibilityReason.ReasonWindowsMachineScope,
-        recoveryTarget: updateidentity.RecoveryTarget.RecoveryWindowsPerUserMigration,
-      })
-    );
-
-    expect(presentation?.primary).toEqual({
-      kind: 'recovery',
-      label: 'Switch to Per-User Installation',
-      url: 'https://github.com/luxury-yacht/app/releases/tag/v2.0.0-beta.4',
-    });
-  });
-
   it.each([
     [
       updateidentity.EligibilityReason.ReasonMacNotInstalledBundle,
@@ -86,12 +68,12 @@ describe('getUpdatePresentation', () => {
       'View macOS Download',
     ],
     [
-      updateidentity.EligibilityReason.ReasonWindowsMachineScope,
-      updateidentity.RecoveryTarget.RecoveryWindowsPerUserMigration,
-      'Switch to Per-User Installation',
+      updateidentity.EligibilityReason.ReasonWindowsUnverifiedInstall,
+      updateidentity.RecoveryTarget.RecoveryWindowsDownload,
+      'View Windows Download',
     ],
     [
-      updateidentity.EligibilityReason.ReasonWindowsUnverifiedInstall,
+      updateidentity.EligibilityReason.ReasonManagedInstallation,
       updateidentity.RecoveryTarget.RecoveryWindowsDownload,
       'View Windows Download',
     ],
@@ -126,6 +108,21 @@ describe('getUpdatePresentation', () => {
       expect(presentation?.secondary).toEqual({ kind: 'skip', label: 'Skip This Version' });
     }
   );
+
+  it('explains that managed installations update outside the app', () => {
+    const presentation = getUpdatePresentation(
+      update({
+        status: appupdates.Status.StatusAvailable,
+        canInstall: false,
+        eligibilityReason: updateidentity.EligibilityReason.ReasonManagedInstallation,
+        recoveryTarget: updateidentity.RecoveryTarget.RecoveryWindowsDownload,
+      })
+    );
+
+    expect(presentation?.explanation).toBe(
+      'This installation is managed outside the app. Use its installer or package manager to update it.'
+    );
+  });
 
   it('renders no update surface for idle state', () => {
     expect(getUpdatePresentation(update({ status: appupdates.Status.StatusIdle }))).toBeNull();

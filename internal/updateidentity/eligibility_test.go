@@ -53,6 +53,7 @@ func TestResolveInstallationSupportsEachApprovedDistribution(t *testing.T) {
 				CanCheck:     true,
 				CanInstall:   true,
 				Distribution: updateidentity.DistributionWindowsNSIS,
+				Scope:        updateidentity.InstallationScopeUser,
 			},
 		},
 		{
@@ -60,17 +61,19 @@ func TestResolveInstallationSupportsEachApprovedDistribution(t *testing.T) {
 			probe: func() updateidentity.InstallationProbe {
 				executable := filepath.Join("C:", "Program Files", "Luxury Yacht", "luxury-yacht.exe")
 				return updateidentity.InstallationProbe{
-					Platform:     updateidentity.PlatformWindows,
-					Architecture: "arm64",
-					TargetPath:   executable,
-					Marker:       validMarker(executable, "nsis", "machine"),
+					Platform:                 updateidentity.PlatformWindows,
+					Architecture:             "arm64",
+					TargetPath:               executable,
+					Marker:                   validMarker(executable, "nsis", "machine"),
+					WindowsMachineRegistered: true,
 				}
 			}(),
 			want: updateidentity.InstallationEligibility{
 				CanCheck:     true,
 				Distribution: updateidentity.DistributionWindowsNSIS,
-				Reason:       updateidentity.ReasonWindowsMachineScope,
-				Recovery:     updateidentity.RecoveryWindowsPerUserMigration,
+				Scope:        updateidentity.InstallationScopeMachine,
+				Reason:       updateidentity.ReasonManagedInstallation,
+				Recovery:     updateidentity.RecoveryWindowsDownload,
 			},
 		},
 		{
@@ -127,14 +130,16 @@ func TestResolveInstallationRecognizesStrictLegacyWindowsMachineEvidence(t *test
 
 	probe := updateidentity.InstallationProbe{
 		Platform: updateidentity.PlatformWindows, Architecture: "amd64",
-		TargetPath:                  "/Program Files/Luxury Yacht/luxury-yacht.exe",
-		WindowsLegacyMachineInstall: true,
+		TargetPath:               "/Program Files/Luxury Yacht/luxury-yacht.exe",
+		WindowsMachineRegistered: true,
 	}
 
 	require.Equal(t, updateidentity.InstallationEligibility{
-		CanCheck: true, Distribution: updateidentity.DistributionWindowsNSIS,
-		Reason:   updateidentity.ReasonWindowsMachineScope,
-		Recovery: updateidentity.RecoveryWindowsPerUserMigration,
+		CanCheck:     true,
+		Distribution: updateidentity.DistributionWindowsNSIS,
+		Scope:        updateidentity.InstallationScopeMachine,
+		Reason:       updateidentity.ReasonManagedInstallation,
+		Recovery:     updateidentity.RecoveryWindowsDownload,
 	}, updateidentity.ResolveInstallation(probe))
 
 	probe.Marker = &updateidentity.MarkerCandidate{
@@ -228,6 +233,16 @@ func TestResolveInstallationRejectsUnverifiedOrUnreplaceableTargets(t *testing.T
 			probe: updateidentity.InstallationProbe{
 				Platform: updateidentity.PlatformWindows, Architecture: "amd64", TargetPath: windowsExecutable,
 				Marker: &updateidentity.MarkerCandidate{Path: filepath.Join(filepath.Dir(filepath.Dir(windowsExecutable)), "luxury-yacht.install.json"), Data: []byte(`{"schemaVersion":1,"productIdentifier":"app.luxury-yacht.desktop","distribution":"nsis","scope":"user"}`)},
+			},
+			want: updateidentity.InstallationEligibility{
+				Reason: updateidentity.ReasonWindowsUnverifiedInstall, Recovery: updateidentity.RecoveryWindowsDownload,
+			},
+		},
+		{
+			name: "Windows machine marker without exact machine registration",
+			probe: updateidentity.InstallationProbe{
+				Platform: updateidentity.PlatformWindows, Architecture: "amd64", TargetPath: windowsExecutable,
+				Marker: &updateidentity.MarkerCandidate{Path: windowsMarkerPath, Data: []byte(`{"schemaVersion":1,"productIdentifier":"app.luxury-yacht.desktop","distribution":"nsis","scope":"machine"}`)},
 			},
 			want: updateidentity.InstallationEligibility{
 				Reason: updateidentity.ReasonWindowsUnverifiedInstall, Recovery: updateidentity.RecoveryWindowsDownload,

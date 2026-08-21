@@ -152,21 +152,23 @@ func TestRenderedWindowsMarkersMatchRuntimeInstallationIdentity(t *testing.T) {
 	for _, test := range []struct {
 		name       string
 		markerPath string
+		scope      updateidentity.InstallationScope
 		canInstall bool
-		reason     updateidentity.EligibilityReason
-		recovery   updateidentity.RecoveryTarget
 	}{
-		{name: "user", markerPath: specs[0].outputPath, canInstall: true},
+		{
+			name: "user", markerPath: specs[0].outputPath,
+			scope: updateidentity.InstallationScopeUser, canInstall: true,
+		},
 		{
 			name: "machine", markerPath: specs[1].outputPath,
-			reason:   updateidentity.ReasonWindowsMachineScope,
-			recovery: updateidentity.RecoveryWindowsPerUserMigration,
+			scope: updateidentity.InstallationScopeMachine,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			executable := filepath.Join("C:", "Luxury Yacht", "luxury-yacht.exe")
 			eligibility := updateidentity.ResolveInstallation(updateidentity.InstallationProbe{
 				Platform: updateidentity.PlatformWindows, Architecture: "amd64", TargetPath: executable,
+				WindowsMachineRegistered: test.scope == updateidentity.InstallationScopeMachine,
 				Marker: &updateidentity.MarkerCandidate{
 					Path: filepath.Join(filepath.Dir(executable), updateidentity.InstallationMarkerName),
 					Data: readTestFileBytes(t, test.markerPath),
@@ -175,8 +177,14 @@ func TestRenderedWindowsMarkersMatchRuntimeInstallationIdentity(t *testing.T) {
 			require.True(t, eligibility.CanCheck)
 			require.Equal(t, test.canInstall, eligibility.CanInstall)
 			require.Equal(t, updateidentity.DistributionWindowsNSIS, eligibility.Distribution)
-			require.Equal(t, test.reason, eligibility.Reason)
-			require.Equal(t, test.recovery, eligibility.Recovery)
+			require.Equal(t, test.scope, eligibility.Scope)
+			if test.canInstall {
+				require.Empty(t, eligibility.Reason)
+				require.Empty(t, eligibility.Recovery)
+			} else {
+				require.Equal(t, updateidentity.ReasonManagedInstallation, eligibility.Reason)
+				require.Equal(t, updateidentity.RecoveryWindowsDownload, eligibility.Recovery)
+			}
 		})
 	}
 }

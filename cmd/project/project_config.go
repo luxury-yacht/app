@@ -229,10 +229,16 @@ func linuxReleaseArtifactName(name, version, goarch, format string) string {
 }
 
 func windowsReleaseArtifactName(name, version, goarch, format string) string {
-	if format != "exe" || !isReleaseArchitecture(goarch) {
+	if !isReleaseArchitecture(goarch) {
 		return ""
 	}
-	return fmt.Sprintf("%s-%s-windows-%s-installer.exe", name, version, goarch)
+	scope := "user"
+	if format == "system-exe" {
+		scope = "system"
+	} else if format != "exe" {
+		return ""
+	}
+	return fmt.Sprintf("%s-%s-windows-%s-%s-installer.exe", name, version, goarch, scope)
 }
 
 func isReleaseArchitecture(goarch string) bool {

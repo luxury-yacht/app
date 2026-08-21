@@ -71,6 +71,7 @@ func TestCollectInstallationProbeReadsOnlyAdjacentWindowsMarker(t *testing.T) {
 	require.Equal(t, &updateidentity.MarkerCandidate{Path: markerPath, Data: markerData}, probe.Marker)
 	require.Equal(t, updateidentity.InstallationEligibility{
 		CanCheck: true, CanInstall: true, Distribution: updateidentity.DistributionWindowsNSIS,
+		Scope: updateidentity.InstallationScopeUser,
 	}, updateidentity.ResolveInstallation(probe))
 }
 

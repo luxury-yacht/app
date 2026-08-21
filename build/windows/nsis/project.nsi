@@ -70,12 +70,14 @@ ManifestDPIAware true
 #!finalize 'signtool --file "%1"'
 
 Name "${INFO_PRODUCTNAME}"
-OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${INFO_PRODUCTVERSION}-windows-${ARCH}-installer.exe"
 !if "${WAILS_INSTALL_SCOPE}" == "user"
+	!define WAILS_INSTALL_SCOPE_NAME "user"
     InstallDir "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
 !else
+	!define WAILS_INSTALL_SCOPE_NAME "system"
     InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}"
 !endif
+OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${INFO_PRODUCTVERSION}-windows-${ARCH}-${WAILS_INSTALL_SCOPE_NAME}-installer.exe"
 ShowInstDetails show # This will always show the installation details.
 
 Function .onInit

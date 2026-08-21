@@ -14,6 +14,8 @@ import (
 
 const gitHubRepositoryFlag = "--repo"
 
+const releaseDryRunEnv = "RELEASE_DRY_RUN"
+
 type releaseNotesData struct {
 	Version          string
 	BuildLabel       string
@@ -221,6 +223,7 @@ func createRelease(
 	cfg releaseConfig,
 	notesFile string,
 	assets []string,
+	dryRun bool,
 	run releaseCommandRunner,
 ) error {
 	args := []string{
@@ -234,6 +237,14 @@ func createRelease(
 		args = append(args, "--prerelease")
 	}
 	args = append(args, assets...)
+	if dryRun {
+		fmt.Printf(
+			"\n🧪 Dry run validated release %s with %d assets; skipping GitHub release creation.\n",
+			cfg.version,
+			len(assets),
+		)
+		return nil
+	}
 
 	fmt.Printf("\n🎯 Creating release %s\n", cfg.version)
 
@@ -254,8 +265,19 @@ func createRelease(
 	return nil
 }
 
-// publishRelease publishes the release to GitHub.
-func publishRelease(cfg releaseConfig) error {
+func parseReleaseDryRun(value string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "false":
+		return false, nil
+	case "true":
+		return true, nil
+	default:
+		return false, fmt.Errorf("%s must be true or false, got %q", releaseDryRunEnv, value)
+	}
+}
+
+// publishRelease validates the complete release input and optionally publishes it.
+func publishRelease(cfg releaseConfig, dryRun bool) error {
 	if err := checkGhCli(); err != nil {
 		return err
 	}
@@ -293,7 +315,7 @@ func publishRelease(cfg releaseConfig) error {
 	defer os.Remove(notesFile)
 
 	// Create the release.
-	if err := createRelease(cfg, notesFile, assets, runCommand); err != nil {
+	if err := createRelease(cfg, notesFile, assets, dryRun, runCommand); err != nil {
 		return err
 	}
 

@@ -376,17 +376,17 @@ func TestValidateConfiguredLinuxUpdaterArchiveUsesExactWailsPayload(t *testing.T
 	require.ErrorContains(t, err, "unsupported updater artifact target")
 }
 
-func TestPrepareReleaseUpdaterManifestSignsOneImmutableAssetForStableRelease(t *testing.T) {
+func TestPrepareReleaseUpdaterManifestSignsEveryConfiguredTargetForStableRelease(t *testing.T) {
 	t.Chdir(repositoryPath())
 	directory := t.TempDir()
 	metadata := testProjectMetadata("v2.0.0")
-	for _, target := range []updaterTarget{
-		{Platform: "darwin", Architecture: "arm64"},
-		{Platform: "darwin", Architecture: "amd64"},
-	} {
+	metadata.LuxuryYacht.UpdaterTargets = updaterTargetNames(orderedUpdaterTargets)
+	var artifactNames []string
+	for _, target := range orderedUpdaterTargets {
 		name, err := updaterArtifactName(metadata, target.Platform, target.Architecture)
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(directory, name), []byte("artifact"), 0o600))
+		artifactNames = append(artifactNames, name)
 	}
 	privateKey := filepath.Join(directory, "updater.key")
 	publicKey := filepath.Join(directory, "updater.key.pub")
@@ -399,8 +399,10 @@ func TestPrepareReleaseUpdaterManifestSignsOneImmutableAssetForStableRelease(t *
 		"GITHUB_RUN_NUMBER":        "42",
 	}
 	var channels []string
+	var manifestArgs []string
 	run := func(_ string, args ...string) error {
 		if slices.Contains(args, "manifest") {
+			manifestArgs = append([]string(nil), args...)
 			channel := args[slices.Index(args, "-channel")+1]
 			channels = append(channels, channel)
 			output := args[slices.Index(args, "-output")+1]
@@ -419,6 +421,9 @@ func TestPrepareReleaseUpdaterManifestSignsOneImmutableAssetForStableRelease(t *
 	require.NoError(t, err)
 	require.Equal(t, []string{"stable"}, channels)
 	require.FileExists(t, filepath.Join(directory, "updater.json"))
+	for _, name := range artifactNames {
+		require.Contains(t, manifestArgs, filepath.Join(directory, ".updater-manifest-stable", name))
+	}
 }
 
 func TestPrepareReleaseUpdaterManifestRejectsMismatchedOrIncompleteConfiguration(t *testing.T) {

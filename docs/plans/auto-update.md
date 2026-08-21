@@ -8,9 +8,10 @@ discovers releases through GitHub and loads that release's `updater.json` before
 accepting an update. Before Stage 1 rollout, the macOS beta smoke and recovery
 matrix must pass. The Phase 6 durable lifecycle, workflow, and release
 documentation is complete. Cross-platform acceptance remains the overall
-completion gate. Windows Authenticode certificate procurement is in progress.
-It does not block the macOS stage, but it remains a Windows enablement and
-overall-completion dependency (`backend/update_provider.go`;
+completion gate. Windows updater payloads are enabled without Authenticode;
+their mandatory integrity boundary remains the signed updater manifest.
+Authenticode may be added later as distribution hardening without changing the
+updater protocol (`backend/update_provider.go`;
 `cmd/project/updater_release.go`; `cmd/project/release.go`;
 `.github/workflows/release.yml`).
 
@@ -56,8 +57,9 @@ macOS completion is not plan completion. This initiative is complete only when
 all of the following are production-supported for every release architecture:
 
 - an eligible installed macOS `.app` updates through a signed/notarized app ZIP;
-- an eligible per-user Windows installation updates through a signed raw
-  executable; and
+- eligible per-user Windows installations update through a raw executable
+  authenticated by the signed updater manifest, while all-users installations
+  remain check-only and use the current installer; and
 - an explicitly identified, user-owned portable Linux installation updates
   through a single binary or single-entry tar payload.
 
@@ -70,8 +72,7 @@ plan unless later added as separately approved distribution work.
 ## Non-goals
 
 - silent download, forced restart, or an updater-owned modal workflow;
-- in-place replacement of files owned by DEB, RPM, or a machine-scope Windows
-  installer;
+- in-place replacement of files owned by DEB or RPM;
 - AppImage self-update, package-repository management, delta updates, or
   automatic downgrade; and
 - treating completion of the macOS stage as completion of the cross-platform
@@ -90,9 +91,9 @@ Owner decisions recorded before implementation:
   required completion stage.
 - [x] Use an Ed25519 signing key held in a protected CI secret, with
   the public key embedded in the application.
-- [x] Windows Authenticode certificate procurement is in progress. Windows
-  update checks and self-update remain disabled until signed payload targets
-  are enabled, and the initiative cannot be declared complete in that state.
+- [x] Enable Windows self-update without making Authenticode a prerequisite.
+  The release-scoped Ed25519 signature remains mandatory for payload integrity;
+  Authenticode can be added later to improve Windows trust and reputation.
 - [x] **Skip This Version** survives application restarts as backend-owned update
   state that is not part of portable settings export.
 - [x] Publish exactly one signed `updater.json` as an asset of each GitHub
@@ -150,8 +151,8 @@ updater target:
   through the same code-signing, Gatekeeper, and stapler checks
   (`.github/workflows/release.yml:62-68,118-157`;
   `build/darwin/Taskfile.yml:130-142`);
-- Windows builds unsigned per-user NSIS installers for CI validation but does
-  not publish them while the signing rollout is incomplete;
+- Windows publishes unsigned per-user NSIS installers and versioned raw updater
+  executables for amd64 and arm64 after native validation;
 - Linux publishes DEB and RPM packages
   (`.github/workflows/release.yml:159-166`); and
 - the release helper selects the ordered target set configured in
@@ -189,10 +190,9 @@ Automatic work is process-scoped, not window-scoped or cluster-scoped:
    the existing readiness guarantee in `backend/application_lifecycle.go:42-65`.
 3. Run one silent `Updater.Check` immediately, then repeat every six hours.
 4. Suppress automatic checks for development builds, server builds, and builds
-   without a valid release version or valid distribution identity. A valid
-   notification-only DEB, RPM, or machine-scope installation still checks so it
-   can offer the defined manual recovery action; eligibility blocks staging,
-   not discovery.
+   without a valid release version or valid distribution identity. Valid
+   notification-only DEB/RPM installations still check so they can offer the
+   defined manual recovery action; eligibility blocks staging, not discovery.
 5. Cancel the scheduler during service shutdown.
 6. Allow only one check/download/install flow at a time. A manual check joins,
    focuses, or reports the existing flow rather than starting a competing state
@@ -262,8 +262,8 @@ The shell action contract is:
    **Restart & Apply**. Only that action may call `Updater.Restart`.
 6. Notification-only distributions expose the typed reason-specific recovery
    action defined below, falling back to **View Download Options** only for an
-   unsupported distribution. Recovery actions open the release/download or
-   migration target and never stage an artifact.
+   unsupported distribution. Recovery actions open the release/download target
+   and never stage an artifact.
 7. Any permitted About close path, including its close control, `Escape`, or
    backdrop, closes only the presentation. It never cancels a process-owned
    check, download, verification, or staging operation. The status chip keeps
@@ -326,8 +326,7 @@ the one frontend presentation mapping:
 | --- | --- | --- |
 | `mac-not-installed-bundle` | **Move Luxury Yacht to Applications to enable automatic updates.** | **View macOS Download** |
 | `mac-read-only` or `mac-unwritable-parent` | **This copy of Luxury Yacht cannot replace itself in its current location.** | **View macOS Download** |
-| `windows-machine-scope` | **This copy was installed for all users. Switch to the per-user installation to enable automatic updates.** | **Switch to Per-User Installation** |
-| `windows-unverified-install` | **This Windows installation cannot be verified as a supported per-user installation.** | **View Windows Download** |
+| `windows-unverified-install` | **This Windows installation cannot be verified as a supported installation.** | **View Windows Download** |
 | `linux-package-managed` | **This installation is managed by your system package manager. Update it with that package manager or download the latest package.** | **View Linux Packages** |
 | `linux-portable-ineligible` | **This portable installation cannot replace itself in its current location.** | **View Portable Download** |
 | `unsupported-distribution` | **Automatic updates are not available for this installation.** | **View Download Options** |
@@ -537,59 +536,44 @@ not complete.
 
 ### Windows
 
-Do not enable full self-update until all of these are resolved:
+Full self-update requires all of these contracts:
 
-1. Change new release installers to per-user scope under LocalAppData, or add a
-   separately identified per-user distribution intended for self-update.
-2. Sign the application executable before creating the NSIS installer so both
-   the installed binary and standalone updater artifact contain the same signed
-   bytes.
-3. Sign the installer separately.
-4. Publish the signed raw executable as the updater artifact; retain the NSIS
-   installer for first installation and manual recovery.
-5. Have the per-user NSIS installer write
+1. Publish a recommended per-user installer under LocalAppData and an optional
+   all-users installer under Program Files, with distinct artifact names.
+2. Build once, copy that executable to the versioned raw updater artifact, and
+   package the same bytes into both NSIS installers.
+3. Publish the raw executable as the updater artifact and authenticate it with
+   the release-scoped Ed25519-signed manifest; retain both NSIS installers for
+   first installation and manual recovery.
+4. Have both NSIS installers write
    `$INSTDIR\luxury-yacht.install.json` with a versioned schema containing
-   `productIdentifier`, `distribution: "nsis"`, and `scope: "user"`. The app
+   `productIdentifier`, `distribution: "nsis"`, and the exact scope. The app
    reads this marker adjacent to its running executable; the updater replaces
-   only the executable, so the marker survives updates. A missing, malformed,
-   machine-scope, mismatched-product, or non-adjacent marker is notification-only.
-   The uninstaller removes it with the installation directory.
-6. Apply the one-time machine-scope migration experience defined below. Until
-   migrated, those installs stay notification-only.
-7. Reconcile per-user Apps & Features `DisplayVersion` after a successful
-   update, because Wails replaces the application executable rather than
-   rerunning NSIS. Keep uninstaller ownership and registry access limited to the
-   known per-user installation contract.
+   only the executable, so the marker survives updates. Machine scope also
+   requires exact HKLM product registration; that registration is accepted as
+   legacy all-users identity when a marker is absent. Missing, malformed,
+   mismatched-product, non-adjacent, or otherwise ambiguous identity is
+   notification-only.
+5. Keep the ordinary Wails path for per-user replacement. Treat verified
+   all-users and legacy machine installations as check-only and direct them to
+   the current Windows installer without staging a payload or requesting UAC.
+6. Never change installation scope during automatic update. The per-user
+   installer may refuse a second copy beside an exact all-users registration;
+   switching scope remains an explicit uninstall/reinstall operation.
 
-The machine-scope migration experience is part of the Windows stage after a
-signed Windows updater target is enabled:
-
-1. About explains why the current installation is notification-only and exposes
-   **Switch to Per-User Installation**.
-2. That action opens the exact GitHub Release for the discovered version. Its
-   release notes provide the signed per-user installer and the required order:
-   close Luxury Yacht, uninstall the existing all-users copy through Windows
-   Installed Apps, then run the per-user installer and relaunch.
-3. The per-user installer detects the registered machine-scope product and
-   refuses a side-by-side installation. It offers **Open Installed Apps** and
-   **Exit** rather than installing a second copy.
-4. The machine-scope uninstaller and per-user installer preserve the existing
-   user-profile settings. Migration tests prove the first per-user launch sees
-   the prior settings before automatic updates become eligible.
-5. Until the adjacent per-user marker validates, every check remains
-   notification-only. The running application never initiates an elevated
-   uninstall or silently changes installation scope.
-
-Builds that predate the machine-install detector and signed Windows updater
-target cannot acquire this migration action in-band. Release/download guidance
-is the required out-of-band path for those users; it must give the same
-uninstall-then-install sequence before the first signed per-user rollout.
-
-Do not add a compile-time distribution stamp: the same signed executable is the
-input to both NSIS and the raw updater artifact (`build/windows/Taskfile.yml:85-102`).
+Do not add a compile-time distribution stamp: the same built executable is the
+input to both NSIS scopes and the raw updater artifact.
 The installer-written marker is the runtime distribution and scope identity. A
 general filesystem-writability check alone is not sufficient proof that
 replacing a package-owned executable is correct.
+
+Authenticode is not part of the updater protocol: Wails authenticates the raw
+executable with the manifest's SHA-512 digest and Ed25519ph signature. Until a
+certificate is available, Windows Smart App Control or enterprise App Control
+may block an unknown unsigned executable. A future signing change must sign the
+built executable before the raw copy and NSIS packaging, then sign the completed
+installer separately; it does not require a new payload format or eligibility
+path.
 
 ### Linux
 
@@ -715,17 +699,19 @@ are blocked:
   `docs/architecture/application-lifecycle.md:102-113`.
 
 Staging cleanup uses the pinned beta.8 behavior without a Wails change. As the
-first operation in `main`, before `MaybeRunExecWrapper`, reporter setup, or
-`application.New`, create and validate a stable per-user Luxury Yacht directory
-under the operating system's original temporary directory. The directory must
-have the expected product-specific basename and ownership marker, be owned by
-the current user, reject symlinks, and use owner-only permissions where the
-platform supports them. Reuse a validated inherited `LUXURY_YACHT_TEMP_ROOT` to
-keep helper/relaunch paths idempotent rather than nesting a new root on every
-restart; when a platform launcher does not propagate that marker, derive the
-same stable per-user root from the original system temp directory. Set `TMPDIR`
-on Unix and both `TMP` and `TEMP` on Windows to that root. If setup or validation
-fails, start the app with updates disabled and a diagnostic; do not fall back to
+first startup operation in `main`, create and validate a stable per-user Luxury
+Yacht directory before the existing credential-wrapper dispatch, reporter
+setup, or `application.New`. Wails updater helpers inherit and reuse that root,
+then `application.New` recognizes and runs Wails' cross-platform helper mode.
+The directory must be under the operating system's original temporary directory, have the expected
+product-specific basename and ownership marker, be owned by the current user,
+reject symlinks, and use owner-only permissions where the platform supports
+them. Reuse a validated inherited `LUXURY_YACHT_TEMP_ROOT` to keep
+helper/relaunch paths idempotent rather than nesting a new root on every restart;
+when a platform launcher does not propagate that marker, derive the same stable
+per-user root from the original system temp directory. Set `TMPDIR` on Unix and
+both `TMP` and `TEMP` on Windows to that root. If setup or validation fails,
+start the app with updates disabled and a diagnostic; do not fall back to
 sweeping the shared operating-system temp directory.
 
 This process-global temp-directory choice is intentional. Wails calls
@@ -949,8 +935,9 @@ Add failing tests for:
 - supported platform/architecture/distribution combinations;
 - macOS installed-bundle, writable-parent, read-only-volume, and unsupported-path
   eligibility;
-- Windows valid per-user installer marker versus missing, malformed,
-  mismatched-product, non-adjacent, and machine-scope identity;
+- Windows valid per-user and machine installer markers, strict legacy HKLM
+  machine identity, and missing, malformed, mismatched-product, or non-adjacent
+  identity;
 - Linux valid portable marker versus missing, malformed, mismatched-product,
   non-adjacent, package-managed, and non-user-writable identity;
 - Linux valid DEB/RPM package marker versus missing, malformed, mismatched-
@@ -1042,7 +1029,7 @@ Add failing frontend and menu tests before changing the surfaces:
   eligible pending release;
 - **Restart & Apply** calls restart only from ready;
 - notification-only installs expose only their reason-specific recovery action
-  and open its validated release/download or migration target;
+  and open its validated release/download target;
 - About renders the canonical copy and actions for checking, current, available,
   downloading, verifying, preparing, ready, check-error, prepare-error,
   restart-error, and apply-error, including release notes where required;
@@ -1052,8 +1039,6 @@ Add failing frontend and menu tests before changing the surfaces:
 - every permitted About close path during active work closes the modal without
   cancelling the process-owned operation, and reopening resumes from the shared
   snapshot;
-- **Switch to Per-User Installation** opens the Windows migration target only
-  for machine-scope identity;
 - manual check labels and actions are aligned across native menu and command
   palette surfaces;
 - native manual check reuses `ShowAbout` so only the focused workspace opens the
@@ -1139,14 +1124,14 @@ initiative complete, rerun the combined matrix across every target:
   `open -n` relaunch through the single-instance lifecycle, version, settings,
   restored-backup reporting, missing-helper-log reporting, and backup-creation
   and launch failures;
-- Windows amd64 and arm64: verify per-user install identity,
-  every invalid marker form, Authenticode, executable swap without elevation,
-  Apps & Features version reconciliation, relaunch, and uninstall; assert the
+- Windows amd64 and arm64: verify both installer scopes, every invalid marker
+  form, strict legacy HKLM identity, signed-manifest payload authentication,
+  per-user replacement without elevation, machine check-only installer handoff,
+  Apps & Features version reconciliation, rollback on binary failure, and
+  uninstall; assert the
   recursive NSIS uninstall leaves no installation directory even when
-  `luxury-yacht.exe.old.*` or `luxury-yacht.exe.bak` is present; then verify
-  machine-scope reason copy, migration-page action, side-by-side installer
-  refusal, settings preservation, and notification-only fallback
-  (`build/windows/nsis/project.nsi:103-116`);
+  `luxury-yacht.exe.old.*` or `luxury-yacht.exe.bak` is present, and verify
+  side-by-side installer refusal plus user-profile settings preservation;
 - Linux amd64 and arm64 portable installs: verify valid installation identity,
   invalid-marker and package-owned rejection, bare-binary or single-entry-tar
   replacement without elevation, dependency diagnostics, relaunch, settings,
@@ -1198,6 +1183,10 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
     `release:failed-draft-drill` refuses the production repository, injects the
     failure before publication, verifies the remote draft state, and cleans up
     the disposable release while reporting any cleanup failure.
+  - [x] Manual release workflow dispatches default to a full non-publishing run:
+    all platform artifacts and drills execute, the signed manifest and release
+    inputs are prepared and validated, and only the GitHub Release mutation and
+    its downstream website publication remain gated behind the release input.
   - [x] Full prerelease gate passed on macOS arm64 on 2026-08-18: the complete
     Go race suite, 4,288 frontend tests across 471 files, formatting, generated
     bindings, vet, static analysis, frontend lint and typecheck, dependency
@@ -1205,35 +1194,28 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
   - [ ] Release operator: run one live failed-draft recovery drill in a
     disposable release repository before stable-channel rollout. This is not a
     manual application smoke test; follow `docs/workflows/application-updates.md`.
-- [ ] **Stage 2 — Windows:** provision Authenticode signing, move the supported
-  installer to per-user identity, publish signed raw updater executables for
-  arm64 and amd64, publish migration instructions with the release, enforce
-  installer side-by-side refusal, prove settings-preserving migration and the
-  Windows smoke matrix in prerelease and ordinary releases. Existing
-  machine-scope installs on target-enabled builds remain notification-only
-  until migrated; earlier builds use the out-of-band release guidance below.
-  - [x] Credential-free implementation completed on 2026-08-18: release
-    installers default to per-user scope and write scoped adjacent markers;
-    strict legacy HKLM evidence identifies existing machine installs as
-    non-installable; the installer refuses side-by-side migration; successful
-    swaps reconcile the validated HKCU `DisplayVersion`; versioned raw amd64 and
-    arm64 executables are built and PE-validated; and the Windows workflow
-    defines native identity plus install/uninstall/settings-preservation drills.
-  - [x] The machine-install recovery action routes to the exact versioned
-    GitHub Release instead of the unpublished website migration route. Windows
-    updater executables remain intentionally absent from published release
-    artifacts and `luxuryYacht.updaterTargets` while they are unsigned, so
-    Windows update checks remain disabled rather than reporting missing assets.
-  - [ ] Provision Authenticode credentials, sign the application executable
-    before raw-artifact copying and NSIS packaging, sign the installer
-    separately, and add both Windows architectures to
-    `luxuryYacht.updaterTargets`.
-  - [ ] Put the uninstall-then-install migration instructions and signed
-    per-user installer on the matching GitHub Release before enabling either
-    Windows target. This is the out-of-band path for older all-users builds.
+- [ ] **Stage 2 — Windows:** publish recommended per-user and optional all-users
+  installers plus raw updater executables authenticated by the signed updater
+  manifest for arm64 and amd64. Prove per-user self-update, all-users installer
+  handoff, and the Windows smoke matrix in prerelease and ordinary releases.
+  - [x] Credential-free implementation completed: both installers write scoped
+    adjacent markers; strict legacy HKLM evidence recognizes older all-users
+    installs; per-user swaps reconcile validated HKCU metadata; and machine
+    installs remain check-only with a typed Windows installer recovery action.
+  - [x] Unsigned Windows amd64 and arm64 raw updater executables plus distinct
+    user and system installers are published, both architectures are enabled in
+    `luxuryYacht.updaterTargets`, and the release manifest authenticates the raw
+    executables. Authenticode is deferred until a certificate is available.
+  - [x] Windows-native tests cover update identity and authenticated per-user
+    staging; the package drill installs and uninstalls both scopes,
+    verifies their markers/registrations, and preserves user-profile settings.
+  - [x] The 2026-08-20 macOS arm64 prerelease gate passed with both Windows
+    architecture vet builds, the full Go race suite, 4,287 frontend tests,
+    generated bindings, lint/typecheck, dependency analysis, and high/critical
+    vulnerability plus secret scanning.
   - [ ] Run the Windows amd64 and arm64 beta-to-beta, beta-to-stable,
-    multi-window, migration, failure-recovery, and ordinary-release smoke
-    matrices before declaring Windows rollout complete.
+    multi-window, machine-installer handoff, failure-recovery, and ordinary-release
+    smoke matrices before declaring Windows rollout complete.
   - [ ] Confirm the first Windows amd64 and arm64 workflow executions pass the
     new registry tests and silent NSIS package drill.
 - [ ] **Stage 3 — Linux:** publish the explicitly identified user-owned portable
@@ -1306,14 +1288,14 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
   persisted attempt state on the next launch, including when the exact helper
   log is absent; a different manually installed version supersedes stale attempt
   state without a false failure.
-- Windows self-update works without elevation from the approved per-user
-  installation marker and preserves correct uninstall metadata; recursive NSIS
-  uninstall removes the complete installation directory, including any
-  best-effort Wails `.old.*` or `.bak` leftovers.
-- Machine-scope Windows users running target-enabled builds receive the defined
-  per-user migration action; older builds receive the same sequence through
-  out-of-band release guidance. The installer prevents side-by-side scope
-  installations and preserves user-profile settings through migration.
+- Windows per-user self-update works without elevation, while all-users
+  installations remain check-only and open the current Windows installer. Both
+  scopes preserve exact uninstall metadata;
+  recursive NSIS uninstall removes the complete installation directory,
+  including any best-effort `.old.*` or `.bak` leftovers.
+- Release artifacts make the per-user installer the recommended default while
+  retaining a distinct all-users installer. Automatic update never changes
+  scope, and installer/uninstaller flows preserve user-profile settings.
 - Portable Linux self-update works without elevation only from the approved
   user-owned installation marker and preserves desktop integration and uninstall
   behavior.

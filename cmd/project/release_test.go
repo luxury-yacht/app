@@ -94,7 +94,7 @@ func TestCreateReleasePublishesOnlyAfterDraftAssetsAreUploaded(t *testing.T) {
 	err := createRelease(cfg, "/tmp/release-notes.md", []string{
 		"artifacts/luxury-yacht-v2.0.0-beta.2-darwin-arm64.zip",
 		"artifacts/updater.json",
-	}, runner)
+	}, false, runner)
 
 	require.NoError(t, err)
 	require.Equal(t, [][]string{
@@ -111,6 +111,24 @@ func TestCreateReleasePublishesOnlyAfterDraftAssetsAreUploaded(t *testing.T) {
 	}, calls)
 }
 
+func TestCreateReleaseDryRunStopsBeforeGitHubMutation(t *testing.T) {
+	runner := func(name string, args ...string) error {
+		t.Fatalf("dry run invoked %s %v", name, args)
+		return nil
+	}
+
+	err := createRelease(releaseConfig{
+		version:     "v2.0.0-beta.2",
+		isBeta:      true,
+		releaseRepo: "luxury-yacht/app",
+	}, "/tmp/release-notes.md", []string{
+		"artifacts/luxury-yacht-v2.0.0-beta.2-darwin-arm64.zip",
+		"artifacts/updater.json",
+	}, true, runner)
+
+	require.NoError(t, err)
+}
+
 func TestCreateReleaseLeavesDraftWhenPublishFails(t *testing.T) {
 	publishFailure := errors.New("publish failed")
 	call := 0
@@ -125,10 +143,23 @@ func TestCreateReleaseLeavesDraftWhenPublishFails(t *testing.T) {
 	err := createRelease(releaseConfig{
 		version:     "v2.0.0",
 		releaseRepo: "luxury-yacht/app",
-	}, "/tmp/release-notes.md", []string{"artifacts/updater.json"}, runner)
+	}, "/tmp/release-notes.md", []string{"artifacts/updater.json"}, false, runner)
 
 	require.ErrorIs(t, err, publishFailure)
 	require.ErrorContains(t, err, "failed to publish draft release v2.0.0")
+}
+
+func TestParseReleaseDryRunFailsClosed(t *testing.T) {
+	dryRun, err := parseReleaseDryRun("")
+	require.NoError(t, err)
+	require.False(t, dryRun)
+
+	dryRun, err = parseReleaseDryRun("true")
+	require.NoError(t, err)
+	require.True(t, dryRun)
+
+	_, err = parseReleaseDryRun("tru")
+	require.EqualError(t, err, `RELEASE_DRY_RUN must be true or false, got "tru"`)
 }
 
 func TestValidateReleaseDoesNotAlreadyExistBlocksUnsafeRerun(t *testing.T) {

@@ -28,7 +28,8 @@ func reconcileWindowsDisplayVersion(version string) error {
 		return fmt.Errorf("validate per-user Windows installation marker: %w", err)
 	}
 	eligibility := updateidentity.ResolveInstallation(probe)
-	if !eligibility.CanInstall || eligibility.Distribution != updateidentity.DistributionWindowsNSIS {
+	if !eligibility.CanInstall || eligibility.Distribution != updateidentity.DistributionWindowsNSIS ||
+		eligibility.Scope != updateidentity.InstallationScopeUser {
 		return fmt.Errorf("refuse Windows Installed Apps metadata update for unverified per-user installation")
 	}
 

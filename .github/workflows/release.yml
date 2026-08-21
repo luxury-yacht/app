@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: "Release (uncheck to build only)"
+        description: "Create GitHub release (uncheck for full dry run)"
         required: false
         default: false
         type: boolean
@@ -73,12 +73,18 @@ jobs:
             goos: windows
             arch: amd64
             artifact_name: artifacts-windows-amd64
-            artifact_path: bin/*-amd64-installer.exe
+            artifact_path: |
+              bin/*-windows-amd64.exe
+              bin/*-windows-amd64-user-installer.exe
+              bin/*-windows-amd64-system-installer.exe
           - runner: windows-latest-arm
             goos: windows
             arch: arm64
             artifact_name: artifacts-windows-arm64
-            artifact_path: bin/*-arm64-installer.exe
+            artifact_path: |
+              bin/*-windows-arm64.exe
+              bin/*-windows-arm64-user-installer.exe
+              bin/*-windows-arm64-system-installer.exe
           - runner: ubuntu-latest
             goos: linux
             arch: amd64
@@ -180,7 +186,7 @@ jobs:
         if: matrix.goos == 'windows'
         run: |
           go test ./internal/updateidentity ./internal/windowsinstall ./backend -run Windows -count=1
-          wails3 task windows:package ARCH=${{ matrix.arch }} INSTALL_SCOPE=user
+          wails3 task windows:package ARCH=${{ matrix.arch }}
           $env:GOOS = "windows"
           $env:GOARCH = "${{ matrix.arch }}"
           $env:WINDOWS_ARCH = "${{ matrix.arch }}"
@@ -188,9 +194,11 @@ jobs:
           $env:UPDATER_ARTIFACT = "bin/$(go run ./cmd/project release-artifact-name)"
           wails3 task release:validate-windows-updater
           $config = go run ./cmd/project config | ConvertFrom-Json
-          $installer = Get-ChildItem "bin/*-${{ matrix.arch }}-installer.exe" -File -ErrorAction Stop
-          if ($installer.Count -ne 1) { throw "Expected exactly one Windows installer" }
-          ./build/windows/package-drill.ps1 -Installer $installer.FullName -ExpectedVersion $config.version -ProductName $config.productName -UninstallRegistryPath $config.windowsUninstallRegistryPath
+          $userInstaller = Get-ChildItem "bin/*-windows-${{ matrix.arch }}-user-installer.exe" -File -ErrorAction Stop
+          if ($userInstaller.Count -ne 1) { throw "Expected exactly one Windows user installer" }
+          $systemInstaller = Get-ChildItem "bin/*-windows-${{ matrix.arch }}-system-installer.exe" -File -ErrorAction Stop
+          if ($systemInstaller.Count -ne 1) { throw "Expected exactly one Windows system installer" }
+          ./build/windows/package-drill.ps1 -UserInstaller $userInstaller.FullName -SystemInstaller $systemInstaller.FullName -ExpectedVersion $config.version -ProductName $config.productName -UninstallRegistryPath $config.windowsUninstallRegistryPath
 
       - uses: actions/upload-artifact@v7
         with:
@@ -198,19 +206,17 @@ jobs:
           path: ${{ matrix.artifact_path }}
           if-no-files-found: error
 
-  release:
-    if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}
+  prepare-release:
     needs:
       - test
       - build
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
-      RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-toolchain
@@ -241,6 +247,47 @@ jobs:
       - name: Remove updater signing key
         if: ${{ always() }}
         run: rm -f "$RUNNER_TEMP/updater.key"
+
+      - name: Validate prepared GitHub release without publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          RELEASE_DRY_RUN: "true"
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: wails3 task release:app
+
+      - name: Upload prepared release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: prepared-release-assets
+          path: ./artifacts
+          if-no-files-found: error
+
+  release:
+    if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+      RELEASE_DRY_RUN: "false"
+      RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
+        with:
+          install-linux-deps: "true"
+
+      - name: Download prepared release assets
+        uses: actions/download-artifact@v8
+        with:
+          name: prepared-release-assets
+          path: ./artifacts
 
       - name: Publish GitHub release
         run: |

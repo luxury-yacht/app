@@ -8,7 +8,7 @@ The current pipeline only publishes DMG, NSIS, DEB, and RPM packages ([release.y
 | Platform | Keep for installation | Add for Wails updates | Installation changes |
 |---|---|---|---|
 | macOS | Signed/notarized DMG | ZIP containing one signed/notarized `.app` | Only update installed bundles with a writable parent |
-| Windows | Signed NSIS installer | Signed raw `.exe` | Move eligible installs to per-user LocalAppData and add an installer-written identity marker |
+| Windows | Recommended per-user and optional all-users NSIS installers | Raw `.exe` authenticated by the signed updater manifest | Write an exact scope marker; per-user installs self-update and all-users installs use the current installer; Authenticode can be added later |
 | Linux | DEB/RPM | Raw binary or single-entry tar for a new portable distribution | DEB/RPM stay package-manager-owned; only the explicit portable distribution self-updates |
 
 ### macOS
@@ -32,31 +32,43 @@ So the existing DMG remains the installer; the new `.app.zip` is the updater pay
 
 Windows needs the most packaging work.
 
-Today the release produces an unsigned NSIS installer, and machine scope is the default ([Taskfile](/Volumes/git/luxury-yacht/app/build/windows/Taskfile.yml:58), [NSIS configuration](/Volumes/git/luxury-yacht/app/build/windows/nsis/project.nsi:68)). Wails cannot rerun that installer—it replaces the running executable.
+The release produces distinct per-user and all-users NSIS installers plus a raw
+updater executable from the same build. Wails cannot rerun an installer—it
+replaces the running executable.
 
 We would change the pipeline to:
 
 1. Build `luxury-yacht.exe`.
-2. Authenticode-sign that executable.
-3. Save a versioned copy as the updater artifact, such as `luxury-yacht-v2.0.0-windows-amd64.exe`.
-4. Build the NSIS installer from those same signed bytes.
-5. Sign the completed installer separately.
-6. Publish both artifacts.
+2. Save a versioned copy as the updater artifact, such as `luxury-yacht-v2.0.0-windows-amd64.exe`.
+3. Build both NSIS installer scopes from those same bytes.
+4. Publish all three artifacts and authenticate the raw executable with the signed updater manifest.
 
-Eligible installations must become per-user installs under LocalAppData. The installer would also write an adjacent marker such as:
+When an Authenticode certificate becomes available, sign the built executable
+before steps 2 and 3, then sign each completed installer separately. That changes
+Windows trust and reputation, not the updater payload format.
+
+The per-user installer is the recommended default under LocalAppData. The
+all-users installer remains available under Program Files for managed or shared
+machines. Each installer writes an adjacent marker such as:
 
 ```json
 {
   "schemaVersion": 1,
-  "productIdentifier": "com.luxury-yacht.app",
+  "productIdentifier": "app.luxury-yacht.desktop",
   "distribution": "nsis",
   "scope": "user"
 }
 ```
 
-The application would only self-update when that marker is valid and adjacent to the running executable. Existing machine-wide Program Files installations would remain notification-only until migrated.
+The application self-updates directly when a valid `user` marker is adjacent to
+the executable. A valid `machine` marker plus exact HKLM ownership, or that same
+strict ownership evidence for an older markerless all-users install, remains
+check-only and opens the current Windows installer. Automatic update never
+requests elevation or changes installation scope.
 
-Because Wails updates only the executable, we would also need to reconcile the per-user Apps & Features `DisplayVersion`; otherwise Windows could show the original installer version after several self-updates.
+Because Wails updates only the per-user executable, that path reconciles the
+exact Apps & Features `DisplayVersion`; all-users metadata is owned by the
+installer that performs its manual upgrade.
 
 ### Linux
 
@@ -91,4 +103,9 @@ Across all platforms, we also need to:
 - Download the public manifest and artifacts afterward and verify their exact versions, channels, digests, and signatures.
 - Preserve all current installation artifacts for new installations and recovery.
 
-So the build itself is largely reusable. The main work is adding safe updater-specific wrappers around the binaries, platform signing, explicit installation identity, and a stricter publication pipeline. The significant policy question is whether “all platforms” means adding a portable self-updating Linux distribution or accepting that package-manager installations remain notification-only.
+So the build itself is largely reusable. The main work is adding safe
+updater-specific wrappers around the binaries, required platform validation,
+explicit installation identity, and a stricter publication pipeline. The
+significant policy question is whether “all platforms” means adding a portable
+self-updating Linux distribution or accepting that package-manager installations
+remain notification-only.

@@ -157,7 +157,7 @@ func runReleaseDraftDrill(
 	releaseErr := createRelease(releaseConfig{
 		version:     cfg.tag,
 		releaseRepo: cfg.repository,
-	}, notesFile, []string{asset}, faultInjectingRunner)
+	}, notesFile, []string{asset}, false, faultInjectingRunner)
 	if !errors.Is(releaseErr, errInjectedDraftPublishFailure) {
 		return fmt.Errorf("failed-draft drill did not reach the injected publish failure: %w", releaseErr)
 	}

@@ -35,7 +35,7 @@ const (
 	ReasonMacNotInstalledBundle    EligibilityReason = "mac-not-installed-bundle"
 	ReasonMacReadOnly              EligibilityReason = "mac-read-only"
 	ReasonMacUnwritableParent      EligibilityReason = "mac-unwritable-parent"
-	ReasonWindowsMachineScope      EligibilityReason = "windows-machine-scope"
+	ReasonManagedInstallation      EligibilityReason = "managed-installation"
 	ReasonWindowsUnverifiedInstall EligibilityReason = "windows-unverified-install"
 	ReasonLinuxPackageManaged      EligibilityReason = "linux-package-managed"
 	ReasonLinuxPortableIneligible  EligibilityReason = "linux-portable-ineligible"
@@ -45,12 +45,18 @@ const (
 type RecoveryTarget string
 
 const (
-	RecoveryMacDownload             RecoveryTarget = "mac-download"
-	RecoveryWindowsDownload         RecoveryTarget = "windows-download"
-	RecoveryWindowsPerUserMigration RecoveryTarget = "windows-per-user-migration"
-	RecoveryLinuxPackages           RecoveryTarget = "linux-packages"
-	RecoveryLinuxPortableDownload   RecoveryTarget = "linux-portable-download"
-	RecoveryDownloadOptions         RecoveryTarget = "download-options"
+	RecoveryMacDownload           RecoveryTarget = "mac-download"
+	RecoveryWindowsDownload       RecoveryTarget = "windows-download"
+	RecoveryLinuxPackages         RecoveryTarget = "linux-packages"
+	RecoveryLinuxPortableDownload RecoveryTarget = "linux-portable-download"
+	RecoveryDownloadOptions       RecoveryTarget = "download-options"
+)
+
+type InstallationScope string
+
+const (
+	InstallationScopeUser    InstallationScope = "user"
+	InstallationScopeMachine InstallationScope = "machine"
 )
 
 // MarkerCandidate is the exact marker path and content observed by a platform
@@ -64,16 +70,16 @@ type MarkerCandidate struct {
 // InstallationProbe contains filesystem evidence gathered for the running
 // target. The resolver remains deterministic and does not access the host.
 type InstallationProbe struct {
-	Platform                    Platform
-	Architecture                string
-	TargetPath                  string
-	MacInstalledBundle          bool
-	VolumeReadOnly              bool
-	ParentWritable              bool
-	PackageManagedTarget        bool
-	WindowsLegacyMachineInstall bool
-	Marker                      *MarkerCandidate
-	PackageMarker               *MarkerCandidate
+	Platform                 Platform
+	Architecture             string
+	TargetPath               string
+	MacInstalledBundle       bool
+	VolumeReadOnly           bool
+	ParentWritable           bool
+	PackageManagedTarget     bool
+	WindowsMachineRegistered bool
+	Marker                   *MarkerCandidate
+	PackageMarker            *MarkerCandidate
 }
 
 // InstallationEligibility distinguishes release discovery from in-place
@@ -83,6 +89,7 @@ type InstallationEligibility struct {
 	CanCheck     bool
 	CanInstall   bool
 	Distribution Distribution
+	Scope        InstallationScope
 	Reason       EligibilityReason
 	Recovery     RecoveryTarget
 }
@@ -139,10 +146,11 @@ func resolveMacInstallation(probe InstallationProbe) InstallationEligibility {
 func resolveWindowsInstallation(probe InstallationProbe) InstallationEligibility {
 	marker, ok := validAdjacentMarker(probe.Platform, probe.TargetPath, probe.Marker)
 	if !ok {
-		if probe.Marker == nil && probe.WindowsLegacyMachineInstall {
+		if probe.Marker == nil && probe.WindowsMachineRegistered {
 			return InstallationEligibility{
 				CanCheck: true, Distribution: DistributionWindowsNSIS,
-				Reason: ReasonWindowsMachineScope, Recovery: RecoveryWindowsPerUserMigration,
+				Scope: InstallationScopeMachine, Reason: ReasonManagedInstallation,
+				Recovery: RecoveryWindowsDownload,
 			}
 		}
 		return InstallationEligibility{
@@ -164,9 +172,17 @@ func resolveWindowsInstallation(probe InstallationProbe) InstallationEligibility
 	switch marker.Scope {
 	case "user":
 		result.CanInstall = true
+		result.Scope = InstallationScopeUser
 	case "machine":
-		result.Reason = ReasonWindowsMachineScope
-		result.Recovery = RecoveryWindowsPerUserMigration
+		if !probe.WindowsMachineRegistered {
+			return InstallationEligibility{
+				Reason:   ReasonWindowsUnverifiedInstall,
+				Recovery: RecoveryWindowsDownload,
+			}
+		}
+		result.Scope = InstallationScopeMachine
+		result.Reason = ReasonManagedInstallation
+		result.Recovery = RecoveryWindowsDownload
 	default:
 		return InstallationEligibility{
 			Reason:   ReasonWindowsUnverifiedInstall,

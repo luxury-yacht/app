@@ -23,7 +23,7 @@ export enum EligibilityReason {
     ReasonMacNotInstalledBundle = "mac-not-installed-bundle",
     ReasonMacReadOnly = "mac-read-only",
     ReasonMacUnwritableParent = "mac-unwritable-parent",
-    ReasonWindowsMachineScope = "windows-machine-scope",
+    ReasonManagedInstallation = "managed-installation",
     ReasonWindowsUnverifiedInstall = "windows-unverified-install",
     ReasonLinuxPackageManaged = "linux-package-managed",
     ReasonLinuxPortableIneligible = "linux-portable-ineligible",
@@ -38,7 +38,6 @@ export enum RecoveryTarget {
 
     RecoveryMacDownload = "mac-download",
     RecoveryWindowsDownload = "windows-download",
-    RecoveryWindowsPerUserMigration = "windows-per-user-migration",
     RecoveryLinuxPackages = "linux-packages",
     RecoveryLinuxPortableDownload = "linux-portable-download",
     RecoveryDownloadOptions = "download-options",

@@ -105,12 +105,6 @@ const recoveryActionForTarget = (
       return { kind: 'recovery', label: 'View macOS Download', url: releaseURL(update) };
     case 'windows-download':
       return { kind: 'recovery', label: 'View Windows Download', url: releaseURL(update) };
-    case 'windows-per-user-migration':
-      return {
-        kind: 'recovery',
-        label: 'Switch to Per-User Installation',
-        url: releaseURL(update),
-      };
     case 'linux-packages':
       return { kind: 'recovery', label: 'View Linux Packages', url: DOWNLOADS_URL };
     case 'linux-portable-download':
@@ -142,25 +136,20 @@ const recoveryPresentation = (
         explanation: 'This copy of Luxury Yacht cannot replace itself in its current location.',
         action: action({ kind: 'recovery', label: 'View macOS Download', url: releaseURL(update) }),
       };
-    case 'windows-machine-scope':
-      return {
-        explanation:
-          'This copy was installed for all users. Switch to the per-user installation to enable automatic updates.',
-        action: action({
-          kind: 'recovery',
-          label: 'Switch to Per-User Installation',
-          url: releaseURL(update),
-        }),
-      };
     case 'windows-unverified-install':
       return {
-        explanation:
-          'This Windows installation cannot be verified as a supported per-user installation.',
+        explanation: 'This Windows installation cannot be verified as a supported installation.',
         action: action({
           kind: 'recovery',
           label: 'View Windows Download',
           url: releaseURL(update),
         }),
+      };
+    case 'managed-installation':
+      return {
+        explanation:
+          'This installation is managed outside the app. Use its installer or package manager to update it.',
+        action: action({ kind: 'recovery', label: 'View Download Options', url: DOWNLOADS_URL }),
       };
     case 'linux-package-managed':
       return {
