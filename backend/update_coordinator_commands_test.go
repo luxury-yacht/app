@@ -369,12 +369,22 @@ func TestNewUpdateCoordinatorDisablesOnTempSetupFailure(t *testing.T) {
 	require.NotNil(t, app.Updates.coordinator)
 	require.Equal(t, appupdates.StatusDisabled, app.Updates.coordinator.Snapshot().Status)
 	require.False(t, app.Updates.coordinator.Snapshot().CanInstall)
+	require.NoError(t, app.Updates.Reset(context.Background()))
 }
 
 func TestNewUpdateCoordinatorWithoutStateStopsCleanly(t *testing.T) {
 	app := newUpdateCoordinatorTestFixture(t)
 
 	require.NotPanics(t, app.Updates.Stop)
+}
+
+func TestNewApplicationUpdateStateStoreUsesDefaultStatePath(t *testing.T) {
+	setTestConfigEnv(t)
+
+	store, err := newApplicationUpdateStateStore(ApplicationUpdateOptions{TempRoot: t.TempDir()})
+
+	require.NoError(t, err)
+	require.NotNil(t, store)
 }
 
 func TestPrepareApplicationUpdateStateReconcilesBeforeSweepingOrphans(t *testing.T) {

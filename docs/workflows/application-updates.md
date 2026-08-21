@@ -246,7 +246,11 @@ restart/application handoff or another non-cancellable durable mutation is in
 flight, leaving recovery state intact. Cleanup attempts every validated owned
 artifact, preserves failed entries for retry, aggregates errors, and removes
 the state file only after validated cleanup. Missing state and a repeated reset
-are valid; merely resolving paths must not create their parent directories.
+are valid; merely resolving paths must not create their parent directories. If
+startup rejected the configured temp root, updates remain disabled and reset
+leaves that unvalidated path untouched instead of treating the startup
+diagnostic as a Factory Reset failure. The final static-state sweep still
+removes app-owned config and cache state.
 
 ## Signing-key handling
 

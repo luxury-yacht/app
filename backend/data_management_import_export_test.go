@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/internal/appupdates"
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -377,6 +378,33 @@ func TestFactoryResetAttemptsIndependentOwnersAndReturnsPartialFailure(t *testin
 	_, statErr := os.Lstat(favoritesPath)
 	require.ErrorIs(t, statErr, os.ErrNotExist, "favorites reset must still run after updater failure")
 	require.FileExists(t, recoveryPath, "the root sweep must not discard recovery data after an owner failure")
+}
+
+func TestFactoryResetSucceedsWhenUpdaterTempSetupFailed(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newSettingsEffectsTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	foreignRoot := t.TempDir()
+	foreignSentinel := filepath.Join(foreignRoot, "keep")
+	require.NoError(t, os.WriteFile(foreignSentinel, []byte("foreign"), 0o600))
+	updates := NewUpdateCoordinator(
+		app.DesktopShell,
+		app.signals.CtxOrBackground,
+		app.signals.emitEvent,
+		app.AppLogs.Logger(),
+		ApplicationUpdateOptions{
+			TempRoot:       foreignRoot,
+			TempSetupError: errors.New("updater temp path is not owned by the current user"),
+		},
+	)
+	app.Updates = updates
+	app.DataManagement.updates = updates
+
+	err := app.DataManagement.ClearAppState()
+
+	require.NoError(t, err)
+	require.Equal(t, appupdates.StatusDisabled, updates.coordinator.Snapshot().Status)
+	require.FileExists(t, foreignSentinel)
 }
 
 func TestReadDataImportFileRejectsOversizedFiles(t *testing.T) {

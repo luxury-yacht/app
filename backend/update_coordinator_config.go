@@ -208,7 +208,9 @@ func prepareApplicationUpdateState(
 
 func newApplicationUpdateStateStore(options ApplicationUpdateOptions) (*updatestate.Store, error) {
 	if options.TempSetupError != nil {
-		return nil, options.TempSetupError
+		// No temp root was accepted as app-owned, so reset must leave that path
+		// untouched instead of replaying the startup diagnostic as a reset failure.
+		return nil, nil
 	}
 	if strings.TrimSpace(options.TempRoot) == "" {
 		return nil, nil
