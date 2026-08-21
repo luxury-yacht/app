@@ -12,7 +12,7 @@ info:
   description: "Luxury Yacht is a desktop app for managing Kubernetes clusters. Sail the seas of Kubernetes in style!"
   copyright: "Copyright © 2025-2026 Luxury Yacht"
   comments: "Luxury Yacht desktop application"
-  version: "v2.0.0-beta.3"
+  version: "v2.0.0-beta.4"
   cfBundleIconName: "appicon"
 
 # Repository-owned release metadata that is not part of Wails' platform metadata.
