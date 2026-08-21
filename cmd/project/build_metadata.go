@@ -59,7 +59,7 @@ func generateBuildMetadata(options buildMetadataOptions) (buildManifest, error) 
 	version := strings.TrimSpace(config.Info.Version)
 	beta := isBetaVersion(version)
 	updaterTargets, err := configuredUpdaterTargets(config)
-	if err != nil && len(config.LuxuryYacht.UpdaterTargets) > 0 {
+	if err != nil {
 		return buildManifest{}, fmt.Errorf("validate configured updater targets: %w", err)
 	}
 	manifest := buildManifest{

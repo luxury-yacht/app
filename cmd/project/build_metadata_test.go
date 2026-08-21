@@ -12,6 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const validUpdaterTargetsYAML = `luxuryYacht:
+  updaterTargets:
+    - darwin/arm64
+`
+
 func TestGenerateWritesManifestFromWailsConfigAndEnvironment(t *testing.T) {
 	withoutEnvironment(t, sentryBackendDSN)
 	root := t.TempDir()
@@ -59,9 +64,7 @@ func TestGenerateDoesNotOverrideExportedEnvironment(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.yml")
 	envPath := filepath.Join(root, ".env")
-	require.NoError(t, os.WriteFile(configPath, []byte(`info:
-  version: "2.0.0"
-`), 0o600))
+	require.NoError(t, os.WriteFile(configPath, []byte("info:\n  version: \"2.0.0\"\n"+validUpdaterTargetsYAML), 0o600))
 	require.NoError(t, os.WriteFile(envPath, []byte("SENTRY_BACKEND_DSN=https://file@example.com/1\n"), 0o600))
 
 	manifest, err := generateBuildMetadata(buildMetadataOptions{
@@ -80,7 +83,7 @@ func TestGenerateAllowsMissingEnvironmentFileForStableBuild(t *testing.T) {
 	withoutEnvironment(t, sentryBackendDSN)
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.yml")
-	require.NoError(t, os.WriteFile(configPath, []byte("info:\n  version: 2.0.0\n"), 0o600))
+	require.NoError(t, os.WriteFile(configPath, []byte("info:\n  version: 2.0.0\n"+validUpdaterTargetsYAML), 0o600))
 
 	manifest, err := generateBuildMetadata(buildMetadataOptions{
 		ConfigPath: configPath,
@@ -95,6 +98,64 @@ func TestGenerateAllowsMissingEnvironmentFileForStableBuild(t *testing.T) {
 	require.Empty(t, manifest.BetaExpiry)
 	require.Empty(t, manifest.SentryDSN)
 	require.Equal(t, "abc123def", manifest.GitCommit)
+}
+
+func TestGenerateRequiresConfiguredUpdaterTargets(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "config.yml")
+	outputPath := filepath.Join(root, "generated.json")
+	require.NoError(t, os.WriteFile(configPath, []byte("info:\n  version: 2.0.0\n"), 0o600))
+
+	_, err := generateBuildMetadata(buildMetadataOptions{
+		ConfigPath: configPath,
+		OutputPath: outputPath,
+	})
+
+	require.EqualError(t, err, "validate configured updater targets: updater targets are required")
+	require.NoFileExists(t, outputPath)
+}
+
+func TestGenerateRejectsInvalidUpdaterTargetConfiguration(t *testing.T) {
+	tests := map[string]struct {
+		config string
+		want   string
+	}{
+		"misspelled key": {
+			config: `info:
+  version: 2.0.0
+luxuryYacht:
+  updaterTarget:
+    - darwin/arm64
+`,
+			want: "validate configured updater targets: updater targets are required",
+		},
+		"unsupported target": {
+			config: `info:
+  version: 2.0.0
+luxuryYacht:
+  updaterTargets:
+    - plan9/amd64
+`,
+			want: "validate configured updater targets: unsupported updater target plan9/amd64",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			configPath := filepath.Join(root, "config.yml")
+			outputPath := filepath.Join(root, "generated.json")
+			require.NoError(t, os.WriteFile(configPath, []byte(test.config), 0o600))
+
+			_, err := generateBuildMetadata(buildMetadataOptions{
+				ConfigPath: configPath,
+				OutputPath: outputPath,
+			})
+
+			require.EqualError(t, err, test.want)
+			require.NoFileExists(t, outputPath)
+		})
+	}
 }
 
 func TestGenerateReportsInvalidInputs(t *testing.T) {
@@ -115,18 +176,18 @@ func TestGenerateReportsInvalidInputs(t *testing.T) {
 			want:   "parse Wails config",
 		},
 		"missing version": {
-			config: "info: {}\n",
+			config: "info: {}\n" + validUpdaterTargetsYAML,
 			output: filepath.Join(root, "generated.json"),
 			want:   "has no info.version",
 		},
 		"malformed environment": {
-			config: "info:\n  version: 2.0.0\n",
+			config: "info:\n  version: 2.0.0\n" + validUpdaterTargetsYAML,
 			env:    "SENTRY_BACKEND_DSN='unterminated",
 			output: filepath.Join(root, "generated.json"),
 			want:   "read environment",
 		},
 		"missing output": {
-			config: "info:\n  version: 2.0.0\n",
+			config: "info:\n  version: 2.0.0\n" + validUpdaterTargetsYAML,
 			want:   "build manifest output path is required",
 		},
 	}
@@ -175,7 +236,7 @@ func withoutEnvironment(t *testing.T, name string) {
 func TestGenerateReportsSummaryWriteFailure(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.yml")
-	require.NoError(t, os.WriteFile(configPath, []byte("info:\n  version: 2.0.0\n"), 0o600))
+	require.NoError(t, os.WriteFile(configPath, []byte("info:\n  version: 2.0.0\n"+validUpdaterTargetsYAML), 0o600))
 
 	_, err := generateBuildMetadata(buildMetadataOptions{
 		ConfigPath: configPath,

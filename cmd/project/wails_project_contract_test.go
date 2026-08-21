@@ -889,18 +889,17 @@ func TestWindowsReleasePublishesAndDrillsBothInstallerScopes(t *testing.T) {
 
 func TestConfiguredUpdaterTargetsPublishOnlyReplaceablePayloads(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
-	config := readTestFile(t, repositoryPath("build", "config.yml"))
 	require.NotContains(t, workflow, "UPDATER_TARGETS:")
-	for _, target := range []string{
+	config, err := readProjectMetadata(repositoryPath("build", "config.yml"))
+	require.NoError(t, err)
+	require.Equal(t, []string{
 		"darwin/arm64",
 		"darwin/amd64",
 		"windows/amd64",
 		"windows/arm64",
 		"linux/amd64",
 		"linux/arm64",
-	} {
-		require.Contains(t, config, "- "+target)
-	}
+	}, config.LuxuryYacht.UpdaterTargets)
 	windowsPackage := "wails3 task windows:package ARCH=${{ matrix.arch }}"
 	windowsValidation := "wails3 task release:validate-windows-updater"
 	require.Contains(t, workflow, windowsPackage)
