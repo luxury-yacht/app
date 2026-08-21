@@ -10,4 +10,4 @@ Luxury Yacht v2.0.0 has migrated to the latest version of the Wails framework! W
 
 ### Fixed
 
-- Factory Reset in Settings -> Advanced now properly removes ALL saved state. Preferences, favorites, UI persistence, updater state and staging, caches, browser storage, abandoned atomic-write files, and obsolete files under the app state roots are all deleted. Interrupted-save temp files are also discarded on app startup. Factory Reset also completes when automatic updates were disabled by an invalid or foreign temp root, while leaving that unowned path untouched.
+- Factory Reset in Settings -> Advanced now properly removes ALL saved state. Preferences, favorites, UI persistence, updater state and staging, caches, browser storage, abandoned atomic-write files, and obsolete files under the app state roots are all deleted. Interrupted-save temp files are also discarded on app startup.
