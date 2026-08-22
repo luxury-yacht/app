@@ -708,7 +708,7 @@ product-specific basename and ownership marker, reject symlinks, and use
 owner-only permissions where the platform supports them. Unix ownership must
 match the current UID. Windows creates the root and marker with an explicit
 `TOKEN_USER` owner and protected user-only DACL, then requires that exact owner
-and DACL on reuse.
+on reuse.
 Reuse a validated inherited `LUXURY_YACHT_TEMP_ROOT` to keep
 helper/relaunch paths idempotent rather than nesting a new root on every restart;
 when a platform launcher does not propagate that marker, derive the same stable

@@ -5,6 +5,7 @@ package updatetemp
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -53,4 +54,42 @@ func TestWindowsCreatesPrivateFileOwnedByProcessUser(t *testing.T) {
 	currentUser, err := windows.GetCurrentProcessToken().GetTokenUser()
 	require.NoError(t, err)
 	require.True(t, owner.Equals(currentUser.User.Sid))
+}
+
+func TestWindowsValidationDoesNotRequireAnExactDACL(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "unprotected")
+	require.NoError(t, createOwnedDirectory(root))
+
+	descriptor, err := windows.GetNamedSecurityInfo(
+		root,
+		windows.SE_FILE_OBJECT,
+		windows.DACL_SECURITY_INFORMATION,
+	)
+	require.NoError(t, err)
+	dacl, _, err := descriptor.DACL()
+	require.NoError(t, err)
+	require.NoError(t, windows.SetNamedSecurityInfo(
+		root,
+		windows.SE_FILE_OBJECT,
+		windows.DACL_SECURITY_INFORMATION|windows.UNPROTECTED_DACL_SECURITY_INFORMATION,
+		nil,
+		nil,
+		dacl,
+		nil,
+	))
+	runtime.KeepAlive(descriptor)
+
+	updated, err := windows.GetNamedSecurityInfo(
+		root,
+		windows.SE_FILE_OBJECT,
+		windows.DACL_SECURITY_INFORMATION,
+	)
+	require.NoError(t, err)
+	control, _, err := updated.Control()
+	require.NoError(t, err)
+	require.Zero(t, control&windows.SE_DACL_PROTECTED)
+
+	info, err := os.Lstat(root)
+	require.NoError(t, err)
+	require.NoError(t, validateOwnedPath(root, info, true))
 }

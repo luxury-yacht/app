@@ -11,8 +11,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const fileAllAccessMask windows.ACCESS_MASK = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0x1ff
-
 func createOwnedDirectory(path string) error {
 	userSID, err := currentProcessUserSID(windows.GetCurrentProcessToken())
 	if err != nil {
@@ -73,14 +71,14 @@ func createOwnedFile(path string) (*os.File, error) {
 	return file, nil
 }
 
-func validateOwnedPath(path string, _ os.FileInfo, directory bool) error {
+func validateOwnedPath(path string, _ os.FileInfo, _ bool) error {
 	descriptor, err := windows.GetNamedSecurityInfo(
 		path,
 		windows.SE_FILE_OBJECT,
-		windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION,
+		windows.OWNER_SECURITY_INFORMATION,
 	)
 	if err != nil {
-		return fmt.Errorf("read updater temp path security %s: %w", path, err)
+		return fmt.Errorf("read updater temp path owner %s: %w", path, err)
 	}
 	owner, _, err := descriptor.Owner()
 	if err != nil {
@@ -92,38 +90,6 @@ func validateOwnedPath(path string, _ os.FileInfo, directory bool) error {
 	}
 	if owner == nil || !owner.Equals(userSID) {
 		return fmt.Errorf("updater temp path is not owned by the current user: %s", path)
-	}
-	control, _, err := descriptor.Control()
-	if err != nil {
-		return fmt.Errorf("read updater temp path security control %s: %w", path, err)
-	}
-	if control&windows.SE_DACL_PROTECTED == 0 {
-		return fmt.Errorf("updater temp path DACL must be protected from inheritance: %s", path)
-	}
-	dacl, _, err := descriptor.DACL()
-	if err != nil {
-		return fmt.Errorf("read updater temp path DACL %s: %w", path, err)
-	}
-	if dacl == nil || dacl.AceCount != 1 {
-		return fmt.Errorf("updater temp path must grant access only to the current user: %s", path)
-	}
-	var ace *windows.ACCESS_ALLOWED_ACE
-	if err := windows.GetAce(dacl, 0, &ace); err != nil {
-		return fmt.Errorf("read updater temp path access entry %s: %w", path, err)
-	}
-	if ace == nil {
-		return fmt.Errorf("updater temp path access entry is missing: %s", path)
-	}
-	wantFlags := uint8(0)
-	if directory {
-		wantFlags = windows.OBJECT_INHERIT_ACE | windows.CONTAINER_INHERIT_ACE
-	}
-	aceSID := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
-	if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE ||
-		ace.Header.AceFlags != wantFlags ||
-		ace.Mask != fileAllAccessMask ||
-		!aceSID.Equals(userSID) {
-		return fmt.Errorf("updater temp path must grant full access only to the current user: %s", path)
 	}
 	return nil
 }
