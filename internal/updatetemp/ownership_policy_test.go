@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWindowsOwnerSIDAllowsOnlyTrustedOwnershipMigration(t *testing.T) {
+func TestWindowsOwnerSIDRequiresExactCurrentUser(t *testing.T) {
 	const (
 		tokenUserSID         = "S-1-5-21-1000"
 		tokenDefaultOwnerSID = "S-1-5-32-544"
@@ -14,7 +14,7 @@ func TestWindowsOwnerSIDAllowsOnlyTrustedOwnershipMigration(t *testing.T) {
 	)
 
 	require.NotEqual(t, tokenUserSID, tokenDefaultOwnerSID)
-	require.True(t, ownerSIDCanBeMigrated(tokenDefaultOwnerSID, tokenUserSID, tokenDefaultOwnerSID))
-	require.True(t, ownerSIDCanBeMigrated(tokenUserSID, tokenUserSID, tokenDefaultOwnerSID))
-	require.False(t, ownerSIDCanBeMigrated(foreignOwnerSID, tokenUserSID, tokenDefaultOwnerSID))
+	require.False(t, ownerSIDIsCurrentUser(tokenDefaultOwnerSID, tokenUserSID))
+	require.True(t, ownerSIDIsCurrentUser(tokenUserSID, tokenUserSID))
+	require.False(t, ownerSIDIsCurrentUser(foreignOwnerSID, tokenUserSID))
 }

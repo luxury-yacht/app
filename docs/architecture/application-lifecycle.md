@@ -50,11 +50,9 @@ root before exec-wrapper dispatch, Wails composition, or any child process so
 Wails staging, helper logs, and inherited children resolve the same root.
 On Windows, create the root and marker with an explicit account owner
 (`TOKEN_USER`) and a protected DACL granting inheritable full control only to
-that user. A legacy path owned by the same process token's default owner
-(`TOKEN_OWNER`) may be migrated once to that private descriptor; foreign owners
-are rejected. Validation after creation or migration requires the exact user
-owner and private DACL. Unix platforms continue to require the current UID and
-owner-only permissions.
+that user. Validation requires the exact user owner and private DACL; paths
+owned by any other account or group are rejected. Unix platforms continue to
+require the current UID and owner-only permissions.
 For an installable portable Linux target, derive the root's base from the
 target's XDG data home rather than the system temporary directory; Wails'
 Unix helper completes the swap with a same-filesystem rename. Package-managed

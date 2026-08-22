@@ -169,7 +169,7 @@ func ensureOwnedRoot(root, userID string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("updater temp root must be a directory: %s", root)
 	}
-	if err := ensureOwnedPath(root, info, true); err != nil {
+	if err := validateOwnedPath(root, info, true); err != nil {
 		return err
 	}
 	return ensureOwnershipMarker(root, userID)
@@ -211,7 +211,7 @@ func ensureOwnershipMarker(root, userID string) error {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return fmt.Errorf("updater temp ownership marker must be a regular file")
 	}
-	if err := ensureOwnedPath(markerPath, info, false); err != nil {
+	if err := validateOwnedPath(markerPath, info, false); err != nil {
 		return err
 	}
 	data, err := os.ReadFile(markerPath)

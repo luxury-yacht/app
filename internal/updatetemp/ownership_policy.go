@@ -1,5 +1,5 @@
 package updatetemp
 
-func ownerSIDCanBeMigrated(pathOwnerSID, tokenUserSID, tokenDefaultOwnerSID string) bool {
-	return pathOwnerSID != "" && (pathOwnerSID == tokenUserSID || pathOwnerSID == tokenDefaultOwnerSID)
+func ownerSIDIsCurrentUser(pathOwnerSID, tokenUserSID string) bool {
+	return pathOwnerSID != "" && pathOwnerSID == tokenUserSID
 }

@@ -73,49 +73,6 @@ func createOwnedFile(path string) (*os.File, error) {
 	return file, nil
 }
 
-func ensureOwnedPath(path string, info os.FileInfo, directory bool) error {
-	token := windows.GetCurrentProcessToken()
-	userSID, err := currentProcessUserSID(token)
-	if err != nil {
-		return fmt.Errorf("read current process user SID: %w", err)
-	}
-	defaultOwner, err := tokenDefaultOwnerSID(token)
-	if err != nil {
-		return fmt.Errorf("read current process default owner SID: %w", err)
-	}
-	descriptor, err := windows.GetNamedSecurityInfo(
-		path,
-		windows.SE_FILE_OBJECT,
-		windows.OWNER_SECURITY_INFORMATION,
-	)
-	if err != nil {
-		return fmt.Errorf("read updater temp path owner %s: %w", path, err)
-	}
-	owner, _, err := descriptor.Owner()
-	if err != nil {
-		return fmt.Errorf("read updater temp path owner SID %s: %w", path, err)
-	}
-	pathOwnerSID := ""
-	if owner != nil {
-		pathOwnerSID = owner.String()
-	}
-	userSIDString := userSID.String()
-	defaultOwnerSID := defaultOwner.String()
-	if !ownerSIDCanBeMigrated(pathOwnerSID, userSIDString, defaultOwnerSID) {
-		return fmt.Errorf(
-			"updater temp path is not owned by the current process: %s (path owner: %s; process user: %s; process default owner: %s)",
-			path,
-			pathOwnerSID,
-			userSIDString,
-			defaultOwnerSID,
-		)
-	}
-	if err := setPrivatePathSecurity(path, userSID, directory); err != nil {
-		return fmt.Errorf("secure updater temp path for the current user %s: %w", path, err)
-	}
-	return validateOwnedPath(path, info, directory)
-}
-
 func validateOwnedPath(path string, _ os.FileInfo, directory bool) error {
 	descriptor, err := windows.GetNamedSecurityInfo(
 		path,
@@ -133,7 +90,11 @@ func validateOwnedPath(path string, _ os.FileInfo, directory bool) error {
 	if err != nil {
 		return fmt.Errorf("read current process user SID: %w", err)
 	}
-	if owner == nil || !owner.Equals(userSID) {
+	pathOwnerSID := ""
+	if owner != nil {
+		pathOwnerSID = owner.String()
+	}
+	if !ownerSIDIsCurrentUser(pathOwnerSID, userSID.String()) {
 		return fmt.Errorf("updater temp path is not owned by the current user: %s", path)
 	}
 	control, _, err := descriptor.Control()
@@ -205,61 +166,4 @@ func privateSecurityDescriptor(userSID *windows.SID, directory bool) (*windows.S
 		return nil, fmt.Errorf("make private security descriptor absolute: %w", err)
 	}
 	return descriptor, nil
-}
-
-func setPrivatePathSecurity(path string, userSID *windows.SID, directory bool) error {
-	descriptor, err := privateSecurityDescriptor(userSID, directory)
-	if err != nil {
-		return err
-	}
-	dacl, _, err := descriptor.DACL()
-	if err != nil {
-		return fmt.Errorf("read private DACL: %w", err)
-	}
-	err = windows.SetNamedSecurityInfo(
-		path,
-		windows.SE_FILE_OBJECT,
-		windows.OWNER_SECURITY_INFORMATION|
-			windows.DACL_SECURITY_INFORMATION|
-			windows.PROTECTED_DACL_SECURITY_INFORMATION,
-		userSID,
-		nil,
-		dacl,
-		nil,
-	)
-	runtime.KeepAlive(descriptor)
-	return err
-}
-
-type tokenOwner struct {
-	Owner *windows.SID
-}
-
-// Legacy roots created without an explicit security descriptor may use
-// TOKEN_OWNER, which is separate from TOKEN_USER and may be Administrators.
-func tokenDefaultOwnerSID(token windows.Token) (*windows.SID, error) {
-	var required uint32
-	err := windows.GetTokenInformation(token, windows.TokenOwner, nil, 0, &required)
-	if err != windows.ERROR_INSUFFICIENT_BUFFER {
-		return nil, err
-	}
-	if required < uint32(unsafe.Sizeof(tokenOwner{})) {
-		return nil, fmt.Errorf("invalid TOKEN_OWNER size: %d", required)
-	}
-
-	buffer := make([]byte, required)
-	if err := windows.GetTokenInformation(
-		token,
-		windows.TokenOwner,
-		&buffer[0],
-		uint32(len(buffer)),
-		&required,
-	); err != nil {
-		return nil, err
-	}
-	owner := (*tokenOwner)(unsafe.Pointer(&buffer[0])).Owner
-	if owner == nil {
-		return nil, fmt.Errorf("TOKEN_OWNER did not contain an owner SID")
-	}
-	return owner.Copy()
 }

@@ -16,10 +16,6 @@ func createOwnedFile(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 }
 
-func ensureOwnedPath(path string, info os.FileInfo, directory bool) error {
-	return validateOwnedPath(path, info, directory)
-}
-
 func validateOwnedPath(path string, info os.FileInfo, directory bool) error {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || int(stat.Uid) != os.Geteuid() {
