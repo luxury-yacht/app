@@ -859,7 +859,7 @@ func TestWindowsReleasePublishesAndDrillsBothInstallerScopes(t *testing.T) {
 	drill := readTestFile(t, repositoryPath("build", "windows", "package-drill.ps1"))
 
 	require.Contains(t, workflow, "build/windows/package-drill.ps1")
-	require.Contains(t, workflow, "go test ./internal/updateidentity ./internal/windowsinstall ./backend -run Windows -count=1")
+	require.Contains(t, workflow, "go test ./internal/updatetemp ./internal/updateidentity ./internal/windowsinstall ./backend -run Windows -count=1")
 	require.Contains(t, workflow, "*-windows-${{ matrix.arch }}-user-installer.exe")
 	require.Contains(t, workflow, "*-windows-${{ matrix.arch }}-system-installer.exe")
 	require.Contains(t, workflow, "-UserInstaller $userInstaller.FullName -SystemInstaller $systemInstaller.FullName")

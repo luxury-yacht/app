@@ -704,9 +704,12 @@ Yacht directory before the existing credential-wrapper dispatch, reporter
 setup, or `application.New`. Wails updater helpers inherit and reuse that root,
 then `application.New` recognizes and runs Wails' cross-platform helper mode.
 The directory must be under the operating system's original temporary directory, have the expected
-product-specific basename and ownership marker, be owned by the current user,
-reject symlinks, and use owner-only permissions where the platform supports
-them. Reuse a validated inherited `LUXURY_YACHT_TEMP_ROOT` to keep
+product-specific basename and ownership marker, reject symlinks, and use
+owner-only permissions where the platform supports them. Unix ownership must
+match the current UID. Windows creates the root and marker with an explicit
+`TOKEN_USER` owner and protected user-only DACL; a legacy `TOKEN_OWNER` path may
+be migrated once, after which strict user ownership and DACL validation apply.
+Reuse a validated inherited `LUXURY_YACHT_TEMP_ROOT` to keep
 helper/relaunch paths idempotent rather than nesting a new root on every restart;
 when a platform launcher does not propagate that marker, derive the same stable
 per-user root from the original system temp directory. Set `TMPDIR` on Unix and

@@ -155,7 +155,7 @@ func ensureOwnedRoot(root, userID string) error {
 		if !os.IsNotExist(err) {
 			return fmt.Errorf("inspect updater temp root %s: %w", root, err)
 		}
-		if err := os.Mkdir(root, 0o700); err != nil {
+		if err := createOwnedDirectory(root); err != nil {
 			return fmt.Errorf("create updater temp root %s: %w", root, err)
 		}
 		info, err = os.Lstat(root)
@@ -169,7 +169,7 @@ func ensureOwnedRoot(root, userID string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("updater temp root must be a directory: %s", root)
 	}
-	if err := validateOwnedPath(root, info, true); err != nil {
+	if err := ensureOwnedPath(root, info, true); err != nil {
 		return err
 	}
 	return ensureOwnershipMarker(root, userID)
@@ -191,7 +191,7 @@ func ensureOwnershipMarker(root, userID string) error {
 		if marshalErr != nil {
 			return fmt.Errorf("encode updater temp ownership marker: %w", marshalErr)
 		}
-		file, openErr := os.OpenFile(markerPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		file, openErr := createOwnedFile(markerPath)
 		if openErr != nil {
 			return fmt.Errorf("create updater temp ownership marker: %w", openErr)
 		}
@@ -211,7 +211,7 @@ func ensureOwnershipMarker(root, userID string) error {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return fmt.Errorf("updater temp ownership marker must be a regular file")
 	}
-	if err := validateOwnedPath(markerPath, info, false); err != nil {
+	if err := ensureOwnedPath(markerPath, info, false); err != nil {
 		return err
 	}
 	data, err := os.ReadFile(markerPath)

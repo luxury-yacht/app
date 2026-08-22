@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/luxury-yacht/app/internal/updatetemp"
@@ -111,6 +112,38 @@ func TestSetupRejectsSymlinkedRootAndInvalidOwnershipMarker(t *testing.T) {
 		})
 
 		require.ErrorContains(t, err, "invalid ownership marker")
+	})
+}
+
+func TestSetupRejectsUnsafeUnixOwnershipPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows ownership is validated with security identifiers")
+	}
+
+	t.Run("root", func(t *testing.T) {
+		base := t.TempDir()
+		root := updatetemp.ExpectedRoot(base, "501")
+		require.NoError(t, os.Mkdir(root, 0o755))
+
+		_, err := updatetemp.Setup(updatetemp.Config{
+			Platform: "darwin", BaseTempDir: base, UserID: "501", Environment: newMemoryEnvironment(),
+		})
+
+		require.ErrorContains(t, err, "owner-only rwx permissions")
+	})
+
+	t.Run("ownership marker", func(t *testing.T) {
+		base := t.TempDir()
+		root := updatetemp.ExpectedRoot(base, "501")
+		require.NoError(t, os.Mkdir(root, 0o700))
+		marker := filepath.Join(root, updatetemp.OwnershipMarkerName)
+		require.NoError(t, os.WriteFile(marker, []byte(`{}`), 0o644))
+
+		_, err := updatetemp.Setup(updatetemp.Config{
+			Platform: "darwin", BaseTempDir: base, UserID: "501", Environment: newMemoryEnvironment(),
+		})
+
+		require.ErrorContains(t, err, "ownership marker must have owner-only permissions")
 	})
 }
 
