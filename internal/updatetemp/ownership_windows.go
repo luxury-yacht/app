@@ -90,11 +90,7 @@ func validateOwnedPath(path string, _ os.FileInfo, directory bool) error {
 	if err != nil {
 		return fmt.Errorf("read current process user SID: %w", err)
 	}
-	pathOwnerSID := ""
-	if owner != nil {
-		pathOwnerSID = owner.String()
-	}
-	if !ownerSIDIsCurrentUser(pathOwnerSID, userSID.String()) {
+	if owner == nil || !owner.Equals(userSID) {
 		return fmt.Errorf("updater temp path is not owned by the current user: %s", path)
 	}
 	control, _, err := descriptor.Control()
