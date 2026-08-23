@@ -9,6 +9,10 @@ import ActiveFilterChips, { type ActiveFilterChip } from '@shared/components/Act
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import {
+  DropdownFilterOption,
+  dropdownFilterOptionState,
+} from '@shared/components/dropdowns/Dropdown/DropdownFilterOption';
+import {
   ALL_MULTISELECT_FILTER,
   filterSelectionToDropdownValues,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
@@ -181,9 +185,8 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       if (!(eventTarget instanceof Element)) {
         return null;
       }
-      const row = eventTarget.closest('.dropdown-option-row');
-      const handle = row?.querySelector<HTMLElement>('.gridtable-column-drag-handle');
-      const key = handle?.dataset.columnKey;
+      const row = eventTarget.closest<HTMLElement>('.dropdown-option-row');
+      const key = row?.dataset.columnKey;
       if (!key || key === draggingColumnKey) {
         return null;
       }
@@ -223,20 +226,41 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
     };
   }, [columnOptions, draggingColumnKey, onReorderColumn]);
 
-  // Required columns are constrained, not broken: the label stays at full
-  // contrast and the row says why, instead of reading as a disabled control.
+  // A hidden column is absent from the table, so the Columns menu is the one
+  // place where dimming an unselected label reports something real.
   const renderColumnOption = (option: DropdownOption, isSelected: boolean) => {
     const required = Boolean(option.disabled);
     return (
-      <span
-        className={`dropdown-filter-option${required ? ' dropdown-filter-option--required' : ''}`}
+      <DropdownFilterOption
+        label={option.label}
+        state={dropdownFilterOptionState(isSelected, required)}
+        dimWhenOff
         title={required ? 'Always shown' : undefined}
-      >
-        <span className="dropdown-filter-check">{isSelected ? '\u2713' : ''}</span>
-        <span className="dropdown-filter-label">{option.label}</span>
-        {!!required && <span className="dropdown-filter-required">Always</span>}
-      </span>
+      />
     );
+  };
+
+  // The whole row is the drag target — a 14x18px handle is too small to aim at.
+  // The grip stays as the affordance that says so, and as the keyboard entry point.
+  const getColumnRowProps = (option: DropdownOption) => {
+    if (!onMoveColumn || !onReorderColumn || !columnOptions) {
+      return {};
+    }
+    return {
+      draggable: true,
+      'data-column-key': option.value,
+      'data-dragging': draggingColumnKey === option.value || undefined,
+      'data-drop-position': dropTarget?.key === option.value ? dropTarget.position : undefined,
+      onDragStart: (event: React.DragEvent<HTMLDivElement>) => {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', option.value);
+        setDraggingColumnKey(option.value);
+      },
+      onDragEnd: () => {
+        setDraggingColumnKey(null);
+        setDropTarget(null);
+      },
+    };
   };
 
   const renderColumnOrderActions = (option: DropdownOption) => {
@@ -247,19 +271,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       <button
         type="button"
         className="gridtable-column-drag-handle"
-        draggable
         data-column-key={option.value}
-        data-dragging={draggingColumnKey === option.value || undefined}
-        data-drop-position={dropTarget?.key === option.value ? dropTarget.position : undefined}
-        onDragStart={(event) => {
-          event.dataTransfer.effectAllowed = 'move';
-          event.dataTransfer.setData('text/plain', option.value);
-          setDraggingColumnKey(option.value);
-        }}
-        onDragEnd={() => {
-          setDraggingColumnKey(null);
-          setDropTarget(null);
-        }}
         onKeyDown={(event) => {
           if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
             return;
@@ -268,8 +280,8 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
           event.stopPropagation();
           onMoveColumn(option.value, event.key === 'ArrowUp' ? -1 : 1);
         }}
-        aria-label={`Reorder ${option.label}. Drag or use Up and Down Arrow keys.`}
-        title="Drag or use Up and Down Arrow keys to reorder"
+        aria-label={`Reorder ${option.label}. Drag the row, or use Up and Down Arrow keys.`}
+        title="Drag the row, or use Up and Down Arrow keys to reorder"
       >
         ⠿
       </button>
@@ -621,6 +633,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 dropdownClassName="dropdown-filter-menu dropdown-columns-menu"
                 renderOption={renderColumnOption}
                 renderOptionActions={renderColumnOrderActions}
+                getOptionRowProps={getColumnRowProps}
                 additionalBulkActions={
                   onResetColumns ? (
                     <button

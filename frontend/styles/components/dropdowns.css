@@ -288,15 +288,43 @@
   gap: 8px;
 }
 
-.dropdown-filter-check {
-  width: 8px;
+/* The shared multi-select control. Selection used to be a bare check glyph in an
+   8px cell, which gave the list no spine and never read as clickable. */
+.dropdown-filter-box {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1.5px solid var(--color-text-tertiary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  line-height: inherit;
-  color: var(--color-text);
-  font-weight: 600;
+  color: var(--color-bg);
+  transition:
+    background-color 0.1s ease,
+    border-color 0.1s ease;
+}
+
+.dropdown-filter-box--on {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* On, and not the user's to change. A state of the control, never extra words. */
+.dropdown-filter-box--required {
+  background-color: var(--color-text-tertiary);
+  border-color: var(--color-text-tertiary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-filter-box {
+    transition: none;
+  }
+}
+
+/* Opt-in: only correct where "off" means "removed from view". */
+.dropdown-filter-label--muted {
+  color: var(--color-text-secondary);
 }
 
 .dropdown-filter-label {
@@ -315,18 +343,6 @@
   opacity: 1;
   color: var(--color-text);
   cursor: default;
-}
-
-.dropdown-columns-menu .dropdown-option.disabled .dropdown-filter-check {
-  color: var(--color-text-tertiary);
-}
-
-.dropdown-filter-required {
-  flex: 0 0 auto;
-  padding-left: 8px;
-  font-size: var(--font-size-small, 0.75rem);
-  color: var(--color-text-tertiary);
-  white-space: nowrap;
 }
 
 /* Option content elements */

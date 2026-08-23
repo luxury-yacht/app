@@ -483,6 +483,14 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   line-height: 1;
   padding: 4px 7px;
   user-select: none;
+  opacity: 0.45;
+  transition: opacity 0.1s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gridtable-column-drag-handle {
+    transition: none;
+  }
 }
 
 .gridtable-column-drag-handle:hover,
@@ -490,16 +498,27 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   color: var(--color-text-secondary);
 }
 
-.gridtable-column-drag-handle[data-dragging="true"] {
+/* The row is the drag target; the grip is the affordance that announces it. */
+.dropdown-option-row[data-column-key] {
+  cursor: grab;
+}
+
+.dropdown-option-row[data-dragging="true"] {
   cursor: grabbing;
   opacity: 0.4;
 }
 
-.dropdown-option-row:has(.gridtable-column-drag-handle[data-drop-position="before"]) {
+.dropdown-option-row[data-column-key]:hover .gridtable-column-drag-handle,
+.dropdown-option-row.highlighted .gridtable-column-drag-handle,
+.gridtable-column-drag-handle:focus-visible {
+  opacity: 1;
+}
+
+.dropdown-option-row[data-drop-position="before"] {
   box-shadow: inset 0 2px 0 0 var(--color-accent);
 }
 
-.dropdown-option-row:has(.gridtable-column-drag-handle[data-drop-position="after"]) {
+.dropdown-option-row[data-drop-position="after"] {
   box-shadow: inset 0 -2px 0 0 var(--color-accent);
 }
 
@@ -786,10 +805,6 @@ body.dockable-panel-resizing .content-body .gridtable-pagination {
 
 .dropdown-filter-option--action {
   padding-left: 0;
-}
-
-.dropdown-filter-option--action .dropdown-filter-check {
-  display: none;
 }
 
 .gridtable-filter-actions {

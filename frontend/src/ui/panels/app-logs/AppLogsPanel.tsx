@@ -6,6 +6,10 @@
  */
 
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import {
+  DropdownFilterOption,
+  dropdownFilterOptionState,
+} from '@shared/components/dropdowns/Dropdown/DropdownFilterOption';
 import { normalizeDropdownValue } from '@shared/components/dropdowns/dropdownValue';
 import {
   ALL_MULTISELECT_FILTER,
@@ -463,10 +467,7 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
   const renderLogLevelOption = useCallback(
     (option: { value: string; label: string }, isSelected: boolean) => {
       return (
-        <span className="dropdown-filter-option">
-          <span className="dropdown-filter-check">{isSelected ? '✓' : ''}</span>
-          <span className="dropdown-filter-label">{option.label}</span>
-        </span>
+        <DropdownFilterOption label={option.label} state={dropdownFilterOptionState(isSelected)} />
       );
     },
     []
@@ -545,10 +546,7 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
   const renderComponentOption = useCallback(
     (option: { value: string; label: string }, isSelected: boolean) => {
       return (
-        <span className="dropdown-filter-option">
-          <span className="dropdown-filter-check">{isSelected ? '✓' : ''}</span>
-          <span className="dropdown-filter-label">{option.label}</span>
-        </span>
+        <DropdownFilterOption label={option.label} state={dropdownFilterOptionState(isSelected)} />
       );
     },
     []
@@ -568,20 +566,22 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
       const context = typeof option.metadata?.context === 'string' ? option.metadata.context : '';
 
       return (
-        <span className="dropdown-filter-option">
-          <span className="dropdown-filter-check">{isSelected ? '✓' : ''}</span>
-          {fileName && context ? (
-            <span className="app-logs-cluster-label">
-              <span className="app-logs-cluster-file">{fileName}</span>
-              <span className="app-logs-cluster-separator" aria-hidden="true">
-                :
+        <DropdownFilterOption
+          label={
+            fileName && context ? (
+              <span className="app-logs-cluster-label">
+                <span className="app-logs-cluster-file">{fileName}</span>
+                <span className="app-logs-cluster-separator" aria-hidden="true">
+                  :
+                </span>
+                <span className="app-logs-cluster-context">{context}</span>
               </span>
-              <span className="app-logs-cluster-context">{context}</span>
-            </span>
-          ) : (
-            <span className="dropdown-filter-label">{option.label}</span>
-          )}
-        </span>
+            ) : (
+              option.label
+            )
+          }
+          state={dropdownFilterOptionState(isSelected)}
+        />
       );
     },
     []

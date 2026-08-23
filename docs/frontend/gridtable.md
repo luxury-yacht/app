@@ -76,21 +76,28 @@ workflow and that exception is documented.
   views supply `onRowSelectionClear` to clear their selected state at the same
   boundary. Descendant rows, cells, and controls are excluded.
 - The Columns trigger reports table state the way the other filter dropdowns do:
-  plain `Columns` while every column is shown, and `Columns (shown/total)` once
-  the user hides one. Column visibility persists per cluster and view, so the
+  plain `Columns` while every column is shown, and `Columns (N hidden)` once the
+  user hides one — the count names what is missing rather than making the reader
+  subtract shown-from-total. Column visibility persists per cluster and view, so the
   closed control must stay the place that discloses it.
 - The Columns menu lists every column in current display order. Visibility
-  toggles remain disabled for required columns, while one drag handle per row
-  lets every column—including Name—move in the vertical menu. Tab from the open
-  Columns trigger focuses the first handle; a focused handle supports Up and
-  Down Arrow keys. The menu's top-to-bottom order maps to
-  the table's left-to-right column order. Reordering and visibility are
-  independent, and the shared All/None actions affect hideable columns only.
-- A required column renders as required, not as an unavailable control: the
-  label keeps full contrast, the row is titled `Always shown`, and the menu
-  carries `dropdown-columns-menu` so it can opt out of the shared disabled
-  styling. Dimming the label while its still-usable drag handle stays at full
-  strength is the state this exists to prevent.
+  toggles remain disabled for required columns, while every row—including
+  Name—can be dragged to reorder. The whole row is the drag target; the grip is
+  the affordance that says so and the keyboard entry point. Tab from the open
+  Columns trigger focuses the first grip; a focused grip supports Up and Down
+  Arrow keys. The menu's top-to-bottom order maps to the table's left-to-right
+  column order. Reordering and visibility are independent, and the shared
+  All/None actions affect hideable columns only.
+- Option presentation is owned by the shared `DropdownFilterOption`, not by each
+  menu. A required column renders as a locked control state with the label at
+  full contrast and an `Always shown` title; it must never be explained with an
+  extra word in the row. The menu carries `dropdown-columns-menu` so it can opt
+  out of the shared disabled styling, because dimming a label while its
+  still-usable drag handle stays at full strength is the state this prevents.
+- The Columns menu is the only place that dims an unselected label
+  (`dimWhenOff`), because there "off" means the column is absent from the table.
+  Filter menus must not adopt it: most of their options are off by default, so
+  dimming would flag the normal case as an anomaly.
 - `Reset` is one action over both axes: it restores the column definitions'
   declaration order and shows every hideable column. It is enabled whenever
   either axis differs from its default, and it is separated from All/None in the

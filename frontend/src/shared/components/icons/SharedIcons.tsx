@@ -585,6 +585,28 @@ export const CheckIcon: React.FC<IconProps> = ({
   </svg>
 );
 
+// Padlock for states that are on and not user-changeable (e.g. a required
+// table column in the Columns menu).
+export const LockIcon: React.FC<IconProps> = ({
+  width = 24,
+  height = 24,
+  fill = 'currentColor',
+  className,
+}) => (
+  <svg
+    className={className}
+    aria-hidden="true"
+    focusable="false"
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill={fill}
+    width={width}
+    height={height}
+  >
+    <path d="M12 2a5 5 0 0 0-5 5v3H5.5A1.5 1.5 0 0 0 4 11.5v9A1.5 1.5 0 0 0 5.5 22h13a1.5 1.5 0 0 0 1.5-1.5v-9a1.5 1.5 0 0 0-1.5-1.5H17V7a5 5 0 0 0-5-5Zm3 8H9V7a3 3 0 1 1 6 0v3Z" />
+  </svg>
+);
+
 // Pencil icon for inline edit actions (e.g., load/edit a saved theme).
 export const EditIcon: React.FC<IconProps> = ({
   width = 24,

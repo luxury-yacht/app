@@ -5,6 +5,7 @@
  * Defines shared interfaces and payload shapes for the shared components.
  */
 
+import type React from 'react';
 import type { ReactNode } from 'react';
 
 export interface DropdownOption<TMetadata = unknown> {
@@ -14,6 +15,10 @@ export interface DropdownOption<TMetadata = unknown> {
   group?: string;
   metadata?: TMetadata;
 }
+
+export type DropdownOptionRowProps = React.HTMLAttributes<HTMLDivElement> & {
+  [dataAttribute: `data-${string}`]: unknown;
+};
 
 export interface DropdownProps<TMetadata = unknown> {
   // Core props
@@ -46,6 +51,12 @@ export interface DropdownProps<TMetadata = unknown> {
   // Customization props
   renderOption?: (option: DropdownOption<TMetadata>, isSelected: boolean) => ReactNode;
   renderOptionActions?: (option: DropdownOption<TMetadata>) => ReactNode;
+  /**
+   * Props spread onto the option ROW. `renderOptionActions` only owns the
+   * trailing slot, so this is the seam for row-level behaviour such as making
+   * the whole row a drag target instead of a small handle inside it.
+   */
+  getOptionRowProps?: (option: DropdownOption<TMetadata>) => DropdownOptionRowProps;
   renderValue?: (value: string | string[], options: DropdownOption<TMetadata>[]) => ReactNode;
   className?: string;
   dropdownClassName?: string;

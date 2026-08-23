@@ -38,6 +38,7 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     dropdownClassName,
     renderOption,
     renderOptionActions,
+    getOptionRowProps,
     additionalBulkActions,
   }: {
     id: string;
@@ -49,6 +50,7 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     dropdownClassName?: string;
     renderOption?: (option: MockDropdownOption, isSelected: boolean) => React.ReactNode;
     renderOptionActions?: (option: MockDropdownOption) => React.ReactNode;
+    getOptionRowProps?: (option: MockDropdownOption) => Record<string, unknown>;
     additionalBulkActions?: React.ReactNode;
   }) => (
     <div className={dropdownClassName}>
@@ -66,7 +68,12 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
         ))}
       </select>
       {options.map((option) => (
-        <div className="dropdown-option-row" data-option-value={option.value} key={option.value}>
+        <div
+          {...getOptionRowProps?.(option)}
+          className="dropdown-option-row"
+          data-option-value={option.value}
+          key={option.value}
+        >
           {renderOption ? renderOption(option, value.includes(option.value)) : option.label}
           {renderOptionActions?.(option)}
         </div>
@@ -899,10 +906,10 @@ describe('GridTableFiltersBar', () => {
     expect(onColumnsChange).toHaveBeenCalledWith(['age']);
 
     const nameHandle = container.querySelector(
-      'button[aria-label="Reorder Name. Drag or use Up and Down Arrow keys."]'
+      'button[aria-label="Reorder Name. Drag the row, or use Up and Down Arrow keys."]'
     ) as HTMLButtonElement;
     const ageHandle = container.querySelector(
-      'button[aria-label="Reorder Age. Drag or use Up and Down Arrow keys."]'
+      'button[aria-label="Reorder Age. Drag the row, or use Up and Down Arrow keys."]'
     ) as HTMLButtonElement;
     const ageRow = container.querySelector(
       '.dropdown-option-row[data-option-value="age"]'
@@ -911,7 +918,11 @@ describe('GridTableFiltersBar', () => {
       '.dropdown-option-row[data-option-value="name"]'
     ) as HTMLDivElement;
 
-    expect(nameHandle.draggable).toBe(true);
+    // The row owns the drag; the grip is the affordance and the keyboard entry point.
+    expect(nameHandle.draggable).toBe(false);
+    expect(ageHandle.draggable).toBe(false);
+    expect(nameRow.draggable).toBe(true);
+    expect(ageRow.draggable).toBe(true);
     expect(nameHandle.textContent).toBe('⠿');
     expect(container.querySelectorAll('.gridtable-column-drag-handle')).toHaveLength(2);
 
@@ -927,12 +938,12 @@ describe('GridTableFiltersBar', () => {
     };
     const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
     Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
-    await act(async () => nameHandle.dispatchEvent(dragStart));
+    await act(async () => nameRow.dispatchEvent(dragStart));
 
     const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
     Object.defineProperty(dragOver, 'dataTransfer', { value: dataTransfer });
     await act(async () => ageRow.dispatchEvent(dragOver));
-    expect(ageHandle.dataset.dropPosition).toBe('after');
+    expect(ageRow.dataset.dropPosition).toBe('after');
 
     const drop = new Event('drop', { bubbles: true, cancelable: true });
     Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
@@ -942,13 +953,13 @@ describe('GridTableFiltersBar', () => {
 
     const upwardDragStart = new Event('dragstart', { bubbles: true, cancelable: true });
     Object.defineProperty(upwardDragStart, 'dataTransfer', { value: dataTransfer });
-    await act(async () => ageHandle.dispatchEvent(upwardDragStart));
+    await act(async () => ageRow.dispatchEvent(upwardDragStart));
     const upwardDragOver = new Event('dragover', { bubbles: true, cancelable: true });
     Object.defineProperty(upwardDragOver, 'dataTransfer', { value: dataTransfer });
     await act(async () => nameRow.dispatchEvent(upwardDragOver));
-    expect(nameHandle.dataset.dropPosition).toBe('before');
+    expect(nameRow.dataset.dropPosition).toBe('before');
 
-    await act(async () => ageHandle.dispatchEvent(new Event('dragend', { bubbles: true })));
+    await act(async () => ageRow.dispatchEvent(new Event('dragend', { bubbles: true })));
 
     const reset = container.querySelector(
       'button[aria-label="Reset columns"]'
@@ -1007,9 +1018,14 @@ describe('GridTableFiltersBar', () => {
       requiredRow.querySelector('.dropdown-filter-option'),
       'expected the Name option content'
     );
-    expect(requiredOption.classList.contains('dropdown-filter-option--required')).toBe(true);
     expect(requiredOption.getAttribute('title')).toBe('Always shown');
-    expect(requiredRow.querySelector('.dropdown-filter-required')?.textContent).toBe('Always');
+    expect(
+      requiredRow
+        .querySelector('.dropdown-filter-box')
+        ?.classList.contains('dropdown-filter-box--required')
+    ).toBe(true);
+    // Required is a state of the control, never an extra word in the row.
+    expect(requiredOption.textContent).toBe('Name');
 
     const optionalRow = requireValue(
       container.querySelector('.dropdown-option-row[data-option-value="age"]'),
@@ -1019,7 +1035,11 @@ describe('GridTableFiltersBar', () => {
       optionalRow.querySelector('.dropdown-filter-option'),
       'expected the Age option content'
     );
-    expect(optionalOption.classList.contains('dropdown-filter-option--required')).toBe(false);
-    expect(optionalRow.querySelector('.dropdown-filter-required')).toBeNull();
+    expect(optionalOption.getAttribute('title')).toBeNull();
+    expect(
+      optionalRow
+        .querySelector('.dropdown-filter-box')
+        ?.classList.contains('dropdown-filter-box--required')
+    ).toBe(false);
   });
 });

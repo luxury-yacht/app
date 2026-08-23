@@ -14,6 +14,10 @@ import type { DropdownOption, DropdownProps } from './types';
 import '@styles/components/dropdowns.css';
 import { ListboxOptionButton } from '@shared/components/aria/ListboxOptionButton';
 import {
+  DropdownFilterOption,
+  dropdownFilterOptionState,
+} from '@shared/components/dropdowns/Dropdown/DropdownFilterOption';
+import {
   DropdownArrowIcon,
   DropdownSelectAllIcon,
   DropdownSelectNoneIcon,
@@ -499,14 +503,15 @@ const DropdownOptionContent = <TMetadata,>({
   if (renderOption) {
     return renderOption(option, optionIsSelected);
   }
-  return (
-    <>
-      {multiple ? (
-        <span className="dropdown-filter-check">{optionIsSelected ? '✓' : ''}</span>
-      ) : null}
-      <span className="option-label">{option.label}</span>
-    </>
-  );
+  if (multiple) {
+    return (
+      <DropdownFilterOption
+        label={option.label}
+        state={dropdownFilterOptionState(optionIsSelected)}
+      />
+    );
+  }
+  return <span className="option-label">{option.label}</span>;
 };
 
 interface DropdownOptionRowProps<TMetadata> {
@@ -518,6 +523,7 @@ interface DropdownOptionRowProps<TMetadata> {
   optionIsSelected: boolean;
   renderOption: DropdownProps<TMetadata>['renderOption'];
   renderOptionActions: DropdownProps<TMetadata>['renderOptionActions'];
+  getOptionRowProps: DropdownProps<TMetadata>['getOptionRowProps'];
   selectOption: (value: string) => void;
 }
 
@@ -530,6 +536,7 @@ const DropdownOptionRow = <TMetadata,>({
   optionIsSelected,
   renderOption,
   renderOptionActions,
+  getOptionRowProps,
   selectOption,
 }: DropdownOptionRowProps<TMetadata>) => {
   const isGroupHeader = option.group === 'header';
@@ -581,6 +588,7 @@ const DropdownOptionRow = <TMetadata,>({
   }
   return (
     <div
+      {...getOptionRowProps?.(option)}
       className={`dropdown-option-row${optionIsHighlighted ? ' highlighted' : ''}`}
       data-dropdown-option-index={index}
     >
@@ -607,6 +615,7 @@ interface DropdownOptionListProps<TMetadata> {
   highlightedIndex: number;
   renderOption: DropdownProps<TMetadata>['renderOption'];
   renderOptionActions: DropdownProps<TMetadata>['renderOptionActions'];
+  getOptionRowProps: DropdownProps<TMetadata>['getOptionRowProps'];
   isSelected: (value: string) => boolean;
   selectOption: (value: string) => void;
 }
@@ -618,6 +627,7 @@ const DropdownOptionList = <TMetadata,>({
   highlightedIndex,
   renderOption,
   renderOptionActions,
+  getOptionRowProps,
   isSelected,
   selectOption,
 }: DropdownOptionListProps<TMetadata>) => {
@@ -635,6 +645,7 @@ const DropdownOptionList = <TMetadata,>({
       optionIsSelected={isSelected(option.value)}
       renderOption={renderOption}
       renderOptionActions={renderOptionActions}
+      getOptionRowProps={getOptionRowProps}
       selectOption={selectOption}
     />
   ));
@@ -664,6 +675,7 @@ interface DropdownMenuPortalProps<TMetadata> {
   highlightedIndex: number;
   renderOption: DropdownProps<TMetadata>['renderOption'];
   renderOptionActions: DropdownProps<TMetadata>['renderOptionActions'];
+  getOptionRowProps: DropdownProps<TMetadata>['getOptionRowProps'];
   isSelected: (value: string) => boolean;
   selectOption: (value: string) => void;
   setHighlightedIndex: (index: number) => void;
@@ -698,6 +710,7 @@ const DropdownMenuPortal = <TMetadata,>({
   highlightedIndex,
   renderOption,
   renderOptionActions,
+  getOptionRowProps,
   isSelected,
   selectOption,
   setHighlightedIndex,
@@ -765,6 +778,7 @@ const DropdownMenuPortal = <TMetadata,>({
         highlightedIndex={highlightedIndex}
         renderOption={renderOption}
         renderOptionActions={renderOptionActions}
+        getOptionRowProps={getOptionRowProps}
         isSelected={isSelected}
         selectOption={selectOption}
       />
@@ -860,6 +874,7 @@ const Dropdown = <TMetadata,>({
   additionalBulkActions,
   renderOption,
   renderOptionActions,
+  getOptionRowProps,
   renderValue,
   className = '',
   dropdownClassName = '',
@@ -1266,6 +1281,7 @@ const Dropdown = <TMetadata,>({
         highlightedIndex={highlightedIndex}
         renderOption={renderOption}
         renderOptionActions={renderOptionActions}
+        getOptionRowProps={getOptionRowProps}
         isSelected={isSelected}
         selectOption={selectOption}
         setHighlightedIndex={setHighlightedIndex}

@@ -200,16 +200,16 @@ describe('useGridTableColumnsDropdown', () => {
       expect(readLabel(renderHook({}))).toBe('Columns');
     });
 
-    it('reports shown-of-total once a column is hidden', () => {
-      expect(readLabel(renderHook({ hiddenColumns: new Set(['age']) }))).toBe('Columns (2/3)');
+    it('names the hidden count rather than making the reader subtract', () => {
+      expect(readLabel(renderHook({ hiddenColumns: new Set(['age']) }))).toBe('Columns (1 hidden)');
     });
 
-    it('counts required columns as shown', () => {
+    it('never counts a required column as hidden', () => {
       const result = renderHook({
         lockedColumns: new Set(['name']),
         hiddenColumns: new Set(['status', 'age']),
       });
-      expect(readLabel(result)).toBe('Columns (1/3)');
+      expect(readLabel(result)).toBe('Columns (2 hidden)');
     });
   });
 

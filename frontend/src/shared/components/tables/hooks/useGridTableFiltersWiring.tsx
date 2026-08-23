@@ -6,6 +6,10 @@
  */
 
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import {
+  DropdownFilterOption,
+  dropdownFilterOptionState,
+} from '@shared/components/dropdowns/Dropdown/DropdownFilterOption';
 import { normalizeDropdownValue } from '@shared/components/dropdowns/dropdownValue';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import type {
@@ -167,16 +171,11 @@ export function useGridTableFiltersWiring<T>({
 
   const renderFilterOption = useCallback(
     (option: DropdownOption, isSelected: boolean): ReactNode => (
-      <span
-        className={`dropdown-filter-option${
-          isActionOption(option) ? ' dropdown-filter-option--action' : ''
-        }`}
-      >
-        <span className="dropdown-filter-check">
-          {!isActionOption(option) && isSelected ? '✓' : ''}
-        </span>
-        <span className="dropdown-filter-label">{option.label}</span>
-      </span>
+      <DropdownFilterOption
+        label={option.label}
+        state={dropdownFilterOptionState(isSelected)}
+        plain={isActionOption(option)}
+      />
     ),
     []
   );

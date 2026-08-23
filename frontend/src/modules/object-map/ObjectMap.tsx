@@ -12,6 +12,10 @@ import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import {
+  DropdownFilterOption,
+  dropdownFilterOptionState,
+} from '@shared/components/dropdowns/Dropdown/DropdownFilterOption';
 import { normalizeDropdownValue } from '@shared/components/dropdowns/dropdownValue';
 import {
   ALL_MULTISELECT_FILTER,
@@ -619,10 +623,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
 
   const renderFilterOption = useCallback(
     (option: DropdownOption, isSelected: boolean) => (
-      <span className="dropdown-filter-option">
-        <span className="dropdown-filter-check">{isSelected ? '✓' : ''}</span>
-        <span className="dropdown-filter-label">{option.label}</span>
-      </span>
+      <DropdownFilterOption label={option.label} state={dropdownFilterOptionState(isSelected)} />
     ),
     []
   );

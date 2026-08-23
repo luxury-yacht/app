@@ -24,7 +24,7 @@ type ColumnsDropdownConfig = {
   options: Array<{ label: string; value: string; disabled?: boolean }>;
   value: string[];
   onChange: (value: string | string[]) => void;
-  /** Trigger label. Reports the shown-of-total count only while a column is hidden. */
+  /** Trigger label. Names the hidden count, and only while something is hidden. */
   renderValue: () => string;
   onMoveColumn: (key: string, offset: -1 | 1) => void;
   onReorderColumn: (key: string, targetIndex: number) => void;
@@ -112,15 +112,16 @@ export function useGridTableColumnsDropdown<T>({
   const value = columns.filter((column) => isColumnVisible(column.key)).map((column) => column.key);
 
   // Required columns are always visible, so `value` covers them too: the counts
-  // differ exactly when the user has hidden something.
+  // differ exactly when the user has hidden something. The label names that
+  // count rather than reporting shown-of-total, which would make the reader
+  // subtract to learn the one thing they want to know.
   const hiddenCount = options.length - value.length;
 
   return {
     options,
     value,
     onChange: handleColumnsDropdownChange,
-    renderValue: () =>
-      hiddenCount > 0 ? `Columns (${value.length}/${options.length})` : 'Columns',
+    renderValue: () => (hiddenCount > 0 ? `Columns (${hiddenCount} hidden)` : 'Columns'),
     onMoveColumn: moveColumn,
     onReorderColumn: reorderColumn,
     canResetColumns: canResetColumnOrder || hiddenCount > 0,
