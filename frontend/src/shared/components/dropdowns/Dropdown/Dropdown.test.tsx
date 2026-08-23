@@ -79,12 +79,16 @@ describe('Dropdown', () => {
     });
   };
 
-  const pressKey = async (element: Element | null, key: string) => {
+  const pressKey = async (
+    element: Element | null,
+    key: string,
+    init: Omit<KeyboardEventInit, 'key' | 'bubbles'> = {}
+  ) => {
     if (!element) {
       throw new Error('Element not found');
     }
     await act(async () => {
-      element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+      element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }));
       await Promise.resolve();
     });
   };
@@ -613,6 +617,54 @@ describe('Dropdown', () => {
     const thirdRow = thirdAction?.closest('.dropdown-option-row');
     expect(thirdRow?.classList.contains('highlighted')).toBe(true);
     expect(secondRow?.classList.contains('highlighted')).toBe(false);
+  });
+
+  it('returns focus to the trigger when Tab leaves an action-row dialog', async () => {
+    await mount(
+      <Dropdown
+        options={OPTIONS}
+        value={[]}
+        multiple
+        onChange={vi.fn()}
+        renderOptionActions={(option) => (
+          <button type="button" data-testid={`action-${option.value}`}>
+            Reorder
+          </button>
+        )}
+      />
+    );
+
+    const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
+    click(trigger);
+    const focusableSelector =
+      'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const forwardFocusables = Array.from(
+      document.body.querySelectorAll<HTMLElement>(`[role="dialog"] ${focusableSelector}`)
+    );
+    const lastFocusable = forwardFocusables[forwardFocusables.length - 1] ?? null;
+    await act(async () => {
+      lastFocusable?.focus();
+      await Promise.resolve();
+    });
+
+    await pressKey(lastFocusable, 'Tab');
+
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+
+    click(trigger);
+    const firstFocusable = document.body.querySelector<HTMLElement>(
+      `[role="dialog"] ${focusableSelector}`
+    );
+    await act(async () => {
+      firstFocusable?.focus();
+      await Promise.resolve();
+    });
+
+    await pressKey(firstFocusable, 'Tab', { shiftKey: true });
+
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('supports keyboard navigation while the search input has focus', async () => {

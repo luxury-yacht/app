@@ -543,37 +543,39 @@ const DropdownOptionRow = <TMetadata,>({
   }
 
   const optionIsHighlighted = index === highlightedIndex;
-  const optionAriaSelected = multiple
-    ? optionIsSelected
-    : optionIsHighlighted || (highlightedIndex < 0 && optionIsSelected);
-
-  const optionButton = (
-    <ListboxOptionButton
-      id={`${controlId}-option-${index}`}
-      data-dropdown-option-index={index}
-      className={[
-        'dropdown-option',
-        optionIsSelected && 'selected',
-        optionIsHighlighted && 'highlighted',
-        option.disabled && 'disabled',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      onClick={() => selectOption(option.value)}
-      selected={optionAriaSelected}
-      aria-disabled={option.disabled}
-      disabled={option.disabled}
-    >
-      <DropdownOptionContent
-        option={option}
-        optionIsSelected={optionIsSelected}
-        multiple={multiple}
-        renderOption={renderOption}
-      />
-    </ListboxOptionButton>
+  const optionClassName = [
+    'dropdown-option',
+    optionIsSelected && 'selected',
+    optionIsHighlighted && 'highlighted',
+    option.disabled && 'disabled',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const optionContent = (
+    <DropdownOptionContent
+      option={option}
+      optionIsSelected={optionIsSelected}
+      multiple={multiple}
+      renderOption={renderOption}
+    />
   );
   if (!renderOptionActions) {
-    return optionButton;
+    const optionAriaSelected = multiple
+      ? optionIsSelected
+      : optionIsHighlighted || (highlightedIndex < 0 && optionIsSelected);
+    return (
+      <ListboxOptionButton
+        id={`${controlId}-option-${index}`}
+        data-dropdown-option-index={index}
+        className={optionClassName}
+        onClick={() => selectOption(option.value)}
+        selected={optionAriaSelected}
+        aria-disabled={option.disabled}
+        disabled={option.disabled}
+      >
+        {optionContent}
+      </ListboxOptionButton>
+    );
   }
   return (
     <div
@@ -584,24 +586,12 @@ const DropdownOptionRow = <TMetadata,>({
         type="button"
         id={`${controlId}-option-${index}`}
         data-dropdown-option-index={index}
-        className={[
-          'dropdown-option',
-          optionIsSelected && 'selected',
-          optionIsHighlighted && 'highlighted',
-          option.disabled && 'disabled',
-        ]
-          .filter(Boolean)
-          .join(' ')}
+        className={optionClassName}
         onClick={() => selectOption(option.value)}
         aria-pressed={optionIsSelected}
         disabled={option.disabled}
       >
-        <DropdownOptionContent
-          option={option}
-          optionIsSelected={optionIsSelected}
-          multiple={multiple}
-          renderOption={renderOption}
-        />
+        {optionContent}
       </button>
       <div className="dropdown-option-actions">{renderOptionActions(option)}</div>
     </div>
@@ -1159,7 +1149,8 @@ const Dropdown = <TMetadata,>({
           : activeIndex === focusableElements.length - 1;
         if (leavingDialog) {
           closeDropdown();
-          return 'handled-no-prevent' as const;
+          triggerRef.current?.focus();
+          return true;
         }
         return false;
       }
