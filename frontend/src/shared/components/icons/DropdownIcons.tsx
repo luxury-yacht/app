@@ -1,32 +1,43 @@
 import type React from 'react';
 import type { IconProps } from './SharedIcons';
 
+// Select all / none are commands over the whole list, so they are drawn as bare
+// marks. A rounded-square outline would collide with the real checkbox each
+// option row now carries, making the header read as a third checkbox state
+// rather than an action.
 export const DropdownSelectAllIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 16 16"
+    viewBox="0 0 24 24"
     width={width}
     height={height}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
     aria-hidden="true"
     focusable="false"
   >
-    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="none" stroke="currentColor" />
-    <path d="M8 4.5v7" stroke="currentColor" strokeLinecap="round" />
-    <path d="M4.5 8h7" stroke="currentColor" strokeLinecap="round" />
+    <path d="M4 12.5 9.5 18 20 6.5" />
   </svg>
 );
 
 export const DropdownSelectNoneIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 16 16"
+    viewBox="0 0 24 24"
     width={width}
     height={height}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
     aria-hidden="true"
     focusable="false"
   >
-    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="none" stroke="currentColor" />
-    <path d="M4.75 8h6.5" stroke="currentColor" strokeLinecap="round" />
+    <path d="M5 12h14" />
   </svg>
 );
 
