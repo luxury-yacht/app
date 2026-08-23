@@ -8,6 +8,7 @@
 import ActiveFilterChips, { type ActiveFilterChip } from '@shared/components/ActiveFilterChips';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import { DROPDOWN_BULK_ACTION_ICON_SIZE } from '@shared/components/dropdowns/Dropdown/Dropdown';
 import {
   DropdownFilterOption,
   dropdownFilterOptionState,
@@ -647,7 +648,10 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                         onResetColumns();
                       }}
                     >
-                      <ResetFiltersIcon width={20} height={20} />
+                      <ResetFiltersIcon
+                        width={DROPDOWN_BULK_ACTION_ICON_SIZE}
+                        height={DROPDOWN_BULK_ACTION_ICON_SIZE}
+                      />
                       <span className="dropdown-bulk-action-label">Reset</span>
                     </button>
                   ) : null

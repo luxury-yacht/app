@@ -29,6 +29,15 @@ type DropdownMenuStyle = React.CSSProperties & {
   '--dropdown-menu-available-height': string;
 };
 
+/**
+ * Bulk-action glyph sizes. The labeled bar pairs each icon with a text label, so
+ * it takes a smaller glyph than the icon-only variant, which has nothing else to
+ * carry meaning. Exported so consumers adding actions via `additionalBulkActions`
+ * match rather than drift.
+ */
+export const DROPDOWN_BULK_ACTION_ICON_SIZE = 14;
+const DROPDOWN_BULK_ACTION_ICON_SIZE_ICON_ONLY = 16;
+
 const DROPDOWN_MENU_GAP = 2;
 const DROPDOWN_VIEWPORT_PADDING = 8;
 const DROPDOWN_MENU_MAX_HEIGHT = 400;
@@ -362,54 +371,59 @@ const DropdownBulkActions = ({
   onSelectAll,
   onSelectNone,
   additionalActions,
-}: DropdownBulkActionsProps) => (
-  <div
-    className={`dropdown-bulk-actions icon-bar${
-      showLabels ? ' dropdown-bulk-actions--labeled' : ''
-    }`}
-  >
-    {showSelectionActions ? (
-      <>
-        <button
-          type="button"
-          className={`dropdown-bulk-action icon-bar-button${
-            showLabels ? ' dropdown-bulk-action--labeled' : ''
-          }`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onSelectAll();
-          }}
-          disabled={selectedCount === selectableCount}
-          title="Select all"
-          aria-label="Select all"
-        >
-          <DropdownSelectAllIcon width={20} height={20} />
-          {showLabels ? <span className="dropdown-bulk-action-label">All</span> : null}
-        </button>
-        <button
-          type="button"
-          className={`dropdown-bulk-action icon-bar-button${
-            showLabels ? ' dropdown-bulk-action--labeled' : ''
-          }`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onSelectNone();
-          }}
-          disabled={selectedCount === 0}
-          title="Select none"
-          aria-label="Select none"
-        >
-          <DropdownSelectNoneIcon width={20} height={20} />
-          {showLabels ? <span className="dropdown-bulk-action-label">None</span> : null}
-        </button>
-      </>
-    ) : null}
-    {!!(showSelectionActions && additionalActions) && (
-      <span className="dropdown-bulk-actions-divider" aria-hidden="true" />
-    )}
-    {additionalActions}
-  </div>
-);
+}: DropdownBulkActionsProps) => {
+  const iconSize = showLabels
+    ? DROPDOWN_BULK_ACTION_ICON_SIZE
+    : DROPDOWN_BULK_ACTION_ICON_SIZE_ICON_ONLY;
+  return (
+    <div
+      className={`dropdown-bulk-actions icon-bar${
+        showLabels ? ' dropdown-bulk-actions--labeled' : ''
+      }`}
+    >
+      {showSelectionActions ? (
+        <>
+          <button
+            type="button"
+            className={`dropdown-bulk-action icon-bar-button${
+              showLabels ? ' dropdown-bulk-action--labeled' : ''
+            }`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelectAll();
+            }}
+            disabled={selectedCount === selectableCount}
+            title="Select all"
+            aria-label="Select all"
+          >
+            <DropdownSelectAllIcon width={iconSize} height={iconSize} />
+            {showLabels ? <span className="dropdown-bulk-action-label">All</span> : null}
+          </button>
+          <button
+            type="button"
+            className={`dropdown-bulk-action icon-bar-button${
+              showLabels ? ' dropdown-bulk-action--labeled' : ''
+            }`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelectNone();
+            }}
+            disabled={selectedCount === 0}
+            title="Select none"
+            aria-label="Select none"
+          >
+            <DropdownSelectNoneIcon width={iconSize} height={iconSize} />
+            {showLabels ? <span className="dropdown-bulk-action-label">None</span> : null}
+          </button>
+        </>
+      ) : null}
+      {!!(showSelectionActions && additionalActions) && (
+        <span className="dropdown-bulk-actions-divider" aria-hidden="true" />
+      )}
+      {additionalActions}
+    </div>
+  );
+};
 
 interface DropdownMenuControlsProps {
   searchable: boolean;

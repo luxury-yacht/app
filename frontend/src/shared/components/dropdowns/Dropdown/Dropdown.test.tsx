@@ -941,17 +941,39 @@ describe('Dropdown', () => {
     expect(actions?.querySelector('.dropdown-bulk-actions-divider')).toBeNull();
   });
 
-  it('renders bulk-action icons at the dropdown-specific size', async () => {
+  it('renders labeled bulk-action icons at the compact size', async () => {
     await mount(
       <Dropdown options={OPTIONS} value={[]} onChange={vi.fn()} multiple showBulkActions />
     );
 
     click(container.querySelector('.dropdown-trigger'));
 
+    // A labeled action pairs the glyph with text, so it takes the smaller size.
     const icon = document.body.querySelector<SVGElement>('.dropdown-bulk-action svg');
     expect(icon).not.toBeNull();
-    expect(requireValue(icon, 'expected bulk-action icon').getAttribute('width')).toBe('20');
-    expect(requireValue(icon, 'expected bulk-action icon').getAttribute('height')).toBe('20');
+    expect(requireValue(icon, 'expected bulk-action icon').getAttribute('width')).toBe('14');
+    expect(requireValue(icon, 'expected bulk-action icon').getAttribute('height')).toBe('14');
+  });
+
+  it('gives icon-only bulk actions a slightly larger glyph in the same compact row', async () => {
+    await mount(
+      <Dropdown
+        options={OPTIONS}
+        value={[]}
+        onChange={vi.fn()}
+        multiple
+        showBulkActions
+        searchable
+      />
+    );
+
+    click(container.querySelector('.dropdown-trigger'));
+
+    // Nothing but the glyph carries meaning here, so it takes a little more room
+    // than a labeled action — but the controls row itself is the same one.
+    const icon = document.body.querySelector<SVGElement>('.dropdown-bulk-action svg');
+    expect(requireValue(icon, 'expected bulk-action icon').getAttribute('width')).toBe('16');
+    expect(document.body.querySelectorAll('.dropdown-menu-controls')).toHaveLength(1);
   });
 
   it('preserves menu scroll position across multi-select updates', async () => {
