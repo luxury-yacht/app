@@ -22,7 +22,6 @@ import {
   DropdownSelectAllIcon,
   DropdownSelectNoneIcon,
 } from '@shared/components/icons/DropdownIcons';
-import { IconBarSeparatorIcon } from '@shared/components/icons/SharedIcons';
 import { useKeyboardSurface } from '@ui/shortcuts';
 
 type DropdownMenuStyle = React.CSSProperties & {
@@ -405,7 +404,9 @@ const DropdownBulkActions = ({
         </button>
       </>
     ) : null}
-    {!!(showSelectionActions && additionalActions) && <IconBarSeparatorIcon />}
+    {!!(showSelectionActions && additionalActions) && (
+      <span className="dropdown-bulk-actions-divider" aria-hidden="true" />
+    )}
     {additionalActions}
   </div>
 );

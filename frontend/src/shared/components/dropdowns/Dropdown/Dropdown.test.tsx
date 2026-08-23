@@ -922,9 +922,12 @@ describe('Dropdown', () => {
     expect(onReset).toHaveBeenCalledTimes(1);
 
     // The added action is a different kind of verb from All/None, so it is
-    // separated with the icon bar's shared separator rather than sitting flush.
+    // separated by a real divider. Not the icon-bar spacer, which is
+    // deliberately `visibility: hidden` and would render nothing.
     const actions = document.body.querySelector('.dropdown-bulk-actions');
-    expect(actions?.querySelector('.icon-bar-separator')).not.toBeNull();
+    const divider = actions?.querySelector('.dropdown-bulk-actions-divider');
+    expect(divider).not.toBeNull();
+    expect(divider?.classList.contains('icon-bar-separator')).toBe(false);
   });
 
   it('omits the bulk-action separator when there is nothing to separate', async () => {
@@ -935,7 +938,7 @@ describe('Dropdown', () => {
     click(container.querySelector('.dropdown-trigger'));
     const actions = document.body.querySelector('.dropdown-bulk-actions');
     expect(actions).not.toBeNull();
-    expect(actions?.querySelector('.icon-bar-separator')).toBeNull();
+    expect(actions?.querySelector('.dropdown-bulk-actions-divider')).toBeNull();
   });
 
   it('renders bulk-action icons at the dropdown-specific size', async () => {

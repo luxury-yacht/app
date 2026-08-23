@@ -461,9 +461,16 @@
 }
 
 /* Separates the visibility pair from actions that do something else. */
-.dropdown-bulk-actions .icon-bar-separator {
+/* A real rule, not the icon-bar spacer: `.icon-bar-separator` is deliberately
+   `visibility: hidden` and only reserves space. --color-border is also too close
+   to --color-bg-secondary to read on this bar in light mode. */
+.dropdown-bulk-actions-divider {
   flex: 0 0 auto;
-  color: var(--color-border);
+  width: 1px;
+  align-self: stretch;
+  margin: 3px 0.375rem;
+  background-color: var(--color-text-tertiary);
+  opacity: 0.5;
 }
 
 .dropdown-bulk-action.icon-bar-button.dropdown-bulk-action--labeled {
@@ -486,6 +493,19 @@
 
 .dropdown-bulk-action:disabled {
   opacity: 0.3;
+}
+
+/* A labeled bulk action is a toolbar control with text, not one of the icon
+   bar's quiet-until-hover glyphs, so it opts out of `.icon-bar-button`'s
+   resting `opacity: 0.4`. Without this, an ENABLED action (0.4) rendered
+   fainter than a DISABLED one (0.3-0.5), so the whole bar read as one grey
+   block with no state at all. */
+.dropdown-bulk-action.icon-bar-button.dropdown-bulk-action--labeled {
+  opacity: 1;
+}
+
+.dropdown-bulk-action.icon-bar-button.dropdown-bulk-action--labeled:disabled {
+  opacity: 0.4;
 }
 
 /* No options message */
