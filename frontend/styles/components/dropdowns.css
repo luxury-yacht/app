@@ -224,6 +224,10 @@
   flex: 1;
 }
 
+.dropdown-option-row.highlighted {
+  background-color: var(--color-bg-tertiary, rgba(255, 255, 255, 0.05));
+}
+
 .dropdown-option-actions {
   display: inline-flex;
   align-items: center;

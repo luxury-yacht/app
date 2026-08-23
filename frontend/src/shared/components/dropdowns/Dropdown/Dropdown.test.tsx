@@ -553,6 +553,52 @@ describe('Dropdown', () => {
     expect(handleChange).toHaveBeenCalledWith('beta');
   });
 
+  it('highlights the full option row when the option has a trailing action', async () => {
+    await mount(
+      <Dropdown
+        options={OPTIONS.map((option) =>
+          option.value === 'beta' ? { ...option, disabled: true } : option
+        )}
+        value=""
+        onChange={vi.fn()}
+        renderOptionActions={(option) => (
+          <button type="button" data-testid={`action-${option.value}`}>
+            Reorder
+          </button>
+        )}
+      />
+    );
+
+    const trigger = container.querySelector('.dropdown-trigger');
+    click(trigger);
+    await pressKey(trigger, 'ArrowDown');
+
+    const firstRow = document.body
+      .querySelector('[data-testid="action-alpha"]')
+      ?.closest('.dropdown-option-row');
+    expect(firstRow?.classList.contains('highlighted')).toBe(true);
+
+    const secondAction = document.body.querySelector('[data-testid="action-beta"]');
+    await act(async () => {
+      secondAction?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const secondRow = secondAction?.closest('.dropdown-option-row');
+    expect(secondRow?.classList.contains('highlighted')).toBe(true);
+    expect(firstRow?.classList.contains('highlighted')).toBe(false);
+
+    const thirdAction = document.body.querySelector<HTMLElement>('[data-testid="action-gamma"]');
+    await act(async () => {
+      thirdAction?.focus();
+      await Promise.resolve();
+    });
+
+    const thirdRow = thirdAction?.closest('.dropdown-option-row');
+    expect(thirdRow?.classList.contains('highlighted')).toBe(true);
+    expect(secondRow?.classList.contains('highlighted')).toBe(false);
+  });
+
   it('supports keyboard navigation while the search input has focus', async () => {
     await mount(
       <Dropdown options={OPTIONS} value="" onChange={vi.fn()} searchable placeholder="Searchable" />

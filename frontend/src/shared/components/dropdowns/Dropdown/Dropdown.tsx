@@ -494,7 +494,6 @@ interface DropdownOptionRowProps<TMetadata> {
   renderOption: DropdownProps<TMetadata>['renderOption'];
   renderOptionActions: DropdownProps<TMetadata>['renderOptionActions'];
   selectOption: (value: string) => void;
-  setHighlightedIndex: (index: number) => void;
 }
 
 const DropdownOptionRow = <TMetadata,>({
@@ -507,7 +506,6 @@ const DropdownOptionRow = <TMetadata,>({
   renderOption,
   renderOptionActions,
   selectOption,
-  setHighlightedIndex,
 }: DropdownOptionRowProps<TMetadata>) => {
   const isGroupHeader = option.group === 'header';
   if (isGroupHeader && option.label.trim().length === 0) {
@@ -525,15 +523,11 @@ const DropdownOptionRow = <TMetadata,>({
   const optionAriaSelected = multiple
     ? optionIsSelected
     : optionIsHighlighted || (highlightedIndex < 0 && optionIsSelected);
-  const handleMouseEnter = () => {
-    if (!option.disabled) {
-      setHighlightedIndex(index);
-    }
-  };
 
   const optionButton = (
     <ListboxOptionButton
       id={`${controlId}-option-${index}`}
+      data-dropdown-option-index={index}
       className={[
         'dropdown-option',
         optionIsSelected && 'selected',
@@ -543,7 +537,6 @@ const DropdownOptionRow = <TMetadata,>({
         .filter(Boolean)
         .join(' ')}
       onClick={() => selectOption(option.value)}
-      onMouseEnter={handleMouseEnter}
       selected={optionAriaSelected}
       aria-disabled={option.disabled}
       disabled={option.disabled}
@@ -560,7 +553,11 @@ const DropdownOptionRow = <TMetadata,>({
     return optionButton;
   }
   return (
-    <div className="dropdown-option-row" role="presentation">
+    <div
+      className={`dropdown-option-row${optionIsHighlighted ? ' highlighted' : ''}`}
+      role="presentation"
+      data-dropdown-option-index={index}
+    >
       {optionButton}
       <div className="dropdown-option-actions">{renderOptionActions(option)}</div>
     </div>
@@ -576,7 +573,6 @@ interface DropdownOptionListProps<TMetadata> {
   renderOptionActions: DropdownProps<TMetadata>['renderOptionActions'];
   isSelected: (value: string) => boolean;
   selectOption: (value: string) => void;
-  setHighlightedIndex: (index: number) => void;
 }
 
 const DropdownOptionList = <TMetadata,>({
@@ -588,7 +584,6 @@ const DropdownOptionList = <TMetadata,>({
   renderOptionActions,
   isSelected,
   selectOption,
-  setHighlightedIndex,
 }: DropdownOptionListProps<TMetadata>) => {
   if (options.length === 0) {
     return <div className="no-options">No options available</div>;
@@ -605,7 +600,6 @@ const DropdownOptionList = <TMetadata,>({
       renderOption={renderOption}
       renderOptionActions={renderOptionActions}
       selectOption={selectOption}
-      setHighlightedIndex={setHighlightedIndex}
     />
   ));
 };
@@ -679,6 +673,19 @@ const DropdownMenuPortal = <TMetadata,>({
     return null;
   }
 
+  const highlightOptionFromTarget = (target: EventTarget) => {
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const isOptionAction = Boolean(target.closest('.dropdown-option-actions'));
+    const optionElement = target.closest<HTMLElement>('[data-dropdown-option-index]');
+    const optionIndex = Number(optionElement?.dataset.dropdownOptionIndex);
+    if (!Number.isInteger(optionIndex) || (options[optionIndex]?.disabled && !isOptionAction)) {
+      return;
+    }
+    setHighlightedIndex(optionIndex);
+  };
+
   return createPortal(
     <div
       ref={menuRef}
@@ -688,6 +695,8 @@ const DropdownMenuPortal = <TMetadata,>({
       aria-multiselectable={multiple}
       id={menuId}
       data-focus-portal-owner={menuId}
+      onMouseOver={(event) => highlightOptionFromTarget(event.target)}
+      onFocus={(event) => highlightOptionFromTarget(event.target)}
     >
       <DropdownMenuControls
         searchable={searchable}
@@ -715,7 +724,6 @@ const DropdownMenuPortal = <TMetadata,>({
         renderOptionActions={renderOptionActions}
         isSelected={isSelected}
         selectOption={selectOption}
-        setHighlightedIndex={setHighlightedIndex}
       />
     </div>,
     document.body
