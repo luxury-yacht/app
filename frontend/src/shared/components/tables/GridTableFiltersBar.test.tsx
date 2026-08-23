@@ -25,6 +25,8 @@ vi.mock('@core/backend-api', () => ({
   SetZoomLevel: vi.fn().mockResolvedValue(undefined),
 }));
 
+type MockDropdownOption = { label: string; value: string; disabled?: boolean };
+
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
   Dropdown: ({
     id,
@@ -33,19 +35,23 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     onChange,
     searchable,
     showBulkActions,
+    dropdownClassName,
+    renderOption,
     renderOptionActions,
     additionalBulkActions,
   }: {
     id: string;
     value: string[];
-    options: Array<{ label: string; value: string }>;
+    options: MockDropdownOption[];
     onChange: (value: string[]) => void;
     searchable?: boolean;
     showBulkActions?: boolean;
-    renderOptionActions?: (option: { label: string; value: string }) => React.ReactNode;
+    dropdownClassName?: string;
+    renderOption?: (option: MockDropdownOption, isSelected: boolean) => React.ReactNode;
+    renderOptionActions?: (option: MockDropdownOption) => React.ReactNode;
     additionalBulkActions?: React.ReactNode;
   }) => (
-    <div>
+    <div className={dropdownClassName}>
       <select
         data-testid={id}
         data-searchable={searchable ? 'true' : 'false'}
@@ -61,7 +67,7 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
       </select>
       {options.map((option) => (
         <div className="dropdown-option-row" data-option-value={option.value} key={option.value}>
-          <span>{option.label}</span>
+          {renderOption ? renderOption(option, value.includes(option.value)) : option.label}
           {renderOptionActions?.(option)}
         </div>
       ))}
@@ -864,7 +870,7 @@ describe('GridTableFiltersBar', () => {
     const onColumnsChange = vi.fn();
     const onMoveColumn = vi.fn();
     const onReorderColumn = vi.fn();
-    const onResetColumnOrder = vi.fn();
+    const onResetColumns = vi.fn();
     await renderFilters({
       showColumnsDropdown: true,
       columnOptions: [
@@ -875,8 +881,8 @@ describe('GridTableFiltersBar', () => {
       onColumnsChange,
       onMoveColumn,
       onReorderColumn,
-      canResetColumnOrder: true,
-      onResetColumnOrder,
+      canResetColumns: true,
+      onResetColumns,
       columnsDropdownId: 'columns',
       renderColumnsValue: () => 'Columns',
     });
@@ -944,12 +950,76 @@ describe('GridTableFiltersBar', () => {
 
     await act(async () => ageHandle.dispatchEvent(new Event('dragend', { bubbles: true })));
 
-    const resetOrder = container.querySelector(
-      'button[aria-label="Reset column order"]'
+    const reset = container.querySelector(
+      'button[aria-label="Reset columns"]'
     ) as HTMLButtonElement;
-    expect(resetOrder.textContent).toContain('Reset Order');
-    expect(resetOrder.disabled).toBe(false);
-    await act(async () => resetOrder.click());
-    expect(onResetColumnOrder).toHaveBeenCalledTimes(1);
+    expect(reset.textContent).toContain('Reset');
+    expect(reset.disabled).toBe(false);
+    await act(async () => reset.click());
+    expect(onResetColumns).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables reset until order or visibility differs from the defaults', async () => {
+    await renderFilters({
+      showColumnsDropdown: true,
+      columnOptions: [{ label: 'Name', value: 'name' }],
+      columnValue: ['name'],
+      onColumnsChange: vi.fn(),
+      onMoveColumn: vi.fn(),
+      onReorderColumn: vi.fn(),
+      canResetColumns: false,
+      onResetColumns: vi.fn(),
+      columnsDropdownId: 'columns',
+      renderColumnsValue: () => 'Columns',
+    });
+
+    const reset = container.querySelector(
+      'button[aria-label="Reset columns"]'
+    ) as HTMLButtonElement;
+    expect(reset.disabled).toBe(true);
+  });
+
+  it('presents required columns as required rather than disabled', async () => {
+    await renderFilters({
+      showColumnsDropdown: true,
+      columnOptions: [
+        { label: 'Name', value: 'name', disabled: true },
+        { label: 'Age', value: 'age' },
+      ],
+      columnValue: ['name', 'age'],
+      onColumnsChange: vi.fn(),
+      onMoveColumn: vi.fn(),
+      onReorderColumn: vi.fn(),
+      canResetColumns: false,
+      onResetColumns: vi.fn(),
+      columnsDropdownId: 'columns',
+      renderColumnsValue: () => 'Columns',
+    });
+
+    // The menu is scoped so required rows can opt out of the shared disabled styling.
+    expect(container.querySelector('.dropdown-columns-menu')).not.toBeNull();
+
+    const requiredRow = requireValue(
+      container.querySelector('.dropdown-option-row[data-option-value="name"]'),
+      'expected the Name option row'
+    );
+    const requiredOption = requireValue(
+      requiredRow.querySelector('.dropdown-filter-option'),
+      'expected the Name option content'
+    );
+    expect(requiredOption.classList.contains('dropdown-filter-option--required')).toBe(true);
+    expect(requiredOption.getAttribute('title')).toBe('Always shown');
+    expect(requiredRow.querySelector('.dropdown-filter-required')?.textContent).toBe('Always');
+
+    const optionalRow = requireValue(
+      container.querySelector('.dropdown-option-row[data-option-value="age"]'),
+      'expected the Age option row'
+    );
+    const optionalOption = requireValue(
+      optionalRow.querySelector('.dropdown-filter-option'),
+      'expected the Age option content'
+    );
+    expect(optionalOption.classList.contains('dropdown-filter-option--required')).toBe(false);
+    expect(optionalRow.querySelector('.dropdown-filter-required')).toBeNull();
   });
 });

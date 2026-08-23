@@ -906,8 +906,8 @@ describe('Dropdown', () => {
         multiple
         showBulkActions
         additionalBulkActions={
-          <button type="button" aria-label="Reset column order" onClick={onReset}>
-            Reset Order
+          <button type="button" aria-label="Extra action" onClick={onReset}>
+            Extra
           </button>
         }
       />
@@ -915,11 +915,27 @@ describe('Dropdown', () => {
 
     click(container.querySelector('.dropdown-trigger'));
     const reset = document.body.querySelector<HTMLButtonElement>(
-      'button[aria-label="Reset column order"]'
+      'button[aria-label="Extra action"]'
     );
-    expect(reset?.textContent).toBe('Reset Order');
+    expect(reset?.textContent).toBe('Extra');
     click(reset);
     expect(onReset).toHaveBeenCalledTimes(1);
+
+    // The added action is a different kind of verb from All/None, so it is
+    // separated with the icon bar's shared separator rather than sitting flush.
+    const actions = document.body.querySelector('.dropdown-bulk-actions');
+    expect(actions?.querySelector('.icon-bar-separator')).not.toBeNull();
+  });
+
+  it('omits the bulk-action separator when there is nothing to separate', async () => {
+    await mount(
+      <Dropdown options={OPTIONS} value={[]} onChange={vi.fn()} multiple showBulkActions />
+    );
+
+    click(container.querySelector('.dropdown-trigger'));
+    const actions = document.body.querySelector('.dropdown-bulk-actions');
+    expect(actions).not.toBeNull();
+    expect(actions?.querySelector('.icon-bar-separator')).toBeNull();
   });
 
   it('renders bulk-action icons at the dropdown-specific size', async () => {

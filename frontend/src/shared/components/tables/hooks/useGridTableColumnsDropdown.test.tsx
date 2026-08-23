@@ -49,6 +49,8 @@ describe('useGridTableColumnsDropdown', () => {
     lockedColumns?: Set<string>;
     hiddenColumns?: Set<string>;
     enabled?: boolean;
+    canResetColumnOrder?: boolean;
+    resetColumnOrder?: () => void;
   }): CapturedResult => {
     const lockedColumns = opts.lockedColumns ?? new Set<string>();
     const hiddenColumns = opts.hiddenColumns ?? new Set<string>();
@@ -71,8 +73,8 @@ describe('useGridTableColumnsDropdown', () => {
         enableColumnVisibilityMenu: enabled,
         moveColumn: vi.fn(),
         reorderColumn: vi.fn(),
-        canResetColumnOrder: false,
-        resetColumnOrder: vi.fn(),
+        canResetColumnOrder: opts.canResetColumnOrder ?? false,
+        resetColumnOrder: opts.resetColumnOrder ?? vi.fn(),
       });
       return null;
     };
@@ -183,6 +185,90 @@ describe('useGridTableColumnsDropdown', () => {
     ]);
 
     expect(latestApplyVisibilityChanges).toHaveBeenCalledTimes(1);
+  });
+
+  describe('trigger label', () => {
+    const readLabel = (result: CapturedResult) => {
+      const config = requireValue(
+        result,
+        'expected test value in useGridTableColumnsDropdown.test.tsx'
+      );
+      return config.renderValue?.();
+    };
+
+    it('stays plain while every column is shown', () => {
+      expect(readLabel(renderHook({}))).toBe('Columns');
+    });
+
+    it('reports shown-of-total once a column is hidden', () => {
+      expect(readLabel(renderHook({ hiddenColumns: new Set(['age']) }))).toBe('Columns (2/3)');
+    });
+
+    it('counts required columns as shown', () => {
+      const result = renderHook({
+        lockedColumns: new Set(['name']),
+        hiddenColumns: new Set(['status', 'age']),
+      });
+      expect(readLabel(result)).toBe('Columns (1/3)');
+    });
+  });
+
+  describe('reset', () => {
+    it('is unavailable while order and visibility are both at their defaults', () => {
+      const result = renderHook({});
+      expect(
+        requireValue(result, 'expected test value in useGridTableColumnsDropdown.test.tsx')
+          .canResetColumns
+      ).toBe(false);
+    });
+
+    it('becomes available when a column is hidden', () => {
+      const result = renderHook({ hiddenColumns: new Set(['age']) });
+      expect(
+        requireValue(result, 'expected test value in useGridTableColumnsDropdown.test.tsx')
+          .canResetColumns
+      ).toBe(true);
+    });
+
+    it('becomes available when only the order was changed', () => {
+      const result = renderHook({ canResetColumnOrder: true });
+      expect(
+        requireValue(result, 'expected test value in useGridTableColumnsDropdown.test.tsx')
+          .canResetColumns
+      ).toBe(true);
+    });
+
+    it('restores declaration order and every hidden column in one action', () => {
+      const resetColumnOrder = vi.fn();
+      const result = renderHook({
+        hiddenColumns: new Set(['name', 'age']),
+        canResetColumnOrder: true,
+        resetColumnOrder,
+      });
+
+      requireValue(
+        result,
+        'expected test value in useGridTableColumnsDropdown.test.tsx'
+      ).onResetColumns();
+
+      expect(latestVisibility).toEqual({});
+      expect(resetColumnOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves required columns untouched when restoring visibility', () => {
+      const result = renderHook({
+        lockedColumns: new Set(['status']),
+        hiddenColumns: new Set(['age']),
+      });
+
+      requireValue(
+        result,
+        'expected test value in useGridTableColumnsDropdown.test.tsx'
+      ).onResetColumns();
+
+      expect(latestVisibility).toEqual({});
+      expect(latestApplyVisibilityChanges).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('ignores non-array values passed to onChange', () => {

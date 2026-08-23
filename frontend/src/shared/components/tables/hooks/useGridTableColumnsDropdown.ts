@@ -24,10 +24,12 @@ type ColumnsDropdownConfig = {
   options: Array<{ label: string; value: string; disabled?: boolean }>;
   value: string[];
   onChange: (value: string | string[]) => void;
+  /** Trigger label. Reports the shown-of-total count only while a column is hidden. */
+  renderValue: () => string;
   onMoveColumn: (key: string, offset: -1 | 1) => void;
   onReorderColumn: (key: string, targetIndex: number) => void;
-  canResetColumnOrder: boolean;
-  onResetColumnOrder: () => void;
+  canResetColumns: boolean;
+  onResetColumns: () => void;
 };
 
 // Builds the column visibility options and handler so GridTable does not have to
@@ -81,6 +83,22 @@ export function useGridTableColumnsDropdown<T>({
     [applyVisibilityChanges, hideableColumns, isColumnVisible]
   );
 
+  // One reset for the whole menu: restoring visibility alone would leave a
+  // reordered table, and restoring order alone would leave columns hidden.
+  const handleResetColumns = useCallback(() => {
+    applyVisibilityChanges((next) => {
+      let changed = false;
+      hideableColumns.forEach((column) => {
+        if (column.key in next) {
+          delete next[column.key];
+          changed = true;
+        }
+      });
+      return changed;
+    });
+    resetColumnOrder();
+  }, [applyVisibilityChanges, hideableColumns, resetColumnOrder]);
+
   if (!showColumnsDropdown) {
     return null;
   }
@@ -93,13 +111,19 @@ export function useGridTableColumnsDropdown<T>({
 
   const value = columns.filter((column) => isColumnVisible(column.key)).map((column) => column.key);
 
+  // Required columns are always visible, so `value` covers them too: the counts
+  // differ exactly when the user has hidden something.
+  const hiddenCount = options.length - value.length;
+
   return {
     options,
     value,
     onChange: handleColumnsDropdownChange,
+    renderValue: () =>
+      hiddenCount > 0 ? `Columns (${value.length}/${options.length})` : 'Columns',
     onMoveColumn: moveColumn,
     onReorderColumn: reorderColumn,
-    canResetColumnOrder,
-    onResetColumnOrder: resetColumnOrder,
+    canResetColumns: canResetColumnOrder || hiddenCount > 0,
+    onResetColumns: handleResetColumns,
   };
 }

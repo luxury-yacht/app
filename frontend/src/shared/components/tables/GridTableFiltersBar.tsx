@@ -13,7 +13,7 @@ import {
   filterSelectionToDropdownValues,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
+import { CaseSensitiveIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import SearchInput from '@shared/components/inputs/SearchInput';
 import Tooltip from '@shared/components/Tooltip';
 import type {
@@ -54,8 +54,8 @@ interface GridTableFiltersBarProps {
   onColumnsChange?: (value: string | string[]) => void;
   onMoveColumn?: (key: string, offset: -1 | 1) => void;
   onReorderColumn?: (key: string, targetIndex: number) => void;
-  canResetColumnOrder?: boolean;
-  onResetColumnOrder?: () => void;
+  canResetColumns?: boolean;
+  onResetColumns?: () => void;
   showKindDropdown?: boolean;
   showNamespaceDropdown?: boolean;
   showClusterDropdown?: boolean;
@@ -147,8 +147,8 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   onColumnsChange,
   onMoveColumn,
   onReorderColumn,
-  canResetColumnOrder = false,
-  onResetColumnOrder,
+  canResetColumns = false,
+  onResetColumns,
   showKindDropdown = false,
   showNamespaceDropdown = false,
   showClusterDropdown = false,
@@ -222,6 +222,22 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       document.removeEventListener('drop', handleDrop);
     };
   }, [columnOptions, draggingColumnKey, onReorderColumn]);
+
+  // Required columns are constrained, not broken: the label stays at full
+  // contrast and the row says why, instead of reading as a disabled control.
+  const renderColumnOption = (option: DropdownOption, isSelected: boolean) => {
+    const required = Boolean(option.disabled);
+    return (
+      <span
+        className={`dropdown-filter-option${required ? ' dropdown-filter-option--required' : ''}`}
+        title={required ? 'Always shown' : undefined}
+      >
+        <span className="dropdown-filter-check">{isSelected ? '\u2713' : ''}</span>
+        <span className="dropdown-filter-label">{option.label}</span>
+        {!!required && <span className="dropdown-filter-required">Always</span>}
+      </span>
+    );
+  };
 
   const renderColumnOrderActions = (option: DropdownOption) => {
     if (!onMoveColumn || !onReorderColumn || !columnOptions) {
@@ -602,23 +618,24 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 options={columnOptions}
                 disabled={!columnOptions.length}
                 onChange={onColumnsChange}
-                dropdownClassName="dropdown-filter-menu"
-                renderOption={renderOption}
+                dropdownClassName="dropdown-filter-menu dropdown-columns-menu"
+                renderOption={renderColumnOption}
                 renderOptionActions={renderColumnOrderActions}
                 additionalBulkActions={
-                  onResetColumnOrder ? (
+                  onResetColumns ? (
                     <button
                       type="button"
                       className="dropdown-bulk-action dropdown-bulk-action--labeled icon-bar-button"
-                      disabled={!canResetColumnOrder}
-                      title="Reset column order"
-                      aria-label="Reset column order"
+                      disabled={!canResetColumns}
+                      title="Restore the default column order and show every column"
+                      aria-label="Reset columns"
                       onClick={(event) => {
                         event.stopPropagation();
-                        onResetColumnOrder();
+                        onResetColumns();
                       }}
                     >
-                      <span className="dropdown-bulk-action-label">Reset Order</span>
+                      <ResetFiltersIcon width={20} height={20} />
+                      <span className="dropdown-bulk-action-label">Reset</span>
                     </button>
                   ) : null
                 }

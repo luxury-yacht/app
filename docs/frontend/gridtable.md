@@ -75,15 +75,27 @@ workflow and that exception is documented.
   scrollable table body clears the focused-row highlight; controlled-selection
   views supply `onRowSelectionClear` to clear their selected state at the same
   boundary. Descendant rows, cells, and controls are excluded.
+- The Columns trigger reports table state the way the other filter dropdowns do:
+  plain `Columns` while every column is shown, and `Columns (shown/total)` once
+  the user hides one. Column visibility persists per cluster and view, so the
+  closed control must stay the place that discloses it.
 - The Columns menu lists every column in current display order. Visibility
   toggles remain disabled for required columns, while one drag handle per row
   lets every column—including Name—move in the vertical menu. Tab from the open
   Columns trigger focuses the first handle; a focused handle supports Up and
   Down Arrow keys. The menu's top-to-bottom order maps to
   the table's left-to-right column order. Reordering and visibility are
-  independent, the shared All/None actions affect hideable columns only, and
-  Reset Order restores the column definitions' declaration order without
-  changing visibility.
+  independent, and the shared All/None actions affect hideable columns only.
+- A required column renders as required, not as an unavailable control: the
+  label keeps full contrast, the row is titled `Always shown`, and the menu
+  carries `dropdown-columns-menu` so it can opt out of the shared disabled
+  styling. Dimming the label while its still-usable drag handle stays at full
+  strength is the state this exists to prevent.
+- `Reset` is one action over both axes: it restores the column definitions'
+  declaration order and shows every hideable column. It is enabled whenever
+  either axis differs from its default, and it is separated from All/None in the
+  menu's action bar because it is a different kind of verb. Do not reintroduce an
+  order-only reset — recovering a table must not take two actions in two models.
 - Every multi-select Kinds dropdown exposes search plus `Select all` and
   `Select none`. GridTable owns this as an invariant of a visible Kind filter;
   views may decide whether the filter is present but cannot disable its controls.
