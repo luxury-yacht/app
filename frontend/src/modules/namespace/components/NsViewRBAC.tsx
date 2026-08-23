@@ -43,7 +43,7 @@ const rbacSpec: AggregatedResourceGridViewSpec<RBACData> = {
       onClick: identity.open,
       onAltClick: identity.navigate,
     }),
-    cf.createTextColumn<RBACData>('name', 'Name', (resource) => resource.ref.name, {
+    cf.createResourceNameColumn<RBACData>((resource) => resource.ref.name, {
       onClick: identity.open,
       onAltClick: identity.navigate,
       getClassName: () => 'object-panel-link',

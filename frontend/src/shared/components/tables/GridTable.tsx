@@ -44,7 +44,6 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
     useShortNames = false,
     emptyMessage = 'No data available',
     filteredEmptyState,
-    allowHorizontalOverflow = true,
     showTrailingColumnBoundary = true,
     keyExtractor,
   } = props;
@@ -124,7 +123,6 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
       onWrapperBlur={handleWrapperBlur}
       onWrapperBackgroundClick={handleWrapperBackgroundClick}
       contentWidth={tableContentWidth}
-      allowHorizontalOverflow={allowHorizontalOverflow}
       viewportWidth={tableViewportWidth}
       loading={loading}
       hasActiveFilters={hasActiveFilters}

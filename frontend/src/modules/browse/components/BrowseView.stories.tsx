@@ -9,7 +9,11 @@ import '@styles/components/gridtables.css';
 import './BrowseView.css';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { FavoriteFilledIcon, FavoriteOutlineIcon } from '@shared/components/icons/FavoriteIcons';
-import { createAgeColumn } from '@shared/components/tables/columnFactories';
+import {
+  createAgeColumn,
+  createKindColumn,
+  createResourceNameColumn,
+} from '@shared/components/tables/columnFactories';
 import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { KeyboardProviderDecorator } from '../../../../.storybook/decorators/KeyboardProviderDecorator';
 
@@ -52,8 +56,14 @@ const ROWS: BrowseStoryRow[] = [
 ];
 
 const COLUMNS: GridColumnDefinition<BrowseStoryRow>[] = [
-  { key: 'kind', header: 'Kind', render: (row) => row.kind, sortable: true, width: 160 },
-  { key: 'name', header: 'Name', render: (row) => row.name, sortable: true, width: 320 },
+  {
+    ...createKindColumn<BrowseStoryRow>({ getKind: (row) => row.kind }),
+    width: 160,
+  },
+  {
+    ...createResourceNameColumn<BrowseStoryRow>((row) => row.name),
+    width: 320,
+  },
   { key: 'namespace', header: 'Namespace', render: (row) => row.ns, sortable: true, width: 220 },
   { ...createAgeColumn<BrowseStoryRow>(), width: 120 },
 ];
@@ -71,7 +81,7 @@ function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
     <GridTable
       data={ROWS}
       columns={COLUMNS}
-      keyExtractor={(row) => `${row.kind}:${row.ns}:${row.name}`}
+      keyExtractor={(row) => `story|${row.kind}:${row.ns}:${row.name}`}
       className="gridtable-browse"
       tableClassName="gridtable-browse"
       onSort={noOp}

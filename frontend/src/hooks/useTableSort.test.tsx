@@ -235,7 +235,7 @@ describe('useTableSort', () => {
     expect(getText('ids')).toBe('a,c,b');
   });
 
-  it('sorts age strings using duration-aware parsing', async () => {
+  it('sorts strings generically without inferring semantics from the column key', async () => {
     await renderHarness();
 
     const sortAgeButton = container.querySelector('[data-testid="sort-age"]') as HTMLButtonElement;
@@ -244,14 +244,14 @@ describe('useTableSort', () => {
       sortAgeButton.click();
     });
 
-    expect(getText('names')).toBe('alpha,charlie,bravo');
-    expect(getText('ages')).toBe('30m,2h,-');
+    expect(getText('names')).toBe('charlie,alpha,bravo');
+    expect(getText('ages')).toBe('2h,30m,-');
     expect(getText('direction')).toBe('asc');
 
     act(() => {
       sortAgeButton.click();
     });
-    expect(getText('names')).toBe('charlie,alpha,bravo');
+    expect(getText('names')).toBe('alpha,charlie,bravo');
     expect(getText('direction')).toBe('desc');
   });
 

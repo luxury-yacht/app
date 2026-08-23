@@ -229,8 +229,8 @@ const HookWrapper: React.FC<{
 
 const WORKLOAD_PANES = ['workloads', 'pods'] as const;
 const paneSetters = {
-  workloads: { filters: vi.fn(), sort: vi.fn(), visibility: vi.fn() },
-  pods: { filters: vi.fn(), sort: vi.fn(), visibility: vi.fn() },
+  workloads: { filters: vi.fn(), sort: vi.fn(), visibility: vi.fn(), order: vi.fn() },
+  pods: { filters: vi.fn(), sort: vi.fn(), visibility: vi.fn(), order: vi.fn() },
 };
 
 const GroupedPane: React.FC<{ pane: 'workloads' | 'pods' }> = ({ pane }) => {
@@ -249,10 +249,12 @@ const GroupedPane: React.FC<{ pane: 'workloads' | 'pods' }> = ({ pane }) => {
     sortColumn: 'name',
     sortDirection: 'asc',
     columnVisibility: {},
+    columnOrder: ['kind', 'name', 'age'],
     hydrated: true,
     setFilters: paneSetters[pane].filters,
     setSortConfig: paneSetters[pane].sort,
     setColumnVisibility: paneSetters[pane].visibility,
+    setColumnOrder: paneSetters[pane].order,
     filterOptions: {},
   });
   return (
@@ -328,6 +330,7 @@ describe('useFavToggle', () => {
       setters.filters.mockClear();
       setters.sort.mockClear();
       setters.visibility.mockClear();
+      setters.order.mockClear();
     });
 
     container = document.createElement('div');
@@ -572,7 +575,12 @@ describe('useFavToggle', () => {
             caseSensitive: false,
             includeMetadata: false,
           },
-          tableState: { sortColumn: 'kind', sortDirection: 'desc', columnVisibility: {} },
+          tableState: {
+            sortColumn: 'kind',
+            sortDirection: 'desc',
+            columnVisibility: {},
+            columnOrder: ['name', 'kind', 'age'],
+          },
         },
         pods: {
           filters: {
@@ -588,6 +596,7 @@ describe('useFavToggle', () => {
             sortColumn: 'node',
             sortDirection: 'asc',
             columnVisibility: { cpu: false },
+            columnOrder: ['name', 'node', 'cpu'],
           },
         },
       },
@@ -604,6 +613,8 @@ describe('useFavToggle', () => {
     expect(paneSetters.pods.filters).toHaveBeenCalledWith(mockPendingFavorite.panes.pods.filters);
     expect(paneSetters.pods.sort).toHaveBeenCalledWith({ key: 'node', direction: 'asc' });
     expect(paneSetters.pods.visibility).toHaveBeenCalledWith({ cpu: false });
+    expect(paneSetters.workloads.order).toHaveBeenCalledWith(['name', 'kind', 'age']);
+    expect(paneSetters.pods.order).toHaveBeenCalledWith(['name', 'node', 'cpu']);
     expect(mockSetPendingFavorite).toHaveBeenCalledWith(null);
   });
 

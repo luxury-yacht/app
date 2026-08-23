@@ -33,6 +33,10 @@ type ColumnsDropdownConfig = {
   value: string[];
   onChange: (value: string | string[]) => void;
   renderValue?: (value: string | string[], options: DropdownOption[]) => ReactNode;
+  onMoveColumn?: (key: string, offset: -1 | 1) => void;
+  onReorderColumn?: (key: string, targetIndex: number) => void;
+  canResetColumnOrder?: boolean;
+  onResetColumnOrder?: () => void;
 };
 
 type SearchShortcutConfig = {
@@ -334,6 +338,10 @@ export function useGridTableFiltersWiring<T>({
       columnOptions: columnsDropdown?.options,
       columnValue: columnsDropdown?.value,
       onColumnsChange: columnsDropdown?.onChange,
+      onMoveColumn: columnsDropdown?.onMoveColumn,
+      onReorderColumn: columnsDropdown?.onReorderColumn,
+      canResetColumnOrder: columnsDropdown?.canResetColumnOrder,
+      onResetColumnOrder: columnsDropdown?.onResetColumnOrder,
       showColumnsDropdown,
       searchShortcutActive,
       searchShortcutPriority,

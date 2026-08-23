@@ -20,7 +20,7 @@ import {
 type Row = { id: string };
 
 const sampleColumns: GridColumnDefinition<Row>[] = [
-  { key: 'name', header: 'Name', sortable: true, render: (row) => row.id },
+  { key: 'name', header: 'Name', sortable: true, hideable: false, render: (row) => row.id },
   { key: 'status', header: 'Status', render: (row) => row.id },
   { key: 'age', header: 'Age', render: (row) => row.id },
 ];
@@ -116,7 +116,7 @@ describe('gridTablePersistence', () => {
       }
     );
 
-    expect(pruned?.columnVisibility).toEqual({ status: true });
+    expect(pruned?.columnVisibility).toEqual({ status: true, age: false });
     expect(pruned?.columnWidths).toEqual({ name: sampleWidthState, status: sampleWidthState });
     expect(pruned?.sort).toBeUndefined();
     expect(pruned?.filters).toEqual({
@@ -198,6 +198,7 @@ describe('gridTablePersistence', () => {
       rows: sampleRows,
       keyExtractor: (row) => row.id,
       columnVisibility: { status: false, extra: true },
+      columnOrder: ['age', 'name', 'status'],
       columnWidths: { status: sampleWidthState, orphan: sampleWidthState },
       sort: { key: 'name', direction: 'asc' },
       filters: {
@@ -214,8 +215,9 @@ describe('gridTablePersistence', () => {
     });
 
     expect(state).toEqual({
-      version: 2,
+      version: 3,
       columnVisibility: { status: false },
+      columnOrder: ['age', 'name', 'status'],
       columnWidths: { status: sampleWidthState },
       sort: { key: 'name', direction: 'asc' },
       filters: {
@@ -249,7 +251,7 @@ describe('gridTablePersistence', () => {
     });
 
     expect(state).toEqual({
-      version: 2,
+      version: 3,
       filters,
     });
 
@@ -267,5 +269,17 @@ describe('gridTablePersistence', () => {
     );
 
     expect(pruned?.filters).toEqual(filters);
+  });
+
+  it('reconciles persisted order with the current column declaration', () => {
+    const pruned = prunePersistedState(
+      {
+        version: 3,
+        columnOrder: ['age', 'removed', 'name'],
+      },
+      { columns: sampleColumns }
+    );
+
+    expect(pruned?.columnOrder).toEqual(['age', 'name', 'status']);
   });
 });

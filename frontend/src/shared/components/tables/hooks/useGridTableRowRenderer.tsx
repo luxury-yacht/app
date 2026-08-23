@@ -27,6 +27,7 @@ export type RenderRowContentFn<T> = (
 export interface UseGridTableRowRendererParams<T> {
   keyExtractor: (item: T, index: number) => string;
   getRowClassName?: (item: T, index: number) => string | undefined | null;
+  isRowSelected?: (item: T, index: number) => boolean;
   getRowStyle?: (item: T, index: number) => React.CSSProperties | undefined;
   handleRowClick: (item: T, index: number, event: React.MouseEvent) => void;
   handleRowMouseEnter: (element: HTMLDivElement) => void;
@@ -66,6 +67,7 @@ export interface UseGridTableRowRendererParams<T> {
 export function useGridTableRowRenderer<T>({
   keyExtractor,
   getRowClassName,
+  isRowSelected,
   getRowStyle,
   handleRowClick,
   handleRowMouseEnter,
@@ -88,7 +90,14 @@ export function useGridTableRowRenderer<T>({
     ): React.ReactNode => {
       const rowKey = keyExtractor(item, absoluteIndex);
       const rowExtraClass = getRowClassName?.(item, absoluteIndex);
-      const rowClassName = ['gridtable-row', rowExtraClass || ''].filter(Boolean).join(' ');
+      const selected = isRowSelected?.(item, absoluteIndex) ?? false;
+      const rowClassName = [
+        'gridtable-row',
+        selected ? 'gridtable-row--selected' : '',
+        rowExtraClass || '',
+      ]
+        .filter(Boolean)
+        .join(' ');
       const configuredRowStyle = getRowStyle ? getRowStyle(item, absoluteIndex) : undefined;
       const rowInlineStyle =
         virtualTop === undefined
@@ -98,7 +107,7 @@ export function useGridTableRowRenderer<T>({
               position: 'absolute' as const,
               transform: `translateY(${virtualTop}px)`,
             };
-      const isSelected = rowClassName.includes('gridtable-row--selected');
+      const isSelected = selected;
       const isFocused = rowClassName.includes('gridtable-row--focused');
 
       // When shouldMeasure is true (virtualized rows), attach a ref callback
@@ -168,6 +177,7 @@ export function useGridTableRowRenderer<T>({
     [
       keyExtractor,
       getRowClassName,
+      isRowSelected,
       getRowStyle,
       handleRowClick,
       handleRowMouseEnter,

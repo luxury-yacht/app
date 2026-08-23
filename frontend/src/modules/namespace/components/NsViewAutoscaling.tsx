@@ -108,7 +108,7 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
         onClick: identity.open,
         onAltClick: identity.navigate,
       }),
-      cf.createTextColumn<AutoscalingData>('name', 'Name', (resource) => resource.ref.name, {
+      cf.createResourceNameColumn<AutoscalingData>((resource) => resource.ref.name, {
         onClick: identity.open,
         onAltClick: identity.navigate,
         getClassName: () => 'object-panel-link',

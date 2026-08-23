@@ -213,6 +213,23 @@
   cursor: pointer;
 }
 
+.dropdown-option-row {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+
+.dropdown-option-row .dropdown-option {
+  min-width: 0;
+  flex: 1;
+}
+
+.dropdown-option-actions {
+  display: inline-flex;
+  align-items: center;
+  padding-right: 4px;
+}
+
 .dropdown-option:hover:not(.disabled) {
   background-color: var(--color-bg-hover, rgba(255, 255, 255, 0.08));
 }

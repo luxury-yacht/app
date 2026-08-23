@@ -55,6 +55,8 @@ export interface FavToggleState {
   sortDirection: 'asc' | 'desc';
   /** Current column visibility map. */
   columnVisibility: Record<string, boolean>;
+  /** Current column order. */
+  columnOrder?: string[];
   /** Available kind values for the favorites modal kind filter dropdown. */
   availableKinds?: string[];
   /** Available namespace values for the favorites modal namespace filter dropdown. */
@@ -71,6 +73,7 @@ export interface FavToggleState {
   setFilters?: (filters: GridTableFilterState) => void;
   setSortConfig?: (config: { key: string; direction: 'asc' | 'desc' } | null) => void;
   setColumnVisibility?: (visibility: Record<string, boolean>) => void;
+  setColumnOrder?: (order: string[]) => void;
 }
 
 interface RegisteredFavoritePane {
@@ -149,6 +152,7 @@ const snapshotFavoritePane = (state: FavToggleState): FavoritePaneState => {
       sortColumn: state.sortColumn ?? '',
       sortDirection: state.sortDirection,
       columnVisibility: { ...state.columnVisibility },
+      columnOrder: [...(state.columnOrder ?? [])],
     },
   };
 };
@@ -166,7 +170,9 @@ const favoritePaneMatches = (left: FavoritePaneState, right: FavoritePaneState):
       Object.entries(right.tableState.columnVisibility).sort(([leftKey], [rightKey]) =>
         compareUtf16Strings(leftKey, rightKey)
       )
-    );
+    ) &&
+  JSON.stringify(left.tableState.columnOrder ?? []) ===
+    JSON.stringify(right.tableState.columnOrder ?? []);
 
 const favoriteFilterOptionsSignature = (options: GridTableFilterOptions): string =>
   JSON.stringify({
@@ -332,6 +338,9 @@ const restoreFavoritePane = ({ pane, savedPane }: FavoritePaneRestoreEntry) => {
       : null
   );
   pane.state.setColumnVisibility?.(savedPane.tableState.columnVisibility);
+  if (savedPane.tableState.columnOrder) {
+    pane.state.setColumnOrder?.(savedPane.tableState.columnOrder);
+  }
 };
 
 /**

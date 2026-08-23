@@ -196,17 +196,17 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       [objectActions, queryClusterId, selectedClusterName]
     );
 
-    const getRowClassName = useCallback(
-      (row: WorkloadData) => {
-        const classes: string[] = [];
-        if (row.ref.kind === 'Pod') {
-          classes.push('gridtable-row--pod');
-        }
-        if (selectedWorkloadKey && keyExtractor(row) === selectedWorkloadKey) {
-          classes.push('gridtable-row--selected');
-        }
-        return classes.join(' ');
-      },
+    const getRowClassName = useCallback((row: WorkloadData) => {
+      const classes: string[] = [];
+      if (row.ref.kind === 'Pod') {
+        classes.push('gridtable-row--pod');
+      }
+      return classes.join(' ');
+    }, []);
+
+    const isRowSelected = useCallback(
+      (row: WorkloadData) =>
+        Boolean(selectedWorkloadKey && keyExtractor(row) === selectedWorkloadKey),
       [keyExtractor, selectedWorkloadKey]
     );
 
@@ -237,12 +237,12 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
             onRowSelectionToggle={onWorkloadSelect}
             onRowSelectionClear={selectedWorkloadKey ? onWorkloadSelectionClear : undefined}
             getRowClassName={getRowClassName}
+            isRowSelected={isRowSelected}
             tableClassName="gridtable-workloads"
             enableContextMenu={true}
             getCustomContextMenuItems={getContextMenuItems}
             emptyMessage={emptyMessage}
             enableColumnVisibilityMenu
-            allowHorizontalOverflow={true}
           />
         </div>
 

@@ -264,6 +264,7 @@ const GlobalViewClusters: React.FC = () => {
   const columns = useMemo<GridColumnDefinition<GlobalClusterRow>[]>(() => {
     const result: GridColumnDefinition<GlobalClusterRow>[] = [
       cf.createTextColumn('name', 'Cluster', (row) => row.name, {
+        hideable: false,
         onClick: (row) => navigateToOverview(row),
         getClassName: () => 'object-panel-link',
       }),
@@ -331,7 +332,7 @@ const GlobalViewClusters: React.FC = () => {
       createClusterResourceColumn('cpu'),
       createClusterResourceColumn('memory'),
     ];
-    cf.applyColumnSizing(result, {
+    return cf.withColumnSizing(result, {
       name: { autoWidth: true },
       connection: { autoWidth: true },
       clusterType: { autoWidth: true },
@@ -344,7 +345,6 @@ const GlobalViewClusters: React.FC = () => {
       totalNamespaces: { autoWidth: true },
       metrics: { autoWidth: true },
     });
-    return result;
   }, [navigateToOverview]);
 
   const keyExtractor = useCallback(
@@ -406,7 +406,6 @@ const GlobalViewClusters: React.FC = () => {
           diagnosticsLabel="Clusters"
           diagnosticsMode="local"
           enableColumnVisibilityMenu
-          allowHorizontalOverflow
           favModal={favModal}
         />
       </div>

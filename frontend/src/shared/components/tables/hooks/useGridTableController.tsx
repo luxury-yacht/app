@@ -10,14 +10,10 @@
  */
 
 import type { GridTableProps } from '@shared/components/tables/GridTable.types';
-import {
-  isKindColumnKey as defaultIsKindColumnKey,
-  getTextContent,
-  isFixedColumnKey,
-  normalizeKindClass,
-} from '@shared/components/tables/GridTable.utils';
+import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableKeys';
 import { hasNarrowingGridTableFilters } from '@shared/components/tables/gridTableFilterState';
+import { useColumnOrderController } from '@shared/components/tables/hooks/useColumnOrderController';
 import { useColumnVisibilityController } from '@shared/components/tables/hooks/useColumnVisibilityController';
 import { useGridTableCellCache } from '@shared/components/tables/hooks/useGridTableCellCache';
 import { useGridTableColumnLayout } from '@shared/components/tables/hooks/useGridTableColumnLayout';
@@ -43,9 +39,6 @@ import {
 } from '@shared/components/tables/performance/gridTablePerformanceStore';
 import type { MutableRefObject, ReactElement, ReactNode, RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-
-// Stable default to avoid re-creating lock lists on every render.
-const DEFAULT_NON_HIDEABLE_COLUMNS: string[] = [];
 
 type GridTableProfilerOptions = NonNullable<Parameters<typeof useGridTableProfiler>[0]>;
 
@@ -221,6 +214,7 @@ export function useGridTableController<T>({
   columns,
   keyExtractor,
   getRowClassName,
+  isRowSelected,
   getRowStyle,
   onRowClick,
   onRowPointerClick,
@@ -233,13 +227,13 @@ export function useGridTableController<T>({
   enableContextMenu = false,
   getCustomContextMenuItems,
   useShortNames = false,
-  initialColumnWidths,
   columnWidths: controlledColumnWidths = null,
   onColumnWidthsChange,
   enableColumnResizing = true,
   columnVisibility = null,
   onColumnVisibilityChange,
-  nonHideableColumns = DEFAULT_NON_HIDEABLE_COLUMNS,
+  columnOrder = null,
+  onColumnOrderChange,
   enableColumnVisibilityMenu = true,
   paginationControls: externalPaginationControls,
   localPagination,
@@ -254,8 +248,6 @@ export function useGridTableController<T>({
   exportFilename,
   diagnosticsLabel,
   diagnosticsMode = 'local',
-  allowHorizontalOverflow = true,
-  isKindColumnKey = defaultIsKindColumnKey,
 }: GridTableProps<T>): GridTableControllerResult<T> {
   const totalDataCount = Array.isArray(inputData) ? inputData.length : 0;
   const sourceData = useMemo<T[]>(
@@ -276,20 +268,30 @@ export function useGridTableController<T>({
   const { wrapWithProfiler, warnDevOnce, startFrameSampler, stopFrameSampler } =
     useGridTableProfiler(getProfilerOptions(diagnosticsLabel));
 
+  const { orderedColumns, moveColumn, reorderColumn, canResetColumnOrder, resetColumnOrder } =
+    useColumnOrderController({
+      columns,
+      columnOrder,
+      onColumnOrderChange,
+    });
+
   const { renderedColumns, isColumnVisible, applyVisibilityChanges, lockedColumns } =
     useColumnVisibilityController<T>({
-      columns,
+      columns: orderedColumns,
       columnVisibility,
-      nonHideableColumns,
       onColumnVisibilityChange,
     });
 
   const columnsDropdownConfig = useGridTableColumnsDropdown({
-    columns,
+    columns: orderedColumns,
     lockedColumns,
     isColumnVisible,
     applyVisibilityChanges,
     enableColumnVisibilityMenu,
+    moveColumn,
+    reorderColumn,
+    canResetColumnOrder,
+    resetColumnOrder,
   });
 
   const {
@@ -386,7 +388,7 @@ export function useGridTableController<T>({
     activateFocusedRow,
   } = useGridTableInteractionWiring<T>({
     tableData,
-    columns,
+    columns: orderedColumns,
     keyExtractor,
     getRowClassName,
     onRowClick,
@@ -418,28 +420,22 @@ export function useGridTableController<T>({
     autoSizeColumn,
     markVisibleAutoColumnsDirty,
   } = useGridTableColumnLayout<T>({
-    columns,
+    columns: orderedColumns,
     renderedColumns,
     tableRef,
     wrapperRef,
     tableData,
-    initialColumnWidths,
     controlledColumnWidths,
     externalColumnWidths,
     enableColumnResizing,
     onColumnWidthsChange,
     useShortNames,
-    allowHorizontalOverflow,
     virtualization,
-    isKindColumnKey,
-    getTextContent,
   });
 
   const { getCachedCellContent } = useGridTableCellCache<T>({
     renderedColumns,
-    isKindColumnKey,
     getTextContent,
-    normalizeKindClass,
     data: tableData,
   });
 
@@ -554,7 +550,7 @@ export function useGridTableController<T>({
 
   const { renderSortIndicator, handleHeaderClick, handleHeaderContextMenu, headerContextMenuNode } =
     useGridTableHeaderActions<T>({
-      columns,
+      columns: orderedColumns,
       lockedColumns,
       sortConfig,
       onSort,
@@ -565,6 +561,7 @@ export function useGridTableController<T>({
   const renderRowContent = useGridTableRowRenderer({
     keyExtractor,
     getRowClassName: getRowClassNameWithFocus,
+    isRowSelected,
     getRowStyle,
     handleRowClick,
     handleRowMouseEnter,
@@ -580,7 +577,6 @@ export function useGridTableController<T>({
   const headerRow = useGridTableHeaderRow({
     renderedColumns,
     enableColumnResizing,
-    isFixedColumnKey,
     handleHeaderContextMenu,
     columnWidths,
     handleHeaderClick,

@@ -38,7 +38,7 @@ const configSpec: AggregatedResourceGridViewSpec<ConfigData> = {
       onClick: identity.open,
       onAltClick: identity.navigate,
     }),
-    cf.createTextColumn<ConfigData>('name', 'Name', (resource) => resource.ref.name, {
+    cf.createResourceNameColumn<ConfigData>((resource) => resource.ref.name, {
       sortable: true,
       onClick: identity.open,
       onAltClick: identity.navigate,

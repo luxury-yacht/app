@@ -46,7 +46,7 @@ const networkSpec: AggregatedResourceGridViewSpec<NetworkData> = {
       onClick: identity.open,
       onAltClick: identity.navigate,
     }),
-    cf.createTextColumn<NetworkData>('name', 'Name', (resource) => resource.ref.name, {
+    cf.createResourceNameColumn<NetworkData>((resource) => resource.ref.name, {
       onClick: identity.open,
       onAltClick: identity.navigate,
       getClassName: () => 'object-panel-link',

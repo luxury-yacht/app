@@ -92,10 +92,12 @@ describe('useGridTablePersistence', () => {
     stateMap['key:clusterhash:namespace-pods:team-a'] = {
       version: 1,
       sort: { key: 'name', direction: 'desc' },
+      columnOrder: ['age', 'name'],
     };
     stateMap['key:clusterhash:namespace-pods:team-b'] = {
       version: 1,
       sort: { key: 'age', direction: 'asc' },
+      columnOrder: ['name', 'age'],
     };
 
     const container = document.createElement('div');
@@ -106,11 +108,13 @@ describe('useGridTablePersistence', () => {
     const firstState = getLatestState();
     expect(firstState.sortConfig?.key).toBe('name');
     expect(firstState.sortConfig?.direction).toBe('desc');
+    expect(firstState.columnOrder).toEqual(['age', 'name']);
 
     await renderHarness('team-b', root);
     const secondState = getLatestState();
     expect(secondState.sortConfig?.key).toBe('age');
     expect(secondState.sortConfig?.direction).toBe('asc');
+    expect(secondState.columnOrder).toEqual(['name', 'age']);
 
     await act(async () => {
       root.unmount();

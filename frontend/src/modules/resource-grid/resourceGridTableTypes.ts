@@ -32,7 +32,8 @@ export interface GridTableBindingProps<T> {
   onColumnWidthsChange?: (widths: Record<string, ColumnWidthState>) => void;
   columnVisibility?: Record<string, boolean> | null;
   onColumnVisibilityChange?: (visibility: Record<string, boolean>) => void;
-  allowHorizontalOverflow?: boolean;
+  columnOrder?: string[] | null;
+  onColumnOrderChange?: (order: string[]) => void;
   /** Arms the scope-toggle + Copy + Export trio in the filter bar. */
   fetchAllRows?: () => Promise<T[]>;
   /** Default filename offered by the file Export action. */
@@ -129,6 +130,8 @@ export interface ResourceGridPersistence<T extends ResourceGridTableRow> {
   setColumnWidths: (next: Record<string, ColumnWidthState>) => void;
   columnVisibility: Record<string, boolean> | null;
   setColumnVisibility: (next: Record<string, boolean>) => void;
+  columnOrder: string[] | null;
+  setColumnOrder: (next: string[]) => void;
   filters: GridTableFilterState;
   setFilters: NonNullable<GridTableFilterConfig<T>['onChange']>;
   pageSize: number | null;

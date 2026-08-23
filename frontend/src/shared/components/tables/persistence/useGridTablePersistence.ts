@@ -52,6 +52,8 @@ export interface UseGridTablePersistenceResult {
   setSortConfig: (config: SortConfig | null) => void;
   columnVisibility: Record<string, boolean> | null;
   setColumnVisibility: (visibility: Record<string, boolean>) => void;
+  columnOrder: string[] | null;
+  setColumnOrder: (order: string[]) => void;
   columnWidths: Record<string, ColumnWidthState> | null;
   setColumnWidths: (widths: Record<string, ColumnWidthState>) => void;
   filters: GridTableFilterState;
@@ -85,6 +87,7 @@ export function useGridTablePersistence<T>({
 
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean> | null>(null);
+  const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, ColumnWidthState> | null>(null);
   const [filters, setFilters] = useState<GridTableFilterState>(DEFAULT_GRID_TABLE_FILTER_STATE);
   const [pageSize, setPageSize] = useState<number | null>(null);
@@ -137,6 +140,7 @@ export function useGridTablePersistence<T>({
     lastSavePayloadRef.current = '';
     setSortConfig(null);
     setColumnVisibility(null);
+    setColumnOrder(null);
     setColumnWidths(null);
     setFilters(DEFAULT_GRID_TABLE_FILTER_STATE);
     setPageSize(null);
@@ -172,6 +176,9 @@ export function useGridTablePersistence<T>({
       }
       if (pruned?.columnVisibility) {
         setColumnVisibility(pruned.columnVisibility);
+      }
+      if (pruned?.columnOrder) {
+        setColumnOrder(pruned.columnOrder);
       }
       if (pruned?.columnWidths) {
         setColumnWidths(pruned.columnWidths);
@@ -209,6 +216,7 @@ export function useGridTablePersistence<T>({
     lastHydratedPayloadRef.current = '';
     setSortConfig(null);
     setColumnVisibility({});
+    setColumnOrder(null);
     setColumnWidths({});
     setFilters(DEFAULT_GRID_TABLE_FILTER_STATE);
     setPageSize(null);
@@ -231,6 +239,7 @@ export function useGridTablePersistence<T>({
         rows: data,
         keyExtractor,
         columnVisibility,
+        columnOrder,
         columnWidths,
         sort: sortConfig,
         filters,
@@ -277,6 +286,7 @@ export function useGridTablePersistence<T>({
     data,
     keyExtractor,
     columnVisibility,
+    columnOrder,
     columnWidths,
     sortConfig,
     filters,
@@ -293,6 +303,8 @@ export function useGridTablePersistence<T>({
       setSortConfig,
       columnVisibility,
       setColumnVisibility,
+      columnOrder,
+      setColumnOrder,
       columnWidths,
       setColumnWidths,
       filters,
@@ -306,6 +318,7 @@ export function useGridTablePersistence<T>({
       storageKey,
       sortConfig,
       columnVisibility,
+      columnOrder,
       columnWidths,
       filters,
       pageSize,

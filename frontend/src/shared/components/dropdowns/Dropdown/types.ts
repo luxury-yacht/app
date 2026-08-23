@@ -41,9 +41,11 @@ export interface DropdownProps<TMetadata = unknown> {
   onSearchChange?: (value: string) => void;
   clearable?: boolean;
   showBulkActions?: boolean;
+  additionalBulkActions?: ReactNode;
 
   // Customization props
   renderOption?: (option: DropdownOption<TMetadata>, isSelected: boolean) => ReactNode;
+  renderOptionActions?: (option: DropdownOption<TMetadata>) => ReactNode;
   renderValue?: (value: string | string[], options: DropdownOption<TMetadata>[]) => ReactNode;
   className?: string;
   dropdownClassName?: string;

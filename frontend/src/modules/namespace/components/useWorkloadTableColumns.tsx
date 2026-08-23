@@ -89,7 +89,7 @@ const useWorkloadTableColumns = ({
         isInteractive: () => true,
         sortValue: (row) => row.ref.kind.toLowerCase(),
       }),
-      cf.createTextColumn<WorkloadData>('name', 'Name', (row) => row.ref.name, {
+      cf.createResourceNameColumn<WorkloadData>((row) => row.ref.name, {
         onClick: (row) => handleWorkloadClick(row),
         onAltClick,
         // Match object panel link styling for clickable names.
@@ -97,13 +97,6 @@ const useWorkloadTableColumns = ({
         isInteractive: () => true,
       })
     );
-
-    if (showNamespaceColumn) {
-      cf.upsertNamespaceColumn(columns, {
-        accessor: (row) => row.ref.namespace ?? '',
-        ...namespaceColumnLink,
-      });
-    }
 
     const statusColumn = cf.createTextColumn<WorkloadData>(
       'status',
@@ -194,9 +187,14 @@ const useWorkloadTableColumns = ({
       memory: { width: 200, minWidth: 200 },
       age: { autoWidth: true },
     };
-    cf.applyColumnSizing(columns, sizing);
-
-    return columns;
+    const withNamespace = showNamespaceColumn
+      ? cf.withNamespaceColumn(columns, {
+          afterColumnKey: 'name',
+          accessor: (row) => row.ref.namespace ?? '',
+          ...namespaceColumnLink,
+        })
+      : columns;
+    return cf.withColumnSizing(withNamespace, sizing);
   }, [
     handleWorkloadClick,
     metrics?.lastError,

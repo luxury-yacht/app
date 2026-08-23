@@ -11,13 +11,14 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import {
-  applyColumnSizing,
   type ColumnSizingMap,
   createAgeColumn,
   createKindColumn,
   createResourceBarColumn,
+  createResourceNameColumn,
   createTextColumn,
-  upsertNamespaceColumn,
+  withColumnSizing,
+  withNamespaceColumn,
 } from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { formatRestartCount } from '@shared/components/tables/restartCount';
@@ -151,7 +152,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         onAltClick: navigatePod,
         sortable: false,
       }),
-      createTextColumn<PodSnapshotEntry>('name', 'Name', (pod) => pod.ref.name, {
+      createResourceNameColumn<PodSnapshotEntry>((pod) => pod.ref.name, {
         onClick: handlePodOpen,
         onAltClick: navigatePod,
         getClassName: () => 'object-panel-link',
@@ -210,14 +211,15 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
       }),
     ];
 
-    upsertNamespaceColumn(base, {
+    const withNamespace = withNamespaceColumn(base, {
+      afterColumnKey: 'name',
       accessor: (pod) => pod.ref.namespace,
       onClick: handleNamespaceSelect,
       isInteractive: (pod) => Boolean(pod.ref.namespace),
       getClassName: () => 'object-panel-link',
     });
 
-    base.push(
+    withNamespace.push(
       createResourceBarColumn<PodSnapshotEntry>({
         key: 'cpu',
         header: 'CPU',
@@ -251,8 +253,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
       ) as GridColumnDefinition<PodSnapshotEntry>
     );
 
-    applyColumnSizing(base, COLUMN_SIZING);
-    return base;
+    return withColumnSizing(withNamespace, COLUMN_SIZING);
   }, [
     handleNamespaceSelect,
     handlePodOpen,

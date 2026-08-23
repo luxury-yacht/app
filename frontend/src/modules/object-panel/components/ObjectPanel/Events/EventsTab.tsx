@@ -14,9 +14,9 @@ import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { formatLiveAgeText, LiveAgeText } from '@shared/components/LiveAgeText';
 import {
-  applyColumnSizing,
   type ColumnSizingMap,
   createTextColumn,
+  withColumnSizing,
 } from '@shared/components/tables/columnFactories';
 import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
@@ -472,9 +472,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
       objectName: { width: 220, minWidth: 180, autoWidth: true },
       age: { width: 100, minWidth: 80 },
     };
-    applyColumnSizing(base, sizing);
-
-    return base;
+    return withColumnSizing(base, sizing);
   }, [canOpenRelatedObject, navigateToRelatedObject, openRelatedObject]);
 
   const { sortedData, sortConfig, handleSort } = useTableSort(events, 'age', 'desc', {

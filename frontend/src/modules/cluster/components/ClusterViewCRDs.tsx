@@ -52,7 +52,7 @@ const crdsSpec: AggregatedResourceGridViewSpec<CRDsData> = {
       onClick: identity.open,
       onAltClick: identity.navigate,
     }),
-    cf.createTextColumn<CRDsData>('name', 'Name', (crd) => crd.ref.name, {
+    cf.createResourceNameColumn<CRDsData>((crd) => crd.ref.name, {
       sortable: true,
       onClick: identity.open,
       onAltClick: identity.navigate,

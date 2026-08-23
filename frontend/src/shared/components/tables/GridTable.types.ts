@@ -38,6 +38,10 @@ export interface GridColumnDefinition<T> extends GridColumnAlignmentOptions {
   key: string;
   header: string;
   render: (item: T) => React.ReactNode;
+  /** Whether the user may hide this column. Defaults to true. */
+  hideable?: boolean;
+  /** Whether the user may resize this column. Defaults to true. */
+  resizable?: boolean;
   sortable?: boolean;
   sortValue?: (item: T) => unknown;
   className?: string;
@@ -46,7 +50,6 @@ export interface GridColumnDefinition<T> extends GridColumnAlignmentOptions {
   maxWidth?: ColumnWidthInput;
   autoSizeMaxWidth?: ColumnWidthInput;
   autoWidth?: boolean;
-  flex?: string;
   disableShortcuts?: boolean | ((item: T) => boolean);
 }
 
@@ -187,14 +190,9 @@ export interface GridTableProps<T> {
   exportFilename?: string;
   diagnosticsLabel?: string;
   diagnosticsMode?: GridTableDiagnosticsMode;
-  /**
-   * Override which column keys should be treated as special "kind badge"
-   * columns by shared table helpers. Use this when a consumer needs plain
-   * text rendering for keys that would otherwise collide with global table
-   * conventions.
-   */
-  isKindColumnKey?: (key: string) => boolean;
   getRowClassName?: (item: T, index: number) => string | undefined | null;
+  /** Declares selected-row semantics independently from presentation classes. */
+  isRowSelected?: (item: T, index: number) => boolean;
   getRowStyle?: (item: T, index: number) => React.CSSProperties | undefined;
   onRowClick?: (item: T) => void;
   /** Called for pointer row activation after interactive descendants are excluded. */
@@ -213,13 +211,13 @@ export interface GridTableProps<T> {
   enableContextMenu?: boolean;
   getCustomContextMenuItems?: (item: T, columnKey: string) => ContextMenuItem[];
   useShortNames?: boolean;
-  initialColumnWidths?: Record<string, ColumnWidthInput>;
   columnWidths?: Record<string, ColumnWidthState> | null;
   onColumnWidthsChange?: (widths: Record<string, ColumnWidthState>) => void;
   enableColumnResizing?: boolean;
   columnVisibility?: Record<string, boolean> | null;
   onColumnVisibilityChange?: (visibility: Record<string, boolean>) => void;
-  nonHideableColumns?: string[];
+  columnOrder?: string[] | null;
+  onColumnOrderChange?: (order: string[]) => void;
   enableColumnVisibilityMenu?: boolean;
   emptyMessage?: string;
   /** Optional view-specific copy and action shown only when active filters produce no rows. */
@@ -242,7 +240,6 @@ export interface GridTableProps<T> {
     message?: string;
   };
   filters?: GridTableFilterConfig<T>;
-  allowHorizontalOverflow?: boolean;
   /**
    * When true, show a passive vertical boundary at the end of the rendered
    * columns whenever the table content is narrower than the visible viewport.

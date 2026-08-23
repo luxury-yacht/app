@@ -172,6 +172,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
         allowRowClick: false,
       }),
       cf.createTextColumn<NamespaceTableRow>('name', 'Namespace', (row) => row.ref.name, {
+        hideable: false,
         onClick: navigate,
         getClassName: () => 'object-panel-link',
         isInteractive: (row) => !row.scopeStatus,
@@ -259,7 +260,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
       }),
       cf.createAgeColumn<NamespaceTableRow>()
     );
-    cf.applyColumnSizing(result, {
+    return cf.withColumnSizing(result, {
       kind: { autoWidth: true },
       name: { autoWidth: true },
       cluster: { autoWidth: true },
@@ -272,7 +273,6 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
       quotaPressure: { autoWidth: true },
       age: { autoWidth: true },
     });
-    return result;
   }, [
     navigate,
     navigateAttention,
@@ -360,7 +360,6 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
         onPageSizeChange: persistence.setPageSize,
       }}
       enableColumnVisibilityMenu
-      allowHorizontalOverflow
       {...(enableRowNavigation ? { onRowClick: navigate, onRowPointerClick: navigate } : {})}
       favModal={favModal}
     />

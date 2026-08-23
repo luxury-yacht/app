@@ -100,20 +100,12 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           onAltClick: (resource) => navigateToView(helmReference(resource)),
           isInteractive: () => true,
         }),
-        cf.createTextColumn<HelmData>('name', 'Name', (resource) => resource.ref.name, {
+        cf.createResourceNameColumn<HelmData>((resource) => resource.ref.name, {
           onClick: handleResourceClick,
           onAltClick: (resource) => navigateToView(helmReference(resource)),
           getClassName: () => 'object-panel-link',
         }),
       ];
-
-      if (showNamespaceColumn) {
-        cf.upsertNamespaceColumn(baseColumns, {
-          accessor: (resource) => resource.ref.namespace,
-          sortValue: (resource) => (resource.ref.namespace || '').toLowerCase(),
-          ...namespaceColumnLink,
-        });
-      }
 
       baseColumns.push(
         cf.createTextColumn<HelmData>('chart', 'Chart', (resource) => {
@@ -240,9 +232,15 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
         description: { autoWidth: true },
         age: { autoWidth: true },
       };
-      cf.applyColumnSizing(baseColumns, sizing);
-
-      return baseColumns;
+      const withNamespace = showNamespaceColumn
+        ? cf.withNamespaceColumn(baseColumns, {
+            afterColumnKey: 'name',
+            accessor: (resource) => resource.ref.namespace,
+            sortValue: (resource) => (resource.ref.namespace || '').toLowerCase(),
+            ...namespaceColumnLink,
+          })
+        : baseColumns;
+      return cf.withColumnSizing(withNamespace, sizing);
     }, [
       handleResourceClick,
       helmReference,

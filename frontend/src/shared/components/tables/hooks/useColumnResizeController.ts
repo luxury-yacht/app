@@ -33,7 +33,6 @@ export interface ColumnResizeControllerOptions<T> {
   getColumnMaxWidth: (column: GridColumnDefinition<T>) => number;
   measureColumnWidth: (column: GridColumnDefinition<T>) => number;
   enableColumnResizing: boolean;
-  isFixedColumnKey: (key: string) => boolean;
   onManualResize?: (event: {
     type: 'dragStart' | 'drag' | 'dragEnd' | 'autoSize' | 'reset';
     columns: string[];
@@ -57,7 +56,6 @@ export function useColumnResizeController<T>({
   getColumnMaxWidth,
   measureColumnWidth,
   enableColumnResizing,
-  isFixedColumnKey,
   onManualResize,
 }: ColumnResizeControllerOptions<T>): ColumnResizeController {
   const [resizing, setResizing] = useState<ResizeState | null>(null);
@@ -77,11 +75,13 @@ export function useColumnResizeController<T>({
       }
 
       const leftColumn = columnsRef.current.find((col) => col.key === leftKey);
-      const rightColumnExists = columnsRef.current.some((col) => col.key === rightKey);
-      if (!leftColumn || !rightColumnExists) {
-        return;
-      }
-      if (isFixedColumnKey(leftKey) || isFixedColumnKey(rightKey)) {
+      const rightColumn = columnsRef.current.find((col) => col.key === rightKey);
+      if (
+        !leftColumn ||
+        !rightColumn ||
+        leftColumn.resizable === false ||
+        rightColumn.resizable === false
+      ) {
         return;
       }
 
@@ -99,16 +99,16 @@ export function useColumnResizeController<T>({
       onManualResize?.({ type: 'dragStart', columns: [leftKey] });
       onManualResize?.({ type: 'drag', columns: [leftKey] });
     },
-    [columnWidths, enableColumnResizing, getColumnMinWidth, isFixedColumnKey, onManualResize]
+    [columnWidths, enableColumnResizing, getColumnMinWidth, onManualResize]
   );
 
   const handleResizeKeyDown = useCallback(
     (event: React.KeyboardEvent, columnKey: string) => {
-      if (!enableColumnResizing || isFixedColumnKey(columnKey)) {
+      if (!enableColumnResizing) {
         return;
       }
       const column = columnsRef.current.find((candidate) => candidate.key === columnKey);
-      if (!column) {
+      if (!column || column.resizable === false) {
         return;
       }
 
@@ -136,6 +136,8 @@ export function useColumnResizeController<T>({
       event.preventDefault();
       event.stopPropagation();
       const clampedWidth = Math.min(Math.max(nextWidth, minimum), maximum);
+      onManualResize?.({ type: 'dragStart', columns: [columnKey] });
+      onManualResize?.({ type: 'drag', columns: [columnKey] });
       setColumnWidths((previous) => ({ ...previous, [columnKey]: clampedWidth }));
       manuallyResizedColumnsRef.current.add(columnKey);
       onManualResize?.({ type: 'dragEnd', columns: [columnKey] });
@@ -145,7 +147,6 @@ export function useColumnResizeController<T>({
       enableColumnResizing,
       getColumnMaxWidth,
       getColumnMinWidth,
-      isFixedColumnKey,
       manuallyResizedColumnsRef,
       onManualResize,
       setColumnWidths,
@@ -269,14 +270,10 @@ export function useColumnResizeController<T>({
       if (!enableColumnResizing) {
         return;
       }
-      if (isFixedColumnKey(columnKey)) {
-        return;
-      }
-
       const columnsSnapshot = columnsRef.current;
 
       const column = columnsSnapshot.find((col) => col.key === columnKey);
-      if (!column) {
+      if (!column || column.resizable === false) {
         return;
       }
 
@@ -308,7 +305,6 @@ export function useColumnResizeController<T>({
       enableColumnResizing,
       getColumnMaxWidth,
       getColumnMinWidth,
-      isFixedColumnKey,
       manuallyResizedColumnsRef,
       measureColumnWidth,
       setColumnWidths,

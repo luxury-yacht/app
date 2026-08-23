@@ -10,12 +10,13 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import {
-  applyColumnSizing,
   type ColumnSizingMap,
   createAgeColumn,
   createKindColumn,
+  createResourceNameColumn,
   createTextColumn,
-  upsertNamespaceColumn,
+  withColumnSizing,
+  withNamespaceColumn,
 } from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
@@ -157,7 +158,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
           ),
         sortable: false,
       }),
-      createTextColumn<JobRow>('name', 'Name', {
+      createResourceNameColumn<JobRow>({
         onClick: handleJobOpen,
         onAltClick: (job) =>
           navigateToView(
@@ -184,14 +185,15 @@ export const JobsTab: React.FC<JobsTabProps> = ({
       createTextColumn<JobRow>('duration', 'Duration', (job) => job.duration || '\u2014'),
     ];
 
-    upsertNamespaceColumn(base, {
+    const withNamespace = withNamespaceColumn(base, {
+      afterColumnKey: 'name',
       accessor: (job) => job.namespace,
       onClick: handleNamespaceSelect,
       isInteractive: (job) => Boolean(job.namespace),
       getClassName: () => 'object-panel-link',
     });
 
-    base.push(
+    withNamespace.push(
       createAgeColumn<JobRow & { age?: string }>(
         'age',
         'Age',
@@ -199,8 +201,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
       ) as GridColumnDefinition<JobRow>
     );
 
-    applyColumnSizing(base, COLUMN_SIZING);
-    return base;
+    return withColumnSizing(withNamespace, COLUMN_SIZING);
   }, [handleJobOpen, handleNamespaceSelect, navigateToView, objectData?.clusterId]);
 
   const getSearchTokens = useCallback((job: JobRow) => {

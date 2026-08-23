@@ -35,7 +35,7 @@ func TestAppFavoritesRoundTrip(t *testing.T) {
 						"resourceScopes": {Mode: "some", Values: []string{"Namespace"}},
 					},
 				},
-				TableState: FavoriteTableState{SortColumn: "name", SortDirection: "asc"},
+				TableState: FavoriteTableState{SortColumn: "name", SortDirection: "asc", ColumnOrder: []string{"kind", "name", "age"}},
 			},
 		},
 	}

@@ -54,6 +54,7 @@ type FavoriteTableState struct {
 	SortColumn       string          `json:"sortColumn"`
 	SortDirection    string          `json:"sortDirection"`
 	ColumnVisibility map[string]bool `json:"columnVisibility"`
+	ColumnOrder      []string        `json:"columnOrder,omitempty"`
 }
 
 // favoritesFile is the on-disk format for favorites.json.

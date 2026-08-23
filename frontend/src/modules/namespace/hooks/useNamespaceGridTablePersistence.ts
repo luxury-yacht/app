@@ -46,6 +46,8 @@ export interface NamespaceGridTablePersistenceResult<
   setColumnWidths: (next: Record<string, ColumnWidthState>) => void;
   columnVisibility: Record<string, boolean> | null;
   setColumnVisibility: (next: Record<string, boolean>) => void;
+  columnOrder: string[] | null;
+  setColumnOrder: (next: string[]) => void;
   filters: GridTableFilterState;
   setFilters: (next: GridTableFilterState) => void;
   pageSize: number | null;
@@ -79,6 +81,8 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
     setColumnWidths,
     columnVisibility,
     setColumnVisibility,
+    columnOrder,
+    setColumnOrder,
     filters,
     setFilters,
     pageSize,
@@ -132,6 +136,8 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
       setColumnWidths,
       columnVisibility,
       setColumnVisibility,
+      columnOrder,
+      setColumnOrder,
       filters,
       setFilters,
       pageSize,
@@ -141,6 +147,7 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
     }),
     [
       columnVisibility,
+      columnOrder,
       columnWidths,
       filters,
       handleReset,
@@ -148,6 +155,7 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
       hydrated,
       pageSize,
       setColumnVisibility,
+      setColumnOrder,
       setColumnWidths,
       setFilters,
       setPageSize,
@@ -162,6 +170,8 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
     setColumnWidths,
     columnVisibility,
     setColumnVisibility,
+    columnOrder,
+    setColumnOrder,
     filters,
     setFilters,
     pageSize,

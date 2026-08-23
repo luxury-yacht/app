@@ -47,7 +47,6 @@ interface GridTableBodyProps<T> {
   onWrapperBlur: (event: React.FocusEvent<HTMLElement>) => void;
   onWrapperBackgroundClick: () => void;
   contentWidth: number;
-  allowHorizontalOverflow: boolean;
   viewportWidth: number;
   /** Whether data is currently loading — drives aria-busy on the grid container. */
   loading: boolean;
@@ -79,7 +78,6 @@ function GridTableBody<T>({
   onWrapperBlur,
   onWrapperBackgroundClick,
   contentWidth,
-  allowHorizontalOverflow,
   viewportWidth,
   loading,
   hasActiveFilters,
@@ -134,7 +132,7 @@ function GridTableBody<T>({
   }, [onWrapperBackgroundClick, wrapperRef]);
 
   const virtualWidth = (() => {
-    if (!shouldVirtualize || !allowHorizontalOverflow || contentWidth <= 0) {
+    if (!shouldVirtualize || contentWidth <= 0) {
       stretchDecisionRef.current = false;
       return undefined;
     }

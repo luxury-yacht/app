@@ -16,35 +16,11 @@ import {
   detectWidthUnit,
   getStableRowId,
   getTextContent,
-  isFixedColumnKey,
-  isKindColumnKey,
-  normalizeKindClass,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
 import { describe, expect, it } from 'vitest';
 
 describe('GridTable utils', () => {
-  it('returns a hash-based color slot class for known kinds', () => {
-    // Same kind always lands on the same slot.
-    expect(normalizeKindClass('Deployment')).toBe(normalizeKindClass('Deployment'));
-    // Casing and surrounding whitespace are normalized away.
-    expect(normalizeKindClass('Deployment')).toBe(normalizeKindClass('  deployment  '));
-    // The slot class follows the documented hash-color-{1..N} contract.
-    expect(normalizeKindClass('Deployment')).toMatch(/^hash-color-\d{1,2}$/);
-  });
-
-  it('returns an empty class for missing kinds so the badge falls back to grey', () => {
-    expect(normalizeKindClass('')).toBe('');
-  });
-
-  it('detects fixed column keys', () => {
-    expect(isKindColumnKey('kind')).toBe(true);
-    expect(isKindColumnKey('type')).toBe(false);
-    expect(isFixedColumnKey('type')).toBe(false);
-    expect(isFixedColumnKey('age')).toBe(false);
-    expect(isFixedColumnKey('name')).toBe(false);
-  });
-
   it('extracts kind, namespace, and search text defaults', () => {
     const row = {
       name: 'pod-1',

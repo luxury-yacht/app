@@ -43,7 +43,7 @@ const configSpec: AggregatedResourceGridViewSpec<ConfigData> = {
       onClick: identity.open,
       onAltClick: identity.navigate,
     }),
-    cf.createTextColumn<ConfigData>('name', 'Name', (resource) => resource.ref.name, {
+    cf.createResourceNameColumn<ConfigData>((resource) => resource.ref.name, {
       onClick: identity.open,
       onAltClick: identity.navigate,
       getClassName: () => 'object-panel-link',

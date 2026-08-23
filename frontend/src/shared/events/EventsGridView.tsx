@@ -188,9 +188,7 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
         message: { width: 250 },
         age: { autoWidth: true },
       };
-      cf.applyColumnSizing(baseColumns, sizing);
-
-      return baseColumns;
+      return cf.withColumnSizing(baseColumns, sizing);
     },
     [
       canOpenInvolvedObject,

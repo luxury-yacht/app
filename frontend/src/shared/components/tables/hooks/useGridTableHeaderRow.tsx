@@ -13,7 +13,6 @@ import type React from 'react';
 export interface UseGridTableHeaderRowParams<T> {
   renderedColumns: GridColumnDefinition<T>[];
   enableColumnResizing: boolean;
-  isFixedColumnKey: (key: string) => boolean;
   handleHeaderContextMenu?: (event: React.MouseEvent, columnKey: string) => void;
   columnWidths: Record<string, number>;
   handleHeaderClick: (column: GridColumnDefinition<T>) => void;
@@ -29,7 +28,6 @@ export interface UseGridTableHeaderRowParams<T> {
 export function useGridTableHeaderRow<T>({
   renderedColumns,
   enableColumnResizing,
-  isFixedColumnKey,
   handleHeaderContextMenu,
   columnWidths,
   handleHeaderClick,
@@ -49,9 +47,8 @@ export function useGridTableHeaderRow<T>({
         const showResizeHandle =
           enableColumnResizing &&
           !!nextColumn &&
-          !isFixedColumnKey(column.key) &&
-          !isFixedColumnKey(nextColumn.key);
-        const showKindSeparator = column.key === 'kind' && !!nextColumn && !showResizeHandle;
+          column.resizable !== false &&
+          nextColumn.resizable !== false;
 
         // Compute aria-sort for this header cell.
         const ariaSortValue = (() => {
@@ -116,7 +113,6 @@ export function useGridTableHeaderRow<T>({
                 tabIndex={0}
               />
             )}
-            {!!showKindSeparator && <div className="column-separator" aria-hidden="true" />}
           </AriaGridColumnHeader>
         );
       })}

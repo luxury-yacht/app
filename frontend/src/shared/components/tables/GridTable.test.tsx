@@ -119,10 +119,8 @@ type RenderOptions = Partial<{
   getCustomContextMenuItems: (item: SimpleRow, columnKey: string) => unknown[];
   columnVisibility: Record<string, boolean>;
   onColumnVisibilityChange: (visibility: Record<string, boolean>) => void;
-  nonHideableColumns: string[];
   onColumnWidthsChange: (widths: Record<string, unknown>) => void;
   columnWidths: Record<string, unknown>;
-  allowHorizontalOverflow: boolean;
   keyExtractor: (item: SimpleRow, index: number) => string;
   paginationControls: React.ReactNode;
   localPagination: {
@@ -487,7 +485,7 @@ describe('GridTable virtualization', () => {
     expect(renderedRows.length).toBeLessThan(500);
   });
 
-  it('expands the virtual body width to match the total column width when overflow is allowed', () => {
+  it('expands the virtual body width to match the total column width', () => {
     const wideColumns: GridColumnDefinition<SimpleRow>[] = [
       {
         key: 'label',
@@ -507,7 +505,6 @@ describe('GridTable virtualization', () => {
       data: createRows(150).map((row, index) => ({ ...row, name: `Name ${index}` })),
       columns: wideColumns,
       virtualization: { enabled: true, threshold: 1, overscan: 1, estimateRowHeight: 40 },
-      allowHorizontalOverflow: true,
     });
     cleanupRoot = cleanup;
 
@@ -539,7 +536,6 @@ describe('GridTable virtualization', () => {
       data: createRows(150).map((row, index) => ({ ...row, name: `Name ${index}` })),
       columns: wideColumns,
       virtualization: { enabled: true, threshold: 1, overscan: 1, estimateRowHeight: 40 },
-      allowHorizontalOverflow: true,
     });
     cleanupRoot = cleanup;
 
@@ -1274,10 +1270,8 @@ function renderGridTable(options: RenderOptions = {}) {
     getCustomContextMenuItems: options.getCustomContextMenuItems,
     columnVisibility: options.columnVisibility,
     onColumnVisibilityChange: options.onColumnVisibilityChange,
-    nonHideableColumns: options.nonHideableColumns ?? [],
     onColumnWidthsChange: options.onColumnWidthsChange,
     columnWidths: options.columnWidths ?? {},
-    allowHorizontalOverflow: options.allowHorizontalOverflow ?? false,
     paginationControls: options.paginationControls,
     localPagination: options.localPagination,
   };
@@ -1906,7 +1900,13 @@ it('does not hide locked columns through visibility menu', async () => {
   const onColumnVisibilityChange = vi.fn();
   const columns: GridColumnDefinition<SimpleRow>[] = [
     { key: 'name', header: 'Name', render: (row) => row.name ?? row.id },
-    { key: 'extra', header: 'Extra', sortable: false, render: (row) => row.id },
+    {
+      key: 'extra',
+      header: 'Extra',
+      sortable: false,
+      hideable: false,
+      render: (row) => row.id,
+    },
   ];
 
   const { container, cleanup } = renderGridTable({
@@ -1915,7 +1915,6 @@ it('does not hide locked columns through visibility menu', async () => {
     virtualization: { enabled: false },
     enableContextMenu: true,
     enableColumnVisibilityMenu: true,
-    nonHideableColumns: ['extra'],
     onSort: vi.fn(),
     onColumnVisibilityChange,
   });

@@ -22,6 +22,7 @@ const eventTypeVariant = (type: string): StatusChipVariant => {
 export const createEventTypeColumn = <T extends EventTypeRow>(): GridColumnDefinition<T> => ({
   key: 'type',
   header: EVENT_LABELS.type,
+  className: 'gridtable-badge-column',
   sortable: true,
   sortValue: eventTypeLabel,
   render: (row) => {

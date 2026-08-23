@@ -33,6 +33,7 @@ export interface FavoriteTableState {
   sortColumn: string;
   sortDirection: string;
   columnVisibility: Record<string, boolean>;
+  columnOrder?: string[];
 }
 
 export interface FavoritePaneState {
@@ -89,24 +90,31 @@ const fromBackendFilters = (
   };
 };
 
-const fromBackendPane = (pane: backend.FavoritePaneState): FavoritePaneState => ({
-  filters: fromBackendFilters(pane.filters) ?? {
-    search: '',
-    kinds: { mode: 'all' },
-    namespaces: { mode: 'all' },
-    clusters: { mode: 'all' },
-    caseSensitive: false,
-    includeMetadata: false,
-  },
-  tableState: {
-    ...pane.tableState,
-    columnVisibility: Object.fromEntries(
-      Object.entries(pane.tableState.columnVisibility ?? {}).filter(
-        (entry): entry is [string, boolean] => typeof entry[1] === 'boolean'
-      )
-    ),
-  },
-});
+const fromBackendPane = (pane: backend.FavoritePaneState): FavoritePaneState => {
+  const columnOrder = Array.from(
+    new Set((pane.tableState.columnOrder ?? []).filter((key) => typeof key === 'string' && key))
+  );
+  return {
+    filters: fromBackendFilters(pane.filters) ?? {
+      search: '',
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
+      caseSensitive: false,
+      includeMetadata: false,
+    },
+    tableState: {
+      sortColumn: pane.tableState.sortColumn,
+      sortDirection: pane.tableState.sortDirection,
+      columnVisibility: Object.fromEntries(
+        Object.entries(pane.tableState.columnVisibility ?? {}).filter(
+          (entry): entry is [string, boolean] => typeof entry[1] === 'boolean'
+        )
+      ),
+      ...(columnOrder.length > 0 ? { columnOrder } : {}),
+    },
+  };
+};
 
 const fromBackendFavorite = (favorite: backend.Favorite): Favorite => ({
   id: favorite.id,

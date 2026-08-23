@@ -115,7 +115,7 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
             })
           ),
       }),
-      cf.createTextColumn<CustomResourceGridRow>('name', 'Name', (resource) => resource.ref.name, {
+      cf.createResourceNameColumn<CustomResourceGridRow>((resource) => resource.ref.name, {
         sortable: true,
         onClick: handleResourceClick,
         onAltClick: (resource) =>

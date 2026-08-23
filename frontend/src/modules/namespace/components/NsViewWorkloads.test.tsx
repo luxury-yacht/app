@@ -379,9 +379,7 @@ describe('NsViewWorkloads', () => {
         },
       },
     });
-    expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).toContain(
-      'gridtable-row--selected'
-    );
+    expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
 
     act(() => {
       const onWorkloadFilterMismatch = podsViewPropsRef.current?.onWorkloadFilterMismatch;
@@ -391,9 +389,7 @@ describe('NsViewWorkloads', () => {
       onWorkloadFilterMismatch();
     });
     expect(podsViewPropsRef.current?.workloadFilterRequest).toBeUndefined();
-    expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).not.toContain(
-      'gridtable-row--selected'
-    );
+    expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(false);
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
 
@@ -411,9 +407,7 @@ describe('NsViewWorkloads', () => {
       namespace: 'team-a',
       workloadFilterRequest: { type: 'clear' },
     });
-    expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).not.toContain(
-      'gridtable-row--selected'
-    );
+    expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(false);
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
     expect(
@@ -462,9 +456,7 @@ describe('NsViewWorkloads', () => {
 
     expect(gridTablePropsRef.current.onRowSelectionClear).toBeUndefined();
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-    expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).toContain(
-      'gridtable-row--selected'
-    );
+    expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
     expect(gridTablePropsRef.current.onRowSelectionClear).toEqual(expect.any(Function));
 
     act(() => {
@@ -478,9 +470,7 @@ describe('NsViewWorkloads', () => {
     expect(podsViewPropsRef.current).toMatchObject({
       workloadFilterRequest: { type: 'clear' },
     });
-    expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).not.toContain(
-      'gridtable-row--selected'
-    );
+    expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(false);
   });
 
   it('clears a workload-owned Pods filter when the namespace scope changes', async () => {

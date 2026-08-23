@@ -33,6 +33,8 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     onChange,
     searchable,
     showBulkActions,
+    renderOptionActions,
+    additionalBulkActions,
   }: {
     id: string;
     value: string[];
@@ -40,20 +42,31 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     onChange: (value: string[]) => void;
     searchable?: boolean;
     showBulkActions?: boolean;
+    renderOptionActions?: (option: { label: string; value: string }) => React.ReactNode;
+    additionalBulkActions?: React.ReactNode;
   }) => (
-    <select
-      data-testid={id}
-      data-searchable={searchable ? 'true' : 'false'}
-      data-bulk-actions={showBulkActions ? 'true' : 'false'}
-      value={value[0] ?? ''}
-      onChange={(event) => onChange([event.target.value])}
-    >
+    <div>
+      <select
+        data-testid={id}
+        data-searchable={searchable ? 'true' : 'false'}
+        data-bulk-actions={showBulkActions ? 'true' : 'false'}
+        value={value[0] ?? ''}
+        onChange={(event) => onChange([event.target.value])}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
       {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
+        <div className="dropdown-option-row" data-option-value={option.value} key={option.value}>
+          <span>{option.label}</span>
+          {renderOptionActions?.(option)}
+        </div>
       ))}
-    </select>
+      {additionalBulkActions}
+    </div>
   ),
 }));
 
@@ -849,6 +862,9 @@ describe('GridTableFiltersBar', () => {
 
   it('renders the columns dropdown when enabled', async () => {
     const onColumnsChange = vi.fn();
+    const onMoveColumn = vi.fn();
+    const onReorderColumn = vi.fn();
+    const onResetColumnOrder = vi.fn();
     await renderFilters({
       showColumnsDropdown: true,
       columnOptions: [
@@ -857,6 +873,10 @@ describe('GridTableFiltersBar', () => {
       ],
       columnValue: ['name'],
       onColumnsChange,
+      onMoveColumn,
+      onReorderColumn,
+      canResetColumnOrder: true,
+      onResetColumnOrder,
       columnsDropdownId: 'columns',
       renderColumnsValue: () => 'Columns',
     });
@@ -871,5 +891,44 @@ describe('GridTableFiltersBar', () => {
     });
 
     expect(onColumnsChange).toHaveBeenCalledWith(['age']);
+
+    const nameHandle = container.querySelector(
+      'button[aria-label="Reorder Name. Drag or use Up and Down Arrow keys."]'
+    ) as HTMLButtonElement;
+    const ageRow = container.querySelector(
+      '.dropdown-option-row[data-option-value="age"]'
+    ) as HTMLDivElement;
+
+    expect(nameHandle.draggable).toBe(true);
+    expect(nameHandle.textContent).toBe('⠿');
+    expect(container.querySelectorAll('.gridtable-column-drag-handle')).toHaveLength(2);
+
+    await act(async () => {
+      nameHandle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    });
+    expect(onMoveColumn).toHaveBeenCalledWith('name', 1);
+
+    const dataTransfer = {
+      effectAllowed: 'none',
+      dropEffect: 'none',
+      setData: vi.fn(),
+    };
+    const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+    await act(async () => nameHandle.dispatchEvent(dragStart));
+
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+    await act(async () => ageRow.dispatchEvent(drop));
+
+    expect(onReorderColumn).toHaveBeenCalledWith('name', 1);
+
+    const resetOrder = container.querySelector(
+      'button[aria-label="Reset column order"]'
+    ) as HTMLButtonElement;
+    expect(resetOrder.textContent).toContain('Reset Order');
+    expect(resetOrder.disabled).toBe(false);
+    await act(async () => resetOrder.click());
+    expect(onResetColumnOrder).toHaveBeenCalledTimes(1);
   });
 });

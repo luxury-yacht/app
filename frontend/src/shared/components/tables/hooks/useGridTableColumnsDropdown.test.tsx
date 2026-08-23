@@ -69,6 +69,10 @@ describe('useGridTableColumnsDropdown', () => {
         isColumnVisible: (key) => !hiddenColumns.has(key),
         applyVisibilityChanges,
         enableColumnVisibilityMenu: enabled,
+        moveColumn: vi.fn(),
+        reorderColumn: vi.fn(),
+        canResetColumnOrder: false,
+        resetColumnOrder: vi.fn(),
       });
       return null;
     };
@@ -85,11 +89,12 @@ describe('useGridTableColumnsDropdown', () => {
     expect(result).toBeNull();
   });
 
-  it('returns null when all columns are locked', () => {
+  it('keeps the menu available for reordering when all columns are locked', () => {
     const result = renderHook({
       lockedColumns: new Set(['name', 'status', 'age']),
     });
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result?.options.every((option) => option.disabled)).toBe(true);
   });
 
   it('includes only hideable columns in options', () => {
@@ -103,7 +108,7 @@ describe('useGridTableColumnsDropdown', () => {
     expect(labels).toEqual(['Name', 'Status', 'Age']);
   });
 
-  it('excludes locked columns from options', () => {
+  it('includes locked columns as non-hideable ordering options', () => {
     const result = renderHook({ lockedColumns: new Set(['status']) });
     expect(result).not.toBeNull();
 
@@ -113,7 +118,19 @@ describe('useGridTableColumnsDropdown', () => {
     ).options.map((o) => o.label);
     expect(columnLabels).toContain('Name');
     expect(columnLabels).toContain('Age');
-    expect(columnLabels).not.toContain('Status');
+    expect(columnLabels).toContain('Status');
+    expect(result?.options.find((option) => option.value === 'status')?.disabled).toBe(true);
+  });
+
+  it('forwards column move actions independently from visibility', () => {
+    const result = renderHook({ lockedColumns: new Set(['name']) });
+    const moveColumn = requireValue(
+      result,
+      'expected test value in useGridTableColumnsDropdown.test.tsx'
+    ).onMoveColumn;
+
+    expect(() => moveColumn('name', 1)).not.toThrow();
+    expect(latestApplyVisibilityChanges).not.toHaveBeenCalled();
   });
 
   it('value contains only currently visible hideable columns', () => {

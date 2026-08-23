@@ -14,10 +14,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 type SampleRow = { name: string };
 
 const columns: GridColumnDefinition<SampleRow>[] = [
-  { key: 'name', header: 'Name', render: (row) => row.name },
+  { key: 'name', header: 'Name', hideable: false, render: (row) => row.name },
   { key: 'namespace', header: 'Namespace', render: (row) => row.name },
   { key: 'status', header: 'Status', render: (row) => row.name },
   { key: 'kind', header: 'Kind', render: (row) => row.name },
+  { key: 'type', header: 'Type', render: (row) => row.name },
   { key: 'age', header: 'Age', render: (row) => row.name },
 ];
 
@@ -29,7 +30,6 @@ type HarnessHandle = {
 
 interface HarnessProps {
   columnVisibility?: Record<string, boolean>;
-  nonHideableColumns?: string[];
   onColumnVisibilityChange?: (next: Record<string, boolean>) => void;
 }
 
@@ -48,7 +48,6 @@ const createHarness = async (props: HarnessProps = {}) => {
     const controller = useColumnVisibilityController<SampleRow>({
       columns,
       columnVisibility: incomingProps.columnVisibility,
-      nonHideableColumns: incomingProps.nonHideableColumns ?? [],
       onColumnVisibilityChange: incomingProps.onColumnVisibilityChange,
     });
 
@@ -100,31 +99,31 @@ afterEach(() => {
 });
 
 describe('useColumnVisibilityController', () => {
-  it('toggles visibility and respects locked columns', async () => {
+  it('uses declared hideability instead of special column keys', async () => {
     const onChange = vi.fn();
     const harness = await createHarness({
-      nonHideableColumns: ['namespace'],
       onColumnVisibilityChange: onChange,
     });
     const handle = harness.handle();
 
-    expect(handle.getRenderedKeys()).toContain('namespace');
-    expect(handle.getRenderedKeys()).toContain('status');
-
     await act(async () => {
-      handle.toggle('status');
+      handle.toggle('kind');
+      handle.toggle('type');
+      handle.toggle('age');
       await Promise.resolve();
     });
 
-    expect(handle.isVisible('status')).toBe(false);
-    expect(handle.getRenderedKeys()).not.toContain('status');
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ status: false }));
+    expect(handle.getRenderedKeys()).not.toContain('kind');
+    expect(handle.getRenderedKeys()).not.toContain('type');
+    expect(handle.getRenderedKeys()).not.toContain('age');
+    expect(onChange).toHaveBeenLastCalledWith({ age: false, kind: false, type: false });
 
     await act(async () => {
-      handle.toggle('namespace');
+      handle.toggle('name');
     });
 
-    expect(handle.isVisible('namespace')).toBe(true);
+    expect(handle.isVisible('name')).toBe(true);
+    expect(handle.getRenderedKeys()).toContain('name');
 
     await harness.unmount();
   });

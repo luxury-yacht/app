@@ -11,11 +11,11 @@ import {
   renderTableNoValue,
   TABLE_NO_VALUE_TEXT,
 } from '@shared/components/tables/tableNoValue';
-import React, { useCallback, useEffect, useRef } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 // Caches rendered cell content per column/value so virtualization and hover
-// syncing don't force expensive rerenders. Separates object/primitive caches and
-// keeps kind-class normalization/text extraction consistent.
+// syncing don't force expensive rerenders. Separates object/primitive caches.
 
 // Max entries per column's primitive cache before eviction
 const PRIMITIVE_CACHE_MAX_SIZE = 500;
@@ -33,9 +33,7 @@ interface CachedCell<T> {
 
 export interface CellCacheOptions<T> {
   renderedColumns: GridColumnDefinition<T>[];
-  isKindColumnKey: (key: string) => boolean;
   getTextContent: (node: React.ReactNode) => string;
-  normalizeKindClass: (value: string) => string;
   // Current data array - when reference changes, primitive caches are cleared
   // to prevent unbounded growth from old values
   data?: T[];
@@ -90,97 +88,23 @@ const storeCachedCell = <T,>(
   return result;
 };
 
-interface KindElementMetadata {
-  canonicalKind: string | undefined;
-  interactive: boolean;
-}
-
-const getKindElementMetadata = (content: React.ReactNode): KindElementMetadata => {
-  if (!React.isValidElement<Record<string, unknown>>(content)) {
-    return { canonicalKind: undefined, interactive: false };
-  }
-  const props = content.props;
-  const explicitKindValue = props?.['data-kind-value'];
-  const canonicalKind =
-    typeof explicitKindValue === 'string' && explicitKindValue.trim().length > 0
-      ? explicitKindValue
-      : undefined;
-  const interactive =
-    props?.['data-kind-interactive'] === 'true' ||
-    typeof props?.onClick === 'function' ||
-    typeof props?.onKeyDown === 'function' ||
-    props?.role === 'button';
-  return { canonicalKind, interactive };
-};
-
-const appendClassToken = (tokens: string[], token: string | undefined): void => {
-  if (token && !tokens.includes(token)) {
-    tokens.push(token);
-  }
-};
-
-const buildKindClassName = (
-  existingClassName: unknown,
-  normalizedClass: string,
-  interactive: boolean
-): string => {
-  const tokens = typeof existingClassName === 'string' ? existingClassName.split(/\s+/) : [];
-  const classTokens = tokens.map((token) => token.trim()).filter(Boolean);
-  appendClassToken(classTokens, 'kind-badge');
-  appendClassToken(classTokens, normalizedClass);
-  appendClassToken(classTokens, interactive ? 'clickable' : undefined);
-  return classTokens.join(' ');
-};
-
-const renderKindContent = (
-  rawContent: React.ReactNode,
-  rawText: string,
-  normalizeKindClass: (value: string) => string
-): React.ReactNode => {
-  const metadata = getKindElementMetadata(rawContent);
-  const trimmedDisplay = rawText.trim();
-  const normalizedClass = normalizeKindClass(metadata.canonicalKind ?? trimmedDisplay);
-  if (React.isValidElement<Record<string, unknown>>(rawContent)) {
-    return React.cloneElement(rawContent, {
-      className: buildKindClassName(
-        rawContent.props.className,
-        normalizedClass,
-        metadata.interactive
-      ),
-    });
-  }
-  if (trimmedDisplay.length === 0) {
-    return rawContent;
-  }
-  return (
-    <span className={buildKindClassName(undefined, normalizedClass, metadata.interactive)}>
-      {rawContent}
-    </span>
-  );
-};
-
 const renderCellValue = <T,>(
   column: GridColumnDefinition<T>,
   item: T,
-  isKindColumnKey: (key: string) => boolean,
-  getTextContent: (node: React.ReactNode) => string,
-  normalizeKindClass: (value: string) => string
+  getTextContent: (node: React.ReactNode) => string
 ): CachedCellValue => {
   const rawContent = column.render(item);
   const rawText = getTextContent(rawContent);
   const noValue = isTableNoValueText(rawText);
-  let content: React.ReactNode = noValue ? renderTableNoValue() : rawContent;
-  if (isKindColumnKey(column.key)) {
-    content = renderKindContent(rawContent, rawText, normalizeKindClass);
-  }
-  return { content, text: noValue ? TABLE_NO_VALUE_TEXT : rawText };
+  return {
+    content: noValue ? renderTableNoValue() : rawContent,
+    text: noValue ? TABLE_NO_VALUE_TEXT : rawText,
+  };
 };
 
 export function useGridTableCellCache<T>({
   renderedColumns,
-  isKindColumnKey,
   getTextContent,
-  normalizeKindClass,
   data,
 }: CellCacheOptions<T>) {
   const columnRenderCacheRef = useRef<Map<string, CachedCell<T>>>(new Map());
@@ -215,13 +139,9 @@ export function useGridTableCellCache<T>({
       if (cached) {
         return cached;
       }
-      return storeCachedCell(
-        entry,
-        item,
-        renderCellValue(column, item, isKindColumnKey, getTextContent, normalizeKindClass)
-      );
+      return storeCachedCell(entry, item, renderCellValue(column, item, getTextContent));
     },
-    [getTextContent, isKindColumnKey, normalizeKindClass]
+    [getTextContent]
   );
 
   return { getCachedCellContent };

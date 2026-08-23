@@ -44,7 +44,7 @@ const quotasSpec: AggregatedResourceGridViewSpec<QuotaData> = {
       onClick: identity.open,
       onAltClick: identity.navigate,
     }),
-    cf.createTextColumn<QuotaData>('name', 'Name', (resource) => resource.ref.name, {
+    cf.createResourceNameColumn<QuotaData>((resource) => resource.ref.name, {
       onClick: identity.open,
       onAltClick: identity.navigate,
       getClassName: () => 'object-panel-link',

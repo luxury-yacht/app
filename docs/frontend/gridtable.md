@@ -11,6 +11,13 @@ workflow and that exception is documented.
   cluster identity.
 - Column keys are durable persistence identifiers. Renaming one is a migration,
   not cosmetic cleanup.
+- Column capabilities are declarative. Set `hideable: false` or
+  `resizable: false` on the definition; the shared table must not infer either
+  capability from `name`, `kind`, `type`, `age`, or another key.
+- Use `createResourceNameColumn` for Kubernetes resource identity. It keeps the
+  Name column visible while still allowing the user to move and resize it.
+- Use `createKindColumn` when Kind badge presentation is wanted. A plain column
+  whose key happens to be `kind` or `type` remains plain.
 - Column header and data alignment are independent: use `alignHeader` and
   `alignData` with `left`, `center`, or `right`. Each defaults to `left` when
   omitted; use `className` only for styling outside this alignment contract.
@@ -63,13 +70,19 @@ workflow and that exception is documented.
   `onRowClick`; when `onRowSelectionToggle` is supplied, `Space` runs that
   selection action instead. Pointer-only selection uses `onRowPointerClick`,
   which excludes interactive descendants. A view that enables selection must
-  expose the selected state through `gridtable-row--selected` so the shared row
-  renderer publishes `aria-selected`. A primary click on unused space in the
+  supply `isRowSelected` so the shared row renderer owns the selected class,
+  `data-row-selected`, and `aria-selected`. A primary click on unused space in the
   scrollable table body clears the focused-row highlight; controlled-selection
   views supply `onRowSelectionClear` to clear their selected state at the same
   boundary. Descendant rows, cells, and controls are excluded.
-- The Columns menu uses `Dropdown`'s shared bulk-action controls. Its options are
-  hideable columns only; do not add synthetic show-all or hide-all options.
+- The Columns menu lists every column in current display order. Visibility
+  toggles remain disabled for required columns, while one drag handle per row
+  lets every column—including Name—move in the vertical menu. A focused handle
+  also supports Up and Down Arrow keys. The menu's top-to-bottom order maps to
+  the table's left-to-right column order. Reordering and visibility are
+  independent, the shared All/None actions affect hideable columns only, and
+  Reset Order restores the column definitions' declaration order without
+  changing visibility.
 - Every multi-select Kinds dropdown exposes search plus `Select all` and
   `Select none`. GridTable owns this as an invariant of a visible Kind filter;
   views may decide whether the filter is present but cannot disable its controls.
@@ -168,6 +181,12 @@ When row virtualization changes `virtualRange.start/end`, the controller must en
 auto-width columns after the new row window commits; the range bounds are intentional effect
 invalidators even though the callback does not read them.
 
+Column widths come from persisted user state, the column definition, auto-width
+measurement, or the shared fallback. The table does not stretch columns to fill
+the viewport; narrower tables leave trailing space and wider tables scroll
+horizontally. Resizing affects only the declared column and respects its
+`minWidth`, `maxWidth`, and `resizable` capability.
+
 ## Filtering And Search
 
 - Use local search only when the table owns the complete searchable row set.
@@ -215,6 +234,9 @@ invalidators even though the callback does not read them.
   state as one named pane. Favorites code must compare, edit, save, and restore
   the state object as a whole; it must not maintain a separate allowlist of
   Kinds, Namespaces, or provider facet keys.
+- Table display state includes column order as well as sort and visibility.
+  Restoring a favorite reconciles the saved order with the current definitions:
+  removed keys are dropped and newly added columns append in declaration order.
 - The save modal derives editable controls from the pane's
   `GridTableFilterOptions`. Built-in structural filters and every declared
   `queryFacets` entry therefore use the same option vocabulary and selection
@@ -238,8 +260,9 @@ invalidators even though the callback does not read them.
   fields such as timestamps may be used by a column `sortValue`, but must not be
   published as active table sort keys.
 - Age columns should render relative text from `ageTimestamp` through the
-  live-age contract in [live-age.md](live-age.md). Displayed `age` strings are
-  fallback text only; they are not stable sort values.
+  live-age contract in [live-age.md](live-age.md). `createAgeColumn` owns the
+  timestamp sort value and parses compact fallback text only when a timestamp is
+  unavailable; the generic sorting hook never infers Age semantics from a key.
 - Query-backed table columns may be `sortable: true` only when the backend
   adapter supports that exact column key, or a documented alias for it, as a
   global query sort.

@@ -104,7 +104,7 @@ export default function ClusterViewAttention() {
         onAltClick: navigateObject,
       }),
       cf.createTextColumn('namespace', 'Namespace', (row) => row.namespace || '-'),
-      cf.createTextColumn('name', 'Name', (row) => row.ref.name, {
+      cf.createResourceNameColumn((row) => row.ref.name, {
         onClick: openObject,
         onAltClick: navigateObject,
         getClassName: () => 'object-panel-link',
@@ -128,7 +128,7 @@ export default function ClusterViewAttention() {
       },
       cf.createAgeColumn<ClusterAttentionFinding>('age', 'Age', (row) => row.age),
     ];
-    cf.applyColumnSizing(result, {
+    return cf.withColumnSizing(result, {
       kind: { autoWidth: true },
       name: { width: 220 },
       namespace: { width: 180 },
@@ -136,7 +136,6 @@ export default function ClusterViewAttention() {
       reason: { width: 320 },
       age: { autoWidth: true },
     });
-    return result;
   }, [navigateObject, openObject, useShortResourceNames]);
 
   const keyExtractor = useCallback(

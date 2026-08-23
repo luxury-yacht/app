@@ -8,10 +8,8 @@
 import {
   DEFAULT_COLUMN_MIN_WIDTH,
   detectWidthUnit,
-  isFixedColumnKey,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
-import { reconcileColumnWidthsToContainer } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 import {
   type ManualResizeEvent,
   useDirtyQueue,
@@ -19,7 +17,7 @@ import {
 import {
   useColumnWidthState,
   useExternalWidthsSync,
-  useInitialMeasurementAndReconcile,
+  useInitialColumnMeasurement,
   useSyncRenderedColumns,
   useWatchTableData,
   useWidthsChangeNotifier,
@@ -67,14 +65,12 @@ interface ColumnWidthsOptions<T> {
   renderedColumns: GridColumnDefinition<T>[];
   tableRef: RefObject<HTMLElement | null>;
   tableData: T[];
-  initialColumnWidths?: Record<string, ColumnWidthInput | undefined> | null;
   controlledColumnWidths?: Record<string, ColumnWidthState> | null;
   externalColumnWidths: Record<string, number> | null;
   enableColumnResizing: boolean;
   onColumnWidthsChange?: (payload: Record<string, ColumnWidthState>) => void;
   useShortNames: boolean;
   measureColumnWidth: (column: GridColumnDefinition<T>) => number;
-  allowHorizontalOverflow: boolean;
 }
 
 interface ColumnWidthsResult<T> {
@@ -82,14 +78,8 @@ interface ColumnWidthsResult<T> {
   setColumnWidths: (updater: React.SetStateAction<Record<string, number>>) => void;
   columnsRef: RefObject<GridColumnDefinition<T>[]>;
   manuallyResizedColumnsRef: RefObject<Set<string>>;
-  reconcileWidthsToContainer: (
-    base: Record<string, number>,
-    containerWidth: number,
-    options?: { forceFit?: boolean }
-  ) => Record<string, number>;
   buildColumnWidthState: (key: string, width: number) => ColumnWidthState;
   updateNaturalWidth: (key: string, width: number) => void;
-  isInitialized: boolean;
   markColumnsDirty: (keys: Iterable<string>) => void;
   markAllAutoColumnsDirty: () => void;
   handleManualResizeEvent: (event: ManualResizeEvent) => void;
@@ -101,7 +91,6 @@ const hasWidthInput = (value: ColumnWidthInput | null | undefined): boolean =>
 const resolveControlledWidthSource = <T>(
   controlledState: ColumnWidthState,
   column: GridColumnDefinition<T> | undefined,
-  initialInput: ColumnWidthInput | null | undefined,
   manual: boolean,
   autoWidth: boolean
 ): ColumnWidthState['source'] => {
@@ -114,9 +103,6 @@ const resolveControlledWidthSource = <T>(
   if (autoWidth) {
     return 'auto';
   }
-  if (hasWidthInput(initialInput)) {
-    return 'table';
-  }
   return hasWidthInput(column?.width) ? 'column' : 'table';
 };
 
@@ -124,7 +110,6 @@ const buildControlledWidthState = <T>(
   width: number,
   controlledState: ColumnWidthState,
   column: GridColumnDefinition<T> | undefined,
-  initialInput: ColumnWidthInput | null | undefined,
   manual: boolean
 ): ColumnWidthState => {
   const autoWidth = controlledState.autoWidth ?? Boolean(column?.autoWidth && !manual);
@@ -137,7 +122,7 @@ const buildControlledWidthState = <T>(
       controlledState.rawValue ??
       (typeof controlledState.raw === 'number' ? controlledState.raw : null),
     autoWidth,
-    source: resolveControlledWidthSource(controlledState, column, initialInput, manual, autoWidth),
+    source: resolveControlledWidthSource(controlledState, column, manual, autoWidth),
     updatedAt: Date.now(),
   };
 };
@@ -150,29 +135,25 @@ const parseRawWidthValue = (raw: ColumnWidthInput | null): number | null => {
 };
 
 const resolveWidthSource = (
-  initialInput: ColumnWidthInput | null | undefined,
   manual: boolean,
-  autoWidth: boolean
+  autoWidth: boolean,
+  hasDeclaredWidth: boolean
 ): ColumnWidthState['source'] => {
   if (manual) {
     return 'user';
   }
-  if (hasWidthInput(initialInput)) {
-    return 'table';
-  }
   if (autoWidth) {
     return 'auto';
   }
-  return 'column';
+  return hasDeclaredWidth ? 'column' : 'table';
 };
 
 const buildUncontrolledWidthState = <T>(
   width: number,
   column: GridColumnDefinition<T> | undefined,
-  initialInput: ColumnWidthInput | null | undefined,
   manual: boolean
 ): ColumnWidthState => {
-  const raw = column?.width ?? initialInput ?? null;
+  const raw = column?.width ?? null;
   const autoWidth = Boolean(column?.autoWidth) && !manual;
   return {
     width,
@@ -180,14 +161,14 @@ const buildUncontrolledWidthState = <T>(
     raw,
     rawValue: parseRawWidthValue(raw),
     autoWidth,
-    source: resolveWidthSource(initialInput, manual, autoWidth),
+    source: resolveWidthSource(manual, autoWidth, hasWidthInput(column?.width)),
     updatedAt: Date.now(),
   };
 };
 
 // Main hook that keeps GridTable column widths in sync with user actions, data changes,
 // and layout constraints. In plain terms, it:
-// - picks starting widths (controlled, initial overrides, column defaults)
+// - picks starting widths (controlled state, column defaults, shared fallback)
 // - lets auto-width columns grow/shrink when their visible text changes
 // - leaves manually resized columns alone while fitting the rest to the container
 // - listens to external width updates and notifies persistence/parents when widths change
@@ -199,14 +180,12 @@ export function useGridTableColumnWidths<T>(
     renderedColumns,
     tableRef,
     tableData,
-    initialColumnWidths,
     controlledColumnWidths,
     externalColumnWidths,
     enableColumnResizing,
     onColumnWidthsChange,
     useShortNames,
     measureColumnWidth,
-    allowHorizontalOverflow,
   } = options;
 
   const columnsRef = useRef(renderedColumns);
@@ -242,7 +221,6 @@ export function useGridTableColumnWidths<T>(
   const { columnWidths, setColumnWidths } = useColumnWidthState({
     columns,
     columnsRef,
-    initialColumnWidths,
     controlledColumnWidths,
     naturalWidthsRef,
     manuallyResizedColumnsRef,
@@ -292,13 +270,12 @@ export function useGridTableColumnWidths<T>(
       const column = columnsRef.current.find((col) => col.key === key);
       const controlledState = controlledColumnWidths?.[key];
       const manual = manuallyResizedColumnsRef.current.has(key);
-      const initialInput = initialColumnWidths?.[key];
       if (controlledState) {
-        return buildControlledWidthState(width, controlledState, column, initialInput, manual);
+        return buildControlledWidthState(width, controlledState, column, manual);
       }
-      return buildUncontrolledWidthState(width, column, initialInput, manual);
+      return buildUncontrolledWidthState(width, column, manual);
     },
-    [controlledColumnWidths, initialColumnWidths]
+    [controlledColumnWidths]
   );
 
   useExternalWidthsSync({
@@ -323,45 +300,10 @@ export function useGridTableColumnWidths<T>(
     lastNotifiedWidthsRef,
   });
 
-  const reconcileWidthsToContainer = useCallback(
-    (
-      base: Record<string, number>,
-      containerWidth: number,
-      resizeOptions?: { forceFit?: boolean }
-    ): Record<string, number> => {
-      // Adjust widths so the table fits its container without fighting the user.
-      // - Skip auto-fitting while a drag is in progress.
-      // - If overflow is allowed, we mostly leave widths alone unless forceFit asks us to fill space.
-      // - Manually resized columns are protected below (locked as fixed) while flex columns adjust.
-      if (phaseRef.current === 'dragging') {
-        return base;
-      }
-      if (!containerWidth || containerWidth <= 0 || renderedColumns.length === 0) {
-        return base;
-      }
-
-      return reconcileColumnWidthsToContainer({
-        baseWidths: base,
-        renderedColumns,
-        naturalWidths: naturalWidthsRef.current,
-        containerWidth,
-        allowHorizontalOverflow,
-        forceFit: resizeOptions?.forceFit,
-        enableColumnResizing,
-        externalColumnWidths,
-        manuallyResizedColumnKeys: manuallyResizedColumnsRef.current,
-        isFixedColumnKey,
-        getColumnMinWidth,
-        getColumnMaxWidth,
-      });
-    },
-    [enableColumnResizing, externalColumnWidths, renderedColumns, allowHorizontalOverflow]
-  );
-
   const prevColumnsSignatureRef = useRef<string | null>(null);
   const prevShortNamesRef = useRef(useShortNames);
 
-  useInitialMeasurementAndReconcile({
+  useInitialColumnMeasurement({
     tableRef,
     renderedColumns,
     measureColumnWidth,
@@ -369,13 +311,10 @@ export function useGridTableColumnWidths<T>(
     columnWidths,
     naturalWidthsRef,
     externalColumnWidths,
-    reconcileWidthsToContainer,
     setColumnWidths,
     useShortNames,
-    allowHorizontalOverflow,
     getColumnMinWidth,
     getColumnMaxWidth,
-    isFixedColumnKey,
     phaseRef,
     transitionPhase,
     prevColumnsSignatureRef,
@@ -388,10 +327,8 @@ export function useGridTableColumnWidths<T>(
     setColumnWidths,
     columnsRef,
     manuallyResizedColumnsRef,
-    reconcileWidthsToContainer,
     buildColumnWidthState,
     updateNaturalWidth,
-    isInitialized: phaseState !== 'initializing',
     markColumnsDirty,
     markAllAutoColumnsDirty,
     handleManualResizeEvent,

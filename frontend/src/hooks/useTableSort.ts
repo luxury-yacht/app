@@ -2,13 +2,12 @@
  * frontend/src/hooks/useTableSort.ts
  *
  * Hook for useTableSort.
- * Provides sorting functionality for tables, including special handling for age and timestamp columns.
+ * Provides generic sorting functionality for tables.
  * Supports both controlled and uncontrolled sorting states.
  */
 
 import { recordGridTablePerformanceSample } from '@shared/components/tables/performance/gridTablePerformanceStore';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { parseCompactAgeToSeconds } from '@/utils/ageFormatter';
 
 export type SortDirection = 'asc' | 'desc' | null;
 
@@ -78,11 +77,6 @@ const getNextSortConfig = (
   return { key, direction: NEXT_SORT_DIRECTION[previous.direction ?? 'none'] };
 };
 
-const normalizeSortValue = (sortKey: string, value: unknown): unknown =>
-  sortKey.toLowerCase() === 'age' && typeof value === 'string'
-    ? parseCompactAgeToSeconds(value)
-    : value;
-
 const decorateSortRows = <T>(
   data: T[],
   sortKey: string,
@@ -90,12 +84,11 @@ const decorateSortRows = <T>(
   rowIdentity: ((item: T, index: number) => string) | undefined
 ): DecoratedSortRow<T>[] =>
   data.map((item, index) => {
-    const rawValue = extractor ? extractor(item) : (item as Record<string, unknown>)[sortKey];
     return {
       item,
       index,
       key: rowIdentity?.(item, index),
-      value: normalizeSortValue(sortKey, rawValue),
+      value: extractor ? extractor(item) : (item as Record<string, unknown>)[sortKey],
     };
   });
 

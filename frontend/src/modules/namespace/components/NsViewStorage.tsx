@@ -63,7 +63,7 @@ const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
         onClick: identity.open,
         onAltClick: identity.navigate,
       }),
-      cf.createTextColumn<StorageData>('name', 'Name', (resource) => resource.ref.name, {
+      cf.createResourceNameColumn<StorageData>((resource) => resource.ref.name, {
         onClick: identity.open,
         onAltClick: identity.navigate,
         getClassName: () => 'object-panel-link',

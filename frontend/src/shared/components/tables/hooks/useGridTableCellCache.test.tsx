@@ -45,7 +45,6 @@ const renderHarness = async (renderedColumns: GridColumnDefinition<SampleRow>[])
   const Harness: React.FC = () => {
     const { getCachedCellContent } = useGridTableCellCache<SampleRow>({
       renderedColumns,
-      isKindColumnKey: (key) => key === 'kind',
       getTextContent: (node) => {
         if (typeof node === 'string') {
           return node;
@@ -61,7 +60,6 @@ const renderHarness = async (renderedColumns: GridColumnDefinition<SampleRow>[])
         }
         return '';
       },
-      normalizeKindClass: (value) => value.toLowerCase(),
     });
 
     getter = getCachedCellContent;
@@ -106,14 +104,16 @@ describe('useGridTableCellCache', () => {
     await harness.cleanup();
   });
 
-  it('wraps kind content with normalized classes', async () => {
+  it('preserves column-owned presentation regardless of the column key', async () => {
     const harness = await renderHarness(columns);
     const result = harness.get(columns[1], { id: 'beta', kind: 'Deployment' });
     expect(React.isValidElement(result.content)).toBe(true);
-    const className = ((result.content as React.ReactElement).props as { className?: string })
-      .className;
-    expect(className).toContain('kind-badge');
-    expect(className).toContain('deployment');
+    const props = (result.content as React.ReactElement).props as {
+      'data-kind-value'?: string;
+      children?: React.ReactNode;
+    };
+    expect(props['data-kind-value']).toBe('Deployment');
+    expect(props.children).toBe('Deployment');
 
     await harness.cleanup();
   });

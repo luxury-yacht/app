@@ -38,7 +38,6 @@ const ParsedLogTable = ({ rows, columns, expandedRows, onToggleRow }: ParsedLogT
       className="parsed-logs-table"
       tableClassName="gridtable-parsed-logs"
       virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-      isKindColumnKey={() => false}
     />
   );
 };

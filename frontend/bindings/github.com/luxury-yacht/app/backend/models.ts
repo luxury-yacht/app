@@ -420,6 +420,7 @@ export interface FavoriteTableState {
     "sortColumn": string;
     "sortDirection": string;
     "columnVisibility": { [_ in string]?: boolean } | null;
+    "columnOrder"?: string[] | null;
 }
 
 /**

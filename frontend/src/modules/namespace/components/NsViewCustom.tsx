@@ -40,13 +40,12 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       if (!showNamespaceColumn) {
         return parts.baseColumns;
       }
-      const withNamespace = [...parts.baseColumns];
-      cf.upsertNamespaceColumn(withNamespace, {
+      return cf.withNamespaceColumn(parts.baseColumns, {
+        afterColumnKey: 'name',
         accessor: (resource) => resource.ref.namespace,
         sortValue: (resource) => (resource.ref.namespace || '').toLowerCase(),
         ...namespaceColumnLink,
       });
-      return withNamespace;
     }, [namespaceColumnLink, parts.baseColumns, showNamespaceColumn]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;

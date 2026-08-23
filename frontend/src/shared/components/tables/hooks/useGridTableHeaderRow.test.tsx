@@ -51,10 +51,12 @@ const HeaderHarness: React.FC<{
   withContextMenu?: boolean;
   tableColumns?: GridColumnDefinition<Row>[];
 }> = ({ enableResizing, fixedKeys = [], withContextMenu = false, tableColumns = columns }) => {
+  const renderedColumns = tableColumns.map((column) =>
+    fixedKeys.includes(column.key) ? { ...column, resizable: false } : column
+  );
   const node = useGridTableHeaderRow({
-    renderedColumns: tableColumns,
+    renderedColumns,
     enableColumnResizing: enableResizing,
-    isFixedColumnKey: (key) => fixedKeys.includes(key),
     handleHeaderContextMenu: withContextMenu ? handleHeaderContextMenu : undefined,
     columnWidths,
     handleHeaderClick,
@@ -193,10 +195,12 @@ describe('useGridTableHeaderRow', () => {
       await Promise.resolve();
     });
     // sortable column should still trigger click even without resize handles
-    expect(handleHeaderClick).toHaveBeenCalledWith(columns[2]);
+    expect(handleHeaderClick).toHaveBeenCalledWith(
+      expect.objectContaining({ key: columns[2].key, resizable: false })
+    );
   });
 
-  it('renders a passive separator after the Kind column when it is fixed', async () => {
+  it('does not infer resize behavior from the Kind key', async () => {
     const kindColumns: GridColumnDefinition<Row>[] = [
       { key: 'kind', header: 'Kind', sortable: true, render: (row) => row.kind ?? null },
       { key: 'name', header: 'Name', sortable: true, render: (row) => row.name },
@@ -206,7 +210,6 @@ describe('useGridTableHeaderRow', () => {
       const node = useGridTableHeaderRow({
         renderedColumns: kindColumns,
         enableColumnResizing: true,
-        isFixedColumnKey: (key) => key === 'kind',
         handleHeaderContextMenu: undefined,
         columnWidths: { kind: 120, name: 180 },
         handleHeaderClick,
@@ -224,8 +227,8 @@ describe('useGridTableHeaderRow', () => {
       root.render(<KindHarness />);
     });
 
-    expect(container.querySelectorAll('.resize-handle')).toHaveLength(0);
-    expect(container.querySelectorAll('.column-separator')).toHaveLength(1);
+    expect(container.querySelectorAll('.resize-handle')).toHaveLength(1);
+    expect(container.querySelectorAll('.column-separator')).toHaveLength(0);
   });
 
   it('uses a native button for sortable-header activation', async () => {

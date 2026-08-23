@@ -1,5 +1,4 @@
 import type {
-  ColumnWidthInput,
   ColumnWidthState,
   GridColumnDefinition,
   GridTableVirtualizationOptions,
@@ -7,13 +6,10 @@ import type {
 import {
   DEFAULT_COLUMN_MIN_WIDTH,
   DEFAULT_COLUMN_WIDTH,
-  isFixedColumnKey,
-  normalizeKindClass,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
 import { useColumnResizeController } from '@shared/components/tables/hooks/useColumnResizeController';
 import { useContainerWidthObserver } from '@shared/components/tables/hooks/useContainerWidthObserver';
-import { useGridTableAutoGrow } from '@shared/components/tables/hooks/useGridTableAutoGrow';
 import { useGridTableColumnMeasurer } from '@shared/components/tables/hooks/useGridTableColumnMeasurer';
 import {
   type ColumnRenderModel,
@@ -39,20 +35,6 @@ const getColumnMaxWidth = <T>(column: GridColumnDefinition<T>) => {
     return parsed;
   }
   return Number.POSITIVE_INFINITY;
-};
-
-const areWidthMapsEqual = (a: Record<string, number>, b: Record<string, number>): boolean => {
-  const aKeys = Object.keys(a);
-  const bKeys = Object.keys(b);
-  if (aKeys.length !== bKeys.length) {
-    return false;
-  }
-  for (const key of aKeys) {
-    if (a[key] !== b[key]) {
-      return false;
-    }
-  }
-  return true;
 };
 
 export const getVisibleAutoColumnKeys = <T>({
@@ -108,16 +90,12 @@ interface UseGridTableColumnLayoutOptions<T> {
   tableRef: RefObject<HTMLDivElement | null>;
   wrapperRef: RefObject<HTMLDivElement | null>;
   tableData: T[];
-  initialColumnWidths?: Record<string, ColumnWidthInput>;
   controlledColumnWidths?: Record<string, ColumnWidthState> | null;
   externalColumnWidths: Record<string, number> | null;
   enableColumnResizing: boolean;
   onColumnWidthsChange?: (widths: Record<string, ColumnWidthState>) => void;
   useShortNames: boolean;
-  allowHorizontalOverflow: boolean;
   virtualization?: GridTableVirtualizationOptions;
-  isKindColumnKey: (key: string) => boolean;
-  getTextContent: (node: React.ReactNode) => string;
 }
 
 interface GridTableColumnLayout<T> {
@@ -147,28 +125,20 @@ export function useGridTableColumnLayout<T>({
   tableRef,
   wrapperRef,
   tableData,
-  initialColumnWidths,
   controlledColumnWidths,
   externalColumnWidths,
   enableColumnResizing,
   onColumnWidthsChange,
   useShortNames,
-  allowHorizontalOverflow,
   virtualization,
-  isKindColumnKey,
-  getTextContent,
 }: UseGridTableColumnLayoutOptions<T>): GridTableColumnLayout<T> {
   const [tableViewportWidth, setTableViewportWidth] = useState(0);
   const tableRefMutable = tableRef as RefObject<HTMLElement | null>;
 
   const { measureColumnWidth } = useGridTableColumnMeasurer<T>({
-    tableRef: tableRefMutable,
     tableData,
     parseWidthInputToNumber,
     defaultColumnWidth: DEFAULT_COLUMN_WIDTH,
-    isKindColumnKey,
-    getTextContent,
-    normalizeKindClass,
     getColumnMinWidth,
     getColumnMaxWidth,
   });
@@ -177,9 +147,6 @@ export function useGridTableColumnLayout<T>({
     columnWidths,
     setColumnWidths,
     manuallyResizedColumnsRef,
-    reconcileWidthsToContainer,
-    updateNaturalWidth,
-    isInitialized: columnWidthsInitialized,
     markColumnsDirty,
     markAllAutoColumnsDirty,
     handleManualResizeEvent,
@@ -188,14 +155,12 @@ export function useGridTableColumnLayout<T>({
     renderedColumns,
     tableRef: tableRefMutable,
     tableData,
-    initialColumnWidths,
     controlledColumnWidths,
     externalColumnWidths,
     enableColumnResizing,
     onColumnWidthsChange,
     useShortNames,
     measureColumnWidth,
-    allowHorizontalOverflow,
   });
 
   const {
@@ -220,9 +185,8 @@ export function useGridTableColumnLayout<T>({
 
   useEffect(() => {
     void columnVirtualizationConfig.enabled;
-    void allowHorizontalOverflow;
     markAllAutoColumnsDirty();
-  }, [markAllAutoColumnsDirty, columnVirtualizationConfig.enabled, allowHorizontalOverflow]);
+  }, [markAllAutoColumnsDirty, columnVirtualizationConfig.enabled]);
 
   const visibleAutoColumnKeys = useMemo(
     () =>
@@ -242,36 +206,12 @@ export function useGridTableColumnLayout<T>({
     markColumnsDirty(visibleAutoColumnKeys);
   }, [markColumnsDirty, visibleAutoColumnKeys]);
 
-  useGridTableAutoGrow({
-    tableRef,
-    tableDataLength: tableData.length,
-    renderedColumns,
-    isKindColumnKey,
-    externalColumnWidths,
-    measureColumnWidth,
-    setColumnWidths,
-    reconcileWidthsToContainer: (base, width) => reconcileWidthsToContainer(base, width),
-    updateNaturalWidth,
-  });
-
-  const recalculateForContainerWidth = useCallback(
-    (incomingWidth: number) => {
-      if (!incomingWidth || incomingWidth <= 0) {
-        return;
-      }
-      setTableViewportWidth((prev) =>
-        Math.abs(prev - incomingWidth) < 0.5 ? prev : incomingWidth
-      );
-      setColumnWidths((prev) => {
-        if (allowHorizontalOverflow && !columnWidthsInitialized) {
-          return prev;
-        }
-        const next = reconcileWidthsToContainer(prev, incomingWidth);
-        return areWidthMapsEqual(prev, next) ? prev : next;
-      });
-    },
-    [allowHorizontalOverflow, columnWidthsInitialized, reconcileWidthsToContainer, setColumnWidths]
-  );
+  const recalculateForContainerWidth = useCallback((incomingWidth: number) => {
+    if (!incomingWidth || incomingWidth <= 0) {
+      return;
+    }
+    setTableViewportWidth((prev) => (Math.abs(prev - incomingWidth) < 0.5 ? prev : incomingWidth));
+  }, []);
 
   useContainerWidthObserver({
     tableRef: tableRefMutable,
@@ -290,7 +230,6 @@ export function useGridTableColumnLayout<T>({
       getColumnMaxWidth,
       measureColumnWidth,
       enableColumnResizing,
-      isFixedColumnKey,
       onManualResize: handleManualResizeEvent,
     });
 

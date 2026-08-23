@@ -319,56 +319,65 @@ const DropdownTrigger = ({
 
 interface DropdownBulkActionsProps {
   showLabels: boolean;
+  showSelectionActions: boolean;
   selectedCount: number;
   selectableCount: number;
   onSelectAll: () => void;
   onSelectNone: () => void;
+  additionalActions?: React.ReactNode;
 }
 
 const DropdownBulkActions = ({
   showLabels,
+  showSelectionActions,
   selectedCount,
   selectableCount,
   onSelectAll,
   onSelectNone,
+  additionalActions,
 }: DropdownBulkActionsProps) => (
   <div
     className={`dropdown-bulk-actions icon-bar${
       showLabels ? ' dropdown-bulk-actions--labeled' : ''
     }`}
   >
-    <button
-      type="button"
-      className={`dropdown-bulk-action icon-bar-button${
-        showLabels ? ' dropdown-bulk-action--labeled' : ''
-      }`}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelectAll();
-      }}
-      disabled={selectedCount === selectableCount}
-      title="Select all"
-      aria-label="Select all"
-    >
-      <DropdownSelectAllIcon width={20} height={20} />
-      {showLabels ? <span className="dropdown-bulk-action-label">All</span> : null}
-    </button>
-    <button
-      type="button"
-      className={`dropdown-bulk-action icon-bar-button${
-        showLabels ? ' dropdown-bulk-action--labeled' : ''
-      }`}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelectNone();
-      }}
-      disabled={selectedCount === 0}
-      title="Select none"
-      aria-label="Select none"
-    >
-      <DropdownSelectNoneIcon width={20} height={20} />
-      {showLabels ? <span className="dropdown-bulk-action-label">None</span> : null}
-    </button>
+    {showSelectionActions ? (
+      <>
+        <button
+          type="button"
+          className={`dropdown-bulk-action icon-bar-button${
+            showLabels ? ' dropdown-bulk-action--labeled' : ''
+          }`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelectAll();
+          }}
+          disabled={selectedCount === selectableCount}
+          title="Select all"
+          aria-label="Select all"
+        >
+          <DropdownSelectAllIcon width={20} height={20} />
+          {showLabels ? <span className="dropdown-bulk-action-label">All</span> : null}
+        </button>
+        <button
+          type="button"
+          className={`dropdown-bulk-action icon-bar-button${
+            showLabels ? ' dropdown-bulk-action--labeled' : ''
+          }`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelectNone();
+          }}
+          disabled={selectedCount === 0}
+          title="Select none"
+          aria-label="Select none"
+        >
+          <DropdownSelectNoneIcon width={20} height={20} />
+          {showLabels ? <span className="dropdown-bulk-action-label">None</span> : null}
+        </button>
+      </>
+    ) : null}
+    {additionalActions}
   </div>
 );
 
@@ -387,6 +396,7 @@ interface DropdownMenuControlsProps {
   onSearchFocusChange: (focused: boolean) => void;
   onSelectAll: () => void;
   onSelectNone: () => void;
+  additionalBulkActions?: React.ReactNode;
 }
 
 const DropdownMenuControls = ({
@@ -404,8 +414,9 @@ const DropdownMenuControls = ({
   onSearchFocusChange,
   onSelectAll,
   onSelectNone,
+  additionalBulkActions,
 }: DropdownMenuControlsProps) => {
-  if (!searchable && !showBulkActions) {
+  if (!searchable && !showBulkActions && !additionalBulkActions) {
     return null;
   }
 
@@ -432,13 +443,15 @@ const DropdownMenuControls = ({
           />
         </div>
       ) : null}
-      {showBulkActions ? (
+      {showBulkActions || additionalBulkActions ? (
         <DropdownBulkActions
           showLabels={showBulkActionLabels}
+          showSelectionActions={showBulkActions}
           selectedCount={selectedCount}
           selectableCount={selectableCount}
           onSelectAll={onSelectAll}
           onSelectNone={onSelectNone}
+          additionalActions={additionalBulkActions}
         />
       ) : null}
     </div>
@@ -479,6 +492,7 @@ interface DropdownOptionRowProps<TMetadata> {
   highlightedIndex: number;
   optionIsSelected: boolean;
   renderOption: DropdownProps<TMetadata>['renderOption'];
+  renderOptionActions: DropdownProps<TMetadata>['renderOptionActions'];
   selectOption: (value: string) => void;
   setHighlightedIndex: (index: number) => void;
 }
@@ -491,6 +505,7 @@ const DropdownOptionRow = <TMetadata,>({
   highlightedIndex,
   optionIsSelected,
   renderOption,
+  renderOptionActions,
   selectOption,
   setHighlightedIndex,
 }: DropdownOptionRowProps<TMetadata>) => {
@@ -516,7 +531,7 @@ const DropdownOptionRow = <TMetadata,>({
     }
   };
 
-  return (
+  const optionButton = (
     <ListboxOptionButton
       id={`${controlId}-option-${index}`}
       className={[
@@ -541,6 +556,15 @@ const DropdownOptionRow = <TMetadata,>({
       />
     </ListboxOptionButton>
   );
+  if (!renderOptionActions) {
+    return optionButton;
+  }
+  return (
+    <div className="dropdown-option-row" role="presentation">
+      {optionButton}
+      <div className="dropdown-option-actions">{renderOptionActions(option)}</div>
+    </div>
+  );
 };
 
 interface DropdownOptionListProps<TMetadata> {
@@ -549,6 +573,7 @@ interface DropdownOptionListProps<TMetadata> {
   multiple: boolean;
   highlightedIndex: number;
   renderOption: DropdownProps<TMetadata>['renderOption'];
+  renderOptionActions: DropdownProps<TMetadata>['renderOptionActions'];
   isSelected: (value: string) => boolean;
   selectOption: (value: string) => void;
   setHighlightedIndex: (index: number) => void;
@@ -560,6 +585,7 @@ const DropdownOptionList = <TMetadata,>({
   multiple,
   highlightedIndex,
   renderOption,
+  renderOptionActions,
   isSelected,
   selectOption,
   setHighlightedIndex,
@@ -577,6 +603,7 @@ const DropdownOptionList = <TMetadata,>({
       highlightedIndex={highlightedIndex}
       optionIsSelected={isSelected(option.value)}
       renderOption={renderOption}
+      renderOptionActions={renderOptionActions}
       selectOption={selectOption}
       setHighlightedIndex={setHighlightedIndex}
     />
@@ -605,6 +632,7 @@ interface DropdownMenuPortalProps<TMetadata> {
   controlId: string;
   highlightedIndex: number;
   renderOption: DropdownProps<TMetadata>['renderOption'];
+  renderOptionActions: DropdownProps<TMetadata>['renderOptionActions'];
   isSelected: (value: string) => boolean;
   selectOption: (value: string) => void;
   setHighlightedIndex: (index: number) => void;
@@ -612,6 +640,7 @@ interface DropdownMenuPortalProps<TMetadata> {
   onSearchFocusChange: (focused: boolean) => void;
   onSelectAll: () => void;
   onSelectNone: () => void;
+  additionalBulkActions?: React.ReactNode;
 }
 
 const DropdownMenuPortal = <TMetadata,>({
@@ -636,6 +665,7 @@ const DropdownMenuPortal = <TMetadata,>({
   controlId,
   highlightedIndex,
   renderOption,
+  renderOptionActions,
   isSelected,
   selectOption,
   setHighlightedIndex,
@@ -643,6 +673,7 @@ const DropdownMenuPortal = <TMetadata,>({
   onSearchFocusChange,
   onSelectAll,
   onSelectNone,
+  additionalBulkActions,
 }: DropdownMenuPortalProps<TMetadata>) => {
   if (!isOpen || disabled || loading || typeof document === 'undefined') {
     return null;
@@ -673,6 +704,7 @@ const DropdownMenuPortal = <TMetadata,>({
         onSearchFocusChange={onSearchFocusChange}
         onSelectAll={onSelectAll}
         onSelectNone={onSelectNone}
+        additionalBulkActions={additionalBulkActions}
       />
       <DropdownOptionList
         options={options}
@@ -680,6 +712,7 @@ const DropdownMenuPortal = <TMetadata,>({
         multiple={multiple}
         highlightedIndex={highlightedIndex}
         renderOption={renderOption}
+        renderOptionActions={renderOptionActions}
         isSelected={isSelected}
         selectOption={selectOption}
         setHighlightedIndex={setHighlightedIndex}
@@ -745,7 +778,9 @@ const Dropdown = <TMetadata,>({
   onSearchChange,
   clearable = false,
   showBulkActions = false,
+  additionalBulkActions,
   renderOption,
+  renderOptionActions,
   renderValue,
   className = '',
   dropdownClassName = '',
@@ -1116,6 +1151,7 @@ const Dropdown = <TMetadata,>({
         controlId={controlId}
         highlightedIndex={highlightedIndex}
         renderOption={renderOption}
+        renderOptionActions={renderOptionActions}
         isSelected={isSelected}
         selectOption={selectOption}
         setHighlightedIndex={setHighlightedIndex}
@@ -1123,6 +1159,7 @@ const Dropdown = <TMetadata,>({
         onSearchFocusChange={setIsSearchFocused}
         onSelectAll={handleSelectAll}
         onSelectNone={handleSelectNone}
+        additionalBulkActions={additionalBulkActions}
       />
       <DropdownHiddenInput name={name} value={value} />
       <div ref={announcementRef} aria-live="polite" aria-atomic="true" className="sr-only" />

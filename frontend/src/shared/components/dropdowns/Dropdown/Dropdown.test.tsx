@@ -782,6 +782,32 @@ describe('Dropdown', () => {
     expect(document.body.querySelector('.search-input')).toBeNull();
   });
 
+  it('renders an additional action beside All and None', async () => {
+    const onReset = vi.fn();
+    await mount(
+      <Dropdown
+        options={OPTIONS}
+        value={[]}
+        onChange={vi.fn()}
+        multiple
+        showBulkActions
+        additionalBulkActions={
+          <button type="button" aria-label="Reset column order" onClick={onReset}>
+            Reset Order
+          </button>
+        }
+      />
+    );
+
+    click(container.querySelector('.dropdown-trigger'));
+    const reset = document.body.querySelector<HTMLButtonElement>(
+      'button[aria-label="Reset column order"]'
+    );
+    expect(reset?.textContent).toBe('Reset Order');
+    click(reset);
+    expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
   it('renders bulk-action icons at the dropdown-specific size', async () => {
     await mount(
       <Dropdown options={OPTIONS} value={[]} onChange={vi.fn()} multiple showBulkActions />

@@ -129,7 +129,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         isInteractive: () => true,
         sortValue: () => 'node',
       }),
-      cf.createTextColumn<ClusterNodeRow>('name', 'Name', (row) => row.ref.name || '', {
+      cf.createResourceNameColumn<ClusterNodeRow>((row) => row.ref.name || '', {
         onClick: (row) => handleNodeClick(row),
         onAltClick: handleNodeAltClick,
         // Use the shared link styling for object panel navigation.
@@ -258,9 +258,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
       memory: { width: 200, minWidth: 200 },
       age: { autoWidth: true },
     };
-    cf.applyColumnSizing(columns, sizing);
-
-    return columns;
+    return cf.withColumnSizing(columns, sizing);
   }, [
     handleNodeClick,
     handleNodeAltClick,

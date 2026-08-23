@@ -6,7 +6,7 @@
  */
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const areVisibilityMapsEqual = (
   a: Record<string, boolean>,
@@ -25,14 +25,13 @@ const areVisibilityMapsEqual = (
   return true;
 };
 
-// Controls which columns GridTable renders: respects locked/non-hideable columns,
+// Controls which columns GridTable renders: respects declared non-hideable columns,
 // merges controlled visibility with internal state, and provides mutators for
 // callers (including show/hide-all helpers upstream).
 
 export interface ColumnVisibilityControllerOptions<T> {
   columns: GridColumnDefinition<T>[];
   columnVisibility?: Record<string, boolean> | null;
-  nonHideableColumns: string[];
   onColumnVisibilityChange?: (next: Record<string, boolean>) => void;
 }
 
@@ -49,10 +48,10 @@ export interface ColumnVisibilityController<T> {
 export function useColumnVisibilityController<T>({
   columns,
   columnVisibility,
-  nonHideableColumns,
   onColumnVisibilityChange,
 }: ColumnVisibilityControllerOptions<T>): ColumnVisibilityController<T> {
   const [localColumnVisibility, setLocalColumnVisibility] = useState<Record<string, boolean>>({});
+  const localColumnVisibilityRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
     if (columnVisibility === null || columnVisibility === undefined) {
@@ -62,15 +61,14 @@ export function useColumnVisibilityController<T>({
     setLocalColumnVisibility((prev) =>
       areVisibilityMapsEqual(prev, columnVisibility) ? prev : columnVisibility
     );
+    localColumnVisibilityRef.current = columnVisibility;
   }, [columnVisibility]);
 
   const lockedColumns = useMemo(() => {
-    const set = new Set<string>(['kind', 'type', 'name']);
-    nonHideableColumns.forEach((key) => {
-      set.add(key);
-    });
-    return set;
-  }, [nonHideableColumns]);
+    return new Set(
+      columns.filter((column) => column.hideable === false).map((column) => column.key)
+    );
+  }, [columns]);
 
   const effectiveColumnVisibility = useMemo(
     () => columnVisibility ?? localColumnVisibility,
@@ -92,7 +90,7 @@ export function useColumnVisibilityController<T>({
 
   const applyVisibilityChanges = useCallback(
     (mutator: (next: Record<string, boolean>) => boolean) => {
-      const base = columnVisibility ?? localColumnVisibility;
+      const base = columnVisibility ?? localColumnVisibilityRef.current;
       const next: Record<string, boolean> = { ...base };
       let changed = mutator(next);
 
@@ -108,12 +106,13 @@ export function useColumnVisibilityController<T>({
       }
 
       if (!columnVisibility) {
+        localColumnVisibilityRef.current = next;
         setLocalColumnVisibility(next);
       }
 
       onColumnVisibilityChange?.(next);
     },
-    [columnVisibility, localColumnVisibility, lockedColumns, onColumnVisibilityChange]
+    [columnVisibility, lockedColumns, onColumnVisibilityChange]
   );
 
   const updateColumnVisibility = useCallback(

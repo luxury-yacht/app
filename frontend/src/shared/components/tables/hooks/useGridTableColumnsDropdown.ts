@@ -14,12 +14,20 @@ type UseGridTableColumnsDropdownOptions<T> = {
   isColumnVisible: (key: string) => boolean;
   applyVisibilityChanges: (updater: (next: Record<string, boolean | undefined>) => boolean) => void;
   enableColumnVisibilityMenu: boolean;
+  moveColumn: (key: string, offset: -1 | 1) => void;
+  reorderColumn: (key: string, targetIndex: number) => void;
+  canResetColumnOrder: boolean;
+  resetColumnOrder: () => void;
 };
 
 type ColumnsDropdownConfig = {
-  options: Array<{ label: string; value: string }>;
+  options: Array<{ label: string; value: string; disabled?: boolean }>;
   value: string[];
   onChange: (value: string | string[]) => void;
+  onMoveColumn: (key: string, offset: -1 | 1) => void;
+  onReorderColumn: (key: string, targetIndex: number) => void;
+  canResetColumnOrder: boolean;
+  onResetColumnOrder: () => void;
 };
 
 // Builds the column visibility options and handler so GridTable does not have to
@@ -30,13 +38,18 @@ export function useGridTableColumnsDropdown<T>({
   isColumnVisible,
   applyVisibilityChanges,
   enableColumnVisibilityMenu,
+  moveColumn,
+  reorderColumn,
+  canResetColumnOrder,
+  resetColumnOrder,
 }: UseGridTableColumnsDropdownOptions<T>): ColumnsDropdownConfig | null {
   const hideableColumns = useMemo(
     () => columns.filter((column) => !lockedColumns.has(column.key)),
     [columns, lockedColumns]
   );
 
-  const showColumnsDropdown = enableColumnVisibilityMenu && hideableColumns.length > 0;
+  const showColumnsDropdown =
+    enableColumnVisibilityMenu && (hideableColumns.length > 0 || columns.length > 1);
 
   const handleColumnsDropdownChange = useCallback(
     (nextValue: string | string[]) => {
@@ -72,14 +85,21 @@ export function useGridTableColumnsDropdown<T>({
     return null;
   }
 
-  const options: ColumnsDropdownConfig['options'] = hideableColumns.map((column) => ({
+  const options: ColumnsDropdownConfig['options'] = columns.map((column) => ({
     label: column.header,
     value: column.key,
+    disabled: lockedColumns.has(column.key),
   }));
 
-  const value = hideableColumns
-    .filter((column) => isColumnVisible(column.key))
-    .map((column) => column.key);
+  const value = columns.filter((column) => isColumnVisible(column.key)).map((column) => column.key);
 
-  return { options, value, onChange: handleColumnsDropdownChange };
+  return {
+    options,
+    value,
+    onChange: handleColumnsDropdownChange,
+    onMoveColumn: moveColumn,
+    onReorderColumn: reorderColumn,
+    canResetColumnOrder,
+    onResetColumnOrder: resetColumnOrder,
+  };
 }

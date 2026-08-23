@@ -213,7 +213,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           onAltClick: handlePodNavigate,
           sortable: false,
         }),
-        cf.createTextColumn<PodSnapshotEntry>('name', 'Name', (pod) => pod.ref.name, {
+        cf.createResourceNameColumn<PodSnapshotEntry>((pod) => pod.ref.name, {
           onClick: handlePodOpen,
           onAltClick: handlePodNavigate,
           getTitle: (pod) => pod.ref.name,
@@ -350,17 +350,15 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         memory: { width: 200, minWidth: 200 },
         age: { autoWidth: true },
       };
-      cf.applyColumnSizing(baseColumns, sizing);
-
-      if (showNamespaceColumn) {
-        cf.upsertNamespaceColumn(baseColumns, {
-          accessor: (pod) => pod.ref.namespace || '—',
-          sortValue: (pod) => (pod.ref.namespace || '').toLowerCase(),
-          ...namespaceColumnLink,
-        });
-      }
-
-      return baseColumns;
+      const withNamespace = showNamespaceColumn
+        ? cf.withNamespaceColumn(baseColumns, {
+            afterColumnKey: 'name',
+            accessor: (pod) => pod.ref.namespace || '—',
+            sortValue: (pod) => (pod.ref.namespace || '').toLowerCase(),
+            ...namespaceColumnLink,
+          })
+        : baseColumns;
+      return cf.withColumnSizing(withNamespace, sizing);
     }, [
       handleNodeOpen,
       handleOwnerOpen,

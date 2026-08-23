@@ -188,14 +188,12 @@ describe('useGridTableColumnWidths', () => {
       renderedColumns: columns,
       tableRef,
       tableData: [],
-      initialColumnWidths: { kind: '180px' },
       controlledColumnWidths,
       externalColumnWidths: null,
       enableColumnResizing: true,
       onColumnWidthsChange: vi.fn(),
       useShortNames: false,
       measureColumnWidth,
-      allowHorizontalOverflow: false,
     });
 
     const result = getResult();
@@ -210,7 +208,7 @@ describe('useGridTableColumnWidths', () => {
       'misc',
     ]);
     expect(result?.manuallyResizedColumnsRef.current.has('name')).toBe(true);
-    expect(measureColumnWidth).toHaveBeenCalled();
+    expect(measureColumnWidth).not.toHaveBeenCalled();
 
     const nameState = requireValue(
       result,
@@ -266,14 +264,12 @@ describe('useGridTableColumnWidths', () => {
       renderedColumns: columns,
       tableRef,
       tableData: [{ id: '1', name: 'alpha' }],
-      initialColumnWidths: null,
       controlledColumnWidths: null,
       externalColumnWidths: null as Record<string, number> | null,
       enableColumnResizing: true,
       onColumnWidthsChange,
       useShortNames: false,
       measureColumnWidth,
-      allowHorizontalOverflow: false,
     };
 
     const { getResult, rerender } = await renderHook(baseOptions);
@@ -298,7 +294,37 @@ describe('useGridTableColumnWidths', () => {
     wrapper.remove();
   });
 
-  it('reconciles widths to container size and builds column width state', async () => {
+  it('remeasures reordered columns without repeating the initialization phase transition', async () => {
+    const tableRef = { current: null as HTMLElement | null };
+    const wrapper = createWrapper(tableRef);
+    const columns = [
+      createColumn('name', { autoWidth: true }),
+      createColumn('kind', { autoWidth: true }),
+    ];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const baseOptions = {
+      columns,
+      renderedColumns: columns,
+      tableRef,
+      tableData: [{ id: '1', name: 'alpha' }],
+      controlledColumnWidths: null,
+      externalColumnWidths: null,
+      enableColumnResizing: true,
+      onColumnWidthsChange: vi.fn(),
+      useShortNames: false,
+      measureColumnWidth: vi.fn(() => 160),
+    };
+
+    const { rerender } = await renderHook(baseOptions);
+    warn.mockClear();
+    const reordered = [columns[1], columns[0]];
+    await rerender({ ...baseOptions, columns: reordered, renderedColumns: reordered });
+
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('invalid transition'));
+    wrapper.remove();
+  });
+
+  it('builds persisted width state for a manually resized auto column', async () => {
     const tableRef = { current: null as HTMLElement | null };
     const wrapper = createWrapper(tableRef);
 
@@ -320,27 +346,16 @@ describe('useGridTableColumnWidths', () => {
       renderedColumns: columns,
       tableRef,
       tableData: [],
-      initialColumnWidths: null,
       controlledColumnWidths: null,
       externalColumnWidths: null,
       enableColumnResizing: true,
       onColumnWidthsChange: vi.fn(),
       useShortNames: false,
       measureColumnWidth,
-      allowHorizontalOverflow: false,
     });
 
     const result = getResult();
     expect(result).not.toBeNull();
-    const base = { kind: 120 } as Record<string, number>;
-    const reconciled = requireValue(
-      result,
-      'expected test value in useGridTableColumnWidths.test.tsx'
-    ).reconcileWidthsToContainer(base, 520);
-    expect(reconciled.kind).toBe(120);
-    expect(reconciled.name).toBe(200);
-    expect(reconciled.misc).toBe(200);
-
     requireValue(
       result,
       'expected test value in useGridTableColumnWidths.test.tsx'
@@ -351,140 +366,6 @@ describe('useGridTableColumnWidths', () => {
     ).buildColumnWidthState('name', 210);
     expect(state.source).toBe('user');
     expect(state.autoWidth).toBe(false);
-
-    wrapper.remove();
-  });
-
-  it('skips container reconciliation when horizontal overflow is allowed', async () => {
-    const tableRef = { current: null as HTMLElement | null };
-    const wrapper = createWrapper(tableRef);
-
-    const columns = [createColumn('kind'), createColumn('name'), createColumn('misc')];
-
-    const measureColumnWidth = vi.fn((column: GridColumnDefinition<Row>) => {
-      if (column.key === 'kind') {
-        return 90;
-      }
-      if (column.key === 'misc') {
-        return 140;
-      }
-      return 260;
-    });
-
-    const { getResult } = await renderHook({
-      columns,
-      renderedColumns: columns,
-      tableRef,
-      tableData: [],
-      initialColumnWidths: null,
-      controlledColumnWidths: null,
-      externalColumnWidths: null,
-      enableColumnResizing: true,
-      onColumnWidthsChange: vi.fn(),
-      useShortNames: false,
-      measureColumnWidth,
-      allowHorizontalOverflow: true,
-    });
-
-    const result = getResult();
-    expect(result).not.toBeNull();
-
-    const base = { kind: 90, name: 260, misc: 140 };
-    const reconciled = requireValue(
-      result,
-      'expected test value in useGridTableColumnWidths.test.tsx'
-    ).reconcileWidthsToContainer(base, 320);
-    expect(reconciled).toEqual(base);
-
-    wrapper.remove();
-  });
-
-  it('keeps natural widths when overflow is allowed and can opt into force-fit', async () => {
-    const tableRef = { current: null as HTMLElement | null };
-    const wrapper = createWrapper(tableRef);
-
-    const columns = [createColumn('kind'), createColumn('name')];
-
-    const measureColumnWidth = vi.fn((column: GridColumnDefinition<Row>) => {
-      return column.key === 'kind' ? 80 : 120;
-    });
-
-    const { getResult } = await renderHook({
-      columns,
-      renderedColumns: columns,
-      tableRef,
-      tableData: [],
-      initialColumnWidths: null,
-      controlledColumnWidths: null,
-      externalColumnWidths: null,
-      enableColumnResizing: true,
-      onColumnWidthsChange: vi.fn(),
-      useShortNames: false,
-      measureColumnWidth,
-      allowHorizontalOverflow: true,
-    });
-
-    const result = getResult();
-    expect(result).not.toBeNull();
-
-    const base = { kind: 80, name: 120 };
-    const natural = requireValue(
-      result,
-      'expected test value in useGridTableColumnWidths.test.tsx'
-    ).reconcileWidthsToContainer(base, 480);
-    expect(natural).toEqual(base);
-
-    const forceFit = requireValue(
-      result,
-      'expected test value in useGridTableColumnWidths.test.tsx'
-    ).reconcileWidthsToContainer(base, 480, { forceFit: true });
-    expect(forceFit.name).toBeGreaterThan(120);
-    expect(forceFit.kind).toBe(80);
-    expect(forceFit.kind + forceFit.name).toBeGreaterThanOrEqual(480 - 1);
-
-    wrapper.remove();
-  });
-
-  it('does not expand columns when under container width (no overflow allowed)', async () => {
-    const tableRef = { current: null as HTMLElement | null };
-    const wrapper = createWrapper(tableRef);
-
-    const columns = [createColumn('kind'), createColumn('name'), createColumn('age')];
-
-    const measureColumnWidth = vi.fn((column: GridColumnDefinition<Row>) => {
-      if (column.key === 'kind') {
-        return 90;
-      }
-      if (column.key === 'age') {
-        return 100;
-      }
-      return 180;
-    });
-
-    const { getResult } = await renderHook({
-      columns,
-      renderedColumns: columns,
-      tableRef,
-      tableData: [],
-      initialColumnWidths: null,
-      controlledColumnWidths: null,
-      externalColumnWidths: null,
-      enableColumnResizing: true,
-      onColumnWidthsChange: vi.fn(),
-      useShortNames: false,
-      measureColumnWidth,
-      allowHorizontalOverflow: false,
-    });
-
-    const result = getResult();
-    expect(result).not.toBeNull();
-
-    const base = { kind: 90, name: 180, age: 100 };
-    const reconciled = requireValue(
-      result,
-      'expected test value in useGridTableColumnWidths.test.tsx'
-    ).reconcileWidthsToContainer(base, 600);
-    expect(reconciled).toEqual(base);
 
     wrapper.remove();
   });
@@ -525,14 +406,12 @@ describe('useGridTableColumnWidths', () => {
       renderedColumns: columns,
       tableRef,
       tableData: [{ id: '1', name: 'alpha' }],
-      initialColumnWidths: null,
       controlledColumnWidths: null,
       externalColumnWidths: null,
       enableColumnResizing: true,
       onColumnWidthsChange: vi.fn(),
       useShortNames: false,
       measureColumnWidth,
-      allowHorizontalOverflow: false,
     });
 
     measureColumnWidth.mockClear();
@@ -587,14 +466,12 @@ describe('useGridTableColumnWidths', () => {
       renderedColumns: columns,
       tableRef,
       tableData: [{ id: '1', name: 'alpha' }],
-      initialColumnWidths: null,
       controlledColumnWidths: null,
       externalColumnWidths: null,
       enableColumnResizing: true,
       onColumnWidthsChange: vi.fn(),
       useShortNames: false,
       measureColumnWidth,
-      allowHorizontalOverflow: false,
     });
 
     const result = getResult();

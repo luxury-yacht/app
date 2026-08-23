@@ -20,6 +20,10 @@ type SampleRow = {
 type HarnessProps = {
   enable?: boolean;
   measureWidth?: number;
+  onManualResize?: (event: {
+    type: 'dragStart' | 'drag' | 'dragEnd' | 'autoSize' | 'reset';
+    columns: string[];
+  }) => void;
 };
 
 type HarnessHandle = {
@@ -53,6 +57,7 @@ const baseColumns: GridColumnDefinition<SampleRow>[] = [
     minWidth: 80,
     maxWidth: 200,
     width: 110,
+    resizable: false,
   },
 ];
 
@@ -64,6 +69,7 @@ const getColumnMaxWidth = <T,>(column: GridColumnDefinition<T>) =>
 const Harness = ({
   enable = true,
   measureWidth = 320,
+  onManualResize,
   ref,
 }: HarnessProps & { ref?: React.Ref<HarnessHandle> }) => {
   const [widths, setWidths] = useState<Record<string, number>>({
@@ -85,7 +91,7 @@ const Harness = ({
     getColumnMaxWidth,
     measureColumnWidth: () => measureWidth,
     enableColumnResizing: enable,
-    isFixedColumnKey: (key) => key === 'status',
+    onManualResize,
   });
 
   const widthsRef = useRef(widths);
@@ -113,6 +119,7 @@ const renderHarness = async (props?: HarnessProps) => {
   const root = ReactDOM.createRoot(container);
   const ref = React.createRef<HarnessHandle>();
   const currentProps: HarnessProps = { enable: props?.enable, measureWidth: props?.measureWidth };
+  currentProps.onManualResize = props?.onManualResize;
 
   await act(async () => {
     root.render(<Harness ref={ref} {...currentProps} />);
@@ -166,6 +173,25 @@ describe('useColumnResizeController', () => {
     expect(handle.getWidths().name).toBe(420);
     expect(handle.getManualKeys()).toEqual(['name']);
 
+    await harness.unmount();
+  });
+
+  it('wraps each keyboard resize in a complete manual-resize lifecycle', async () => {
+    const onManualResize = vi.fn();
+    const harness = await renderHarness({ onManualResize });
+    const event = {
+      key: 'ArrowRight',
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as unknown as React.KeyboardEvent;
+
+    await act(async () => harness.getHandle().resizeWithKeyboard(event, 'name'));
+
+    expect(onManualResize.mock.calls.map(([resizeEvent]) => resizeEvent.type)).toEqual([
+      'dragStart',
+      'drag',
+      'dragEnd',
+    ]);
     await harness.unmount();
   });
 

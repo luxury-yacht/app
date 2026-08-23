@@ -24,6 +24,8 @@ interface GridTableBindingPersistence {
   setColumnWidths?: (next: Record<string, ColumnWidthState>) => void;
   columnVisibility?: Record<string, boolean> | null;
   setColumnVisibility?: (next: Record<string, boolean>) => void;
+  columnOrder?: string[] | null;
+  setColumnOrder?: (next: string[]) => void;
 }
 
 interface GridTableBindingParams<T> {
@@ -84,7 +86,8 @@ export function useGridTableBinding<T>({
               onColumnWidthsChange: persistence.setColumnWidths,
               columnVisibility: persistence.columnVisibility ?? null,
               onColumnVisibilityChange: persistence.setColumnVisibility,
-              allowHorizontalOverflow: true,
+              columnOrder: persistence.columnOrder ?? null,
+              onColumnOrderChange: persistence.setColumnOrder,
             }
           : {}),
       },

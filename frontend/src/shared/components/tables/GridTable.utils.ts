@@ -11,14 +11,11 @@ import type {
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
 import { isTableNoValueText } from '@shared/components/tables/tableNoValue';
-import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import React from 'react';
 
 export const DEFAULT_COLUMN_WIDTH = 150;
 export const DEFAULT_COLUMN_MIN_WIDTH = 72;
 export const DEFAULT_FONT_SIZE = 16;
-
-const FIXED_KIND_KEYS = new Set(['kind']);
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
@@ -29,12 +26,8 @@ interface TextElementProps {
   title?: string;
 }
 
-export const isKindColumnKey = (key: string) => FIXED_KIND_KEYS.has(key);
-export const isFixedColumnKey = (key: string) => isKindColumnKey(key);
 export const isSortableColumn = <T>(column: GridColumnDefinition<T> | null | undefined) =>
   column !== null && column !== undefined && column.sortable !== false;
-
-export const normalizeKindClass = (value: string) => getKindColorClass(value);
 
 export const defaultGetKind = (row: unknown): string | null => {
   const record = asRecord(row);
