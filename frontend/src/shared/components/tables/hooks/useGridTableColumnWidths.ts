@@ -5,6 +5,11 @@
  * Encapsulates state and side effects for the shared components.
  */
 
+import type {
+  ColumnWidthInput,
+  ColumnWidthState,
+  GridColumnDefinition,
+} from '@shared/components/tables/GridTable.types';
 import {
   DEFAULT_COLUMN_MIN_WIDTH,
   detectWidthUnit,
@@ -53,12 +58,6 @@ const getColumnMaxWidth = <T>(column: GridColumnDefinition<T>) => {
   const parsed = parseWidthInputToNumber(column.maxWidth);
   return parsed ?? Number.POSITIVE_INFINITY;
 };
-
-import type {
-  ColumnWidthInput,
-  ColumnWidthState,
-  GridColumnDefinition,
-} from '@shared/components/tables/GridTable.types';
 
 interface ColumnWidthsOptions<T> {
   columns: GridColumnDefinition<T>[];

@@ -170,6 +170,7 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
             getClassName: () => 'object-panel-link',
             isInteractive: canOpenInvolvedObject,
             allowRowClick: false,
+            hideable: false,
           }
         ),
         cf.createTextColumn('reason', EVENT_LABELS.reason, (event) => event.reason || '-'),

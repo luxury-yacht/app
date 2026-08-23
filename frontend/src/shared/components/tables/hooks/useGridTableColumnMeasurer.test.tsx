@@ -5,6 +5,7 @@
  * Covers key behaviors and edge cases for useGridTableColumnMeasurer.
  */
 
+import { createKindColumn } from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { useGridTableColumnMeasurer } from '@shared/components/tables/hooks/useGridTableColumnMeasurer';
 import type React from 'react';
@@ -154,6 +155,43 @@ describe('useGridTableColumnMeasurer', () => {
     const measurement = harness.measure(columns[1]);
     expect(measurement).toBeGreaterThanOrEqual(240);
 
+    await harness.cleanup();
+  });
+
+  it('measures each distinct declared sample only once', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get() {
+        return 120;
+      },
+    });
+    const getBoundingClientRect = vi.fn(
+      () =>
+        ({
+          width: 180,
+          height: 0,
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: 180,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        }) as DOMRect
+    );
+    HTMLElement.prototype.getBoundingClientRect = getBoundingClientRect;
+    const kindColumn = createKindColumn<SampleRow>({
+      getKind: (row) => row.kind ?? '',
+    });
+    const harness = await renderHarness([
+      { name: 'alpha', kind: 'Pod' },
+      { name: 'beta', kind: 'Pod' },
+      { name: 'gamma', kind: 'Job' },
+    ]);
+
+    harness.measure(kindColumn);
+
+    expect(getBoundingClientRect).toHaveBeenCalledTimes(2);
     await harness.cleanup();
   });
 

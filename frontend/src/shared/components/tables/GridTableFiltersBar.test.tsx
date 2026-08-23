@@ -895,8 +895,14 @@ describe('GridTableFiltersBar', () => {
     const nameHandle = container.querySelector(
       'button[aria-label="Reorder Name. Drag or use Up and Down Arrow keys."]'
     ) as HTMLButtonElement;
+    const ageHandle = container.querySelector(
+      'button[aria-label="Reorder Age. Drag or use Up and Down Arrow keys."]'
+    ) as HTMLButtonElement;
     const ageRow = container.querySelector(
       '.dropdown-option-row[data-option-value="age"]'
+    ) as HTMLDivElement;
+    const nameRow = container.querySelector(
+      '.dropdown-option-row[data-option-value="name"]'
     ) as HTMLDivElement;
 
     expect(nameHandle.draggable).toBe(true);
@@ -917,11 +923,26 @@ describe('GridTableFiltersBar', () => {
     Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
     await act(async () => nameHandle.dispatchEvent(dragStart));
 
+    const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
+    Object.defineProperty(dragOver, 'dataTransfer', { value: dataTransfer });
+    await act(async () => ageRow.dispatchEvent(dragOver));
+    expect(ageHandle.dataset.dropPosition).toBe('after');
+
     const drop = new Event('drop', { bubbles: true, cancelable: true });
     Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
     await act(async () => ageRow.dispatchEvent(drop));
 
     expect(onReorderColumn).toHaveBeenCalledWith('name', 1);
+
+    const upwardDragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(upwardDragStart, 'dataTransfer', { value: dataTransfer });
+    await act(async () => ageHandle.dispatchEvent(upwardDragStart));
+    const upwardDragOver = new Event('dragover', { bubbles: true, cancelable: true });
+    Object.defineProperty(upwardDragOver, 'dataTransfer', { value: dataTransfer });
+    await act(async () => nameRow.dispatchEvent(upwardDragOver));
+    expect(nameHandle.dataset.dropPosition).toBe('before');
+
+    await act(async () => ageHandle.dispatchEvent(new Event('dragend', { bubbles: true })));
 
     const resetOrder = container.querySelector(
       'button[aria-label="Reset column order"]'

@@ -680,5 +680,7 @@ describe('useFavToggle', () => {
 
     expect(paneSetters.workloads.sort).toHaveBeenCalledWith(null);
     expect(paneSetters.pods.sort).toHaveBeenCalledWith(null);
+    expect(paneSetters.workloads.order).toHaveBeenCalledWith([]);
+    expect(paneSetters.pods.order).toHaveBeenCalledWith([]);
   });
 });

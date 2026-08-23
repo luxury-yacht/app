@@ -81,6 +81,11 @@ interface GridTableFiltersBarProps {
   };
 }
 
+type ColumnDropTarget = {
+  key: string;
+  position: 'before' | 'after';
+};
+
 function formatResultCountLabel(
   resultCount: NonNullable<GridTableFiltersBarProps['resultCount']>
 ): string {
@@ -164,7 +169,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   const showCaseSensitiveToggle = resolvedFilterOptions.searchBehavior !== 'query';
   const queryFacets = resolvedFilterOptions.queryFacets ?? [];
   const [draggingColumnKey, setDraggingColumnKey] = useState<string | null>(null);
-  const [dropTargetColumnKey, setDropTargetColumnKey] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<ColumnDropTarget | null>(null);
 
   useEffect(() => {
     if (!draggingColumnKey || !onReorderColumn || !columnOptions) {
@@ -183,12 +188,15 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         return null;
       }
       const index = columnOptions.findIndex((option) => option.value === key);
-      return index >= 0 ? { key, index } : null;
+      const draggingIndex = columnOptions.findIndex((option) => option.value === draggingColumnKey);
+      return index >= 0 && draggingIndex >= 0
+        ? { key, index, position: draggingIndex < index ? ('after' as const) : ('before' as const) }
+        : null;
     };
 
     const handleDragOver = (event: DragEvent) => {
       const target = getDropTarget(event);
-      setDropTargetColumnKey(target?.key ?? null);
+      setDropTarget(target ? { key: target.key, position: target.position } : null);
       if (target) {
         event.preventDefault();
         if (event.dataTransfer) {
@@ -204,7 +212,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         onReorderColumn(draggingColumnKey, target.index);
       }
       setDraggingColumnKey(null);
-      setDropTargetColumnKey(null);
+      setDropTarget(null);
     };
 
     document.addEventListener('dragover', handleDragOver);
@@ -226,7 +234,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         draggable
         data-column-key={option.value}
         data-dragging={draggingColumnKey === option.value || undefined}
-        data-drop-target={dropTargetColumnKey === option.value || undefined}
+        data-drop-position={dropTarget?.key === option.value ? dropTarget.position : undefined}
         onDragStart={(event) => {
           event.dataTransfer.effectAllowed = 'move';
           event.dataTransfer.setData('text/plain', option.value);
@@ -234,7 +242,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         }}
         onDragEnd={() => {
           setDraggingColumnKey(null);
-          setDropTargetColumnKey(null);
+          setDropTarget(null);
         }}
         onKeyDown={(event) => {
           if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {

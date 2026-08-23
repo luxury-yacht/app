@@ -247,6 +247,7 @@ const getActiveOptionId = (isOpen: boolean, highlightedIndex: number, controlId:
 interface DropdownTriggerProps {
   triggerRef: React.RefObject<HTMLButtonElement | null>;
   searchable: boolean;
+  hasOptionActions: boolean;
   isOpen: boolean;
   menuId: string;
   activeOptionId?: string;
@@ -262,6 +263,7 @@ interface DropdownTriggerProps {
 const DropdownTrigger = ({
   triggerRef,
   searchable,
+  hasOptionActions,
   isOpen,
   menuId,
   activeOptionId,
@@ -273,6 +275,27 @@ const DropdownTrigger = ({
   toggleDropdown,
   children,
 }: DropdownTriggerProps) => {
+  if (hasOptionActions) {
+    return (
+      <button
+        type="button"
+        ref={triggerRef}
+        className="dropdown-trigger"
+        onClick={toggleDropdown}
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
+        aria-labelledby={ariaLabelledBy}
+        aria-controls={menuId}
+        tabIndex={disabled ? -1 : 0}
+        id={id}
+        disabled={disabled}
+      >
+        {children}
+      </button>
+    );
+  }
   if (searchable) {
     return (
       <button
@@ -555,10 +578,31 @@ const DropdownOptionRow = <TMetadata,>({
   return (
     <div
       className={`dropdown-option-row${optionIsHighlighted ? ' highlighted' : ''}`}
-      role="presentation"
       data-dropdown-option-index={index}
     >
-      {optionButton}
+      <button
+        type="button"
+        id={`${controlId}-option-${index}`}
+        data-dropdown-option-index={index}
+        className={[
+          'dropdown-option',
+          optionIsSelected && 'selected',
+          optionIsHighlighted && 'highlighted',
+          option.disabled && 'disabled',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        onClick={() => selectOption(option.value)}
+        aria-pressed={optionIsSelected}
+        disabled={option.disabled}
+      >
+        <DropdownOptionContent
+          option={option}
+          optionIsSelected={optionIsSelected}
+          multiple={multiple}
+          renderOption={renderOption}
+        />
+      </button>
       <div className="dropdown-option-actions">{renderOptionActions(option)}</div>
     </div>
   );
@@ -613,6 +657,7 @@ interface DropdownMenuPortalProps<TMetadata> {
   menuStyle: DropdownMenuStyle;
   multiple: boolean;
   menuId: string;
+  menuAriaLabel: string;
   searchable: boolean;
   searchInputRef: React.RefObject<HTMLInputElement | null>;
   searchPlaceholder: string;
@@ -646,6 +691,7 @@ const DropdownMenuPortal = <TMetadata,>({
   menuStyle,
   multiple,
   menuId,
+  menuAriaLabel,
   searchable,
   searchInputRef,
   searchPlaceholder,
@@ -669,35 +715,40 @@ const DropdownMenuPortal = <TMetadata,>({
   onSelectNone,
   additionalBulkActions,
 }: DropdownMenuPortalProps<TMetadata>) => {
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!isOpen || disabled || loading || !menu) {
+      return;
+    }
+
+    const highlightOptionFromTarget = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      const isOptionAction = Boolean(target.closest('.dropdown-option-actions'));
+      const optionElement = target.closest<HTMLElement>('[data-dropdown-option-index]');
+      const optionIndex = Number(optionElement?.dataset.dropdownOptionIndex);
+      if (!Number.isInteger(optionIndex) || (options[optionIndex]?.disabled && !isOptionAction)) {
+        return;
+      }
+      setHighlightedIndex(optionIndex);
+    };
+
+    menu.addEventListener('mouseover', highlightOptionFromTarget);
+    menu.addEventListener('focusin', highlightOptionFromTarget);
+    return () => {
+      menu.removeEventListener('mouseover', highlightOptionFromTarget);
+      menu.removeEventListener('focusin', highlightOptionFromTarget);
+    };
+  }, [disabled, isOpen, loading, menuRef, options, setHighlightedIndex]);
+
   if (!isOpen || disabled || loading || typeof document === 'undefined') {
     return null;
   }
 
-  const highlightOptionFromTarget = (target: EventTarget) => {
-    if (!(target instanceof Element)) {
-      return;
-    }
-    const isOptionAction = Boolean(target.closest('.dropdown-option-actions'));
-    const optionElement = target.closest<HTMLElement>('[data-dropdown-option-index]');
-    const optionIndex = Number(optionElement?.dataset.dropdownOptionIndex);
-    if (!Number.isInteger(optionIndex) || (options[optionIndex]?.disabled && !isOptionAction)) {
-      return;
-    }
-    setHighlightedIndex(optionIndex);
-  };
-
-  return createPortal(
-    <div
-      ref={menuRef}
-      className={menuClasses}
-      style={menuStyle}
-      role="listbox"
-      aria-multiselectable={multiple}
-      id={menuId}
-      data-focus-portal-owner={menuId}
-      onMouseOver={(event) => highlightOptionFromTarget(event.target)}
-      onFocus={(event) => highlightOptionFromTarget(event.target)}
-    >
+  const menuContent = (
+    <>
       <DropdownMenuControls
         searchable={searchable}
         searchInputRef={searchInputRef}
@@ -725,7 +776,35 @@ const DropdownMenuPortal = <TMetadata,>({
         isSelected={isSelected}
         selectOption={selectOption}
       />
-    </div>,
+    </>
+  );
+
+  return createPortal(
+    renderOptionActions ? (
+      <div
+        ref={menuRef}
+        className={menuClasses}
+        style={menuStyle}
+        role="dialog"
+        aria-label={menuAriaLabel}
+        id={menuId}
+        data-focus-portal-owner={menuId}
+      >
+        {menuContent}
+      </div>
+    ) : (
+      <div
+        ref={menuRef}
+        className={menuClasses}
+        style={menuStyle}
+        role="listbox"
+        aria-multiselectable={multiple}
+        id={menuId}
+        data-focus-portal-owner={menuId}
+      >
+        {menuContent}
+      </div>
+    ),
     document.body
   );
 };
@@ -1057,11 +1136,43 @@ const Dropdown = <TMetadata,>({
       return false;
     }
 
+    if (event.key === 'Tab' && isOpen && renderOptionActions) {
+      const activeElement = document.activeElement;
+      if (!event.shiftKey && activeElement === triggerRef.current) {
+        const firstAction = menuRef.current?.querySelector<HTMLElement>(
+          '.dropdown-option-actions button:not([disabled])'
+        );
+        if (firstAction) {
+          firstAction.focus();
+          return true;
+        }
+      }
+      if (activeElement && menuRef.current?.contains(activeElement)) {
+        const focusableElements = Array.from(
+          menuRef.current.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        );
+        const activeIndex = focusableElements.indexOf(activeElement as HTMLElement);
+        const leavingDialog = event.shiftKey
+          ? activeIndex === 0
+          : activeIndex === focusableElements.length - 1;
+        if (leavingDialog) {
+          closeDropdown();
+          return 'handled-no-prevent' as const;
+        }
+        return false;
+      }
+    }
+
     const result = handleKeyAction(event.key);
     if (result === 'handled-no-prevent') {
       return 'handled-no-prevent' as const;
     }
     if (result === 'handled') {
+      if (event.key === 'Escape' && renderOptionActions) {
+        triggerRef.current?.focus();
+      }
       return true;
     }
     return false;
@@ -1118,6 +1229,7 @@ const Dropdown = <TMetadata,>({
       <DropdownTrigger
         triggerRef={triggerRef}
         searchable={searchable}
+        hasOptionActions={Boolean(renderOptionActions)}
         isOpen={isOpen}
         menuId={menuId}
         activeOptionId={activeOptionId}
@@ -1146,6 +1258,7 @@ const Dropdown = <TMetadata,>({
         menuStyle={menuStyle}
         multiple={multiple}
         menuId={menuId}
+        menuAriaLabel={ariaLabel ?? placeholder}
         searchable={searchable}
         searchInputRef={searchInputRef}
         searchPlaceholder={searchPlaceholder}

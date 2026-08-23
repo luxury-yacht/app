@@ -553,13 +553,14 @@ describe('Dropdown', () => {
     expect(handleChange).toHaveBeenCalledWith('beta');
   });
 
-  it('highlights the full option row when the option has a trailing action', async () => {
+  it('uses action-row semantics and exposes the first trailing action from the trigger', async () => {
     await mount(
       <Dropdown
         options={OPTIONS.map((option) =>
           option.value === 'beta' ? { ...option, disabled: true } : option
         )}
-        value=""
+        value={[]}
+        multiple
         onChange={vi.fn()}
         renderOptionActions={(option) => (
           <button type="button" data-testid={`action-${option.value}`}>
@@ -571,7 +572,22 @@ describe('Dropdown', () => {
 
     const trigger = container.querySelector('.dropdown-trigger');
     click(trigger);
-    await pressKey(trigger, 'ArrowDown');
+    expect(trigger?.getAttribute('role')).toBeNull();
+    expect(trigger?.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.body.querySelector('.dropdown-option')?.getAttribute('role')).toBeNull();
+    expect(document.body.querySelector('.dropdown-option')?.getAttribute('aria-pressed')).toBe(
+      'false'
+    );
+
+    await act(async () => {
+      (trigger as HTMLElement).focus();
+      await Promise.resolve();
+    });
+    await pressKey(trigger, 'Tab');
+    expect(document.activeElement).toBe(
+      document.body.querySelector('[data-testid="action-alpha"]')
+    );
 
     const firstRow = document.body
       .querySelector('[data-testid="action-alpha"]')

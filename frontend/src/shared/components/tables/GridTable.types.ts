@@ -50,6 +50,8 @@ export interface GridColumnDefinition<T> extends GridColumnAlignmentOptions {
   maxWidth?: ColumnWidthInput;
   autoSizeMaxWidth?: ColumnWidthInput;
   autoWidth?: boolean;
+  /** Groups equivalent rendered values so auto-width measures each distinct sample once. */
+  measurementSampleKey?: (item: T) => string;
   disableShortcuts?: boolean | ((item: T) => boolean);
 }
 

@@ -452,6 +452,13 @@ export const createKindColumn = <T,>(
     alignHeader,
     alignData,
     disableShortcuts,
+    measurementSampleKey: (item: T) => {
+      const displayText = resolveDisplayText(item);
+      const interactive = Boolean(
+        onClick && (isInteractive ? isInteractive(item) : true) && displayText.trim().length > 0
+      );
+      return JSON.stringify([getKind(item), displayText, interactive]);
+    },
     sortValue:
       sortValue ??
       ((item: T) => {

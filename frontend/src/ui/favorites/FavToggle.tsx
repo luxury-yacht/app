@@ -338,9 +338,7 @@ const restoreFavoritePane = ({ pane, savedPane }: FavoritePaneRestoreEntry) => {
       : null
   );
   pane.state.setColumnVisibility?.(savedPane.tableState.columnVisibility);
-  if (savedPane.tableState.columnOrder) {
-    pane.state.setColumnOrder?.(savedPane.tableState.columnOrder);
-  }
+  pane.state.setColumnOrder?.(savedPane.tableState.columnOrder ?? []);
 };
 
 /**

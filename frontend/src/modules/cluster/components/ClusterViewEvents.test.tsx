@@ -279,6 +279,9 @@ describe('ClusterViewEvents', () => {
       'Message',
       'Last Seen',
     ]);
+    expect(
+      gridTablePropsRef.current.columns.find((column) => column.key === 'objectName')?.hideable
+    ).toBe(false);
   });
 
   it('opens the involved object with group/version when object name is clicked', async () => {

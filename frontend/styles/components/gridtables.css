@@ -495,8 +495,12 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   opacity: 0.4;
 }
 
-.dropdown-option-row:has(.gridtable-column-drag-handle[data-drop-target="true"]) {
+.dropdown-option-row:has(.gridtable-column-drag-handle[data-drop-position="before"]) {
   box-shadow: inset 0 2px 0 0 var(--color-accent);
+}
+
+.dropdown-option-row:has(.gridtable-column-drag-handle[data-drop-position="after"]) {
+  box-shadow: inset 0 -2px 0 0 var(--color-accent);
 }
 
 /* Badge columns own their presentation through a declarative class. */

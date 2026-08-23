@@ -77,8 +77,9 @@ workflow and that exception is documented.
   boundary. Descendant rows, cells, and controls are excluded.
 - The Columns menu lists every column in current display order. Visibility
   toggles remain disabled for required columns, while one drag handle per row
-  lets every column—including Name—move in the vertical menu. A focused handle
-  also supports Up and Down Arrow keys. The menu's top-to-bottom order maps to
+  lets every column—including Name—move in the vertical menu. Tab from the open
+  Columns trigger focuses the first handle; a focused handle supports Up and
+  Down Arrow keys. The menu's top-to-bottom order maps to
   the table's left-to-right column order. Reordering and visibility are
   independent, the shared All/None actions affect hideable columns only, and
   Reset Order restores the column definitions' declaration order without

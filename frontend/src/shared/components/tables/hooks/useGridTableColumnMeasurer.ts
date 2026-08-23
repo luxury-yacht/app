@@ -85,8 +85,16 @@ export function useGridTableColumnMeasurer<T>({
       cell.style.width = 'auto';
       document.body.appendChild(cell);
       let measuredWidth = measureHeaderWidth(column);
+      const measuredSampleKeys = column.measurementSampleKey ? new Set<string>() : null;
       try {
         for (const item of selectMeasurementSamples(tableData)) {
+          if (measuredSampleKeys && column.measurementSampleKey) {
+            const sampleKey = column.measurementSampleKey(item);
+            if (measuredSampleKeys.has(sampleKey)) {
+              continue;
+            }
+            measuredSampleKeys.add(sampleKey);
+          }
           setMeasuredContent(cell, column.render(item));
           measuredWidth = Math.max(measuredWidth, cell.getBoundingClientRect().width);
         }
