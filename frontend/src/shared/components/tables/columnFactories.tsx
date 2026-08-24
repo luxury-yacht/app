@@ -193,6 +193,11 @@ export const withColumnSizing = <T,>(
     };
   });
 
+export const withAutoWidthColumns = <T,>(
+  columns: GridColumnDefinition<T>[]
+): GridColumnDefinition<T>[] =>
+  columns.map((column) => (column.autoWidth ? column : { ...column, autoWidth: true }));
+
 /**
  * Creates a simple text column (optionally interactive)
  */
@@ -492,7 +497,7 @@ export const createKindColumn = <T,>(
       return (
         <button
           type="button"
-          className={`${getKindBadgeClassName(kindValue)} clickable gridtable-cell-button`}
+          className={`${getKindBadgeClassName(kindValue)} clickable`}
           data-kind-value={kindValue}
           data-kind-interactive="true"
           data-gridtable-shortcut-optout="true"

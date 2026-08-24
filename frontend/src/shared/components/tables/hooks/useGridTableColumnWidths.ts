@@ -15,6 +15,7 @@ import {
   detectWidthUnit,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
+import { isUserOwnedColumnWidth } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 import {
   type ManualResizeEvent,
   useDirtyQueue,
@@ -22,9 +23,8 @@ import {
 import {
   useColumnWidthState,
   useExternalWidthsSync,
-  useInitialColumnMeasurement,
+  useGridTableAutoWidthMeasurement,
   useSyncRenderedColumns,
-  useWatchTableData,
   useWidthsChangeNotifier,
 } from '@shared/components/tables/hooks/useGridTableColumnWidths.helpers';
 import type { RefObject } from 'react';
@@ -82,6 +82,8 @@ interface ColumnWidthsResult<T> {
   markColumnsDirty: (keys: Iterable<string>) => void;
   markAllAutoColumnsDirty: () => void;
   handleManualResizeEvent: (event: ManualResizeEvent) => void;
+  canResetAutoWidthColumns: boolean;
+  resetAutoWidthColumns: () => void;
 }
 
 const hasWidthInput = (value: ColumnWidthInput | null | undefined): boolean =>
@@ -93,14 +95,14 @@ const resolveControlledWidthSource = <T>(
   manual: boolean,
   autoWidth: boolean
 ): ColumnWidthState['source'] => {
-  if (controlledState.source) {
-    return controlledState.source;
-  }
   if (manual) {
     return 'user';
   }
   if (autoWidth) {
     return 'auto';
+  }
+  if (controlledState.source === 'column' || controlledState.source === 'table') {
+    return controlledState.source;
   }
   return hasWidthInput(column?.width) ? 'column' : 'table';
 };
@@ -111,7 +113,7 @@ const buildControlledWidthState = <T>(
   column: GridColumnDefinition<T> | undefined,
   manual: boolean
 ): ColumnWidthState => {
-  const autoWidth = controlledState.autoWidth ?? Boolean(column?.autoWidth && !manual);
+  const autoWidth = manual ? false : Boolean(column?.autoWidth);
   const raw = controlledState.raw ?? null;
   return {
     width,
@@ -219,7 +221,6 @@ export function useGridTableColumnWidths<T>(
 
   const { columnWidths, setColumnWidths } = useColumnWidthState({
     columns,
-    columnsRef,
     controlledColumnWidths,
     naturalWidthsRef,
     manuallyResizedColumnsRef,
@@ -235,7 +236,11 @@ export function useGridTableColumnWidths<T>(
     };
   }, []);
 
-  const { markColumnsDirty, markAllAutoColumnsDirty, handleManualResizeEvent } = useDirtyQueue({
+  const {
+    markColumnsDirty,
+    markAllAutoColumnsDirty,
+    handleManualResizeEvent: handleMeasurementQueueResizeEvent,
+  } = useDirtyQueue({
     tableRef,
     renderedColumnsRef: columnsRef,
     manuallyResizedColumnsRef,
@@ -250,8 +255,16 @@ export function useGridTableColumnWidths<T>(
     getColumnMinWidth,
     getColumnMaxWidth,
   });
-
-  useWatchTableData({ tableData, renderedColumns, markColumnsDirty });
+  const [, setManualOwnershipRevision] = useState(0);
+  const handleManualResizeEvent = useCallback(
+    (event: ManualResizeEvent) => {
+      handleMeasurementQueueResizeEvent(event);
+      if (event.type === 'dragEnd' || event.type === 'autoSize' || event.type === 'reset') {
+        setManualOwnershipRevision((revision) => revision + 1);
+      }
+    },
+    [handleMeasurementQueueResizeEvent]
+  );
 
   useSyncRenderedColumns({
     renderedColumns,
@@ -264,18 +277,94 @@ export function useGridTableColumnWidths<T>(
     markColumnsDirty,
   });
 
-  const buildColumnWidthState = useCallback(
-    (key: string, width: number): ColumnWidthState => {
-      const column = columnsRef.current.find((col) => col.key === key);
+  const createColumnWidthState = useCallback(
+    (key: string, width: number, manual: boolean): ColumnWidthState => {
+      const column = columns.find((col) => col.key === key);
       const controlledState = controlledColumnWidths?.[key];
-      const manual = manuallyResizedColumnsRef.current.has(key);
       if (controlledState) {
         return buildControlledWidthState(width, controlledState, column, manual);
       }
       return buildUncontrolledWidthState(width, column, manual);
     },
-    [controlledColumnWidths]
+    [columns, controlledColumnWidths]
   );
+
+  const buildColumnWidthState = useCallback(
+    (key: string, width: number): ColumnWidthState => {
+      const column = columns.find((col) => col.key === key);
+      const controlledState = controlledColumnWidths?.[key];
+      const manual = Boolean(
+        manuallyResizedColumnsRef.current.has(key) ||
+          (controlledState && column && isUserOwnedColumnWidth(controlledState, column))
+      );
+      return createColumnWidthState(key, width, manual);
+    },
+    [columns, controlledColumnWidths, createColumnWidthState]
+  );
+
+  const canResetAutoWidthColumns = columns.some((column) => {
+    if (!column.autoWidth) {
+      return false;
+    }
+    const controlledState = controlledColumnWidths?.[column.key];
+    return (
+      manuallyResizedColumnsRef.current.has(column.key) ||
+      Boolean(controlledState && isUserOwnedColumnWidth(controlledState, column))
+    );
+  });
+
+  const resetAutoWidthColumns = useCallback(() => {
+    const autoColumns = columns.filter((column) => column.autoWidth);
+    if (autoColumns.length === 0) {
+      return;
+    }
+
+    const autoColumnKeys = autoColumns.map((column) => column.key);
+    autoColumnKeys.forEach((key) => {
+      manuallyResizedColumnsRef.current.delete(key);
+    });
+
+    const measuredWidths = Object.fromEntries(
+      autoColumns.map((column) => [column.key, measureColumnWidth(column)])
+    );
+    const nextWidths = { ...columnWidths, ...measuredWidths };
+    naturalWidthsRef.current = { ...naturalWidthsRef.current, ...measuredWidths };
+    setColumnWidths(nextWidths);
+    handleManualResizeEvent({ type: 'reset', columns: autoColumnKeys });
+
+    if (onColumnWidthsChange) {
+      const resetKeys = new Set(autoColumnKeys);
+      const payload: Record<string, ColumnWidthState> = {};
+      columns.forEach((column) => {
+        const width = nextWidths[column.key];
+        if (typeof width !== 'number' || Number.isNaN(width)) {
+          return;
+        }
+        payload[column.key] = resetKeys.has(column.key)
+          ? createColumnWidthState(column.key, width, false)
+          : buildColumnWidthState(column.key, width);
+      });
+      const widthSignature: Record<string, number> = {};
+      renderedColumns.forEach((column) => {
+        const width = nextWidths[column.key];
+        if (typeof width === 'number' && !Number.isNaN(width)) {
+          widthSignature[column.key] = width;
+        }
+      });
+      lastNotifiedWidthsRef.current = JSON.stringify(widthSignature);
+      onColumnWidthsChange(payload);
+    }
+  }, [
+    buildColumnWidthState,
+    columnWidths,
+    columns,
+    createColumnWidthState,
+    handleManualResizeEvent,
+    measureColumnWidth,
+    onColumnWidthsChange,
+    renderedColumns,
+    setColumnWidths,
+  ]);
 
   useExternalWidthsSync({
     columnsRef,
@@ -302,7 +391,7 @@ export function useGridTableColumnWidths<T>(
   const prevColumnsSignatureRef = useRef<string | null>(null);
   const prevShortNamesRef = useRef(useShortNames);
 
-  useInitialColumnMeasurement({
+  useGridTableAutoWidthMeasurement({
     tableRef,
     renderedColumns,
     measureColumnWidth,
@@ -331,5 +420,7 @@ export function useGridTableColumnWidths<T>(
     markColumnsDirty,
     markAllAutoColumnsDirty,
     handleManualResizeEvent,
+    canResetAutoWidthColumns,
+    resetAutoWidthColumns,
   };
 }

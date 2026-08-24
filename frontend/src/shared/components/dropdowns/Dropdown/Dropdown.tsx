@@ -22,6 +22,7 @@ import {
   DropdownSelectAllIcon,
   DropdownSelectNoneIcon,
 } from '@shared/components/icons/DropdownIcons';
+import { getAppZoomFactor } from '@shared/utils/appZoom';
 import { useKeyboardSurface } from '@ui/shortcuts';
 
 type DropdownMenuStyle = React.CSSProperties & {
@@ -52,13 +53,6 @@ interface DropdownPlacement {
   menuStyle: DropdownMenuStyle;
 }
 
-const getZoomFactor = () => {
-  const parsed = Number.parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue('--app-zoom-factor')
-  );
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
-};
-
 const getVerticalPosition = (
   measuredMenuHeight: number,
   spaceBelow: number,
@@ -79,7 +73,7 @@ const calculateDropdownPlacement = (
   trigger: HTMLButtonElement,
   menu: HTMLDivElement
 ): DropdownPlacement => {
-  const zoomFactor = getZoomFactor();
+  const zoomFactor = getAppZoomFactor();
   const visualTriggerRect = trigger.getBoundingClientRect();
   const triggerRect = {
     top: visualTriggerRect.top / zoomFactor,

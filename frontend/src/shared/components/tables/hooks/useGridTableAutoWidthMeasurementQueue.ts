@@ -235,6 +235,11 @@ export function useDirtyQueue<T>({
       if (type === 'reset') {
         // Clear everything and re-measure the specified + all auto columns.
         clearMeasurementQueue();
+        keys.forEach((key) => {
+          if (key) {
+            allowShrinkColumnsRef.current.add(key);
+          }
+        });
         markColumnsDirty(keys);
         markColumnsDirty(renderedColumnsRef.current.map((col) => col.key));
       }

@@ -65,4 +65,20 @@ describe('gridTableColumnWidthMath', () => {
     expect(plan.naturalWidths).toEqual(plan.widths);
     expect(measureColumnWidth).not.toHaveBeenCalled();
   });
+
+  it('uses a fresh measurement instead of a persisted automatic width', () => {
+    const auto = column('kind', { autoWidth: true, width: 100 });
+
+    const plan = buildInitialMeasuredColumnWidthPlan({
+      renderedColumns: [auto],
+      columnWidths: { kind: 100 },
+      measuredAutoWidths: { kind: 188 },
+      externalColumnWidths: { kind: 100 },
+      manuallyResizedColumnKeys: new Set(),
+      measureColumnWidth: vi.fn(() => 188),
+      ...bounds,
+    });
+
+    expect(plan.widths.kind).toBe(188);
+  });
 });

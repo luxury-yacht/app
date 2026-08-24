@@ -98,11 +98,14 @@ workflow and that exception is documented.
   (`dimWhenOff`), because there "off" means the column is absent from the table.
   Filter menus must not adopt it: most of their options are off by default, so
   dimming would flag the normal case as an anomaly.
-- `Reset` is one action over both axes: it restores the column definitions'
-  declaration order and shows every hideable column. It is enabled whenever
-  either axis differs from its default, and it is separated from All/None in the
-  menu's action bar because it is a different kind of verb. Do not reintroduce an
-  order-only reset — recovering a table must not take two actions in two models.
+- `Reset` is one recovery action for column preferences: it restores the column
+  definitions' declaration order, shows every hideable column, and returns every
+  `autoWidth` column to automatic measurement. Manually sized non-auto columns
+  remain user-owned. Reset is enabled whenever order, visibility, or automatic
+  width ownership differs from its default, and it is separated from All/None in
+  the menu's action bar because it is a different kind of verb. Do not
+  reintroduce partial reset actions — recovering a table must not take multiple
+  actions in multiple models.
 - Every multi-select Kinds dropdown exposes search plus `Select all` and
   `Select none`. GridTable owns this as an invariant of a visible Kind filter;
   views may decide whether the filter is present but cannot disable its controls.
@@ -201,11 +204,26 @@ When row virtualization changes `virtualRange.start/end`, the controller must en
 auto-width columns after the new row window commits; the range bounds are intentional effect
 invalidators even though the callback does not read them.
 
+Auto-width measurement considers every row in GridTable's current data page. Do not cap or stride
+that input: a skipped row can contain the widest value. A column may use `measurementSampleKey` to
+deduplicate rows only when the key guarantees equivalent rendered width. Replacing the current page
+forces every non-user-sized `autoWidth` column to recompute in both directions; a wider prior page
+must not become the minimum width for later pages. This replacement-page pass reads the data page
+directly after render and must not depend on a visible-cell signature because virtualization or a
+loading transition can temporarily leave no rendered cells. Measurements from
+`getBoundingClientRect()` are visual pixels and must be converted back to unzoomed CSS pixels before
+becoming a column width. Intrinsic measurements reserve one additional CSS pixel so subpixel paint
+rounding cannot clip the content edge.
+
 Column widths come from persisted user state, the column definition, auto-width
 measurement, or the shared fallback. The table does not stretch columns to fill
 the viewport; narrower tables leave trailing space and wider tables scroll
 horizontally. Resizing affects only the declared column and respects its
 `minWidth`, `maxWidth`, and `resizable` capability.
+
+When a column changes from declared fixed sizing to automatic sizing, its fresh
+measurement replaces persisted column-owned widths. Only widths whose persisted
+source is `user` remain fixed after that declaration change.
 
 ## Filtering And Search
 

@@ -18,6 +18,8 @@ type UseGridTableColumnsDropdownOptions<T> = {
   reorderColumn: (key: string, targetIndex: number) => void;
   canResetColumnOrder: boolean;
   resetColumnOrder: () => void;
+  canResetAutoWidthColumns: boolean;
+  resetAutoWidthColumns: () => void;
 };
 
 type ColumnsDropdownConfig = {
@@ -44,6 +46,8 @@ export function useGridTableColumnsDropdown<T>({
   reorderColumn,
   canResetColumnOrder,
   resetColumnOrder,
+  canResetAutoWidthColumns,
+  resetAutoWidthColumns,
 }: UseGridTableColumnsDropdownOptions<T>): ColumnsDropdownConfig | null {
   const hideableColumns = useMemo(
     () => columns.filter((column) => !lockedColumns.has(column.key)),
@@ -83,8 +87,7 @@ export function useGridTableColumnsDropdown<T>({
     [applyVisibilityChanges, hideableColumns, isColumnVisible]
   );
 
-  // One reset for the whole menu: restoring visibility alone would leave a
-  // reordered table, and restoring order alone would leave columns hidden.
+  // One reset restores every column preference owned by this menu.
   const handleResetColumns = useCallback(() => {
     applyVisibilityChanges((next) => {
       let changed = false;
@@ -97,7 +100,8 @@ export function useGridTableColumnsDropdown<T>({
       return changed;
     });
     resetColumnOrder();
-  }, [applyVisibilityChanges, hideableColumns, resetColumnOrder]);
+    resetAutoWidthColumns();
+  }, [applyVisibilityChanges, hideableColumns, resetAutoWidthColumns, resetColumnOrder]);
 
   if (!showColumnsDropdown) {
     return null;
@@ -124,7 +128,7 @@ export function useGridTableColumnsDropdown<T>({
     renderValue: () => (hiddenCount > 0 ? `Columns (${hiddenCount} hidden)` : 'Columns'),
     onMoveColumn: moveColumn,
     onReorderColumn: reorderColumn,
-    canResetColumns: canResetColumnOrder || hiddenCount > 0,
+    canResetColumns: canResetColumnOrder || canResetAutoWidthColumns || hiddenCount > 0,
     onResetColumns: handleResetColumns,
   };
 }

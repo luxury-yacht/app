@@ -51,6 +51,8 @@ describe('useGridTableColumnsDropdown', () => {
     enabled?: boolean;
     canResetColumnOrder?: boolean;
     resetColumnOrder?: () => void;
+    canResetAutoWidthColumns?: boolean;
+    resetAutoWidthColumns?: () => void;
   }): CapturedResult => {
     const lockedColumns = opts.lockedColumns ?? new Set<string>();
     const hiddenColumns = opts.hiddenColumns ?? new Set<string>();
@@ -75,6 +77,8 @@ describe('useGridTableColumnsDropdown', () => {
         reorderColumn: vi.fn(),
         canResetColumnOrder: opts.canResetColumnOrder ?? false,
         resetColumnOrder: opts.resetColumnOrder ?? vi.fn(),
+        canResetAutoWidthColumns: opts.canResetAutoWidthColumns ?? false,
+        resetAutoWidthColumns: opts.resetAutoWidthColumns ?? vi.fn(),
       });
       return null;
     };
@@ -238,12 +242,22 @@ describe('useGridTableColumnsDropdown', () => {
       ).toBe(true);
     });
 
+    it('becomes available when only an auto-width column was manually sized', () => {
+      const result = renderHook({ canResetAutoWidthColumns: true });
+      expect(
+        requireValue(result, 'expected test value in useGridTableColumnsDropdown.test.tsx')
+          .canResetColumns
+      ).toBe(true);
+    });
+
     it('restores declaration order and every hidden column in one action', () => {
       const resetColumnOrder = vi.fn();
+      const resetAutoWidthColumns = vi.fn();
       const result = renderHook({
         hiddenColumns: new Set(['name', 'age']),
         canResetColumnOrder: true,
         resetColumnOrder,
+        resetAutoWidthColumns,
       });
 
       requireValue(
@@ -253,6 +267,7 @@ describe('useGridTableColumnsDropdown', () => {
 
       expect(latestVisibility).toEqual({});
       expect(resetColumnOrder).toHaveBeenCalledTimes(1);
+      expect(resetAutoWidthColumns).toHaveBeenCalledTimes(1);
     });
 
     it('leaves required columns untouched when restoring visibility', () => {

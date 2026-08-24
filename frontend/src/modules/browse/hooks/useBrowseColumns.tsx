@@ -124,14 +124,6 @@ export function useBrowseColumns({
 
     baseColumns.push(ageColumn);
 
-    // Apply fixed column sizing to avoid measurement loops
-    const sizing: cf.ColumnSizingMap = {
-      kind: { width: 160, autoWidth: false },
-      name: { width: 320, autoWidth: false },
-      api: { width: 180, autoWidth: false },
-      ...(showNamespaceColumn ? { namespace: { width: 220, autoWidth: false } } : {}),
-      age: { width: 120, autoWidth: false },
-    };
-    return cf.withColumnSizing(baseColumns, sizing);
+    return cf.withAutoWidthColumns(baseColumns);
   }, [showNamespaceColumn, onRowClick, onNamespaceClick, navigateToView]);
 }

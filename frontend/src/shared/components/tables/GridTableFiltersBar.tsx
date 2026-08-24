@@ -641,7 +641,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                       type="button"
                       className="dropdown-bulk-action dropdown-bulk-action--labeled icon-bar-button"
                       disabled={!canResetColumns}
-                      title="Restore the default column order and show every column"
+                      title="Restore the default column order, show every column, and reset automatic widths"
                       aria-label="Reset columns"
                       onClick={(event) => {
                         event.stopPropagation();

@@ -154,11 +154,7 @@ function useAggregatedGridCore<D extends AggregatedRowBase>(
       fallbackClusterName: selectedClusterName,
       useShortResourceNames,
     });
-    const sizing: cf.ColumnSizingMap = {};
-    for (const column of built) {
-      sizing[column.key] = { autoWidth: true };
-    }
-    return cf.withColumnSizing(built, sizing);
+    return cf.withAutoWidthColumns(built);
   }, [
     buildColumns,
     identity,

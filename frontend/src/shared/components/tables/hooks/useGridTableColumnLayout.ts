@@ -117,6 +117,8 @@ interface GridTableColumnLayout<T> {
   getColumnMaxWidth: (column: GridColumnDefinition<T>) => number;
   autoSizeColumn: (columnKey: string) => void;
   markVisibleAutoColumnsDirty: () => void;
+  canResetAutoWidthColumns: boolean;
+  resetAutoWidthColumns: () => void;
 }
 
 export function useGridTableColumnLayout<T>({
@@ -150,6 +152,8 @@ export function useGridTableColumnLayout<T>({
     markColumnsDirty,
     markAllAutoColumnsDirty,
     handleManualResizeEvent,
+    canResetAutoWidthColumns,
+    resetAutoWidthColumns,
   } = useGridTableColumnWidths<T>({
     columns,
     renderedColumns,
@@ -253,5 +257,7 @@ export function useGridTableColumnLayout<T>({
     getColumnMaxWidth,
     autoSizeColumn,
     markVisibleAutoColumnsDirty,
+    canResetAutoWidthColumns,
+    resetAutoWidthColumns,
   };
 }

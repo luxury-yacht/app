@@ -39,6 +39,7 @@ afterEach(() => {
   } else {
     Reflect.deleteProperty(HTMLElement.prototype, 'scrollWidth');
   }
+  document.documentElement.style.removeProperty('--app-zoom-factor');
   document.body.innerHTML = '';
   vi.restoreAllMocks();
 });
@@ -158,6 +159,33 @@ describe('useGridTableColumnMeasurer', () => {
     await harness.cleanup();
   });
 
+  it('converts zoomed visual measurements back to CSS width with paint clearance', async () => {
+    document.documentElement.style.setProperty('--app-zoom-factor', '0.8');
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get() {
+        return 120;
+      },
+    });
+    HTMLElement.prototype.getBoundingClientRect = () =>
+      ({
+        width: 204.125,
+        height: 0,
+        top: 0,
+        left: 0,
+        bottom: 0,
+        right: 204.125,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const harness = await renderHarness([{ name: 'PriorityLevelConfiguration' }]);
+
+    expect(harness.measure(columns[0])).toBe(257);
+    await harness.cleanup();
+  });
+
   it('measures each distinct declared sample only once', async () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
       configurable: true,
@@ -195,7 +223,7 @@ describe('useGridTableColumnMeasurer', () => {
     await harness.cleanup();
   });
 
-  it('includes the final row when sampling large datasets', async () => {
+  it('includes the final row when measuring large datasets', async () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
       configurable: true,
       get() {
@@ -230,6 +258,42 @@ describe('useGridTableColumnMeasurer', () => {
     const measurement = harness.measure(columns[1]);
     expect(measurement).toBeGreaterThanOrEqual('ExtremelyVerboseCustomResourceKind'.length * 10);
 
+    await harness.cleanup();
+  });
+
+  it('includes the widest row anywhere in a 500-row page', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get() {
+        return 120;
+      },
+    });
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      const width = (this.textContent ?? '').length * 10;
+      return {
+        width,
+        height: 0,
+        top: 0,
+        left: 0,
+        bottom: 0,
+        right: width,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return {};
+        },
+      } as DOMRect;
+    };
+
+    const widestName = 'cert-manager-controller-certificatesigningrequests';
+    const tableData: SampleRow[] = Array.from({ length: 500 }, (_value, index) => ({
+      name: index === 1 ? widestName : `row-${index}`,
+    }));
+    const harness = await renderHarness(tableData);
+
+    const measurement = harness.measure(columns[0]);
+
+    expect(measurement).toBeGreaterThanOrEqual(widestName.length * 10);
     await harness.cleanup();
   });
 

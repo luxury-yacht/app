@@ -294,6 +294,90 @@ describe('useGridTableColumnWidths', () => {
     wrapper.remove();
   });
 
+  it('remeasures persisted automatic widths but preserves user-sized auto columns', async () => {
+    const tableRef = { current: null as HTMLElement | null };
+    const wrapper = createWrapper(tableRef);
+    const columns = [
+      createColumn('kind', { autoWidth: true, width: 100 }),
+      createColumn('name', { autoWidth: true, width: 100 }),
+    ];
+    const controlledColumnWidths: Record<string, ColumnWidthState> = {
+      kind: {
+        width: 100,
+        unit: 'px',
+        raw: 100,
+        rawValue: 100,
+        autoWidth: true,
+        source: 'auto',
+        updatedAt: Date.now(),
+      },
+      name: {
+        width: 100,
+        unit: 'px',
+        raw: 100,
+        rawValue: 100,
+        autoWidth: false,
+        source: 'user',
+        updatedAt: Date.now(),
+      },
+    };
+
+    const { getResult } = await renderHook({
+      columns,
+      renderedColumns: columns,
+      tableRef,
+      tableData: [{ id: '1', name: 'MutatingWebhook' }],
+      controlledColumnWidths,
+      externalColumnWidths: { kind: 100, name: 100 },
+      enableColumnResizing: true,
+      onColumnWidthsChange: vi.fn(),
+      useShortNames: false,
+      measureColumnWidth: vi.fn((column) => (column.key === 'kind' ? 188 : 240)),
+    });
+
+    expect(getResult()?.columnWidths).toMatchObject({ kind: 188, name: 100 });
+    expect(getResult()?.manuallyResizedColumnsRef.current.has('name')).toBe(true);
+    wrapper.remove();
+  });
+
+  it('remeasures a column-owned fixed width when the column becomes automatic', async () => {
+    const tableRef = { current: null as HTMLElement | null };
+    const wrapper = createWrapper(tableRef);
+    const columns = [createColumn('kind', { autoWidth: true, width: 100 })];
+    const controlledColumnWidths: Record<string, ColumnWidthState> = {
+      kind: {
+        width: 160,
+        unit: 'px',
+        raw: 160,
+        rawValue: 160,
+        autoWidth: false,
+        source: 'column',
+        updatedAt: Date.now(),
+      },
+    };
+
+    const { getResult } = await renderHook({
+      columns,
+      renderedColumns: columns,
+      tableRef,
+      tableData: [{ id: '1', name: 'ClusterRoleBinding' }],
+      controlledColumnWidths,
+      externalColumnWidths: { kind: 160 },
+      enableColumnResizing: true,
+      onColumnWidthsChange: vi.fn(),
+      useShortNames: false,
+      measureColumnWidth: vi.fn(() => 220),
+    });
+
+    expect(getResult()?.columnWidths.kind).toBe(220);
+    expect(getResult()?.manuallyResizedColumnsRef.current.has('kind')).toBe(false);
+    expect(getResult()?.buildColumnWidthState('kind', 220)).toMatchObject({
+      autoWidth: true,
+      source: 'auto',
+    });
+    wrapper.remove();
+  });
+
   it('remeasures reordered columns without repeating the initialization phase transition', async () => {
     const tableRef = { current: null as HTMLElement | null };
     const wrapper = createWrapper(tableRef);
@@ -432,6 +516,102 @@ describe('useGridTableColumnWidths', () => {
     wrapper.remove();
   });
 
+  it('remeasures automatic widths in both directions when the page data changes', async () => {
+    const tableRef = { current: null as HTMLElement | null };
+    const wrapper = createWrapper(tableRef);
+    const table = requireValue(
+      tableRef.current,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    );
+    const kindColumn = createColumn('kind', { autoWidth: true });
+    const columns = [kindColumn];
+    const cell = document.createElement('div');
+    cell.className = 'grid-cell';
+    cell.dataset.column = 'kind';
+    const content = document.createElement('span');
+    content.className = 'grid-cell-content';
+    cell.appendChild(content);
+    table.appendChild(cell);
+
+    let measuredWidth = 185;
+    const measureColumnWidth = vi.fn(() => measuredWidth);
+    const pageOne = [{ id: '1', name: 'ClusterRoleBinding' }];
+    const pageTwo = [{ id: '2', name: 'CustomResourceDefinition' }];
+    const baseOptions = {
+      columns,
+      renderedColumns: columns,
+      tableRef,
+      controlledColumnWidths: null,
+      externalColumnWidths: null,
+      enableColumnResizing: true,
+      onColumnWidthsChange: vi.fn(),
+      useShortNames: false,
+      measureColumnWidth,
+    };
+
+    content.textContent = pageOne[0].name;
+    const { getResult, rerender } = await renderHook({ ...baseOptions, tableData: pageOne });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+    expect(getResult()?.columnWidths.kind).toBe(185);
+
+    measuredWidth = 239;
+    content.textContent = pageTwo[0].name;
+    await rerender({ ...baseOptions, tableData: pageTwo });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+    expect(getResult()?.columnWidths.kind).toBe(239);
+
+    measuredWidth = 185;
+    content.textContent = pageOne[0].name;
+    await rerender({ ...baseOptions, tableData: pageOne });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+    expect(getResult()?.columnWidths.kind).toBe(185);
+
+    wrapper.remove();
+  });
+
+  it('remeasures replacement page data without waiting for a rendered cell signature', async () => {
+    const tableRef = { current: null as HTMLElement | null };
+    const wrapper = createWrapper(tableRef);
+    const columns = [createColumn('kind', { autoWidth: true })];
+    let measuredWidth = 185;
+    const measureColumnWidth = vi.fn(() => measuredWidth);
+    const pageOne = [{ id: '1', name: 'ClusterRoleBinding' }];
+    const pageTwo = [{ id: '2', name: 'PriorityLevelConfiguration' }];
+    const baseOptions = {
+      columns,
+      renderedColumns: columns,
+      tableRef,
+      controlledColumnWidths: null,
+      externalColumnWidths: null,
+      enableColumnResizing: true,
+      onColumnWidthsChange: vi.fn(),
+      useShortNames: false,
+      measureColumnWidth,
+    };
+
+    const { getResult, rerender } = await renderHook({ ...baseOptions, tableData: pageOne });
+    expect(getResult()?.columnWidths.kind).toBe(185);
+
+    measuredWidth = 257;
+    await rerender({ ...baseOptions, tableData: pageTwo });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+
+    expect(getResult()?.columnWidths.kind).toBe(257);
+    wrapper.remove();
+  });
+
   it('does not measure manually resized columns until they are reset', async () => {
     const tableRef = { current: null as HTMLElement | null };
     const wrapper = createWrapper(tableRef);
@@ -542,6 +722,74 @@ describe('useGridTableColumnWidths', () => {
       (call) => (call[0] as GridColumnDefinition<Row>).key
     );
     expect(measuredKeysAfterReset).toContain('name');
+    wrapper.remove();
+  });
+
+  it('restores automatic sizing for a hidden column without clearing a manually sized fixed column', async () => {
+    const tableRef = { current: null as HTMLElement | null };
+    const wrapper = createWrapper(tableRef);
+    const columns = [createColumn('name', { autoWidth: true }), createColumn('status')];
+    const controlledColumnWidths: Record<string, ColumnWidthState> = {
+      name: {
+        width: 300,
+        unit: 'px',
+        autoWidth: false,
+        source: 'user',
+        updatedAt: 1,
+      },
+      status: {
+        width: 220,
+        unit: 'px',
+        autoWidth: false,
+        source: 'user',
+        updatedAt: 1,
+      },
+    };
+    const onColumnWidthsChange = vi.fn();
+    const measureColumnWidth = vi.fn((column: GridColumnDefinition<Row>) =>
+      column.key === 'name' ? 180 : 200
+    );
+
+    const { getResult } = await renderHook({
+      columns,
+      renderedColumns: [columns[1]],
+      tableRef,
+      tableData: [{ id: '1', name: 'alpha' }],
+      controlledColumnWidths,
+      externalColumnWidths: { name: 300, status: 220 },
+      enableColumnResizing: true,
+      onColumnWidthsChange,
+      useShortNames: false,
+      measureColumnWidth,
+    });
+
+    const initial = requireValue(
+      getResult(),
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    );
+    expect(initial.canResetAutoWidthColumns).toBe(true);
+
+    act(() => {
+      initial.resetAutoWidthColumns();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+
+    const reset = requireValue(
+      getResult(),
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    );
+    expect(reset.manuallyResizedColumnsRef.current.has('name')).toBe(false);
+    expect(reset.manuallyResizedColumnsRef.current.has('status')).toBe(true);
+    expect(reset.columnWidths.name).toBe(180);
+    expect(onColumnWidthsChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        name: expect.objectContaining({ autoWidth: true, source: 'auto' }),
+        status: expect.objectContaining({ autoWidth: false, source: 'user' }),
+      })
+    );
     wrapper.remove();
   });
 });

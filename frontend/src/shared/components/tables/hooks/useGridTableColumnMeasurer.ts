@@ -3,10 +3,11 @@ import type {
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
+import { getAppZoomFactor } from '@shared/utils/appZoom';
 import React, { useCallback } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-const MEASUREMENT_SAMPLE_LIMIT = 400;
+const AUTO_WIDTH_PAINT_GUTTER_PX = 1;
 
 const detachNode = (node: HTMLElement): void => {
   node.parentNode?.removeChild(node);
@@ -31,20 +32,7 @@ const measureHeaderWidth = <T>(column: GridColumnDefinition<T>): number => {
   }
 };
 
-const selectMeasurementSamples = <T>(tableData: T[]): T[] => {
-  if (tableData.length <= MEASUREMENT_SAMPLE_LIMIT) {
-    return tableData;
-  }
-  const step = Math.max(1, Math.ceil(tableData.length / MEASUREMENT_SAMPLE_LIMIT));
-  const samples = tableData.filter((_item, index) => index % step === 0);
-  const last = tableData[tableData.length - 1];
-  if (samples[samples.length - 1] !== last) {
-    samples.push(last);
-  }
-  return samples;
-};
-
-const setMeasuredContent = (node: HTMLDivElement, content: React.ReactNode): void => {
+const setMeasuredContent = (node: HTMLElement, content: React.ReactNode): void => {
   if (React.isValidElement(content)) {
     node.innerHTML = renderToStaticMarkup(content);
   } else {
@@ -83,11 +71,15 @@ export function useGridTableColumnMeasurer<T>({
       cell.style.left = '-9999px';
       cell.style.whiteSpace = 'nowrap';
       cell.style.width = 'auto';
+      const content = document.createElement('span');
+      content.className = 'grid-cell-content';
+      cell.appendChild(content);
       document.body.appendChild(cell);
       let measuredWidth = measureHeaderWidth(column);
+      const zoomFactor = getAppZoomFactor();
       const measuredSampleKeys = column.measurementSampleKey ? new Set<string>() : null;
       try {
-        for (const item of selectMeasurementSamples(tableData)) {
+        for (const item of tableData) {
           if (measuredSampleKeys && column.measurementSampleKey) {
             const sampleKey = column.measurementSampleKey(item);
             if (measuredSampleKeys.has(sampleKey)) {
@@ -95,14 +87,17 @@ export function useGridTableColumnMeasurer<T>({
             }
             measuredSampleKeys.add(sampleKey);
           }
-          setMeasuredContent(cell, column.render(item));
-          measuredWidth = Math.max(measuredWidth, cell.getBoundingClientRect().width);
+          setMeasuredContent(content, column.render(item));
+          measuredWidth = Math.max(measuredWidth, cell.getBoundingClientRect().width / zoomFactor);
         }
       } finally {
         detachNode(cell);
       }
 
-      const contentWidth = Math.ceil(measuredWidth > 0 ? measuredWidth : defaultColumnWidth);
+      const contentWidth =
+        measuredWidth > 0
+          ? Math.ceil(measuredWidth) + AUTO_WIDTH_PAINT_GUTTER_PX
+          : defaultColumnWidth;
       const minimum = Math.max(contentWidth, getColumnMinWidth(column));
       const configuredMaximum = getColumnMaxWidth(column);
       const autoSizeMaximum = parseWidthInputToNumber(column.autoSizeMaxWidth);

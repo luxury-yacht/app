@@ -10,7 +10,10 @@ import type {
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
 import { parseWidthInputToNumber } from '@shared/components/tables/GridTable.utils';
-import { buildInitialMeasuredColumnWidthPlan } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
+import {
+  buildInitialMeasuredColumnWidthPlan,
+  isUserOwnedColumnWidth,
+} from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -35,13 +38,11 @@ const getAutoSizeMaxWidth = <T>(
 // and whenever a user manually resizes a column we remember that width as the new “natural” size.
 export function useColumnWidthState<T>({
   columns,
-  columnsRef,
   controlledColumnWidths,
   naturalWidthsRef,
   manuallyResizedColumnsRef,
 }: {
   columns: GridColumnDefinition<T>[];
-  columnsRef: RefObject<GridColumnDefinition<T>[]>;
   controlledColumnWidths?: Record<string, ColumnWidthState> | null;
   naturalWidthsRef: RefObject<Record<string, number>>;
   manuallyResizedColumnsRef: RefObject<Set<string>>;
@@ -77,37 +78,35 @@ export function useColumnWidthState<T>({
     return initialWidths;
   });
 
-  const setColumnWidths = useCallback(
-    (updater: React.SetStateAction<Record<string, number>>) => {
-      setColumnWidthsState((prev) => {
-        const next =
-          typeof updater === 'function'
-            ? (updater as (prev: Record<string, number>) => Record<string, number>)(prev)
-            : updater;
+  const setColumnWidths = useCallback((updater: React.SetStateAction<Record<string, number>>) => {
+    setColumnWidthsState((prev) => {
+      const next =
+        typeof updater === 'function'
+          ? (updater as (prev: Record<string, number>) => Record<string, number>)(prev)
+          : updater;
 
-        if (next === prev) {
-          return prev;
+      if (next === prev) {
+        return prev;
+      }
+
+      // Hidden columns can be reset before visibility is restored, so compare
+      // the complete width state rather than only the currently rendered keys.
+      let changed = false;
+      const widthKeys = new Set([...Object.keys(prev), ...Object.keys(next)]);
+      for (const key of widthKeys) {
+        if (Math.abs((prev[key] ?? 0) - (next[key] ?? 0)) > 0.1) {
+          changed = true;
+          break;
         }
+      }
 
-        // Only treat as a change when a visible column moves by a perceptible delta.
-        let changed = false;
-        for (const col of columnsRef.current) {
-          const key = col.key;
-          if (Math.abs((prev[key] ?? 0) - (next[key] ?? 0)) > 0.1) {
-            changed = true;
-            break;
-          }
-        }
+      if (!changed) {
+        return prev;
+      }
 
-        if (!changed) {
-          return prev;
-        }
-
-        return next;
-      });
-    },
-    [columnsRef]
-  );
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     const manualKeys = manuallyResizedColumnsRef.current;
@@ -124,29 +123,6 @@ export function useColumnWidthState<T>({
   }, [columnWidths, manuallyResizedColumnsRef, naturalWidthsRef]);
 
   return { columnWidths, setColumnWidths };
-}
-
-export function useWatchTableData<T>({
-  tableData,
-  renderedColumns,
-  markColumnsDirty,
-}: {
-  tableData: T[];
-  renderedColumns: GridColumnDefinition<T>[];
-  markColumnsDirty: (keys: Iterable<string>) => void;
-}) {
-  const lastTableDataRef = useRef<T[] | null>(tableData);
-  const lastTableLengthRef = useRef<number>(Array.isArray(tableData) ? tableData.length : 0);
-
-  useEffect(() => {
-    const currentLength = Array.isArray(tableData) ? tableData.length : 0;
-    if (lastTableDataRef.current !== tableData || lastTableLengthRef.current !== currentLength) {
-      lastTableDataRef.current = tableData;
-      lastTableLengthRef.current = currentLength;
-      // When the dataset changes, re-measure auto columns.
-      markColumnsDirty(renderedColumns.map((column) => column.key));
-    }
-  }, [markColumnsDirty, renderedColumns, tableData]);
 }
 
 // Keeps renderedColumns aligned with our refs, prunes stale manual flags/hashes,
@@ -180,8 +156,7 @@ export function useSyncRenderedColumns<T>({
       if (!state) {
         return;
       }
-      const columnAuto = Boolean(column.autoWidth);
-      const manual = state.source === 'user' || (columnAuto && state.autoWidth === false);
+      const manual = isUserOwnedColumnWidth(state, column);
       if (manual) {
         controlledManualKeys.add(column.key);
       }
@@ -282,10 +257,7 @@ export function useExternalWidthsSync<T>({
 
         // Respect controlled/manual columns by carrying their manual flag forward.
         const controlledState = controlledColumnWidths?.[col.key];
-        const columnAuto = Boolean(col.autoWidth);
-        const manual =
-          controlledState?.source === 'user' ||
-          (columnAuto && controlledState?.autoWidth === false);
+        const manual = controlledState ? isUserOwnedColumnWidth(controlledState, col) : false;
 
         if (manual) {
           manuallyResizedColumnsRef.current.add(col.key);
@@ -387,9 +359,10 @@ export function useWidthsChangeNotifier<T>({
   ]);
 }
 
-// Performs the first full measurement pass (and later re-runs) when columns change or labels shorten.
-// This keeps natural widths in sync with the container before virtualization or persistence apply.
-export function useInitialColumnMeasurement<T>({
+// Measures automatic columns after render on initialization, column changes, label-mode changes,
+// and every replacement data page. Page measurement reads the full data page directly, so it does
+// not depend on whether virtualization or a loading transition has committed visible cells yet.
+export function useGridTableAutoWidthMeasurement<T>({
   tableRef,
   renderedColumns,
   measureColumnWidth,
@@ -424,7 +397,7 @@ export function useInitialColumnMeasurement<T>({
   prevShortNamesRef: RefObject<boolean>;
   tableData: T[];
 }) {
-  const initializedWithDataRef = useRef(false);
+  const lastMeasuredTableDataRef = useRef<T[] | null>(null);
   useEffect(() => {
     if (!tableRef.current || renderedColumns.length === 0) {
       return;
@@ -440,17 +413,14 @@ export function useInitialColumnMeasurement<T>({
     const needsInitialization = phaseRef.current === 'initializing';
     const columnsChanged = prevColumnsSignatureRef.current !== columnsSignature;
     const shortNamesChanged = prevShortNamesRef.current !== useShortNames;
-    // Re-initialize if we previously initialized with empty data and now have data
-    const dataArrivedAfterEmptyInit =
-      phaseRef.current !== 'initializing' &&
-      !initializedWithDataRef.current &&
-      tableData.length > 0;
+    const replacementDataNeedsMeasurement =
+      lastMeasuredTableDataRef.current !== tableData && tableData.length > 0;
 
     if (
       !needsInitialization &&
       !columnsChanged &&
       !shortNamesChanged &&
-      !dataArrivedAfterEmptyInit
+      !replacementDataNeedsMeasurement
     ) {
       return;
     }
@@ -484,11 +454,9 @@ export function useInitialColumnMeasurement<T>({
 
       prevColumnsSignatureRef.current = columnsSignature;
       prevShortNamesRef.current = useShortNames;
+      lastMeasuredTableDataRef.current = tableData;
       if (phaseRef.current === 'initializing') {
         transitionPhase('idle');
-      }
-      if (tableData.length > 0) {
-        initializedWithDataRef.current = true;
       }
     });
 

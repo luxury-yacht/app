@@ -124,4 +124,24 @@ describe('useBrowseColumns', () => {
     namespaceHook.cleanup();
     crossNamespaceHook.cleanup();
   });
+
+  it('lets every Browse column size itself from the current page content', () => {
+    const hook = renderHook(() =>
+      useBrowseColumns({
+        showNamespaceColumn: true,
+        onRowClick: vi.fn(),
+        onNamespaceClick: vi.fn(),
+      })
+    );
+
+    expect(hook.get().map((column) => [column.key, column.autoWidth])).toEqual([
+      ['kind', true],
+      ['name', true],
+      ['api', true],
+      ['namespace', true],
+      ['age', true],
+    ]);
+
+    hook.cleanup();
+  });
 });

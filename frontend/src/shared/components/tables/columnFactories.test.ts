@@ -12,6 +12,7 @@ import {
   createResourceBarColumn,
   createResourceNameColumn,
   createTextColumn,
+  withAutoWidthColumns,
   withColumnSizing,
   withNamespaceColumn,
 } from '@shared/components/tables/columnFactories';
@@ -245,6 +246,7 @@ describe('columnFactories', () => {
       expect(React.isValidElement(element)).toBe(true);
       expect((element as React.ReactElement).type).toBe('button');
       const badge = element as React.ReactElement<{
+        className?: string;
         'data-kind-value': string;
         children: React.ReactNode;
         onClick?: (event: unknown) => void;
@@ -254,6 +256,7 @@ describe('columnFactories', () => {
       }>;
       expect(badge.props['data-kind-value']).toBe('Pod');
       expect(badge.props.children).toBe('P');
+      expect(badge.props.className?.split(' ')).not.toContain('gridtable-cell-button');
       expect(badge.props['data-gridtable-shortcut-optout']).toBe('true');
       expect(badge.props['data-gridtable-rowclick']).toBe('allow');
 
@@ -384,6 +387,22 @@ describe('columnFactories', () => {
         autoWidth: true,
       });
       expect(sized[1].width).toBeUndefined();
+    });
+
+    it('enables automatic sizing without replacing existing column defaults', () => {
+      const columns: GridColumnDefinition<RowSample>[] = [
+        { key: 'name', header: 'Name', width: 250, render: () => null },
+        { key: 'kind', header: 'Kind', width: 100, autoWidth: true, render: () => null },
+      ];
+
+      const sized = withAutoWidthColumns(columns);
+
+      expect(sized).toMatchObject([
+        { key: 'name', width: 250, autoWidth: true },
+        { key: 'kind', width: 100, autoWidth: true },
+      ]);
+      expect(columns[0].autoWidth).toBeUndefined();
+      expect(sized[1]).toBe(columns[1]);
     });
   });
 });

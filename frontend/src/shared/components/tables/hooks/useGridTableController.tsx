@@ -38,7 +38,7 @@ import {
   recordGridTableScrollFrameSample,
 } from '@shared/components/tables/performance/gridTablePerformanceStore';
 import type { MutableRefObject, ReactElement, ReactNode, RefObject } from 'react';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type GridTableProfilerOptions = NonNullable<Parameters<typeof useGridTableProfiler>[0]>;
 
@@ -262,6 +262,9 @@ export function useGridTableController<T>({
   const contextMenuActiveRef = useRef(false);
   const clusterKeyCheckRef = useRef(false);
   const keyExtractorRef = useRef(keyExtractor);
+  const resetAutoWidthColumnsRef = useRef<() => void>(() => undefined);
+  const [canResetAutoWidthColumns, setCanResetAutoWidthColumns] = useState(false);
+  const resetAutoWidthColumns = useCallback(() => resetAutoWidthColumnsRef.current(), []);
 
   const externalColumnWidths = useGridTableExternalWidths(controlledColumnWidths);
 
@@ -292,6 +295,8 @@ export function useGridTableController<T>({
     reorderColumn,
     canResetColumnOrder,
     resetColumnOrder,
+    canResetAutoWidthColumns,
+    resetAutoWidthColumns,
   });
 
   const {
@@ -419,6 +424,8 @@ export function useGridTableController<T>({
     getColumnMaxWidth,
     autoSizeColumn,
     markVisibleAutoColumnsDirty,
+    canResetAutoWidthColumns: layoutCanResetAutoWidthColumns,
+    resetAutoWidthColumns: resetLayoutAutoWidthColumns,
   } = useGridTableColumnLayout<T>({
     columns: orderedColumns,
     renderedColumns,
@@ -432,6 +439,10 @@ export function useGridTableController<T>({
     useShortNames,
     virtualization,
   });
+  resetAutoWidthColumnsRef.current = resetLayoutAutoWidthColumns;
+  useEffect(() => {
+    setCanResetAutoWidthColumns(layoutCanResetAutoWidthColumns);
+  }, [layoutCanResetAutoWidthColumns]);
 
   const { getCachedCellContent } = useGridTableCellCache<T>({
     renderedColumns,

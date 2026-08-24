@@ -1,4 +1,7 @@
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import type {
+  ColumnWidthState,
+  GridColumnDefinition,
+} from '@shared/components/tables/GridTable.types';
 import { parseWidthInputToNumber } from '@shared/components/tables/GridTable.utils';
 
 type WidthBounds<T> = {
@@ -22,6 +25,13 @@ export type InitialMeasuredWidthPlan = {
 
 const isFiniteColumnWidth = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
+
+export const isUserOwnedColumnWidth = <T>(
+  state: ColumnWidthState,
+  column: GridColumnDefinition<T>
+): boolean =>
+  state.source === 'user' ||
+  (!state.source && Boolean(column.autoWidth) && state.autoWidth === false);
 
 export const clampColumnWidth = <T>(
   column: GridColumnDefinition<T>,
@@ -63,12 +73,16 @@ export const buildInitialMeasuredColumnWidthPlan = <T>({
   for (const column of renderedColumns) {
     const externalWidth = externalColumnWidths?.[column.key];
     const configuredWidth = parseWidthInputToNumber(column.width);
-    const candidate =
-      isFiniteColumnWidth(externalWidth) || manuallyResizedColumnKeys.has(column.key)
-        ? (externalWidth ?? columnWidths[column.key])
-        : column.autoWidth
-          ? measuredAutoWidths[column.key]
-          : (configuredWidth ?? columnWidths[column.key]);
+    let candidate: number | undefined;
+    if (manuallyResizedColumnKeys.has(column.key)) {
+      candidate = externalWidth ?? columnWidths[column.key];
+    } else if (column.autoWidth) {
+      candidate = measuredAutoWidths[column.key];
+    } else {
+      candidate = isFiniteColumnWidth(externalWidth)
+        ? externalWidth
+        : (configuredWidth ?? columnWidths[column.key]);
+    }
     naturalWidths[column.key] = clampColumnWidth(
       column,
       isFiniteColumnWidth(candidate) ? candidate : measureColumnWidth(column),

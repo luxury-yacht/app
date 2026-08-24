@@ -2463,3 +2463,74 @@ it('defers external column width notifications until drag end', () => {
   requestAnimationFrameSpy.mockRestore();
   cancelAnimationFrameSpy.mockRestore();
 });
+
+it('returns auto-width columns to automatic sizing from the Columns reset action', async () => {
+  const columns: GridColumnDefinition<SimpleRow>[] = [
+    {
+      key: 'label',
+      header: 'Label',
+      autoWidth: true,
+      render: (row) => row.label,
+    },
+    {
+      key: 'name',
+      header: 'Name',
+      render: (row) => row.name ?? '',
+    },
+  ];
+  const onColumnWidthsChange = vi.fn();
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    columns,
+    filters: { enabled: true },
+    enableColumnVisibilityMenu: true,
+    enableColumnResizing: true,
+    virtualization: { enabled: false },
+    columnWidths: {
+      label: {
+        width: 300,
+        unit: 'px',
+        autoWidth: false,
+        source: 'user',
+        updatedAt: 1,
+      },
+      name: {
+        width: 220,
+        unit: 'px',
+        autoWidth: false,
+        source: 'user',
+        updatedAt: 1,
+      },
+    },
+    onColumnWidthsChange,
+  });
+  cleanupRoot = cleanup;
+  await flushAsync();
+
+  const columnsTrigger = container.querySelector<HTMLButtonElement>(
+    '[data-gridtable-filter-role="columns"] .dropdown-trigger'
+  );
+  expect(columnsTrigger).not.toBeNull();
+  await act(async () => {
+    requireValue(columnsTrigger, 'expected Columns trigger in GridTable.test.tsx').click();
+    await Promise.resolve();
+  });
+
+  const reset = document.body.querySelector<HTMLButtonElement>(
+    'button[aria-label="Reset columns"]'
+  );
+  expect(reset).not.toBeNull();
+  expect(reset?.disabled).toBe(false);
+  onColumnWidthsChange.mockClear();
+  await act(async () => {
+    requireValue(reset, 'expected Columns reset in GridTable.test.tsx').click();
+    await Promise.resolve();
+  });
+
+  expect(onColumnWidthsChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      label: expect.objectContaining({ autoWidth: true, source: 'auto' }),
+      name: expect.objectContaining({ autoWidth: false, source: 'user' }),
+    })
+  );
+});
