@@ -6,7 +6,7 @@
  */
 
 import ActiveFilterChips, { type ActiveFilterChip } from '@shared/components/ActiveFilterChips';
-import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import type { DropdownOption, DropdownProps } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import { DROPDOWN_BULK_ACTION_ICON_SIZE } from '@shared/components/dropdowns/Dropdown/Dropdown';
 import {
@@ -150,6 +150,178 @@ function queryFacetChipSingularType(facet: GridTableQueryFacetDefinition): strin
     return label.slice(0, -1);
   }
   return label;
+}
+
+function buildActiveFilterChips(
+  activeFilters: GridTableFilterState,
+  filterControls: ResolvedMultiselectFilterControl[],
+  onFiltersChange: GridTableFiltersBarProps['onFiltersChange']
+): ActiveFilterChip[] {
+  const chips: ActiveFilterChip[] = [];
+  const search = activeFilters.search.trim();
+  if (search) {
+    chips.push({
+      key: 'search',
+      label: `Text: ${search}`,
+      removeLabel: 'Clear text filter',
+      onRemove: () => onFiltersChange({ search: '' }),
+    });
+  }
+  for (const control of filterControls) {
+    const { selection } = control;
+    if (selection.mode === 'all') {
+      continue;
+    }
+    const count = selection.mode === 'some' ? selection.values.length : 0;
+    const label =
+      selection.mode === 'some' && selection.values.length === 1
+        ? `${control.singularLabel}: ${control.options.find((option) => option.value === selection.values[0])?.label ?? selection.values[0]}`
+        : `${control.label}: ${count}`;
+    chips.push({
+      key: control.key,
+      label,
+      removeLabel: `Clear ${control.clearLabel} filter`,
+      onRemove: control.onClear,
+    });
+  }
+  if (activeFilters.caseSensitive) {
+    chips.push({
+      key: 'case-sensitive',
+      label: 'Match case',
+      removeLabel: 'Clear Match case filter',
+      onRemove: () => onFiltersChange({ caseSensitive: false }),
+    });
+  }
+  if (activeFilters.includeMetadata) {
+    chips.push({
+      key: 'include-metadata',
+      label: 'Include metadata',
+      removeLabel: 'Clear Include metadata filter',
+      onRemove: () => onFiltersChange({ includeMetadata: false }),
+    });
+  }
+  return chips;
+}
+
+function renderResultCountChip(
+  resultCount: GridTableFiltersBarProps['resultCount'],
+  hasNarrowingFilters: boolean,
+  searchBehavior: InternalFilterOptions['searchBehavior']
+): React.ReactNode {
+  if (!resultCount || !hasNarrowingFilters) {
+    return undefined;
+  }
+  return (
+    <span className="active-filter-chips__summary" data-gridtable-filter-role="result-count">
+      {resultCount.capped ? (
+        <Tooltip
+          content={
+            <>
+              {resultCount.totalIsExact === false && (
+                <p className="gridtable-filter-result-tooltip-paragraph">
+                  The total count is approximate because the backend stopped counting after the
+                  configured exact-count budget.
+                </p>
+              )}
+              {!!resultCount.partialDataLabel && (
+                <p className="gridtable-filter-result-tooltip-paragraph">
+                  {resultCount.partialDataLabel}
+                </p>
+              )}
+              <p className="gridtable-filter-result-tooltip-paragraph">
+                {searchBehavior === 'query'
+                  ? 'This table is showing the current backend query page.'
+                  : 'This table is showing the current local row window.'}
+              </p>
+              {searchBehavior === 'query' && (
+                <p className="gridtable-filter-result-tooltip-paragraph">
+                  Use page controls to inspect additional matching rows.
+                </p>
+              )}
+            </>
+          }
+        >
+          <span>{formatResultCountLabel(resultCount)}</span>
+        </Tooltip>
+      ) : (
+        formatResultCountLabel(resultCount)
+      )}
+    </span>
+  );
+}
+
+interface ColumnsDropdownOptions {
+  show: boolean;
+  id: string;
+  columnOptions?: DropdownOption[];
+  columnValue?: string[];
+  onColumnsChange?: GridTableFiltersBarProps['onColumnsChange'];
+  renderColumnOption: NonNullable<DropdownProps['renderOption']>;
+  renderColumnOrderActions: DropdownProps['renderOptionActions'];
+  getColumnRowProps: DropdownProps['getOptionRowProps'];
+  onResetColumns?: GridTableFiltersBarProps['onResetColumns'];
+  canResetColumns: boolean;
+  renderColumnsValue: NonNullable<GridTableFiltersBarProps['renderColumnsValue']>;
+}
+
+function renderColumnsDropdown({
+  show,
+  id,
+  columnOptions,
+  columnValue,
+  onColumnsChange,
+  renderColumnOption,
+  renderColumnOrderActions,
+  getColumnRowProps,
+  onResetColumns,
+  canResetColumns,
+  renderColumnsValue,
+}: ColumnsDropdownOptions): React.ReactNode {
+  if (!show || !columnOptions || !columnValue || !onColumnsChange) {
+    return null;
+  }
+  return (
+    <div className="gridtable-filter-group" data-gridtable-filter-role="columns">
+      <Dropdown
+        id={id}
+        name="gridtable-filter-columns"
+        multiple
+        showBulkActions
+        size="compact"
+        placeholder="Columns"
+        value={columnValue}
+        options={columnOptions}
+        disabled={!columnOptions.length}
+        onChange={onColumnsChange}
+        dropdownClassName="dropdown-filter-menu dropdown-columns-menu"
+        renderOption={renderColumnOption}
+        renderOptionActions={renderColumnOrderActions}
+        getOptionRowProps={getColumnRowProps}
+        additionalBulkActions={
+          onResetColumns ? (
+            <button
+              type="button"
+              className="dropdown-bulk-action dropdown-bulk-action--labeled icon-bar-button"
+              disabled={!canResetColumns}
+              title="Restore the default column order, show every column, and reset automatic widths"
+              aria-label="Reset columns"
+              onClick={(event) => {
+                event.stopPropagation();
+                onResetColumns();
+              }}
+            >
+              <ResetFiltersIcon
+                width={DROPDOWN_BULK_ACTION_ICON_SIZE}
+                height={DROPDOWN_BULK_ACTION_ICON_SIZE}
+              />
+              <span className="dropdown-bulk-action-label">Reset</span>
+            </button>
+          ) : null
+        }
+        renderValue={renderColumnsValue}
+      />
+    </div>
+  );
 }
 
 const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
@@ -423,49 +595,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
     ...controlsAt('after-clusters').map((control) => ({ type: 'control' as const, control })),
   ];
 
-  const activeFilterChips: ActiveFilterChip[] = [];
-  const search = activeFilters.search.trim();
-  if (search) {
-    activeFilterChips.push({
-      key: 'search',
-      label: `Text: ${search}`,
-      removeLabel: 'Clear text filter',
-      onRemove: () => onFiltersChange({ search: '' }),
-    });
-  }
-  for (const control of filterControls) {
-    const { selection } = control;
-    if (selection.mode === 'all') {
-      continue;
-    }
-    const count = selection.mode === 'some' ? selection.values.length : 0;
-    const label =
-      selection.mode === 'some' && selection.values.length === 1
-        ? `${control.singularLabel}: ${control.options.find((option) => option.value === selection.values[0])?.label ?? selection.values[0]}`
-        : `${control.label}: ${count}`;
-    activeFilterChips.push({
-      key: control.key,
-      label,
-      removeLabel: `Clear ${control.clearLabel} filter`,
-      onRemove: control.onClear,
-    });
-  }
-  if (activeFilters.caseSensitive) {
-    activeFilterChips.push({
-      key: 'case-sensitive',
-      label: 'Match case',
-      removeLabel: 'Clear Match case filter',
-      onRemove: () => onFiltersChange({ caseSensitive: false }),
-    });
-  }
-  if (activeFilters.includeMetadata) {
-    activeFilterChips.push({
-      key: 'include-metadata',
-      label: 'Include metadata',
-      removeLabel: 'Clear Include metadata filter',
-      onRemove: () => onFiltersChange({ includeMetadata: false }),
-    });
-  }
+  const activeFilterChips = buildActiveFilterChips(activeFilters, filterControls, onFiltersChange);
 
   const renderFilterControl = (control: ResolvedMultiselectFilterControl) => (
     <div
@@ -543,44 +673,11 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
     postActions,
   ]);
 
-  const resultCountChip =
-    resultCount && hasNarrowingFilters ? (
-      <span className="active-filter-chips__summary" data-gridtable-filter-role="result-count">
-        {resultCount.capped ? (
-          <Tooltip
-            content={
-              <>
-                {resultCount.totalIsExact === false && (
-                  <p className="gridtable-filter-result-tooltip-paragraph">
-                    The total count is approximate because the backend stopped counting after the
-                    configured exact-count budget.
-                  </p>
-                )}
-                {!!resultCount.partialDataLabel && (
-                  <p className="gridtable-filter-result-tooltip-paragraph">
-                    {resultCount.partialDataLabel}
-                  </p>
-                )}
-                <p className="gridtable-filter-result-tooltip-paragraph">
-                  {resolvedFilterOptions.searchBehavior === 'query'
-                    ? 'This table is showing the current backend query page.'
-                    : 'This table is showing the current local row window.'}
-                </p>
-                {resolvedFilterOptions.searchBehavior === 'query' && (
-                  <p className="gridtable-filter-result-tooltip-paragraph">
-                    Use page controls to inspect additional matching rows.
-                  </p>
-                )}
-              </>
-            }
-          >
-            <span>{formatResultCountLabel(resultCount)}</span>
-          </Tooltip>
-        ) : (
-          formatResultCountLabel(resultCount)
-        )}
-      </span>
-    ) : undefined;
+  const resultCountChip = renderResultCountChip(
+    resultCount,
+    hasNarrowingFilters,
+    resolvedFilterOptions.searchBehavior
+  );
 
   return (
     <div className="gridtable-filter-container">
@@ -629,48 +726,19 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
           </div>
         </div>
         <div className="gridtable-filter-cluster" data-gridtable-filter-cluster="tertiary">
-          {!!(showColumnsDropdown && columnOptions && columnValue && onColumnsChange) && (
-            <div className="gridtable-filter-group" data-gridtable-filter-role="columns">
-              <Dropdown
-                id={columnsDropdownId ?? `${searchInputId}-columns`}
-                name="gridtable-filter-columns"
-                multiple
-                showBulkActions
-                size="compact"
-                placeholder="Columns"
-                value={columnValue}
-                options={columnOptions}
-                disabled={!columnOptions.length}
-                onChange={onColumnsChange}
-                dropdownClassName="dropdown-filter-menu dropdown-columns-menu"
-                renderOption={renderColumnOption}
-                renderOptionActions={renderColumnOrderActions}
-                getOptionRowProps={getColumnRowProps}
-                additionalBulkActions={
-                  onResetColumns ? (
-                    <button
-                      type="button"
-                      className="dropdown-bulk-action dropdown-bulk-action--labeled icon-bar-button"
-                      disabled={!canResetColumns}
-                      title="Restore the default column order, show every column, and reset automatic widths"
-                      aria-label="Reset columns"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onResetColumns();
-                      }}
-                    >
-                      <ResetFiltersIcon
-                        width={DROPDOWN_BULK_ACTION_ICON_SIZE}
-                        height={DROPDOWN_BULK_ACTION_ICON_SIZE}
-                      />
-                      <span className="dropdown-bulk-action-label">Reset</span>
-                    </button>
-                  ) : null
-                }
-                renderValue={renderColumnsValue}
-              />
-            </div>
-          )}
+          {renderColumnsDropdown({
+            show: showColumnsDropdown,
+            id: columnsDropdownId ?? `${searchInputId}-columns`,
+            columnOptions,
+            columnValue,
+            onColumnsChange,
+            renderColumnOption,
+            renderColumnOrderActions,
+            getColumnRowProps,
+            onResetColumns,
+            canResetColumns,
+            renderColumnsValue,
+          })}
         </div>
       </div>
       <ActiveFilterChips

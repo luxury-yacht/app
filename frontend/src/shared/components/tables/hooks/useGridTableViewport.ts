@@ -55,7 +55,7 @@ export function useGridTableViewport({
       return;
     }
     const rawScrollbarWidth = wrapper.offsetWidth - wrapper.clientWidth;
-    const nextScrollbarWidth = rawScrollbarWidth > 0 ? rawScrollbarWidth : 0;
+    const nextScrollbarWidth = Math.max(rawScrollbarWidth, 0);
     const nextWidth = wrapper.clientWidth;
     const nextHeight = wrapper.clientHeight;
     setViewport((previous) => {
