@@ -44,7 +44,7 @@ const renderHook = <T,>(hook: () => T) => {
 };
 
 describe('useGridTableRowRenderer', () => {
-  const baseColumns: RowRendererOptions['columnRenderModelsWithOffsets'] = [
+  const baseColumns: RowRendererOptions['columnRenderModels'] = [
     {
       column: {
         key: 'name',
@@ -87,7 +87,7 @@ describe('useGridTableRowRenderer', () => {
         handleRowClick,
         handleRowMouseEnter: vi.fn(),
         handleRowMouseLeave: vi.fn(),
-        columnRenderModelsWithOffsets: baseColumns,
+        columnRenderModels: baseColumns,
         columnVirtualizationConfig: {
           enabled: true,
           overscanColumns: 0,
@@ -142,7 +142,7 @@ describe('useGridTableRowRenderer', () => {
         handleRowClick,
         handleRowMouseEnter: vi.fn(),
         handleRowMouseLeave: vi.fn(),
-        columnRenderModelsWithOffsets: baseColumns,
+        columnRenderModels: baseColumns,
         columnVirtualizationConfig: {
           enabled: false,
           overscanColumns: 0,
@@ -186,7 +186,7 @@ describe('useGridTableRowRenderer', () => {
   });
 
   it('supports right-aligned data independently from header alignment', () => {
-    const rightAlignedColumns: RowRendererOptions['columnRenderModelsWithOffsets'] = [
+    const rightAlignedColumns: RowRendererOptions['columnRenderModels'] = [
       {
         ...baseColumns[0],
         column: {
@@ -204,7 +204,7 @@ describe('useGridTableRowRenderer', () => {
         handleRowClick: vi.fn(),
         handleRowMouseEnter: vi.fn(),
         handleRowMouseLeave: vi.fn(),
-        columnRenderModelsWithOffsets: rightAlignedColumns,
+        columnRenderModels: rightAlignedColumns,
         columnVirtualizationConfig: {
           enabled: false,
           overscanColumns: 0,
@@ -239,7 +239,7 @@ describe('useGridTableRowRenderer', () => {
         handleRowClick: vi.fn(),
         handleRowMouseEnter: vi.fn(),
         handleRowMouseLeave: vi.fn(),
-        columnRenderModelsWithOffsets: baseColumns,
+        columnRenderModels: baseColumns,
         columnVirtualizationConfig: {
           enabled: false,
           overscanColumns: 0,

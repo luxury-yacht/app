@@ -11,12 +11,12 @@
  */
 
 import type { GridTableVirtualizationOptions } from '@shared/components/tables/GridTable.types';
+import { useGridTableViewport } from '@shared/components/tables/hooks/useGridTableViewport';
 import {
   type RefObject,
   useCallback,
   useEffect,
   useEffectEvent,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -59,6 +59,8 @@ export interface UseGridTableVirtualizationResult<T> {
   /** Returns the top offset of a row by its absolute index (uses prefix-sum positions). */
   getRowTop: (index: number) => number;
   scrollbarWidth: number;
+  viewportWidth: number;
+  viewportHeight: number;
 }
 
 /**
@@ -134,12 +136,7 @@ export function useGridTableVirtualization<T>({
   // the controller's page-size approximation.
   const virtualRowHeight = virtualizationConfig.estimateRowHeight;
 
-  const [virtualViewportHeight, setVirtualViewportHeight] = useState(0);
-  const [virtualScrollTop, setVirtualScrollTop] = useState(0);
   const lastFilterSignatureRef = useRef(filterSignature);
-  const [scrollbarWidth, setScrollbarWidth] = useState(0);
-  const scrollRafRef = useRef<number | null>(null);
-  const pendingScrollTopRef = useRef<number | null>(null);
 
   // Per-row height cache. Populated by measureRowRef for every rendered row.
   const rowHeightCacheRef = useRef<Map<string, number>>(new Map());
@@ -168,22 +165,6 @@ export function useGridTableVirtualization<T>({
     []
   );
 
-  const updateScrollbarWidth = useCallback(() => {
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      return;
-    }
-    const raw = wrapper.offsetWidth - wrapper.clientWidth;
-    const width = raw > 0 ? raw : 0;
-    setScrollbarWidth((prev) => (Math.abs(prev - width) < 0.5 ? prev : width));
-  }, [wrapperRef]);
-
-  useLayoutEffect(() => {
-    void data.length;
-    void hideHeader;
-    updateScrollbarWidth();
-  }, [updateScrollbarWidth, data.length, hideHeader]);
-
   const shouldVirtualize = useMemo(() => {
     if (!virtualizationConfig.enabled) {
       return false;
@@ -206,6 +187,25 @@ export function useGridTableVirtualization<T>({
     warnDevOnce,
   ]);
 
+  const {
+    width: viewportWidth,
+    height: viewportHeight,
+    scrollbarWidth,
+    scrollTop: virtualScrollTop,
+    resetScrollTop,
+  } = useGridTableViewport({
+    wrapperRef,
+    dataLength: data.length,
+    hideHeader,
+    shouldVirtualize,
+    scheduleHeaderSync,
+    updateHoverForElement,
+    hoverRowRef,
+    updateColumnWindowRange,
+    startFrameSampler,
+    stopFrameSampler,
+  });
+
   // --- Prefix-sum positions array ---
   // positions[i] = top offset of row i. positions[data.length] = total height.
   // Unmeasured rows use estimateRowHeight as their height.
@@ -224,113 +224,6 @@ export function useGridTableVirtualization<T>({
     // heightCacheVersion is included so positions recompute after measurements.
   }, [data, keyExtractor, virtualizationConfig.estimateRowHeight, heightCacheVersion]);
 
-  // --- Viewport and scroll tracking ---
-
-  useEffect(() => {
-    void data.length;
-    if (!shouldVirtualize) {
-      setVirtualViewportHeight(0);
-      setVirtualScrollTop(0);
-      return;
-    }
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      return;
-    }
-
-    const updateViewport = () => {
-      setVirtualViewportHeight(wrapper.clientHeight);
-      updateScrollbarWidth();
-      if (hoverRowRef.current) {
-        updateHoverForElement(hoverRowRef.current);
-      }
-    };
-
-    updateViewport();
-
-    let resizeObserver: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(() => updateViewport());
-      resizeObserver.observe(wrapper);
-    }
-
-    return () => {
-      resizeObserver?.disconnect();
-    };
-  }, [
-    shouldVirtualize,
-    wrapperRef,
-    updateScrollbarWidth,
-    hoverRowRef,
-    updateHoverForElement,
-    data.length,
-  ]);
-
-  useEffect(() => {
-    void data.length;
-    if (!shouldVirtualize) {
-      return;
-    }
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      return;
-    }
-
-    // Flush pending scroll updates - called via rAF to coalesce rapid scroll events
-    const flushScrollUpdates = () => {
-      scrollRafRef.current = null;
-      const scrollTop = pendingScrollTopRef.current;
-      if (scrollTop === null) {
-        return;
-      }
-      pendingScrollTopRef.current = null;
-      setVirtualScrollTop(scrollTop);
-      scheduleHeaderSync();
-      if (hoverRowRef.current) {
-        updateHoverForElement(hoverRowRef.current);
-      }
-      updateColumnWindowRange();
-    };
-
-    const handleScroll = () => {
-      // Capture scroll position immediately
-      pendingScrollTopRef.current = wrapper.scrollTop;
-      startFrameSampler();
-
-      // Coalesce updates via rAF - only one state update per frame
-      if (scrollRafRef.current === null) {
-        scrollRafRef.current = requestAnimationFrame(flushScrollUpdates);
-      }
-    };
-
-    wrapper.addEventListener('scroll', handleScroll, { passive: true });
-
-    // Initial sync without rAF
-    setVirtualScrollTop(wrapper.scrollTop);
-    scheduleHeaderSync();
-    updateColumnWindowRange();
-
-    return () => {
-      wrapper.removeEventListener('scroll', handleScroll);
-      if (scrollRafRef.current !== null) {
-        cancelAnimationFrame(scrollRafRef.current);
-        scrollRafRef.current = null;
-      }
-      pendingScrollTopRef.current = null;
-      stopFrameSampler('manual');
-    };
-  }, [
-    shouldVirtualize,
-    wrapperRef,
-    scheduleHeaderSync,
-    updateHoverForElement,
-    hoverRowRef,
-    updateColumnWindowRange,
-    startFrameSampler,
-    stopFrameSampler,
-    data.length,
-  ]);
-
   // Reset scroll position when filters change
   useEffect(() => {
     if (!filteringEnabled) {
@@ -345,7 +238,7 @@ export function useGridTableVirtualization<T>({
     if (wrapper) {
       wrapper.scrollTo({ top: 0 });
     }
-    setVirtualScrollTop(0);
+    resetScrollTop();
     let rafHandle: number | undefined;
     if (shouldVirtualize) {
       if (typeof requestAnimationFrame === 'function') {
@@ -359,7 +252,14 @@ export function useGridTableVirtualization<T>({
         cancelAnimationFrame(rafHandle);
       }
     };
-  }, [filteringEnabled, filterSignature, shouldVirtualize, wrapperRef, updateColumnWindowRange]);
+  }, [
+    filteringEnabled,
+    filterSignature,
+    resetScrollTop,
+    shouldVirtualize,
+    wrapperRef,
+    updateColumnWindowRange,
+  ]);
 
   const cleanUpVirtualization = useEffectEvent(() => {
     return () => {
@@ -385,7 +285,7 @@ export function useGridTableVirtualization<T>({
 
     // Count how many rows fit in the viewport by walking from firstVisible.
     let visibleCount = 0;
-    const viewportBottom = virtualScrollTop + virtualViewportHeight;
+    const viewportBottom = virtualScrollTop + viewportHeight;
     for (let i = firstVisible; i < totalCount; i++) {
       if (rowPositions[i] >= viewportBottom) {
         break;
@@ -400,7 +300,7 @@ export function useGridTableVirtualization<T>({
     shouldVirtualize,
     rowPositions,
     virtualScrollTop,
-    virtualViewportHeight,
+    viewportHeight,
     virtualizationConfig.overscan,
   ]);
 
@@ -428,37 +328,6 @@ export function useGridTableVirtualization<T>({
     }
     updateHoverForElement(current);
   }, [updateHoverForElement, hoverRowRef, virtualRange.start, virtualRange.end, data.length]);
-
-  // Handle resize for non-virtualized mode
-  useEffect(() => {
-    if (shouldVirtualize) {
-      return;
-    }
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      return;
-    }
-
-    const handleResize = () => {
-      updateScrollbarWidth();
-      if (hoverRowRef.current) {
-        updateHoverForElement(hoverRowRef.current);
-      }
-    };
-
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(handleResize);
-      observer.observe(wrapper);
-      return () => observer.disconnect();
-    }
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-    }
-
-    return undefined;
-  }, [shouldVirtualize, wrapperRef, updateScrollbarWidth, updateHoverForElement, hoverRowRef]);
 
   // --- Derived values from the positions array ---
 
@@ -495,5 +364,7 @@ export function useGridTableVirtualization<T>({
     measureRowRef,
     getRowTop,
     scrollbarWidth,
+    viewportWidth,
+    viewportHeight,
   };
 }

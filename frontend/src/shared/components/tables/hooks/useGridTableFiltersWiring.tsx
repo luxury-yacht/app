@@ -1,8 +1,7 @@
 /**
  * frontend/src/shared/components/tables/hooks/useGridTableFiltersWiring.tsx
  *
- * React hook for useGridTableFiltersWiring.
- * Encapsulates state and side effects for the shared components.
+ * Filter state/data and presentation hooks for GridTable.
  */
 
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
@@ -27,10 +26,6 @@ import { useGridTableCsvFileExportAction } from '@shared/components/tables/hooks
 import { useGridTableFilters } from '@shared/components/tables/useGridTableFilters';
 import type { ComponentProps, ReactNode } from 'react';
 import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
-
-// Bundles all filter-bar wiring for GridTable: resolves filter state, builds
-// dropdown IDs and renderers, manages focus refs, and returns a ready-to-render
-// filter bar node so the table stays agnostic of filter internals.
 
 type ColumnsDropdownConfig = {
   options: DropdownOption[];
@@ -58,11 +53,17 @@ const isActionOption = (option: DropdownOption): boolean => {
   );
 };
 
-type UseGridTableFiltersWiringOptions<T> = {
+type UseGridTableFilterModelOptions<T> = {
+  data: T[];
+  filters: GridTableFilterConfig<T> | undefined;
+  diagnosticsLabel?: string;
+};
+
+type UseGridTableFiltersPresentationOptions<T> = {
+  filterModel: ReturnType<typeof useGridTableFilterModel<T>>;
   data: T[];
   totalDataCount?: number;
   filters: GridTableFilterConfig<T> | undefined;
-  diagnosticsLabel?: string;
   columnsDropdown?: ColumnsDropdownConfig;
   searchShortcut?: SearchShortcutConfig;
   exportColumns?: GridColumnDefinition<T>[];
@@ -79,25 +80,11 @@ type UseGridTableFiltersWiringOptions<T> = {
   postActions?: IconBarItem[];
 };
 
-// This hook gathers everything the GridTable needs to wire up the filter bar.
-// It hides the details of: enabling/disabling filters, deriving the filtered data,
-// managing focusable elements for keyboard navigation, and building the props for
-// the shared GridTableFiltersBar component.
-export function useGridTableFiltersWiring<T>({
+export function useGridTableFilterModel<T>({
   data,
-  totalDataCount,
   filters,
   diagnosticsLabel,
-  columnsDropdown,
-  searchShortcut,
-  exportColumns,
-  getTextContent,
-  fetchAllRows,
-  exportFilename,
-  hasAllLocalMatches,
-  preActions,
-  postActions,
-}: UseGridTableFiltersWiringOptions<T>) {
+}: UseGridTableFilterModelOptions<T>) {
   const filtersContainerRef = useRef<HTMLDivElement | null>(null);
   const filterFocusIndexRef = useRef<number | null>(null);
 
@@ -129,6 +116,56 @@ export function useGridTableFiltersWiring<T>({
       filterFocusIndexRef.current = null;
     }
   }, [filteringEnabled]);
+
+  return {
+    filteringEnabled,
+    tableData,
+    activeFilters,
+    filterSignature,
+    resolvedFilterOptions,
+    filtersContainerRef,
+    filterFocusIndexRef,
+    handleFilterSearchChange,
+    handleFilterKindsChange,
+    handleFilterNamespacesChange,
+    handleFilterClustersChange,
+    handleFilterQueryFacetChange,
+    handleFiltersChange,
+    handleFilterReset,
+    toggleCaseSensitive,
+  };
+}
+
+export function useGridTableFiltersPresentation<T>({
+  filterModel,
+  data,
+  totalDataCount,
+  filters,
+  columnsDropdown,
+  searchShortcut,
+  exportColumns,
+  getTextContent,
+  fetchAllRows,
+  exportFilename,
+  hasAllLocalMatches,
+  preActions,
+  postActions,
+}: UseGridTableFiltersPresentationOptions<T>): ReactNode {
+  const {
+    filteringEnabled,
+    tableData,
+    activeFilters,
+    resolvedFilterOptions,
+    filtersContainerRef,
+    handleFilterSearchChange,
+    handleFilterKindsChange,
+    handleFilterNamespacesChange,
+    handleFilterClustersChange,
+    handleFilterQueryFacetChange,
+    handleFiltersChange,
+    handleFilterReset,
+    toggleCaseSensitive,
+  } = filterModel;
 
   const handleKindDropdownChange = useCallback(
     (value: string | string[]) => {
@@ -382,21 +419,9 @@ export function useGridTableFiltersWiring<T>({
       resolvedPostActions,
       resolvedCustomActions,
       resultCount,
+      filtersContainerRef,
     ]
   );
 
-  const filtersNode = filteringEnabled ? <GridTableFiltersBar {...filtersBarProps} /> : null;
-
-  return {
-    filteringEnabled,
-    tableData,
-    activeFilters,
-    filterSignature,
-    resolvedFilterOptions,
-    filtersContainerRef,
-    filterFocusIndexRef,
-    filtersBarProps,
-    filtersNode,
-    handleFilterReset,
-  };
+  return filteringEnabled ? <GridTableFiltersBar {...filtersBarProps} /> : null;
 }

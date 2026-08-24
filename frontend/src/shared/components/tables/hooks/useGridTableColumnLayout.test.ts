@@ -31,8 +31,7 @@ describe('getVisibleAutoColumnKeys', () => {
   it('returns every auto-width column when column virtualization is disabled', () => {
     expect(
       getVisibleAutoColumnKeys({
-        renderedColumns: columns,
-        columnRenderModelsWithOffsets: models,
+        columnRenderModels: models,
         columnVirtualizationConfig: { enabled: false, stickyStart: 1, stickyEnd: 1 },
         columnWindowRange: { startIndex: 1, endIndex: 1 },
       })
@@ -42,8 +41,7 @@ describe('getVisibleAutoColumnKeys', () => {
   it('includes sticky and visible auto-width columns when virtualization is enabled', () => {
     expect(
       getVisibleAutoColumnKeys({
-        renderedColumns: columns,
-        columnRenderModelsWithOffsets: models,
+        columnRenderModels: models,
         columnVirtualizationConfig: { enabled: true, stickyStart: 1, stickyEnd: 1 },
         columnWindowRange: { startIndex: 1, endIndex: 2 },
       })
@@ -53,8 +51,7 @@ describe('getVisibleAutoColumnKeys', () => {
   it('omits non-sticky auto-width columns outside the visible window', () => {
     expect(
       getVisibleAutoColumnKeys({
-        renderedColumns: columns,
-        columnRenderModelsWithOffsets: models,
+        columnRenderModels: models,
         columnVirtualizationConfig: { enabled: true, stickyStart: 1, stickyEnd: 0 },
         columnWindowRange: { startIndex: 1, endIndex: 1 },
       })

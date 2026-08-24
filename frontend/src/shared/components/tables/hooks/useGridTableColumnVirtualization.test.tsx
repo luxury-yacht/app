@@ -95,10 +95,8 @@ describe('useGridTableColumnVirtualization', () => {
     const result = getResult();
     expect(result?.columnVirtualizationConfig.enabled).toBe(false);
     expect(result?.columnWindowRange).toEqual({ startIndex: 0, endIndex: 2 });
-    expect(result?.columnRenderModelsWithOffsets.map((model) => model.width)).toEqual([
-      120, 140, 160,
-    ]);
-    expect(result?.columnRenderModelsWithOffsets[1]?.start).toBe(120);
+    expect(result?.columnRenderModels.map((model) => model.width)).toEqual([120, 140, 160]);
+    expect(result?.columnRenderModels[1]?.start).toBe(120);
   });
 
   it('computes a window range based on scroll position when virtualization is enabled', async () => {
@@ -148,8 +146,6 @@ describe('useGridTableColumnVirtualization', () => {
 
     expect(result?.columnWindowRange.startIndex).toBe(0);
     expect(result?.columnWindowRange.endIndex).toBe(3);
-    expect(result?.columnRenderModelsWithOffsets.map((model) => model.start)).toEqual([
-      0, 100, 220, 310,
-    ]);
+    expect(result?.columnRenderModels.map((model) => model.start)).toEqual([0, 100, 220, 310]);
   });
 });

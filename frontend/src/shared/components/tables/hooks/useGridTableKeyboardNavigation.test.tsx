@@ -80,6 +80,7 @@ const KeyboardNavigationHarness: FC<HarnessProps> = ({
     updateHoverForElement,
     shouldVirtualize,
     virtualRowHeight,
+    viewportHeight: wrapperHeight,
     getRowTop,
   });
 

@@ -16,6 +16,7 @@ interface UseGridTableKeyboardNavigationOptions {
   updateHoverForElement: (element: HTMLDivElement | null) => void;
   shouldVirtualize: boolean;
   virtualRowHeight: number;
+  viewportHeight: number;
   getRowTop: (index: number) => number;
 }
 
@@ -36,6 +37,7 @@ export function useGridTableKeyboardNavigation({
   updateHoverForElement,
   shouldVirtualize,
   virtualRowHeight,
+  viewportHeight,
   getRowTop,
 }: UseGridTableKeyboardNavigationOptions): GridTableKeyboardNavigation {
   const getPageSizeRef = useRef(1);
@@ -87,7 +89,7 @@ export function useGridTableKeyboardNavigation({
     }
 
     const computePageSize = () => {
-      const height = wrapper.clientHeight || 1;
+      const height = viewportHeight || wrapper.clientHeight || 1;
       if (height <= 0) {
         getPageSizeRef.current = 1;
         return;
@@ -104,17 +106,7 @@ export function useGridTableKeyboardNavigation({
     };
 
     computePageSize();
-
-    const observer =
-      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(computePageSize) : null;
-    if (observer) {
-      observer.observe(wrapper);
-    }
-
-    return () => {
-      observer?.disconnect();
-    };
-  }, [shouldVirtualize, virtualRowHeight, wrapperRef, tableDataLength]);
+  }, [shouldVirtualize, virtualRowHeight, viewportHeight, wrapperRef, tableDataLength]);
 
   useEffect(() => {
     if (!shortcutsActive || !focusedRowKey) {

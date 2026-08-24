@@ -8,42 +8,42 @@
 import { AriaGridColumnHeader, AriaGridRow } from '@shared/components/tables/AriaGridPrimitives';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
+import {
+  getColumnMaxWidth,
+  getColumnMinWidth,
+} from '@shared/components/tables/hooks/gridTableColumnWidthMath';
+import type { ColumnRenderModel } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
 import type React from 'react';
 
 export interface UseGridTableHeaderRowParams<T> {
-  renderedColumns: GridColumnDefinition<T>[];
+  columnRenderModels: Array<ColumnRenderModel<T>>;
   enableColumnResizing: boolean;
   handleHeaderContextMenu?: (event: React.MouseEvent, columnKey: string) => void;
-  columnWidths: Record<string, number>;
   handleHeaderClick: (column: GridColumnDefinition<T>) => void;
   renderSortIndicator: (columnKey: string) => React.ReactNode;
   handleResizeStart: (event: React.MouseEvent, leftKey: string, rightKey: string) => void;
   handleResizeKeyDown: (event: React.KeyboardEvent, columnKey: string) => void;
-  getColumnMinWidth: (column: GridColumnDefinition<T>) => number;
-  getColumnMaxWidth: (column: GridColumnDefinition<T>) => number;
   autoSizeColumn: (columnKey: string) => void;
   sortConfig?: { key: string; direction: 'asc' | 'desc' | null } | null;
 }
 
 export function useGridTableHeaderRow<T>({
-  renderedColumns,
+  columnRenderModels,
   enableColumnResizing,
   handleHeaderContextMenu,
-  columnWidths,
   handleHeaderClick,
   renderSortIndicator,
   handleResizeStart,
   handleResizeKeyDown,
-  getColumnMinWidth,
-  getColumnMaxWidth,
   autoSizeColumn,
   sortConfig,
 }: UseGridTableHeaderRowParams<T>): React.ReactNode {
   return (
     <AriaGridRow className="gridtable-header">
-      {renderedColumns.map((column, index) => {
+      {columnRenderModels.map((model, index) => {
+        const { column } = model;
         const isSortable = isSortableColumn(column);
-        const nextColumn = renderedColumns[index + 1];
+        const nextColumn = columnRenderModels[index + 1]?.column;
         const showResizeHandle =
           enableColumnResizing &&
           !!nextColumn &&
@@ -72,12 +72,7 @@ export function useGridTableHeaderRow<T>({
             onContextMenu={
               handleHeaderContextMenu ? (e) => handleHeaderContextMenu(e, column.key) : undefined
             }
-            style={{
-              width: `${columnWidths[column.key]}px`,
-              minWidth: `${columnWidths[column.key]}px`,
-              maxWidth: `${columnWidths[column.key]}px`,
-              flexShrink: 0,
-            }}
+            style={model.cellStyle}
           >
             <span className="header-content">
               {isSortable ? (
@@ -109,7 +104,7 @@ export function useGridTableHeaderRow<T>({
                 aria-orientation="vertical"
                 aria-valuemin={getColumnMinWidth(column)}
                 aria-valuemax={getColumnMaxWidth(column)}
-                aria-valuenow={columnWidths[column.key]}
+                aria-valuenow={model.width}
                 tabIndex={0}
               />
             )}

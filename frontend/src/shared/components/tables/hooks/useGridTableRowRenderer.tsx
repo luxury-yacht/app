@@ -8,6 +8,7 @@
 import { AriaGridCell, AriaGridRow } from '@shared/components/tables/AriaGridPrimitives';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { getStableRowId } from '@shared/components/tables/GridTable.utils';
+import type { ColumnRenderModel } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
 import type { MeasureRowRefFn } from '@shared/components/tables/hooks/useGridTableVirtualization';
 import type React from 'react';
 import { useCallback } from 'react';
@@ -32,15 +33,7 @@ export interface UseGridTableRowRendererParams<T> {
   handleRowClick: (item: T, index: number, event: React.MouseEvent) => void;
   handleRowMouseEnter: (element: HTMLDivElement) => void;
   handleRowMouseLeave: (element?: HTMLDivElement | null) => void;
-  columnRenderModelsWithOffsets: Array<{
-    column: GridColumnDefinition<T>;
-    key: string;
-    className: string;
-    cellStyle: React.CSSProperties;
-    start: number;
-    end: number;
-    width: number;
-  }>;
+  columnRenderModels: Array<ColumnRenderModel<T>>;
   columnVirtualizationConfig: {
     enabled: boolean;
     overscanColumns: number;
@@ -72,7 +65,7 @@ export function useGridTableRowRenderer<T>({
   handleRowClick,
   handleRowMouseEnter,
   handleRowMouseLeave,
-  columnRenderModelsWithOffsets,
+  columnRenderModels,
   columnVirtualizationConfig,
   columnWindowRange,
   handleContextMenu,
@@ -135,9 +128,9 @@ export function useGridTableRowRenderer<T>({
           data-row-selected={isSelected ? 'true' : undefined}
           data-row-focused={isFocused ? 'true' : undefined}
         >
-          {columnRenderModelsWithOffsets.map((model, columnIndex) => {
+          {columnRenderModels.map((model, columnIndex) => {
             if (columnVirtualizationConfig.enabled) {
-              const total = columnRenderModelsWithOffsets.length;
+              const total = columnRenderModels.length;
               const stickyStart = Math.min(columnVirtualizationConfig.stickyStart, total);
               const stickyEnd = Math.min(columnVirtualizationConfig.stickyEnd, total - stickyStart);
               const isSticky = columnIndex < stickyStart || columnIndex >= total - stickyEnd;
@@ -182,7 +175,7 @@ export function useGridTableRowRenderer<T>({
       handleRowClick,
       handleRowMouseEnter,
       handleRowMouseLeave,
-      columnRenderModelsWithOffsets,
+      columnRenderModels,
       columnVirtualizationConfig,
       columnWindowRange,
       handleContextMenu,

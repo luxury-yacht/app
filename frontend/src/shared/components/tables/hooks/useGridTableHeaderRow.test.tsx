@@ -6,6 +6,7 @@
  */
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import type { ColumnRenderModel } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
 import { useGridTableHeaderRow } from '@shared/components/tables/hooks/useGridTableHeaderRow';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -45,6 +46,32 @@ const columns: GridColumnDefinition<Row>[] = [
 
 const columnWidths = { name: 120, age: 80, role: 100 };
 
+const buildColumnRenderModels = (
+  tableColumns: GridColumnDefinition<Row>[],
+  widths: Record<string, number>
+): Array<ColumnRenderModel<Row>> => {
+  let offset = 0;
+  return tableColumns.map((column) => {
+    const width = widths[column.key];
+    const start = offset;
+    offset += width;
+    return {
+      column,
+      key: column.key,
+      className: column.className || '',
+      cellStyle: {
+        width: `${width}px`,
+        minWidth: `${width}px`,
+        maxWidth: `${width}px`,
+        flexShrink: 0,
+      },
+      start,
+      end: offset,
+      width,
+    };
+  });
+};
+
 const HeaderHarness: React.FC<{
   enableResizing: boolean;
   fixedKeys?: string[];
@@ -55,16 +82,13 @@ const HeaderHarness: React.FC<{
     fixedKeys.includes(column.key) ? { ...column, resizable: false } : column
   );
   const node = useGridTableHeaderRow({
-    renderedColumns,
+    columnRenderModels: buildColumnRenderModels(renderedColumns, columnWidths),
     enableColumnResizing: enableResizing,
     handleHeaderContextMenu: withContextMenu ? handleHeaderContextMenu : undefined,
-    columnWidths,
     handleHeaderClick,
     renderSortIndicator,
     handleResizeStart,
     handleResizeKeyDown,
-    getColumnMinWidth: () => 40,
-    getColumnMaxWidth: () => 400,
     autoSizeColumn,
   });
   return <>{node}</>;
@@ -208,16 +232,13 @@ describe('useGridTableHeaderRow', () => {
 
     const KindHarness: React.FC = () => {
       const node = useGridTableHeaderRow({
-        renderedColumns: kindColumns,
+        columnRenderModels: buildColumnRenderModels(kindColumns, { kind: 120, name: 180 }),
         enableColumnResizing: true,
         handleHeaderContextMenu: undefined,
-        columnWidths: { kind: 120, name: 180 },
         handleHeaderClick,
         renderSortIndicator,
         handleResizeStart,
         handleResizeKeyDown,
-        getColumnMinWidth: () => 40,
-        getColumnMaxWidth: () => 400,
         autoSizeColumn,
       });
       return <>{node}</>;

@@ -41,7 +41,6 @@ export interface UseGridTableColumnVirtualizationResult<T> {
     stickyEnd: number;
   };
   columnRenderModels: Array<ColumnRenderModel<T>>;
-  columnRenderModelsWithOffsets: Array<ColumnRenderModel<T>>;
   columnWindowRange: { startIndex: number; endIndex: number };
   updateColumnWindowRange: () => void;
 }
@@ -63,40 +62,28 @@ export function useGridTableColumnVirtualization<T>({
   );
 
   const columnRenderModels = useMemo(() => {
+    let offset = 0;
     return renderedColumns.map((column) => {
-      const width = columnWidths[column.key] ?? 0;
+      const configuredWidth = columnWidths[column.key] ?? 0;
+      const width = Number.isFinite(configuredWidth) ? configuredWidth : 0;
+      const start = offset;
+      offset += width;
       return {
         column,
         key: column.key,
         className: column.className || '',
         cellStyle: {
-          width: `${width}px`,
-          minWidth: `${width}px`,
-          maxWidth: `${width}px`,
+          width: `${configuredWidth}px`,
+          minWidth: `${configuredWidth}px`,
+          maxWidth: `${configuredWidth}px`,
           flexShrink: 0,
         } as CSSProperties,
-        start: 0,
-        end: width,
+        start,
+        end: offset,
         width,
       };
     });
   }, [renderedColumns, columnWidths]);
-
-  const columnRenderModelsWithOffsets = useMemo(() => {
-    let offset = 0;
-    return columnRenderModels.map((model) => {
-      const widthPx = Number.parseFloat(model.cellStyle.width as string);
-      const safeWidth = Number.isFinite(widthPx) ? widthPx : 0;
-      const start = offset;
-      offset += safeWidth;
-      return {
-        ...model,
-        start,
-        end: offset,
-        width: safeWidth,
-      };
-    });
-  }, [columnRenderModels]);
 
   const [columnWindowRange, setColumnWindowRange] = useState(() => ({
     startIndex: 0,
@@ -107,13 +94,13 @@ export function useGridTableColumnVirtualization<T>({
     setColumnWindowRange((prev) => {
       const fullRange = {
         startIndex: 0,
-        endIndex: Math.max(0, columnRenderModelsWithOffsets.length - 1),
+        endIndex: Math.max(0, columnRenderModels.length - 1),
       };
       return prev.startIndex === fullRange.startIndex && prev.endIndex === fullRange.endIndex
         ? prev
         : fullRange;
     });
-  }, [columnRenderModelsWithOffsets.length]);
+  }, [columnRenderModels.length]);
 
   const updateColumnWindowRange = useCallback(() => {
     if (!columnVirtualizationConfig.enabled) {
@@ -122,7 +109,7 @@ export function useGridTableColumnVirtualization<T>({
     }
 
     const wrapper = wrapperRef.current;
-    if (!wrapper || columnRenderModelsWithOffsets.length === 0) {
+    if (!wrapper || columnRenderModels.length === 0) {
       ensureFullColumnWindow();
       return;
     }
@@ -133,27 +120,27 @@ export function useGridTableColumnVirtualization<T>({
     const visibleEnd = scrollLeft + viewportWidth;
 
     let startIdx = 0;
-    let endIdx = columnRenderModelsWithOffsets.length - 1;
+    let endIdx = columnRenderModels.length - 1;
 
     while (
-      startIdx < columnRenderModelsWithOffsets.length &&
-      columnRenderModelsWithOffsets[startIdx].end <= visibleStart
+      startIdx < columnRenderModels.length &&
+      columnRenderModels[startIdx].end <= visibleStart
     ) {
       startIdx += 1;
     }
 
-    while (endIdx >= 0 && columnRenderModelsWithOffsets[endIdx].start >= visibleEnd) {
+    while (endIdx >= 0 && columnRenderModels[endIdx].start >= visibleEnd) {
       endIdx -= 1;
     }
 
     if (startIdx > endIdx) {
-      startIdx = Math.max(0, Math.min(columnRenderModelsWithOffsets.length - 1, startIdx));
+      startIdx = Math.max(0, Math.min(columnRenderModels.length - 1, startIdx));
       endIdx = startIdx;
     }
 
     startIdx = Math.max(0, startIdx - columnVirtualizationConfig.overscanColumns);
     endIdx = Math.min(
-      columnRenderModelsWithOffsets.length - 1,
+      columnRenderModels.length - 1,
       endIdx + columnVirtualizationConfig.overscanColumns
     );
 
@@ -163,7 +150,7 @@ export function useGridTableColumnVirtualization<T>({
         : { startIndex: startIdx, endIndex: endIdx }
     );
   }, [
-    columnRenderModelsWithOffsets,
+    columnRenderModels,
     columnVirtualizationConfig.enabled,
     columnVirtualizationConfig.overscanColumns,
     ensureFullColumnWindow,
@@ -181,7 +168,6 @@ export function useGridTableColumnVirtualization<T>({
   return {
     columnVirtualizationConfig,
     columnRenderModels,
-    columnRenderModelsWithOffsets,
     columnWindowRange,
     updateColumnWindowRange,
   };
