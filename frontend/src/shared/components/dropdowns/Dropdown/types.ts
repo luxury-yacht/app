@@ -46,6 +46,12 @@ export interface DropdownProps<TMetadata = unknown> {
   onSearchChange?: (value: string) => void;
   clearable?: boolean;
   showBulkActions?: boolean;
+  /**
+   * Per-option "only" shortcut that collapses the selection to that option.
+   * On by default for every multi-select; opt out where isolating one value is
+   * not a meaningful action.
+   */
+  enableOnlyAction?: boolean;
   additionalBulkActions?: ReactNode;
 
   // Customization props

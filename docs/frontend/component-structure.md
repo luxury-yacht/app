@@ -76,6 +76,25 @@ Selection is a real checkbox, not a text glyph, and it is decided in one place.
   set it: most of their options are off by default, so dimming would flag the
   normal case as an anomaly.
 
+Every multi-select also gets a per-row `only` shortcut that collapses the
+selection to that option. It is on by default (`enableOnlyAction`), revealed on
+hover or keyboard highlight, and reachable without a pointer via `Alt+Enter` on
+the highlighted option.
+
+- It is a click *region* inside the option button, not a nested `<button>`. A
+  real button per row would be an invalid `role="listbox"` child and would force
+  every multi-select menu to `role="dialog"`; the region keeps listbox semantics
+  intact for the menus that do not need the dialog treatment.
+- It never renders on a disabled option or a group header, and it is inert when
+  the option is already the sole selection — disabled rather than hidden, so rows
+  do not change shape as the pointer moves down the list.
+- In the Columns menu it sits immediately left of the drag grip, which stays
+  anchored. Do not swap the grip out for it: hiding the drag affordance exactly
+  when the pointer is on the row is the wrong trade.
+- `only` selects the option alone. Values that cannot be deselected — a required
+  column — necessarily remain, so it means "only this, plus what cannot be turned
+  off".
+
 Row-level behavior (drag-to-reorder, per-row affordances) goes through
 `Dropdown`'s `getOptionRowProps`; `renderOptionActions` only owns the trailing
 slot and cannot reach the row element.

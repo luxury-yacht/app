@@ -941,6 +941,117 @@ describe('Dropdown', () => {
     expect(actions?.querySelector('.dropdown-bulk-actions-divider')).toBeNull();
   });
 
+  describe('only action', () => {
+    const onlyIn = (label: string) =>
+      Array.from(document.body.querySelectorAll<HTMLElement>('.dropdown-option'))
+        .find((option) => option.textContent?.startsWith(label))
+        ?.querySelector<HTMLElement>('.dropdown-only-action') ?? null;
+
+    it('collapses the selection to the hovered option', async () => {
+      const onChange = vi.fn();
+      await mount(
+        <Dropdown
+          options={OPTIONS}
+          value={['alpha', 'beta', 'gamma']}
+          onChange={onChange}
+          multiple
+        />
+      );
+
+      click(container.querySelector('.dropdown-trigger'));
+      click(onlyIn('Beta'));
+
+      expect(onChange).toHaveBeenCalledWith(['beta']);
+    });
+
+    it('leaves the ordinary toggle alone', async () => {
+      const onChange = vi.fn();
+      await mount(
+        <Dropdown options={OPTIONS} value={['alpha', 'beta']} onChange={onChange} multiple />
+      );
+
+      click(container.querySelector('.dropdown-trigger'));
+      const beta =
+        Array.from(document.body.querySelectorAll<HTMLElement>('.dropdown-option')).find((option) =>
+          option.textContent?.startsWith('Beta')
+        ) ?? null;
+      click(beta);
+
+      // Clicking the row body still toggles rather than isolating.
+      expect(onChange).toHaveBeenCalledWith(['alpha']);
+    });
+
+    it('is inert when the option is already the sole selection', async () => {
+      const onChange = vi.fn();
+      await mount(<Dropdown options={OPTIONS} value={['beta']} onChange={onChange} multiple />);
+
+      click(container.querySelector('.dropdown-trigger'));
+      const only = requireValue(onlyIn('Beta'), 'expected an only action');
+      expect(only.dataset.disabled).toBe('true');
+
+      click(only);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('is absent on a disabled option', async () => {
+      await mount(
+        <Dropdown
+          options={OPTIONS.map((option) =>
+            option.value === 'beta' ? { ...option, disabled: true } : option
+          )}
+          value={['alpha']}
+          onChange={vi.fn()}
+          multiple
+        />
+      );
+
+      click(container.querySelector('.dropdown-trigger'));
+      expect(onlyIn('Beta')).toBeNull();
+      expect(onlyIn('Alpha')).not.toBeNull();
+    });
+
+    it('is absent for single-select dropdowns', async () => {
+      await mount(<Dropdown options={OPTIONS} value="alpha" onChange={vi.fn()} />);
+
+      click(container.querySelector('.dropdown-trigger'));
+      expect(document.body.querySelector('.dropdown-only-action')).toBeNull();
+    });
+
+    it('can be opted out of', async () => {
+      await mount(
+        <Dropdown
+          options={OPTIONS}
+          value={['alpha']}
+          onChange={vi.fn()}
+          multiple
+          enableOnlyAction={false}
+        />
+      );
+
+      click(container.querySelector('.dropdown-trigger'));
+      expect(document.body.querySelector('.dropdown-only-action')).toBeNull();
+    });
+
+    it('isolates the highlighted option from the keyboard', async () => {
+      const onChange = vi.fn();
+      await mount(
+        <Dropdown
+          options={OPTIONS}
+          value={['alpha', 'beta', 'gamma']}
+          onChange={onChange}
+          multiple
+        />
+      );
+
+      const trigger = container.querySelector('.dropdown-trigger');
+      click(trigger);
+      await pressKey(trigger, 'ArrowDown');
+      await pressKey(trigger, 'Enter', { altKey: true });
+
+      expect(onChange).toHaveBeenCalledWith(['alpha']);
+    });
+  });
+
   it('renders labeled bulk-action icons at the compact size', async () => {
     await mount(
       <Dropdown options={OPTIONS} value={[]} onChange={vi.fn()} multiple showBulkActions />

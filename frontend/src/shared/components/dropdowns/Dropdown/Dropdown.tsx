@@ -529,6 +529,49 @@ const DropdownOptionContent = <TMetadata,>({
   return <span className="option-label">{option.label}</span>;
 };
 
+type OnlyActionConfig = {
+  isOnlySelection: (value: string) => boolean;
+  selectOnly: (value: string) => void;
+};
+
+const ONLY_ACTION_ATTRIBUTE = 'data-dropdown-only';
+
+const renderOnlyAction = (option: DropdownOption<unknown>, onlyAction: OnlyActionConfig | null) => {
+  if (!onlyAction || option.disabled || option.group === 'header') {
+    return null;
+  }
+  const inert = onlyAction.isOnlySelection(option.value);
+  return (
+    <span
+      className="dropdown-only-action"
+      data-dropdown-only="true"
+      data-disabled={inert ? 'true' : undefined}
+      aria-hidden="true"
+    >
+      only
+    </span>
+  );
+};
+
+/** Routes a click on the option button to isolate-or-toggle. */
+const buildOptionClickHandler = (
+  option: DropdownOption<unknown>,
+  selectOption: (value: string) => void,
+  onlyAction: OnlyActionConfig | null
+) => {
+  return (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (onlyAction && event.target instanceof Element) {
+      if (event.target.closest(`[${ONLY_ACTION_ATTRIBUTE}]`)) {
+        if (!onlyAction.isOnlySelection(option.value)) {
+          onlyAction.selectOnly(option.value);
+        }
+        return;
+      }
+    }
+    selectOption(option.value);
+  };
+};
+
 interface DropdownOptionRowProps<TMetadata> {
   option: DropdownOption<TMetadata>;
   index: number;
@@ -540,6 +583,7 @@ interface DropdownOptionRowProps<TMetadata> {
   renderOptionActions: DropdownProps<TMetadata>['renderOptionActions'];
   getOptionRowProps: DropdownProps<TMetadata>['getOptionRowProps'];
   selectOption: (value: string) => void;
+  onlyAction: OnlyActionConfig | null;
 }
 
 const DropdownOptionRow = <TMetadata,>({
@@ -553,6 +597,7 @@ const DropdownOptionRow = <TMetadata,>({
   renderOptionActions,
   getOptionRowProps,
   selectOption,
+  onlyAction,
 }: DropdownOptionRowProps<TMetadata>) => {
   const isGroupHeader = option.group === 'header';
   if (isGroupHeader && option.label.trim().length === 0) {
@@ -576,12 +621,20 @@ const DropdownOptionRow = <TMetadata,>({
     .filter(Boolean)
     .join(' ');
   const optionContent = (
-    <DropdownOptionContent
-      option={option}
-      optionIsSelected={optionIsSelected}
-      multiple={multiple}
-      renderOption={renderOption}
-    />
+    <>
+      <DropdownOptionContent
+        option={option}
+        optionIsSelected={optionIsSelected}
+        multiple={multiple}
+        renderOption={renderOption}
+      />
+      {renderOnlyAction(option as DropdownOption<unknown>, onlyAction)}
+    </>
+  );
+  const handleOptionClick = buildOptionClickHandler(
+    option as DropdownOption<unknown>,
+    selectOption,
+    onlyAction
   );
   if (!renderOptionActions) {
     const optionAriaSelected = multiple
@@ -592,7 +645,7 @@ const DropdownOptionRow = <TMetadata,>({
         id={`${controlId}-option-${index}`}
         data-dropdown-option-index={index}
         className={optionClassName}
-        onClick={() => selectOption(option.value)}
+        onClick={handleOptionClick}
         selected={optionAriaSelected}
         aria-disabled={option.disabled}
         disabled={option.disabled}
@@ -612,7 +665,7 @@ const DropdownOptionRow = <TMetadata,>({
         id={`${controlId}-option-${index}`}
         data-dropdown-option-index={index}
         className={optionClassName}
-        onClick={() => selectOption(option.value)}
+        onClick={handleOptionClick}
         aria-pressed={optionIsSelected}
         disabled={option.disabled}
       >
@@ -633,6 +686,7 @@ interface DropdownOptionListProps<TMetadata> {
   getOptionRowProps: DropdownProps<TMetadata>['getOptionRowProps'];
   isSelected: (value: string) => boolean;
   selectOption: (value: string) => void;
+  onlyAction: OnlyActionConfig | null;
 }
 
 const DropdownOptionList = <TMetadata,>({
@@ -645,6 +699,7 @@ const DropdownOptionList = <TMetadata,>({
   getOptionRowProps,
   isSelected,
   selectOption,
+  onlyAction,
 }: DropdownOptionListProps<TMetadata>) => {
   if (options.length === 0) {
     return <div className="no-options">No options available</div>;
@@ -662,6 +717,7 @@ const DropdownOptionList = <TMetadata,>({
       renderOptionActions={renderOptionActions}
       getOptionRowProps={getOptionRowProps}
       selectOption={selectOption}
+      onlyAction={onlyAction}
     />
   ));
 };
@@ -693,6 +749,7 @@ interface DropdownMenuPortalProps<TMetadata> {
   getOptionRowProps: DropdownProps<TMetadata>['getOptionRowProps'];
   isSelected: (value: string) => boolean;
   selectOption: (value: string) => void;
+  onlyAction: OnlyActionConfig | null;
   setHighlightedIndex: (index: number) => void;
   onSearchChange: (value: string) => void;
   onSearchFocusChange: (focused: boolean) => void;
@@ -728,6 +785,7 @@ const DropdownMenuPortal = <TMetadata,>({
   getOptionRowProps,
   isSelected,
   selectOption,
+  onlyAction,
   setHighlightedIndex,
   onSearchChange,
   onSearchFocusChange,
@@ -796,6 +854,7 @@ const DropdownMenuPortal = <TMetadata,>({
         getOptionRowProps={getOptionRowProps}
         isSelected={isSelected}
         selectOption={selectOption}
+        onlyAction={onlyAction}
       />
     </>
   );
@@ -886,6 +945,7 @@ const Dropdown = <TMetadata,>({
   onSearchChange,
   clearable = false,
   showBulkActions = false,
+  enableOnlyAction = true,
   additionalBulkActions,
   renderOption,
   renderOptionActions,
@@ -993,6 +1053,18 @@ const Dropdown = <TMetadata,>({
       searchInputRef.current?.focus();
     }
   }, [isOpen, searchable]);
+
+  // Isolating one value only means something when several can be selected.
+  const onlyAction = useMemo<OnlyActionConfig | null>(() => {
+    if (!multiple || !enableOnlyAction) {
+      return null;
+    }
+    return {
+      isOnlySelection: (optionValue: string) =>
+        Array.isArray(value) && value.length === 1 && value[0] === optionValue,
+      selectOnly: (optionValue: string) => onChange([optionValue]),
+    };
+  }, [enableOnlyAction, multiple, onChange, value]);
 
   const { handleKeyAction } = useKeyboardNavigation({
     options: filteredOptions,
@@ -1188,6 +1260,18 @@ const Dropdown = <TMetadata,>({
       }
     }
 
+    // The "only" affordance is revealed by hover, so the keyboard needs its own
+    // way in rather than a tab stop on something that is usually invisible.
+    if (event.key === 'Enter' && event.altKey && onlyAction && highlightedIndex >= 0) {
+      const highlighted = filteredOptions[highlightedIndex];
+      if (highlighted && !highlighted.disabled && highlighted.group !== 'header') {
+        if (!onlyAction.isOnlySelection(highlighted.value)) {
+          onlyAction.selectOnly(highlighted.value);
+        }
+        return true;
+      }
+    }
+
     const result = handleKeyAction(event.key);
     if (result === 'handled-no-prevent') {
       return 'handled-no-prevent' as const;
@@ -1299,6 +1383,7 @@ const Dropdown = <TMetadata,>({
         getOptionRowProps={getOptionRowProps}
         isSelected={isSelected}
         selectOption={selectOption}
+        onlyAction={onlyAction}
         setHighlightedIndex={setHighlightedIndex}
         onSearchChange={handleSearchInputChange}
         onSearchFocusChange={setIsSearchFocused}

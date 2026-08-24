@@ -481,7 +481,9 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   cursor: grab;
   font: inherit;
   line-height: 1;
-  padding: 4px 7px;
+  /* The row is the drag target now, so the grip no longer needs a generous hit
+     area of its own — it is an affordance and a keyboard entry point. */
+  padding: 4px 3px;
   user-select: none;
   opacity: 0.45;
   transition: opacity 0.1s ease;
