@@ -28,7 +28,7 @@ import {
   useWidthsChangeNotifier,
 } from '@shared/components/tables/hooks/useGridTableColumnWidths.helpers';
 import type { RefObject } from 'react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useReducer, useRef, useState } from 'react';
 
 // Column width lifecycle phase. Replaces the three coupled boolean refs
 // (initializedColumnsRef, isAutoSizingEnabledRef, isManualResizeActiveRef)
@@ -255,12 +255,12 @@ export function useGridTableColumnWidths<T>(
     getColumnMinWidth,
     getColumnMaxWidth,
   });
-  const [, setManualOwnershipRevision] = useState(0);
+  const refreshManualOwnership = useReducer((revision: number) => revision + 1, 0)[1];
   const handleManualResizeEvent = useCallback(
     (event: ManualResizeEvent) => {
       handleMeasurementQueueResizeEvent(event);
       if (event.type === 'dragEnd' || event.type === 'autoSize' || event.type === 'reset') {
-        setManualOwnershipRevision((revision) => revision + 1);
+        refreshManualOwnership();
       }
     },
     [handleMeasurementQueueResizeEvent]

@@ -71,7 +71,7 @@ const getPreferredTop = (
 
 const calculateDropdownPlacement = (
   trigger: HTMLButtonElement,
-  menu: HTMLDivElement
+  menu: HTMLElement
 ): DropdownPlacement => {
   const zoomFactor = getAppZoomFactor();
   const visualTriggerRect = trigger.getBoundingClientRect();
@@ -149,7 +149,7 @@ const calculateDropdownPlacement = (
 const observeDropdownElements = (
   positionMenu: () => void,
   trigger: HTMLButtonElement,
-  menu: HTMLDivElement
+  menu: HTMLElement
 ) => {
   if (typeof ResizeObserver === 'undefined') {
     return null;
@@ -168,7 +168,7 @@ const observeDropdownElements = (
 const useDropdownPlacement = (
   isOpen: boolean,
   triggerRef: React.RefObject<HTMLButtonElement | null>,
-  menuRef: React.RefObject<HTMLDivElement | null>
+  menuRef: React.RefObject<HTMLElement | null>
 ) => {
   const [placement, setPlacement] = useState<DropdownPlacement>({
     dropdownPosition: 'bottom',
@@ -528,6 +528,96 @@ type OnlyActionConfig = {
   selectOnly: (value: string) => void;
 };
 
+type KeyboardNavigationResult = 'handled' | 'handled-no-prevent' | 'ignored';
+
+interface ActionRowTabContext {
+  isOpen: boolean;
+  hasOptionActions: boolean;
+  trigger: HTMLButtonElement | null;
+  menu: HTMLElement | null;
+  closeDropdown: () => void;
+}
+
+const handleActionRowTab = (
+  event: KeyboardEvent,
+  { isOpen, hasOptionActions, trigger, menu, closeDropdown }: ActionRowTabContext
+): boolean | null => {
+  if (event.key !== 'Tab' || !isOpen || !hasOptionActions) {
+    return null;
+  }
+
+  const activeElement = document.activeElement;
+  if (!event.shiftKey && activeElement === trigger) {
+    const firstAction = menu?.querySelector<HTMLElement>(
+      '.dropdown-option-actions button:not([disabled])'
+    );
+    if (firstAction) {
+      firstAction.focus();
+      return true;
+    }
+  }
+  if (!activeElement || !menu?.contains(activeElement)) {
+    return null;
+  }
+
+  const focusableElements = Array.from(
+    menu.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+  );
+  const activeIndex = focusableElements.indexOf(activeElement as HTMLElement);
+  const leavingDialog = event.shiftKey
+    ? activeIndex === 0
+    : activeIndex === focusableElements.length - 1;
+  if (!leavingDialog) {
+    return false;
+  }
+
+  closeDropdown();
+  trigger?.focus();
+  return true;
+};
+
+const handleOnlySelectionShortcut = <TMetadata,>(
+  event: KeyboardEvent,
+  onlyAction: OnlyActionConfig | null,
+  highlightedIndex: number,
+  options: DropdownOption<TMetadata>[]
+): boolean => {
+  if (event.key !== 'Enter' || !event.altKey || !onlyAction || highlightedIndex < 0) {
+    return false;
+  }
+  const highlighted = options[highlightedIndex];
+  if (!highlighted || highlighted.disabled || highlighted.group === 'header') {
+    return false;
+  }
+  if (!onlyAction.isOnlySelection(highlighted.value)) {
+    onlyAction.selectOnly(highlighted.value);
+  }
+  return true;
+};
+
+const resolveKeyboardNavigationResult = (
+  event: KeyboardEvent,
+  result: KeyboardNavigationResult,
+  hasOptionActions: boolean,
+  trigger: HTMLButtonElement | null
+): boolean | 'handled-no-prevent' => {
+  if (result === 'handled-no-prevent') {
+    return 'handled-no-prevent';
+  }
+  if (result !== 'handled') {
+    return false;
+  }
+  if (event.key === 'Escape' && hasOptionActions) {
+    trigger?.focus();
+  }
+  return true;
+};
+
+const isTypingInSearch = (searchable: boolean): boolean =>
+  searchable && document.activeElement?.classList.contains('search-input') === true;
+
 const ONLY_ACTION_ATTRIBUTE = 'data-dropdown-only';
 
 const renderOnlyAction = (option: DropdownOption<unknown>, onlyAction: OnlyActionConfig | null) => {
@@ -720,7 +810,7 @@ interface DropdownMenuPortalProps<TMetadata> {
   isOpen: boolean;
   disabled: boolean;
   loading: boolean;
-  menuRef: React.RefObject<HTMLDivElement | null>;
+  menuRef: React.RefObject<HTMLElement | null>;
   menuClasses: string;
   menuStyle: DropdownMenuStyle;
   multiple: boolean;
@@ -853,22 +943,26 @@ const DropdownMenuPortal = <TMetadata,>({
     </>
   );
 
+  const setMenuElement = (element: HTMLElement | null) => {
+    menuRef.current = element;
+  };
+
   return createPortal(
     renderOptionActions ? (
-      <div
-        ref={menuRef}
+      <dialog
+        ref={setMenuElement}
+        open
         className={menuClasses}
         style={menuStyle}
-        role="dialog"
         aria-label={menuAriaLabel}
         id={menuId}
         data-focus-portal-owner={menuId}
       >
         {menuContent}
-      </div>
+      </dialog>
     ) : (
       <div
-        ref={menuRef}
+        ref={setMenuElement}
         className={menuClasses}
         style={menuStyle}
         role="listbox"
@@ -982,7 +1076,7 @@ const Dropdown = <TMetadata,>({
 
   useEffect(() => {
     const nodes = [dropdownRef.current, isOpen ? menuRef.current : null].filter(
-      (node): node is HTMLDivElement => node !== null
+      (node): node is HTMLElement => node !== null
     );
     if (nodes.length === 0) {
       return;
@@ -1211,72 +1305,34 @@ const Dropdown = <TMetadata,>({
 
   const shortcutsEnabled = !disabled && (isOpen || isFocused);
 
-  const isTypingInSearch = () => {
-    if (!searchable) {
-      return false;
-    }
-    const active = document.activeElement as HTMLElement | null;
-    return Boolean(active?.classList.contains('search-input'));
-  };
-
   const handleDropdownKeyDown = (event: KeyboardEvent) => {
-    if (event.key === ' ' && isTypingInSearch()) {
+    if (event.key === ' ' && isTypingInSearch(searchable)) {
       return false;
     }
 
-    if (event.key === 'Tab' && isOpen && renderOptionActions) {
-      const activeElement = document.activeElement;
-      if (!event.shiftKey && activeElement === triggerRef.current) {
-        const firstAction = menuRef.current?.querySelector<HTMLElement>(
-          '.dropdown-option-actions button:not([disabled])'
-        );
-        if (firstAction) {
-          firstAction.focus();
-          return true;
-        }
-      }
-      if (activeElement && menuRef.current?.contains(activeElement)) {
-        const focusableElements = Array.from(
-          menuRef.current.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
-          )
-        );
-        const activeIndex = focusableElements.indexOf(activeElement as HTMLElement);
-        const leavingDialog = event.shiftKey
-          ? activeIndex === 0
-          : activeIndex === focusableElements.length - 1;
-        if (leavingDialog) {
-          closeDropdown();
-          triggerRef.current?.focus();
-          return true;
-        }
-        return false;
-      }
+    const tabResult = handleActionRowTab(event, {
+      isOpen,
+      hasOptionActions: Boolean(renderOptionActions),
+      trigger: triggerRef.current,
+      menu: menuRef.current,
+      closeDropdown,
+    });
+    if (tabResult !== null) {
+      return tabResult;
     }
 
     // The "only" affordance is revealed by hover, so the keyboard needs its own
     // way in rather than a tab stop on something that is usually invisible.
-    if (event.key === 'Enter' && event.altKey && onlyAction && highlightedIndex >= 0) {
-      const highlighted = filteredOptions[highlightedIndex];
-      if (highlighted && !highlighted.disabled && highlighted.group !== 'header') {
-        if (!onlyAction.isOnlySelection(highlighted.value)) {
-          onlyAction.selectOnly(highlighted.value);
-        }
-        return true;
-      }
-    }
-
-    const result = handleKeyAction(event.key);
-    if (result === 'handled-no-prevent') {
-      return 'handled-no-prevent' as const;
-    }
-    if (result === 'handled') {
-      if (event.key === 'Escape' && renderOptionActions) {
-        triggerRef.current?.focus();
-      }
+    if (handleOnlySelectionShortcut(event, onlyAction, highlightedIndex, filteredOptions)) {
       return true;
     }
-    return false;
+
+    return resolveKeyboardNavigationResult(
+      event,
+      handleKeyAction(event.key),
+      Boolean(renderOptionActions),
+      triggerRef.current
+    );
   };
 
   useKeyboardSurface({

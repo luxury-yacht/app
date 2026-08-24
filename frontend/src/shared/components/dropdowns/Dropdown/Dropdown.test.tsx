@@ -578,7 +578,10 @@ describe('Dropdown', () => {
     click(trigger);
     expect(trigger?.getAttribute('role')).toBeNull();
     expect(trigger?.getAttribute('aria-haspopup')).toBe('dialog');
-    expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
+    const dialog = document.body.querySelector('dialog.dropdown-menu');
+    expect(dialog).not.toBeNull();
+    expect(dialog?.hasAttribute('open')).toBe(true);
+    expect(dialog?.getAttribute('role')).toBeNull();
     expect(document.body.querySelector('.dropdown-option')?.getAttribute('role')).toBeNull();
     expect(document.body.querySelector('.dropdown-option')?.getAttribute('aria-pressed')).toBe(
       'false'
@@ -639,7 +642,7 @@ describe('Dropdown', () => {
     const focusableSelector =
       'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
     const forwardFocusables = Array.from(
-      document.body.querySelectorAll<HTMLElement>(`[role="dialog"] ${focusableSelector}`)
+      document.body.querySelectorAll<HTMLElement>(`dialog ${focusableSelector}`)
     );
     const lastFocusable = forwardFocusables[forwardFocusables.length - 1] ?? null;
     await act(async () => {
@@ -649,13 +652,11 @@ describe('Dropdown', () => {
 
     await pressKey(lastFocusable, 'Tab');
 
-    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.body.querySelector('dialog')).toBeNull();
     expect(document.activeElement).toBe(trigger);
 
     click(trigger);
-    const firstFocusable = document.body.querySelector<HTMLElement>(
-      `[role="dialog"] ${focusableSelector}`
-    );
+    const firstFocusable = document.body.querySelector<HTMLElement>(`dialog ${focusableSelector}`);
     await act(async () => {
       firstFocusable?.focus();
       await Promise.resolve();
@@ -663,7 +664,7 @@ describe('Dropdown', () => {
 
     await pressKey(firstFocusable, 'Tab', { shiftKey: true });
 
-    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.body.querySelector('dialog')).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
 

@@ -50,11 +50,13 @@ export const resolveColumnWidth = <T>({
   baseWidths: Record<string, number>;
   naturalWidths: Record<string, number>;
 }): number => {
-  const width = isFiniteColumnWidth(baseWidths[column.key])
-    ? baseWidths[column.key]
-    : isFiniteColumnWidth(naturalWidths[column.key])
-      ? naturalWidths[column.key]
-      : (parseWidthInputToNumber(column.width) ?? getColumnMinWidth(column));
+  let width = parseWidthInputToNumber(column.width) ?? getColumnMinWidth(column);
+  if (isFiniteColumnWidth(naturalWidths[column.key])) {
+    width = naturalWidths[column.key];
+  }
+  if (isFiniteColumnWidth(baseWidths[column.key])) {
+    width = baseWidths[column.key];
+  }
   return clampColumnWidth(column, width, { getColumnMinWidth, getColumnMaxWidth });
 };
 

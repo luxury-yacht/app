@@ -10,7 +10,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 const AUTO_WIDTH_PAINT_GUTTER_PX = 1;
 
 const detachNode = (node: HTMLElement): void => {
-  node.parentNode?.removeChild(node);
+  node.remove();
 };
 
 const measureHeaderWidth = <T>(column: GridColumnDefinition<T>): number => {
