@@ -180,7 +180,7 @@ export const withColumnSizing = <T,>(
     if (!hint) {
       return column;
     }
-    const minimumWidth = hint.minWidth === undefined ? hint.width : hint.minWidth;
+    const minimumWidth = hint.minWidth ?? hint.width;
     return {
       ...column,
       ...(hint.width !== undefined ? { width: hint.width } : {}),
