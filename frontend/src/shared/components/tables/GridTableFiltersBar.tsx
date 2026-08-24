@@ -255,11 +255,11 @@ interface ColumnsDropdownOptions {
   id: string;
   columnOptions?: DropdownOption[];
   columnValue?: string[];
-  onColumnsChange?: GridTableFiltersBarProps['onColumnsChange'];
+  onColumnsChange: GridTableFiltersBarProps['onColumnsChange'];
   renderColumnOption: NonNullable<DropdownProps['renderOption']>;
   renderColumnOrderActions: DropdownProps['renderOptionActions'];
   getColumnRowProps: DropdownProps['getOptionRowProps'];
-  onResetColumns?: GridTableFiltersBarProps['onResetColumns'];
+  onResetColumns: GridTableFiltersBarProps['onResetColumns'];
   canResetColumns: boolean;
   renderColumnsValue: NonNullable<GridTableFiltersBarProps['renderColumnsValue']>;
 }
