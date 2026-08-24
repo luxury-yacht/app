@@ -11,7 +11,6 @@ import type {
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
 import {
-  DEFAULT_COLUMN_MIN_WIDTH,
   detectWidthUnit,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
@@ -49,16 +48,6 @@ const VALID_TRANSITIONS: Record<ColumnWidthPhase, ColumnWidthPhase[]> = {
 // Orchestrates all column-width concerns for GridTable: starting widths, auto
 // measurement, manual resize tracking, reconciling to container space, and
 // notifying persistence/controlled consumers.
-const getColumnMinWidth = <T>(column: GridColumnDefinition<T>) => {
-  const parsed = parseWidthInputToNumber(column.minWidth);
-  return parsed ?? DEFAULT_COLUMN_MIN_WIDTH;
-};
-
-const getColumnMaxWidth = <T>(column: GridColumnDefinition<T>) => {
-  const parsed = parseWidthInputToNumber(column.maxWidth);
-  return parsed ?? Number.POSITIVE_INFINITY;
-};
-
 interface ColumnWidthsOptions<T> {
   columns: GridColumnDefinition<T>[];
   renderedColumns: GridColumnDefinition<T>[];
@@ -252,8 +241,6 @@ export function useGridTableColumnWidths<T>(
     transitionPhase,
     setColumnWidths,
     measureColumnWidth,
-    getColumnMinWidth,
-    getColumnMaxWidth,
   });
   const refreshManualOwnership = useReducer((revision: number) => revision + 1, 0)[1];
   const handleManualResizeEvent = useCallback(
@@ -401,8 +388,6 @@ export function useGridTableColumnWidths<T>(
     externalColumnWidths,
     setColumnWidths,
     useShortNames,
-    getColumnMinWidth,
-    getColumnMaxWidth,
     phaseRef,
     transitionPhase,
     prevColumnsSignatureRef,

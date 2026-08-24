@@ -12,22 +12,12 @@ import type {
 import { parseWidthInputToNumber } from '@shared/components/tables/GridTable.utils';
 import {
   buildInitialMeasuredColumnWidthPlan,
+  clampAutoSizeColumnWidth,
   isUserOwnedColumnWidth,
 } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-
-const getAutoSizeMaxWidth = <T>(
-  column: GridColumnDefinition<T>,
-  getColumnMaxWidth: (column: GridColumnDefinition<T>) => number
-) => {
-  const configuredMaxWidth = getColumnMaxWidth(column);
-  const autoSizeMaxWidth = parseWidthInputToNumber(column.autoSizeMaxWidth);
-  return autoSizeMaxWidth !== null && autoSizeMaxWidth !== undefined
-    ? Math.min(configuredMaxWidth, autoSizeMaxWidth)
-    : configuredMaxWidth;
-};
 
 // Helper hooks extracted from useGridTableColumnWidths to reduce file size and clarify intent.
 // They cover local state init, syncing rendered columns, reacting to data changes,
@@ -372,8 +362,6 @@ export function useGridTableAutoWidthMeasurement<T>({
   externalColumnWidths,
   setColumnWidths,
   useShortNames,
-  getColumnMinWidth,
-  getColumnMaxWidth,
   phaseRef,
   transitionPhase,
   prevColumnsSignatureRef,
@@ -389,8 +377,6 @@ export function useGridTableAutoWidthMeasurement<T>({
   externalColumnWidths: Record<string, number> | null;
   setColumnWidths: (updater: React.SetStateAction<Record<string, number>>) => void;
   useShortNames: boolean;
-  getColumnMinWidth: (column: GridColumnDefinition<T>) => number;
-  getColumnMaxWidth: (column: GridColumnDefinition<T>) => number;
   phaseRef: RefObject<ColumnWidthPhase>;
   transitionPhase: (to: ColumnWidthPhase) => void;
   prevColumnsSignatureRef: RefObject<string | null>;
@@ -433,10 +419,7 @@ export function useGridTableAutoWidthMeasurement<T>({
           if (manuallyResizedColumnsRef.current.has(col.key)) {
             return;
           }
-          const measured = measureColumnWidth(col);
-          const min = getColumnMinWidth(col);
-          const max = getAutoSizeMaxWidth(col, getColumnMaxWidth);
-          measuredAutoWidths[col.key] = Math.max(min, Math.min(max, measured));
+          measuredAutoWidths[col.key] = clampAutoSizeColumnWidth(col, measureColumnWidth(col));
         });
 
       const plan = buildInitialMeasuredColumnWidthPlan({
@@ -446,8 +429,6 @@ export function useGridTableAutoWidthMeasurement<T>({
         externalColumnWidths,
         manuallyResizedColumnKeys: manuallyResizedColumnsRef.current,
         measureColumnWidth,
-        getColumnMinWidth,
-        getColumnMaxWidth,
       });
       naturalWidthsRef.current = plan.naturalWidths;
       setColumnWidths(plan.widths);
@@ -464,8 +445,6 @@ export function useGridTableAutoWidthMeasurement<T>({
   }, [
     columnWidths,
     externalColumnWidths,
-    getColumnMaxWidth,
-    getColumnMinWidth,
     manuallyResizedColumnsRef,
     measureColumnWidth,
     naturalWidthsRef,

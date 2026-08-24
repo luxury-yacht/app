@@ -6,7 +6,10 @@
  */
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { parseWidthInputToNumber } from '@shared/components/tables/GridTable.utils';
+import {
+  clampAutoSizeColumnWidth,
+  getColumnMinWidth,
+} from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
@@ -21,17 +24,6 @@ import { useCallback, useEffect, useRef } from 'react';
 const DIRTY_DEBOUNCE_MS = 280;
 const DIRTY_MIN_INTERVAL_MS = 200;
 const WIDTH_EPSILON = 0.5;
-
-const getAutoSizeMaxWidth = <T>(
-  column: GridColumnDefinition<T>,
-  getColumnMaxWidth: (column: GridColumnDefinition<T>) => number
-) => {
-  const configuredMaxWidth = getColumnMaxWidth(column);
-  const autoSizeMaxWidth = parseWidthInputToNumber(column.autoSizeMaxWidth);
-  return autoSizeMaxWidth !== null && autoSizeMaxWidth !== undefined
-    ? Math.min(configuredMaxWidth, autoSizeMaxWidth)
-    : configuredMaxWidth;
-};
 
 export type ManualResizeEvent = {
   type: 'dragStart' | 'drag' | 'dragEnd' | 'autoSize' | 'reset';
@@ -50,8 +42,6 @@ type DirtyQueueOptions<T> = {
   transitionPhase: (to: ColumnWidthPhase) => void;
   setColumnWidths: (updater: React.SetStateAction<Record<string, number>>) => void;
   measureColumnWidth: (column: GridColumnDefinition<T>) => number;
-  getColumnMinWidth: (column: GridColumnDefinition<T>) => number;
-  getColumnMaxWidth: (column: GridColumnDefinition<T>) => number;
 };
 
 export type DirtyQueueResult = {
@@ -97,8 +87,6 @@ export function useDirtyQueue<T>({
   transitionPhase,
   setColumnWidths,
   measureColumnWidth,
-  getColumnMinWidth,
-  getColumnMaxWidth,
 }: DirtyQueueOptions<T>): DirtyQueueResult {
   // Debounced auto-width measurement queue that only re-measures columns when their visible
   // contents change and skips anything the user has manually resized.
@@ -313,10 +301,8 @@ export function useDirtyQueue<T>({
 
       columnHashesRef.current.set(key, signature);
 
-      const measured = measureColumnWidth(column);
       const min = getColumnMinWidth(column);
-      const max = getAutoSizeMaxWidth(column, getColumnMaxWidth);
-      const clamped = Math.max(min, Math.min(max, measured));
+      const clamped = clampAutoSizeColumnWidth(column, measureColumnWidth(column));
       const current = naturalWidthsRef.current[column.key] ?? min;
 
       if (clamped > current + WIDTH_EPSILON || (allowShrink && clamped < current - WIDTH_EPSILON)) {
@@ -364,8 +350,6 @@ export function useDirtyQueue<T>({
     allowShrinkColumnsRef,
     columnHashesRef,
     dirtyColumnsRef,
-    getColumnMaxWidth,
-    getColumnMinWidth,
     manuallyResizedColumnsRef,
     measureColumnWidth,
     naturalWidthsRef,

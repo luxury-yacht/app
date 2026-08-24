@@ -1,8 +1,13 @@
-import type {
-  ColumnWidthInput,
-  GridColumnDefinition,
-} from '@shared/components/tables/GridTable.types';
-import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import {
+  DEFAULT_COLUMN_WIDTH,
+  isSortableColumn,
+  parseWidthInputToNumber,
+} from '@shared/components/tables/GridTable.utils';
+import {
+  clampAutoSizeColumnWidth,
+  getColumnMinWidth,
+} from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 import { getAppZoomFactor } from '@shared/utils/appZoom';
 import React, { useCallback } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -42,26 +47,16 @@ const setMeasuredContent = (node: HTMLElement, content: React.ReactNode): void =
 
 export interface ColumnMeasurerOptions<T> {
   tableData: T[];
-  parseWidthInputToNumber: (input: ColumnWidthInput | undefined) => number | null;
-  defaultColumnWidth: number;
-  getColumnMinWidth: (column: GridColumnDefinition<T>) => number;
-  getColumnMaxWidth: (column: GridColumnDefinition<T>) => number;
 }
 
-export function useGridTableColumnMeasurer<T>({
-  tableData,
-  parseWidthInputToNumber,
-  defaultColumnWidth,
-  getColumnMinWidth,
-  getColumnMaxWidth,
-}: ColumnMeasurerOptions<T>) {
+export function useGridTableColumnMeasurer<T>({ tableData }: ColumnMeasurerOptions<T>) {
   const measureColumnWidth = useCallback(
     (column: GridColumnDefinition<T>): number => {
       if (typeof document === 'undefined') {
         return (
           parseWidthInputToNumber(column.width) ??
           parseWidthInputToNumber(column.minWidth) ??
-          defaultColumnWidth
+          DEFAULT_COLUMN_WIDTH
         );
       }
       const cell = document.createElement('div');
@@ -97,15 +92,10 @@ export function useGridTableColumnMeasurer<T>({
       const contentWidth =
         measuredWidth > 0
           ? Math.ceil(measuredWidth) + AUTO_WIDTH_PAINT_GUTTER_PX
-          : defaultColumnWidth;
-      const minimum = Math.max(contentWidth, getColumnMinWidth(column));
-      const configuredMaximum = getColumnMaxWidth(column);
-      const autoSizeMaximum = parseWidthInputToNumber(column.autoSizeMaxWidth);
-      const maximum =
-        autoSizeMaximum === null ? configuredMaximum : Math.min(configuredMaximum, autoSizeMaximum);
-      return Number.isFinite(maximum) ? Math.min(minimum, maximum) : minimum;
+          : DEFAULT_COLUMN_WIDTH;
+      return clampAutoSizeColumnWidth(column, Math.max(contentWidth, getColumnMinWidth(column)));
     },
-    [defaultColumnWidth, getColumnMaxWidth, getColumnMinWidth, parseWidthInputToNumber, tableData]
+    [tableData]
   );
 
   return { measureColumnWidth };

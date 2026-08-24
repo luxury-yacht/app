@@ -15,24 +15,16 @@ const column = (key: string, config: Partial<GridColumnDefinition<Row>> = {}) =>
   ...config,
 });
 
-const getColumnMinWidth = (col: GridColumnDefinition<Row>) =>
-  typeof col.minWidth === 'number' ? col.minWidth : 72;
-const getColumnMaxWidth = (col: GridColumnDefinition<Row>) =>
-  typeof col.maxWidth === 'number' ? col.maxWidth : Number.POSITIVE_INFINITY;
-const bounds = { getColumnMinWidth, getColumnMaxWidth };
-
 describe('gridTableColumnWidthMath', () => {
   it('clamps and resolves widths from state, natural size, and column defaults', () => {
     const name = column('name', { minWidth: 100, maxWidth: 200, width: '180px' });
 
-    expect(clampColumnWidth(name, 80, bounds)).toBe(100);
-    expect(clampColumnWidth(name, 240, bounds)).toBe(200);
-    expect(
-      resolveColumnWidth({ column: name, baseWidths: {}, naturalWidths: { name: 160 }, ...bounds })
-    ).toBe(160);
-    expect(resolveColumnWidth({ column: name, baseWidths: {}, naturalWidths: {}, ...bounds })).toBe(
-      180
+    expect(clampColumnWidth(name, 80)).toBe(100);
+    expect(clampColumnWidth(name, 240)).toBe(200);
+    expect(resolveColumnWidth({ column: name, baseWidths: {}, naturalWidths: { name: 160 } })).toBe(
+      160
     );
+    expect(resolveColumnWidth({ column: name, baseWidths: {}, naturalWidths: {} })).toBe(180);
   });
 
   it('builds initial widths from external, manual, auto, and declared sources', () => {
@@ -52,7 +44,6 @@ describe('gridTableColumnWidthMath', () => {
       externalColumnWidths: { external: 140 },
       manuallyResizedColumnKeys: new Set(['manual']),
       measureColumnWidth,
-      ...bounds,
     });
 
     expect(plan.widths).toEqual({
@@ -76,7 +67,6 @@ describe('gridTableColumnWidthMath', () => {
       externalColumnWidths: { kind: 100 },
       manuallyResizedColumnKeys: new Set(),
       measureColumnWidth: vi.fn(() => 188),
-      ...bounds,
     });
 
     expect(plan.widths.kind).toBe(188);

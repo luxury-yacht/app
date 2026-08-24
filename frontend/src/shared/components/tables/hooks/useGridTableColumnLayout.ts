@@ -4,10 +4,9 @@ import type {
   GridTableVirtualizationOptions,
 } from '@shared/components/tables/GridTable.types';
 import {
-  DEFAULT_COLUMN_MIN_WIDTH,
-  DEFAULT_COLUMN_WIDTH,
-  parseWidthInputToNumber,
-} from '@shared/components/tables/GridTable.utils';
+  getColumnMaxWidth,
+  getColumnMinWidth,
+} from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 import { useColumnResizeController } from '@shared/components/tables/hooks/useColumnResizeController';
 import { useContainerWidthObserver } from '@shared/components/tables/hooks/useContainerWidthObserver';
 import { useGridTableColumnMeasurer } from '@shared/components/tables/hooks/useGridTableColumnMeasurer';
@@ -20,22 +19,6 @@ import { useGridTableColumnWidths } from '@shared/components/tables/hooks/useGri
 import type React from 'react';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-
-const getColumnMinWidth = <T>(column: GridColumnDefinition<T>) => {
-  const parsed = parseWidthInputToNumber(column.minWidth);
-  if (parsed !== null && parsed !== undefined) {
-    return parsed;
-  }
-  return DEFAULT_COLUMN_MIN_WIDTH;
-};
-
-const getColumnMaxWidth = <T>(column: GridColumnDefinition<T>) => {
-  const parsed = parseWidthInputToNumber(column.maxWidth);
-  if (parsed !== null && parsed !== undefined) {
-    return parsed;
-  }
-  return Number.POSITIVE_INFINITY;
-};
 
 export const getVisibleAutoColumnKeys = <T>({
   renderedColumns,
@@ -139,10 +122,6 @@ export function useGridTableColumnLayout<T>({
 
   const { measureColumnWidth } = useGridTableColumnMeasurer<T>({
     tableData,
-    parseWidthInputToNumber,
-    defaultColumnWidth: DEFAULT_COLUMN_WIDTH,
-    getColumnMinWidth,
-    getColumnMaxWidth,
   });
 
   const {
@@ -230,8 +209,6 @@ export function useGridTableColumnLayout<T>({
       columnWidths,
       setColumnWidths,
       manuallyResizedColumnsRef,
-      getColumnMinWidth,
-      getColumnMaxWidth,
       measureColumnWidth,
       enableColumnResizing,
       onManualResize: handleManualResizeEvent,

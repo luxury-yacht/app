@@ -61,11 +61,6 @@ const baseColumns: GridColumnDefinition<SampleRow>[] = [
   },
 ];
 
-const getColumnMinWidth = <T,>(column: GridColumnDefinition<T>) =>
-  typeof column.minWidth === 'number' ? column.minWidth : 60;
-const getColumnMaxWidth = <T,>(column: GridColumnDefinition<T>) =>
-  typeof column.maxWidth === 'number' ? column.maxWidth : 480;
-
 const Harness = ({
   enable = true,
   measureWidth = 320,
@@ -87,8 +82,6 @@ const Harness = ({
     columnWidths: widths,
     setColumnWidths: setWidths,
     manuallyResizedColumnsRef: manualRef,
-    getColumnMinWidth,
-    getColumnMaxWidth,
     measureColumnWidth: () => measureWidth,
     enableColumnResizing: enable,
     onManualResize,

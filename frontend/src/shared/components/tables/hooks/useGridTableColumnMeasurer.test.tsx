@@ -54,19 +54,6 @@ const renderHarness = async (tableData: SampleRow[]) => {
   const Harness: React.FC = () => {
     const { measureColumnWidth: measure } = useGridTableColumnMeasurer<SampleRow>({
       tableData,
-      parseWidthInputToNumber: (input) => {
-        if (typeof input === 'number') {
-          return input;
-        }
-        if (!input || input === 'auto') {
-          return null;
-        }
-        const numeric = Number.parseFloat(input);
-        return Number.isFinite(numeric) ? numeric : null;
-      },
-      defaultColumnWidth: 150,
-      getColumnMinWidth: () => 72,
-      getColumnMaxWidth: () => Number.POSITIVE_INFINITY,
     });
 
     measureColumnWidth = measure;

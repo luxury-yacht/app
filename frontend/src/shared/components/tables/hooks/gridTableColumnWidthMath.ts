@@ -2,14 +2,12 @@ import type {
   ColumnWidthState,
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
-import { parseWidthInputToNumber } from '@shared/components/tables/GridTable.utils';
+import {
+  DEFAULT_COLUMN_MIN_WIDTH,
+  parseWidthInputToNumber,
+} from '@shared/components/tables/GridTable.utils';
 
-type WidthBounds<T> = {
-  getColumnMinWidth: (column: GridColumnDefinition<T>) => number;
-  getColumnMaxWidth: (column: GridColumnDefinition<T>) => number;
-};
-
-type BuildInitialMeasuredWidthsOptions<T> = WidthBounds<T> & {
+type BuildInitialMeasuredWidthsOptions<T> = {
   renderedColumns: GridColumnDefinition<T>[];
   columnWidths: Record<string, number>;
   measuredAutoWidths: Record<string, number>;
@@ -33,19 +31,34 @@ export const isUserOwnedColumnWidth = <T>(
   state.source === 'user' ||
   (!state.source && Boolean(column.autoWidth) && state.autoWidth === false);
 
-export const clampColumnWidth = <T>(
+export const getColumnMinWidth = <T>(column: GridColumnDefinition<T>): number =>
+  parseWidthInputToNumber(column.minWidth) ?? DEFAULT_COLUMN_MIN_WIDTH;
+
+export const getColumnMaxWidth = <T>(column: GridColumnDefinition<T>): number =>
+  parseWidthInputToNumber(column.maxWidth) ?? Number.POSITIVE_INFINITY;
+
+const getColumnAutoSizeMaxWidth = <T>(column: GridColumnDefinition<T>): number => {
+  const configuredMaximum = getColumnMaxWidth(column);
+  const autoSizeMaximum = parseWidthInputToNumber(column.autoSizeMaxWidth);
+  return autoSizeMaximum === null
+    ? configuredMaximum
+    : Math.min(configuredMaximum, autoSizeMaximum);
+};
+
+export const clampColumnWidth = <T>(column: GridColumnDefinition<T>, width: number): number =>
+  Math.max(getColumnMinWidth(column), Math.min(getColumnMaxWidth(column), width));
+
+export const clampAutoSizeColumnWidth = <T>(
   column: GridColumnDefinition<T>,
-  width: number,
-  { getColumnMinWidth, getColumnMaxWidth }: WidthBounds<T>
-): number => Math.max(getColumnMinWidth(column), Math.min(getColumnMaxWidth(column), width));
+  width: number
+): number =>
+  Math.max(getColumnMinWidth(column), Math.min(getColumnAutoSizeMaxWidth(column), width));
 
 export const resolveColumnWidth = <T>({
   column,
   baseWidths,
   naturalWidths,
-  getColumnMinWidth,
-  getColumnMaxWidth,
-}: WidthBounds<T> & {
+}: {
   column: GridColumnDefinition<T>;
   baseWidths: Record<string, number>;
   naturalWidths: Record<string, number>;
@@ -57,7 +70,7 @@ export const resolveColumnWidth = <T>({
   if (isFiniteColumnWidth(baseWidths[column.key])) {
     width = baseWidths[column.key];
   }
-  return clampColumnWidth(column, width, { getColumnMinWidth, getColumnMaxWidth });
+  return clampColumnWidth(column, width);
 };
 
 export const buildInitialMeasuredColumnWidthPlan = <T>({
@@ -67,10 +80,7 @@ export const buildInitialMeasuredColumnWidthPlan = <T>({
   externalColumnWidths,
   manuallyResizedColumnKeys,
   measureColumnWidth,
-  getColumnMinWidth,
-  getColumnMaxWidth,
 }: BuildInitialMeasuredWidthsOptions<T>): InitialMeasuredWidthPlan => {
-  const bounds = { getColumnMinWidth, getColumnMaxWidth };
   const naturalWidths: Record<string, number> = {};
   for (const column of renderedColumns) {
     const externalWidth = externalColumnWidths?.[column.key];
@@ -87,8 +97,7 @@ export const buildInitialMeasuredColumnWidthPlan = <T>({
     }
     naturalWidths[column.key] = clampColumnWidth(
       column,
-      isFiniteColumnWidth(candidate) ? candidate : measureColumnWidth(column),
-      bounds
+      isFiniteColumnWidth(candidate) ? candidate : measureColumnWidth(column)
     );
   }
   return { widths: naturalWidths, naturalWidths };

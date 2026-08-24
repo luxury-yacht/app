@@ -31,7 +31,7 @@ import {
   subscribeGridTablePersistenceMode,
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 export interface UseGridTablePersistenceParams<T> {
   viewId: string;
@@ -66,6 +66,68 @@ export interface UseGridTablePersistenceResult {
 
 const SAVE_DEBOUNCE_MS = 250;
 
+interface GridTablePersistenceState {
+  sortConfig: SortConfig | null;
+  columnVisibility: Record<string, boolean> | null;
+  columnOrder: string[] | null;
+  columnWidths: Record<string, ColumnWidthState> | null;
+  filters: GridTableFilterState;
+  pageSize: number | null;
+  hydrated: boolean;
+}
+
+type GridTablePersistenceUpdate = Partial<Omit<GridTablePersistenceState, 'hydrated'>>;
+
+type GridTablePersistenceAction =
+  | { type: 'scopeChanged' }
+  | { type: 'hydrated'; persisted: ReturnType<typeof prunePersistedState> }
+  | { type: 'reset' }
+  | { type: 'update'; update: GridTablePersistenceUpdate };
+
+const createPendingPersistenceState = (): GridTablePersistenceState => ({
+  sortConfig: null,
+  columnVisibility: null,
+  columnOrder: null,
+  columnWidths: null,
+  filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+  pageSize: null,
+  hydrated: false,
+});
+
+const hydratePersistenceState = (
+  persisted: ReturnType<typeof prunePersistedState>
+): GridTablePersistenceState => ({
+  ...createPendingPersistenceState(),
+  sortConfig: persisted?.sort ?? null,
+  columnVisibility: persisted?.columnVisibility ?? null,
+  columnOrder: persisted?.columnOrder ?? null,
+  columnWidths: persisted?.columnWidths ?? null,
+  filters: persisted?.filters ?? DEFAULT_GRID_TABLE_FILTER_STATE,
+  pageSize: persisted?.pageSize ?? null,
+  hydrated: true,
+});
+
+const gridTablePersistenceReducer = (
+  state: GridTablePersistenceState,
+  action: GridTablePersistenceAction
+): GridTablePersistenceState => {
+  switch (action.type) {
+    case 'scopeChanged':
+      return createPendingPersistenceState();
+    case 'hydrated':
+      return hydratePersistenceState(action.persisted);
+    case 'reset':
+      return {
+        ...createPendingPersistenceState(),
+        columnVisibility: {},
+        columnWidths: {},
+        hydrated: state.hydrated,
+      };
+    case 'update':
+      return { ...state, ...action.update };
+  }
+};
+
 export function useGridTablePersistence<T>({
   viewId,
   clusterIdentity,
@@ -80,17 +142,33 @@ export function useGridTablePersistence<T>({
 }: UseGridTablePersistenceParams<T>): UseGridTablePersistenceResult {
   const [clusterHash, setClusterHash] = useState<string>('');
   const [storageKey, setStorageKey] = useState<string | null>(null);
-  const [hydrated, setHydrated] = useState(false);
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(
     getGridTablePersistenceMode()
   );
-
-  const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
-  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean> | null>(null);
-  const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
-  const [columnWidths, setColumnWidths] = useState<Record<string, ColumnWidthState> | null>(null);
-  const [filters, setFilters] = useState<GridTableFilterState>(DEFAULT_GRID_TABLE_FILTER_STATE);
-  const [pageSize, setPageSize] = useState<number | null>(null);
+  const [persistenceState, dispatchPersistence] = useReducer(
+    gridTablePersistenceReducer,
+    undefined,
+    createPendingPersistenceState
+  );
+  const { sortConfig, columnVisibility, columnOrder, columnWidths, filters, pageSize, hydrated } =
+    persistenceState;
+  const persistenceSetters = useMemo(
+    () => ({
+      setSortConfig: (value: SortConfig | null) =>
+        dispatchPersistence({ type: 'update', update: { sortConfig: value } }),
+      setColumnVisibility: (value: Record<string, boolean>) =>
+        dispatchPersistence({ type: 'update', update: { columnVisibility: value } }),
+      setColumnOrder: (value: string[]) =>
+        dispatchPersistence({ type: 'update', update: { columnOrder: value } }),
+      setColumnWidths: (value: Record<string, ColumnWidthState>) =>
+        dispatchPersistence({ type: 'update', update: { columnWidths: value } }),
+      setFilters: (value: GridTableFilterState) =>
+        dispatchPersistence({ type: 'update', update: { filters: value } }),
+      setPageSize: (value: number | null) =>
+        dispatchPersistence({ type: 'update', update: { pageSize: value } }),
+    }),
+    []
+  );
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavePayloadRef = useRef<string>('');
@@ -136,14 +214,8 @@ export function useGridTablePersistence<T>({
   useEffect(() => {
     void storageKey;
     // Force re-hydration when the storage key changes (e.g., namespace switch).
-    setHydrated(false);
     lastSavePayloadRef.current = '';
-    setSortConfig(null);
-    setColumnVisibility(null);
-    setColumnOrder(null);
-    setColumnWidths(null);
-    setFilters(DEFAULT_GRID_TABLE_FILTER_STATE);
-    setPageSize(null);
+    dispatchPersistence({ type: 'scopeChanged' });
   }, [storageKey]);
 
   useEffect(() => {
@@ -171,26 +243,8 @@ export function useGridTablePersistence<T>({
         pageSizeOptions,
       });
 
-      if (pruned?.sort) {
-        setSortConfig(pruned.sort);
-      }
-      if (pruned?.columnVisibility) {
-        setColumnVisibility(pruned.columnVisibility);
-      }
-      if (pruned?.columnOrder) {
-        setColumnOrder(pruned.columnOrder);
-      }
-      if (pruned?.columnWidths) {
-        setColumnWidths(pruned.columnWidths);
-      }
-      if (pruned?.filters) {
-        setFilters(pruned.filters);
-      }
-      if (pruned?.pageSize) {
-        setPageSize(pruned.pageSize);
-      }
       lastHydratedPayloadRef.current = pruned ? JSON.stringify(pruned) : '';
-      setHydrated(true);
+      dispatchPersistence({ type: 'hydrated', persisted: pruned });
     };
 
     void loadPersisted();
@@ -214,12 +268,7 @@ export function useGridTablePersistence<T>({
     }
     lastSavePayloadRef.current = '';
     lastHydratedPayloadRef.current = '';
-    setSortConfig(null);
-    setColumnVisibility({});
-    setColumnOrder(null);
-    setColumnWidths({});
-    setFilters(DEFAULT_GRID_TABLE_FILTER_STATE);
-    setPageSize(null);
+    dispatchPersistence({ type: 'reset' });
   }, [storageKey]);
 
   useEffect(() => {
@@ -300,17 +349,17 @@ export function useGridTablePersistence<T>({
     () => ({
       storageKey,
       sortConfig,
-      setSortConfig,
+      setSortConfig: persistenceSetters.setSortConfig,
       columnVisibility,
-      setColumnVisibility,
+      setColumnVisibility: persistenceSetters.setColumnVisibility,
       columnOrder,
-      setColumnOrder,
+      setColumnOrder: persistenceSetters.setColumnOrder,
       columnWidths,
-      setColumnWidths,
+      setColumnWidths: persistenceSetters.setColumnWidths,
       filters,
-      setFilters,
+      setFilters: persistenceSetters.setFilters,
       pageSize,
-      setPageSize,
+      setPageSize: persistenceSetters.setPageSize,
       hydrated,
       resetState: resetLocalState,
     }),
@@ -323,6 +372,7 @@ export function useGridTablePersistence<T>({
       filters,
       pageSize,
       hydrated,
+      persistenceSetters,
       resetLocalState,
     ]
   );

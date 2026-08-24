@@ -6,7 +6,12 @@
  */
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { parseWidthInputToNumber } from '@shared/components/tables/GridTable.utils';
+import {
+  clampAutoSizeColumnWidth,
+  clampColumnWidth,
+  getColumnMaxWidth,
+  getColumnMinWidth,
+} from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -29,8 +34,6 @@ export interface ColumnResizeControllerOptions<T> {
   columnWidths: Record<string, number>;
   setColumnWidths: (updater: React.SetStateAction<Record<string, number>>) => void;
   manuallyResizedColumnsRef: React.RefObject<Set<string>>;
-  getColumnMinWidth: (column: GridColumnDefinition<T>) => number;
-  getColumnMaxWidth: (column: GridColumnDefinition<T>) => number;
   measureColumnWidth: (column: GridColumnDefinition<T>) => number;
   enableColumnResizing: boolean;
   onManualResize?: (event: {
@@ -52,8 +55,6 @@ export function useColumnResizeController<T>({
   columnWidths,
   setColumnWidths,
   manuallyResizedColumnsRef,
-  getColumnMinWidth,
-  getColumnMaxWidth,
   measureColumnWidth,
   enableColumnResizing,
   onManualResize,
@@ -99,7 +100,7 @@ export function useColumnResizeController<T>({
       onManualResize?.({ type: 'dragStart', columns: [leftKey] });
       onManualResize?.({ type: 'drag', columns: [leftKey] });
     },
-    [columnWidths, enableColumnResizing, getColumnMinWidth, onManualResize]
+    [columnWidths, enableColumnResizing, onManualResize]
   );
 
   const handleResizeKeyDown = useCallback(
@@ -135,22 +136,14 @@ export function useColumnResizeController<T>({
 
       event.preventDefault();
       event.stopPropagation();
-      const clampedWidth = Math.min(Math.max(nextWidth, minimum), maximum);
+      const clampedWidth = clampColumnWidth(column, nextWidth);
       onManualResize?.({ type: 'dragStart', columns: [columnKey] });
       onManualResize?.({ type: 'drag', columns: [columnKey] });
       setColumnWidths((previous) => ({ ...previous, [columnKey]: clampedWidth }));
       manuallyResizedColumnsRef.current.add(columnKey);
       onManualResize?.({ type: 'dragEnd', columns: [columnKey] });
     },
-    [
-      columnWidths,
-      enableColumnResizing,
-      getColumnMaxWidth,
-      getColumnMinWidth,
-      manuallyResizedColumnsRef,
-      onManualResize,
-      setColumnWidths,
-    ]
+    [columnWidths, enableColumnResizing, manuallyResizedColumnsRef, onManualResize, setColumnWidths]
   );
 
   useEffect(() => {
@@ -255,15 +248,7 @@ export function useColumnResizeController<T>({
       }
       pendingResizeRef.current = null;
     };
-  }, [
-    enableColumnResizing,
-    getColumnMaxWidth,
-    getColumnMinWidth,
-    manuallyResizedColumnsRef,
-    onManualResize,
-    resizing,
-    setColumnWidths,
-  ]);
+  }, [enableColumnResizing, manuallyResizedColumnsRef, onManualResize, resizing, setColumnWidths]);
 
   const autoSizeColumn = useCallback(
     (columnKey: string) => {
@@ -278,14 +263,7 @@ export function useColumnResizeController<T>({
       }
 
       const measuredWidth = measureColumnWidth(column);
-      const minWidth = getColumnMinWidth(column);
-      const configuredMaxWidth = getColumnMaxWidth(column);
-      const autoSizeMaxWidth = parseWidthInputToNumber(column.autoSizeMaxWidth);
-      const maxWidth =
-        autoSizeMaxWidth !== null && autoSizeMaxWidth !== undefined
-          ? Math.min(configuredMaxWidth, autoSizeMaxWidth)
-          : configuredMaxWidth;
-      const clampedWidth = Math.max(minWidth, Math.min(maxWidth, measuredWidth));
+      const clampedWidth = clampAutoSizeColumnWidth(column, measuredWidth);
 
       manuallyResizedColumnsRef.current.delete(columnKey);
 
@@ -303,8 +281,6 @@ export function useColumnResizeController<T>({
     },
     [
       enableColumnResizing,
-      getColumnMaxWidth,
-      getColumnMinWidth,
       manuallyResizedColumnsRef,
       measureColumnWidth,
       setColumnWidths,
