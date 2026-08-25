@@ -357,7 +357,7 @@ func TestBroadcastRecordsDeliveryPerScope(t *testing.T) {
 	// per scope (cluster / namespace:<name>) instead of one aggregate.
 	var got telemetry.StreamStatus
 	for _, s := range recorder.SnapshotSummary().Streams {
-		if s.Domain == "namespace:demo" {
+		if s.LeafKind == telemetry.StreamLeafScope && s.Leaf == "namespace:demo" {
 			got = s
 		}
 	}

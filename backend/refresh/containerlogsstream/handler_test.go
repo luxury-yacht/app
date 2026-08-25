@@ -215,12 +215,14 @@ func TestHandleStreamsInitialSnapshotAndUpdatesWithTelemetry(t *testing.T) {
 	require.Equal(t, payloads[0].Sequence+1, payloads[1].Sequence)
 	require.Equal(t, payloads[1].Sequence+1, payloads[2].Sequence)
 
-	byDomain := map[string]telemetry.StreamStatus{}
+	byTarget := map[string]telemetry.StreamStatus{}
 	for _, status := range recorder.SnapshotSummary().Streams {
-		byDomain[status.Domain] = status
+		if status.LeafKind == telemetry.StreamLeafTarget {
+			byTarget[status.Leaf] = status
+		}
 	}
-	require.Equal(t, telemetry.StreamContainerLogs, byDomain["default/stream-pod"].Name)
-	require.GreaterOrEqual(t, byDomain["default/stream-pod"].TotalMessages, uint64(2))
+	require.Equal(t, telemetry.StreamContainerLogs, byTarget["default/stream-pod"].Name)
+	require.GreaterOrEqual(t, byTarget["default/stream-pod"].TotalMessages, uint64(2))
 }
 
 func TestHandleEmitsPermissionDeniedPayload(t *testing.T) {

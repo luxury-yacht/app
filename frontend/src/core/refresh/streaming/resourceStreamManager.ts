@@ -655,6 +655,21 @@ export class ResourceStreamManager {
     this.clearStreamError(subscription.clusterId);
   }
 
+  // recordStreamFallback counts a poll that ran because this scope's stream was
+  // not delivering. The refresh orchestrator owns that decision, so it reports
+  // the fallback here rather than the manager inferring one.
+  recordStreamFallback(domain: DoorbellDomain, scope: string, reason: string): void {
+    const now = Date.now();
+    // getForScope resolves without creating: a fallback is evidence about an
+    // existing subscription, never a reason to open one.
+    this.subscriptions.getForScope(domain, scope).forEach((subscription) => {
+      const stats = this.ensureStreamTelemetry(subscription);
+      stats.fallbackCount += 1;
+      stats.lastFallbackAt = now;
+      stats.lastFallbackReason = reason;
+    });
+  }
+
   // Track resync activity so diagnostics can surface stream health.
   private recordResync(subscription: StreamSubscription, reason: string): void {
     if (!this.shouldTrackResync(reason)) {

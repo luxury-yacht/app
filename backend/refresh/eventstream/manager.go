@@ -337,11 +337,11 @@ func (m *Manager) recordDelivery(scope string, delivered, backlogDrops int) {
 	if m.telemetry == nil {
 		return
 	}
-	m.telemetry.RecordStreamDeliveryForDomain(telemetry.StreamEvents, scope, delivered, backlogDrops)
+	m.telemetry.RecordStreamDeliveryForLeaf(telemetry.StreamEvents, telemetry.ScopeLeaf(scope), delivered, backlogDrops)
 	if backlogDrops > 0 {
-		m.telemetry.RecordStreamErrorForDomain(
+		m.telemetry.RecordStreamErrorForLeaf(
 			telemetry.StreamEvents,
-			scope,
+			telemetry.ScopeLeaf(scope),
 			fmt.Errorf("dropped %d event(s) due to backlog", backlogDrops),
 		)
 	}

@@ -182,6 +182,7 @@ const resourceStreamMocks = vi.hoisted(() => ({
   stop: vi.fn(),
   refreshOnce: vi.fn(),
   isHealthy: vi.fn(() => false),
+  recordStreamFallback: vi.fn(),
 }));
 
 vi.mock('./streaming/resourceStreamManager', () => ({

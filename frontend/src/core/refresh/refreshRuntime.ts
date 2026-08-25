@@ -466,6 +466,15 @@ type ScopedRefreshState = {
 
 type StreamingFetchMode = 'snapshot' | 'skip';
 
+export type StreamingFetchDecision = {
+  mode: StreamingFetchMode;
+  // True only when this fetch runs BECAUSE the stream that should have kept the
+  // scope fresh is not delivering. That is the stream-down fallback, and it is
+  // the one branch worth counting: every other snapshot has its own reason
+  // (manual, no stream, first page, or a doorbell asking for the fetch).
+  fallback: boolean;
+};
+
 type StreamingFetchDecisionInput = {
   domain: RefreshDomain;
   scope: string;
@@ -1099,28 +1108,30 @@ export class ClusterRefreshRuntime {
     return stream;
   }
 
-  resolveStreamingFetchMode(input: StreamingFetchDecisionInput): StreamingFetchMode {
+  resolveStreamingFetchMode(input: StreamingFetchDecisionInput): StreamingFetchDecision {
     if (input.isManual || !input.shouldStream) {
-      return 'snapshot';
+      return { mode: 'snapshot', fallback: false };
     }
 
     // A scope with no applied data yet must load its first page even when the stream
     // is healthy — the notify-only stream signals changes, it does not deliver a new
     // query's initial snapshot. Without this, a filter/scope change never fetches.
     if (!input.hasData) {
-      return 'snapshot';
+      return { mode: 'snapshot', fallback: false };
     }
 
     // A doorbell-triggered fetch IS the stream refresh: skipping it for a
     // "healthy stream" swallows the very signal the stream sent.
     if (input.streamSignal) {
-      return 'snapshot';
+      return { mode: 'snapshot', fallback: false };
     }
 
     // While the stream is healthy, streaming IS the refresh: change signals
     // (object clock) and doorbells (metric/event/catalog clocks) drive refetch;
     // the poll runs only as the stream-down fallback.
-    return input.streamingHealthy ? 'skip' : 'snapshot';
+    return input.streamingHealthy
+      ? { mode: 'skip', fallback: false }
+      : { mode: 'snapshot', fallback: true };
   }
 
   resetTransientState(): void {

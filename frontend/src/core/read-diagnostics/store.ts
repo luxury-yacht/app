@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 
 import type { AppStateAdapter } from '@/core/app-state-access';
 import type { DataAccessAdapter, DataRequestReason } from '@/core/data-access';
+import { parseClusterScope } from '@/core/refresh/clusterScope';
 import { recordBrokerRequestCompleted, recordBrokerRequestStarted } from '@/core/telemetry/sentry';
 
 type Listener = () => void;
@@ -13,6 +14,9 @@ export type BrokerRequestStatus = 'success' | 'error' | 'blocked';
 export interface BrokerReadDiagnosticsEntry {
   key: string;
   broker: BrokerKind;
+  // Cluster this call site read from, derived from the request scope. Empty for
+  // reads with no single owning cluster: app state, and multi-cluster scopes.
+  clusterId: string;
   resource: string;
   label?: string;
   adapter: BrokerAdapter;
@@ -76,8 +80,18 @@ const notify = () => {
   }
 };
 
-const buildKey = ({ broker, resource, adapter, reason }: BeginBrokerReadOptions): string => {
-  return [broker, resource, adapter, reason ?? ''].join('::');
+// clusterIdForRead resolves the single cluster a read belongs to. A scope that
+// names several clusters has no single owner and stays an app-level row.
+const clusterIdForRead = (scope?: string): string => {
+  const parsed = parseClusterScope(scope);
+  return parsed.isMultiCluster ? '' : parsed.clusterId;
+};
+
+// The key carries cluster identity so a per-cluster surface can group these
+// rows under the cluster they read from instead of folding clusters together.
+const buildKey = (options: BeginBrokerReadOptions): string => {
+  const { broker, resource, adapter, reason } = options;
+  return [broker, clusterIdForRead(options.scope), resource, adapter, reason ?? ''].join('::');
 };
 
 const getOrCreateEntry = (options: BeginBrokerReadOptions): BrokerReadDiagnosticsEntry => {
@@ -90,6 +104,7 @@ const getOrCreateEntry = (options: BeginBrokerReadOptions): BrokerReadDiagnostic
   const entry: BrokerReadDiagnosticsEntry = {
     key,
     broker: options.broker,
+    clusterId: clusterIdForRead(options.scope),
     resource: options.resource,
     adapter: options.adapter,
     reason: options.reason,

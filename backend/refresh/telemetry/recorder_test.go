@@ -201,20 +201,20 @@ func TestSnapshotSummaryTagsStreamsWithClusterMeta(t *testing.T) {
 	require.Equal(t, "Cluster One", streams[0].ClusterName)
 }
 
-// TestRecordStreamDeliveryForDomainTracksPerDomainCounters proves the resources
+// TestRecordStreamDeliveryForLeafTracksPerDomainCounters proves the resources
 // stream's delivery/error counters can be attributed per resource domain, while
 // stream-level (domain-less) activity stays its own entry — so diagnostics can
 // show one row per domain.
-func TestRecordStreamDeliveryForDomainTracksPerDomainCounters(t *testing.T) {
+func TestRecordStreamDeliveryForLeafTracksPerDomainCounters(t *testing.T) {
 	rec := NewRecorder()
-	rec.RecordStreamConnect(StreamResources) // stream-level (socket), no domain
-	rec.RecordStreamDeliveryForDomain(StreamResources, "nodes", 5, 0)
-	rec.RecordStreamDeliveryForDomain(StreamResources, "pods", 3, 1)
-	rec.RecordStreamErrorForDomain(StreamResources, "pods", errors.New("backlog"))
+	rec.RecordStreamConnect(StreamResources) // stream-level (socket), no leaf
+	rec.RecordStreamDeliveryForLeaf(StreamResources, DomainLeaf("nodes"), 5, 0)
+	rec.RecordStreamDeliveryForLeaf(StreamResources, DomainLeaf("pods"), 3, 1)
+	rec.RecordStreamErrorForLeaf(StreamResources, DomainLeaf("pods"), errors.New("backlog"))
 
 	byDomain := map[string]StreamStatus{}
 	for _, s := range rec.SnapshotSummary().Streams {
-		byDomain[s.Domain] = s
+		byDomain[s.Leaf] = s
 	}
 
 	require.Equal(t, uint64(5), byDomain["nodes"].TotalMessages)
@@ -222,8 +222,58 @@ func TestRecordStreamDeliveryForDomainTracksPerDomainCounters(t *testing.T) {
 	require.Equal(t, uint64(3), byDomain["pods"].TotalMessages)
 	require.Equal(t, uint64(1), byDomain["pods"].DroppedMessages)
 	require.Equal(t, "backlog", byDomain["pods"].LastError)
-	// Stream-level connect stays a domain-less entry.
+	// Stream-level connect stays a leaf-less entry.
 	require.Equal(t, 1, byDomain[""].ActiveSessions)
 	require.Equal(t, StreamResources, byDomain[""].Name)
 	require.Equal(t, StreamResources, byDomain["nodes"].Name)
+}
+
+// TestStreamLeafKindsDoNotCollide proves the three streams key their per-leaf
+// counters by different things (a refresh domain, an event scope, a container
+// target) and that a diagnostics consumer can tell them apart. Two leaves that
+// share a key string but not a kind must stay separate entries.
+func TestStreamLeafKindsDoNotCollide(t *testing.T) {
+	rec := NewRecorder()
+	rec.RecordStreamDeliveryForLeaf(StreamResources, DomainLeaf("pods"), 5, 0)
+	rec.RecordStreamDeliveryForLeaf(StreamEvents, ScopeLeaf("pods"), 2, 0)
+	rec.RecordStreamDeliveryForLeaf(StreamContainerLogs, TargetLeaf("ns/pods/app"), 7, 0)
+
+	type leafID struct {
+		name string
+		kind StreamLeafKind
+		key  string
+	}
+	byLeaf := map[leafID]StreamStatus{}
+	for _, s := range rec.SnapshotSummary().Streams {
+		byLeaf[leafID{s.Name, s.LeafKind, s.Leaf}] = s
+	}
+
+	require.Equal(t, uint64(5), byLeaf[leafID{StreamResources, StreamLeafDomain, "pods"}].TotalMessages)
+	require.Equal(t, uint64(2), byLeaf[leafID{StreamEvents, StreamLeafScope, "pods"}].TotalMessages)
+	require.Equal(t, uint64(7), byLeaf[leafID{StreamContainerLogs, StreamLeafTarget, "ns/pods/app"}].TotalMessages)
+	require.Len(t, byLeaf, 3)
+}
+
+// TestStreamLevelRowsCarryNoLeaf proves socket-level activity (sessions,
+// connect) stays its own leaf-less entry so a merged view never attributes a
+// connection counter to a domain.
+func TestStreamLevelRowsCarryNoLeaf(t *testing.T) {
+	rec := NewRecorder()
+	rec.RecordStreamConnect(StreamResources)
+	rec.RecordStreamDeliveryForLeaf(StreamResources, DomainLeaf("nodes"), 4, 0)
+
+	var streamLevel, leafLevel int
+	for _, s := range rec.SnapshotSummary().Streams {
+		if s.LeafKind == StreamLeafNone {
+			streamLevel++
+			require.Empty(t, s.Leaf)
+			require.Equal(t, 1, s.ActiveSessions)
+			continue
+		}
+		leafLevel++
+		require.Equal(t, StreamLeafDomain, s.LeafKind)
+		require.Equal(t, "nodes", s.Leaf)
+	}
+	require.Equal(t, 1, streamLevel)
+	require.Equal(t, 1, leafLevel)
 }

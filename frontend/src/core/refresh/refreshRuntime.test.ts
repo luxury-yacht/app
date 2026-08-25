@@ -491,10 +491,16 @@ describe('ClusterRefreshRuntime', () => {
       shouldStream: true,
       hasData: true,
     };
-    expect(runtime.resolveStreamingFetchMode({ ...base, streamingHealthy: true })).toBe('skip');
-    expect(runtime.resolveStreamingFetchMode({ ...base, streamingHealthy: false })).toBe(
-      'snapshot'
-    );
+    expect(runtime.resolveStreamingFetchMode({ ...base, streamingHealthy: true })).toEqual({
+      mode: 'skip',
+      fallback: false,
+    });
+    // A poll that runs only because the stream is not delivering IS the
+    // stream-down fallback, and must be counted as one.
+    expect(runtime.resolveStreamingFetchMode({ ...base, streamingHealthy: false })).toEqual({
+      mode: 'snapshot',
+      fallback: true,
+    });
   });
 
   it('never skips a stream-signal fetch — the doorbell IS the stream saying data changed', async () => {
@@ -517,7 +523,7 @@ describe('ClusterRefreshRuntime', () => {
         hasData: true,
         streamSignal: true,
       })
-    ).toBe('snapshot');
+    ).toEqual({ mode: 'snapshot', fallback: false });
   });
 
   it('fetches a snapshot for a no-data scope even when the stream is healthy, but skips once it has data', () => {
@@ -531,8 +537,14 @@ describe('ClusterRefreshRuntime', () => {
     };
     // A brand-new filter/page scope has no data yet — the notify-only stream cannot
     // deliver its first page, so it MUST fetch even though the stream is healthy.
-    expect(runtime.resolveStreamingFetchMode({ ...base, hasData: false })).toBe('snapshot');
+    expect(runtime.resolveStreamingFetchMode({ ...base, hasData: false })).toEqual({
+      mode: 'snapshot',
+      fallback: false,
+    });
     // Once the scope holds data, the healthy stream keeps it fresh → skip the poll.
-    expect(runtime.resolveStreamingFetchMode({ ...base, hasData: true })).toBe('skip');
+    expect(runtime.resolveStreamingFetchMode({ ...base, hasData: true })).toEqual({
+      mode: 'skip',
+      fallback: false,
+    });
   });
 });

@@ -1559,6 +1559,26 @@ describe('ResourceStreamManager', () => {
     expect(manager.getTelemetrySummary()).toEqual({ resyncCount: 0, fallbackCount: 0 });
   });
 
+  test('counts a stream-down fallback only against a live subscription for that scope', async () => {
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    await manager.start('pods', storeScope);
+    await flushPromises();
+
+    manager.recordStreamFallback('pods', storeScope, 'stream not delivering');
+    manager.recordStreamFallback('pods', storeScope, 'stream not delivering');
+    // No subscription owns this scope, so there is nothing to attribute a
+    // fallback to — the counter must not invent a row for it.
+    manager.recordStreamFallback('pods', buildClusterScope('cluster-a', 'namespace:other'), 'nope');
+
+    const summary = manager.getTelemetrySummary();
+    expect(summary.fallbackCount).toBe(2);
+    expect(summary.lastFallbackReason).toBe('stream not delivering');
+    expect(manager.getTelemetrySummaryByClusterDomain()['cluster-a::pods']).toMatchObject({
+      fallbackCount: 2,
+    });
+  });
+
   test('groups resync/fallback telemetry by cluster AND domain for per-domain rows', () => {
     const manager = new ResourceStreamManager();
     const internal = manager as unknown as {

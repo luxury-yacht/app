@@ -54,6 +54,10 @@ export type ResourceStatusSignalType =
 
 export type TelemetrySnapshotLastStatus = 'success' | 'error';
 
+export const TELEMETRY_STREAM_LEAF_KINDS = ['', 'domain', 'scope', 'target'] as const;
+
+export type TelemetryStreamLeafKind = (typeof TELEMETRY_STREAM_LEAF_KINDS)[number];
+
 export const RESOURCE_STREAM_MESSAGE_TYPES = [
   'REQUEST',
   'CANCEL',
@@ -1561,7 +1565,8 @@ export interface TelemetrySnapshotStatus {
 
 export interface TelemetryStreamStatus {
   name: string;
-  domain?: string;
+  leaf?: string;
+  leafKind?: TelemetryStreamLeafKind;
   clusterId?: string;
   clusterName?: string;
   activeSessions: number;
@@ -2393,7 +2398,8 @@ const telemetrySummarySchema: RefreshContractSchema = { kind: 'object', fields: 
   } } },
   streams: { optional: false, schema: { kind: 'array', items: { kind: 'object', fields: {
     name: { optional: false, schema: { kind: 'string' } },
-    domain: { optional: true, schema: { kind: 'string' } },
+    leaf: { optional: true, schema: { kind: 'string' } },
+    leafKind: { optional: true, schema: { kind: 'enum', values: ['', 'domain', 'scope', 'target'] } },
     clusterId: { optional: true, schema: { kind: 'string' } },
     clusterName: { optional: true, schema: { kind: 'string' } },
     activeSessions: { optional: false, schema: { kind: 'number' } },

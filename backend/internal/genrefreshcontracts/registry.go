@@ -195,6 +195,7 @@ var contractEnums = []enumSpec{
 	{name: "ResourceScope", typeOf: typeOf[resourcemodel.ResourceScope]()},
 	{name: "ResourceStatusSignalType", typeOf: typeOf[resourcemodel.StatusSignalType]()},
 	{name: "TelemetrySnapshotLastStatus", typeOf: typeOf[telemetry.SnapshotLastStatus]()},
+	{name: "TelemetryStreamLeafKind", typeOf: typeOf[telemetry.StreamLeafKind](), valuesName: "TELEMETRY_STREAM_LEAF_KINDS"},
 	{name: "ResourceStreamMessageType", typeOf: typeOf[streammux.MessageType](), valuesName: "RESOURCE_STREAM_MESSAGE_TYPES"},
 	{name: "ResourceStreamSource", typeOf: typeOf[streammux.Source](), valuesName: "RESOURCE_STREAM_SOURCES"},
 	{name: "ResourceStreamSignal", typeOf: typeOf[streammux.Signal](), valuesName: "RESOURCE_STREAM_SIGNALS"},

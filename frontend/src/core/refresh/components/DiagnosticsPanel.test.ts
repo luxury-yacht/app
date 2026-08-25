@@ -262,8 +262,87 @@ const selectDiagnosticsTab = async (container: HTMLElement, index: number) => {
   await flushAsync();
 };
 
-const selectRefreshDomainsTab = async (container: HTMLElement) =>
-  selectDiagnosticsTab(container, 1);
+const selectClusterDataTab = async (container: HTMLElement) => selectDiagnosticsTab(container, 1);
+
+// readScopeRows walks the Cluster Data tree the way a reader does: a domain
+// group row names the domain for the scope rows beneath it, and a standalone
+// scope row names its own. Either way each scope resolves to one labelled row.
+const readScopeRows = (
+  container: HTMLElement
+): Array<{ label: string; scope: string; feed: string; health: string }> => {
+  const domainText = (row: Element): string =>
+    row.querySelector('.diagnostics-domain')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  let groupLabel = '';
+  const out: Array<{ label: string; scope: string; feed: string; health: string }> = [];
+  container.querySelectorAll('.diagnostics-table tbody tr').forEach((row) => {
+    if (row.classList.contains('diagnostics-domain-row')) {
+      groupLabel = domainText(row);
+      return;
+    }
+    if (row.classList.contains('diagnostics-cluster-row')) {
+      groupLabel = '';
+      return;
+    }
+    if (!row.classList.contains('diagnostics-scope-row')) {
+      return;
+    }
+    const cells = row.querySelectorAll('td');
+    out.push({
+      label: domainText(row) || groupLabel,
+      scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+      health: cells[2]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+      feed: cells[3]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+    });
+  });
+  return out;
+};
+
+// Cluster Data shows eight columns; everything else lives behind the row's
+// expander. expandScopeRow opens the row whose first cell names `label` and
+// returns its detail grid as a label -> value map.
+const expandScopeRow = async (
+  container: HTMLElement,
+  label: string
+): Promise<Record<string, string>> => {
+  // A grouped scope row is unlabelled by design, so resolve its domain the same
+  // way a reader does: from the domain group row above it.
+  let groupLabel = '';
+  let row: Element | undefined;
+  for (const candidate of Array.from(container.querySelectorAll('.diagnostics-table tbody tr'))) {
+    if (candidate.classList.contains('diagnostics-cluster-row')) {
+      groupLabel = '';
+      continue;
+    }
+    if (candidate.classList.contains('diagnostics-domain-row')) {
+      groupLabel = candidate.querySelector('.diagnostics-domain')?.textContent?.trim() ?? '';
+      continue;
+    }
+    if (!candidate.classList.contains('diagnostics-scope-row')) {
+      continue;
+    }
+    const own = candidate.querySelector('td')?.textContent ?? '';
+    if (own.includes(label) || groupLabel.includes(label)) {
+      row = candidate;
+      break;
+    }
+  }
+  const expander = row?.querySelector<HTMLButtonElement>('.diagnostics-row-expander');
+  if (!expander) {
+    throw new Error(`no expandable Cluster Data row for "${label}"`);
+  }
+  await act(async () => {
+    expander.click();
+    await Promise.resolve();
+  });
+  const detailRow = row?.nextElementSibling;
+  const entries = Array.from(detailRow?.querySelectorAll('.diagnostics-detail-item') ?? []).map(
+    (item) => [
+      item.querySelector('dt')?.textContent?.trim() ?? '',
+      item.querySelector('dd')?.textContent?.trim() ?? '',
+    ]
+  );
+  return Object.fromEntries(entries);
+};
 
 const renderDiagnosticsPanel = async (
   DiagnosticsPanelComponent: React.ComponentType<DiagnosticsPanelProps>,
@@ -427,12 +506,12 @@ describe('broker read diagnostics', () => {
 
     const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
-      tabButtons[3].click();
+      tabButtons[2].click();
       await Promise.resolve();
     });
     await flushAsync();
 
-    expect(rendered.container.textContent).toContain('Broker Reads');
+    expect(rendered.container.textContent).toContain('Reads that belong to no refresh domain');
     expect(rendered.container.textContent).toContain('Query Permissions');
     expect(rendered.container.textContent).toContain('query-permissions');
     expect(rendered.container.textContent).toContain('cluster:test-cluster');
@@ -585,20 +664,17 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
     const markup = rendered.container.innerHTML;
 
     expect(markup).toContain('Cluster Overview');
-    expect(markup).toContain('OK (5 polls)');
-    const nodesRow = Array.from(
-      rendered.container.querySelectorAll('.diagnostics-table tbody tr')
-    ).find((row) => row.querySelector('td')?.textContent?.includes('Nodes'));
-    // Sync Wait (no informer-sync-wait telemetry → dimmed hyphen); Metrics shifted to 15.
-    // Nodes carries the joined-usage freshness block on its base payload now,
-    // so the Metrics column reflects it directly.
-    expect(nodesRow?.querySelectorAll('td')[14]?.textContent?.trim()).toBe('-');
-    expect(nodesRow?.querySelectorAll('td')[15]?.textContent?.trim()).toBe('OK (2 polls)');
+    // Sync wait and Metrics are detail fields now, not columns. Nodes carries
+    // the joined-usage freshness block on its base payload, so Metrics reflects
+    // it directly; with no informer-sync telemetry there is no Sync wait entry.
+    const nodesDetails = await expandScopeRow(rendered.container, 'Nodes');
+    expect(nodesDetails['Sync wait']).toBeUndefined();
+    expect(nodesDetails.Metrics).toBe('OK (2 polls)');
 
     const clusterIndex = markup.indexOf('Cluster Overview');
     const podsIndex = markup.indexOf('Pods');
@@ -677,42 +753,39 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
-    const rows = Array.from(
-      rendered.container.querySelectorAll<HTMLTableRowElement>('.diagnostics-table tbody tr')
+    // Scope and label stay visible; metric freshness is a detail field.
+    const visible = Array.from(
+      rendered.container.querySelectorAll<HTMLTableRowElement>(
+        '.diagnostics-table tbody tr.diagnostics-scope-row'
+      )
     ).map((row) => {
       const cells = row.querySelectorAll<HTMLTableCellElement>('td');
       return {
-        label: cells[0]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+        label:
+          cells[0]
+            ?.querySelector('.diagnostics-domain')
+            ?.textContent?.replace(/\s+/g, ' ')
+            .trim() ?? '',
         scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-        metrics: cells[15]?.textContent?.trim() ?? '',
-        metricsTooltip: cells[15]?.getAttribute('title') ?? '',
       };
     });
-
-    expect(rows).toEqual(
+    expect(visible).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          label: 'Nodes',
-          scope: 'cluster-a (active)',
-          metrics: 'Unavailable (2 fails)',
-        }),
-        expect.objectContaining({
-          label: 'Workloads',
-          scope: 'cluster-a (active) - namespace:team-a',
-          metrics: 'Error (1 fails)',
-          metricsTooltip: expect.stringContaining('Last error: workload metrics failed'),
-        }),
-        // pods rows point at the joined usage instead of rendering their own
-        // freshness column.
-        expect.objectContaining({
-          label: 'ObjPanel - Pods - team-a',
-          scope: 'cluster-a (active) - namespace:team-a',
-          metrics: 'N/A',
-          metricsTooltip: 'Pod usage is joined onto the pods rows at serve',
-        }),
+        expect.objectContaining({ label: 'Nodes', scope: 'cluster-a (active)' }),
+        // The cluster prefix is dropped: the cluster header row states it.
+        expect.objectContaining({ label: 'Workloads', scope: 'namespace:team-a' }),
       ])
+    );
+
+    expect((await expandScopeRow(rendered.container, 'Nodes')).Metrics).toBe(
+      'Unavailable (2 fails)'
+    );
+    expect((await expandScopeRow(rendered.container, 'Workloads')).Metrics).toBe('Error (1 fails)');
+    // Pod rows point at the joined usage rather than their own freshness.
+    expect((await expandScopeRow(rendered.container, 'ObjPanel - Pods - team-a')).Metrics).toBe(
+      'N/A'
     );
 
     await rendered.unmount();
@@ -745,7 +818,7 @@ describe('DiagnosticsPanel component', () => {
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
 
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
     const markup = rendered.container.innerHTML;
 
@@ -782,7 +855,7 @@ describe('DiagnosticsPanel component', () => {
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
 
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
     const markup = rendered.container.innerHTML;
 
@@ -843,7 +916,7 @@ describe('DiagnosticsPanel component', () => {
     mockKubeconfigState.selectedClusterId = 'cluster-a';
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
     await flushAsync();
     const clusterAScopeRow = findClusterConfigRow(rendered.container, 'cluster-a');
@@ -881,7 +954,7 @@ describe('DiagnosticsPanel component', () => {
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
 
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
     const markup = rendered.container.innerHTML;
 
@@ -958,12 +1031,14 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
     await flushAsync();
 
     const findRowsByLabel = (label: string) => {
-      const rows = Array.from(rendered.container.querySelectorAll('.diagnostics-table tbody tr'));
+      const rows = Array.from(
+        rendered.container.querySelectorAll('.diagnostics-table tbody tr.diagnostics-scope-row')
+      );
       return rows.filter((row) => row.querySelector('td')?.textContent?.includes(label));
     };
 
@@ -973,7 +1048,7 @@ describe('DiagnosticsPanel component', () => {
       const cells = row.querySelectorAll('td');
       return {
         scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-        count: cells[9]?.textContent?.trim() ?? '',
+        count: cells[4]?.textContent?.trim() ?? '',
       };
     });
     expect(namespaceSummaries).toEqual(
@@ -989,14 +1064,13 @@ describe('DiagnosticsPanel component', () => {
       const cells = row.querySelectorAll('td');
       return {
         scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-        count: cells[9]?.textContent?.trim() ?? '',
-        metrics: cells[15]?.textContent?.trim() ?? '',
+        count: cells[4]?.textContent?.trim() ?? '',
       };
     });
     expect(overviewSummaries).toEqual(
       expect.arrayContaining([
-        { scope: 'cluster-a', count: '4', metrics: 'OK (3 polls)' },
-        { scope: 'cluster-b (active)', count: '6', metrics: 'OK (9 polls)' },
+        { scope: 'cluster-a', count: '4' },
+        { scope: 'cluster-b (active)', count: '6' },
       ])
     );
     expect(rendered.container.textContent).not.toContain('clusters=');
@@ -1075,35 +1149,28 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
-    const rows = Array.from(
-      rendered.container.querySelectorAll<HTMLTableRowElement>('.diagnostics-table tbody tr')
-    ).map((row) => {
-      const cells = row.querySelectorAll<HTMLTableCellElement>('td');
-      return {
-        label: cells[0]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-        scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-        role: cells[2]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-        mode: cells[4]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-      };
-    });
+    const rows = readScopeRows(rendered.container);
 
     const catalogRows = rows.filter((row) => row.label === 'Browse Catalog');
     expect(catalogRows).toHaveLength(2);
     expect(new Set(catalogRows.map((row) => row.scope)).size).toBe(2);
     expect(catalogRows.map((row) => row.scope).join(' | ')).toContain('limit=200');
     expect(catalogRows.map((row) => row.scope).join(' | ')).toContain('limit=1');
-    expect(catalogRows.map((row) => row.role)).toEqual(
-      expect.arrayContaining(['Metadata', 'Page Query'])
-    );
-    expect(catalogRows.map((row) => row.mode)).toEqual(['streaming', 'streaming']);
+    // Both catalog scopes are fed by the same stream; Role distinguishes them
+    // and is now a detail field rather than a column.
+    // Both catalog scopes ride the same stream, so Feed is identical for both;
+    // Role is what distinguishes them, and it is a detail field now.
+    expect(new Set(catalogRows.map((row) => row.feed)).size).toBe(1);
+    expect(catalogRows[0].feed).toContain('Resources');
+    expect((await expandScopeRow(rendered.container, 'Browse Catalog')).Role).toBeDefined();
 
     const nodeRows = rows.filter((row) => row.label === 'Nodes');
     expect(nodeRows).toHaveLength(1);
     expect(nodeRows.some((row) => row.scope === 'cluster-a (active)')).toBe(true);
     expect(nodeRows.some((row) => row.scope.includes('limit=50'))).toBe(false);
-    expect(nodeRows.map((row) => row.role)).toEqual(['Live Scope']);
+    expect((await expandScopeRow(rendered.container, 'Nodes')).Role).toBe('Live Scope');
 
     await rendered.unmount();
     healthSpy.mockRestore();
@@ -1169,7 +1236,8 @@ describe('DiagnosticsPanel component', () => {
         },
         {
           name: 'resources',
-          domain: 'catalog',
+          leafKind: 'domain',
+          leaf: 'catalog',
           activeSessions: 0,
           totalMessages: 20,
           droppedMessages: 4,
@@ -1253,7 +1321,7 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
     await flushAsync();
     await flushAsync();
@@ -1261,41 +1329,47 @@ describe('DiagnosticsPanel component', () => {
     const orchestratorPrimary = rendered.container.querySelector<HTMLSpanElement>(
       '.diagnostics-summary-card:nth-of-type(1) .diagnostics-summary-primary'
     );
-    expect(orchestratorPrimary?.textContent?.trim()).toBe(
-      'Pending Requests: 2 • Selection Queue: 1'
-    );
+    // Each card is now a headline figure plus at most two supporting facts; the
+    // full breakdown moved to the card's tooltip so the strip stays glanceable.
+    expect(orchestratorPrimary?.textContent?.trim()).toBe('2 pending');
+    expect(orchestratorPrimary?.getAttribute('title')).toContain('Failed 1');
     const orchestratorSecondary = rendered.container.querySelector<HTMLSpanElement>(
       '.diagnostics-summary-card:nth-of-type(1) .diagnostics-summary-secondary'
     );
-    expect(orchestratorSecondary?.textContent).toContain('Queue p95: 42 ms');
-    expect(orchestratorSecondary?.textContent).toContain('Failed: 1');
+    expect(orchestratorSecondary?.textContent).toBe('Queue 1 · p95 42 ms');
 
     const metricsPrimary = rendered.container.querySelector<HTMLSpanElement>(
       '.diagnostics-summary-card:nth-of-type(2) .diagnostics-summary-primary'
     );
-    expect(metricsPrimary?.textContent).toContain('Status: OK • Polls: 7');
+    expect(metricsPrimary?.textContent).toBe('OK');
+    expect(
+      rendered.container.querySelector<HTMLSpanElement>(
+        '.diagnostics-summary-card:nth-of-type(2) .diagnostics-summary-secondary'
+      )?.textContent
+    ).toContain('7 polls');
 
     const eventsPrimary = rendered.container.querySelector<HTMLSpanElement>(
       '.diagnostics-summary-card:nth-of-type(3) .diagnostics-summary-primary'
     );
-    expect(eventsPrimary?.textContent).toContain('Active: 2');
-    expect(eventsPrimary?.textContent).toContain('Delivered: 12');
+    expect(eventsPrimary?.textContent).toBe('12 delivered');
+    expect(eventsPrimary?.getAttribute('title')).toContain('Active 2');
 
     const catalogPrimary = rendered.container.querySelector<HTMLSpanElement>(
       '.diagnostics-summary-card:nth-of-type(4) .diagnostics-summary-primary'
     );
     expect(catalogPrimary?.className).toContain('diagnostics-summary-error');
-    expect(catalogPrimary?.textContent).toContain('Active: 1');
-    expect(catalogPrimary?.textContent).toContain('Batches: 20');
+    expect(catalogPrimary?.textContent).toBe('20 batches');
+    expect(catalogPrimary?.getAttribute('title')).toContain('Active 1');
 
     const logPrimary = rendered.container.querySelector<HTMLSpanElement>(
       '.diagnostics-summary-card:nth-of-type(5) .diagnostics-summary-primary'
     );
     expect(logPrimary?.className).toContain('diagnostics-summary-error');
-    expect(logPrimary?.textContent).toContain('Scopes: 2');
-    expect(logPrimary?.textContent).toContain('Sessions: 1');
-    expect(logPrimary?.textContent).toContain('Delivered: 9');
-    expect(logPrimary?.textContent).toContain('Skipped Targets: 5');
+    expect(logPrimary?.textContent).toBe('9 delivered');
+    // Every figure the headline drops is still reachable in the tooltip.
+    expect(logPrimary?.getAttribute('title')).toContain('Scopes: 2');
+    expect(logPrimary?.getAttribute('title')).toContain('Sessions: 1');
+    expect(logPrimary?.getAttribute('title')).toContain('Skipped Targets: 5');
 
     const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
@@ -1304,27 +1378,27 @@ describe('DiagnosticsPanel component', () => {
     });
     await flushAsync();
 
-    const streamsSection = rendered.container.querySelector('.diagnostics-section');
-    expect(streamsSection?.textContent).toContain('Streams');
-    expect(streamsSection?.textContent).toContain('Resources');
-    const streamRows = streamsSection?.querySelectorAll('tbody tr') ?? [];
-    expect(streamRows).toHaveLength(5);
-    expect(
-      Array.from(streamRows).some((row) => row.textContent?.toLowerCase().includes('catalog'))
-    ).toBe(true);
-    const resourcesRow = Array.from(streamRows).find((row) =>
+    // Connections lists one socket row per (stream, cluster). The fixture has no
+    // leaf-keyed entries, so every row here is a socket.
+    const connectionsSection = rendered.container.querySelector('.diagnostics-section');
+    expect(connectionsSection?.textContent).toContain('Sockets: 3');
+    expect(connectionsSection?.textContent).toContain('Resources');
+    const connectionRows =
+      connectionsSection
+        ?.querySelector('.diagnostics-table-wrapper')
+        ?.querySelectorAll('tbody tr') ?? [];
+    expect(connectionRows).toHaveLength(3);
+    const resourcesRow = Array.from(connectionRows).find((row) =>
       row.textContent?.includes('Resources')
     );
+    // Socket row: Connection | Cluster | Sessions | Last Connect | Delivered(4)
+    // | Dropped(5) | Errors(6) | Last Event(7) | Last Error(8).
     const cells = resourcesRow?.querySelectorAll('td') ?? [];
-    // Domain-less fixture → a stream header row (Name | Delivered | Dropped |
-    // Errors | Resyncs | Fallbacks | Last Event | Last Error); resyncs/fallbacks
-    // are per-domain only, so the header shows the canonical no-value hyphen.
-    expect(cells[4]?.textContent?.trim()).toBe('-');
-    expect(cells[5]?.textContent?.trim()).toBe('-');
+    expect(cells[2]?.textContent?.trim()).toBe('1');
     // The Last Error placeholder is dimmed and has no error colour.
-    expect(cells[7]?.textContent?.trim()).toBe('-');
-    expect(cells[7]?.querySelector('.table-no-value')).not.toBeNull();
-    expect(cells[7]?.classList.contains('diagnostics-error-warning')).toBe(false);
+    expect(cells[8]?.textContent?.trim()).toBe('-');
+    expect(cells[8]?.querySelector('.table-no-value')).not.toBeNull();
+    expect(cells[8]?.classList.contains('diagnostics-error-warning')).toBe(false);
 
     await rendered.unmount();
     resourceStreamSpy.mockRestore();
@@ -1366,16 +1440,13 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
     await flushAsync();
     await flushAsync();
 
-    const namespaceRow = Array.from(
-      rendered.container.querySelectorAll('.diagnostics-table tbody tr')
-    ).find((row) => row.querySelector('td')?.textContent?.includes('Namespaces'));
-    expect(namespaceRow).toBeDefined();
-    // Sync Wait column (index 14, after Duration at 13).
-    expect(namespaceRow?.querySelectorAll('td')[14]?.textContent?.trim()).toBe('1500 ms');
+    // Sync wait is a detail field: it matters when diagnosing a slow first
+    // load, not on every row, so it lives behind the row expander.
+    expect((await expandScopeRow(rendered.container, 'Namespaces'))['Sync wait']).toBe('1500 ms');
 
     await rendered.unmount();
   });
@@ -1493,29 +1564,37 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
     await flushAsync();
     await flushAsync();
 
-    const rows = rendered.container.querySelectorAll('.diagnostics-table tbody tr');
+    const rows = rendered.container.querySelectorAll(
+      '.diagnostics-table tbody tr.diagnostics-scope-row'
+    );
     const configRow = Array.from(rows).find((row) => row.textContent?.includes('Cluster Config'));
     expect(configRow).toBeDefined();
 
+    // Stream trouble now reads off the single Health badge, with the detail in
+    // its tooltip, instead of a separate Telemetry column repeating it.
     const cells = configRow?.querySelectorAll('td') ?? [];
-    const telemetryCell = cells[12];
-    expect(telemetryCell?.textContent).toContain('Stream unhealthy');
-    expect(telemetryCell?.getAttribute('title')).toContain('Stream health: unhealthy');
-    expect(telemetryCell?.getAttribute('title')).toContain('Stream reason: no-delivery');
-    expect(telemetryCell?.getAttribute('title')).toContain('Stream fallbacks: 2');
-    expect(telemetryCell?.getAttribute('title')).toContain('Last fallback: stream stalled');
+    const healthCell = cells[2];
+    // No error MESSAGE on this row — only an unhealthy stream — so the badge
+    // says `unhealthy`, not `error`. Reporting `error` here would mean the
+    // no-value placeholder was being read as an error again.
+    expect(healthCell?.textContent?.trim()).toBe('unhealthy');
+    expect(healthCell?.getAttribute('title')).toContain('Health: unhealthy (no-delivery)');
+    expect(healthCell?.getAttribute('title')).toContain('Reason: no-delivery');
+    const activityCell = cells[6];
+    expect(activityCell?.getAttribute('title')).toContain('Stream fallbacks: 2');
+    expect(activityCell?.getAttribute('title')).toContain('Last fallback: stream stalled');
 
     await rendered.unmount();
     healthSpy.mockRestore();
     telemetrySpy.mockRestore();
   });
 
-  test('shows all streams without filter controls', async () => {
+  test('shows every connection unfiltered', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
     const now = Date.now();
@@ -1558,7 +1637,7 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
     await flushAsync();
     await flushAsync();
@@ -1572,17 +1651,16 @@ describe('DiagnosticsPanel component', () => {
 
     const streamsSection = rendered.container.querySelector('.diagnostics-section');
     expect(streamsSection).toBeTruthy();
-    expect(
-      requireValue(
-        streamsSection,
-        'expected test value in DiagnosticsPanel.test.ts'
-      ).querySelectorAll('button, input').length
-    ).toBe(0);
-
-    const streamRows = requireValue(
-      streamsSection,
+    const connectionsTable = requireValue(
+      requireValue(streamsSection, 'expected test value in DiagnosticsPanel.test.ts').querySelector(
+        '.diagnostics-table-wrapper'
+      ),
       'expected test value in DiagnosticsPanel.test.ts'
-    ).querySelectorAll('tbody tr');
+    );
+    // The connection list itself is never filtered — every socket is shown.
+    expect(connectionsTable.querySelectorAll('button, input').length).toBe(0);
+
+    const streamRows = connectionsTable.querySelectorAll('tbody tr');
     expect(Array.from(streamRows).some((row) => row.textContent?.includes('Resources'))).toBe(true);
     expect(Array.from(streamRows).some((row) => row.textContent?.includes('Events'))).toBe(true);
 
@@ -1619,7 +1697,8 @@ describe('DiagnosticsPanel component', () => {
           },
           {
             name: 'resources',
-            domain: 'catalog',
+            leafKind: 'domain',
+            leaf: 'catalog',
             clusterId: 'cluster-a',
             clusterName: 'Cluster A',
             activeSessions: 0,
@@ -1648,7 +1727,7 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
     await flushAsync();
     await flushAsync();
@@ -1660,34 +1739,27 @@ describe('DiagnosticsPanel component', () => {
     });
     await flushAsync();
 
-    const streamsSection = rendered.container.querySelector('.diagnostics-section');
-    const streamRows = Array.from(streamsSection?.querySelectorAll('tbody tr') ?? []);
-    const catalogRow = streamRows.find((row) => row.textContent?.toLowerCase().includes('catalog'));
-    const resourcesRow = streamRows.find((row) => row.textContent?.includes('Resources'));
-    expect(catalogRow).toBeDefined();
+    // The Connections view owns the TRANSPORT: the resources socket and its
+    // errors. Catalog is a refresh domain, so its per-domain counters moved to
+    // the Cluster Data tree and must NOT appear as a connection leaf here.
+    const connectionsSection = rendered.container.querySelector('.diagnostics-section');
+    const connectionRows = Array.from(connectionsSection?.querySelectorAll('tbody tr') ?? []);
+    const resourcesRow = connectionRows.find((row) => row.textContent?.includes('Resources'));
     expect(resourcesRow).toBeDefined();
+    expect(connectionRows.some((row) => row.textContent?.toLowerCase().includes('catalog'))).toBe(
+      false
+    );
 
-    // Catalog is a domain leaf under the Resources socket: Name | Delivered |
-    // Dropped | Errors(3) | Resyncs(4) | Fallbacks(5) | Last Event | Last Error(7).
-    const catalogCells = requireValue(
-      catalogRow,
-      'expected test value in DiagnosticsPanel.test.ts'
-    ).querySelectorAll('td');
-    expect(catalogCells[3]?.textContent?.trim()).toBe('1');
-    expect(catalogCells[4]?.textContent?.trim()).toBe('0');
-    expect(catalogCells[5]?.textContent?.trim()).toBe('0');
-    expect(catalogCells[7]?.textContent?.trim()).toBe('Catalog subscription disconnected');
-
+    // Socket row: Connection | Cluster | Sessions | Last Connect | Delivered(4)
+    // | Dropped(5) | Errors(6) | Last Event | Last Error(8).
     const resourceCells = requireValue(
       resourcesRow,
       'expected test value in DiagnosticsPanel.test.ts'
     ).querySelectorAll('td');
-    expect(resourceCells[3]?.textContent?.trim()).toBe('1');
-    expect(resourceCells[4]?.textContent?.trim()).toBe('-');
-    expect(resourceCells[5]?.textContent?.trim()).toBe('-');
-    expect(resourceCells[7]?.textContent?.trim()).toBe('Resource stream disconnected');
+    expect(resourceCells[6]?.textContent?.trim()).toBe('1');
+    expect(resourceCells[8]?.textContent?.trim()).toBe('Resource stream disconnected');
     // An actual error is coloured with the warning class (not red, not the placeholder).
-    expect(resourceCells[7]?.classList.contains('diagnostics-error-warning')).toBe(true);
+    expect(resourceCells[8]?.classList.contains('diagnostics-error-warning')).toBe(true);
 
     await rendered.unmount();
     resourceStreamSpy.mockRestore();
@@ -1716,7 +1788,7 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
     await flushAsync();
     await flushAsync();
@@ -1724,7 +1796,7 @@ describe('DiagnosticsPanel component', () => {
     const metricsPrimary = rendered.container.querySelector<HTMLSpanElement>(
       '.diagnostics-summary-card:nth-of-type(2) .diagnostics-summary-primary'
     );
-    expect(metricsPrimary?.textContent).toContain('Status: Idle');
+    expect(metricsPrimary?.textContent).toBe('Idle');
 
     await rendered.unmount();
   });
@@ -1736,7 +1808,7 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await selectRefreshDomainsTab(rendered.container);
+    await selectClusterDataTab(rendered.container);
 
     await flushAsync();
     await flushAsync();
@@ -1744,14 +1816,14 @@ describe('DiagnosticsPanel component', () => {
     const metricsPrimary = rendered.container.querySelector<HTMLSpanElement>(
       '.diagnostics-summary-card:nth-of-type(2) .diagnostics-summary-primary'
     );
-    expect(metricsPrimary?.textContent).toContain('Status: Unavailable');
+    expect(metricsPrimary?.textContent).toBe('Unavailable');
     expect(metricsPrimary?.className).toContain('diagnostics-summary-warning');
 
     const eventsPrimary = rendered.container.querySelector<HTMLSpanElement>(
       '.diagnostics-summary-card:nth-of-type(3) .diagnostics-summary-primary'
     );
     expect(eventsPrimary?.className).toContain('diagnostics-summary-warning');
-    expect(eventsPrimary?.textContent?.trim()).toBe('Active: — • Delivered: — • Dropped: —');
+    expect(eventsPrimary?.textContent?.trim()).toBe('—');
     expect(handleInlineMock).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'Telemetry offline' }),
       {
@@ -1910,7 +1982,7 @@ describe('DiagnosticsPanel component', () => {
 
     const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
-      tabButtons[5].click();
+      tabButtons[4].click();
       await Promise.resolve();
     });
     await flushAsync();
@@ -1942,7 +2014,7 @@ describe('DiagnosticsPanel component', () => {
     expect(expandedCells[13].textContent).toContain('deployments');
 
     await act(async () => {
-      tabButtons[6].click();
+      tabButtons[5].click();
       await Promise.resolve();
     });
     await flushAsync();
@@ -1976,13 +2048,12 @@ describe('DiagnosticsPanel component', () => {
     await flushAsync();
 
     const focusableEls = rendered.container.querySelectorAll('[data-diagnostics-focusable="true"]');
-    // Expect exactly seven focusable tab elements (one per tab descriptor).
-    expect(focusableEls.length).toBe(7);
+    // Expect exactly six focusable tab elements (one per tab descriptor).
+    expect(focusableEls.length).toBe(6);
     expect(Array.from(focusableEls).map((el) => el.textContent)).toEqual([
       'K8s API',
-      'Refresh Domains',
-      'Streams',
-      'Broker Reads',
+      'Cluster Data',
+      'Connections',
       'Tables',
       'Cap Checks',
       'Permissions',

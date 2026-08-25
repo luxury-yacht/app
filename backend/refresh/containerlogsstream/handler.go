@@ -236,14 +236,14 @@ func (s *containerLogsStream) writeInitial(initial containerLogsInitial) error {
 		return err
 	}
 	if s.handler.telemetry != nil && len(initial.entries) > 0 {
-		s.handler.telemetry.RecordStreamDeliveryForDomain(s.stream, s.target, len(initial.entries), 0)
+		s.handler.telemetry.RecordStreamDeliveryForLeaf(s.stream, telemetry.TargetLeaf(s.target), len(initial.entries), 0)
 	}
 	return nil
 }
 
 func (s *containerLogsStream) recordError(err error) {
 	if s.handler.telemetry != nil {
-		s.handler.telemetry.RecordStreamErrorForDomain(s.stream, s.target, err)
+		s.handler.telemetry.RecordStreamErrorForLeaf(s.stream, telemetry.TargetLeaf(s.target), err)
 	}
 }
 
@@ -427,7 +427,7 @@ func (d *containerLogsDelivery) handleWarnings(warnings []string) bool {
 func (d *containerLogsDelivery) handleEntriesClosed() bool {
 	d.flushBatch()
 	if d.request.handler.telemetry != nil && d.pendingDropped > 0 {
-		d.request.handler.telemetry.RecordStreamDeliveryForDomain(d.request.stream, d.request.target, 0, d.pendingDropped)
+		d.request.handler.telemetry.RecordStreamDeliveryForLeaf(d.request.stream, telemetry.TargetLeaf(d.request.target), 0, d.pendingDropped)
 	}
 	return true
 }
@@ -466,8 +466,8 @@ func (d *containerLogsDelivery) handleDrop(drop int) bool {
 		}
 	}
 	if d.request.handler.telemetry != nil && len(d.batch) == 0 {
-		d.request.handler.telemetry.RecordStreamDeliveryForDomain(
-			d.request.stream, d.request.target, 0, d.pendingDropped,
+		d.request.handler.telemetry.RecordStreamDeliveryForLeaf(
+			d.request.stream, telemetry.TargetLeaf(d.request.target), 0, d.pendingDropped,
 		)
 		d.pendingDropped = 0
 	}
@@ -501,8 +501,8 @@ func (d *containerLogsDelivery) flushBatch() bool {
 		}
 	}
 	if d.request.handler.telemetry != nil {
-		d.request.handler.telemetry.RecordStreamDeliveryForDomain(
-			d.request.stream, d.request.target, delivered, d.pendingDropped,
+		d.request.handler.telemetry.RecordStreamDeliveryForLeaf(
+			d.request.stream, telemetry.TargetLeaf(d.request.target), delivered, d.pendingDropped,
 		)
 	}
 	if d.pendingDropped > 0 && !d.transportDropObserved {

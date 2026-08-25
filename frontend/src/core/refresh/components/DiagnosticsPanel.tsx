@@ -54,12 +54,9 @@ import type {
 // Import from extracted modules
 import {
   buildBrokerReadRows,
-  buildBrokerReadsSummary,
   buildCapabilityBatchRows,
   buildCatalogSummary,
   buildContainerLogsSummary,
-  buildDiagnosticsStreamRows,
-  buildDiagnosticsStreamSummary,
   buildEventStreamSummary,
   buildKubernetesAPIClientRows,
   buildKubernetesAPISummary,
@@ -85,19 +82,28 @@ import {
   selectCatalogStreamTelemetry,
   selectDomainStreamTelemetry,
 } from './diagnostics';
+import {
+  buildClusterDataRows,
+  buildClusterDataSummary,
+  buildConnectionsRows,
+  buildConnectionsSummary,
+} from './diagnostics/clusterDataRowModel';
 import { GridTablePerformance } from './diagnostics/GridTablePerformance';
 import { resolveModeDetails } from './diagnostics/modeDetails';
-import { BrokerReadsTable } from './diagnostics/TableBrokerReads';
+import { DiagnosticsSummaryCards } from './diagnostics/SummaryCards';
 import { CapabilityChecksTable } from './diagnostics/TableCapabilitesChecks';
+import { ClusterDataTable } from './diagnostics/TableClusterData';
+import { ConnectionsTable } from './diagnostics/TableConnections';
 import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissions';
 import { KubernetesAPIClientsTable } from './diagnostics/TableKubernetesAPIClients';
-import { DiagnosticsSummaryCards, DiagnosticsTable } from './diagnostics/TableRefreshDomains';
-import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
 
 // Re-export for backwards compatibility
 export { resolveDomainNamespace } from './diagnostics';
 
-type HealthStatus = 'healthy' | 'degraded' | 'unhealthy';
+// 'inactive' is its own state, NOT a degree of failure. A scope with no stream
+// is usually just unleased; folding that into 'degraded' told the user
+// something was wrong with a domain they simply were not using.
+type HealthStatus = 'healthy' | 'inactive' | 'degraded' | 'unhealthy';
 
 type StreamHealthSummary = {
   status: HealthStatus;
@@ -109,17 +115,24 @@ type StreamHealthSummary = {
 
 const PERMISSION_ERROR_HINTS = ['forbidden', 'permission', 'unauthorized', 'access denied', 'rbac'];
 
+// diagnosticsRowClusterId resolves the single cluster owning a scope. A scope
+// naming several clusters has no single owner, so it groups at the app level
+// rather than being attributed to an arbitrary member.
+const diagnosticsRowClusterId = (scope?: string | null): string => {
+  const parsed = parseClusterScopeList(scope);
+  return parsed.isMultiCluster ? '' : (parsed.clusterIds[0] ?? '');
+};
+
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
 
 type DiagnosticsTabId =
-  | 'refresh-domains'
-  | 'streams'
+  | 'cluster-data'
   | 'k8s-api'
   | 'table-performance'
   | 'capability-checks'
   | 'effective-permissions'
-  | 'broker-reads';
+  | 'connections';
 
 // Applied to every diagnostics tab via extraProps. The panel's custom focus
 // walker (querySelectorAll below) locates tabs through this marker — if it
@@ -132,9 +145,8 @@ const DIAGNOSTICS_FOCUSABLE_PROPS = {
 
 const DIAGNOSTICS_TAB_DESCRIPTORS: TabDescriptor[] = [
   { id: 'k8s-api', label: 'K8s API', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
-  { id: 'refresh-domains', label: 'Refresh Domains', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
-  { id: 'streams', label: 'Streams', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
-  { id: 'broker-reads', label: 'Broker Reads', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
+  { id: 'cluster-data', label: 'Cluster Data', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
+  { id: 'connections', label: 'Connections', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
   { id: 'table-performance', label: 'Tables', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
   {
     id: 'capability-checks',
@@ -475,13 +487,20 @@ const resolveStreamHealthDetails = (
   streamHealth: StreamHealthSummary
 ): HealthDetails => {
   const tooltipParts = buildStreamHealthTooltip(streamHealth);
-  if (streamHealth.reason === 'inactive' && status !== 'idle') {
+  // No stream for this scope is not a fault. Either nothing is leasing it, or
+  // the retained snapshot is serving it — both are normal, so neither may be
+  // dressed as degraded or unhealthy.
+  if (streamHealth.reason === 'inactive') {
     return {
-      label: formatHealthLabel('degraded', 'inactive'),
-      tooltip: ['Retained snapshot is ready; stream is inactive for this scope.']
+      label: 'inactive',
+      tooltip: [
+        status === 'idle'
+          ? 'No consumer is leasing this scope, so no stream is running.'
+          : 'Retained snapshot is ready; no stream is running for this scope.',
+      ]
         .concat(tooltipParts)
         .join('\n'),
-      status: 'degraded',
+      status: 'inactive',
     };
   }
   return {
@@ -717,10 +736,13 @@ const resolveDomainTelemetrySources = (
 const formatTelemetryMilliseconds = (value: number | undefined): string =>
   value ? `${value} ms` : '—';
 
+// Returns '' when there is no error. It must NOT return a dimmed placeholder:
+// a row's error is read as data (health, issue counts), and a placeholder that
+// looks like a value makes every healthy row report a failure.
 const resolveTelemetryError = (
   telemetryLastError: string,
   stateError: string | null | undefined
-): string => telemetryLastError || stateError || '—';
+): string => telemetryLastError || stateError || '';
 
 const resolveStreamDropped = (
   isResourceStreamDomain: boolean,
@@ -1065,6 +1087,7 @@ const buildPodDiagnosticsRow = (
   const countDetails = buildDiagnosticsCountDetails(payload?.rows?.length ?? 0, state, 'pods');
   return {
     rowKey: `pods:${scope}`,
+    clusterId: diagnosticsRowClusterId(scope),
     domain: 'pods',
     label: resolvePodLabel(scope),
     status: state.status,
@@ -1146,6 +1169,7 @@ const buildContainerLogsDiagnosticsRow = (
   const resetCount = payload?.resetCount ?? 0;
   return {
     rowKey: `container-logs:${scope}`,
+    clusterId: diagnosticsRowClusterId(scope),
     domain: 'container-logs',
     label: identity.name ? `ObjPanel - Logs - ${identity.name}` : scope,
     status: state.status,
@@ -1205,6 +1229,7 @@ const buildObjectPanelDiagnosticsRow = (
   });
   return {
     rowKey: `${domain}:${scope}`,
+    clusterId: diagnosticsRowClusterId(scope),
     domain,
     label: identity.name ? `ObjPanel - ${tabName} - ${identity.name}` : `ObjPanel - ${tabName}`,
     status: state.status,
@@ -1691,6 +1716,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
         return {
           rowKey: `${domain}:${effectiveScope ?? '-'}`,
+          clusterId: diagnosticsRowClusterId(effectiveScope),
           domain,
           label,
           status: state.status,
@@ -1847,19 +1873,46 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   ]);
 
   const filteredRows = useMemo(() => rows.filter((row) => row.status !== 'idle'), [rows]);
-  // Build stream telemetry rows for the dedicated diagnostics section.
-  const streamRows = useMemo(
+
+  // Cluster names for the tree's cluster group rows, keyed by cluster id.
+  const clusterNamesById = useMemo(() => {
+    const names: Record<string, string> = {};
+    filteredRows.forEach((row) => {
+      if (!row.clusterId || names[row.clusterId]) {
+        return;
+      }
+      names[row.clusterId] = getClusterMeta(row.clusterId)?.name || row.clusterId;
+    });
+    return names;
+  }, [filteredRows, getClusterMeta]);
+
+  // Cluster Data is the demand side: cluster -> domain -> scope, with the
+  // domain's transport and callers folded in as columns on the domain row.
+  const clusterDataRows = useMemo(
     () =>
-      buildDiagnosticsStreamRows(
-        telemetrySummary,
-        filteredRows,
-        resourceStreamStatsByClusterDomain
-      ),
-    [filteredRows, resourceStreamStatsByClusterDomain, telemetrySummary]
+      buildClusterDataRows({
+        rows: filteredRows,
+        clusterNames: clusterNamesById,
+        streamStatsByClusterDomain: resourceStreamStatsByClusterDomain,
+        brokerReads: brokerReadDiagnostics,
+      }),
+    [brokerReadDiagnostics, clusterNamesById, filteredRows, resourceStreamStatsByClusterDomain]
+  );
+  const clusterDataSummary = useMemo(
+    () => buildClusterDataSummary(clusterDataRows),
+    [clusterDataRows]
   );
 
-  // Streams tab includes stream telemetry plus active scoped domains for each stream.
-  const streamSummary = useMemo(() => buildDiagnosticsStreamSummary(streamRows), [streamRows]);
+  // Connections is the transport side: the sockets plus the stream children that
+  // key by something other than a refresh domain.
+  const connectionsRows = useMemo(
+    () =>
+      buildConnectionsRows({
+        streams: telemetrySummary?.streams,
+        clusterNames: clusterNamesById,
+      }),
+    [clusterNamesById, telemetrySummary]
+  );
 
   const kubernetesAPIClientRows = useMemo(
     () => buildKubernetesAPIClientRows(kubernetesAPIDiagnostics),
@@ -1957,8 +2010,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     priority: isOpen ? 35 : 0,
   });
 
-  // Refresh Domains tab content.
-  const refreshDomainsContent = (
+  // Cluster Data tab content.
+  const clusterDataContent = (
     <>
       <DiagnosticsSummaryCards
         orchestratorSummary={orchestratorSummary}
@@ -1967,19 +2020,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         catalogSummary={catalogSummary}
         logSummary={logSummary}
       />
-      <DiagnosticsTable rows={filteredRows} />
+      <ClusterDataTable rows={clusterDataRows} summary={clusterDataSummary} />
     </>
-  );
-
-  // Streams tab content.
-  const streamsContent = (
-    <DiagnosticsStreamsTable
-      rows={streamRows}
-      summary={streamSummary}
-      emptyMessage={
-        streamRows.length === 0 ? 'Stream telemetry is not available yet.' : 'No streams available.'
-      }
-    />
   );
 
   const kubernetesAPIContent = (
@@ -2015,21 +2057,28 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   // Permissions tab content.
   const effectivePermissionsContent = <EffectivePermissionsTable rows={permissionRows} />;
 
-  const brokerReadRows = useMemo(
+  // Only the reads with no refresh domain belong here; a refresh-domain read is
+  // already counted on its domain row in the Cluster Data tree.
+  const nonDomainCallRows = useMemo(
     () =>
-      buildBrokerReadRows(brokerReadDiagnostics, (scopes) =>
-        resolveBrokerReadScope(scopes, selectedClusterId, getClusterMeta)
+      buildBrokerReadRows(
+        brokerReadDiagnostics.filter((entry) => entry.adapter !== 'refresh-domain'),
+        (scopes) => resolveBrokerReadScope(scopes, selectedClusterId, getClusterMeta)
       ),
     [brokerReadDiagnostics, getClusterMeta, selectedClusterId]
   );
 
-  const brokerReadsSummary = useMemo(
-    () => buildBrokerReadsSummary(brokerReadRows),
-    [brokerReadRows]
+  const connectionsSummary = useMemo(
+    () => buildConnectionsSummary(connectionsRows, nonDomainCallRows.length),
+    [connectionsRows, nonDomainCallRows.length]
   );
 
-  const brokerReadsContent = (
-    <BrokerReadsTable rows={brokerReadRows} summary={brokerReadsSummary} />
+  const connectionsContent = (
+    <ConnectionsTable
+      rows={connectionsRows}
+      callRows={nonDomainCallRows}
+      summary={connectionsSummary}
+    />
   );
 
   const panelRef = useRef<HTMLDivElement>(null);
@@ -2085,13 +2134,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   });
 
   const contentByTab: Record<DiagnosticsTabId, React.ReactNode> = {
-    'refresh-domains': refreshDomainsContent,
-    streams: streamsContent,
+    'cluster-data': clusterDataContent,
     'k8s-api': kubernetesAPIContent,
     'table-performance': tablePerformanceContent,
     'capability-checks': capabilityChecksContent,
     'effective-permissions': effectivePermissionsContent,
-    'broker-reads': brokerReadsContent,
+    connections: connectionsContent,
   };
 
   return (

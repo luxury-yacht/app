@@ -229,6 +229,35 @@ First-paint latency near a fallback interval, retained data surviving a
 non-replayable reset without a clock change, or a replacement manager with zero
 subscribers indicates this contract regressed.
 
+## Diagnostics surfaces
+
+Diagnostics presents the refresh system as two views, cut along the one join
+that actually exists.
+
+**Cluster Data** is a tree of `cluster -> refresh domain -> scope`. Every domain
+maps to at most one stream in the authored contract, so a stream is an
+ATTRIBUTE of a domain — delivery, resync and fallback counters are columns on
+the domain row, never a level above it. The broker reads that fetch a domain
+(`adapter: refresh-domain`) hang off the same row.
+
+**Connections** is flat by design. It owns the transport itself: one row per
+socket, the stream children whose keys are not refresh domains, and every read
+that belongs to no domain. Those members share no parent, so nesting them would
+invent a hierarchy the data does not have.
+
+Three rules keep the two views joinable:
+
+- `telemetry.StreamStatus` carries `Leaf` plus `LeafKind`. The three streams key
+  their children differently — resources by refresh domain, events by event
+  scope, container logs by pod target — so a consumer may only join leaves of
+  the same kind. A leaf-less row is socket level.
+- A broker-read row is keyed by cluster as well as broker, resource, adapter and
+  reason. A scope naming several clusters has no single owner and stays an
+  app-level row.
+- A stream fallback is counted where the decision is made: the orchestrator
+  reports it when a scope polls only because its stream is not delivering. Every
+  other snapshot has its own reason and is not a fallback.
+
 ## Change checklist
 
 1. Update the authored domain entry, backend/frontend registrations, DTO

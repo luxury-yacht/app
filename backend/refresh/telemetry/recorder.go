@@ -473,11 +473,13 @@ func (r *Recorder) SnapshotSummary() Summary {
 // StreamStatus captures health metrics for streaming transports (events/logs/resources).
 type StreamStatus struct {
 	Name string `json:"name"`
-	// Domain attributes these counters to a single resource domain (e.g. "pods")
-	// when set; empty for stream-level (socket) activity like sessions/connect.
-	// Lets diagnostics show one row per domain. Only the resources stream's
-	// deliveries are recorded per-domain (RecordStreamDeliveryForDomain).
-	Domain string `json:"domain,omitempty"`
+	// Leaf attributes these counters to one child of the stream; empty for
+	// stream-level (socket) activity like sessions/connect. LeafKind says what
+	// the key means, because the three streams key their children by different
+	// things: resources by refresh domain, events by event scope, container
+	// logs by pod target. A consumer must never join two kinds as one.
+	Leaf     string         `json:"leaf,omitempty"`
+	LeafKind StreamLeafKind `json:"leafKind,omitempty"`
 	// ClusterID/ClusterName identify which cluster these stream counters belong
 	// to. Stamped from the recorder's cluster at SnapshotSummary time (each
 	// recorder is per-cluster) so a multi-cluster diagnostics view shows or
@@ -505,6 +507,51 @@ const (
 	StreamResources     = "resources"
 )
 
+// StreamLeafKind names what a StreamStatus.Leaf key identifies. Each stream
+// subdivides its counters by a different thing, so the kind travels with the
+// key and a diagnostics view can only join leaves of the same kind.
+type StreamLeafKind string
+
+const (
+	// StreamLeafNone marks stream-level (socket) activity: sessions, connects,
+	// and any delivery not attributed to a child.
+	StreamLeafNone StreamLeafKind = ""
+	// StreamLeafDomain keys by refresh domain, e.g. "pods" (resources stream).
+	StreamLeafDomain StreamLeafKind = "domain"
+	// StreamLeafScope keys by event scope, e.g. "cluster" or
+	// "namespace:<name>" (events stream).
+	StreamLeafScope StreamLeafKind = "scope"
+	// StreamLeafTarget keys by container-logs target, e.g.
+	// "<namespace>/<pod>[/<container>]" (container-logs stream).
+	StreamLeafTarget StreamLeafKind = "target"
+)
+
+// StreamLeaf is one stream child's identity. The zero value is stream level.
+type StreamLeaf struct {
+	Kind StreamLeafKind
+	Key  string
+}
+
+// DomainLeaf attributes counters to a refresh domain.
+func DomainLeaf(domain string) StreamLeaf {
+	return StreamLeaf{Kind: StreamLeafDomain, Key: domain}
+}
+
+// ScopeLeaf attributes counters to an event scope.
+func ScopeLeaf(scope string) StreamLeaf {
+	return StreamLeaf{Kind: StreamLeafScope, Key: scope}
+}
+
+// TargetLeaf attributes counters to a container-logs target.
+func TargetLeaf(target string) StreamLeaf {
+	return StreamLeaf{Kind: StreamLeafTarget, Key: target}
+}
+
+// isStreamLevel reports whether the leaf addresses the socket itself.
+func (l StreamLeaf) isStreamLevel() bool {
+	return l.Kind == StreamLeafNone || l.Key == ""
+}
+
 // RecordStreamConnect increments the active session count for a stream.
 func (r *Recorder) RecordStreamConnect(name string) {
 	r.updateStream(name, func(status *StreamStatus) {
@@ -530,14 +577,14 @@ func (r *Recorder) RecordStreamDelivery(name string, delivered, dropped int) {
 	r.updateStream(name, streamDeliveryMutator(delivered, dropped))
 }
 
-// RecordStreamDeliveryForDomain is RecordStreamDelivery scoped to one resource
-// domain, so the diagnostics view can attribute deliveries/drops to the domain
-// (used by the resources broadcast, which knows the domain).
-func (r *Recorder) RecordStreamDeliveryForDomain(name, domain string, delivered, dropped int) {
+// RecordStreamDeliveryForLeaf is RecordStreamDelivery attributed to one stream
+// child, so diagnostics can show a row per domain, per event scope, or per
+// container-logs target without folding the kinds together.
+func (r *Recorder) RecordStreamDeliveryForLeaf(name string, leaf StreamLeaf, delivered, dropped int) {
 	if delivered <= 0 && dropped <= 0 {
 		return
 	}
-	r.updateStreamKeyed(name, domain, streamDeliveryMutator(delivered, dropped))
+	r.updateStreamLeaf(name, leaf, streamDeliveryMutator(delivered, dropped))
 }
 
 // streamDeliveryMutator builds the StreamStatus update applied by both the
@@ -571,12 +618,12 @@ func (r *Recorder) RecordStreamError(name string, err error) {
 	r.updateStream(name, streamErrorMutator(err))
 }
 
-// RecordStreamErrorForDomain is RecordStreamError scoped to one resource domain.
-func (r *Recorder) RecordStreamErrorForDomain(name, domain string, err error) {
+// RecordStreamErrorForLeaf is RecordStreamError attributed to one stream child.
+func (r *Recorder) RecordStreamErrorForLeaf(name string, leaf StreamLeaf, err error) {
 	if err == nil {
 		return
 	}
-	r.updateStreamKeyed(name, domain, streamErrorMutator(err))
+	r.updateStreamLeaf(name, leaf, streamErrorMutator(err))
 }
 
 func streamErrorMutator(err error) func(*StreamStatus) {
@@ -600,28 +647,32 @@ func (r *Recorder) RecordStreamSkippedTargets(name string, skipped int, reason s
 }
 
 func (r *Recorder) updateStream(name string, fn func(*StreamStatus)) {
-	r.updateStreamKeyed(name, "", fn)
+	r.updateStreamLeaf(name, StreamLeaf{}, fn)
 }
 
-// updateStreamKeyed mutates the StreamStatus for a stream, optionally scoped to a
-// resource domain. domain "" is stream-level (sessions/connect/socket activity);
-// a non-empty domain gets its own entry so per-domain counters don't fold
-// together. The map key separates the two with a NUL so a domain can never
-// collide with a stream name.
-func (r *Recorder) updateStreamKeyed(name, domain string, fn func(*StreamStatus)) {
+// updateStreamLeaf mutates the StreamStatus for a stream, optionally attributed
+// to one child. The zero leaf is stream-level (sessions/connect/socket
+// activity); a keyed leaf gets its own entry so child counters don't fold
+// together. The map key carries the kind as well as the key, so an event scope
+// named "pods" can never collide with the "pods" refresh domain, and NUL
+// separators keep either from colliding with a stream name.
+func (r *Recorder) updateStreamLeaf(name string, leaf StreamLeaf, fn func(*StreamStatus)) {
 	if name == "" || fn == nil {
 		return
 	}
+	if leaf.isStreamLevel() {
+		leaf = StreamLeaf{}
+	}
 	key := name
-	if domain != "" {
-		key = name + "\x00" + domain
+	if leaf.Kind != StreamLeafNone {
+		key = name + "\x00" + string(leaf.Kind) + "\x00" + leaf.Key
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	status, ok := r.streams[key]
 	if !ok {
-		status = &StreamStatus{Name: name, Domain: domain}
+		status = &StreamStatus{Name: name, Leaf: leaf.Key, LeafKind: leaf.Kind}
 		r.streams[key] = status
 	}
 

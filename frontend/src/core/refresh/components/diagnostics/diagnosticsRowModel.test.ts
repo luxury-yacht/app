@@ -10,14 +10,12 @@ import type { PermissionQueryDiagnostics, PermissionStatus } from '@/core/capabi
 import { getPermissionKey, PERMISSION_FEATURES } from '@/core/capabilities';
 import { makeTelemetrySummary } from '../../refreshContractTestBuilders';
 import type { TelemetrySummary } from '../../types';
-import type { DiagnosticsRow, DiagnosticsStreamRow } from './diagnosticsPanelTypes';
+import type { DiagnosticsRow } from './diagnosticsPanelTypes';
 import {
   buildBrokerReadRows,
   buildBrokerReadsSummary,
   buildCapabilityBatchRows,
   buildContainerLogsSummary,
-  buildDiagnosticsStreamRows,
-  buildDiagnosticsStreamSummary,
   buildEventStreamSummary,
   buildKubernetesAPIClientRows,
   buildKubernetesAPISummary,
@@ -39,6 +37,7 @@ describe('diagnosticsRowModel', () => {
   const diagnosticsRow = (overrides: Partial<DiagnosticsRow>): DiagnosticsRow => ({
     rowKey: overrides.rowKey ?? 'nodes:cluster-a|',
     domain: overrides.domain ?? 'nodes',
+    clusterId: overrides.clusterId ?? '',
     label: overrides.label ?? 'Nodes',
     status: overrides.status ?? 'ready',
     version: overrides.version ?? '1',
@@ -85,10 +84,6 @@ describe('diagnosticsRowModel', () => {
     ]);
   });
 
-  test('returns empty stream rows when telemetry is unavailable', () => {
-    expect(buildDiagnosticsStreamRows(null, [], {})).toEqual([]);
-  });
-
   test('selects the matching resource-domain telemetry instead of the socket aggregate', () => {
     const socket = {
       name: 'resources',
@@ -102,7 +97,8 @@ describe('diagnosticsRowModel', () => {
     };
     const catalog = {
       ...socket,
-      domain: 'catalog',
+      leafKind: 'domain' as const,
+      leaf: 'catalog',
       activeSessions: 0,
       totalMessages: 7,
       droppedMessages: 0,
@@ -110,243 +106,6 @@ describe('diagnosticsRowModel', () => {
     };
 
     expect(selectDomainStreamTelemetry([socket, catalog], 'resources', 'catalog')).toBe(catalog);
-  });
-
-  test('builds the resources stream as a tree: header (socket-level) + cluster + per-domain leaves', () => {
-    const rows = buildDiagnosticsStreamRows(
-      telemetry([
-        // Socket-level entry (no domain): Sessions/Connect + socket backlog drops.
-        {
-          name: 'resources',
-          clusterId: 'c1',
-          clusterName: 'kwok',
-          activeSessions: 1,
-          totalMessages: 0,
-          droppedMessages: 809,
-          skippedTargets: 0,
-          errorCount: 809,
-          lastConnect: 0,
-          lastEvent: 0,
-          lastError: 'subscriber backlog',
-        },
-        {
-          name: 'resources',
-          clusterId: 'c1',
-          clusterName: 'kwok',
-          domain: 'nodes',
-          activeSessions: 0,
-          totalMessages: 100,
-          droppedMessages: 3,
-          skippedTargets: 0,
-          errorCount: 0,
-          lastConnect: 0,
-          lastEvent: 0,
-        },
-        {
-          name: 'resources',
-          clusterId: 'c1',
-          clusterName: 'kwok',
-          domain: 'pods',
-          activeSessions: 0,
-          totalMessages: 5,
-          droppedMessages: 0,
-          skippedTargets: 0,
-          errorCount: 1,
-          lastConnect: 0,
-          lastEvent: 0,
-          lastError: 'pods backlog',
-          lastErrorAt: 1700,
-        },
-      ]),
-      [
-        { domain: 'nodes', label: 'Nodes' },
-        { domain: 'pods', label: 'Pods' },
-      ],
-      {
-        'c1::nodes': { resyncCount: 7, fallbackCount: 1 },
-        'c1::pods': { resyncCount: 0, fallbackCount: 0 },
-      }
-    );
-
-    // Ordered tree: stream header → cluster group → domain leaves.
-    expect(rows.map((row) => row.kind)).toEqual(['stream', 'cluster', 'domain', 'domain']);
-
-    // Socket-level metrics (Sessions, the 809 backlog) live on the header, not a domain.
-    expect(rows[0]).toMatchObject({
-      kind: 'stream',
-      label: 'Resources',
-      sessions: 1,
-      dropped: 809,
-      errors: 809,
-      lastError: 'subscriber backlog',
-    });
-    expect(rows[1]).toMatchObject({ kind: 'cluster', cluster: 'kwok' });
-
-    const nodes = rows.find((row) => row.kind === 'domain' && row.domain === 'Nodes');
-    const pods = rows.find((row) => row.kind === 'domain' && row.domain === 'Pods');
-    expect(nodes).toMatchObject({
-      cluster: 'kwok',
-      delivered: 100,
-      dropped: 3,
-      resyncs: 7,
-      fallbacks: 1,
-    });
-    expect(pods).toMatchObject({
-      cluster: 'kwok',
-      delivered: 5,
-      errors: 1,
-      resyncs: 0,
-      fallbacks: 0,
-      lastError: 'pods backlog',
-      lastErrorAt: 1700,
-    });
-  });
-
-  test('renders one socket-only resource stream as a header-only row', () => {
-    const rows = buildDiagnosticsStreamRows(
-      telemetry([
-        {
-          name: 'resources',
-          activeSessions: 1,
-          totalMessages: 3,
-          droppedMessages: 2,
-          skippedTargets: 0,
-          errorCount: 1,
-          lastConnect: 0,
-          lastEvent: 0,
-          lastError: 'resource stream stalled',
-        },
-      ]),
-      [],
-      {}
-    );
-
-    // With no per-domain delivery yet, only the socket header is shown.
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      kind: 'stream',
-      label: 'Resources',
-      sessions: 1,
-      delivered: 3,
-      dropped: 2,
-      errors: 1,
-      lastError: 'resource stream stalled',
-    });
-  });
-
-  test('builds socket-only resource telemetry as a header plus one leaf per cluster', () => {
-    const rows = buildDiagnosticsStreamRows(
-      telemetry([
-        {
-          name: 'resources',
-          clusterId: 'c1',
-          clusterName: 'kwok',
-          activeSessions: 1,
-          totalMessages: 20,
-          droppedMessages: 0,
-          skippedTargets: 0,
-          errorCount: 0,
-          lastConnect: 0,
-          lastEvent: 0,
-        },
-        {
-          name: 'resources',
-          clusterId: 'c2',
-          clusterName: 'kind',
-          activeSessions: 1,
-          totalMessages: 5,
-          droppedMessages: 2,
-          skippedTargets: 0,
-          errorCount: 1,
-          lastConnect: 0,
-          lastEvent: 0,
-          lastError: 'resource stream stalled',
-        },
-      ]),
-      [],
-      {}
-    );
-
-    // No sub-cluster child → the cluster IS the leaf: header → one cluster leaf
-    // per cluster (sorted), each carrying its own metrics.
-    expect(rows.map((row) => row.kind)).toEqual(['stream', 'cluster', 'cluster']);
-    expect(rows[0]).toMatchObject({ kind: 'stream', label: 'Resources', sessions: 2 });
-    const kind = rows.find((row) => row.kind === 'cluster' && row.cluster === 'kind');
-    const kwok = rows.find((row) => row.kind === 'cluster' && row.cluster === 'kwok');
-    expect(kind).toMatchObject({
-      leaf: { delivered: 5, dropped: 2, errors: 1, lastError: 'resource stream stalled' },
-    });
-    expect(kwok).toMatchObject({ leaf: { delivered: 20, dropped: 0, errors: 0 } });
-  });
-
-  test('summarizes the tree: sessions from headers, active domains from leaves', () => {
-    const rows: DiagnosticsStreamRow[] = [
-      {
-        kind: 'stream',
-        rowKey: 'stream::resources',
-        label: 'Resources',
-        sessions: 3,
-        lastConnect: '1s',
-        lastConnectTooltip: '1s',
-        delivered: 0,
-        dropped: 0,
-        errors: 0,
-        lastEvent: '1s',
-        lastEventTooltip: '1s',
-        lastError: '—',
-        activeDomainCount: 2,
-      },
-      { kind: 'cluster', rowKey: 'cluster::resources::kwok', cluster: 'kwok' },
-      {
-        kind: 'domain',
-        rowKey: 'domain::resources::c1::nodes',
-        cluster: 'kwok',
-        domain: 'Nodes',
-        delivered: 10,
-        dropped: 0,
-        errors: 0,
-        resyncs: 1,
-        fallbacks: 0,
-        lastEvent: '1s',
-        lastEventTooltip: '1s',
-        lastError: '—',
-      },
-      {
-        kind: 'domain',
-        rowKey: 'domain::resources::c1::pods',
-        cluster: 'kwok',
-        domain: 'Pods',
-        delivered: 4,
-        dropped: 0,
-        errors: 0,
-        resyncs: null,
-        fallbacks: null,
-        lastEvent: '1s',
-        lastEventTooltip: '1s',
-        lastError: '—',
-      },
-      {
-        kind: 'stream',
-        rowKey: 'stream::catalog',
-        label: 'Catalog',
-        sessions: 1,
-        lastConnect: '1s',
-        lastConnectTooltip: '1s',
-        delivered: 4,
-        dropped: 0,
-        errors: 0,
-        lastEvent: '1s',
-        lastEventTooltip: '1s',
-        lastError: '—',
-        activeDomainCount: 0,
-      },
-    ];
-
-    // Sessions = 3 + 1 (headers); Streams = 2 headers; Active Domains = 2 leaves.
-    expect(buildDiagnosticsStreamSummary(rows)).toBe(
-      'Sessions: 4 • Streams: 2 • Active Domains: 2'
-    );
-    expect(buildDiagnosticsStreamSummary([])).toBe('No stream telemetry available');
   });
 
   test('builds Kubernetes API client rows and summary', () => {
@@ -429,6 +188,7 @@ describe('diagnosticsRowModel', () => {
         {
           key: 'data-access:api-resource',
           broker: 'data-access',
+          clusterId: '',
           resource: 'api-resource',
           adapter: 'refresh-domain',
           reason: 'background',
@@ -447,6 +207,7 @@ describe('diagnosticsRowModel', () => {
         {
           key: 'app-state:settings',
           broker: 'app-state-access',
+          clusterId: '',
           resource: 'settings-schema',
           label: 'Settings Schema',
           adapter: 'rpc-read',
@@ -656,8 +417,8 @@ describe('diagnosticsRowModel', () => {
         selectionDiagnosticsError: null,
       })
     ).toMatchObject({
-      primary: 'Pending Requests: 1 • Selection Queue: 2',
-      secondary: 'Queue p95: 25 ms • Total: 5 • Failed: 1 • Canceled: 1 • Superseded: 1',
+      primary: '1 pending',
+      secondary: 'Queue 2 · p95 25 ms',
       className: 'diagnostics-summary-error',
     });
 
@@ -675,8 +436,8 @@ describe('diagnosticsRowModel', () => {
         telemetryError: null,
       })
     ).toMatchObject({
-      primary: 'Status: Idle • Polls: 3',
-      secondary: expect.stringContaining('Updated:'),
+      primary: 'Idle',
+      secondary: expect.stringContaining('3 polls'),
       title: expect.stringContaining('Polling idle'),
     });
 
@@ -696,7 +457,7 @@ describe('diagnosticsRowModel', () => {
         telemetryError: null,
       })
     ).toMatchObject({
-      primary: 'Active: 1 • Delivered: 12 • Dropped: 1',
+      primary: '12 delivered',
       className: 'diagnostics-summary-warning',
     });
 
@@ -738,10 +499,11 @@ describe('diagnosticsRowModel', () => {
         },
       })
     ).toMatchObject({
-      primary:
-        'Scopes: 2 • Active Scopes: 1 • Sessions: 1 • Delivered: 8 • Dropped: 0 • Skipped Targets: 2',
+      primary: '8 delivered',
+      secondary: expect.stringContaining('1 active'),
       className: 'diagnostics-summary-error',
-      title: expect.stringContaining('pod not ready'),
+      // The figures the headline drops stay reachable in the tooltip.
+      title: expect.stringContaining('Skipped Targets: 2'),
     });
   });
 });

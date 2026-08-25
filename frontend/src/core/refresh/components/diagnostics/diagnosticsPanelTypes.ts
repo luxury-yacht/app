@@ -17,6 +17,10 @@ export interface DiagnosticsPanelProps {
 export interface DiagnosticsRow {
   rowKey: string;
   domain: RefreshDomain;
+  // Cluster that owns this scope, parsed from the raw (cluster-prefixed) scope.
+  // Empty for app-level scopes and multi-cluster aggregate scopes, which group
+  // under the app rather than a cluster.
+  clusterId: string;
   label: string;
   status: DomainStatus;
   version: string;
@@ -63,70 +67,118 @@ export interface DiagnosticsRow {
   pollingTooltip?: string;
 }
 
-// DiagnosticsStreamRow captures formatted stream telemetry for the streams table.
-// The Streams table is a tree: a per-stream header (socket-level: sessions/
-// connect/socket-backlog drops, since one multiplexed socket spans all clusters)
-// → a cluster group row → per-domain rows (per-domain delivery/recovery).
-export type DiagnosticsStreamRow =
-  | DiagnosticsStreamHeaderRow
-  | DiagnosticsStreamClusterRow
-  | DiagnosticsStreamDomainRow;
+// ClusterDataRow is the Cluster Data tree: cluster -> [domain] -> scope.
+//
+// A domain with a single scope produces ONE row, not two: the scope row names
+// its own domain. A domain group row appears only when several scopes share a
+// domain and there is something to group. The domain -> transport mapping is a
+// total function in the authored contract, so a stream is an attribute of a
+// domain, never a level above it.
+//
+// The row model pre-formats every visible cell. The table renders it and adds
+// no logic of its own, so what the user sees is what the tests assert.
+export type ClusterDataRow = ClusterDataClusterRow | ClusterDataDomainRow | ClusterDataScopeRow;
 
-// Stream header: socket-level metrics for one stream (Sessions/Last Connect are
-// a property of the single socket, not any cluster/domain).
-export interface DiagnosticsStreamHeaderRow {
-  kind: 'stream';
-  rowKey: string;
+export type ClusterDataHealthTone = 'ok' | 'warn' | 'error' | 'inactive';
+
+export interface ClusterDataHealth {
   label: string;
+  tone: ClusterDataHealthTone;
+  tooltip: string;
+}
+
+// One labelled fact in a scope row's expander. Everything the eight visible
+// columns leave out lives here rather than widening the table.
+export interface ClusterDataDetail {
+  label: string;
+  value: string;
+  tooltip?: string;
+}
+
+export interface ClusterDataClusterRow {
+  kind: 'cluster';
+  rowKey: string;
+  clusterId: string;
+  clusterName: string;
+  // Pre-formatted right-hand summary, e.g. "2 domains · 2 scopes".
+  summary: string;
+  // Rendered separately so it can carry the attention tone; empty when clean.
+  issueSummary: string;
+}
+
+// Only emitted for a domain with more than one scope.
+export interface ClusterDataDomainRow {
+  kind: 'domain';
+  rowKey: string;
+  clusterId: string;
+  domain: RefreshDomain;
+  label: string;
+  summary: string;
+  summaryTooltip: string;
+}
+
+export interface ClusterDataScopeRow {
+  kind: 'scope';
+  rowKey: string;
+  clusterId: string;
+  domain: RefreshDomain;
+  // Empty when a domain group row directly above already names the domain.
+  domainLabel: string;
+  // True when this row sits under a domain group row.
+  indented: boolean;
+  scope: string;
+  scopeTooltip?: string;
+  scopeEntries?: { label: 'Active' | 'Background'; clusterName: string }[];
+  health: ClusterDataHealth;
+  feed: string;
+  feedTooltip: string;
+  count: string;
+  countTooltip?: string;
+  countClassName?: string;
+  updated: string;
+  updatedTooltip: string;
+  activity: string;
+  activityTooltip: string;
+  error: string;
+  details: ClusterDataDetail[];
+}
+
+// ConnectionsRow is the flat Connections & Calls view. Its members genuinely
+// have no common parent - a socket, an event scope, a log target and an app
+// state read do not nest - so it is a list, not a tree.
+export type ConnectionsRow = ConnectionsSocketRow | ConnectionsLeafRow;
+
+export interface ConnectionsSocketRow {
+  kind: 'socket';
+  rowKey: string;
+  stream: string;
+  label: string;
+  cluster: string;
   sessions: number;
   lastConnect: string;
   lastConnectTooltip: string;
-  // Stream-level (socket) delivery/backlog: events deliver here; for the
-  // resources stream this is the socket-level backpressure (per-domain delivery
-  // lives on the domain rows below).
   delivered: number;
   dropped: number;
   errors: number;
   lastEvent: string;
   lastEventTooltip: string;
   lastError: string;
-  // When the last error occurred (unix ms), for the relative age in the column.
   lastErrorAt?: number;
-  // Number of per-domain child rows under this stream (for the section summary).
-  activeDomainCount: number;
 }
 
-// Cluster row under a stream. Usually a group label with domain leaves below it
-// (resources/events/container-logs). For streams with no sub-cluster breakdown
-// the cluster IS the leaf, so `leaf` carries its per-cluster metrics.
-export interface DiagnosticsStreamClusterRow {
-  kind: 'cluster';
+// A stream child whose key is NOT a refresh domain: an events scope or a
+// container-logs target. These cannot join the Cluster Data tree.
+export interface ConnectionsLeafRow {
+  kind: 'leaf';
   rowKey: string;
+  stream: string;
+  label: string;
   cluster: string;
-  leaf?: {
-    delivered: number;
-    dropped: number;
-    errors: number;
-    lastEvent: string;
-    lastEventTooltip: string;
-    lastError: string;
-    lastErrorAt?: number;
-  };
-}
-
-// A single (cluster, domain) leaf with its per-domain counters.
-export interface DiagnosticsStreamDomainRow {
-  kind: 'domain';
-  rowKey: string;
-  cluster: string;
-  domain: string;
+  leafKind: 'scope' | 'target';
+  leaf: string;
   delivered: number;
   dropped: number;
   errors: number;
-  resyncs: number | null;
-  resyncsTooltip?: string;
-  fallbacks: number | null;
-  fallbacksTooltip?: string;
   lastEvent: string;
   lastEventTooltip: string;
   lastError: string;

@@ -386,6 +386,162 @@
   color: var(--color-text);
 }
 
+/* Cluster Data tree: a cluster header, then one row per scope. A domain group
+   row appears only when several scopes share a domain, so the common case is a
+   single row rather than a header plus a duplicate. */
+/* A colSpan header must NOT become a flex container: a flex cell is taken out
+   of the table's column sizing, which let the first column swell until the
+   Error column was pushed off the right edge. Inline spans keep the cell
+   participating in layout normally. */
+.diagnostics-table td.diagnostics-cluster-name {
+  border-top: 1px solid var(--color-border, var(--color-bg-secondary));
+  white-space: nowrap;
+}
+.diagnostics-cluster-label {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.diagnostics-cluster-summary {
+  margin-left: 0.75rem;
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+}
+/* No width cap on Scope: under auto table-layout a nowrap cell can never be
+   narrower than its min-content, so max-width there is unenforceable. The
+   column is kept short by not repeating the cluster name the header already
+   states (see scopeWithoutCluster) rather than by hiding characters. */
+
+/* The first column holds only a name and an expander, so cap it: without this
+   it absorbs the table's slack and squeezes the columns that carry values. */
+.diagnostics-table--cluster-data th:first-child,
+.diagnostics-table--cluster-data td.diagnostics-scope-name {
+  width: 1%;
+  white-space: nowrap;
+}
+/* Indentation alone carries the nesting: one step for a scope under its
+   cluster, a second for a scope under a domain group row. A connector glyph
+   beside the expander read as two competing affordances. */
+/* The Cluster Data indent ladder. Each step must be strictly deeper than the
+   step above, measured at the TRIANGLE (the leftmost thing a scope row draws),
+   or children appear to hang left of their own parent:
+     level 0  cluster header text
+     level 1  domain group text, and a standalone scope's triangle
+     level 2  a grouped scope's triangle
+   The expander must not use a negative left margin here — that would pull the
+   triangle back out of its level. */
+.diagnostics-table--cluster-data {
+  --diagnostics-indent-0: 0.5rem;
+  --diagnostics-indent-1: 1.6rem;
+  --diagnostics-indent-2: 3rem;
+}
+.diagnostics-table--cluster-data td.diagnostics-cluster-name {
+  padding-left: var(--diagnostics-indent-0);
+}
+.diagnostics-table--cluster-data td.diagnostics-scope-name {
+  padding-left: var(--diagnostics-indent-1);
+}
+.diagnostics-table--cluster-data .diagnostics-scope-row--nested td.diagnostics-scope-name {
+  padding-left: var(--diagnostics-indent-2);
+}
+
+/* The expander is a text affordance, not a button chrome: it must not add
+   height to the row or shift the label it sits beside. */
+/* The expander needs a real hit target, not just a glyph. The negative margins
+   let a 20px square sit inside a ~23px row without changing row height (the
+   no-expander rows must stay exactly as tall).
+   U+25B6/U+25BC are used deliberately: the "small triangle" characters
+   (U+25B8/U+25BE) stay visually tiny at ANY font-size, which is what made the
+   original control hard to see. */
+.diagnostics-row-expander {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: -0.15rem 0.2rem -0.15rem 0;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  padding: 0;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  line-height: 1;
+  vertical-align: middle;
+}
+.diagnostics-row-expander:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+}
+.diagnostics-row-expander:focus-visible {
+  outline: 2px solid var(--color-accent, var(--color-text-secondary));
+  outline-offset: -2px;
+}
+
+/* One health badge replaces the old status/health/stale trio. Tone is the only
+   colour in a healthy table, so a problem row is the thing that stands out. */
+.diagnostics-health {
+  white-space: nowrap;
+}
+.diagnostics-health::before {
+  content: "●";
+  margin-right: 0.3rem;
+}
+.diagnostics-health--ok::before {
+  color: var(--color-success, #22c55e);
+}
+.diagnostics-health--warn::before {
+  color: var(--color-warning, #ffb74d);
+}
+.diagnostics-health--error::before {
+  color: var(--color-error-text, var(--color-error));
+}
+.diagnostics-health--inactive::before {
+  color: var(--color-text-tertiary, var(--color-text-secondary));
+}
+.diagnostics-health--error {
+  color: var(--color-error-text, var(--color-error));
+}
+
+/* Expanded detail: a labelled grid, so the fields the eight columns leave out
+   stay readable instead of becoming another run-on line. */
+.diagnostics-detail-row > td {
+  background: var(--color-bg-secondary);
+}
+.diagnostics-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.25rem 1.5rem;
+  margin: 0;
+  padding: 0.4rem 0 0.4rem 2.4rem;
+}
+.diagnostics-detail-item {
+  display: flex;
+  gap: 0.4rem;
+  min-width: 0;
+  white-space: nowrap;
+}
+.diagnostics-detail-item dt {
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+}
+.diagnostics-detail-item dd {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A count of things needing attention. Deliberately NOT an error class: these
+   are tallies, not operational error text, and must not be styled as though a
+   failure message is being rendered. */
+.diagnostics-count-flag {
+  margin-left: 0.75rem;
+  color: var(--color-warning, #ffb74d);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
 /* Streams tree: stream header → cluster group → per-domain leaf. The
    indentation selectors must out-specify `.diagnostics-table td` (0,1,1), which
    sets `padding` via shorthand — a bare `.diagnostics-domain-name` (0,1,0) would
@@ -400,19 +556,13 @@
   font-weight: 400;
   color: var(--color-text-secondary);
 }
-.diagnostics-table td.diagnostics-cluster-name {
-  padding-left: 1.6rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-}
+/* Indentation for these two lives in the Cluster Data ladder above; Connections
+   uses .diagnostics-domain-name only for its non-domain leaves. */
 .diagnostics-table td.diagnostics-domain-name {
   padding-left: 3rem;
 }
-/* Leading connector makes the child relationship explicit even at a glance. */
-.diagnostics-table td.diagnostics-domain-name::before {
-  content: "↳";
-  margin-right: 0.4rem;
-  color: var(--color-text-secondary);
+.diagnostics-table--cluster-data td.diagnostics-domain-name {
+  padding-left: var(--diagnostics-indent-1);
 }
 
 .diagnostics-table-stack {

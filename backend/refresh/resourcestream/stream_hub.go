@@ -186,11 +186,11 @@ func (m *Manager) recordBroadcastResult(domain, scope string, result broadcastRe
 	if m.telemetry != nil {
 		// Attribute deliveries/drops to the resource domain so diagnostics can
 		// show one Streams row per domain (sessions/connect stay stream-level).
-		m.telemetry.RecordStreamDeliveryForDomain(telemetry.StreamResources, domain, result.delivered, backpressureEvents)
+		m.telemetry.RecordStreamDeliveryForLeaf(telemetry.StreamResources, telemetry.DomainLeaf(domain), result.delivered, backpressureEvents)
 		if backpressureEvents > 0 {
-			m.telemetry.RecordStreamErrorForDomain(
+			m.telemetry.RecordStreamErrorForLeaf(
 				telemetry.StreamResources,
-				domain,
+				telemetry.DomainLeaf(domain),
 				fmt.Errorf(
 					"resource stream backlog reset %d subscriber(s) and dropped %d subscriber(s) for %s/%s",
 					result.backpressureResets,
