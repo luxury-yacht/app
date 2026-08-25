@@ -69,7 +69,7 @@ describe('buildClusterDataRows', () => {
       'Nodes',
       'Pods',
     ]);
-    expect(scopes.every((row) => row.kind === 'scope' && !row.indented)).toBe(true);
+    expect(scopes.every((row) => row.kind === 'scope' && row.depth === 1)).toBe(true);
   });
 
   it('adds a domain group row only when several scopes share a domain', () => {
@@ -91,7 +91,7 @@ describe('buildClusterDataRows', () => {
       'scope',
       'scope',
     ]);
-    const grouped = rows.filter((row) => row.kind === 'scope' && row.indented);
+    const grouped = rows.filter((row) => row.kind === 'scope' && row.depth === 2);
     expect(grouped).toHaveLength(2);
     // Rows under a group row must not repeat the domain name.
     expect(grouped.every((row) => row.kind === 'scope' && row.domainLabel === '')).toBe(true);
@@ -222,6 +222,59 @@ describe('buildClusterDataRows', () => {
 
     const tones = rows.flatMap((row) => (row.kind === 'scope' ? [row.health.tone] : []));
     expect(tones).toEqual(['error', 'error']);
+  });
+
+  it('states the tree connection lines as data, so depth is never guessed', () => {
+    const rows = buildClusterDataRows({
+      rows: [
+        scopeRow({ domain: 'catalog', clusterId: 'c1', scope: 'limit=1' }),
+        scopeRow({ domain: 'catalog', clusterId: 'c1', scope: 'limit=50' }),
+        scopeRow({ domain: 'nodes', clusterId: 'c1' }),
+        scopeRow({ domain: 'pods', clusterId: 'c1', scope: 'default' }),
+      ],
+      clusterNames: { c1: 'Cluster One' },
+      streamStatsByClusterDomain: {},
+      brokerReads: [],
+    });
+
+    const tree = rows.flatMap((row) =>
+      row.kind === 'cluster' ? [] : [[row.kind, row.depth, row.guides.join('|'), row.connector]]
+    );
+    expect(tree).toEqual([
+      // catalog is grouped and has domains after it, so its children carry a
+      // pass-through rule at level 1 and the group row is a tee.
+      ['domain', 1, '', 'tee'],
+      ['scope', 2, 'line', 'tee'],
+      ['scope', 2, 'line', 'end'],
+      ['scope', 1, '', 'tee'],
+      // the cluster's last child closes the rule
+      ['scope', 1, '', 'end'],
+    ]);
+  });
+
+  it("stops the level-1 rule under the cluster's last domain", () => {
+    const rows = buildClusterDataRows({
+      rows: [
+        scopeRow({ domain: 'nodes', clusterId: 'c1' }),
+        // pods sorts last AND is grouped: its children must draw no
+        // pass-through rule, or the tree would imply a sibling below.
+        scopeRow({ domain: 'pods', clusterId: 'c1', scope: 'a' }),
+        scopeRow({ domain: 'pods', clusterId: 'c1', scope: 'b' }),
+      ],
+      clusterNames: { c1: 'Cluster One' },
+      streamStatsByClusterDomain: {},
+      brokerReads: [],
+    });
+
+    const nested = rows.filter((row) => row.kind === 'scope' && row.depth === 2);
+    expect(nested.map((row) => (row.kind === 'scope' ? row.guides.join('|') : ''))).toEqual([
+      'blank',
+      'blank',
+    ]);
+    expect(nested.map((row) => (row.kind === 'scope' ? row.connector : ''))).toEqual([
+      'tee',
+      'end',
+    ]);
   });
 
   it('folds status, health and staleness into one badge', () => {

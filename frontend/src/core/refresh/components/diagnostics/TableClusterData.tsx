@@ -21,9 +21,43 @@ import type {
   ClusterDataDomainRow,
   ClusterDataRow,
   ClusterDataScopeRow,
+  ClusterDataTreeNode,
 } from './diagnosticsPanelTypes';
 
 const COLUMN_COUNT = 8;
+
+// TreeGuides draws the connection lines from the row's own structure. Each
+// guide is a real box of fixed width, so the depth of a row and the position of
+// its rule are the same measurement — there is no indent arithmetic to get
+// wrong, and a child can never appear to hang left of its parent.
+const TreeGuides: React.FC<{ node: ClusterDataTreeNode; descender?: boolean }> = ({
+  node,
+  descender = false,
+}) => (
+  <span className="diagnostics-tree-guides" aria-hidden="true">
+    {node.guides.map((guide, index) => (
+      <span
+        // Guides are positional by nature; index IS the identity here.
+        // biome-ignore lint/suspicious/noArrayIndexKey: positional by definition
+        key={index}
+        className={`diagnostics-tree-guide diagnostics-tree-guide--${guide}`}
+      />
+    ))}
+    <span className={`diagnostics-tree-guide diagnostics-tree-guide--${node.connector}`} />
+    {/* A row with children continues the line downward into them, forming the
+        arriving-horizontal-plus-stem junction. It occupies a full guide slot so
+        its stem lands exactly on the children's own vertical. */}
+    {descender ? (
+      <span className="diagnostics-tree-guide diagnostics-tree-guide--descender" />
+    ) : null}
+  </span>
+);
+
+// Slots the first column reserves before its label: one per guide, one for the
+// connector, and one more for a descender or an expander. Deriving the padding
+// from this count is what keeps every label on the same x.
+const slotCount = (node: ClusterDataTreeNode, descender: boolean): number =>
+  node.guides.length + 1 + (descender ? 1 : 0);
 
 const ClusterGroupRow: React.FC<{ row: ClusterDataClusterRow }> = ({ row }) => (
   <tr className="diagnostics-cluster-row">
@@ -37,7 +71,12 @@ const ClusterGroupRow: React.FC<{ row: ClusterDataClusterRow }> = ({ row }) => (
 
 const DomainGroupRow: React.FC<{ row: ClusterDataDomainRow }> = ({ row }) => (
   <tr className="diagnostics-domain-row">
-    <td className="diagnostics-domain-name" colSpan={COLUMN_COUNT}>
+    <td
+      className="diagnostics-domain-name"
+      colSpan={COLUMN_COUNT}
+      style={{ '--diagnostics-slots': slotCount(row, true) } as React.CSSProperties}
+    >
+      <TreeGuides node={row} descender />
       <span className="diagnostics-domain">{row.label}</span>
       <span className="diagnostics-table-secondary" title={row.summaryTooltip}>
         {` · ${row.summary}`}
@@ -52,8 +91,12 @@ const ScopeRow: React.FC<{
   onToggle: (rowKey: string) => void;
 }> = ({ row, expanded, onToggle }) => (
   <>
-    <tr className={`diagnostics-scope-row${row.indented ? ' diagnostics-scope-row--nested' : ''}`}>
-      <td className="diagnostics-scope-name">
+    <tr className="diagnostics-scope-row">
+      <td
+        className="diagnostics-scope-name"
+        style={{ '--diagnostics-slots': slotCount(row, false) } as React.CSSProperties}
+      >
+        <TreeGuides node={row} />
         <button
           type="button"
           className="diagnostics-row-expander"
@@ -139,7 +182,6 @@ interface ClusterDataTableProps {
 
 export const ClusterDataTable: React.FC<ClusterDataTableProps> = ({ rows, summary }) => {
   const [expandedKeys, setExpandedKeys] = useState<ReadonlySet<string>>(() => new Set());
-
   const toggle = useCallback((rowKey: string) => {
     setExpandedKeys((previous) => {
       const next = new Set(previous);

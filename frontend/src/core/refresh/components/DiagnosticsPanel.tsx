@@ -87,6 +87,7 @@ import {
   buildClusterDataSummary,
   buildConnectionsRows,
   buildConnectionsSummary,
+  buildNonDomainCallsSummary,
 } from './diagnostics/clusterDataRowModel';
 import { GridTablePerformance } from './diagnostics/GridTablePerformance';
 import { resolveModeDetails } from './diagnostics/modeDetails';
@@ -2069,8 +2070,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   );
 
   const connectionsSummary = useMemo(
-    () => buildConnectionsSummary(connectionsRows, nonDomainCallRows.length),
-    [connectionsRows, nonDomainCallRows.length]
+    () => buildConnectionsSummary(connectionsRows),
+    [connectionsRows]
+  );
+  const nonDomainCallsSummary = useMemo(
+    () => buildNonDomainCallsSummary(nonDomainCallRows.length),
+    [nonDomainCallRows.length]
   );
 
   const connectionsContent = (
@@ -2078,6 +2083,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       rows={connectionsRows}
       callRows={nonDomainCallRows}
       summary={connectionsSummary}
+      callsSummary={nonDomainCallsSummary}
     />
   );
 

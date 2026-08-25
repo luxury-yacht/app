@@ -107,7 +107,24 @@ export interface ClusterDataClusterRow {
 }
 
 // Only emitted for a domain with more than one scope.
-export interface ClusterDataDomainRow {
+// Tree guides are DATA, not something inferred from padding. Each row states
+// which ancestor lines pass through it and whether it is the last child, so the
+// hierarchy is drawn from structure rather than from tuned indentation.
+//   'line'  an ancestor continues below this row, so its rule passes through
+//   'blank' that ancestor had no further children, so nothing is drawn
+export type ClusterDataGuide = 'line' | 'blank';
+// 'tee' has siblings below it (├), 'end' is the last child (└).
+export type ClusterDataConnector = 'tee' | 'end';
+
+export interface ClusterDataTreeNode {
+  // 1 = child of the cluster header, 2 = child of a domain group row.
+  depth: number;
+  // One entry per ancestor ABOVE this row's own connector, outermost first.
+  guides: ClusterDataGuide[];
+  connector: ClusterDataConnector;
+}
+
+export interface ClusterDataDomainRow extends ClusterDataTreeNode {
   kind: 'domain';
   rowKey: string;
   clusterId: string;
@@ -117,15 +134,13 @@ export interface ClusterDataDomainRow {
   summaryTooltip: string;
 }
 
-export interface ClusterDataScopeRow {
+export interface ClusterDataScopeRow extends ClusterDataTreeNode {
   kind: 'scope';
   rowKey: string;
   clusterId: string;
   domain: RefreshDomain;
   // Empty when a domain group row directly above already names the domain.
   domainLabel: string;
-  // True when this row sits under a domain group row.
-  indented: boolean;
   scope: string;
   scopeTooltip?: string;
   scopeEntries?: { label: 'Active' | 'Background'; clusterName: string }[];

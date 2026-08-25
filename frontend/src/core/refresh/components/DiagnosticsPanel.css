@@ -108,6 +108,13 @@
   min-height: 0;
 }
 
+/* A section that must NOT claim the panel's spare height: it sizes to its own
+   content so a sibling section below it keeps the remainder. Capped so a long
+   list still cannot crowd out what follows. */
+.diagnostics-section--content-height {
+  flex: 0 0 auto;
+}
+
 .diagnostics-section-header {
   display: block;
   padding: 0 0.5rem;
@@ -421,29 +428,108 @@
 /* Indentation alone carries the nesting: one step for a scope under its
    cluster, a second for a scope under a domain group row. A connector glyph
    beside the expander read as two competing affordances. */
-/* The Cluster Data indent ladder. Each step must be strictly deeper than the
-   step above, measured at the TRIANGLE (the leftmost thing a scope row draws),
-   or children appear to hang left of their own parent:
-     level 0  cluster header text
-     level 1  domain group text, and a standalone scope's triangle
-     level 2  a grouped scope's triangle
-   The expander must not use a negative left margin here — that would pull the
-   triangle back out of its level. */
+/* Cluster Data hierarchy is drawn with connection lines, not indentation.
+   Each guide is a real box of GUIDE_WIDTH, so a row's depth and the x-position
+   of its rule are the same measurement — nothing to hand-tune, and a child can
+   never sit left of its parent.
+
+   The guides are absolutely positioned over the cell so a vertical rule spans
+   the FULL row height (cell padding included) and therefore joins the rule in
+   the row above. The cell reserves depth x GUIDE_WIDTH of left padding so text
+   starts clear of them. */
 .diagnostics-table--cluster-data {
-  --diagnostics-indent-0: 0.5rem;
-  --diagnostics-indent-1: 1.6rem;
-  --diagnostics-indent-2: 3rem;
+  /* A guide slot and the expander are the SAME width. That is what makes a
+     parent's downward stem land exactly on its children's vertical, and every
+     label in the tree share one x — without any per-level tuning. */
+  --diagnostics-guide-width: 1.45rem;
 }
-.diagnostics-table--cluster-data td.diagnostics-cluster-name {
-  padding-left: var(--diagnostics-indent-0);
-}
+.diagnostics-table--cluster-data td.diagnostics-cluster-name,
+.diagnostics-table--cluster-data td.diagnostics-domain-name,
 .diagnostics-table--cluster-data td.diagnostics-scope-name {
-  padding-left: var(--diagnostics-indent-1);
-}
-.diagnostics-table--cluster-data .diagnostics-scope-row--nested td.diagnostics-scope-name {
-  padding-left: var(--diagnostics-indent-2);
+  position: relative;
+  padding-left: calc(var(--diagnostics-guide-width) * var(--diagnostics-slots, 0) + 0.4rem);
 }
 
+.diagnostics-tree-guides {
+  position: absolute;
+  left: 0.4rem;
+  top: 0;
+  bottom: 0;
+  display: flex;
+}
+.diagnostics-tree-guide {
+  position: relative;
+  width: var(--diagnostics-guide-width);
+  flex: 0 0 var(--diagnostics-guide-width);
+}
+/* Vertical rule. A pass-through and a tee run the full height; an end stops at
+   the elbow, which is what makes the last child read as the last child. */
+.diagnostics-tree-guide--line::before,
+.diagnostics-tree-guide--tee::before,
+.diagnostics-tree-guide--end::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 1px;
+  background: var(--color-text-tertiary, var(--color-text-secondary));
+}
+.diagnostics-tree-guide--line::before,
+.diagnostics-tree-guide--tee::before {
+  bottom: 0;
+}
+.diagnostics-tree-guide--end::before {
+  height: 50%;
+}
+/* A row that has children draws a T junction: the horizontal runs the FULL
+   width of the slot and the stem drops from its centre. Stopping the horizontal
+   at the stem would draw a corner instead, which reads as "the line ends here"
+   rather than "the branch continues down". The stem sits at this slot's centre,
+   exactly where the children's own connector vertical is. */
+.diagnostics-tree-guide--descender::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  /* Stops short of the slot edge. Running to 0 put the rule hard against the
+     label, while sibling rows leave whitespace around their triangle — the
+     parent row then read as differently indented. This keeps an arm past the
+     stem (so it is a T, not a corner) and the same breathing room the
+     triangle rows have. */
+  right: 28%;
+  top: 50%;
+  height: 1px;
+  background: var(--color-text-tertiary, var(--color-text-secondary));
+}
+.diagnostics-tree-guide--descender::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-text-tertiary, var(--color-text-secondary));
+}
+
+/* Elbow into the row's own content. */
+.diagnostics-tree-guide--tee::after,
+.diagnostics-tree-guide--end::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  right: 0;
+  height: 1px;
+  background: var(--color-text-tertiary, var(--color-text-secondary));
+}
+
+.diagnostics-table--cluster-data th:first-child,
+.diagnostics-table--cluster-data td.diagnostics-scope-name {
+  width: 1%;
+  white-space: nowrap;
+}
+/* Indentation alone carries the nesting: one step for a scope under its
+   cluster, a second for a scope under a domain group row. A connector glyph
+   beside the expander read as two competing affordances. */
 /* The expander is a text affordance, not a button chrome: it must not add
    height to the row or shift the label it sits beside. */
 /* The expander needs a real hit target, not just a glyph. The negative margins
@@ -456,9 +542,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.25rem;
+  width: var(--diagnostics-guide-width, 1.45rem);
   height: 1.25rem;
-  margin: -0.15rem 0.2rem -0.15rem 0;
+  margin: -0.15rem 0;
   background: none;
   border: none;
   border-radius: 3px;
@@ -556,13 +642,12 @@
   font-weight: 400;
   color: var(--color-text-secondary);
 }
-/* Indentation for these two lives in the Cluster Data ladder above; Connections
-   uses .diagnostics-domain-name only for its non-domain leaves. */
-.diagnostics-table td.diagnostics-domain-name {
+/* Connections indents its non-domain leaves (event scopes, log targets) under
+   their socket. This is its OWN class: sharing .diagnostics-domain-name with
+   Cluster Data put two equal-specificity padding rules on the same cell, and
+   source order silently decided which applied. */
+.diagnostics-table td.diagnostics-connection-leaf-name {
   padding-left: 3rem;
-}
-.diagnostics-table--cluster-data td.diagnostics-domain-name {
-  padding-left: var(--diagnostics-indent-1);
 }
 
 .diagnostics-table-stack {
@@ -599,6 +684,13 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+}
+
+/* Declared AFTER the base wrapper so the override actually wins and the
+   descending-specificity rule is satisfied. */
+.diagnostics-section--content-height .diagnostics-table-wrapper {
+  flex: 0 0 auto;
+  max-height: 14rem;
 }
 
 .diagnostics-table {

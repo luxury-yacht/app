@@ -1381,7 +1381,7 @@ describe('DiagnosticsPanel component', () => {
     // Connections lists one socket row per (stream, cluster). The fixture has no
     // leaf-keyed entries, so every row here is a socket.
     const connectionsSection = rendered.container.querySelector('.diagnostics-section');
-    expect(connectionsSection?.textContent).toContain('Sockets: 3');
+    expect(connectionsSection?.textContent).toContain('3 sockets');
     expect(connectionsSection?.textContent).toContain('Resources');
     const connectionRows =
       connectionsSection

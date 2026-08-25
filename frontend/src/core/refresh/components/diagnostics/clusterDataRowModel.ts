@@ -281,7 +281,10 @@ export const buildClusterDataRows = ({
       issueSummary: issueCount > 0 ? pluralize(issueCount, 'issue') : '',
     });
 
-    domainNames.forEach((domain) => {
+    domainNames.forEach((domain, domainIndex) => {
+      // A level-1 row is the cluster's last child when no domain follows it;
+      // its children then draw no pass-through rule at level 1.
+      const lastDomain = domainIndex === domainNames.length - 1;
       const scopeRows = (domains.get(domain) ?? [])
         .slice()
         .sort((left, right) => compareStrings(left.rowKey, right.rowKey));
@@ -327,10 +330,14 @@ export const buildClusterDataRows = ({
             pluralize(scopeRows.length, 'scope'),
           ].join(' · '),
           summaryTooltip: callers.callerTooltip ?? '',
+          depth: 1,
+          guides: [],
+          connector: lastDomain ? 'end' : 'tee',
         });
       }
 
-      scopeRows.forEach((row) => {
+      scopeRows.forEach((row, scopeIndex) => {
+        const lastScope = scopeIndex === scopeRows.length - 1;
         const { feed, feedTooltip } = resolveFeed(row, transport);
         const { activity, activityTooltip } = resolveActivity(row);
         out.push({
@@ -339,7 +346,9 @@ export const buildClusterDataRows = ({
           clusterId,
           domain,
           domainLabel: grouped ? '' : label,
-          indented: grouped,
+          depth: grouped ? 2 : 1,
+          guides: grouped ? [lastDomain ? 'blank' : 'line'] : [],
+          connector: grouped ? (lastScope ? 'end' : 'tee') : lastDomain ? 'end' : 'tee',
           scope: scopeWithoutCluster(row.scope, clusterName),
           // The tooltip keeps the untrimmed scope so nothing is lost.
           scopeTooltip: row.scopeTooltip ?? row.scope,
@@ -448,12 +457,30 @@ export const buildConnectionsRows = ({
   return out;
 };
 
-export const buildConnectionsSummary = (rows: ConnectionsRow[], brokerRowCount: number): string => {
+// Each section states only its own totals; folding the read count into the
+// connection summary made one line describe two different tables.
+export const buildConnectionsSummary = (rows: ConnectionsRow[]): string => {
   const sockets = rows.filter((row) => row.kind === 'socket');
   const sessions = sockets.reduce(
     (total, row) => total + (row.kind === 'socket' ? row.sessions : 0),
     0
   );
   const errors = rows.reduce((total, row) => total + row.errors, 0);
-  return `Sockets: ${sockets.length} • Sessions: ${sessions} • Other leaves: ${rows.length - sockets.length} • Calls: ${brokerRowCount} • Errors: ${errors}`;
+  const leaves = rows.length - sockets.length;
+  const parts = [
+    `${sockets.length} socket${sockets.length === 1 ? '' : 's'}`,
+    `${sessions} session${sessions === 1 ? '' : 's'}`,
+  ];
+  if (leaves > 0) {
+    parts.push(`${leaves} other leaf${leaves === 1 ? '' : 'ves'}`);
+  }
+  if (errors > 0) {
+    parts.push(`${errors} error${errors === 1 ? '' : 's'}`);
+  }
+  return parts.join(' · ');
 };
+
+export const buildNonDomainCallsSummary = (rowCount: number): string =>
+  rowCount === 0
+    ? 'Reads that belong to no refresh domain'
+    : `Reads that belong to no refresh domain · ${rowCount}`;
