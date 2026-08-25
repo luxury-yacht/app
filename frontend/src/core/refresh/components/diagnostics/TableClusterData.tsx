@@ -35,13 +35,8 @@ const TreeGuides: React.FC<{ node: ClusterDataTreeNode; descender?: boolean }> =
   descender = false,
 }) => (
   <span className="diagnostics-tree-guides" aria-hidden="true">
-    {node.guides.map((guide, index) => (
-      <span
-        // Guides are positional by nature; index IS the identity here.
-        // biome-ignore lint/suspicious/noArrayIndexKey: positional by definition
-        key={index}
-        className={`diagnostics-tree-guide diagnostics-tree-guide--${guide}`}
-      />
+    {node.guides.map((guide) => (
+      <span key={guide} className={`diagnostics-tree-guide diagnostics-tree-guide--${guide}`} />
     ))}
     <span className={`diagnostics-tree-guide diagnostics-tree-guide--${node.connector}`} />
     {/* A row with children continues the line downward into them, forming the

@@ -530,14 +530,6 @@
   background: var(--color-text-tertiary, var(--color-text-secondary));
 }
 
-.diagnostics-table--cluster-data th:first-child,
-.diagnostics-table--cluster-data td.diagnostics-scope-name {
-  width: 1%;
-  white-space: nowrap;
-}
-/* Indentation alone carries the nesting: one step for a scope under its
-   cluster, a second for a scope under a domain group row. A connector glyph
-   beside the expander read as two competing affordances. */
 /* The expander is a text affordance, not a button chrome: it must not add
    height to the row or shift the label it sits beside. */
 /* The expander needs a real hit target, not just a glyph. The negative margins

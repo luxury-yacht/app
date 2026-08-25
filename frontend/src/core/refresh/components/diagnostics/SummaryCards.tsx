@@ -40,13 +40,14 @@ interface SummaryCardProps {
 }
 
 const SummaryCard: React.FC<SummaryCardProps> = ({ heading, data }) => {
+  const primaryClassName = ['diagnostics-summary-primary', data.className]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <div className="diagnostics-summary-card">
       <span className="diagnostics-summary-heading">{heading}</span>
-      <span
-        className={`diagnostics-summary-primary${data.className ? ` ${data.className}` : ''}`}
-        title={data.title ?? ''}
-      >
+      <span className={primaryClassName} title={data.title ?? ''}>
         {data.primary}
       </span>
       {data.secondary ? (

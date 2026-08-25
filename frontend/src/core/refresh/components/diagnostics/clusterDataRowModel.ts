@@ -21,7 +21,9 @@ import { REFRESH_DOMAIN_DESCRIPTORS } from '../../domainRegistry';
 import type { RefreshDomain } from '../../types';
 import type { TelemetryStreamStatus } from '../../types.generated';
 import type {
+  ClusterDataConnector,
   ClusterDataDetail,
+  ClusterDataGuide,
   ClusterDataHealth,
   ClusterDataRow,
   ConnectionsRow,
@@ -61,8 +63,15 @@ const transportForDomain = (domain: RefreshDomain): { label: string; streamed: b
   return { label: STREAM_LABELS[stream] ?? stream, streamed: true };
 };
 
-const compareStrings = (left: string, right: string): number =>
-  left < right ? -1 : left > right ? 1 : 0;
+const compareStrings = (left: string, right: string): number => {
+  if (left < right) {
+    return -1;
+  }
+  if (left > right) {
+    return 1;
+  }
+  return 0;
+};
 
 // scopeError normalizes a row's error to '' when absent. Upstream formatting has
 // spelled "no error" as a dash before now, and health must never be decided by
@@ -163,7 +172,12 @@ const resolveFeed = (
       feedTooltip: `${row.domain} has no stream; ${row.pollingTooltip ?? 'it refreshes on its poll interval'}`,
     };
   }
-  const suffix = pollingOff ? `poll ${row.pollingStatus}` : interval ? `${interval} poll` : 'poll';
+  let suffix = 'poll';
+  if (pollingOff) {
+    suffix = `poll ${row.pollingStatus}`;
+  } else if (interval) {
+    suffix = `${interval} poll`;
+  }
   return {
     feed: `${transport.label} · ${suffix}`,
     feedTooltip:
@@ -340,6 +354,12 @@ export const buildClusterDataRows = ({
         const lastScope = scopeIndex === scopeRows.length - 1;
         const { feed, feedTooltip } = resolveFeed(row, transport);
         const { activity, activityTooltip } = resolveActivity(row);
+        const parentGuide: ClusterDataGuide = lastDomain ? 'blank' : 'line';
+        const guides = grouped ? [parentGuide] : [];
+        let connector: ClusterDataConnector = lastDomain ? 'end' : 'tee';
+        if (grouped) {
+          connector = lastScope ? 'end' : 'tee';
+        }
         out.push({
           kind: 'scope',
           rowKey: `scope::${clusterId}::${domain}::${row.rowKey}`,
@@ -347,8 +367,8 @@ export const buildClusterDataRows = ({
           domain,
           domainLabel: grouped ? '' : label,
           depth: grouped ? 2 : 1,
-          guides: grouped ? [lastDomain ? 'blank' : 'line'] : [],
-          connector: grouped ? (lastScope ? 'end' : 'tee') : lastDomain ? 'end' : 'tee',
+          guides,
+          connector,
           scope: scopeWithoutCluster(row.scope, clusterName),
           // The tooltip keeps the untrimmed scope so nothing is lost.
           scopeTooltip: row.scopeTooltip ?? row.scope,
