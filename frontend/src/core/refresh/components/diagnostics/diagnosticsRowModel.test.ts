@@ -108,6 +108,33 @@ describe('diagnosticsRowModel', () => {
     expect(selectDomainStreamTelemetry([socket, catalog], 'resources', 'catalog')).toBe(catalog);
   });
 
+  test('selects resource-domain telemetry from the requested cluster', () => {
+    const forClusterB = {
+      name: 'resources',
+      clusterId: 'cluster-b',
+      leafKind: 'domain' as const,
+      leaf: 'catalog',
+      activeSessions: 0,
+      totalMessages: 20,
+      droppedMessages: 2,
+      skippedTargets: 0,
+      errorCount: 1,
+      lastConnect: 10,
+      lastEvent: 20,
+    };
+    const forClusterA = {
+      ...forClusterB,
+      clusterId: 'cluster-a',
+      totalMessages: 7,
+      droppedMessages: 0,
+      errorCount: 0,
+    };
+
+    expect(
+      selectDomainStreamTelemetry([forClusterB, forClusterA], 'resources', 'catalog', 'cluster-a')
+    ).toBe(forClusterA);
+  });
+
   test('builds Kubernetes API client rows and summary', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));

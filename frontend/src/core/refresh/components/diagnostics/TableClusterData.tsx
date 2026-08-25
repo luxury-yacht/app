@@ -59,6 +59,9 @@ const TreeGuides: React.FC<{ node: ClusterDataTreeNode; descender?: boolean }> =
 const slotCount = (node: ClusterDataTreeNode, descender: boolean): number =>
   node.guides.length + 1 + (descender ? 1 : 0);
 
+const slotClassName = (node: ClusterDataTreeNode, descender: boolean): string =>
+  `diagnostics-tree-slots--${slotCount(node, descender)}`;
+
 const ClusterGroupRow: React.FC<{ row: ClusterDataClusterRow }> = ({ row }) => (
   <tr className="diagnostics-cluster-row">
     <td className="diagnostics-cluster-name" colSpan={COLUMN_COUNT}>
@@ -71,11 +74,7 @@ const ClusterGroupRow: React.FC<{ row: ClusterDataClusterRow }> = ({ row }) => (
 
 const DomainGroupRow: React.FC<{ row: ClusterDataDomainRow }> = ({ row }) => (
   <tr className="diagnostics-domain-row">
-    <td
-      className="diagnostics-domain-name"
-      colSpan={COLUMN_COUNT}
-      style={{ '--diagnostics-slots': slotCount(row, true) } as React.CSSProperties}
-    >
+    <td className={`diagnostics-domain-name ${slotClassName(row, true)}`} colSpan={COLUMN_COUNT}>
       <TreeGuides node={row} descender />
       <span className="diagnostics-domain">{row.label}</span>
       <span className="diagnostics-table-secondary" title={row.summaryTooltip}>
@@ -92,10 +91,7 @@ const ScopeRow: React.FC<{
 }> = ({ row, expanded, onToggle }) => (
   <>
     <tr className="diagnostics-scope-row">
-      <td
-        className="diagnostics-scope-name"
-        style={{ '--diagnostics-slots': slotCount(row, false) } as React.CSSProperties}
-      >
+      <td className={`diagnostics-scope-name ${slotClassName(row, false)}`}>
         <TreeGuides node={row} />
         <button
           type="button"

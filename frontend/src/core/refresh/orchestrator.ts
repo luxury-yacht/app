@@ -1286,13 +1286,20 @@ class RefreshOrchestrator {
       return false;
     }
 
+    let streamingExpected = false;
     let streamingHealthy = false;
     if (config.streaming && this.shouldStreamScope(domain, scope)) {
+      streamingExpected = true;
       this.startStreamingScope(domain, scope, config.streaming);
       streamingHealthy = this.isStreamingHealthy(domain, scope);
     }
     if (!options.isManual && streamingHealthy) {
       return true;
+    }
+    if (!options.isManual && streamingExpected && isResourceStreamDomain(domain)) {
+      // Query-only consumers refetch their own page instead of loading a base
+      // snapshot here, but the scheduled poll is still a stream fallback.
+      resourceStreamManager.recordStreamFallback(domain, scope, 'stream not delivering');
     }
     setScopedDomainState(domain, scope, (previous) => ({
       ...previous,

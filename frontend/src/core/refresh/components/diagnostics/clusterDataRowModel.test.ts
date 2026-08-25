@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { BrokerReadDiagnosticsEntry } from '@/core/read-diagnostics';
 import type { TelemetryStreamStatus } from '../../types.generated';
-import { buildClusterDataRows, buildConnectionsRows } from './clusterDataRowModel';
+import {
+  buildClusterDataRows,
+  buildClusterDataSummary,
+  buildConnectionsRows,
+} from './clusterDataRowModel';
 import type { DiagnosticsRow } from './diagnosticsPanelTypes';
 
 const scopeRow = (over: Partial<DiagnosticsRow> & Pick<DiagnosticsRow, 'domain' | 'clusterId'>) =>
@@ -382,6 +386,25 @@ describe('buildClusterDataRows', () => {
       brokerReads: [],
     });
     expect(broken[0].kind === 'cluster' && broken[0].issueSummary).toBe('1 issue');
+  });
+
+  it('uses the same health classification in the overall issue summary', () => {
+    const rows = buildClusterDataRows({
+      rows: [
+        scopeRow({
+          domain: 'pods',
+          clusterId: 'c1',
+          scope: 'a',
+          healthStatus: 'unhealthy (no-delivery)',
+        }),
+      ],
+      clusterNames: { c1: 'Cluster One' },
+      streamStatsByClusterDomain: {},
+      brokerReads: [],
+    });
+
+    expect(rows[0].kind === 'cluster' && rows[0].issueSummary).toBe('1 issue');
+    expect(buildClusterDataSummary(rows)).toContain('Issues 1');
   });
 });
 

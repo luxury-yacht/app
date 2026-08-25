@@ -20,6 +20,7 @@ import type { DomainSnapshotState } from '../../store';
 import type {
   CatalogSnapshotPayload,
   TelemetryMetricsStatus,
+  TelemetrySnapshotStatus,
   TelemetryStreamStatus,
   TelemetrySummary,
 } from '../../types';
@@ -117,19 +118,44 @@ const maxStreamValue = (
   select: (entry: TelemetryStreamStatus) => number
 ): number => entries.reduce((latest, entry) => Math.max(latest, select(entry)), 0);
 
+export const selectStreamSocketTelemetry = (
+  streams: TelemetryStreamStatus[] | null | undefined,
+  streamName: string,
+  clusterId = ''
+): TelemetryStreamStatus | undefined =>
+  (streams ?? []).find(
+    (entry) => entry.name === streamName && (entry.clusterId ?? '') === clusterId && !entry.leafKind
+  );
+
 export const selectDomainStreamTelemetry = (
   streams: TelemetryStreamStatus[] | null | undefined,
   streamName: string,
-  domain: string
+  domain: string,
+  clusterId = ''
 ): TelemetryStreamStatus | undefined => {
-  const matchingStream = (streams ?? []).filter((entry) => entry.name === streamName);
+  const matchingStream = (streams ?? []).filter(
+    (entry) => entry.name === streamName && (entry.clusterId ?? '') === clusterId
+  );
   // Only a `domain` leaf names a refresh domain; scope/target leaves key by
   // something else entirely and must never be matched here.
   return (
     matchingStream.find((entry) => entry.leafKind === 'domain' && entry.leaf === domain) ??
-    matchingStream.find((entry) => !entry.leafKind)
+    selectStreamSocketTelemetry(streams, streamName, clusterId)
   );
 };
+
+export const selectDomainSnapshotTelemetry = (
+  snapshots: TelemetrySnapshotStatus[] | null | undefined,
+  domain: string,
+  clusterId = '',
+  scope = ''
+): TelemetrySnapshotStatus | undefined =>
+  (snapshots ?? []).find(
+    (entry) =>
+      entry.domain === domain &&
+      (entry.clusterId ?? '') === clusterId &&
+      (entry.scope ?? '') === scope
+  );
 
 // Catalog is a domain on the unified resources socket. Present its domain
 // deliveries together with the owning socket's session/connect state so the

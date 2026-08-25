@@ -378,7 +378,7 @@ export const buildClusterDataSummary = (rows: ClusterDataRow[]): string => {
   const domains = new Set(
     rows.flatMap((row) => (row.kind === 'scope' ? [`${row.clusterId}::${row.domain}`] : []))
   ).size;
-  const issues = rows.filter((row) => row.kind === 'scope' && Boolean(row.error)).length;
+  const issues = rows.filter((row) => row.kind === 'scope' && row.health.tone === 'error').length;
   return `Clusters ${clusters} · Domains ${domains} · Scopes ${scopes} · Issues ${issues}`;
 };
 

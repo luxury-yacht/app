@@ -9,15 +9,16 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 )
 
-// SnapshotLastStatus is the closed set of refresh outcomes recorded per domain.
+// SnapshotLastStatus is the closed set of refresh outcomes recorded per domain scope.
 type SnapshotLastStatus string
 
 const (
-	SnapshotLastStatusSuccess SnapshotLastStatus = "success"
-	SnapshotLastStatusError   SnapshotLastStatus = "error"
+	SnapshotLastStatusSuccess   SnapshotLastStatus = "success"
+	SnapshotLastStatusError     SnapshotLastStatus = "error"
+	maxSnapshotTelemetryEntries                    = 512
 )
 
-// SnapshotStatus captures the latest refresh outcome for a domain.
+// SnapshotStatus captures the latest refresh outcome for one domain scope.
 type SnapshotStatus struct {
 	Domain             string             `json:"domain"`
 	Scope              string             `json:"scope,omitempty"`
@@ -121,7 +122,7 @@ type ConnectionStats struct {
 // Recorder collects refresh and metrics telemetry in-memory.
 type Recorder struct {
 	mu          sync.RWMutex
-	snapshots   map[string]*SnapshotStatus
+	snapshots   map[snapshotTelemetryKey]*SnapshotStatus
 	metrics     MetricsStatus
 	streams     map[string]*StreamStatus
 	catalog     CatalogStatus
@@ -130,10 +131,16 @@ type Recorder struct {
 	clusterName string
 }
 
+type snapshotTelemetryKey struct {
+	clusterID string
+	domain    string
+	scope     string
+}
+
 // NewRecorder returns an empty telemetry recorder.
 func NewRecorder() *Recorder {
 	return &Recorder{
-		snapshots: make(map[string]*SnapshotStatus),
+		snapshots: make(map[snapshotTelemetryKey]*SnapshotStatus),
 		streams:   make(map[string]*StreamStatus),
 	}
 }
@@ -221,7 +228,7 @@ func (r *Recorder) RecordSnapshot(record SnapshotRecord) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	entry := r.snapshotStatus(record.Domain)
+	entry := r.snapshotStatus(record.ClusterID, record.Domain, record.Scope)
 	updateSnapshotBatch(entry, snapshotBatchUpdate{
 		scope:        record.Scope,
 		clusterID:    record.ClusterID,
@@ -239,13 +246,33 @@ func (r *Recorder) RecordSnapshot(record SnapshotRecord) {
 	updateSnapshotResult(entry, record.Err)
 }
 
-func (r *Recorder) snapshotStatus(domain string) *SnapshotStatus {
-	if entry, ok := r.snapshots[domain]; ok {
+func (r *Recorder) snapshotStatus(clusterID, domain, scope string) *SnapshotStatus {
+	key := snapshotTelemetryKey{clusterID: clusterID, domain: domain, scope: scope}
+	if entry, ok := r.snapshots[key]; ok {
 		return entry
 	}
-	entry := &SnapshotStatus{Domain: domain}
-	r.snapshots[domain] = entry
+	if len(r.snapshots) >= maxSnapshotTelemetryEntries {
+		r.evictOldestSnapshotStatus()
+	}
+	entry := &SnapshotStatus{Domain: domain, Scope: scope, ClusterID: clusterID}
+	r.snapshots[key] = entry
 	return entry
+}
+
+func (r *Recorder) evictOldestSnapshotStatus() {
+	var oldestKey snapshotTelemetryKey
+	oldestUpdated := int64(0)
+	found := false
+	for key, entry := range r.snapshots {
+		if !found || entry.LastUpdated < oldestUpdated {
+			oldestKey = key
+			oldestUpdated = entry.LastUpdated
+			found = true
+		}
+	}
+	if found {
+		delete(r.snapshots, oldestKey)
+	}
 }
 
 type snapshotBatchUpdate struct {

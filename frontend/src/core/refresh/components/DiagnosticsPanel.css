@@ -450,6 +450,14 @@
   padding-left: calc(var(--diagnostics-guide-width) * var(--diagnostics-slots, 0) + 0.4rem);
 }
 
+.diagnostics-tree-slots--1 {
+  --diagnostics-slots: 1;
+}
+
+.diagnostics-tree-slots--2 {
+  --diagnostics-slots: 2;
+}
+
 .diagnostics-tree-guides {
   position: absolute;
   left: 0.4rem;

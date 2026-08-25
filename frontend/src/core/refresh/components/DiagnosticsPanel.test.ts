@@ -269,11 +269,25 @@ const selectClusterDataTab = async (container: HTMLElement) => selectDiagnostics
 // scope row names its own. Either way each scope resolves to one labelled row.
 const readScopeRows = (
   container: HTMLElement
-): Array<{ label: string; scope: string; feed: string; health: string }> => {
+): Array<{
+  label: string;
+  scope: string;
+  feed: string;
+  health: string;
+  activity: string;
+  error: string;
+}> => {
   const domainText = (row: Element): string =>
     row.querySelector('.diagnostics-domain')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
   let groupLabel = '';
-  const out: Array<{ label: string; scope: string; feed: string; health: string }> = [];
+  const out: Array<{
+    label: string;
+    scope: string;
+    feed: string;
+    health: string;
+    activity: string;
+    error: string;
+  }> = [];
   container.querySelectorAll('.diagnostics-table tbody tr').forEach((row) => {
     if (row.classList.contains('diagnostics-domain-row')) {
       groupLabel = domainText(row);
@@ -292,6 +306,8 @@ const readScopeRows = (
       scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
       health: cells[2]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
       feed: cells[3]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+      activity: cells[6]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+      error: cells[7]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
     });
   });
   return out;
@@ -1105,6 +1121,33 @@ describe('DiagnosticsPanel component', () => {
         },
       ],
     ]);
+    fetchTelemetrySummaryMock.mockResolvedValue(
+      makeTelemetrySummary({
+        snapshots: [
+          {
+            domain: 'catalog',
+            clusterId: 'cluster-a',
+            scope: catalogScope,
+            lastStatus: 'error',
+            lastError: 'page query failed',
+            lastDurationMs: 10,
+            lastUpdated: Date.now(),
+            successCount: 2,
+            failureCount: 1,
+          },
+          {
+            domain: 'catalog',
+            clusterId: 'cluster-a',
+            scope: catalogMetadataScope,
+            lastStatus: 'success',
+            lastDurationMs: 20,
+            lastUpdated: Date.now(),
+            successCount: 7,
+            failureCount: 0,
+          },
+        ],
+      })
+    );
 
     const nodesScope = buildClusterScope('cluster-a', '');
     const nodesAliasScope = buildClusterScope('cluster-a', 'cluster');
@@ -1150,6 +1193,8 @@ describe('DiagnosticsPanel component', () => {
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
     await selectClusterDataTab(rendered.container);
+    await flushAsync();
+    await flushAsync();
 
     const rows = readScopeRows(rendered.container);
 
@@ -1164,6 +1209,32 @@ describe('DiagnosticsPanel component', () => {
     // Role is what distinguishes them, and it is a detail field now.
     expect(new Set(catalogRows.map((row) => row.feed)).size).toBe(1);
     expect(catalogRows[0].feed).toContain('Resources');
+    const catalogActivityByScope = Object.fromEntries(
+      catalogRows.map((row) => [
+        row.scope.includes('limit=200') ? 'page' : 'metadata',
+        row.activity,
+      ])
+    );
+    expect(catalogActivityByScope).toEqual({ page: '2✓ 1✗ 10 ms', metadata: '7✓ 0✗ 20 ms' });
+    expect(catalogRows.find((row) => row.scope.includes('limit=200'))?.error).toContain(
+      'page query failed'
+    );
+    expect(catalogRows.find((row) => row.scope.includes('limit=1'))?.error).not.toContain(
+      'page query failed'
+    );
+
+    const treeCells = rendered.container.querySelectorAll(
+      'td.diagnostics-domain-name, td.diagnostics-scope-name'
+    );
+    expect(treeCells.length).toBeGreaterThan(0);
+    expect(Array.from(treeCells).every((cell) => cell.getAttribute('style') === null)).toBe(true);
+    expect(
+      Array.from(treeCells).every(
+        (cell) =>
+          cell.classList.contains('diagnostics-tree-slots--1') ||
+          cell.classList.contains('diagnostics-tree-slots--2')
+      )
+    ).toBe(true);
     expect((await expandScopeRow(rendered.container, 'Browse Catalog')).Role).toBeDefined();
 
     const nodeRows = rows.filter((row) => row.label === 'Nodes');
@@ -1417,6 +1488,7 @@ describe('DiagnosticsPanel component', () => {
         snapshots: [
           {
             domain: 'namespaces',
+            clusterId: 'cluster-a',
             scope: clusterScope,
             lastStatus: 'success',
             lastDurationMs: 12,
@@ -1524,6 +1596,7 @@ describe('DiagnosticsPanel component', () => {
         streams: [
           {
             name: 'resources',
+            clusterId: 'cluster-a',
             activeSessions: 1,
             totalMessages: 5,
             droppedMessages: 1,
@@ -1592,6 +1665,57 @@ describe('DiagnosticsPanel component', () => {
     await rendered.unmount();
     healthSpy.mockRestore();
     telemetrySpy.mockRestore();
+  });
+
+  test('keeps container log socket health attached to its owning cluster', async () => {
+    mockKubeconfigState.selectedClusterId = 'cluster-a';
+    const scopeA = buildClusterScope('cluster-a', 'default:apps/v1:deployment:web');
+    const scopeB = buildClusterScope('cluster-b', 'default:apps/v1:deployment:api');
+    setScopedEntries('container-logs', [
+      [scopeA, { ...createReadyState({ entries: [] }), scope: scopeA }],
+      [scopeB, { ...createReadyState({ entries: [] }), scope: scopeB }],
+    ]);
+    fetchTelemetrySummaryMock.mockResolvedValueOnce(
+      makeTelemetrySummary({
+        streams: [
+          {
+            name: 'container-logs',
+            clusterId: 'cluster-b',
+            activeSessions: 1,
+            totalMessages: 1,
+            droppedMessages: 0,
+            skippedTargets: 0,
+            errorCount: 1,
+            lastError: 'cluster-b socket failed',
+            lastConnect: Date.now(),
+            lastEvent: Date.now(),
+          },
+          {
+            name: 'container-logs',
+            clusterId: 'cluster-a',
+            activeSessions: 1,
+            totalMessages: 5,
+            droppedMessages: 0,
+            skippedTargets: 0,
+            errorCount: 0,
+            lastConnect: Date.now(),
+            lastEvent: Date.now(),
+          },
+        ],
+      })
+    );
+
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectClusterDataTab(rendered.container);
+    await flushAsync();
+    await flushAsync();
+
+    const rows = readScopeRows(rendered.container).filter((row) => row.label.includes('Logs'));
+    expect(rows.find((row) => row.label.includes('web'))?.health).toBe('healthy');
+    expect(rows.find((row) => row.label.includes('api'))?.health).toBe('unhealthy');
+
+    await rendered.unmount();
   });
 
   test('shows every connection unfiltered', async () => {

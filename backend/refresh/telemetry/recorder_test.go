@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -85,14 +86,14 @@ func TestRecordSnapshotAggregatesWarningsAndAverages(t *testing.T) {
 	rec := NewRecorder()
 
 	rec.RecordSnapshot(SnapshotRecord{Domain: "domains", Scope: "scopeA", ClusterID: "cluster-1", ClusterName: "cluster-one", Duration: 100 * time.Millisecond, Err: errors.New("boom"), Truncated: false, TotalItems: 10, Warnings: []string{"catalog fallback on namespaces", "hydration failed"}, BatchIndex: 0, TotalBatches: 2, BatchSize: 5, IsFinal: false, TimeToFirstBatchMs: 12, InformerSyncWaitMs: 0})
-	rec.RecordSnapshot(SnapshotRecord{Domain: "domains", Scope: "scopeB", ClusterID: "cluster-1", ClusterName: "cluster-one", Duration: 200 * time.Millisecond, Err: nil, Truncated: true, TotalItems: 5, Warnings: nil, BatchIndex: 1, TotalBatches: 2, BatchSize: 3, IsFinal: true, TimeToFirstBatchMs: 0, InformerSyncWaitMs: 0})
+	rec.RecordSnapshot(SnapshotRecord{Domain: "domains", Scope: "scopeA", ClusterID: "cluster-1", ClusterName: "cluster-one", Duration: 200 * time.Millisecond, Err: nil, Truncated: true, TotalItems: 5, Warnings: nil, BatchIndex: 1, TotalBatches: 2, BatchSize: 3, IsFinal: true, TimeToFirstBatchMs: 0, InformerSyncWaitMs: 0})
 
 	summary := rec.SnapshotSummary()
 	require.Len(t, summary.Snapshots, 1)
 
 	s := summary.Snapshots[0]
 	require.Equal(t, "domains", s.Domain)
-	require.Equal(t, "scopeB", s.Scope)
+	require.Equal(t, "scopeA", s.Scope)
 	require.Equal(t, SnapshotLastStatusSuccess, s.LastStatus)
 	require.Equal(t, "", s.LastError)
 	require.Equal(t, int64(150), s.AverageDurationMs)
@@ -108,6 +109,40 @@ func TestRecordSnapshotAggregatesWarningsAndAverages(t *testing.T) {
 	require.Equal(t, uint64(1), s.FallbackCount)
 	require.Equal(t, uint64(1), s.HydrationCount)
 	require.Equal(t, "", s.LastWarning) // cleared when last call had no warnings
+}
+
+func TestRecordSnapshotKeepsScopesIndependent(t *testing.T) {
+	rec := NewRecorder()
+
+	rec.RecordSnapshot(SnapshotRecord{Domain: "catalog", Scope: "cluster-1|limit=1", ClusterID: "cluster-1", Duration: 10 * time.Millisecond, Err: errors.New("metadata failed")})
+	rec.RecordSnapshot(SnapshotRecord{Domain: "catalog", Scope: "cluster-1|limit=500", ClusterID: "cluster-1", Duration: 20 * time.Millisecond})
+
+	byScope := make(map[string]SnapshotStatus)
+	for _, status := range rec.SnapshotSummary().Snapshots {
+		byScope[status.Scope] = status
+	}
+
+	require.Len(t, byScope, 2)
+	require.Equal(t, uint64(1), byScope["cluster-1|limit=1"].FailureCount)
+	require.Equal(t, uint64(0), byScope["cluster-1|limit=1"].SuccessCount)
+	require.Equal(t, "metadata failed", byScope["cluster-1|limit=1"].LastError)
+	require.Equal(t, uint64(0), byScope["cluster-1|limit=500"].FailureCount)
+	require.Equal(t, uint64(1), byScope["cluster-1|limit=500"].SuccessCount)
+	require.Empty(t, byScope["cluster-1|limit=500"].LastError)
+}
+
+func TestRecordSnapshotBoundsRetainedScopes(t *testing.T) {
+	rec := NewRecorder()
+
+	for index := 0; index <= maxSnapshotTelemetryEntries; index++ {
+		rec.RecordSnapshot(SnapshotRecord{
+			Domain:    "catalog",
+			Scope:     fmt.Sprintf("cluster-1|query=%d", index),
+			ClusterID: "cluster-1",
+		})
+	}
+
+	require.Len(t, rec.SnapshotSummary().Snapshots, maxSnapshotTelemetryEntries)
 }
 
 func TestRecordSnapshotTracksPeakInformerSyncWait(t *testing.T) {

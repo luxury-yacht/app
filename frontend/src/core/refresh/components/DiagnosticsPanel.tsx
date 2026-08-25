@@ -80,7 +80,9 @@ import {
   STREAM_MODE_BY_NAME,
   STREAM_ONLY_DOMAINS,
   selectCatalogStreamTelemetry,
+  selectDomainSnapshotTelemetry,
   selectDomainStreamTelemetry,
+  selectStreamSocketTelemetry,
 } from './diagnostics';
 import {
   buildClusterDataRows,
@@ -721,13 +723,20 @@ interface DomainTelemetrySources {
 
 const resolveDomainTelemetrySources = (
   domain: RefreshDomain,
+  clusterId: string,
+  scope: string | undefined,
   telemetrySummary: NormalizedTelemetrySummary | null
 ): DomainTelemetrySources => {
   const streamName = DOMAIN_STREAM_MAP[domain];
   return {
-    telemetryInfo: telemetrySummary?.snapshots.find((entry) => entry.domain === domain),
+    telemetryInfo: selectDomainSnapshotTelemetry(
+      telemetrySummary?.snapshots,
+      domain,
+      clusterId,
+      scope
+    ),
     streamTelemetry: streamName
-      ? selectDomainStreamTelemetry(telemetrySummary?.streams, streamName, domain)
+      ? selectDomainStreamTelemetry(telemetrySummary?.streams, streamName, domain, clusterId)
       : undefined,
     isResourceStreamDomain: streamName === 'resources',
     streamMode: streamName ? (STREAM_MODE_BY_NAME[streamName] ?? 'streaming') : null,
@@ -895,13 +904,14 @@ interface DomainTelemetryDetails {
 const buildDomainTelemetryDetails = (params: {
   domain: RefreshDomain;
   state: DomainSnapshotState<unknown>;
+  clusterId: string;
   scope?: string;
   telemetrySummary: NormalizedTelemetrySummary | null;
   resourceStreamStats: ResourceStreamStats;
 }): DomainTelemetryDetails => {
-  const { domain, state, scope, telemetrySummary, resourceStreamStats } = params;
+  const { domain, state, clusterId, scope, telemetrySummary, resourceStreamStats } = params;
   const { telemetryInfo, streamTelemetry, isResourceStreamDomain, streamMode } =
-    resolveDomainTelemetrySources(domain, telemetrySummary);
+    resolveDomainTelemetrySources(domain, clusterId, scope, telemetrySummary);
   const streamLastEvent = isResourceStreamDomain ? streamTelemetry?.lastEvent : 0;
   const baseLastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
   const combinedLastUpdated = Math.max(baseLastUpdated ?? 0, streamLastEvent ?? 0);
@@ -1141,6 +1151,41 @@ interface ContainerLogsRowContext extends ScopedRowContext {
   modeDetails: ReturnType<typeof resolveModeDetails>;
   pollingDetails: PollingDetails;
 }
+
+const resolveContainerLogsRowContext = (
+  scope: string,
+  context: ScopedRowContext,
+  streams: TelemetryStreamStatus[] | null | undefined
+): ContainerLogsRowContext => {
+  const streamTelemetry = selectStreamSocketTelemetry(
+    streams,
+    'container-logs',
+    diagnosticsRowClusterId(scope)
+  );
+  const streamHealth = resolveStreamTelemetryHealth(streamTelemetry);
+  const streamActive = Boolean(streamTelemetry?.activeSessions);
+  const streamHealthy = streamHealth?.status === 'healthy';
+  const pollingDetails = resolvePollingDetails({
+    domain: 'container-logs',
+    refresherName: DOMAIN_REFRESHER_MAP['container-logs'],
+    streamActive,
+    streamHealthy,
+  });
+  return {
+    ...context,
+    streamHealth,
+    pollingDetails,
+    modeDetails: resolveModeDetails({
+      domain: 'container-logs',
+      streamMode: STREAM_MODE_BY_NAME['container-logs'],
+      streamActive,
+      streamHealthy,
+      pollingEnabled: pollingDetails.enabled,
+      streamingBlocked: false,
+      streamOnly: STREAM_ONLY_DOMAINS.has('container-logs'),
+    }),
+  };
+};
 
 const buildContainerLogsDiagnosticsRow = (
   [scope, state]: [string, DomainSnapshotState<unknown>],
@@ -1675,6 +1720,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const telemetryDetails = buildDomainTelemetryDetails({
           domain,
           state,
+          clusterId: diagnosticsRowClusterId(effectiveScope),
           scope: effectiveScope,
           telemetrySummary,
           resourceStreamStats,
@@ -1763,36 +1809,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
     const orderedPodRows = podRows.sort((a, b) => a.label.localeCompare(b.label));
 
-    const containerLogsStreamTelemetry = telemetrySummary?.streams.find(
-      (entry) => entry.name === 'container-logs'
-    );
-    const containerLogsStreamHealth = resolveStreamTelemetryHealth(containerLogsStreamTelemetry);
-    const containerLogsStreamActive = Boolean(containerLogsStreamTelemetry?.activeSessions);
-    const containerLogsStreamHealthy = containerLogsStreamHealth?.status === 'healthy';
-    const logPollingDetails = resolvePollingDetails({
-      domain: 'container-logs',
-      refresherName: DOMAIN_REFRESHER_MAP['container-logs'],
-      streamActive: containerLogsStreamActive,
-      streamHealthy: containerLogsStreamHealthy,
+    const logRows = containerLogsScopeEntries.map((entry) => {
+      const scope = entry[1].scope ?? entry[0];
+      return buildContainerLogsDiagnosticsRow(
+        entry,
+        resolveContainerLogsRowContext(scope, scopedRowContext, telemetrySummary?.streams)
+      );
     });
-    const logModeDetails = resolveModeDetails({
-      domain: 'container-logs',
-      streamMode: STREAM_MODE_BY_NAME['container-logs'],
-      streamActive: containerLogsStreamActive,
-      streamHealthy: containerLogsStreamHealthy,
-      pollingEnabled: logPollingDetails.enabled,
-      streamingBlocked: false,
-      streamOnly: STREAM_ONLY_DOMAINS.has('container-logs'),
-    });
-    const logRowContext = {
-      ...scopedRowContext,
-      streamHealth: containerLogsStreamHealth,
-      modeDetails: logModeDetails,
-      pollingDetails: logPollingDetails,
-    };
-    const logRows = containerLogsScopeEntries.map((entry) =>
-      buildContainerLogsDiagnosticsRow(entry, logRowContext)
-    );
 
     const orderedLogRows = logRows.sort((a, b) => a.label.localeCompare(b.label));
 

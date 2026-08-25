@@ -245,18 +245,25 @@ socket, the stream children whose keys are not refresh domains, and every read
 that belongs to no domain. Those members share no parent, so nesting them would
 invent a hierarchy the data does not have.
 
-Three rules keep the two views joinable:
+Four rules keep the two views joinable:
 
+- Snapshot telemetry is keyed and joined by the complete
+  `(cluster, domain, scope)` identity. A domain-level aggregate must never be
+  copied onto each scope row. The backend retains only the 512 most recently
+  updated snapshot identities per recorder so query scopes cannot grow
+  diagnostics memory without bound.
 - `telemetry.StreamStatus` carries `Leaf` plus `LeafKind`. The three streams key
   their children differently — resources by refresh domain, events by event
   scope, container logs by pod target — so a consumer may only join leaves of
-  the same kind. A leaf-less row is socket level.
+  the same kind and the same cluster. A leaf-less row is socket level.
 - A broker-read row is keyed by cluster as well as broker, resource, adapter and
   reason. A scope naming several clusters has no single owner and stays an
   app-level row.
 - A stream fallback is counted where the decision is made: the orchestrator
   reports it when a scope polls only because its stream is not delivering. Every
-  other snapshot has its own reason and is not a fallback.
+  other snapshot has its own reason and is not a fallback. Query-only consumers
+  count this before advancing their reconciliation identity even though they
+  reissue their own query instead of fetching a retained base snapshot.
 
 ## Change checklist
 
