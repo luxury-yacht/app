@@ -583,6 +583,7 @@ export interface QueryBackedNamespaceGridParams<
       | 'persistenceOverride'
       | 'keyExtractor'
       | 'availableKinds'
+      | 'supportsCustomMetadataColumns'
     >,
     QueryBackedGridParamsCommon<TPayload, TRow> {
   /** Optional: the wrapper resolves a canonical default when omitted. */
@@ -652,6 +653,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   });
   const table = useNamespaceResourceGridTable<TRow>({
     ...tableParams,
+    supportsCustomMetadataColumns: true,
     keyExtractor: resolvedKeyExtractor,
     namespace,
     defaultSort,
@@ -691,6 +693,7 @@ export interface QueryBackedClusterGridParams<
       | 'persistenceOverride'
       | 'keyExtractor'
       | 'availableKinds'
+      | 'supportsCustomMetadataColumns'
     >,
     QueryBackedGridParamsCommon<TPayload, TRow> {
   /** Optional: the wrapper resolves a canonical default when omitted. */
@@ -757,6 +760,7 @@ export function useQueryBackedClusterResourceGridTable<
   });
   const table = useClusterResourceGridTable<TRow>({
     ...tableParams,
+    supportsCustomMetadataColumns: true,
     keyExtractor: resolvedKeyExtractor,
     defaultSortKey,
     defaultSortDirection,

@@ -1418,6 +1418,46 @@ it('appends configured metadata columns to the rendered and exportable column se
   cleanup();
 });
 
+it('does not inspect row metadata until the custom-column editor opens', async () => {
+  let metadataReads = 0;
+  const row: SimpleRow = { id: 'row-1', label: 'Row 1' };
+  Object.defineProperty(row, 'metadata', {
+    configurable: true,
+    get: () => {
+      metadataReads += 1;
+      return { labels: { 'example.com/owner': 'platform' } };
+    },
+  });
+  const { container, cleanup } = renderGridTable({
+    data: [row],
+    filters: { enabled: true },
+    enableColumnVisibilityMenu: true,
+    virtualization: { enabled: false },
+    customMetadataColumns: { definitions: [], onChange: vi.fn() },
+  });
+  cleanupRoot = cleanup;
+  await flushAsync();
+
+  expect(metadataReads).toBe(0);
+  await act(async () => {
+    requireValue(
+      container.querySelector<HTMLButtonElement>(
+        '[data-gridtable-filter-role="columns"] .dropdown-trigger'
+      ),
+      'expected Columns trigger'
+    ).click();
+  });
+  expect(metadataReads).toBe(0);
+
+  await act(async () => {
+    requireValue(
+      document.body.querySelector<HTMLButtonElement>('button[aria-label="Add Custom Column"]'),
+      'expected Add Custom Column action'
+    ).click();
+  });
+  expect(metadataReads).toBeGreaterThan(0);
+});
+
 it('creates a custom metadata column from the Columns menu', async () => {
   const onChange = vi.fn();
   const { container, cleanup } = renderGridTable({

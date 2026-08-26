@@ -72,6 +72,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
 
     const { gridTableProps, favModal } = useQueryResourceGridTable<CustomResourceGridRow>({
       tableMode: 'Query Backed Static',
+      supportsCustomMetadataColumns: true,
       data: catalog.rows,
       columns,
       persistence,

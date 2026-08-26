@@ -166,6 +166,20 @@ describe('strict CSS cascade contracts', () => {
     expect(window.getComputedStyle(button as HTMLButtonElement).textTransform).toBe('uppercase');
   });
 
+  it('uses appearance-mode tokens for custom-column action hover states', () => {
+    const gridTableCSS = readProjectFile('styles/components/gridtables.css');
+    const editHover = gridTableCSS.match(
+      /\.gridtable-column-edit-action:hover,[\s\S]*?\{([\s\S]*?)\}/
+    )?.[1];
+    const deleteHover = gridTableCSS.match(
+      /\.gridtable-column-delete-action:hover,[\s\S]*?\{([\s\S]*?)\}/
+    )?.[1];
+
+    expect(editHover).toContain('background: var(--color-bg-tertiary)');
+    expect(deleteHover).toContain('color: var(--color-error-text)');
+    expect(deleteHover).toContain('background: var(--color-error-bg)');
+  });
+
   it('keeps motion and interaction CSS free of important declarations', () => {
     const classifiedBoundaries = [
       ['src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css', 0],

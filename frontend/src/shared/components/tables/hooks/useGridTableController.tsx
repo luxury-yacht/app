@@ -287,8 +287,8 @@ export function useGridTableController<T>({
     [customMetadataColumns?.definitions]
   );
   const availableCustomMetadataKeys = useMemo(
-    () => collectAvailableCustomMetadataKeys(sourceData),
-    [sourceData]
+    () => (customColumnEditorState === null ? [] : collectAvailableCustomMetadataKeys(sourceData)),
+    [customColumnEditorState, sourceData]
   );
   const handleAddCustomMetadataColumn = useCallback(() => {
     setCustomColumnEditorState({ mode: 'create' });

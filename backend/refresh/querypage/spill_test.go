@@ -10,6 +10,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 )
 
@@ -220,6 +221,40 @@ func TestSpillColumnsRoundTrip(t *testing.T) {
 	}
 
 	assertStoresEquivalent(t, orig, restored)
+}
+
+func TestSpillColumnsRestoreIntoRoundTripsNilResourceTableMetadata(t *testing.T) {
+	type row struct {
+		UID      string
+		Metadata *resourcemodel.ResourceTableMetadata
+	}
+	schema := Schema[row]{
+		UID:      func(r row) string { return r.UID },
+		SortKeys: map[string]func(row) string{"uid": func(r row) string { return r.UID }},
+	}
+	original := NewStore(schema)
+	original.Upsert(row{
+		UID: "with-metadata",
+		Metadata: &resourcemodel.ResourceTableMetadata{
+			Labels: map[string]string{"example.com/owner": "platform"},
+		},
+	})
+	original.Upsert(row{UID: "without-metadata"})
+
+	path := filepath.Join(t.TempDir(), "resource-table-metadata.cols")
+	require.NoError(t, original.SpillColumns(path))
+
+	restored := NewStore(schema)
+	require.NoError(t, restored.RestoreColumnsFromFileInto(path))
+	rows := make(map[string]row)
+	for _, restoredRow := range restored.Snapshot() {
+		rows[restoredRow.UID] = restoredRow
+	}
+	require.Contains(t, rows, "with-metadata")
+	require.NotNil(t, rows["with-metadata"].Metadata)
+	require.Equal(t, "platform", rows["with-metadata"].Metadata.Labels["example.com/owner"])
+	require.Contains(t, rows, "without-metadata")
+	require.Nil(t, rows["without-metadata"].Metadata)
 }
 
 // TestSpillInternedColumnsRoundTripsNilPointerStructFallback proves a nil pointer-to-struct

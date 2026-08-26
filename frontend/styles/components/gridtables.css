@@ -513,13 +513,13 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 .gridtable-column-edit-action:hover,
 .gridtable-column-edit-action:focus-visible {
   color: var(--color-text);
-  background: var(--color-bg-hover, rgba(255, 255, 255, 0.08));
+  background: var(--color-bg-tertiary);
 }
 
 .gridtable-column-delete-action:hover,
 .gridtable-column-delete-action:focus-visible {
-  color: var(--status-error-text);
-  background: var(--color-bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--color-error-text);
+  background: var(--color-error-bg);
 }
 
 @media (prefers-reduced-motion: reduce) {

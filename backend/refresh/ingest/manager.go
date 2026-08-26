@@ -33,6 +33,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
+	"github.com/luxury-yacht/app/backend/refresh/informer"
 
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -277,7 +278,7 @@ func (m *IngestManager) addDescriptor(desc streamspec.Descriptor) {
 	}
 
 	e := &entry{desc: desc}
-	e.store = NewProjectingStore(projectionFor(m.meta, e))
+	e.store = newIngestProjectingStore(projectionFor(m.meta, e))
 	m.installReflector(e, gvr, gvk, restClient, example)
 }
 
@@ -340,7 +341,7 @@ func (m *IngestManager) RegisterReflector(gvr schema.GroupVersionResource, gvk s
 	if _, exists := m.entries[gvr]; exists {
 		return false
 	}
-	store := NewProjectingStore(project)
+	store := newIngestProjectingStore(project)
 	store.SetRetainTable(retainTable)
 	e := &entry{store: store}
 	m.installReflector(e, gvr, gvk, restClient, example)
@@ -366,7 +367,7 @@ func (m *IngestManager) RegisterDynamicCatalogReflector(gvr schema.GroupVersionR
 	if _, exists := m.entries[gvr]; exists {
 		return false
 	}
-	e := &entry{store: NewProjectingStore(catalogProjectionFor(project))}
+	e := &entry{store: newIngestProjectingStore(catalogProjectionFor(project))}
 	e.onDemand.Store(true)
 	example := &unstructuredv1.Unstructured{}
 	example.SetGroupVersionKind(gvk)
@@ -450,6 +451,20 @@ func catalogProjectionFor(project CatalogProjector) ProjectFunc {
 		}
 		return Bundle{Catalog: project(m)}, nil
 	}
+}
+
+// newIngestProjectingStore applies the shared projection-at-intake cleanup
+// before any table, catalog, aggregate, or object-map projector sees an object.
+// The source object is dropped immediately after this projection, so doing the
+// cleanup here covers LIST, WatchList, and subsequent watch updates uniformly.
+func newIngestProjectingStore(project ProjectFunc) *ProjectingStore {
+	return NewProjectingStore(func(obj interface{}) (interface{}, error) {
+		transformed, err := informer.StripManagedFields(obj)
+		if err != nil {
+			return nil, err
+		}
+		return project(transformed)
+	})
 }
 
 // projectionFor returns the ProjectFunc for an entry: it asserts the

@@ -107,6 +107,33 @@ func TestRegisterDynamicCatalogReflectorServesCatalogRows(t *testing.T) {
 	require.Equal(t, map[string]bool{"w1": true, "w2": true}, got)
 }
 
+func TestRegisterDynamicCatalogReflectorStripsProjectionOnlyMetadata(t *testing.T) {
+	disableWatchList(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	gvr := schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"}
+	gvk := schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"}
+	widget := newDynUnstructured(gvk, "default", "w1", "100")
+	widget.SetAnnotations(map[string]string{
+		"example.com/owner": "platform",
+		"kubectl.kubernetes.io/last-applied-configuration": `{"metadata":{"name":"w1"}}`,
+	})
+	dyn := newWidgetDynamicClient(gvr, gvk, widget)
+
+	m := newStartedDynamicManager(ctx, dyn)
+	project := func(o metav1.Object) interface{} {
+		return o.GetAnnotations()
+	}
+	require.True(t, m.RegisterDynamicCatalogReflector(gvr, gvk, project, true))
+	require.Eventually(t, func() bool { return m.HasSyncedFor(gvr) }, 2*time.Second, 10*time.Millisecond)
+
+	rows := m.CatalogRows(gvr)
+	require.Equal(t, []interface{}{
+		map[string]string{"example.com/owner": "platform"},
+	}, rows)
+}
+
 // TestGlobalHasSyncedIgnoresOnDemandEntries proves the readiness isolation: an on-demand
 // dynamic reflector that has NOT synced must not gate the whole-manager HasSynced (which
 // blocks the metrics poller — the issue-#225 class), yet its per-gvr HasSyncedFor reports

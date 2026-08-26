@@ -1,3 +1,4 @@
+import type { ResourceTableMetadata } from '@core/refresh/types';
 import { createTextColumn } from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 
@@ -17,10 +18,7 @@ export interface AvailableCustomMetadataKey {
 }
 
 export interface CustomMetadataColumnRow {
-  metadata?: {
-    labels?: Record<string, string>;
-    annotations?: Record<string, string>;
-  } | null;
+  metadata?: ResourceTableMetadata | null;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
 }

@@ -303,6 +303,51 @@ func TestCanonicalResourceRowWireFixtureMatchesProductionProducers(t *testing.T)
 	}
 }
 
+func TestCanonicalResourceRowWireMetadataOverheadStaysMeasured(t *testing.T) {
+	withMetadata, err := json.Marshal(canonicalRowWireFixtures(t))
+	require.NoError(t, err)
+
+	var withoutMetadata any
+	require.NoError(t, json.Unmarshal(withMetadata, &withoutMetadata))
+	metadataRows := removeCanonicalFixtureTableMetadata(withoutMetadata)
+	require.Equal(t, 16, metadataRows)
+	withoutMetadataBytes, err := json.Marshal(withoutMetadata)
+	require.NoError(t, err)
+
+	overhead := len(withMetadata) - len(withoutMetadataBytes)
+	require.LessOrEqual(t, overhead, metadataRows*45)
+	t.Logf(
+		"canonical metadata projection: rows=%d total_bytes=%d overhead_bytes=%d overhead_per_row=%.1f",
+		metadataRows,
+		len(withMetadata),
+		overhead,
+		float64(overhead)/float64(metadataRows),
+	)
+}
+
+func removeCanonicalFixtureTableMetadata(value any) int {
+	switch typed := value.(type) {
+	case []any:
+		count := 0
+		for _, entry := range typed {
+			count += removeCanonicalFixtureTableMetadata(entry)
+		}
+		return count
+	case map[string]any:
+		count := 0
+		if _, ok := typed["metadata"]; ok {
+			delete(typed, "metadata")
+			count++
+		}
+		for _, entry := range typed {
+			count += removeCanonicalFixtureTableMetadata(entry)
+		}
+		return count
+	default:
+		return 0
+	}
+}
+
 func normalizeCanonicalFixtureVolatility(value any) {
 	switch typed := value.(type) {
 	case []any:

@@ -80,6 +80,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
 
     const { gridTableProps, favModal } = useQueryResourceGridTable<CustomResourceData>({
       tableMode: 'Query Backed Static',
+      supportsCustomMetadataColumns: true,
       data: catalog.rows,
       columns,
       persistence,

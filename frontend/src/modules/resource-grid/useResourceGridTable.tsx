@@ -127,6 +127,7 @@ export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
 export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>({
   viewId,
   tableMode,
+  supportsCustomMetadataColumns,
   clusterIdentity,
   enabled = true,
   data,
@@ -158,6 +159,7 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
   const binding = useGridTableBinding({
     data,
     tableMode,
+    supportsCustomMetadataColumns,
     columns,
     keyExtractor: resolvedKeyExtractor,
     defaultSortKey: defaultSort.key,
@@ -201,6 +203,7 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
 
 export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
   tableMode,
+  supportsCustomMetadataColumns,
   data,
   columns,
   persistence,
@@ -219,6 +222,7 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
   const binding = useGridTableBinding({
     data,
     tableMode,
+    supportsCustomMetadataColumns,
     columns,
     keyExtractor: resolvedKeyExtractor,
     defaultSortKey,
@@ -229,8 +233,12 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
     virtualization,
   });
   const favoriteColumns = useMemo(
-    () => buildFavoriteColumns(columns, persistence.customColumns ?? []),
-    [columns, persistence.customColumns]
+    () =>
+      buildFavoriteColumns(
+        columns,
+        supportsCustomMetadataColumns ? (persistence.customColumns ?? []) : []
+      ),
+    [columns, persistence.customColumns, supportsCustomMetadataColumns]
   );
 
   const { item: favToggle, modal: favModal } = useFavToggle({
@@ -294,6 +302,7 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
 function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   data,
   tableMode,
+  supportsCustomMetadataColumns,
   columns,
   availableKinds: kindOptions,
   diagnosticsLabel,
@@ -317,6 +326,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   const binding = useGridTableBinding({
     data,
     tableMode,
+    supportsCustomMetadataColumns,
     columns,
     keyExtractor,
     defaultSortKey,
@@ -449,8 +459,12 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     ]
   );
   const favoriteColumns = useMemo(
-    () => buildFavoriteColumns(columns, persistence.customColumns ?? []),
-    [columns, persistence.customColumns]
+    () =>
+      buildFavoriteColumns(
+        columns,
+        supportsCustomMetadataColumns ? (persistence.customColumns ?? []) : []
+      ),
+    [columns, persistence.customColumns, supportsCustomMetadataColumns]
   );
   const { item: favToggle, modal: favModal } = useFavToggle({
     filters: persistence.filters,

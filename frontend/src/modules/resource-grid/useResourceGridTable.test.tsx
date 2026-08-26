@@ -83,6 +83,7 @@ const renderObjectPanelGrid = (
     result.current = useObjectPanelResourceGridTable<TestRow>({
       viewId: 'test-grid',
       tableMode: 'Local Complete',
+      supportsCustomMetadataColumns: true,
       clusterIdentity: 'alpha:ctx',
       data: [row],
       columns,
@@ -130,6 +131,7 @@ const renderNamespaceGrid = (
     result.current = useNamespaceResourceGridTable<TestRow>({
       viewId: 'namespace-pods',
       tableMode: 'Query Backed Dynamic',
+      supportsCustomMetadataColumns: true,
       namespace: ALL_NAMESPACES_SCOPE,
       data: [row],
       columns,
@@ -269,6 +271,14 @@ describe('useObjectPanelResourceGridTable', () => {
 });
 
 describe('useNamespaceResourceGridTable', () => {
+  it('omits custom metadata controls for rows that do not support Kubernetes metadata', () => {
+    const harness = renderNamespaceGrid({ supportsCustomMetadataColumns: false });
+
+    expect(harness.result.current?.gridTableProps.customMetadataColumns).toBeUndefined();
+
+    harness.cleanup();
+  });
+
   it('publishes custom metadata columns to the favorite column contract', () => {
     favoriteMocks.useFavToggle.mockClear();
     const harness = renderNamespaceGrid();

@@ -34,6 +34,7 @@ interface GridTableBindingPersistence {
 interface GridTableBindingParams<T> {
   data: T[];
   tableMode: ResourceGridTableMode;
+  supportsCustomMetadataColumns: boolean;
   columns: GridColumnDefinition<T>[];
   keyExtractor: (item: T, index: number) => string;
   defaultSortKey?: string;
@@ -48,6 +49,7 @@ interface GridTableBindingParams<T> {
 export function useGridTableBinding<T>({
   data,
   tableMode,
+  supportsCustomMetadataColumns,
   columns,
   keyExtractor,
   defaultSortKey,
@@ -91,7 +93,9 @@ export function useGridTableBinding<T>({
               onColumnVisibilityChange: persistence.setColumnVisibility,
               columnOrder: persistence.columnOrder ?? null,
               onColumnOrderChange: persistence.setColumnOrder,
-              ...(persistence.customColumns && persistence.setCustomColumns
+              ...(supportsCustomMetadataColumns &&
+              persistence.customColumns &&
+              persistence.setCustomColumns
                 ? {
                     customMetadataColumns: {
                       definitions: persistence.customColumns,
@@ -103,6 +107,15 @@ export function useGridTableBinding<T>({
           : {}),
       },
     }),
-    [filters, handleSort, keyExtractor, persistence, sortConfig, sortedData, virtualization]
+    [
+      filters,
+      handleSort,
+      keyExtractor,
+      persistence,
+      sortConfig,
+      sortedData,
+      supportsCustomMetadataColumns,
+      virtualization,
+    ]
   );
 }

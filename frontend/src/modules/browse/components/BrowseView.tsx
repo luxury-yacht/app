@@ -405,6 +405,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
 
   const { gridTableProps, favModal } = useQueryResourceGridTable<BrowseTableRow>({
     tableMode: 'Query Backed Static',
+    supportsCustomMetadataColumns: true,
     data: rows,
     columns,
     persistence,

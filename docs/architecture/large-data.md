@@ -472,6 +472,17 @@ ten loopback fetch/parse samples measured 8.2 ms p50 / 15.8 ms p95 total, of
 which JSON parsing was 0.2 ms p50 / 0.3 ms p95. A stable Config validator
 returned an empty `304` in 1.2 ms p50 / 3.9 ms p95.
 
+Custom metadata projection was measured on 2026-08-25 with the canonical wire
+fixture. Adding one small label to each of its 16 metadata-capable synthetic
+rows increased the compact document from 20,527 B to 21,247 B: 720 B total, or
+45 B per metadata-bearing row. At the 250-row page limit, the same shape adds
+about 11.25 KB to the measured Browse baseline. This is a small-value fixture,
+not a maximum: label and annotation values remain variable-size Kubernetes
+metadata, and the app adds no byte cap below the upstream object limit. The
+ingest boundary strips managed fields and
+`kubectl.kubernetes.io/last-applied-configuration` before projection so the
+known full-object annotation is never retained or serialized by this path.
+
 Best-speed gzip remains rejected. At 1,000 rows it reduced Events to 48,921 B,
 Pods to 16,333 B, and custom resources to 16,396 B, but increased encode time
 from roughly 0.68-0.86 ms to 1.42-2.02 ms and allocations from roughly

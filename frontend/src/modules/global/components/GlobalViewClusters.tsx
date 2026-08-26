@@ -364,6 +364,7 @@ const GlobalViewClusters: React.FC = () => {
   const { gridTableProps, favModal } = useClusterResourceGridTable({
     viewId: 'cluster-fleet',
     tableMode: 'Local Complete',
+    supportsCustomMetadataColumns: false,
     data: rows,
     columns,
     keyExtractor,

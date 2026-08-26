@@ -303,6 +303,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   const { gridTableProps, favModal } = useClusterResourceGridTable({
     viewId: resolvedViewId,
     tableMode: tableMode === 'Local Partial' ? 'Local Partial' : 'Local Complete',
+    supportsCustomMetadataColumns: true,
     data: rows,
     columns,
     keyExtractor,
