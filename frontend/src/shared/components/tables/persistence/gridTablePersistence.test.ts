@@ -5,6 +5,7 @@
  * Covers key behaviors and edge cases for gridTablePersistence.
  */
 
+import { createCustomMetadataColumnDefinition } from '@shared/components/tables/customMetadataColumns';
 import type {
   ColumnWidthState,
   GridColumnDefinition,
@@ -281,5 +282,47 @@ describe('gridTablePersistence', () => {
     );
 
     expect(pruned?.columnOrder).toEqual(['age', 'name', 'status']);
+  });
+
+  it('restores custom definitions before pruning their presentation state', () => {
+    const ownerColumn = createCustomMetadataColumnDefinition({
+      source: 'label',
+      metadataKey: 'app.kubernetes.io/owner',
+      header: 'Owner',
+    });
+
+    const pruned = prunePersistedState(
+      {
+        version: 3,
+        customColumns: [ownerColumn],
+        columnVisibility: { [ownerColumn.key]: false },
+        columnOrder: ['name', ownerColumn.key, 'status', 'age'],
+        columnWidths: { [ownerColumn.key]: sampleWidthState },
+      },
+      { columns: sampleColumns }
+    );
+
+    expect(pruned).toEqual({
+      version: 3,
+      customColumns: [ownerColumn],
+      columnVisibility: { [ownerColumn.key]: false },
+      columnOrder: ['name', ownerColumn.key, 'status', 'age'],
+      columnWidths: { [ownerColumn.key]: sampleWidthState },
+    });
+  });
+
+  it('saves custom definitions even when every presentation setting is at its default', () => {
+    const ownerColumn = createCustomMetadataColumnDefinition({
+      source: 'annotation',
+      metadataKey: 'example.com/owner',
+      header: 'Owner',
+    });
+
+    const state = buildPersistedStateForSave({
+      columns: sampleColumns,
+      customColumns: [ownerColumn],
+    });
+
+    expect(state).toEqual({ version: 3, customColumns: [ownerColumn] });
   });
 });

@@ -17,9 +17,11 @@ import (
 func TestProjectClusterEventEntryCarriesCanonicalEventRef(t *testing.T) {
 	event := &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "event-a",
-			Namespace: "kube-system",
-			UID:       types.UID("event-uid"),
+			Name:        "event-a",
+			Namespace:   "kube-system",
+			UID:         types.UID("event-uid"),
+			Labels:      map[string]string{"example.com/owner": "platform"},
+			Annotations: map[string]string{"example.com/note": "visible"},
 		},
 		InvolvedObject: corev1.ObjectReference{
 			APIVersion: "v1",
@@ -31,6 +33,8 @@ func TestProjectClusterEventEntryCarriesCanonicalEventRef(t *testing.T) {
 	row, ok := projectClusterEventEntry(ClusterMeta{ClusterID: "cluster-a"}, event)
 	require.True(t, ok)
 	require.Equal(t, eventres.BuildResourceModel("cluster-a", event).Ref, row.Ref)
+	require.Equal(t, event.Labels, row.Metadata.Labels)
+	require.Equal(t, event.Annotations, row.Metadata.Annotations)
 }
 
 func TestClusterEventsBuilder(t *testing.T) {

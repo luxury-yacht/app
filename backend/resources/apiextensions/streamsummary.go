@@ -22,6 +22,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, crd *apiextensionsv1.Custom
 	model := BuildResourceModel(meta.ClusterID, crd)
 	return streamrows.ClusterCRDEntry{
 		Ref:                     model.Ref,
+		Metadata:                streamrows.NewResourceMetadata(crd),
 		Group:                   facts.Group,
 		Scope:                   facts.Scope,
 		Details:                 CustomResourceDefinitionVersionDetails(facts),

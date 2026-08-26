@@ -5,6 +5,7 @@
  * sorting, persistence-backed table state, virtualization, and canonical row keys.
  */
 
+import type { CustomMetadataColumnDefinition } from '@shared/components/tables/customMetadataColumns';
 import {
   type ColumnWidthState,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -26,6 +27,8 @@ interface GridTableBindingPersistence {
   setColumnVisibility?: (next: Record<string, boolean>) => void;
   columnOrder?: string[] | null;
   setColumnOrder?: (next: string[]) => void;
+  customColumns?: CustomMetadataColumnDefinition[];
+  setCustomColumns?: (next: CustomMetadataColumnDefinition[]) => void;
 }
 
 interface GridTableBindingParams<T> {
@@ -88,6 +91,14 @@ export function useGridTableBinding<T>({
               onColumnVisibilityChange: persistence.setColumnVisibility,
               columnOrder: persistence.columnOrder ?? null,
               onColumnOrderChange: persistence.setColumnOrder,
+              ...(persistence.customColumns && persistence.setCustomColumns
+                ? {
+                    customMetadataColumns: {
+                      definitions: persistence.customColumns,
+                      onChange: persistence.setCustomColumns,
+                    },
+                  }
+                : {}),
             }
           : {}),
       },

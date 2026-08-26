@@ -60,9 +60,10 @@ type HealthStatus struct {
 
 // Summary represents the lightweight metadata captured for each Kubernetes object.
 type Summary struct {
-	Ref               resourcemodel.ResourceRef `json:"ref"`
-	ResourceVersion   string                    `json:"resourceVersion"`   // resource version
-	CreationTimestamp string                    `json:"creationTimestamp"` // resource creation timestamp
+	Ref               resourcemodel.ResourceRef            `json:"ref"`
+	Metadata          *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	ResourceVersion   string                               `json:"resourceVersion"`   // resource version
+	CreationTimestamp string                               `json:"creationTimestamp"` // resource creation timestamp
 	lifecycle         resourcemodel.ResourceLifecycle
 	deletionTime      int64
 	Scope             Scope        `json:"scope"`                  // resource scope
@@ -74,6 +75,7 @@ type Summary struct {
 // for a concrete Kubernetes object awaiting finalizer cleanup.
 type FinalizerBlocker struct {
 	Ref               resourcemodel.ResourceRef
+	Metadata          *resourcemodel.ResourceTableMetadata
 	DeletionTimestamp int64
 }
 
@@ -83,7 +85,7 @@ func (s Summary) FinalizerBlocker() (FinalizerBlocker, bool) {
 	if !s.lifecycle.FinalizerBlocked || s.deletionTime <= 0 {
 		return FinalizerBlocker{}, false
 	}
-	return FinalizerBlocker{Ref: s.Ref, DeletionTimestamp: s.deletionTime}, true
+	return FinalizerBlocker{Ref: s.Ref, Metadata: s.Metadata, DeletionTimestamp: s.deletionTime}, true
 }
 
 // ActionFacts carries lightweight, action-relevant state for catalog rows.

@@ -68,6 +68,7 @@ var contractTypes = []typeSpec{
 	{name: "DisplayRef", typeOf: typeOf[resourcemodel.DisplayRef]()},
 	{name: "ResourceLink", typeOf: typeOf[resourcemodel.ResourceLink]()},
 	{name: "ResourceMetadata", typeOf: typeOf[resourcemodel.ResourceMetadata]()},
+	{name: "ResourceTableMetadata", typeOf: typeOf[resourcemodel.ResourceTableMetadata]()},
 	{name: "ResourceStatusSignal", typeOf: typeOf[resourcemodel.ResourceStatusSignal]()},
 	{name: "ResourceStatusBadge", typeOf: typeOf[resourcemodel.ResourceStatusBadge]()},
 	{name: "ResourceLifecycle", typeOf: typeOf[resourcemodel.ResourceLifecycle]()},

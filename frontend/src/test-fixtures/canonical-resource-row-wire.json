@@ -38,7 +38,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -54,7 +57,11 @@
         "payload": {
           "clusterId": "cluster-wire",
           "clusterName": "Wire Cluster",
-          "metrics": { "failureCount": 0, "stale": false, "successCount": 0 },
+          "metrics": {
+            "failureCount": 0,
+            "stale": false,
+            "successCount": 0
+          },
           "metricsState": "available",
           "namespaces": [
             {
@@ -73,7 +80,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -91,7 +101,11 @@
           "clusterId": "cluster-wire",
           "clusterName": "Wire Cluster",
           "facetsExact": true,
-          "metrics": { "failureCount": 0, "stale": false, "successCount": 0 },
+          "metrics": {
+            "failureCount": 0,
+            "stale": false,
+            "successCount": 0
+          },
           "provider": "",
           "rows": [
             {
@@ -103,7 +117,9 @@
               "cpuLimits": "",
               "cpuRequests": "",
               "cpuUsage": "",
-              "labels": { "app": "wire-fixture" },
+              "labels": {
+                "app": "wire-fixture"
+              },
               "memLimits": "",
               "memRequests": "",
               "memory": "0Mi",
@@ -138,7 +154,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -190,7 +209,11 @@
               "status": "Not Ready"
             }
           ],
-          "severityCounts": { "error": 0, "info": 0, "warning": 0 },
+          "severityCounts": {
+            "error": 0,
+            "info": 0,
+            "warning": 0
+          },
           "table": "",
           "total": 1,
           "totalIsExact": true,
@@ -198,7 +221,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -225,6 +251,11 @@
             {
               "creationTimestamp": "2023-11-14T21:56:40Z",
               "labelsDigest": "3ef2cd4dd12920f4",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "ref": {
                 "clusterId": "cluster-wire",
                 "group": "",
@@ -248,7 +279,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -272,6 +306,11 @@
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
               "details": "example.io/wire",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "ref": {
                 "clusterId": "cluster-wire",
                 "group": "storage.k8s.io",
@@ -290,7 +329,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -315,6 +357,11 @@
               "ageTimestamp": 1699999000000,
               "details": "Versions: v1*",
               "group": "example.io",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "ref": {
                 "clusterId": "cluster-wire",
                 "group": "apiextensions.k8s.io",
@@ -336,7 +383,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -360,6 +410,11 @@
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
               "details": "Rules: 0",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "ref": {
                 "clusterId": "cluster-wire",
                 "group": "rbac.authorization.k8s.io",
@@ -379,7 +434,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -405,6 +463,11 @@
               "ageTimestamp": 1699999000000,
               "capacity": "-",
               "claim": "-",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "ref": {
                 "clusterId": "cluster-wire",
                 "group": "",
@@ -426,7 +489,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -460,6 +526,11 @@
                 }
               },
               "message": "Node reports pressure",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "object": "Node/node-wire",
               "objectApiVersion": "v1",
               "objectNamespace": "",
@@ -487,7 +558,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -511,6 +585,11 @@
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
               "data": 1,
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "ref": {
                 "clusterId": "cluster-wire",
                 "group": "",
@@ -531,7 +610,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -555,6 +637,11 @@
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
               "details": "Policy types: Ingress",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "ref": {
                 "clusterId": "cluster-wire",
                 "group": "networking.k8s.io",
@@ -574,7 +661,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -598,6 +688,11 @@
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
               "details": "Rules: 0",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "ref": {
                 "clusterId": "cluster-wire",
                 "group": "rbac.authorization.k8s.io",
@@ -617,7 +712,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -641,6 +739,11 @@
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
               "capacity": "-",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "ref": {
                 "clusterId": "cluster-wire",
                 "group": "",
@@ -664,7 +767,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -689,6 +795,11 @@
               "ageTimestamp": 1699999000000,
               "current": 0,
               "max": 3,
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "min": 1,
               "ref": {
                 "clusterId": "cluster-wire",
@@ -711,7 +822,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -735,6 +849,11 @@
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
               "details": "Hard: 0, Used: 0",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "ref": {
                 "clusterId": "cluster-wire",
                 "group": "",
@@ -754,7 +873,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -790,6 +912,11 @@
               },
               "kind": "Pod",
               "message": "Node reports pressure",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "object": "Pod/pod-wire",
               "objectApiVersion": "v1",
               "objectNamespace": "default",
@@ -817,7 +944,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -866,7 +996,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -885,7 +1018,11 @@
           "clusterName": "Wire Cluster",
           "facetsExact": true,
           "healthCounts": null,
-          "metrics": { "failureCount": 0, "stale": false, "successCount": 0 },
+          "metrics": {
+            "failureCount": 0,
+            "stale": false,
+            "successCount": 0
+          },
           "provider": "",
           "rows": [
             {
@@ -897,6 +1034,11 @@
               "memLimit": "0Mi",
               "memRequest": "0Mi",
               "memUsage": "64 MB",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "node": "",
               "ownerKind": "None",
               "ownerName": "None",
@@ -926,7 +1068,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -944,7 +1089,11 @@
           "clusterId": "cluster-wire",
           "clusterName": "Wire Cluster",
           "facetsExact": true,
-          "metrics": { "failureCount": 0, "stale": false, "successCount": 0 },
+          "metrics": {
+            "failureCount": 0,
+            "stale": false,
+            "successCount": 0
+          },
           "provider": "",
           "rows": [
             {
@@ -957,6 +1106,11 @@
               "memLimit": "-",
               "memRequest": "-",
               "memUsage": "-",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "portForwardAvailable": false,
               "ready": "1/2",
               "ref": {
@@ -982,7 +1136,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -1020,7 +1177,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -1057,7 +1217,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     },
@@ -1116,6 +1279,11 @@
               "involvedObjectUid": "pod-wire-uid",
               "lastTimestamp": "2023-11-14T21:56:40Z",
               "message": "Node reports pressure",
+              "metadata": {
+                "labels": {
+                  "app": "wire-fixture"
+                }
+              },
               "reason": "NodePressure",
               "ref": {
                 "clusterId": "cluster-wire",
@@ -1134,7 +1302,10 @@
         },
         "scope": "cluster-wire|",
         "sequence": 1,
-        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "stats": {
+          "buildDurationMs": 0,
+          "itemCount": 1
+        },
         "version": 1
       }
     }

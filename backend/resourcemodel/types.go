@@ -91,6 +91,14 @@ type ResourceMetadata struct {
 	Finalizers        []string          `json:"finalizers,omitempty"`
 }
 
+// ResourceTableMetadata is the exact label/annotation projection carried by
+// resource inventory rows. It intentionally excludes detail-only metadata so
+// table pages do not serialize empty timestamps, versions, or finalizers.
+type ResourceTableMetadata struct {
+	Labels      map[string]string `json:"labels,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
 type ResourceStatusSignal struct {
 	Type    StatusSignalType `json:"type"`
 	Name    string           `json:"name"`

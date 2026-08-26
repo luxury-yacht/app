@@ -489,6 +489,32 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   transition: opacity 0.1s ease;
 }
 
+.gridtable-column-option-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.gridtable-column-edit-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.gridtable-column-edit-action:hover,
+.gridtable-column-edit-action:focus-visible {
+  color: var(--color-text);
+  background: var(--color-bg-hover, rgba(255, 255, 255, 0.08));
+}
+
 @media (prefers-reduced-motion: reduce) {
   .gridtable-column-drag-handle {
     transition: none;

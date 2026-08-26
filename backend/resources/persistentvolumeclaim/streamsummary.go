@@ -21,6 +21,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, pvc *corev1.PersistentVolum
 	model := BuildResourceModel(meta.ClusterID, pvc)
 	return streamrows.StorageSummary{
 		Ref:                model.Ref,
+		Metadata:           streamrows.NewResourceMetadata(pvc),
 		Capacity:           streamCapacity(pvc),
 		Status:             model.Status.Label,
 		StatusState:        model.Status.State,

@@ -183,27 +183,28 @@ type NamespaceSnapshot struct {
 
 // NamespaceSummary provides high level namespace metadata.
 type NamespaceSummary struct {
-	Ref                        resourcemodel.ResourceRef `json:"ref"`
-	Phase                      string                    `json:"phase"`
-	Status                     string                    `json:"status,omitempty"`
-	StatusState                string                    `json:"statusState,omitempty"`
-	StatusPresentation         string                    `json:"statusPresentation,omitempty"`
-	StatusReason               string                    `json:"statusReason,omitempty"`
-	ResourceVersion            string                    `json:"resourceVersion"`
-	CreationUnix               int64                     `json:"creationTimestamp"`
-	HasWorkloads               bool                      `json:"hasWorkloads"`
-	WorkloadsUnknown           bool                      `json:"workloadsUnknown,omitempty"`
-	UnhealthyWorkloads         int                       `json:"unhealthyWorkloads,omitempty"`
-	WarningEvents              int                       `json:"warningEvents,omitempty"`
-	WarningEventsState         NamespaceSignalState      `json:"warningEventsState"`
-	CPURequestsMilli           int64                     `json:"cpuRequestsMilli,omitempty"`
-	CPULimitsMilli             int64                     `json:"cpuLimitsMilli,omitempty"`
-	MemoryRequestsBytes        int64                     `json:"memoryRequestsBytes,omitempty"`
-	MemoryLimitsBytes          int64                     `json:"memoryLimitsBytes,omitempty"`
-	QuotaCount                 int                       `json:"quotaCount,omitempty"`
-	QuotaHighestUsedPercentage int                       `json:"quotaHighestUsedPercentage,omitempty"`
-	QuotaPressure              NamespaceQuotaPressure    `json:"quotaPressure,omitempty"`
-	QuotaPressureState         NamespaceSignalState      `json:"quotaPressureState"`
+	Ref                        resourcemodel.ResourceRef            `json:"ref"`
+	Metadata                   *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	Phase                      string                               `json:"phase"`
+	Status                     string                               `json:"status,omitempty"`
+	StatusState                string                               `json:"statusState,omitempty"`
+	StatusPresentation         string                               `json:"statusPresentation,omitempty"`
+	StatusReason               string                               `json:"statusReason,omitempty"`
+	ResourceVersion            string                               `json:"resourceVersion"`
+	CreationUnix               int64                                `json:"creationTimestamp"`
+	HasWorkloads               bool                                 `json:"hasWorkloads"`
+	WorkloadsUnknown           bool                                 `json:"workloadsUnknown,omitempty"`
+	UnhealthyWorkloads         int                                  `json:"unhealthyWorkloads,omitempty"`
+	WarningEvents              int                                  `json:"warningEvents,omitempty"`
+	WarningEventsState         NamespaceSignalState                 `json:"warningEventsState"`
+	CPURequestsMilli           int64                                `json:"cpuRequestsMilli,omitempty"`
+	CPULimitsMilli             int64                                `json:"cpuLimitsMilli,omitempty"`
+	MemoryRequestsBytes        int64                                `json:"memoryRequestsBytes,omitempty"`
+	MemoryLimitsBytes          int64                                `json:"memoryLimitsBytes,omitempty"`
+	QuotaCount                 int                                  `json:"quotaCount,omitempty"`
+	QuotaHighestUsedPercentage int                                  `json:"quotaHighestUsedPercentage,omitempty"`
+	QuotaPressure              NamespaceQuotaPressure               `json:"quotaPressure,omitempty"`
+	QuotaPressureState         NamespaceSignalState                 `json:"quotaPressureState"`
 	// ScopeStatus flags a configured scope entry the identity cannot reach:
 	// "not-found" (definitive) or "no-access" (may not exist). Empty for
 	// reachable namespaces and for every unscoped row.
@@ -519,6 +520,7 @@ func (b *NamespaceBuilder) buildNamespaceSummaries(inputs namespaceBuildInputs) 
 		facts := namespacepkg.BuildFacts(inputs.meta.ClusterID, ns, hasWorkloads, workloadsKnown, nil, nil, resourcemodel.ResourceModelBuildOptions{})
 		items = append(items, NamespaceSummary{
 			Ref:                        model.Ref,
+			Metadata:                   streamrows.NewResourceMetadata(ns),
 			Phase:                      model.Status.State,
 			Status:                     model.Status.Label,
 			StatusState:                model.Status.State,

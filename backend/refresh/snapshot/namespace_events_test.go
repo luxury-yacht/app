@@ -17,9 +17,11 @@ import (
 func TestProjectNamespaceEventSummaryCarriesCanonicalEventRef(t *testing.T) {
 	event := &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "event-a",
-			Namespace: "team-a",
-			UID:       types.UID("event-uid"),
+			Name:        "event-a",
+			Namespace:   "team-a",
+			UID:         types.UID("event-uid"),
+			Labels:      map[string]string{"example.com/owner": "platform"},
+			Annotations: map[string]string{"example.com/note": "visible"},
 		},
 		InvolvedObject: corev1.ObjectReference{
 			APIVersion: "v1",
@@ -32,6 +34,11 @@ func TestProjectNamespaceEventSummaryCarriesCanonicalEventRef(t *testing.T) {
 	row, ok := projectNamespaceEventSummary(ClusterMeta{ClusterID: "cluster-a"}, event)
 	require.True(t, ok)
 	require.Equal(t, eventres.BuildResourceModel("cluster-a", event).Ref, row.Ref)
+	require.Equal(t, event.Labels, row.Metadata.Labels)
+	require.Equal(t, event.Annotations, row.Metadata.Annotations)
+	objectRow := convertObjectEvent(ClusterMeta{ClusterID: "cluster-a"}, *event)
+	require.Equal(t, event.Labels, objectRow.Metadata.Labels)
+	require.Equal(t, event.Annotations, objectRow.Metadata.Annotations)
 }
 
 func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {

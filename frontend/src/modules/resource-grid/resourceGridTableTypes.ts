@@ -6,6 +6,7 @@
 
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import type { CustomMetadataColumnDefinition } from '@shared/components/tables/customMetadataColumns';
 import type {
   ColumnWidthState,
   GridColumnDefinition,
@@ -50,6 +51,12 @@ export interface ResourceGridTableRow {
   clusterName?: string | null;
   group?: string | null;
   version?: string | null;
+  metadata?: {
+    labels?: Record<string, string>;
+    annotations?: Record<string, string>;
+  } | null;
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
 }
 
 export type ResourceGridTableMode =
@@ -132,6 +139,8 @@ export interface ResourceGridPersistence<T extends ResourceGridTableRow> {
   setColumnVisibility: (next: Record<string, boolean>) => void;
   columnOrder: string[] | null;
   setColumnOrder: (next: string[]) => void;
+  customColumns: CustomMetadataColumnDefinition[];
+  setCustomColumns: (next: CustomMetadataColumnDefinition[]) => void;
   filters: GridTableFilterState;
   setFilters: NonNullable<GridTableFilterConfig<T>['onChange']>;
   pageSize: number | null;

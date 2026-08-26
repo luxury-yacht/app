@@ -9,6 +9,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import type { MultiSelectFilterSelection } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import type { CustomMetadataColumnDefinition } from '@shared/components/tables/customMetadataColumns';
 import type React from 'react';
 
 export type ColumnWidthUnit = 'px' | 'em' | 'rem' | '%';
@@ -185,6 +186,10 @@ export interface GridTableFilteredEmptyState {
 export interface GridTableProps<T> {
   data: T[];
   columns: GridColumnDefinition<T>[];
+  customMetadataColumns?: {
+    definitions: CustomMetadataColumnDefinition[];
+    onChange: (definitions: CustomMetadataColumnDefinition[]) => void;
+  };
   keyExtractor: (item: T, index: number) => string;
   /** Fetch every matching row (all pages) — enables the Copy/Export "all matching rows" scope. */
   fetchAllRows?: () => Promise<T[]>;

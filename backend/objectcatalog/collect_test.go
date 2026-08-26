@@ -442,6 +442,7 @@ func TestBuildSummaryNamespaced(t *testing.T) {
 	obj.SetNamespace("default")
 	obj.SetName("example")
 	obj.SetLabels(map[string]string{"app": "demo"})
+	obj.SetAnnotations(map[string]string{"example.com/note": "managed"})
 
 	svc := NewService(Dependencies{Common: common.Dependencies{}}, nil)
 	summary := svc.buildSummary(desc, obj)
@@ -450,6 +451,9 @@ func TestBuildSummaryNamespaced(t *testing.T) {
 	}
 	if summary.LabelsDigest == "" {
 		t.Fatalf("expected labels digest to be populated")
+	}
+	if summary.Metadata == nil || summary.Metadata.Labels["app"] != "demo" || summary.Metadata.Annotations["example.com/note"] != "managed" {
+		t.Fatalf("expected exact labels and annotations to be projected, got %#v", summary.Metadata)
 	}
 }
 

@@ -12,6 +12,10 @@ import {
   migrateLegacyMultiSelectFilterSelection,
   normalizeMultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
+import {
+  type CustomMetadataColumnDefinition,
+  normalizeCustomMetadataColumnDefinitions,
+} from '@shared/components/tables/customMetadataColumns';
 import type {
   ColumnWidthState,
   GridColumnDefinition,
@@ -37,6 +41,7 @@ import { reportOperationalError } from '@/utils/errorHandler';
 
 export interface GridTablePersistedState {
   version: 3;
+  customColumns?: CustomMetadataColumnDefinition[];
   columnVisibility?: Record<string, boolean>;
   columnOrder?: string[];
   columnWidths?: Record<string, ColumnWidthState>;
@@ -79,6 +84,7 @@ export interface GridTablePruneContext<T> {
 }
 
 export interface GridTableSaveContext<T> extends GridTablePruneContext<T> {
+  customColumns?: CustomMetadataColumnDefinition[];
   columnVisibility?: Record<string, boolean> | null;
   columnOrder?: string[] | null;
   columnWidths?: Record<string, ColumnWidthState> | null;
@@ -518,6 +524,7 @@ const prunePageSize = (
     : undefined;
 
 interface PersistedStateParts {
+  customColumns?: CustomMetadataColumnDefinition[];
   columnVisibility?: Record<string, boolean>;
   columnOrder?: string[];
   columnWidths?: Record<string, ColumnWidthState>;
@@ -528,7 +535,8 @@ interface PersistedStateParts {
 
 const hasPersistedStateParts = (parts: PersistedStateParts): boolean =>
   Boolean(
-    parts.columnVisibility ||
+    parts.customColumns ||
+      parts.columnVisibility ||
       parts.columnOrder ||
       parts.columnWidths ||
       parts.sort ||
@@ -541,6 +549,9 @@ const assemblePersistedState = (parts: PersistedStateParts): GridTablePersistedS
     return null;
   }
   const state: GridTablePersistedState = { version: STORAGE_VERSION };
+  if (parts.customColumns) {
+    state.customColumns = parts.customColumns;
+  }
   if (parts.columnVisibility) {
     state.columnVisibility = parts.columnVisibility;
   }
@@ -570,10 +581,21 @@ export const prunePersistedState = <T>(
   if (!migrated) {
     return null;
   }
-  const columnMap = buildColumnMap(context.columns);
+  const customColumns = normalizeCustomMetadataColumnDefinitions(migrated.customColumns);
+  const columns: GridColumnDefinition<T>[] = [
+    ...context.columns,
+    ...customColumns.map((definition) => ({
+      key: definition.key,
+      header: definition.header,
+      sortable: false,
+      render: () => null,
+    })),
+  ];
+  const columnMap = buildColumnMap(columns);
   return assemblePersistedState({
+    customColumns: customColumns.length > 0 ? customColumns : undefined,
     columnVisibility: pruneColumnVisibility(migrated.columnVisibility, columnMap),
-    columnOrder: pruneColumnOrder(migrated.columnOrder, context.columns),
+    columnOrder: pruneColumnOrder(migrated.columnOrder, columns),
     columnWidths: pruneColumnWidths(migrated.columnWidths, columnMap),
     sort: pruneSort(migrated.sort, columnMap),
     filters: pruneFilters(migrated.filters, context.filterOptions),
@@ -584,10 +606,21 @@ export const prunePersistedState = <T>(
 export const buildPersistedStateForSave = <T>(
   context: GridTableSaveContext<T>
 ): GridTablePersistedState | null => {
-  const columnMap = buildColumnMap(context.columns);
+  const customColumns = normalizeCustomMetadataColumnDefinitions(context.customColumns);
+  const columns: GridColumnDefinition<T>[] = [
+    ...context.columns,
+    ...customColumns.map((definition) => ({
+      key: definition.key,
+      header: definition.header,
+      sortable: false,
+      render: () => null,
+    })),
+  ];
+  const columnMap = buildColumnMap(columns);
   return assemblePersistedState({
+    customColumns: customColumns.length > 0 ? customColumns : undefined,
     columnVisibility: pruneColumnVisibility(context.columnVisibility, columnMap),
-    columnOrder: pruneColumnOrder(context.columnOrder, context.columns),
+    columnOrder: pruneColumnOrder(context.columnOrder, columns),
     columnWidths: pruneColumnWidths(context.columnWidths, columnMap),
     sort: pruneSort(context.sort, columnMap),
     filters: pruneFilters(context.filters, context.filterOptions),

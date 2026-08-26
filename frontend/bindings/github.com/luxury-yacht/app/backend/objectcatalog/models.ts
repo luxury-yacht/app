@@ -43,6 +43,7 @@ export enum Scope {
  */
 export interface Summary {
     "ref": resourcemodel$0.ResourceRef;
+    "metadata"?: resourcemodel$0.ResourceTableMetadata | null;
 
     /**
      * resource version

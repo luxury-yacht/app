@@ -126,6 +126,7 @@ export interface CatalogActionFacts {
 
 export interface CatalogItem {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   resourceVersion: string;
   creationTimestamp: string;
   scope: CatalogItemScope;
@@ -175,6 +176,7 @@ export interface CatalogSnapshotPayload {
 
 export interface ClusterAttentionFinding {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   namespace?: string;
   severity: AttentionSeverity;
   status: string;
@@ -214,6 +216,7 @@ export interface ClusterAttentionSnapshot {
 
 export interface ClusterCRDEntry {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   group: string;
   scope: string;
   details: string;
@@ -252,6 +255,7 @@ export interface ClusterCRDSnapshotPayload {
 
 export interface ClusterConfigEntry {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   details: string;
   isDefault?: boolean;
   age: string;
@@ -307,6 +311,7 @@ export interface ClusterCustomSnapshotPayload {
 
 export interface ClusterEventEntry {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   resourceVersion: string;
   objectNamespace: string;
   objectUid: string;
@@ -473,6 +478,7 @@ export interface ClusterOverviewSnapshotPayload {
 
 export interface ClusterRBACEntry {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   details: string;
   age: string;
   ageTimestamp?: number;
@@ -507,6 +513,7 @@ export interface ClusterRBACSnapshotPayload {
 
 export interface ClusterStorageEntry {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   storageClass?: string;
   capacity: string;
   accessModes: string;
@@ -642,6 +649,7 @@ export interface NamespaceAutoscalingSnapshotPayload {
 
 export interface NamespaceAutoscalingSummary {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   target: string;
   targetApiVersion?: string;
   min: number;
@@ -679,6 +687,7 @@ export interface NamespaceConfigSnapshotPayload {
 
 export interface NamespaceConfigSummary {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   typeAlias?: string;
   data: number;
   age: string;
@@ -708,6 +717,7 @@ export interface NamespaceCustomSummary {
 
 export interface NamespaceEventSummary {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   kind: string;
   resourceVersion: string;
   objectNamespace: string;
@@ -832,6 +842,7 @@ export interface NamespaceNetworkSnapshotPayload {
 
 export interface NamespaceNetworkSummary {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   details: string;
   age: string;
   ageTimestamp?: number;
@@ -839,6 +850,7 @@ export interface NamespaceNetworkSummary {
 
 export interface NamespaceQuotaSummary {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   details: string;
   age: string;
   ageTimestamp?: number;
@@ -901,6 +913,7 @@ export interface NamespaceRBACSnapshotPayload {
 
 export interface NamespaceRBACSummary {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   details: string;
   age: string;
   ageTimestamp?: number;
@@ -940,6 +953,7 @@ export interface NamespaceStorageSnapshotPayload {
 
 export interface NamespaceStorageSummary {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   capacity: string;
   status: string;
   statusState?: string;
@@ -952,6 +966,7 @@ export interface NamespaceStorageSummary {
 
 export interface NamespaceSummary {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   phase: string;
   status?: string;
   statusState?: string;
@@ -1004,6 +1019,7 @@ export interface NamespaceWorkloadSnapshotPayload {
 
 export interface NamespaceWorkloadSummary {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   ready: string;
   status: string;
   statusState?: string;
@@ -1092,6 +1108,7 @@ export interface ObjectDetailsSnapshotPayload {
 
 export interface ObjectEventSummary {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   resourceVersion: string;
   eventType: string;
   reason: string;
@@ -1204,6 +1221,7 @@ export interface PodMetricsInfo {
 
 export interface PodSnapshotEntry {
   ref: CanonicalResourceRef;
+  metadata?: ResourceTableMetadata;
   node: string;
   status: string;
   statusState?: string;
@@ -1480,6 +1498,11 @@ export interface ResourceStreamServerMessage {
   ref?: ResourceRef;
   error?: string;
   errorDetails?: RefreshPermissionDeniedStatus;
+}
+
+export interface ResourceTableMetadata {
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
 }
 
 export interface SnapshotStats {

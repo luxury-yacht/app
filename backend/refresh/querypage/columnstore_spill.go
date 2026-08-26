@@ -22,7 +22,7 @@ import (
 // reconstructs each row and re-Upserts it, which rebuilds the columns, dictionaries, indexes,
 // and match cache exactly as the gob path does.
 
-const columnStoreMagic = "QPS1"
+const columnStoreMagic = "QPS2"
 
 // SpillColumns writes the store's rows to path in the columnar format.
 func (s *Store[R]) SpillColumns(path string) error {
@@ -55,8 +55,15 @@ func appendFieldColumn(out []byte, fc *fieldCodec, vals []reflect.Value) []byte 
 		var buf bytes.Buffer
 		enc := gob.NewEncoder(&buf)
 		for _, v := range vals {
-			// One stream carries the field type info once, then each row's value.
-			_ = enc.Encode(fc.fieldValue(v).Interface())
+			// One stream carries the field type info once, then each row's presence
+			// and value. The presence bit makes nil pointers to structured fallback
+			// values round-trip without asking gob to encode a nil root pointer.
+			value := fc.fieldValue(v)
+			present := reflectValuePresent(value)
+			_ = enc.Encode(present)
+			if present {
+				_ = enc.Encode(value.Interface())
+			}
 		}
 		out = binary.LittleEndian.AppendUint64(out, uint64(buf.Len()))
 		return append(out, buf.Bytes()...)
@@ -189,9 +196,11 @@ func readFieldColumn(rd *colReader, fc *fieldCodec, recon []reflect.Value) error
 		dec := gob.NewDecoder(bytes.NewReader(rd.take(n)))
 		for i := range recon {
 			fv := fc.fieldValue(recon[i])
-			if err := dec.Decode(fv.Addr().Interface()); err != nil {
+			value, err := decodeFallbackFieldValue(dec, fv.Type())
+			if err != nil {
 				return err
 			}
+			fv.Set(value)
 		}
 	case fieldPtrScalar:
 		for i := range recon {

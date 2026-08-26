@@ -5,6 +5,7 @@
  * Covers key behaviors and edge cases for useGridTablePersistence.
  */
 
+import { createCustomMetadataColumnDefinition } from '@shared/components/tables/customMetadataColumns';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import type React from 'react';
 import { act, useEffect } from 'react';
@@ -147,6 +148,58 @@ describe('useGridTablePersistence', () => {
     await act(async () => {
       root.unmount();
     });
+    container.remove();
+  });
+
+  it('exposes hydrated custom definitions for the current table scope', async () => {
+    const ownerColumn = createCustomMetadataColumnDefinition({
+      source: 'label',
+      metadataKey: 'app.kubernetes.io/owner',
+      header: 'Owner',
+    });
+    stateMap['key:clusterhash:namespace-pods:team-a'] = {
+      version: 3,
+      customColumns: [ownerColumn],
+    };
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = ReactDOM.createRoot(container);
+
+    await renderHarness('team-a', root);
+    expect(getLatestState().customColumns).toEqual([ownerColumn]);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('resets custom column presentation without deleting definitions', async () => {
+    const ownerColumn = createCustomMetadataColumnDefinition({
+      source: 'label',
+      metadataKey: 'app.kubernetes.io/owner',
+      header: 'Owner',
+    });
+    stateMap['key:clusterhash:namespace-pods:team-a'] = {
+      version: 3,
+      customColumns: [ownerColumn],
+      columnOrder: ['metadata:label:app.kubernetes.io/owner', 'name', 'age'],
+      columnVisibility: { 'metadata:label:app.kubernetes.io/owner': false },
+    };
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = ReactDOM.createRoot(container);
+
+    await renderHarness('team-a', root);
+    await act(async () => getLatestState().resetState());
+
+    expect(getLatestState().customColumns).toEqual([ownerColumn]);
+    expect(getLatestState().columnOrder).toBeNull();
+    expect(getLatestState().columnVisibility).toEqual({});
+
+    await act(async () => root.unmount());
     container.remove();
   });
 });

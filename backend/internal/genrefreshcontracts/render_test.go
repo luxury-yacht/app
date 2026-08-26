@@ -22,6 +22,7 @@ func TestRenderEmitsBackendOwnedRefreshContract(t *testing.T) {
 	require.Contains(t, contract, "export interface CatalogItem {\n  ref: CanonicalResourceRef;")
 	require.Contains(t, contract, "export interface ResourceModel {\n  ref: ResourceRef;")
 	require.Contains(t, contract, "export interface ResourceLifecycle")
+	require.Contains(t, contract, "export interface ResourceTableMetadata")
 	require.NotContains(t, contract, "export interface Resourcemodel")
 	require.NotContains(t, contract, "export interface Streamrows")
 	require.NotContains(t, contract, "export interface Objectcatalog")

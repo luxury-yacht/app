@@ -88,6 +88,28 @@ workflow and that exception is documented.
   Arrow keys. The menu's top-to-bottom order maps to the table's left-to-right
   column order. Reordering and visibility are independent, and the shared
   All/None actions affect hideable columns only.
+- Resource tables may add custom metadata columns through the Columns menu.
+  `Add custom` opens the shared editor for an exact label or annotation key and
+  an editable heading. Custom rows expose Edit beside the reorder grip; editing
+  can rename or explicitly remove the definition. Hiding and removing are
+  separate operations.
+- A custom metadata column's durable key is
+  `metadata:<label|annotation>:<exact-metadata-key>`. Its heading is presentation
+  only, so renaming must preserve width, order, visibility, and favorite
+  references. The same source/key pair may appear only once in a table scope;
+  a label and annotation with the same key are distinct definitions.
+- Custom metadata columns are hideable, resizable, automatic-width, appended on
+  creation, and deliberately non-sortable. Query-backed sorting must not claim
+  to order the complete result by an arbitrary metadata key until the provider
+  implements that contract. A missing key returns `undefined` and uses the
+  shared `-` placeholder; a present empty string remains an explicitly present,
+  blank value.
+- Persist custom definitions with the table's existing
+  cluster/view/namespace key and restore them before pruning column order,
+  visibility, or width state. Columns Reset clears presentation state while
+  preserving definitions. Favorites may reference a durable custom key but do
+  not own or recreate its definition; a deleted definition is ignored when a
+  favorite is applied.
 - Option presentation is owned by the shared `DropdownFilterOption`, not by each
   menu. A required column renders as a locked control state with the label at
   full contrast and an `Always shown` title; it must never be explained with an

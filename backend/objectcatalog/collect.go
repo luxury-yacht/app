@@ -442,6 +442,7 @@ func summaryFromObject(clusterID string, desc resourceDescriptor, item metav1.Ob
 	}
 	summary := Summary{
 		Ref:               resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: clusterID, Group: desc.Group, Version: desc.Version, Kind: desc.Kind, Resource: desc.Resource, Namespace: item.GetNamespace(), Name: item.GetName(), UID: string(item.GetUID())}),
+		Metadata:          catalogResourceMetadata(item),
 		ResourceVersion:   item.GetResourceVersion(),
 		CreationTimestamp: creationTimestamp,
 		lifecycle:         resourcemodel.ObjectLifecycleWithFinalizers(meta, additionalObjectFinalizers(desc, item)),
@@ -455,6 +456,18 @@ func summaryFromObject(clusterID string, desc resourceDescriptor, item metav1.Ob
 	summary.ActionFacts = buildSummaryActionFacts(desc, item)
 
 	return summary
+}
+
+func catalogResourceMetadata(item metav1.Object) *resourcemodel.ResourceTableMetadata {
+	labels := item.GetLabels()
+	annotations := item.GetAnnotations()
+	if len(labels) == 0 && len(annotations) == 0 {
+		return nil
+	}
+	return &resourcemodel.ResourceTableMetadata{
+		Labels:      labels,
+		Annotations: annotations,
+	}
 }
 
 func additionalObjectFinalizers(desc resourceDescriptor, item metav1.Object) []string {

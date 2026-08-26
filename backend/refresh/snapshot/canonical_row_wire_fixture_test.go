@@ -281,11 +281,15 @@ func TestCanonicalResourceRowWireFixtureMatchesProductionProducers(t *testing.T)
 	var stable any
 	require.NoError(t, json.Unmarshal(produced, &stable))
 	normalizeCanonicalFixtureVolatility(stable)
-	want, err := json.Marshal(stable)
+	want, err := json.MarshalIndent(stable, "", "  ")
 	require.NoError(t, err)
 	want = append(want, '\n')
 
 	fixturePath := filepath.Join("..", "..", "..", "frontend", "src", "test-fixtures", "canonical-resource-row-wire.json")
+	if os.Getenv("UPDATE_CANONICAL_RESOURCE_ROW_WIRE") == "1" {
+		require.NoError(t, os.WriteFile(fixturePath, want, 0o644))
+		return
+	}
 	got, err := os.ReadFile(fixturePath)
 	if err != nil {
 		t.Fatalf("read canonical resource row wire fixture: %v\nfixture contents:\n%s", err, want)

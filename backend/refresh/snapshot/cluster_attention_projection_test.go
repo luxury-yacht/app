@@ -23,7 +23,10 @@ func TestAttentionRecordFromBundleUsesCatalogIdentityAndTypedSummary(t *testing.
 			StatusPresentation: "error", StatusReason: "CrashLoopBackOff", Restarts: 4,
 			AgeTimestamp: 1234,
 		},
-		Catalog: objectcatalog.Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "payments", Name: "checkout-0", UID: "pod-uid"}},
+		Catalog: objectcatalog.Summary{
+			Ref:      resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "payments", Name: "checkout-0", UID: "pod-uid"},
+			Metadata: &resourcemodel.ResourceTableMetadata{Labels: map[string]string{"example.com/owner": "platform"}},
+		},
 	}
 
 	record, ok := attentionRecordFromBundle(attentionSourcePod, bundle)
@@ -32,6 +35,9 @@ func TestAttentionRecordFromBundleUsesCatalogIdentityAndTypedSummary(t *testing.
 	require.Equal(t, "pod-uid", record.Ref.UID)
 	require.Equal(t, "CrashLoopBackOff", record.Status)
 	require.Equal(t, int32(4), record.Restarts)
+	require.Equal(t, "platform", record.Metadata.Labels["example.com/owner"])
+	evaluation := evaluateAttentionSource(record, time.Now())
+	require.Equal(t, record.Metadata, evaluation.Finding.Metadata)
 }
 
 func TestDeletingPodBlockedByFinalizerProjectsIntoAttentionCategory(t *testing.T) {

@@ -990,6 +990,38 @@ describe('GridTableFiltersBar', () => {
     expect(reset.disabled).toBe(true);
   });
 
+  it('adds and edits custom metadata columns from the Columns menu', async () => {
+    const onAddCustomMetadataColumn = vi.fn();
+    const onEditCustomMetadataColumn = vi.fn();
+    await renderFilters({
+      showColumnsDropdown: true,
+      columnOptions: [
+        { label: 'Name', value: 'name' },
+        { label: 'Owner', value: 'metadata:label:example.com/owner' },
+      ],
+      columnValue: ['name', 'metadata:label:example.com/owner'],
+      onColumnsChange: vi.fn(),
+      onMoveColumn: vi.fn(),
+      onReorderColumn: vi.fn(),
+      customMetadataColumnKeys: new Set(['metadata:label:example.com/owner']),
+      onAddCustomMetadataColumn,
+      onEditCustomMetadataColumn,
+      columnsDropdownId: 'columns',
+      renderColumnsValue: () => 'Columns',
+    });
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="Add custom column"]')?.click();
+    });
+    expect(onAddCustomMetadataColumn).toHaveBeenCalledTimes(1);
+
+    expect(container.querySelector('button[aria-label="Edit Name"]')).toBeNull();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="Edit Owner"]')?.click();
+    });
+    expect(onEditCustomMetadataColumn).toHaveBeenCalledWith('metadata:label:example.com/owner');
+  });
+
   it('presents required columns as required rather than disabled', async () => {
     await renderFilters({
       showColumnsDropdown: true,

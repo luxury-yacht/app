@@ -5,5 +5,6 @@ export type {
     ConditionFacts,
     DisplayRef,
     ResourceLink,
-    ResourceRef
+    ResourceRef,
+    ResourceTableMetadata
 } from "./models.js";

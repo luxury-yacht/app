@@ -1,5 +1,10 @@
 ### Added
 
+- Resource table Columns menus can create, rename, hide, reorder, and remove
+  custom columns backed by an exact Kubernetes label or annotation key. Missing
+  values use the shared `-` placeholder, and definitions retain the table's
+  existing cluster/view/namespace persistence scope.
+
 ### Changed
 
 - The diagnostics panel's Refresh Domains, Streams, and Broker Reads tabs are now

@@ -16,6 +16,7 @@ import type {
   ResourceGridPersistence,
   ResourceGridTableRow,
 } from '@modules/resource-grid/resourceGridTableTypes';
+import type { CustomMetadataColumnDefinition } from '@shared/components/tables/customMetadataColumns';
 import type {
   ColumnWidthState,
   GridColumnDefinition,
@@ -48,6 +49,8 @@ export interface NamespaceGridTablePersistenceResult<
   setColumnVisibility: (next: Record<string, boolean>) => void;
   columnOrder: string[] | null;
   setColumnOrder: (next: string[]) => void;
+  customColumns: CustomMetadataColumnDefinition[];
+  setCustomColumns: (next: CustomMetadataColumnDefinition[]) => void;
   filters: GridTableFilterState;
   setFilters: (next: GridTableFilterState) => void;
   pageSize: number | null;
@@ -83,6 +86,8 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
     setColumnVisibility,
     columnOrder,
     setColumnOrder,
+    customColumns,
+    setCustomColumns,
     filters,
     setFilters,
     pageSize,
@@ -138,6 +143,8 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
       setColumnVisibility,
       columnOrder,
       setColumnOrder,
+      customColumns,
+      setCustomColumns,
       filters,
       setFilters,
       pageSize,
@@ -149,6 +156,7 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
       columnVisibility,
       columnOrder,
       columnWidths,
+      customColumns,
       filters,
       handleReset,
       handleSortChange,
@@ -157,6 +165,7 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
       setColumnVisibility,
       setColumnOrder,
       setColumnWidths,
+      setCustomColumns,
       setFilters,
       setPageSize,
       sortConfig,
@@ -172,6 +181,8 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
     setColumnVisibility,
     columnOrder,
     setColumnOrder,
+    customColumns,
+    setCustomColumns,
     filters,
     setFilters,
     pageSize,

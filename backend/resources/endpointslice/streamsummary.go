@@ -21,6 +21,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, slice *discoveryv1.Endpoint
 	model := BuildResourceModel(meta.ClusterID, slice)
 	return streamrows.NetworkSummary{
 		Ref:          model.Ref,
+		Metadata:     streamrows.NewResourceMetadata(slice),
 		Details:      DescribeSummary(facts),
 		Age:          streamrows.FormatAge(slice.CreationTimestamp.Time),
 		AgeTimestamp: streamrows.CreationMillis(slice),

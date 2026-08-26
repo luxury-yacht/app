@@ -6,6 +6,7 @@
  */
 
 import type { SortConfig } from '@hooks/useTableSort';
+import type { CustomMetadataColumnDefinition } from '@shared/components/tables/customMetadataColumns';
 import type {
   ColumnWidthState,
   GridColumnDefinition,
@@ -56,6 +57,8 @@ export interface UseGridTablePersistenceResult {
   setColumnOrder: (order: string[]) => void;
   columnWidths: Record<string, ColumnWidthState> | null;
   setColumnWidths: (widths: Record<string, ColumnWidthState>) => void;
+  customColumns: CustomMetadataColumnDefinition[];
+  setCustomColumns: (columns: CustomMetadataColumnDefinition[]) => void;
   filters: GridTableFilterState;
   setFilters: (next: GridTableFilterState) => void;
   pageSize: number | null;
@@ -71,6 +74,7 @@ interface GridTablePersistenceState {
   columnVisibility: Record<string, boolean> | null;
   columnOrder: string[] | null;
   columnWidths: Record<string, ColumnWidthState> | null;
+  customColumns: CustomMetadataColumnDefinition[];
   filters: GridTableFilterState;
   pageSize: number | null;
   hydrated: boolean;
@@ -89,6 +93,7 @@ const createPendingPersistenceState = (): GridTablePersistenceState => ({
   columnVisibility: null,
   columnOrder: null,
   columnWidths: null,
+  customColumns: [],
   filters: DEFAULT_GRID_TABLE_FILTER_STATE,
   pageSize: null,
   hydrated: false,
@@ -102,6 +107,7 @@ const hydratePersistenceState = (
   columnVisibility: persisted?.columnVisibility ?? null,
   columnOrder: persisted?.columnOrder ?? null,
   columnWidths: persisted?.columnWidths ?? null,
+  customColumns: persisted?.customColumns ?? [],
   filters: persisted?.filters ?? DEFAULT_GRID_TABLE_FILTER_STATE,
   pageSize: persisted?.pageSize ?? null,
   hydrated: true,
@@ -119,6 +125,7 @@ const gridTablePersistenceReducer = (
     case 'reset':
       return {
         ...createPendingPersistenceState(),
+        customColumns: state.customColumns,
         columnVisibility: {},
         columnWidths: {},
         hydrated: state.hydrated,
@@ -150,8 +157,16 @@ export function useGridTablePersistence<T>({
     undefined,
     createPendingPersistenceState
   );
-  const { sortConfig, columnVisibility, columnOrder, columnWidths, filters, pageSize, hydrated } =
-    persistenceState;
+  const {
+    sortConfig,
+    columnVisibility,
+    columnOrder,
+    columnWidths,
+    customColumns,
+    filters,
+    pageSize,
+    hydrated,
+  } = persistenceState;
   const persistenceSetters = useMemo(
     () => ({
       setSortConfig: (value: SortConfig | null) =>
@@ -162,6 +177,8 @@ export function useGridTablePersistence<T>({
         dispatchPersistence({ type: 'update', update: { columnOrder: value } }),
       setColumnWidths: (value: Record<string, ColumnWidthState>) =>
         dispatchPersistence({ type: 'update', update: { columnWidths: value } }),
+      setCustomColumns: (value: CustomMetadataColumnDefinition[]) =>
+        dispatchPersistence({ type: 'update', update: { customColumns: value } }),
       setFilters: (value: GridTableFilterState) =>
         dispatchPersistence({ type: 'update', update: { filters: value } }),
       setPageSize: (value: number | null) =>
@@ -285,6 +302,7 @@ export function useGridTablePersistence<T>({
       saveTimerRef.current = null;
       const state = buildPersistedStateForSave({
         columns,
+        customColumns,
         rows: data,
         keyExtractor,
         columnVisibility,
@@ -337,6 +355,7 @@ export function useGridTablePersistence<T>({
     columnVisibility,
     columnOrder,
     columnWidths,
+    customColumns,
     sortConfig,
     filters,
     pageSize,
@@ -356,6 +375,8 @@ export function useGridTablePersistence<T>({
       setColumnOrder: persistenceSetters.setColumnOrder,
       columnWidths,
       setColumnWidths: persistenceSetters.setColumnWidths,
+      customColumns,
+      setCustomColumns: persistenceSetters.setCustomColumns,
       filters,
       setFilters: persistenceSetters.setFilters,
       pageSize,
@@ -369,6 +390,7 @@ export function useGridTablePersistence<T>({
       columnVisibility,
       columnOrder,
       columnWidths,
+      customColumns,
       filters,
       pageSize,
       hydrated,

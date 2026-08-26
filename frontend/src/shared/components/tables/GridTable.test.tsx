@@ -10,6 +10,7 @@ import {
   createResourceBarColumn,
   createTextColumn,
 } from '@shared/components/tables/columnFactories';
+import { createCustomMetadataColumnDefinition } from '@shared/components/tables/customMetadataColumns';
 import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridColumnDefinition,
@@ -79,6 +80,10 @@ interface SimpleRow {
   id: string;
   label: string;
   name?: string;
+  metadata?: {
+    labels?: Record<string, string>;
+    annotations?: Record<string, string>;
+  };
 }
 
 const defaultColumns: GridColumnDefinition<SimpleRow>[] = [
@@ -129,6 +134,7 @@ type RenderOptions = Partial<{
     pageSizeOptions: readonly number[];
     onPageSizeChange: (value: number) => void;
   };
+  customMetadataColumns: NonNullable<GridTableProps<SimpleRow>['customMetadataColumns']>;
 }>;
 
 let cleanupRoot: (() => void) | null = null;
@@ -1274,6 +1280,7 @@ function renderGridTable(options: RenderOptions = {}) {
     columnWidths: options.columnWidths ?? {},
     paginationControls: options.paginationControls,
     localPagination: options.localPagination,
+    customMetadataColumns: options.customMetadataColumns,
   };
 
   let currentProps = initialProps;
@@ -1325,6 +1332,95 @@ function renderGridTable(options: RenderOptions = {}) {
 
   return { container, rerender, cleanup, scrollWrapper };
 }
+
+it('appends configured metadata columns to the rendered and exportable column set', () => {
+  const owner = createCustomMetadataColumnDefinition({
+    source: 'label',
+    metadataKey: 'example.com/owner',
+    header: 'Owner',
+  });
+  const { container, cleanup } = renderGridTable({
+    data: [
+      {
+        id: 'row-1',
+        label: 'Row 1',
+        metadata: { labels: { 'example.com/owner': 'platform' } },
+      },
+      { id: 'row-2', label: 'Row 2' },
+    ],
+    virtualization: { enabled: false },
+    customMetadataColumns: { definitions: [owner], onChange: vi.fn() },
+  });
+
+  expect(container.querySelector('.gridtable--header')?.textContent).toContain('Owner');
+  expect(container.textContent).toContain('platform');
+  expect(container.textContent).toContain('-');
+
+  cleanup();
+});
+
+it('creates a custom metadata column from the Columns menu', async () => {
+  const onChange = vi.fn();
+  const { container, cleanup } = renderGridTable({
+    data: createRows(2),
+    filters: { enabled: true },
+    enableColumnVisibilityMenu: true,
+    virtualization: { enabled: false },
+    customMetadataColumns: { definitions: [], onChange },
+  });
+  cleanupRoot = cleanup;
+  await flushAsync();
+
+  await act(async () => {
+    requireValue(
+      container.querySelector<HTMLButtonElement>(
+        '[data-gridtable-filter-role="columns"] .dropdown-trigger'
+      ),
+      'expected Columns trigger'
+    ).click();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    requireValue(
+      document.body.querySelector<HTMLButtonElement>('button[aria-label="Add custom column"]'),
+      'expected Add custom column action'
+    ).click();
+    await Promise.resolve();
+  });
+
+  expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain(
+    'Add custom column'
+  );
+  const metadataKeyInput = requireValue(
+    document.body.querySelector<HTMLInputElement>('.custom-metadata-column-editor .modal-input'),
+    'expected metadata key input'
+  );
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  await act(async () => {
+    requireValue(valueSetter, 'expected native input value setter').call(
+      metadataKeyInput,
+      'example.com/owner'
+    );
+    metadataKeyInput.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => {
+    requireValue(
+      document.body.querySelector<HTMLButtonElement>(
+        '.custom-metadata-column-editor button[type="submit"]'
+      ),
+      'expected Add column submit action'
+    ).click();
+  });
+
+  expect(onChange).toHaveBeenCalledWith([
+    {
+      key: 'metadata:label:example.com/owner',
+      source: 'label',
+      metadataKey: 'example.com/owner',
+      header: 'Owner',
+    },
+  ]);
+});
 
 it('renders the full dataset when virtualization is disabled', () => {
   const { container, cleanup } = renderGridTable({

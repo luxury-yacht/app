@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
@@ -45,7 +46,8 @@ const (
 // AttentionFinding is one Kubernetes object that currently warrants operator
 // attention. Causes combines every active finding for that source object.
 type AttentionFinding struct {
-	Ref resourcemodel.ResourceRef `json:"ref"`
+	Ref      resourcemodel.ResourceRef            `json:"ref"`
+	Metadata *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
 	// Namespace is the affected object's display namespace. For Event findings,
 	// Ref identifies the Event while Namespace belongs to its involved object.
 	Namespace    string            `json:"namespace,omitempty"`
@@ -216,6 +218,7 @@ func clusterAttentionQueryCapabilities() ResourceQueryCapabilities {
 
 type attentionSourceRecord struct {
 	Ref                resourcemodel.ResourceRef
+	Metadata           *resourcemodel.ResourceTableMetadata
 	Source             attentionSource
 	objectNamespace    string
 	Status             string
@@ -818,7 +821,7 @@ func finalizerAttentionFinding(blocker objectcatalog.FinalizerBlocker) Attention
 		"Waiting for finalizer cleanup",
 	)}
 	return AttentionFinding{
-		Ref: blocker.Ref, Namespace: blocker.Ref.Namespace, Severity: policy.Severity,
+		Ref: blocker.Ref, Metadata: blocker.Metadata, Namespace: blocker.Ref.Namespace, Severity: policy.Severity,
 		Status: "Terminating", Causes: causes,
 		Age: formatAge(time.UnixMilli(blocker.DeletionTimestamp)), AgeTimestamp: blocker.DeletionTimestamp,
 	}
@@ -1418,8 +1421,9 @@ func attentionRecordFromBundle(source attentionSource, bundle ingest.Bundle) (at
 		return attentionSourceRecord{}, false
 	}
 	record := attentionSourceRecord{
-		Ref:    catalog.Ref,
-		Source: source,
+		Ref:      catalog.Ref,
+		Metadata: catalog.Metadata,
+		Source:   source,
 	}
 	switch source {
 	case attentionSourcePod:
@@ -1482,6 +1486,7 @@ func attentionRecordFromEvent(meta ClusterMeta, event *corev1.Event) (attentionS
 			Name:      event.Name,
 			UID:       string(event.UID),
 		},
+		Metadata:          streamrows.NewResourceMetadata(event),
 		Source:            attentionSourceEvent,
 		objectNamespace:   event.InvolvedObject.Namespace,
 		Status:            event.Type,
@@ -1659,6 +1664,7 @@ func findingEvaluation(record attentionSourceRecord, causes []AttentionCause) at
 	}
 	return attentionEvaluation{Finding: &AttentionFinding{
 		Ref:          record.Ref,
+		Metadata:     record.Metadata,
 		Namespace:    attentionFindingNamespace(record),
 		Severity:     attentionCauseSeverity(causes),
 		Status:       firstNonEmpty(record.Status, causes[0].Message),

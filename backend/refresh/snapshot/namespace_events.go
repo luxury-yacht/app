@@ -49,6 +49,7 @@ func projectNamespaceEventSummary(meta ClusterMeta, event *corev1.Event) (EventS
 	timestamp := eventres.EventTimestamp(event).Time
 	return EventSummary{
 		Ref:              streamrows.NewResourceRef(meta, eventres.Identity, event),
+		Metadata:         streamrows.NewResourceMetadata(event),
 		Kind:             event.InvolvedObject.Kind,
 		ResourceVersion:  event.ResourceVersion,
 		ObjectNamespace:  event.InvolvedObject.Namespace,
@@ -100,20 +101,21 @@ func namespaceEventsQuerypageSchema() querypage.Schema[EventSummary] {
 
 // EventSummary captures the essential event fields for display.
 type EventSummary struct {
-	Ref              resourcemodel.ResourceRef   `json:"ref"`
-	Kind             string                      `json:"kind"`
-	ResourceVersion  string                      `json:"resourceVersion"`
-	ObjectNamespace  string                      `json:"objectNamespace"`
-	ObjectUID        string                      `json:"objectUid"`
-	ObjectAPIVersion string                      `json:"objectApiVersion"`
-	InvolvedObject   *resourcemodel.ResourceLink `json:"involvedObject,omitempty"`
-	Type             string                      `json:"type"`
-	Source           string                      `json:"source"`
-	Reason           string                      `json:"reason"`
-	Object           string                      `json:"object"`
-	Message          string                      `json:"message"`
-	Age              string                      `json:"age"`
-	AgeTimestamp     int64                       `json:"ageTimestamp"`
+	Ref              resourcemodel.ResourceRef            `json:"ref"`
+	Metadata         *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	Kind             string                               `json:"kind"`
+	ResourceVersion  string                               `json:"resourceVersion"`
+	ObjectNamespace  string                               `json:"objectNamespace"`
+	ObjectUID        string                               `json:"objectUid"`
+	ObjectAPIVersion string                               `json:"objectApiVersion"`
+	InvolvedObject   *resourcemodel.ResourceLink          `json:"involvedObject,omitempty"`
+	Type             string                               `json:"type"`
+	Source           string                               `json:"source"`
+	Reason           string                               `json:"reason"`
+	Object           string                               `json:"object"`
+	Message          string                               `json:"message"`
+	Age              string                               `json:"age"`
+	AgeTimestamp     int64                                `json:"ageTimestamp"`
 }
 
 // RegisterNamespaceEventsDomain registers the events domain. It serves from a maintained

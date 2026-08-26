@@ -817,6 +817,8 @@ func TestNamespaceBuilderScopedProbesEnrichAndFlagRows(t *testing.T) {
 			Name:              "prod",
 			ResourceVersion:   "42",
 			CreationTimestamp: metav1.NewTime(created),
+			Labels:            map[string]string{"example.com/owner": "platform"},
+			Annotations:       map[string]string{"example.com/note": "visible"},
 		},
 		Status: corev1.NamespaceStatus{Phase: corev1.NamespaceActive},
 	}
@@ -848,6 +850,8 @@ func TestNamespaceBuilderScopedProbesEnrichAndFlagRows(t *testing.T) {
 	require.Equal(t, "Active", prod.Phase, "probe enriches the row from the real object")
 	require.Equal(t, "42", prod.ResourceVersion)
 	require.Equal(t, created.Unix(), prod.CreationUnix)
+	require.Equal(t, realNs.Labels, prod.Metadata.Labels)
+	require.Equal(t, realNs.Annotations, prod.Metadata.Annotations)
 
 	require.Equal(t, NamespaceScopeStatusNotFound, byName["ghost"].ScopeStatus,
 		"a permitted GET returning 404 is definitive")

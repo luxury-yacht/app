@@ -26,6 +26,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, hpa *autoscalingv1.Horizont
 	return streamrows.AutoscalingSummary{
 		// The stream reads v1 objects, while navigation/details use the primary v2 API.
 		Ref:              streamrows.NewResourceRef(meta, Identity, hpa),
+		Metadata:         streamrows.NewResourceMetadata(hpa),
 		Target:           streamTargetLabel(facts.ScaleTarget),
 		TargetAPIVersion: streamTargetAPIVersion(facts.ScaleTarget),
 		Min:              streamMinReplicas(facts),

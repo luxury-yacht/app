@@ -39,3 +39,13 @@ export interface ResourceRef {
     "name"?: string;
     "uid"?: string;
 }
+
+/**
+ * ResourceTableMetadata is the exact label/annotation projection carried by
+ * resource inventory rows. It intentionally excludes detail-only metadata so
+ * table pages do not serialize empty timestamps, versions, or finalizers.
+ */
+export interface ResourceTableMetadata {
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
+}

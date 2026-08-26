@@ -124,19 +124,21 @@ type EndpointSliceServiceFact struct {
 
 // ConfigSummary describes a ConfigMap or Secret row (the namespace-config domain).
 type ConfigSummary struct {
-	Ref          resourcemodel.ResourceRef `json:"ref"`
-	TypeAlias    string                    `json:"typeAlias,omitempty"`
-	Data         int                       `json:"data"`
-	Age          string                    `json:"age"`
-	AgeTimestamp int64                     `json:"ageTimestamp,omitempty"`
+	Ref          resourcemodel.ResourceRef            `json:"ref"`
+	Metadata     *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	TypeAlias    string                               `json:"typeAlias,omitempty"`
+	Data         int                                  `json:"data"`
+	Age          string                               `json:"age"`
+	AgeTimestamp int64                                `json:"ageTimestamp,omitempty"`
 }
 
 // RBACSummary describes a Role/RoleBinding/ServiceAccount row (namespace-rbac).
 type RBACSummary struct {
-	Ref          resourcemodel.ResourceRef `json:"ref"`
-	Details      string                    `json:"details"`
-	Age          string                    `json:"age"`
-	AgeTimestamp int64                     `json:"ageTimestamp,omitempty"`
+	Ref          resourcemodel.ResourceRef            `json:"ref"`
+	Metadata     *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	Details      string                               `json:"details"`
+	Age          string                               `json:"age"`
+	AgeTimestamp int64                                `json:"ageTimestamp,omitempty"`
 }
 
 // NewRBACSummary fills the row skeleton (name/namespace/age from the object plus
@@ -145,6 +147,7 @@ type RBACSummary struct {
 func NewRBACSummary(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object, details string) RBACSummary {
 	return RBACSummary{
 		Ref:          NewResourceRef(meta, identity, obj),
+		Metadata:     NewResourceMetadata(obj),
 		Details:      details,
 		Age:          FormatAge(obj.GetCreationTimestamp().Time),
 		AgeTimestamp: CreationMillis(obj),
@@ -155,39 +158,42 @@ func NewRBACSummary(meta ClusterMeta, identity resourcekind.Identity, obj metav1
 // TargetAPIVersion carries the scale target's apiVersion so the frontend can open
 // the target with a fully-qualified GVK (required for CRD HPA targets).
 type AutoscalingSummary struct {
-	Ref              resourcemodel.ResourceRef `json:"ref"`
-	Target           string                    `json:"target"`
-	TargetAPIVersion string                    `json:"targetApiVersion,omitempty"`
-	Min              int32                     `json:"min"`
-	Max              int32                     `json:"max"`
-	Current          int32                     `json:"current"`
-	Age              string                    `json:"age"`
-	AgeTimestamp     int64                     `json:"ageTimestamp,omitempty"`
+	Ref              resourcemodel.ResourceRef            `json:"ref"`
+	Metadata         *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	Target           string                               `json:"target"`
+	TargetAPIVersion string                               `json:"targetApiVersion,omitempty"`
+	Min              int32                                `json:"min"`
+	Max              int32                                `json:"max"`
+	Current          int32                                `json:"current"`
+	Age              string                               `json:"age"`
+	AgeTimestamp     int64                                `json:"ageTimestamp,omitempty"`
 }
 
 // StorageSummary captures PVC info for display (namespace-storage).
 type StorageSummary struct {
-	Ref                resourcemodel.ResourceRef `json:"ref"`
-	Capacity           string                    `json:"capacity"`
-	Status             string                    `json:"status"`
-	StatusState        string                    `json:"statusState,omitempty"`
-	StatusPresentation string                    `json:"statusPresentation,omitempty"`
-	StatusReason       string                    `json:"statusReason,omitempty"`
-	StorageClass       string                    `json:"storageClass"`
-	Age                string                    `json:"age"`
-	AgeTimestamp       int64                     `json:"ageTimestamp,omitempty"`
+	Ref                resourcemodel.ResourceRef            `json:"ref"`
+	Metadata           *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	Capacity           string                               `json:"capacity"`
+	Status             string                               `json:"status"`
+	StatusState        string                               `json:"statusState,omitempty"`
+	StatusPresentation string                               `json:"statusPresentation,omitempty"`
+	StatusReason       string                               `json:"statusReason,omitempty"`
+	StorageClass       string                               `json:"storageClass"`
+	Age                string                               `json:"age"`
+	AgeTimestamp       int64                                `json:"ageTimestamp,omitempty"`
 }
 
 // QuotaSummary captures ResourceQuota/LimitRange/PDB info (namespace-quotas).
 // The PDB-specific fields are unset for the other two kinds.
 type QuotaSummary struct {
-	Ref            resourcemodel.ResourceRef `json:"ref"`
-	Details        string                    `json:"details"`
-	Age            string                    `json:"age"`
-	AgeTimestamp   int64                     `json:"ageTimestamp,omitempty"`
-	MinAvailable   *string                   `json:"minAvailable,omitempty"`
-	MaxUnavailable *string                   `json:"maxUnavailable,omitempty"`
-	Status         *QuotaStatus              `json:"status,omitempty"`
+	Ref            resourcemodel.ResourceRef            `json:"ref"`
+	Metadata       *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	Details        string                               `json:"details"`
+	Age            string                               `json:"age"`
+	AgeTimestamp   int64                                `json:"ageTimestamp,omitempty"`
+	MinAvailable   *string                              `json:"minAvailable,omitempty"`
+	MaxUnavailable *string                              `json:"maxUnavailable,omitempty"`
+	Status         *QuotaStatus                         `json:"status,omitempty"`
 }
 
 // QuotaStatus carries PDB status fields needed by the quotas table.
@@ -208,6 +214,7 @@ type ResourceQuotaAggregate struct {
 func NewQuotaSummary(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object, details string) QuotaSummary {
 	return QuotaSummary{
 		Ref:          NewResourceRef(meta, identity, obj),
+		Metadata:     NewResourceMetadata(obj),
 		Details:      details,
 		Age:          FormatAge(obj.GetCreationTimestamp().Time),
 		AgeTimestamp: CreationMillis(obj),
@@ -216,17 +223,19 @@ func NewQuotaSummary(meta ClusterMeta, identity resourcekind.Identity, obj metav
 
 // ClusterRBACEntry represents a ClusterRole or ClusterRoleBinding (cluster-rbac).
 type ClusterRBACEntry struct {
-	Ref          resourcemodel.ResourceRef `json:"ref"`
-	Details      string                    `json:"details"`
-	Age          string                    `json:"age"`
-	AgeTimestamp int64                     `json:"ageTimestamp,omitempty"`
-	TypeAlias    string                    `json:"typeAlias,omitempty"`
+	Ref          resourcemodel.ResourceRef            `json:"ref"`
+	Metadata     *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	Details      string                               `json:"details"`
+	Age          string                               `json:"age"`
+	AgeTimestamp int64                                `json:"ageTimestamp,omitempty"`
+	TypeAlias    string                               `json:"typeAlias,omitempty"`
 }
 
 // NewClusterRBACEntry fills the row skeleton shared by the cluster-rbac kinds.
 func NewClusterRBACEntry(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object, details, typeAlias string) ClusterRBACEntry {
 	return ClusterRBACEntry{
 		Ref:          NewResourceRef(meta, identity, obj),
+		Metadata:     NewResourceMetadata(obj),
 		Details:      details,
 		Age:          FormatAge(obj.GetCreationTimestamp().Time),
 		AgeTimestamp: CreationMillis(obj),
@@ -237,17 +246,19 @@ func NewClusterRBACEntry(meta ClusterMeta, identity resourcekind.Identity, obj m
 // ClusterConfigEntry represents a StorageClass/IngressClass/GatewayClass/webhook
 // configuration row (cluster-config).
 type ClusterConfigEntry struct {
-	Ref          resourcemodel.ResourceRef `json:"ref"`
-	Details      string                    `json:"details"`
-	IsDefault    bool                      `json:"isDefault,omitempty"`
-	Age          string                    `json:"age"`
-	AgeTimestamp int64                     `json:"ageTimestamp,omitempty"`
+	Ref          resourcemodel.ResourceRef            `json:"ref"`
+	Metadata     *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	Details      string                               `json:"details"`
+	IsDefault    bool                                 `json:"isDefault,omitempty"`
+	Age          string                               `json:"age"`
+	AgeTimestamp int64                                `json:"ageTimestamp,omitempty"`
 }
 
 // NewClusterConfigEntry fills the row skeleton shared by the cluster-config kinds.
 func NewClusterConfigEntry(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object, details string, isDefault bool) ClusterConfigEntry {
 	return ClusterConfigEntry{
 		Ref:          NewResourceRef(meta, identity, obj),
+		Metadata:     NewResourceMetadata(obj),
 		Details:      details,
 		IsDefault:    isDefault,
 		Age:          FormatAge(obj.GetCreationTimestamp().Time),
@@ -257,30 +268,32 @@ func NewClusterConfigEntry(meta ClusterMeta, identity resourcekind.Identity, obj
 
 // ClusterStorageEntry represents a PersistentVolume row (cluster-storage).
 type ClusterStorageEntry struct {
-	Ref                resourcemodel.ResourceRef `json:"ref"`
-	StorageClass       string                    `json:"storageClass,omitempty"`
-	Capacity           string                    `json:"capacity"`
-	AccessModes        string                    `json:"accessModes"`
-	Status             string                    `json:"status"`
-	StatusState        string                    `json:"statusState,omitempty"`
-	StatusPresentation string                    `json:"statusPresentation,omitempty"`
-	StatusReason       string                    `json:"statusReason,omitempty"`
-	Claim              string                    `json:"claim"`
-	Age                string                    `json:"age"`
-	AgeTimestamp       int64                     `json:"ageTimestamp,omitempty"`
+	Ref                resourcemodel.ResourceRef            `json:"ref"`
+	Metadata           *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	StorageClass       string                               `json:"storageClass,omitempty"`
+	Capacity           string                               `json:"capacity"`
+	AccessModes        string                               `json:"accessModes"`
+	Status             string                               `json:"status"`
+	StatusState        string                               `json:"statusState,omitempty"`
+	StatusPresentation string                               `json:"statusPresentation,omitempty"`
+	StatusReason       string                               `json:"statusReason,omitempty"`
+	Claim              string                               `json:"claim"`
+	Age                string                               `json:"age"`
+	AgeTimestamp       int64                                `json:"ageTimestamp,omitempty"`
 }
 
 // ClusterCRDEntry represents a CustomResourceDefinition row (cluster-crds).
 type ClusterCRDEntry struct {
-	Ref                     resourcemodel.ResourceRef `json:"ref"`
-	Group                   string                    `json:"group"`
-	Scope                   string                    `json:"scope"`
-	Details                 string                    `json:"details"`
-	StorageVersion          string                    `json:"storageVersion,omitempty"`
-	ExtraServedVersionCount int                       `json:"extraServedVersionCount,omitempty"`
-	Age                     string                    `json:"age"`
-	AgeTimestamp            int64                     `json:"ageTimestamp,omitempty"`
-	TypeAlias               string                    `json:"typeAlias,omitempty"`
+	Ref                     resourcemodel.ResourceRef            `json:"ref"`
+	Metadata                *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	Group                   string                               `json:"group"`
+	Scope                   string                               `json:"scope"`
+	Details                 string                               `json:"details"`
+	StorageVersion          string                               `json:"storageVersion,omitempty"`
+	ExtraServedVersionCount int                                  `json:"extraServedVersionCount,omitempty"`
+	Age                     string                               `json:"age"`
+	AgeTimestamp            int64                                `json:"ageTimestamp,omitempty"`
+	TypeAlias               string                               `json:"typeAlias,omitempty"`
 }
 
 // NamespaceCustomSummary is a CRD-backed namespaced custom resource row.
@@ -316,16 +329,18 @@ type ClusterCustomSummary struct {
 // NetworkSummary is a Service/Ingress/EndpointSlice/NetworkPolicy/Gateway-API row
 // (the namespace-network domain).
 type NetworkSummary struct {
-	Ref          resourcemodel.ResourceRef `json:"ref"`
-	Details      string                    `json:"details"`
-	Age          string                    `json:"age"`
-	AgeTimestamp int64                     `json:"ageTimestamp,omitempty"`
+	Ref          resourcemodel.ResourceRef            `json:"ref"`
+	Metadata     *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	Details      string                               `json:"details"`
+	Age          string                               `json:"age"`
+	AgeTimestamp int64                                `json:"ageTimestamp,omitempty"`
 }
 
 // NewNetworkSummary fills the row skeleton shared by the namespace-network kinds.
 func NewNetworkSummary(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object, details string) NetworkSummary {
 	return NetworkSummary{
 		Ref:          NewResourceRef(meta, identity, obj),
+		Metadata:     NewResourceMetadata(obj),
 		Details:      details,
 		Age:          FormatAge(obj.GetCreationTimestamp().Time),
 		AgeTimestamp: CreationMillis(obj),
@@ -334,20 +349,21 @@ func NewNetworkSummary(meta ClusterMeta, identity resourcekind.Identity, obj met
 
 // PodSummary is a pod row (the pods domain).
 type PodSummary struct {
-	Ref                  resourcemodel.ResourceRef `json:"ref"`
-	Node                 string                    `json:"node"`
-	Status               string                    `json:"status"`
-	StatusState          string                    `json:"statusState,omitempty"`
-	StatusPresentation   string                    `json:"statusPresentation,omitempty"`
-	StatusReason         string                    `json:"statusReason,omitempty"`
-	Ready                string                    `json:"ready"`
-	Restarts             int32                     `json:"restarts"`
-	Age                  string                    `json:"age"`
-	AgeTimestamp         int64                     `json:"ageTimestamp,omitempty"`
-	OwnerKind            string                    `json:"ownerKind"`
-	OwnerName            string                    `json:"ownerName"`
-	PortForwardAvailable bool                      `json:"portForwardAvailable"`
-	OwnerAPIVersion      string                    `json:"ownerApiVersion,omitempty"`
+	Ref                  resourcemodel.ResourceRef            `json:"ref"`
+	Metadata             *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	Node                 string                               `json:"node"`
+	Status               string                               `json:"status"`
+	StatusState          string                               `json:"statusState,omitempty"`
+	StatusPresentation   string                               `json:"statusPresentation,omitempty"`
+	StatusReason         string                               `json:"statusReason,omitempty"`
+	Ready                string                               `json:"ready"`
+	Restarts             int32                                `json:"restarts"`
+	Age                  string                               `json:"age"`
+	AgeTimestamp         int64                                `json:"ageTimestamp,omitempty"`
+	OwnerKind            string                               `json:"ownerKind"`
+	OwnerName            string                               `json:"ownerName"`
+	PortForwardAvailable bool                                 `json:"portForwardAvailable"`
+	OwnerAPIVersion      string                               `json:"ownerApiVersion,omitempty"`
 	// DirectOwner* is the pod's direct controlling ownerRef as written on the
 	// pod, BEFORE the ReplicaSet->Deployment collapse Owner* applies. For a
 	// Deployment's pod Owner* is the Deployment and DirectOwner* the ReplicaSet;
@@ -369,24 +385,25 @@ type PodSummary struct {
 // WorkloadSummary is a Deployment/StatefulSet/DaemonSet/Job/CronJob/Pod row
 // (the namespace-workloads domain).
 type WorkloadSummary struct {
-	Ref                  resourcemodel.ResourceRef `json:"ref"`
-	Ready                string                    `json:"ready"`
-	Status               string                    `json:"status"`
-	StatusState          string                    `json:"statusState,omitempty"`
-	StatusPresentation   string                    `json:"statusPresentation,omitempty"`
-	StatusReason         string                    `json:"statusReason,omitempty"`
-	Restarts             int32                     `json:"restarts"`
-	Age                  string                    `json:"age"`
-	AgeTimestamp         int64                     `json:"ageTimestamp,omitempty"`
-	CPUUsage             string                    `json:"cpuUsage,omitempty"`
-	CPURequest           string                    `json:"cpuRequest,omitempty"`
-	CPULimit             string                    `json:"cpuLimit,omitempty"`
-	MemUsage             string                    `json:"memUsage,omitempty"`
-	MemRequest           string                    `json:"memRequest,omitempty"`
-	MemLimit             string                    `json:"memLimit,omitempty"`
-	PortForwardAvailable bool                      `json:"portForwardAvailable"`
-	DesiredReplicas      *int32                    `json:"desiredReplicas,omitempty"`
-	HPAManaged           *bool                     `json:"hpaManaged,omitempty"`
+	Ref                  resourcemodel.ResourceRef            `json:"ref"`
+	Metadata             *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	Ready                string                               `json:"ready"`
+	Status               string                               `json:"status"`
+	StatusState          string                               `json:"statusState,omitempty"`
+	StatusPresentation   string                               `json:"statusPresentation,omitempty"`
+	StatusReason         string                               `json:"statusReason,omitempty"`
+	Restarts             int32                                `json:"restarts"`
+	Age                  string                               `json:"age"`
+	AgeTimestamp         int64                                `json:"ageTimestamp,omitempty"`
+	CPUUsage             string                               `json:"cpuUsage,omitempty"`
+	CPURequest           string                               `json:"cpuRequest,omitempty"`
+	CPULimit             string                               `json:"cpuLimit,omitempty"`
+	MemUsage             string                               `json:"memUsage,omitempty"`
+	MemRequest           string                               `json:"memRequest,omitempty"`
+	MemLimit             string                               `json:"memLimit,omitempty"`
+	PortForwardAvailable bool                                 `json:"portForwardAvailable"`
+	DesiredReplicas      *int32                               `json:"desiredReplicas,omitempty"`
+	HPAManaged           *bool                                `json:"hpaManaged,omitempty"`
 }
 
 // NodeSummary is a node row (the nodes domain).
@@ -437,6 +454,24 @@ func NewResourceRef(meta ClusterMeta, identity resourcekind.Identity, obj metav1
 	ref.Name = obj.GetName()
 	ref.UID = string(obj.GetUID())
 	return ref
+}
+
+// NewResourceMetadata projects the label and annotation maps used by table
+// metadata columns. Informer objects are immutable snapshots, so retaining the
+// maps avoids cloning every key/value pair into the table row store.
+func NewResourceMetadata(obj metav1.Object) *resourcemodel.ResourceTableMetadata {
+	if obj == nil {
+		return nil
+	}
+	labels := obj.GetLabels()
+	annotations := obj.GetAnnotations()
+	if len(labels) == 0 && len(annotations) == 0 {
+		return nil
+	}
+	return &resourcemodel.ResourceTableMetadata{
+		Labels:      labels,
+		Annotations: annotations,
+	}
 }
 
 // NodeTaint is a node taint shown in the node row.

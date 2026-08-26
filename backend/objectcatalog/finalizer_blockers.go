@@ -1,7 +1,7 @@
 package objectcatalog
 
 import (
-	"maps"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -70,7 +70,7 @@ func (s *Service) replaceFinalizerBlockers(items map[string]Summary) {
 	}
 
 	s.finalizerMu.Lock()
-	if maps.Equal(s.finalizerBlockers, next) {
+	if reflect.DeepEqual(s.finalizerBlockers, next) {
 		s.finalizerMu.Unlock()
 		return
 	}

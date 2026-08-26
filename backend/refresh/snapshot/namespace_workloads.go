@@ -639,6 +639,7 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 
 	return WorkloadSummary{
 		Ref:                  model.Ref,
+		Metadata:             streamrows.NewResourceMetadata(deploy),
 		Ready:                readyStatus,
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
@@ -683,6 +684,7 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 
 	return WorkloadSummary{
 		Ref:                  model.Ref,
+		Metadata:             streamrows.NewResourceMetadata(stateful),
 		Ready:                readyStatus,
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
@@ -725,6 +727,7 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 
 	return WorkloadSummary{
 		Ref:                  model.Ref,
+		Metadata:             streamrows.NewResourceMetadata(daemon),
 		Ready:                readyStatus,
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
@@ -767,6 +770,7 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 
 	return WorkloadSummary{
 		Ref:                  model.Ref,
+		Metadata:             streamrows.NewResourceMetadata(job),
 		Ready:                fmt.Sprintf("%d/%d", completed, desired),
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
@@ -805,6 +809,7 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 
 	return WorkloadSummary{
 		Ref:                  model.Ref,
+		Metadata:             streamrows.NewResourceMetadata(cron),
 		Ready:                fmt.Sprintf("%d", active),
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
@@ -842,6 +847,7 @@ func buildStandalonePodSummaryFromRows(podSummary streamrows.PodSummary, agg str
 	sample := usage[fmt.Sprintf("%s/%s", agg.Namespace, agg.Name)]
 	return WorkloadSummary{
 		Ref:                  podSummary.Ref,
+		Metadata:             podSummary.Metadata,
 		Ready:                podSummary.Ready,
 		Status:               podSummary.Status,
 		StatusState:          podSummary.StatusState,

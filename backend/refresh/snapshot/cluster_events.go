@@ -71,6 +71,7 @@ func projectClusterEventEntry(meta ClusterMeta, evt *corev1.Event) (ClusterEvent
 	}
 	return ClusterEventEntry{
 		Ref:              streamrows.NewResourceRef(meta, eventres.Identity, evt),
+		Metadata:         streamrows.NewResourceMetadata(evt),
 		ResourceVersion:  evt.ResourceVersion,
 		ObjectNamespace:  evt.InvolvedObject.Namespace,
 		ObjectUID:        string(evt.InvolvedObject.UID),
@@ -122,19 +123,20 @@ func clusterEventsQuerypageSchema() querypage.Schema[ClusterEventEntry] {
 
 // ClusterEventEntry mirrors the fields consumed by the frontend grid.
 type ClusterEventEntry struct {
-	Ref              resourcemodel.ResourceRef   `json:"ref"`
-	ResourceVersion  string                      `json:"resourceVersion"`
-	ObjectNamespace  string                      `json:"objectNamespace"`
-	ObjectUID        string                      `json:"objectUid"`
-	ObjectAPIVersion string                      `json:"objectApiVersion"`
-	InvolvedObject   *resourcemodel.ResourceLink `json:"involvedObject,omitempty"`
-	Type             string                      `json:"type"`
-	Source           string                      `json:"source"`
-	Reason           string                      `json:"reason"`
-	Object           string                      `json:"object"`
-	Message          string                      `json:"message"`
-	Age              string                      `json:"age"`
-	AgeTimestamp     int64                       `json:"ageTimestamp"`
+	Ref              resourcemodel.ResourceRef            `json:"ref"`
+	Metadata         *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	ResourceVersion  string                               `json:"resourceVersion"`
+	ObjectNamespace  string                               `json:"objectNamespace"`
+	ObjectUID        string                               `json:"objectUid"`
+	ObjectAPIVersion string                               `json:"objectApiVersion"`
+	InvolvedObject   *resourcemodel.ResourceLink          `json:"involvedObject,omitempty"`
+	Type             string                               `json:"type"`
+	Source           string                               `json:"source"`
+	Reason           string                               `json:"reason"`
+	Object           string                               `json:"object"`
+	Message          string                               `json:"message"`
+	Age              string                               `json:"age"`
+	AgeTimestamp     int64                                `json:"ageTimestamp"`
 }
 
 // RegisterClusterEventsDomain registers the cluster events domain. It serves from a
