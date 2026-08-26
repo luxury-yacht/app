@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildCustomMetadataGridColumns,
+  collectAvailableCustomMetadataKeys,
   createCustomMetadataColumnDefinition,
 } from './customMetadataColumns';
 
@@ -59,5 +60,28 @@ describe('custom metadata columns', () => {
     expect(columns.every((column) => column.sortable === false && column.autoWidth === true)).toBe(
       true
     );
+  });
+
+  it('collects grouped metadata keys with distinct sample values from nested and legacy rows', () => {
+    expect(
+      collectAvailableCustomMetadataKeys([
+        {
+          metadata: {
+            labels: { 'example.com/team': 'platform', app: 'api' },
+            annotations: { 'example.com/revision': '7' },
+          },
+        },
+        {
+          labels: { app: 'worker', tier: 'backend' },
+          annotations: { 'example.com/checksum': 'abc' },
+        },
+      ])
+    ).toEqual([
+      { source: 'label', metadataKey: 'app', sampleValues: ['api', 'worker'] },
+      { source: 'label', metadataKey: 'example.com/team', sampleValues: ['platform'] },
+      { source: 'label', metadataKey: 'tier', sampleValues: ['backend'] },
+      { source: 'annotation', metadataKey: 'example.com/checksum', sampleValues: ['abc'] },
+      { source: 'annotation', metadataKey: 'example.com/revision', sampleValues: ['7'] },
+    ]);
   });
 });

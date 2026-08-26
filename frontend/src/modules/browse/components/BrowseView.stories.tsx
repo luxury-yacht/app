@@ -19,7 +19,10 @@ import {
   createResourceNameColumn,
   withAutoWidthColumns,
 } from '@shared/components/tables/columnFactories';
-import type { CustomMetadataColumnDefinition } from '@shared/components/tables/customMetadataColumns';
+import {
+  type CustomMetadataColumnDefinition,
+  createCustomMetadataColumnDefinition,
+} from '@shared/components/tables/customMetadataColumns';
 import GridTable, {
   type ColumnWidthState,
   type GridColumnDefinition,
@@ -55,14 +58,20 @@ const ROWS: BrowseStoryRow[] = [
     name: 'nginx-deployment-7fb96c846b',
     ns: 'default',
     age: '3d',
-    metadata: { labels: { 'app.kubernetes.io/managed-by': 'helm' } },
+    metadata: {
+      labels: { 'app.kubernetes.io/managed-by': 'helm' },
+      annotations: { 'example.com/revision': '7' },
+    },
   },
   {
     kind: 'Deployment',
     name: 'nginx-deployment',
     ns: 'default',
     age: '3d',
-    metadata: { labels: { 'app.kubernetes.io/managed-by': 'helm' } },
+    metadata: {
+      labels: { 'app.kubernetes.io/managed-by': 'helm' },
+      annotations: { 'example.com/revision': '8' },
+    },
   },
   { kind: 'StatefulSet', name: 'redis-master-0', ns: 'default', age: '5d' },
   { kind: 'ReplicaSet', name: 'coredns-5dd5756b68', ns: 'kube-system', age: '30d' },
@@ -76,6 +85,8 @@ const ROWS: BrowseStoryRow[] = [
   { kind: 'Deployment', name: 'ingress-nginx-controller', ns: 'ingress-nginx', age: '7d' },
 ];
 
+const ROWS_WITHOUT_METADATA = ROWS.map((row) => ({ ...row, metadata: undefined }));
+
 const COLUMNS: GridColumnDefinition<BrowseStoryRow>[] = [
   {
     ...createKindColumn<BrowseStoryRow>({ getKind: (row) => row.kind }),
@@ -87,6 +98,14 @@ const COLUMNS: GridColumnDefinition<BrowseStoryRow>[] = [
   },
   { key: 'namespace', header: 'Namespace', render: (row) => row.ns, sortable: true, width: 220 },
   { ...createAgeColumn<BrowseStoryRow>(), width: 120 },
+];
+
+const createInitialCustomColumns = (): CustomMetadataColumnDefinition[] => [
+  createCustomMetadataColumnDefinition({
+    source: 'annotation',
+    metadataKey: 'example.com/revision',
+    header: 'Revision',
+  }),
 ];
 
 const LARGE_AUTO_WIDTH_ROWS: BrowseStoryRow[] = Array.from({ length: 609 }, (_value, index) => ({
@@ -122,8 +141,20 @@ const persistedColumnWidth = (width: number): ColumnWidthState => ({
   updatedAt: 0,
 });
 
-function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
-  const [customColumns, setCustomColumns] = useState<CustomMetadataColumnDefinition[]>([]);
+interface MockBrowseViewProps {
+  isFavorited?: boolean;
+  rows?: BrowseStoryRow[];
+  initialCustomColumnDefinitions?: CustomMetadataColumnDefinition[];
+}
+
+function MockBrowseView({
+  isFavorited = false,
+  rows = ROWS,
+  initialCustomColumnDefinitions = createInitialCustomColumns(),
+}: MockBrowseViewProps) {
+  const [customColumns, setCustomColumns] = useState<CustomMetadataColumnDefinition[]>(
+    initialCustomColumnDefinitions
+  );
   const favoriteAction: IconBarItem = {
     type: 'toggle',
     id: 'favorite',
@@ -134,7 +165,7 @@ function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
   };
   return (
     <GridTable
-      data={ROWS}
+      data={rows}
       columns={COLUMNS}
       customMetadataColumns={{ definitions: customColumns, onChange: setCustomColumns }}
       keyExtractor={(row) => `story|${row.kind}:${row.ns}:${row.name}`}
@@ -224,6 +255,13 @@ export const Default: Story = {
 /** Browse view — favorited (filled heart, active state). */
 export const Favorited: Story = {
   render: () => <MockBrowseView isFavorited />,
+};
+
+/** Custom-column editor when the loaded rows expose no labels or annotations. */
+export const NoMetadataKeys: Story = {
+  render: () => (
+    <MockBrowseView rows={ROWS_WITHOUT_METADATA} initialCustomColumnDefinitions={[]} />
+  ),
 };
 
 /** Cached widths are remeasured after each backend-style page transition. */

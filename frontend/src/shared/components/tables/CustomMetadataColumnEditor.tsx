@@ -1,8 +1,10 @@
+import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { DeleteIcon, MetadataIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import {
+  type AvailableCustomMetadataKey,
   type CustomMetadataColumnDefinition,
   type CustomMetadataColumnSource,
   createCustomMetadataColumnDefinition,
@@ -18,6 +20,7 @@ export type CustomMetadataColumnEditorState =
 interface CustomMetadataColumnEditorProps {
   state: CustomMetadataColumnEditorState | null;
   definitions: CustomMetadataColumnDefinition[];
+  availableKeys: AvailableCustomMetadataKey[];
   onChange: (definitions: CustomMetadataColumnDefinition[]) => void;
   onClose: () => void;
 }
@@ -25,12 +28,13 @@ interface CustomMetadataColumnEditorProps {
 export default function CustomMetadataColumnEditor({
   state,
   definitions,
+  availableKeys,
   onChange,
   onClose,
 }: Readonly<CustomMetadataColumnEditorProps>) {
   const modalRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
-  const sourceName = useId();
+  const metadataKeyLabelId = useId();
   const [source, setSource] = useState<CustomMetadataColumnSource>('label');
   const [metadataKey, setMetadataKey] = useState('');
   const [header, setHeader] = useState('');
@@ -80,6 +84,53 @@ export default function CustomMetadataColumnEditor({
     candidate !== null &&
     definitions.some((definition) => definition.key === candidate.key);
   const canSave = candidate !== null && normalizedHeader.length > 0 && !duplicate;
+  const editorKeys =
+    state.mode === 'edit' &&
+    !availableKeys.some(
+      (key) =>
+        key.source === state.definition.source && key.metadataKey === state.definition.metadataKey
+    )
+      ? [
+          ...availableKeys,
+          {
+            source: state.definition.source,
+            metadataKey: state.definition.metadataKey,
+            sampleValues: [],
+          },
+        ]
+      : availableKeys;
+  const metadataKeyOptions: DropdownOption<AvailableCustomMetadataKey>[] = (
+    ['label', 'annotation'] as const
+  ).flatMap((optionSource) => {
+    const sourceKeys = editorKeys.filter((key) => key.source === optionSource);
+    if (sourceKeys.length === 0) {
+      return [];
+    }
+    return [
+      {
+        value: `__${optionSource}_header__`,
+        label: optionSource === 'label' ? 'Labels' : 'Annotations',
+        group: 'header',
+      },
+      ...sourceKeys.map((key) => ({
+        value: `metadata:${key.source}:${key.metadataKey}`,
+        label: key.metadataKey,
+        metadata: key,
+        disabled:
+          state.mode === 'create' &&
+          definitions.some(
+            (definition) =>
+              definition.source === key.source && definition.metadataKey === key.metadataKey
+          ),
+      })),
+    ];
+  });
+  const selectedOptionValue = normalizedKey ? `metadata:${source}:${normalizedKey}` : '';
+  const selectedMetadata = editorKeys.find(
+    (key) => key.source === source && key.metadataKey === normalizedKey
+  );
+  const metadataKeyPlaceholder =
+    availableKeys.length === 0 ? 'No metadata keys available' : 'Select a key';
 
   return (
     <ModalSurface
@@ -117,52 +168,67 @@ export default function CustomMetadataColumnEditor({
           <div className="custom-metadata-column-editor__intro">
             Values come from the exact metadata key. Objects without it display <code>-</code>.
           </div>
-          <fieldset
-            className="custom-metadata-column-editor__source"
-            disabled={state.mode === 'edit'}
-          >
-            <legend>Source</legend>
-            <label className="modal-radio-label">
-              <input
-                type="radio"
-                name={sourceName}
-                value="label"
-                checked={source === 'label'}
-                onChange={() => setSource('label')}
-              />
-              Label
-            </label>
-            <label className="modal-radio-label">
-              <input
-                type="radio"
-                name={sourceName}
-                value="annotation"
-                checked={source === 'annotation'}
-                onChange={() => setSource('annotation')}
-              />
-              Annotation
-            </label>
-          </fieldset>
-          <label className="custom-metadata-column-editor__field">
-            <span>Metadata key</span>
-            <input
-              className={duplicate ? 'modal-input modal-input-error' : 'modal-input'}
-              value={metadataKey}
-              placeholder={source === 'label' ? 'app.kubernetes.io/owner' : 'example.com/owner'}
-              disabled={state.mode === 'edit'}
-              data-modal-initial-focus={state.mode === 'create' ? true : undefined}
-              onChange={(event) => {
-                const nextKey = event.target.value;
-                setMetadataKey(nextKey);
+          <div className="custom-metadata-column-editor__field">
+            <span id={metadataKeyLabelId}>Metadata key</span>
+            <Dropdown
+              options={metadataKeyOptions}
+              value={selectedOptionValue}
+              onChange={(value) => {
+                const nextValue = Array.isArray(value) ? (value[0] ?? '') : value;
+                const nextMetadata = metadataKeyOptions.find(
+                  (option) => option.value === nextValue
+                )?.metadata;
+                if (!nextMetadata) {
+                  return;
+                }
+                setSource(nextMetadata.source);
+                setMetadataKey(nextMetadata.metadataKey);
                 if (!headerEdited) {
-                  setHeader(defaultCustomMetadataColumnHeader(nextKey));
+                  setHeader(defaultCustomMetadataColumnHeader(nextMetadata.metadataKey));
                 }
               }}
+              displayValue={(value) => {
+                const selected = metadataKeyOptions.find(
+                  (option) => option.value === value
+                )?.metadata;
+                return selected
+                  ? `${selected.source === 'label' ? 'Label' : 'Annotation'} · ${selected.metadataKey}`
+                  : value || metadataKeyPlaceholder;
+              }}
+              placeholder={metadataKeyPlaceholder}
+              ariaLabel="Metadata key"
+              ariaLabelledBy={metadataKeyLabelId}
+              searchable
+              disabled={state.mode === 'edit' || availableKeys.length === 0}
+              error={duplicate}
+              className="custom-metadata-column-editor__key-dropdown"
+              dropdownClassName="custom-metadata-column-editor__key-menu"
             />
+            {state.mode === 'create' && availableKeys.length === 0 && (
+              <span className="modal-field-message">
+                No label or annotation keys are available in the current rows.
+              </span>
+            )}
             {!!duplicate && (
               <span className="modal-field-message modal-field-error">Already added</span>
             )}
-          </label>
+          </div>
+          {!!normalizedKey && (
+            <div className="custom-metadata-column-editor__samples">
+              <span>Sample values</span>
+              {selectedMetadata?.sampleValues.length ? (
+                <div className="custom-metadata-column-editor__sample-list">
+                  {selectedMetadata.sampleValues.map((value) => (
+                    <code key={value}>{value || '(empty)'}</code>
+                  ))}
+                </div>
+              ) : (
+                <div className="custom-metadata-column-editor__no-samples">
+                  No sample values in the current rows.
+                </div>
+              )}
+            </div>
+          )}
           <label className="custom-metadata-column-editor__field">
             <span>Column heading</span>
             <input
@@ -204,7 +270,7 @@ export default function CustomMetadataColumnEditor({
             Cancel
           </button>
           <button type="submit" className="button save" disabled={!canSave}>
-            {state.mode === 'edit' ? 'Save changes' : 'Add column'}
+            {state.mode === 'edit' ? 'Save changes' : 'Add'}
           </button>
         </div>
       </form>

@@ -39,6 +39,7 @@ type ColumnsDropdownConfig = {
   customMetadataColumnKeys?: Set<string>;
   onAddCustomMetadataColumn?: () => void;
   onEditCustomMetadataColumn?: (key: string) => void;
+  onRemoveCustomMetadataColumn?: (key: string) => void;
 };
 
 type SearchShortcutConfig = {
@@ -384,6 +385,7 @@ export function useGridTableFiltersPresentation<T>({
       customMetadataColumnKeys: columnsDropdown?.customMetadataColumnKeys,
       onAddCustomMetadataColumn: columnsDropdown?.onAddCustomMetadataColumn,
       onEditCustomMetadataColumn: columnsDropdown?.onEditCustomMetadataColumn,
+      onRemoveCustomMetadataColumn: columnsDropdown?.onRemoveCustomMetadataColumn,
       showColumnsDropdown,
       searchShortcutActive,
       searchShortcutPriority,

@@ -495,7 +495,8 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   gap: 2px;
 }
 
-.gridtable-column-edit-action {
+.gridtable-column-edit-action,
+.gridtable-column-delete-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -512,6 +513,12 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 .gridtable-column-edit-action:hover,
 .gridtable-column-edit-action:focus-visible {
   color: var(--color-text);
+  background: var(--color-bg-hover, rgba(255, 255, 255, 0.08));
+}
+
+.gridtable-column-delete-action:hover,
+.gridtable-column-delete-action:focus-visible {
+  color: var(--status-error-text);
   background: var(--color-bg-hover, rgba(255, 255, 255, 0.08));
 }
 

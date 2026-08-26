@@ -23,6 +23,7 @@ type UseGridTableColumnsDropdownOptions<T> = {
   customMetadataColumnKeys?: Set<string>;
   onAddCustomMetadataColumn?: () => void;
   onEditCustomMetadataColumn?: (key: string) => void;
+  onRemoveCustomMetadataColumn?: (key: string) => void;
 };
 
 type ColumnsDropdownConfig = {
@@ -38,6 +39,7 @@ type ColumnsDropdownConfig = {
   customMetadataColumnKeys?: Set<string>;
   onAddCustomMetadataColumn?: () => void;
   onEditCustomMetadataColumn?: (key: string) => void;
+  onRemoveCustomMetadataColumn?: (key: string) => void;
 };
 
 // Builds the column visibility options and handler so GridTable does not have to
@@ -57,6 +59,7 @@ export function useGridTableColumnsDropdown<T>({
   customMetadataColumnKeys,
   onAddCustomMetadataColumn,
   onEditCustomMetadataColumn,
+  onRemoveCustomMetadataColumn,
 }: UseGridTableColumnsDropdownOptions<T>): ColumnsDropdownConfig | null {
   const hideableColumns = useMemo(
     () => columns.filter((column) => !lockedColumns.has(column.key)),
@@ -143,5 +146,6 @@ export function useGridTableColumnsDropdown<T>({
     customMetadataColumnKeys,
     onAddCustomMetadataColumn,
     onEditCustomMetadataColumn,
+    onRemoveCustomMetadataColumn,
   };
 }

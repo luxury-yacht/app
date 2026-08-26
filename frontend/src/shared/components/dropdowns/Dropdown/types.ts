@@ -8,6 +8,10 @@
 import type React from 'react';
 import type { ReactNode } from 'react';
 
+export interface DropdownBulkActionsContext {
+  closeDropdown: () => void;
+}
+
 export interface DropdownOption<TMetadata = unknown> {
   value: string;
   label: string;
@@ -52,7 +56,7 @@ export interface DropdownProps<TMetadata = unknown> {
    * not a meaningful action.
    */
   enableOnlyAction?: boolean;
-  additionalBulkActions?: ReactNode;
+  additionalBulkActions?: ReactNode | ((context: DropdownBulkActionsContext) => ReactNode);
 
   // Customization props
   renderOption?: (option: DropdownOption<TMetadata>, isSelected: boolean) => ReactNode;

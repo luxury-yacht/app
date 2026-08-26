@@ -51,7 +51,9 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     renderOption?: (option: MockDropdownOption, isSelected: boolean) => React.ReactNode;
     renderOptionActions?: (option: MockDropdownOption) => React.ReactNode;
     getOptionRowProps?: (option: MockDropdownOption) => Record<string, unknown>;
-    additionalBulkActions?: React.ReactNode;
+    additionalBulkActions?:
+      | React.ReactNode
+      | ((context: { closeDropdown: () => void }) => React.ReactNode);
   }) => (
     <div className={dropdownClassName}>
       <select
@@ -78,7 +80,9 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
           {renderOptionActions?.(option)}
         </div>
       ))}
-      {additionalBulkActions}
+      {(typeof additionalBulkActions === 'function'
+        ? additionalBulkActions({ closeDropdown: vi.fn() })
+        : additionalBulkActions) ?? null}
     </div>
   ),
 }));
@@ -990,9 +994,10 @@ describe('GridTableFiltersBar', () => {
     expect(reset.disabled).toBe(true);
   });
 
-  it('adds and edits custom metadata columns from the Columns menu', async () => {
+  it('adds, edits, and directly deletes custom metadata columns from the Columns menu', async () => {
     const onAddCustomMetadataColumn = vi.fn();
     const onEditCustomMetadataColumn = vi.fn();
+    const onRemoveCustomMetadataColumn = vi.fn();
     await renderFilters({
       showColumnsDropdown: true,
       columnOptions: [
@@ -1006,12 +1011,17 @@ describe('GridTableFiltersBar', () => {
       customMetadataColumnKeys: new Set(['metadata:label:example.com/owner']),
       onAddCustomMetadataColumn,
       onEditCustomMetadataColumn,
+      onRemoveCustomMetadataColumn,
       columnsDropdownId: 'columns',
       renderColumnsValue: () => 'Columns',
     });
 
+    const addCustomColumnButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Add custom column"]'
+    );
+    expect(addCustomColumnButton?.textContent).toBe('Add');
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('button[aria-label="Add custom column"]')?.click();
+      addCustomColumnButton?.click();
     });
     expect(onAddCustomMetadataColumn).toHaveBeenCalledTimes(1);
 
@@ -1020,6 +1030,12 @@ describe('GridTableFiltersBar', () => {
       container.querySelector<HTMLButtonElement>('button[aria-label="Edit Owner"]')?.click();
     });
     expect(onEditCustomMetadataColumn).toHaveBeenCalledWith('metadata:label:example.com/owner');
+
+    expect(container.querySelector('button[aria-label="Delete Name"]')).toBeNull();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="Delete Owner"]')?.click();
+    });
+    expect(onRemoveCustomMetadataColumn).toHaveBeenCalledWith('metadata:label:example.com/owner');
   });
 
   it('presents required columns as required rather than disabled', async () => {

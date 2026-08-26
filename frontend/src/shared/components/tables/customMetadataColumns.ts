@@ -10,6 +10,12 @@ export interface CustomMetadataColumnDefinition {
   header: string;
 }
 
+export interface AvailableCustomMetadataKey {
+  source: CustomMetadataColumnSource;
+  metadataKey: string;
+  sampleValues: string[];
+}
+
 export interface CustomMetadataColumnRow {
   metadata?: {
     labels?: Record<string, string>;
@@ -74,6 +80,40 @@ export const normalizeCustomMetadataColumnDefinitions = (
     definitions.push(definition);
   }
   return definitions;
+};
+
+const CUSTOM_METADATA_SAMPLE_VALUE_LIMIT = 3;
+
+export const collectAvailableCustomMetadataKeys = <T>(rows: T[]): AvailableCustomMetadataKey[] => {
+  const valuesBySource: Record<CustomMetadataColumnSource, Map<string, string[]>> = {
+    label: new Map(),
+    annotation: new Map(),
+  };
+
+  const collectMap = (
+    source: CustomMetadataColumnSource,
+    values: Record<string, string> | undefined
+  ) => {
+    for (const [key, value] of Object.entries(values ?? {})) {
+      const samples = valuesBySource[source].get(key) ?? [];
+      if (samples.length < CUSTOM_METADATA_SAMPLE_VALUE_LIMIT && !samples.includes(value)) {
+        samples.push(value);
+      }
+      valuesBySource[source].set(key, samples);
+    }
+  };
+
+  for (const row of rows) {
+    const metadataRow = row as CustomMetadataColumnRow;
+    collectMap('label', metadataRow.metadata?.labels ?? metadataRow.labels);
+    collectMap('annotation', metadataRow.metadata?.annotations ?? metadataRow.annotations);
+  }
+
+  return (['label', 'annotation'] as const).flatMap((source) =>
+    [...valuesBySource[source].entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([metadataKey, sampleValues]) => ({ source, metadataKey, sampleValues }))
+  );
 };
 
 export const buildCustomMetadataGridColumns = <T>(

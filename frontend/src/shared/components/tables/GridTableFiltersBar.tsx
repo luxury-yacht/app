@@ -66,6 +66,7 @@ interface GridTableFiltersBarProps {
   customMetadataColumnKeys?: Set<string>;
   onAddCustomMetadataColumn?: () => void;
   onEditCustomMetadataColumn?: (key: string) => void;
+  onRemoveCustomMetadataColumn?: (key: string) => void;
   showKindDropdown?: boolean;
   showNamespaceDropdown?: boolean;
   showClusterDropdown?: boolean;
@@ -298,7 +299,7 @@ function renderColumnsDropdown({
         renderOption={renderColumnOption}
         renderOptionActions={renderColumnOrderActions}
         getOptionRowProps={getColumnRowProps}
-        additionalBulkActions={
+        additionalBulkActions={({ closeDropdown }) => (
           <>
             {!!onAddCustomMetadataColumn && (
               <button
@@ -308,6 +309,7 @@ function renderColumnsDropdown({
                 aria-label="Add custom column"
                 onClick={(event) => {
                   event.stopPropagation();
+                  closeDropdown();
                   onAddCustomMetadataColumn();
                 }}
               >
@@ -315,7 +317,7 @@ function renderColumnsDropdown({
                   width={DROPDOWN_BULK_ACTION_ICON_SIZE}
                   height={DROPDOWN_BULK_ACTION_ICON_SIZE}
                 />
-                <span className="dropdown-bulk-action-label">Add custom</span>
+                <span className="dropdown-bulk-action-label">Add</span>
               </button>
             )}
             {!!onResetColumns && (
@@ -338,7 +340,7 @@ function renderColumnsDropdown({
               </button>
             )}
           </>
-        }
+        )}
         renderValue={renderColumnsValue}
       />
     </div>
@@ -377,6 +379,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   customMetadataColumnKeys,
   onAddCustomMetadataColumn,
   onEditCustomMetadataColumn,
+  onRemoveCustomMetadataColumn,
   showKindDropdown = false,
   showNamespaceDropdown = false,
   showClusterDropdown = false,
@@ -403,6 +406,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       onReorderColumn,
       customMetadataColumnKeys,
       onEditCustomMetadataColumn,
+      onRemoveCustomMetadataColumn,
     });
   const filterControls: ResolvedMultiselectFilterControl[] = [
     {

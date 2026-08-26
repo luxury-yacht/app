@@ -12,7 +12,10 @@
 import CustomMetadataColumnEditor, {
   type CustomMetadataColumnEditorState,
 } from '@shared/components/tables/CustomMetadataColumnEditor';
-import { buildCustomMetadataGridColumns } from '@shared/components/tables/customMetadataColumns';
+import {
+  buildCustomMetadataGridColumns,
+  collectAvailableCustomMetadataKeys,
+} from '@shared/components/tables/customMetadataColumns';
 import type { GridTableProps } from '@shared/components/tables/GridTable.types';
 import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableKeys';
@@ -283,6 +286,10 @@ export function useGridTableController<T>({
     () => new Set(customMetadataColumns?.definitions.map((definition) => definition.key) ?? []),
     [customMetadataColumns?.definitions]
   );
+  const availableCustomMetadataKeys = useMemo(
+    () => collectAvailableCustomMetadataKeys(sourceData),
+    [sourceData]
+  );
   const handleAddCustomMetadataColumn = useCallback(() => {
     setCustomColumnEditorState({ mode: 'create' });
   }, []);
@@ -294,6 +301,14 @@ export function useGridTableController<T>({
       }
     },
     [customMetadataColumns?.definitions]
+  );
+  const handleRemoveCustomMetadataColumn = useCallback(
+    (key: string) => {
+      customMetadataColumns?.onChange(
+        customMetadataColumns.definitions.filter((definition) => definition.key !== key)
+      );
+    },
+    [customMetadataColumns]
   );
   const handleCloseCustomMetadataColumnEditor = useCallback(() => {
     setCustomColumnEditorState(null);
@@ -461,6 +476,9 @@ export function useGridTableController<T>({
     customMetadataColumnKeys,
     onAddCustomMetadataColumn: customMetadataColumns ? handleAddCustomMetadataColumn : undefined,
     onEditCustomMetadataColumn: customMetadataColumns ? handleEditCustomMetadataColumn : undefined,
+    onRemoveCustomMetadataColumn: customMetadataColumns
+      ? handleRemoveCustomMetadataColumn
+      : undefined,
   });
 
   const filtersPresentation = useGridTableFiltersPresentation<T>({
@@ -482,6 +500,7 @@ export function useGridTableController<T>({
         <CustomMetadataColumnEditor
           state={customColumnEditorState}
           definitions={customMetadataColumns.definitions}
+          availableKeys={availableCustomMetadataKeys}
           onChange={customMetadataColumns.onChange}
           onClose={handleCloseCustomMetadataColumnEditor}
         />

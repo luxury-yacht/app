@@ -1,7 +1,8 @@
 ### Added
 
 - Resource table Columns menus can create, rename, hide, reorder, and remove
-  custom columns backed by an exact Kubernetes label or annotation key. Missing
+  custom columns from a grouped picker of available Kubernetes label and
+  annotation keys, with sample-value previews and direct deletion. Missing
   values use the shared `-` placeholder, and definitions retain the table's
   existing cluster/view/namespace persistence scope.
 

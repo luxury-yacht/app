@@ -1361,6 +1361,11 @@ const Dropdown = <TMetadata,>({
     setHighlightedIndex(-1);
   };
 
+  const resolvedAdditionalBulkActions =
+    typeof additionalBulkActions === 'function'
+      ? additionalBulkActions({ closeDropdown })
+      : additionalBulkActions;
+
   const showBulkActionLabels = !searchable;
   const triggerContent = (
     <>
@@ -1439,7 +1444,7 @@ const Dropdown = <TMetadata,>({
         onSearchFocusChange={setIsSearchFocused}
         onSelectAll={handleSelectAll}
         onSelectNone={handleSelectNone}
-        additionalBulkActions={additionalBulkActions}
+        additionalBulkActions={resolvedAdditionalBulkActions}
       />
       <DropdownHiddenInput name={name} value={value} />
       <div ref={announcementRef} aria-live="polite" aria-atomic="true" className="sr-only" />

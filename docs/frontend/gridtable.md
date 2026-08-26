@@ -89,10 +89,14 @@ workflow and that exception is documented.
   column order. Reordering and visibility are independent, and the shared
   All/None actions affect hideable columns only.
 - Resource tables may add custom metadata columns through the Columns menu.
-  `Add custom` opens the shared editor for an exact label or annotation key and
-  an editable heading. Custom rows expose Edit beside the reorder grip; editing
-  can rename or explicitly remove the definition. Hiding and removing are
-  separate operations.
+  `Add` closes the Columns menu and opens the shared editor with the distinct
+  metadata keys available in the table's loaded rows. One searchable picker
+  presents Labels and Annotations as separate groups; the user selects an exact
+  key instead of typing one. Selecting a key shows up to three distinct values
+  sampled from the loaded rows. If no metadata keys are available, the editor
+  explains that state and disables creation. Custom rows expose Edit and a
+  direct Delete action beside the reorder grip; editing can rename or explicitly
+  remove the definition. Hiding and removing are separate operations.
 - A custom metadata column's durable key is
   `metadata:<label|annotation>:<exact-metadata-key>`. Its heading is presentation
   only, so renaming must preserve width, order, visibility, and favorite

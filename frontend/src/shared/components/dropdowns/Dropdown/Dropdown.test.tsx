@@ -931,6 +931,28 @@ describe('Dropdown', () => {
     expect(divider?.classList.contains('icon-bar-separator')).toBe(false);
   });
 
+  it('lets a rendered additional bulk action close the dropdown', async () => {
+    await mount(
+      <Dropdown
+        options={OPTIONS}
+        value={[]}
+        onChange={vi.fn()}
+        multiple
+        showBulkActions
+        additionalBulkActions={({ closeDropdown }) => (
+          <button type="button" aria-label="Close from action" onClick={closeDropdown}>
+            Close
+          </button>
+        )}
+      />
+    );
+
+    click(container.querySelector('.dropdown-trigger'));
+    click(document.body.querySelector('button[aria-label="Close from action"]'));
+
+    expect(document.body.querySelector('.dropdown-menu')).toBeNull();
+  });
+
   it('omits the bulk-action separator when there is nothing to separate', async () => {
     await mount(
       <Dropdown options={OPTIONS} value={[]} onChange={vi.fn()} multiple showBulkActions />

@@ -3,7 +3,7 @@ import {
   DropdownFilterOption,
   dropdownFilterOptionState,
 } from '@shared/components/dropdowns/Dropdown/DropdownFilterOption';
-import { EditIcon } from '@shared/components/icons/SharedIcons';
+import { CloseIcon, EditIcon } from '@shared/components/icons/SharedIcons';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 
@@ -18,6 +18,7 @@ interface GridTableColumnOptionRowsOptions {
   onReorderColumn?: (key: string, targetIndex: number) => void;
   customMetadataColumnKeys?: Set<string>;
   onEditCustomMetadataColumn?: (key: string) => void;
+  onRemoveCustomMetadataColumn?: (key: string) => void;
 }
 
 interface GridTableColumnOptionRows {
@@ -33,6 +34,7 @@ export function useGridTableColumnOptionRows({
   onReorderColumn,
   customMetadataColumnKeys,
   onEditCustomMetadataColumn,
+  onRemoveCustomMetadataColumn,
 }: GridTableColumnOptionRowsOptions): GridTableColumnOptionRows {
   const [draggingColumnKey, setDraggingColumnKey] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<ColumnDropTarget | null>(null);
@@ -140,6 +142,21 @@ export function useGridTableColumnOptionRows({
             }}
           >
             <EditIcon width={13} height={13} />
+          </button>
+        )}
+        {customMetadataColumnKeys?.has(option.value) && onRemoveCustomMetadataColumn && (
+          <button
+            type="button"
+            className="gridtable-column-delete-action"
+            aria-label={`Delete ${option.label}`}
+            title={`Delete ${option.label}`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onRemoveCustomMetadataColumn(option.value);
+            }}
+          >
+            <CloseIcon width={11} height={11} />
           </button>
         )}
         <button

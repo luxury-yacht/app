@@ -1362,7 +1362,10 @@ it('appends configured metadata columns to the rendered and exportable column se
 it('creates a custom metadata column from the Columns menu', async () => {
   const onChange = vi.fn();
   const { container, cleanup } = renderGridTable({
-    data: createRows(2),
+    data: [
+      { id: 'row-1', label: 'Row 1', metadata: { labels: { 'example.com/owner': 'platform' } } },
+      { id: 'row-2', label: 'Row 2' },
+    ],
     filters: { enabled: true },
     enableColumnVisibilityMenu: true,
     virtualization: { enabled: false },
@@ -1391,24 +1394,25 @@ it('creates a custom metadata column from the Columns menu', async () => {
   expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain(
     'Add custom column'
   );
-  const metadataKeyInput = requireValue(
-    document.body.querySelector<HTMLInputElement>('.custom-metadata-column-editor .modal-input'),
-    'expected metadata key input'
-  );
-  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  expect(document.body.querySelector('dialog[aria-label="Columns"]')).toBeNull();
   await act(async () => {
-    requireValue(valueSetter, 'expected native input value setter').call(
-      metadataKeyInput,
-      'example.com/owner'
-    );
-    metadataKeyInput.dispatchEvent(new Event('input', { bubbles: true }));
+    requireValue(
+      document.body.querySelector<HTMLButtonElement>('button[aria-label="Metadata key"]'),
+      'expected metadata key selector'
+    ).click();
+  });
+  await act(async () => {
+    const metadataKeyOption = Array.from(
+      document.body.querySelectorAll<HTMLElement>('.dropdown-option')
+    ).find((option) => option.textContent?.includes('example.com/owner'));
+    requireValue(metadataKeyOption, 'expected metadata key option').click();
   });
   await act(async () => {
     requireValue(
       document.body.querySelector<HTMLButtonElement>(
         '.custom-metadata-column-editor button[type="submit"]'
       ),
-      'expected Add column submit action'
+      'expected Add submit action'
     ).click();
   });
 
@@ -1420,6 +1424,43 @@ it('creates a custom metadata column from the Columns menu', async () => {
       header: 'Owner',
     },
   ]);
+});
+
+it('deletes a custom metadata column directly from the Columns menu', async () => {
+  const owner = createCustomMetadataColumnDefinition({
+    source: 'label',
+    metadataKey: 'example.com/owner',
+    header: 'Owner',
+  });
+  const onChange = vi.fn();
+  const { container, cleanup } = renderGridTable({
+    data: [
+      { id: 'row-1', label: 'Row 1', metadata: { labels: { 'example.com/owner': 'platform' } } },
+    ],
+    filters: { enabled: true },
+    enableColumnVisibilityMenu: true,
+    virtualization: { enabled: false },
+    customMetadataColumns: { definitions: [owner], onChange },
+  });
+  cleanupRoot = cleanup;
+  await flushAsync();
+
+  await act(async () => {
+    requireValue(
+      container.querySelector<HTMLButtonElement>(
+        '[data-gridtable-filter-role="columns"] .dropdown-trigger'
+      ),
+      'expected Columns trigger'
+    ).click();
+  });
+  await act(async () => {
+    requireValue(
+      document.body.querySelector<HTMLButtonElement>('button[aria-label="Delete Owner"]'),
+      'expected direct delete action'
+    ).click();
+  });
+
+  expect(onChange).toHaveBeenCalledWith([]);
 });
 
 it('renders the full dataset when virtualization is disabled', () => {
