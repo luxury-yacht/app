@@ -104,4 +104,40 @@ describe('useColumnOrderController', () => {
     await act(async () => root.unmount());
     container.remove();
   });
+
+  it('maps a visible-header insertion around hidden columns into the durable full order', async () => {
+    type Handle = {
+      reorderVisible: (key: string, visibleKeys: string[], insertIndex: number) => void;
+      keys: () => string[];
+    };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = ReactDOM.createRoot(container);
+    const ref = React.createRef<Handle>();
+    const onChange = vi.fn();
+
+    const Harness = ({ ref: handleRef }: { ref?: React.Ref<Handle> }) => {
+      const controller = useColumnOrderController({ columns, onColumnOrderChange: onChange });
+      useImperativeHandle(handleRef, () => ({
+        reorderVisible: controller.reorderVisibleColumn,
+        keys: () => controller.orderedColumns.map((column) => column.key),
+      }));
+      return null;
+    };
+
+    await act(async () => root.render(<Harness ref={ref} />));
+    // Name is hidden from this rendered header. Dropping Kind after Age must
+    // still preserve Name in the durable order and place Kind directly after Age.
+    await act(async () => ref.current?.reorderVisible('kind', ['kind', 'age'], 2));
+
+    expect(ref.current?.keys()).toEqual(['name', 'age', 'kind']);
+    expect(onChange).toHaveBeenCalledWith(['name', 'age', 'kind']);
+
+    await act(async () => ref.current?.reorderVisible('kind', ['age', 'kind'], 0));
+    expect(ref.current?.keys()).toEqual(['name', 'kind', 'age']);
+    expect(onChange).toHaveBeenLastCalledWith(['name', 'kind', 'age']);
+
+    await act(async () => root.unmount());
+    container.remove();
+  });
 });

@@ -18,6 +18,7 @@ const handleHeaderContextMenu = vi.fn();
 const handleResizeStart = vi.fn();
 const handleResizeKeyDown = vi.fn();
 const autoSizeColumn = vi.fn();
+const reorderVisibleColumn = vi.fn();
 
 type Row = { name: string; age: string; role: string; kind?: string };
 
@@ -90,6 +91,7 @@ const HeaderHarness: React.FC<{
     handleResizeStart,
     handleResizeKeyDown,
     autoSizeColumn,
+    reorderVisibleColumn,
   });
   return <>{node}</>;
 };
@@ -107,6 +109,7 @@ describe('useGridTableHeaderRow', () => {
     handleResizeStart.mockClear();
     handleResizeKeyDown.mockClear();
     autoSizeColumn.mockClear();
+    reorderVisibleColumn.mockClear();
     renderSortIndicator.mockClear();
   });
 
@@ -163,6 +166,22 @@ describe('useGridTableHeaderRow', () => {
       await Promise.resolve();
     });
     expect(autoSizeColumn).toHaveBeenCalledWith('name');
+  });
+
+  it('places a non-interactive reorder grip before every column label', async () => {
+    await act(async () => {
+      root.render(<HeaderHarness enableResizing />);
+    });
+
+    const headerContents = Array.from(container.querySelectorAll('.header-content'));
+    expect(headerContents).toHaveLength(columns.length);
+
+    for (const headerContent of headerContents) {
+      const grip = headerContent.firstElementChild;
+      expect(grip?.classList.contains('gridtable-header-drag-handle')).toBe(true);
+      expect(grip?.getAttribute('aria-hidden')).toBe('true');
+      expect(grip?.textContent).toBe('⠿');
+    }
   });
 
   it('aligns headers independently and defaults omitted alignment to left', async () => {
@@ -224,6 +243,28 @@ describe('useGridTableHeaderRow', () => {
     );
   });
 
+  it('keeps resize handles resize-only when their header is draggable', async () => {
+    await act(async () => {
+      root.render(<HeaderHarness enableResizing />);
+    });
+
+    const resizeHandle = container.querySelector('.resize-handle') as HTMLElement;
+    const dataTransfer = {
+      effectAllowed: 'none',
+      setData: vi.fn(),
+    };
+    const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+
+    await act(async () => {
+      resizeHandle.dispatchEvent(dragStart);
+    });
+
+    expect(dragStart.defaultPrevented).toBe(true);
+    expect(dataTransfer.setData).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-dragging="true"]')).toBeNull();
+  });
+
   it('does not infer resize behavior from the Kind key', async () => {
     const kindColumns: GridColumnDefinition<Row>[] = [
       { key: 'kind', header: 'Kind', sortable: true, render: (row) => row.kind ?? null },
@@ -240,6 +281,7 @@ describe('useGridTableHeaderRow', () => {
         handleResizeStart,
         handleResizeKeyDown,
         autoSizeColumn,
+        reorderVisibleColumn,
       });
       return <>{node}</>;
     };

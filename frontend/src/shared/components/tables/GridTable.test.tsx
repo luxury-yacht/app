@@ -33,7 +33,7 @@ import { KeyboardProvider } from '@ui/shortcuts';
 // which require real shortcut registration. These should use Playwright/Cypress.
 //
 // import React, { act } from 'react';
-import { act } from 'react';
+import { act, useState } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
@@ -2557,6 +2557,102 @@ it('renders native table, row, header, and cell semantics', () => {
 
   const rowgroup = container.querySelector('table.gridtable--body > tbody');
   expect(rowgroup).not.toBeNull();
+});
+
+it('reorders visible columns by dragging a header across the same insertion boundary as tabs', async () => {
+  const reorderableColumns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label },
+    { key: 'name', header: 'Name', render: (row) => row.name ?? '' },
+    { key: 'id', header: 'ID', render: (row) => row.id },
+  ];
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = ReactDOM.createRoot(container);
+
+  function Harness() {
+    const [columnOrder, setColumnOrder] = useState(['label', 'name', 'id']);
+    return (
+      <ZoomProvider>
+        <KeyboardProvider>
+          <GridTable<SimpleRow>
+            data={[{ id: 'row-1', label: 'Example', name: 'demo' }]}
+            columns={reorderableColumns}
+            columnOrder={columnOrder}
+            onColumnOrderChange={setColumnOrder}
+            keyExtractor={(item) => `cluster|${item.id}`}
+            virtualization={{ enabled: false }}
+          />
+        </KeyboardProvider>
+      </ZoomProvider>
+    );
+  }
+
+  await act(async () => {
+    root.render(<Harness />);
+  });
+
+  const labelHeader = requireValue(
+    container.querySelector<HTMLElement>('th[data-column="label"]'),
+    'expected Label header'
+  );
+  const idHeader = requireValue(
+    container.querySelector<HTMLElement>('th[data-column="id"]'),
+    'expected ID header'
+  );
+  idHeader.getBoundingClientRect = () => ({ left: 200, right: 300, width: 100 }) as DOMRect;
+
+  const dataTransfer = {
+    effectAllowed: 'none',
+    dropEffect: 'none',
+    types: [] as string[],
+    setData: vi.fn((type: string) => {
+      dataTransfer.types = [type];
+    }),
+    getData: vi.fn(() => 'label'),
+  };
+  const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+  Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+
+  await act(async () => {
+    labelHeader.dispatchEvent(dragStart);
+  });
+
+  expect(labelHeader.draggable).toBe(true);
+  expect(labelHeader.dataset.dragging).toBe('true');
+  expect(dataTransfer.effectAllowed).toBe('move');
+  expect(dataTransfer.setData).toHaveBeenCalledWith(
+    'application/x-luxury-yacht-grid-column',
+    'label'
+  );
+
+  const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
+  Object.defineProperty(dragOver, 'dataTransfer', { value: dataTransfer });
+  Object.defineProperty(dragOver, 'clientX', { value: 275 });
+  await act(async () => {
+    idHeader.dispatchEvent(dragOver);
+  });
+
+  expect(dragOver.defaultPrevented).toBe(true);
+  expect(idHeader.dataset.dropPosition).toBe('after');
+
+  const drop = new Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+  Object.defineProperty(drop, 'clientX', { value: 275 });
+  await act(async () => {
+    idHeader.dispatchEvent(drop);
+  });
+
+  const headerOrder = Array.from(container.querySelectorAll('th[data-column]')).map(
+    (cell) => (cell as HTMLElement).dataset.column
+  );
+  const bodyOrder = Array.from(
+    container.querySelectorAll('tbody > .gridtable-row:first-child > td[data-column]')
+  ).map((cell) => (cell as HTMLElement).dataset.column);
+  expect(headerOrder).toEqual(['name', 'id', 'label']);
+  expect(bodyOrder).toEqual(['name', 'id', 'label']);
+
+  act(() => root.unmount());
+  container.remove();
 });
 
 it('sets aria-sort="ascending" on the actively sorted column header', () => {

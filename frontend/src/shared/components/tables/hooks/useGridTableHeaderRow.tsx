@@ -13,6 +13,7 @@ import {
   getColumnMinWidth,
 } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 import type { ColumnRenderModel } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
+import { useGridTableHeaderReorder } from '@shared/components/tables/hooks/useGridTableHeaderReorder';
 import type React from 'react';
 
 export interface UseGridTableHeaderRowParams<T> {
@@ -24,6 +25,7 @@ export interface UseGridTableHeaderRowParams<T> {
   handleResizeStart: (event: React.MouseEvent, leftKey: string, rightKey: string) => void;
   handleResizeKeyDown: (event: React.KeyboardEvent, columnKey: string) => void;
   autoSizeColumn: (columnKey: string) => void;
+  reorderVisibleColumn: (key: string, visibleKeys: string[], insertIndex: number) => void;
   sortConfig?: { key: string; direction: 'asc' | 'desc' | null } | null;
 }
 
@@ -36,8 +38,15 @@ export function useGridTableHeaderRow<T>({
   handleResizeStart,
   handleResizeKeyDown,
   autoSizeColumn,
+  reorderVisibleColumn,
   sortConfig,
 }: UseGridTableHeaderRowParams<T>): React.ReactNode {
+  const visibleColumnKeys = columnRenderModels.map((model) => model.key);
+  const getHeaderDragProps = useGridTableHeaderReorder({
+    visibleColumnKeys,
+    onReorderVisibleColumn: reorderVisibleColumn,
+  });
+
   return (
     <AriaGridRow className="gridtable-header">
       {columnRenderModels.map((model, index) => {
@@ -69,12 +78,16 @@ export function useGridTableHeaderRow<T>({
             data-column={column.key}
             data-align={column.alignHeader ?? 'left'}
             data-sortable={isSortable}
+            {...getHeaderDragProps(column.key, index)}
             onContextMenu={
               handleHeaderContextMenu ? (e) => handleHeaderContextMenu(e, column.key) : undefined
             }
             style={model.cellStyle}
           >
             <span className="header-content">
+              <span className="gridtable-header-drag-handle" aria-hidden="true">
+                ⠿
+              </span>
               {isSortable ? (
                 <button
                   type="button"
@@ -86,7 +99,7 @@ export function useGridTableHeaderRow<T>({
                   {renderSortIndicator(column.key)}
                 </button>
               ) : (
-                <span>{column.header}</span>
+                <span className="gridtable-header-label">{column.header}</span>
               )}
             </span>
             {!!showResizeHandle && (

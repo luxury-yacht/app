@@ -231,12 +231,27 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   min-width: 0;
   flex-shrink: 0;
   box-sizing: border-box;
+  cursor: grab;
+}
+
+.grid-cell-header[data-dragging="true"] {
+  cursor: grabbing;
+  opacity: 0.4;
+}
+
+.grid-cell-header[data-drop-position="before"] {
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.grid-cell-header[data-drop-position="after"] {
+  box-shadow: inset -3px 0 0 var(--color-accent);
 }
 
 .header-content {
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  gap: var(--grid-spacing-xs);
   flex: 1;
   line-height: inherit;
   overflow: hidden;
@@ -253,13 +268,38 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   text-align: right;
 }
 
-.header-content > span,
+.gridtable-header-label,
 .gridtable-sort-button {
   display: inline-block;
+  min-width: 0;
   line-height: inherit;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.gridtable-header-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 1em;
+  color: var(--grid-text-secondary);
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity var(--transition-fast);
+}
+
+.grid-cell-header:hover .gridtable-header-drag-handle,
+.grid-cell-header:focus-within .gridtable-header-drag-handle,
+.grid-cell-header[data-dragging="true"] .gridtable-header-drag-handle {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gridtable-header-drag-handle {
+    transition: none;
+  }
 }
 
 .gridtable-sort-button {

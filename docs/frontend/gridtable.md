@@ -88,6 +88,14 @@ workflow and that exception is documented.
   Arrow keys. The menu's top-to-bottom order maps to the table's left-to-right
   column order. Reordering and visibility are independent, and the shared
   All/None actions affect hideable columns only.
+- Visible column headers are also whole-cell drag targets. They use the shared
+  tab-reorder language: a reorder grip appears on hover immediately before the
+  column label, the dragged header dims, the cursor changes from grab to
+  grabbing, and a vertical accent marker follows the pointer across column
+  midpoints to show the insertion boundary. Dropping updates the same durable
+  column order as the Columns menu; hidden columns keep their place in that
+  full order. Resize handles remain resize-only and must not start a header
+  drag.
 - Resource tables may add custom metadata columns through the Columns menu.
   Every resource table must explicitly declare `supportsCustomMetadataColumns`.
   Set it to `true` only when the row producer carries Kubernetes labels or

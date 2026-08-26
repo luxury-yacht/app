@@ -15,6 +15,7 @@ export interface ColumnOrderController<T> {
   effectiveColumnOrder: string[];
   moveColumn: (key: string, offset: -1 | 1) => void;
   reorderColumn: (key: string, targetIndex: number) => void;
+  reorderVisibleColumn: (key: string, visibleKeys: string[], insertIndex: number) => void;
   canResetColumnOrder: boolean;
   resetColumnOrder: () => void;
 }
@@ -33,6 +34,16 @@ export function useColumnOrderController<T>({
   const effectiveColumnOrder = useMemo(
     () => reconcileColumnOrder(columns, columnOrder ?? localOrder),
     [columnOrder, columns, localOrder]
+  );
+
+  const applyColumnOrder = useCallback(
+    (next: string[]) => {
+      if (columnOrder === null || columnOrder === undefined) {
+        setLocalOrder(next);
+      }
+      onColumnOrderChange?.(next);
+    },
+    [columnOrder, onColumnOrderChange]
   );
 
   useEffect(() => {
@@ -54,12 +65,9 @@ export function useColumnOrderController<T>({
       }
       const next = [...effectiveColumnOrder];
       [next[currentIndex], next[nextIndex]] = [next[nextIndex], next[currentIndex]];
-      if (columnOrder === null || columnOrder === undefined) {
-        setLocalOrder(next);
-      }
-      onColumnOrderChange?.(next);
+      applyColumnOrder(next);
     },
-    [columnOrder, effectiveColumnOrder, onColumnOrderChange]
+    [applyColumnOrder, effectiveColumnOrder]
   );
 
   const reorderColumn = useCallback(
@@ -76,12 +84,46 @@ export function useColumnOrderController<T>({
       const next = [...effectiveColumnOrder];
       const [movedKey] = next.splice(currentIndex, 1);
       next.splice(targetIndex, 0, movedKey);
-      if (columnOrder === null || columnOrder === undefined) {
-        setLocalOrder(next);
-      }
-      onColumnOrderChange?.(next);
+      applyColumnOrder(next);
     },
-    [columnOrder, effectiveColumnOrder, onColumnOrderChange]
+    [applyColumnOrder, effectiveColumnOrder]
+  );
+
+  const reorderVisibleColumn = useCallback(
+    (key: string, visibleKeys: string[], insertIndex: number) => {
+      const sourceIndex = effectiveColumnOrder.indexOf(key);
+      if (
+        sourceIndex < 0 ||
+        visibleKeys.length === 0 ||
+        !visibleKeys.includes(key) ||
+        insertIndex < 0 ||
+        insertIndex > visibleKeys.length
+      ) {
+        return;
+      }
+
+      const boundaryKey =
+        insertIndex < visibleKeys.length
+          ? visibleKeys[insertIndex]
+          : visibleKeys[visibleKeys.length - 1];
+      const boundaryKeyIndex = effectiveColumnOrder.indexOf(boundaryKey);
+      if (boundaryKeyIndex < 0) {
+        return;
+      }
+      const fullInsertIndex =
+        insertIndex < visibleKeys.length ? boundaryKeyIndex : boundaryKeyIndex + 1;
+      const adjustedInsertIndex =
+        sourceIndex < fullInsertIndex ? fullInsertIndex - 1 : fullInsertIndex;
+      if (adjustedInsertIndex === sourceIndex) {
+        return;
+      }
+
+      const next = [...effectiveColumnOrder];
+      const [movedKey] = next.splice(sourceIndex, 1);
+      next.splice(adjustedInsertIndex, 0, movedKey);
+      applyColumnOrder(next);
+    },
+    [applyColumnOrder, effectiveColumnOrder]
   );
 
   const canResetColumnOrder = !areOrdersEqual(effectiveColumnOrder, declaredOrder);
@@ -90,11 +132,8 @@ export function useColumnOrderController<T>({
       return;
     }
     const next = [...declaredOrder];
-    if (columnOrder === null || columnOrder === undefined) {
-      setLocalOrder(next);
-    }
-    onColumnOrderChange?.(next);
-  }, [columnOrder, declaredOrder, effectiveColumnOrder, onColumnOrderChange]);
+    applyColumnOrder(next);
+  }, [applyColumnOrder, declaredOrder, effectiveColumnOrder]);
 
   const orderedColumns = useMemo(
     () => orderColumns(columns, effectiveColumnOrder),
@@ -106,6 +145,7 @@ export function useColumnOrderController<T>({
     effectiveColumnOrder,
     moveColumn,
     reorderColumn,
+    reorderVisibleColumn,
     canResetColumnOrder,
     resetColumnOrder,
   };
