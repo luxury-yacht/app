@@ -196,7 +196,7 @@ describe('useGridTableHeaderRow', () => {
     }
   });
 
-  it('does not reserve label width for the hover-only reorder grip', async () => {
+  it('keeps the hover-only grip out of layout and the header content shrinkable', async () => {
     const style = document.createElement('style');
     style.textContent = readFileSync(
       resolve(process.cwd(), 'styles/components/gridtables.css'),
@@ -213,6 +213,7 @@ describe('useGridTableHeaderRow', () => {
       const headerContent = container.querySelector('.header-content') as HTMLElement;
       expect(window.getComputedStyle(grip).position).toBe('absolute');
       expect(window.getComputedStyle(headerContent).gap).toBe('');
+      expect(window.getComputedStyle(headerContent).minWidth).toBe('0px');
     } finally {
       style.remove();
     }

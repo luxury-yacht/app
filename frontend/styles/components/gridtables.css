@@ -255,6 +255,7 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   align-items: center;
   justify-content: flex-start;
   flex: 1;
+  min-width: 0;
   line-height: inherit;
   overflow: visible;
   text-align: left;
