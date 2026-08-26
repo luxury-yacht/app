@@ -22,6 +22,7 @@ export type BrowseTableRow = {
   resourceVersion: CatalogItem['resourceVersion'];
   creationTimestamp: CatalogItem['creationTimestamp'];
   scope: CatalogItem['scope'];
+  metadata: CatalogItem['metadata'];
   labelsDigest?: CatalogItem['labelsDigest'];
   actionFacts?: CatalogItem['actionFacts'];
   kindDisplay: string;
@@ -47,6 +48,7 @@ export const toTableRows = (
     const namespaceDisplay = item.ref.namespace ?? '—';
     return {
       ...item,
+      metadata: item.metadata,
       kindDisplay: kindLabel,
       namespaceDisplay,
       apiDisplay: `${item.ref.group || 'core'}/${item.ref.version}`,

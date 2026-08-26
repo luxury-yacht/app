@@ -1,10 +1,11 @@
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { CatalogItem } from '@/core/refresh/types';
 import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
+import type { BrowseTableRow } from './useBrowseColumns';
 import { toTableRows, useBrowseColumns } from './useBrowseColumns';
 
 const navigateToView = vi.hoisted(() => vi.fn());
@@ -62,6 +63,10 @@ const catalogItem = (namespace: string): CatalogItem => ({
 });
 
 describe('useBrowseColumns', () => {
+  it('declares catalog metadata on Browse rows', () => {
+    expectTypeOf<BrowseTableRow['metadata']>().toEqualTypeOf<CatalogItem['metadata']>();
+  });
+
   it('preserves action facts without projecting a display-only Status field', () => {
     const [row] = toTableRows([catalogItem('team-a')], false);
 

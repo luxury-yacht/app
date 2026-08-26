@@ -69,6 +69,32 @@ describe('customCatalogRowAdapter', () => {
     });
   });
 
+  it('preserves catalog metadata while custom-resource hydration is unavailable', () => {
+    const fallback = catalogItemToFallbackCustomRow({
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'rds.services.k8s.aws',
+        version: 'v1alpha1',
+        kind: 'DBInstance',
+        resource: 'dbinstances',
+        name: 'primary',
+        uid: 'primary-uid',
+      },
+      metadata: {
+        labels: { owner: 'database-team' },
+        annotations: { 'example.com/runbook': 'primary-database' },
+      },
+      resourceVersion: '1',
+      creationTimestamp: '2026-06-28T00:00:00Z',
+      scope: 'Cluster',
+    });
+
+    expect(fallback).toMatchObject({
+      labels: { owner: 'database-team' },
+      annotations: { 'example.com/runbook': 'primary-database' },
+    });
+  });
+
   it('uses group/version row fields without api-prefixed aliases', () => {
     const fallback = catalogItemToFallbackCustomRow({
       ref: {

@@ -127,6 +127,8 @@ export const catalogItemToFallbackCustomRow = (
     crdName: item.ref.group ? `${item.ref.resource}.${item.ref.group}` : item.ref.resource,
     status: item.actionFacts?.status,
     statusPresentation: item.actionFacts?.status,
+    labels: item.metadata?.labels,
+    annotations: item.metadata?.annotations,
     ageTimestamp,
     creationTimestamp: item.creationTimestamp,
   };
