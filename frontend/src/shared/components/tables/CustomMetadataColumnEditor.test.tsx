@@ -109,12 +109,12 @@ describe("CustomMetadataColumnEditor", () => {
 			document.querySelector<HTMLInputElement>(".modal-input");
 
 		expect(document.body.textContent).toContain(
-			"Select a metadata key (Label or Annotation) to use as a custom column",
+			"Select a metadata Label or Annotation to use as a custom column.",
 		);
 		expect(document.body.textContent).not.toContain(
 			"Values come from the exact metadata key.",
 		);
-		expect(document.body.textContent).toContain("Column Name");
+		expect(document.body.textContent).toContain("Column name");
 		expect(document.body.textContent).not.toContain("Column heading");
 		expect(document.querySelector('input[value="label"]')).toBeNull();
 		expect(document.querySelector('input[value="annotation"]')).toBeNull();
@@ -214,6 +214,9 @@ describe("CustomMetadataColumnEditor", () => {
 		if (!headingInput) {
 			throw new Error("expected column heading input");
 		}
+		expect(document.body.textContent).not.toContain(
+			"Renaming keeps the column’s width, order, visibility, and favorite reference.",
+		);
 
 		await changeInput(headingInput, "Release revision");
 		await act(async () => {
