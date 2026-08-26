@@ -94,9 +94,11 @@ workflow and that exception is documented.
   presents Labels and Annotations as separate groups; the user selects an exact
   key instead of typing one. Selecting a key shows up to three distinct values
   sampled from the loaded rows. If no metadata keys are available, the editor
-  explains that state and disables creation. Custom rows expose Edit and a
-  direct Delete action beside the reorder grip; editing can rename or explicitly
-  remove the definition. Hiding and removing are separate operations.
+  keeps the full-width picker disabled with `No metadata keys available`,
+  explains that state beneath the field, and disables creation. Custom rows
+  expose Edit and a direct Delete action beside the reorder grip; editing can
+  rename or explicitly remove the definition. Hiding and removing are separate
+  operations.
 - A custom metadata column's durable key is
   `metadata:<label|annotation>:<exact-metadata-key>`. Its heading is presentation
   only, so renaming must preserve width, order, visibility, and favorite

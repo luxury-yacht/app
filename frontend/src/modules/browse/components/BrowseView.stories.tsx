@@ -259,9 +259,7 @@ export const Favorited: Story = {
 
 /** Custom-column editor when the loaded rows expose no labels or annotations. */
 export const NoMetadataKeys: Story = {
-  render: () => (
-    <MockBrowseView rows={ROWS_WITHOUT_METADATA} initialCustomColumnDefinitions={[]} />
-  ),
+  render: () => <MockBrowseView rows={ROWS_WITHOUT_METADATA} initialCustomColumnDefinitions={[]} />,
 };
 
 /** Cached widths are remeasured after each backend-style page transition. */

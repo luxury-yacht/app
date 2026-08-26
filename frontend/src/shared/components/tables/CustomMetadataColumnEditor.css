@@ -10,7 +10,6 @@
   gap: var(--spacing-md);
 }
 
-.custom-metadata-column-editor__intro,
 .custom-metadata-column-editor__stable-id {
   padding: var(--spacing-sm) var(--spacing-md);
   color: var(--color-text-secondary);
@@ -19,11 +18,6 @@
   border-radius: var(--border-radius-md);
   font-size: var(--font-size-small);
   line-height: 1.45;
-}
-
-.custom-metadata-column-editor__intro code {
-  color: var(--color-text);
-  font-weight: 600;
 }
 
 .custom-metadata-column-editor__field > span {
