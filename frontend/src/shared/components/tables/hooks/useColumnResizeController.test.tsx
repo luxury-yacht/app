@@ -219,6 +219,27 @@ describe('useColumnResizeController', () => {
     await harness.unmount();
   });
 
+  it('prevents native drag initiation when a pointer resize starts', async () => {
+    const harness = await renderHarness();
+    const event = {
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+      clientX: 200,
+    } as unknown as React.MouseEvent;
+
+    await act(async () => {
+      harness.getHandle().beginResize(event, 'name', 'kind');
+    });
+
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(event.stopPropagation).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      document.dispatchEvent(new MouseEvent('mouseup'));
+    });
+    await harness.unmount();
+  });
+
   it('auto-sizes a column without altering neighbors', async () => {
     const harness = await renderHarness({ measureWidth: 360 });
     const handle = harness.getHandle();

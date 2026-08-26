@@ -31,6 +31,8 @@
   the cluster it read from instead of folding every cluster into one row.
 - Improvements to column handling in tables.
   - Column order can be changed via drag and drop in the dropdown.
+  - Visible column headers can be dragged to reorder them wherever the Columns
+    menu supports ordering; a hover grip identifies the drag surface.
   - Columns that cannot be hidden are indicated with a lock icon. Locked visibility columns can still have their order changed.
   - The new "Reset" button resets all of the column state (order, width, and visibility) to default.
   - The new "Only" button (on hover over an item) selects only that columns and hides others.

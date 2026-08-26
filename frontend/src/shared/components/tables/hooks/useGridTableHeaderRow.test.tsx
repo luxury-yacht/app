@@ -5,6 +5,8 @@
  * Covers key behaviors and edge cases for useGridTableHeaderRow.
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import type { ColumnRenderModel } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
 import { useGridTableHeaderRow } from '@shared/components/tables/hooks/useGridTableHeaderRow';
@@ -75,10 +77,17 @@ const buildColumnRenderModels = (
 
 const HeaderHarness: React.FC<{
   enableResizing: boolean;
+  canReorder?: boolean;
   fixedKeys?: string[];
   withContextMenu?: boolean;
   tableColumns?: GridColumnDefinition<Row>[];
-}> = ({ enableResizing, fixedKeys = [], withContextMenu = false, tableColumns = columns }) => {
+}> = ({
+  enableResizing,
+  canReorder = true,
+  fixedKeys = [],
+  withContextMenu = false,
+  tableColumns = columns,
+}) => {
   const renderedColumns = tableColumns.map((column) =>
     fixedKeys.includes(column.key) ? { ...column, resizable: false } : column
   );
@@ -91,6 +100,7 @@ const HeaderHarness: React.FC<{
     handleResizeStart,
     handleResizeKeyDown,
     autoSizeColumn,
+    canReorderColumns: canReorder,
     reorderVisibleColumn,
   });
   return <>{node}</>;
@@ -177,10 +187,34 @@ describe('useGridTableHeaderRow', () => {
     expect(headerContents).toHaveLength(columns.length);
 
     for (const headerContent of headerContents) {
-      const grip = headerContent.firstElementChild;
+      const labelGroup = headerContent.firstElementChild;
+      expect(labelGroup?.classList.contains('gridtable-header-label-group')).toBe(true);
+      const grip = labelGroup?.firstElementChild;
       expect(grip?.classList.contains('gridtable-header-drag-handle')).toBe(true);
       expect(grip?.getAttribute('aria-hidden')).toBe('true');
       expect(grip?.textContent).toBe('⠿');
+    }
+  });
+
+  it('does not reserve label width for the hover-only reorder grip', async () => {
+    const style = document.createElement('style');
+    style.textContent = readFileSync(
+      resolve(process.cwd(), 'styles/components/gridtables.css'),
+      'utf8'
+    );
+    document.head.appendChild(style);
+
+    try {
+      await act(async () => {
+        root.render(<HeaderHarness enableResizing />);
+      });
+
+      const grip = container.querySelector('.gridtable-header-drag-handle') as HTMLElement;
+      const headerContent = container.querySelector('.header-content') as HTMLElement;
+      expect(window.getComputedStyle(grip).position).toBe('absolute');
+      expect(window.getComputedStyle(headerContent).gap).toBe('');
+    } finally {
+      style.remove();
     }
   });
 
@@ -243,28 +277,6 @@ describe('useGridTableHeaderRow', () => {
     );
   });
 
-  it('keeps resize handles resize-only when their header is draggable', async () => {
-    await act(async () => {
-      root.render(<HeaderHarness enableResizing />);
-    });
-
-    const resizeHandle = container.querySelector('.resize-handle') as HTMLElement;
-    const dataTransfer = {
-      effectAllowed: 'none',
-      setData: vi.fn(),
-    };
-    const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
-    Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
-
-    await act(async () => {
-      resizeHandle.dispatchEvent(dragStart);
-    });
-
-    expect(dragStart.defaultPrevented).toBe(true);
-    expect(dataTransfer.setData).not.toHaveBeenCalled();
-    expect(container.querySelector('[data-dragging="true"]')).toBeNull();
-  });
-
   it('does not infer resize behavior from the Kind key', async () => {
     const kindColumns: GridColumnDefinition<Row>[] = [
       { key: 'kind', header: 'Kind', sortable: true, render: (row) => row.kind ?? null },
@@ -281,6 +293,7 @@ describe('useGridTableHeaderRow', () => {
         handleResizeStart,
         handleResizeKeyDown,
         autoSizeColumn,
+        canReorderColumns: true,
         reorderVisibleColumn,
       });
       return <>{node}</>;

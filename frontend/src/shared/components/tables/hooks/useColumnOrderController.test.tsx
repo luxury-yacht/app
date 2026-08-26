@@ -140,4 +140,38 @@ describe('useColumnOrderController', () => {
     await act(async () => root.unmount());
     container.remove();
   });
+
+  it('does not publish a full-order change for a visually unchanged header drop', async () => {
+    type Handle = {
+      reorderVisible: (key: string, visibleKeys: string[], insertIndex: number) => void;
+      keys: () => string[];
+    };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = ReactDOM.createRoot(container);
+    const ref = React.createRef<Handle>();
+    const onChange = vi.fn();
+
+    const Harness = ({ ref: handleRef }: { ref?: React.Ref<Handle> }) => {
+      const controller = useColumnOrderController({
+        columns,
+        columnOrder: ['kind', 'name', 'age'],
+        onColumnOrderChange: onChange,
+      });
+      useImperativeHandle(handleRef, () => ({
+        reorderVisible: controller.reorderVisibleColumn,
+        keys: () => controller.orderedColumns.map((column) => column.key),
+      }));
+      return null;
+    };
+
+    await act(async () => root.render(<Harness ref={ref} />));
+    await act(async () => ref.current?.reorderVisible('kind', ['kind', 'age'], 1));
+
+    expect(ref.current?.keys()).toEqual(['kind', 'name', 'age']);
+    expect(onChange).not.toHaveBeenCalled();
+
+    await act(async () => root.unmount());
+    container.remove();
+  });
 });

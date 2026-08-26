@@ -40,6 +40,8 @@
  * browser silently rejects the drop — drag-and-drop appears "broken" in
  * production with no errors or warnings.
  */
+
+import { getHorizontalDropInsertIndex, hasDragDataType } from '@shared/components/dragReorder';
 import {
   type RefCallback,
   useCallback,
@@ -49,7 +51,6 @@ import {
   useRef,
   useState,
 } from 'react';
-
 import { type DropTargetRegistration, TabDragContext } from './TabDragProvider';
 import { TAB_DRAG_DATA_TYPE, type TabDragPayload } from './types';
 
@@ -83,22 +84,6 @@ export interface UseTabDropTargetResult {
   dropInsertIndex: number | null;
 }
 
-/**
- * Compute the insert index for a drop at `clientX` relative to the tab
- * buttons found inside `container`. Uses each button's midpoint — cursor
- * left of midpoint inserts before that tab, right inserts after.
- */
-function computeDropInsertIndex(container: HTMLElement, clientX: number): number {
-  const buttons = container.querySelectorAll<HTMLElement>('[role="tab"]');
-  for (let i = 0; i < buttons.length; i += 1) {
-    const rect = buttons[i].getBoundingClientRect();
-    if (clientX < rect.left + rect.width / 2) {
-      return i;
-    }
-  }
-  return buttons.length;
-}
-
 let nextTargetId = 0;
 
 /**
@@ -119,27 +104,6 @@ function readPayloadFromDataTransfer(event: DragEvent): TabDragPayload | null {
   } catch {
     return null;
   }
-}
-
-/**
- * Check whether a dragenter/dragover event represents a Luxury Yacht
- * tab drag. `dataTransfer.types` is always readable (even in protected
- * mode), so we use it as the presence gate. Works cross-browser.
- */
-function hasTabDragType(event: DragEvent): boolean {
-  if (!event.dataTransfer) {
-    return false;
-  }
-  const types = event.dataTransfer.types;
-  // `types` is a frozen array in modern browsers and a DOMStringList in
-  // older ones. Both are iterable, but only the former has `.includes`,
-  // so loop manually for portability.
-  for (let i = 0; i < types.length; i += 1) {
-    if (types[i] === TAB_DRAG_DATA_TYPE) {
-      return true;
-    }
-  }
-  return false;
 }
 
 export function useTabDropTarget<K extends TabDragPayload['kind']>(
@@ -167,7 +131,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
   currentDragRef.current = currentDrag;
 
   const handleDragEnter = useCallback((event: DragEvent) => {
-    if (!hasTabDragType(event)) {
+    if (!hasDragDataType(event.dataTransfer, TAB_DRAG_DATA_TYPE)) {
       return;
     }
     const drag = currentDragRef.current;
@@ -180,7 +144,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
   }, []);
 
   const handleDragOver = useCallback((event: DragEvent) => {
-    if (!hasTabDragType(event)) {
+    if (!hasDragDataType(event.dataTransfer, TAB_DRAG_DATA_TYPE)) {
       return;
     }
     const drag = currentDragRef.current;
@@ -194,7 +158,10 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     }
     const el = elementRef.current;
     if (el) {
-      const nextIndex = computeDropInsertIndex(el, event.clientX);
+      const nextIndex = getHorizontalDropInsertIndex(
+        el.querySelectorAll<HTMLElement>('[role="tab"]'),
+        event.clientX
+      );
       setDropInsertIndex((prev) => (prev === nextIndex ? prev : nextIndex));
     }
   }, []);
@@ -224,7 +191,12 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     event.preventDefault();
     event.stopPropagation();
     const el = elementRef.current;
-    const insertIndex = el ? computeDropInsertIndex(el, event.clientX) : 0;
+    const insertIndex = el
+      ? getHorizontalDropInsertIndex(
+          el.querySelectorAll<HTMLElement>('[role="tab"]'),
+          event.clientX
+        )
+      : 0;
     setIsDragOver(false);
     setDropInsertIndex(null);
     onDropRef.current(payload as Extract<TabDragPayload, { kind: K }>, event, insertIndex);

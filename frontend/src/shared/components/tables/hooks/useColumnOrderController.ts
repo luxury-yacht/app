@@ -1,5 +1,10 @@
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { orderColumns, reconcileColumnOrder } from '@shared/components/tables/gridTableColumnOrder';
+import {
+  areColumnOrdersEqual,
+  orderColumns,
+  reconcileColumnOrder,
+  reorderVisibleColumnOrder,
+} from '@shared/components/tables/gridTableColumnOrder';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export { reconcileColumnOrder } from '@shared/components/tables/gridTableColumnOrder';
@@ -19,9 +24,6 @@ export interface ColumnOrderController<T> {
   canResetColumnOrder: boolean;
   resetColumnOrder: () => void;
 }
-
-const areOrdersEqual = (left: readonly string[], right: readonly string[]): boolean =>
-  left.length === right.length && left.every((key, index) => key === right[index]);
 
 export function useColumnOrderController<T>({
   columns,
@@ -52,7 +54,7 @@ export function useColumnOrderController<T>({
     }
     setLocalOrder((current) => {
       const reconciled = reconcileColumnOrder(columns, current);
-      return areOrdersEqual(current, reconciled) ? current : reconciled;
+      return areColumnOrdersEqual(current, reconciled) ? current : reconciled;
     });
   }, [columnOrder, columns]);
 
@@ -91,44 +93,18 @@ export function useColumnOrderController<T>({
 
   const reorderVisibleColumn = useCallback(
     (key: string, visibleKeys: string[], insertIndex: number) => {
-      const sourceIndex = effectiveColumnOrder.indexOf(key);
-      if (
-        sourceIndex < 0 ||
-        visibleKeys.length === 0 ||
-        !visibleKeys.includes(key) ||
-        insertIndex < 0 ||
-        insertIndex > visibleKeys.length
-      ) {
+      const next = reorderVisibleColumnOrder(effectiveColumnOrder, key, visibleKeys, insertIndex);
+      if (!next) {
         return;
       }
-
-      const boundaryKey =
-        insertIndex < visibleKeys.length
-          ? visibleKeys[insertIndex]
-          : visibleKeys[visibleKeys.length - 1];
-      const boundaryKeyIndex = effectiveColumnOrder.indexOf(boundaryKey);
-      if (boundaryKeyIndex < 0) {
-        return;
-      }
-      const fullInsertIndex =
-        insertIndex < visibleKeys.length ? boundaryKeyIndex : boundaryKeyIndex + 1;
-      const adjustedInsertIndex =
-        sourceIndex < fullInsertIndex ? fullInsertIndex - 1 : fullInsertIndex;
-      if (adjustedInsertIndex === sourceIndex) {
-        return;
-      }
-
-      const next = [...effectiveColumnOrder];
-      const [movedKey] = next.splice(sourceIndex, 1);
-      next.splice(adjustedInsertIndex, 0, movedKey);
       applyColumnOrder(next);
     },
     [applyColumnOrder, effectiveColumnOrder]
   );
 
-  const canResetColumnOrder = !areOrdersEqual(effectiveColumnOrder, declaredOrder);
+  const canResetColumnOrder = !areColumnOrdersEqual(effectiveColumnOrder, declaredOrder);
   const resetColumnOrder = useCallback(() => {
-    if (areOrdersEqual(effectiveColumnOrder, declaredOrder)) {
+    if (areColumnOrdersEqual(effectiveColumnOrder, declaredOrder)) {
       return;
     }
     const next = [...declaredOrder];

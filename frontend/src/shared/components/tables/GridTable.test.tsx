@@ -124,6 +124,8 @@ type RenderOptions = Partial<{
   getCustomContextMenuItems: (item: SimpleRow, columnKey: string) => unknown[];
   columnVisibility: Record<string, boolean>;
   onColumnVisibilityChange: (visibility: Record<string, boolean>) => void;
+  columnOrder: string[];
+  onColumnOrderChange: (order: string[]) => void;
   onColumnWidthsChange: (widths: Record<string, unknown>) => void;
   columnWidths: Record<string, unknown>;
   keyExtractor: (item: SimpleRow, index: number) => string;
@@ -1335,6 +1337,8 @@ function renderGridTable(options: RenderOptions = {}) {
     getCustomContextMenuItems: options.getCustomContextMenuItems,
     columnVisibility: options.columnVisibility,
     onColumnVisibilityChange: options.onColumnVisibilityChange,
+    columnOrder: options.columnOrder,
+    onColumnOrderChange: options.onColumnOrderChange,
     onColumnWidthsChange: options.onColumnWidthsChange,
     columnWidths: options.columnWidths ?? {},
     paginationControls: options.paginationControls,
@@ -2124,7 +2128,7 @@ it('triggers onSort when a sortable header is clicked', () => {
   const clickable = requireValue(
     headerCell,
     'expected test value in GridTable.test.tsx'
-  ).querySelector<HTMLButtonElement>('.header-content > button');
+  ).querySelector<HTMLButtonElement>('.header-content button');
   expect(clickable).not.toBeNull();
 
   act(() => {
@@ -2559,6 +2563,42 @@ it('renders native table, row, header, and cell semantics', () => {
   expect(rowgroup).not.toBeNull();
 });
 
+it('does not expose header reordering when the table has no Columns menu', () => {
+  const { container, cleanup } = renderGridTable({
+    data: [{ id: 'row-1', label: 'Example', name: 'demo' }],
+    columns: [
+      { key: 'label', header: 'Label', render: (row) => row.label },
+      { key: 'name', header: 'Name', render: (row) => row.name ?? '' },
+    ],
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  const headerCells = Array.from(container.querySelectorAll<HTMLTableCellElement>('th'));
+  expect(headerCells).toHaveLength(2);
+  expect(headerCells.every((header) => !header.draggable)).toBe(true);
+  expect(container.querySelector('.gridtable-header-drag-handle')).toBeNull();
+});
+
+it('does not expose header reordering for controlled read-only column order', () => {
+  const { container, cleanup } = renderGridTable({
+    data: [{ id: 'row-1', label: 'Example', name: 'demo' }],
+    columns: [
+      { key: 'label', header: 'Label', render: (row) => row.label },
+      { key: 'name', header: 'Name', render: (row) => row.name ?? '' },
+    ],
+    columnOrder: ['label', 'name'],
+    filters: { enabled: true },
+    enableColumnVisibilityMenu: true,
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  const headerCells = Array.from(container.querySelectorAll<HTMLTableCellElement>('th'));
+  expect(headerCells.every((header) => !header.draggable)).toBe(true);
+  expect(container.querySelector('.gridtable-header-drag-handle')).toBeNull();
+});
+
 it('reorders visible columns by dragging a header across the same insertion boundary as tabs', async () => {
   const reorderableColumns: GridColumnDefinition<SimpleRow>[] = [
     { key: 'label', header: 'Label', render: (row) => row.label },
@@ -2579,6 +2619,8 @@ it('reorders visible columns by dragging a header across the same insertion boun
             columns={reorderableColumns}
             columnOrder={columnOrder}
             onColumnOrderChange={setColumnOrder}
+            filters={{ enabled: true }}
+            enableColumnVisibilityMenu
             keyExtractor={(item) => `cluster|${item.id}`}
             virtualization={{ enabled: false }}
           />

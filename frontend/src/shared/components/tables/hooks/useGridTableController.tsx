@@ -473,6 +473,7 @@ export function useGridTableController<T>({
     isColumnVisible,
     applyVisibilityChanges,
     enableColumnVisibilityMenu,
+    canReorderColumns: columnOrder === null || onColumnOrderChange !== undefined,
     moveColumn,
     reorderColumn,
     canResetColumnOrder,
@@ -657,6 +658,7 @@ export function useGridTableController<T>({
     handleResizeStart,
     handleResizeKeyDown,
     autoSizeColumn,
+    canReorderColumns: filteringEnabled && Boolean(columnsDropdownConfig?.onReorderColumn),
     reorderVisibleColumn,
     sortConfig,
   });

@@ -231,6 +231,9 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   min-width: 0;
   flex-shrink: 0;
   box-sizing: border-box;
+}
+
+.grid-cell-header[draggable="true"] {
   cursor: grab;
 }
 
@@ -251,10 +254,9 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: var(--grid-spacing-xs);
   flex: 1;
   line-height: inherit;
-  overflow: hidden;
+  overflow: visible;
   text-align: left;
 }
 
@@ -268,6 +270,14 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   text-align: right;
 }
 
+.gridtable-header-label-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .gridtable-header-label,
 .gridtable-sort-button {
   display: inline-block;
@@ -279,10 +289,12 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
 }
 
 .gridtable-header-drag-handle {
+  position: absolute;
+  inset-inline-end: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 1em;
+  width: 1em;
   color: var(--grid-text-secondary);
   opacity: 0;
   pointer-events: none;

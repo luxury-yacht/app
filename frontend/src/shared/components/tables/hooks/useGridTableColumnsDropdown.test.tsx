@@ -49,6 +49,7 @@ describe('useGridTableColumnsDropdown', () => {
     lockedColumns?: Set<string>;
     hiddenColumns?: Set<string>;
     enabled?: boolean;
+    canReorderColumns?: boolean;
     canResetColumnOrder?: boolean;
     resetColumnOrder?: () => void;
     canResetAutoWidthColumns?: boolean;
@@ -73,6 +74,7 @@ describe('useGridTableColumnsDropdown', () => {
         isColumnVisible: (key) => !hiddenColumns.has(key),
         applyVisibilityChanges,
         enableColumnVisibilityMenu: enabled,
+        canReorderColumns: opts.canReorderColumns,
         moveColumn: vi.fn(),
         reorderColumn: vi.fn(),
         canResetColumnOrder: opts.canResetColumnOrder ?? false,
@@ -135,8 +137,17 @@ describe('useGridTableColumnsDropdown', () => {
       'expected test value in useGridTableColumnsDropdown.test.tsx'
     ).onMoveColumn;
 
-    expect(() => moveColumn('name', 1)).not.toThrow();
+    expect(() =>
+      requireValue(moveColumn, 'expected mutable column-order action')('name', 1)
+    ).not.toThrow();
     expect(latestApplyVisibilityChanges).not.toHaveBeenCalled();
+  });
+
+  it('omits order actions when the column order is read-only', () => {
+    const result = renderHook({ canReorderColumns: false, canResetColumnOrder: true });
+    expect(result?.onMoveColumn).toBeUndefined();
+    expect(result?.onReorderColumn).toBeUndefined();
+    expect(result?.canResetColumns).toBe(false);
   });
 
   it('value contains only currently visible hideable columns', () => {
