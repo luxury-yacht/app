@@ -79,11 +79,7 @@ export default function CustomMetadataColumnEditor({
         header: normalizedHeader,
       })
     : null;
-  const duplicate =
-    state.mode === 'create' &&
-    candidate !== null &&
-    definitions.some((definition) => definition.key === candidate.key);
-  const canSave = candidate !== null && normalizedHeader.length > 0 && !duplicate;
+  const canSave = candidate !== null && normalizedHeader.length > 0;
   const editorKeys =
     state.mode === 'edit' &&
     !availableKeys.some(
@@ -200,7 +196,6 @@ export default function CustomMetadataColumnEditor({
               ariaLabelledBy={metadataKeyLabelId}
               searchable
               disabled={state.mode === 'edit' || availableKeys.length === 0}
-              error={duplicate}
               className="custom-metadata-column-editor__key-dropdown"
               dropdownClassName="custom-metadata-column-editor__key-menu"
             />
@@ -208,9 +203,6 @@ export default function CustomMetadataColumnEditor({
               <span className="modal-field-message">
                 No label or annotation keys are available in the current rows.
               </span>
-            )}
-            {!!duplicate && (
-              <span className="modal-field-message modal-field-error">Already added</span>
             )}
           </div>
           {!!normalizedKey && (

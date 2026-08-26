@@ -41,6 +41,8 @@ const mockUseGridTablePersistence = vi.fn().mockReturnValue({
   setColumnVisibility: vi.fn(),
   filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
   setFilters: vi.fn(),
+  customColumns: [],
+  setCustomColumns: vi.fn(),
   resetState: vi.fn(),
 });
 
@@ -197,6 +199,16 @@ describe('JobsTab', () => {
     });
 
     expect(container.querySelector('[data-testid="grid-table"]')).toBeTruthy();
+  });
+
+  it('does not offer custom metadata columns for JobSimpleInfo rows', () => {
+    act(() => {
+      root.render(
+        <JobsTab jobs={[makeJob()]} loading={false} isActive={true} clusterId={PANEL_CLUSTER_ID} />
+      );
+    });
+
+    expect(getGridTableProps().customMetadataColumns).toBeUndefined();
   });
 
   it('offers the all-matching-rows export scope like every other resource table', async () => {

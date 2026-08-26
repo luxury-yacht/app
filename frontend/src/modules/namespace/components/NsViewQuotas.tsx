@@ -24,6 +24,7 @@ interface QuotasViewProps {
 const quotasSpec: AggregatedResourceGridViewSpec<QuotaData> = {
   domain: 'namespace-quotas',
   viewId: 'namespace-quotas',
+  supportsCustomMetadataColumns: true,
   labels: {
     namespace: 'Namespace Quotas',
     allNamespaces: 'All Namespaces Quotas',

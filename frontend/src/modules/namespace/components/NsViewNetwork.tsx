@@ -27,6 +27,7 @@ interface NetworkViewProps {
 const networkSpec: AggregatedResourceGridViewSpec<NetworkData> = {
   domain: 'namespace-network',
   viewId: 'namespace-network',
+  supportsCustomMetadataColumns: true,
   labels: {
     namespace: 'Namespace Network',
     allNamespaces: 'All Namespaces Network',

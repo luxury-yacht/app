@@ -132,7 +132,7 @@ describe('CustomMetadataColumnEditor', () => {
     ]);
   });
 
-  it('blocks a duplicate source and metadata key', async () => {
+  it('disables an already-added source and metadata key', async () => {
     const existing = createCustomMetadataColumnDefinition({
       source: 'label',
       metadataKey: 'example.com/owner',
@@ -147,6 +147,7 @@ describe('CustomMetadataColumnEditor', () => {
     ).find((candidate) => candidate.textContent?.includes('example.com/owner'));
 
     expect(duplicateOption?.classList.contains('disabled')).toBe(true);
+    expect(document.body.textContent).not.toContain('Already added');
     expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
     expect(onChange).not.toHaveBeenCalled();
   });

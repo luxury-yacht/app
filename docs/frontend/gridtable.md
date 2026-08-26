@@ -89,6 +89,12 @@ workflow and that exception is documented.
   column order. Reordering and visibility are independent, and the shared
   All/None actions affect hideable columns only.
 - Resource tables may add custom metadata columns through the Columns menu.
+  Every resource table must explicitly declare `supportsCustomMetadataColumns`.
+  Set it to `true` only when the row producer carries Kubernetes labels or
+  annotations through `metadata` or the supported top-level compatibility
+  fields. Set it to `false` for projected row types without metadata so the
+  Columns menu omits the dead-end Add action. Shared and query-backed wrappers
+  forward this caller-owned capability; they must not infer it from table mode.
   `Add` closes the Columns menu and opens the shared editor with the distinct
   metadata keys available in the table's loaded rows. One searchable picker
   presents Labels and Annotations as separate groups; the user selects an exact

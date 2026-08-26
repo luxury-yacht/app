@@ -24,6 +24,7 @@ interface RBACViewProps {
 const rbacSpec: AggregatedResourceGridViewSpec<RBACData> = {
   domain: 'cluster-rbac',
   viewId: 'cluster-rbac',
+  supportsCustomMetadataColumns: true,
   labels: { cluster: 'Cluster RBAC' },
   emptyMessage: () => 'No cluster-scoped RBAC objects found',
   spinnerMessage: 'Loading RBAC resources...',

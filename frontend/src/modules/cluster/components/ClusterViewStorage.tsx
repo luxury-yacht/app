@@ -36,6 +36,7 @@ const getClaimTarget = (pv: StorageData) => {
 const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
   domain: 'cluster-storage',
   viewId: 'cluster-storage',
+  supportsCustomMetadataColumns: true,
   labels: { cluster: 'Cluster Storage' },
   emptyMessage: () => 'No cluster-scoped storage objects found',
   spinnerMessage: 'Loading storage resources...',

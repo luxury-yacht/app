@@ -38,6 +38,7 @@ interface CRDsViewProps {
 const crdsSpec: AggregatedResourceGridViewSpec<CRDsData> = {
   domain: 'cluster-crds',
   viewId: 'cluster-crds',
+  supportsCustomMetadataColumns: true,
   labels: { cluster: 'Cluster CRDs' },
   emptyMessage: () => 'No CRDs found',
   spinnerMessage: 'Loading CRDs...',

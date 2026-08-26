@@ -400,6 +400,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       queryPayload,
     } = useQueryBackedNamespaceResourceGridTable<PodSnapshotPayload, PodSnapshotEntry>({
       queryTableMode: 'Query Backed Dynamic',
+      supportsCustomMetadataColumns: true,
       enabled: !collapsed,
       clusterId: queryClusterId,
       domain: 'pods',

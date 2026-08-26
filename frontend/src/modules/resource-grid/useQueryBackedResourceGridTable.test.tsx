@@ -257,6 +257,53 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     vi.useRealTimers();
   });
 
+  it('forwards an explicit custom metadata capability to namespace tables', () => {
+    const Probe: React.FC = () => {
+      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'Namespace Pods',
+        selectRows,
+        viewId: 'namespace-pods',
+        namespace: 'team-a',
+        columns,
+        supportsCustomMetadataColumns: false,
+      });
+      return null;
+    };
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    expect(useNamespaceResourceGridTableMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ supportsCustomMetadataColumns: false })
+    );
+  });
+
+  it('forwards an explicit custom metadata capability to cluster tables', () => {
+    const Probe: React.FC = () => {
+      useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        clusterId: 'cluster-a',
+        domain: 'nodes',
+        label: 'Cluster Nodes',
+        selectRows,
+        viewId: 'cluster-nodes',
+        columns,
+        supportsCustomMetadataColumns: false,
+      });
+      return null;
+    };
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    expect(useClusterResourceGridTableMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ supportsCustomMetadataColumns: false })
+    );
+  });
+
   it('issues exactly one typed query per render — metrics are joined at serve, never a second domain query', async () => {
     const cpuSortState = {
       filters: DEFAULT_GRID_TABLE_FILTER_STATE,
@@ -271,6 +318,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         viewId: 'namespace-pods',
         namespace: 'team-a',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -329,6 +377,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         viewId: 'namespace-pods',
         namespace: 'team-a',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
         excludedQueryFacetKeys: ['statuses'],
       });
@@ -357,6 +406,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-nodes',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -417,6 +467,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         viewId: 'namespace-pods',
         namespace: ALL_NAMESPACES_SCOPE,
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -475,6 +526,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         viewId: 'namespace-pods',
         namespace: ALL_NAMESPACES_SCOPE,
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -526,6 +578,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-nodes',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -582,6 +635,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-nodes',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -621,6 +675,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-nodes',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -654,6 +709,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-events',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
         defaultSortKey: 'age',
         defaultSortDirection: 'desc',
@@ -689,6 +745,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         viewId: 'namespace-events',
         namespace: ALL_NAMESPACES_SCOPE,
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
         defaultSort: { key: 'age', direction: 'desc' },
       });
@@ -724,6 +781,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-nodes',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -760,6 +818,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         viewId: 'namespace-pods',
         namespace: ALL_NAMESPACES_SCOPE,
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -795,6 +854,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-config',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -866,6 +926,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-nodes',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -934,6 +995,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         viewId: 'namespace-config',
         namespace: ALL_NAMESPACES_SCOPE,
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -1001,6 +1063,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-nodes',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -1057,6 +1120,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-nodes',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -1113,6 +1177,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-nodes',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -1171,6 +1236,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-nodes',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -1224,6 +1290,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-nodes',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -1276,6 +1343,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         selectRows,
         viewId: 'cluster-nodes',
         columns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return null;
@@ -1354,6 +1422,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         viewId: 'namespace-pods',
         namespace: 'team-a',
         columns: ageColumns,
+        supportsCustomMetadataColumns: true,
         keyExtractor: (item) => item.name,
       });
       return <>{renderedAgeCell}</>;

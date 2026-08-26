@@ -266,6 +266,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       HelmData
     >({
       queryTableMode: 'Query Backed Static',
+      supportsCustomMetadataColumns: false,
       clusterId: queryClusterId,
       domain: 'namespace-helm',
       label: diagnosticsLabel,

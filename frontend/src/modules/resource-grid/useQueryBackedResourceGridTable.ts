@@ -583,7 +583,6 @@ export interface QueryBackedNamespaceGridParams<
       | 'persistenceOverride'
       | 'keyExtractor'
       | 'availableKinds'
-      | 'supportsCustomMetadataColumns'
     >,
     QueryBackedGridParamsCommon<TPayload, TRow> {
   /** Optional: the wrapper resolves a canonical default when omitted. */
@@ -606,6 +605,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   excludedQueryFacetKeys,
   defaultSort = { key: 'name', direction: 'asc' },
   namespace,
+  supportsCustomMetadataColumns,
   ...tableParams
 }: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow, TPayload> {
   const resolvedKeyExtractor = useResolvedQueryKeyExtractor(
@@ -653,7 +653,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   });
   const table = useNamespaceResourceGridTable<TRow>({
     ...tableParams,
-    supportsCustomMetadataColumns: true,
+    supportsCustomMetadataColumns,
     keyExtractor: resolvedKeyExtractor,
     namespace,
     defaultSort,
@@ -693,7 +693,6 @@ export interface QueryBackedClusterGridParams<
       | 'persistenceOverride'
       | 'keyExtractor'
       | 'availableKinds'
-      | 'supportsCustomMetadataColumns'
     >,
     QueryBackedGridParamsCommon<TPayload, TRow> {
   /** Optional: the wrapper resolves a canonical default when omitted. */
@@ -716,6 +715,7 @@ export function useQueryBackedClusterResourceGridTable<
   excludedQueryFacetKeys,
   defaultSortKey = 'name',
   defaultSortDirection = 'asc',
+  supportsCustomMetadataColumns,
   ...tableParams
 }: QueryBackedClusterGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow, TPayload> {
   const defaultSort = useMemo(
@@ -760,7 +760,7 @@ export function useQueryBackedClusterResourceGridTable<
   });
   const table = useClusterResourceGridTable<TRow>({
     ...tableParams,
-    supportsCustomMetadataColumns: true,
+    supportsCustomMetadataColumns,
     keyExtractor: resolvedKeyExtractor,
     defaultSortKey,
     defaultSortDirection,

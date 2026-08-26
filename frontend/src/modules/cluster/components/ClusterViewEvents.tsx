@@ -43,6 +43,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(({ error }) => {
     EventGridRow
   >({
     queryTableMode: 'Query Backed Static',
+    supportsCustomMetadataColumns: true,
     clusterId: selectedClusterId,
     domain: 'cluster-events',
     label: 'Cluster Events',

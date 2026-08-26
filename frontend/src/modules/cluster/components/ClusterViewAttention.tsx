@@ -224,6 +224,7 @@ export default function ClusterViewAttention() {
   const { gridTableProps, favModal, source, queryPayload, persistence } =
     useQueryBackedClusterResourceGridTable<ClusterAttentionSnapshot, ClusterAttentionFinding>({
       queryTableMode: 'Query Backed Static',
+      supportsCustomMetadataColumns: true,
       clusterId: selectedClusterId,
       domain: 'cluster-attention',
       label: 'Cluster Attention',

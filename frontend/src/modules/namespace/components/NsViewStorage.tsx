@@ -28,6 +28,7 @@ interface StorageViewProps {
 const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
   domain: 'namespace-storage',
   viewId: 'namespace-storage',
+  supportsCustomMetadataColumns: true,
   labels: {
     namespace: 'Namespace Storage',
     allNamespaces: 'All Namespaces Storage',

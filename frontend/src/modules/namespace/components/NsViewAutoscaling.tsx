@@ -40,6 +40,7 @@ interface AutoscalingViewProps {
 const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
   domain: 'namespace-autoscaling',
   viewId: 'namespace-autoscaling',
+  supportsCustomMetadataColumns: true,
   labels: {
     namespace: 'Namespace Autoscaling',
     allNamespaces: 'All Namespaces Autoscaling',

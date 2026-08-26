@@ -24,6 +24,7 @@ interface RBACViewProps {
 const rbacSpec: AggregatedResourceGridViewSpec<RBACData> = {
   domain: 'namespace-rbac',
   viewId: 'namespace-rbac',
+  supportsCustomMetadataColumns: true,
   labels: {
     namespace: 'Namespace RBAC',
     allNamespaces: 'All Namespaces RBAC',

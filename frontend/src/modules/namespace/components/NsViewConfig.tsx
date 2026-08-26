@@ -24,6 +24,7 @@ interface ConfigViewProps {
 const configSpec: AggregatedResourceGridViewSpec<ConfigData> = {
   domain: 'namespace-config',
   viewId: 'namespace-config',
+  supportsCustomMetadataColumns: true,
   labels: {
     namespace: 'Namespace Configuration',
     allNamespaces: 'All Namespaces Configuration',

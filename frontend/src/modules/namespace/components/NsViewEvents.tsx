@@ -80,6 +80,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       EventGridRow
     >({
       queryTableMode: 'Query Backed Static',
+      supportsCustomMetadataColumns: true,
       clusterId: selectedClusterId,
       domain: 'namespace-events',
       label: diagnosticsLabel,

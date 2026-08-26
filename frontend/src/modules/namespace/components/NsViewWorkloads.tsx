@@ -156,6 +156,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       queryPayload,
     } = useQueryBackedNamespaceResourceGridTable<NamespaceWorkloadSnapshotPayload, WorkloadData>({
       queryTableMode: 'Query Backed Dynamic',
+      supportsCustomMetadataColumns: true,
       clusterId: queryClusterId,
       domain: 'namespace-workloads',
       excludedQueryFacetKeys: RESOURCE_STATUS_QUERY_FACET_KEYS,

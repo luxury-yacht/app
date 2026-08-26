@@ -269,6 +269,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     PodSnapshotEntry
   >({
     queryTableMode: 'Query Backed Dynamic',
+    supportsCustomMetadataColumns: true,
     clusterId: queryClusterId,
     domain: 'pods',
     excludedQueryFacetKeys: RESOURCE_STATUS_QUERY_FACET_KEYS,

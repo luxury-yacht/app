@@ -69,6 +69,8 @@ export interface AggregatedColumnHelpers<D> {
 export interface AggregatedResourceGridViewSpec<D extends AggregatedRowBase> {
   domain: RefreshDomain;
   viewId: string;
+  /** Whether this spec's projected rows carry Kubernetes label or annotation metadata. */
+  supportsCustomMetadataColumns: boolean;
   /**
    * Diagnostics/table label. Cluster views use `cluster`; namespace views pick
    * `allNamespaces` or `namespace` from the active scope.
@@ -198,6 +200,7 @@ export function ClusterAggregatedResourceGridView<
 
   const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<P, D>({
     queryTableMode: 'Query Backed Static',
+    supportsCustomMetadataColumns: spec.supportsCustomMetadataColumns,
     clusterId: core.selectedClusterId,
     domain: spec.domain,
     label: diagnosticsLabel,
@@ -278,6 +281,7 @@ export function NamespaceAggregatedResourceGridView<
 
   const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<P, D>({
     queryTableMode: 'Query Backed Static',
+    supportsCustomMetadataColumns: spec.supportsCustomMetadataColumns,
     clusterId: core.selectedClusterId,
     domain: spec.domain,
     label: diagnosticsLabel,

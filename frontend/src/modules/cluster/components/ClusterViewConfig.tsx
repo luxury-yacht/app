@@ -24,6 +24,7 @@ interface ConfigViewProps {
 const configSpec: AggregatedResourceGridViewSpec<ConfigData> = {
   domain: 'cluster-config',
   viewId: 'cluster-config',
+  supportsCustomMetadataColumns: true,
   labels: { cluster: 'Cluster Configuration' },
   emptyMessage: () => 'No cluster-scoped config objects found',
   spinnerMessage: 'Loading configuration resources...',
