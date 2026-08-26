@@ -114,7 +114,7 @@ describe("CustomMetadataColumnEditor", () => {
 		expect(document.body.textContent).not.toContain(
 			"Values come from the exact metadata key.",
 		);
-		expect(document.body.textContent).toContain("Column name");
+		expect(document.body.textContent).toContain("Column Name");
 		expect(document.body.textContent).not.toContain("Column heading");
 		expect(document.querySelector('input[value="label"]')).toBeNull();
 		expect(document.querySelector('input[value="annotation"]')).toBeNull();
