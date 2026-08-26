@@ -24,8 +24,8 @@ export function hasDragDataType(dataTransfer: DragTypeSource | null, type: strin
   if (!dataTransfer) {
     return false;
   }
-  for (let index = 0; index < dataTransfer.types.length; index += 1) {
-    if (dataTransfer.types[index] === type) {
+  for (const dragType of Array.from(dataTransfer.types)) {
+    if (dragType === type) {
       return true;
     }
   }
