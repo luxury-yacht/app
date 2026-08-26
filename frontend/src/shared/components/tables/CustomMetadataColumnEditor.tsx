@@ -189,9 +189,11 @@ export default function CustomMetadataColumnEditor({
                 const selected = metadataKeyOptions.find(
                   (option) => option.value === value
                 )?.metadata;
-                return selected
-                  ? `${selected.source === 'label' ? 'Label' : 'Annotation'} · ${selected.metadataKey}`
-                  : value || metadataKeyPlaceholder;
+                if (!selected) {
+                  return value || metadataKeyPlaceholder;
+                }
+                const sourceLabel = selected.source === 'label' ? 'Label' : 'Annotation';
+                return `${sourceLabel} · ${selected.metadataKey}`;
               }}
               placeholder={metadataKeyPlaceholder}
               ariaLabel="Metadata Key"
