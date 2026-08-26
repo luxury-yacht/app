@@ -12,12 +12,6 @@
     // CSS
     "stylelint.vscode-stylelint",
 
-    // Git
-    "eamodio.gitlens",
-
-    // Markdown
-    "yzhang.markdown-all-in-one",
-
     // YAML
     "redhat.vscode-yaml"
   ]

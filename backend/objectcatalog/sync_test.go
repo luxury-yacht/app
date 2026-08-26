@@ -72,10 +72,10 @@ func (p *preferredDiscovery) ServerPreferredResources() ([]*metav1.APIResourceLi
 
 type discoveryOverrideClient struct {
 	*kubernetesfake.Clientset
-	discovery discovery.DiscoveryInterface
+	discovery discovery.DiscoveryInterfaces
 }
 
-func (c *discoveryOverrideClient) Discovery() discovery.DiscoveryInterface {
+func (c *discoveryOverrideClient) Discovery() discovery.DiscoveryInterfaces {
 	return c.discovery
 }
 

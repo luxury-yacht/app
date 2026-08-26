@@ -47,7 +47,7 @@ type isolationClientSet struct {
 	disco *isolationDiscovery
 }
 
-func (c *isolationClientSet) Discovery() discovery.DiscoveryInterface {
+func (c *isolationClientSet) Discovery() discovery.DiscoveryInterfaces {
 	return c.disco
 }
 

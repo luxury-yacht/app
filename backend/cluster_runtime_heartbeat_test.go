@@ -44,7 +44,7 @@ type heartbeatClientSet struct {
 	disco *heartbeatDiscovery
 }
 
-func (h *heartbeatClientSet) Discovery() discovery.DiscoveryInterface {
+func (h *heartbeatClientSet) Discovery() discovery.DiscoveryInterfaces {
 	return h.disco
 }
 

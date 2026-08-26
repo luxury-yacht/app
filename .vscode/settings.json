@@ -47,12 +47,12 @@
   },
 
   // TypeScript settings
-  "typescript.tsdk": "./frontend/node_modules/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "js/ts.tsdk.path": "./frontend/node_modules/typescript/lib",
+  "js/ts.tsdk.promptToUseWorkspaceVersion": true,
 
   // Disable JavaScript validation — all JS files are Wails-generated bindings
   // with a hardcoded // @ts-check that overrides implicitProjectConfig.checkJs.
-  "javascript.validate.enable": false,
+  "js/ts.validate.enabled": false,
 
   // Auto-save settings (optional - you can enable if desired)
   "files.autoSave": "off",

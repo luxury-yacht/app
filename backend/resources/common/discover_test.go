@@ -17,7 +17,7 @@ import (
 )
 
 type kindDiscovery struct {
-	discovery.DiscoveryInterface
+	discovery.DiscoveryInterfaces
 	preferred    []*metav1.APIResourceList
 	preferredErr error
 	groups       []*metav1.APIResourceList
@@ -35,18 +35,18 @@ func (d *kindDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav
 
 type kindDiscoveryClient struct {
 	kubernetes.Interface
-	discovery discovery.DiscoveryInterface
+	discovery discovery.DiscoveryInterfaces
 }
 
-func (c *kindDiscoveryClient) Discovery() discovery.DiscoveryInterface { return c.discovery }
+func (c *kindDiscoveryClient) Discovery() discovery.DiscoveryInterfaces { return c.discovery }
 
 func dependenciesWithKindDiscovery(preferred, groups []*metav1.APIResourceList, preferredErr error) Dependencies {
 	client := kubernetesfake.NewSimpleClientset()
 	return Dependencies{KubernetesClient: &kindDiscoveryClient{
 		Interface: client,
 		discovery: &kindDiscovery{
-			DiscoveryInterface: client.Discovery().(*fakediscovery.FakeDiscovery),
-			preferred:          preferred, preferredErr: preferredErr, groups: groups,
+			DiscoveryInterfaces: client.Discovery().(*fakediscovery.FakeDiscovery),
+			preferred:           preferred, preferredErr: preferredErr, groups: groups,
 		},
 	}}
 }
