@@ -50,6 +50,12 @@ export const createAgeColumn = <T extends AgeColumnRow>(
     }
     return fallback;
   },
+  measurementText: (item) => {
+    const fallback = getValue(item) || '-';
+    return typeof item.ageTimestamp === 'number' && Number.isFinite(item.ageTimestamp)
+      ? formatLiveAgeText(item.ageTimestamp, Date.now(), fallback)
+      : fallback;
+  },
   sortable: true,
   sortValue: (item) =>
     typeof item.ageTimestamp === 'number' && Number.isFinite(item.ageTimestamp)

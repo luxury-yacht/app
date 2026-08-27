@@ -1,4 +1,8 @@
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import {
+  createStatusChipMeasurementElement,
+  StatusChip,
+  type StatusChipVariant,
+} from '@shared/components/StatusChip';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { EVENT_LABELS } from '@shared/events/eventPresentation';
 
@@ -25,6 +29,10 @@ export const createEventTypeColumn = <T extends EventTypeRow>(): GridColumnDefin
   className: 'gridtable-badge-column',
   sortable: true,
   sortValue: eventTypeLabel,
+  measurementElement: (row) => {
+    const type = eventTypeLabel(row);
+    return createStatusChipMeasurementElement(eventTypeVariant(type), type);
+  },
   render: (row) => {
     const type = eventTypeLabel(row);
     return <StatusChip variant={eventTypeVariant(type)}>{type}</StatusChip>;

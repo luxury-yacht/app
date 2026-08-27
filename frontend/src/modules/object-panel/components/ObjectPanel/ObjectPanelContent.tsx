@@ -20,14 +20,13 @@ import type {
   PanelObjectData,
   ViewType,
 } from '@modules/object-panel/components/ObjectPanel/types';
+import { loadObjectPanelDetails } from '@modules/object-panel/objectPanelDetailsLazyModule';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import React, { lazy, type ReactNode, useMemo } from 'react';
 
-const DetailsTab = lazy(
-  () => import('@modules/object-panel/components/ObjectPanel/Details/DetailsTab')
-);
+const DetailsTab = lazy(loadObjectPanelDetails);
 const EventsTab = lazy(
   () => import('@modules/object-panel/components/ObjectPanel/Events/EventsTab')
 );

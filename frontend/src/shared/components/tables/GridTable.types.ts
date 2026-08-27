@@ -35,6 +35,12 @@ export interface GridColumnAlignmentOptions {
   alignData?: GridColumnAlignment;
 }
 
+export interface GridColumnMeasurementElement {
+  tagName: keyof HTMLElementTagNameMap;
+  className?: string;
+  textContent: string;
+}
+
 export interface GridColumnDefinition<T> extends GridColumnAlignmentOptions {
   key: string;
   header: string;
@@ -51,6 +57,10 @@ export interface GridColumnDefinition<T> extends GridColumnAlignmentOptions {
   maxWidth?: ColumnWidthInput;
   autoSizeMaxWidth?: ColumnWidthInput;
   autoWidth?: boolean;
+  /** Inert host markup used when composite-cell box styling affects measured width. */
+  measurementElement?: (item: T) => GridColumnMeasurementElement;
+  /** Inert visible text used to auto-measure composite cells without mounting them. */
+  measurementText?: (item: T) => string;
   /** Groups equivalent rendered values so auto-width measures each distinct sample once. */
   measurementSampleKey?: (item: T) => string;
   disableShortcuts?: boolean | ((item: T) => boolean);

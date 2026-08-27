@@ -9,7 +9,7 @@ import { createKindColumn } from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { useGridTableColumnMeasurer } from '@shared/components/tables/hooks/useGridTableColumnMeasurer';
 import type React from 'react';
-import { act } from 'react';
+import { act, useEffect } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
@@ -65,21 +65,11 @@ const renderHarness = async (tableData: SampleRow[]) => {
   });
 
   return {
-    measure: (column: GridColumnDefinition<SampleRow>) => {
-      if (!measureColumnWidth) {
-        throw new Error('measureColumnWidth not initialised');
-      }
-      let measured = 0;
-      // The measurement path creates and unmounts a temporary React root.
-      // Keep that work inside act() so React test warnings stay clean.
-      act(() => {
-        measured = requireValue(
-          measureColumnWidth,
-          'expected test value in useGridTableColumnMeasurer.test.tsx'
-        )(column);
-      });
-      return measured;
-    },
+    measure: (column: GridColumnDefinition<SampleRow>) =>
+      requireValue(
+        measureColumnWidth,
+        'expected test value in useGridTableColumnMeasurer.test.tsx'
+      )(column),
     cleanup: async () => {
       await act(async () => {
         root.unmount();
@@ -281,6 +271,74 @@ describe('useGridTableColumnMeasurer', () => {
     const measurement = harness.measure(columns[0]);
 
     expect(measurement).toBeGreaterThanOrEqual(widestName.length * 10);
+    await harness.cleanup();
+  });
+
+  it('batches inert samples without mounting rendered components', async () => {
+    let mounts = 0;
+    let cleanups = 0;
+    let sampleCountAtFirstMeasurement: number | null = null;
+    let measuredWrapperClassName: string | null = null;
+
+    const SideEffectingCell = ({ value }: { value: string }) => {
+      useEffect(() => {
+        mounts += 1;
+        return () => {
+          cleanups += 1;
+        };
+      }, []);
+      return <span>{value}</span>;
+    };
+    const sideEffectingColumn: GridColumnDefinition<SampleRow> = {
+      key: 'side-effecting',
+      header: 'Side effecting',
+      render: (row) => <SideEffectingCell value={row.name} />,
+      measurementElement: (row) => ({
+        tagName: 'span',
+        className: 'status-chip status-chip--healthy',
+        textContent: row.name,
+      }),
+    };
+
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get() {
+        return 120;
+      },
+    });
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      sampleCountAtFirstMeasurement ??= document.body.querySelectorAll(
+        '.gridtable-column-measurement-sample'
+      ).length;
+      measuredWrapperClassName ??= this.querySelector('.status-chip')?.className ?? null;
+      const width = (this.textContent ?? '').length * 10;
+      return {
+        width,
+        height: 0,
+        top: 0,
+        left: 0,
+        bottom: 0,
+        right: width,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return {};
+        },
+      } as DOMRect;
+    };
+
+    const harness = await renderHarness([
+      { name: 'alpha' },
+      { name: 'beta' },
+      { name: 'widest-value' },
+    ]);
+
+    expect(harness.measure(sideEffectingColumn)).toBeGreaterThanOrEqual(120);
+    expect(sampleCountAtFirstMeasurement).toBe(3);
+    expect(measuredWrapperClassName).toBe('status-chip status-chip--healthy');
+    expect(mounts).toBe(0);
+    expect(cleanups).toBe(0);
+
     await harness.cleanup();
   });
 

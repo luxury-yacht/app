@@ -26,15 +26,26 @@ export interface StatusChipProps {
   className?: string;
 }
 
+const getStatusChipClassName = (variant: StatusChipVariant, className?: string): string =>
+  ['status-chip', `status-chip--${variant}`, className].filter(Boolean).join(' ');
+
+export const createStatusChipMeasurementElement = (
+  variant: StatusChipVariant,
+  textContent: string,
+  className?: string
+) => ({
+  tagName: 'span' as const,
+  className: getStatusChipClassName(variant, className),
+  textContent,
+});
+
 export const StatusChip: React.FC<StatusChipProps> = ({
   variant,
   children,
   tooltip,
   className,
 }) => {
-  const chipClassName = ['status-chip', `status-chip--${variant}`, className]
-    .filter(Boolean)
-    .join(' ');
+  const chipClassName = getStatusChipClassName(variant, className);
   const chip = <span className={chipClassName}>{children}</span>;
   if (!tooltip) {
     return chip;

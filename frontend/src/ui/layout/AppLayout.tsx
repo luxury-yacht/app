@@ -23,6 +23,10 @@ import {
   useObjectMapDebugSnapshots,
 } from '@modules/object-map/objectMapDebugStore';
 import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
+import {
+  loadObjectPanel,
+  preloadObjectPanelModules,
+} from '@modules/object-panel/objectPanelLazyModules';
 // Error Handling
 import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotificationSystem';
 import { CopyIcon } from '@shared/components/icons/LogIcons';
@@ -87,10 +91,7 @@ const BrowseView = withLazyBoundary(
   () => import('@/modules/browse/components/BrowseView'),
   'Loading Browse...'
 );
-const ObjectPanel = withLazyBoundary(
-  () => import('@modules/object-panel/components/ObjectPanel/ObjectPanel'),
-  'Loading object details...'
-);
+const ObjectPanel = withLazyBoundary(loadObjectPanel, 'Loading object details...');
 
 const SettingsModal = withLazyBoundary(
   () => import('@ui/modals/SettingsModal'),
@@ -330,6 +331,24 @@ export const AppLayout: React.FC = () => {
     focusPanel,
     setLastFocusedGroupKey,
   });
+
+  useEffect(() => {
+    const warmObjectPanelModules = () => {
+      // Speculative loading is best-effort. The lazy boundaries surface a real
+      // import failure if the user later opens the panel.
+      void preloadObjectPanelModules().catch(() => undefined);
+    };
+    if (openPanels.size > 0) {
+      warmObjectPanelModules();
+      return;
+    }
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleCallbackId = window.requestIdleCallback(warmObjectPanelModules, { timeout: 1500 });
+      return () => window.cancelIdleCallback(idleCallbackId);
+    }
+    const timeoutId = window.setTimeout(warmObjectPanelModules, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [openPanels.size]);
 
   useEffect(() => {
     setObjectMapDebugOverlayVisible(isMapDebugOverlayVisible);

@@ -63,6 +63,7 @@ describe('columnFactories', () => {
 
         expect(container.textContent).toBe('10s');
         expect(getTextContent(column.render(row))).toBe('10s');
+        expect(column.measurementText?.(row)).toBe('10s');
         expect(column.sortValue?.(row)).toBe(-createdAt);
 
         await act(async () => {
@@ -71,6 +72,7 @@ describe('columnFactories', () => {
         });
 
         expect(container.textContent).toBe('11s');
+        expect(column.measurementText?.(row)).toBe('11s');
       } finally {
         act(() => root.unmount());
         container.remove();
@@ -81,6 +83,7 @@ describe('columnFactories', () => {
       const column = createAgeColumn<{ age?: string; ageTimestamp?: number }>();
 
       expect(column.render({ age: '5m' })).toBe('5m');
+      expect(column.measurementText?.({ age: '5m' })).toBe('5m');
       expect(column.sortValue?.({ age: '5m' })).toBe(300);
     });
   });

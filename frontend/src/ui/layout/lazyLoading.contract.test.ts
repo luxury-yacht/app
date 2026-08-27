@@ -11,7 +11,10 @@ const valueImportPattern = (modulePath: string) => {
 
 describe('application code-splitting boundaries', () => {
   it('loads route and object-panel implementations on demand', () => {
-    const source = readSource('src/ui/layout/AppLayout.tsx');
+    const source = [
+      readSource('src/ui/layout/AppLayout.tsx'),
+      readSource('src/modules/object-panel/objectPanelLazyModules.ts'),
+    ].join('\n');
 
     const deferredModules = [
       '@modules/cluster/components/ClusterOverview',
@@ -30,9 +33,11 @@ describe('application code-splitting boundaries', () => {
   });
 
   it('defers every object-panel tab implementation', () => {
-    const source = readSource(
-      'src/modules/object-panel/components/ObjectPanel/ObjectPanelContent.tsx'
-    );
+    const source = [
+      readSource('src/modules/object-panel/components/ObjectPanel/ObjectPanelContent.tsx'),
+      readSource('src/modules/object-panel/objectPanelLazyModules.ts'),
+      readSource('src/modules/object-panel/objectPanelDetailsLazyModule.ts'),
+    ].join('\n');
 
     const deferredModules = [
       '@modules/object-panel/components/ObjectPanel/Details/DetailsTab',
@@ -54,11 +59,19 @@ describe('application code-splitting boundaries', () => {
     }
   });
 
-  it('keeps the server renderer out of client-side table measurement', () => {
+  it('warms the object-panel shell and default tab together while the app is idle', () => {
+    const source = readSource('src/ui/layout/AppLayout.tsx');
+
+    expect(source).toContain('preloadObjectPanelModules');
+    expect(source).toContain('requestIdleCallback');
+  });
+
+  it('keeps React renderers out of client-side table measurement', () => {
     const source = readSource('src/shared/components/tables/hooks/useGridTableColumnMeasurer.ts');
 
     expect(source).not.toContain("from 'react-dom/server'");
-    expect(source).toContain("from 'react-dom/client'");
-    expect(source).toContain('flushSync');
+    expect(source).not.toContain("from 'react-dom/client'");
+    expect(source).not.toContain('flushSync');
+    expect(source).toContain('document.createDocumentFragment()');
   });
 });

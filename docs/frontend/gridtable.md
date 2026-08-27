@@ -259,6 +259,12 @@ loading transition can temporarily leave no rendered cells. Measurements from
 becoming a column width. Intrinsic measurements reserve one additional CSS pixel so subpixel paint
 rounding cannot clip the content edge.
 
+Measurement must not mount cell components or run their effects. Plain composite values declare
+`measurementText`; composites whose wrapper styling changes box width declare an inert
+`measurementElement` with the same host tag and classes as the rendered wrapper. Keep that markup
+derived from the same presentation helpers as the live component so padding, borders, font, and text
+transform stay synchronized.
+
 Column widths come from persisted user state, the column definition, auto-width
 measurement, or the shared fallback. The table does not stretch columns to fill
 the viewport; narrower tables leave trailing space and wider tables scroll

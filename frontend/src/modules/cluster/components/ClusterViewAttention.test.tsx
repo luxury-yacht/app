@@ -331,6 +331,11 @@ describe('ClusterViewAttention', () => {
       expect(
         (severityCell as React.ReactElement<{ variant: string; children: React.ReactNode }>).props
       ).toEqual(expect.objectContaining({ variant, children: severity }));
+      expect(severityColumn?.measurementElement?.({ ...finding, severity })).toEqual({
+        tagName: 'span',
+        className: `status-chip status-chip--${variant}`,
+        textContent: severity,
+      });
     }
   });
 

@@ -5,7 +5,11 @@ import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScop
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { SettingsIcon } from '@shared/components/icons/SharedIcons';
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import {
+  createStatusChipMeasurementElement,
+  StatusChip,
+  type StatusChipVariant,
+} from '@shared/components/StatusChip';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useGridTableExternalFilters } from '@shared/components/tables/hooks/useGridTableExternalFilters';
@@ -114,6 +118,8 @@ export default function ClusterViewAttention() {
         header: 'Severity',
         sortable: true,
         sortValue: (row) => row.severity,
+        measurementElement: (row) =>
+          createStatusChipMeasurementElement(severityChipVariants[row.severity], row.severity),
         render: (row) => (
           <StatusChip variant={severityChipVariants[row.severity]}>{row.severity}</StatusChip>
         ),
