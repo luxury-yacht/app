@@ -4,12 +4,14 @@
 
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { createTestId } from '@/test-utils/createTestId';
 import { requireValue } from '@/test-utils/requireValue';
 import { installWindowProperty } from '@/test-utils/windowProperty';
-
 import { Tabs } from './Tabs';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite('Tabs contracts');
 
 const installResizeObserver = (observers: Array<() => void>) =>
   installWindowProperty(

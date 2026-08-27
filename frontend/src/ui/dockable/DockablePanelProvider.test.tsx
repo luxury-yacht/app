@@ -15,12 +15,17 @@ import {
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
 import { useDockablePanelEmptySpaceDropTarget } from './DockablePanelContentArea';
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 import { DockableTabBar } from './DockableTabBar';
 import { clearPanelState } from './useDockablePanelState';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite(
+  'DockablePanelProvider contracts'
+);
 
 type DockablePanelContextValue = ReturnType<typeof useDockablePanelContext>;
 

@@ -1,10 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
-
 import {
   __resetScrollbarActivityTrackingForTest,
   initializeScrollbarActivityTracking,
 } from './scrollbarActivity';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite(
+  'scrollbarActivity contracts'
+);
 
 const defineMetric = (element: HTMLElement, name: keyof HTMLElement, value: number) => {
   Object.defineProperty(element, name, {

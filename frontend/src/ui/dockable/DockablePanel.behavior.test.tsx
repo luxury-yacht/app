@@ -9,12 +9,17 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider } from './DockablePanelProvider';
 import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
 import { type DockPosition, getAllPanelStates, restorePanelStates } from './useDockablePanelState';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite(
+  'DockablePanel.behavior contracts'
+);
 
 vi.mock('@core/backend-api', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),

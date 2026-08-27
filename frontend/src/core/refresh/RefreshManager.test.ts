@@ -5,7 +5,7 @@
  * Covers key behaviors and edge cases for RefreshManager.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import type { RefreshCallback, RefreshContext, Refresher } from '@/core/refresh';
 import { refreshManager } from '@/core/refresh';
@@ -15,7 +15,10 @@ import {
   refresherIntervalTimer,
 } from '@/core/refresh/refresherRuntimeState';
 import type { RefresherName } from '@/core/refresh/refresherTypes';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite('RefreshManager contracts');
 
 const TEST_REFRESHER = 'object-test' as RefresherName;
 

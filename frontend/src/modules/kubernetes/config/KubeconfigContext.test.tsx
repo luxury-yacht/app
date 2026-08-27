@@ -12,10 +12,15 @@ import {
 } from '@core/persistence/clusterTabOrder';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import { clusterReadiness } from '@/core/refresh/clusterReadiness';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { KubeconfigProvider, useKubeconfig } from './KubeconfigContext';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite(
+  'KubeconfigContext contracts'
+);
 
 const {
   getKubeconfigsMock,

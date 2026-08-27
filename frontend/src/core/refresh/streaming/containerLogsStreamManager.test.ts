@@ -5,7 +5,7 @@
  * Covers key behaviors and edge cases for containerLogsStreamManager.
  */
 
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 
 vi.mock('@core/backend-api', () => ({
@@ -24,7 +24,12 @@ import {
   resetContainerLogsStreamScopeParamsCacheForTesting,
   setContainerLogsStreamScopeParams,
 } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { getScopedDomainState, resetScopedDomainState } from '../store';
+
+const { afterEach, beforeEach, describe, test } = createConsolidatedSuite(
+  'containerLogsStreamManager contracts'
+);
 
 const SCOPE = 'cluster-a|default:/v1:Pod:example';
 type JSONStreamSourceHarness = {

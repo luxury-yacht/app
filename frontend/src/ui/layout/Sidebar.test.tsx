@@ -11,14 +11,18 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
 import Sidebar from './Sidebar';
+
+const { afterAll, afterEach, beforeAll, beforeEach, describe, it } =
+  createConsolidatedSuite('Sidebar contracts');
 
 const sidebarStyles = readFileSync(resolve(process.cwd(), 'src/ui/layout/Sidebar.css'), 'utf8');
 

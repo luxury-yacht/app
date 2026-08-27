@@ -10,7 +10,7 @@ import type { DropdownProps } from '@shared/components/dropdowns/Dropdown';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -260,9 +260,12 @@ vi.mock('react-dom', async (importOriginal) => {
   };
 });
 
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import type { FavSaveModalProps } from './FavSaveModal';
 // Import after all mocks are established.
 import FavSaveModal from './FavSaveModal';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite('FavSaveModal contracts');
 
 // ---------------------------------------------------------------------------
 // Test helpers

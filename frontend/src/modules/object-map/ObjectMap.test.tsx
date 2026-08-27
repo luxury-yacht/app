@@ -9,10 +9,13 @@ import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActi
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import * as ReactDOMClient from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
 import ObjectMap from './ObjectMap';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
+
+const { afterEach, describe, it } = createConsolidatedSuite('ObjectMap contracts');
 
 const useShortNamesMock = vi.hoisted(() => vi.fn(() => false));
 

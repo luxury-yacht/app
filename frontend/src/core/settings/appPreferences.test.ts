@@ -4,8 +4,9 @@
  * Test suite for appPreferences hydration and persistence helpers.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import {
   type AppPreferenceKey,
   commitIntegerPreferenceInput,
@@ -76,6 +77,8 @@ import {
   setUseShortResourceNames,
   validateThemeClusterPattern,
 } from './appPreferences';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite('appPreferences contracts');
 
 const appMocks = vi.hoisted(() => ({
   GetAppSettings: vi.fn(),

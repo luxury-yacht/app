@@ -2,11 +2,16 @@ import type { SortConfig } from '@hooks/useTableSort';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireValue } from '@/test-utils/requireValue';
 import type { TypedQueryPayload } from './typedResourceQueryScope';
 import { type UseTypedResourceQueryResult, useTypedResourceQuery } from './useTypedResourceQuery';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite(
+  'useTypedResourceQuery contracts'
+);
 
 const { requestRefreshDomainStateMock } = vi.hoisted(() => ({
   requestRefreshDomainStateMock: vi.fn(),

@@ -9,10 +9,15 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import { act, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import type { ClusterOverviewPayload, ClusterOverviewSnapshotPayload } from '@/core/refresh/types';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import ClusterOverview from './ClusterOverview';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite(
+  'ClusterOverview contracts'
+);
 
 const {
   mockRefreshOrchestrator,

@@ -10,9 +10,12 @@ import {
   objectActionLabel,
 } from '@shared/actions/objectActionContract';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { afterEach, describe, expect, it } from 'vitest';
+import { expect } from 'vitest';
 import { eventBus } from '@/core/events';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { buildObjectActionItems } from './useObjectActions';
+
+const { afterEach, describe, it } = createConsolidatedSuite('useObjectActions contracts');
 
 const findAction = (
   items: ContextMenuItem[],

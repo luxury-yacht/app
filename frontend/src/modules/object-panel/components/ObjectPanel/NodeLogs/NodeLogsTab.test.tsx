@@ -1,10 +1,14 @@
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
 import { resetLogViewerPrefsCacheForTesting } from '../Logs/logViewerPrefsCache';
 import NodeLogsTab from './NodeLogsTab';
+
+const { afterEach, beforeAll, beforeEach, describe, it } =
+  createConsolidatedSuite('NodeLogsTab contracts');
 
 const mockFetchNodeLogs = vi.fn();
 const handleInlineMock = vi.hoisted(() => vi.fn());

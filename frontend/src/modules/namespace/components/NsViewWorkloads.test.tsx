@@ -10,7 +10,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import type { UseTableSortOptions } from '@/hooks/useTableSort';
 import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
@@ -93,6 +93,11 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', async (importOriginal) =
 });
 
 import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite(
+  'NsViewWorkloads contracts'
+);
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({

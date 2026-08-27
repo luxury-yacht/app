@@ -13,10 +13,13 @@ import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
 import { ActionsMenu } from './ActionsMenu';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite('ActionsMenu contracts');
 
 const openWithObjectMock = vi.hoisted(() => vi.fn());
 

@@ -7,13 +7,18 @@
 
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import type { CanonicalRowTestOverrides, CatalogItem } from '@/core/refresh/types';
 import { compareUtf16Strings } from '@/shared/utils/sort';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
 import { buildCatalogDisplayEntries, CommandPalette, parseQueryTokens } from './CommandPalette';
 import type { Command } from './CommandPaletteCommands';
+
+const { afterEach, beforeAll, beforeEach, describe, it } = createConsolidatedSuite(
+  'CommandPalette contracts'
+);
 
 const baseTimestamp = '2024-01-01T00:00:00Z';
 

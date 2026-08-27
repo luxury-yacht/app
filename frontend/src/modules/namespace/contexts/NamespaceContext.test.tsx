@@ -8,7 +8,7 @@
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 vi.mock('@/utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
@@ -16,7 +16,12 @@ vi.mock('@/utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
 import { ALL_NAMESPACES_DISPLAY_NAME } from '@modules/namespace/constants';
 import { eventBus } from '@/core/events';
 import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { NamespaceProvider, useNamespace } from './NamespaceContext';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite(
+  'NamespaceContext contracts'
+);
 
 let mockClusterId = 'cluster-a';
 let mockClusterIds = ['cluster-a'];

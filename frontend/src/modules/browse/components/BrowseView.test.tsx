@@ -14,7 +14,7 @@ import type { GridTableFilterState, GridTableProps } from '@shared/components/ta
 import type { UseGridTablePersistenceParams } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import type {
   CanonicalRowTestOverrides,
@@ -22,7 +22,10 @@ import type {
   CatalogSnapshotPayload,
 } from '@/core/refresh/types';
 import BrowseView from '@/modules/browse/components/BrowseView';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite('BrowseView contracts');
 
 type BaseGridTableProps = GridTableProps<BrowseTableRow>;
 type CapturedGridTableProps = BaseGridTableProps & {

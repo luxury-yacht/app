@@ -5,9 +5,12 @@
  * Covers key behaviors and edge cases for errorHandler.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import type { ErrorHandlerOptions } from './errorHandler';
 import { ErrorCategory, ErrorSeverity, errorHandler } from './errorHandler';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite('ErrorHandler contracts');
 
 const telemetryMocks = vi.hoisted(() => ({
   captureUserVisibleError: vi.fn(),

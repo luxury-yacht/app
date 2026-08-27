@@ -7,15 +7,20 @@
 
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import type {
   CanonicalRowTestOverrides,
   CatalogItem,
   CatalogSnapshotPayload,
 } from '@/core/refresh/types';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
 import { type UseBrowseCatalogResult, useBrowseCatalog } from './useBrowseCatalog';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite(
+  'useBrowseCatalog contracts'
+);
 
 const mocks = vi.hoisted(() => ({
   setScopedDomainEnabled: vi.fn(),

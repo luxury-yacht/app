@@ -35,9 +35,12 @@ import { KeyboardProvider } from '@ui/shortcuts';
 // import React, { act } from 'react';
 import { act, useState } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite('GridTable contracts');
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(() => () => undefined),

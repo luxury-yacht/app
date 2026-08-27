@@ -9,7 +9,7 @@ import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { FetchContainerLogs, GetContainerLogsScopeContainers } from '@/core/backend-api';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import {
@@ -22,6 +22,7 @@ import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
 import {
   getContainerLogsStreamScopeParams,
@@ -33,6 +34,8 @@ import {
   resetLogViewerPrefsCacheForTesting,
   setLogViewerPrefs,
 } from './logViewerPrefsCache';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite('LogViewer contracts');
 
 const flushAsync = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 type ViMock = ReturnType<typeof vi.fn>;

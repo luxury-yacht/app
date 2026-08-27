@@ -4,7 +4,7 @@
  * Test suite for getPermissionKey and makePermissionStatus.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import type { DataReadRequest } from '@/core/data-access';
 import type { QueryPayloadItem, QueryPermissionsResponse } from './permissionRead';
 
@@ -21,6 +21,7 @@ vi.mock('@/core/data-access', () => ({
 }));
 
 import { eventBus } from '@/core/events';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { PERMISSION_FEATURES } from './permissionFeatures';
 import { POD_PERMISSIONS, WORKLOAD_PERMISSIONS } from './permissionSpecs';
 import {
@@ -36,6 +37,8 @@ import {
   subscribeUserPermissions,
 } from './permissionStore';
 import type { PermissionEntry } from './permissionTypes';
+
+const { afterEach, describe, it } = createConsolidatedSuite('permissionStore contracts');
 
 afterEach(() => {
   __resetForTests();

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { eventBus } from '@/core/events/eventBus';
 
 const sentryMocks = vi.hoisted(() => ({
@@ -21,6 +21,7 @@ const scopeMocks = vi.hoisted(() => ({
 
 vi.mock('@sentry/react', () => sentryMocks);
 
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import {
   captureBootstrapError,
   captureUserVisibleError,
@@ -35,6 +36,8 @@ import {
   setActiveNamespaceContext,
   setActiveViewContext,
 } from './sentry';
+
+const { beforeEach, describe, it } = createConsolidatedSuite('sentry contracts');
 
 describe('Sentry error reporting', () => {
   beforeEach(() => {

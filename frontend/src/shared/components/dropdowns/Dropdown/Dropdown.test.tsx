@@ -9,11 +9,15 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import type React from 'react';
 import { act, useEffect, useRef, useState } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { createTestId } from '@/test-utils/createTestId';
 import { requireValue } from '@/test-utils/requireValue';
 import Dropdown from './Dropdown';
 import type { DropdownOption } from './types';
+
+const { afterEach, beforeAll, beforeEach, describe, it } =
+  createConsolidatedSuite('Dropdown contracts');
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(() => () => undefined),

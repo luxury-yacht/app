@@ -8,7 +8,7 @@
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom';
 import * as ReactDOMClient from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 
 // Mock createPortal so tooltip content renders inline for assertions
 vi.mock('react-dom', async () => {
@@ -24,7 +24,10 @@ vi.mock('@core/contexts/ZoomContext', () => ({
   useZoom: () => ({ zoomLevel: 100 }),
 }));
 
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import Tooltip from './Tooltip';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite('Tooltip contracts');
 
 // ---------------------------------------------------------------------------
 // Helpers

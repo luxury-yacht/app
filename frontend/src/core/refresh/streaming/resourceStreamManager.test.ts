@@ -4,7 +4,7 @@
  * Test suite for resource stream helpers.
  */
 
-import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 
 import { eventBus } from '@/core/events';
 
@@ -36,6 +36,7 @@ vi.mock('@/core/logging/appLogsClient', () => ({
   logAppLogsWarn: logAppLogsWarnMock,
 }));
 
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { buildClusterScope } from '../clusterScope';
 import {
   makeNamespaceAutoscalingSnapshotPayload,
@@ -45,6 +46,10 @@ import {
 } from '../refreshContractTestBuilders';
 import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
 import { normalizeResourceScope, ResourceStreamManager } from './resourceStreamManager';
+
+const { afterEach, beforeEach, describe, it, test } = createConsolidatedSuite(
+  'resourceStreamManager contracts'
+);
 
 class FakeJSONSocket {
   static OPEN = 1;

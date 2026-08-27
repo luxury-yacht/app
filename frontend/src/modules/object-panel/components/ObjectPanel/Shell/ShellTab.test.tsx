@@ -7,9 +7,12 @@ import { KeyboardProvider } from '@ui/shortcuts/context';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
 import ShellTab from './ShellTab';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite('ShellTab contracts');
 
 const wailsMocks = vi.hoisted(() => ({
   StartShellSession: vi.fn(),

@@ -5,13 +5,14 @@
  * Covers key behaviors and edge cases for orchestrator.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
   setAutoRefreshEnabled,
 } from '@/core/settings/appPreferences';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
 import { clusterReadiness } from './clusterReadiness';
 import { buildClusterScope } from './clusterScope';
@@ -40,6 +41,8 @@ import {
   setScopedDomainState,
 } from './store';
 import { REFRESH_DOMAINS, type RefreshDomain } from './types';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite('orchestrator contracts');
 
 const SNAPSHOT_REFRESH_DOMAINS = REFRESH_DOMAINS.filter(
   (domain): domain is Exclude<RefreshDomain, 'container-logs'> => domain !== 'container-logs'

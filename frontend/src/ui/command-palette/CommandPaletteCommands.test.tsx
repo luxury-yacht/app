@@ -10,13 +10,18 @@ import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
 import { act, isValidElement } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
 import { type Command, useCommandPaletteCommands } from './CommandPaletteCommands';
+
+const { afterEach, beforeEach, describe, it } = createConsolidatedSuite(
+  'CommandPaletteCommands contracts'
+);
 
 const { mocks } = vi.hoisted(() => ({
   mocks: {

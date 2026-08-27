@@ -8,13 +8,14 @@
 import { KeyboardProvider } from '@ui/shortcuts';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { PERMISSION_FEATURES } from '@/core/capabilities';
 import type {
   PermissionQueryDiagnostics,
   PermissionStatus,
 } from '@/core/capabilities/permissionTypes';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { createConsolidatedSuite } from '@/test-utils/consolidatedTest';
 import { requireValue } from '@/test-utils/requireValue';
 import type { ViewType } from '@/types/navigation/views';
 import type { KubernetesAPIClientDiagnostics } from '../client';
@@ -23,6 +24,10 @@ import type { DomainSnapshotState } from '../store';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
 import type { TelemetrySummary } from '../types';
 import type { DiagnosticsPanelProps } from './diagnostics/diagnosticsPanelTypes';
+
+const { afterEach, beforeAll, beforeEach, describe, test } = createConsolidatedSuite(
+  'DiagnosticsPanel contracts'
+);
 
 const fetchTelemetrySummaryMock = vi.hoisted(() =>
   vi.fn<() => Promise<TelemetrySummary>>(async () => {
