@@ -547,9 +547,9 @@ describe('Sentry error reporting', () => {
     expect(sentryMocks.captureException).toHaveBeenCalledWith(error);
   });
 
-  it.each(['AUTHENTICATION', 'NETWORK', 'NOT_FOUND', 'TIMEOUT'] as const)(
-    'captures %s errors at an operational exception boundary',
-    (category) => {
+  it('captures operational errors at the exception boundary', () => {
+    for (const category of ['AUTHENTICATION', 'NETWORK', 'NOT_FOUND', 'TIMEOUT'] as const) {
+      vi.clearAllMocks();
       initializeErrorReporting({
         enabled: true,
         dsn: 'https://public@example.com/1',
@@ -566,11 +566,11 @@ describe('Sentry error reporting', () => {
       expect(sentryMocks.withScope).toHaveBeenCalledOnce();
       expect(sentryMocks.captureException).toHaveBeenCalledOnce();
     }
-  );
+  });
 
-  it.each(['NETWORK', 'NOT_FOUND', 'TIMEOUT'] as const)(
-    'does not capture an explicitly expected %s condition',
-    (category) => {
+  it('does not capture explicitly expected conditions', () => {
+    for (const category of ['NETWORK', 'NOT_FOUND', 'TIMEOUT'] as const) {
+      vi.clearAllMocks();
       initializeErrorReporting({
         enabled: true,
         dsn: 'https://public@example.com/1',
@@ -587,7 +587,7 @@ describe('Sentry error reporting', () => {
       expect(sentryMocks.withScope).not.toHaveBeenCalled();
       expect(sentryMocks.captureException).not.toHaveBeenCalled();
     }
-  );
+  });
 
   it('captures event-handler exceptions through the centralized operational boundary', () => {
     configureErrorReporting(

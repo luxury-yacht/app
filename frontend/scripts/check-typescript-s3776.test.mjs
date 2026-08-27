@@ -277,13 +277,15 @@ describe('audit command orchestration', () => {
     );
   });
 
-  it.each([
-    [[], 'Specify exactly one'],
-    [['--branch', 'main', '--pull-request', '123'], 'Specify exactly one'],
-    [['--pull-request', '123', '--update-baseline'], 'allowed only with --branch'],
-    [['--unknown'], 'Unknown or incomplete argument'],
-  ])('rejects invalid arguments %#', (args, message) => {
-    expect(() => parseAuditArguments(args)).toThrow(message);
+  it('rejects every invalid argument combination', () => {
+    for (const [args, message] of [
+      [[], 'Specify exactly one'],
+      [['--branch', 'main', '--pull-request', '123'], 'Specify exactly one'],
+      [['--pull-request', '123', '--update-baseline'], 'allowed only with --branch'],
+      [['--unknown'], 'Unknown or incomplete argument'],
+    ]) {
+      expect(() => parseAuditArguments(args), JSON.stringify(args)).toThrow(message);
+    }
   });
 
   it('audits a branch and writes only a monotonic update', async () => {

@@ -53,87 +53,97 @@ const lintWithProjectConfig = (
 };
 
 describe('Biome architectural boundary plugins', () => {
-  it.each([
-    ['no-direct-fetch', 'fetch("/api/resources");', 'direct fetch calls'],
-    ['no-direct-permission-read', 'runtime.QueryPermissions([]);', 'dataAccess'],
-    ['no-direct-cluster-workspace', 'runtime.GetClusterWorkspaceState();', 'clusterWorkspaceStore'],
-    ['no-direct-cluster-workspace', 'GetClusterWorkspaceState();', 'clusterWorkspaceStore'],
-    [
-      'no-direct-cluster-workspace',
-      'runtime.onEvent("cluster:lifecycle", handler);',
-      'clusterWorkspaceStore',
-    ],
-    [
-      'no-direct-cluster-workspace',
-      'onEvent("cluster:lifecycle", handler);',
-      'clusterWorkspaceStore',
-    ],
-    [
-      'no-direct-refresh-orchestrator',
-      'orchestrator.fetchScopedDomain("cluster", {});',
-      'fetchScopedDomain',
-    ],
-    [
-      'no-direct-refresh-orchestrator',
-      'orchestrator.triggerManualRefreshForContext({});',
-      'triggerManualRefreshForContext',
-    ],
-    ['no-direct-console-error', 'console.error("load failed", error);', 'errorHandler'],
-    [
-      'no-inline-error-text',
-      'const loadError = "failed"; const View = () => <div>{loadError}</div>;',
-      'ErrorSurface',
-    ],
-    [
-      'no-inline-error-text',
-      'const error = new Error("failed"); const View = () => <div>{error}</div>;',
-      'ErrorSurface',
-    ],
-    [
-      'no-inline-error-text',
-      'const result = { error: "failed" }; const View = () => <div>{result.error}</div>;',
-      'ErrorSurface',
-    ],
-    [
-      'no-inline-error-text',
-      'const error = new Error("failed"); const View = () => <div>{error.message}</div>;',
-      'ErrorSurface',
-    ],
-    [
-      'no-inline-error-text',
-      'const error = new Error("failed"); const View = () => <div>{String(error)}</div>;',
-      'ErrorSurface',
-    ],
-    [
-      'no-inline-error-text',
-      'const error = new Error("failed"); const View = () => <div>{error.toString()}</div>;',
-      'ErrorSurface',
-    ],
-    [
-      'no-inline-error-text',
-      'const message = "failed"; const View = () => <div className="inline-error">{message}</div>;',
-      'ErrorSurface',
-    ],
-    [
-      'no-inline-error-text',
-      'const message = "failed"; const View = () => <div role="alert">{message}</div>;',
-      'ErrorSurface',
-    ],
-  ])('rejects forbidden calls enforced by %s: %s', (pluginName, source, diagnostic) => {
-    const result = lintWithPlugin(pluginName, source);
+  it('rejects every forbidden call enforced by a boundary plugin', () => {
+    for (const [pluginName, source, diagnostic] of [
+      ['no-direct-fetch', 'fetch("/api/resources");', 'direct fetch calls'],
+      ['no-direct-permission-read', 'runtime.QueryPermissions([]);', 'dataAccess'],
+      [
+        'no-direct-cluster-workspace',
+        'runtime.GetClusterWorkspaceState();',
+        'clusterWorkspaceStore',
+      ],
+      ['no-direct-cluster-workspace', 'GetClusterWorkspaceState();', 'clusterWorkspaceStore'],
+      [
+        'no-direct-cluster-workspace',
+        'runtime.onEvent("cluster:lifecycle", handler);',
+        'clusterWorkspaceStore',
+      ],
+      [
+        'no-direct-cluster-workspace',
+        'onEvent("cluster:lifecycle", handler);',
+        'clusterWorkspaceStore',
+      ],
+      [
+        'no-direct-refresh-orchestrator',
+        'orchestrator.fetchScopedDomain("cluster", {});',
+        'fetchScopedDomain',
+      ],
+      [
+        'no-direct-refresh-orchestrator',
+        'orchestrator.triggerManualRefreshForContext({});',
+        'triggerManualRefreshForContext',
+      ],
+      ['no-direct-console-error', 'console.error("load failed", error);', 'errorHandler'],
+      [
+        'no-inline-error-text',
+        'const loadError = "failed"; const View = () => <div>{loadError}</div>;',
+        'ErrorSurface',
+      ],
+      [
+        'no-inline-error-text',
+        'const error = new Error("failed"); const View = () => <div>{error}</div>;',
+        'ErrorSurface',
+      ],
+      [
+        'no-inline-error-text',
+        'const result = { error: "failed" }; const View = () => <div>{result.error}</div>;',
+        'ErrorSurface',
+      ],
+      [
+        'no-inline-error-text',
+        'const error = new Error("failed"); const View = () => <div>{error.message}</div>;',
+        'ErrorSurface',
+      ],
+      [
+        'no-inline-error-text',
+        'const error = new Error("failed"); const View = () => <div>{String(error)}</div>;',
+        'ErrorSurface',
+      ],
+      [
+        'no-inline-error-text',
+        'const error = new Error("failed"); const View = () => <div>{error.toString()}</div>;',
+        'ErrorSurface',
+      ],
+      [
+        'no-inline-error-text',
+        'const message = "failed"; const View = () => <div className="inline-error">{message}</div>;',
+        'ErrorSurface',
+      ],
+      [
+        'no-inline-error-text',
+        'const message = "failed"; const View = () => <div role="alert">{message}</div>;',
+        'ErrorSurface',
+      ],
+    ]) {
+      const result = lintWithPlugin(pluginName, source);
 
-    expect(result.status).not.toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toContain(diagnostic);
+      expect(result.status, `${pluginName}: ${source}`).not.toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`, `${pluginName}: ${source}`).toContain(
+        diagnostic
+      );
+    }
   });
 
-  it.each([
-    ['no-direct-fetch', 'dataAccess.readResources();'],
-    ['no-direct-permission-read', 'dataAccess.readPermissions();'],
-    ['no-direct-refresh-orchestrator', 'dataAccess.refreshContext();'],
-  ])('accepts boundary calls outside %s', (pluginName, source) => {
-    const result = lintWithPlugin(pluginName, source);
+  it('accepts calls made through every approved boundary', () => {
+    for (const [pluginName, source] of [
+      ['no-direct-fetch', 'dataAccess.readResources();'],
+      ['no-direct-permission-read', 'dataAccess.readPermissions();'],
+      ['no-direct-refresh-orchestrator', 'dataAccess.refreshContext();'],
+    ]) {
+      const result = lintWithPlugin(pluginName, source);
 
-    expect(result.status).toBe(0);
+      expect(result.status, `${pluginName}: ${source}`).toBe(0);
+    }
   });
 
   it('allows error text passed as data to the shared presentation boundary', () => {
@@ -145,21 +155,23 @@ describe('Biome architectural boundary plugins', () => {
     expect(result.status).toBe(0);
   });
 
-  it.each([
-    ['fetch("/api/resources");', 'direct fetch calls'],
-    ['runtime.QueryPermissions([]);', 'dataAccess'],
-    ['runtime.GetClusterWorkspaceState();', 'clusterWorkspaceStore'],
-    ['GetClusterWorkspaceState();', 'clusterWorkspaceStore'],
-    ['runtime.onEvent("cluster:auth:failed", handler);', 'clusterWorkspaceStore'],
-    ['onEvent("cluster:auth:failed", handler);', 'clusterWorkspaceStore'],
-    ['orchestrator.fetchScopedDomain("cluster", {});', 'fetchScopedDomain'],
-    ['orchestrator.triggerManualRefreshForContext({});', 'triggerManualRefreshForContext'],
-    ['console.error("load failed", error);', 'errorHandler'],
-  ])('rejects forbidden calls through the real project config', (source, diagnostic) => {
-    const result = lintWithProjectConfig(source);
+  it('rejects every forbidden call through the real project config', () => {
+    for (const [source, diagnostic] of [
+      ['fetch("/api/resources");', 'direct fetch calls'],
+      ['runtime.QueryPermissions([]);', 'dataAccess'],
+      ['runtime.GetClusterWorkspaceState();', 'clusterWorkspaceStore'],
+      ['GetClusterWorkspaceState();', 'clusterWorkspaceStore'],
+      ['runtime.onEvent("cluster:auth:failed", handler);', 'clusterWorkspaceStore'],
+      ['onEvent("cluster:auth:failed", handler);', 'clusterWorkspaceStore'],
+      ['orchestrator.fetchScopedDomain("cluster", {});', 'fetchScopedDomain'],
+      ['orchestrator.triggerManualRefreshForContext({});', 'triggerManualRefreshForContext'],
+      ['console.error("load failed", error);', 'errorHandler'],
+    ]) {
+      const result = lintWithProjectConfig(source);
 
-    expect(result.status).not.toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toContain(diagnostic);
+      expect(result.status, source).not.toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`, source).toContain(diagnostic);
+    }
   });
 
   it('rejects inline error text through the real project TSX configuration', () => {

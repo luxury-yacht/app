@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { collectSuppressionErrors, readSourceFiles } from './check-biome-suppressions.mjs';
 
 describe('Biome inline suppression policy', () => {
-  it.each(['biome-ignore-all', 'biome-ignore-start', 'biome-ignore-end'])(
-    'rejects broad %s directives',
-    (directive) => {
+  it('rejects every broad suppression directive', () => {
+    for (const directive of ['biome-ignore-all', 'biome-ignore-start', 'biome-ignore-end']) {
       const errors = collectSuppressionErrors([
         {
           file: 'src/widget.tsx',
@@ -16,7 +15,7 @@ describe('Biome inline suppression policy', () => {
         `src/widget.tsx:1 Biome suppression form ${directive} is prohibited; use an exact inline biome-ignore directive`,
       ]);
     }
-  );
+  });
 
   it('requires an exact rule instead of a rule category', () => {
     const errors = collectSuppressionErrors([

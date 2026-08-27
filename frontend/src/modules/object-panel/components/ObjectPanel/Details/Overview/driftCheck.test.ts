@@ -37,12 +37,12 @@ const generatedDtoFields = (interfaceName: string): string[] => {
 };
 
 describe('Overview descriptor drift-check', () => {
-  for (const descriptor of registeredDescriptors) {
-    it(`${descriptor.displayKind}: descriptor accounts for every DTO field`, () => {
+  it('accounts for every generated DTO field in every registered descriptor', () => {
+    for (const descriptor of registeredDescriptors) {
       const allFields = generatedDtoFields(descriptor.dtoName);
       const covered = coverageKeys(descriptor);
       const uncovered = allFields.filter((field) => !covered.has(field));
-      expect(uncovered).toEqual([]);
-    });
-  }
+      expect(uncovered, descriptor.displayKind).toEqual([]);
+    }
+  });
 });

@@ -18,11 +18,13 @@ const duplicateProneOverviewFiles = [
 ];
 
 describe('duplicate-prone overview list keys', () => {
-  it.each(duplicateProneOverviewFiles)('%s disambiguates repeated content', (file) => {
-    const source = readFileSync(resolve(process.cwd(), file), 'utf8');
+  it('disambiguates repeated content in every duplicate-prone overview list', () => {
+    for (const file of duplicateProneOverviewFiles) {
+      const source = readFileSync(resolve(process.cwd(), file), 'utf8');
 
-    expect(source).not.toMatch(
-      /key=\{(?:JSON\.stringify\(|c\.name\}|ep\}|entry\}|host\}|label\}|formatPolicy\(p\)|`\$\{p\.label\}:\$\{p\.tooltip\}`|`\$\{resource\.kind\}:)/
-    );
+      expect(source, file).not.toMatch(
+        /key=\{(?:JSON\.stringify\(|c\.name\}|ep\}|entry\}|host\}|label\}|formatPolicy\(p\)|`\$\{p\.label\}:\$\{p\.tooltip\}`|`\$\{resource\.kind\}:)/
+      );
+    }
   });
 });

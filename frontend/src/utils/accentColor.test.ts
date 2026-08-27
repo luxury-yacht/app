@@ -92,18 +92,18 @@ describe('hslToHex', () => {
 describe('hexToHsl / hslToHex round-trip', () => {
   const testColors = ['#326ce5', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6'];
 
-  for (const hex of testColors) {
-    it(`round-trips ${hex}`, () => {
+  it('round-trips every representative accent color', () => {
+    for (const hex of testColors) {
       const { h, s, l } = hexToHsl(hex);
       const result = hslToHex(h, s, l);
       // Allow ±3 per channel due to HSL rounding
       const orig = hexToRgb(hex);
       const roundTrip = hexToRgb(result);
-      expect(Math.abs(orig.r - roundTrip.r)).toBeLessThanOrEqual(3);
-      expect(Math.abs(orig.g - roundTrip.g)).toBeLessThanOrEqual(3);
-      expect(Math.abs(orig.b - roundTrip.b)).toBeLessThanOrEqual(3);
-    });
-  }
+      expect(Math.abs(orig.r - roundTrip.r), `${hex} red channel`).toBeLessThanOrEqual(3);
+      expect(Math.abs(orig.g - roundTrip.g), `${hex} green channel`).toBeLessThanOrEqual(3);
+      expect(Math.abs(orig.b - roundTrip.b), `${hex} blue channel`).toBeLessThanOrEqual(3);
+    }
+  });
 });
 
 describe('hexToRgb', () => {
@@ -194,7 +194,7 @@ describe('applyAccentColor', () => {
     }
   });
 
-  it('sets CSS custom properties when hex is provided', () => {
+  it('sets, selectively applies, and removes accent palette properties', () => {
     applyAccentColor('#326ce5', '#f59e0b');
     const root = document.documentElement;
     // Light shades should be set.
@@ -205,25 +205,16 @@ describe('applyAccentColor', () => {
     for (const token of Object.keys(DARK_OFFSETS)) {
       expect(root.style.getPropertyValue(token)).not.toBe('');
     }
-  });
 
-  it('removes CSS custom properties when hex is empty', () => {
-    // First set them.
-    applyAccentColor('#326ce5', '#f59e0b');
-    // Then clear them.
     applyAccentColor('', '');
-    const root = document.documentElement;
     for (const token of Object.keys(LIGHT_OFFSETS)) {
       expect(root.style.getPropertyValue(token)).toBe('');
     }
     for (const token of Object.keys(DARK_OFFSETS)) {
       expect(root.style.getPropertyValue(token)).toBe('');
     }
-  });
 
-  it('only sets light shades when dark hex is empty', () => {
     applyAccentColor('#326ce5', '');
-    const root = document.documentElement;
     for (const token of Object.keys(LIGHT_OFFSETS)) {
       expect(root.style.getPropertyValue(token)).not.toBe('');
     }
@@ -238,22 +229,17 @@ describe('applyAccentBg', () => {
     document.documentElement.style.removeProperty('--color-accent-bg');
   });
 
-  it('sets --color-accent-bg for light mode', () => {
+  it('sets the mode-specific background and removes it when empty', () => {
     applyAccentBg('#326ce5', 'light');
     expect(document.documentElement.style.getPropertyValue('--color-accent-bg')).toBe(
       'rgba(50, 108, 229, 0.1)'
     );
-  });
 
-  it('sets --color-accent-bg for dark mode', () => {
     applyAccentBg('#f59e0b', 'dark');
     expect(document.documentElement.style.getPropertyValue('--color-accent-bg')).toBe(
       'rgba(245, 158, 11, 0.15)'
     );
-  });
 
-  it('removes --color-accent-bg when hex is empty', () => {
-    applyAccentBg('#326ce5', 'light');
     applyAccentBg('', 'light');
     expect(document.documentElement.style.getPropertyValue('--color-accent-bg')).toBe('');
   });

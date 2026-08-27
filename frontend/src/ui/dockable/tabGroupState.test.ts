@@ -5,7 +5,7 @@
  * All helpers are pure functions operating on immutable TabGroupState.
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   addPanelToFloatingGroup,
   addPanelToGroup,
@@ -17,7 +17,6 @@ import {
   reorderTab,
   setActiveTab,
 } from './tabGroupState';
-import type { TabGroupState } from './tabGroupTypes';
 
 // ---------------------------------------------------------------------------
 // createInitialTabGroupState
@@ -50,79 +49,64 @@ describe('createInitialTabGroupState', () => {
 // addPanelToGroup
 // ---------------------------------------------------------------------------
 describe('addPanelToGroup', () => {
-  let state: TabGroupState;
+  it('covers docked, floating, move, deduplication, and immutability scenarios', () => {
+    {
+      const state = createInitialTabGroupState();
+      const right = addPanelToGroup(state, 'panel-a', 'right');
+      const bottom = addPanelToGroup(state, 'panel-b', 'bottom');
+      expect(right.right.tabs).toEqual(['panel-a']);
+      expect(right.right.activeTab).toBe('panel-a');
+      expect(bottom.bottom.tabs).toEqual(['panel-b']);
+      expect(bottom.bottom.activeTab).toBe('panel-b');
+    }
 
-  beforeEach(() => {
-    state = createInitialTabGroupState();
-  });
+    {
+      let state = createInitialTabGroupState();
+      state = addPanelToGroup(state, 'a', 'right');
+      state = addPanelToGroup(state, 'b', 'right');
+      expect(state.right.tabs).toEqual(['a', 'b']);
+      expect(state.right.activeTab).toBe('b');
 
-  // -- right / bottom -------------------------------------------------------
-  it('adds a panel to the right group and activates it', () => {
-    const next = addPanelToGroup(state, 'panel-a', 'right');
-    expect(next.right.tabs).toEqual(['panel-a']);
-    expect(next.right.activeTab).toBe('panel-a');
-  });
+      state = addPanelToGroup(state, 'a', 'right');
+      expect(state.right.tabs).toEqual(['b', 'a']);
+      expect(state.right.activeTab).toBe('a');
+    }
 
-  it('adds a panel to the bottom group and activates it', () => {
-    const next = addPanelToGroup(state, 'panel-b', 'bottom');
-    expect(next.bottom.tabs).toEqual(['panel-b']);
-    expect(next.bottom.activeTab).toBe('panel-b');
-  });
+    {
+      let state = createInitialTabGroupState();
+      state = addPanelToGroup(state, 'a', 'right');
+      state = addPanelToGroup(state, 'a', 'bottom');
+      expect(state.right.tabs).toEqual([]);
+      expect(state.bottom.tabs).toEqual(['a']);
+      expect(state.bottom.activeTab).toBe('a');
+    }
 
-  it('appends to existing tabs in a docked group', () => {
-    let next = addPanelToGroup(state, 'a', 'right');
-    next = addPanelToGroup(next, 'b', 'right');
-    expect(next.right.tabs).toEqual(['a', 'b']);
-    expect(next.right.activeTab).toBe('b');
-  });
+    {
+      let state = createInitialTabGroupState();
+      state = addPanelToGroup(state, 'f1', 'floating');
+      state = addPanelToGroup(state, 'f2', 'floating');
+      expect(state.floating).toHaveLength(2);
+      expect(state.floating[0].tabs).toEqual(['f1']);
+      expect(state.floating[1].tabs).toEqual(['f2']);
+      expect(state.floating[0].groupId).toBe('floating-1');
+      expect(state.floating[1].groupId).toBe('floating-2');
+    }
 
-  it('does not duplicate a panel already in the group', () => {
-    let next = addPanelToGroup(state, 'a', 'right');
-    next = addPanelToGroup(next, 'b', 'right');
-    next = addPanelToGroup(next, 'a', 'right');
-    // 'a' should be moved to end (re-added), not duplicated
-    expect(next.right.tabs).toEqual(['b', 'a']);
-    expect(next.right.activeTab).toBe('a');
-  });
+    {
+      let state = createInitialTabGroupState();
+      state = addPanelToGroup(state, 'a', 'right');
+      state = addPanelToGroup(state, 'a', 'floating');
+      expect(state.right.tabs).toEqual([]);
+      expect(state.floating).toHaveLength(1);
+      expect(state.floating[0].tabs).toEqual(['a']);
+    }
 
-  it('removes panel from existing group when adding to a different group', () => {
-    let next = addPanelToGroup(state, 'a', 'right');
-    next = addPanelToGroup(next, 'a', 'bottom');
-    expect(next.right.tabs).toEqual([]);
-    expect(next.bottom.tabs).toEqual(['a']);
-    expect(next.bottom.activeTab).toBe('a');
-  });
-
-  // -- floating -------------------------------------------------------------
-  it('creates a new floating group each time a panel is added as floating', () => {
-    let next = addPanelToGroup(state, 'f1', 'floating');
-    next = addPanelToGroup(next, 'f2', 'floating');
-    expect(next.floating).toHaveLength(2);
-    expect(next.floating[0].tabs).toEqual(['f1']);
-    expect(next.floating[1].tabs).toEqual(['f2']);
-  });
-
-  it('assigns deterministic IDs to floating groups based on current state', () => {
-    let next = addPanelToGroup(state, 'f1', 'floating');
-    next = addPanelToGroup(next, 'f2', 'floating');
-    expect(next.floating[0].groupId).toBe('floating-1');
-    expect(next.floating[1].groupId).toBe('floating-2');
-  });
-
-  it('removes panel from previous group when adding as floating', () => {
-    let next = addPanelToGroup(state, 'a', 'right');
-    next = addPanelToGroup(next, 'a', 'floating');
-    expect(next.right.tabs).toEqual([]);
-    expect(next.floating).toHaveLength(1);
-    expect(next.floating[0].tabs).toEqual(['a']);
-  });
-
-  // -- immutability ---------------------------------------------------------
-  it('does not mutate the original state', () => {
-    const original = createInitialTabGroupState();
-    const frozen = JSON.parse(JSON.stringify(original));
-    addPanelToGroup(original, 'x', 'right');
-    expect(original).toEqual(frozen);
+    {
+      const original = createInitialTabGroupState();
+      const frozen = JSON.parse(JSON.stringify(original));
+      addPanelToGroup(original, 'x', 'right');
+      expect(original).toEqual(frozen);
+    }
   });
 });
 

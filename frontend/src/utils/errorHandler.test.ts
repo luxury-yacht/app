@@ -181,33 +181,37 @@ describe('ErrorHandler', () => {
     expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ['Failed to fetch: dial tcp 10.0.0.1:8403: connection refused', ErrorCategory.NETWORK],
-    ['Fetching cluster state failed', ErrorCategory.NETWORK],
-    ['Could not refetch cluster state', ErrorCategory.NETWORK],
-    ['All cluster connections were closed', ErrorCategory.NETWORK],
-    [
-      'Post "https://cluster.example.test": dial tcp: lookup cluster.example.test: no such host',
-      ErrorCategory.NETWORK,
-    ],
-    ['Container logs stream disconnected. Reconnecting soon', ErrorCategory.NETWORK],
-    ['dial tcp 10.0.0.1:403: i/o timeout', ErrorCategory.TIMEOUT],
-    ['request took 403 ms: internal server error', ErrorCategory.SERVER_ERROR],
-    ['processed 403 records before too many requests', ErrorCategory.RATE_LIMIT],
-  ])('does not treat incidental 403 digits in %s as permission denial', (message, category) => {
-    const details = handler.handle(message);
+  it('does not treat incidental 403 digits as permission denial', () => {
+    for (const [message, category] of [
+      ['Failed to fetch: dial tcp 10.0.0.1:8403: connection refused', ErrorCategory.NETWORK],
+      ['Fetching cluster state failed', ErrorCategory.NETWORK],
+      ['Could not refetch cluster state', ErrorCategory.NETWORK],
+      ['All cluster connections were closed', ErrorCategory.NETWORK],
+      [
+        'Post "https://cluster.example.test": dial tcp: lookup cluster.example.test: no such host',
+        ErrorCategory.NETWORK,
+      ],
+      ['Container logs stream disconnected. Reconnecting soon', ErrorCategory.NETWORK],
+      ['dial tcp 10.0.0.1:403: i/o timeout', ErrorCategory.TIMEOUT],
+      ['request took 403 ms: internal server error', ErrorCategory.SERVER_ERROR],
+      ['processed 403 records before too many requests', ErrorCategory.RATE_LIMIT],
+    ] as const) {
+      const details = handler.handle(message);
 
-    expect(details.category).toBe(category);
+      expect(details.category, message).toBe(category);
+    }
   });
 
-  it.each([
-    'request failed with HTTP 403',
-    'request failed with status code 403',
-    'server responded with a status of 403',
-  ])('treats structured 403 status in %s as permission denial', (message) => {
-    const details = handler.handle(message);
+  it('treats every structured 403 status as permission denial', () => {
+    for (const message of [
+      'request failed with HTTP 403',
+      'request failed with status code 403',
+      'server responded with a status of 403',
+    ]) {
+      const details = handler.handle(message);
 
-    expect(details.category).toBe(ErrorCategory.PERMISSION);
+      expect(details.category, message).toBe(ErrorCategory.PERMISSION);
+    }
   });
 
   it('treats forbidden Kubernetes resources with network in their API group as permission conditions', () => {
