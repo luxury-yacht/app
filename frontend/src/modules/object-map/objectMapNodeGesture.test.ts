@@ -17,176 +17,187 @@ import {
 } from './objectMapNodeGesture';
 
 describe('objectMapNodeGesture', () => {
-  it('does not mark a pointer gesture as a drag before the threshold is reached', () => {
-    const state = createObjectMapNodeGestureState();
+  it('covers objectMapNodeGesture scenarios', async () => {
+    {
+      // Scenario: does not mark a pointer gesture as a drag before the threshold is reached
+      const state = createObjectMapNodeGestureState();
 
-    beginObjectMapNodeGesture(state, {
-      pointerId: 1,
-      nodeId: 'deploy',
-      clientX: 10,
-      clientY: 10,
-    });
+      beginObjectMapNodeGesture(state, {
+        pointerId: 1,
+        nodeId: 'deploy',
+        clientX: 10,
+        clientY: 10,
+      });
 
-    expect(
+      expect(
+        updateObjectMapNodeGesture(state, {
+          pointerId: 1,
+          clientX: 10 + OBJECT_MAP_NODE_DRAG_THRESHOLD_PX - 1,
+          clientY: 10,
+        })
+      ).toBe(true);
+      expect(endObjectMapNodeGesture(state, 1)).toEqual({ nodeId: 'deploy', didDrag: false });
+      expect(consumeObjectMapSuppressedClick(state, 'deploy')).toBe(false);
+    }
+
+    {
+      // Scenario: suppresses the synthetic click for the same node after a drag
+      const state = createObjectMapNodeGestureState();
+
+      beginObjectMapNodeGesture(state, {
+        pointerId: 1,
+        nodeId: 'deploy',
+        clientX: 10,
+        clientY: 10,
+      });
+      expect(
+        updateObjectMapNodeGesture(state, {
+          pointerId: 1,
+          clientX: 10 + OBJECT_MAP_NODE_DRAG_THRESHOLD_PX,
+          clientY: 10,
+        })
+      ).toBe(true);
+      expect(endObjectMapNodeGesture(state, 1)).toEqual({ nodeId: 'deploy', didDrag: true });
+
+      expect(consumeObjectMapSuppressedClick(state, 'deploy')).toBe(true);
+      expect(consumeObjectMapSuppressedClick(state, 'deploy')).toBe(false);
+    }
+
+    {
+      // Scenario: does not suppress a different node click and clears stale suppression
+      const state = createObjectMapNodeGestureState();
+
+      beginObjectMapNodeGesture(state, {
+        pointerId: 1,
+        nodeId: 'deploy',
+        clientX: 10,
+        clientY: 10,
+      });
       updateObjectMapNodeGesture(state, {
         pointerId: 1,
-        clientX: 10 + OBJECT_MAP_NODE_DRAG_THRESHOLD_PX - 1,
+        clientX: 30,
         clientY: 10,
-      })
-    ).toBe(true);
-    expect(endObjectMapNodeGesture(state, 1)).toEqual({ nodeId: 'deploy', didDrag: false });
-    expect(consumeObjectMapSuppressedClick(state, 'deploy')).toBe(false);
-  });
+      });
+      endObjectMapNodeGesture(state, 1);
 
-  it('suppresses the synthetic click for the same node after a drag', () => {
-    const state = createObjectMapNodeGestureState();
+      expect(consumeObjectMapSuppressedClick(state, 'pod')).toBe(false);
+      expect(consumeObjectMapSuppressedClick(state, 'deploy')).toBe(false);
+    }
 
-    beginObjectMapNodeGesture(state, {
-      pointerId: 1,
-      nodeId: 'deploy',
-      clientX: 10,
-      clientY: 10,
-    });
-    expect(
+    {
+      // Scenario: clears stale suppression when a new node gesture starts
+      const state = createObjectMapNodeGestureState();
+
+      beginObjectMapNodeGesture(state, {
+        pointerId: 1,
+        nodeId: 'deploy',
+        clientX: 10,
+        clientY: 10,
+      });
       updateObjectMapNodeGesture(state, {
         pointerId: 1,
-        clientX: 10 + OBJECT_MAP_NODE_DRAG_THRESHOLD_PX,
+        clientX: 30,
         clientY: 10,
-      })
-    ).toBe(true);
-    expect(endObjectMapNodeGesture(state, 1)).toEqual({ nodeId: 'deploy', didDrag: true });
+      });
+      endObjectMapNodeGesture(state, 1);
 
-    expect(consumeObjectMapSuppressedClick(state, 'deploy')).toBe(true);
-    expect(consumeObjectMapSuppressedClick(state, 'deploy')).toBe(false);
-  });
+      beginObjectMapNodeGesture(state, {
+        pointerId: 2,
+        nodeId: 'deploy',
+        clientX: 30,
+        clientY: 10,
+      });
 
-  it('does not suppress a different node click and clears stale suppression', () => {
-    const state = createObjectMapNodeGestureState();
+      expect(consumeObjectMapSuppressedClick(state, 'deploy')).toBe(false);
+    }
 
-    beginObjectMapNodeGesture(state, {
-      pointerId: 1,
-      nodeId: 'deploy',
-      clientX: 10,
-      clientY: 10,
-    });
-    updateObjectMapNodeGesture(state, {
-      pointerId: 1,
-      clientX: 30,
-      clientY: 10,
-    });
-    endObjectMapNodeGesture(state, 1);
+    {
+      // Scenario: clears active drag and suppressed click state
+      const state = createObjectMapNodeGestureState();
 
-    expect(consumeObjectMapSuppressedClick(state, 'pod')).toBe(false);
-    expect(consumeObjectMapSuppressedClick(state, 'deploy')).toBe(false);
-  });
+      beginObjectMapNodeGesture(state, {
+        pointerId: 1,
+        nodeId: 'deploy',
+        clientX: 10,
+        clientY: 10,
+      });
+      updateObjectMapNodeGesture(state, {
+        pointerId: 1,
+        clientX: 30,
+        clientY: 10,
+      });
+      endObjectMapNodeGesture(state, 1);
+      clearObjectMapNodeGesture(state);
 
-  it('clears stale suppression when a new node gesture starts', () => {
-    const state = createObjectMapNodeGestureState();
-
-    beginObjectMapNodeGesture(state, {
-      pointerId: 1,
-      nodeId: 'deploy',
-      clientX: 10,
-      clientY: 10,
-    });
-    updateObjectMapNodeGesture(state, {
-      pointerId: 1,
-      clientX: 30,
-      clientY: 10,
-    });
-    endObjectMapNodeGesture(state, 1);
-
-    beginObjectMapNodeGesture(state, {
-      pointerId: 2,
-      nodeId: 'deploy',
-      clientX: 30,
-      clientY: 10,
-    });
-
-    expect(consumeObjectMapSuppressedClick(state, 'deploy')).toBe(false);
-  });
-
-  it('clears active drag and suppressed click state', () => {
-    const state = createObjectMapNodeGestureState();
-
-    beginObjectMapNodeGesture(state, {
-      pointerId: 1,
-      nodeId: 'deploy',
-      clientX: 10,
-      clientY: 10,
-    });
-    updateObjectMapNodeGesture(state, {
-      pointerId: 1,
-      clientX: 30,
-      clientY: 10,
-    });
-    endObjectMapNodeGesture(state, 1);
-    clearObjectMapNodeGesture(state);
-
-    expect(updateObjectMapNodeGesture(state, { pointerId: 1, clientX: 40, clientY: 10 })).toBe(
-      false
-    );
-    expect(consumeObjectMapSuppressedClick(state, 'deploy')).toBe(false);
+      expect(updateObjectMapNodeGesture(state, { pointerId: 1, clientX: 40, clientY: 10 })).toBe(
+        false
+      );
+      expect(consumeObjectMapSuppressedClick(state, 'deploy')).toBe(false);
+    }
   });
 });
 
 describe('objectMapActiveDragNodeId', () => {
-  it('returns null when no gesture is active', () => {
+  it('covers objectMapActiveDragNodeId scenarios', async () => {
+    // Scenario: returns null when no gesture is active
     expect(objectMapActiveDragNodeId(createObjectMapNodeGestureState())).toBeNull();
-  });
 
-  it('returns null while the pointer is down but below the drag threshold', () => {
-    const state = createObjectMapNodeGestureState();
+    {
+      // Scenario: returns null while the pointer is down but below the drag threshold
+      const state = createObjectMapNodeGestureState();
 
-    beginObjectMapNodeGesture(state, {
-      pointerId: 1,
-      nodeId: 'deploy',
-      clientX: 10,
-      clientY: 10,
-    });
-    updateObjectMapNodeGesture(state, {
-      pointerId: 1,
-      clientX: 10 + OBJECT_MAP_NODE_DRAG_THRESHOLD_PX - 1,
-      clientY: 10,
-    });
+      beginObjectMapNodeGesture(state, {
+        pointerId: 1,
+        nodeId: 'deploy',
+        clientX: 10,
+        clientY: 10,
+      });
+      updateObjectMapNodeGesture(state, {
+        pointerId: 1,
+        clientX: 10 + OBJECT_MAP_NODE_DRAG_THRESHOLD_PX - 1,
+        clientY: 10,
+      });
 
-    expect(objectMapActiveDragNodeId(state)).toBeNull();
-  });
+      expect(objectMapActiveDragNodeId(state)).toBeNull();
+    }
 
-  it('returns the dragged node id once the drag threshold is crossed', () => {
-    const state = createObjectMapNodeGestureState();
+    {
+      // Scenario: returns the dragged node id once the drag threshold is crossed
+      const state = createObjectMapNodeGestureState();
 
-    beginObjectMapNodeGesture(state, {
-      pointerId: 1,
-      nodeId: 'deploy',
-      clientX: 10,
-      clientY: 10,
-    });
-    updateObjectMapNodeGesture(state, {
-      pointerId: 1,
-      clientX: 10 + OBJECT_MAP_NODE_DRAG_THRESHOLD_PX,
-      clientY: 10,
-    });
+      beginObjectMapNodeGesture(state, {
+        pointerId: 1,
+        nodeId: 'deploy',
+        clientX: 10,
+        clientY: 10,
+      });
+      updateObjectMapNodeGesture(state, {
+        pointerId: 1,
+        clientX: 10 + OBJECT_MAP_NODE_DRAG_THRESHOLD_PX,
+        clientY: 10,
+      });
 
-    expect(objectMapActiveDragNodeId(state)).toBe('deploy');
-  });
+      expect(objectMapActiveDragNodeId(state)).toBe('deploy');
+    }
 
-  it('returns null after the gesture ends', () => {
-    const state = createObjectMapNodeGestureState();
+    {
+      // Scenario: returns null after the gesture ends
+      const state = createObjectMapNodeGestureState();
 
-    beginObjectMapNodeGesture(state, {
-      pointerId: 1,
-      nodeId: 'deploy',
-      clientX: 10,
-      clientY: 10,
-    });
-    updateObjectMapNodeGesture(state, {
-      pointerId: 1,
-      clientX: 40,
-      clientY: 10,
-    });
-    endObjectMapNodeGesture(state, 1);
+      beginObjectMapNodeGesture(state, {
+        pointerId: 1,
+        nodeId: 'deploy',
+        clientX: 10,
+        clientY: 10,
+      });
+      updateObjectMapNodeGesture(state, {
+        pointerId: 1,
+        clientX: 40,
+        clientY: 10,
+      });
+      endObjectMapNodeGesture(state, 1);
 
-    expect(objectMapActiveDragNodeId(state)).toBeNull();
+      expect(objectMapActiveDragNodeId(state)).toBeNull();
+    }
   });
 });

@@ -106,20 +106,21 @@ const collectSourceFiles = (root: string): Array<{ path: string; content: string
 };
 
 describe('stream-consumer drift guard', () => {
-  it('detects a literal stream-domain reader with no refetch mechanism', () => {
-    const violations = findUnguardedStreamReaders(
-      [
-        {
-          path: 'src/modules/example/Frozen.tsx',
-          content: "const state = useRefreshScopedDomain('pods', scope); return state.data;",
-        },
-      ],
-      ['pods']
-    );
-    expect(violations).toEqual([{ path: 'src/modules/example/Frozen.tsx', domains: ['pods'] }]);
-  });
-
-  it('accepts a reader wired to useStreamSignalRefetch or the query refetch identity', () => {
+  it('covers stream-consumer drift guard scenarios', async () => {
+    {
+      // Scenario: detects a literal stream-domain reader with no refetch mechanism
+      const violations = findUnguardedStreamReaders(
+        [
+          {
+            path: 'src/modules/example/Frozen.tsx',
+            content: "const state = useRefreshScopedDomain('pods', scope); return state.data;",
+          },
+        ],
+        ['pods']
+      );
+      expect(violations).toEqual([{ path: 'src/modules/example/Frozen.tsx', domains: ['pods'] }]);
+    }
+    // Scenario: accepts a reader wired to useStreamSignalRefetch or the query refetch identity
     expect(
       findUnguardedStreamReaders(
         [
@@ -137,9 +138,7 @@ describe('stream-consumer drift guard', () => {
         ['pods']
       )
     ).toEqual([]);
-  });
-
-  it('ignores plain snapshot domains — polling still refreshes them', () => {
+    // Scenario: ignores plain snapshot domains — polling still refreshes them
     expect(
       findUnguardedStreamReaders(
         [
@@ -151,18 +150,19 @@ describe('stream-consumer drift guard', () => {
         streamClassDomains
       )
     ).toEqual([]);
-  });
 
-  it('finds no unguarded stream-domain readers in the source tree', () => {
-    const files = collectSourceFiles(join(process.cwd(), 'src'));
-    // Sanity: the scan actually saw the known guarded consumers, so an empty
-    // violations list means "checked and clean", not "matched nothing".
-    const scannedPaths = files.map((file) => file.path);
-    expect(scannedPaths).toContain('src/modules/namespace/contexts/NamespaceContext.tsx');
-    expect(scannedPaths).toContain(
-      'src/modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx'
-    );
+    {
+      // Scenario: finds no unguarded stream-domain readers in the source tree
+      const files = collectSourceFiles(join(process.cwd(), 'src'));
+      // Sanity: the scan actually saw the known guarded consumers, so an empty
+      // violations list means "checked and clean", not "matched nothing".
+      const scannedPaths = files.map((file) => file.path);
+      expect(scannedPaths).toContain('src/modules/namespace/contexts/NamespaceContext.tsx');
+      expect(scannedPaths).toContain(
+        'src/modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx'
+      );
 
-    expect(findUnguardedStreamReaders(files)).toEqual([]);
+      expect(findUnguardedStreamReaders(files)).toEqual([]);
+    }
   });
 });

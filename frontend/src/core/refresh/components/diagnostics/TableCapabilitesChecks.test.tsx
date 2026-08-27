@@ -34,106 +34,119 @@ const createBatchRow = (index: number): CapabilityBatchRow => ({
 });
 
 describe('CapabilityChecksTable', () => {
-  it('renders large previous check sets incrementally', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const root = ReactDOM.createRoot(host);
-    const previousRows = Array.from({ length: 300 }, (_, index) => createBatchRow(index));
+  it('covers CapabilityChecksTable scenarios', async () => {
+    {
+      // Scenario: renders large previous check sets incrementally
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const root = ReactDOM.createRoot(host);
+      const previousRows = Array.from({ length: 300 }, (_, index) => createBatchRow(index));
 
-    await act(async () => {
-      root.render(
-        <CapabilityChecksTable currentRows={[]} previousRows={previousRows} summary="300 BATCHES" />
+      await act(async () => {
+        root.render(
+          <CapabilityChecksTable
+            currentRows={[]}
+            previousRows={previousRows}
+            summary="300 BATCHES"
+          />
+        );
+        await Promise.resolve();
+      });
+
+      expect(host.querySelectorAll('tr').length).toBeLessThan(300);
+      expect(host.textContent).toContain('300 BATCHES • Showing 250');
+      const showMore = Array.from(host.querySelectorAll('button')).find((button) =>
+        button.textContent?.includes('Show 50 More')
       );
-      await Promise.resolve();
-    });
+      expect(showMore).toBeInstanceOf(HTMLButtonElement);
 
-    expect(host.querySelectorAll('tr').length).toBeLessThan(300);
-    expect(host.textContent).toContain('300 BATCHES • Showing 250');
-    const showMore = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Show 50 More')
-    );
-    expect(showMore).toBeInstanceOf(HTMLButtonElement);
+      await act(async () => {
+        showMore?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
 
-    await act(async () => {
-      showMore?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
+      expect(host.textContent).toContain('namespace-299');
 
-    expect(host.textContent).toContain('namespace-299');
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    }
 
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
-  });
+    {
+      // Scenario: filters across previous rows that are not currently rendered
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const root = ReactDOM.createRoot(host);
+      const previousRows = Array.from({ length: 300 }, (_, index) => createBatchRow(index));
 
-  it('filters across previous rows that are not currently rendered', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const root = ReactDOM.createRoot(host);
-    const previousRows = Array.from({ length: 300 }, (_, index) => createBatchRow(index));
+      await act(async () => {
+        root.render(
+          <CapabilityChecksTable
+            currentRows={[]}
+            previousRows={previousRows}
+            summary="300 BATCHES"
+          />
+        );
+        await Promise.resolve();
+      });
 
-    await act(async () => {
-      root.render(
-        <CapabilityChecksTable currentRows={[]} previousRows={previousRows} summary="300 BATCHES" />
-      );
-      await Promise.resolve();
-    });
+      const search = host.querySelector<HTMLInputElement>('input[type="search"]');
+      expect(search).toBeTruthy();
 
-    const search = host.querySelector<HTMLInputElement>('input[type="search"]');
-    expect(search).toBeTruthy();
+      await act(async () => {
+        setSearchValue(
+          requireValue(search, 'expected test value in TableCapabilitesChecks.test.tsx'),
+          'namespace-299'
+        );
+        await Promise.resolve();
+      });
 
-    await act(async () => {
-      setSearchValue(
-        requireValue(search, 'expected test value in TableCapabilitesChecks.test.tsx'),
-        'namespace-299'
-      );
-      await Promise.resolve();
-    });
+      expect(host.textContent).toContain('1 MATCHES');
+      expect(host.textContent).toContain('namespace-299');
+      expect(host.textContent).not.toContain('Show 50 More');
 
-    expect(host.textContent).toContain('1 MATCHES');
-    expect(host.textContent).toContain('namespace-299');
-    expect(host.textContent).not.toContain('Show 50 More');
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    }
 
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
-  });
+    {
+      // Scenario: renders feature display labels for keyed descriptor groups
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const root = ReactDOM.createRoot(host);
+      const row = {
+        ...createBatchRow(1),
+        descriptorsByFeature: [
+          {
+            feature: PERMISSION_FEATURES.namespaceWorkloads,
+            resources: ['Deployment (list)'],
+          },
+        ],
+      };
 
-  it('renders feature display labels for keyed descriptor groups', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const root = ReactDOM.createRoot(host);
-    const row = {
-      ...createBatchRow(1),
-      descriptorsByFeature: [
-        {
-          feature: PERMISSION_FEATURES.namespaceWorkloads,
-          resources: ['Deployment (list)'],
-        },
-      ],
-    };
+      await act(async () => {
+        root.render(
+          <CapabilityChecksTable currentRows={[row]} previousRows={[]} summary="1 BATCH" />
+        );
+        await Promise.resolve();
+      });
 
-    await act(async () => {
-      root.render(
-        <CapabilityChecksTable currentRows={[row]} previousRows={[]} summary="1 BATCH" />
-      );
-      await Promise.resolve();
-    });
+      const dataRows = host.querySelectorAll('tbody tr');
+      await act(async () => {
+        dataRows[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
 
-    const dataRows = host.querySelectorAll('tbody tr');
-    await act(async () => {
-      dataRows[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
+      expect(host.textContent).toContain('Namespace workloads');
+      expect(host.textContent).not.toContain(PERMISSION_FEATURES.namespaceWorkloads);
 
-    expect(host.textContent).toContain('Namespace workloads');
-    expect(host.textContent).not.toContain(PERMISSION_FEATURES.namespaceWorkloads);
-
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    }
   });
 });

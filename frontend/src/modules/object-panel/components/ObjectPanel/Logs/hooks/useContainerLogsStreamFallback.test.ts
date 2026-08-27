@@ -112,25 +112,20 @@ function defaultProps(overrides: Partial<HarnessProps> = {}): HarnessProps {
 }
 
 describe('isLogDataUnavailable', () => {
-  it('returns false for null/empty messages', () => {
+  it('covers isLogDataUnavailable scenarios', async () => {
+    // Scenario: returns false for null/empty messages
     expect(isLogDataUnavailable(null)).toBe(false);
     expect(isLogDataUnavailable('')).toBe(false);
     expect(isLogDataUnavailable(undefined)).toBe(false);
-  });
-
-  it('returns true for known unavailable patterns', () => {
+    // Scenario: returns true for known unavailable patterns
     expect(isLogDataUnavailable('waiting to start: ContainerCreating')).toBe(true);
     expect(isLogDataUnavailable('PodInitializing')).toBe(true);
     expect(isLogDataUnavailable('container not found')).toBe(true);
     expect(isLogDataUnavailable('no logs available')).toBe(true);
-  });
-
-  it('returns false for transient errors', () => {
+    // Scenario: returns false for transient errors
     expect(isLogDataUnavailable('connection refused')).toBe(false);
     expect(isLogDataUnavailable('container logs stream disconnected')).toBe(false);
-  });
-
-  it('builds the correct unavailable-state message', () => {
+    // Scenario: builds the correct unavailable-state message
     expect(getLogDataUnavailableMessage(false)).toContain('not available yet');
     expect(getLogDataUnavailableMessage(true)).toContain('No previous logs');
   });

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { applyClusterNavigationTarget, resolveNavigationWorkspace } from './ViewStateContext';
 
 describe('applyClusterNavigationTarget', () => {
-  it('prepares only the requested cluster while preserving its other tab state', () => {
+  it('covers applyClusterNavigationTarget scenarios', async () => {
+    // Scenario: prepares only the requested cluster while preserving its other tab state
     expect(
       applyClusterNavigationTarget(
         {
@@ -36,9 +37,7 @@ describe('applyClusterNavigationTarget', () => {
         activeClusterView: 'storage',
       },
     });
-  });
-
-  it('prepares a namespace destination without changing another cluster', () => {
+    // Scenario: prepares a namespace destination without changing another cluster
     expect(
       applyClusterNavigationTarget(
         {
@@ -70,12 +69,11 @@ describe('applyClusterNavigationTarget', () => {
 });
 
 describe('resolveNavigationWorkspace', () => {
-  it('keeps Global active while multiple clusters remain open', () => {
+  it('covers resolveNavigationWorkspace scenarios', async () => {
+    // Scenario: keeps Global active while multiple clusters remain open
     expect(resolveNavigationWorkspace('global', 3)).toBe('global');
     expect(resolveNavigationWorkspace('global', 2)).toBe('global');
-  });
-
-  it('falls back to the cluster workspace when Global is no longer available', () => {
+    // Scenario: falls back to the cluster workspace when Global is no longer available
     expect(resolveNavigationWorkspace('global', 1)).toBe('cluster');
     expect(resolveNavigationWorkspace('global', 0)).toBe('cluster');
     expect(resolveNavigationWorkspace('cluster', 2)).toBe('cluster');

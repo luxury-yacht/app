@@ -35,7 +35,8 @@ const buildJob = (
 });
 
 describe('drainNodeModalModel', () => {
-  it('normalizes finite and non-finite numeric options', () => {
+  it('covers drainNodeModalModel scenarios', async () => {
+    // Scenario: normalizes finite and non-finite numeric options
     expect(normalizeGraceSeconds(Number.NaN)).toBe(30);
     expect(normalizeGraceSeconds(0)).toBe(1);
     expect(normalizeGraceSeconds(901.9)).toBe(900);
@@ -45,9 +46,7 @@ describe('drainNodeModalModel', () => {
     expect(hasPositiveDrainOption(undefined)).toBe(false);
     expect(hasPositiveDrainOption(null)).toBe(false);
     expect(hasPositiveDrainOption(1)).toBe(true);
-  });
-
-  it('builds a normalized backend payload and omits disabled numeric options', () => {
+    // Scenario: builds a normalized backend payload and omits disabled numeric options
     expect(
       buildDrainOptionsPayload({
         ignoreDaemonSets: true,
@@ -77,9 +76,7 @@ describe('drainNodeModalModel', () => {
         timeoutSeconds: 0,
       })
     ).not.toHaveProperty('timeoutSeconds');
-  });
-
-  it('resolves node and selected pod permission explanations', () => {
+    // Scenario: resolves node and selected pod permission explanations
     expect(resolveDrainStartPermissionReason(undefined, false)).toBeNull();
     expect(
       resolveDrainStartPermissionReason(
@@ -117,9 +114,7 @@ describe('drainNodeModalModel', () => {
         true
       )
     ).toBeNull();
-  });
-
-  it('resolves cancel permission explanations', () => {
+    // Scenario: resolves cancel permission explanations
     expect(resolveDrainCancelPermissionReason(undefined)).toBeNull();
     expect(
       resolveDrainCancelPermissionReason({
@@ -142,33 +137,34 @@ describe('drainNodeModalModel', () => {
         podDelete: allowed,
       })
     ).toBeNull();
-  });
 
-  it('selects active, recent, retry, and earlier drain presentation', () => {
-    expect(buildDrainJobPresentation([])).toEqual({
-      activeDrainJob: null,
-      primaryDrainJob: null,
-      earlierDrains: [],
-      isRetry: false,
-      closeLabel: 'Cancel',
-    });
-    const failed = buildJob('failed', 'failed');
-    const running = buildJob('running', 'running');
-    const older = buildJob('older', 'succeeded');
-    expect(buildDrainJobPresentation([failed, older])).toMatchObject({
-      primaryDrainJob: failed,
-      earlierDrains: [older],
-      isRetry: true,
-      closeLabel: 'Close',
-    });
-    expect(buildDrainJobPresentation([failed, running, older])).toMatchObject({
-      activeDrainJob: running,
-      primaryDrainJob: running,
-      earlierDrains: [failed, older],
-      isRetry: false,
-    });
-    expect(resolveDrainStartLabel(true, false)).toBe('Starting…');
-    expect(resolveDrainStartLabel(false, true)).toBe('Retry');
-    expect(resolveDrainStartLabel(false, false)).toBe('Drain');
+    {
+      // Scenario: selects active, recent, retry, and earlier drain presentation
+      expect(buildDrainJobPresentation([])).toEqual({
+        activeDrainJob: null,
+        primaryDrainJob: null,
+        earlierDrains: [],
+        isRetry: false,
+        closeLabel: 'Cancel',
+      });
+      const failed = buildJob('failed', 'failed');
+      const running = buildJob('running', 'running');
+      const older = buildJob('older', 'succeeded');
+      expect(buildDrainJobPresentation([failed, older])).toMatchObject({
+        primaryDrainJob: failed,
+        earlierDrains: [older],
+        isRetry: true,
+        closeLabel: 'Close',
+      });
+      expect(buildDrainJobPresentation([failed, running, older])).toMatchObject({
+        activeDrainJob: running,
+        primaryDrainJob: running,
+        earlierDrains: [failed, older],
+        isRetry: false,
+      });
+      expect(resolveDrainStartLabel(true, false)).toBe('Starting…');
+      expect(resolveDrainStartLabel(false, true)).toBe('Retry');
+      expect(resolveDrainStartLabel(false, false)).toBe('Drain');
+    }
   });
 });

@@ -3,34 +3,29 @@ import { describe, expect, it } from 'vitest';
 import { parseAnsiTextSegments } from './ansi';
 
 describe('parseAnsiTextSegments', () => {
-  it('uses the shared iTerm2 ANSI palette for base colors', () => {
+  it('covers parseAnsiTextSegments scenarios', async () => {
+    // Scenario: uses the shared iTerm2 ANSI palette for base colors
     expect(parseAnsiTextSegments('\u001b[31merror\u001b[0m', DEFAULT_TERMINAL_THEME)).toEqual([
       {
         text: 'error',
         style: { color: '#b43c2a' },
       },
     ]);
-  });
-
-  it('resolves bright colors from the shared palette', () => {
+    // Scenario: resolves bright colors from the shared palette
     expect(parseAnsiTextSegments('\u001b[94mnote\u001b[0m', DEFAULT_TERMINAL_THEME)).toEqual([
       {
         text: 'note',
         style: { color: '#a7abf2' },
       },
     ]);
-  });
-
-  it('dims the foreground color instead of using span opacity', () => {
+    // Scenario: dims the foreground color instead of using span opacity
     expect(parseAnsiTextSegments('\u001b[2mquiet\u001b[0m', DEFAULT_TERMINAL_THEME)).toEqual([
       {
         text: 'quiet',
         style: { color: 'rgba(220, 220, 220, 0.5)' },
       },
     ]);
-  });
-
-  it('swaps foreground and background for inverse video', () => {
+    // Scenario: swaps foreground and background for inverse video
     expect(parseAnsiTextSegments('\u001b[7mflip\u001b[0m', DEFAULT_TERMINAL_THEME)).toEqual([
       {
         text: 'flip',
@@ -40,9 +35,7 @@ describe('parseAnsiTextSegments', () => {
         },
       },
     ]);
-  });
-
-  it('keeps truecolor values exact', () => {
+    // Scenario: keeps truecolor values exact
     expect(
       parseAnsiTextSegments('\u001b[38;2;1;2;3mtruecolor\u001b[0m', DEFAULT_TERMINAL_THEME)
     ).toEqual([
@@ -51,9 +44,7 @@ describe('parseAnsiTextSegments', () => {
         style: { color: 'rgb(1, 2, 3)' },
       },
     ]);
-  });
-
-  it('resolves 256-color foreground and background values', () => {
+    // Scenario: resolves 256-color foreground and background values
     expect(
       parseAnsiTextSegments('\u001b[38;5;196;48;5;21mindexed\u001b[0m', DEFAULT_TERMINAL_THEME)
     ).toEqual([
@@ -65,9 +56,7 @@ describe('parseAnsiTextSegments', () => {
         },
       },
     ]);
-  });
-
-  it('applies bold without affecting color resolution', () => {
+    // Scenario: applies bold without affecting color resolution
     expect(parseAnsiTextSegments('\u001b[1;32mready\u001b[0m', DEFAULT_TERMINAL_THEME)).toEqual([
       {
         text: 'ready',
@@ -77,18 +66,14 @@ describe('parseAnsiTextSegments', () => {
         },
       },
     ]);
-  });
-
-  it('keeps truecolor backgrounds exact', () => {
+    // Scenario: keeps truecolor backgrounds exact
     expect(parseAnsiTextSegments('\u001b[48;2;4;5;6mbg\u001b[0m', DEFAULT_TERMINAL_THEME)).toEqual([
       {
         text: 'bg',
         style: { backgroundColor: 'rgb(4, 5, 6)' },
       },
     ]);
-  });
-
-  it('resets styles back to plain text segments', () => {
+    // Scenario: resets styles back to plain text segments
     expect(parseAnsiTextSegments('\u001b[31mred\u001b[0m plain', DEFAULT_TERMINAL_THEME)).toEqual([
       {
         text: 'red',
@@ -99,9 +84,7 @@ describe('parseAnsiTextSegments', () => {
         style: {},
       },
     ]);
-  });
-
-  it('supports nested resets while preserving the remaining foreground', () => {
+    // Scenario: supports nested resets while preserving the remaining foreground
     expect(
       parseAnsiTextSegments(
         '\u001b[31mred \u001b[1mbold\u001b[22m still\u001b[0m plain',

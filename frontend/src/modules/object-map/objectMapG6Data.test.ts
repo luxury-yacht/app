@@ -150,7 +150,8 @@ const palette: ObjectMapG6Palette = {
 };
 
 describe('objectMapG6Data', () => {
-  it('maps edge types to stable canvas strokes', () => {
+  it('covers objectMapG6Data scenarios', async () => {
+    // Scenario: maps edge types to stable canvas strokes
     expect(objectMapG6EdgeStroke('owner', palette)).toBe('#0f766e');
     expect(objectMapG6EdgeStroke(' routes ', palette)).toBe('#1d4ed8');
     expect(objectMapG6EdgeStroke('selector', palette)).toBe('#4f46e5');
@@ -162,9 +163,7 @@ describe('objectMapG6Data', () => {
     expect(objectMapG6EdgeStroke('filtered-path', palette)).toBe('#ef4444');
     expect(objectMapG6EdgeStroke('uses', palette)).toBe('#6b7280');
     expect(objectMapG6EdgeStroke('unknown', palette)).toBe('#9ca3af');
-  });
-
-  it('computes node and edge states from the shared selection state', () => {
+    // Scenario: computes node and edge states from the shared selection state
     expect(objectMapG6NodeState(layout.nodes[0], selectionState('deploy'))).toEqual([
       'seed',
       'selected',
@@ -176,239 +175,241 @@ describe('objectMapG6Data', () => {
     ]);
     expect(objectMapG6EdgeState(layout.edges[1], selectionState('deploy'))).toEqual(['dimmed']);
     expect(objectMapG6EdgeState(layout.edges[1], selectionState(null))).toEqual([]);
-  });
-
-  it('parses routed SVG edge paths for the G6 renderer', () => {
+    // Scenario: parses routed SVG edge paths for the G6 renderer
     expect(parseObjectMapG6Path('M 10 20 C 30 20, 40 50, 60 50')).toEqual([
       ['M', 10, 20],
       ['C', 30, 20, 40, 50, 60, 50],
     ]);
-  });
 
-  it('builds preset-positioned graph data with node metadata, collapse controls, and edge metadata', () => {
-    const graphData = toObjectMapG6Data(
-      layout,
-      selectionState('deploy'),
-      (nodeId) =>
-        nodeId === 'deploy' ? { deploymentId: 'deploy', hiddenCount: 2, expanded: false } : null,
-      palette
-    );
-
-    expect(graphData.nodes).toHaveLength(3);
-    expect(graphData.edges).toHaveLength(2);
-
-    const deploy = graphData.nodes?.find((entry) => entry.id === 'deploy');
-    expect(deploy?.type).toBe(OBJECT_MAP_G6_CARD_NODE);
-    expect(deploy?.data).toEqual(
-      expect.objectContaining({
-        ref: expect.objectContaining({
-          clusterId: 'cluster-a',
-          group: 'apps',
-          kind: 'Deployment',
-          version: 'v1',
-          name: 'web',
-        }),
-        badge: { deploymentId: 'deploy', hiddenCount: 2, expanded: false },
-        kindLabel: 'Deployment',
-        nameLabel: 'web',
-        namespaceLabel: 'default',
-        ageLabel: formatAge('2024-01-01T00:00:00Z'),
-        status: { state: '2/2', label: '2/2 ready', presentation: 'ready' },
-      })
-    );
-    expect(deploy?.style).toEqual(
-      expect.objectContaining({
-        x: 110,
-        y: 52,
-        size: [220, 64],
-        label: false,
-        cardBackgroundOpacity: 1,
-        cardForegroundOpacity: 1,
-        cardDetailLevel: 'full',
-        cardKindBadgeText: 'DEPLOYMENT',
-        cardKindBadgeFill: 'rgba(100, 116, 139, 0.15)',
-        cardCollapseBadgeFill: '#f8fafc',
-        cardCollapseBadgeStroke: '#9ca3af',
-        cardCollapseBadgeText: '+2',
-        cardCollapseBadgeTextFill: '#64748b',
-        cardNameText: 'web',
-        cardNamespaceText: 'default',
-        cardAgeText: formatAge('2024-01-01T00:00:00Z'),
-        cardAgeFill: '#64748b',
-        cardStatusText: '2/2 ready',
-        cardStatusFill: '#22c55e',
-        cardStatusStroke: '#f8fafc',
-      })
-    );
-    expect(deploy?.style?.badges).toBeUndefined();
-
-    const clusterScoped = graphData.nodes?.find((entry) => entry.id === 'node');
-    expect(clusterScoped?.data).toEqual(
-      expect.objectContaining({ namespaceLabel: 'cluster-scoped' })
-    );
-    expect(clusterScoped?.style).toEqual(
-      expect.objectContaining({
-        cardBackgroundOpacity: 0.25,
-        cardForegroundOpacity: 0.45,
-      })
-    );
-
-    const uses = graphData.edges?.find((entry) => entry.id === 'edge-uses');
-    expect(uses?.type).toBe(OBJECT_MAP_G6_PATH_EDGE);
-    expect(uses?.data).toEqual(
-      expect.objectContaining({
-        label: 'uses edge',
-        type: 'uses',
-        tracedBy: 'trace detail',
-        midX: 160,
-        midY: 40,
-        path: 'M 0 0 C 1 1, 2 2, 3 3',
-      })
-    );
-    expect(uses?.style).toEqual(
-      expect.objectContaining({
-        lineDash: [4, 3],
-        objectMapPath: [
-          ['M', 0, 0],
-          ['C', 1, 1, 2, 2, 3, 3],
-        ],
-      })
-    );
-  });
-
-  it('updates card age text from an explicit age clock without moving layout', () => {
-    const first = toObjectMapG6Data(layout, selectionState('deploy'), () => null, palette, {
-      ageNow: Date.parse('2024-01-01T00:00:10Z'),
-    });
-    const second = toObjectMapG6Data(layout, selectionState('deploy'), () => null, palette, {
-      ageNow: Date.parse('2024-01-01T00:00:11Z'),
-    });
-
-    const firstDeploy = first.nodes?.find((entry) => entry.id === 'deploy');
-    const secondDeploy = second.nodes?.find((entry) => entry.id === 'deploy');
-    expect(firstDeploy?.style?.cardAgeText).toBe('10s');
-    expect(secondDeploy?.style?.cardAgeText).toBe('11s');
-    expect(secondDeploy?.style?.x).toBe(firstDeploy?.style?.x);
-    expect(secondDeploy?.style?.y).toBe(firstDeploy?.style?.y);
-  });
-
-  it('does not style raw status state when backend presentation is missing', () => {
-    const statusCases = [
-      { state: 'True', fill: '#94a3b8' },
-      { state: 'False', fill: '#94a3b8' },
-      { state: 'Unknown', fill: '#94a3b8' },
-    ];
-
-    for (const { state, fill } of statusCases) {
+    {
+      // Scenario: builds preset-positioned graph data with node metadata, collapse controls, and edge metadata
       const graphData = toObjectMapG6Data(
-        {
-          ...layout,
-          nodes: [{ ...layout.nodes[2], status: { state, label: state } }],
-          edges: [],
-        },
-        selectionState(null),
-        () => null,
+        layout,
+        selectionState('deploy'),
+        (nodeId) =>
+          nodeId === 'deploy' ? { deploymentId: 'deploy', hiddenCount: 2, expanded: false } : null,
         palette
       );
 
-      expect(graphData.nodes?.[0].data?.status).toEqual({ state, label: state });
-      expect(graphData.nodes?.[0].style).toEqual(
+      expect(graphData.nodes).toHaveLength(3);
+      expect(graphData.edges).toHaveLength(2);
+
+      const deploy = graphData.nodes?.find((entry) => entry.id === 'deploy');
+      expect(deploy?.type).toBe(OBJECT_MAP_G6_CARD_NODE);
+      expect(deploy?.data).toEqual(
         expect.objectContaining({
-          cardStatusFill: fill,
+          ref: expect.objectContaining({
+            clusterId: 'cluster-a',
+            group: 'apps',
+            kind: 'Deployment',
+            version: 'v1',
+            name: 'web',
+          }),
+          badge: { deploymentId: 'deploy', hiddenCount: 2, expanded: false },
+          kindLabel: 'Deployment',
+          nameLabel: 'web',
+          namespaceLabel: 'default',
+          ageLabel: formatAge('2024-01-01T00:00:00Z'),
+          status: { state: '2/2', label: '2/2 ready', presentation: 'ready' },
         })
       );
-    }
-  });
+      expect(deploy?.style).toEqual(
+        expect.objectContaining({
+          x: 110,
+          y: 52,
+          size: [220, 64],
+          label: false,
+          cardBackgroundOpacity: 1,
+          cardForegroundOpacity: 1,
+          cardDetailLevel: 'full',
+          cardKindBadgeText: 'DEPLOYMENT',
+          cardKindBadgeFill: 'rgba(100, 116, 139, 0.15)',
+          cardCollapseBadgeFill: '#f8fafc',
+          cardCollapseBadgeStroke: '#9ca3af',
+          cardCollapseBadgeText: '+2',
+          cardCollapseBadgeTextFill: '#64748b',
+          cardNameText: 'web',
+          cardNamespaceText: 'default',
+          cardAgeText: formatAge('2024-01-01T00:00:00Z'),
+          cardAgeFill: '#64748b',
+          cardStatusText: '2/2 ready',
+          cardStatusFill: '#22c55e',
+          cardStatusStroke: '#f8fafc',
+        })
+      );
+      expect(deploy?.style?.badges).toBeUndefined();
 
-  it('uses backend status presentation for object-map color without changing raw state', () => {
-    const cases = [
-      { state: 'True', label: 'Terminating', presentation: 'terminating', fill: '#f59e0b' },
-      { state: 'Running', label: 'Running', presentation: 'warning', fill: '#f59e0b' },
-      { state: 'Pending', label: 'ErrImagePull', presentation: 'error', fill: '#ef4444' },
-    ];
+      const clusterScoped = graphData.nodes?.find((entry) => entry.id === 'node');
+      expect(clusterScoped?.data).toEqual(
+        expect.objectContaining({ namespaceLabel: 'cluster-scoped' })
+      );
+      expect(clusterScoped?.style).toEqual(
+        expect.objectContaining({
+          cardBackgroundOpacity: 0.25,
+          cardForegroundOpacity: 0.45,
+        })
+      );
 
-    for (const statusCase of cases) {
-      const { fill, ...status } = statusCase;
-      const graphData = toObjectMapG6Data(
-        {
-          ...layout,
-          nodes: [
-            {
-              ...layout.nodes[2],
-              status,
-            },
+      const uses = graphData.edges?.find((entry) => entry.id === 'edge-uses');
+      expect(uses?.type).toBe(OBJECT_MAP_G6_PATH_EDGE);
+      expect(uses?.data).toEqual(
+        expect.objectContaining({
+          label: 'uses edge',
+          type: 'uses',
+          tracedBy: 'trace detail',
+          midX: 160,
+          midY: 40,
+          path: 'M 0 0 C 1 1, 2 2, 3 3',
+        })
+      );
+      expect(uses?.style).toEqual(
+        expect.objectContaining({
+          lineDash: [4, 3],
+          objectMapPath: [
+            ['M', 0, 0],
+            ['C', 1, 1, 2, 2, 3, 3],
           ],
-          edges: [],
-        },
-        selectionState(null),
-        () => null,
-        palette
-      );
-
-      expect(graphData.nodes?.[0].data?.status).toEqual(status);
-      expect(graphData.nodes?.[0].style).toEqual(
-        expect.objectContaining({
-          cardStatusFill: fill,
         })
       );
     }
-  });
 
-  it('uses the centralized kind badge style resolver for card kind badges', () => {
-    const graphData = toObjectMapG6Data(layout, selectionState(null), () => null, palette, {
-      kindBadgeStyleForKind: (kind) => ({
-        className: `kind-badge ${kind}`,
-        backgroundColor: '#123456',
-        color: '#abcdef',
-        borderColor: '#fedcba',
-        borderWidth: 2,
-        borderRadius: 5,
-        fontSize: 10,
-        fontWeight: '700',
-        letterSpacing: 1,
-        paddingX: 6,
-        paddingY: 3,
-      }),
-    });
+    {
+      // Scenario: updates card age text from an explicit age clock without moving layout
+      const first = toObjectMapG6Data(layout, selectionState('deploy'), () => null, palette, {
+        ageNow: Date.parse('2024-01-01T00:00:10Z'),
+      });
+      const second = toObjectMapG6Data(layout, selectionState('deploy'), () => null, palette, {
+        ageNow: Date.parse('2024-01-01T00:00:11Z'),
+      });
 
-    const deploy = graphData.nodes?.find((entry) => entry.id === 'deploy');
-    expect(deploy?.style).toEqual(
-      expect.objectContaining({
-        cardKindBadgeFill: '#123456',
-        cardKindBadgeTextFill: '#abcdef',
-        cardKindBadgeStroke: '#fedcba',
-        cardKindBadgeBorderWidth: 2,
-        cardKindBadgeRadius: 5,
-        cardKindBadgeFontSize: 10,
-        cardKindBadgeFontWeight: '700',
-        cardKindBadgeLetterSpacing: 1,
-        cardKindBadgePaddingX: 6,
-        cardKindBadgePaddingY: 3,
-      })
-    );
-  });
+      const firstDeploy = first.nodes?.find((entry) => entry.id === 'deploy');
+      const secondDeploy = second.nodes?.find((entry) => entry.id === 'deploy');
+      expect(firstDeploy?.style?.cardAgeText).toBe('10s');
+      expect(secondDeploy?.style?.cardAgeText).toBe('11s');
+      expect(secondDeploy?.style?.x).toBe(firstDeploy?.style?.x);
+      expect(secondDeploy?.style?.y).toBe(firstDeploy?.style?.y);
+    }
 
-  it('uses short resource names for card kind labels when enabled', () => {
-    const graphData = toObjectMapG6Data(layout, selectionState(null), () => null, palette, {
-      useShortResourceNames: true,
-    });
+    {
+      // Scenario: does not style raw status state when backend presentation is missing
+      const statusCases = [
+        { state: 'True', fill: '#94a3b8' },
+        { state: 'False', fill: '#94a3b8' },
+        { state: 'Unknown', fill: '#94a3b8' },
+      ];
 
-    const deploy = graphData.nodes?.find((entry) => entry.id === 'deploy');
-    expect(deploy?.data).toEqual(
-      expect.objectContaining({
-        kindLabel: 'deploy',
-        nameLabel: 'web',
-      })
-    );
-    expect(deploy?.style).toEqual(
-      expect.objectContaining({
-        cardKindBadgeText: 'DEPLOY',
-        cardNameText: 'web',
-      })
-    );
-  });
+      for (const { state, fill } of statusCases) {
+        const graphData = toObjectMapG6Data(
+          {
+            ...layout,
+            nodes: [{ ...layout.nodes[2], status: { state, label: state } }],
+            edges: [],
+          },
+          selectionState(null),
+          () => null,
+          palette
+        );
 
-  it('maps zoom levels to card detail levels and never drops the card shape', () => {
+        expect(graphData.nodes?.[0].data?.status).toEqual({ state, label: state });
+        expect(graphData.nodes?.[0].style).toEqual(
+          expect.objectContaining({
+            cardStatusFill: fill,
+          })
+        );
+      }
+    }
+
+    {
+      // Scenario: uses backend status presentation for object-map color without changing raw state
+      const cases = [
+        { state: 'True', label: 'Terminating', presentation: 'terminating', fill: '#f59e0b' },
+        { state: 'Running', label: 'Running', presentation: 'warning', fill: '#f59e0b' },
+        { state: 'Pending', label: 'ErrImagePull', presentation: 'error', fill: '#ef4444' },
+      ];
+
+      for (const statusCase of cases) {
+        const { fill, ...status } = statusCase;
+        const graphData = toObjectMapG6Data(
+          {
+            ...layout,
+            nodes: [
+              {
+                ...layout.nodes[2],
+                status,
+              },
+            ],
+            edges: [],
+          },
+          selectionState(null),
+          () => null,
+          palette
+        );
+
+        expect(graphData.nodes?.[0].data?.status).toEqual(status);
+        expect(graphData.nodes?.[0].style).toEqual(
+          expect.objectContaining({
+            cardStatusFill: fill,
+          })
+        );
+      }
+    }
+
+    {
+      // Scenario: uses the centralized kind badge style resolver for card kind badges
+      const graphData = toObjectMapG6Data(layout, selectionState(null), () => null, palette, {
+        kindBadgeStyleForKind: (kind) => ({
+          className: `kind-badge ${kind}`,
+          backgroundColor: '#123456',
+          color: '#abcdef',
+          borderColor: '#fedcba',
+          borderWidth: 2,
+          borderRadius: 5,
+          fontSize: 10,
+          fontWeight: '700',
+          letterSpacing: 1,
+          paddingX: 6,
+          paddingY: 3,
+        }),
+      });
+
+      const deploy = graphData.nodes?.find((entry) => entry.id === 'deploy');
+      expect(deploy?.style).toEqual(
+        expect.objectContaining({
+          cardKindBadgeFill: '#123456',
+          cardKindBadgeTextFill: '#abcdef',
+          cardKindBadgeStroke: '#fedcba',
+          cardKindBadgeBorderWidth: 2,
+          cardKindBadgeRadius: 5,
+          cardKindBadgeFontSize: 10,
+          cardKindBadgeFontWeight: '700',
+          cardKindBadgeLetterSpacing: 1,
+          cardKindBadgePaddingX: 6,
+          cardKindBadgePaddingY: 3,
+        })
+      );
+    }
+
+    {
+      // Scenario: uses short resource names for card kind labels when enabled
+      const graphData = toObjectMapG6Data(layout, selectionState(null), () => null, palette, {
+        useShortResourceNames: true,
+      });
+
+      const deploy = graphData.nodes?.find((entry) => entry.id === 'deploy');
+      expect(deploy?.data).toEqual(
+        expect.objectContaining({
+          kindLabel: 'deploy',
+          nameLabel: 'web',
+        })
+      );
+      expect(deploy?.style).toEqual(
+        expect.objectContaining({
+          cardKindBadgeText: 'DEPLOY',
+          cardNameText: 'web',
+        })
+      );
+    }
+    // Scenario: maps zoom levels to card detail levels and never drops the card shape
     expect(objectMapG6CardDetailLevelForZoom(1)).toBe('full');
     expect(objectMapG6CardDetailLevelForZoom(0.75)).toBe('full');
     expect(objectMapG6CardDetailLevelForZoom(0.63)).toBe('compact');
@@ -417,62 +418,65 @@ describe('objectMapG6Data', () => {
     expect(objectMapG6CardDetailLevelForZoom(0.19)).toBe('minimal');
     expect(objectMapG6CardDetailLevelForZoom(0.05)).toBe('minimal');
     expect(objectMapG6CardDetailLevelForZoom(0.01)).toBe('minimal');
-  });
 
-  it('passes the requested card detail level to G6 nodes', () => {
-    const graphData = toObjectMapG6Data(layout, selectionState(null), () => null, palette, {
-      cardDetailLevel: 'compact',
-    });
+    {
+      // Scenario: passes the requested card detail level to G6 nodes
+      const graphData = toObjectMapG6Data(layout, selectionState(null), () => null, palette, {
+        cardDetailLevel: 'compact',
+      });
 
-    expect(graphData.nodes?.[0].style).toEqual(
-      expect.objectContaining({ cardDetailLevel: 'compact' })
-    );
-  });
+      expect(graphData.nodes?.[0].style).toEqual(
+        expect.objectContaining({ cardDetailLevel: 'compact' })
+      );
+    }
 
-  it('uses simple straight link paths without dashes when requested', () => {
-    const graphData = toObjectMapG6Data(layout, selectionState(null), () => null, palette, {
-      edgeDetailLevel: 'simple',
-    });
+    {
+      // Scenario: uses simple straight link paths without dashes when requested
+      const graphData = toObjectMapG6Data(layout, selectionState(null), () => null, palette, {
+        edgeDetailLevel: 'simple',
+      });
 
-    const uses = graphData.edges?.find((entry) => entry.id === 'edge-uses');
-    expect(uses?.style).toEqual(
-      expect.objectContaining({
-        objectMapEdgeDetailLevel: 'simple',
-        lineDash: undefined,
-        objectMapPath: [
-          ['M', 430, 52],
-          ['L', -210, 52],
-        ],
-      })
-    );
-  });
+      const uses = graphData.edges?.find((entry) => entry.id === 'edge-uses');
+      expect(uses?.style).toEqual(
+        expect.objectContaining({
+          objectMapEdgeDetailLevel: 'simple',
+          lineDash: undefined,
+          objectMapPath: [
+            ['M', 430, 52],
+            ['L', -210, 52],
+          ],
+        })
+      );
+    }
 
-  it('leaves long kind and object names intact before renderer width-based truncation', () => {
-    const longKind = 'VeryLongCustomResourceKindName';
-    const longName = 'object-name-that-is-longer-than-the-old-fixed-character-limit';
-    const graphData = toObjectMapG6Data(
-      {
-        ...layout,
-        nodes: [node('custom', longKind, longName, 0, true)],
-        edges: [],
-      },
-      selectionState(null),
-      () => null,
-      palette
-    );
+    {
+      // Scenario: leaves long kind and object names intact before renderer width-based truncation
+      const longKind = 'VeryLongCustomResourceKindName';
+      const longName = 'object-name-that-is-longer-than-the-old-fixed-character-limit';
+      const graphData = toObjectMapG6Data(
+        {
+          ...layout,
+          nodes: [node('custom', longKind, longName, 0, true)],
+          edges: [],
+        },
+        selectionState(null),
+        () => null,
+        palette
+      );
 
-    const custom = graphData.nodes?.find((entry) => entry.id === 'custom');
-    expect(custom?.data).toEqual(
-      expect.objectContaining({
-        kindLabel: longKind,
-        nameLabel: longName,
-      })
-    );
-    expect(custom?.style).toEqual(
-      expect.objectContaining({
-        cardKindBadgeText: longKind.toUpperCase(),
-        cardNameText: longName,
-      })
-    );
+      const custom = graphData.nodes?.find((entry) => entry.id === 'custom');
+      expect(custom?.data).toEqual(
+        expect.objectContaining({
+          kindLabel: longKind,
+          nameLabel: longName,
+        })
+      );
+      expect(custom?.style).toEqual(
+        expect.objectContaining({
+          cardKindBadgeText: longKind.toUpperCase(),
+          cardNameText: longName,
+        })
+      );
+    }
   });
 });

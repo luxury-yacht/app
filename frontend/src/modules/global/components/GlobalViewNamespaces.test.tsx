@@ -513,47 +513,49 @@ describe('GlobalViewNamespaces', () => {
     await unmount();
   });
 
-  it.each([
-    [
-      'unhealthy',
-      'unhealthy-link-cluster-b-payments',
-      ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'CronJob'],
-    ],
-    ['warnings', 'warnings-link-cluster-b-payments', ['Event']],
-  ])('opens %s findings for the namespace in the target cluster', async (_label, testId, kinds) => {
-    const { container, unmount } = await renderView();
+  it('covers opens parameterized findings for the namespace in the target cluster cases', async () => {
+    for (const [_label, testId, kinds] of [
+      [
+        'unhealthy',
+        'unhealthy-link-cluster-b-payments',
+        ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'CronJob'],
+      ],
+      ['warnings', 'warnings-link-cluster-b-payments', ['Event']],
+    ]) {
+      const { container, unmount } = await renderView();
 
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>(`[data-testid="${testId}"] button`)?.click();
-    });
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(`[data-testid="${testId}"] button`)?.click();
+      });
 
-    expect(mocks.requestGridTableFilters).toHaveBeenCalledWith({
-      clusterId: 'cluster-b',
-      destinationViewId: 'cluster-attention',
-      filters: {
-        search: '',
-        kinds: { mode: 'some', values: kinds },
-        namespaces: { mode: 'some', values: ['payments'] },
-        clusters: { mode: 'all' },
-        caseSensitive: false,
-        includeMetadata: false,
-      },
-    });
-    expect(mocks.setClusterNavigationTarget).toHaveBeenCalledWith('cluster-b', {
-      viewType: 'cluster',
-      activeClusterView: 'attention',
-    });
-    expect(mocks.setSidebarSelectionForCluster).toHaveBeenCalledWith('cluster-b', {
-      type: 'cluster',
-      value: 'cluster',
-    });
-    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith('cluster-b');
-    expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
-    expect(mocks.requestGridTableFilters.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]
-    );
+      expect(mocks.requestGridTableFilters).toHaveBeenCalledWith({
+        clusterId: 'cluster-b',
+        destinationViewId: 'cluster-attention',
+        filters: {
+          search: '',
+          kinds: { mode: 'some', values: kinds },
+          namespaces: { mode: 'some', values: ['payments'] },
+          clusters: { mode: 'all' },
+          caseSensitive: false,
+          includeMetadata: false,
+        },
+      });
+      expect(mocks.setClusterNavigationTarget).toHaveBeenCalledWith('cluster-b', {
+        viewType: 'cluster',
+        activeClusterView: 'attention',
+      });
+      expect(mocks.setSidebarSelectionForCluster).toHaveBeenCalledWith('cluster-b', {
+        type: 'cluster',
+        value: 'cluster',
+      });
+      expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith('cluster-b');
+      expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
+      expect(mocks.requestGridTableFilters.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]
+      );
 
-    await unmount();
+      await unmount();
+    }
   });
 
   it('opens the namespace Object Panel from Kind without staging navigation', async () => {

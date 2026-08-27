@@ -54,6 +54,9 @@ describe('UpdateStatus', () => {
 
   const renderAndSettle = async () => {
     await act(async () => {
+      root.render(null);
+    });
+    await act(async () => {
       root.render(<UpdateStatus />);
     });
     // Flush the app-info promise + the resulting state update.
@@ -108,34 +111,37 @@ describe('UpdateStatus', () => {
     expect(container.querySelector('[data-testid="update-status-chip"]')).toBeNull();
   });
 
-  it.each([
-    ['downloading', 'Downloading update…'],
-    ['verifying', 'Verifying update…'],
-    ['preparing', 'Preparing update…'],
-    ['ready', 'Restart to update'],
-    ['check-error', 'Update needs attention'],
-    ['prepare-error', 'Update needs attention'],
-    ['restart-error', 'Update needs attention'],
-    ['apply-error', 'Update needs attention'],
-  ])('renders compact %s state and opens About', async (status, label) => {
-    readAppInfoMock.mockResolvedValue({ update: { status, availableVersion: '1.10.1' } });
+  it('covers renders compact parameterized state and opens About cases', async () => {
+    for (const [status, label] of [
+      ['downloading', 'Downloading update…'],
+      ['verifying', 'Verifying update…'],
+      ['preparing', 'Preparing update…'],
+      ['ready', 'Restart to update'],
+      ['check-error', 'Update needs attention'],
+      ['prepare-error', 'Update needs attention'],
+      ['restart-error', 'Update needs attention'],
+      ['apply-error', 'Update needs attention'],
+    ]) {
+      readAppInfoMock.mockResolvedValue({ update: { status, availableVersion: '1.10.1' } });
 
-    await renderAndSettle();
+      await renderAndSettle();
 
-    const chip = container.querySelector('[data-testid="update-status-chip"]') as HTMLButtonElement;
-    expect(chip.textContent).toContain(label);
-    act(() => chip.click());
-    expect(setIsAboutOpenMock).toHaveBeenCalledWith(true);
+      const chip = container.querySelector(
+        '[data-testid="update-status-chip"]'
+      ) as HTMLButtonElement;
+      expect(chip.textContent).toContain(label);
+      act(() => chip.click());
+      expect(setIsAboutOpenMock).toHaveBeenCalledWith(true);
+    }
   });
 
-  it.each(['disabled', 'idle', 'checking', 'skipped'])(
-    'stays out of the header for %s',
-    async (status) => {
+  it('covers stays out of the header for parameterized cases', async () => {
+    for (const status of ['disabled', 'idle', 'checking', 'skipped']) {
       readAppInfoMock.mockResolvedValue({ update: { status } });
 
       await renderAndSettle();
 
       expect(container.querySelector('[data-testid="update-status-chip"]')).toBeNull();
     }
-  );
+  });
 });

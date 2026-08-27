@@ -10,7 +10,8 @@ import { describe, expect, it } from 'vitest';
 import { normalizeDescriptor } from './utils';
 
 describe('normalizeDescriptor', () => {
-  it('trims identifiers and normalizes verb casing', () => {
+  it('covers normalizeDescriptor scenarios', async () => {
+    // Scenario: trims identifiers and normalizes verb casing
     expect(
       normalizeDescriptor({
         id: ' pod-delete ',
@@ -34,9 +35,7 @@ describe('normalizeDescriptor', () => {
       name: 'api',
       subresource: 'scale',
     });
-  });
-
-  it('drops blank optional fields', () => {
+    // Scenario: drops blank optional fields
     expect(
       normalizeDescriptor({
         id: 'list-pods',

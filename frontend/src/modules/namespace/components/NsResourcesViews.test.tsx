@@ -179,18 +179,20 @@ describe('NamespaceResourcesViews', () => {
     },
   ];
 
-  it.each(tabCases)('renders %s tab content', async ({ tab, props, mock, expected }) => {
-    await renderView({
-      namespace: 'team-a',
-      activeTab: tab,
-      ...props,
-    });
+  it('covers renders parameterized tab content cases', async () => {
+    for (const { tab, props, mock, expected } of tabCases) {
+      await renderView({
+        namespace: 'team-a',
+        activeTab: tab,
+        ...props,
+      });
 
-    expect(mock).toHaveBeenCalledTimes(1);
-    const call = mock.mock.calls.length
-      ? (mock.mock.calls[0] as unknown[] | undefined)?.[0]
-      : undefined;
-    expect(call).toMatchObject(expected);
+      expect(mock).toHaveBeenCalledTimes(1);
+      const call = mock.mock.calls.length
+        ? (mock.mock.calls[0] as unknown[] | undefined)?.[0]
+        : undefined;
+      expect(call).toMatchObject(expected);
+    }
   });
 
   it('renders custom view data when provided', async () => {

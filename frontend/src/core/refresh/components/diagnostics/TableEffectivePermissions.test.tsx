@@ -35,92 +35,97 @@ const createPermissionRow = (index: number): PermissionRow => ({
 });
 
 describe('EffectivePermissionsTable', () => {
-  it('renders large permission sets incrementally', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const root = ReactDOM.createRoot(host);
-    const rows = Array.from({ length: 300 }, (_, index) => createPermissionRow(index));
+  it('covers EffectivePermissionsTable scenarios', async () => {
+    {
+      // Scenario: renders large permission sets incrementally
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const root = ReactDOM.createRoot(host);
+      const rows = Array.from({ length: 300 }, (_, index) => createPermissionRow(index));
 
-    await act(async () => {
-      root.render(<EffectivePermissionsTable rows={rows} />);
-      await Promise.resolve();
-    });
+      await act(async () => {
+        root.render(<EffectivePermissionsTable rows={rows} />);
+        await Promise.resolve();
+      });
 
-    expect(host.querySelectorAll('tbody tr')).toHaveLength(250);
-    expect(host.textContent).toContain('300 CHECKS • Showing 250');
-    const showMore = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Show 50 More')
-    );
-    expect(showMore).toBeInstanceOf(HTMLButtonElement);
-
-    await act(async () => {
-      showMore?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(host.querySelectorAll('tbody tr')).toHaveLength(300);
-
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
-  });
-
-  it('filters across rows that are not currently rendered', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const root = ReactDOM.createRoot(host);
-    const rows = Array.from({ length: 300 }, (_, index) => createPermissionRow(index));
-
-    await act(async () => {
-      root.render(<EffectivePermissionsTable rows={rows} />);
-      await Promise.resolve();
-    });
-
-    const search = host.querySelector<HTMLInputElement>('input[type="search"]');
-    expect(search).toBeTruthy();
-
-    await act(async () => {
-      setSearchValue(
-        requireValue(search, 'expected test value in TableEffectivePermissions.test.tsx'),
-        'namespace-299'
+      expect(host.querySelectorAll('tbody tr')).toHaveLength(250);
+      expect(host.textContent).toContain('300 CHECKS • Showing 250');
+      const showMore = Array.from(host.querySelectorAll('button')).find((button) =>
+        button.textContent?.includes('Show 50 More')
       );
-      await Promise.resolve();
-    });
+      expect(showMore).toBeInstanceOf(HTMLButtonElement);
 
-    expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
-    expect(host.textContent).toContain('1 OF 300 CHECKS');
-    expect(host.textContent).toContain('namespace-299');
+      await act(async () => {
+        showMore?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
 
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
-  });
+      expect(host.querySelectorAll('tbody tr')).toHaveLength(300);
 
-  it('renders display labels while keeping stable feature keys in row data', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const root = ReactDOM.createRoot(host);
-    const rows = [
-      {
-        ...createPermissionRow(1),
-        feature: PERMISSION_FEATURES.namespaceWorkloads,
-        featureLabel: 'Namespace workloads',
-      },
-    ];
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    }
 
-    await act(async () => {
-      root.render(<EffectivePermissionsTable rows={rows} />);
-      await Promise.resolve();
-    });
+    {
+      // Scenario: filters across rows that are not currently rendered
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const root = ReactDOM.createRoot(host);
+      const rows = Array.from({ length: 300 }, (_, index) => createPermissionRow(index));
 
-    expect(host.textContent).toContain('Namespace workloads');
-    expect(host.textContent).not.toContain(PERMISSION_FEATURES.namespaceWorkloads);
+      await act(async () => {
+        root.render(<EffectivePermissionsTable rows={rows} />);
+        await Promise.resolve();
+      });
 
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
+      const search = host.querySelector<HTMLInputElement>('input[type="search"]');
+      expect(search).toBeTruthy();
+
+      await act(async () => {
+        setSearchValue(
+          requireValue(search, 'expected test value in TableEffectivePermissions.test.tsx'),
+          'namespace-299'
+        );
+        await Promise.resolve();
+      });
+
+      expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
+      expect(host.textContent).toContain('1 OF 300 CHECKS');
+      expect(host.textContent).toContain('namespace-299');
+
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    }
+
+    {
+      // Scenario: renders display labels while keeping stable feature keys in row data
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const root = ReactDOM.createRoot(host);
+      const rows = [
+        {
+          ...createPermissionRow(1),
+          feature: PERMISSION_FEATURES.namespaceWorkloads,
+          featureLabel: 'Namespace workloads',
+        },
+      ];
+
+      await act(async () => {
+        root.render(<EffectivePermissionsTable rows={rows} />);
+        await Promise.resolve();
+      });
+
+      expect(host.textContent).toContain('Namespace workloads');
+      expect(host.textContent).not.toContain(PERMISSION_FEATURES.namespaceWorkloads);
+
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    }
   });
 });

@@ -15,11 +15,10 @@ import {
 const sortedDomains = (domains: Set<string>) => Array.from(domains).sort();
 
 describe('diagnosticsPanelConfig domain behavior sets', () => {
-  test('pins stream-only domains derived from the contract', () => {
+  test('covers diagnosticsPanelConfig domain behavior sets scenarios', async () => {
+    // Scenario: pins stream-only domains derived from the contract
     expect(sortedDomains(STREAM_ONLY_DOMAINS)).toEqual(['container-logs']);
-  });
-
-  test('pins domains that pause polling while streaming', () => {
+    // Scenario: pins domains that pause polling while streaming
     // pods/nodes/namespace-workloads pause polling while streaming like every
     // other stream-covered domain: their metric cadence is push-driven (the
     // backend poller fans a metric doorbell over the stream), so no
@@ -49,9 +48,7 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
       'object-events',
       'pods',
     ]);
-  });
-
-  test('does not project selected-cluster permissions onto the Global workspace', () => {
+    // Scenario: does not project selected-cluster permissions onto the Global workspace
     expect(getScopedFeaturesForView('global', null, 'workloads')).toEqual([]);
   });
 });

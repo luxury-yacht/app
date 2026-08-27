@@ -118,69 +118,76 @@ const measure = <T>(fn: () => T): { result: T; durationMs: number } => {
 };
 
 describe('object map performance fixtures', () => {
-  it('builds deterministic large fixtures with complete object references', () => {
-    const payload = createObjectMapPerformanceFixture({ nodeCount: 500, edgeCount: 1000 });
+  it('covers object map performance fixtures scenarios', async () => {
+    {
+      // Scenario: builds deterministic large fixtures with complete object references
+      const payload = createObjectMapPerformanceFixture({ nodeCount: 500, edgeCount: 1000 });
 
-    expect(payload.nodes).toHaveLength(500);
-    expect(payload.edges).toHaveLength(1000);
-    expect(payload.seed).toEqual(payload.nodes[0].ref);
-    expect(payload.nodes[499].ref).toEqual(
-      expect.objectContaining({
-        clusterId: 'perf-cluster',
-        group: expect.any(String),
-        kind: expect.any(String),
-        version: expect.any(String),
-      })
-    );
-  });
+      expect(payload.nodes).toHaveLength(500);
+      expect(payload.edges).toHaveLength(1000);
+      expect(payload.seed).toEqual(payload.nodes[0].ref);
+      expect(payload.nodes[499].ref).toEqual(
+        expect.objectContaining({
+          clusterId: 'perf-cluster',
+          group: expect.any(String),
+          kind: expect.any(String),
+          version: expect.any(String),
+        })
+      );
+    }
 
-  it('prepares a 500 node / 1000 edge map within the interaction budget smoke threshold', () => {
-    const { result, durationMs } = measure(() => prepareFixture(500, 1000));
+    {
+      // Scenario: prepares a 500 node / 1000 edge map within the interaction budget smoke threshold
+      const { result, durationMs } = measure(() => prepareFixture(500, 1000));
 
-    expect(result.visible.nodes).toHaveLength(500);
-    expect(result.visible.edges).toHaveLength(1000);
-    expect(result.layout.nodes).toHaveLength(500);
-    expect(result.layout.edges).toHaveLength(1000);
-    expect(result.graphData.nodes).toHaveLength(500);
-    expect(result.graphData.edges).toHaveLength(1000);
-    expect(durationMs).toBeLessThan(1000);
-  });
+      expect(result.visible.nodes).toHaveLength(500);
+      expect(result.visible.edges).toHaveLength(1000);
+      expect(result.layout.nodes).toHaveLength(500);
+      expect(result.layout.edges).toHaveLength(1000);
+      expect(result.graphData.nodes).toHaveLength(500);
+      expect(result.graphData.edges).toHaveLength(1000);
+      expect(durationMs).toBeLessThan(1000);
+    }
 
-  it('prepares a 1000 node / 2000 edge map without pathological growth', () => {
-    const { result, durationMs } = measure(() => prepareFixture(1000, 2000));
+    {
+      // Scenario: prepares a 1000 node / 2000 edge map without pathological growth
+      const { result, durationMs } = measure(() => prepareFixture(1000, 2000));
 
-    expect(result.visible.nodes).toHaveLength(1000);
-    expect(result.visible.edges).toHaveLength(2000);
-    expect(result.layout.nodes).toHaveLength(1000);
-    expect(result.layout.edges).toHaveLength(2000);
-    expect(result.graphData.nodes).toHaveLength(1000);
-    expect(result.graphData.edges).toHaveLength(2000);
-    expect(durationMs).toBeLessThan(3000);
-  });
+      expect(result.visible.nodes).toHaveLength(1000);
+      expect(result.visible.edges).toHaveLength(2000);
+      expect(result.layout.nodes).toHaveLength(1000);
+      expect(result.layout.edges).toHaveLength(2000);
+      expect(result.graphData.nodes).toHaveLength(1000);
+      expect(result.graphData.edges).toHaveLength(2000);
+      expect(durationMs).toBeLessThan(3000);
+    }
 
-  it('computes large-map selection highlighting within an interaction budget', () => {
-    const { result } = measure(() => prepareFixture(1000, 2000));
-    const activeNodeId = result.layout.nodes[500].id;
+    {
+      // Scenario: computes large-map selection highlighting within an interaction budget
+      const { result } = measure(() => prepareFixture(1000, 2000));
+      const activeNodeId = result.layout.nodes[500].id;
 
-    const selection = measure(() =>
-      computeObjectMapSelectionState(result.layout.edges, activeNodeId)
-    );
+      const selection = measure(() =>
+        computeObjectMapSelectionState(result.layout.edges, activeNodeId)
+      );
 
-    expect(selection.result.activeId).toBe(activeNodeId);
-    expect(selection.result.connectedIds.size).toBeGreaterThan(0);
-    expect(selection.result.connectedEdgeIds.size).toBeGreaterThan(0);
-    expect(selection.durationMs).toBeLessThan(100);
-  });
+      expect(selection.result.activeId).toBe(activeNodeId);
+      expect(selection.result.connectedIds.size).toBeGreaterThan(0);
+      expect(selection.result.connectedEdgeIds.size).toBeGreaterThan(0);
+      expect(selection.durationMs).toBeLessThan(100);
+    }
 
-  it('reroutes edges after a large-map node drag within an interaction budget', () => {
-    const { result } = measure(() => prepareFixture(1000, 2000));
-    const movedNodes = result.layout.nodes.map((node, index) =>
-      index === 500 ? { ...node, x: node.x + 80, y: node.y + 40 } : node
-    );
+    {
+      // Scenario: reroutes edges after a large-map node drag within an interaction budget
+      const { result } = measure(() => prepareFixture(1000, 2000));
+      const movedNodes = result.layout.nodes.map((node, index) =>
+        index === 500 ? { ...node, x: node.x + 80, y: node.y + 40 } : node
+      );
 
-    const rerouted = measure(() => routeObjectMapEdges(movedNodes, result.visible.edges));
+      const rerouted = measure(() => routeObjectMapEdges(movedNodes, result.visible.edges));
 
-    expect(rerouted.result).toHaveLength(2000);
-    expect(rerouted.durationMs).toBeLessThan(100);
+      expect(rerouted.result).toHaveLength(2000);
+      expect(rerouted.durationMs).toBeLessThan(100);
+    }
   });
 });

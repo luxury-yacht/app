@@ -28,27 +28,27 @@ const deployment = (overrides: Partial<ObjectActionData> = {}): ObjectActionData
 });
 
 describe('resolveObjectActionPolicy', () => {
-  it('requires cluster and GVK identity in action data', () => {
+  it('covers resolveObjectActionPolicy scenarios', async () => {
+    // Scenario: requires cluster and GVK identity in action data
     expectTypeOf<Pick<ObjectActionData, 'clusterId' | 'group' | 'version'>>().toEqualTypeOf<{
       clusterId: string;
       group: string;
       version: string;
     }>();
-  });
 
-  it('selects normal scale only when HPA ownership is known false', () => {
-    const policy = resolveObjectActionPolicy({
-      object: deployment(),
-      context: 'gridtable',
-      handlers: { scale: true },
-      permissions: { scale: allowed },
-    });
+    {
+      // Scenario: selects normal scale only when HPA ownership is known false
+      const policy = resolveObjectActionPolicy({
+        object: deployment(),
+        context: 'gridtable',
+        handlers: { scale: true },
+        permissions: { scale: allowed },
+      });
 
-    expect(policy.scaleActionId).toBe(OBJECT_ACTION_IDS.scale);
-    expect(objectActionPolicyIds(policy)).toContain(OBJECT_ACTION_IDS.scale);
-  });
-
-  it('selects scale-to-zero or resume-from-zero for HPA-managed workloads', () => {
+      expect(policy.scaleActionId).toBe(OBJECT_ACTION_IDS.scale);
+      expect(objectActionPolicyIds(policy)).toContain(OBJECT_ACTION_IDS.scale);
+    }
+    // Scenario: selects scale-to-zero or resume-from-zero for HPA-managed workloads
     expect(
       resolveObjectActionPolicy({
         object: deployment({ hpaManaged: true, desiredReplicas: 3 }),
@@ -66,9 +66,7 @@ describe('resolveObjectActionPolicy', () => {
         permissions: { scale: allowed },
       }).scaleActionId
     ).toBe(OBJECT_ACTION_IDS.resumeFromZero);
-  });
-
-  it('shows port-forward only when target facts and permission both allow it', () => {
+    // Scenario: shows port-forward only when target facts and permission both allow it
     expect(
       resolveObjectActionPolicy({
         object: deployment({ group: 'apps', version: 'v1' }),
@@ -86,76 +84,76 @@ describe('resolveObjectActionPolicy', () => {
         permissions: { portForward: denied },
       }).portForwardEnabled
     ).toBe(false);
-  });
 
-  it('uses exact supported target GVKs for port-forward availability', () => {
-    const supportedTargets: ObjectActionData[] = [
-      {
-        kind: 'Pod',
-        group: '',
-        version: 'v1',
-        name: 'api',
-        namespace: 'apps',
-        clusterId: 'cluster-a',
-      },
-      {
-        kind: 'Service',
-        group: '',
-        version: 'v1',
-        name: 'api',
-        namespace: 'apps',
-        clusterId: 'cluster-a',
-      },
-      deployment({ group: 'apps', version: 'v1' }),
-      deployment({ kind: 'StatefulSet', group: 'apps', version: 'v1' }),
-      deployment({ kind: 'DaemonSet', group: 'apps', version: 'v1' }),
-    ];
+    {
+      // Scenario: uses exact supported target GVKs for port-forward availability
+      const supportedTargets: ObjectActionData[] = [
+        {
+          kind: 'Pod',
+          group: '',
+          version: 'v1',
+          name: 'api',
+          namespace: 'apps',
+          clusterId: 'cluster-a',
+        },
+        {
+          kind: 'Service',
+          group: '',
+          version: 'v1',
+          name: 'api',
+          namespace: 'apps',
+          clusterId: 'cluster-a',
+        },
+        deployment({ group: 'apps', version: 'v1' }),
+        deployment({ kind: 'StatefulSet', group: 'apps', version: 'v1' }),
+        deployment({ kind: 'DaemonSet', group: 'apps', version: 'v1' }),
+      ];
 
-    for (const object of supportedTargets) {
-      const policy = resolveObjectActionPolicy({
-        object,
+      for (const object of supportedTargets) {
+        const policy = resolveObjectActionPolicy({
+          object,
+          context: 'gridtable',
+          handlers: { portForward: true },
+          permissions: { portForward: allowed },
+        });
+
+        expect(policy.portForward.show, object.kind).toBe(true);
+        expect(policy.portForwardEnabled, object.kind).toBe(true);
+      }
+
+      const staleDeployment = resolveObjectActionPolicy({
+        object: deployment({ group: 'extensions', version: 'v1beta1' }),
         context: 'gridtable',
         handlers: { portForward: true },
         permissions: { portForward: allowed },
       });
+      expect(staleDeployment.portForward.show).toBe(false);
+      expect(staleDeployment.portForwardEnabled).toBe(false);
 
-      expect(policy.portForward.show, object.kind).toBe(true);
-      expect(policy.portForwardEnabled, object.kind).toBe(true);
+      const replicaSet = resolveObjectActionPolicy({
+        object: deployment({ kind: 'ReplicaSet', group: 'apps', version: 'v1' }),
+        context: 'gridtable',
+        handlers: { portForward: true },
+        permissions: { portForward: allowed },
+      });
+      expect(replicaSet.portForward.show).toBe(false);
+      expect(replicaSet.portForwardEnabled).toBe(false);
     }
 
-    const staleDeployment = resolveObjectActionPolicy({
-      object: deployment({ group: 'extensions', version: 'v1beta1' }),
-      context: 'gridtable',
-      handlers: { portForward: true },
-      permissions: { portForward: allowed },
-    });
-    expect(staleDeployment.portForward.show).toBe(false);
-    expect(staleDeployment.portForwardEnabled).toBe(false);
+    {
+      // Scenario: does not grant built-in workload actions to a different GVK with the same kind
+      const policy = resolveObjectActionPolicy({
+        object: deployment({ group: 'example.com', version: 'v1' }),
+        context: 'gridtable',
+        handlers: { restart: true, rollback: true, scale: true },
+        permissions: { restart: allowed, rollback: allowed, scale: allowed },
+      });
 
-    const replicaSet = resolveObjectActionPolicy({
-      object: deployment({ kind: 'ReplicaSet', group: 'apps', version: 'v1' }),
-      context: 'gridtable',
-      handlers: { portForward: true },
-      permissions: { portForward: allowed },
-    });
-    expect(replicaSet.portForward.show).toBe(false);
-    expect(replicaSet.portForwardEnabled).toBe(false);
-  });
-
-  it('does not grant built-in workload actions to a different GVK with the same kind', () => {
-    const policy = resolveObjectActionPolicy({
-      object: deployment({ group: 'example.com', version: 'v1' }),
-      context: 'gridtable',
-      handlers: { restart: true, rollback: true, scale: true },
-      permissions: { restart: allowed, rollback: allowed, scale: allowed },
-    });
-
-    expect(objectActionPolicyIds(policy)).not.toContain(OBJECT_ACTION_IDS.restart);
-    expect(objectActionPolicyIds(policy)).not.toContain(OBJECT_ACTION_IDS.rollback);
-    expect(objectActionPolicyIds(policy)).not.toContain(OBJECT_ACTION_IDS.scale);
-  });
-
-  it('uses node facts and permissions to choose cordon versus uncordon', () => {
+      expect(objectActionPolicyIds(policy)).not.toContain(OBJECT_ACTION_IDS.restart);
+      expect(objectActionPolicyIds(policy)).not.toContain(OBJECT_ACTION_IDS.rollback);
+      expect(objectActionPolicyIds(policy)).not.toContain(OBJECT_ACTION_IDS.scale);
+    }
+    // Scenario: uses node facts and permissions to choose cordon versus uncordon
     expect(
       resolveObjectActionPolicy({
         object: {
@@ -186,25 +184,26 @@ describe('resolveObjectActionPolicy', () => {
         permissions: { cordon: allowed },
       }).cordonActionId
     ).toBe(OBJECT_ACTION_IDS.uncordon);
-  });
 
-  it('keeps suspended CronJob trigger visible but disabled', () => {
-    const policy = resolveObjectActionPolicy({
-      object: {
-        kind: 'CronJob',
-        group: 'batch',
-        version: 'v1',
-        name: 'backup',
-        namespace: 'default',
-        clusterId: 'cluster-a',
-        status: 'Suspended',
-      },
-      context: 'gridtable',
-      handlers: { trigger: true },
-      permissions: { trigger: allowed },
-    });
+    {
+      // Scenario: keeps suspended CronJob trigger visible but disabled
+      const policy = resolveObjectActionPolicy({
+        object: {
+          kind: 'CronJob',
+          group: 'batch',
+          version: 'v1',
+          name: 'backup',
+          namespace: 'default',
+          clusterId: 'cluster-a',
+          status: 'Suspended',
+        },
+        context: 'gridtable',
+        handlers: { trigger: true },
+        permissions: { trigger: allowed },
+      });
 
-    expect(policy.triggerEnabled).toBe(true);
-    expect(policy.triggerDisabled).toBe(true);
+      expect(policy.triggerEnabled).toBe(true);
+      expect(policy.triggerDisabled).toBe(true);
+    }
   });
 });

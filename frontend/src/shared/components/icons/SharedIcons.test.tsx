@@ -85,7 +85,8 @@ const ALL_EXPORTED_ICONS = [
 ].flatMap((module) => Object.values(module)) as unknown as ComponentType[];
 
 describe('SharedIcons', () => {
-  it('renders each icon with default attributes', () => {
+  it('covers SharedIcons scenarios', async () => {
+    // Scenario: renders each icon with default attributes
     ALL_ICONS.forEach((Icon) => {
       const markup = ReactDOMServer.renderToStaticMarkup(<Icon />);
       const container = document.createElement('div');
@@ -96,21 +97,20 @@ describe('SharedIcons', () => {
       expect(svg?.getAttribute('height')).toBe('24');
       expect(svg?.getAttribute('fill')).toBe('currentColor');
     });
-  });
 
-  it('applies custom dimensions and fill colour', () => {
-    const markup = ReactDOMServer.renderToStaticMarkup(
-      <ScaleIcon width={24} height={18} fill="#ff0000" />
-    );
-    const container = document.createElement('div');
-    container.innerHTML = markup;
-    const svg = container.querySelector('svg');
-    expect(svg?.getAttribute('width')).toBe('24');
-    expect(svg?.getAttribute('height')).toBe('18');
-    expect(svg?.getAttribute('fill')).toBe('#ff0000');
-  });
-
-  it('makes every shared icon decorative and unfocusable by default', () => {
+    {
+      // Scenario: applies custom dimensions and fill colour
+      const markup = ReactDOMServer.renderToStaticMarkup(
+        <ScaleIcon width={24} height={18} fill="#ff0000" />
+      );
+      const container = document.createElement('div');
+      container.innerHTML = markup;
+      const svg = container.querySelector('svg');
+      expect(svg?.getAttribute('width')).toBe('24');
+      expect(svg?.getAttribute('height')).toBe('18');
+      expect(svg?.getAttribute('fill')).toBe('#ff0000');
+    }
+    // Scenario: makes every shared icon decorative and unfocusable by default
     ALL_EXPORTED_ICONS.forEach((Icon) => {
       const markup = ReactDOMServer.renderToStaticMarkup(<Icon />);
       const container = document.createElement('div');

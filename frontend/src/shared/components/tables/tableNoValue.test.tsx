@@ -2,15 +2,17 @@ import { isTableNoValueText, TABLE_NO_VALUE_TEXT } from '@shared/components/tabl
 import { describe, expect, it } from 'vitest';
 
 describe('table no-value presentation', () => {
-  it.each(['-', '—', ' - ', ' — '])('recognizes the %s placeholder', (value) => {
-    expect(isTableNoValueText(value)).toBe(true);
-  });
+  it('covers table no-value presentation scenarios', async () => {
+    for (const value of ['-', '—', ' - ', ' — ']) {
+      // Scenarios: recognizes the %s placeholder
+      expect(isTableNoValueText(value)).toBe(true);
+    }
 
-  it.each(['', 'Unavailable', 'alpha-beta', '–'])('does not treat %s as no value', (value) => {
-    expect(isTableNoValueText(value)).toBe(false);
-  });
-
-  it('uses the namespace table hyphen-minus marker', () => {
+    for (const value of ['', 'Unavailable', 'alpha-beta', '–']) {
+      // Scenarios: does not treat %s as no value
+      expect(isTableNoValueText(value)).toBe(false);
+    }
+    // Scenario: uses the namespace table hyphen-minus marker
     expect(TABLE_NO_VALUE_TEXT).toBe('-');
   });
 });

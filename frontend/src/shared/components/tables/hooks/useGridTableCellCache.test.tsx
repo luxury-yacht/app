@@ -118,26 +118,28 @@ describe('useGridTableCellCache', () => {
     await harness.cleanup();
   });
 
-  it.each(['-', '—'])('normalizes the %s no-value marker', async (marker) => {
-    const noValueColumn: GridColumnDefinition<SampleRow> = {
-      key: 'value',
-      header: 'Value',
-      render: () => marker,
-    };
-    const harness = await renderHarness([noValueColumn]);
+  it('covers normalizes the parameterized no-value marker cases', async () => {
+    for (const marker of ['-', '—']) {
+      const noValueColumn: GridColumnDefinition<SampleRow> = {
+        key: 'value',
+        header: 'Value',
+        render: () => marker,
+      };
+      const harness = await renderHarness([noValueColumn]);
 
-    const result = harness.get(noValueColumn, { id: 'missing' });
+      const result = harness.get(noValueColumn, { id: 'missing' });
 
-    expect(result.text).toBe(TABLE_NO_VALUE_TEXT);
-    expect(React.isValidElement(result.content)).toBe(true);
-    const props = (result.content as React.ReactElement).props as {
-      children?: React.ReactNode;
-      className?: string;
-    };
-    expect(props.children).toBe(TABLE_NO_VALUE_TEXT);
-    expect(props.className?.split(' ')).toContain('table-no-value');
+      expect(result.text).toBe(TABLE_NO_VALUE_TEXT);
+      expect(React.isValidElement(result.content)).toBe(true);
+      const props = (result.content as React.ReactElement).props as {
+        children?: React.ReactNode;
+        className?: string;
+      };
+      expect(props.children).toBe(TABLE_NO_VALUE_TEXT);
+      expect(props.className?.split(' ')).toContain('table-no-value');
 
-    await harness.cleanup();
+      await harness.cleanup();
+    }
   });
 
   it('does not style a dash that is part of a real value', async () => {

@@ -58,16 +58,18 @@ describe('DrainProgressCard status pill', () => {
     return pill;
   };
 
-  it.each([
-    ['running', 'Running', 'info'],
-    ['canceling', 'Canceling', 'warning'],
-    ['cancelled', 'Cancelled', 'warning'],
-    ['failed', 'Failed', 'error'],
-    ['succeeded', 'Completed', 'success'],
-  ] as const)('renders %s as "%s" with the %s style', (status, label, statusClass) => {
-    const pill = renderStatus(status);
-    expect(pill.textContent).toBe(label);
-    expect(pill.classList.contains(statusClass)).toBe(true);
+  it('covers renders parameterized as "parameterized" with the parameterized style cases', async () => {
+    for (const [status, label, statusClass] of [
+      ['running', 'Running', 'info'],
+      ['canceling', 'Canceling', 'warning'],
+      ['cancelled', 'Cancelled', 'warning'],
+      ['failed', 'Failed', 'error'],
+      ['succeeded', 'Completed', 'success'],
+    ] as const) {
+      const pill = renderStatus(status);
+      expect(pill.textContent).toBe(label);
+      expect(pill.classList.contains(statusClass)).toBe(true);
+    }
   });
 
   it('throws on a status outside the union instead of rendering success', () => {

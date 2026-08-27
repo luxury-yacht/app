@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { resolveResourceMetricsScope } from './scope';
 
 describe('resolveResourceMetricsScope', () => {
-  it('routes Pod metrics to the pods base domain in the cluster-prefixed namespace scope', () => {
+  it('covers resolveResourceMetricsScope scenarios', async () => {
+    // Scenario: routes Pod metrics to the pods base domain in the cluster-prefixed namespace scope
     expect(
       resolveResourceMetricsScope({
         clusterId: 'cluster-a',
@@ -19,9 +20,7 @@ describe('resolveResourceMetricsScope', () => {
       domain: 'pods',
       scope: 'cluster-a|namespace:team-a',
     });
-  });
-
-  it('routes Deployment metrics to the namespace-workloads base domain in the object cluster', () => {
+    // Scenario: routes Deployment metrics to the namespace-workloads base domain in the object cluster
     expect(
       resolveResourceMetricsScope({
         clusterId: 'cluster-b',
@@ -37,9 +36,7 @@ describe('resolveResourceMetricsScope', () => {
       domain: 'namespace-workloads',
       scope: 'cluster-b|namespace:team-b',
     });
-  });
-
-  it('routes Node metrics to the nodes base domain in the cluster scope', () => {
+    // Scenario: routes Node metrics to the nodes base domain in the cluster scope
     expect(
       resolveResourceMetricsScope({
         clusterId: 'cluster-c',
@@ -54,9 +51,7 @@ describe('resolveResourceMetricsScope', () => {
       domain: 'nodes',
       scope: 'cluster-c|',
     });
-  });
-
-  it('keeps ReplicaSet as a detail DTO exception instead of routing through pods workload scope', () => {
+    // Scenario: keeps ReplicaSet as a detail DTO exception instead of routing through pods workload scope
     expect(
       resolveResourceMetricsScope({
         clusterId: 'cluster-a',
@@ -71,20 +66,21 @@ describe('resolveResourceMetricsScope', () => {
       source: 'detail-replicaset',
       reason: 'replicaset-owner-collapse',
     });
-  });
 
-  it('returns an invalid resolution when clusterId is missing', () => {
-    const resolved = resolveResourceMetricsScope({
-      group: '',
-      version: 'v1',
-      kind: 'Pod',
-      namespace: 'team-a',
-      name: 'api-7c9d',
-    });
+    {
+      // Scenario: returns an invalid resolution when clusterId is missing
+      const resolved = resolveResourceMetricsScope({
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'team-a',
+        name: 'api-7c9d',
+      });
 
-    expect(resolved).toMatchObject({
-      kind: 'invalid',
-      error: expect.stringContaining('clusterId'),
-    });
+      expect(resolved).toMatchObject({
+        kind: 'invalid',
+        error: expect.stringContaining('clusterId'),
+      });
+    }
   });
 });

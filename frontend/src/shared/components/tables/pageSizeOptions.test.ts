@@ -15,19 +15,16 @@ import {
 } from './pageSizeOptions';
 
 describe('pageSizeOptions', () => {
-  it('offers the default as one of the selectable options', () => {
+  it('covers pageSizeOptions scenarios', async () => {
+    // Scenario: offers the default as one of the selectable options
     expect(TABLE_PAGE_SIZE_OPTIONS).toContain(DEFAULT_TABLE_PAGE_SIZE);
     expect(DEFAULT_TABLE_PAGE_SIZE).toBe(50);
-  });
-
-  it('accepts only values from the options list', () => {
+    // Scenario: accepts only values from the options list
     for (const option of TABLE_PAGE_SIZE_OPTIONS) {
       expect(isTablePageSize(option)).toBe(true);
       expect(normalizeTablePageSize(option)).toBe(option);
     }
-  });
-
-  it('normalizes off-list values to the default', () => {
+    // Scenario: normalizes off-list values to the default
     expect(isTablePageSize(333)).toBe(false);
     expect(normalizeTablePageSize(333)).toBe(DEFAULT_TABLE_PAGE_SIZE);
     expect(normalizeTablePageSize(undefined)).toBe(DEFAULT_TABLE_PAGE_SIZE);

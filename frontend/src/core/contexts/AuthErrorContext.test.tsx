@@ -196,149 +196,165 @@ describe('auth error state transitions', () => {
   const requireClusterState = (states: Map<string, ClusterAuthState>): ClusterAuthState =>
     requireValue(states.get('c1'), 'Expected auth state for cluster c1');
 
-  it('marks a terminal failure as a confirmed auth verdict', () => {
-    const next = applyAuthFailedEvent(empty(), {
-      clusterId: 'c1',
-      clusterName: 'alpha',
-      reason: 'token expired',
-    });
+  it('covers auth error state transitions scenarios', async () => {
+    {
+      // Scenario: marks a terminal failure as a confirmed auth verdict
+      const next = applyAuthFailedEvent(empty(), {
+        clusterId: 'c1',
+        clusterName: 'alpha',
+        reason: 'token expired',
+      });
 
-    const state = requireClusterState(next);
-    expect(state.hasError).toBe(true);
-    expect(state.errorClass).toBe('auth');
-    expect(isConfirmedAuthFailure(state)).toBe(true);
-  });
+      const state = requireClusterState(next);
+      expect(state.hasError).toBe(true);
+      expect(state.errorClass).toBe('auth');
+      expect(isConfirmedAuthFailure(state)).toBe(true);
+    }
 
-  it('does not confirm a fresh recovering cluster before any probe verdict', () => {
-    const next = applyAuthRecoveringEvent(empty(), {
-      clusterId: 'c1',
-      clusterName: 'alpha',
-      reason: '401 Unauthorized',
-    });
+    {
+      // Scenario: does not confirm a fresh recovering cluster before any probe verdict
+      const next = applyAuthRecoveringEvent(empty(), {
+        clusterId: 'c1',
+        clusterName: 'alpha',
+        reason: '401 Unauthorized',
+      });
 
-    const state = requireClusterState(next);
-    expect(state.hasError).toBe(true);
-    expect(state.isRecovering).toBe(true);
-    expect(state.errorClass).toBe('');
-    expect(isConfirmedAuthFailure(state)).toBe(false);
-  });
+      const state = requireClusterState(next);
+      expect(state.hasError).toBe(true);
+      expect(state.isRecovering).toBe(true);
+      expect(state.errorClass).toBe('');
+      expect(isConfirmedAuthFailure(state)).toBe(false);
+    }
 
-  it('keeps a connectivity verdict unconfirmed (cluster unreachable, waiting)', () => {
-    let map = applyAuthRecoveringEvent(empty(), { clusterId: 'c1', reason: '401' });
-    map = applyAuthProgressEvent(map, {
-      clusterId: 'c1',
-      secondsUntilRetry: 15,
-      errorClass: 'connectivity',
-    });
+    {
+      // Scenario: keeps a connectivity verdict unconfirmed (cluster unreachable, waiting)
+      let map = applyAuthRecoveringEvent(empty(), { clusterId: 'c1', reason: '401' });
+      map = applyAuthProgressEvent(map, {
+        clusterId: 'c1',
+        secondsUntilRetry: 15,
+        errorClass: 'connectivity',
+      });
 
-    const state = requireClusterState(map);
-    expect(state.errorClass).toBe('connectivity');
-    expect(isConfirmedAuthFailure(state)).toBe(false);
-  });
+      const state = requireClusterState(map);
+      expect(state.errorClass).toBe('connectivity');
+      expect(isConfirmedAuthFailure(state)).toBe(false);
+    }
 
-  it('confirms an auth verdict reported by a probe', () => {
-    let map = applyAuthRecoveringEvent(empty(), { clusterId: 'c1', reason: '401' });
-    map = applyAuthProgressEvent(map, {
-      clusterId: 'c1',
-      secondsUntilRetry: 5,
-      errorClass: 'auth',
-    });
+    {
+      // Scenario: confirms an auth verdict reported by a probe
+      let map = applyAuthRecoveringEvent(empty(), { clusterId: 'c1', reason: '401' });
+      map = applyAuthProgressEvent(map, {
+        clusterId: 'c1',
+        secondsUntilRetry: 5,
+        errorClass: 'auth',
+      });
 
-    expect(isConfirmedAuthFailure(requireClusterState(map))).toBe(true);
-  });
+      expect(isConfirmedAuthFailure(requireClusterState(map))).toBe(true);
+    }
 
-  it('carries the exec command, kind, and summary from a failed event', () => {
-    const next = applyAuthFailedEvent(empty(), {
-      clusterId: 'c1',
-      reason: 'exec: executable gke-gcloud-auth-plugin not found',
-      kind: 'missing-helper',
-      summary: "The kubeconfig's credential helper could not be found.",
-      execCommand: 'gke-gcloud-auth-plugin',
-    });
+    {
+      // Scenario: carries the exec command, kind, and summary from a failed event
+      const next = applyAuthFailedEvent(empty(), {
+        clusterId: 'c1',
+        reason: 'exec: executable gke-gcloud-auth-plugin not found',
+        kind: 'missing-helper',
+        summary: "The kubeconfig's credential helper could not be found.",
+        execCommand: 'gke-gcloud-auth-plugin',
+      });
 
-    const state = requireClusterState(next);
-    expect(state.execCommand).toBe('gke-gcloud-auth-plugin');
-    expect(state.diagnosticKind).toBe('missing-helper');
-    expect(state.diagnosticSummary).toBe("The kubeconfig's credential helper could not be found.");
-  });
+      const state = requireClusterState(next);
+      expect(state.execCommand).toBe('gke-gcloud-auth-plugin');
+      expect(state.diagnosticKind).toBe('missing-helper');
+      expect(state.diagnosticSummary).toBe(
+        "The kubeconfig's credential helper could not be found."
+      );
+    }
 
-  it('carries the exec command from a recovering event', () => {
-    const next = applyAuthRecoveringEvent(empty(), {
-      clusterId: 'c1',
-      reason: 'exec: executable aws not found',
-      execCommand: 'aws',
-    });
+    {
+      // Scenario: carries the exec command from a recovering event
+      const next = applyAuthRecoveringEvent(empty(), {
+        clusterId: 'c1',
+        reason: 'exec: executable aws not found',
+        execCommand: 'aws',
+      });
 
-    expect(requireClusterState(next).execCommand).toBe('aws');
-  });
+      expect(requireClusterState(next).execCommand).toBe('aws');
+    }
 
-  it('keeps the exec command sticky across a progress event without one', () => {
-    let map = applyAuthRecoveringEvent(empty(), {
-      clusterId: 'c1',
-      reason: 'missing helper',
-      execCommand: 'gke-gcloud-auth-plugin',
-    });
-    map = applyAuthProgressEvent(map, { clusterId: 'c1', secondsUntilRetry: 5 });
+    {
+      // Scenario: keeps the exec command sticky across a progress event without one
+      let map = applyAuthRecoveringEvent(empty(), {
+        clusterId: 'c1',
+        reason: 'missing helper',
+        execCommand: 'gke-gcloud-auth-plugin',
+      });
+      map = applyAuthProgressEvent(map, { clusterId: 'c1', secondsUntilRetry: 5 });
 
-    expect(requireClusterState(map).execCommand).toBe('gke-gcloud-auth-plugin');
-  });
+      expect(requireClusterState(map).execCommand).toBe('gke-gcloud-auth-plugin');
+    }
 
-  it('adopts the exec command from a progress event that carries one', () => {
-    let map = applyAuthRecoveringEvent(empty(), { clusterId: 'c1', reason: 'x' });
-    map = applyAuthProgressEvent(map, {
-      clusterId: 'c1',
-      secondsUntilRetry: 5,
-      execCommand: 'aws',
-    });
+    {
+      // Scenario: adopts the exec command from a progress event that carries one
+      let map = applyAuthRecoveringEvent(empty(), { clusterId: 'c1', reason: 'x' });
+      map = applyAuthProgressEvent(map, {
+        clusterId: 'c1',
+        secondsUntilRetry: 5,
+        execCommand: 'aws',
+      });
 
-    expect(requireClusterState(map).execCommand).toBe('aws');
-  });
+      expect(requireClusterState(map).execCommand).toBe('aws');
+    }
 
-  it('keeps the previous verdict when a progress event has no verdict yet', () => {
-    let map = applyAuthFailedEvent(empty(), { clusterId: 'c1', reason: 'expired' });
-    map = applyAuthRecoveringEvent(map, { clusterId: 'c1' });
-    map = applyAuthProgressEvent(map, {
-      clusterId: 'c1',
-      secondsUntilRetry: 0,
-      errorClass: '',
-    });
+    {
+      // Scenario: keeps the previous verdict when a progress event has no verdict yet
+      let map = applyAuthFailedEvent(empty(), { clusterId: 'c1', reason: 'expired' });
+      map = applyAuthRecoveringEvent(map, { clusterId: 'c1' });
+      map = applyAuthProgressEvent(map, {
+        clusterId: 'c1',
+        secondsUntilRetry: 0,
+        errorClass: '',
+      });
 
-    const state = requireClusterState(map);
-    expect(state.errorClass).toBe('auth');
-    expect(isConfirmedAuthFailure(state)).toBe(true);
-  });
+      const state = requireClusterState(map);
+      expect(state.errorClass).toBe('auth');
+      expect(isConfirmedAuthFailure(state)).toBe(true);
+    }
 
-  it('keeps the auth verdict across an automatic retry (no overlay flicker)', () => {
-    let map = applyAuthFailedEvent(empty(), { clusterId: 'c1', reason: 'expired' });
-    map = applyAuthRecoveringEvent(map, { clusterId: 'c1', reason: 'expired' });
+    {
+      // Scenario: keeps the auth verdict across an automatic retry (no overlay flicker)
+      let map = applyAuthFailedEvent(empty(), { clusterId: 'c1', reason: 'expired' });
+      map = applyAuthRecoveringEvent(map, { clusterId: 'c1', reason: 'expired' });
 
-    const state = requireClusterState(map);
-    expect(state.isRecovering).toBe(true);
-    expect(state.errorClass).toBe('auth');
-    expect(isConfirmedAuthFailure(state)).toBe(true);
-  });
+      const state = requireClusterState(map);
+      expect(state.isRecovering).toBe(true);
+      expect(state.errorClass).toBe('auth');
+      expect(isConfirmedAuthFailure(state)).toBe(true);
+    }
 
-  it('lets a connectivity probe verdict supersede an auth verdict', () => {
-    // Credentials were bad, then the cluster became unreachable before they
-    // were fixed: unreachable is a waiting state, not a confirmed failure.
-    let map = applyAuthFailedEvent(empty(), { clusterId: 'c1', reason: 'expired' });
-    map = applyAuthRecoveringEvent(map, { clusterId: 'c1' });
-    map = applyAuthProgressEvent(map, {
-      clusterId: 'c1',
-      secondsUntilRetry: 15,
-      errorClass: 'connectivity',
-    });
+    {
+      // Scenario: lets a connectivity probe verdict supersede an auth verdict
+      // Credentials were bad, then the cluster became unreachable before they
+      // were fixed: unreachable is a waiting state, not a confirmed failure.
+      let map = applyAuthFailedEvent(empty(), { clusterId: 'c1', reason: 'expired' });
+      map = applyAuthRecoveringEvent(map, { clusterId: 'c1' });
+      map = applyAuthProgressEvent(map, {
+        clusterId: 'c1',
+        secondsUntilRetry: 15,
+        errorClass: 'connectivity',
+      });
 
-    expect(isConfirmedAuthFailure(requireClusterState(map))).toBe(false);
-  });
+      expect(isConfirmedAuthFailure(requireClusterState(map))).toBe(false);
+    }
 
-  it('ignores progress for clusters without an active error', () => {
-    const map = applyAuthProgressEvent(empty(), {
-      clusterId: 'c1',
-      secondsUntilRetry: 0,
-      errorClass: 'auth',
-    });
+    {
+      // Scenario: ignores progress for clusters without an active error
+      const map = applyAuthProgressEvent(empty(), {
+        clusterId: 'c1',
+        secondsUntilRetry: 0,
+        errorClass: 'auth',
+      });
 
-    expect(map.size).toBe(0);
+      expect(map.size).toBe(0);
+    }
   });
 });

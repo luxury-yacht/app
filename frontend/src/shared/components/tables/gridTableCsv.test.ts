@@ -17,55 +17,66 @@ const columns = [
 ] as unknown as GridColumnDefinition<Row>[];
 
 describe('buildGridTableCsv', () => {
-  it('builds a header row + data rows from the displayed columns', () => {
-    const csv = buildGridTableCsv(
-      [
-        { name: 'alpha', note: 'one' },
-        { name: 'beta', note: 'two' },
-      ],
-      columns,
-      getTextContent
-    );
+  it('covers buildGridTableCsv scenarios', async () => {
+    {
+      // Scenario: builds a header row + data rows from the displayed columns
+      const csv = buildGridTableCsv(
+        [
+          { name: 'alpha', note: 'one' },
+          { name: 'beta', note: 'two' },
+        ],
+        columns,
+        getTextContent
+      );
 
-    expect(csv).toBe('Name,Note\nalpha,one\nbeta,two');
-  });
+      expect(csv).toBe('Name,Note\nalpha,one\nbeta,two');
+    }
 
-  it('quotes and escapes cells containing commas, quotes, or newlines', () => {
-    const csv = buildGridTableCsv([{ name: 'a,b', note: 'he said "hi"' }], columns, getTextContent);
+    {
+      // Scenario: quotes and escapes cells containing commas, quotes, or newlines
+      const csv = buildGridTableCsv(
+        [{ name: 'a,b', note: 'he said "hi"' }],
+        columns,
+        getTextContent
+      );
 
-    expect(csv).toBe('Name,Note\n"a,b","he said ""hi"""');
-  });
+      expect(csv).toBe('Name,Note\n"a,b","he said ""hi"""');
+    }
 
-  it('exports legacy and canonical no-value markers as the canonical hyphen', () => {
-    const csv = buildGridTableCsv(
-      [
-        { name: 'legacy', note: '—' },
-        { name: 'canonical', note: '-' },
-      ],
-      columns,
-      getTextContent
-    );
+    {
+      // Scenario: exports legacy and canonical no-value markers as the canonical hyphen
+      const csv = buildGridTableCsv(
+        [
+          { name: 'legacy', note: '—' },
+          { name: 'canonical', note: '-' },
+        ],
+        columns,
+        getTextContent
+      );
 
-    expect(csv).toBe('Name,Note\nlegacy,-\ncanonical,-');
-  });
-
-  it('returns an empty string when there are no columns', () => {
+      expect(csv).toBe('Name,Note\nlegacy,-\ncanonical,-');
+    }
+    // Scenario: returns an empty string when there are no columns
     expect(buildGridTableCsv([{ name: 'a', note: 'b' }], [], getTextContent)).toBe('');
   });
 });
 
 describe('buildCsvExportFilename', () => {
-  it('wraps the per-view base name with the app prefix and a local timestamp', () => {
-    const exportedAt = new Date(2026, 5, 10, 14, 22, 33); // 2026-06-10 14:22:33 local
-    expect(buildCsvExportFilename('cluster-crds', exportedAt)).toBe(
-      'luxury-yacht-cluster-crds-20260610142233.csv'
-    );
-  });
+  it('covers buildCsvExportFilename scenarios', async () => {
+    {
+      // Scenario: wraps the per-view base name with the app prefix and a local timestamp
+      const exportedAt = new Date(2026, 5, 10, 14, 22, 33); // 2026-06-10 14:22:33 local
+      expect(buildCsvExportFilename('cluster-crds', exportedAt)).toBe(
+        'luxury-yacht-cluster-crds-20260610142233.csv'
+      );
+    }
 
-  it('zero-pads every timestamp component', () => {
-    const exportedAt = new Date(2026, 0, 2, 3, 4, 5); // 2026-01-02 03:04:05 local
-    expect(buildCsvExportFilename('browse', exportedAt)).toBe(
-      'luxury-yacht-browse-20260102030405.csv'
-    );
+    {
+      // Scenario: zero-pads every timestamp component
+      const exportedAt = new Date(2026, 0, 2, 3, 4, 5); // 2026-01-02 03:04:05 local
+      expect(buildCsvExportFilename('browse', exportedAt)).toBe(
+        'luxury-yacht-browse-20260102030405.csv'
+      );
+    }
   });
 });

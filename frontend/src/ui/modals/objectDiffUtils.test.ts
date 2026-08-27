@@ -13,8 +13,10 @@ import {
 } from './objectDiffUtils';
 
 describe('sanitizeYamlForDiff', () => {
-  it('removes ignored metadata fields but retains muted fields', () => {
-    const yaml = `apiVersion: v1
+  it('covers sanitizeYamlForDiff scenarios', async () => {
+    {
+      // Scenario: removes ignored metadata fields but retains muted fields
+      const yaml = `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: demo
@@ -27,21 +29,21 @@ data:
   key: value
 `;
 
-    const result = sanitizeYamlForDiff(yaml);
-    expect(result).toContain('name: demo');
-    expect(result).toContain('data:');
-    expect(result).not.toContain('managedFields');
-    expect(result).toContain('resourceVersion');
-    expect(result).toContain('creationTimestamp');
-    expect(result).toContain('uid');
-  });
+      const result = sanitizeYamlForDiff(yaml);
+      expect(result).toContain('name: demo');
+      expect(result).toContain('data:');
+      expect(result).not.toContain('managedFields');
+      expect(result).toContain('resourceVersion');
+      expect(result).toContain('creationTimestamp');
+      expect(result).toContain('uid');
+    }
 
-  it('returns the original string when YAML parsing fails', () => {
-    const yaml = 'kind: [broken';
-    expect(sanitizeYamlForDiff(yaml)).toBe(yaml);
-  });
-
-  it('returns an empty string for blank input', () => {
+    {
+      // Scenario: returns the original string when YAML parsing fails
+      const yaml = 'kind: [broken';
+      expect(sanitizeYamlForDiff(yaml)).toBe(yaml);
+    }
+    // Scenario: returns an empty string for blank input
     expect(sanitizeYamlForDiff('   ')).toBe('');
   });
 });

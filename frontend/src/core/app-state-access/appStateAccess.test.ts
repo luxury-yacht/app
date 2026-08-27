@@ -7,7 +7,8 @@ import {
 import { requestAppState } from './appStateAccess';
 
 describe('appStateAccess', () => {
-  it('records diagnostics for app-state reads', async () => {
+  it('covers appStateAccess scenarios', async () => {
+    // Scenario: records diagnostics for app-state reads
     resetBrokerReadDiagnosticsForTesting();
 
     await requestAppState({
@@ -28,19 +29,20 @@ describe('appStateAccess', () => {
         recentScopes: [],
       }),
     ]);
-  });
 
-  it('executes app-state reads through the shared request path', async () => {
-    resetBrokerReadDiagnosticsForTesting();
-    const read = vi.fn().mockResolvedValue({ version: '1.0.0' });
+    {
+      // Scenario: executes app-state reads through the shared request path
+      resetBrokerReadDiagnosticsForTesting();
+      const read = vi.fn().mockResolvedValue({ version: '1.0.0' });
 
-    await expect(
-      requestAppState({
-        resource: 'app-info',
-        read,
-      })
-    ).resolves.toEqual({ version: '1.0.0' });
+      await expect(
+        requestAppState({
+          resource: 'app-info',
+          read,
+        })
+      ).resolves.toEqual({ version: '1.0.0' });
 
-    expect(read).toHaveBeenCalledTimes(1);
+      expect(read).toHaveBeenCalledTimes(1);
+    }
   });
 });

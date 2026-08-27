@@ -42,9 +42,9 @@ describe('getViewForKind', () => {
     ['HelmRelease', 'namespace', 'helm'],
     ['Event', 'namespace', 'events'],
   ];
-  it.each(namespaceKindCases)(
-    'maps %s to %s/%s',
-    (kind, expectedViewType, expectedTab, destinationViewId) => {
+  it('covers getViewForKind scenarios', async () => {
+    for (const [kind, expectedViewType, expectedTab, destinationViewId] of namespaceKindCases) {
+      // Scenarios: maps %s to %s/%s
       const result = getViewForKind(kind);
       expect(result).toEqual({
         viewType: expectedViewType,
@@ -52,31 +52,27 @@ describe('getViewForKind', () => {
         ...(destinationViewId ? { destinationViewId } : {}),
       });
     }
-  );
 
-  // Cluster-scoped kinds
-  it.each([
-    ['Node', 'cluster', 'nodes'],
-    ['ClusterRole', 'cluster', 'rbac'],
-    ['ClusterRoleBinding', 'cluster', 'rbac'],
-    ['PersistentVolume', 'cluster', 'storage'],
-    ['PV', 'cluster', 'storage'],
-    ['StorageClass', 'cluster', 'storage'],
-    ['Namespace', 'cluster', 'config'],
-    ['CustomResourceDefinition', 'cluster', 'crds'],
-    ['CRD', 'cluster', 'crds'],
-  ])('maps %s to %s/%s', (kind, expectedViewType, expectedTab) => {
-    const result = getViewForKind(kind);
-    expect(result).toEqual({ viewType: expectedViewType, tab: expectedTab });
-  });
-
-  it('returns null for unknown kinds', () => {
+    for (const [kind, expectedViewType, expectedTab] of [
+      ['Node', 'cluster', 'nodes'],
+      ['ClusterRole', 'cluster', 'rbac'],
+      ['ClusterRoleBinding', 'cluster', 'rbac'],
+      ['PersistentVolume', 'cluster', 'storage'],
+      ['PV', 'cluster', 'storage'],
+      ['StorageClass', 'cluster', 'storage'],
+      ['Namespace', 'cluster', 'config'],
+      ['CustomResourceDefinition', 'cluster', 'crds'],
+      ['CRD', 'cluster', 'crds'],
+    ]) {
+      // Scenarios: maps %s to %s/%s
+      const result = getViewForKind(kind);
+      expect(result).toEqual({ viewType: expectedViewType, tab: expectedTab });
+    }
+    // Scenario: returns null for unknown kinds
     expect(getViewForKind('UnknownKind')).toBeNull();
     expect(getViewForKind('FooBar')).toBeNull();
     expect(getViewForKind('')).toBeNull();
-  });
-
-  it('is case-insensitive', () => {
+    // Scenario: is case-insensitive
     expect(getViewForKind('pod')).toEqual(getViewForKind('Pod'));
     expect(getViewForKind('NODE')).toEqual(getViewForKind('node'));
     expect(getViewForKind('configmap')).toEqual(getViewForKind('ConfigMap'));
@@ -84,21 +80,18 @@ describe('getViewForKind', () => {
 });
 
 describe('isNamespaceScopedKind', () => {
-  it('returns true for namespace-scoped kinds', () => {
+  it('covers isNamespaceScopedKind scenarios', async () => {
+    // Scenario: returns true for namespace-scoped kinds
     expect(isNamespaceScopedKind('Pod')).toBe(true);
     expect(isNamespaceScopedKind('Deployment')).toBe(true);
     expect(isNamespaceScopedKind('ConfigMap')).toBe(true);
     expect(isNamespaceScopedKind('Service')).toBe(true);
-  });
-
-  it('returns false for cluster-scoped kinds', () => {
+    // Scenario: returns false for cluster-scoped kinds
     expect(isNamespaceScopedKind('Node')).toBe(false);
     expect(isNamespaceScopedKind('ClusterRole')).toBe(false);
     expect(isNamespaceScopedKind('PersistentVolume')).toBe(false);
     expect(isNamespaceScopedKind('Namespace')).toBe(false);
-  });
-
-  it('returns false for unknown kinds', () => {
+    // Scenario: returns false for unknown kinds
     expect(isNamespaceScopedKind('UnknownKind')).toBe(false);
   });
 });

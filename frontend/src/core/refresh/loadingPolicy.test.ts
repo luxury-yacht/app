@@ -15,7 +15,8 @@ import {
 } from './loadingPolicy';
 
 describe('applyPassiveLoadingPolicy', () => {
-  it('suppresses passive loading when auto-refresh is paused', () => {
+  it('covers applyPassiveLoadingPolicy scenarios', async () => {
+    // Scenario: suppresses passive loading when auto-refresh is paused
     expect(
       applyPassiveLoadingPolicy({
         loading: true,
@@ -30,9 +31,7 @@ describe('applyPassiveLoadingPolicy', () => {
       suppressPassiveLoading: true,
       showPausedEmptyState: true,
     });
-  });
-
-  it('preserves loading when a manual refresh is active', () => {
+    // Scenario: preserves loading when a manual refresh is active
     expect(
       applyPassiveLoadingPolicy({
         loading: true,
@@ -51,14 +50,13 @@ describe('applyPassiveLoadingPolicy', () => {
 });
 
 describe('paused empty-state messaging', () => {
-  it('uses cmd+R on macOS', () => {
+  it('covers paused empty-state messaging scenarios', async () => {
+    // Scenario: uses cmd+R on macOS
     platformMocks.isMacPlatform.mockReturnValue(true);
 
     expect(getAutoRefreshShortcutLabel()).toBe('cmd+R');
     expect(getClusterDataAutoRefreshDisabledMessage()).toContain('press cmd+R');
-  });
-
-  it('uses ctrl+R on non-mac platforms', () => {
+    // Scenario: uses ctrl+R on non-mac platforms
     platformMocks.isMacPlatform.mockReturnValue(false);
 
     expect(getAutoRefreshShortcutLabel()).toBe('ctrl+R');

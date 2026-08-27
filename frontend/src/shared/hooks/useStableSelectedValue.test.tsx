@@ -43,44 +43,49 @@ const renderHook = <T,>(hook: () => T) => {
 };
 
 describe('useStableSelectedValue', () => {
-  it('reuses a previous array reference when the next array contains the same item references', () => {
-    const sharedRows = [{ name: 'one' }, { name: 'two' }];
-    let nextValue = [...sharedRows];
+  it('covers useStableSelectedValue scenarios', async () => {
+    {
+      // Scenario: reuses a previous array reference when the next array contains the same item references
+      const sharedRows = [{ name: 'one' }, { name: 'two' }];
+      let nextValue = [...sharedRows];
 
-    const hook = renderHook(() => useStableSelectedValue(nextValue));
-    const first = hook.get();
+      const hook = renderHook(() => useStableSelectedValue(nextValue));
+      const first = hook.get();
 
-    nextValue = [...sharedRows];
-    hook.rerender();
+      nextValue = [...sharedRows];
+      hook.rerender();
 
-    expect(hook.get()).toBe(first);
-    hook.cleanup();
-  });
+      expect(hook.get()).toBe(first);
+      hook.cleanup();
+    }
 
-  it('reuses a previous shallow object reference when the next object has the same fields', () => {
-    let nextValue: { kinds: string[] } = { kinds: ['ConfigMap', 'Secret'] };
+    {
+      // Scenario: reuses a previous shallow object reference when the next object has the same fields
+      let nextValue: { kinds: string[] } = { kinds: ['ConfigMap', 'Secret'] };
 
-    const hook = renderHook(() => useStableSelectedValue(nextValue));
-    const first = hook.get();
+      const hook = renderHook(() => useStableSelectedValue(nextValue));
+      const first = hook.get();
 
-    nextValue = { kinds: first.kinds };
-    hook.rerender();
+      nextValue = { kinds: first.kinds };
+      hook.rerender();
 
-    expect(hook.get()).toBe(first);
-    hook.cleanup();
-  });
+      expect(hook.get()).toBe(first);
+      hook.cleanup();
+    }
 
-  it('returns a new reference when array contents change', () => {
-    const sharedRows = [{ name: 'one' }, { name: 'two' }];
-    let nextValue = [...sharedRows];
+    {
+      // Scenario: returns a new reference when array contents change
+      const sharedRows = [{ name: 'one' }, { name: 'two' }];
+      let nextValue = [...sharedRows];
 
-    const hook = renderHook(() => useStableSelectedValue(nextValue));
-    const first = hook.get();
+      const hook = renderHook(() => useStableSelectedValue(nextValue));
+      const first = hook.get();
 
-    nextValue = [sharedRows[0], { name: 'three' }];
-    hook.rerender();
+      nextValue = [sharedRows[0], { name: 'three' }];
+      hook.rerender();
 
-    expect(hook.get()).not.toBe(first);
-    hook.cleanup();
+      expect(hook.get()).not.toBe(first);
+      hook.cleanup();
+    }
   });
 });

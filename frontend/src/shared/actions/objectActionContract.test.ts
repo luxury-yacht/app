@@ -17,46 +17,48 @@ import {
 } from './objectActionContract';
 
 describe('object action contract', () => {
-  it('documents every UI-visible mutating action once', () => {
-    const actionIds = new Set(MUTATING_OBJECT_ACTION_IDS);
+  it('covers object action contract scenarios', async () => {
+    {
+      // Scenario: documents every UI-visible mutating action once
+      const actionIds = new Set(MUTATING_OBJECT_ACTION_IDS);
 
-    expect(actionIds.size).toBe(MUTATING_OBJECT_ACTION_IDS.length);
-    expect(actionIds).toEqual(
-      new Set([
-        OBJECT_ACTION_IDS.restart,
-        OBJECT_ACTION_IDS.rollback,
-        OBJECT_ACTION_IDS.scale,
-        OBJECT_ACTION_IDS.scaleToZero,
-        OBJECT_ACTION_IDS.resumeFromZero,
-        OBJECT_ACTION_IDS.triggerNow,
-        OBJECT_ACTION_IDS.suspend,
-        OBJECT_ACTION_IDS.resume,
-        OBJECT_ACTION_IDS.portForward,
-        OBJECT_ACTION_IDS.cordon,
-        OBJECT_ACTION_IDS.uncordon,
-        OBJECT_ACTION_IDS.drain,
-        OBJECT_ACTION_IDS.delete,
-        OBJECT_ACTION_IDS.removeFinalizer,
-        OBJECT_ACTION_IDS.removeNamespaceFinalizer,
-      ])
-    );
-  });
-
-  it('ties each mutating action to backend execution and permission metadata', () => {
-    const backendActions = new Set<string>(Object.values(OBJECT_ACTIONS));
-
-    for (const actionId of MUTATING_OBJECT_ACTION_IDS) {
-      const contract = objectActionContract(actionId);
-
-      expect(contract.actionId).toBe(actionId);
-      expect(backendActions.has(objectActionBackendAction(actionId))).toBe(true);
-      expect(contract.frontendPermission).toBeTruthy();
-      expect(contract.backendPermission).toContain('resourcePermissionCheck');
-      expect(contract.deniedReason).toBeTruthy();
+      expect(actionIds.size).toBe(MUTATING_OBJECT_ACTION_IDS.length);
+      expect(actionIds).toEqual(
+        new Set([
+          OBJECT_ACTION_IDS.restart,
+          OBJECT_ACTION_IDS.rollback,
+          OBJECT_ACTION_IDS.scale,
+          OBJECT_ACTION_IDS.scaleToZero,
+          OBJECT_ACTION_IDS.resumeFromZero,
+          OBJECT_ACTION_IDS.triggerNow,
+          OBJECT_ACTION_IDS.suspend,
+          OBJECT_ACTION_IDS.resume,
+          OBJECT_ACTION_IDS.portForward,
+          OBJECT_ACTION_IDS.cordon,
+          OBJECT_ACTION_IDS.uncordon,
+          OBJECT_ACTION_IDS.drain,
+          OBJECT_ACTION_IDS.delete,
+          OBJECT_ACTION_IDS.removeFinalizer,
+          OBJECT_ACTION_IDS.removeNamespaceFinalizer,
+        ])
+      );
     }
-  });
 
-  it('derives RunObjectAction payload metadata from the shared contract', () => {
+    {
+      // Scenario: ties each mutating action to backend execution and permission metadata
+      const backendActions = new Set<string>(Object.values(OBJECT_ACTIONS));
+
+      for (const actionId of MUTATING_OBJECT_ACTION_IDS) {
+        const contract = objectActionContract(actionId);
+
+        expect(contract.actionId).toBe(actionId);
+        expect(backendActions.has(objectActionBackendAction(actionId))).toBe(true);
+        expect(contract.frontendPermission).toBeTruthy();
+        expect(contract.backendPermission).toContain('resourcePermissionCheck');
+        expect(contract.deniedReason).toBeTruthy();
+      }
+    }
+    // Scenario: derives RunObjectAction payload metadata from the shared contract
     expect(objectActionPayloadFields(OBJECT_ACTION_IDS.scale)).toEqual(['replicas']);
     expect(objectActionBackendAction(OBJECT_ACTION_IDS.scale)).toBe(OBJECT_ACTIONS.scale);
 
@@ -70,9 +72,7 @@ describe('object action contract', () => {
     expect(objectActionBackendAction(OBJECT_ACTION_IDS.removeFinalizer)).toBe(
       OBJECT_ACTIONS.removeFinalizer
     );
-  });
-
-  it('uses the Namespace finalize subresource for spec finalizers', () => {
+    // Scenario: uses the Namespace finalize subresource for spec finalizers
     expect(
       buildObjectActionPermissionDescriptor(OBJECT_ACTION_IDS.removeNamespaceFinalizer, {
         clusterId: 'cluster-a',
@@ -94,9 +94,7 @@ describe('object action contract', () => {
       name: 'terminating',
       subresource: 'finalize',
     });
-  });
-
-  it('builds permission descriptors with full target identity', () => {
+    // Scenario: builds permission descriptors with full target identity
     expect(
       buildObjectActionPermissionDescriptor(OBJECT_ACTION_IDS.delete, {
         clusterId: 'cluster-a',
@@ -118,9 +116,7 @@ describe('object action contract', () => {
       namespace: 'team-a',
       name: 'api',
     });
-  });
-
-  it('requires object kind before building target-object permission descriptors', () => {
+    // Scenario: requires object kind before building target-object permission descriptors
     expect(
       buildObjectActionPermissionDescriptor(OBJECT_ACTION_IDS.delete, {
         clusterId: 'cluster-a',

@@ -14,30 +14,34 @@ import {
 import { clearAllGridTableState, subscribeGridTableResetAll } from './gridTablePersistenceReset';
 
 describe('gridTablePersistenceReset', () => {
-  it('clears all cached gridtable entries', async () => {
-    resetGridTablePersistenceCacheForTesting();
-    setGridTablePersistenceCacheForTesting({
-      'gridtable:v1:abc:view': { version: 1 },
-      'gridtable:v1:def:view': { version: 1 },
-    });
+  it('covers gridTablePersistenceReset scenarios', async () => {
+    {
+      // Scenario: clears all cached gridtable entries
+      resetGridTablePersistenceCacheForTesting();
+      setGridTablePersistenceCacheForTesting({
+        'gridtable:v1:abc:view': { version: 1 },
+        'gridtable:v1:def:view': { version: 1 },
+      });
 
-    const removed = await clearAllGridTableState();
-    expect(removed).toBe(2);
-    const snapshot = getGridTablePersistenceSnapshot();
-    expect(snapshot).toEqual({});
-  });
+      const removed = await clearAllGridTableState();
+      expect(removed).toBe(2);
+      const snapshot = getGridTablePersistenceSnapshot();
+      expect(snapshot).toEqual({});
+    }
 
-  it('notifies subscribers when clearing all state', async () => {
-    resetGridTablePersistenceCacheForTesting();
-    setGridTablePersistenceCacheForTesting({
-      'gridtable:v1:abc:view': { version: 1 },
-    });
-    const calls: number[] = [];
-    const unsubscribe = subscribeGridTableResetAll(() => {
-      calls.push(1);
-    });
-    await clearAllGridTableState();
-    expect(calls.length).toBe(1);
-    unsubscribe();
+    {
+      // Scenario: notifies subscribers when clearing all state
+      resetGridTablePersistenceCacheForTesting();
+      setGridTablePersistenceCacheForTesting({
+        'gridtable:v1:abc:view': { version: 1 },
+      });
+      const calls: number[] = [];
+      const unsubscribe = subscribeGridTableResetAll(() => {
+        calls.push(1);
+      });
+      await clearAllGridTableState();
+      expect(calls.length).toBe(1);
+      unsubscribe();
+    }
   });
 });

@@ -70,168 +70,176 @@ const deferred = () => {
 };
 
 describe('createObjectMapG6ApplyQueue', () => {
-  it('keeps only the latest graph data queued before the graph is ready', async () => {
-    const g = graph();
-    const first: GraphData = { nodes: [{ id: 'first' }] };
-    const latest: GraphData = { nodes: [{ id: 'latest' }] };
-    const queue = createObjectMapG6ApplyQueue({
-      getGraph: () => g,
-      getCurrentLayout: () => layout(),
-      getCurrentSelectionState: () => selectionState(),
-      getHoveredEdgeId: () => null,
-      getPreserveViewportNodeId: () => null,
-    });
+  it('covers createObjectMapG6ApplyQueue scenarios', async () => {
+    {
+      // Scenario: keeps only the latest graph data queued before the graph is ready
+      const g = graph();
+      const first: GraphData = { nodes: [{ id: 'first' }] };
+      const latest: GraphData = { nodes: [{ id: 'latest' }] };
+      const queue = createObjectMapG6ApplyQueue({
+        getGraph: () => g,
+        getCurrentLayout: () => layout(),
+        getCurrentSelectionState: () => selectionState(),
+        getHoveredEdgeId: () => null,
+        getPreserveViewportNodeId: () => null,
+      });
 
-    queue.scheduleGraphData(first);
-    queue.scheduleGraphData(latest);
+      queue.scheduleGraphData(first);
+      queue.scheduleGraphData(latest);
 
-    expect(g.setData).not.toHaveBeenCalled();
+      expect(g.setData).not.toHaveBeenCalled();
 
-    queue.setReady(true);
-    await flushPromises();
+      queue.setReady(true);
+      await flushPromises();
 
-    expect(g.setData).toHaveBeenCalledTimes(1);
-    expect(g.setData).toHaveBeenCalledWith(latest);
-    expect(queue.getRenderedData()).toBe(latest);
-  });
+      expect(g.setData).toHaveBeenCalledTimes(1);
+      expect(g.setData).toHaveBeenCalledWith(latest);
+      expect(queue.getRenderedData()).toBe(latest);
+    }
 
-  it('applies graph data updates in order and finishes on the latest rendered data', async () => {
-    const g = graph();
-    const previous: GraphData = { nodes: [{ id: 'previous' }] };
-    const first: GraphData = { nodes: [{ id: 'first' }] };
-    const latest: GraphData = { nodes: [{ id: 'latest' }] };
-    const firstApply = deferred();
-    const applyGraphDataFn = vi
-      .fn()
-      .mockImplementationOnce(() => firstApply.promise)
-      .mockResolvedValue(undefined);
-    const queue = createObjectMapG6ApplyQueue({
-      getGraph: () => g,
-      getCurrentLayout: () => layout(),
-      getCurrentSelectionState: () => selectionState(),
-      getHoveredEdgeId: () => null,
-      getPreserveViewportNodeId: () => null,
-      applyGraphDataFn,
-    });
+    {
+      // Scenario: applies graph data updates in order and finishes on the latest rendered data
+      const g = graph();
+      const previous: GraphData = { nodes: [{ id: 'previous' }] };
+      const first: GraphData = { nodes: [{ id: 'first' }] };
+      const latest: GraphData = { nodes: [{ id: 'latest' }] };
+      const firstApply = deferred();
+      const applyGraphDataFn = vi
+        .fn()
+        .mockImplementationOnce(() => firstApply.promise)
+        .mockResolvedValue(undefined);
+      const queue = createObjectMapG6ApplyQueue({
+        getGraph: () => g,
+        getCurrentLayout: () => layout(),
+        getCurrentSelectionState: () => selectionState(),
+        getHoveredEdgeId: () => null,
+        getPreserveViewportNodeId: () => null,
+        applyGraphDataFn,
+      });
 
-    queue.setRenderedData(previous);
-    queue.setReady(true);
-    queue.scheduleGraphData(first);
-    queue.scheduleGraphData(latest);
+      queue.setRenderedData(previous);
+      queue.setReady(true);
+      queue.scheduleGraphData(first);
+      queue.scheduleGraphData(latest);
 
-    expect(applyGraphDataFn).toHaveBeenCalledTimes(1);
-    expect(applyGraphDataFn).toHaveBeenNthCalledWith(1, g, previous, first, {
-      preserveViewportNodeId: null,
-      draggedNodeId: null,
-    });
+      expect(applyGraphDataFn).toHaveBeenCalledTimes(1);
+      expect(applyGraphDataFn).toHaveBeenNthCalledWith(1, g, previous, first, {
+        preserveViewportNodeId: null,
+        draggedNodeId: null,
+      });
 
-    firstApply.resolve();
-    await flushPromises();
+      firstApply.resolve();
+      await flushPromises();
 
-    expect(applyGraphDataFn).toHaveBeenCalledTimes(2);
-    expect(applyGraphDataFn).toHaveBeenNthCalledWith(2, g, first, latest, {
-      preserveViewportNodeId: null,
-      draggedNodeId: null,
-    });
-    expect(queue.getRenderedData()).toBe(latest);
-  });
+      expect(applyGraphDataFn).toHaveBeenCalledTimes(2);
+      expect(applyGraphDataFn).toHaveBeenNthCalledWith(2, g, first, latest, {
+        preserveViewportNodeId: null,
+        draggedNodeId: null,
+      });
+      expect(queue.getRenderedData()).toBe(latest);
+    }
 
-  it('captures the dragged node id at schedule time for the graph-data apply', async () => {
-    const g = graph();
-    const previous: GraphData = { nodes: [{ id: 'pod', style: { x: 0, y: 0 } }], edges: [] };
-    const next: GraphData = { nodes: [{ id: 'pod', style: { x: 40, y: 0 } }], edges: [] };
-    const applyGraphDataFn = vi.fn().mockResolvedValue(undefined);
-    let draggedNodeId: string | null = 'pod';
-    const queue = createObjectMapG6ApplyQueue({
-      getGraph: () => g,
-      getCurrentLayout: () => layout(),
-      getCurrentSelectionState: () => selectionState(),
-      getHoveredEdgeId: () => null,
-      getPreserveViewportNodeId: () => 'pod',
-      getDraggedNodeId: () => draggedNodeId,
-      applyGraphDataFn,
-    });
+    {
+      // Scenario: captures the dragged node id at schedule time for the graph-data apply
+      const g = graph();
+      const previous: GraphData = { nodes: [{ id: 'pod', style: { x: 0, y: 0 } }], edges: [] };
+      const next: GraphData = { nodes: [{ id: 'pod', style: { x: 40, y: 0 } }], edges: [] };
+      const applyGraphDataFn = vi.fn().mockResolvedValue(undefined);
+      let draggedNodeId: string | null = 'pod';
+      const queue = createObjectMapG6ApplyQueue({
+        getGraph: () => g,
+        getCurrentLayout: () => layout(),
+        getCurrentSelectionState: () => selectionState(),
+        getHoveredEdgeId: () => null,
+        getPreserveViewportNodeId: () => 'pod',
+        getDraggedNodeId: () => draggedNodeId,
+        applyGraphDataFn,
+      });
 
-    queue.setRenderedData(previous);
-    queue.scheduleGraphData(next);
-    draggedNodeId = null;
-    queue.setReady(true);
-    await flushPromises();
+      queue.setRenderedData(previous);
+      queue.scheduleGraphData(next);
+      draggedNodeId = null;
+      queue.setReady(true);
+      await flushPromises();
 
-    expect(applyGraphDataFn).toHaveBeenCalledWith(g, previous, next, {
-      preserveViewportNodeId: 'pod',
-      draggedNodeId: 'pod',
-    });
-  });
+      expect(applyGraphDataFn).toHaveBeenCalledWith(g, previous, next, {
+        preserveViewportNodeId: 'pod',
+        draggedNodeId: 'pod',
+      });
+    }
 
-  it('queues selection state before readiness and applies it once ready', async () => {
-    const g = graph();
-    const currentLayout = layout(['deploy', 'pod']);
-    const currentSelection = selectionState('pod');
-    const applySelectionStateFn = vi.fn().mockResolvedValue(undefined);
-    const queue = createObjectMapG6ApplyQueue({
-      getGraph: () => g,
-      getCurrentLayout: () => currentLayout,
-      getCurrentSelectionState: () => currentSelection,
-      getHoveredEdgeId: () => 'edge-1',
-      getPreserveViewportNodeId: () => null,
-      applySelectionStateFn,
-    });
+    {
+      // Scenario: queues selection state before readiness and applies it once ready
+      const g = graph();
+      const currentLayout = layout(['deploy', 'pod']);
+      const currentSelection = selectionState('pod');
+      const applySelectionStateFn = vi.fn().mockResolvedValue(undefined);
+      const queue = createObjectMapG6ApplyQueue({
+        getGraph: () => g,
+        getCurrentLayout: () => currentLayout,
+        getCurrentSelectionState: () => currentSelection,
+        getHoveredEdgeId: () => 'edge-1',
+        getPreserveViewportNodeId: () => null,
+        applySelectionStateFn,
+      });
 
-    queue.scheduleSelectionState(currentLayout, currentSelection);
-    expect(applySelectionStateFn).not.toHaveBeenCalled();
+      queue.scheduleSelectionState(currentLayout, currentSelection);
+      expect(applySelectionStateFn).not.toHaveBeenCalled();
 
-    queue.setReady(true);
-    await flushPromises();
+      queue.setReady(true);
+      await flushPromises();
 
-    expect(applySelectionStateFn).toHaveBeenCalledWith(
-      g,
-      currentLayout,
-      currentSelection,
-      'edge-1'
-    );
-  });
+      expect(applySelectionStateFn).toHaveBeenCalledWith(
+        g,
+        currentLayout,
+        currentSelection,
+        'edge-1'
+      );
+    }
 
-  it('clears pending work and rendered data', async () => {
-    const g = graph();
-    const latest: GraphData = { nodes: [{ id: 'latest' }] };
-    const queue = createObjectMapG6ApplyQueue({
-      getGraph: () => g,
-      getCurrentLayout: () => layout(),
-      getCurrentSelectionState: () => selectionState(),
-      getHoveredEdgeId: () => null,
-      getPreserveViewportNodeId: () => null,
-    });
+    {
+      // Scenario: clears pending work and rendered data
+      const g = graph();
+      const latest: GraphData = { nodes: [{ id: 'latest' }] };
+      const queue = createObjectMapG6ApplyQueue({
+        getGraph: () => g,
+        getCurrentLayout: () => layout(),
+        getCurrentSelectionState: () => selectionState(),
+        getHoveredEdgeId: () => null,
+        getPreserveViewportNodeId: () => null,
+      });
 
-    queue.setRenderedData({ nodes: [{ id: 'previous' }] });
-    queue.scheduleGraphData(latest);
-    queue.clear();
-    queue.setReady(true);
-    await flushPromises();
+      queue.setRenderedData({ nodes: [{ id: 'previous' }] });
+      queue.scheduleGraphData(latest);
+      queue.clear();
+      queue.setReady(true);
+      await flushPromises();
 
-    expect(g.setData).not.toHaveBeenCalled();
-    expect(g.render).not.toHaveBeenCalled();
-    expect(queue.getRenderedData()).toBeNull();
-  });
+      expect(g.setData).not.toHaveBeenCalled();
+      expect(g.render).not.toHaveBeenCalled();
+      expect(queue.getRenderedData()).toBeNull();
+    }
 
-  it('ignores scheduling when the graph has been destroyed', () => {
-    const g = graph();
-    Object.defineProperty(g, 'destroyed', { configurable: true, value: true });
-    const applyGraphDataFn = vi.fn();
-    const queue = createObjectMapG6ApplyQueue({
-      getGraph: () => g,
-      getCurrentLayout: () => layout(),
-      getCurrentSelectionState: () => selectionState(),
-      getHoveredEdgeId: () => null,
-      getPreserveViewportNodeId: () => null,
-      applyGraphDataFn,
-    });
+    {
+      // Scenario: ignores scheduling when the graph has been destroyed
+      const g = graph();
+      Object.defineProperty(g, 'destroyed', { configurable: true, value: true });
+      const applyGraphDataFn = vi.fn();
+      const queue = createObjectMapG6ApplyQueue({
+        getGraph: () => g,
+        getCurrentLayout: () => layout(),
+        getCurrentSelectionState: () => selectionState(),
+        getHoveredEdgeId: () => null,
+        getPreserveViewportNodeId: () => null,
+        applyGraphDataFn,
+      });
 
-    queue.setReady(true);
-    queue.scheduleGraphData({ nodes: [{ id: 'pod' }] });
+      queue.setReady(true);
+      queue.scheduleGraphData({ nodes: [{ id: 'pod' }] });
 
-    expect(applyGraphDataFn).not.toHaveBeenCalled();
-    expect(g.setData).not.toHaveBeenCalled();
+      expect(applyGraphDataFn).not.toHaveBeenCalled();
+      expect(g.setData).not.toHaveBeenCalled();
+    }
   });
 });
 
@@ -254,292 +262,328 @@ describe('applySelectionState', () => {
     bounds: { minX: 0, minY: 0, maxX: 340, maxY: 58 },
   };
 
-  it('does not re-apply hover highlight to a hovered edge dimmed by the selection', async () => {
-    const g = graph();
+  it('covers applySelectionState scenarios', async () => {
+    {
+      // Scenario: does not re-apply hover highlight to a hovered edge dimmed by the selection
+      const g = graph();
 
-    await applySelectionState(
-      g,
-      hoverLayout,
-      { activeId: 'other', connectedIds: new Set(), connectedEdgeIds: new Set() },
-      'edge'
-    );
+      await applySelectionState(
+        g,
+        hoverLayout,
+        { activeId: 'other', connectedIds: new Set(), connectedEdgeIds: new Set() },
+        'edge'
+      );
 
-    expect(g.setElementState).toHaveBeenCalledWith(
-      {
-        service: ['seed', 'dimmed'],
-        pod: ['dimmed'],
-        other: ['selected'],
-        edge: ['dimmed'],
-      },
-      false
-    );
-  });
+      expect(g.setElementState).toHaveBeenCalledWith(
+        {
+          service: ['seed', 'dimmed'],
+          pod: ['dimmed'],
+          other: ['selected'],
+          edge: ['dimmed'],
+        },
+        false
+      );
+    }
 
-  it('keeps hover highlight on a hovered edge connected to the selection', async () => {
-    const g = graph();
+    {
+      // Scenario: keeps hover highlight on a hovered edge connected to the selection
+      const g = graph();
 
-    await applySelectionState(
-      g,
-      hoverLayout,
-      { activeId: 'service', connectedIds: new Set(['pod']), connectedEdgeIds: new Set(['edge']) },
-      'edge'
-    );
+      await applySelectionState(
+        g,
+        hoverLayout,
+        {
+          activeId: 'service',
+          connectedIds: new Set(['pod']),
+          connectedEdgeIds: new Set(['edge']),
+        },
+        'edge'
+      );
 
-    expect(g.setElementState).toHaveBeenCalledWith(
-      {
-        service: ['seed', 'selected', 'edgeHovered'],
-        pod: ['connected', 'edgeHovered'],
-        other: ['dimmed'],
-        edge: ['highlighted', 'hovered'],
-      },
-      false
-    );
+      expect(g.setElementState).toHaveBeenCalledWith(
+        {
+          service: ['seed', 'selected', 'edgeHovered'],
+          pod: ['connected', 'edgeHovered'],
+          other: ['dimmed'],
+          edge: ['highlighted', 'hovered'],
+        },
+        false
+      );
+    }
   });
 });
 
 describe('applyGraphData', () => {
-  it('uses a full render when nodes or edges are added or removed', async () => {
-    const previous: GraphData = {
-      nodes: [{ id: 'deploy' }],
-      edges: [],
-    };
-    const next: GraphData = {
-      nodes: [{ id: 'deploy' }, { id: 'pod' }],
-      edges: [{ id: 'edge-1', source: 'deploy', target: 'pod' }],
-    };
-    const g = graph();
+  it('covers applyGraphData scenarios', async () => {
+    {
+      // Scenario: uses a full render when nodes or edges are added or removed
+      const previous: GraphData = {
+        nodes: [{ id: 'deploy' }],
+        edges: [],
+      };
+      const next: GraphData = {
+        nodes: [{ id: 'deploy' }, { id: 'pod' }],
+        edges: [{ id: 'edge-1', source: 'deploy', target: 'pod' }],
+      };
+      const g = graph();
 
-    await applyGraphData(g, previous, next);
+      await applyGraphData(g, previous, next);
 
-    expect(g.setData).toHaveBeenCalledWith(next);
-    expect(g.render).toHaveBeenCalledTimes(1);
-    expect(g.draw).not.toHaveBeenCalled();
-    expect(g.updateData).not.toHaveBeenCalled();
-  });
+      expect(g.setData).toHaveBeenCalledWith(next);
+      expect(g.render).toHaveBeenCalledTimes(1);
+      expect(g.draw).not.toHaveBeenCalled();
+      expect(g.updateData).not.toHaveBeenCalled();
+    }
 
-  it('patches and redraws existing graph elements when only attributes change', async () => {
-    const previous: GraphData = {
-      nodes: [{ id: 'pod', style: { x: 0, y: 0 } }],
-      edges: [{ id: 'edge-1', source: 'deploy', target: 'pod', data: { path: 'M 0 0 L 1 1' } }],
-    };
-    const next: GraphData = {
-      nodes: [{ id: 'pod', style: { x: 10, y: 0 } }],
-      edges: [{ id: 'edge-1', source: 'deploy', target: 'pod', data: { path: 'M 0 0 L 2 2' } }],
-    };
-    const g = graph();
+    {
+      // Scenario: patches and redraws existing graph elements when only attributes change
+      const previous: GraphData = {
+        nodes: [{ id: 'pod', style: { x: 0, y: 0 } }],
+        edges: [{ id: 'edge-1', source: 'deploy', target: 'pod', data: { path: 'M 0 0 L 1 1' } }],
+      };
+      const next: GraphData = {
+        nodes: [{ id: 'pod', style: { x: 10, y: 0 } }],
+        edges: [{ id: 'edge-1', source: 'deploy', target: 'pod', data: { path: 'M 0 0 L 2 2' } }],
+      };
+      const g = graph();
 
-    await applyGraphData(g, previous, next);
+      await applyGraphData(g, previous, next);
 
-    expect(g.updateData).toHaveBeenCalledWith({
-      nodes: [requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
-      edges: [requireValue(next.edges, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
-    });
-    expect(g.draw).toHaveBeenCalledTimes(1);
-    expect(g.render).not.toHaveBeenCalled();
-    expect(g.setData).not.toHaveBeenCalled();
-  });
+      expect(g.updateData).toHaveBeenCalledWith({
+        nodes: [
+          requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0],
+        ],
+        edges: [
+          requireValue(next.edges, 'expected test value in objectMapG6ApplyQueue.test.ts')[0],
+        ],
+      });
+      expect(g.draw).toHaveBeenCalledTimes(1);
+      expect(g.render).not.toHaveBeenCalled();
+      expect(g.setData).not.toHaveBeenCalled();
+    }
 
-  it('patches and redraws when a custom collapse badge changes', async () => {
-    const previous: GraphData = {
-      nodes: [{ id: 'deploy', style: { cardCollapseBadgeText: '+2' } }],
-      edges: [],
-    };
-    const next: GraphData = {
-      nodes: [{ id: 'deploy', style: { cardCollapseBadgeText: '\u2212' } }],
-      edges: [],
-    };
-    const g = graph();
+    {
+      // Scenario: patches and redraws when a custom collapse badge changes
+      const previous: GraphData = {
+        nodes: [{ id: 'deploy', style: { cardCollapseBadgeText: '+2' } }],
+        edges: [],
+      };
+      const next: GraphData = {
+        nodes: [{ id: 'deploy', style: { cardCollapseBadgeText: '\u2212' } }],
+        edges: [],
+      };
+      const g = graph();
 
-    await applyGraphData(g, previous, next);
+      await applyGraphData(g, previous, next);
 
-    expect(g.updateData).toHaveBeenCalledWith({
-      nodes: [requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
-    });
-    expect(g.draw).toHaveBeenCalledTimes(1);
-    expect(g.render).not.toHaveBeenCalled();
-  });
+      expect(g.updateData).toHaveBeenCalledWith({
+        nodes: [
+          requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0],
+        ],
+      });
+      expect(g.draw).toHaveBeenCalledTimes(1);
+      expect(g.render).not.toHaveBeenCalled();
+    }
 
-  it('patches and redraws when card detail level changes', async () => {
-    const previous: GraphData = {
-      nodes: [{ id: 'deploy', style: { cardDetailLevel: 'full' } }],
-      edges: [],
-    };
-    const next: GraphData = {
-      nodes: [{ id: 'deploy', style: { cardDetailLevel: 'compact' } }],
-      edges: [],
-    };
-    const g = graph();
+    {
+      // Scenario: patches and redraws when card detail level changes
+      const previous: GraphData = {
+        nodes: [{ id: 'deploy', style: { cardDetailLevel: 'full' } }],
+        edges: [],
+      };
+      const next: GraphData = {
+        nodes: [{ id: 'deploy', style: { cardDetailLevel: 'compact' } }],
+        edges: [],
+      };
+      const g = graph();
 
-    await applyGraphData(g, previous, next);
+      await applyGraphData(g, previous, next);
 
-    expect(g.updateData).toHaveBeenCalledWith({
-      nodes: [requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
-    });
-    expect(g.draw).toHaveBeenCalledTimes(1);
-    expect(g.render).not.toHaveBeenCalled();
-  });
+      expect(g.updateData).toHaveBeenCalledWith({
+        nodes: [
+          requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0],
+        ],
+      });
+      expect(g.draw).toHaveBeenCalledTimes(1);
+      expect(g.render).not.toHaveBeenCalled();
+    }
 
-  it('patches and redraws when link detail level changes', async () => {
-    const previous: GraphData = {
-      nodes: [],
-      edges: [
-        {
-          id: 'edge',
-          source: 'source',
-          target: 'target',
-          style: { objectMapEdgeDetailLevel: 'routed' },
-        },
-      ],
-    };
-    const next: GraphData = {
-      nodes: [],
-      edges: [
-        {
-          id: 'edge',
-          source: 'source',
-          target: 'target',
-          style: { objectMapEdgeDetailLevel: 'simple' },
-        },
-      ],
-    };
-    const g = graph();
-
-    await applyGraphData(g, previous, next);
-
-    expect(g.updateData).toHaveBeenCalledWith({
-      edges: [requireValue(next.edges, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
-    });
-    expect(g.draw).toHaveBeenCalledTimes(1);
-    expect(g.render).not.toHaveBeenCalled();
-  });
-
-  it('patches and redraws when a custom link path changes', async () => {
-    const previous: GraphData = {
-      nodes: [],
-      edges: [
-        {
-          id: 'edge',
-          source: 'source',
-          target: 'target',
-          style: {
-            objectMapPath: [
-              ['M', 0, 0],
-              ['L', 10, 10],
-            ],
+    {
+      // Scenario: patches and redraws when link detail level changes
+      const previous: GraphData = {
+        nodes: [],
+        edges: [
+          {
+            id: 'edge',
+            source: 'source',
+            target: 'target',
+            style: { objectMapEdgeDetailLevel: 'routed' },
           },
-        },
-      ],
-    };
-    const next: GraphData = {
-      nodes: [],
-      edges: [
-        {
-          id: 'edge',
-          source: 'source',
-          target: 'target',
-          style: {
-            objectMapPath: [
-              ['M', 20, 0],
-              ['L', 30, 10],
-            ],
+        ],
+      };
+      const next: GraphData = {
+        nodes: [],
+        edges: [
+          {
+            id: 'edge',
+            source: 'source',
+            target: 'target',
+            style: { objectMapEdgeDetailLevel: 'simple' },
           },
-        },
-      ],
-    };
-    const g = graph();
+        ],
+      };
+      const g = graph();
 
-    await applyGraphData(g, previous, next);
+      await applyGraphData(g, previous, next);
 
-    expect(g.updateData).toHaveBeenCalledWith({
-      edges: [requireValue(next.edges, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
-    });
-    expect(g.draw).toHaveBeenCalledTimes(1);
-    expect(g.render).not.toHaveBeenCalled();
-  });
+      expect(g.updateData).toHaveBeenCalledWith({
+        edges: [
+          requireValue(next.edges, 'expected test value in objectMapG6ApplyQueue.test.ts')[0],
+        ],
+      });
+      expect(g.draw).toHaveBeenCalledTimes(1);
+      expect(g.render).not.toHaveBeenCalled();
+    }
 
-  it('preserves a focused node screen position after a full redraw', async () => {
-    const previous: GraphData = {
-      nodes: [{ id: 'pod', style: { x: 320, y: 40 } }, { id: 'sibling' }],
-      edges: [],
-    };
-    const next: GraphData = {
-      nodes: [{ id: 'pod', style: { x: 0, y: 40 } }],
-      edges: [],
-    };
-    const g = graph();
+    {
+      // Scenario: patches and redraws when a custom link path changes
+      const previous: GraphData = {
+        nodes: [],
+        edges: [
+          {
+            id: 'edge',
+            source: 'source',
+            target: 'target',
+            style: {
+              objectMapPath: [
+                ['M', 0, 0],
+                ['L', 10, 10],
+              ],
+            },
+          },
+        ],
+      };
+      const next: GraphData = {
+        nodes: [],
+        edges: [
+          {
+            id: 'edge',
+            source: 'source',
+            target: 'target',
+            style: {
+              objectMapPath: [
+                ['M', 20, 0],
+                ['L', 30, 10],
+              ],
+            },
+          },
+        ],
+      };
+      const g = graph();
 
-    await applyGraphData(g, previous, next, { preserveViewportNodeId: 'pod' });
+      await applyGraphData(g, previous, next);
 
-    expect(g.setData).toHaveBeenCalledWith(next);
-    expect(g.render).toHaveBeenCalledTimes(1);
-    expect(g.translateBy).toHaveBeenCalledWith([640, 0], false);
-  });
+      expect(g.updateData).toHaveBeenCalledWith({
+        edges: [
+          requireValue(next.edges, 'expected test value in objectMapG6ApplyQueue.test.ts')[0],
+        ],
+      });
+      expect(g.draw).toHaveBeenCalledTimes(1);
+      expect(g.render).not.toHaveBeenCalled();
+    }
 
-  it('preserves a focused node screen position after a patched redraw', async () => {
-    const previous: GraphData = {
-      nodes: [{ id: 'pod', style: { x: 320, y: 40 } }],
-      edges: [],
-    };
-    const next: GraphData = {
-      nodes: [{ id: 'pod', style: { x: 300, y: 70 } }],
-      edges: [],
-    };
-    const g = graph();
+    {
+      // Scenario: preserves a focused node screen position after a full redraw
+      const previous: GraphData = {
+        nodes: [{ id: 'pod', style: { x: 320, y: 40 } }, { id: 'sibling' }],
+        edges: [],
+      };
+      const next: GraphData = {
+        nodes: [{ id: 'pod', style: { x: 0, y: 40 } }],
+        edges: [],
+      };
+      const g = graph();
 
-    await applyGraphData(g, previous, next, { preserveViewportNodeId: 'pod' });
+      await applyGraphData(g, previous, next, { preserveViewportNodeId: 'pod' });
 
-    expect(g.updateData).toHaveBeenCalledWith({
-      nodes: [requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
-    });
-    expect(g.draw).toHaveBeenCalledTimes(1);
-    expect(g.translateBy).toHaveBeenCalledWith([40, -60], false);
-  });
+      expect(g.setData).toHaveBeenCalledWith(next);
+      expect(g.render).toHaveBeenCalledTimes(1);
+      expect(g.translateBy).toHaveBeenCalledWith([640, 0], false);
+    }
 
-  it('does not pan the viewport when the preserved node is the node being dragged', async () => {
-    const previous: GraphData = {
-      nodes: [{ id: 'pod', style: { x: 320, y: 40 } }],
-      edges: [],
-    };
-    const next: GraphData = {
-      nodes: [{ id: 'pod', style: { x: 300, y: 70 } }],
-      edges: [],
-    };
-    const g = graph();
+    {
+      // Scenario: preserves a focused node screen position after a patched redraw
+      const previous: GraphData = {
+        nodes: [{ id: 'pod', style: { x: 320, y: 40 } }],
+        edges: [],
+      };
+      const next: GraphData = {
+        nodes: [{ id: 'pod', style: { x: 300, y: 70 } }],
+        edges: [],
+      };
+      const g = graph();
 
-    await applyGraphData(g, previous, next, {
-      preserveViewportNodeId: 'pod',
-      draggedNodeId: 'pod',
-    });
+      await applyGraphData(g, previous, next, { preserveViewportNodeId: 'pod' });
 
-    expect(g.updateData).toHaveBeenCalledWith({
-      nodes: [requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
-    });
-    expect(g.draw).toHaveBeenCalledTimes(1);
-    expect(g.translateBy).not.toHaveBeenCalled();
-  });
+      expect(g.updateData).toHaveBeenCalledWith({
+        nodes: [
+          requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0],
+        ],
+      });
+      expect(g.draw).toHaveBeenCalledTimes(1);
+      expect(g.translateBy).toHaveBeenCalledWith([40, -60], false);
+    }
 
-  it('keeps preserving the focused node when a different node is dragged', async () => {
-    const previous: GraphData = {
-      nodes: [
-        { id: 'pod', style: { x: 320, y: 40 } },
-        { id: 'other', style: { x: 0, y: 0 } },
-      ],
-      edges: [],
-    };
-    const next: GraphData = {
-      nodes: [
-        { id: 'pod', style: { x: 300, y: 70 } },
-        { id: 'other', style: { x: 50, y: 0 } },
-      ],
-      edges: [],
-    };
-    const g = graph();
+    {
+      // Scenario: does not pan the viewport when the preserved node is the node being dragged
+      const previous: GraphData = {
+        nodes: [{ id: 'pod', style: { x: 320, y: 40 } }],
+        edges: [],
+      };
+      const next: GraphData = {
+        nodes: [{ id: 'pod', style: { x: 300, y: 70 } }],
+        edges: [],
+      };
+      const g = graph();
 
-    await applyGraphData(g, previous, next, {
-      preserveViewportNodeId: 'pod',
-      draggedNodeId: 'other',
-    });
+      await applyGraphData(g, previous, next, {
+        preserveViewportNodeId: 'pod',
+        draggedNodeId: 'pod',
+      });
 
-    expect(g.translateBy).toHaveBeenCalledWith([40, -60], false);
+      expect(g.updateData).toHaveBeenCalledWith({
+        nodes: [
+          requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0],
+        ],
+      });
+      expect(g.draw).toHaveBeenCalledTimes(1);
+      expect(g.translateBy).not.toHaveBeenCalled();
+    }
+
+    {
+      // Scenario: keeps preserving the focused node when a different node is dragged
+      const previous: GraphData = {
+        nodes: [
+          { id: 'pod', style: { x: 320, y: 40 } },
+          { id: 'other', style: { x: 0, y: 0 } },
+        ],
+        edges: [],
+      };
+      const next: GraphData = {
+        nodes: [
+          { id: 'pod', style: { x: 300, y: 70 } },
+          { id: 'other', style: { x: 50, y: 0 } },
+        ],
+        edges: [],
+      };
+      const g = graph();
+
+      await applyGraphData(g, previous, next, {
+        preserveViewportNodeId: 'pod',
+        draggedNodeId: 'other',
+      });
+
+      expect(g.translateBy).toHaveBeenCalledWith([40, -60], false);
+    }
   });
 });

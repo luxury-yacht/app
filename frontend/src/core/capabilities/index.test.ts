@@ -35,15 +35,14 @@ import {
 } from './permissionStore';
 
 describe('core/capabilities index exports', () => {
-  it('re-exports catalog and hook utilities', () => {
+  it('covers core/capabilities index exports scenarios', async () => {
+    // Scenario: re-exports catalog and hook utilities
     expect(CLUSTER_CAPABILITIES).toBe(RawClusterCapabilities);
     expect(useCapabilities).toBe(rawUseCapabilities);
     expect(useCapabilityDiagnostics).toBe(rawUseCapabilityDiagnostics);
     expect(useUserPermissions).toBe(rawUseUserPermissions);
     expect(useUserPermission).toBe(rawUseUserPermission);
-  });
-
-  it('re-exports permission store functions', () => {
+    // Scenario: re-exports permission store functions
     expect(setActivePermissionCluster).toBe(rawSetActivePermissionCluster);
     expect(getPermissionKey).toBe(rawGetPermissionKey);
     expect(queryNamespacePermissions).toBe(rawQueryNamespacePermissions);

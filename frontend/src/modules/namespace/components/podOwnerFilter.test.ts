@@ -17,48 +17,52 @@ const deployment = buildRequiredObjectReference({
 });
 
 describe('podOwnerFilter', () => {
-  it('encodes complete workload and standalone Pod identities', () => {
-    const pod = buildRequiredObjectReference({
-      clusterId: 'cluster-a',
-      group: '',
-      version: 'v1',
-      kind: 'Pod',
-      namespace: 'team-a',
-      name: 'standalone',
-    });
+  it('covers podOwnerFilter scenarios', async () => {
+    {
+      // Scenario: encodes complete workload and standalone Pod identities
+      const pod = buildRequiredObjectReference({
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'team-a',
+        name: 'standalone',
+      });
 
-    expect(buildPodOwnerFacetValue(deployment)).toBe(
-      '["owner","Deployment","api","cluster-a","apps","v1","team-a"]'
-    );
-    expect(buildPodOwnerFacetValue(pod)).toBe(
-      '["pod","Pod","standalone","cluster-a","","v1","team-a"]'
-    );
-  });
+      expect(buildPodOwnerFacetValue(deployment)).toBe(
+        '["owner","Deployment","api","cluster-a","apps","v1","team-a"]'
+      );
+      expect(buildPodOwnerFacetValue(pod)).toBe(
+        '["pod","Pod","standalone","cluster-a","","v1","team-a"]'
+      );
+    }
 
-  it('sets and clears Namespace and Owner while preserving other facets', () => {
-    const current = {
-      ...DEFAULT_GRID_TABLE_FILTER_STATE,
-      queryFacets: { nodes: { mode: 'some' as const, values: ['node-a'] } },
-    };
-    const selected = applyPodWorkloadFilterRequest(
-      current,
-      { type: 'set', workload: deployment },
-      true
-    );
+    {
+      // Scenario: sets and clears Namespace and Owner while preserving other facets
+      const current = {
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        queryFacets: { nodes: { mode: 'some' as const, values: ['node-a'] } },
+      };
+      const selected = applyPodWorkloadFilterRequest(
+        current,
+        { type: 'set', workload: deployment },
+        true
+      );
 
-    expect(selected.namespaces).toEqual({ mode: 'some', values: ['team-a'] });
-    expect(selected.queryFacets).toEqual({
-      nodes: { mode: 'some', values: ['node-a'] },
-      owners: {
-        mode: 'some',
-        values: ['["owner","Deployment","api","cluster-a","apps","v1","team-a"]'],
-      },
-    });
-    expect(podFiltersMatchWorkload(selected, deployment, true)).toBe(true);
+      expect(selected.namespaces).toEqual({ mode: 'some', values: ['team-a'] });
+      expect(selected.queryFacets).toEqual({
+        nodes: { mode: 'some', values: ['node-a'] },
+        owners: {
+          mode: 'some',
+          values: ['["owner","Deployment","api","cluster-a","apps","v1","team-a"]'],
+        },
+      });
+      expect(podFiltersMatchWorkload(selected, deployment, true)).toBe(true);
 
-    expect(applyPodWorkloadFilterRequest(selected, { type: 'clear' }, true)).toMatchObject({
-      namespaces: { mode: 'some', values: ['team-a'] },
-      queryFacets: { nodes: { mode: 'some', values: ['node-a'] } },
-    });
+      expect(applyPodWorkloadFilterRequest(selected, { type: 'clear' }, true)).toMatchObject({
+        namespaces: { mode: 'some', values: ['team-a'] },
+        queryFacets: { nodes: { mode: 'some', values: ['node-a'] } },
+      });
+    }
   });
 });

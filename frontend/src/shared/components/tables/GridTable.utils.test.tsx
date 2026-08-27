@@ -21,25 +21,26 @@ import {
 import { describe, expect, it } from 'vitest';
 
 describe('GridTable utils', () => {
-  it('extracts kind, namespace, and search text defaults', () => {
-    const row = {
-      name: 'pod-1',
-      namespaceDisplay: 'kube-system',
-      kindDisplay: 'Pod',
-      item: { kind: 'Pod', namespace: 'kube-system', name: 'pod-1' },
-    };
-    expect(defaultGetKind(row)).toBe('Pod');
-    expect(defaultGetNamespace(row)).toBe('kube-system');
-    expect(defaultGetNamespace({ namespaceDisplay: '—' })).toBe('');
-    expect(defaultGetNamespace({ namespaceDisplay: '-' })).toBe('');
+  it('covers GridTable utils scenarios', async () => {
+    {
+      // Scenario: extracts kind, namespace, and search text defaults
+      const row = {
+        name: 'pod-1',
+        namespaceDisplay: 'kube-system',
+        kindDisplay: 'Pod',
+        item: { kind: 'Pod', namespace: 'kube-system', name: 'pod-1' },
+      };
+      expect(defaultGetKind(row)).toBe('Pod');
+      expect(defaultGetNamespace(row)).toBe('kube-system');
+      expect(defaultGetNamespace({ namespaceDisplay: '—' })).toBe('');
+      expect(defaultGetNamespace({ namespaceDisplay: '-' })).toBe('');
 
-    const search = defaultGetSearchText(row);
-    expect(search).toContain('pod-1');
-    expect(search).toContain('kube-system');
-    expect(search).toContain('Pod');
-  });
-
-  it('derives text content from React nodes', () => {
+      const search = defaultGetSearchText(row);
+      expect(search).toContain('pod-1');
+      expect(search).toContain('kube-system');
+      expect(search).toContain('Pod');
+    }
+    // Scenario: derives text content from React nodes
     expect(getTextContent('plain')).toBe('plain');
     expect(getTextContent(42)).toBe('42');
     expect(getTextContent(['a', 'b'])).toBe('ab');
@@ -48,28 +49,25 @@ describe('GridTable utils', () => {
     expect(getTextContent(<span data-gridtable-export-text="exported">child</span>)).toBe(
       'exported'
     );
-  });
 
-  it('parses and detects width inputs', () => {
-    expect(detectWidthUnit(undefined)).toBe('px');
-    expect(detectWidthUnit('50%')).toBe('%');
-    expect(parseWidthInputToNumber(120)).toBe(120);
-    expect(parseWidthInputToNumber('2em')).toBe(2 * DEFAULT_FONT_SIZE);
-    expect(parseWidthInputToNumber('30px')).toBe(30);
-    expect(parseWidthInputToNumber('auto')).toBeNull();
-    const invalid = '10vh' as unknown as ColumnWidthInput;
-    expect(parseWidthInputToNumber(invalid)).toBeNull();
-  });
-
-  it('builds cluster-scoped keys using clusterId only', () => {
+    {
+      // Scenario: parses and detects width inputs
+      expect(detectWidthUnit(undefined)).toBe('px');
+      expect(detectWidthUnit('50%')).toBe('%');
+      expect(parseWidthInputToNumber(120)).toBe(120);
+      expect(parseWidthInputToNumber('2em')).toBe(2 * DEFAULT_FONT_SIZE);
+      expect(parseWidthInputToNumber('30px')).toBe(30);
+      expect(parseWidthInputToNumber('auto')).toBeNull();
+      const invalid = '10vh' as unknown as ColumnWidthInput;
+      expect(parseWidthInputToNumber(invalid)).toBeNull();
+    }
+    // Scenario: builds cluster-scoped keys using clusterId only
     // With clusterId present, key is prefixed.
     expect(buildClusterScopedKey({ clusterId: 'alpha:dev' }, 'pod-1')).toBe('alpha:dev|pod-1');
     expect(buildClusterScopedKey({ item: { clusterId: 'beta:prod' } }, 'svc-1')).toBe(
       'beta:prod|svc-1'
     );
-  });
-
-  it('throws when clusterId is missing', () => {
+    // Scenario: throws when clusterId is missing
     // Without clusterId, buildClusterScopedKey throws to prevent silent key
     // collisions in multi-cluster views.
     expect(() => buildClusterScopedKey({ clusterName: 'dev' }, 'pod-1')).toThrow(
@@ -80,41 +78,46 @@ describe('GridTable utils', () => {
     );
     expect(() => buildClusterScopedKey({}, 'deploy-1')).toThrow(/requires clusterId/);
     expect(() => buildClusterScopedKey(null, 'job-1')).toThrow(/requires clusterId/);
-  });
 
-  it('produces different keys for same name in different clusters', () => {
-    const rowA = { clusterId: 'cluster-a', name: 'app' };
-    const rowB = { clusterId: 'cluster-b', name: 'app' };
-    const keyA = buildClusterScopedKey(rowA, 'app');
-    const keyB = buildClusterScopedKey(rowB, 'app');
-    expect(keyA).not.toBe(keyB);
-    expect(keyA).toBe('cluster-a|app');
-    expect(keyB).toBe('cluster-b|app');
+    {
+      // Scenario: produces different keys for same name in different clusters
+      const rowA = { clusterId: 'cluster-a', name: 'app' };
+      const rowB = { clusterId: 'cluster-b', name: 'app' };
+      const keyA = buildClusterScopedKey(rowA, 'app');
+      const keyB = buildClusterScopedKey(rowB, 'app');
+      expect(keyA).not.toBe(keyB);
+      expect(keyA).toBe('cluster-a|app');
+      expect(keyB).toBe('cluster-b|app');
+    }
   });
 
   describe('getStableRowId', () => {
-    it('returns a prefixed id for simple keys', () => {
+    it('covers getStableRowId scenarios', async () => {
+      // Scenario: returns a prefixed id for simple keys
       expect(getStableRowId('row-a')).toBe('gridtable-row-row-a');
-    });
 
-    it('hex-encodes special characters to preserve uniqueness', () => {
-      const idSlash = getStableRowId('a/b');
-      const idColon = getStableRowId('a:b');
-      const idPipe = getStableRowId('a|b');
-      expect(idSlash).not.toBe(idColon);
-      expect(idSlash).not.toBe(idPipe);
-      expect(idColon).not.toBe(idPipe);
-    });
+      {
+        // Scenario: hex-encodes special characters to preserve uniqueness
+        const idSlash = getStableRowId('a/b');
+        const idColon = getStableRowId('a:b');
+        const idPipe = getStableRowId('a|b');
+        expect(idSlash).not.toBe(idColon);
+        expect(idSlash).not.toBe(idPipe);
+        expect(idColon).not.toBe(idPipe);
+      }
 
-    it('handles cluster-scoped keys with pipe separator', () => {
-      const id = getStableRowId('cluster-1|pod:default/nginx');
-      expect(id).toMatch(/^gridtable-row-/);
-      expect(id).toMatch(/^[a-zA-Z][a-zA-Z0-9_-]*$/);
-    });
+      {
+        // Scenario: handles cluster-scoped keys with pipe separator
+        const id = getStableRowId('cluster-1|pod:default/nginx');
+        expect(id).toMatch(/^gridtable-row-/);
+        expect(id).toMatch(/^[a-zA-Z][a-zA-Z0-9_-]*$/);
+      }
 
-    it('produces identical output for identical input', () => {
-      const key = 'cluster-1|pod:ns/name';
-      expect(getStableRowId(key)).toBe(getStableRowId(key));
+      {
+        // Scenario: produces identical output for identical input
+        const key = 'cluster-1|pod:ns/name';
+        expect(getStableRowId(key)).toBe(getStableRowId(key));
+      }
     });
   });
 });

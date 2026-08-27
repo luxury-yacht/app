@@ -66,20 +66,21 @@ const layout: ObjectMapLayout = {
 };
 
 describe('objectMapG6RendererOptions', () => {
-  it('finds layout endpoints and formats fallback endpoint labels', () => {
-    const node = findObjectMapG6Node(layout, 'deploy');
+  it('covers objectMapG6RendererOptions scenarios', async () => {
+    {
+      // Scenario: finds layout endpoints and formats fallback endpoint labels
+      const node = findObjectMapG6Node(layout, 'deploy');
 
-    expect(node?.ref.name).toBe('web');
-    expect(findObjectMapG6Node(layout, 'missing')).toBeNull();
-    expect(findObjectMapG6Edge(layout, 'edge')?.label).toBe('owns');
-    expect(findObjectMapG6Edge(layout, 'missing')).toBeNull();
-    expect(objectMapG6EndpointLabel(node)).toBe('web');
-    expect(objectMapG6EndpointKind(node)).toBe('Deployment');
-    expect(objectMapG6EndpointLabel(null)).toBe('Unknown');
-    expect(objectMapG6EndpointKind(null)).toBe('Object');
-  });
-
-  it('builds node and edge states from palette values', () => {
+      expect(node?.ref.name).toBe('web');
+      expect(findObjectMapG6Node(layout, 'missing')).toBeNull();
+      expect(findObjectMapG6Edge(layout, 'edge')?.label).toBe('owns');
+      expect(findObjectMapG6Edge(layout, 'missing')).toBeNull();
+      expect(objectMapG6EndpointLabel(node)).toBe('web');
+      expect(objectMapG6EndpointKind(node)).toBe('Deployment');
+      expect(objectMapG6EndpointLabel(null)).toBe('Unknown');
+      expect(objectMapG6EndpointKind(null)).toBe('Object');
+    }
+    // Scenario: builds node and edge states from palette values
     expect(objectMapG6NodeOptions(palette).state.selected).toEqual({
       stroke: '#2563eb',
       lineWidth: 1,

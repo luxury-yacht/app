@@ -13,74 +13,79 @@ import {
 } from './objectMapScope';
 
 describe('buildObjectMapScope', () => {
-  it('encodes a namespaced object with default depth/nodes (no query string)', () => {
-    const scope = buildObjectMapScope({
-      clusterId: 'cluster-a',
-      group: 'apps',
-      version: 'v1',
-      kind: 'Deployment',
-      name: 'web',
-      namespace: 'default',
-    });
-    expect(scope).toBe('cluster-a|default:apps/v1:Deployment:web');
-  });
+  it('covers buildObjectMapScope scenarios', async () => {
+    {
+      // Scenario: encodes a namespaced object with default depth/nodes (no query string)
+      const scope = buildObjectMapScope({
+        clusterId: 'cluster-a',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        name: 'web',
+        namespace: 'default',
+      });
+      expect(scope).toBe('cluster-a|default:apps/v1:Deployment:web');
+    }
 
-  it('encodes a core/v1 object with the leading-slash form the backend expects', () => {
-    const scope = buildObjectMapScope({
-      clusterId: 'cluster-a',
-      group: '',
-      version: 'v1',
-      kind: 'Service',
-      name: 'web',
-      namespace: 'default',
-    });
-    expect(scope).toBe('cluster-a|default:/v1:Service:web');
-  });
-
-  it('uses the cluster-scope sentinel when namespace is empty', () => {
-    const scope = buildObjectMapScope({
-      clusterId: 'cluster-a',
-      group: '',
-      version: 'v1',
-      kind: 'Node',
-      name: 'node-1',
-    });
-    expect(scope).toBe('cluster-a|__cluster__:/v1:Node:node-1');
-  });
-
-  it('appends maxDepth and maxNodes when provided', () => {
-    const scope = buildObjectMapScope(
-      {
+    {
+      // Scenario: encodes a core/v1 object with the leading-slash form the backend expects
+      const scope = buildObjectMapScope({
         clusterId: 'cluster-a',
         group: '',
         version: 'v1',
         kind: 'Service',
         name: 'web',
         namespace: 'default',
-      },
-      { maxDepth: 6, maxNodes: 500 }
-    );
-    expect(scope).toBe('cluster-a|default:/v1:Service:web?maxDepth=6&maxNodes=500');
-  });
+      });
+      expect(scope).toBe('cluster-a|default:/v1:Service:web');
+    }
 
-  it('clamps maxDepth and maxNodes to the backend caps', () => {
-    const scope = buildObjectMapScope(
-      {
+    {
+      // Scenario: uses the cluster-scope sentinel when namespace is empty
+      const scope = buildObjectMapScope({
         clusterId: 'cluster-a',
         group: '',
         version: 'v1',
-        kind: 'Service',
-        name: 'web',
-        namespace: 'default',
-      },
-      { maxDepth: 99, maxNodes: 99999 }
-    );
-    expect(scope).toBe(
-      `cluster-a|default:/v1:Service:web?maxDepth=${OBJECT_MAP_MAX_DEPTH}&maxNodes=${OBJECT_MAP_MAX_NODES}`
-    );
-  });
+        kind: 'Node',
+        name: 'node-1',
+      });
+      expect(scope).toBe('cluster-a|__cluster__:/v1:Node:node-1');
+    }
 
-  it('returns null when required identity fields are missing', () => {
+    {
+      // Scenario: appends maxDepth and maxNodes when provided
+      const scope = buildObjectMapScope(
+        {
+          clusterId: 'cluster-a',
+          group: '',
+          version: 'v1',
+          kind: 'Service',
+          name: 'web',
+          namespace: 'default',
+        },
+        { maxDepth: 6, maxNodes: 500 }
+      );
+      expect(scope).toBe('cluster-a|default:/v1:Service:web?maxDepth=6&maxNodes=500');
+    }
+
+    {
+      // Scenario: clamps maxDepth and maxNodes to the backend caps
+      const scope = buildObjectMapScope(
+        {
+          clusterId: 'cluster-a',
+          group: '',
+          version: 'v1',
+          kind: 'Service',
+          name: 'web',
+          namespace: 'default',
+        },
+        { maxDepth: 99, maxNodes: 99999 }
+      );
+      expect(scope).toBe(
+        `cluster-a|default:/v1:Service:web?maxDepth=${OBJECT_MAP_MAX_DEPTH}&maxNodes=${OBJECT_MAP_MAX_NODES}`
+      );
+    }
+    // Scenario: returns null when required identity fields are missing
     expect(
       buildObjectMapScope({ clusterId: '', version: 'v1', kind: 'Pod', name: 'p' })
     ).toBeNull();
@@ -89,15 +94,11 @@ describe('buildObjectMapScope', () => {
     expect(
       buildObjectMapScope({ clusterId: 'c', version: 'v1', kind: 'Pod', name: '' })
     ).toBeNull();
-  });
-
-  it('encodes a namespace map scope', () => {
+    // Scenario: encodes a namespace map scope
     expect(buildNamespaceObjectMapScope('cluster-a', 'default', { maxNodes: 1000 })).toBe(
       'cluster-a|namespace:default?maxNodes=1000'
     );
-  });
-
-  it('returns null for namespace map scopes without cluster or namespace', () => {
+    // Scenario: returns null for namespace map scopes without cluster or namespace
     expect(buildNamespaceObjectMapScope('', 'default')).toBeNull();
     expect(buildNamespaceObjectMapScope('cluster-a', '')).toBeNull();
   });

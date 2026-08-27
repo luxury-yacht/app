@@ -87,179 +87,188 @@ const derive = ({
   });
 
 describe('deriveObjectMapVisibleState', () => {
-  it('applies relationship filters before rendering', () => {
-    const result = derive({
-      nodes: [node('deploy', 'Deployment', 'web', 0), node('pod', 'Pod', 'web-a', 1)],
-      edges: [edge('owner-1', 'deploy', 'pod', 'owner', 'owns')],
-      enabledEdgeTypes: new Set(),
-    });
+  it('covers deriveObjectMapVisibleState scenarios', async () => {
+    {
+      // Scenario: applies relationship filters before rendering
+      const result = derive({
+        nodes: [node('deploy', 'Deployment', 'web', 0), node('pod', 'Pod', 'web-a', 1)],
+        edges: [edge('owner-1', 'deploy', 'pod', 'owner', 'owns')],
+        enabledEdgeTypes: new Set(),
+      });
 
-    expect(result.visibleLayout.nodes.map((n) => n.id)).toEqual(['deploy', 'pod']);
-    expect(result.visibleLayout.edges).toHaveLength(0);
-    expect(result.legendEntries.some((entry) => entry.type === 'owner')).toBe(true);
-  });
+      expect(result.visibleLayout.nodes.map((n) => n.id)).toEqual(['deploy', 'pod']);
+      expect(result.visibleLayout.edges).toHaveLength(0);
+      expect(result.legendEntries.some((entry) => entry.type === 'owner')).toBe(true);
+    }
 
-  it('preserves directed transitive relationships through kinds hidden by the kind filter', () => {
-    const result = derive({
-      nodes: [
+    {
+      // Scenario: preserves directed transitive relationships through kinds hidden by the kind filter
+      const result = derive({
+        nodes: [
+          node('service', 'Service', 'frontend', 0),
+          node('slice', 'EndpointSlice', 'frontend-a', 1),
+          node('pod', 'Pod', 'frontend-a', 2),
+        ],
+        edges: [
+          edge('service-slice', 'service', 'slice', 'endpoint', 'has endpoints'),
+          edge('slice-pod', 'slice', 'pod', 'routes', 'routes to'),
+        ],
+        selectedKinds: { mode: 'some', values: ['Service', 'Pod'] },
+      });
+
+      expect(result.visibleLayout.nodes.map((n) => n.id).sort(compareUtf16Strings)).toEqual([
+        'pod',
+        'service',
+      ]);
+      expect(result.visibleLayout.edges).toHaveLength(1);
+      expect(result.visibleLayout.edges[0]).toMatchObject({
+        sourceId: 'service',
+        targetId: 'pod',
+        type: 'filtered-path',
+      });
+      expect(result.visibleLayout.edges[0].filteredPath?.nodes.map((n) => n.id)).toEqual([
+        'service',
+        'slice',
+        'pod',
+      ]);
+    }
+
+    {
+      // Scenario: keeps kind-filtered layout anchored to the map seed instead of selection
+      const nodes = [
         node('service', 'Service', 'frontend', 0),
         node('slice', 'EndpointSlice', 'frontend-a', 1),
-        node('pod', 'Pod', 'frontend-a', 2),
-      ],
-      edges: [
-        edge('service-slice', 'service', 'slice', 'endpoint', 'has endpoints'),
-        edge('slice-pod', 'slice', 'pod', 'routes', 'routes to'),
-      ],
-      selectedKinds: { mode: 'some', values: ['Service', 'Pod'] },
-    });
+        node('pod-a', 'Pod', 'frontend-a', 2),
+        node('pod-b', 'Pod', 'frontend-b', 2),
+      ];
+      const edges = [
+        edge('service-slice', 'service', 'slice', 'endpoint'),
+        edge('slice-pod-a', 'slice', 'pod-a', 'routes'),
+        edge('slice-pod-b', 'slice', 'pod-b', 'routes'),
+      ];
+      const unselected = derive({
+        nodes,
+        edges,
+        seedId: 'service',
+        selectedKinds: { mode: 'some', values: ['Service', 'Pod'] },
+      });
+      const selected = derive({
+        nodes,
+        edges,
+        seedId: 'service',
+        activeNodeId: 'pod-b',
+        selectedKinds: { mode: 'some', values: ['Service', 'Pod'] },
+      });
 
-    expect(result.visibleLayout.nodes.map((n) => n.id).sort(compareUtf16Strings)).toEqual([
-      'pod',
-      'service',
-    ]);
-    expect(result.visibleLayout.edges).toHaveLength(1);
-    expect(result.visibleLayout.edges[0]).toMatchObject({
-      sourceId: 'service',
-      targetId: 'pod',
-      type: 'filtered-path',
-    });
-    expect(result.visibleLayout.edges[0].filteredPath?.nodes.map((n) => n.id)).toEqual([
-      'service',
-      'slice',
-      'pod',
-    ]);
-  });
+      expect(
+        selected.visibleLayout.nodes.map((selectedNode) => [
+          selectedNode.id,
+          selectedNode.x,
+          selectedNode.y,
+        ])
+      ).toEqual(
+        unselected.visibleLayout.nodes.map((unselectedNode) => [
+          unselectedNode.id,
+          unselectedNode.x,
+          unselectedNode.y,
+        ])
+      );
+      expect(selected.visibleSelectionState.activeId).toBe('pod-b');
+    }
 
-  it('keeps kind-filtered layout anchored to the map seed instead of selection', () => {
-    const nodes = [
-      node('service', 'Service', 'frontend', 0),
-      node('slice', 'EndpointSlice', 'frontend-a', 1),
-      node('pod-a', 'Pod', 'frontend-a', 2),
-      node('pod-b', 'Pod', 'frontend-b', 2),
-    ];
-    const edges = [
-      edge('service-slice', 'service', 'slice', 'endpoint'),
-      edge('slice-pod-a', 'slice', 'pod-a', 'routes'),
-      edge('slice-pod-b', 'slice', 'pod-b', 'routes'),
-    ];
-    const unselected = derive({
-      nodes,
-      edges,
-      seedId: 'service',
-      selectedKinds: { mode: 'some', values: ['Service', 'Pod'] },
-    });
-    const selected = derive({
-      nodes,
-      edges,
-      seedId: 'service',
-      activeNodeId: 'pod-b',
-      selectedKinds: { mode: 'some', values: ['Service', 'Pod'] },
-    });
+    {
+      // Scenario: focuses recursively related visible objects
+      const result = derive({
+        nodes: [
+          node('deploy', 'Deployment', 'web', 0),
+          node('pod-a', 'Pod', 'web-a', 1),
+          node('pod-b', 'Pod', 'web-b', 1),
+          node('config', 'ConfigMap', 'web-config', 2),
+          node('secret', 'Secret', 'web-secret', 3),
+        ],
+        edges: [
+          edge('deploy-pod-a', 'deploy', 'pod-a', 'owner'),
+          edge('deploy-pod-b', 'deploy', 'pod-b', 'owner'),
+          edge('pod-config', 'pod-a', 'config', 'uses'),
+          edge('config-secret', 'config', 'secret', 'uses'),
+        ],
+        activeNodeId: 'pod-a',
+        focusMode: true,
+      });
 
-    expect(
-      selected.visibleLayout.nodes.map((selectedNode) => [
-        selectedNode.id,
-        selectedNode.x,
-        selectedNode.y,
-      ])
-    ).toEqual(
-      unselected.visibleLayout.nodes.map((unselectedNode) => [
-        unselectedNode.id,
-        unselectedNode.x,
-        unselectedNode.y,
-      ])
-    );
-    expect(selected.visibleSelectionState.activeId).toBe('pod-b');
-  });
+      expect(result.visibleLayout.nodes.map((n) => n.id).sort(compareUtf16Strings)).toEqual([
+        'config',
+        'deploy',
+        'pod-a',
+        'secret',
+      ]);
+      expect(result.visibleLayout.edges.map((e) => e.id).sort(compareUtf16Strings)).toEqual([
+        'config-secret',
+        'deploy-pod-a',
+        'pod-config',
+      ]);
+    }
 
-  it('focuses recursively related visible objects', () => {
-    const result = derive({
-      nodes: [
+    {
+      // Scenario: keeps the active object at the same map coordinate in focus mode
+      const nodes = [
         node('deploy', 'Deployment', 'web', 0),
         node('pod-a', 'Pod', 'web-a', 1),
         node('pod-b', 'Pod', 'web-b', 1),
         node('config', 'ConfigMap', 'web-config', 2),
         node('secret', 'Secret', 'web-secret', 3),
-      ],
-      edges: [
+      ];
+      const edges = [
         edge('deploy-pod-a', 'deploy', 'pod-a', 'owner'),
         edge('deploy-pod-b', 'deploy', 'pod-b', 'owner'),
         edge('pod-config', 'pod-a', 'config', 'uses'),
         edge('config-secret', 'config', 'secret', 'uses'),
-      ],
-      activeNodeId: 'pod-a',
-      focusMode: true,
-    });
+      ];
+      const unselected = derive({ nodes, edges });
+      const focused = derive({
+        nodes,
+        edges,
+        activeNodeId: 'pod-a',
+        focusMode: true,
+      });
+      const unselectedActiveNode = unselected.visibleLayout.nodes.find((n) => n.id === 'pod-a');
+      const focusedActiveNode = focused.visibleLayout.nodes.find((n) => n.id === 'pod-a');
 
-    expect(result.visibleLayout.nodes.map((n) => n.id).sort(compareUtf16Strings)).toEqual([
-      'config',
-      'deploy',
-      'pod-a',
-      'secret',
-    ]);
-    expect(result.visibleLayout.edges.map((e) => e.id).sort(compareUtf16Strings)).toEqual([
-      'config-secret',
-      'deploy-pod-a',
-      'pod-config',
-    ]);
-  });
+      expect(focusedActiveNode).toBeTruthy();
+      expect(focusedActiveNode?.x).toBe(unselectedActiveNode?.x);
+      expect(focusedActiveNode?.y).toBe(unselectedActiveNode?.y);
+    }
 
-  it('keeps the active object at the same map coordinate in focus mode', () => {
-    const nodes = [
-      node('deploy', 'Deployment', 'web', 0),
-      node('pod-a', 'Pod', 'web-a', 1),
-      node('pod-b', 'Pod', 'web-b', 1),
-      node('config', 'ConfigMap', 'web-config', 2),
-      node('secret', 'Secret', 'web-secret', 3),
-    ];
-    const edges = [
-      edge('deploy-pod-a', 'deploy', 'pod-a', 'owner'),
-      edge('deploy-pod-b', 'deploy', 'pod-b', 'owner'),
-      edge('pod-config', 'pod-a', 'config', 'uses'),
-      edge('config-secret', 'config', 'secret', 'uses'),
-    ];
-    const unselected = derive({ nodes, edges });
-    const focused = derive({
-      nodes,
-      edges,
-      activeNodeId: 'pod-a',
-      focusMode: true,
-    });
-    const unselectedActiveNode = unselected.visibleLayout.nodes.find((n) => n.id === 'pod-a');
-    const focusedActiveNode = focused.visibleLayout.nodes.find((n) => n.id === 'pod-a');
+    {
+      // Scenario: searches only visible nodes
+      const result = derive({
+        nodes: [
+          node('service', 'Service', 'frontend', 0),
+          node('slice', 'EndpointSlice', 'frontend-a', 1),
+          node('pod', 'Pod', 'frontend-a', 2),
+        ],
+        edges: [
+          edge('service-slice', 'service', 'slice', 'endpoint'),
+          edge('slice-pod', 'slice', 'pod', 'routes'),
+        ],
+        selectedKinds: { mode: 'some', values: ['Service', 'Pod'] },
+        searchQuery: 'endpoint',
+      });
 
-    expect(focusedActiveNode).toBeTruthy();
-    expect(focusedActiveNode?.x).toBe(unselectedActiveNode?.x);
-    expect(focusedActiveNode?.y).toBe(unselectedActiveNode?.y);
-  });
+      expect(result.searchMatches).toHaveLength(0);
+    }
 
-  it('searches only visible nodes', () => {
-    const result = derive({
-      nodes: [
-        node('service', 'Service', 'frontend', 0),
-        node('slice', 'EndpointSlice', 'frontend-a', 1),
-        node('pod', 'Pod', 'frontend-a', 2),
-      ],
-      edges: [
-        edge('service-slice', 'service', 'slice', 'endpoint'),
-        edge('slice-pod', 'slice', 'pod', 'routes'),
-      ],
-      selectedKinds: { mode: 'some', values: ['Service', 'Pod'] },
-      searchQuery: 'endpoint',
-    });
+    {
+      // Scenario: shows no objects when every kind is explicitly deselected
+      const result = derive({
+        nodes: [node('deploy', 'Deployment', 'web', 0), node('pod', 'Pod', 'web-a', 1)],
+        edges: [edge('owner-1', 'deploy', 'pod', 'owner', 'owns')],
+        selectedKinds: NONE_MULTISELECT_FILTER,
+      });
 
-    expect(result.searchMatches).toHaveLength(0);
-  });
-
-  it('shows no objects when every kind is explicitly deselected', () => {
-    const result = derive({
-      nodes: [node('deploy', 'Deployment', 'web', 0), node('pod', 'Pod', 'web-a', 1)],
-      edges: [edge('owner-1', 'deploy', 'pod', 'owner', 'owns')],
-      selectedKinds: NONE_MULTISELECT_FILTER,
-    });
-
-    expect(result.visibleLayout.nodes).toEqual([]);
-    expect(result.visibleLayout.edges).toEqual([]);
+      expect(result.visibleLayout.nodes).toEqual([]);
+      expect(result.visibleLayout.edges).toEqual([]);
+    }
   });
 });
 

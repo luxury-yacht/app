@@ -295,13 +295,15 @@ describe('NsViewStorage', () => {
     expect(props.filters?.options?.kinds).toEqual([]);
   });
 
-  it.each([
-    ['a selected namespace', 'team-a'],
-    ['All Namespaces', ALL_NAMESPACES_SCOPE],
-  ])('does not show a Kind dropdown for %s', async (_label, namespace) => {
-    const props = await renderStorageView({ namespace });
+  it('covers does not show a Kind dropdown for parameterized cases', async () => {
+    for (const [_label, namespace] of [
+      ['a selected namespace', 'team-a'],
+      ['All Namespaces', ALL_NAMESPACES_SCOPE],
+    ]) {
+      const props = await renderStorageView({ namespace });
 
-    expect(props.filters?.options?.showKindDropdown).toBe(false);
+      expect(props.filters?.options?.showKindDropdown).toBe(false);
+    }
   });
 
   it('uses canonical object identity for row keys', async () => {

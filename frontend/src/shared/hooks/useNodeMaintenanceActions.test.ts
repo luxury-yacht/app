@@ -25,41 +25,43 @@ const drainJob = (overrides: Partial<NodeMaintenanceDrainJob>): NodeMaintenanceD
 });
 
 describe('node maintenance aggregate helpers', () => {
-  it('builds the same aggregate scope that the refresh domain stores', () => {
+  it('covers node maintenance aggregate helpers scenarios', async () => {
+    // Scenario: builds the same aggregate scope that the refresh domain stores
     expect(buildNodeMaintenanceAggregateScope('cluster-a')).toBe('cluster-a|aggregate');
-  });
 
-  it('collects drains from watched aggregate scopes only', () => {
-    const watched = buildNodeMaintenanceAggregateScope('cluster-a');
-    const included = drainJob({ id: 'included', clusterId: 'cluster-a' });
-    const ignored = drainJob({ id: 'ignored', clusterId: 'cluster-b' });
+    {
+      // Scenario: collects drains from watched aggregate scopes only
+      const watched = buildNodeMaintenanceAggregateScope('cluster-a');
+      const included = drainJob({ id: 'included', clusterId: 'cluster-a' });
+      const ignored = drainJob({ id: 'ignored', clusterId: 'cluster-b' });
 
-    expect(
-      collectNodeMaintenanceDrains(
-        [
+      expect(
+        collectNodeMaintenanceDrains(
           [
-            watched,
-            {
-              status: 'ready',
-              data: { clusterId: 'cluster-a', clusterName: 'Cluster A', drains: [included] },
-              stats: null,
-              error: null,
-              droppedAutoRefreshes: 0,
-            },
+            [
+              watched,
+              {
+                status: 'ready',
+                data: { clusterId: 'cluster-a', clusterName: 'Cluster A', drains: [included] },
+                stats: null,
+                error: null,
+                droppedAutoRefreshes: 0,
+              },
+            ],
+            [
+              buildNodeMaintenanceAggregateScope('cluster-b'),
+              {
+                status: 'ready',
+                data: { clusterId: 'cluster-b', clusterName: 'Cluster B', drains: [ignored] },
+                stats: null,
+                error: null,
+                droppedAutoRefreshes: 0,
+              },
+            ],
           ],
-          [
-            buildNodeMaintenanceAggregateScope('cluster-b'),
-            {
-              status: 'ready',
-              data: { clusterId: 'cluster-b', clusterName: 'Cluster B', drains: [ignored] },
-              stats: null,
-              error: null,
-              droppedAutoRefreshes: 0,
-            },
-          ],
-        ],
-        [watched]
-      )
-    ).toEqual([included]);
+          [watched]
+        )
+      ).toEqual([included]);
+    }
   });
 });

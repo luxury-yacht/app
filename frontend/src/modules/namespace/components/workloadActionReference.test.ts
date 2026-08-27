@@ -13,7 +13,8 @@ import {
 } from './workloadActionReference';
 
 describe('workloadActionReference', () => {
-  it('builds a required object reference with workload action facts', () => {
+  it('covers workloadActionReference scenarios', async () => {
+    // Scenario: builds a required object reference with workload action facts
     expect(
       buildWorkloadActionReference(
         {
@@ -59,9 +60,7 @@ describe('workloadActionReference', () => {
         desiredReplicas: 3,
       })
     );
-  });
-
-  it('normalizes unknown HPA ownership to null', () => {
+    // Scenario: normalizes unknown HPA ownership to null
     expect(normalizeWorkloadHPAManaged(undefined)).toBeNull();
     expect(normalizeWorkloadHPAManaged(null)).toBeNull();
     expect(normalizeWorkloadHPAManaged(true)).toBe(true);

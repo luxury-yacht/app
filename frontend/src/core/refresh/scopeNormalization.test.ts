@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { normalizeRefreshDomainScope } from './scopeNormalization';
 
 describe('normalizeRefreshDomainScope', () => {
-  it('canonicalizes cluster resource-stream aliases', () => {
+  it('covers normalizeRefreshDomainScope scenarios', async () => {
+    // Scenario: canonicalizes cluster resource-stream aliases
     expect(
       normalizeRefreshDomainScope({
         domain: 'nodes',
@@ -11,9 +12,7 @@ describe('normalizeRefreshDomainScope', () => {
         selectedClusterId: 'cluster-b',
       })
     ).toBe('cluster-a|');
-  });
-
-  it('preserves resource-stream query scopes for snapshot-backed table queries', () => {
+    // Scenario: preserves resource-stream query scopes for snapshot-backed table queries
     expect(
       normalizeRefreshDomainScope({
         domain: 'nodes',

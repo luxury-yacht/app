@@ -39,17 +39,21 @@ describe('query-backed view loading contract', () => {
   // empty eligibility, and the refresh overlay from the normalized source state,
   // so the view must pass `source={...}` — directly or via the shared
   // aggregated view — and must not hand-roll boundaryLoading/loaded/loading.
-  it.each(QUERY_BACKED_VIEW_FILES)('%s consumes the query-backed lifecycle', (file) => {
-    const source = readFileSync(join(process.cwd(), file), 'utf8');
+  it('covers query-backed view loading contract scenarios', async () => {
+    for (const file of QUERY_BACKED_VIEW_FILES) {
+      // Scenarios: %s consumes the query-backed lifecycle
+      const source = readFileSync(join(process.cwd(), file), 'utf8');
 
-    expect(satisfiesDirectContract(source) || delegatesToSharedView(source)).toBe(true);
-    expect(source).not.toContain('boundaryLoading=');
-  });
+      expect(satisfiesDirectContract(source) || delegatesToSharedView(source)).toBe(true);
+      expect(source).not.toContain('boundaryLoading=');
+    }
 
-  it('the shared aggregated view satisfies the direct contract', () => {
-    const source = readFileSync(join(process.cwd(), SHARED_VIEW_FILE), 'utf8');
+    {
+      // Scenario: the shared aggregated view satisfies the direct contract
+      const source = readFileSync(join(process.cwd(), SHARED_VIEW_FILE), 'utf8');
 
-    expect(satisfiesDirectContract(source)).toBe(true);
-    expect(source).not.toContain('boundaryLoading=');
+      expect(satisfiesDirectContract(source)).toBe(true);
+      expect(source).not.toContain('boundaryLoading=');
+    }
   });
 });

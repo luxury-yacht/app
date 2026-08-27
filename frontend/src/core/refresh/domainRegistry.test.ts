@@ -18,7 +18,8 @@ import {
 } from './refresherTypes';
 
 describe('refresh domain registry', () => {
-  it('preserves frontend registration order from generated policy', () => {
+  it('covers refresh domain registry scenarios', async () => {
+    // Scenario: preserves frontend registration order from generated policy
     expect(frontendRefreshDomainPolicies.map((policy) => policy.domain)).toEqual([
       'namespaces',
       'namespace-metrics',
@@ -53,9 +54,7 @@ describe('refresh domain registry', () => {
       'namespace-custom',
       'namespace-helm',
     ]);
-  });
-
-  it('derives metrics demand from the generated source clocks', () => {
+    // Scenario: derives metrics demand from the generated source clocks
     expect(METRIC_DEMAND_DOMAINS).toEqual([
       'namespace-metrics',
       'cluster-overview',
@@ -63,21 +62,20 @@ describe('refresh domain registry', () => {
       'namespace-workloads',
       'pods',
     ]);
-  });
 
-  it('covers every static refresher name with registry timing', () => {
-    const staticRefresherNames: StaticRefresherName[] = [
-      ...Object.values(SYSTEM_REFRESHERS),
-      ...Object.values(CLUSTER_REFRESHERS),
-      ...Object.values(NAMESPACE_REFRESHERS),
-    ];
+    {
+      // Scenario: covers every static refresher name with registry timing
+      const staticRefresherNames: StaticRefresherName[] = [
+        ...Object.values(SYSTEM_REFRESHERS),
+        ...Object.values(CLUSTER_REFRESHERS),
+        ...Object.values(NAMESPACE_REFRESHERS),
+      ];
 
-    for (const name of staticRefresherNames) {
-      expect(REFRESHER_TIMING_BY_NAME[name]).toBeDefined();
+      for (const name of staticRefresherNames) {
+        expect(REFRESHER_TIMING_BY_NAME[name]).toBeDefined();
+      }
     }
-  });
-
-  it('derives diagnostics and timing maps from the descriptor table', () => {
+    // Scenario: derives diagnostics and timing maps from the descriptor table
     expect(refreshDomainDescriptors).toHaveLength(Object.keys(REFRESH_DOMAIN_DESCRIPTORS).length);
 
     for (const descriptor of refreshDomainDescriptors) {
@@ -91,9 +89,7 @@ describe('refresh domain registry', () => {
         expect(DOMAIN_STREAM_MAP[descriptor.domain]).toBeUndefined();
       }
     }
-  });
-
-  it('keeps priority diagnostics domains in the registry instead of panel config', () => {
+    // Scenario: keeps priority diagnostics domains in the registry instead of panel config
     expect(PRIORITY_DOMAINS).toEqual([
       'namespaces',
       'namespace-metrics',
@@ -104,9 +100,7 @@ describe('refresh domain registry', () => {
       'catalog',
       'namespace-workloads',
     ]);
-  });
-
-  it('exposes object-panel domains through the shared refresher map', () => {
+    // Scenario: exposes object-panel domains through the shared refresher map
     expect(DOMAIN_REFRESHER_MAP['object-details']).toBe('object-details');
     expect(DOMAIN_REFRESHER_MAP['object-events']).toBe('object-events');
     expect(DOMAIN_REFRESHER_MAP['object-yaml']).toBe('object-yaml');

@@ -36,36 +36,38 @@ const valueAtPath = (value: unknown, path: string): unknown =>
   }, value);
 
 describe('canonical resource row wire fixtures', () => {
-  it('covers every inventoried producer family with a unique entry', () => {
+  it('covers canonical resource row wire fixtures scenarios', async () => {
+    // Scenario: covers every inventoried producer family with a unique entry
     expect(fixture.entries).toHaveLength(24);
     expect(new Set(fixture.entries.map(({ family }) => family)).size).toBe(24);
-  });
 
-  it.each(fixture.entries)('$family survives its production frontend parse boundary', (entry) => {
-    const row = (() => {
+    for (const entry of fixture.entries) {
+      // Scenarios: $family survives its production frontend parse boundary
+      const row = (() => {
+        if (entry.boundary === 'custom-hydration') {
+          return normalizeHydratedCustomRow(entry.row) as unknown as Record<string, unknown>;
+        }
+        const snapshot = parseRefreshSnapshotValue<Record<string, unknown>>(
+          entry.snapshot,
+          entry.domain
+        );
+        const rows = valueAtPath(snapshot, entry.rowPath);
+        expect(Array.isArray(rows)).toBe(true);
+        expect(rows).toHaveLength(1);
+        return (rows as Array<Record<string, unknown>>)[0];
+      })();
+      const ref = row.ref as Record<string, unknown>;
+      expect(typeof ref.clusterId).toBe('string');
+      expect(typeof ref.group).toBe('string');
+      expect(typeof ref.version).toBe('string');
+      expect(typeof ref.kind).toBe('string');
+      expect(typeof ref.resource).toBe('string');
+      expect(typeof ref.name).toBe('string');
+      expect(buildRequiredCanonicalObjectRowKey(ref)).toContain('cluster-wire');
+
       if (entry.boundary === 'custom-hydration') {
-        return normalizeHydratedCustomRow(entry.row) as unknown as Record<string, unknown>;
+        expect(ref.namespace).toBe('');
       }
-      const snapshot = parseRefreshSnapshotValue<Record<string, unknown>>(
-        entry.snapshot,
-        entry.domain
-      );
-      const rows = valueAtPath(snapshot, entry.rowPath);
-      expect(Array.isArray(rows)).toBe(true);
-      expect(rows).toHaveLength(1);
-      return (rows as Array<Record<string, unknown>>)[0];
-    })();
-    const ref = row.ref as Record<string, unknown>;
-    expect(typeof ref.clusterId).toBe('string');
-    expect(typeof ref.group).toBe('string');
-    expect(typeof ref.version).toBe('string');
-    expect(typeof ref.kind).toBe('string');
-    expect(typeof ref.resource).toBe('string');
-    expect(typeof ref.name).toBe('string');
-    expect(buildRequiredCanonicalObjectRowKey(ref)).toContain('cluster-wire');
-
-    if (entry.boundary === 'custom-hydration') {
-      expect(ref.namespace).toBe('');
     }
   });
 });

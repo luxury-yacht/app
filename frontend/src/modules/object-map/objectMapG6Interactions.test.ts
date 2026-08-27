@@ -77,7 +77,8 @@ const createContext = () => {
 };
 
 describe('object map G6 interactions', () => {
-  it('converts G6 pointer input to client and layout coordinates', () => {
+  it('covers object map G6 interactions scenarios', async () => {
+    // Scenario: converts G6 pointer input to client and layout coordinates
     expect(
       toObjectMapG6Pointer(
         {
@@ -98,190 +99,200 @@ describe('object map G6 interactions', () => {
       layoutX: 21,
       layoutY: 32,
     });
-  });
 
-  it('detects badge clicks from the G6 display-object ancestry', () => {
-    const badgeTarget = {
-      className: 'badge-expand',
-      parentNode: null,
-    };
-    const childTarget = {
-      className: 'badge-label',
-      parentNode: badgeTarget,
-    };
+    {
+      // Scenario: detects badge clicks from the G6 display-object ancestry
+      const badgeTarget = {
+        className: 'badge-expand',
+        parentNode: null,
+      };
+      const childTarget = {
+        className: 'badge-label',
+        parentNode: badgeTarget,
+      };
 
-    expect(isObjectMapG6BadgeEvent({ target: { id: 'deploy' }, originalTarget: childTarget })).toBe(
-      true
-    );
-    expect(isObjectMapG6BadgeEvent({ target: { id: 'deploy' }, originalTarget: null })).toBe(false);
-  });
+      expect(
+        isObjectMapG6BadgeEvent({ target: { id: 'deploy' }, originalTarget: childTarget })
+      ).toBe(true);
+      expect(isObjectMapG6BadgeEvent({ target: { id: 'deploy' }, originalTarget: null })).toBe(
+        false
+      );
+    }
 
-  it('keeps tooltip position relative to the map container', () => {
-    const container = document.createElement('div');
-    container.getBoundingClientRect = () =>
-      ({
-        left: 30,
-        top: 50,
-      }) as DOMRect;
+    {
+      // Scenario: keeps tooltip position relative to the map container
+      const container = document.createElement('div');
+      container.getBoundingClientRect = () =>
+        ({
+          left: 30,
+          top: 50,
+        }) as DOMRect;
 
-    expect(objectMapG6TooltipPoint({ clientX: 80, clientY: 120 }, container, 6)).toEqual({
-      x: 50,
-      y: 66,
-    });
-  });
+      expect(objectMapG6TooltipPoint({ clientX: 80, clientY: 120 }, container, 6)).toEqual({
+        x: 50,
+        y: 66,
+      });
+    }
 
-  it('suppresses the synthetic same-node click after drag but allows the next real click', () => {
-    const { context, handlers } = createContext();
+    {
+      // Scenario: suppresses the synthetic same-node click after drag but allows the next real click
+      const { context, handlers } = createContext();
 
-    handleObjectMapG6NodePointerDown(context, {
-      target: { id: 'deploy' },
-      pointerId: 1,
-      clientX: 10,
-      clientY: 10,
-    });
-    handleObjectMapG6Drag(context, {
-      target: { id: 'deploy' },
-      pointerId: 1,
-      clientX: 30,
-      clientY: 10,
-    });
-    handleObjectMapG6DragEnd(context, {
-      target: { id: 'deploy' },
-      pointerId: 1,
-      clientX: 30,
-      clientY: 10,
-    });
+      handleObjectMapG6NodePointerDown(context, {
+        target: { id: 'deploy' },
+        pointerId: 1,
+        clientX: 10,
+        clientY: 10,
+      });
+      handleObjectMapG6Drag(context, {
+        target: { id: 'deploy' },
+        pointerId: 1,
+        clientX: 30,
+        clientY: 10,
+      });
+      handleObjectMapG6DragEnd(context, {
+        target: { id: 'deploy' },
+        pointerId: 1,
+        clientX: 30,
+        clientY: 10,
+      });
 
-    expect(handlers.onNodeDragStart).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'deploy' }),
-      expect.objectContaining({ pointerId: 1, layoutX: 20, layoutY: 30 })
-    );
-    expect(handlers.onNodeDragMove).toHaveBeenCalledTimes(1);
-    expect(handlers.onNodeDragEnd).toHaveBeenCalledTimes(1);
+      expect(handlers.onNodeDragStart).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'deploy' }),
+        expect.objectContaining({ pointerId: 1, layoutX: 20, layoutY: 30 })
+      );
+      expect(handlers.onNodeDragMove).toHaveBeenCalledTimes(1);
+      expect(handlers.onNodeDragEnd).toHaveBeenCalledTimes(1);
 
-    handleObjectMapG6NodeClick(context, { target: { id: 'deploy' } });
-    expect(handlers.onSelectNode).not.toHaveBeenCalled();
+      handleObjectMapG6NodeClick(context, { target: { id: 'deploy' } });
+      expect(handlers.onSelectNode).not.toHaveBeenCalled();
 
-    handleObjectMapG6NodeClick(context, { target: { id: 'deploy' } });
-    expect(handlers.onSelectNode).toHaveBeenCalledWith('deploy');
-  });
+      handleObjectMapG6NodeClick(context, { target: { id: 'deploy' } });
+      expect(handlers.onSelectNode).toHaveBeenCalledWith('deploy');
+    }
 
-  it('clears a click-only node gesture before the next canvas drag', () => {
-    const { context, handlers } = createContext();
+    {
+      // Scenario: clears a click-only node gesture before the next canvas drag
+      const { context, handlers } = createContext();
 
-    handleObjectMapG6NodePointerDown(context, {
-      target: { id: 'deploy' },
-      pointerId: 1,
-      clientX: 10,
-      clientY: 10,
-    });
-    handleObjectMapG6PointerUp(context, {
-      target: { id: 'deploy' },
-      pointerId: 1,
-      clientX: 10,
-      clientY: 10,
-    });
-    handleObjectMapG6NodeClick(context, { target: { id: 'deploy' } });
-    handleObjectMapG6Drag(context, {
-      target: { id: 'canvas' },
-      targetType: 'canvas',
-      pointerId: 1,
-      clientX: 140,
-      clientY: 150,
-    });
+      handleObjectMapG6NodePointerDown(context, {
+        target: { id: 'deploy' },
+        pointerId: 1,
+        clientX: 10,
+        clientY: 10,
+      });
+      handleObjectMapG6PointerUp(context, {
+        target: { id: 'deploy' },
+        pointerId: 1,
+        clientX: 10,
+        clientY: 10,
+      });
+      handleObjectMapG6NodeClick(context, { target: { id: 'deploy' } });
+      handleObjectMapG6Drag(context, {
+        target: { id: 'canvas' },
+        targetType: 'canvas',
+        pointerId: 1,
+        clientX: 140,
+        clientY: 150,
+      });
 
-    expect(handlers.onSelectNode).toHaveBeenCalledWith('deploy');
-    expect(handlers.onNodeDragMove).not.toHaveBeenCalled();
-    expect(handlers.onUserViewportChange).toHaveBeenCalledTimes(1);
-  });
+      expect(handlers.onSelectNode).toHaveBeenCalledWith('deploy');
+      expect(handlers.onNodeDragMove).not.toHaveBeenCalled();
+      expect(handlers.onUserViewportChange).toHaveBeenCalledTimes(1);
+    }
 
-  it('allows selecting a different node immediately after a drag', () => {
-    const { context, handlers } = createContext();
+    {
+      // Scenario: allows selecting a different node immediately after a drag
+      const { context, handlers } = createContext();
 
-    handleObjectMapG6NodePointerDown(context, {
-      target: { id: 'deploy' },
-      pointerId: 1,
-      clientX: 10,
-      clientY: 10,
-    });
-    handleObjectMapG6Drag(context, {
-      target: { id: 'deploy' },
-      pointerId: 1,
-      clientX: 30,
-      clientY: 10,
-    });
-    handleObjectMapG6DragEnd(context, {
-      target: { id: 'deploy' },
-      pointerId: 1,
-      clientX: 30,
-      clientY: 10,
-    });
+      handleObjectMapG6NodePointerDown(context, {
+        target: { id: 'deploy' },
+        pointerId: 1,
+        clientX: 10,
+        clientY: 10,
+      });
+      handleObjectMapG6Drag(context, {
+        target: { id: 'deploy' },
+        pointerId: 1,
+        clientX: 30,
+        clientY: 10,
+      });
+      handleObjectMapG6DragEnd(context, {
+        target: { id: 'deploy' },
+        pointerId: 1,
+        clientX: 30,
+        clientY: 10,
+      });
 
-    handleObjectMapG6NodeClick(context, { target: { id: 'pod' } });
+      handleObjectMapG6NodeClick(context, { target: { id: 'pod' } });
 
-    expect(handlers.onSelectNode).toHaveBeenCalledTimes(1);
-    expect(handlers.onSelectNode).toHaveBeenCalledWith('pod');
-  });
+      expect(handlers.onSelectNode).toHaveBeenCalledTimes(1);
+      expect(handlers.onSelectNode).toHaveBeenCalledWith('pod');
+    }
 
-  it('opens panel, map, or view for modifier clicks using the full object reference', () => {
-    const { context, handlers } = createContext();
+    {
+      // Scenario: opens panel, map, or view for modifier clicks using the full object reference
+      const { context, handlers } = createContext();
 
-    handleObjectMapG6NodeClick(context, { target: { id: 'pod' }, metaKey: true });
-    handleObjectMapG6NodeClick(context, { target: { id: 'pod' }, shiftKey: true });
-    handleObjectMapG6NodeClick(context, { target: { id: 'pod' }, altKey: true });
+      handleObjectMapG6NodeClick(context, { target: { id: 'pod' }, metaKey: true });
+      handleObjectMapG6NodeClick(context, { target: { id: 'pod' }, shiftKey: true });
+      handleObjectMapG6NodeClick(context, { target: { id: 'pod' }, altKey: true });
 
-    expect(handlers.onOpenPanel).toHaveBeenCalledWith(layout.nodes[1].ref);
-    expect(handlers.onOpenObjectMap).toHaveBeenCalledWith(layout.nodes[1].ref);
-    expect(handlers.onNavigateView).toHaveBeenCalledWith(layout.nodes[1].ref);
-    expect(handlers.onSelectNode).not.toHaveBeenCalled();
-  });
+      expect(handlers.onOpenPanel).toHaveBeenCalledWith(layout.nodes[1].ref);
+      expect(handlers.onOpenObjectMap).toHaveBeenCalledWith(layout.nodes[1].ref);
+      expect(handlers.onNavigateView).toHaveBeenCalledWith(layout.nodes[1].ref);
+      expect(handlers.onSelectNode).not.toHaveBeenCalled();
+    }
 
-  it('emits context menu requests and prevents the native menu', () => {
-    const { context, handlers } = createContext();
-    const preventDefault = vi.fn();
-    const nativePreventDefault = vi.fn();
+    {
+      // Scenario: emits context menu requests and prevents the native menu
+      const { context, handlers } = createContext();
+      const preventDefault = vi.fn();
+      const nativePreventDefault = vi.fn();
 
-    handleObjectMapG6NodeContextMenu(context, {
-      target: { id: 'pod' },
-      clientX: 40,
-      clientY: 50,
-      preventDefault,
-      nativeEvent: { preventDefault: nativePreventDefault },
-    });
+      handleObjectMapG6NodeContextMenu(context, {
+        target: { id: 'pod' },
+        clientX: 40,
+        clientY: 50,
+        preventDefault,
+        nativeEvent: { preventDefault: nativePreventDefault },
+      });
 
-    expect(preventDefault).toHaveBeenCalledTimes(1);
-    expect(nativePreventDefault).toHaveBeenCalledTimes(1);
-    expect(handlers.onNodeContextMenu).toHaveBeenCalledWith({
-      ref: layout.nodes[1].ref,
-      position: { x: 40, y: 50 },
-    });
-  });
+      expect(preventDefault).toHaveBeenCalledTimes(1);
+      expect(nativePreventDefault).toHaveBeenCalledTimes(1);
+      expect(handlers.onNodeContextMenu).toHaveBeenCalledWith({
+        ref: layout.nodes[1].ref,
+        position: { x: 40, y: 50 },
+      });
+    }
 
-  it('emits canvas context menu requests only for canvas targets', () => {
-    const { context, handlers } = createContext();
-    const preventDefault = vi.fn();
-    const nativePreventDefault = vi.fn();
+    {
+      // Scenario: emits canvas context menu requests only for canvas targets
+      const { context, handlers } = createContext();
+      const preventDefault = vi.fn();
+      const nativePreventDefault = vi.fn();
 
-    handleObjectMapG6CanvasContextMenu(context, {
-      target: { id: 'canvas' },
-      targetType: 'canvas',
-      clientX: 70,
-      clientY: 80,
-      preventDefault,
-      nativeEvent: { preventDefault: nativePreventDefault },
-    });
-    handleObjectMapG6CanvasContextMenu(context, {
-      target: { id: 'pod' },
-      targetType: 'node',
-      clientX: 10,
-      clientY: 20,
-    });
+      handleObjectMapG6CanvasContextMenu(context, {
+        target: { id: 'canvas' },
+        targetType: 'canvas',
+        clientX: 70,
+        clientY: 80,
+        preventDefault,
+        nativeEvent: { preventDefault: nativePreventDefault },
+      });
+      handleObjectMapG6CanvasContextMenu(context, {
+        target: { id: 'pod' },
+        targetType: 'node',
+        clientX: 10,
+        clientY: 20,
+      });
 
-    expect(preventDefault).toHaveBeenCalledTimes(1);
-    expect(nativePreventDefault).toHaveBeenCalledTimes(1);
-    expect(handlers.onCanvasContextMenu).toHaveBeenCalledTimes(1);
-    expect(handlers.onCanvasContextMenu).toHaveBeenCalledWith({
-      position: { x: 70, y: 80 },
-    });
+      expect(preventDefault).toHaveBeenCalledTimes(1);
+      expect(nativePreventDefault).toHaveBeenCalledTimes(1);
+      expect(handlers.onCanvasContextMenu).toHaveBeenCalledTimes(1);
+      expect(handlers.onCanvasContextMenu).toHaveBeenCalledWith({
+        position: { x: 70, y: 80 },
+      });
+    }
   });
 });

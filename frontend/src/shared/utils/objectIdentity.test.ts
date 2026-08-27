@@ -14,7 +14,8 @@ import {
 } from './objectIdentity';
 
 describe('objectIdentity', () => {
-  it('builds a canonical object reference for built-in kinds', () => {
+  it('covers objectIdentity scenarios', async () => {
+    // Scenario: builds a canonical object reference for built-in kinds
     expect(
       buildObjectReference({
         kind: 'Pod',
@@ -34,9 +35,7 @@ describe('objectIdentity', () => {
       resource: undefined,
       uid: undefined,
     });
-  });
-
-  it('preserves explicit group/version for custom resources', () => {
+    // Scenario: preserves explicit group/version for custom resources
     expect(
       buildObjectReference({
         kind: 'DBInstance',
@@ -52,9 +51,7 @@ describe('objectIdentity', () => {
         version: 'v1alpha1',
       })
     );
-  });
-
-  it('builds canonical row keys from GVKNN identity', () => {
+    // Scenario: builds canonical row keys from GVKNN identity
     expect(
       buildCanonicalObjectRowKey({
         kind: 'DBInstance',
@@ -65,9 +62,7 @@ describe('objectIdentity', () => {
         version: 'v1alpha1',
       })
     ).toBe('alpha:ctx|rds.services.k8s.aws/v1alpha1/DBInstance/ops/db-a');
-  });
-
-  it('requires clusterId for strict object references', () => {
+    // Scenario: requires clusterId for strict object references
     expect(() =>
       buildRequiredObjectReference({
         kind: 'Pod',
@@ -75,9 +70,7 @@ describe('objectIdentity', () => {
         namespace: 'team-a',
       })
     ).toThrow(/clusterId/);
-  });
-
-  it('uses a fallback clusterId for strict object references', () => {
+    // Scenario: uses a fallback clusterId for strict object references
     expect(
       buildRequiredObjectReference(
         {
@@ -95,9 +88,7 @@ describe('objectIdentity', () => {
         version: 'v1',
       })
     );
-  });
-
-  it('builds strict canonical row keys with a required clusterId', () => {
+    // Scenario: builds strict canonical row keys with a required clusterId
     expect(
       buildRequiredCanonicalObjectRowKey({
         kind: 'Pod',
@@ -106,9 +97,7 @@ describe('objectIdentity', () => {
         clusterId: 'alpha:ctx',
       })
     ).toBe('alpha:ctx|/v1/Pod/team-a/api');
-  });
-
-  it('throws when a custom resource omits version', () => {
+    // Scenario: throws when a custom resource omits version
     expect(() =>
       buildObjectReference({
         kind: 'DBInstance',
@@ -117,9 +106,7 @@ describe('objectIdentity', () => {
         clusterId: 'alpha:ctx',
       })
     ).toThrow(/missing version/);
-  });
-
-  it('throws when a custom resource has version but omits group', () => {
+    // Scenario: throws when a custom resource has version but omits group
     expect(() =>
       buildObjectReference({
         kind: 'DBInstance',
@@ -129,9 +116,7 @@ describe('objectIdentity', () => {
         version: 'v1alpha1',
       })
     ).toThrow(/missing group/);
-  });
-
-  it('carries non-identity extras through real object references', () => {
+    // Scenario: carries non-identity extras through real object references
     expect(
       buildObjectReference(
         {
@@ -150,9 +135,7 @@ describe('objectIdentity', () => {
         portForwardAvailable: true,
       })
     );
-  });
-
-  it('builds related-object references from explicit apiVersion', () => {
+    // Scenario: builds related-object references from explicit apiVersion
     expect(
       buildRelatedObjectReference({
         kind: 'HorizontalPodAutoscaler',
@@ -167,9 +150,7 @@ describe('objectIdentity', () => {
         version: 'v2',
       })
     );
-  });
-
-  it('falls back to built-in GVK when related-object apiVersion is omitted', () => {
+    // Scenario: falls back to built-in GVK when related-object apiVersion is omitted
     expect(
       buildRelatedObjectReference({
         kind: 'Pod',
@@ -183,9 +164,7 @@ describe('objectIdentity', () => {
         version: 'v1',
       })
     );
-  });
-
-  it('requires clusterId for strict related-object references', () => {
+    // Scenario: requires clusterId for strict related-object references
     expect(() =>
       buildRequiredRelatedObjectReference({
         kind: 'Deployment',
@@ -193,9 +172,7 @@ describe('objectIdentity', () => {
         namespace: 'team-a',
       })
     ).toThrow(/clusterId/);
-  });
-
-  it('uses fallback clusterId and explicit apiVersion for strict related-object references', () => {
+    // Scenario: uses fallback clusterId and explicit apiVersion for strict related-object references
     expect(
       buildRequiredRelatedObjectReference(
         {
@@ -243,7 +220,8 @@ describe('ClusterObjectReference', () => {
 });
 
 describe('assertObjectRefHasRequiredIdentity', () => {
-  it('accepts complete core built-in refs with an explicit empty group', () => {
+  it('covers assertObjectRefHasRequiredIdentity scenarios', async () => {
+    // Scenario: accepts complete core built-in refs with an explicit empty group
     expect(() =>
       assertObjectRefHasRequiredIdentity({
         clusterId: 'cluster-a',
@@ -254,24 +232,23 @@ describe('assertObjectRefHasRequiredIdentity', () => {
         name: 'api',
       })
     ).not.toThrow();
-  });
 
-  it('narrows a loose reference to ClusterObjectReference', () => {
-    const ref: KubernetesObjectReference = {
-      clusterId: 'cluster-a',
-      group: '',
-      version: 'v1',
-      kind: 'Pod',
-      namespace: 'default',
-      name: 'api',
-    };
-    assertObjectRefHasRequiredIdentity(ref);
-    // Compile-level: past the assert, clusterId is a required string.
-    const clusterId: string = ref.clusterId;
-    expect(clusterId).toBe('cluster-a');
-  });
-
-  it('requires the group field even when the group is empty for core built-ins', () => {
+    {
+      // Scenario: narrows a loose reference to ClusterObjectReference
+      const ref: KubernetesObjectReference = {
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'default',
+        name: 'api',
+      };
+      assertObjectRefHasRequiredIdentity(ref);
+      // Compile-level: past the assert, clusterId is a required string.
+      const clusterId: string = ref.clusterId;
+      expect(clusterId).toBe('cluster-a');
+    }
+    // Scenario: requires the group field even when the group is empty for core built-ins
     expect(() =>
       assertObjectRefHasRequiredIdentity({
         clusterId: 'cluster-a',
@@ -281,9 +258,7 @@ describe('assertObjectRefHasRequiredIdentity', () => {
         name: 'api',
       })
     ).toThrow(/missing group/);
-  });
-
-  it('rejects custom-resource refs with version but no group', () => {
+    // Scenario: rejects custom-resource refs with version but no group
     expect(() =>
       assertObjectRefHasRequiredIdentity({
         clusterId: 'cluster-a',
@@ -294,9 +269,7 @@ describe('assertObjectRefHasRequiredIdentity', () => {
         name: 'primary',
       })
     ).toThrow(/missing group/);
-  });
-
-  it('requires concrete object identity fields before opening a panel', () => {
+    // Scenario: requires concrete object identity fields before opening a panel
     expect(() =>
       assertObjectRefHasRequiredIdentity({
         group: 'apps',
@@ -314,9 +287,7 @@ describe('assertObjectRefHasRequiredIdentity', () => {
         kind: 'Deployment',
       })
     ).toThrow(/name/);
-  });
-
-  it('requires synthetic refs to carry canonical group/version identity', () => {
+    // Scenario: requires synthetic refs to carry canonical group/version identity
     expect(() =>
       assertObjectRefHasRequiredIdentity({
         clusterId: 'cluster-a',

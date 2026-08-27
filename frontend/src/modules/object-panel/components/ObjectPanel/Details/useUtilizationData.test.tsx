@@ -231,9 +231,8 @@ describe('useUtilizationData', () => {
     hook.cleanup();
   });
 
-  it.each(['DaemonSet', 'StatefulSet'] as const)(
-    'updates %s utilization from namespace-workloads metric rows',
-    async (kind) => {
+  it('covers updates parameterized utilization from namespace-workloads metric rows cases', async () => {
+    for (const kind of ['DaemonSet', 'StatefulSet'] as const) {
       const objectData = {
         clusterId: 'cluster-a',
         group: 'apps',
@@ -295,7 +294,7 @@ describe('useUtilizationData', () => {
 
       hook.cleanup();
     }
-  );
+  });
 
   it('updates Node utilization from nodes metric rows', async () => {
     const objectData = {

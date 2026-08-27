@@ -18,17 +18,18 @@ import {
 } from './resourceDescriptorSelectors';
 
 describe('resourceDescriptorSelectors', () => {
-  it('filters rows to the selected cluster and preserves legacy unclustered rows without one', () => {
-    const rows = [{ name: 'legacy' }, { name: 'alpha', clusterId: 'cluster-a' }];
+  it('covers resourceDescriptorSelectors scenarios', async () => {
+    {
+      // Scenario: filters rows to the selected cluster and preserves legacy unclustered rows without one
+      const rows = [{ name: 'legacy' }, { name: 'alpha', clusterId: 'cluster-a' }];
 
-    expect(filterRowsForCluster(rows, 'cluster-a')).toEqual([
-      { name: 'alpha', clusterId: 'cluster-a' },
-    ]);
-    expect(filterRowsForCluster(rows, null)).toEqual([{ name: 'legacy' }]);
-    expect(selectClusterRows(undefined, 'cluster-a')).toBeNull();
-  });
-
-  it('builds stable descriptor row identities with cluster id included', () => {
+      expect(filterRowsForCluster(rows, 'cluster-a')).toEqual([
+        { name: 'alpha', clusterId: 'cluster-a' },
+      ]);
+      expect(filterRowsForCluster(rows, null)).toEqual([{ name: 'legacy' }]);
+      expect(selectClusterRows(undefined, 'cluster-a')).toBeNull();
+    }
+    // Scenario: builds stable descriptor row identities with cluster id included
     expect(
       namespacedKindRowIdentity({
         clusterId: 'cluster-a',
@@ -52,9 +53,7 @@ describe('resourceDescriptorSelectors', () => {
     expect(
       helmReleaseRowIdentity({ clusterId: 'cluster-a', namespace: 'default', name: 'api' })
     ).toBe('cluster-a::default::api');
-  });
-
-  it('builds namespace Event identities from UID first and display fallback second', () => {
+    // Scenario: builds namespace Event identities from UID first and display fallback second
     expect(
       namespaceEventResourceRowIdentity({
         clusterId: 'cluster-a',
@@ -74,9 +73,7 @@ describe('resourceDescriptorSelectors', () => {
         type: 'Warning',
       })
     ).toBe('cluster-a::default::Pod/api:kubelet:FailedMount:Warning');
-  });
-
-  it('parses autoscaling targets and exposes kinds metadata', () => {
+    // Scenario: parses autoscaling targets and exposes kinds metadata
     expect(parseAutoscalingTarget('Deployment/api', 'apps/v1')).toEqual({
       kind: 'Deployment',
       name: 'api',

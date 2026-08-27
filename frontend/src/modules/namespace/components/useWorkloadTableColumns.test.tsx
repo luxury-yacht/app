@@ -84,90 +84,96 @@ describe('useWorkloadTableColumns', () => {
     portForwardAvailable: false,
   };
 
-  it('returns columns with interactive kind and name handlers', () => {
-    const handleWorkloadClick = vi.fn();
-    const hook = renderHook(() =>
-      useWorkloadTableColumns({
-        handleWorkloadClick,
-        showNamespaceColumn: true,
-        useShortResourceNames: false,
-        metrics: null,
-      })
-    );
-    const columns = hook.get();
+  it('covers useWorkloadTableColumns scenarios', async () => {
+    {
+      // Scenario: returns columns with interactive kind and name handlers
+      const handleWorkloadClick = vi.fn();
+      const hook = renderHook(() =>
+        useWorkloadTableColumns({
+          handleWorkloadClick,
+          showNamespaceColumn: true,
+          useShortResourceNames: false,
+          metrics: null,
+        })
+      );
+      const columns = hook.get();
 
-    const kindColumn = columns.find((column) => column.key === 'kind');
-    expect(kindColumn).toBeDefined();
-    kindColumn?.render(workload);
-    const nameColumn = columns.find((column) => column.key === 'name');
-    const nameElement = requireReactElement<{
-      onClick?: (event: { stopPropagation: () => void }) => void;
-    }>(nameColumn?.render(workload), 'expected workload name element');
-    nameElement.props.onClick?.({ stopPropagation: () => undefined });
-    expect(handleWorkloadClick).toHaveBeenCalledTimes(1);
-    hook.cleanup();
-  });
+      const kindColumn = columns.find((column) => column.key === 'kind');
+      expect(kindColumn).toBeDefined();
+      kindColumn?.render(workload);
+      const nameColumn = columns.find((column) => column.key === 'name');
+      const nameElement = requireReactElement<{
+        onClick?: (event: { stopPropagation: () => void }) => void;
+      }>(nameColumn?.render(workload), 'expected workload name element');
+      nameElement.props.onClick?.({ stopPropagation: () => undefined });
+      expect(handleWorkloadClick).toHaveBeenCalledTimes(1);
+      hook.cleanup();
+    }
 
-  it('uses backend statusPresentation for the status class', () => {
-    const hook = renderHook(() =>
-      useWorkloadTableColumns({
-        handleWorkloadClick: vi.fn(),
-        showNamespaceColumn: false,
-        useShortResourceNames: false,
-        metrics: null,
-      })
-    );
-    const columns = hook.get();
-    const statusColumn = columns.find((column) => column.key === 'status');
-    const cell = statusColumn?.render({ ...workload, statusPresentation: 'warning' });
-    expect(React.isValidElement(cell)).toBe(true);
-    expect(
-      requireReactElement<{ className?: string }>(cell, 'expected status element').props.className
-    ).toBe('status-text warning');
-    hook.cleanup();
-  });
+    {
+      // Scenario: uses backend statusPresentation for the status class
+      const hook = renderHook(() =>
+        useWorkloadTableColumns({
+          handleWorkloadClick: vi.fn(),
+          showNamespaceColumn: false,
+          useShortResourceNames: false,
+          metrics: null,
+        })
+      );
+      const columns = hook.get();
+      const statusColumn = columns.find((column) => column.key === 'status');
+      const cell = statusColumn?.render({ ...workload, statusPresentation: 'warning' });
+      expect(React.isValidElement(cell)).toBe(true);
+      expect(
+        requireReactElement<{ className?: string }>(cell, 'expected status element').props.className
+      ).toBe('status-text warning');
+      hook.cleanup();
+    }
 
-  it('does not use statusState as the status class fallback', () => {
-    const hook = renderHook(() =>
-      useWorkloadTableColumns({
-        handleWorkloadClick: vi.fn(),
-        showNamespaceColumn: false,
-        useShortResourceNames: false,
-        metrics: null,
-      })
-    );
-    const columns = hook.get();
-    const statusColumn = columns.find((column) => column.key === 'status');
-    const cell = statusColumn?.render({
-      ...workload,
-      statusState: 'true',
-      statusPresentation: undefined,
-    });
-    expect(React.isValidElement(cell)).toBe(true);
-    expect(
-      requireReactElement<{ className?: string }>(cell, 'expected status element').props.className
-    ).toBe('status-text unknown');
-    hook.cleanup();
-  });
+    {
+      // Scenario: does not use statusState as the status class fallback
+      const hook = renderHook(() =>
+        useWorkloadTableColumns({
+          handleWorkloadClick: vi.fn(),
+          showNamespaceColumn: false,
+          useShortResourceNames: false,
+          metrics: null,
+        })
+      );
+      const columns = hook.get();
+      const statusColumn = columns.find((column) => column.key === 'status');
+      const cell = statusColumn?.render({
+        ...workload,
+        statusState: 'true',
+        statusPresentation: undefined,
+      });
+      expect(React.isValidElement(cell)).toBe(true);
+      expect(
+        requireReactElement<{ className?: string }>(cell, 'expected status element').props.className
+      ).toBe('status-text unknown');
+      hook.cleanup();
+    }
 
-  it('renders zero workload restarts as no value without changing numeric sorting', () => {
-    const hook = renderHook(() =>
-      useWorkloadTableColumns({
-        handleWorkloadClick: vi.fn(),
-        showNamespaceColumn: false,
-        useShortResourceNames: false,
-        metrics: null,
-      })
-    );
-    const column = requireValue(
-      hook.get().find(({ key }) => key === 'restarts'),
-      'expected workload restarts column'
-    );
+    {
+      // Scenario: renders zero workload restarts as no value without changing numeric sorting
+      const hook = renderHook(() =>
+        useWorkloadTableColumns({
+          handleWorkloadClick: vi.fn(),
+          showNamespaceColumn: false,
+          useShortResourceNames: false,
+          metrics: null,
+        })
+      );
+      const column = requireValue(
+        hook.get().find(({ key }) => key === 'restarts'),
+        'expected workload restarts column'
+      );
 
-    expect(getTextContent(column.render(workload))).toBe('-');
-    expect(getTextContent(column.render({ ...workload, restarts: 3 }))).toBe('3');
-    expect(column.sortValue?.(workload)).toBe(0);
-    expect(column.sortValue?.({ ...workload, restarts: 3 })).toBe(3);
-    hook.cleanup();
+      expect(getTextContent(column.render(workload))).toBe('-');
+      expect(getTextContent(column.render({ ...workload, restarts: 3 }))).toBe('3');
+      expect(column.sortValue?.(workload)).toBe(0);
+      expect(column.sortValue?.({ ...workload, restarts: 3 })).toBe(3);
+      hook.cleanup();
+    }
   });
 });

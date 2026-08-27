@@ -36,72 +36,76 @@ const fetcherFor = (attempts: Array<Array<CursorWalkPage<Item>>>) => {
 };
 
 describe('walkQueryCursorPages drift guard', () => {
-  it('collects all pages with a stable source clock and no flag', async () => {
-    const result = await walkQueryCursorPages<Item>(
-      'test',
-      fetcherFor([
-        [
-          { items: ['a', 'b'], continueToken: 't1', sourceVersion: 'v1' },
-          { items: ['c'], continueToken: null, sourceVersion: 'v1' },
-        ],
-      ])
-    );
-    expect(result.items).toEqual(['a', 'b', 'c']);
-    expect(result.dataChangedDuringWalk).toBe(false);
-  });
+  it('covers walkQueryCursorPages drift guard scenarios', async () => {
+    {
+      // Scenario: collects all pages with a stable source clock and no flag
+      const result = await walkQueryCursorPages<Item>(
+        'test',
+        fetcherFor([
+          [
+            { items: ['a', 'b'], continueToken: 't1', sourceVersion: 'v1' },
+            { items: ['c'], continueToken: null, sourceVersion: 'v1' },
+          ],
+        ])
+      );
+      expect(result.items).toEqual(['a', 'b', 'c']);
+      expect(result.dataChangedDuringWalk).toBe(false);
+    }
 
-  it('restarts once on first drift and returns the clean second pass unflagged', async () => {
-    const result = await walkQueryCursorPages<Item>(
-      'test',
-      fetcherFor([
-        [
-          { items: ['stale-a'], continueToken: 't1', sourceVersion: 'v1' },
-          { items: ['stale-b'], continueToken: 't2', sourceVersion: 'v2' }, // drift
-        ],
-        [
-          { items: ['a'], continueToken: 't1', sourceVersion: 'v2' },
-          { items: ['b'], continueToken: null, sourceVersion: 'v2' },
-        ],
-      ])
-    );
-    expect(result.items).toEqual(['a', 'b']);
-    expect(result.dataChangedDuringWalk).toBe(false);
-  });
+    {
+      // Scenario: restarts once on first drift and returns the clean second pass unflagged
+      const result = await walkQueryCursorPages<Item>(
+        'test',
+        fetcherFor([
+          [
+            { items: ['stale-a'], continueToken: 't1', sourceVersion: 'v1' },
+            { items: ['stale-b'], continueToken: 't2', sourceVersion: 'v2' }, // drift
+          ],
+          [
+            { items: ['a'], continueToken: 't1', sourceVersion: 'v2' },
+            { items: ['b'], continueToken: null, sourceVersion: 'v2' },
+          ],
+        ])
+      );
+      expect(result.items).toEqual(['a', 'b']);
+      expect(result.dataChangedDuringWalk).toBe(false);
+    }
 
-  it('completes and flags on a second drift instead of failing', async () => {
-    const result = await walkQueryCursorPages<Item>(
-      'test',
-      fetcherFor([
-        [
-          { items: ['x'], continueToken: 't1', sourceVersion: 'v1' },
-          { items: ['y'], continueToken: 't2', sourceVersion: 'v2' }, // drift 1 → restart
-        ],
-        [
-          { items: ['a'], continueToken: 't1', sourceVersion: 'v3' },
-          { items: ['b'], continueToken: 't2', sourceVersion: 'v4' }, // drift 2 → deliver + flag
-          { items: ['c'], continueToken: null, sourceVersion: 'v5' },
-        ],
-      ])
-    );
-    expect(result.items).toEqual(['a', 'b', 'c']);
-    expect(result.dataChangedDuringWalk).toBe(true);
-  });
+    {
+      // Scenario: completes and flags on a second drift instead of failing
+      const result = await walkQueryCursorPages<Item>(
+        'test',
+        fetcherFor([
+          [
+            { items: ['x'], continueToken: 't1', sourceVersion: 'v1' },
+            { items: ['y'], continueToken: 't2', sourceVersion: 'v2' }, // drift 1 → restart
+          ],
+          [
+            { items: ['a'], continueToken: 't1', sourceVersion: 'v3' },
+            { items: ['b'], continueToken: 't2', sourceVersion: 'v4' }, // drift 2 → deliver + flag
+            { items: ['c'], continueToken: null, sourceVersion: 'v5' },
+          ],
+        ])
+      );
+      expect(result.items).toEqual(['a', 'b', 'c']);
+      expect(result.dataChangedDuringWalk).toBe(true);
+    }
 
-  it('treats missing source clocks as no-drift (no guard possible)', async () => {
-    const result = await walkQueryCursorPages<Item>(
-      'test',
-      fetcherFor([
-        [
-          { items: ['a'], continueToken: 't1' },
-          { items: ['b'], continueToken: null },
-        ],
-      ])
-    );
-    expect(result.items).toEqual(['a', 'b']);
-    expect(result.dataChangedDuringWalk).toBe(false);
-  });
-
-  it('still rejects on a failed page', async () => {
+    {
+      // Scenario: treats missing source clocks as no-drift (no guard possible)
+      const result = await walkQueryCursorPages<Item>(
+        'test',
+        fetcherFor([
+          [
+            { items: ['a'], continueToken: 't1' },
+            { items: ['b'], continueToken: null },
+          ],
+        ])
+      );
+      expect(result.items).toEqual(['a', 'b']);
+      expect(result.dataChangedDuringWalk).toBe(false);
+    }
+    // Scenario: still rejects on a failed page
     await expect(
       walkQueryCursorPages<Item>('test', async () => {
         throw new Error('test export failed: page 1 request was blocked');

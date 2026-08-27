@@ -12,7 +12,8 @@ import {
 } from './viewRegistry';
 
 describe('view registry', () => {
-  it('defines the canonical ordered global navigation vocabulary', () => {
+  it('covers view registry scenarios', async () => {
+    // Scenario: defines the canonical ordered global navigation vocabulary
     expect(
       GLOBAL_VIEW_DESCRIPTORS.map(({ id, label, scope }) => ({
         id,
@@ -28,9 +29,7 @@ describe('view registry', () => {
       'Compare health, capacity, and metrics across open clusters'
     );
     expect(GLOBAL_VIEW_DESCRIPTORS[0].keywords).not.toContain('access');
-  });
-
-  it('defines the canonical ordered cluster navigation vocabulary', () => {
+    // Scenario: defines the canonical ordered cluster navigation vocabulary
     expect(CLUSTER_VIEW_DESCRIPTORS.map(({ id, label }) => ({ id, label }))).toEqual([
       { id: 'attention', label: 'Attention' },
       { id: 'namespaces', label: 'Namespaces' },
@@ -44,9 +43,7 @@ describe('view registry', () => {
       { id: 'rbac', label: 'RBAC' },
     ]);
     expect(CLUSTER_VIEW_DESCRIPTORS.some((descriptor) => 'intent' in descriptor)).toBe(false);
-  });
-
-  it('defines the canonical ordered namespace navigation vocabulary', () => {
+    // Scenario: defines the canonical ordered namespace navigation vocabulary
     expect(NAMESPACE_VIEW_DESCRIPTORS.map(({ id, label }) => ({ id, label }))).toEqual([
       { id: 'browse', label: 'Browse' },
       { id: 'map', label: 'Map' },
@@ -62,28 +59,25 @@ describe('view registry', () => {
       { id: 'rbac', label: 'RBAC' },
     ]);
     expect(NAMESPACE_VIEW_DESCRIPTORS.some((descriptor) => 'intent' in descriptor)).toBe(false);
-  });
-
-  it('migrates the removed Pods route to the combined Workloads view', () => {
+    // Scenario: migrates the removed Pods route to the combined Workloads view
     expect(parseNamespaceViewType('pods')).toBe('workloads');
     expect(getViewDescriptor('namespace', 'pods')).toBeUndefined();
-  });
 
-  it('carries presentation, search, and refresh metadata for every view', () => {
-    const descriptors = [
-      ...GLOBAL_VIEW_DESCRIPTORS,
-      ...CLUSTER_VIEW_DESCRIPTORS,
-      ...NAMESPACE_VIEW_DESCRIPTORS,
-    ];
+    {
+      // Scenario: carries presentation, search, and refresh metadata for every view
+      const descriptors = [
+        ...GLOBAL_VIEW_DESCRIPTORS,
+        ...CLUSTER_VIEW_DESCRIPTORS,
+        ...NAMESPACE_VIEW_DESCRIPTORS,
+      ];
 
-    for (const descriptor of descriptors) {
-      expect(descriptor.description.length).toBeGreaterThan(0);
-      expect(descriptor.keywords).toContain(descriptor.id);
-      expect(descriptor.refresher === null || descriptor.refresher.length > 0).toBe(true);
+      for (const descriptor of descriptors) {
+        expect(descriptor.description.length).toBeGreaterThan(0);
+        expect(descriptor.keywords).toContain(descriptor.id);
+        expect(descriptor.refresher === null || descriptor.refresher.length > 0).toBe(true);
+      }
     }
-  });
-
-  it('maps target lens language onto the existing stable navigation surfaces', () => {
+    // Scenario: maps target lens language onto the existing stable navigation surfaces
     expect(getViewDescriptor('cluster', 'browse')?.keywords).toContain('inventory');
     expect(getViewDescriptor('namespace', 'browse')?.keywords).toContain('inventory');
     expect(getViewDescriptor('cluster', 'nodes')?.keywords).toContain('capacity');
@@ -96,27 +90,21 @@ describe('view registry', () => {
     expect(NAMESPACE_VIEW_DESCRIPTORS.map(({ id }) => id)).not.toEqual(
       expect.arrayContaining(['inventory', 'capacity', 'change'])
     );
-  });
-
-  it('looks up views by both scope and id', () => {
+    // Scenario: looks up views by both scope and id
     expect(getViewDescriptor('global', 'fleet')?.label).toBe('Clusters');
     expect(getViewDescriptor('global', 'global-namespaces')?.label).toBe('Namespaces');
     expect(getViewDescriptor('cluster', 'browse')?.label).toBe('Browse');
     expect(getViewDescriptor('cluster', 'attention')?.label).toBe('Attention');
     expect(getViewDescriptor('namespace', 'map')?.label).toBe('Map');
     expect(getViewDescriptor('cluster', 'map')).toBeUndefined();
-  });
-
-  it('keeps global and cluster route ids in disjoint runtime vocabularies', () => {
+    // Scenario: keeps global and cluster route ids in disjoint runtime vocabularies
     expect(parseGlobalViewType('fleet')).toBe('fleet');
     expect(parseGlobalViewType('global-namespaces')).toBe('global-namespaces');
     expect(parseGlobalViewType('nodes')).toBeUndefined();
     expect(parseClusterViewType('nodes')).toBe('nodes');
     expect(parseClusterViewType('fleet')).toBeUndefined();
     expect(parseClusterViewType('global-namespaces')).toBeUndefined();
-  });
-
-  it('declares which namespace views support the all-namespaces scope', () => {
+    // Scenario: declares which namespace views support the all-namespaces scope
     expect(
       NAMESPACE_VIEW_DESCRIPTORS.filter((view) => !view.supportsAllNamespaces).map(
         (view) => view.id

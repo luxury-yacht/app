@@ -28,24 +28,18 @@ import {
 } from './useDockablePanelState';
 
 describe('components/dockable index exports', () => {
-  it('re-exports DockablePanel and provider utilities', () => {
+  it('covers components/dockable index exports scenarios', async () => {
+    // Scenario: re-exports DockablePanel and provider utilities
     expect(DockablePanel).toBe(RawDockablePanel);
     expect(DockablePanelProvider).toBe(RawProvider);
     expect(useDockablePanelContext).toBe(rawUseContext);
-  });
-
-  it('re-exports state helpers', () => {
+    // Scenario: re-exports state helpers
     expect(useDockablePanelState).toBe(rawUseState);
     expect(getAllPanelStates).toBe(rawGetAll);
     expect(restorePanelStates).toBe(rawRestore);
-  });
-
-  it('re-exports tab bar and tab group types', () => {
+    // Scenario: re-exports tab bar and tab group types
     // Runtime exports
     expect(DockableTabBar).toBeDefined();
     expect(DockableTabBar).toBe(RawDockableTabBar);
-
-    // Type-only exports are verified by TypeScript compilation
-    // (TabInfo, PanelRegistration, TabGroupState, GroupKey)
   });
 });

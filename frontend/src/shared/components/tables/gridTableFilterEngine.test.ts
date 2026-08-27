@@ -79,177 +79,186 @@ const accessors = resolveGridTableFilterAccessors({
 });
 
 describe('gridTableFilterEngine', () => {
-  it('adds cluster-scoped namespace option and separator when requested', () => {
-    const options = buildGridTableFilterOptions({
-      filteringEnabled: true,
-      options: { includeClusterScopedSyntheticNamespace: true },
-      data: rows,
-      accessors,
-      defaultGetKind,
-      defaultGetNamespace,
-    });
+  it('covers gridTableFilterEngine scenarios', async () => {
+    {
+      // Scenario: adds cluster-scoped namespace option and separator when requested
+      const options = buildGridTableFilterOptions({
+        filteringEnabled: true,
+        options: { includeClusterScopedSyntheticNamespace: true },
+        data: rows,
+        accessors,
+        defaultGetKind,
+        defaultGetNamespace,
+      });
 
-    expect(options.namespaces.map((option) => option.value)).toEqual([
-      '',
-      '__namespace-separator__',
-      'default',
-      'platform',
-    ]);
-  });
+      expect(options.namespaces.map((option) => option.value)).toEqual([
+        '',
+        '__namespace-separator__',
+        'default',
+        'platform',
+      ]);
+    }
 
-  it('builds labeled cluster options and filters locally by cluster ID', () => {
-    const clusterAccessors = resolveGridTableFilterAccessors({
-      accessors: {
-        getCluster: (row) => row.clusterId,
-      },
-      defaultGetKind,
-      defaultGetNamespace,
-      defaultGetSearchText,
-    });
-    const options = buildGridTableFilterOptions({
-      filteringEnabled: true,
-      options: {
-        clusters: [
-          { value: 'cluster-a', label: 'alpha' },
-          { value: 'cluster-b', label: 'beta' },
-        ],
-      },
-      data: rows,
-      accessors: clusterAccessors,
-      defaultGetKind,
-      defaultGetNamespace,
-    });
+    {
+      // Scenario: builds labeled cluster options and filters locally by cluster ID
+      const clusterAccessors = resolveGridTableFilterAccessors({
+        accessors: {
+          getCluster: (row) => row.clusterId,
+        },
+        defaultGetKind,
+        defaultGetNamespace,
+        defaultGetSearchText,
+      });
+      const options = buildGridTableFilterOptions({
+        filteringEnabled: true,
+        options: {
+          clusters: [
+            { value: 'cluster-a', label: 'alpha' },
+            { value: 'cluster-b', label: 'beta' },
+          ],
+        },
+        data: rows,
+        accessors: clusterAccessors,
+        defaultGetKind,
+        defaultGetNamespace,
+      });
 
-    expect(options.clusters).toEqual([
-      { value: 'cluster-a', label: 'alpha' },
-      { value: 'cluster-b', label: 'beta' },
-    ]);
+      expect(options.clusters).toEqual([
+        { value: 'cluster-a', label: 'alpha' },
+        { value: 'cluster-b', label: 'beta' },
+      ]);
 
-    const filtered = applyGridTableFilters({
-      filteringEnabled: true,
-      data: rows,
-      activeFilters: {
-        ...defaultState,
-        clusters: { mode: 'some', values: ['cluster-b'] },
-      },
-      accessors: clusterAccessors,
-      defaultGetKind,
-      defaultGetNamespace,
-      defaultGetSearchText,
-    });
+      const filtered = applyGridTableFilters({
+        filteringEnabled: true,
+        data: rows,
+        activeFilters: {
+          ...defaultState,
+          clusters: { mode: 'some', values: ['cluster-b'] },
+        },
+        accessors: clusterAccessors,
+        defaultGetKind,
+        defaultGetNamespace,
+        defaultGetSearchText,
+      });
 
-    expect(filtered.map((row) => row.id)).toEqual(['3', '4']);
+      expect(filtered.map((row) => row.id)).toEqual(['3', '4']);
 
-    const caseVariantFiltered = applyGridTableFilters({
-      filteringEnabled: true,
-      data: rows,
-      activeFilters: {
-        ...defaultState,
-        clusters: { mode: 'some', values: ['CLUSTER-B'] },
-      },
-      accessors: clusterAccessors,
-      defaultGetKind,
-      defaultGetNamespace,
-      defaultGetSearchText,
-    });
-    expect(caseVariantFiltered).toEqual([]);
-  });
+      const caseVariantFiltered = applyGridTableFilters({
+        filteringEnabled: true,
+        data: rows,
+        activeFilters: {
+          ...defaultState,
+          clusters: { mode: 'some', values: ['CLUSTER-B'] },
+        },
+        accessors: clusterAccessors,
+        defaultGetKind,
+        defaultGetNamespace,
+        defaultGetSearchText,
+      });
+      expect(caseVariantFiltered).toEqual([]);
+    }
 
-  it('returns empty option lists when filtering is disabled', () => {
-    const options = buildGridTableFilterOptions({
-      filteringEnabled: false,
-      options: {
-        searchPlaceholder: 'Find resources',
-      },
-      data: rows,
-      accessors,
-      defaultGetKind,
-      defaultGetNamespace,
-    });
+    {
+      // Scenario: returns empty option lists when filtering is disabled
+      const options = buildGridTableFilterOptions({
+        filteringEnabled: false,
+        options: {
+          searchPlaceholder: 'Find resources',
+        },
+        data: rows,
+        accessors,
+        defaultGetKind,
+        defaultGetNamespace,
+      });
 
-    expect(options.searchPlaceholder).toBe('Find resources');
-    expect(options.kinds).toEqual([]);
-    expect(options.namespaces).toEqual([]);
-  });
+      expect(options.searchPlaceholder).toBe('Find resources');
+      expect(options.kinds).toEqual([]);
+      expect(options.namespaces).toEqual([]);
+    }
 
-  it('does not derive query-backed filter options from the loaded page', () => {
-    const options = buildGridTableFilterOptions({
-      filteringEnabled: true,
-      options: {
+    {
+      // Scenario: does not derive query-backed filter options from the loaded page
+      const options = buildGridTableFilterOptions({
+        filteringEnabled: true,
+        options: {
+          searchBehavior: 'query',
+          kinds: ['Pod'],
+        },
+        data: rows,
+        accessors,
+        defaultGetKind,
+        defaultGetNamespace,
+      });
+
+      expect(options.kinds.map((option) => option.value)).toEqual(['Pod']);
+      expect(options.namespaces).toEqual([]);
+    }
+
+    {
+      // Scenario: treats null and em-dash namespaces as cluster-scoped for filtering
+      const clusterScopedAccessors = resolveGridTableFilterAccessors({
+        accessors: {
+          getNamespace: (row) =>
+            row.namespace === null || row.namespace === undefined ? '—' : row.namespace,
+        },
+        defaultGetKind,
+        defaultGetNamespace,
+        defaultGetSearchText,
+      });
+
+      const filtered = applyGridTableFilters({
+        filteringEnabled: true,
+        data: rows,
+        activeFilters: {
+          ...defaultState,
+          namespaces: { mode: 'some', values: [''] },
+        },
+        accessors: clusterScopedAccessors,
+        defaultGetKind,
+        defaultGetNamespace,
+        defaultGetSearchText,
+      });
+
+      expect(filtered.map((row) => row.id)).toEqual(['4']);
+    }
+
+    {
+      // Scenario: does not locally filter query-backed rows
+      const filtered = applyGridTableFilters({
+        filteringEnabled: true,
         searchBehavior: 'query',
-        kinds: ['Pod'],
-      },
-      data: rows,
-      accessors,
-      defaultGetKind,
-      defaultGetNamespace,
-    });
+        data: rows,
+        activeFilters: {
+          ...defaultState,
+          search: 'frontend',
+          kinds: { mode: 'some', values: ['Pod'] },
+          namespaces: { mode: 'some', values: ['default'] },
+        },
+        accessors,
+        defaultGetKind,
+        defaultGetNamespace,
+        defaultGetSearchText,
+      });
 
-    expect(options.kinds.map((option) => option.value)).toEqual(['Pod']);
-    expect(options.namespaces).toEqual([]);
-  });
+      expect(filtered).toBe(rows);
+    }
 
-  it('treats null and em-dash namespaces as cluster-scoped for filtering', () => {
-    const clusterScopedAccessors = resolveGridTableFilterAccessors({
-      accessors: {
-        getNamespace: (row) =>
-          row.namespace === null || row.namespace === undefined ? '—' : row.namespace,
-      },
-      defaultGetKind,
-      defaultGetNamespace,
-      defaultGetSearchText,
-    });
+    {
+      // Scenario: returns no local rows when any structural multiselect is explicitly none
+      const filtered = applyGridTableFilters({
+        filteringEnabled: true,
+        data: rows,
+        activeFilters: {
+          ...defaultState,
+          kinds: NONE_MULTISELECT_FILTER,
+        },
+        accessors,
+        defaultGetKind,
+        defaultGetNamespace,
+        defaultGetSearchText,
+      });
 
-    const filtered = applyGridTableFilters({
-      filteringEnabled: true,
-      data: rows,
-      activeFilters: {
-        ...defaultState,
-        namespaces: { mode: 'some', values: [''] },
-      },
-      accessors: clusterScopedAccessors,
-      defaultGetKind,
-      defaultGetNamespace,
-      defaultGetSearchText,
-    });
-
-    expect(filtered.map((row) => row.id)).toEqual(['4']);
-  });
-
-  it('does not locally filter query-backed rows', () => {
-    const filtered = applyGridTableFilters({
-      filteringEnabled: true,
-      searchBehavior: 'query',
-      data: rows,
-      activeFilters: {
-        ...defaultState,
-        search: 'frontend',
-        kinds: { mode: 'some', values: ['Pod'] },
-        namespaces: { mode: 'some', values: ['default'] },
-      },
-      accessors,
-      defaultGetKind,
-      defaultGetNamespace,
-      defaultGetSearchText,
-    });
-
-    expect(filtered).toBe(rows);
-  });
-
-  it('returns no local rows when any structural multiselect is explicitly none', () => {
-    const filtered = applyGridTableFilters({
-      filteringEnabled: true,
-      data: rows,
-      activeFilters: {
-        ...defaultState,
-        kinds: NONE_MULTISELECT_FILTER,
-      },
-      accessors,
-      defaultGetKind,
-      defaultGetNamespace,
-      defaultGetSearchText,
-    });
-
-    expect(filtered).toEqual([]);
+      expect(filtered).toEqual([]);
+    }
   });
 });

@@ -353,9 +353,8 @@ describe('Sidebar', () => {
     expect(clusterViews.querySelector('[data-sidebar-target-view="global-namespaces"]')).toBeNull();
   });
 
-  it.each(['overview', 'cluster', 'namespace'] as const)(
-    'does not show Global navigation while the %s workspace is active',
-    (viewType) => {
+  it('covers does not show Global navigation while the parameterized workspace is active cases', async () => {
+    for (const viewType of ['overview', 'cluster', 'namespace'] as const) {
       viewStateMock.viewType = viewType;
       renderSidebar();
 
@@ -367,7 +366,7 @@ describe('Sidebar', () => {
         )
       ).toEqual(['Cluster', 'Namespaces']);
     }
-  );
+  });
 
   it('enters Global through a Global sidebar target', () => {
     viewStateMock.viewType = 'global' as never;

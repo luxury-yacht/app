@@ -104,9 +104,8 @@ describe('AllNamespacesView', () => {
     ['events', 'events-view'],
   ];
 
-  it.each(tableTabs)(
-    'renders the %s tab directly with the all-namespaces scope and no extra fetch',
-    async (tab, rendererKey) => {
+  it('covers renders the parameterized tab directly with the all-namespaces scope and no extra fetch cases', async () => {
+    for (const [tab, rendererKey] of tableTabs) {
       await renderView(tab);
 
       expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
@@ -114,7 +113,7 @@ describe('AllNamespacesView', () => {
       expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
       expect(props.showNamespaceColumn).toBe(true);
     }
-  );
+  });
 
   it('renders the custom tab with its catalog-backed props', async () => {
     await renderView('custom');

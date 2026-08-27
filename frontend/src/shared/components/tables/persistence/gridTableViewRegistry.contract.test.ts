@@ -321,100 +321,110 @@ describe('gridTableViewRegistry contract', () => {
   const registered = new Set(listRegisteredGridTableViews());
   const usages = extractViewIds(srcRoot);
 
-  it('finds at least one viewId usage (sanity check)', () => {
+  it('covers gridTableViewRegistry contract scenarios', async () => {
+    // Scenario: finds at least one viewId usage (sanity check)
     expect(usages.length).toBeGreaterThan(0);
-  });
 
-  it('every viewId used in persistence hooks is registered', () => {
-    const missing = usages
-      .filter((u) => !registered.has(u.viewId))
-      .map((m) => `viewId "${m.viewId}" in ${path.relative(srcRoot, m.file)}`);
+    {
+      // Scenario: every viewId used in persistence hooks is registered
+      const missing = usages
+        .filter((u) => !registered.has(u.viewId))
+        .map((m) => `viewId "${m.viewId}" in ${path.relative(srcRoot, m.file)}`);
 
-    expect(missing, 'Add them to the VIEW_IDS set in gridTableViewRegistry.ts.').toEqual([]);
-  });
+      expect(missing, 'Add them to the VIEW_IDS set in gridTableViewRegistry.ts.').toEqual([]);
+    }
 
-  it('registry does not contain stale entries with no matching usage', () => {
-    const usedIds = new Set(usages.map((u) => u.viewId));
-    const stale = [...registered].filter((id) => !usedIds.has(id));
+    {
+      // Scenario: registry does not contain stale entries with no matching usage
+      const usedIds = new Set(usages.map((u) => u.viewId));
+      const stale = [...registered].filter((id) => !usedIds.has(id));
 
-    expect(stale, 'Remove them from gridTableViewRegistry.ts or add their usage.').toEqual([]);
-  });
+      expect(stale, 'Remove them from gridTableViewRegistry.ts or add their usage.').toEqual([]);
+    }
 
-  it('production resource-grid adapter calls declare tableMode', () => {
-    const missing = findResourceGridCallsMissingTableMode(srcRoot);
+    {
+      // Scenario: production resource-grid adapter calls declare tableMode
+      const missing = findResourceGridCallsMissingTableMode(srcRoot);
 
-    expect(
-      missing,
-      'Add an explicit Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic mode.'
-    ).toEqual([]);
-  });
+      expect(
+        missing,
+        'Add an explicit Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic mode.'
+      ).toEqual([]);
+    }
 
-  it('production resource-grid adapter tableMode values are recognized', () => {
-    const invalid = findResourceGridCallsWithoutRecognizedTableMode(srcRoot);
+    {
+      // Scenario: production resource-grid adapter tableMode values are recognized
+      const invalid = findResourceGridCallsWithoutRecognizedTableMode(srcRoot);
 
-    expect(
-      invalid,
-      'Use Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic.'
-    ).toEqual([]);
-  });
+      expect(
+        invalid,
+        'Use Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic.'
+      ).toEqual([]);
+    }
 
-  it('direct production GridTable usage is explicitly allowed', () => {
-    const unexpected = findProductionDirectGridTableUsages(srcRoot);
+    {
+      // Scenario: direct production GridTable usage is explicitly allowed
+      const unexpected = findProductionDirectGridTableUsages(srcRoot);
 
-    expect(
-      unexpected,
-      'Route resource tables through the resource-grid adapter with tableMode, or add a reviewed bounded/partial exception here.'
-    ).toEqual([]);
-  });
+      expect(
+        unexpected,
+        'Route resource tables through the resource-grid adapter with tableMode, or add a reviewed bounded/partial exception here.'
+      ).toEqual([]);
+    }
 
-  it('direct production useTableSort usage is explicitly allowed', () => {
-    const unexpected = findProductionDirectUseTableSortUsages(srcRoot);
+    {
+      // Scenario: direct production useTableSort usage is explicitly allowed
+      const unexpected = findProductionDirectUseTableSortUsages(srcRoot);
 
-    expect(
-      unexpected,
-      'Route resource tables through the resource-grid adapter tableMode path, or add a reviewed bounded/partial exception here.'
-    ).toEqual([]);
-  });
+      expect(
+        unexpected,
+        'Route resource tables through the resource-grid adapter tableMode path, or add a reviewed bounded/partial exception here.'
+      ).toEqual([]);
+    }
 
-  it('direct table bypass exceptions carry an explicit table-mode classification', () => {
-    const unclassified = findUnclassifiedDirectUsageExceptions();
+    {
+      // Scenario: direct table bypass exceptions carry an explicit table-mode classification
+      const unclassified = findUnclassifiedDirectUsageExceptions();
 
-    expect(
-      unclassified,
-      'Every direct bypass must document whether it is an adapter shell, Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic.'
-    ).toEqual([]);
-  });
+      expect(
+        unclassified,
+        'Every direct bypass must document whether it is an adapter shell, Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic.'
+      ).toEqual([]);
+    }
 
-  it('direct table bypass exceptions are not stale (each file still uses what it is allowlisted for)', () => {
-    const stale = findStaleDirectUsageExceptions(srcRoot);
+    {
+      // Scenario: direct table bypass exceptions are not stale (each file still uses what it is allowlisted for)
+      const stale = findStaleDirectUsageExceptions(srcRoot);
 
-    expect(
-      stale,
-      'Remove the stale exception so the allowlist stays exact — a stale entry silently ' +
-        'pre-authorizes a future direct bypass in that file without review.'
-    ).toEqual([]);
-  });
+      expect(
+        stale,
+        'Remove the stale exception so the allowlist stays exact — a stale entry silently ' +
+          'pre-authorizes a future direct bypass in that file without review.'
+      ).toEqual([]);
+    }
 
-  it('only the sanctioned adapters produce a resource-inventory source', () => {
-    const producers = findResourceInventorySourceProducers(srcRoot);
-    const sanctioned = new Set<string>(RESOURCE_INVENTORY_SOURCE_ADAPTERS);
-    const unexpected = producers.filter((file) => !sanctioned.has(file));
+    {
+      // Scenario: only the sanctioned adapters produce a resource-inventory source
+      const producers = findResourceInventorySourceProducers(srcRoot);
+      const sanctioned = new Set<string>(RESOURCE_INVENTORY_SOURCE_ADAPTERS);
+      const unexpected = producers.filter((file) => !sanctioned.has(file));
 
-    expect(
-      unexpected,
-      'Resource inventory tables must source from boundedRowsSource or backendQuerySource. ' +
-        'A new source shape must be reviewed and added to RESOURCE_INVENTORY_SOURCE_ADAPTERS deliberately.'
-    ).toEqual([]);
+      expect(
+        unexpected,
+        'Resource inventory tables must source from boundedRowsSource or backendQuerySource. ' +
+          'A new source shape must be reviewed and added to RESOURCE_INVENTORY_SOURCE_ADAPTERS deliberately.'
+      ).toEqual([]);
 
-    // The set must be exact in both directions — a sanctioned adapter that stops
-    // producing a source is a stale allowlist entry.
-    const noLongerProducing = RESOURCE_INVENTORY_SOURCE_ADAPTERS.filter(
-      (file) => !producers.includes(file)
-    );
+      // The set must be exact in both directions — a sanctioned adapter that stops
+      // producing a source is a stale allowlist entry.
+      const noLongerProducing = RESOURCE_INVENTORY_SOURCE_ADAPTERS.filter(
+        (file) => !producers.includes(file)
+      );
 
-    expect(
-      noLongerProducing,
-      'Sanctioned source adapters must still produce a ResourceInventorySourceState.'
-    ).toEqual([]);
+      expect(
+        noLongerProducing,
+        'Sanctioned source adapters must still produce a ResourceInventorySourceState.'
+      ).toEqual([]);
+    }
   });
 });

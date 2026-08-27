@@ -689,9 +689,8 @@ describe('ObjectPanel tab availability', () => {
     ['ValidatingWebhookConfiguration', { webhooks: [] }],
   ] as const;
 
-  it.each(detailMappingCases)(
-    'exposes the detail payload as the active detail for %s resources',
-    async (kind, detailsPayload) => {
+  it('covers exposes the detail payload as the active detail for parameterized resources cases', async () => {
+    for (const [kind, detailsPayload] of detailMappingCases) {
       await renderObjectPanel({
         kind,
         name: 'resource',
@@ -705,7 +704,7 @@ describe('ObjectPanel tab availability', () => {
 
       expect(getDetailsTabProps().detailModel.activeDetail).toEqual(detailsPayload);
     }
-  );
+  });
 
   it('passes deletion metadata from the refresh envelope to DetailsTab', async () => {
     const deletion = {

@@ -27,7 +27,8 @@ const buildTargetElement = (attrs: Record<string, string>) => {
 };
 
 describe('Sidebar keyboard helpers', () => {
-  it('compares cursor targets correctly', () => {
+  it('covers Sidebar keyboard helpers scenarios', async () => {
+    // Scenario: compares cursor targets correctly
     expect(
       targetsAreEqual(
         { kind: 'namespace-view', namespace: 'dev', view: 'workloads' },
@@ -53,9 +54,7 @@ describe('Sidebar keyboard helpers', () => {
       )
     ).toBe(true);
     expect(targetsAreEqual({ kind: 'overview' }, null)).toBe(false);
-  });
-
-  it('describes sidebar targets from DOM nodes', () => {
+    // Scenario: describes sidebar targets from DOM nodes
     expect(
       describeElementTarget(buildTargetElement({ 'data-sidebar-target-kind': 'overview' }))
     ).toEqual({ kind: 'overview' });
@@ -100,9 +99,7 @@ describe('Sidebar keyboard helpers', () => {
         })
       )
     ).toEqual({ kind: 'cluster-toggle', id: 'resources' });
-  });
-
-  it('yields no target for dataset view values outside the view unions', () => {
+    // Scenario: yields no target for dataset view values outside the view unions
     // The dataset round-trips through the DOM as strings; a value that is not
     // a member of the view unions must not become a cursor target.
     expect(
@@ -130,20 +127,21 @@ describe('Sidebar keyboard helpers', () => {
         })
       )
     ).toBeNull();
-  });
 
-  it('excludes items inside hidden sidebar sections from keyboard navigation', () => {
-    const sidebar = document.createElement('div');
-    const visibleItem = document.createElement('button');
-    visibleItem.dataset.sidebarFocusable = 'true';
-    const hiddenSection = document.createElement('section');
-    hiddenSection.hidden = true;
-    const hiddenItem = document.createElement('button');
-    hiddenItem.dataset.sidebarFocusable = 'true';
-    hiddenSection.appendChild(hiddenItem);
-    sidebar.append(visibleItem, hiddenSection);
+    {
+      // Scenario: excludes items inside hidden sidebar sections from keyboard navigation
+      const sidebar = document.createElement('div');
+      const visibleItem = document.createElement('button');
+      visibleItem.dataset.sidebarFocusable = 'true';
+      const hiddenSection = document.createElement('section');
+      hiddenSection.hidden = true;
+      const hiddenItem = document.createElement('button');
+      hiddenItem.dataset.sidebarFocusable = 'true';
+      hiddenSection.appendChild(hiddenItem);
+      sidebar.append(visibleItem, hiddenSection);
 
-    expect(getFocusableSidebarItems(sidebar)).toEqual([visibleItem]);
+      expect(getFocusableSidebarItems(sidebar)).toEqual([visibleItem]);
+    }
   });
 });
 

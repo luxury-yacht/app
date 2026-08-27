@@ -359,37 +359,39 @@ describe('NsViewNetwork', () => {
     );
   });
 
-  it.each([
-    ['Ingress', 'networking.k8s.io', 'v1'],
-    ['Service', '', 'v1'],
-    ['EndpointSlice', 'discovery.k8s.io', 'v1'],
-  ])('opens the Map from %s context menu', async (kind, group, version) => {
-    const entry = baseNetwork({
-      ref: { kind, name: `${kind.toLowerCase()}-object` },
+  it('covers opens the Map from parameterized context menu cases', async () => {
+    for (const [kind, group, version] of [
+      ['Ingress', 'networking.k8s.io', 'v1'],
+      ['Service', '', 'v1'],
+      ['EndpointSlice', 'discovery.k8s.io', 'v1'],
+    ]) {
+      const entry = baseNetwork({
+        ref: { kind, name: `${kind.toLowerCase()}-object` },
 
-      kindAlias: kind,
-    });
-    const props = await renderNetworkView();
+        kindAlias: kind,
+      });
+      const props = await renderNetworkView();
 
-    const menu = props.getCustomContextMenuItems(entry, 'name');
-    const objectMapItem = menu.find((item) => item.actionId === OBJECT_ACTION_IDS.viewMap);
-    expect(objectMapItem).toBeTruthy();
+      const menu = props.getCustomContextMenuItems(entry, 'name');
+      const objectMapItem = menu.find((item) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+      expect(objectMapItem).toBeTruthy();
 
-    act(() => {
-      objectMapItem?.onClick?.();
-    });
+      act(() => {
+        objectMapItem?.onClick?.();
+      });
 
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind,
-        name: `${kind.toLowerCase()}-object`,
-        namespace: 'team-a',
-        clusterId: 'alpha:ctx',
-        group,
-        version,
-      }),
-      { initialTab: 'map' }
-    );
+      expect(openWithObjectMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind,
+          name: `${kind.toLowerCase()}-object`,
+          namespace: 'team-a',
+          clusterId: 'alpha:ctx',
+          group,
+          version,
+        }),
+        { initialTab: 'map' }
+      );
+    }
   });
 
   it('gates delete option on permissions and confirms deletion', async () => {

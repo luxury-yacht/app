@@ -11,7 +11,8 @@ import {
 } from './targetCapabilities';
 
 describe('port-forward target capabilities', () => {
-  it('describes the supported target GVKs', () => {
+  it('covers port-forward target capabilities scenarios', async () => {
+    // Scenario: describes the supported target GVKs
     expect(
       lookupPortForwardTargetCapability({ kind: 'Pod', group: '', version: 'v1' })
     ).toMatchObject({
@@ -49,9 +50,7 @@ describe('port-forward target capabilities', () => {
       version: 'v1',
       reconnect: true,
     });
-  });
-
-  it('requires exact GVK matches', () => {
+    // Scenario: requires exact GVK matches
     expect(
       isPortForwardTargetGVKSupported({
         kind: 'Deployment',

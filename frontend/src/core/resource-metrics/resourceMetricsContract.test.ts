@@ -28,51 +28,55 @@ const walkSourceFiles = (dir: string): string[] => {
 };
 
 describe('resource metrics contracts', () => {
-  it('keeps metric-bearing table usage cells on the shared value adapters', () => {
-    const columnFiles = [
-      {
-        file: 'frontend/src/modules/cluster/components/ClusterViewNodes.tsx',
-        helpers: ['nodeRowCpuValue', 'nodeRowMemoryValue'],
-      },
-      {
-        file: 'frontend/src/modules/namespace/components/NsViewPods.tsx',
-        helpers: ['podRowCpuValue', 'podRowMemoryValue'],
-      },
-      {
-        file: 'frontend/src/modules/namespace/components/useWorkloadTableColumns.tsx',
-        helpers: ['workloadRowCpuValue', 'workloadRowMemoryValue'],
-      },
-      {
-        file: 'frontend/src/modules/object-panel/components/ObjectPanel/Pods/PodsTab.tsx',
-        helpers: ['podRowCpuValue', 'podRowMemoryValue'],
-      },
-    ];
+  it('covers resource metrics contracts scenarios', async () => {
+    {
+      // Scenario: keeps metric-bearing table usage cells on the shared value adapters
+      const columnFiles = [
+        {
+          file: 'frontend/src/modules/cluster/components/ClusterViewNodes.tsx',
+          helpers: ['nodeRowCpuValue', 'nodeRowMemoryValue'],
+        },
+        {
+          file: 'frontend/src/modules/namespace/components/NsViewPods.tsx',
+          helpers: ['podRowCpuValue', 'podRowMemoryValue'],
+        },
+        {
+          file: 'frontend/src/modules/namespace/components/useWorkloadTableColumns.tsx',
+          helpers: ['workloadRowCpuValue', 'workloadRowMemoryValue'],
+        },
+        {
+          file: 'frontend/src/modules/object-panel/components/ObjectPanel/Pods/PodsTab.tsx',
+          helpers: ['podRowCpuValue', 'podRowMemoryValue'],
+        },
+      ];
 
-    const columnViolations = columnFiles.flatMap(({ file, helpers }) => {
-      const source = readRepoFile(file);
-      const missing = helpers
-        .map((helper) => (!source.includes(helper) ? `${file}: ${helper}` : null))
-        .filter(Boolean);
-      const directUsageGetter =
-        /getUsage:\s*\([^)]*\)\s*=>\s*[^,\n]*\.(?:cpuUsage|memUsage|memoryUsage)\b/.test(source);
-      return directUsageGetter ? [...missing, `${file}: direct usage getter`] : missing;
-    });
+      const columnViolations = columnFiles.flatMap(({ file, helpers }) => {
+        const source = readRepoFile(file);
+        const missing = helpers
+          .map((helper) => (!source.includes(helper) ? `${file}: ${helper}` : null))
+          .filter(Boolean);
+        const directUsageGetter =
+          /getUsage:\s*\([^)]*\)\s*=>\s*[^,\n]*\.(?:cpuUsage|memUsage|memoryUsage)\b/.test(source);
+        return directUsageGetter ? [...missing, `${file}: direct usage getter`] : missing;
+      });
 
-    expect(columnViolations).toEqual([]);
-  });
+      expect(columnViolations).toEqual([]);
+    }
 
-  it('does not introduce a resource metrics cache outside core/resource-metrics', () => {
-    const resourceMetricsDir = path.join(frontendSrc, 'core/resource-metrics');
-    const offenders = walkSourceFiles(frontendSrc)
-      .filter((file) => !file.startsWith(resourceMetricsDir))
-      .filter((file) => !file.endsWith('.test.ts') && !file.endsWith('.test.tsx'))
-      .filter((file) => existsSync(file))
-      .filter((file) => {
-        const source = readFileSync(file, 'utf8');
-        return /\b(?:resourceMetricsCache|metricsUsageCache|metricUsageCache)\b/i.test(source);
-      })
-      .map((file) => path.relative(repoRoot, file));
+    {
+      // Scenario: does not introduce a resource metrics cache outside core/resource-metrics
+      const resourceMetricsDir = path.join(frontendSrc, 'core/resource-metrics');
+      const offenders = walkSourceFiles(frontendSrc)
+        .filter((file) => !file.startsWith(resourceMetricsDir))
+        .filter((file) => !file.endsWith('.test.ts') && !file.endsWith('.test.tsx'))
+        .filter((file) => existsSync(file))
+        .filter((file) => {
+          const source = readFileSync(file, 'utf8');
+          return /\b(?:resourceMetricsCache|metricsUsageCache|metricUsageCache)\b/i.test(source);
+        })
+        .map((file) => path.relative(repoRoot, file));
 
-    expect(offenders).toEqual([]);
+      expect(offenders).toEqual([]);
+    }
   });
 });

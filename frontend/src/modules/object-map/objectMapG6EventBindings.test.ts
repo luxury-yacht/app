@@ -155,109 +155,115 @@ const bind = (selection: ObjectMapSelectionState = selectionState) => {
 };
 
 describe('object map G6 event bindings', () => {
-  it('emits connection hover state and tooltip payloads for edge hover', () => {
-    const { cleanup, graph, handlers } = bind();
+  it('covers object map G6 event bindings scenarios', async () => {
+    {
+      // Scenario: emits connection hover state and tooltip payloads for edge hover
+      const { cleanup, graph, handlers } = bind();
 
-    graph.emit(EdgeEvent.POINTER_ENTER, {
-      target: { id: 'edge' },
-      clientX: 80,
-      clientY: 120,
-    });
+      graph.emit(EdgeEvent.POINTER_ENTER, {
+        target: { id: 'edge' },
+        clientX: 80,
+        clientY: 120,
+      });
 
-    expect(handlers.onHoverEdge).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sourceLabel: 'web',
-        sourceKind: 'Service',
-        label: 'has endpoints',
-        targetLabel: 'web-abc',
-        targetKind: 'Pod',
-        tooltipX: 70,
-        tooltipY: 96,
-      })
-    );
-    expect(graph.setElementState).toHaveBeenCalledWith(
-      expect.objectContaining({
-        edge: expect.arrayContaining(['hovered']),
-        service: expect.arrayContaining(['edgeHovered']),
-        pod: expect.arrayContaining(['edgeHovered']),
-      }),
-      false
-    );
+      expect(handlers.onHoverEdge).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceLabel: 'web',
+          sourceKind: 'Service',
+          label: 'has endpoints',
+          targetLabel: 'web-abc',
+          targetKind: 'Pod',
+          tooltipX: 70,
+          tooltipY: 96,
+        })
+      );
+      expect(graph.setElementState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          edge: expect.arrayContaining(['hovered']),
+          service: expect.arrayContaining(['edgeHovered']),
+          pod: expect.arrayContaining(['edgeHovered']),
+        }),
+        false
+      );
 
-    graph.emit(EdgeEvent.POINTER_LEAVE, { target: { id: 'edge' } });
+      graph.emit(EdgeEvent.POINTER_LEAVE, { target: { id: 'edge' } });
 
-    expect(handlers.onClearHoverEdge).toHaveBeenCalledTimes(1);
-    cleanup();
-  });
+      expect(handlers.onClearHoverEdge).toHaveBeenCalledTimes(1);
+      cleanup();
+    }
 
-  it('suppresses the tooltip and hover highlight for edges unrelated to the active selection', () => {
-    const { cleanup, graph, handlers } = bind({
-      activeId: 'other',
-      connectedIds: new Set(),
-      connectedEdgeIds: new Set(),
-    });
+    {
+      // Scenario: suppresses the tooltip and hover highlight for edges unrelated to the active selection
+      const { cleanup, graph, handlers } = bind({
+        activeId: 'other',
+        connectedIds: new Set(),
+        connectedEdgeIds: new Set(),
+      });
 
-    graph.emit(EdgeEvent.POINTER_ENTER, {
-      target: { id: 'edge' },
-      clientX: 80,
-      clientY: 120,
-    });
+      graph.emit(EdgeEvent.POINTER_ENTER, {
+        target: { id: 'edge' },
+        clientX: 80,
+        clientY: 120,
+      });
 
-    expect(handlers.onHoverEdge).not.toHaveBeenCalled();
-    expect(graph.setElementState).toHaveBeenCalledWith(
-      {
-        edge: ['dimmed'],
-        service: ['seed', 'dimmed'],
-        pod: ['dimmed'],
-      },
-      false
-    );
+      expect(handlers.onHoverEdge).not.toHaveBeenCalled();
+      expect(graph.setElementState).toHaveBeenCalledWith(
+        {
+          edge: ['dimmed'],
+          service: ['seed', 'dimmed'],
+          pod: ['dimmed'],
+        },
+        false
+      );
 
-    graph.emit(EdgeEvent.POINTER_MOVE, {
-      target: { id: 'edge' },
-      clientX: 82,
-      clientY: 122,
-    });
+      graph.emit(EdgeEvent.POINTER_MOVE, {
+        target: { id: 'edge' },
+        clientX: 82,
+        clientY: 122,
+      });
 
-    expect(handlers.onHoverEdge).not.toHaveBeenCalled();
-    expect(handlers.onClearHoverEdge).toHaveBeenCalled();
-    cleanup();
-  });
+      expect(handlers.onHoverEdge).not.toHaveBeenCalled();
+      expect(handlers.onClearHoverEdge).toHaveBeenCalled();
+      cleanup();
+    }
 
-  it('keeps the tooltip and hover highlight for edges connected to the active selection', () => {
-    const { cleanup, graph, handlers } = bind({
-      activeId: 'service',
-      connectedIds: new Set(['pod']),
-      connectedEdgeIds: new Set(['edge']),
-    });
+    {
+      // Scenario: keeps the tooltip and hover highlight for edges connected to the active selection
+      const { cleanup, graph, handlers } = bind({
+        activeId: 'service',
+        connectedIds: new Set(['pod']),
+        connectedEdgeIds: new Set(['edge']),
+      });
 
-    graph.emit(EdgeEvent.POINTER_ENTER, {
-      target: { id: 'edge' },
-      clientX: 80,
-      clientY: 120,
-    });
+      graph.emit(EdgeEvent.POINTER_ENTER, {
+        target: { id: 'edge' },
+        clientX: 80,
+        clientY: 120,
+      });
 
-    expect(handlers.onHoverEdge).toHaveBeenCalledWith(
-      expect.objectContaining({ label: 'has endpoints' })
-    );
-    expect(graph.setElementState).toHaveBeenCalledWith(
-      expect.objectContaining({
-        edge: expect.arrayContaining(['hovered']),
-        service: expect.arrayContaining(['edgeHovered']),
-        pod: expect.arrayContaining(['edgeHovered']),
-      }),
-      false
-    );
-    cleanup();
-  });
+      expect(handlers.onHoverEdge).toHaveBeenCalledWith(
+        expect.objectContaining({ label: 'has endpoints' })
+      );
+      expect(graph.setElementState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          edge: expect.arrayContaining(['hovered']),
+          service: expect.arrayContaining(['edgeHovered']),
+          pod: expect.arrayContaining(['edgeHovered']),
+        }),
+        false
+      );
+      cleanup();
+    }
 
-  it('clears selection from canvas clicks only', () => {
-    const { cleanup, graph, handlers } = bind();
+    {
+      // Scenario: clears selection from canvas clicks only
+      const { cleanup, graph, handlers } = bind();
 
-    graph.emit(CanvasEvent.CLICK, { targetType: 'canvas' });
-    graph.emit(CanvasEvent.CLICK, { targetType: 'node' });
+      graph.emit(CanvasEvent.CLICK, { targetType: 'canvas' });
+      graph.emit(CanvasEvent.CLICK, { targetType: 'node' });
 
-    expect(handlers.onClearSelection).toHaveBeenCalledTimes(1);
-    cleanup();
+      expect(handlers.onClearSelection).toHaveBeenCalledTimes(1);
+      cleanup();
+    }
   });
 });

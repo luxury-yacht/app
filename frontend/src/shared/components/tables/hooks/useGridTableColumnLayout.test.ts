@@ -28,7 +28,8 @@ const models = columns.map(
 );
 
 describe('getVisibleAutoColumnKeys', () => {
-  it('returns every auto-width column when column virtualization is disabled', () => {
+  it('covers getVisibleAutoColumnKeys scenarios', async () => {
+    // Scenario: returns every auto-width column when column virtualization is disabled
     expect(
       getVisibleAutoColumnKeys({
         columnRenderModels: models,
@@ -36,9 +37,7 @@ describe('getVisibleAutoColumnKeys', () => {
         columnWindowRange: { startIndex: 1, endIndex: 1 },
       })
     ).toEqual(['kind', 'status', 'age']);
-  });
-
-  it('includes sticky and visible auto-width columns when virtualization is enabled', () => {
+    // Scenario: includes sticky and visible auto-width columns when virtualization is enabled
     expect(
       getVisibleAutoColumnKeys({
         columnRenderModels: models,
@@ -46,9 +45,7 @@ describe('getVisibleAutoColumnKeys', () => {
         columnWindowRange: { startIndex: 1, endIndex: 2 },
       })
     ).toEqual(['kind', 'status', 'age']);
-  });
-
-  it('omits non-sticky auto-width columns outside the visible window', () => {
+    // Scenario: omits non-sticky auto-width columns outside the visible window
     expect(
       getVisibleAutoColumnKeys({
         columnRenderModels: models,

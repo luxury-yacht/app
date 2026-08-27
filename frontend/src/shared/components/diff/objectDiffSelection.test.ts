@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { buildObjectDiffSelection } from './objectDiffSelection';
 
 describe('buildObjectDiffSelection', () => {
-  it('preserves the shared object identity backbone for generic diff workflows', () => {
+  it('covers buildObjectDiffSelection scenarios', async () => {
+    // Scenario: preserves the shared object identity backbone for generic diff workflows
     expect(
       buildObjectDiffSelection({
         clusterId: 'cluster-a',
@@ -27,9 +28,7 @@ describe('buildObjectDiffSelection', () => {
       resource: 'deployments',
       uid: 'deploy-uid',
     });
-  });
-
-  it('returns null when the selection cannot participate in diff workflows', () => {
+    // Scenario: returns null when the selection cannot participate in diff workflows
     expect(
       buildObjectDiffSelection({
         kind: 'Deployment',

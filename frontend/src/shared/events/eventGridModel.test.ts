@@ -32,7 +32,8 @@ const eventRef = (overrides: Record<string, string> = {}) => ({
 });
 
 describe('eventGridModel', () => {
-  it('builds search text from the visible event fields', () => {
+  it('covers eventGridModel scenarios', async () => {
+    // Scenario: builds search text from the visible event fields
     expect(
       eventGridSearchText({
         ref: eventRef(),
@@ -52,17 +53,13 @@ describe('eventGridModel', () => {
       'Pod/api',
       'Unable to attach volume',
     ]);
-  });
-
-  it('uses object namespace before event namespace before the default namespace', () => {
+    // Scenario: uses object namespace before event namespace before the default namespace
     expect(eventGridObjectNamespace({ objectNamespace: 'object-ns', namespace: 'event-ns' })).toBe(
       'object-ns'
     );
     expect(eventGridObjectNamespace({ namespace: 'event-ns' }, 'default')).toBe('event-ns');
     expect(eventGridObjectNamespace({}, 'default')).toBe('default');
-  });
-
-  it('builds cluster-scoped stable row keys', () => {
+    // Scenario: builds cluster-scoped stable row keys
     expect(
       eventGridStableKey(
         {
@@ -75,9 +72,7 @@ describe('eventGridModel', () => {
         2
       )
     ).toBe('cluster-a|prod-FailedMount-kubelet-Pod/api-1000-2');
-  });
-
-  it('builds required Event row identities for cluster and namespace views', () => {
+    // Scenario: builds required Event row identities for cluster and namespace views
     expect(
       clusterEventRowIdentity(
         {
@@ -97,33 +92,32 @@ describe('eventGridModel', () => {
         'unused'
       )
     ).toBe('cluster-a|/v1/Event/prod/api.123');
-  });
 
-  it('uses the canonical Event ref instead of rebuilding identity from display fields', () => {
-    const event = {
-      ref: {
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-        kind: 'Event',
-        resource: 'events',
-        namespace: 'events-ns',
-        name: 'canonical-event',
-        uid: 'event-uid',
-      },
-    };
+    {
+      // Scenario: uses the canonical Event ref instead of rebuilding identity from display fields
+      const event = {
+        ref: {
+          clusterId: 'cluster-a',
+          group: '',
+          version: 'v1',
+          kind: 'Event',
+          resource: 'events',
+          namespace: 'events-ns',
+          name: 'canonical-event',
+          uid: 'event-uid',
+        },
+      };
 
-    expect(clusterEventRowIdentity(event)).toBe('cluster-a|/v1/Event/events-ns/canonical-event');
-    expect(namespaceEventRowIdentity(event, 'default')).toBe(
-      'cluster-a|/v1/Event/events-ns/canonical-event'
-    );
-    expect(eventGridObjectReference(event)).toEqual(expect.objectContaining(event.ref));
-    expect(eventGridActionReference(event, undefined, undefined, { action: 'open' })).toEqual(
-      expect.objectContaining({ ...event.ref, action: 'open' })
-    );
-  });
-
-  it('carries cluster identity and fallback GVK into related-object inputs', () => {
+      expect(clusterEventRowIdentity(event)).toBe('cluster-a|/v1/Event/events-ns/canonical-event');
+      expect(namespaceEventRowIdentity(event, 'default')).toBe(
+        'cluster-a|/v1/Event/events-ns/canonical-event'
+      );
+      expect(eventGridObjectReference(event)).toEqual(expect.objectContaining(event.ref));
+      expect(eventGridActionReference(event, undefined, undefined, { action: 'open' })).toEqual(
+        expect.objectContaining({ ...event.ref, action: 'open' })
+      );
+    }
+    // Scenario: carries cluster identity and fallback GVK into related-object inputs
     expect(
       eventGridRelatedObjectInput(
         {
@@ -154,9 +148,7 @@ describe('eventGridModel', () => {
       fallbackGroup: 'db.example.io',
       fallbackVersion: 'v1',
     });
-  });
-
-  it('reports direct GVK-backed related objects as openable', () => {
+    // Scenario: reports direct GVK-backed related objects as openable
     expect(
       eventGridCanOpenRelatedObject({
         object: 'Pod/api',
@@ -165,9 +157,7 @@ describe('eventGridModel', () => {
         clusterId: 'cluster-a',
       })
     ).toBe(true);
-  });
-
-  it('normalizes object-panel event rows for the shared resolver', () => {
+    // Scenario: normalizes object-panel event rows for the shared resolver
     expect(
       objectPanelEventGridRow(
         {
@@ -188,9 +178,7 @@ describe('eventGridModel', () => {
       clusterId: 'cluster-a',
       clusterName: undefined,
     });
-  });
-
-  it('builds object action references with Event identity and involved-object extras', () => {
+    // Scenario: builds object action references with Event identity and involved-object extras
     expect(
       eventGridActionReference(
         {
@@ -214,9 +202,7 @@ describe('eventGridModel', () => {
         involvedObject: 'Pod/api',
       })
     );
-  });
-
-  it('builds the Event object-panel reference from the Event itself', () => {
+    // Scenario: builds the Event object-panel reference from the Event itself
     expect(
       eventGridObjectReference(
         {

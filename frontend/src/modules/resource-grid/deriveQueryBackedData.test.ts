@@ -34,78 +34,85 @@ const base = {
 };
 
 describe('deriveQueryBackedData', () => {
-  it('never shows the live snapshot for a query-backed table while gating', () => {
-    const r = deriveQueryBackedData<Row>({ ...base, queryEnabled: false });
-    expect(r.data).toEqual([]); // NOT `local`
-    expect(r.loading).toBe(true); // hold loading so the controller replays the cache
-    expect(r.loaded).toBe(false);
-    expect(r.error).toBeNull();
-  });
+  it('covers deriveQueryBackedData scenarios', async () => {
+    {
+      // Scenario: never shows the live snapshot for a query-backed table while gating
+      const r = deriveQueryBackedData<Row>({ ...base, queryEnabled: false });
+      expect(r.data).toEqual([]); // NOT `local`
+      expect(r.loading).toBe(true); // hold loading so the controller replays the cache
+      expect(r.loaded).toBe(false);
+      expect(r.error).toBeNull();
+    }
 
-  it('shows the server-sorted query page once the query is enabled and loaded', () => {
-    const r = deriveQueryBackedData<Row>({
-      ...base,
-      queryEnabled: true,
-      queryRows: queryPage,
-      queryLoaded: true,
-    });
-    expect(r.data).toBe(queryPage);
-    expect(r.loading).toBe(false);
-    expect(r.loaded).toBe(true);
-  });
+    {
+      // Scenario: shows the server-sorted query page once the query is enabled and loaded
+      const r = deriveQueryBackedData<Row>({
+        ...base,
+        queryEnabled: true,
+        queryRows: queryPage,
+        queryLoaded: true,
+      });
+      expect(r.data).toBe(queryPage);
+      expect(r.loading).toBe(false);
+      expect(r.loaded).toBe(true);
+    }
 
-  it('reports empty+loading before the first page applies (no live-snapshot fallback)', () => {
-    const r = deriveQueryBackedData<Row>({
-      ...base,
-      queryEnabled: true,
-      queryRows: [],
-      queryLoaded: false,
-    });
-    expect(r.data).toEqual([]);
-    expect(r.loading).toBe(true);
-  });
+    {
+      // Scenario: reports empty+loading before the first page applies (no live-snapshot fallback)
+      const r = deriveQueryBackedData<Row>({
+        ...base,
+        queryEnabled: true,
+        queryRows: [],
+        queryLoaded: false,
+      });
+      expect(r.data).toEqual([]);
+      expect(r.loading).toBe(true);
+    }
 
-  it('surfaces a query error (empty rows + error) so the controller bridges with cache', () => {
-    const r = deriveQueryBackedData<Row>({
-      ...base,
-      queryEnabled: true,
-      queryRows: [],
-      queryLoaded: true,
-      queryError: 'returned no data',
-    });
-    expect(r.data).toEqual([]);
-    expect(r.error).toBe('returned no data');
-  });
+    {
+      // Scenario: surfaces a query error (empty rows + error) so the controller bridges with cache
+      const r = deriveQueryBackedData<Row>({
+        ...base,
+        queryEnabled: true,
+        queryRows: [],
+        queryLoaded: true,
+        queryError: 'returned no data',
+      });
+      expect(r.data).toEqual([]);
+      expect(r.error).toBe('returned no data');
+    }
 
-  it('stays quiet during refetches with rows visible (quiet filter refresh, no overlay)', () => {
-    const r = deriveQueryBackedData<Row>({
-      ...base,
-      queryEnabled: true,
-      queryRows: queryPage,
-      queryLoaded: true,
-    });
-    expect(r.data).toBe(queryPage);
-    expect(r.loading).toBe(false);
-  });
+    {
+      // Scenario: stays quiet during refetches with rows visible (quiet filter refresh, no overlay)
+      const r = deriveQueryBackedData<Row>({
+        ...base,
+        queryEnabled: true,
+        queryRows: queryPage,
+        queryLoaded: true,
+      });
+      expect(r.data).toBe(queryPage);
+      expect(r.loading).toBe(false);
+    }
 
-  it('stays quiet while refetching a no-match result (filter input must stay mounted)', () => {
-    const r = deriveQueryBackedData<Row>({
-      ...base,
-      queryEnabled: true,
-      queryRows: [],
-      queryLoaded: true,
-    });
-    expect(r.data).toEqual([]);
-    expect(r.loading).toBe(false);
+    {
+      // Scenario: stays quiet while refetching a no-match result (filter input must stay mounted)
+      const r = deriveQueryBackedData<Row>({
+        ...base,
+        queryEnabled: true,
+        queryRows: [],
+        queryLoaded: true,
+      });
+      expect(r.data).toEqual([]);
+      expect(r.loading).toBe(false);
+    }
   });
 });
 
 describe('typedQueryPageLimitOrDefault', () => {
-  it('keeps a persisted page size that is a real option', () => {
+  it('covers typedQueryPageLimitOrDefault scenarios', async () => {
+    // Scenario: keeps a persisted page size that is a real option
     expect(typedQueryPageLimitOrDefault(250, 100)).toBe(250);
-  });
-
-  it('falls back to the app default for missing or off-list page sizes', () => {
+    // Scenario: falls back to the app default for missing or off-list page sizes
     expect(typedQueryPageLimitOrDefault(null, 100)).toBe(100);
     expect(typedQueryPageLimitOrDefault(undefined, 100)).toBe(100);
     expect(typedQueryPageLimitOrDefault(333, 100)).toBe(100);

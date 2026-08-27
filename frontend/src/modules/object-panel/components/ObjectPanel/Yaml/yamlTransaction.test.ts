@@ -15,25 +15,29 @@ const identity = {
 };
 
 describe('matchesVerifiedSnapshot', () => {
-  it('accepts the exact semantic YAML verified after apply', () => {
-    const semanticYaml = 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\n';
-    const verified: VerifiedPostApplyState = { identity, semanticYaml };
+  it('covers matchesVerifiedSnapshot scenarios', async () => {
+    {
+      // Scenario: accepts the exact semantic YAML verified after apply
+      const semanticYaml = 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\n';
+      const verified: VerifiedPostApplyState = { identity, semanticYaml };
 
-    expect(matchesVerifiedSnapshot(semanticYaml, verified, [])).toBe(true);
-  });
+      expect(matchesVerifiedSnapshot(semanticYaml, verified, [])).toBe(true);
+    }
 
-  it('accepts a recent verified semantic snapshot for the same complete object reference', () => {
-    const verified: VerifiedPostApplyState = {
-      identity,
-      semanticYaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\nspec: {}\n',
-    };
-    const recent: RecentVerifiedSemanticEntry[] = [
-      {
-        reference: 'apps/v1|Deployment|default|api|deployment-uid',
-        semanticYaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\n',
-      },
-    ];
+    {
+      // Scenario: accepts a recent verified semantic snapshot for the same complete object reference
+      const verified: VerifiedPostApplyState = {
+        identity,
+        semanticYaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\nspec: {}\n',
+      };
+      const recent: RecentVerifiedSemanticEntry[] = [
+        {
+          reference: 'apps/v1|Deployment|default|api|deployment-uid',
+          semanticYaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\n',
+        },
+      ];
 
-    expect(matchesVerifiedSnapshot(recent[0].semanticYaml, verified, recent)).toBe(true);
+      expect(matchesVerifiedSnapshot(recent[0].semanticYaml, verified, recent)).toBe(true);
+    }
   });
 });

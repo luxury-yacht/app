@@ -25,28 +25,30 @@ describe('TablePaginationControls', () => {
     container.remove();
   });
 
-  it.each([0, 1, 25])('hides controls for an exact total of %i items', (totalCount) => {
-    act(() => {
-      root.render(
-        <TablePaginationControls
-          idPrefix="small-table"
-          pageIndex={1}
-          pageSize={50}
-          visibleItemCount={totalCount}
-          pageSizeOptions={[25, 50, 100, 250, 500, 1000]}
-          totalCount={totalCount}
-          totalIsExact
-          hasPrevious={false}
-          hasNext={false}
-          loading={false}
-          onPrevious={vi.fn()}
-          onNext={vi.fn()}
-          onPageSizeChange={vi.fn()}
-        />
-      );
-    });
+  it('covers hides controls for an exact total of parameterized items cases', async () => {
+    for (const totalCount of [0, 1, 25]) {
+      act(() => {
+        root.render(
+          <TablePaginationControls
+            idPrefix="small-table"
+            pageIndex={1}
+            pageSize={50}
+            visibleItemCount={totalCount}
+            pageSizeOptions={[25, 50, 100, 250, 500, 1000]}
+            totalCount={totalCount}
+            totalIsExact
+            hasPrevious={false}
+            hasNext={false}
+            loading={false}
+            onPrevious={vi.fn()}
+            onNext={vi.fn()}
+            onPageSizeChange={vi.fn()}
+          />
+        );
+      });
 
-    expect(container.querySelector('.table-pagination-controls')).toBeNull();
+      expect(container.querySelector('.table-pagination-controls')).toBeNull();
+    }
   });
 
   it('shows controls when an exact total exceeds the smallest page size', () => {

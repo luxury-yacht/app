@@ -30,49 +30,54 @@ describe('DetailsTabRBACRules', () => {
     };
   };
 
-  it('returns null when there are no rules', async () => {
-    const { container, cleanup } = await render(<RBACRules />);
-    expect(container.firstChild).toBeNull();
-    cleanup();
-  });
+  it('covers DetailsTabRBACRules scenarios', async () => {
+    {
+      // Scenario: returns null when there are no rules
+      const { container, cleanup } = await render(<RBACRules />);
+      expect(container.firstChild).toBeNull();
+      cleanup();
+    }
 
-  it('renders a card per rule with verb chips and resource title', async () => {
-    const { container, cleanup } = await render(
-      <RBACRules
-        policyRules={[
-          {
-            apiGroups: ['', 'apps'],
-            resources: ['deployments', 'pods'],
-            verbs: ['get', 'list', '*'],
-          },
-          {
-            nonResourceURLs: ['/healthz'],
-            verbs: ['get'],
-          },
-        ]}
-      />
-    );
+    {
+      // Scenario: renders a card per rule with verb chips and resource title
+      const { container, cleanup } = await render(
+        <RBACRules
+          policyRules={[
+            {
+              apiGroups: ['', 'apps'],
+              resources: ['deployments', 'pods'],
+              verbs: ['get', 'list', '*'],
+            },
+            {
+              nonResourceURLs: ['/healthz'],
+              verbs: ['get'],
+            },
+          ]}
+        />
+      );
 
-    expect(container.textContent).toContain('Rules');
-    expect(container.textContent).toContain('deployments');
-    expect(container.textContent).toContain('pods');
-    expect(container.textContent).toContain('* (all)');
-    expect(container.textContent).toContain('/healthz');
-    // empty-string apiGroup renders as `core`, not `""`
-    expect(container.textContent).toContain('core');
-    expect(container.textContent).not.toContain('""');
-    cleanup();
-  });
+      expect(container.textContent).toContain('Rules');
+      expect(container.textContent).toContain('deployments');
+      expect(container.textContent).toContain('pods');
+      expect(container.textContent).toContain('* (all)');
+      expect(container.textContent).toContain('/healthz');
+      // empty-string apiGroup renders as `core`, not `""`
+      expect(container.textContent).toContain('core');
+      expect(container.textContent).not.toContain('""');
+      cleanup();
+    }
 
-  it('flags the wildcard verb with the unhealthy variant', async () => {
-    const { container, cleanup } = await render(
-      <RBACRules policyRules={[{ resources: ['*'], verbs: ['*'] }]} />
-    );
+    {
+      // Scenario: flags the wildcard verb with the unhealthy variant
+      const { container, cleanup } = await render(
+        <RBACRules policyRules={[{ resources: ['*'], verbs: ['*'] }]} />
+      );
 
-    const wildcardVerbChip = Array.from(
-      container.querySelectorAll<HTMLElement>('.status-chip--unhealthy')
-    ).find((el) => el.textContent?.trim() === '* (all)');
-    expect(wildcardVerbChip).toBeTruthy();
-    cleanup();
+      const wildcardVerbChip = Array.from(
+        container.querySelectorAll<HTMLElement>('.status-chip--unhealthy')
+      ).find((el) => el.textContent?.trim() === '* (all)');
+      expect(wildcardVerbChip).toBeTruthy();
+      cleanup();
+    }
   });
 });

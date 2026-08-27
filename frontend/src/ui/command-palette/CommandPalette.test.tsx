@@ -125,22 +125,27 @@ const sampleCatalog: CatalogItem[] = [
 ];
 
 describe('parseQueryTokens', () => {
-  it('derives kind aliases and de-duplicates them', () => {
-    const tokens = parseQueryTokens('pods pod kube-system/aws-node');
-    expect(tokens.kindTokens).toEqual(['pod']);
-    expect(tokens.otherTokens).toEqual(['aws-node', 'kube-system']);
-  });
+  it('covers parseQueryTokens scenarios', async () => {
+    {
+      // Scenario: derives kind aliases and de-duplicates them
+      const tokens = parseQueryTokens('pods pod kube-system/aws-node');
+      expect(tokens.kindTokens).toEqual(['pod']);
+      expect(tokens.otherTokens).toEqual(['aws-node', 'kube-system']);
+    }
 
-  it('treats namespace/name pairs as individual tokens', () => {
-    const tokens = parseQueryTokens('svc default/frontend');
-    expect(tokens.kindTokens).toEqual(['service']);
-    expect(tokens.otherTokens).toEqual(['frontend', 'default']);
-  });
+    {
+      // Scenario: treats namespace/name pairs as individual tokens
+      const tokens = parseQueryTokens('svc default/frontend');
+      expect(tokens.kindTokens).toEqual(['service']);
+      expect(tokens.otherTokens).toEqual(['frontend', 'default']);
+    }
 
-  it('promotes unique partial kind prefixes to canonical kind filters', () => {
-    const tokens = parseQueryTokens('depl');
-    expect(tokens.kindTokens).toEqual(['deployment']);
-    expect(tokens.otherTokens).toEqual([]);
+    {
+      // Scenario: promotes unique partial kind prefixes to canonical kind filters
+      const tokens = parseQueryTokens('depl');
+      expect(tokens.kindTokens).toEqual(['deployment']);
+      expect(tokens.otherTokens).toEqual([]);
+    }
   });
 });
 
@@ -959,36 +964,43 @@ describe('buildCatalogDisplayEntries', () => {
   const evaluate = (query: string, limit?: number) =>
     buildCatalogDisplayEntries(sampleCatalog, parseQueryTokens(query), noShortNames, limit);
 
-  it('matches pods within a fuzzy namespace search', () => {
-    const entries = evaluate('pod kube-sys');
-    expect(entries.map((entry) => entry.displayName)).toEqual(['kube-system/aws-node-abc123']);
-  });
+  it('covers buildCatalogDisplayEntries scenarios', async () => {
+    {
+      // Scenario: matches pods within a fuzzy namespace search
+      const entries = evaluate('pod kube-sys');
+      expect(entries.map((entry) => entry.displayName)).toEqual(['kube-system/aws-node-abc123']);
+    }
 
-  it('matches ingresses by partial name search', () => {
-    const entries = evaluate('ingress test');
-    expect(entries).toHaveLength(1);
-    expect(entries[0].displayName).toBe('test-namespace/test-gateway');
-  });
+    {
+      // Scenario: matches ingresses by partial name search
+      const entries = evaluate('ingress test');
+      expect(entries).toHaveLength(1);
+      expect(entries[0].displayName).toBe('test-namespace/test-gateway');
+    }
 
-  it('returns pods when only a kind is provided', () => {
-    const entries = evaluate('pod');
-    expect(entries.map((entry) => entry.displayName).sort(compareUtf16Strings)).toEqual([
-      'default/frontend-123',
-      'kube-system/aws-node-abc123',
-    ]);
-  });
+    {
+      // Scenario: returns pods when only a kind is provided
+      const entries = evaluate('pod');
+      expect(entries.map((entry) => entry.displayName).sort(compareUtf16Strings)).toEqual([
+        'default/frontend-123',
+        'kube-system/aws-node-abc123',
+      ]);
+    }
 
-  it('returns deployments for partial kind searches', () => {
-    const entries = evaluate('depl');
-    expect(entries.map((entry) => entry.displayName).sort(compareUtf16Strings)).toEqual([
-      'default/frontend',
-      'kube-system/metrics-server',
-      'test-namespace/gateway',
-    ]);
-  });
+    {
+      // Scenario: returns deployments for partial kind searches
+      const entries = evaluate('depl');
+      expect(entries.map((entry) => entry.displayName).sort(compareUtf16Strings)).toEqual([
+        'default/frontend',
+        'kube-system/metrics-server',
+        'test-namespace/gateway',
+      ]);
+    }
 
-  it('limits results based on provided limit', () => {
-    const entries = evaluate('ingress', 1);
-    expect(entries).toHaveLength(1);
+    {
+      // Scenario: limits results based on provided limit
+      const entries = evaluate('ingress', 1);
+      expect(entries).toHaveLength(1);
+    }
   });
 });

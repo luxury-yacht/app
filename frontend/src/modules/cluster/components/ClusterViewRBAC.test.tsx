@@ -172,45 +172,47 @@ describe('ClusterViewRBAC', () => {
     expect(props.columnWidths).toBe(null);
   });
 
-  it.each([
-    ['ClusterRole', 'admin'],
-    ['ClusterRoleBinding', 'admin-binding'],
-  ])('opens the Map for %s rows', async (kind, name) => {
-    const row = {
-      ...baseRBAC,
-      ref: {
-        ...baseRBAC.ref,
-        kind,
-        resource: kind === 'ClusterRole' ? 'clusterroles' : 'clusterrolebindings',
-        name,
-      },
-      kind,
-      name,
-    };
-
-    await act(async () => {
-      root.render(<ClusterViewRBAC />);
-      await Promise.resolve();
-    });
-
-    const objectMapItem = getContextMenuItems(row).find(
-      (item) => item.actionId === OBJECT_ACTION_IDS.viewMap
-    );
-    expect(objectMapItem).toBeTruthy();
-
-    act(() => {
-      objectMapItem?.onClick?.();
-    });
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+  it('covers opens the Map for parameterized rows cases', async () => {
+    for (const [kind, name] of [
+      ['ClusterRole', 'admin'],
+      ['ClusterRoleBinding', 'admin-binding'],
+    ]) {
+      const row = {
+        ...baseRBAC,
+        ref: {
+          ...baseRBAC.ref,
+          kind,
+          resource: kind === 'ClusterRole' ? 'clusterroles' : 'clusterrolebindings',
+          name,
+        },
         kind,
         name,
-        clusterId: 'cluster-a',
-        group: 'rbac.authorization.k8s.io',
-        version: 'v1',
-      }),
-      { initialTab: 'map' }
-    );
+      };
+
+      await act(async () => {
+        root.render(<ClusterViewRBAC />);
+        await Promise.resolve();
+      });
+
+      const objectMapItem = getContextMenuItems(row).find(
+        (item) => item.actionId === OBJECT_ACTION_IDS.viewMap
+      );
+      expect(objectMapItem).toBeTruthy();
+
+      act(() => {
+        objectMapItem?.onClick?.();
+      });
+
+      expect(openWithObjectMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind,
+          name,
+          clusterId: 'cluster-a',
+          group: 'rbac.authorization.k8s.io',
+          version: 'v1',
+        }),
+        { initialTab: 'map' }
+      );
+    }
   });
 });

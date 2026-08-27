@@ -292,51 +292,59 @@ function formatViolationError(callSiteName: string, violations: CallSite[]): str
 }
 
 describe('openWithObject audit (kind-only-objects guardrail)', () => {
-  it('every openWithObject literal carries group + version (or spreads resolveBuiltinGroupVersion)', () => {
-    const violations = gatherViolations(OPEN_WITH_OBJECT_AUDIT);
-    if (violations.length > 0) {
-      throw new Error(formatViolationError('openWithObject call', violations));
-    }
-    expect(violations).toEqual([]);
-  });
-
-  it('discovers at least one literal or helper-backed call site so the walker is wired up', () => {
-    const frontendSrc = path.resolve(__dirname, '../../..');
-    let totalLiterals = 0;
-    for (const file of walkSourceFiles(frontendSrc)) {
-      const source = fs.readFileSync(file, 'utf8');
-      if (!source.includes('openWithObject')) {
-        continue;
+  it('covers openWithObject audit (kind-only-objects guardrail) scenarios', async () => {
+    {
+      // Scenario: every openWithObject literal carries group + version (or spreads resolveBuiltinGroupVersion)
+      const violations = gatherViolations(OPEN_WITH_OBJECT_AUDIT);
+      if (violations.length > 0) {
+        throw new Error(formatViolationError('openWithObject call', violations));
       }
-      totalLiterals +=
-        findOpenWithObjectLiterals(source).length +
-        findOpenWithObjectHelperBackedLiterals(source).length;
+      expect(violations).toEqual([]);
     }
-    expect(totalLiterals).toBeGreaterThan(0);
+
+    {
+      // Scenario: discovers at least one literal or helper-backed call site so the walker is wired up
+      const frontendSrc = path.resolve(__dirname, '../../..');
+      let totalLiterals = 0;
+      for (const file of walkSourceFiles(frontendSrc)) {
+        const source = fs.readFileSync(file, 'utf8');
+        if (!source.includes('openWithObject')) {
+          continue;
+        }
+        totalLiterals +=
+          findOpenWithObjectLiterals(source).length +
+          findOpenWithObjectHelperBackedLiterals(source).length;
+      }
+      expect(totalLiterals).toBeGreaterThan(0);
+    }
   });
 });
 
 describe('ObjectPanelLink audit (kind-only-objects guardrail)', () => {
-  it('every <ObjectPanelLink objectRef={{...}}> literal carries group + version', () => {
-    const violations = gatherViolations(OBJECT_PANEL_LINK_AUDIT);
-    if (violations.length > 0) {
-      throw new Error(formatViolationError('<ObjectPanelLink objectRef={{...}}>', violations));
-    }
-    expect(violations).toEqual([]);
-  });
-
-  it('discovers at least one ObjectPanelLink literal or helper-backed call site so the walker is wired up', () => {
-    const frontendSrc = path.resolve(__dirname, '../../..');
-    let totalLiterals = 0;
-    for (const file of walkSourceFiles(frontendSrc)) {
-      const source = fs.readFileSync(file, 'utf8');
-      if (!source.includes('ObjectPanelLink')) {
-        continue;
+  it('covers ObjectPanelLink audit (kind-only-objects guardrail) scenarios', async () => {
+    {
+      // Scenario: every <ObjectPanelLink objectRef={{...}}> literal carries group + version
+      const violations = gatherViolations(OBJECT_PANEL_LINK_AUDIT);
+      if (violations.length > 0) {
+        throw new Error(formatViolationError('<ObjectPanelLink objectRef={{...}}>', violations));
       }
-      totalLiterals +=
-        findObjectPanelLinkLiterals(source).length +
-        findObjectPanelLinkHelperBackedLiterals(source).length;
+      expect(violations).toEqual([]);
     }
-    expect(totalLiterals).toBeGreaterThan(0);
+
+    {
+      // Scenario: discovers at least one ObjectPanelLink literal or helper-backed call site so the walker is wired up
+      const frontendSrc = path.resolve(__dirname, '../../..');
+      let totalLiterals = 0;
+      for (const file of walkSourceFiles(frontendSrc)) {
+        const source = fs.readFileSync(file, 'utf8');
+        if (!source.includes('ObjectPanelLink')) {
+          continue;
+        }
+        totalLiterals +=
+          findObjectPanelLinkLiterals(source).length +
+          findObjectPanelLinkHelperBackedLiterals(source).length;
+      }
+      expect(totalLiterals).toBeGreaterThan(0);
+    }
   });
 });

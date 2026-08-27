@@ -15,7 +15,8 @@ import {
 import { CLUSTER_REFRESHERS, NAMESPACE_REFRESHERS, SYSTEM_REFRESHERS } from './refresherTypes';
 
 describe('refresherConfig cadence defaults', () => {
-  it('exposes expected namespace refresher timings', () => {
+  it('covers refresherConfig cadence defaults scenarios', async () => {
+    // Scenario: exposes expected namespace refresher timings
     expect(namespaceRefresherConfig(NAMESPACE_REFRESHERS.events)).toEqual({
       interval: 3000,
       cooldown: 1000,
@@ -29,9 +30,7 @@ describe('refresherConfig cadence defaults', () => {
       cooldown: 500,
       timeout: 10,
     });
-  });
-
-  it('exposes expected cluster refresher timings', () => {
+    // Scenario: exposes expected cluster refresher timings
     // nodes uses its authored contract timing (metric cadence is push-driven).
     expect(clusterRefresherConfig(CLUSTER_REFRESHERS.nodes)).toEqual({
       interval: 5000,
@@ -43,9 +42,7 @@ describe('refresherConfig cadence defaults', () => {
       cooldown: 1500,
       timeout: 30,
     });
-  });
-
-  it('exposes expected system refresher timings', () => {
+    // Scenario: exposes expected system refresher timings
     // pods uses its authored contract timing (metric cadence is push-driven).
     expect(systemRefresherConfig(SYSTEM_REFRESHERS.unifiedPods)).toEqual({
       interval: 5000,

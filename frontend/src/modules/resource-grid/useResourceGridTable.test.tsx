@@ -255,147 +255,159 @@ const renderNamespaceGrid = (
 };
 
 describe('useObjectPanelResourceGridTable', () => {
-  it('publishes the default canonical object key on gridTableProps', () => {
-    const result = renderObjectPanelGrid();
+  it('covers useObjectPanelResourceGridTable scenarios', async () => {
+    {
+      // Scenario: publishes the default canonical object key on gridTableProps
+      const result = renderObjectPanelGrid();
 
-    expect(result.gridTableProps.keyExtractor(row, 0)).toBe('alpha:ctx|/v1/Pod/team-a/api');
-  });
+      expect(result.gridTableProps.keyExtractor(row, 0)).toBe('alpha:ctx|/v1/Pod/team-a/api');
+    }
 
-  it('publishes a supplied key extractor on gridTableProps', () => {
-    const keyExtractor = vi.fn((item: TestRow) => `custom:${item.name}`);
-    const result = renderObjectPanelGrid({ keyExtractor });
+    {
+      // Scenario: publishes a supplied key extractor on gridTableProps
+      const keyExtractor = vi.fn((item: TestRow) => `custom:${item.name}`);
+      const result = renderObjectPanelGrid({ keyExtractor });
 
-    expect(result.gridTableProps.keyExtractor(row, 0)).toBe('custom:api');
-    expect(keyExtractor).toHaveBeenCalledWith(row, 0);
+      expect(result.gridTableProps.keyExtractor(row, 0)).toBe('custom:api');
+      expect(keyExtractor).toHaveBeenCalledWith(row, 0);
+    }
   });
 });
 
 describe('useNamespaceResourceGridTable', () => {
-  it('omits custom metadata controls for rows that do not support Kubernetes metadata', () => {
-    const harness = renderNamespaceGrid({ supportsCustomMetadataColumns: false });
+  it('covers useNamespaceResourceGridTable scenarios', async () => {
+    {
+      // Scenario: omits custom metadata controls for rows that do not support Kubernetes metadata
+      const harness = renderNamespaceGrid({ supportsCustomMetadataColumns: false });
 
-    expect(harness.result.current?.gridTableProps.customMetadataColumns).toBeUndefined();
+      expect(harness.result.current?.gridTableProps.customMetadataColumns).toBeUndefined();
 
-    harness.cleanup();
-  });
+      harness.cleanup();
+    }
 
-  it('publishes custom metadata columns to the favorite column contract', () => {
-    favoriteMocks.useFavToggle.mockClear();
-    const harness = renderNamespaceGrid();
-    const ownerColumn = createCustomMetadataColumnDefinition({
-      source: 'label',
-      metadataKey: 'example.com/owner',
-      header: 'Owner',
-    });
-
-    act(() => harness.result.current?.persistence?.setCustomColumns([ownerColumn]));
-
-    expect(favoriteMocks.useFavToggle).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        columns: expect.arrayContaining([
-          expect.objectContaining({
-            key: ownerColumn.key,
-            label: 'Owner',
-            hideable: true,
-            sortable: false,
-          }),
-        ]),
-      })
-    );
-    harness.cleanup();
-  });
-
-  it('keeps all namespace options selected when the namespace dropdown selects all', () => {
-    const harness = renderNamespaceGrid();
-
-    expect(harness.result.current?.gridTableProps.filters?.options?.namespaces).toEqual([
-      'team-a',
-      'team-b',
-    ]);
-
-    act(() => {
-      harness.result.current?.gridTableProps.filters?.onChange?.({
-        ...DEFAULT_GRID_TABLE_FILTER_STATE,
-        namespaces: { mode: 'some', values: ['team-a', 'team-b'] },
+    {
+      // Scenario: publishes custom metadata columns to the favorite column contract
+      favoriteMocks.useFavToggle.mockClear();
+      const harness = renderNamespaceGrid();
+      const ownerColumn = createCustomMetadataColumnDefinition({
+        source: 'label',
+        metadataKey: 'example.com/owner',
+        header: 'Owner',
       });
-    });
 
-    expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual({
-      mode: 'some',
-      values: ['team-a', 'team-b'],
-    });
-    expect(harness.onTableStateChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        filters: expect.objectContaining({ namespaces: { mode: 'all' } }),
-      })
-    );
+      act(() => harness.result.current?.persistence?.setCustomColumns([ownerColumn]));
 
-    act(() => {
-      harness.result.current?.gridTableProps.filters?.onChange?.({
-        ...DEFAULT_GRID_TABLE_FILTER_STATE,
-        namespaces: { mode: 'all' },
+      expect(favoriteMocks.useFavToggle).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          columns: expect.arrayContaining([
+            expect.objectContaining({
+              key: ownerColumn.key,
+              label: 'Owner',
+              hideable: true,
+              sortable: false,
+            }),
+          ]),
+        })
+      );
+      harness.cleanup();
+    }
+
+    {
+      // Scenario: keeps all namespace options selected when the namespace dropdown selects all
+      const harness = renderNamespaceGrid();
+
+      expect(harness.result.current?.gridTableProps.filters?.options?.namespaces).toEqual([
+        'team-a',
+        'team-b',
+      ]);
+
+      act(() => {
+        harness.result.current?.gridTableProps.filters?.onChange?.({
+          ...DEFAULT_GRID_TABLE_FILTER_STATE,
+          namespaces: { mode: 'some', values: ['team-a', 'team-b'] },
+        });
       });
-    });
 
-    expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual({
-      mode: 'all',
-    });
+      expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual({
+        mode: 'some',
+        values: ['team-a', 'team-b'],
+      });
+      expect(harness.onTableStateChange).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ namespaces: { mode: 'all' } }),
+        })
+      );
 
-    harness.cleanup();
-  });
+      act(() => {
+        harness.result.current?.gridTableProps.filters?.onChange?.({
+          ...DEFAULT_GRID_TABLE_FILTER_STATE,
+          namespaces: { mode: 'all' },
+        });
+      });
 
-  it('keeps the static kind vocabulary when query facets collapse to the selected kind', () => {
-    // Backend facets are computed post-kind-filter: with kind "Secret" selected
-    // the facets shrink to ['Secret']. The static per-view list must win or the
-    // dropdown collapses and other kinds become unselectable.
-    const harness = renderNamespaceGrid({
-      availableKinds: ['ConfigMap', 'Secret'],
-      showKindDropdown: true,
-      filterOptionOverrides: {
-        kinds: ['Secret'],
-        namespaces: ['team-a'],
-      },
-    });
+      expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual({
+        mode: 'all',
+      });
 
-    expect(harness.result.current?.gridTableProps.filters?.options?.kinds).toEqual([
-      'ConfigMap',
-      'Secret',
-    ]);
+      harness.cleanup();
+    }
 
-    harness.cleanup();
-  });
+    {
+      // Scenario: keeps the static kind vocabulary when query facets collapse to the selected kind
+      // Backend facets are computed post-kind-filter: with kind "Secret" selected
+      // the facets shrink to ['Secret']. The static per-view list must win or the
+      // dropdown collapses and other kinds become unselectable.
+      const harness = renderNamespaceGrid({
+        availableKinds: ['ConfigMap', 'Secret'],
+        showKindDropdown: true,
+        filterOptionOverrides: {
+          kinds: ['Secret'],
+          namespaces: ['team-a'],
+        },
+      });
 
-  it('publishes the default sort key and direction before any user sort', () => {
-    const harness = renderNamespaceGrid({
-      defaultSort: { key: 'age', direction: 'desc' },
-    });
+      expect(harness.result.current?.gridTableProps.filters?.options?.kinds).toEqual([
+        'ConfigMap',
+        'Secret',
+      ]);
 
-    expect(harness.result.current?.gridTableProps.sortConfig).toEqual({
-      key: 'age',
-      direction: 'desc',
-    });
-    expect(harness.onTableStateChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        sortConfig: expect.objectContaining({ key: 'age', direction: 'desc' }),
-      })
-    );
+      harness.cleanup();
+    }
 
-    harness.cleanup();
-  });
+    {
+      // Scenario: publishes the default sort key and direction before any user sort
+      const harness = renderNamespaceGrid({
+        defaultSort: { key: 'age', direction: 'desc' },
+      });
 
-  it('marks Local Partial tables as bounded local windows', () => {
-    const harness = renderNamespaceGrid({
-      tableMode: 'Local Partial',
-      filterOptionOverrides: undefined,
-    });
+      expect(harness.result.current?.gridTableProps.sortConfig).toEqual({
+        key: 'age',
+        direction: 'desc',
+      });
+      expect(harness.onTableStateChange).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          sortConfig: expect.objectContaining({ key: 'age', direction: 'desc' }),
+        })
+      );
 
-    expect(harness.result.current?.gridTableProps.filters?.options).toMatchObject({
-      searchBehavior: 'local',
-    });
-    expect(harness.result.current?.gridTableProps.filters?.options?.partialDataLabel).toContain(
-      'visible dataset'
-    );
+      harness.cleanup();
+    }
 
-    harness.cleanup();
+    {
+      // Scenario: marks Local Partial tables as bounded local windows
+      const harness = renderNamespaceGrid({
+        tableMode: 'Local Partial',
+        filterOptionOverrides: undefined,
+      });
+
+      expect(harness.result.current?.gridTableProps.filters?.options).toMatchObject({
+        searchBehavior: 'local',
+      });
+      expect(harness.result.current?.gridTableProps.filters?.options?.partialDataLabel).toContain(
+        'visible dataset'
+      );
+
+      harness.cleanup();
+    }
   });
 });
