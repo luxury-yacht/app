@@ -9,8 +9,9 @@ import {
   getColumnMinWidth,
 } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 import { getAppZoomFactor } from '@shared/utils/appZoom';
-import React, { useCallback } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { type ReactNode, useCallback } from 'react';
+import { flushSync } from 'react-dom';
+import { createRoot, type Root } from 'react-dom/client';
 
 const AUTO_WIDTH_PAINT_GUTTER_PX = 1;
 
@@ -37,12 +38,10 @@ const measureHeaderWidth = <T>(column: GridColumnDefinition<T>): number => {
   }
 };
 
-const setMeasuredContent = (node: HTMLElement, content: React.ReactNode): void => {
-  if (React.isValidElement(content)) {
-    node.innerHTML = renderToStaticMarkup(content);
-  } else {
-    node.textContent = String(content ?? '');
-  }
+const setMeasuredContent = (root: Root, content: ReactNode): void => {
+  flushSync(() => {
+    root.render(content);
+  });
 };
 
 export interface ColumnMeasurerOptions<T> {
@@ -70,6 +69,7 @@ export function useGridTableColumnMeasurer<T>({ tableData }: ColumnMeasurerOptio
       content.className = 'grid-cell-content';
       cell.appendChild(content);
       document.body.appendChild(cell);
+      const contentRoot = createRoot(content);
       let measuredWidth = measureHeaderWidth(column);
       const zoomFactor = getAppZoomFactor();
       const measuredSampleKeys = column.measurementSampleKey ? new Set<string>() : null;
@@ -82,10 +82,13 @@ export function useGridTableColumnMeasurer<T>({ tableData }: ColumnMeasurerOptio
             }
             measuredSampleKeys.add(sampleKey);
           }
-          setMeasuredContent(content, column.render(item));
+          setMeasuredContent(contentRoot, column.render(item));
           measuredWidth = Math.max(measuredWidth, cell.getBoundingClientRect().width / zoomFactor);
         }
       } finally {
+        flushSync(() => {
+          contentRoot.unmount();
+        });
         detachNode(cell);
       }
 

@@ -12,12 +12,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 // App Stuff
 import '@/App.css';
 import { useViewState } from '@core/contexts/ViewStateContext';
-import ClusterOverview from '@modules/cluster/components/ClusterOverview';
-import { ClusterResourcesManager } from '@modules/cluster/components/ClusterResourcesManager';
-import GlobalViews from '@modules/global/components/GlobalViews';
+import type { ClusterResourceManagerProps } from '@modules/cluster/components/ClusterResourcesManager';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import AllNamespacesView from '@modules/namespace/components/AllNamespacesView';
-import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { NamespaceResourcesProvider } from '@modules/namespace/contexts/NsResourcesContext';
@@ -62,9 +58,39 @@ import {
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
 } from '@/hooks/useSidebarResize';
-import BrowseView from '@/modules/browse/components/BrowseView';
 
 const Sidebar = withLazyBoundary(() => import('@ui/layout/Sidebar'), 'Loading sidebar...');
+const ClusterOverview = withLazyBoundary(
+  () => import('@modules/cluster/components/ClusterOverview'),
+  'Loading cluster overview...'
+);
+const ClusterResourcesManager = withLazyBoundary<Readonly<ClusterResourceManagerProps>>(
+  () =>
+    import('@modules/cluster/components/ClusterResourcesManager').then((module) => ({
+      default: module.ClusterResourcesManager,
+    })),
+  'Loading cluster resources...'
+);
+const GlobalViews = withLazyBoundary(
+  () => import('@modules/global/components/GlobalViews'),
+  'Loading global resources...'
+);
+const AllNamespacesView = withLazyBoundary(
+  () => import('@modules/namespace/components/AllNamespacesView'),
+  'Loading all namespaces...'
+);
+const NamespaceResourcesViews = withLazyBoundary(
+  () => import('@modules/namespace/components/NsResourcesViews'),
+  'Loading namespace resources...'
+);
+const BrowseView = withLazyBoundary(
+  () => import('@/modules/browse/components/BrowseView'),
+  'Loading Browse...'
+);
+const ObjectPanel = withLazyBoundary(
+  () => import('@modules/object-panel/components/ObjectPanel/ObjectPanel'),
+  'Loading object details...'
+);
 
 const SettingsModal = withLazyBoundary(
   () => import('@ui/modals/SettingsModal'),
@@ -247,11 +273,6 @@ const AppDebugOverlays = (props: AppDebugOverlaysProps) => (
     {props.icon ? <IconDebugOverlay onClose={props.closeIcon} /> : null}
   </>
 );
-
-// ObjectPanel is imported eagerly because panels are only rendered on-demand
-// (when openPanels has entries). A lazy boundary would flash a loading spinner
-// on the first click before the chunk loads.
-import ObjectPanel from '@modules/object-panel/components/ObjectPanel/ObjectPanel';
 
 const DevTestErrorBoundaryLazy = React.lazy(() => import('@ui/errors/TestErrorBoundary'));
 

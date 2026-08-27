@@ -28,7 +28,7 @@ const CLUSTER_DOMAIN_SET = new Set<RefreshDomain>([
   'cluster-events',
 ]);
 
-interface ClusterResourceManagerProps {
+export interface ClusterResourceManagerProps {
   activeTab?: ClusterViewType | null;
   onTabChange?: (tab: ClusterViewType) => void;
 }

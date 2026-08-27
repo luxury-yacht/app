@@ -171,29 +171,31 @@ describe('ObjectPanelContent', () => {
     container.remove();
   });
 
-  const renderContent = (props?: Partial<React.ComponentProps<typeof ObjectPanelContent>>) => {
-    act(() => {
+  const renderContent = async (
+    props?: Partial<React.ComponentProps<typeof ObjectPanelContent>>
+  ) => {
+    await act(async () => {
       root.render(<ObjectPanelContent {...baseProps} {...props} />);
     });
   };
 
-  it('renders details tab content when active', () => {
-    renderContent();
+  it('renders details tab content when active', async () => {
+    await renderContent();
     expect(hoistedRefs.detailsTabProps.current).toMatchObject(
       requireValue(baseProps.detailTabProps, 'expected test value in ObjectPanelContent.test.tsx')
     );
   });
 
-  it('renders logs viewer when logs tab is active and capability present', () => {
-    renderContent({ activeTab: 'logs' });
+  it('renders logs viewer when logs tab is active and capability present', async () => {
+    await renderContent({ activeTab: 'logs' });
     expect(hoistedRefs.logViewerProps.current).toMatchObject({
       resourceKind: 'deployment',
       isActive: true,
     });
   });
 
-  it('renders node logs tab when logs tab is active for a node', () => {
-    renderContent({
+  it('renders node logs tab when logs tab is active for a node', async () => {
+    await renderContent({
       activeTab: 'logs',
       capabilities: { ...baseProps.capabilities, hasObjPanelLogs: true, hasNodeLogs: false },
       objectData: { kind: 'Node', name: 'node-1', clusterId: 'alpha:ctx' },
@@ -218,16 +220,16 @@ describe('ObjectPanelContent', () => {
     });
   });
 
-  it('does not render logs viewer when capability is missing', () => {
-    renderContent({
+  it('does not render logs viewer when capability is missing', async () => {
+    await renderContent({
       activeTab: 'logs',
       capabilities: { ...baseProps.capabilities, hasObjPanelLogs: false },
     });
     expect(hoistedRefs.logViewerProps.current).toBeNull();
   });
 
-  it('renders shell tab when active and capability present', () => {
-    renderContent({
+  it('renders shell tab when active and capability present', async () => {
+    await renderContent({
       activeTab: 'shell',
       capabilities: { ...baseProps.capabilities, hasShell: true },
       capabilityReasons: { shell: 'reason', debug: 'debug-reason' },
@@ -242,16 +244,16 @@ describe('ObjectPanelContent', () => {
     });
   });
 
-  it('does not render shell tab when capability is missing', () => {
-    renderContent({
+  it('does not render shell tab when capability is missing', async () => {
+    await renderContent({
       activeTab: 'shell',
       capabilities: { ...baseProps.capabilities, hasShell: false },
     });
     expect(hoistedRefs.shellTabProps.current).toBeNull();
   });
 
-  it('passes capability information to YAML tab', () => {
-    renderContent({
+  it('passes capability information to YAML tab', async () => {
+    await renderContent({
       activeTab: 'yaml',
       capabilityReasons: { editYaml: 'forbidden' },
       capabilities: { ...baseProps.capabilities, canEditYaml: false },
@@ -263,30 +265,30 @@ describe('ObjectPanelContent', () => {
     });
   });
 
-  it('renders helm manifest and values tabs with scope', () => {
-    renderContent({ activeTab: 'manifest' });
+  it('renders helm manifest and values tabs with scope', async () => {
+    await renderContent({ activeTab: 'manifest' });
     expect(hoistedRefs.manifestTabProps.current).toMatchObject({
       scope: baseProps.helmScope,
       isActive: true,
     });
 
-    renderContent({ activeTab: 'values' });
+    await renderContent({ activeTab: 'values' });
     expect(hoistedRefs.valuesTabProps.current).toMatchObject({
       scope: baseProps.helmScope,
       isActive: true,
     });
   });
 
-  it('renders pods tab when active', () => {
-    renderContent({ activeTab: 'pods' });
+  it('renders pods tab when active', async () => {
+    await renderContent({ activeTab: 'pods' });
     expect(hoistedRefs.podsTabProps.current).toMatchObject({
       isActive: true,
     });
   });
 
-  it('renders a close button when the object is deleted and closes the tab', () => {
+  it('renders a close button when the object is deleted and closes the tab', async () => {
     const onClosePanel = vi.fn();
-    renderContent({
+    await renderContent({
       resourceDeleted: true,
       deletedResourceName: 'api',
       onClosePanel,
@@ -304,8 +306,8 @@ describe('ObjectPanelContent', () => {
     expect(container.textContent).toContain('api is no longer available.');
   });
 
-  it('disables panel-scoped refresh domains with preserveState and exact scope identity', () => {
-    renderContent({
+  it('disables panel-scoped refresh domains with preserveState and exact scope identity', async () => {
+    await renderContent({
       detailScope: 'cluster-a|default:apps/v1:Deployment:api',
       eventsScope: 'cluster-a|default:apps/v1:Deployment:api|events',
       containerLogsScope: 'cluster-a|default:apps/v1:Deployment:api|logs',
@@ -315,7 +317,7 @@ describe('ObjectPanelContent', () => {
 
     hoistedRefs.setScopedDomainEnabled.mockClear();
 
-    renderContent({ isPanelOpen: false });
+    await renderContent({ isPanelOpen: false });
 
     expect(hoistedRefs.setScopedDomainEnabled).toHaveBeenCalledWith(
       'object-events',
