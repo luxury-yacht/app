@@ -19,6 +19,14 @@ DTO fields; it does not reinterpret primary resource semantics.
   manifests, or catalog lookup.
 - Resource-specific facts should stay typed. Do not add generic fact buckets or
   empty future slots.
+- Multi-kind table details use `resourcemodel.DetailSegment` lists (semantic
+  slot, label, value, optional `ResourceLink`, optional presentation token,
+  optional `Search` expansion for collapsed list values) built by each kind's
+  stream-summary builder from its typed facts — never a preformatted prose
+  string. Slots (`DetailSlotReference`/`DetailSlotAddress`/`DetailSlotCounts`)
+  map to aligned frontend columns; `DetailSegmentsSearchText` is the canonical
+  search flatten (expanding collapsed lists) and `DetailSlotText` the per-slot
+  sort flatten.
 - Sensitive or large payloads such as raw YAML, Secret data, logs, manifests,
   and shell output stay in workflow/detail DTOs, not shared facts.
 

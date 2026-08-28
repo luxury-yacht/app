@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	nodespkg "github.com/luxury-yacht/app/backend/resources/nodes"
 )
 
@@ -108,7 +109,7 @@ func networkTableQueryAdapter() typedTableQueryAdapter[NetworkSummary] {
 		Namespace: func(row NetworkSummary) string { return row.Ref.Namespace },
 		Kind:      func(row NetworkSummary) string { return row.Ref.Kind },
 		SearchText: func(row NetworkSummary) []string {
-			return []string{row.Ref.Kind, row.Ref.Name, row.Ref.Namespace, row.Details}
+			return []string{row.Ref.Kind, row.Ref.Name, row.Ref.Namespace, resourcemodel.DetailSegmentsSearchText(row.Details)}
 		},
 		Predicate: func(NetworkSummary, string, string) bool { return true },
 		SortValue: func(row NetworkSummary, field string) string {
@@ -117,8 +118,12 @@ func networkTableQueryAdapter() typedTableQueryAdapter[NetworkSummary] {
 				return row.Ref.Kind
 			case "namespace":
 				return row.Ref.Namespace
-			case "details":
-				return row.Details
+			case "class":
+				return resourcemodel.DetailSlotText(row.Details, resourcemodel.DetailSlotReference)
+			case "address":
+				return resourcemodel.DetailSlotText(row.Details, resourcemodel.DetailSlotAddress)
+			case "counts":
+				return resourcemodel.DetailSlotText(row.Details, resourcemodel.DetailSlotCounts)
 			case "age":
 				return row.Age
 			default:

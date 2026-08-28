@@ -17,5 +17,5 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, policy *networkingv1.Networ
 	if policy == nil {
 		return streamrows.NetworkSummary{}
 	}
-	return streamrows.NewNetworkSummary(meta, Identity, policy, DescribeSummary(BuildFacts(policy)))
+	return streamrows.NewNetworkSummary(meta, Identity, policy, SummarySegments(BuildFacts(policy)))
 }

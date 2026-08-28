@@ -2,30 +2,27 @@
  * backend/resources/ingress/summary.go
  *
  * Ingress streaming summary projection, co-located with its model. Produces the
- * one-line description used by snapshot network summaries.
+ * slotted Details segments used by snapshot network summaries.
  */
 
 package ingress
 
 import (
-	"fmt"
-	"strings"
+	"strconv"
+
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
-// DescribeSummary renders the one-line Ingress summary from its facts.
-func DescribeSummary(facts Facts) string {
-	parts := []string{}
+// SummarySegments renders the Ingress summary segments from its facts: the
+// IngressClass as an openable reference, the hosts as a collapsed address
+// list, and the rule count.
+func SummarySegments(facts Facts) []resourcemodel.DetailSegment {
+	segments := []resourcemodel.DetailSegment{}
 	if facts.ClassName != "" {
-		parts = append(parts, fmt.Sprintf("Class: %s", facts.ClassName))
+		segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Value: facts.ClassName, Link: facts.Class})
 	}
-	if len(facts.Rules) > 0 {
-		if len(facts.Hosts) > 0 {
-			parts = append(parts, fmt.Sprintf("Hosts: %s", strings.Join(facts.Hosts, ",")))
-		}
-		parts = append(parts, fmt.Sprintf("Rules: %d", len(facts.Rules)))
+	if hosts := resourcemodel.ListDetailSegment(resourcemodel.DetailSlotAddress, facts.Hosts); hosts.Value != "" {
+		segments = append(segments, hosts)
 	}
-	if len(parts) == 0 {
-		return "No rules defined"
-	}
-	return strings.Join(parts, ", ")
+	return append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: strconv.Itoa(len(facts.Rules))})
 }

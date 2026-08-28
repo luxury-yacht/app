@@ -636,7 +636,17 @@
             {
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
-              "details": "Policy types: Ingress",
+              "details": [
+                {
+                  "slot": "reference",
+                  "value": "Ingress"
+                },
+                {
+                  "label": "Rules",
+                  "slot": "counts",
+                  "value": "0"
+                }
+              ],
               "metadata": {
                 "labels": {
                   "app": "wire-fixture"

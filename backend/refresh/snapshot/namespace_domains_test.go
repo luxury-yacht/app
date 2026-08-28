@@ -24,6 +24,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -535,11 +536,11 @@ func TestNamespaceNetworkBuilder(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "default", endpointSliceSummary.Ref.Namespace)
 	// The Service row's endpoint join is re-applied at serve from the EndpointSlice store:
-	// the single ready endpoint contributes "Addresses: 1" to the Service Details, exactly
-	// as the typed service.BuildStreamSummary(svc, slices) path produced.
+	// the single ready endpoint contributes the "Endpoints: 1" segment to the Service
+	// Details, exactly as the typed service.BuildStreamSummary(svc, slices) path produced.
 	serviceSummary, ok := findNetworkSummary(payload.Rows, "Service", "api")
 	require.True(t, ok)
-	require.Contains(t, serviceSummary.Details, "Addresses: 1")
+	require.Contains(t, resourcemodel.DetailSegmentsText(serviceSummary.Details), "Endpoints: 1")
 	for _, entry := range payload.Rows {
 		require.NotEmpty(t, entry.Age)
 	}

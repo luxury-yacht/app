@@ -2,6 +2,8 @@ package resourcemodel
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -43,9 +45,29 @@ func GatewayRouteCommonFacts(
 	return facts
 }
 
-// DescribeRouteFacts renders the namespace-network streaming detail for a route.
-func DescribeRouteFacts(facts RouteCommonFacts) string {
-	return fmt.Sprintf("%d rule(s), %d parent(s), %d hostname(s)", len(facts.Rules), len(facts.ParentRefs), len(facts.Hostnames))
+// RouteSummarySegments renders the namespace-network Details segments shared by
+// the HTTPRoute/GRPCRoute/TLSRoute stream summaries: the first parent gateway
+// as an openable reference (remaining parent names kept searchable), the
+// hostnames as a collapsed address list, and the rule count.
+func RouteSummarySegments(facts RouteCommonFacts) []DetailSegment {
+	segments := []DetailSegment{}
+	if len(facts.ParentRefs) > 0 {
+		if name := ResourceLinkName(facts.ParentRefs[0]); name != "" {
+			parent := DetailSegment{Slot: DetailSlotReference, Value: name, Link: &facts.ParentRefs[0]}
+			if len(facts.ParentRefs) > 1 {
+				names := make([]string, 0, len(facts.ParentRefs))
+				for _, ref := range facts.ParentRefs {
+					names = append(names, ResourceLinkName(ref))
+				}
+				parent.Search = strings.Join(names, ", ")
+			}
+			segments = append(segments, parent)
+		}
+	}
+	if hosts := ListDetailSegment(DetailSlotAddress, facts.Hostnames); hosts.Value != "" {
+		segments = append(segments, hosts)
+	}
+	return append(segments, DetailSegment{Slot: DetailSlotCounts, Label: "Rules", Value: strconv.Itoa(len(facts.Rules))})
 }
 
 func gatewayRouteLabel(ruleCount, parentCount, backendCount int) string {

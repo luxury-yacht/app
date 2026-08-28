@@ -17,6 +17,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/service"
 )
 
@@ -165,7 +166,7 @@ func TestNamespaceNetworkMaintainedEndpointJoinFromStore(t *testing.T) {
 	// slices), so the "Addresses: 2" below can only come from the serve-time ingest join.
 	storeRows := b.maintained.rows("default", map[string]bool{service.Identity.Kind: true})
 	require.Len(t, storeRows, 1)
-	require.NotContains(t, storeRows[0].Details, "Addresses:",
+	require.NotContains(t, resourcemodel.DetailSegmentsText(storeRows[0].Details), "Endpoints:",
 		"the stored Service own-row must not carry the endpoint join; it is applied at serve")
 
 	snap, err := b.Build(context.Background(), "namespace:default")
@@ -173,7 +174,7 @@ func TestNamespaceNetworkMaintainedEndpointJoinFromStore(t *testing.T) {
 	payload := snap.Payload.(NamespaceNetworkSnapshot)
 	serviceSummary, ok := findNetworkSummary(payload.Rows, "Service", "api")
 	require.True(t, ok)
-	require.Contains(t, serviceSummary.Details, "Addresses: 2",
+	require.Contains(t, resourcemodel.DetailSegmentsText(serviceSummary.Details), "Endpoints: 2",
 		"the served Service row must re-join the two ready endpoints from the ingest source at serve")
 }
 

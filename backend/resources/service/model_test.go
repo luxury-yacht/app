@@ -9,6 +9,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 func TestBuildServiceResourceModelFactsAndStatus(t *testing.T) {
@@ -69,13 +71,29 @@ func TestBuildServiceResourceModelFactsAndStatus(t *testing.T) {
 	require.Equal(t, int32(30443), facts.Ports[0].NodePort)
 }
 
-func TestDescribeSummary(t *testing.T) {
+func TestSummarySegments(t *testing.T) {
 	facts := Facts{
 		Type:               "ClusterIP",
 		ClusterIP:          "10.0.0.1",
-		Ports:              []PortFacts{{Port: 80, Protocol: "TCP"}},
+		Ports:              []PortFacts{{Port: 443, Protocol: "TCP"}, {Port: 80, Protocol: "TCP"}},
 		ReadyEndpointCount: 2,
 	}
-	require.Equal(t, "Type: ClusterIP, ClusterIP: 10.0.0.1, Ports: 80/TCP, Addresses: 2", DescribeSummary(facts))
-	require.Equal(t, "Type: , ClusterIP: None", DescribeSummary(Facts{}))
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotReference, Value: "ClusterIP"},
+		{Slot: resourcemodel.DetailSlotAddress, Value: "10.0.0.1"},
+		{Slot: resourcemodel.DetailSlotAddress, Value: "443,80/TCP"},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Endpoints", Value: "2"},
+	}, SummarySegments(facts))
+
+	// Mixed protocols keep the protocol per port.
+	mixed := Facts{Type: "ClusterIP", ClusterIP: "10.0.0.1", Ports: []PortFacts{{Port: 443, Protocol: "TCP"}, {Port: 53, Protocol: "UDP"}}}
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotReference, Value: "ClusterIP"},
+		{Slot: resourcemodel.DetailSlotAddress, Value: "10.0.0.1"},
+		{Slot: resourcemodel.DetailSlotAddress, Value: "443/TCP,53/UDP"},
+	}, SummarySegments(mixed))
+
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotAddress, Value: "None"},
+	}, SummarySegments(Facts{}))
 }

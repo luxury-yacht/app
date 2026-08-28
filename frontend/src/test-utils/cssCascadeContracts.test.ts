@@ -148,6 +148,32 @@ describe('strict CSS cascade contracts', () => {
     );
   });
 
+  it('keeps object-panel links authoritative over late-loaded gridtable css copies', () => {
+    // gridtables.css is @imported by several lazy view stylesheets, so a copy
+    // of `.gridtable-link { color: ... }` can load AFTER the object panel's
+    // shared.css. The object-panel-link style must win that tie through
+    // scoped specificity, never through load order.
+    const style = installStyles(
+      readProjectFile('src/modules/object-panel/components/ObjectPanel/shared.css').replace(
+        /var\(--color-object-panel-link\)/g,
+        'rgb(170, 170, 170)'
+      ),
+      readProjectFile('styles/components/gridtables.css').replace(
+        /var\(--color-text\)/g,
+        'rgb(224, 224, 224)'
+      )
+    );
+    style.dataset.cssContract = 'object-panel-link-order';
+    document.body.innerHTML = `
+      <div class="grid-cell"><span class="grid-cell-content">
+        <button class="gridtable-cell-button gridtable-link object-panel-link">api</button>
+      </span></div>
+    `;
+
+    const button = document.querySelector<HTMLButtonElement>('.object-panel-link');
+    expect(window.getComputedStyle(button as HTMLButtonElement).color).toBe('rgb(170, 170, 170)');
+  });
+
   it('keeps sortable table headers uppercase over native button styling', () => {
     const style = installStyles(
       'button { text-transform: none; }',

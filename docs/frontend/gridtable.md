@@ -11,6 +11,11 @@ workflow and that exception is documented.
   cluster identity.
 - Column keys are durable persistence identifiers. Renaming one is a migration,
   not cosmetic cleanup.
+- A persisted column order reconciles against the declared columns: stale keys
+  drop, and a column the stored order has never seen enters at its declared
+  position (after its nearest declared predecessor), never appended after the
+  user's trailing column — so a view can add columns without breaking saved
+  layouts (`reconcileColumnOrder`).
 - Column capabilities are declarative. Set `hideable: false` or
   `resizable: false` on the definition; the shared table must not infer either
   capability from `name`, `kind`, `type`, `age`, or another key.
@@ -22,6 +27,16 @@ workflow and that exception is documented.
   `alignData` with `left`, `center`, or `right`. Each defaults to `left` when
   omitted; use `className` only for styling outside this alignment contract.
 - Prefer shared column factories for common Kubernetes/resource fields.
+- Use `createDetailSegmentsColumn` for backend `DetailSegment[]` details fields
+  (multi-kind tables). The backend tags each segment with a semantic slot
+  (reference/address/counts); a view renders one column per slot so same-kind
+  rows stay vertically aligned. The `text` variant renders plain separated
+  values (reference/address); the default `chips` variant renders subtle chips
+  with presentation-token tints (counts/status). Resolvable `ResourceLink`
+  segments become cross-object link buttons; collapsed list values ("first
+  +N") carry their full text in the tooltip via the segment's `search` field;
+  auto-width relies on the measurer's render-replica fallback, so do not add
+  `measurementText`. Do not re-render segment lists with ad-hoc cells.
 - An absent table value renders as the ASCII hyphen-minus (`-`) in
   `--color-text-tertiary`. `GridTable` normalizes both `-` and the legacy em
   dash through `tableNoValue`; native tables must render potentially absent

@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/service"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -71,5 +72,31 @@ func TestReaggregateServiceSummaryMatchesTypedJoin(t *testing.T) {
 				t.Fatalf("re-join mismatch:\n got=%#v\nwant=%#v", got, want)
 			}
 		})
+	}
+}
+
+// TestReaggregateServiceSummaryDoesNotMutateOwnRow proves the serve-time join never
+// writes into the own-row's Details backing array. The own-row is served from the
+// shared maintained store, so every Build receives the SAME slice; an in-place
+// append (spare capacity) would let one request's join clobber another's row.
+func TestReaggregateServiceSummaryDoesNotMutateOwnRow(t *testing.T) {
+	details := make([]resourcemodel.DetailSegment, 0, 8) // spare capacity — in-place append would alias
+	details = append(details,
+		resourcemodel.DetailSegment{Label: "Type", Value: "ClusterIP"},
+		resourcemodel.DetailSegment{Label: "ClusterIP", Value: "10.0.0.1"},
+	)
+	own := NetworkSummary{Details: details}
+
+	first := reaggregateServiceSummary(own, 3)
+	second := reaggregateServiceSummary(own, 5)
+
+	if len(own.Details) != 2 {
+		t.Fatalf("own row mutated: %#v", own.Details)
+	}
+	if got := first.Details[len(first.Details)-1].Value; got != "3" {
+		t.Fatalf("first join clobbered: Addresses=%q, want 3", got)
+	}
+	if got := second.Details[len(second.Details)-1].Value; got != "5" {
+		t.Fatalf("second join wrong: Addresses=%q, want 5", got)
 	}
 }

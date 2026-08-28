@@ -8,7 +8,7 @@
 package gateway
 
 import (
-	"fmt"
+	"strconv"
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -20,16 +20,18 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, gateway *gatewayv1.Gateway)
 	if gateway == nil {
 		return streamrows.NetworkSummary{}
 	}
-	return streamrows.NewNetworkSummary(meta, Identity, gateway, describeFacts(BuildFacts(meta.ClusterID, gateway)))
+	return streamrows.NewNetworkSummary(meta, Identity, gateway, summarySegments(BuildFacts(meta.ClusterID, gateway)))
 }
 
-func describeFacts(facts Facts) string {
-	className := ""
+func summarySegments(facts Facts) []resourcemodel.DetailSegment {
+	segments := []resourcemodel.DetailSegment{}
 	if facts.Class != nil {
-		className = resourcemodel.ResourceLinkName(*facts.Class)
+		if className := resourcemodel.ResourceLinkName(*facts.Class); className != "" {
+			segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Value: className, Link: facts.Class})
+		}
 	}
-	if className == "" {
-		return fmt.Sprintf("%d listener(s)", len(facts.Listeners))
+	if addresses := resourcemodel.ListDetailSegment(resourcemodel.DetailSlotAddress, facts.Addresses); addresses.Value != "" {
+		segments = append(segments, addresses)
 	}
-	return fmt.Sprintf("Class: %s, %d listener(s)", className, len(facts.Listeners))
+	return append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotCounts, Label: "Listeners", Value: strconv.Itoa(len(facts.Listeners))})
 }

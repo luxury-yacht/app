@@ -32,10 +32,28 @@ export function reconcileColumnOrder<T>(
       reconciled.push(key);
     }
   }
-  for (const key of declaredKeys) {
-    if (!seen.has(key)) {
-      reconciled.push(key);
+  // A declared column the persisted order has never seen enters at its
+  // DECLARED position — right after its nearest declared predecessor already
+  // present (the front when none) — never appended after the user's trailing
+  // column. A view that adds a column before Age must not render it after Age
+  // just because the layout predates it; trailing declared columns (custom
+  // metadata) still trail because their declared predecessor is the last
+  // column.
+  for (let declaredIndex = 0; declaredIndex < declaredKeys.length; declaredIndex++) {
+    const key = declaredKeys[declaredIndex];
+    if (seen.has(key)) {
+      continue;
     }
+    let insertIndex = 0;
+    for (let predecessor = declaredIndex - 1; predecessor >= 0; predecessor--) {
+      const predecessorIndex = reconciled.indexOf(declaredKeys[predecessor]);
+      if (predecessorIndex >= 0) {
+        insertIndex = predecessorIndex + 1;
+        break;
+      }
+    }
+    reconciled.splice(insertIndex, 0, key);
+    seen.add(key);
   }
   return reconciled;
 }

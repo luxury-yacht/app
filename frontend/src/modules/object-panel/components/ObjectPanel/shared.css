@@ -10,8 +10,14 @@
   color: var(--color-text);
 }
 
-/* Shared link style for clickable objects */
-.object-panel-link {
+/* Shared link style for clickable objects. The double-class variants keep
+   this style authoritative over `.gridtable-link`/`.gridtable-cell-button`
+   copies that lazy view stylesheets can load later (gridtables.css is
+   @imported by several of them) — the winner must come from specificity,
+   never from stylesheet load order. */
+.object-panel-link,
+.gridtable-link.object-panel-link,
+.gridtable-cell-button.object-panel-link {
   border: 0;
   padding: 0;
   background: transparent;
@@ -21,7 +27,9 @@
   text-decoration: none;
 }
 
-.object-panel-link:hover {
+.object-panel-link:hover,
+.gridtable-link.object-panel-link:hover,
+.gridtable-cell-button.object-panel-link:hover {
   color: var(--color-object-panel-link-hover);
   text-decoration: underline;
 }

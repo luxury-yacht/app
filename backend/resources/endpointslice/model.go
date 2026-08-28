@@ -33,7 +33,10 @@ func BuildFacts(clusterID string, slice *discoveryv1.EndpointSlice) Facts {
 		Ports:       portFacts(slice.Ports),
 	}
 	if serviceName := slice.Labels[discoveryv1.LabelServiceName]; serviceName != "" {
-		link := resourcemodel.NewDisplayResourceLink(clusterID, "", "v1", "Service", "services", slice.Namespace, serviceName)
+		// The owning Service's identity is fully known (builtin core/v1 +
+		// namespace + label name), so emit a complete, openable ref — the
+		// Network table renders it as a clickable cross-object link.
+		link := resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: clusterID, Group: "", Version: "v1", Kind: "Service", Resource: "services", Namespace: slice.Namespace, Name: serviceName})
 		facts.Service = &link
 	}
 	for _, endpoint := range slice.Endpoints {

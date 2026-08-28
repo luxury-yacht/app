@@ -67,8 +67,18 @@ func TestBuildResourceModelFactsAndStatus(t *testing.T) {
 	require.Equal(t, "Pod", facts.NotReadyAddresses[0].TargetRef.Ref.Kind)
 	require.Equal(t, "default", facts.NotReadyAddresses[0].TargetRef.Ref.Namespace)
 	require.Equal(t, "api-0", facts.NotReadyAddresses[0].TargetRef.Ref.Name)
-	require.Equal(t, "Service", facts.Service.Display.Kind)
-	require.Equal(t, "api", facts.Service.Display.Name)
+	// The owning Service's identity is fully known (builtin core/v1 + namespace
+	// + label name), so the link must be a complete, openable ref — the Network
+	// table renders it as a clickable cross-object link.
+	require.Nil(t, facts.Service.Display)
+	require.NotNil(t, facts.Service.Ref)
+	require.Equal(t, "cluster-a", facts.Service.Ref.ClusterID)
+	require.Equal(t, "", facts.Service.Ref.Group)
+	require.Equal(t, "v1", facts.Service.Ref.Version)
+	require.Equal(t, "Service", facts.Service.Ref.Kind)
+	require.Equal(t, "services", facts.Service.Ref.Resource)
+	require.Equal(t, "default", facts.Service.Ref.Namespace)
+	require.Equal(t, "api", facts.Service.Ref.Name)
 	require.Equal(t, "http", facts.Ports[0].Name)
 	require.Equal(t, int32(8080), facts.Ports[0].Port)
 	require.Equal(t, "TCP", facts.Ports[0].Protocol)

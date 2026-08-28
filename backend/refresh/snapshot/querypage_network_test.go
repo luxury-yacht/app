@@ -14,7 +14,12 @@ func makeNetworkRows(n int) []NetworkSummary {
 	for i := 0; i < n; i++ {
 		rows[i] = NetworkSummary{Ref: resourcemodel.ResourceRef{Kind: kinds[i%len(kinds)], Namespace:
 		// unique -> unique row key
-		namespaces[i%len(namespaces)], Name: fmt.Sprintf("net-%03d", i)}, Details: fmt.Sprintf("d-%d", i%4), // many ties
+		namespaces[i%len(namespaces)], Name: fmt.Sprintf("net-%03d", i)},
+			Details: []resourcemodel.DetailSegment{ // many ties per slot
+				{Slot: resourcemodel.DetailSlotReference, Value: fmt.Sprintf("ref-%d", i%4)},
+				{Slot: resourcemodel.DetailSlotAddress, Value: fmt.Sprintf("host-%d.example.com +1", i%3), Search: fmt.Sprintf("host-%d.example.com, alt-%d.example.com", i%3, i%3)},
+				{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: fmt.Sprintf("%d", i%5)},
+			},
 			Age:          fmt.Sprintf("%dm", i%5),
 			AgeTimestamp: int64(1_000_000 + (i%9)*1000), // ties, non-zero so NumericSort engages
 		}
@@ -58,7 +63,7 @@ func TestNetworkQueryViaStoreEquivalent(t *testing.T) {
 		kinds  []string
 		search string
 	}
-	sorts := []string{"", "name", "kind", "namespace", "details", "age"}
+	sorts := []string{"", "name", "kind", "namespace", "class", "address", "counts", "age"}
 	dirs := []string{"asc", "desc"}
 	filts := []filt{
 		{},
@@ -68,6 +73,9 @@ func TestNetworkQueryViaStoreEquivalent(t *testing.T) {
 		{ns: []string{"kube-system"}, kinds: []string{"Ingress"}},
 		{search: "net-01"},
 		{search: "service"},
+		{search: "ref-1"},
+		// Matches only the collapsed address segment's Search expansion.
+		{search: "alt-2.example.com"},
 	}
 
 	for _, sf := range sorts {

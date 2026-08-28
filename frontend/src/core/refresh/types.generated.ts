@@ -595,6 +595,15 @@ export interface CustomResourceSummary {
   annotations?: Record<string, string>;
 }
 
+export interface DetailSegment {
+  slot?: string;
+  label?: string;
+  value: string;
+  search?: string;
+  link?: ResourceLink;
+  presentation?: string;
+}
+
 export interface DisplayRef {
   clusterId: string;
   group?: string;
@@ -843,7 +852,7 @@ export interface NamespaceNetworkSnapshotPayload {
 export interface NamespaceNetworkSummary {
   ref: CanonicalResourceRef;
   metadata?: ResourceTableMetadata;
-  details: string;
+  details?: Array<DetailSegment>;
   age: string;
   ageTimestamp?: number;
 }

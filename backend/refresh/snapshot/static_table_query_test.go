@@ -51,8 +51,8 @@ func TestMigratedNamespaceStaticTableAdaptersQueryAndPage(t *testing.T) {
 
 	t.Run("network", func(t *testing.T) {
 		page := applyTypedTableQuery([]NetworkSummary{
-			{Ref: resourcemodel.ResourceRef{Kind: "Service", Namespace: "team-a", Name: "alpha"}, Details: "ClusterIP"},
-			{Ref: resourcemodel.ResourceRef{Kind: "Ingress", Namespace: "team-a", Name: "bravo"}, Details: "host"},
+			{Ref: resourcemodel.ResourceRef{Kind: "Service", Namespace: "team-a", Name: "alpha"}, Details: []resourcemodel.DetailSegment{{Label: "Type", Value: "ClusterIP"}}},
+			{Ref: resourcemodel.ResourceRef{Kind: "Ingress", Namespace: "team-a", Name: "bravo"}, Details: []resourcemodel.DetailSegment{{Label: "Hosts", Value: "host"}}},
 			{Ref: resourcemodel.ResourceRef{Kind: "Service", Namespace: "team-b", Name: "charlie"}},
 		}, query, networkTableQueryAdapter())
 		assertMigratedPage(t, page)
@@ -576,7 +576,7 @@ func BenchmarkMigratedStaticTableQueries(b *testing.B) {
 		kinds := []string{"Service", "EndpointSlice", "Ingress", "NetworkPolicy", "Gateway", "HTTPRoute"}
 		rows := make([]NetworkSummary, 10000)
 		for i := range rows {
-			rows[i] = NetworkSummary{Ref: resourcemodel.ResourceRef{Kind: kinds[i%len(kinds)], Namespace: benchmarkNamespace(i), Name: benchmarkName("network", i)}, Details: "bench route"}
+			rows[i] = NetworkSummary{Ref: resourcemodel.ResourceRef{Kind: kinds[i%len(kinds)], Namespace: benchmarkNamespace(i), Name: benchmarkName("network", i)}, Details: []resourcemodel.DetailSegment{{Value: "bench route"}}}
 		}
 		benchmarkTypedTableQuery(b, query, rows, networkTableQueryAdapter())
 	})

@@ -2,46 +2,66 @@
  * backend/resources/service/summary.go
  *
  * Service streaming summary projection, co-located with its model. Produces the
- * one-line description used by snapshot network summaries.
+ * slotted Details segments used by snapshot network summaries.
  */
 
 package service
 
 import (
-	"fmt"
-	"strings"
+	"strconv"
+
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
-// DescribeSummary renders the one-line Service summary from its facts. The own-fields
-// prefix (Type/ClusterIP/Ports) is independent of the Service's EndpointSlices; the
-// Addresses segment is the ONLY endpoint-join part, so it is applied by
-// AppendAddressesDetail — the single definition the namespace-network serve-side re-join
-// reuses to overlay the endpoint count onto a Service own-row built with nil slices.
-func DescribeSummary(facts Facts) string {
-	parts := []string{fmt.Sprintf("Type: %s", facts.Type)}
+// SummarySegments renders the Service summary segments from its facts: the
+// service type (reference slot), the cluster IP and protocol-grouped ports
+// (address slot), and the ready endpoint count (counts slot). The own-fields
+// segments are independent of the Service's EndpointSlices; the Endpoints
+// segment is the ONLY endpoint-join part, so it is applied by
+// AppendEndpointsSegment — the single definition the namespace-network
+// serve-side re-join reuses to overlay the endpoint count onto a Service
+// own-row built with nil slices.
+func SummarySegments(facts Facts) []resourcemodel.DetailSegment {
+	segments := []resourcemodel.DetailSegment{}
+	if facts.Type != "" {
+		segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Value: facts.Type})
+	}
 	clusterIP := facts.ClusterIP
 	if clusterIP == "" {
 		clusterIP = "None"
 	}
-	parts = append(parts, fmt.Sprintf("ClusterIP: %s", clusterIP))
-	if len(facts.Ports) > 0 {
-		portStrings := make([]string, 0, len(facts.Ports))
-		for _, port := range facts.Ports {
-			portStrings = append(portStrings, fmt.Sprintf("%d/%s", port.Port, port.Protocol))
-		}
-		parts = append(parts, fmt.Sprintf("Ports: %s", strings.Join(portStrings, ",")))
+	segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotAddress, Value: clusterIP})
+	if ports := formatSummaryPorts(facts.Ports); ports != "" {
+		segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotAddress, Value: ports})
 	}
-	return AppendAddressesDetail(strings.Join(parts, ", "), facts.ReadyEndpointCount)
+	return AppendEndpointsSegment(segments, facts.ReadyEndpointCount)
 }
 
-// AppendAddressesDetail appends the Service summary's Addresses segment to the own-fields
-// detail prefix when there are ready endpoints, returning the prefix unchanged otherwise.
-// It is the single definition of the endpoint-join part of the one-line summary, shared by
-// DescribeSummary (full typed path) and the namespace-network owned-reflector serve-side
-// re-join (which re-derives the segment from the projected EndpointSlice store).
-func AppendAddressesDetail(prefix string, readyEndpointCount int) string {
-	if readyEndpointCount > 0 {
-		return prefix + fmt.Sprintf(", Addresses: %d", readyEndpointCount)
+// formatSummaryPorts renders the port list compactly via the shared
+// resourcemodel.FormatPortsSummary grouping.
+func formatSummaryPorts(ports []PortFacts) string {
+	pairs := make([]resourcemodel.PortProtocol, 0, len(ports))
+	for _, port := range ports {
+		pairs = append(pairs, resourcemodel.PortProtocol{Port: port.Port, Protocol: port.Protocol})
 	}
-	return prefix
+	return resourcemodel.FormatPortsSummary(pairs)
+}
+
+// AppendEndpointsSegment appends the Service summary's ready-endpoint count
+// segment when there are ready endpoints, returning the input unchanged
+// otherwise. It is the single definition of the endpoint-join part of the
+// summary, shared by SummarySegments (full typed path) and the
+// namespace-network owned-reflector serve-side re-join (which re-derives the
+// segment from the projected EndpointSlice store). The append copies — the
+// re-join runs on rows served from the shared maintained store, so writing into
+// the input's backing array would corrupt concurrently served rows.
+func AppendEndpointsSegment(segments []resourcemodel.DetailSegment, readyEndpointCount int) []resourcemodel.DetailSegment {
+	if readyEndpointCount <= 0 {
+		return segments
+	}
+	return resourcemodel.AppendDetailSegment(segments, resourcemodel.DetailSegment{
+		Slot:  resourcemodel.DetailSlotCounts,
+		Label: "Endpoints",
+		Value: strconv.Itoa(readyEndpointCount),
+	})
 }

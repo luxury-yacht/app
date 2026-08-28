@@ -17,5 +17,5 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, ing *networkingv1.Ingress) 
 	if ing == nil {
 		return streamrows.NetworkSummary{}
 	}
-	return streamrows.NewNetworkSummary(meta, Identity, ing, DescribeSummary(BuildFacts(meta.ClusterID, ing)))
+	return streamrows.NewNetworkSummary(meta, Identity, ing, SummarySegments(BuildFacts(meta.ClusterID, ing)))
 }

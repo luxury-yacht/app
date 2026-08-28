@@ -327,17 +327,19 @@ type ClusterCustomSummary struct {
 }
 
 // NetworkSummary is a Service/Ingress/EndpointSlice/NetworkPolicy/Gateway-API row
-// (the namespace-network domain).
+// (the namespace-network domain). Details is the kind's typed segment list
+// (resourcemodel.DetailSegment) rather than a preformatted string, so the
+// frontend renders labels, cross-object links, and status tokens uniformly.
 type NetworkSummary struct {
 	Ref          resourcemodel.ResourceRef            `json:"ref"`
 	Metadata     *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
-	Details      string                               `json:"details"`
+	Details      []resourcemodel.DetailSegment        `json:"details,omitempty"`
 	Age          string                               `json:"age"`
 	AgeTimestamp int64                                `json:"ageTimestamp,omitempty"`
 }
 
 // NewNetworkSummary fills the row skeleton shared by the namespace-network kinds.
-func NewNetworkSummary(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object, details string) NetworkSummary {
+func NewNetworkSummary(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object, details []resourcemodel.DetailSegment) NetworkSummary {
 	return NetworkSummary{
 		Ref:          NewResourceRef(meta, identity, obj),
 		Metadata:     NewResourceMetadata(obj),

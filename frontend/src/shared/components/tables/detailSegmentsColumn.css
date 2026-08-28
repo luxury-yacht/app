@@ -1,0 +1,51 @@
+/*
+ * frontend/src/shared/components/tables/detailSegmentsColumn.css
+ *
+ * Chip styling for the shared detail-segments table cell: each segment is a
+ * subtle bordered chip with a muted label beside a full-weight value, kept on
+ * one line (table data never wraps). Presentation tokens tint the whole chip
+ * (same recipe as StatusChip variants).
+ */
+
+.detail-segments {
+  display: inline-flex;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.detail-segment {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-bg-tertiary);
+  border-radius: 4px;
+  padding: 1px 7px 2px;
+}
+
+.detail-segment-label {
+  color: var(--color-text-secondary);
+}
+
+.detail-segment--warning {
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning-border);
+}
+
+.detail-segment--warning .detail-segment-value {
+  color: var(--color-warning);
+}
+
+/* Link segments carry the app's shared clickable-object link classes
+   (gridtable-cell-button + gridtable-link + object-panel-link, exactly like
+   Name columns) — no bespoke link styling here. */
+
+/* Text variant (reference/address slot columns): plain separated values, no chips. */
+.detail-segments--text {
+  display: inline;
+  gap: 0;
+}
+
+.detail-segment-separator {
+  color: var(--color-text-secondary);
+}

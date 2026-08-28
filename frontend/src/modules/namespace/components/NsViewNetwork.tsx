@@ -10,6 +10,7 @@ import {
   NamespaceAggregatedResourceGridView,
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
+import { createDetailSegmentsColumn } from '@shared/components/tables/detailSegmentsColumn';
 import React from 'react';
 import type {
   NamespaceNetworkSnapshotPayload,
@@ -38,7 +39,13 @@ const networkSpec: AggregatedResourceGridViewSpec<NetworkData> = {
   defaultSort: { key: 'name', direction: 'asc' },
   showKindDropdown: true,
   namespaceLinkTab: 'network',
-  buildColumns: ({ identity, useShortResourceNames }) => [
+  buildColumns: ({
+    identity,
+    openReference,
+    navigateReference,
+    fallbackClusterName,
+    useShortResourceNames,
+  }) => [
     cf.createKindColumn<NetworkData>({
       key: 'kind',
       getKind: (resource) => resource.ref.kind,
@@ -52,9 +59,38 @@ const networkSpec: AggregatedResourceGridViewSpec<NetworkData> = {
       onAltClick: identity.navigate,
       getClassName: () => 'object-panel-link',
     }),
-    cf.createTextColumn<NetworkData>('details', 'Details', (resource) => resource.details || '-', {
-      getClassName: (resource) => (resource.details ? 'network-details' : undefined),
-      sortable: false,
+    // The backend tags every details segment with a semantic slot; the three
+    // slot columns keep same-kind rows vertically aligned and width-bounded.
+    createDetailSegmentsColumn<NetworkData>({
+      key: 'class',
+      header: 'Type / Class',
+      slot: 'reference',
+      variant: 'text',
+      sortable: true,
+      getSegments: (resource) => resource.details,
+      openReference,
+      navigateReference,
+      clusterName: fallbackClusterName,
+      className: 'network-details',
+      autoSizeMaxWidth: 260,
+    }),
+    createDetailSegmentsColumn<NetworkData>({
+      key: 'address',
+      header: 'Address / Hosts',
+      slot: 'address',
+      variant: 'text',
+      sortable: true,
+      getSegments: (resource) => resource.details,
+      className: 'network-details',
+      autoSizeMaxWidth: 300,
+    }),
+    createDetailSegmentsColumn<NetworkData>({
+      key: 'counts',
+      header: 'Counts / Status',
+      slot: 'counts',
+      getSegments: (resource) => resource.details,
+      className: 'network-details',
+      autoSizeMaxWidth: 340,
     }),
     cf.createAgeColumn(),
   ],

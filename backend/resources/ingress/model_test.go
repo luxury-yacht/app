@@ -7,6 +7,8 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 func stringPtr(s string) *string { return &s }
@@ -58,12 +60,20 @@ func TestBuildIngressResourceModelFactsAndStatus(t *testing.T) {
 	require.Len(t, facts.BackendRefs, 2)
 }
 
-func TestDescribeSummary(t *testing.T) {
+func TestSummarySegments(t *testing.T) {
+	class := &resourcemodel.ResourceLink{Ref: &resourcemodel.ResourceRef{ClusterID: "c1", Group: "networking.k8s.io", Version: "v1", Kind: "IngressClass", Resource: "ingressclasses", Name: "nginx"}}
 	facts := Facts{
 		ClassName: "nginx",
-		Hosts:     []string{"web.example.com"},
+		Class:     class,
+		Hosts:     []string{"web.example.com", "api.example.com", "www.example.com"},
 		Rules:     []RuleFacts{{Host: "web.example.com"}},
 	}
-	require.Equal(t, "Class: nginx, Hosts: web.example.com, Rules: 1", DescribeSummary(facts))
-	require.Equal(t, "No rules defined", DescribeSummary(Facts{}))
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotReference, Value: "nginx", Link: class},
+		{Slot: resourcemodel.DetailSlotAddress, Value: "web.example.com +2", Search: "web.example.com, api.example.com, www.example.com"},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: "1"},
+	}, SummarySegments(facts))
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: "0"},
+	}, SummarySegments(Facts{}))
 }

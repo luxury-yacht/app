@@ -9,7 +9,7 @@ import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
-import { act } from 'react';
+import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -295,7 +295,28 @@ describe('NsViewNetwork', () => {
         ...ref,
       },
       kindAlias: 'Ingress',
-      details: 'Hosts: web.example.com',
+      details: [
+        {
+          slot: 'reference',
+          value: 'nginx',
+          link: {
+            ref: {
+              clusterId: 'alpha:ctx',
+              group: 'networking.k8s.io',
+              version: 'v1',
+              kind: 'IngressClass',
+              resource: 'ingressclasses',
+              name: 'nginx',
+            },
+          },
+        },
+        {
+          slot: 'address',
+          value: 'web.example.com +1',
+          search: 'web.example.com, api.example.com',
+        },
+        { slot: 'counts', label: 'Rules', value: '2' },
+      ],
       age: '3h',
       ...row,
     };
@@ -442,17 +463,79 @@ describe('NsViewNetwork', () => {
     expect(deleteItem).toBeUndefined();
   });
 
-  it('renders details column with styling when text present', async () => {
+  it('renders the three slot columns: class text, collapsed address, counts chips', async () => {
     permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
-    const entry = baseNetwork({ details: 'Hosts: example.com' });
+    const entry = baseNetwork();
     await renderNetworkView();
-    const detailsColumn = getColumn('details');
-    const rendered = requireReactElement<{ className?: string }>(
-      detailsColumn.render(entry),
-      'expected the network details cell element'
+
+    const classColumn = getColumn('class');
+    const classCell = requireReactElement<{ className?: string }>(
+      classColumn.render(entry),
+      'expected the class cell element'
     );
-    expect(renderOutputToText(rendered)).toContain('Hosts: example.com');
-    expect(rendered.props.className).toContain('network-details');
+    expect(renderOutputToText(classCell)).toContain('nginx');
+    expect(classCell.props.className).toContain('detail-segments--text');
+
+    const addressColumn = getColumn('address');
+    const addressCell = requireReactElement<{
+      title?: string;
+      'data-gridtable-export-text'?: string;
+    }>(addressColumn.render(entry), 'expected the address cell element');
+    expect(renderOutputToText(addressCell)).toContain('web.example.com +1');
+    expect(addressCell.props.title).toBe('web.example.com, api.example.com');
+    expect(addressCell.props['data-gridtable-export-text']).toBe('web.example.com +1');
+
+    const countsColumn = getColumn('counts');
+    expect(countsColumn.sortable).toBe(false);
+    const countsMarkup = renderOutputToText(countsColumn.render(entry));
+    expect(countsMarkup).toContain('detail-segment');
+    expect(countsMarkup).toContain('Rules');
+
+    // A row with no address segments renders the shared no-value marker.
+    const bare = baseNetwork({ details: [{ slot: 'counts', label: 'Targets', value: '1' }] });
+    expect(addressColumn.render(bare)).toBe('-');
+  });
+
+  it('opens a linked class segment in the object panel', async () => {
+    const entry = baseNetwork();
+    await renderNetworkView();
+    const detailsColumn = getColumn('class');
+    const rendered = detailsColumn.render(entry);
+
+    const findButton = (node: React.ReactNode): React.ReactElement | undefined => {
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          const match = findButton(child);
+          if (match) {
+            return match;
+          }
+        }
+        return undefined;
+      }
+      if (!React.isValidElement(node)) {
+        return undefined;
+      }
+      if (node.type === 'button') {
+        return node;
+      }
+      return findButton((node.props as { children?: React.ReactNode }).children);
+    };
+
+    const button = requireValue(findButton(rendered), 'expected the linked segment button');
+    const props = button.props as {
+      onClick: (event: {
+        altKey: boolean;
+        preventDefault: () => void;
+        stopPropagation: () => void;
+      }) => void;
+    };
+
+    act(() => {
+      props.onClick({ altKey: false, preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'IngressClass', name: 'nginx', clusterId: 'alpha:ctx' })
+    );
   });
 
   it('handles delete failure with errorHandler', async () => {

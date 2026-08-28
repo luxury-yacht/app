@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
@@ -182,11 +183,40 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 	serviceSummary := servicepkg.BuildStreamSummary(meta, service, []*discoveryv1.EndpointSlice{slice})
 	require.Equal(t, "Service", serviceSummary.Ref.Kind)
 	require.Equal(t, "api", serviceSummary.Ref.Name)
-	require.Equal(t, "Type: ClusterIP, ClusterIP: 10.0.0.10, Ports: 443/TCP, Addresses: 1", serviceSummary.Details)
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotReference, Value: "ClusterIP"},
+		{Slot: resourcemodel.DetailSlotAddress, Value: "10.0.0.10"},
+		{Slot: resourcemodel.DetailSlotAddress, Value: "443/TCP"},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Endpoints", Value: "1"},
+	}, serviceSummary.Details)
 
+	sliceFacts := endpointslice.BuildFacts(meta.ClusterID, slice)
 	sliceSummary := endpointslice.BuildStreamSummary(meta, slice)
 	require.Equal(t, "EndpointSlice", sliceSummary.Ref.Kind)
-	require.Equal(t, "Slices: 1, Ready addresses: 1", sliceSummary.Details)
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotReference, Value: "api", Link: sliceFacts.Service},
+		{Slot: resourcemodel.DetailSlotAddress, Value: "10.244.0.10"},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Ready", Value: "1"},
+	}, sliceSummary.Details)
+
+	// A slice with a not-ready endpoint surfaces it as a warning-presented
+	// segment; an orphan slice (no service-name label) has no Service segment.
+	notReadyCondition := false
+	orphanSlice := &discoveryv1.EndpointSlice{
+		ObjectMeta:  metav1.ObjectMeta{Name: "orphan-a", Namespace: "default"},
+		AddressType: discoveryv1.AddressTypeIPv4,
+		Endpoints: []discoveryv1.Endpoint{
+			{Addresses: []string{"10.244.0.11"}, Conditions: discoveryv1.EndpointConditions{Ready: &ready}},
+			{Addresses: []string{"10.244.0.12"}, Conditions: discoveryv1.EndpointConditions{Ready: &notReadyCondition}},
+		},
+	}
+	orphanSummary := endpointslice.BuildStreamSummary(meta, orphanSlice)
+	require.Equal(t, []resourcemodel.DetailSegment{
+		// Only READY addresses fill the address slot; not-ready is flagged in counts.
+		{Slot: resourcemodel.DetailSlotAddress, Value: "10.244.0.11"},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Ready", Value: "1"},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Not ready", Value: "1", Presentation: "warning"},
+	}, orphanSummary.Details)
 
 	ingress := &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
@@ -195,9 +225,14 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 			Rules:            []networkingv1.IngressRule{{Host: "web.example.com"}},
 		},
 	}
+	ingressFacts := ingresspkg.BuildFacts(meta.ClusterID, ingress)
 	ingressSummary := ingresspkg.BuildStreamSummary(meta, ingress)
 	require.Equal(t, "Ingress", ingressSummary.Ref.Kind)
-	require.Equal(t, "Class: nginx, Hosts: web.example.com, Rules: 1", ingressSummary.Details)
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotReference, Value: "nginx", Link: ingressFacts.Class},
+		{Slot: resourcemodel.DetailSlotAddress, Value: "web.example.com"},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: "1"},
+	}, ingressSummary.Details)
 
 	policy := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "egress", Namespace: "default"},
@@ -207,7 +242,10 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 	}
 	policySummary := networkpolicy.BuildStreamSummary(meta, policy)
 	require.Equal(t, "NetworkPolicy", policySummary.Ref.Kind)
-	require.Equal(t, "Policy types: Ingress,Egress", policySummary.Details)
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotReference, Value: "Ingress, Egress"},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: "1"},
+	}, policySummary.Details)
 }
 
 func TestBuildClusterIngressClassSummaryUsesSharedNetworkFacts(t *testing.T) {
@@ -235,9 +273,13 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 			Listeners:        []gatewayv1.Listener{{Name: gatewayv1.SectionName("http"), Port: gatewayv1.PortNumber(80), Protocol: gatewayv1.HTTPProtocolType}},
 		},
 	}
+	gatewayFacts := gatewaypkg.BuildFacts(meta.ClusterID, gateway)
 	gatewaySummary := gatewaypkg.BuildStreamSummary(meta, gateway)
 	require.Equal(t, "Gateway", gatewaySummary.Ref.Kind)
-	require.Equal(t, "Class: public, 1 listener(s)", gatewaySummary.Details)
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotReference, Value: "public", Link: gatewayFacts.Class},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Listeners", Value: "1"},
+	}, gatewaySummary.Details)
 
 	route := &gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
@@ -247,9 +289,14 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 			Rules:           []gatewayv1.HTTPRouteRule{{}},
 		},
 	}
+	routeFacts := httproute.BuildFacts(meta.ClusterID, route)
 	routeSummary := httproute.BuildStreamSummary(meta, route)
 	require.Equal(t, "HTTPRoute", routeSummary.Ref.Kind)
-	require.Equal(t, "1 rule(s), 1 parent(s), 1 hostname(s)", routeSummary.Details)
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotReference, Value: "edge", Link: &routeFacts.ParentRefs[0]},
+		{Slot: resourcemodel.DetailSlotAddress, Value: "api.example.com"},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: "1"},
+	}, routeSummary.Details)
 
 	listenerSet := &gatewayv1.ListenerSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "extra", Namespace: "default"},
@@ -258,9 +305,33 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 			Listeners: []gatewayv1.ListenerEntry{{Name: gatewayv1.SectionName("http"), Port: gatewayv1.PortNumber(80), Protocol: gatewayv1.HTTPProtocolType}},
 		},
 	}
+	listenerSetFacts := listenerset.BuildFacts(meta.ClusterID, listenerSet)
 	listenerSetSummary := listenerset.BuildStreamSummary(meta, listenerSet)
 	require.Equal(t, "ListenerSet", listenerSetSummary.Ref.Kind)
-	require.Equal(t, "Parent: edge, 1 listener(s)", listenerSetSummary.Details)
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotReference, Value: "edge", Link: &listenerSetFacts.ParentRef},
+		// Hostless listeners fall back to the compact port list.
+		{Slot: resourcemodel.DetailSlotAddress, Value: "80/HTTP"},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Listeners", Value: "1"},
+	}, listenerSetSummary.Details)
+
+	hostedListenerSet := &gatewayv1.ListenerSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "hosted", Namespace: "default"},
+		Spec: gatewayv1.ListenerSetSpec{
+			ParentRef: gatewayv1.ParentGatewayReference{Name: gatewayv1.ObjectName("edge")},
+			Listeners: []gatewayv1.ListenerEntry{
+				{Name: gatewayv1.SectionName("a"), Hostname: gatewayHostnamePtr("a.example.com"), Port: gatewayv1.PortNumber(443), Protocol: gatewayv1.HTTPSProtocolType},
+				{Name: gatewayv1.SectionName("b"), Hostname: gatewayHostnamePtr("b.example.com"), Port: gatewayv1.PortNumber(443), Protocol: gatewayv1.HTTPSProtocolType},
+			},
+		},
+	}
+	hostedFacts := listenerset.BuildFacts(meta.ClusterID, hostedListenerSet)
+	hostedSummary := listenerset.BuildStreamSummary(meta, hostedListenerSet)
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotReference, Value: "edge", Link: &hostedFacts.ParentRef},
+		{Slot: resourcemodel.DetailSlotAddress, Value: "a.example.com +1", Search: "a.example.com, b.example.com"},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Listeners", Value: "2"},
+	}, hostedSummary.Details)
 
 	grant := &gatewayv1.ReferenceGrant{
 		ObjectMeta: metav1.ObjectMeta{Name: "allow", Namespace: "default"},
@@ -271,7 +342,11 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 	}
 	grantSummary := referencegrant.BuildStreamSummary(meta, grant)
 	require.Equal(t, "ReferenceGrant", grantSummary.Ref.Kind)
-	require.Equal(t, "1 from, 1 to", grantSummary.Details)
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotReference, Value: "HTTPRoute → Service"},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "From", Value: "1"},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "To", Value: "1"},
+	}, grantSummary.Details)
 
 	policy := &gatewayv1.BackendTLSPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "tls", Namespace: "default"},
@@ -279,9 +354,13 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 			LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{Group: gatewayv1.Group(""), Kind: gatewayv1.Kind("Service"), Name: gatewayv1.ObjectName("api")},
 		}}},
 	}
+	tlsPolicyFacts := backendtlspolicy.BuildFacts(meta.ClusterID, policy)
 	policySummary := backendtlspolicy.BuildStreamSummary(meta, policy)
 	require.Equal(t, "BackendTLSPolicy", policySummary.Ref.Kind)
-	require.Equal(t, "1 target(s)", policySummary.Details)
+	require.Equal(t, []resourcemodel.DetailSegment{
+		{Slot: resourcemodel.DetailSlotReference, Value: "api", Link: &tlsPolicyFacts.TargetRefs[0]},
+		{Slot: resourcemodel.DetailSlotCounts, Label: "Targets", Value: "1"},
+	}, policySummary.Details)
 
 	gatewayClass := &gatewayv1.GatewayClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "public"},
@@ -303,6 +382,11 @@ func ptrInt32(value int32) *int32 {
 func gatewayObjectNamePtr(value string) *gatewayv1.ObjectName {
 	name := gatewayv1.ObjectName(value)
 	return &name
+}
+
+func gatewayHostnamePtr(value string) *gatewayv1.Hostname {
+	hostname := gatewayv1.Hostname(value)
+	return &hostname
 }
 
 // TestBuildClusterCRDSummaryPopulatesAllFields is a regression guard for
