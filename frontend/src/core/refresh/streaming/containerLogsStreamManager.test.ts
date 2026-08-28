@@ -955,6 +955,37 @@ describe('ContainerLogsStreamManager', () => {
     expect(state.data?.entries?.map((e) => e.line)).toEqual(['fresh-a', 'fresh-b']);
   });
 
+  test('applyPayload preserves render identity when a reconnect snapshot is unchanged', async () => {
+    const manager = await seedScopeWithEntries(3);
+    const previousEntries = getScopedDomainState('container-logs', SCOPE).data?.entries ?? [];
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'container-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 2_000,
+        reset: true,
+        entries: previousEntries.map(
+          ({ timestamp, pod, container, line, isInit, isEphemeral }) => ({
+            timestamp,
+            pod,
+            container,
+            line,
+            isInit,
+            isEphemeral,
+          })
+        ),
+      },
+      'stream'
+    );
+
+    const nextEntries = getScopedDomainState('container-logs', SCOPE).data?.entries ?? [];
+    expect(nextEntries.map(({ line }) => line)).toEqual(previousEntries.map(({ line }) => line));
+    expect(nextEntries.map(({ _seq }) => _seq)).toEqual(previousEntries.map(({ _seq }) => _seq));
+  });
+
   test('applyPayload preserves truncated total across stream reconnect replacement snapshots', async () => {
     const { eventBus } = await import('@/core/events');
     const manager = await seedScopeWithEntries(5);

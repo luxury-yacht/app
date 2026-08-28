@@ -1145,7 +1145,10 @@ describe('LogViewer active pod synchronisation', () => {
       const content = await waitForElement(() =>
         container.querySelector<HTMLDivElement>('.logs-viewer-content')
       );
-      content.scrollTop = 100;
+      act(() => {
+        content.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+        content.scrollTop = 100;
+      });
 
       await act(async () => {
         seedLogSnapshot([entry(2), entry(3), entry(4)]);
@@ -1162,6 +1165,7 @@ describe('LogViewer active pod synchronisation', () => {
       expect(resumeButton).not.toBeNull();
 
       await act(async () => {
+        content.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 100 }));
         content.scrollTop = 300;
         content.dispatchEvent(new Event('scroll'));
       });
@@ -1171,6 +1175,7 @@ describe('LogViewer active pod synchronisation', () => {
       expect(container.textContent).not.toContain('anchored line 1');
 
       await act(async () => {
+        content.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
         content.scrollTop = 100;
         content.dispatchEvent(new Event('scroll'));
       });
@@ -3274,5 +3279,94 @@ describe('LogViewer active pod synchronisation', () => {
       containerLogsStreamManager.stop(defaultScope, true);
       await Promise.resolve();
     });
+  });
+
+  it('keeps unchanged Pretty rows mounted across a stream reconnect', async () => {
+    const { containerLogsStreamManager } = await import(
+      '@/core/refresh/streaming/containerLogsStreamManager'
+    );
+    const panelId = 'obj:test:pretty-reconnect-identity';
+    const entries = Array.from({ length: 200 }, (_, index) => ({
+      pod: 'web-1',
+      container: 'app',
+      line: JSON.stringify({ message: `unchanged entry ${index + 1}` }),
+      timestamp: `2024-05-01T10:00:${String(index % 60).padStart(2, '0')}Z`,
+      isInit: false,
+    }));
+    setLogViewerPrefs(panelId, {
+      selectedContainer: '',
+      selectedFilters: [],
+      autoRefresh: true,
+      timestampMode: 'default',
+      showTimestamps: true,
+      wrapText: false,
+      textFilter: '',
+      highlightMatches: false,
+      inverseMatches: false,
+      caseSensitiveMatches: false,
+      regexMatches: false,
+      displayMode: 'pretty',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousContainerLogs: false,
+    });
+    containerLogsStreamManager.applyPayload(
+      defaultScope,
+      {
+        domain: 'container-logs',
+        scope: defaultScope,
+        sequence: 3,
+        generatedAt: 1_000,
+        reset: true,
+        entries,
+      },
+      'stream'
+    );
+    activeScope = defaultScope;
+
+    try {
+      await renderViewer({ activePodNames: ['web-1'], panelId });
+      const rowsBeforeReconnect = Array.from(container.querySelectorAll('.log-viewer-row'));
+      expect(rowsBeforeReconnect.length).toBeGreaterThan(0);
+      expect(rowsBeforeReconnect.length).toBeLessThan(entries.length);
+      expect(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Resume scrolling"]')
+      ).toBeNull();
+
+      await renderViewer({ activePodNames: ['web-1'], panelId, isActive: false });
+      await renderViewer({ activePodNames: ['web-1'], panelId, isActive: true });
+      expect(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Resume scrolling"]')
+      ).toBeNull();
+      await act(async () => {
+        containerLogsStreamManager.applyPayload(
+          defaultScope,
+          {
+            domain: 'container-logs',
+            scope: defaultScope,
+            sequence: 1,
+            generatedAt: 2_000,
+            reset: true,
+            entries,
+          },
+          'stream'
+        );
+        await Promise.resolve();
+      });
+
+      const rowsAfterReconnect = Array.from(container.querySelectorAll('.log-viewer-row'));
+      expect(rowsAfterReconnect).toHaveLength(rowsBeforeReconnect.length);
+      rowsAfterReconnect.forEach((row, index) => {
+        expect(row).toBe(rowsBeforeReconnect[index]);
+      });
+      expect(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Resume scrolling"]')
+      ).toBeNull();
+    } finally {
+      await act(async () => {
+        containerLogsStreamManager.stop(defaultScope, true);
+        await Promise.resolve();
+      });
+    }
   });
 });

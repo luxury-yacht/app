@@ -435,7 +435,30 @@ export class ContainerLogsStreamManager {
     if (!reset) {
       return existing.concat(incoming);
     }
-    return incoming.length > 0 ? incoming : existing;
+    if (incoming.length === 0 || this.hasSameEntryContent(existing, incoming)) {
+      return existing;
+    }
+    return incoming;
+  }
+
+  private hasSameEntryContent(
+    existing: ContainerLogsEntry[],
+    incoming: ContainerLogsEntry[]
+  ): boolean {
+    return (
+      existing.length === incoming.length &&
+      existing.every((entry, index) => {
+        const candidate = incoming[index];
+        return (
+          entry.timestamp === candidate.timestamp &&
+          entry.pod === candidate.pod &&
+          entry.container === candidate.container &&
+          entry.line === candidate.line &&
+          entry.isInit === candidate.isInit &&
+          Boolean(entry.isEphemeral) === Boolean(candidate.isEphemeral)
+        );
+      })
+    );
   }
 
   private resolveBufferTotal(
@@ -528,11 +551,12 @@ export class ContainerLogsStreamManager {
 
   applyPayload(scope: string, payload: StreamEventPayload, mode: StreamMode): void {
     // Buffer replacement policy:
-    // - reset=true with non-empty incoming → replace the buffered entries.
-    //   For live streams, this frame is a fresh tail snapshot after a
-    //   reconnect/remount, not an authoritative total, so preserve the
-    //   larger running total instead of letting the count shrink back to
-    //   the tail size.
+    // - reset=true with non-empty incoming → preserve the existing entry
+    //   identities when its content is unchanged; otherwise replace the
+    //   buffered entries. For live streams, this frame is a fresh tail
+    //   snapshot after a reconnect/remount, not an authoritative total, so
+    //   preserve the larger running total instead of letting the count shrink
+    //   back to the tail size.
     // - reset=true with empty incoming → PRESERVE. The server emits the
     //   reset flag as part of its "new connection" handshake on every
     //   stream open, before it has had a chance to tail any lines. Wiping

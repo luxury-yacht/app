@@ -72,6 +72,11 @@ export const getLogViewerScrollPosition = (panelId: string): LogScrollPosition |
   scrollPositionCache.get(panelId);
 
 export const setLogViewerScrollPosition = (panelId: string, position: LogScrollPosition): void => {
+  // Panel close evicts the owning prefs before React runs old component cleanup.
+  // Reject that stale cleanup write so it cannot recreate only the scroll entry.
+  if (!cache.has(panelId)) {
+    return;
+  }
   scrollPositionCache.set(panelId, position);
 };
 

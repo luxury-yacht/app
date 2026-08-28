@@ -78,7 +78,7 @@ import { containsAnsi } from './ansi';
 import { setContainerLogsStreamScopeParams } from './containerLogsStreamScopeParamsCache';
 import { useAnchoredLogEntries } from './hooks/useAnchoredLogEntries';
 import { useLogMessageRenderer } from './hooks/useLogMessageRenderer';
-import { isLogScrollAtBottom, useLogScrollRestoration } from './hooks/useLogScrollRestoration';
+import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
 import { useTerminalTheme } from './hooks/useTerminalTheme';
 import { buildCsv } from './logExport';
 import {
@@ -1407,19 +1407,6 @@ const getScopedContainerLogSnapshot = (
   ),
 });
 
-const shouldFollowCurrentLogTail = (
-  isParsedView: boolean,
-  logsContent: HTMLDivElement | null,
-  isTailFollowing: boolean
-): boolean => {
-  const activeScrollContainer = isParsedView
-    ? logsContent?.querySelector<HTMLElement>('.gridtable-wrapper')
-    : logsContent;
-  return Boolean(
-    isTailFollowing && (!activeScrollContainer || isLogScrollAtBottom(activeScrollContainer))
-  );
-};
-
 const getContainerLogDisplayError = (snapshotError: string | null | undefined): string | null => {
   if (!snapshotError || isLogDataUnavailable(snapshotError)) {
     return null;
@@ -1745,16 +1732,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       showPreviousContainerLogs,
     ]
   );
-  const shouldFollowTailForCurrentRender = shouldFollowCurrentLogTail(
-    isParsedView,
-    logsContentRef.current,
-    isTailFollowing
-  );
-  const logEntries = useAnchoredLogEntries(
-    rawLogEntries,
-    shouldFollowTailForCurrentRender,
-    anchoredLogSourceKey
-  );
+  const logEntries = useAnchoredLogEntries(rawLogEntries, isTailFollowing, anchoredLogSourceKey);
   const snapshotStatus = scopedSnapshot.status;
   const snapshotError = scopedSnapshot.error;
   // sequence 1 = connected event, sequence >= 2 = initial logs received (may be empty)
@@ -2479,6 +2457,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   const { resumeTailFollowing } = useLogScrollRestoration({
     rootRef: logsContentRef,
+    isActive,
     isParsedView,
     rowCount: isParsedView ? parsedContainerLogs.length : logEntries.length,
     tailFollowSignal: displayLogs,

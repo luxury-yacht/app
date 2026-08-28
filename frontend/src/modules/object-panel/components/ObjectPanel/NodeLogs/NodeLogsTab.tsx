@@ -976,6 +976,7 @@ const NodeLogsTab = ({
 
   const { resetScrollRestoration } = useLogScrollRestoration({
     rootRef: logsContentRef,
+    isActive,
     isParsedView,
     rowCount,
     tailFollowSignal: `${selectedSource?.path ?? ''}:${parsedLogs.length}:${renderedDisplayRows.length}`,

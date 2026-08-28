@@ -10,6 +10,7 @@ const setScrollPosition = vi.fn();
 interface HarnessProps {
   rowCount: number;
   tailFollowSignal: number;
+  isActive?: boolean;
   isParsedView?: boolean;
   scrollHeight?: number;
   showScrollContainer?: boolean;
@@ -35,9 +36,37 @@ const setScrollMetrics = (node: HTMLDivElement, scrollHeight: number, clampScrol
   }
 };
 
+const dispatchUserWheel = (node: HTMLElement, deltaY: number) => {
+  node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY }));
+};
+
+const collapseScrollMetricsWhenDetached = (node: HTMLDivElement) => {
+  let liveScrollTop = node.scrollTop;
+  const liveScrollHeight = node.scrollHeight;
+  const liveClientHeight = node.clientHeight;
+  Object.defineProperties(node, {
+    scrollTop: {
+      configurable: true,
+      get: () => (node.isConnected ? liveScrollTop : 0),
+      set: (nextScrollTop: number) => {
+        liveScrollTop = Math.min(nextScrollTop, liveScrollHeight - liveClientHeight);
+      },
+    },
+    scrollHeight: {
+      configurable: true,
+      get: () => (node.isConnected ? liveScrollHeight : 0),
+    },
+    clientHeight: {
+      configurable: true,
+      get: () => (node.isConnected ? liveClientHeight : 0),
+    },
+  });
+};
+
 const Harness = ({
   rowCount,
   tailFollowSignal,
+  isActive = true,
   isParsedView = false,
   scrollHeight = 1_000,
   showScrollContainer = true,
@@ -50,6 +79,7 @@ const Harness = ({
     isParsedView,
     rowCount,
     tailFollowSignal,
+    isActive,
     cacheKey: 'panel-a',
     getScrollPosition,
     setScrollPosition,
@@ -170,8 +200,11 @@ describe('useLogScrollRestoration', () => {
       root.render(<Harness rowCount={2} tailFollowSignal={2} />);
     });
 
-    scrollElement.scrollTop = 300;
-    scrollElement.dispatchEvent(new Event('scroll'));
+    act(() => {
+      dispatchUserWheel(scrollElement, -100);
+      scrollElement.scrollTop = 300;
+      scrollElement.dispatchEvent(new Event('scroll'));
+    });
     act(flushFrames);
 
     expect(scrollElement.scrollTop).toBe(300);
@@ -186,7 +219,10 @@ describe('useLogScrollRestoration', () => {
     const scrollElement = container.firstElementChild as HTMLDivElement;
     expect(scrollElement.scrollTop).toBe(1_000);
 
-    scrollElement.scrollTop = 300;
+    act(() => {
+      dispatchUserWheel(scrollElement, -100);
+      scrollElement.scrollTop = 300;
+    });
     await act(async () => {
       root.render(<Harness rowCount={2} tailFollowSignal={2} />);
     });
@@ -210,6 +246,109 @@ describe('useLogScrollRestoration', () => {
     act(flushFrames);
 
     expect(scrollElement.scrollTop).toBe(1_200);
+  });
+
+  it.each([
+    { isParsedView: false, view: 'text' },
+    { isParsedView: true, view: 'table' },
+  ])(
+    'does not pause $view tail-following when inactive layout changes scroll position',
+    async ({ isParsedView }) => {
+      await act(async () => {
+        root.render(
+          <Harness rowCount={200} tailFollowSignal={1} clampScrollTop isParsedView={isParsedView} />
+        );
+      });
+      act(flushFrames);
+
+      const scrollElement = isParsedView
+        ? container.querySelector<HTMLDivElement>('.gridtable-wrapper')
+        : (container.firstElementChild as HTMLDivElement);
+      expect(scrollElement).not.toBeNull();
+      if (!scrollElement) {
+        return;
+      }
+      expect(scrollElement.scrollTop).toBe(900);
+
+      await act(async () => {
+        root.render(
+          <Harness
+            rowCount={200}
+            tailFollowSignal={1}
+            clampScrollTop
+            isActive={false}
+            isParsedView={isParsedView}
+          />
+        );
+      });
+      act(() => {
+        scrollElement.scrollTop = 300;
+        scrollElement.dispatchEvent(new Event('scroll'));
+      });
+
+      expect(
+        container.querySelector<HTMLOutputElement>('[data-testid="tail-follow-state"]')?.textContent
+      ).toBe('following');
+
+      await act(async () => {
+        root.render(
+          <Harness rowCount={200} tailFollowSignal={1} clampScrollTop isParsedView={isParsedView} />
+        );
+      });
+
+      expect(scrollElement.scrollTop).toBe(900);
+    }
+  );
+
+  it('positions a newly selected table view at the followed tail before the next frame', async () => {
+    await act(async () => {
+      root.render(<Harness rowCount={200} tailFollowSignal={1} clampScrollTop />);
+    });
+    act(flushFrames);
+
+    await act(async () => {
+      root.render(<Harness rowCount={200} tailFollowSignal={1} clampScrollTop isParsedView />);
+    });
+
+    const tableScrollElement = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
+    expect(tableScrollElement?.scrollTop).toBe(900);
+  });
+
+  it.each([
+    { isParsedView: false, view: 'text' },
+    { isParsedView: true, view: 'table' },
+  ])('does not treat an active $view layout scroll as user intent', async ({ isParsedView }) => {
+    await act(async () => {
+      root.render(
+        <Harness rowCount={200} tailFollowSignal={1} clampScrollTop isParsedView={isParsedView} />
+      );
+    });
+    act(flushFrames);
+
+    const scrollElement = isParsedView
+      ? container.querySelector<HTMLDivElement>('.gridtable-wrapper')
+      : (container.firstElementChild as HTMLDivElement);
+    expect(scrollElement).not.toBeNull();
+    if (!scrollElement) {
+      return;
+    }
+
+    act(() => {
+      scrollElement.scrollTop = 300;
+      scrollElement.dispatchEvent(new Event('scroll'));
+    });
+    expect(
+      container.querySelector<HTMLOutputElement>('[data-testid="tail-follow-state"]')?.textContent
+    ).toBe('following');
+
+    await act(async () => {
+      root.render(
+        <Harness rowCount={200} tailFollowSignal={2} clampScrollTop isParsedView={isParsedView} />
+      );
+    });
+    act(flushFrames);
+
+    expect(scrollElement.scrollTop).toBe(900);
   });
 
   it('keeps the initial tail pinned while virtualized row measurement grows the content', async () => {
@@ -295,8 +434,11 @@ describe('useLogScrollRestoration', () => {
 
     const scrollElement = container.firstElementChild as HTMLDivElement;
     flushFramesUntilIdle(20);
-    scrollElement.scrollTop = 300;
-    scrollElement.dispatchEvent(new Event('scroll'));
+    act(() => {
+      dispatchUserWheel(scrollElement, -100);
+      scrollElement.scrollTop = 300;
+      scrollElement.dispatchEvent(new Event('scroll'));
+    });
 
     Object.defineProperty(scrollElement, 'scrollHeight', {
       configurable: true,
@@ -410,8 +552,11 @@ describe('useLogScrollRestoration', () => {
     act(flushFrames);
 
     const initialScrollElement = container.firstElementChild as HTMLDivElement;
-    initialScrollElement.scrollTop = 300;
-    initialScrollElement.dispatchEvent(new Event('scroll'));
+    act(() => {
+      dispatchUserWheel(initialScrollElement, -100);
+      initialScrollElement.scrollTop = 300;
+      initialScrollElement.dispatchEvent(new Event('scroll'));
+    });
     expect(cachedPosition).toEqual({ scrollTop: 300, isTailFollowing: false });
 
     await act(async () => {
@@ -431,6 +576,37 @@ describe('useLogScrollRestoration', () => {
     ).toBe('paused');
   });
 
+  it('does not replace a manual position with detached zero metrics during unmount', async () => {
+    let cachedPosition: LogScrollPosition | undefined;
+    getScrollPosition.mockImplementation(() => cachedPosition);
+    setScrollPosition.mockImplementation((_cacheKey, position: LogScrollPosition) => {
+      cachedPosition = position;
+    });
+
+    await act(async () => {
+      root.render(
+        <Harness rowCount={200} tailFollowSignal={1} scrollHeight={1_000} clampScrollTop />
+      );
+    });
+    act(flushFrames);
+
+    const scrollElement = container.firstElementChild as HTMLDivElement;
+    collapseScrollMetricsWhenDetached(scrollElement);
+    act(() => {
+      dispatchUserWheel(scrollElement, -100);
+      scrollElement.scrollTop = 300;
+      scrollElement.dispatchEvent(new Event('scroll'));
+    });
+    expect(cachedPosition).toEqual({ scrollTop: 300, isTailFollowing: false });
+
+    await act(async () => {
+      root.render(<section>Another object-panel tab</section>);
+    });
+
+    expect(scrollElement.isConnected).toBe(false);
+    expect(cachedPosition).toEqual({ scrollTop: 300, isTailFollowing: false });
+  });
+
   it('persists reaching the tail when the Logs tab unmounts before the scroll event', async () => {
     let cachedPosition: LogScrollPosition | undefined = {
       scrollTop: 300,
@@ -447,11 +623,18 @@ describe('useLogScrollRestoration', () => {
       );
     });
     const initialScrollElement = container.firstElementChild as HTMLDivElement;
-    initialScrollElement.scrollTop = 900;
+    collapseScrollMetricsWhenDetached(initialScrollElement);
+    act(() => {
+      dispatchUserWheel(initialScrollElement, 100);
+      initialScrollElement.scrollTop = 900;
+    });
 
     await act(async () => {
       root.render(<section>Another object-panel tab</section>);
     });
+    expect(initialScrollElement.isConnected).toBe(false);
+    expect(cachedPosition).toEqual({ scrollTop: 900, isTailFollowing: true });
+
     await act(async () => {
       root.render(
         <Harness rowCount={210} tailFollowSignal={2} scrollHeight={1_200} clampScrollTop />
@@ -474,12 +657,16 @@ describe('useLogScrollRestoration', () => {
       container.querySelector<HTMLOutputElement>('[data-testid="tail-follow-state"]')?.textContent;
 
     await act(async () => {
+      dispatchUserWheel(scrollElement, -100);
       scrollElement.scrollTop = 300;
       scrollElement.dispatchEvent(new Event('scroll'));
     });
     expect(tailFollowState()).toBe('paused');
 
-    scrollElement.scrollTop = 900;
+    act(() => {
+      dispatchUserWheel(scrollElement, 100);
+      scrollElement.scrollTop = 900;
+    });
     await act(async () => {
       root.render(<Harness rowCount={2} tailFollowSignal={2} scrollHeight={1_200} />);
     });
@@ -501,6 +688,7 @@ describe('useLogScrollRestoration', () => {
 
     const scrollElement = container.firstElementChild as HTMLDivElement;
     await act(async () => {
+      dispatchUserWheel(scrollElement, -100);
       scrollElement.scrollTop = 300;
       scrollElement.dispatchEvent(new Event('scroll'));
     });
@@ -531,8 +719,11 @@ describe('useLogScrollRestoration', () => {
       return;
     }
 
-    scrollElement.scrollTop = 300;
-    scrollElement.dispatchEvent(new Event('scroll'));
+    act(() => {
+      dispatchUserWheel(scrollElement, -100);
+      scrollElement.scrollTop = 300;
+      scrollElement.dispatchEvent(new Event('scroll'));
+    });
     act(flushFrames);
 
     expect(frames.size).toBe(0);

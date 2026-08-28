@@ -24,7 +24,15 @@ Panel. They are not Application Logs and they are not Node Logs.
   changes.
 - A reconnect handshake with `reset=true` and no entries must preserve the
   existing client buffer and keep the client-visible sequence monotonic. A
-  non-empty reset payload replaces the buffer deliberately.
+  non-empty reset payload replaces the buffer when its content differs. An
+  identical reconnect snapshot preserves entry render identity so reconnecting
+  does not invalidate row measurements or move the viewport.
+- Tail-following is explicit user intent shared by raw, Pretty, and parsed
+  table views. Only a user scroll interaction may pause or resume it; stream
+  reconnects, tab visibility, row measurement, and programmatic scroll events
+  preserve the current intent. Reactivating the Logs tab positions the active
+  scroll container during layout so unchanged content cannot visibly jump or
+  expose the Resume scrolling control.
 
 ## Ownership
 

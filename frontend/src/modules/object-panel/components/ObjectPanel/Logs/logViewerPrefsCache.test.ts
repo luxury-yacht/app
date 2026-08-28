@@ -71,6 +71,7 @@ describe('logViewerPrefsCache', () => {
 
   it('retains tail-following state until the owning panel is cleared', () => {
     const id = 'obj:cluster-a:pod:default:api';
+    setLogViewerPrefs(id, samplePrefs());
     setLogViewerScrollPosition(id, { scrollTop: 900, isTailFollowing: true });
 
     expect(getLogViewerScrollPosition(id)).toEqual({
@@ -79,6 +80,17 @@ describe('logViewerPrefsCache', () => {
     });
 
     clearLogViewerPrefs(id);
+    expect(getLogViewerScrollPosition(id)).toBeUndefined();
+  });
+
+  it('does not resurrect a cleared scroll entry when an old unmount cleanup writes late', () => {
+    const id = 'obj:cluster-a:pod:default:api';
+    setLogViewerPrefs(id, samplePrefs());
+    setLogViewerScrollPosition(id, { scrollTop: 300, isTailFollowing: false });
+
+    clearLogViewerPrefs(id);
+    setLogViewerScrollPosition(id, { scrollTop: 0, isTailFollowing: true });
+
     expect(getLogViewerScrollPosition(id)).toBeUndefined();
   });
 });
