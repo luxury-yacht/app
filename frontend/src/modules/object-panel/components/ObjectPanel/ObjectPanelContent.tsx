@@ -114,6 +114,85 @@ interface ObjectPanelContentProps {
   panelId: string;
 }
 
+interface RetainedLogsTabProps {
+  isVisible: boolean;
+  isAvailable: boolean;
+  isPanelOpen: boolean;
+  objectKind: string | null;
+  objectData: PanelObjectData | null;
+  containerLogsScope: string | null;
+  activePodNames: string[] | null;
+  panelId: string;
+  nodeLogsState: CapabilityState;
+  nodeLogSources: NodeLogSource[];
+}
+
+const RetainedLogsTab = ({
+  isVisible,
+  isAvailable,
+  isPanelOpen,
+  objectKind,
+  objectData,
+  containerLogsScope,
+  activePodNames,
+  panelId,
+  nodeLogsState,
+  nodeLogSources,
+}: Readonly<RetainedLogsTabProps>) => {
+  const hasRenderedRef = React.useRef(false);
+  if (isVisible) {
+    hasRenderedRef.current = true;
+  }
+  if (!hasRenderedRef.current || !isAvailable) {
+    return null;
+  }
+
+  const isActive = isPanelOpen && isVisible;
+  return (
+    <div
+      className={`object-panel-retained-tab${isVisible ? '' : ' object-panel-retained-tab--inactive'}`}
+      aria-hidden={!isVisible}
+      inert={!isVisible}
+    >
+      {objectKind !== 'node' ? (
+        <ErrorBoundary
+          scope="panel-logs"
+          resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
+          fallback={(_, reset) => <TabErrorFallback tabName="Logs" reset={reset} />}
+        >
+          <LazyTabContent name="logs">
+            <LogViewer
+              isActive={isActive}
+              resourceKind={objectKind || 'pod'}
+              containerLogsScope={containerLogsScope}
+              activePodNames={activePodNames}
+              clusterId={objectData?.clusterId ?? null}
+              panelId={panelId}
+            />
+          </LazyTabContent>
+        </ErrorBoundary>
+      ) : (
+        <ErrorBoundary
+          scope="panel-node-logs"
+          resetKeys={[objectData?.name ?? '', objectData?.clusterId ?? ''].filter(Boolean)}
+          fallback={(_, reset) => <TabErrorFallback tabName="Logs" reset={reset} />}
+        >
+          <LazyTabContent name="logs">
+            <NodeLogsTab
+              panelId={panelId}
+              nodeName={objectData?.name || ''}
+              clusterId={objectData?.clusterId ?? null}
+              isActive={isActive}
+              availability={nodeLogsState}
+              sources={nodeLogSources}
+            />
+          </LazyTabContent>
+        </ErrorBoundary>
+      )}
+    </div>
+  );
+};
+
 export function ObjectPanelContent({
   activeTab,
   detailTabProps,
@@ -137,11 +216,6 @@ export function ObjectPanelContent({
   const showDetails = activeTab === 'details' && detailTabProps;
   const logsAvailable = capabilities.hasObjPanelLogs && objectData !== null;
   const showLogs = activeTab === 'logs' && logsAvailable;
-  const hasRenderedLogsRef = React.useRef(false);
-  if (showLogs) {
-    hasRenderedLogsRef.current = true;
-  }
-  const renderRetainedLogs = Boolean(hasRenderedLogsRef.current && logsAvailable);
   const showShell = activeTab === 'shell' && capabilities.hasShell && objectData;
   const showPods = activeTab === 'pods';
   const showJobs = activeTab === 'jobs';
@@ -207,49 +281,18 @@ export function ObjectPanelContent({
         </ErrorBoundary>
       )}
 
-      {renderRetainedLogs && (
-        <div
-          className={`object-panel-retained-tab${showLogs ? '' : ' object-panel-retained-tab--inactive'}`}
-          aria-hidden={!showLogs}
-          inert={!showLogs}
-        >
-          {objectKind !== 'node' ? (
-            <ErrorBoundary
-              scope="panel-logs"
-              resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
-              fallback={(_, reset) => <TabErrorFallback tabName="Logs" reset={reset} />}
-            >
-              <LazyTabContent name="logs">
-                <LogViewer
-                  isActive={isPanelOpen && showLogs}
-                  resourceKind={objectKind || 'pod'}
-                  containerLogsScope={containerLogsScope}
-                  activePodNames={activePodNames}
-                  clusterId={objectData?.clusterId ?? null}
-                  panelId={panelId}
-                />
-              </LazyTabContent>
-            </ErrorBoundary>
-          ) : (
-            <ErrorBoundary
-              scope="panel-node-logs"
-              resetKeys={[objectData?.name ?? '', objectData?.clusterId ?? ''].filter(Boolean)}
-              fallback={(_, reset) => <TabErrorFallback tabName="Logs" reset={reset} />}
-            >
-              <LazyTabContent name="logs">
-                <NodeLogsTab
-                  panelId={panelId}
-                  nodeName={objectData?.name || ''}
-                  clusterId={objectData?.clusterId ?? null}
-                  isActive={isPanelOpen && showLogs}
-                  availability={nodeLogsState}
-                  sources={nodeLogSources}
-                />
-              </LazyTabContent>
-            </ErrorBoundary>
-          )}
-        </div>
-      )}
+      <RetainedLogsTab
+        isVisible={showLogs}
+        isAvailable={logsAvailable}
+        isPanelOpen={isPanelOpen}
+        objectKind={objectKind}
+        objectData={objectData}
+        containerLogsScope={containerLogsScope}
+        activePodNames={activePodNames}
+        panelId={panelId}
+        nodeLogsState={nodeLogsState}
+        nodeLogSources={nodeLogSources}
+      />
 
       {!!showShell && (
         <ErrorBoundary
