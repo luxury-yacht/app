@@ -7,8 +7,10 @@ import type { LogViewerPrefs } from '../types';
 import {
   clearLogViewerPrefs,
   getLogViewerPrefs,
+  getLogViewerScrollPosition,
   resetLogViewerPrefsCacheForTesting,
   setLogViewerPrefs,
+  setLogViewerScrollPosition,
 } from './logViewerPrefsCache';
 
 const samplePrefs = (overrides: Partial<LogViewerPrefs> = {}): LogViewerPrefs => ({
@@ -65,5 +67,18 @@ describe('logViewerPrefsCache', () => {
 
     expect(getLogViewerPrefs(a)).toBeUndefined();
     expect(getLogViewerPrefs(b)?.textFilter).toBe('second');
+  });
+
+  it('retains tail-following state until the owning panel is cleared', () => {
+    const id = 'obj:cluster-a:pod:default:api';
+    setLogViewerScrollPosition(id, { scrollTop: 900, isTailFollowing: true });
+
+    expect(getLogViewerScrollPosition(id)).toEqual({
+      scrollTop: 900,
+      isTailFollowing: true,
+    });
+
+    clearLogViewerPrefs(id);
+    expect(getLogViewerScrollPosition(id)).toBeUndefined();
   });
 });

@@ -27,7 +27,7 @@ import {
   type MultiSelectFilterSelection,
   migrateLegacyMultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
-import type { LogViewerPrefs } from '../types';
+import type { LogScrollPosition, LogViewerPrefs } from '../types';
 
 type LogViewerPrefsInput = Omit<LogViewerPrefs, 'selectedFilters'> & {
   selectedFilters: MultiSelectFilterSelection | string[];
@@ -47,11 +47,11 @@ export const setLogViewerPrefs = (panelId: string, prefs: LogViewerPrefsInput): 
 
 export const clearLogViewerPrefs = (panelId: string): void => {
   cache.delete(panelId);
-  scrollTopCache.delete(panelId);
+  scrollPositionCache.delete(panelId);
 };
 
 /**
- * Per-panel scroll position for the active log content container.
+ * Per-panel scroll position and tail-following state for the active log content container.
  *
  * Kept in a separate Map (not merged into LogViewerPrefs) because:
  *
@@ -66,13 +66,13 @@ export const clearLogViewerPrefs = (panelId: string): void => {
  * Eviction is tied into clearLogViewerPrefs above so the two entries
  * always come and go together.
  */
-const scrollTopCache = new Map<string, number>();
+const scrollPositionCache = new Map<string, LogScrollPosition>();
 
-export const getLogViewerScrollTop = (panelId: string): number | undefined =>
-  scrollTopCache.get(panelId);
+export const getLogViewerScrollPosition = (panelId: string): LogScrollPosition | undefined =>
+  scrollPositionCache.get(panelId);
 
-export const setLogViewerScrollTop = (panelId: string, scrollTop: number): void => {
-  scrollTopCache.set(panelId, scrollTop);
+export const setLogViewerScrollPosition = (panelId: string, position: LogScrollPosition): void => {
+  scrollPositionCache.set(panelId, position);
 };
 
 /**
@@ -81,5 +81,5 @@ export const setLogViewerScrollTop = (panelId: string, scrollTop: number): void 
  */
 export const resetLogViewerPrefsCacheForTesting = (): void => {
   cache.clear();
-  scrollTopCache.clear();
+  scrollPositionCache.clear();
 };

@@ -26,7 +26,10 @@ import {
 import { containsAnsi, stripAnsi } from '../Logs/ansi';
 import { buildCsv } from '../Logs/logExport';
 import { buildLogSearchRegex } from '../Logs/logSearch';
-import { getLogViewerScrollTop, setLogViewerScrollTop } from '../Logs/logViewerPrefsCache';
+import {
+  getLogViewerScrollPosition,
+  setLogViewerScrollPosition,
+} from '../Logs/logViewerPrefsCache';
 import type { ParsedLogEntry } from '../Logs/logViewerReducer';
 import { buildParsedLogDataColumns } from '../Logs/parsedLogColumns';
 import {
@@ -977,8 +980,8 @@ const NodeLogsTab = ({
     rowCount,
     tailFollowSignal: `${selectedSource?.path ?? ''}:${parsedLogs.length}:${renderedDisplayRows.length}`,
     cacheKey: panelId,
-    getScrollTop: getLogViewerScrollTop,
-    setScrollTop: setLogViewerScrollTop,
+    getScrollPosition: getLogViewerScrollPosition,
+    setScrollPosition: setLogViewerScrollPosition,
     forceTailOnNextRestore: true,
   });
 

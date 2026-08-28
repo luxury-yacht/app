@@ -1002,6 +1002,110 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).not.toContain('log line 200');
   });
 
+  it('returns a remounted Pretty view to the tail after virtualized layout measurement', async () => {
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollHeight'
+    );
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientHeight'
+    );
+    let layoutMeasured = true;
+    let nextFrameId = 1;
+    const frames = new Map<number, FrameRequestCallback>();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = nextFrameId;
+      nextFrameId += 1;
+      frames.set(id, callback);
+      return id;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      frames.delete(id);
+    });
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return this.classList.contains('logs-viewer-content') && layoutMeasured ? 1_200 : 100;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return this.classList.contains('logs-viewer-content') ? 100 : 0;
+      },
+    });
+    const flushFrames = () => {
+      const pending = [...frames.values()];
+      frames.clear();
+      for (const callback of pending) {
+        callback(0);
+      }
+    };
+
+    try {
+      const panelId = 'obj:test:pretty-remount-scroll';
+      setLogViewerPrefs(panelId, {
+        selectedContainer: '',
+        selectedFilters: [],
+        autoRefresh: true,
+        timestampMode: 'default',
+        showTimestamps: true,
+        wrapText: false,
+        textFilter: '',
+        highlightMatches: false,
+        inverseMatches: false,
+        caseSensitiveMatches: false,
+        regexMatches: false,
+        displayMode: 'pretty',
+        isParsedView: false,
+        expandedRows: [],
+        showPreviousContainerLogs: false,
+      });
+      seedLogSnapshot(
+        Array.from({ length: 200 }, (_, index) => ({
+          pod: 'web-1',
+          container: 'app',
+          line: JSON.stringify({ message: `pretty line ${index + 1}` }),
+          timestamp: `2024-05-01T10:00:${String(index % 60).padStart(2, '0')}Z`,
+          isInit: false,
+        }))
+      );
+
+      await renderViewer({ activePodNames: ['web-1'], panelId });
+      act(flushFrames);
+      act(flushFrames);
+      act(flushFrames);
+
+      await act(async () => {
+        root.render(<section>Another object-panel tab</section>);
+      });
+      layoutMeasured = false;
+      await renderViewer({ activePodNames: ['web-1'], panelId });
+      const remountedContent = await waitForElement(() =>
+        container.querySelector<HTMLDivElement>('.logs-viewer-content')
+      );
+      expect(remountedContent.scrollTop).toBe(0);
+
+      layoutMeasured = true;
+      act(flushFrames);
+
+      expect(remountedContent.scrollTop).toBeGreaterThanOrEqual(1_100);
+    } finally {
+      vi.unstubAllGlobals();
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight');
+      }
+      if (originalClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+      }
+    }
+  });
+
   it('freezes visible log rows while paused and resumes from a bottom overlay', async () => {
     const originalScrollHeight = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,

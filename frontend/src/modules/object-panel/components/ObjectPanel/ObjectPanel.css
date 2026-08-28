@@ -109,6 +109,17 @@
   height: 100%;
 }
 
+.object-panel-retained-tab {
+  height: 100%;
+}
+
+.object-panel-retained-tab--inactive {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .object-panel-placeholder {
   display: flex;
   align-items: center;

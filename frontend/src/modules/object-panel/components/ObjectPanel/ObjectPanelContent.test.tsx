@@ -13,12 +13,14 @@ import { requireValue } from '@/test-utils/requireValue';
 const hoistedRefs = vi.hoisted(() => ({
   detailsTabProps: { current: null as DetailsTabProps | null },
   logViewerProps: { current: null as unknown },
+  logViewerError: { current: null as Error | null },
   eventsTabProps: { current: null as unknown },
   yamlTabProps: { current: null as unknown },
   manifestTabProps: { current: null as unknown },
   valuesTabProps: { current: null as unknown },
   shellTabProps: { current: null as unknown },
   nodeLogsTabProps: { current: null as unknown },
+  nodeLogsError: { current: null as Error | null },
   podsTabProps: { current: null as unknown },
   setScopedDomainEnabled: vi.fn(),
 }));
@@ -38,6 +40,9 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Details/DetailsTab', () =>
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Logs/LogViewer', () => ({
   default: (props: unknown) => {
+    if (hoistedRefs.logViewerError.current) {
+      throw hoistedRefs.logViewerError.current;
+    }
     hoistedRefs.logViewerProps.current = props;
     return <div data-testid="logs-tab" />;
   },
@@ -80,6 +85,9 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Shell/ShellTab', () => ({
 
 vi.mock('@modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab', () => ({
   default: (props: unknown) => {
+    if (hoistedRefs.nodeLogsError.current) {
+      throw hoistedRefs.nodeLogsError.current;
+    }
     hoistedRefs.nodeLogsTabProps.current = props;
     return <div data-testid="node-logs-tab" />;
   },
@@ -184,6 +192,7 @@ describe('ObjectPanelContent', () => {
     expect(hoistedRefs.detailsTabProps.current).toMatchObject(
       requireValue(baseProps.detailTabProps, 'expected test value in ObjectPanelContent.test.tsx')
     );
+    expect(hoistedRefs.logViewerProps.current).toBeNull();
   });
 
   it('renders logs viewer when logs tab is active and capability present', async () => {
@@ -194,8 +203,45 @@ describe('ObjectPanelContent', () => {
     });
   });
 
+  it('preserves the mounted log viewer while another object-panel tab is active', async () => {
+    await renderContent({ activeTab: 'logs' });
+    const mountedLogViewer = requireValue(
+      container.querySelector<HTMLElement>('[data-testid="logs-tab"]'),
+      'expected mounted log viewer'
+    );
+
+    await renderContent({ activeTab: 'details' });
+
+    expect(mountedLogViewer.isConnected).toBe(true);
+    expect(mountedLogViewer.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(hoistedRefs.logViewerProps.current).toMatchObject({ isActive: false });
+
+    await renderContent({ activeTab: 'logs' });
+
+    expect(container.querySelector('[data-testid="logs-tab"]')).toBe(mountedLogViewer);
+    expect(mountedLogViewer.closest('[aria-hidden="true"]')).toBeNull();
+    expect(hoistedRefs.logViewerProps.current).toMatchObject({ isActive: true });
+  });
+
+  it('can retry the retained log viewer after its tab error boundary catches an error', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    hoistedRefs.logViewerError.current = new Error('render failed');
+
+    await renderContent({ activeTab: 'logs' });
+    expect(container.textContent).toContain('Failed to load Logs');
+
+    hoistedRefs.logViewerError.current = null;
+    const retryButton = requireValue(container.querySelector('button'), 'expected retry button');
+    await act(async () => {
+      retryButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.querySelector('[data-testid="logs-tab"]')).not.toBeNull();
+    consoleError.mockRestore();
+  });
+
   it('renders node logs tab when logs tab is active for a node', async () => {
-    await renderContent({
+    const nodeProps: Partial<React.ComponentProps<typeof ObjectPanelContent>> = {
       activeTab: 'logs',
       capabilities: { ...baseProps.capabilities, hasObjPanelLogs: true, hasNodeLogs: false },
       objectData: { kind: 'Node', name: 'node-1', clusterId: 'alpha:ctx' },
@@ -209,7 +255,8 @@ describe('ObjectPanelContent', () => {
           path: 'journal/kubelet',
         },
       ],
-    });
+    };
+    await renderContent(nodeProps);
 
     expect(hoistedRefs.nodeLogsTabProps.current).toMatchObject({
       nodeName: 'node-1',
@@ -218,6 +265,29 @@ describe('ObjectPanelContent', () => {
       availability: { pending: true },
       sources: [{ path: 'journal/kubelet' }],
     });
+
+    const mountedNodeLogs = requireValue(
+      container.querySelector<HTMLElement>('[data-testid="node-logs-tab"]'),
+      'expected mounted node logs'
+    );
+    await renderContent({ ...nodeProps, activeTab: 'details' });
+    expect(mountedNodeLogs.isConnected).toBe(true);
+    expect(mountedNodeLogs.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(hoistedRefs.nodeLogsTabProps.current).toMatchObject({ isActive: false });
+  });
+
+  it('shows the retained node-log error boundary when node logs fail to render', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    hoistedRefs.nodeLogsError.current = new Error('node logs render failed');
+
+    await renderContent({
+      activeTab: 'logs',
+      objectData: { kind: 'Node', name: 'node-1', clusterId: 'alpha:ctx' },
+      objectKind: 'node',
+    });
+
+    expect(container.textContent).toContain('Failed to load Logs');
+    consoleError.mockRestore();
   });
 
   it('does not render logs viewer when capability is missing', async () => {
@@ -250,6 +320,17 @@ describe('ObjectPanelContent', () => {
       capabilities: { ...baseProps.capabilities, hasShell: false },
     });
     expect(hoistedRefs.shellTabProps.current).toBeNull();
+  });
+
+  it('renders the active events tab with the panel scope', async () => {
+    await renderContent({ activeTab: 'events' });
+
+    expect(hoistedRefs.eventsTabProps.current).toMatchObject({
+      objectData: baseProps.objectData,
+      isActive: true,
+      eventsScope: baseProps.eventsScope,
+      panelId: baseProps.panelId,
+    });
   });
 
   it('passes capability information to YAML tab', async () => {

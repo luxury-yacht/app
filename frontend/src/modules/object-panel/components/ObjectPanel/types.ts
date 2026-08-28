@@ -146,6 +146,11 @@ export type LogDisplayMode = 'raw' | 'structured' | 'pretty' | 'parsed';
 
 export type LogTimestampMode = 'hidden' | 'default' | 'short' | 'localized';
 
+export interface LogScrollPosition {
+  scrollTop: number;
+  isTailFollowing: boolean;
+}
+
 /**
  * Persistent subset of LogViewerState — the user-facing view preferences
  * that should survive ObjectPanelContent unmount/remount caused by

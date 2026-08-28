@@ -95,9 +95,9 @@ import { parseBracketedLogPrefix } from './logLineMetadata';
 import { buildLogSearchRegex, isValidRegexPattern } from './logSearch';
 import {
   getLogViewerPrefs,
-  getLogViewerScrollTop,
+  getLogViewerScrollPosition,
   setLogViewerPrefs,
-  setLogViewerScrollTop,
+  setLogViewerScrollPosition,
 } from './logViewerPrefsCache';
 import {
   ALL_CONTAINERS,
@@ -2483,8 +2483,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     rowCount: isParsedView ? parsedContainerLogs.length : logEntries.length,
     tailFollowSignal: displayLogs,
     cacheKey: panelId,
-    getScrollTop: getLogViewerScrollTop,
-    setScrollTop: setLogViewerScrollTop,
+    getScrollPosition: getLogViewerScrollPosition,
+    setScrollPosition: setLogViewerScrollPosition,
     onTailFollowingChange: setIsTailFollowing,
   });
   const handleResumeScrolling = useCallback(() => {

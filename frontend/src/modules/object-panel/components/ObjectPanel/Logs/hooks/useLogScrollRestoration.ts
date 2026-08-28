@@ -1,4 +1,5 @@
 import { type RefObject, useCallback, useEffect, useRef } from 'react';
+import type { LogScrollPosition } from '../../types';
 
 interface LogScrollRestorationOptions {
   rootRef: RefObject<HTMLElement | null>;
@@ -6,13 +7,17 @@ interface LogScrollRestorationOptions {
   rowCount: number;
   tailFollowSignal: unknown;
   cacheKey: string;
-  getScrollTop: (cacheKey: string) => number | undefined;
-  setScrollTop: (cacheKey: string, scrollTop: number) => void;
+  getScrollPosition: (cacheKey: string) => LogScrollPosition | undefined;
+  setScrollPosition: (cacheKey: string, position: LogScrollPosition) => void;
   forceTailOnNextRestore?: boolean;
   onTailFollowingChange?: (isTailFollowing: boolean) => void;
 }
 
 const AT_BOTTOM_THRESHOLD_PX = 16;
+const MAX_LAYOUT_SETTLE_FRAMES = 20;
+// Virtualized rows are measured only after the first bottom jump renders them.
+// Wait for consecutive stable frames so their real height cannot strand the viewport above the tail.
+const REQUIRED_STABLE_LAYOUT_FRAMES = 2;
 
 interface KnownScrollPosition {
   element: HTMLElement;
@@ -45,8 +50,8 @@ export const useLogScrollRestoration = ({
   rowCount,
   tailFollowSignal,
   cacheKey,
-  getScrollTop,
-  setScrollTop,
+  getScrollPosition,
+  setScrollPosition,
   forceTailOnNextRestore = false,
   onTailFollowingChange,
 }: LogScrollRestorationOptions) => {
@@ -105,7 +110,7 @@ export const useLogScrollRestoration = ({
       return;
     }
 
-    const handler = () => {
+    const captureAndPersistPosition = () => {
       const knownPosition = knownScrollPositionRef.current;
       const shouldFollowTail =
         isLogScrollAtBottom(scrollEl) ||
@@ -118,42 +123,51 @@ export const useLogScrollRestoration = ({
       if (!scrollRestoredRef.current) {
         return;
       }
-      setScrollTop(cacheKey, scrollEl.scrollTop);
+      setScrollPosition(cacheKey, {
+        scrollTop: scrollEl.scrollTop,
+        isTailFollowing: shouldFollowTail,
+      });
     };
+    const handler = () => captureAndPersistPosition();
 
     scrollEl.addEventListener('scroll', handler, { passive: true });
     return () => {
       scrollEl.removeEventListener('scroll', handler);
+      captureAndPersistPosition();
     };
-  }, [cacheKey, getScrollContainer, rowCount, setScrollTop, setTailFollowing]);
+  }, [cacheKey, getScrollContainer, rowCount, setScrollPosition, setTailFollowing]);
 
-  useEffect(() => {
+  const restoreScrollPosition = useCallback((): boolean => {
     if (scrollRestoredRef.current || rowCount === 0) {
-      return;
+      return scrollRestoredRef.current;
     }
 
     const scrollEl = getScrollContainer();
     if (!scrollEl || scrollEl.scrollHeight <= scrollEl.clientHeight) {
-      return;
+      return false;
     }
 
     const maxScrollTop = scrollEl.scrollHeight - scrollEl.clientHeight;
-    const savedScrollTop = forceTailRestoreRef.current ? undefined : getScrollTop(cacheKey);
-    const targetScrollTop =
-      savedScrollTop !== null && savedScrollTop !== undefined
-        ? Math.min(savedScrollTop, maxScrollTop)
-        : maxScrollTop;
+    const savedPosition = forceTailRestoreRef.current ? undefined : getScrollPosition(cacheKey);
+    const targetScrollTop = savedPosition?.isTailFollowing
+      ? maxScrollTop
+      : Math.min(savedPosition?.scrollTop ?? maxScrollTop, maxScrollTop);
 
     scrollEl.scrollTop = targetScrollTop;
     knownScrollPositionRef.current = captureScrollPosition(scrollEl);
     setTailFollowing(isLogScrollAtBottom(scrollEl));
     scrollRestoredRef.current = true;
     forceTailRestoreRef.current = false;
-  }, [cacheKey, getScrollContainer, getScrollTop, rowCount, setTailFollowing]);
+    return true;
+  }, [cacheKey, getScrollContainer, getScrollPosition, rowCount, setTailFollowing]);
 
   useEffect(() => {
     void rowCount;
     void tailFollowSignal;
+    if (rowCount === 0) {
+      return;
+    }
+
     const shouldFollowTail = () => {
       const element = getScrollContainer();
       if (!element || !scrollRestoredRef.current) {
@@ -172,17 +186,22 @@ export const useLogScrollRestoration = ({
       knownScrollPositionRef.current = captureScrollPosition(element);
       return wasAtBottomRef.current;
     };
-    if (!shouldFollowTail()) {
-      return;
-    }
-
-    const scrollEl = getScrollContainer();
-    if (!scrollEl) {
+    if (restoreScrollPosition() && !shouldFollowTail()) {
       return;
     }
 
     let rafId: number | undefined;
-    const scrollToBottom = () => {
+    let attempts = 0;
+    let previousScrollHeight: number | undefined;
+    let stableLayoutFrames = 0;
+    const scrollToSettledBottom = () => {
+      if (!restoreScrollPosition()) {
+        attempts += 1;
+        if (attempts < MAX_LAYOUT_SETTLE_FRAMES) {
+          rafId = requestAnimationFrame(scrollToSettledBottom);
+        }
+        return;
+      }
       if (!shouldFollowTail()) {
         return;
       }
@@ -190,36 +209,82 @@ export const useLogScrollRestoration = ({
       if (!element) {
         return;
       }
-      element.scrollTop = element.scrollHeight;
+      const currentScrollHeight = element.scrollHeight;
+      if (currentScrollHeight <= element.clientHeight) {
+        knownScrollPositionRef.current = captureScrollPosition(element);
+        return;
+      }
+      element.scrollTop = currentScrollHeight;
       knownScrollPositionRef.current = captureScrollPosition(element);
+      stableLayoutFrames =
+        previousScrollHeight === currentScrollHeight && isLogScrollAtBottom(element)
+          ? stableLayoutFrames + 1
+          : 0;
+      previousScrollHeight = currentScrollHeight;
+      attempts += 1;
+      if (
+        attempts < MAX_LAYOUT_SETTLE_FRAMES &&
+        stableLayoutFrames < REQUIRED_STABLE_LAYOUT_FRAMES
+      ) {
+        rafId = requestAnimationFrame(scrollToSettledBottom);
+      }
     };
 
-    if (isParsedView) {
-      let attempts = 0;
-      const maxAttempts = 20;
-      const checkAndScroll = () => {
-        if (!shouldFollowTail()) {
-          return;
-        }
-        const element = getScrollContainer();
-        if (element && element.scrollHeight > element.clientHeight) {
-          rafId = requestAnimationFrame(scrollToBottom);
-        } else if (attempts < maxAttempts) {
-          attempts += 1;
-          rafId = requestAnimationFrame(checkAndScroll);
-        }
-      };
-      rafId = requestAnimationFrame(checkAndScroll);
-    } else {
-      rafId = requestAnimationFrame(scrollToBottom);
-    }
+    rafId = requestAnimationFrame(scrollToSettledBottom);
 
     return () => {
       if (rafId !== undefined) {
         cancelAnimationFrame(rafId);
       }
     };
-  }, [getScrollContainer, isParsedView, tailFollowSignal, rowCount, setTailFollowing]);
+  }, [getScrollContainer, restoreScrollPosition, tailFollowSignal, rowCount, setTailFollowing]);
+
+  useEffect(() => {
+    void rowCount;
+    const scrollEl = getScrollContainer();
+    if (!scrollEl || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    let layoutRafId: number | undefined;
+    const observer = new ResizeObserver(() => {
+      if (layoutRafId !== undefined) {
+        return;
+      }
+      layoutRafId = requestAnimationFrame(() => {
+        layoutRafId = undefined;
+        if (!restoreScrollPosition() || !wasAtBottomRef.current) {
+          return;
+        }
+        const element = getScrollContainer();
+        if (!element) {
+          return;
+        }
+        element.scrollTop = element.scrollHeight;
+        knownScrollPositionRef.current = captureScrollPosition(element);
+        setScrollPosition(cacheKey, {
+          scrollTop: element.scrollTop,
+          isTailFollowing: true,
+        });
+      });
+    });
+
+    const layoutElements = Array.from(scrollEl.children);
+    if (layoutElements.length === 0) {
+      observer.observe(scrollEl);
+    } else {
+      for (const element of layoutElements) {
+        observer.observe(element);
+      }
+    }
+
+    return () => {
+      observer.disconnect();
+      if (layoutRafId !== undefined) {
+        cancelAnimationFrame(layoutRafId);
+      }
+    };
+  }, [cacheKey, getScrollContainer, restoreScrollPosition, rowCount, setScrollPosition]);
 
   const resumeTailFollowing = useCallback(() => {
     const scrollEl = getScrollContainer();
@@ -229,9 +294,12 @@ export const useLogScrollRestoration = ({
     scrollEl.scrollTop = scrollEl.scrollHeight;
     knownScrollPositionRef.current = captureScrollPosition(scrollEl);
     scrollRestoredRef.current = true;
-    setScrollTop(cacheKey, scrollEl.scrollTop);
+    setScrollPosition(cacheKey, {
+      scrollTop: scrollEl.scrollTop,
+      isTailFollowing: true,
+    });
     setTailFollowing(true);
-  }, [cacheKey, getScrollContainer, setScrollTop, setTailFollowing]);
+  }, [cacheKey, getScrollContainer, setScrollPosition, setTailFollowing]);
 
   return { getScrollContainer, resetScrollRestoration, resumeTailFollowing };
 };
