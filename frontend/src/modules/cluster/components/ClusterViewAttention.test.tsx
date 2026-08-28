@@ -24,6 +24,10 @@ const {
   queryParamsRef,
   tablePropsRef,
   persistenceRef,
+  setSelectedNamespaceMock,
+  setViewTypeMock,
+  setSidebarSelectionMock,
+  setActiveNamespaceTabMock,
 } = vi.hoisted(() => ({
   openWithObjectMock: vi.fn(),
   ignoreObjectMock: vi
@@ -62,6 +66,10 @@ const {
   persistenceRef: {
     current: { hydrated: true, setFilters: vi.fn() },
   },
+  setSelectedNamespaceMock: vi.fn(),
+  setViewTypeMock: vi.fn(),
+  setSidebarSelectionMock: vi.fn(),
+  setActiveNamespaceTabMock: vi.fn(),
 }));
 
 vi.mock('@/core/settings/clusterAttentionIgnores', () => ({
@@ -79,6 +87,21 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
+}));
+
+vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
+  useNamespace: () => ({ setSelectedNamespace: setSelectedNamespaceMock }),
+}));
+
+vi.mock('@/core/contexts/ViewStateContext', () => ({
+  useViewState: () => ({
+    setViewType: setViewTypeMock,
+    setActiveNamespaceTab: setActiveNamespaceTabMock,
+  }),
+}));
+
+vi.mock('@/core/contexts/SidebarStateContext', () => ({
+  useSidebarState: () => ({ setSidebarSelection: setSidebarSelectionMock }),
 }));
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
@@ -167,6 +190,10 @@ describe('ClusterViewAttention', () => {
     restoreTypeMock.mockClear();
     restoreGlobalTypeMock.mockClear();
     restoreObjectMock.mockClear();
+    setSelectedNamespaceMock.mockClear();
+    setViewTypeMock.mockClear();
+    setSidebarSelectionMock.mockClear();
+    setActiveNamespaceTabMock.mockClear();
     queryPayloadRef.current = {
       ignoreRules: {
         objectFindings: [],
@@ -307,6 +334,34 @@ describe('ClusterViewAttention', () => {
       name: 'checkout',
       uid: 'uid-checkout',
     });
+  });
+
+  it('selects the namespace in the sidebar from the Namespace link', async () => {
+    await act(async () => {
+      root.render(<ClusterViewAttention />);
+      await Promise.resolve();
+    });
+
+    const columns = queryParamsRef.current
+      ?.columns as GridColumnDefinition<ClusterAttentionFinding>[];
+    const namespaceCell = columns.find((column) => column.key === 'namespace')?.render(finding) as
+      | React.ReactElement<{
+          className: string;
+          onClick: (event: { altKey: boolean }) => void;
+        }>
+      | undefined;
+
+    expect(namespaceCell?.type).toBe('button');
+    expect(namespaceCell?.props.className).toContain('gridtable-link');
+    act(() => namespaceCell?.props.onClick({ altKey: false }));
+
+    expect(setSelectedNamespaceMock).toHaveBeenCalledWith('payments', 'cluster-a');
+    expect(setViewTypeMock).toHaveBeenCalledWith('namespace');
+    expect(setSidebarSelectionMock).toHaveBeenCalledWith({
+      type: 'namespace',
+      value: 'payments',
+    });
+    expect(setActiveNamespaceTabMock).toHaveBeenCalledWith('browse');
   });
 
   it('renders every severity with the matching status chip', async () => {

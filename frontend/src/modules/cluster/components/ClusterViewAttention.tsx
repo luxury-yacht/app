@@ -1,4 +1,5 @@
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
@@ -40,6 +41,8 @@ const severityChipVariants = {
   error: 'unhealthy',
 } satisfies Record<ClusterAttentionFinding['severity'], StatusChipVariant>;
 
+const getFindingNamespace = (row: ClusterAttentionFinding) => row.namespace;
+
 const compactFindingText = (values: string[]): string[] => {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -80,6 +83,10 @@ export default function ClusterViewAttention() {
   const { navigateToView } = useNavigateToView();
   const useShortResourceNames = useShortNames();
   const [ignoredModalOpen, setIgnoredModalOpen] = useState(false);
+  const namespaceColumnLink = useNamespaceColumnLink<ClusterAttentionFinding>(
+    'browse',
+    getFindingNamespace
+  );
 
   const reportIgnoreError = useCallback((error: unknown, action: string) => {
     errorHandler.handle(error instanceof Error ? error : new Error(String(error)), { action });
@@ -107,7 +114,12 @@ export default function ClusterViewAttention() {
         onClick: openObject,
         onAltClick: navigateObject,
       }),
-      cf.createTextColumn('namespace', 'Namespace', (row) => row.namespace || '-'),
+      cf.createTextColumn(
+        'namespace',
+        'Namespace',
+        (row) => row.namespace || '-',
+        namespaceColumnLink
+      ),
       cf.createResourceNameColumn((row) => row.ref.name, {
         onClick: openObject,
         onAltClick: navigateObject,
@@ -142,7 +154,7 @@ export default function ClusterViewAttention() {
       reason: { width: 320 },
       age: { autoWidth: true },
     });
-  }, [navigateObject, openObject, useShortResourceNames]);
+  }, [namespaceColumnLink, navigateObject, openObject, useShortResourceNames]);
 
   const keyExtractor = useCallback(
     (row: ClusterAttentionFinding) =>
