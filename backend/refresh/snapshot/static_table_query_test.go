@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"slices"
 	"strconv"
 	"testing"
 )
@@ -18,6 +19,33 @@ func migratedStaticQuery() typedTableQuery {
 			SortDirection: "asc",
 			Limit:         1,
 		},
+	}
+}
+
+func TestNetworkTableQueryUsesStableColumnConcepts(t *testing.T) {
+	row := NetworkSummary{
+		Ref: resourcemodel.ResourceRef{Name: "row-name"},
+		Details: []resourcemodel.DetailSegment{
+			{Slot: resourcemodel.DetailSlotReference, Label: "Class", Value: "nginx"},
+			{Slot: resourcemodel.DetailSlotAddress, Label: "Hosts", Value: "example.com"},
+		},
+	}
+	adapter := networkTableQueryAdapter()
+	if got := adapter.SortValue(row, "context"); got != "Class: nginx" {
+		t.Fatalf("context sort value = %q, want %q", got, "Class: nginx")
+	}
+	if got := adapter.SortValue(row, "network"); got != "Hosts: example.com" {
+		t.Fatalf("network sort value = %q, want %q", got, "Hosts: example.com")
+	}
+
+	capabilities := namespaceNetworkQueryCapabilities()
+	wantSortable := []string{"name", "kind", "namespace", "context", "network", "age"}
+	if !slices.Equal(capabilities.SortableFields, wantSortable) {
+		t.Fatalf("sortable fields = %v, want %v", capabilities.SortableFields, wantSortable)
+	}
+	wantSearchable := []string{"kind", "name", "namespace", "context", "network", "summary"}
+	if !slices.Equal(capabilities.SearchableFields, wantSearchable) {
+		t.Fatalf("searchable fields = %v, want %v", capabilities.SearchableFields, wantSearchable)
 	}
 }
 

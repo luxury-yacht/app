@@ -298,6 +298,7 @@ describe('NsViewNetwork', () => {
       details: [
         {
           slot: 'reference',
+          label: 'Class',
           value: 'nginx',
           link: {
             ref: {
@@ -312,6 +313,7 @@ describe('NsViewNetwork', () => {
         },
         {
           slot: 'address',
+          label: 'Hosts',
           value: 'web.example.com +1',
           search: 'web.example.com, api.example.com',
         },
@@ -463,43 +465,73 @@ describe('NsViewNetwork', () => {
     expect(deleteItem).toBeUndefined();
   });
 
-  it('renders the three slot columns: class text, collapsed address, counts chips', async () => {
+  it('renders stable context, network, and summary columns', async () => {
     permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
     const entry = baseNetwork();
     await renderNetworkView();
 
-    const classColumn = getColumn('class');
-    const classCell = requireReactElement<{ className?: string }>(
-      classColumn.render(entry),
-      'expected the class cell element'
+    const contextColumn = getColumn('context');
+    expect(contextColumn.header).toBe('Context');
+    const contextCell = requireReactElement<{ className?: string }>(
+      contextColumn.render(entry),
+      'expected the context cell element'
     );
-    expect(renderOutputToText(classCell)).toContain('nginx');
-    expect(classCell.props.className).toContain('detail-segments--text');
+    expect(renderOutputToText(contextCell)).toContain('nginx');
+    expect(renderOutputToText(contextCell)).toContain('Class:');
+    expect(contextCell.props.className).toContain('detail-segments--text');
 
-    const addressColumn = getColumn('address');
-    const addressCell = requireReactElement<{
+    const networkColumn = getColumn('network');
+    expect(networkColumn.header).toBe('Network');
+    const networkCell = requireReactElement<{
       title?: string;
       'data-gridtable-export-text'?: string;
-    }>(addressColumn.render(entry), 'expected the address cell element');
-    expect(renderOutputToText(addressCell)).toContain('web.example.com +1');
-    expect(addressCell.props.title).toBe('web.example.com, api.example.com');
-    expect(addressCell.props['data-gridtable-export-text']).toBe('web.example.com +1');
+    }>(networkColumn.render(entry), 'expected the network cell element');
+    expect(renderOutputToText(networkCell)).toContain('web.example.com +1');
+    expect(networkCell.props.title).toBe('Hosts: web.example.com, api.example.com');
+    expect(networkCell.props['data-gridtable-export-text']).toBe('Hosts: web.example.com +1');
 
-    const countsColumn = getColumn('counts');
-    expect(countsColumn.sortable).toBe(false);
-    const countsMarkup = renderOutputToText(countsColumn.render(entry));
-    expect(countsMarkup).toContain('detail-segment');
-    expect(countsMarkup).toContain('Rules');
+    const summaryColumn = getColumn('summary');
+    expect(summaryColumn.header).toBe('Summary');
+    expect(summaryColumn.sortable).toBe(false);
+    const summaryCell = requireReactElement<{ className?: string }>(
+      summaryColumn.render(entry),
+      'expected the summary cell element'
+    );
+    const summaryMarkup = renderOutputToText(summaryCell);
+    expect(summaryCell.props.className).toContain('detail-segments--text');
+    expect(summaryMarkup).not.toContain('class="detail-segment"');
+    expect(summaryMarkup).toContain('Rules:');
+
+    const warningSummary = renderOutputToText(
+      summaryColumn.render(
+        baseNetwork({
+          details: [
+            { slot: 'counts', label: 'Ready', value: '2' },
+            { slot: 'counts', label: 'Not ready', value: '1', presentation: 'warning' },
+          ],
+        })
+      )
+    );
+    expect(warningSummary).toContain('detail-segment-separator');
+    expect(warningSummary).toContain('detail-segment-value status-text warning');
 
     // A row with no address segments renders the shared no-value marker.
     const bare = baseNetwork({ details: [{ slot: 'counts', label: 'Targets', value: '1' }] });
-    expect(addressColumn.render(bare)).toBe('-');
+    expect(networkColumn.render(bare)).toBe('-');
+  });
+
+  it('renders kind and name from the canonical resource reference', async () => {
+    const entry = baseNetwork();
+    await renderNetworkView();
+
+    expect(renderOutputToText(getColumn('kind').render(entry))).toContain('Ingress');
+    expect(renderOutputToText(getColumn('name').render(entry))).toContain('web-gateway');
   });
 
   it('opens a linked class segment in the object panel', async () => {
     const entry = baseNetwork();
     await renderNetworkView();
-    const detailsColumn = getColumn('class');
+    const detailsColumn = getColumn('context');
     const rendered = detailsColumn.render(entry);
 
     const findButton = (node: React.ReactNode): React.ReactElement | undefined => {

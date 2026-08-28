@@ -19,9 +19,9 @@ import (
 func SummarySegments(facts Facts) []resourcemodel.DetailSegment {
 	segments := []resourcemodel.DetailSegment{}
 	if facts.ClassName != "" {
-		segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Value: facts.ClassName, Link: facts.Class})
+		segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Label: "Class", Value: facts.ClassName, Link: facts.Class})
 	}
-	if hosts := resourcemodel.ListDetailSegment(resourcemodel.DetailSlotAddress, facts.Hosts); hosts.Value != "" {
+	if hosts := resourcemodel.ListDetailSegment(resourcemodel.DetailSlotAddress, "Hosts", facts.Hosts); hosts.Value != "" {
 		segments = append(segments, hosts)
 	}
 	return append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: strconv.Itoa(len(facts.Rules))})

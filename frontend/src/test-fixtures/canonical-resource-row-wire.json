@@ -638,6 +638,7 @@
               "ageTimestamp": 1699999000000,
               "details": [
                 {
+                  "label": "Policy",
                   "slot": "reference",
                   "value": "Ingress"
                 },

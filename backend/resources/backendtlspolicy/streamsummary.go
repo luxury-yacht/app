@@ -25,7 +25,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, policy *gatewayv1.BackendTL
 	details := []resourcemodel.DetailSegment{}
 	if len(facts.TargetRefs) > 0 {
 		if name := resourcemodel.ResourceLinkName(facts.TargetRefs[0]); name != "" {
-			target := resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Value: name, Link: &facts.TargetRefs[0]}
+			target := resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Label: "Target", Value: name, Link: &facts.TargetRefs[0]}
 			if len(facts.TargetRefs) > 1 {
 				names := make([]string, 0, len(facts.TargetRefs))
 				for _, ref := range facts.TargetRefs {

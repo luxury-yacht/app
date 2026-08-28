@@ -27,10 +27,10 @@ func summarySegments(facts Facts) []resourcemodel.DetailSegment {
 	segments := []resourcemodel.DetailSegment{}
 	if facts.Class != nil {
 		if className := resourcemodel.ResourceLinkName(*facts.Class); className != "" {
-			segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Value: className, Link: facts.Class})
+			segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Label: "Class", Value: className, Link: facts.Class})
 		}
 	}
-	if addresses := resourcemodel.ListDetailSegment(resourcemodel.DetailSlotAddress, facts.Addresses); addresses.Value != "" {
+	if addresses := resourcemodel.ListDetailSegment(resourcemodel.DetailSlotAddress, "Addresses", facts.Addresses); addresses.Value != "" {
 		segments = append(segments, addresses)
 	}
 	return append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotCounts, Label: "Listeners", Value: strconv.Itoa(len(facts.Listeners))})

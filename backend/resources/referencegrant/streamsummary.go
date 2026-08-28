@@ -24,7 +24,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, grant *gatewayv1.ReferenceG
 	facts := BuildFacts(meta.ClusterID, grant)
 	details := []resourcemodel.DetailSegment{}
 	if kinds := grantKindsSummary(facts); kinds != "" {
-		details = append(details, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Value: kinds})
+		details = append(details, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Label: "Access", Value: kinds})
 	}
 	details = append(details,
 		resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotCounts, Label: "From", Value: strconv.Itoa(len(facts.From))},

@@ -29,9 +29,16 @@ import './detailSegmentsColumn.css';
 const detailSegmentText = (segment: DetailSegment): string =>
   segment.label ? `${segment.label}: ${segment.value}` : segment.value;
 
+const detailSegmentSearchText = (segment: DetailSegment): string => {
+  if (!segment.search) {
+    return detailSegmentText(segment);
+  }
+  return segment.label ? `${segment.label}: ${segment.search}` : segment.search;
+};
+
 /**
- * Flattens segments to one line, matching the backend's DetailSegmentsText so
- * export/tooltip text stays equivalent to the server-side search text.
+ * Flattens displayed segments to one line, matching the backend's
+ * DetailSegmentsText for export. Tooltips expand collapsed values separately.
  */
 export const detailSegmentsText = (segments: DetailSegment[] | undefined): string =>
   (segments ?? []).map(detailSegmentText).join(', ');
@@ -74,7 +81,7 @@ export function createDetailSegmentsColumn<T>(
           type="button"
           className="gridtable-cell-button gridtable-link object-panel-link detail-segment-value"
           data-gridtable-shortcut-optout="true"
-          data-gridtable-rowclick="allow"
+          data-gridtable-rowclick="suppress"
           onClick={(event) => {
             if (event.altKey && options.navigateReference) {
               event.preventDefault();
@@ -116,9 +123,7 @@ export function createDetailSegmentsColumn<T>(
         return '-';
       }
       const flatText = detailSegmentsText(segments);
-      const titleText = segments
-        .map((segment) => segment.search || detailSegmentText(segment))
-        .join(', ');
+      const titleText = segments.map(detailSegmentSearchText).join(', ');
       const text = options.variant === 'text';
       const containerClassName = [
         'detail-segments',
@@ -143,7 +148,7 @@ export function createDetailSegmentsColumn<T>(
                 <span key={segmentKey} className="detail-segment-text">
                   {index > 0 ? <span className="detail-segment-separator">{' · '}</span> : null}
                   {segment.label ? (
-                    <span className="detail-segment-label">{`${segment.label} `}</span>
+                    <span className="detail-segment-label">{`${segment.label}:`}</span>
                   ) : null}
                   {renderSegmentValue(segment, segmentKey)}
                 </span>

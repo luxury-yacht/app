@@ -23,7 +23,7 @@ func SummarySegments(facts Facts) []resourcemodel.DetailSegment {
 		types = strings.Join(facts.PolicyTypes, ", ")
 	}
 	return []resourcemodel.DetailSegment{
-		{Slot: resourcemodel.DetailSlotReference, Value: types},
+		{Slot: resourcemodel.DetailSlotReference, Label: "Policy", Value: types},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: strconv.Itoa(len(facts.IngressRules) + len(facts.EgressRules))},
 	}
 }

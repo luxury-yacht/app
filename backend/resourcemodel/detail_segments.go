@@ -54,9 +54,9 @@ func DetailSegmentText(segment DetailSegment) string {
 	return segment.Label + ": " + segment.Value
 }
 
-// DetailSegmentsText flattens segments into the one-line text used for
-// server-side search and sort (and by frontend export/tooltips), keeping the
-// query surface equivalent to the prior preformatted Details string.
+// DetailSegmentsText flattens displayed segments into the one-line text used by
+// frontend export. Search uses DetailSegmentsSearchText so collapsed values can
+// expand, while per-column sort uses DetailSlotText.
 func DetailSegmentsText(segments []DetailSegment) string {
 	if len(segments) == 0 {
 		return ""
@@ -78,7 +78,11 @@ func DetailSegmentsSearchText(segments []DetailSegment) string {
 	parts := make([]string, 0, len(segments))
 	for _, segment := range segments {
 		if segment.Search != "" {
-			parts = append(parts, segment.Search)
+			expanded := segment.Search
+			if segment.Label != "" {
+				expanded = segment.Label + ": " + expanded
+			}
+			parts = append(parts, expanded)
 			continue
 		}
 		parts = append(parts, DetailSegmentText(segment))
@@ -98,18 +102,19 @@ func DetailSlotText(segments []DetailSegment, slot string) string {
 	return strings.Join(parts, ", ")
 }
 
-// ListDetailSegment collapses a homogeneous string list into one segment:
+// ListDetailSegment collapses a homogeneous string list into one labeled segment:
 // the first value plus a "+N" remainder in the display text, with the full
 // list carried in Search. An empty list yields a zero segment (callers skip it).
-func ListDetailSegment(slot string, values []string) DetailSegment {
+func ListDetailSegment(slot, label string, values []string) DetailSegment {
 	if len(values) == 0 {
 		return DetailSegment{}
 	}
 	if len(values) == 1 {
-		return DetailSegment{Slot: slot, Value: values[0]}
+		return DetailSegment{Slot: slot, Label: label, Value: values[0]}
 	}
 	return DetailSegment{
 		Slot:   slot,
+		Label:  label,
 		Value:  values[0] + " +" + strconv.Itoa(len(values)-1),
 		Search: strings.Join(values, ", "),
 	}

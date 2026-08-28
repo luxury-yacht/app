@@ -10,16 +10,14 @@
 ### Changed
 
 - The namespace Network view's free-form Details column is replaced by three
-  aligned columns: **Type / Class** (service type, ingress/gateway class,
-  route/listener-set parent, slice's service — clickable links open the
-  referenced object), **Address / Hosts** (cluster IPs with ports, hosts,
-  hostnames, gateway addresses, endpoint-slice ready addresses, and listener
-  hostnames/ports; long lists collapse to "first +N" with the full list in the
-  tooltip and search), and **Counts / Status** (rule, listener,
-  endpoint, and target counts as chips; not-ready endpoints get a warning
-  tint). Routes now link their parent gateway, NetworkPolicy rows show rule
-  counts, and ReferenceGrant rows show their from → to kinds. Type / Class and
-  Address are sortable; search matches everything, including collapsed hosts.
+  aligned columns: **Context**, **Network**, and **Summary**. Rows label their
+  own resource-specific meaning (such as Type, Class, Parent, Service, Cluster
+  IP, Hosts, or Ports), related-object values open the referenced object, long
+  lists collapse to "first +N" with the full list in the tooltip and search,
+  narrow cells preserve their label and truncate only the portion of the value
+  that does not fit, and summaries render as plain label/value text with warning
+  emphasis reserved for not-ready endpoints. Context and Network are sortable;
+  search matches everything, including collapsed hosts.
 - Redesigned the Columns dropdown to support the new features. Additionally:
   - Columns that cannot be hidden are indicated with a lock icon.
     - Locked visibility columns can still have reordered.

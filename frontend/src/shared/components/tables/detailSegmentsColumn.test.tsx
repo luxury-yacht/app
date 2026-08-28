@@ -117,6 +117,7 @@ describe('createDetailSegmentsColumn', () => {
     const props = button.props as {
       className?: string;
       'data-gridtable-shortcut-optout'?: string;
+      'data-gridtable-rowclick'?: string;
       onClick: (event: {
         altKey: boolean;
         preventDefault: () => void;
@@ -130,6 +131,7 @@ describe('createDetailSegmentsColumn', () => {
       'gridtable-cell-button gridtable-link object-panel-link detail-segment-value'
     );
     expect(props['data-gridtable-shortcut-optout']).toBe('true');
+    expect(props['data-gridtable-rowclick']).toBe('suppress');
 
     props.onClick({ altKey: false, preventDefault: vi.fn(), stopPropagation: vi.fn() });
     expect(openReference).toHaveBeenCalledWith(
@@ -187,6 +189,7 @@ describe('createDetailSegmentsColumn', () => {
         { slot: 'address', value: '10.0.0.10' },
         {
           slot: 'address',
+          label: 'Hosts',
           value: 'web.example.com +2',
           search: 'web.example.com, b.example.com, c.example.com',
         },
@@ -202,8 +205,26 @@ describe('createDetailSegmentsColumn', () => {
       className?: string;
     }>;
     expect(container.props.className).toContain('detail-segments--text');
-    expect(container.props.title).toBe('10.0.0.10, web.example.com, b.example.com, c.example.com');
-    expect(container.props['data-gridtable-export-text']).toBe('10.0.0.10, web.example.com +2');
+    expect(container.props.title).toBe(
+      '10.0.0.10, Hosts: web.example.com, b.example.com, c.example.com'
+    );
+    expect(container.props['data-gridtable-export-text']).toBe(
+      '10.0.0.10, Hosts: web.example.com +2'
+    );
+  });
+
+  it('keeps text-variant labels visibly associated with their values', () => {
+    const column = buildColumn({ slot: 'address', variant: 'text' });
+    const markup = renderToStaticMarkup(
+      column.render({
+        details: [
+          { slot: 'address', label: 'Cluster IP', value: '10.0.0.10' },
+          { slot: 'address', label: 'Ports', value: '443/TCP' },
+        ],
+      }) as React.ReactElement
+    );
+    expect(markup).toContain('Cluster IP:');
+    expect(markup).toContain('Ports:');
   });
 
   it('renders text-variant link segments as buttons', () => {

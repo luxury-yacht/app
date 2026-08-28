@@ -53,7 +53,7 @@ func RouteSummarySegments(facts RouteCommonFacts) []DetailSegment {
 	segments := []DetailSegment{}
 	if len(facts.ParentRefs) > 0 {
 		if name := ResourceLinkName(facts.ParentRefs[0]); name != "" {
-			parent := DetailSegment{Slot: DetailSlotReference, Value: name, Link: &facts.ParentRefs[0]}
+			parent := DetailSegment{Slot: DetailSlotReference, Label: "Parent", Value: name, Link: &facts.ParentRefs[0]}
 			if len(facts.ParentRefs) > 1 {
 				names := make([]string, 0, len(facts.ParentRefs))
 				for _, ref := range facts.ParentRefs {
@@ -64,7 +64,7 @@ func RouteSummarySegments(facts RouteCommonFacts) []DetailSegment {
 			segments = append(segments, parent)
 		}
 	}
-	if hosts := ListDetailSegment(DetailSlotAddress, facts.Hostnames); hosts.Value != "" {
+	if hosts := ListDetailSegment(DetailSlotAddress, "Hosts", facts.Hostnames); hosts.Value != "" {
 		segments = append(segments, hosts)
 	}
 	return append(segments, DetailSegment{Slot: DetailSlotCounts, Label: "Rules", Value: strconv.Itoa(len(facts.Rules))})

@@ -47,10 +47,10 @@ func TestDetailSlotTextFlattensOnlyTheRequestedSlot(t *testing.T) {
 
 func TestDetailSegmentsSearchTextExpandsCollapsedLists(t *testing.T) {
 	segments := []DetailSegment{
-		{Slot: DetailSlotAddress, Value: "web.example.com +2", Search: "web.example.com, b.example.com, c.example.com"},
+		{Slot: DetailSlotAddress, Label: "Hosts", Value: "web.example.com +2", Search: "web.example.com, b.example.com, c.example.com"},
 		{Slot: DetailSlotCounts, Label: "Rules", Value: "4"},
 	}
-	require.Equal(t, "web.example.com, b.example.com, c.example.com, Rules: 4", DetailSegmentsSearchText(segments))
+	require.Equal(t, "Hosts: web.example.com, b.example.com, c.example.com, Rules: 4", DetailSegmentsSearchText(segments))
 }
 
 func TestFormatPortsSummaryGroupsUniformProtocols(t *testing.T) {
@@ -61,14 +61,15 @@ func TestFormatPortsSummaryGroupsUniformProtocols(t *testing.T) {
 }
 
 func TestListDetailSegmentCollapsesToFirstPlusCount(t *testing.T) {
-	require.Equal(t, DetailSegment{Slot: DetailSlotAddress, Value: "a.example.com"},
-		ListDetailSegment(DetailSlotAddress, []string{"a.example.com"}))
+	require.Equal(t, DetailSegment{Slot: DetailSlotAddress, Label: "Hosts", Value: "a.example.com"},
+		ListDetailSegment(DetailSlotAddress, "Hosts", []string{"a.example.com"}))
 	require.Equal(t, DetailSegment{
 		Slot:   DetailSlotAddress,
+		Label:  "Hosts",
 		Value:  "a.example.com +2",
 		Search: "a.example.com, b.example.com, c.example.com",
-	}, ListDetailSegment(DetailSlotAddress, []string{"a.example.com", "b.example.com", "c.example.com"}))
-	require.Equal(t, DetailSegment{}, ListDetailSegment(DetailSlotAddress, nil))
+	}, ListDetailSegment(DetailSlotAddress, "Hosts", []string{"a.example.com", "b.example.com", "c.example.com"}))
+	require.Equal(t, DetailSegment{}, ListDetailSegment(DetailSlotAddress, "Hosts", nil))
 }
 
 func TestRouteSummarySegments(t *testing.T) {
@@ -80,8 +81,8 @@ func TestRouteSummarySegments(t *testing.T) {
 		Rules:      []RouteRuleFacts{{}, {}, {}},
 	}
 	require.Equal(t, []DetailSegment{
-		{Slot: DetailSlotReference, Value: "edge", Link: &facts.ParentRefs[0], Search: "edge, other"},
-		{Slot: DetailSlotAddress, Value: "a.example.com +1", Search: "a.example.com, b.example.com"},
+		{Slot: DetailSlotReference, Label: "Parent", Value: "edge", Link: &facts.ParentRefs[0], Search: "edge, other"},
+		{Slot: DetailSlotAddress, Label: "Hosts", Value: "a.example.com +1", Search: "a.example.com, b.example.com"},
 		{Slot: DetailSlotCounts, Label: "Rules", Value: "3"},
 	}, RouteSummarySegments(facts))
 

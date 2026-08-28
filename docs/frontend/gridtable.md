@@ -29,14 +29,21 @@ workflow and that exception is documented.
 - Prefer shared column factories for common Kubernetes/resource fields.
 - Use `createDetailSegmentsColumn` for backend `DetailSegment[]` details fields
   (multi-kind tables). The backend tags each segment with a semantic slot
-  (reference/address/counts); a view renders one column per slot so same-kind
-  rows stay vertically aligned. The `text` variant renders plain separated
-  values (reference/address); the default `chips` variant renders subtle chips
-  with presentation-token tints (counts/status). Resolvable `ResourceLink`
-  segments become cross-object link buttons; collapsed list values ("first
-  +N") carry their full text in the tooltip via the segment's `search` field;
-  auto-width relies on the measurer's render-replica fallback, so do not add
-  `measurementText`. Do not re-render segment lists with ad-hoc cells.
+  (reference/address/counts); the namespace Network view maps them to stable
+  **Context**, **Network**, and **Summary** columns so mixed-kind rows remain
+  vertically aligned. Kind-specific meaning belongs in each segment label
+  (`Class`, `Parent`, `Type`, `Hosts`, `Ports`), not in slash-separated column
+  headings. The namespace Network view uses the `text` variant for all three
+  columns: it renders labeled values separated by dots and applies presentation
+  tokens to exceptional values without boxing ordinary counts. In a narrow text
+  column, keep the label visible and truncate only the value within the
+  remaining width. Resolvable `ResourceLink` segments become cross-object link
+  buttons and suppress the
+  parent row action. Collapsed list values ("first +N") carry their full text
+  in the tooltip via the segment's `search` field. Auto-width relies on the
+  measurer's render-replica fallback,
+  so do not add `measurementText`. Do not re-render segment lists with ad-hoc
+  cells.
 - An absent table value renders as the ASCII hyphen-minus (`-`) in
   `--color-text-tertiary`. `GridTable` normalizes both `-` and the legacy em
   dash through `tableNoValue`; native tables must render potentially absent

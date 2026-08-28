@@ -118,12 +118,10 @@ func networkTableQueryAdapter() typedTableQueryAdapter[NetworkSummary] {
 				return row.Ref.Kind
 			case "namespace":
 				return row.Ref.Namespace
-			case "class":
+			case "context":
 				return resourcemodel.DetailSlotText(row.Details, resourcemodel.DetailSlotReference)
-			case "address":
+			case "network":
 				return resourcemodel.DetailSlotText(row.Details, resourcemodel.DetailSlotAddress)
-			case "counts":
-				return resourcemodel.DetailSlotText(row.Details, resourcemodel.DetailSlotCounts)
 			case "age":
 				return row.Age
 			default:

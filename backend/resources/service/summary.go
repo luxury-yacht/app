@@ -24,15 +24,15 @@ import (
 func SummarySegments(facts Facts) []resourcemodel.DetailSegment {
 	segments := []resourcemodel.DetailSegment{}
 	if facts.Type != "" {
-		segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Value: facts.Type})
+		segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Label: "Type", Value: facts.Type})
 	}
 	clusterIP := facts.ClusterIP
 	if clusterIP == "" {
 		clusterIP = "None"
 	}
-	segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotAddress, Value: clusterIP})
+	segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotAddress, Label: "Cluster IP", Value: clusterIP})
 	if ports := formatSummaryPorts(facts.Ports); ports != "" {
-		segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotAddress, Value: ports})
+		segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotAddress, Label: "Ports", Value: ports})
 	}
 	return AppendEndpointsSegment(segments, facts.ReadyEndpointCount)
 }

@@ -22,7 +22,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, listenerSet *gatewayv1.List
 	}
 	facts := BuildFacts(meta.ClusterID, listenerSet)
 	details := []resourcemodel.DetailSegment{
-		{Slot: resourcemodel.DetailSlotReference, Value: resourcemodel.ResourceLinkName(facts.ParentRef), Link: &facts.ParentRef},
+		{Slot: resourcemodel.DetailSlotReference, Label: "Parent", Value: resourcemodel.ResourceLinkName(facts.ParentRef), Link: &facts.ParentRef},
 	}
 	if addresses := listenerAddressSegment(facts.Listeners); addresses.Value != "" {
 		details = append(details, addresses)
@@ -43,14 +43,14 @@ func listenerAddressSegment(listeners []resourcemodel.GatewayListenerFacts) reso
 		}
 	}
 	if len(hostnames) > 0 {
-		return resourcemodel.ListDetailSegment(resourcemodel.DetailSlotAddress, hostnames)
+		return resourcemodel.ListDetailSegment(resourcemodel.DetailSlotAddress, "Hosts", hostnames)
 	}
 	ports := make([]resourcemodel.PortProtocol, 0, len(listeners))
 	for _, listener := range listeners {
 		ports = append(ports, resourcemodel.PortProtocol{Port: listener.Port, Protocol: listener.Protocol})
 	}
 	if summary := resourcemodel.FormatPortsSummary(ports); summary != "" {
-		return resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotAddress, Value: summary}
+		return resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotAddress, Label: "Ports", Value: summary}
 	}
 	return resourcemodel.DetailSegment{}
 }

@@ -184,9 +184,9 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 	require.Equal(t, "Service", serviceSummary.Ref.Kind)
 	require.Equal(t, "api", serviceSummary.Ref.Name)
 	require.Equal(t, []resourcemodel.DetailSegment{
-		{Slot: resourcemodel.DetailSlotReference, Value: "ClusterIP"},
-		{Slot: resourcemodel.DetailSlotAddress, Value: "10.0.0.10"},
-		{Slot: resourcemodel.DetailSlotAddress, Value: "443/TCP"},
+		{Slot: resourcemodel.DetailSlotReference, Label: "Type", Value: "ClusterIP"},
+		{Slot: resourcemodel.DetailSlotAddress, Label: "Cluster IP", Value: "10.0.0.10"},
+		{Slot: resourcemodel.DetailSlotAddress, Label: "Ports", Value: "443/TCP"},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Endpoints", Value: "1"},
 	}, serviceSummary.Details)
 
@@ -194,8 +194,8 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 	sliceSummary := endpointslice.BuildStreamSummary(meta, slice)
 	require.Equal(t, "EndpointSlice", sliceSummary.Ref.Kind)
 	require.Equal(t, []resourcemodel.DetailSegment{
-		{Slot: resourcemodel.DetailSlotReference, Value: "api", Link: sliceFacts.Service},
-		{Slot: resourcemodel.DetailSlotAddress, Value: "10.244.0.10"},
+		{Slot: resourcemodel.DetailSlotReference, Label: "Service", Value: "api", Link: sliceFacts.Service},
+		{Slot: resourcemodel.DetailSlotAddress, Label: "Addresses", Value: "10.244.0.10"},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Ready", Value: "1"},
 	}, sliceSummary.Details)
 
@@ -213,7 +213,7 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 	orphanSummary := endpointslice.BuildStreamSummary(meta, orphanSlice)
 	require.Equal(t, []resourcemodel.DetailSegment{
 		// Only READY addresses fill the address slot; not-ready is flagged in counts.
-		{Slot: resourcemodel.DetailSlotAddress, Value: "10.244.0.11"},
+		{Slot: resourcemodel.DetailSlotAddress, Label: "Addresses", Value: "10.244.0.11"},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Ready", Value: "1"},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Not ready", Value: "1", Presentation: "warning"},
 	}, orphanSummary.Details)
@@ -229,8 +229,8 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 	ingressSummary := ingresspkg.BuildStreamSummary(meta, ingress)
 	require.Equal(t, "Ingress", ingressSummary.Ref.Kind)
 	require.Equal(t, []resourcemodel.DetailSegment{
-		{Slot: resourcemodel.DetailSlotReference, Value: "nginx", Link: ingressFacts.Class},
-		{Slot: resourcemodel.DetailSlotAddress, Value: "web.example.com"},
+		{Slot: resourcemodel.DetailSlotReference, Label: "Class", Value: "nginx", Link: ingressFacts.Class},
+		{Slot: resourcemodel.DetailSlotAddress, Label: "Hosts", Value: "web.example.com"},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: "1"},
 	}, ingressSummary.Details)
 
@@ -243,7 +243,7 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 	policySummary := networkpolicy.BuildStreamSummary(meta, policy)
 	require.Equal(t, "NetworkPolicy", policySummary.Ref.Kind)
 	require.Equal(t, []resourcemodel.DetailSegment{
-		{Slot: resourcemodel.DetailSlotReference, Value: "Ingress, Egress"},
+		{Slot: resourcemodel.DetailSlotReference, Label: "Policy", Value: "Ingress, Egress"},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: "1"},
 	}, policySummary.Details)
 }
@@ -277,7 +277,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 	gatewaySummary := gatewaypkg.BuildStreamSummary(meta, gateway)
 	require.Equal(t, "Gateway", gatewaySummary.Ref.Kind)
 	require.Equal(t, []resourcemodel.DetailSegment{
-		{Slot: resourcemodel.DetailSlotReference, Value: "public", Link: gatewayFacts.Class},
+		{Slot: resourcemodel.DetailSlotReference, Label: "Class", Value: "public", Link: gatewayFacts.Class},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Listeners", Value: "1"},
 	}, gatewaySummary.Details)
 
@@ -293,8 +293,8 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 	routeSummary := httproute.BuildStreamSummary(meta, route)
 	require.Equal(t, "HTTPRoute", routeSummary.Ref.Kind)
 	require.Equal(t, []resourcemodel.DetailSegment{
-		{Slot: resourcemodel.DetailSlotReference, Value: "edge", Link: &routeFacts.ParentRefs[0]},
-		{Slot: resourcemodel.DetailSlotAddress, Value: "api.example.com"},
+		{Slot: resourcemodel.DetailSlotReference, Label: "Parent", Value: "edge", Link: &routeFacts.ParentRefs[0]},
+		{Slot: resourcemodel.DetailSlotAddress, Label: "Hosts", Value: "api.example.com"},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: "1"},
 	}, routeSummary.Details)
 
@@ -309,9 +309,9 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 	listenerSetSummary := listenerset.BuildStreamSummary(meta, listenerSet)
 	require.Equal(t, "ListenerSet", listenerSetSummary.Ref.Kind)
 	require.Equal(t, []resourcemodel.DetailSegment{
-		{Slot: resourcemodel.DetailSlotReference, Value: "edge", Link: &listenerSetFacts.ParentRef},
+		{Slot: resourcemodel.DetailSlotReference, Label: "Parent", Value: "edge", Link: &listenerSetFacts.ParentRef},
 		// Hostless listeners fall back to the compact port list.
-		{Slot: resourcemodel.DetailSlotAddress, Value: "80/HTTP"},
+		{Slot: resourcemodel.DetailSlotAddress, Label: "Ports", Value: "80/HTTP"},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Listeners", Value: "1"},
 	}, listenerSetSummary.Details)
 
@@ -328,8 +328,8 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 	hostedFacts := listenerset.BuildFacts(meta.ClusterID, hostedListenerSet)
 	hostedSummary := listenerset.BuildStreamSummary(meta, hostedListenerSet)
 	require.Equal(t, []resourcemodel.DetailSegment{
-		{Slot: resourcemodel.DetailSlotReference, Value: "edge", Link: &hostedFacts.ParentRef},
-		{Slot: resourcemodel.DetailSlotAddress, Value: "a.example.com +1", Search: "a.example.com, b.example.com"},
+		{Slot: resourcemodel.DetailSlotReference, Label: "Parent", Value: "edge", Link: &hostedFacts.ParentRef},
+		{Slot: resourcemodel.DetailSlotAddress, Label: "Hosts", Value: "a.example.com +1", Search: "a.example.com, b.example.com"},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Listeners", Value: "2"},
 	}, hostedSummary.Details)
 
@@ -343,7 +343,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 	grantSummary := referencegrant.BuildStreamSummary(meta, grant)
 	require.Equal(t, "ReferenceGrant", grantSummary.Ref.Kind)
 	require.Equal(t, []resourcemodel.DetailSegment{
-		{Slot: resourcemodel.DetailSlotReference, Value: "HTTPRoute → Service"},
+		{Slot: resourcemodel.DetailSlotReference, Label: "Access", Value: "HTTPRoute → Service"},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "From", Value: "1"},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "To", Value: "1"},
 	}, grantSummary.Details)
@@ -358,7 +358,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 	policySummary := backendtlspolicy.BuildStreamSummary(meta, policy)
 	require.Equal(t, "BackendTLSPolicy", policySummary.Ref.Kind)
 	require.Equal(t, []resourcemodel.DetailSegment{
-		{Slot: resourcemodel.DetailSlotReference, Value: "api", Link: &tlsPolicyFacts.TargetRefs[0]},
+		{Slot: resourcemodel.DetailSlotReference, Label: "Target", Value: "api", Link: &tlsPolicyFacts.TargetRefs[0]},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Targets", Value: "1"},
 	}, policySummary.Details)
 

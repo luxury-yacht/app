@@ -63,7 +63,7 @@ func TestNetworkQueryViaStoreEquivalent(t *testing.T) {
 		kinds  []string
 		search string
 	}
-	sorts := []string{"", "name", "kind", "namespace", "class", "address", "counts", "age"}
+	sorts := []string{"", "name", "kind", "namespace", "context", "network", "age"}
 	dirs := []string{"asc", "desc"}
 	filts := []filt{
 		{},

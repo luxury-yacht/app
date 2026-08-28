@@ -24,9 +24,10 @@ DTO fields; it does not reinterpret primary resource semantics.
   optional `Search` expansion for collapsed list values) built by each kind's
   stream-summary builder from its typed facts — never a preformatted prose
   string. Slots (`DetailSlotReference`/`DetailSlotAddress`/`DetailSlotCounts`)
-  map to aligned frontend columns; `DetailSegmentsSearchText` is the canonical
-  search flatten (expanding collapsed lists) and `DetailSlotText` the per-slot
-  sort flatten.
+  map to the aligned frontend Context/Network/Summary columns; each segment's
+  label carries the resource-specific meaning within that stable column model.
+  `DetailSegmentsSearchText` is the canonical search flatten (expanding
+  collapsed lists) and `DetailSlotText` the per-slot sort flatten.
 - Sensitive or large payloads such as raw YAML, Secret data, logs, manifests,
   and shell output stay in workflow/detail DTOs, not shared facts.
 

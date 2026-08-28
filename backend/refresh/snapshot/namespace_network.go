@@ -78,9 +78,9 @@ type NamespaceNetworkSnapshot struct {
 
 func namespaceNetworkQueryCapabilities() ResourceQueryCapabilities {
 	return newTypedResourceCapabilities(
-		[]string{"name", "kind", "namespace", "class", "address", "counts", "age"},
+		[]string{"name", "kind", "namespace", "context", "network", "age"},
 		[]string{"kinds", "namespaces"},
-		[]string{"kind", "name", "namespace", "class", "address", "counts"},
+		[]string{"kind", "name", "namespace", "context", "network", "summary"},
 		[]string{service.Identity.Kind, ingress.Identity.Kind, endpointslice.Identity.Kind, networkpolicy.Identity.Kind, gateway.Identity.Kind, httproute.Identity.Kind, grpcroute.Identity.Kind, tlsroute.Identity.Kind, listenerset.Identity.Kind, referencegrant.Identity.Kind, backendtlspolicy.Identity.Kind},
 	)
 }
@@ -89,7 +89,7 @@ func namespaceNetworkQueryCapabilities() ResourceQueryCapabilities {
 // typed-table adapter (reusing the adapter's exact sort encoder + row key), so the
 // engine orders rows byte-identically to the live executor.
 func networkQuerypageSchema() querypage.Schema[NetworkSummary] {
-	return querypageSchemaFromAdapter(networkTableQueryAdapter(), []string{"name", "kind", "namespace", "class", "address", "counts", "age"})
+	return querypageSchemaFromAdapter(networkTableQueryAdapter(), []string{"name", "kind", "namespace", "context", "network", "age"})
 }
 
 // NetworkSummary lives in the streamrows leaf so the kind packages can build it;

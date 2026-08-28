@@ -40,12 +40,36 @@
    (gridtable-cell-button + gridtable-link + object-panel-link, exactly like
    Name columns) — no bespoke link styling here. */
 
-/* Text variant (reference/address slot columns): plain separated values, no chips. */
+/* Text variant (reference/address slot columns): plain separated values, no chips.
+   Each value owns its overflow so a narrow column preserves the label and shows
+   as much of the value as fits instead of eliding the whole atomic link. */
 .detail-segments--text {
-  display: inline;
+  display: inline-flex;
   gap: 0;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.detail-segments--text .detail-segment-text {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .detail-segment-separator {
   color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.detail-segments--text .detail-segment-label {
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.detail-segments--text .detail-segment-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

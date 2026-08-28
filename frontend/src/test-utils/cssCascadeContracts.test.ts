@@ -174,6 +174,35 @@ describe('strict CSS cascade contracts', () => {
     expect(window.getComputedStyle(button as HTMLButtonElement).color).toBe('rgb(170, 170, 170)');
   });
 
+  it('truncates a detail-segment value within the space left after its label', () => {
+    const style = installStyles(
+      readProjectFile('src/shared/components/tables/detailSegmentsColumn.css')
+    );
+    style.dataset.cssContract = 'detail-segment-value-overflow';
+    document.body.innerHTML = `
+      <span class="detail-segments detail-segments--text">
+        <span class="detail-segment-text">
+          <span class="detail-segment-label">Service:</span>
+          <button class="detail-segment-value">argocd-dex-server</button>
+        </span>
+      </span>
+    `;
+
+    const container = document.querySelector<HTMLElement>('.detail-segments--text');
+    const segment = document.querySelector<HTMLElement>('.detail-segment-text');
+    const label = document.querySelector<HTMLElement>('.detail-segment-label');
+    const value = document.querySelector<HTMLButtonElement>('.detail-segment-value');
+
+    expect(window.getComputedStyle(container as HTMLElement).display).toBe('inline-flex');
+    expect(window.getComputedStyle(container as HTMLElement).maxWidth).toBe('100%');
+    expect(window.getComputedStyle(segment as HTMLElement).display).toBe('inline-flex');
+    expect(window.getComputedStyle(segment as HTMLElement).minWidth).toBe('0px');
+    expect(window.getComputedStyle(label as HTMLElement).flexShrink).toBe('0');
+    expect(window.getComputedStyle(value as HTMLButtonElement).minWidth).toBe('0px');
+    expect(window.getComputedStyle(value as HTMLButtonElement).overflow).toBe('hidden');
+    expect(window.getComputedStyle(value as HTMLButtonElement).textOverflow).toBe('ellipsis');
+  });
+
   it('keeps sortable table headers uppercase over native button styling', () => {
     const style = installStyles(
       'button { text-transform: none; }',

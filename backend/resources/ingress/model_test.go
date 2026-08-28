@@ -69,8 +69,8 @@ func TestSummarySegments(t *testing.T) {
 		Rules:     []RuleFacts{{Host: "web.example.com"}},
 	}
 	require.Equal(t, []resourcemodel.DetailSegment{
-		{Slot: resourcemodel.DetailSlotReference, Value: "nginx", Link: class},
-		{Slot: resourcemodel.DetailSlotAddress, Value: "web.example.com +2", Search: "web.example.com, api.example.com, www.example.com"},
+		{Slot: resourcemodel.DetailSlotReference, Label: "Class", Value: "nginx", Link: class},
+		{Slot: resourcemodel.DetailSlotAddress, Label: "Hosts", Value: "web.example.com +2", Search: "web.example.com, api.example.com, www.example.com"},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: "1"},
 	}, SummarySegments(facts))
 	require.Equal(t, []resourcemodel.DetailSegment{

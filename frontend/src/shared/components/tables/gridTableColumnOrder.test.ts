@@ -20,22 +20,22 @@ describe('reconcileColumnOrder', () => {
   it('inserts newly declared columns at their declared position, not after the trailing column', () => {
     // A view replaced its 'details' column with three new columns declared
     // before 'age'; a persisted order must not push them after Age.
-    const columns = columnsFor(['kind', 'name', 'class', 'address', 'counts', 'age']);
+    const columns = columnsFor(['kind', 'name', 'context', 'network', 'summary', 'age']);
     expect(reconcileColumnOrder(columns, ['kind', 'name', 'details', 'age'])).toEqual([
       'kind',
       'name',
-      'class',
-      'address',
-      'counts',
+      'context',
+      'network',
+      'summary',
       'age',
     ]);
   });
 
   it('keeps the user reordering of existing columns while placing new ones after their declared predecessor', () => {
-    const columns = columnsFor(['kind', 'name', 'class', 'age']);
+    const columns = columnsFor(['kind', 'name', 'context', 'age']);
     expect(reconcileColumnOrder(columns, ['name', 'kind', 'age'])).toEqual([
       'name',
-      'class',
+      'context',
       'kind',
       'age',
     ]);

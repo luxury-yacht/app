@@ -21,7 +21,7 @@ func SummarySegments(facts Facts) []resourcemodel.DetailSegment {
 	segments := []resourcemodel.DetailSegment{}
 	if facts.Service != nil {
 		if name := resourcemodel.ResourceLinkName(*facts.Service); name != "" {
-			segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Value: name, Link: facts.Service})
+			segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotReference, Label: "Service", Value: name, Link: facts.Service})
 		}
 	}
 	if len(facts.ReadyAddresses) > 0 {
@@ -31,7 +31,7 @@ func SummarySegments(facts Facts) []resourcemodel.DetailSegment {
 				ips = append(ips, address.IP)
 			}
 		}
-		if addresses := resourcemodel.ListDetailSegment(resourcemodel.DetailSlotAddress, ips); addresses.Value != "" {
+		if addresses := resourcemodel.ListDetailSegment(resourcemodel.DetailSlotAddress, "Addresses", ips); addresses.Value != "" {
 			segments = append(segments, addresses)
 		}
 	}
