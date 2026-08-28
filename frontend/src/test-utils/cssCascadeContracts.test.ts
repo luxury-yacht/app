@@ -174,13 +174,37 @@ describe('strict CSS cascade contracts', () => {
     expect(window.getComputedStyle(button as HTMLButtonElement).color).toBe('rgb(170, 170, 170)');
   });
 
+  it('keeps detail-segment presentation authoritative inside object-panel links', () => {
+    const style = installStyles(
+      readProjectFile('styles/components/badges.css').replace(
+        /var\(--color-warning\)/g,
+        'rgb(255, 165, 0)'
+      ),
+      readProjectFile('src/modules/object-panel/components/ObjectPanel/shared.css').replace(
+        /var\(--color-object-panel-link\)/g,
+        'rgb(170, 170, 170)'
+      )
+    );
+    style.dataset.cssContract = 'detail-segment-link-presentation';
+    document.body.innerHTML = `
+      <button class="gridtable-cell-button gridtable-link object-panel-link detail-segment-value">
+        <span class="status-text warning">api</span>
+      </button>
+    `;
+
+    const button = document.querySelector<HTMLButtonElement>('.detail-segment-value');
+    const value = document.querySelector<HTMLElement>('.detail-segment-value .status-text');
+    expect(window.getComputedStyle(button as HTMLButtonElement).color).toBe('rgb(170, 170, 170)');
+    expect(window.getComputedStyle(value as HTMLElement).color).toBe('rgb(255, 165, 0)');
+  });
+
   it('truncates a detail-segment value within the space left after its label', () => {
     const style = installStyles(
       readProjectFile('src/shared/components/tables/detailSegmentsColumn.css')
     );
     style.dataset.cssContract = 'detail-segment-value-overflow';
     document.body.innerHTML = `
-      <span class="detail-segments detail-segments--text">
+      <span class="detail-segments">
         <span class="detail-segment-text">
           <span class="detail-segment-label">Service:</span>
           <button class="detail-segment-value">argocd-dex-server</button>
@@ -188,7 +212,7 @@ describe('strict CSS cascade contracts', () => {
       </span>
     `;
 
-    const container = document.querySelector<HTMLElement>('.detail-segments--text');
+    const container = document.querySelector<HTMLElement>('.detail-segments');
     const segment = document.querySelector<HTMLElement>('.detail-segment-text');
     const label = document.querySelector<HTMLElement>('.detail-segment-label');
     const value = document.querySelector<HTMLButtonElement>('.detail-segment-value');

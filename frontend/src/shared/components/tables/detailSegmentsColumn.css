@@ -1,56 +1,28 @@
 /*
  * frontend/src/shared/components/tables/detailSegmentsColumn.css
  *
- * Chip styling for the shared detail-segments table cell: each segment is a
- * subtle bordered chip with a muted label beside a full-weight value, kept on
- * one line (table data never wraps). Presentation tokens tint the whole chip
- * (same recipe as StatusChip variants).
+ * Plain-text styling for the shared detail-segments table cell. Each value owns
+ * its overflow so a narrow column preserves the label and shows as much of the
+ * value as fits instead of eliding the whole segment.
  */
 
 .detail-segments {
   display: inline-flex;
-  gap: 5px;
+  gap: 0;
+  max-width: 100%;
+  min-width: 0;
   white-space: nowrap;
-}
-
-.detail-segment {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-bg-tertiary);
-  border-radius: 4px;
-  padding: 1px 7px 2px;
 }
 
 .detail-segment-label {
   color: var(--color-text-secondary);
 }
 
-.detail-segment--warning {
-  background: var(--status-warning-bg);
-  border-color: var(--status-warning-border);
-}
-
-.detail-segment--warning .detail-segment-value {
-  color: var(--color-warning);
-}
-
 /* Link segments carry the app's shared clickable-object link classes
    (gridtable-cell-button + gridtable-link + object-panel-link, exactly like
    Name columns) — no bespoke link styling here. */
 
-/* Text variant (reference/address slot columns): plain separated values, no chips.
-   Each value owns its overflow so a narrow column preserves the label and shows
-   as much of the value as fits instead of eliding the whole atomic link. */
-.detail-segments--text {
-  display: inline-flex;
-  gap: 0;
-  max-width: 100%;
-  min-width: 0;
-}
-
-.detail-segments--text .detail-segment-text {
+.detail-segments .detail-segment-text {
   display: inline-flex;
   align-items: baseline;
   max-width: 100%;
@@ -62,12 +34,12 @@
   flex-shrink: 0;
 }
 
-.detail-segments--text .detail-segment-label {
+.detail-segments .detail-segment-label {
   flex-shrink: 0;
   margin-right: 4px;
 }
 
-.detail-segments--text .detail-segment-value {
+.detail-segments .detail-segment-value {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

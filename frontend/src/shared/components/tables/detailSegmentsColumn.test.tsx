@@ -68,7 +68,7 @@ describe('createDetailSegmentsColumn', () => {
     expect(column.render({ details: [] })).toBe('-');
   });
 
-  it('renders each segment as a chip with a muted label and export text', () => {
+  it('renders each segment as labeled text with export text', () => {
     const column = buildColumn();
     const cell = column.render({
       details: [
@@ -82,15 +82,16 @@ describe('createDetailSegmentsColumn', () => {
     expect(markup).toContain('Class');
     expect(markup).toContain('nginx');
 
-    const chips = collectElements(
+    const renderedSegments = collectElements(
       cell,
       (element) =>
         typeof (element.props as { className?: string }).className === 'string' &&
         ((element.props as { className: string }).className
           .split(' ')
-          .includes('detail-segment') as boolean)
+          .includes('detail-segment-text') as boolean)
     );
-    expect(chips).toHaveLength(3);
+    expect(renderedSegments).toHaveLength(3);
+    expect(markup).toContain('·');
 
     const container = cell as React.ReactElement<{
       title?: string;
@@ -159,13 +160,13 @@ describe('createDetailSegmentsColumn', () => {
     expect(collectElements(cell, (element) => element.type === 'button')).toHaveLength(0);
   });
 
-  it('maps a presentation token onto the chip as a variant class', () => {
+  it('maps a presentation token onto the segment value', () => {
     const column = buildColumn();
     const cell = column.render({
       details: [{ label: 'Not ready', value: '2', presentation: 'warning' }],
     });
     const markup = renderToStaticMarkup(cell as React.ReactElement);
-    expect(markup).toContain('detail-segment--warning');
+    expect(markup).toContain('detail-segment-value status-text warning');
   });
 
   it('filters segments to the configured slot and renders the no-value marker when none match', () => {
@@ -182,8 +183,8 @@ describe('createDetailSegmentsColumn', () => {
     expect(addressColumn.render({ details })).toBe('-');
   });
 
-  it('renders the text variant without chips, with the search expansion in the tooltip', () => {
-    const column = buildColumn({ slot: 'address', variant: 'text' });
+  it('renders plain segments with the search expansion in the tooltip', () => {
+    const column = buildColumn({ slot: 'address' });
     const cell = column.render({
       details: [
         { slot: 'address', value: '10.0.0.10' },
@@ -196,7 +197,6 @@ describe('createDetailSegmentsColumn', () => {
       ],
     });
     const markup = renderToStaticMarkup(cell as React.ReactElement);
-    expect(markup).not.toContain('detail-segment"');
     expect(markup).toContain('·');
 
     const container = cell as React.ReactElement<{
@@ -204,7 +204,7 @@ describe('createDetailSegmentsColumn', () => {
       'data-gridtable-export-text'?: string;
       className?: string;
     }>;
-    expect(container.props.className).toContain('detail-segments--text');
+    expect(container.props.className).toBe('detail-segments');
     expect(container.props.title).toBe(
       '10.0.0.10, Hosts: web.example.com, b.example.com, c.example.com'
     );
@@ -213,8 +213,8 @@ describe('createDetailSegmentsColumn', () => {
     );
   });
 
-  it('keeps text-variant labels visibly associated with their values', () => {
-    const column = buildColumn({ slot: 'address', variant: 'text' });
+  it('keeps labels visibly associated with their values', () => {
+    const column = buildColumn({ slot: 'address' });
     const markup = renderToStaticMarkup(
       column.render({
         details: [
@@ -227,9 +227,9 @@ describe('createDetailSegmentsColumn', () => {
     expect(markup).toContain('Ports:');
   });
 
-  it('renders text-variant link segments as buttons', () => {
+  it('renders link segments as buttons', () => {
     const openReference = vi.fn();
-    const column = buildColumn({ slot: 'reference', variant: 'text', openReference });
+    const column = buildColumn({ slot: 'reference', openReference });
     const cell = column.render({
       details: [{ slot: 'reference', value: 'nginx', link: ingressClassLink }],
     });
@@ -237,9 +237,34 @@ describe('createDetailSegmentsColumn', () => {
     expect(button).toBeTruthy();
   });
 
-  it('leaves auto-width to the render-replica measurement so chip chrome is counted', () => {
+  it('preserves presentation classes on linked segment values', () => {
+    const column = buildColumn({ slot: 'reference', openReference: vi.fn() });
+    const cell = column.render({
+      details: [
+        {
+          slot: 'reference',
+          value: 'nginx',
+          link: ingressClassLink,
+          presentation: 'warning',
+        },
+      ],
+    });
+    const [button] = collectElements(cell, (element) => element.type === 'button');
+    const [presentedValue] = collectElements(
+      button,
+      (element) =>
+        element.type === 'span' &&
+        (element.props as { className?: string }).className?.includes('status-text') === true
+    );
+    expect(presentedValue).toBeTruthy();
+    expect((presentedValue.props as { className?: string }).className?.split(' ')).toEqual(
+      expect.arrayContaining(['status-text', 'warning'])
+    );
+  });
+
+  it('leaves auto-width to the render-replica measurement', () => {
     // No measurementText/measurementElement: the measurer's fallback clones the
-    // rendered cell with its classNames, so chip padding/borders/gaps measure.
+    // rendered cell so labels, separators, and link styling are measured.
     const column = buildColumn();
     expect(column.measurementText).toBeUndefined();
     expect(column.measurementElement).toBeUndefined();

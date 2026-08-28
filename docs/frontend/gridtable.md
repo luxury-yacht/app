@@ -33,13 +33,12 @@ workflow and that exception is documented.
   **Context**, **Network**, and **Summary** columns so mixed-kind rows remain
   vertically aligned. Kind-specific meaning belongs in each segment label
   (`Class`, `Parent`, `Type`, `Hosts`, `Ports`), not in slash-separated column
-  headings. The namespace Network view uses the `text` variant for all three
-  columns: it renders labeled values separated by dots and applies presentation
-  tokens to exceptional values without boxing ordinary counts. In a narrow text
-  column, keep the label visible and truncate only the value within the
-  remaining width. Resolvable `ResourceLink` segments become cross-object link
-  buttons and suppress the
-  parent row action. Collapsed list values ("first +N") carry their full text
+  headings. The namespace Network view renders labeled values separated by dots
+  and applies presentation tokens to exceptional values without boxing ordinary
+  counts. In a narrow text column, keep the label visible and truncate only the
+  value within the remaining width. Resolvable `ResourceLink` segments become
+  cross-object link buttons and suppress the parent row action. Collapsed list
+  values ("first +N") carry their full text
   in the tooltip via the segment's `search` field. Auto-width relies on the
   measurer's render-replica fallback,
   so do not add `measurementText`. Do not re-render segment lists with ad-hoc

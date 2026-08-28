@@ -478,7 +478,7 @@ describe('NsViewNetwork', () => {
     );
     expect(renderOutputToText(contextCell)).toContain('nginx');
     expect(renderOutputToText(contextCell)).toContain('Class:');
-    expect(contextCell.props.className).toContain('detail-segments--text');
+    expect(contextCell.props.className).toBe('detail-segments');
 
     const networkColumn = getColumn('network');
     expect(networkColumn.header).toBe('Network');
@@ -498,7 +498,7 @@ describe('NsViewNetwork', () => {
       'expected the summary cell element'
     );
     const summaryMarkup = renderOutputToText(summaryCell);
-    expect(summaryCell.props.className).toContain('detail-segments--text');
+    expect(summaryCell.props.className).toBe('detail-segments');
     expect(summaryMarkup).not.toContain('class="detail-segment"');
     expect(summaryMarkup).toContain('Rules:');
 
