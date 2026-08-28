@@ -140,9 +140,9 @@ export function createDetailSegmentsColumn<T>(
         >
           {segments.map((segment, index) => {
             const segmentKey = `${index}:${segment.label ?? ''}`;
-            const presentationClass = segment.presentation
-              ? `--${backendStatusClass(segment.presentation)}`
-              : '';
+            const chipPresentationClass = segment.presentation
+              ? `detail-segment--${backendStatusClass(segment.presentation)}`
+              : undefined;
             if (text) {
               return (
                 <span key={segmentKey} className="detail-segment-text">
@@ -157,7 +157,7 @@ export function createDetailSegmentsColumn<T>(
             return (
               <span
                 key={segmentKey}
-                className={`detail-segment${presentationClass ? ` detail-segment${presentationClass}` : ''}`}
+                className={['detail-segment', chipPresentationClass].filter(Boolean).join(' ')}
               >
                 {segment.label ? (
                   <span className="detail-segment-label">{segment.label}</span>
