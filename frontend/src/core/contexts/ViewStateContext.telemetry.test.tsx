@@ -46,15 +46,25 @@ vi.mock('@/core/refresh', () => ({
 
 vi.mock('@/core/telemetry/sentry', () => telemetryMocks);
 
-import { ViewStateProvider } from './ViewStateContext';
+import { useViewState, ViewStateProvider } from './ViewStateContext';
 
-describe('ViewStateProvider telemetry synchronization', () => {
+const NamespaceLinkHarness = () => {
+  const { onNamespaceSelect } = useViewState();
+  return (
+    <button type="button" onClick={() => onNamespaceSelect('payments')}>
+      Open namespace
+    </button>
+  );
+};
+
+describe('ViewStateProvider navigation synchronization', () => {
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
     telemetryMocks.setActiveViewContext.mockReset();
     refreshMocks.updateContext.mockReset();
+    contextMocks.sidebar.setSidebarSelection.mockReset();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -76,6 +86,31 @@ describe('ViewStateProvider telemetry synchronization', () => {
 
     expect(telemetryMocks.setActiveViewContext).toHaveBeenCalledWith({
       view: 'overview',
+      clusterId: 'cluster-a',
+      objectPanelOpen: false,
+    });
+  });
+
+  it('opens Workloads when a namespace is selected outside the namespace view', () => {
+    act(() => {
+      root.render(
+        <ViewStateProvider>
+          <NamespaceLinkHarness />
+        </ViewStateProvider>
+      );
+    });
+
+    act(() => {
+      container.querySelector('button')?.click();
+    });
+
+    expect(contextMocks.sidebar.setSidebarSelection).toHaveBeenCalledWith({
+      type: 'namespace',
+      value: 'payments',
+    });
+    expect(telemetryMocks.setActiveViewContext).toHaveBeenLastCalledWith({
+      view: 'namespace',
+      tab: 'workloads',
       clusterId: 'cluster-a',
       objectPanelOpen: false,
     });

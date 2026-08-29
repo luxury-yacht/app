@@ -361,7 +361,7 @@ describe('ClusterViewAttention', () => {
       type: 'namespace',
       value: 'payments',
     });
-    expect(setActiveNamespaceTabMock).toHaveBeenCalledWith('browse');
+    expect(setActiveNamespaceTabMock).toHaveBeenCalledWith('workloads');
   });
 
   it('renders every severity with the matching status chip', async () => {

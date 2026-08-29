@@ -165,7 +165,7 @@ const GlobalViewNamespaces: React.FC = () => {
       setSelectedNamespace(row.ref.name, row.ref.clusterId);
       setClusterNavigationTarget(row.ref.clusterId, {
         viewType: 'namespace',
-        activeNamespaceView: 'browse',
+        activeNamespaceView: 'workloads',
       });
       setSidebarSelectionForCluster(row.ref.clusterId, {
         type: 'namespace',

@@ -84,7 +84,7 @@ export default function ClusterViewAttention() {
   const useShortResourceNames = useShortNames();
   const [ignoredModalOpen, setIgnoredModalOpen] = useState(false);
   const namespaceColumnLink = useNamespaceColumnLink<ClusterAttentionFinding>(
-    'browse',
+    'workloads',
     getFindingNamespace
   );
 

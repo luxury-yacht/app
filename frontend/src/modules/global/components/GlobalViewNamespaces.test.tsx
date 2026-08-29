@@ -489,7 +489,7 @@ describe('GlobalViewNamespaces', () => {
     expect(mocks.setSelectedNamespace).toHaveBeenCalledWith('payments', 'cluster-b');
     expect(mocks.setClusterNavigationTarget).toHaveBeenCalledWith('cluster-b', {
       viewType: 'namespace',
-      activeNamespaceView: 'browse',
+      activeNamespaceView: 'workloads',
     });
     expect(mocks.setSidebarSelectionForCluster).toHaveBeenCalledWith('cluster-b', {
       type: 'namespace',
