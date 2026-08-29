@@ -246,37 +246,3 @@ func TestClusterAttentionBuilderPublishesIgnoreRulesAndFindingTypeCatalog(t *tes
 	require.Equal(t, []string{"warning-event"}, payload.IgnoreRules.GlobalFindingTypes)
 	require.Contains(t, payload.FindingTypes, AttentionFindingTypeDefinition{ID: "restarts", Label: "Restarts"})
 }
-
-func TestClusterAttentionBuilderPublishesClusterWideIgnoredFindingCount(t *testing.T) {
-	now := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
-	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
-	index := newClusterAttentionIndex(meta, func() time.Time { return now })
-	t.Cleanup(index.Stop)
-	checkout := attentionTestRef("Pod", "payments", "checkout-0")
-	index.UpsertSource("pods", attentionSourceRecord{
-		Ref: checkout, Source: attentionSourcePod,
-		Status: "CrashLoopBackOff", StatusPresentation: "error", StatusReason: "CrashLoopBackOff",
-		Restarts: 4, AgeTimestamp: now.Add(-time.Hour).UnixMilli(),
-	})
-	index.UpsertSource("pods", attentionSourceRecord{
-		Ref: attentionTestRef("Pod", "payments", "worker-0"), Source: attentionSourcePod,
-		Status: "Running", StatusPresentation: "ready",
-		Restarts: 1, AgeTimestamp: now.Add(-time.Hour).UnixMilli(),
-	})
-	index.SetIgnoreRules(AttentionIgnoreRules{
-		ObjectFindings: []AttentionObjectFindingIgnore{{
-			Ref: checkout, FindingType: "error-presentation",
-		}},
-		ClusterFindingTypes: []string{"restarts"},
-		GlobalFindingTypes:  []string{"restarts"},
-	})
-
-	result, err := (&ClusterAttentionBuilder{index: index}).Build(
-		WithClusterMeta(context.Background(), meta),
-		refresh.JoinClusterScope(meta.ClusterID, "?limit=1&search=missing"),
-	)
-	require.NoError(t, err)
-	payload := result.Payload.(ClusterAttentionSnapshot)
-	require.Empty(t, payload.Rows)
-	require.Equal(t, 3, payload.IgnoredFindingCount)
-}

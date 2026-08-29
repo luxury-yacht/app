@@ -101,13 +101,10 @@ type AttentionSeverityCounts struct {
 type ClusterAttentionSnapshot struct {
 	ClusterMeta
 	ResourceQueryEnvelope
-	SeverityCounts AttentionSeverityCounts `json:"severityCounts"`
-	// IgnoredFindingCount counts active causes suppressed across the cluster,
-	// independent of the table's active query, page, or filters.
-	IgnoredFindingCount int                              `json:"ignoredFindingCount"`
-	IgnoreRules         AttentionIgnoreRules             `json:"ignoreRules"`
-	FindingTypes        []AttentionFindingTypeDefinition `json:"findingTypes"`
-	Rows                []AttentionFinding               `json:"rows"`
+	SeverityCounts AttentionSeverityCounts          `json:"severityCounts"`
+	IgnoreRules    AttentionIgnoreRules             `json:"ignoreRules"`
+	FindingTypes   []AttentionFindingTypeDefinition `json:"findingTypes"`
+	Rows           []AttentionFinding               `json:"rows"`
 }
 
 type ClusterAttentionBuilder struct {
@@ -185,7 +182,6 @@ func (b *ClusterAttentionBuilder) Build(ctx context.Context, scope string) (*ref
 			ClusterMeta:           meta,
 			ResourceQueryEnvelope: resolved.Envelope,
 			SeverityCounts:        severityCounts,
-			IgnoredFindingCount:   b.index.IgnoredFindingCount(),
 			IgnoreRules:           b.index.IgnoreRules(),
 			FindingTypes:          AttentionFindingTypes(),
 			Rows:                  resolved.Rows,
@@ -277,27 +273,25 @@ type clusterAttentionIndex struct {
 	maintained *typedMaintainedStore[AttentionFinding]
 	now        func() time.Time
 
-	mu                   sync.Mutex
-	sources              map[string]attentionSourceState
-	owners               map[string]map[string]struct{}
-	ownerKinds           map[string]map[string]struct{}
-	unavailableOwners    map[string]struct{}
-	healthFindings       map[string]AttentionFinding
-	finalizerFindings    map[string]AttentionFinding
-	findings             map[string]AttentionFinding
-	deadlines            attentionDeadlineHeap
-	timer                *time.Timer
-	notify               *time.Timer
-	broadcast            func(version string)
-	dirty                bool
-	revision             uint64
-	stopped              bool
-	eventRows            func() []attentionSourceRecord
-	eventRowsSynced      func() bool
-	ignoreRules          AttentionIgnoreRules
-	ignoredFindingCounts map[string]int
-	ignoredFindingCount  int
-	ignoredObjectPruner  func(resourcemodel.ResourceRef)
+	mu                  sync.Mutex
+	sources             map[string]attentionSourceState
+	owners              map[string]map[string]struct{}
+	ownerKinds          map[string]map[string]struct{}
+	unavailableOwners   map[string]struct{}
+	healthFindings      map[string]AttentionFinding
+	finalizerFindings   map[string]AttentionFinding
+	findings            map[string]AttentionFinding
+	deadlines           attentionDeadlineHeap
+	timer               *time.Timer
+	notify              *time.Timer
+	broadcast           func(version string)
+	dirty               bool
+	revision            uint64
+	stopped             bool
+	eventRows           func() []attentionSourceRecord
+	eventRowsSynced     func() bool
+	ignoreRules         AttentionIgnoreRules
+	ignoredObjectPruner func(resourcemodel.ResourceRef)
 }
 
 // ClusterAttentionIndex is the subsystem-owned lifecycle handle for the
@@ -309,17 +303,16 @@ func newClusterAttentionIndex(meta ClusterMeta, now func() time.Time) *clusterAt
 		now = time.Now
 	}
 	index := &clusterAttentionIndex{
-		meta:                 meta,
-		now:                  now,
-		sources:              make(map[string]attentionSourceState),
-		owners:               make(map[string]map[string]struct{}),
-		ownerKinds:           make(map[string]map[string]struct{}),
-		unavailableOwners:    make(map[string]struct{}),
-		healthFindings:       make(map[string]AttentionFinding),
-		finalizerFindings:    make(map[string]AttentionFinding),
-		findings:             make(map[string]AttentionFinding),
-		ignoredFindingCounts: make(map[string]int),
-		deadlines:            attentionDeadlineHeap{},
+		meta:              meta,
+		now:               now,
+		sources:           make(map[string]attentionSourceState),
+		owners:            make(map[string]map[string]struct{}),
+		ownerKinds:        make(map[string]map[string]struct{}),
+		unavailableOwners: make(map[string]struct{}),
+		healthFindings:    make(map[string]AttentionFinding),
+		finalizerFindings: make(map[string]AttentionFinding),
+		findings:          make(map[string]AttentionFinding),
+		deadlines:         attentionDeadlineHeap{},
 	}
 	index.maintained = newTypedMaintainedStore(meta, attentionQuerypageSchema(), attentionTableQueryAdapter())
 	heap.Init(&index.deadlines)
@@ -363,15 +356,6 @@ func (i *clusterAttentionIndex) IgnoreRules() AttentionIgnoreRules {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	return cloneAttentionIgnoreRules(i.ignoreRules)
-}
-
-func (i *clusterAttentionIndex) IgnoredFindingCount() int {
-	if i == nil {
-		return 0
-	}
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	return i.ignoredFindingCount
 }
 
 func (i *clusterAttentionIndex) SetIgnoredObjectPruner(pruner func(resourcemodel.ResourceRef)) {
@@ -893,22 +877,9 @@ func (i *clusterAttentionIndex) applyHealthFindingLocked(key string, finding *At
 
 func (i *clusterAttentionIndex) publishMergedFindingLocked(key string) {
 	previous, existed := i.findings[key]
-	raw := i.mergedUnfilteredFindingLocked(key)
-	merged := i.filterIgnoredEvaluationLocked(attentionEvaluation{Finding: raw}).Finding
-	ignoredCount := 0
-	if raw != nil {
-		ignoredCount = len(raw.Causes)
-		if merged != nil {
-			ignoredCount -= len(merged.Causes)
-		}
-	}
-	ignoredCountChanged := i.setIgnoredFindingCountLocked(key, ignoredCount)
+	merged := i.mergedFindingLocked(key)
 	if merged == nil {
 		if !existed {
-			if ignoredCountChanged {
-				i.revision++
-				i.markDirtyLocked()
-			}
 			return
 		}
 		delete(i.findings, key)
@@ -920,10 +891,6 @@ func (i *clusterAttentionIndex) publishMergedFindingLocked(key string) {
 	}
 	row := *merged
 	if existed && reflect.DeepEqual(previous, row) {
-		if ignoredCountChanged {
-			i.revision++
-			i.markDirtyLocked()
-		}
 		return
 	}
 	i.findings[key] = row
@@ -933,21 +900,7 @@ func (i *clusterAttentionIndex) publishMergedFindingLocked(key string) {
 	i.markDirtyLocked()
 }
 
-func (i *clusterAttentionIndex) setIgnoredFindingCountLocked(key string, count int) bool {
-	previous := i.ignoredFindingCounts[key]
-	if previous == count {
-		return false
-	}
-	if count == 0 {
-		delete(i.ignoredFindingCounts, key)
-	} else {
-		i.ignoredFindingCounts[key] = count
-	}
-	i.ignoredFindingCount += count - previous
-	return true
-}
-
-func (i *clusterAttentionIndex) mergedUnfilteredFindingLocked(key string) *AttentionFinding {
+func (i *clusterAttentionIndex) mergedFindingLocked(key string) *AttentionFinding {
 	health, hasHealth := i.healthFindings[key]
 	finalizer, hasFinalizer := i.finalizerFindings[key]
 	if !hasHealth && !hasFinalizer {
@@ -964,11 +917,11 @@ func (i *clusterAttentionIndex) mergedUnfilteredFindingLocked(key string) *Atten
 	case hasHealth:
 		row = health
 	}
-	return &row
+	return i.filterIgnoredEvaluationLocked(attentionEvaluation{Finding: &row}).Finding
 }
 
 func (i *clusterAttentionIndex) reprojectAllFindingsLocked() {
-	keys := make(map[string]struct{}, len(i.healthFindings)+len(i.finalizerFindings)+len(i.findings)+len(i.ignoredFindingCounts))
+	keys := make(map[string]struct{}, len(i.healthFindings)+len(i.finalizerFindings)+len(i.findings))
 	for key := range i.healthFindings {
 		keys[key] = struct{}{}
 	}
@@ -976,9 +929,6 @@ func (i *clusterAttentionIndex) reprojectAllFindingsLocked() {
 		keys[key] = struct{}{}
 	}
 	for key := range i.findings {
-		keys[key] = struct{}{}
-	}
-	for key := range i.ignoredFindingCounts {
 		keys[key] = struct{}{}
 	}
 	for key := range keys {
