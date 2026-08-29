@@ -1,5 +1,8 @@
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
+import type {
+  GridTableFilterOptions,
+  GridTableProps,
+} from '@shared/components/tables/GridTable';
 import {
   type GridTableFocusRequest,
   matchesGridTableFocusRequest,
@@ -165,6 +168,15 @@ export const isLiveDomainInitialLoadPending = (state: {
 
 export interface QueryBackedNamespaceGridResult<T extends ResourceGridTableRow, TPayload = unknown>
   extends ResourceGridTableResult<T> {
+  gridTableProps: ResourceGridTableResult<T>['gridTableProps'] &
+    Pick<
+      GridTableProps<T>,
+      | 'paginationControls'
+      | 'onPagePrevious'
+      | 'onPageNext'
+      | 'canPagePrevious'
+      | 'canPageNext'
+    >;
   /**
    * The typed query's last applied page payload. Rows come through `source`;
    * payload-level metadata (e.g. the pods metrics meta, scoped to the queried

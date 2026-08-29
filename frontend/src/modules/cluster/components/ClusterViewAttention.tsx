@@ -270,17 +270,50 @@ export default function ClusterViewAttention() {
     globalFindingTypes: [],
   };
   const findingTypes = queryPayload?.findingTypes ?? [];
+  const ignoredFindingCount = Math.max(0, queryPayload?.ignoredFindingCount ?? 0);
+  const attentionGridTableProps = useMemo(() => {
+    if (ignoredFindingCount === 0) {
+      return gridTableProps;
+    }
+    const paginationControls = gridTableProps.paginationControls;
+    return {
+      ...gridTableProps,
+      paginationControls: (
+        <div className="attention-footer">
+          <span className="attention-footer__ignored">
+            {ignoredFindingCount} {ignoredFindingCount === 1 ? 'finding' : 'findings'} currently
+            ignored.{' '}
+            <button
+              type="button"
+              className="attention-footer__manage"
+              onClick={() => setIgnoredModalOpen(true)}
+            >
+              Manage ignored findings
+            </button>
+            .
+          </span>
+          {paginationControls && (
+            <span className="attention-footer__pagination">{paginationControls}</span>
+          )}
+        </div>
+      ),
+    };
+  }, [gridTableProps, ignoredFindingCount]);
 
   return (
     <>
       <ResourceInventoryTable
         source={source}
-        gridTableProps={gridTableProps}
+        gridTableProps={attentionGridTableProps}
         spinnerMessage="Loading attention findings..."
         favModal={favModal}
         columns={columns}
         diagnosticsLabel="Cluster Attention"
-        emptyMessage="No cluster objects need attention"
+        emptyMessage={
+          ignoredFindingCount > 0
+            ? 'No visible cluster objects need attention'
+            : 'No cluster objects need attention'
+        }
         filteredEmptyState={filteredEmptyState}
         enableContextMenu
         getCustomContextMenuItems={getCustomContextMenuItems}

@@ -114,7 +114,10 @@ vi.mock('@modules/resource-grid/useQueryBackedResourceGridTable', () => ({
   useQueryBackedClusterResourceGridTable: (params: Record<string, unknown>) => {
     queryParamsRef.current = params;
     return {
-      gridTableProps: { keyExtractor: params.keyExtractor },
+      gridTableProps: {
+        keyExtractor: params.keyExtractor,
+        paginationControls: <button type="button">Next page</button>,
+      },
       favModal: null,
       source: { rows: [], loading: false, loaded: true, error: null },
       queryPayload: queryPayloadRef.current,
@@ -126,7 +129,8 @@ vi.mock('@modules/resource-grid/useQueryBackedResourceGridTable', () => ({
 vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
   default: (props: Record<string, unknown>) => {
     tablePropsRef.current = props;
-    return <div data-testid="attention-table" />;
+    const gridTableProps = props.gridTableProps as { paginationControls?: React.ReactNode };
+    return <div data-testid="attention-table">{gridTableProps.paginationControls}</div>;
   },
 }));
 
@@ -296,6 +300,64 @@ describe('ClusterViewAttention', () => {
 
     act(() => filteredEmptyState?.secondaryAction.onClick());
     expect(document.body.textContent).toContain('Ignored findings');
+  });
+
+  it('shows ignored findings below the table without replacing pagination', async () => {
+    queryPayloadRef.current = {
+      ignoredFindingCount: 2,
+      ignoreRules: {
+        objectFindings: [],
+        clusterFindingTypes: ['restarts'],
+        globalFindingTypes: [],
+      },
+      findingTypes: [{ id: 'restarts', label: 'Restarts' }],
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewAttention />);
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('2 findings currently ignored.');
+    expect(container.textContent).toContain('Next page');
+    expect(tablePropsRef.current?.emptyMessage).toBe('No visible cluster objects need attention');
+
+    const manageButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Manage ignored findings'
+    );
+    expect(manageButton).toBeTruthy();
+    act(() => manageButton?.click());
+    expect(document.body.textContent).toContain('Ignored findings');
+  });
+
+  it('uses singular copy for one ignored finding', async () => {
+    queryPayloadRef.current = {
+      ignoredFindingCount: 1,
+      ignoreRules: {
+        objectFindings: [],
+        clusterFindingTypes: ['restarts'],
+        globalFindingTypes: [],
+      },
+      findingTypes: [{ id: 'restarts', label: 'Restarts' }],
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewAttention />);
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('1 finding currently ignored.');
+    expect(container.textContent).not.toContain('1 findings currently ignored.');
+  });
+
+  it('omits the ignored-findings footer when no active findings are suppressed', async () => {
+    await act(async () => {
+      root.render(<ClusterViewAttention />);
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toBe('Next page');
+    expect(tablePropsRef.current?.emptyMessage).toBe('No cluster objects need attention');
   });
 
   it('opens the complete object reference from the Name link', async () => {

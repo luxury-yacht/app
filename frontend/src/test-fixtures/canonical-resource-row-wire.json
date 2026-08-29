@@ -181,6 +181,7 @@
             "globalFindingTypes": null,
             "objectFindings": null
           },
+          "ignoredFindingCount": 0,
           "provider": "",
           "rows": [
             {

@@ -209,6 +209,7 @@ export interface ClusterAttentionSnapshot {
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
   severityCounts: AttentionSeverityCounts;
+  ignoredFindingCount: number;
   ignoreRules: AttentionIgnoreRules;
   findingTypes: Array<AttentionFindingTypeDefinition> | null;
   rows: Array<ClusterAttentionFinding> | null;
