@@ -721,6 +721,25 @@ func TestProjectUsesWailsTaskRunnerWithoutMage(t *testing.T) {
 	require.NotContains(t, strings.ToLower(editorSettings), "-tags=mage")
 }
 
+func TestDarwinGoChecksUseProductionDeploymentTarget(t *testing.T) {
+	rootTaskfile := readTestFile(t, repositoryPath("Taskfile.yml"))
+	darwinTaskfile := readTestFile(t, repositoryPath("build", "darwin", "Taskfile.yml"))
+
+	require.Contains(t, rootTaskfile, `MACOS_DEPLOYMENT_TARGET: "12.0"`)
+	require.Contains(t, rootTaskfile, `DARWIN_CGO_ENV: '{{if eq OS "darwin"}}env MACOSX_DEPLOYMENT_TARGET={{.MACOS_DEPLOYMENT_TARGET}} CGO_CFLAGS="-mmacosx-version-min={{.MACOS_DEPLOYMENT_TARGET}}" CGO_LDFLAGS="-mmacosx-version-min={{.MACOS_DEPLOYMENT_TARGET}}" {{end}}'`)
+	for _, command := range []string{
+		`'{{.DARWIN_CGO_ENV}}go test ./...'`,
+		`'{{.DARWIN_CGO_ENV}}go run ./cmd/project backend-coverage'`,
+		`'{{.DARWIN_CGO_ENV}}go test ./... -race'`,
+	} {
+		require.Contains(t, rootTaskfile, command)
+	}
+
+	require.Contains(t, darwinTaskfile, `CGO_CFLAGS: "-mmacosx-version-min={{.MACOS_DEPLOYMENT_TARGET}}"`)
+	require.Contains(t, darwinTaskfile, `CGO_LDFLAGS: "-mmacosx-version-min={{.MACOS_DEPLOYMENT_TARGET}}"`)
+	require.Contains(t, darwinTaskfile, `MACOSX_DEPLOYMENT_TARGET: "{{.MACOS_DEPLOYMENT_TARGET}}"`)
+}
+
 func TestReleaseWorkflowUsesConfiguredVVersionTags(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
 	require.Contains(t, workflow, `- "v[1-9]*"`)

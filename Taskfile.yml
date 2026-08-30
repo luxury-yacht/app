@@ -15,6 +15,8 @@ vars:
   PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
   VITE_PORT: "{{.WAILS_VITE_PORT | default 9245}}"
   GOOS: "{{.GOOS | default OS}}"
+  MACOS_DEPLOYMENT_TARGET: "12.0"
+  DARWIN_CGO_ENV: '{{if eq OS "darwin"}}env MACOSX_DEPLOYMENT_TARGET={{.MACOS_DEPLOYMENT_TARGET}} CGO_CFLAGS="-mmacosx-version-min={{.MACOS_DEPLOYMENT_TARGET}}" CGO_LDFLAGS="-mmacosx-version-min={{.MACOS_DEPLOYMENT_TARGET}}" {{end}}'
 
 tasks:
   build:
@@ -174,17 +176,17 @@ tasks:
   test:backend:
     desc: Runs backend tests
     cmds:
-      - go test ./...
+      - '{{.DARWIN_CGO_ENV}}go test ./...'
 
   test:backend-coverage:
     desc: Runs backend tests with coverage
     cmds:
-      - go run ./cmd/project backend-coverage
+      - '{{.DARWIN_CGO_ENV}}go run ./cmd/project backend-coverage'
 
   test:race:
     desc: Runs Go tests with the race detector
     cmds:
-      - go test ./... -race
+      - '{{.DARWIN_CGO_ENV}}go test ./... -race'
 
   test:frontend:
     desc: Runs frontend tests
