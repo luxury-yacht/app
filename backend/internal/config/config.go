@@ -27,9 +27,9 @@ const (
 // Refresh subsystem settings.
 const (
 	// RefreshIngestInitialSyncConcurrency caps the ingest-owned initial snapshots
-	// admitted concurrently before the shared liveness deadline. The six slots
-	// match the six ingest-owned Pod/workload feeds, which are launched first;
-	// the typed informer factory continues independently for ReplicaSets and HPA.
+	// admitted concurrently before the shared liveness deadline. This is an API
+	// pressure budget independent of how many resources the workload-priority set
+	// currently contains.
 	RefreshIngestInitialSyncConcurrency = 6
 
 	// RefreshResyncInterval controls how often shared informers perform a full resync sweep.

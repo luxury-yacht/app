@@ -643,8 +643,8 @@ func (m *IngestManager) beginRun(ctx context.Context) (context.Context, []ingest
 }
 
 func (m *IngestManager) markStarted() {
-	// Stamp the readiness deadline from a single moment, so a kind whose initial
-	// relist never completes degrades out of the gate rather than blocking it.
+	// Stamp one readiness window for the whole startup queue. Data still queued
+	// or actively syncing when it expires degrades rather than blocking startup.
 	m.startedAtMu.Lock()
 	m.startedAt = m.now()
 	m.startedAtMu.Unlock()
@@ -835,10 +835,11 @@ func (m *IngestManager) HasSynced() bool {
 }
 
 // entrySettled reports whether one kind's store has stopped gating readiness: it has
-// synced, or it has been marked degraded, or it has exceeded the sync deadline without
-// syncing (flipped to degraded here, logged once). A degraded store keeps retrying
-// LIST+WATCH in the background, so HasSynced still reflects a later real sync — the
-// degrade only stops it BLOCKING the initial gate.
+// synced, was permission-skipped, or its data was not ready when the shared startup
+// deadline expired (flipped to degraded here, logged once). The source may still be
+// queued or already syncing; either way its reflector runs after the deadline and keeps
+// retrying LIST+WATCH, so a later real sync replaces the degraded data state. Degradation
+// only stops the source BLOCKING the initial gate.
 func (m *IngestManager) entrySettled(e *entry) bool {
 	if e.allPartsSkipped() {
 		// Permission-skipped: reflector never launched, store stays empty; settled so it
@@ -858,17 +859,19 @@ func (m *IngestManager) entrySettled(e *entry) bool {
 		// into the settled decision made a raced HasSynced return a false
 		// negative, which can block Manager.Start's readiness wait.
 		if e.degraded.CompareAndSwap(false, true) {
-			klog.Warningf("ingest store for %s did not sync within the deadline — marking degraded and excluding from readiness (LIST+WATCH retries continue in the background)", e.gvr)
+			klog.Warningf("ingest data for %s was not ready within the startup deadline — marking degraded and excluding from readiness (queued or active LIST+WATCH continues in the background)", e.gvr)
 		}
 		return true
 	}
 	return false
 }
 
-// syncDeadlineExceeded reports whether the per-cluster ingest sync deadline has passed
-// since Start stamped startedAt. A zero startedAt (Start not yet called) or a
-// non-positive deadline never fires, so the deadline can only degrade a store after the
-// reflectors have actually been given the chance to run.
+// syncDeadlineExceeded reports whether the per-cluster ingest startup deadline has
+// passed since Start stamped startedAt. The deadline includes time waiting in the
+// bounded startup queue, so a queued resource can degrade before its first request;
+// once the deadline passes, queue waiters release and every remaining reflector starts
+// while readiness honestly reports its source as degraded until a real sync lands. A
+// zero startedAt (Start not yet called) or non-positive deadline never fires.
 func (m *IngestManager) syncDeadlineExceeded() bool {
 	if m.syncDeadline <= 0 {
 		return false

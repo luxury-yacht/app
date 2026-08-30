@@ -2,9 +2,11 @@ package ingest
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
@@ -20,27 +22,28 @@ import (
 func TestInitialIngestStartupIsBoundedAndWorkloadFirst(t *testing.T) {
 	disableWatchList(t)
 
-	priority := []schema.GroupVersionResource{
-		{Group: "", Version: "v1", Resource: "pods"},
-		{Group: "apps", Version: "v1", Resource: "deployments"},
-		{Group: "apps", Version: "v1", Resource: "statefulsets"},
-		{Group: "apps", Version: "v1", Resource: "daemonsets"},
-		{Group: "batch", Version: "v1", Resource: "jobs"},
-		{Group: "batch", Version: "v1", Resource: "cronjobs"},
+	priority := initialIngestPriorityGVRs()
+	if len(priority) == 0 {
+		t.Fatal("canonical workloads composition produced no ingest-owned priority resources")
 	}
-	queued := []schema.GroupVersionResource{
-		{Group: "", Version: "v1", Resource: "configmaps"},
-		{Group: "", Version: "v1", Resource: "secrets"},
+	queued := make([]schema.GroupVersionResource, config.RefreshIngestInitialSyncConcurrency+1)
+	for i := range queued {
+		queued[i] = schema.GroupVersionResource{
+			Group:    "startup-test.example.com",
+			Version:  "v1",
+			Resource: fmt.Sprintf("resources-%02d", i),
+		}
 	}
+	launchOrder := append(append([]schema.GroupVersionResource(nil), priority...), queued...)
 
-	started := make(chan schema.GroupVersionResource, len(priority)+len(queued))
-	releases := make(map[schema.GroupVersionResource]chan struct{}, len(priority)+len(queued))
+	started := make(chan schema.GroupVersionResource, len(launchOrder))
+	releases := make(map[schema.GroupVersionResource]chan struct{}, len(launchOrder))
 	mgr := &IngestManager{
 		entries:      make(map[schema.GroupVersionResource]*entry),
 		syncDeadline: time.Hour,
 		now:          time.Now,
 	}
-	for _, gvr := range append(append([]schema.GroupVersionResource(nil), priority...), queued...) {
+	for _, gvr := range launchOrder {
 		release := make(chan struct{})
 		releases[gvr] = release
 		mgr.entries[gvr] = blockingStartupEntry(gvr, started, release)
@@ -60,24 +63,25 @@ func TestInitialIngestStartupIsBoundedAndWorkloadFirst(t *testing.T) {
 		}
 	}
 
-	got := receiveStarted(t, started, len(priority), time.Second)
+	firstWaveCount := config.RefreshIngestInitialSyncConcurrency
+	got := receiveStarted(t, started, firstWaveCount, time.Second)
 	if extra := receiveOptional(started, 150*time.Millisecond); extra != nil {
-		t.Fatalf("initial ingest launched more than %d concurrent requests; unexpected %s", len(priority), *extra)
+		t.Fatalf("initial ingest launched more than %d concurrent requests; unexpected %s", firstWaveCount, *extra)
 	}
 	firstWave := make(map[schema.GroupVersionResource]bool, len(got))
 	for _, gvr := range got {
 		firstWave[gvr] = true
 	}
-	for _, want := range priority {
+	for _, want := range launchOrder[:firstWaveCount] {
 		if !firstWave[want] {
 			t.Fatalf("initial request wave %v does not include workload-priority %s", got, want)
 		}
 	}
 
-	close(releases[priority[0]])
-	delete(releases, priority[0])
-	if next := receiveStarted(t, started, 1, time.Second)[0]; next != queued[0] {
-		t.Fatalf("first queued request = %s, want %s", next, queued[0])
+	close(releases[launchOrder[0]])
+	delete(releases, launchOrder[0])
+	if next := receiveStarted(t, started, 1, time.Second)[0]; next != launchOrder[firstWaveCount] {
+		t.Fatalf("first queued request = %s, want %s", next, launchOrder[firstWaveCount])
 	}
 }
 

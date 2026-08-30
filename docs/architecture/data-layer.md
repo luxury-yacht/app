@@ -92,12 +92,14 @@ the completed `v2` rewrite plan.
   partial/inexact data with a syncing issue instead of an authoritative empty
   result. WatchList is **beta** — the LIST fallback is load-bearing.
 - **Bounded, workload-first cold start.** The ingest manager declares every
-  permission-approved partition before launching reflectors, then admits at most six
-  initial snapshots at once before the liveness deadline. Pods, Deployments,
-  StatefulSets, DaemonSets, Jobs, and CronJobs occupy that first wave; ReplicaSets and
-  HPA start through the typed informer factory. A slot opens when its partition lands or
-  the shared 15-second liveness deadline expires. Deadline-expired reflectors continue
-  LIST+WATCH retries in the background, so load shaping never disables recovery.
+  permission-approved partition before launching reflectors, then admits a bounded
+  number of initial snapshots before the liveness deadline. The priority order is the
+  shared Workloads domain composition intersected with the registry's ingest-owned
+  resources; ReplicaSets and HPA currently start through the typed informer factory. A
+  slot opens when its partition lands or the shared 15-second liveness deadline expires.
+  On a slow cluster, lower-priority resources can therefore reach the deadline while
+  still queued; they report degraded/partial rather than empty, launch as the deadline
+  releases the queue, and continue LIST+WATCH recovery in the background.
 - **Two cutover shapes.** Registry-driven single-object kinds flip a descriptor
   `IngestOwned` flag (the generic path wires maintained store, catalog, object-map,
   response-cache). Cross-kind-join domains (pods, workloads, network, nodes) use a

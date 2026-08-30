@@ -39,7 +39,9 @@
 - Initial cluster loading now limits the pre-deadline ingest request burst and
   starts the Pod/workload feeds first, avoiding contention that could delay the
   Workloads view past its readiness deadline. Degraded-ingest warnings now name
-  bespoke resources instead of logging an empty resource identity.
+  bespoke resources instead of logging an empty resource identity. On slow
+  clusters, lower-priority sources may briefly report degraded while queued;
+  they remain visibly partial and recover through background LIST+WATCH.
 - Duplicate Favorite names are now rejected. It's no longer possible to create different Favorites with the same name.
 - An unreachable previously opened cluster no longer blocks startup UI,
   kubeconfig discovery, cluster-tab changes, or app-global controls while its

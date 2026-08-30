@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
 )
@@ -15,16 +17,35 @@ type initialIngestTask struct {
 	part   *ingestPart
 }
 
-// initialIngestPriority is the Workloads view's ingest-owned dependency set.
-// ReplicaSets and HPA are typed informers, so they are started by the informer
-// factory; these six feeds receive the ingest queue's first wave.
-var initialIngestPriority = []schema.GroupVersionResource{
-	{Group: "", Version: "v1", Resource: "pods"},
-	{Group: "apps", Version: "v1", Resource: "deployments"},
-	{Group: "apps", Version: "v1", Resource: "statefulsets"},
-	{Group: "apps", Version: "v1", Resource: "daemonsets"},
-	{Group: "batch", Version: "v1", Resource: "jobs"},
-	{Group: "batch", Version: "v1", Resource: "cronjobs"},
+// initialIngestPriority is derived from the Workloads domain's canonical
+// composition, filtered to resources currently owned by ingest. ReplicaSets and
+// HPA currently remain typed informers, so the informer factory starts them.
+var initialIngestPriority = initialIngestPriorityGVRs()
+
+func initialIngestPriorityGVRs() []schema.GroupVersionResource {
+	composition, ok := domainpermissions.CompositionByDomain()["namespace-workloads"]
+	if !ok {
+		return nil
+	}
+	ingestOwned := kindregistry.IngestOwnedGVRs()
+	seen := make(map[schema.GroupVersionResource]struct{})
+	priority := make([]schema.GroupVersionResource, 0, len(composition.Runtime)+len(composition.Stream))
+	for _, resource := range append(composition.Runtime, composition.Stream...) {
+		gvr := schema.GroupVersionResource{
+			Group:    resource.Group,
+			Version:  resource.Version,
+			Resource: resource.Resource,
+		}
+		if _, owned := ingestOwned[gvr]; !owned {
+			continue
+		}
+		if _, duplicate := seen[gvr]; duplicate {
+			continue
+		}
+		seen[gvr] = struct{}{}
+		priority = append(priority, gvr)
+	}
+	return priority
 }
 
 // prepareInitialIngestTasks declares every store's expected partitions before
@@ -122,9 +143,6 @@ func (m *IngestManager) runInitialIngestQueue(runCtx context.Context, tasks []in
 		if initialWaveStarted != nil {
 			close(initialWaveStarted)
 			initialWaveStarted = nil
-		}
-		if active == 0 {
-			return
 		}
 		select {
 		case <-runCtx.Done():
