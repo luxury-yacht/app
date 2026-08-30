@@ -35,10 +35,10 @@ func (p testGatewayPresence) Has(kind string) bool {
 // version the server does not serve, or an RBAC-forbidden resource.
 func brokenInformer(err error) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(&cache.ListWatch{
-		ListFunc: func(metav1.ListOptions) (runtime.Object, error) {
+		ListWithContextFunc: func(context.Context, metav1.ListOptions) (runtime.Object, error) {
 			return nil, err
 		},
-		WatchFunc: func(metav1.ListOptions) (watch.Interface, error) {
+		WatchFuncWithContext: func(context.Context, metav1.ListOptions) (watch.Interface, error) {
 			return nil, err
 		},
 	}, &corev1.Pod{}, 0, cache.Indexers{})

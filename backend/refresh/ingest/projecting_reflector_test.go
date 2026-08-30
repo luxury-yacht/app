@@ -24,11 +24,11 @@ import (
 // standard way real informers build a ListWatch.
 func configMapListWatch(client kubernetes.Interface) cache.ListerWatcher {
 	lw := &cache.ListWatch{
-		ListFunc: func(opts metav1.ListOptions) (apiruntime.Object, error) {
-			return client.CoreV1().ConfigMaps(metav1.NamespaceAll).List(context.Background(), opts)
+		ListWithContextFunc: func(ctx context.Context, opts metav1.ListOptions) (apiruntime.Object, error) {
+			return client.CoreV1().ConfigMaps(metav1.NamespaceAll).List(ctx, opts)
 		},
-		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
-			return client.CoreV1().ConfigMaps(metav1.NamespaceAll).Watch(context.Background(), opts)
+		WatchFuncWithContext: func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
+			return client.CoreV1().ConfigMaps(metav1.NamespaceAll).Watch(ctx, opts)
 		},
 	}
 	return cache.ToListWatcherWithWatchListSemantics(lw, client)

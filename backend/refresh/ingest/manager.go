@@ -421,21 +421,20 @@ func (m *IngestManager) StopReflectorFor(gvr schema.GroupVersionResource) {
 // namespace ("" = all namespaces) — the on-demand dynamic-CRD equivalent of the
 // typed ListWatch NewListWatchFromClient builds in installReflector. The
 // reflector decodes results as *unstructured.Unstructured, which the catalog
-// projection consumes as a metav1.Object. context.Background mirrors
-// NewListWatchFromClient: the reflector stops the returned watch.Interface on
-// ctx-cancel, so the watch is wound down without a per-call context.
+// projection consumes as a metav1.Object. The context-aware callbacks propagate
+// reflector cancellation into list and watch requests.
 func dynamicListWatch(client dynamic.Interface, gvr schema.GroupVersionResource, namespace string) cache.ListerWatcher {
 	if namespace == "" {
 		namespace = metav1.NamespaceAll
 	}
 	resource := client.Resource(gvr).Namespace(namespace)
 	return &cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (apiruntime.Object, error) {
-			return resource.List(context.Background(), options)
+		ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (apiruntime.Object, error) {
+			return resource.List(ctx, options)
 		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+		WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
 			options.Watch = true
-			return resource.Watch(context.Background(), options)
+			return resource.Watch(ctx, options)
 		},
 	}
 }

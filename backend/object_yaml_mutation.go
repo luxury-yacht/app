@@ -84,9 +84,6 @@ type mutationContext struct {
 
 func (g *ResourceGateway) mutationContext() (context.Context, context.CancelFunc) {
 	base := g.CtxOrBackground()
-	if base == nil {
-		base = context.Background()
-	}
 	if _, hasDeadline := base.Deadline(); hasDeadline {
 		return base, func() {
 			// The caller owns the existing deadline; no derived context needs cancellation.

@@ -32,7 +32,7 @@ func nameProjectingStore() *ProjectingStore {
 func TestResumeAppliesDeltasAndMarksSynced(t *testing.T) {
 	fw := watch.NewFake()
 	lw := &cache.ListWatch{
-		WatchFunc: func(metav1.ListOptions) (watch.Interface, error) { return fw, nil },
+		WatchFuncWithContext: func(context.Context, metav1.ListOptions) (watch.Interface, error) { return fw, nil },
 	}
 	store := nameProjectingStore()
 
@@ -63,7 +63,7 @@ func TestResumeAppliesDeltasAndMarksSynced(t *testing.T) {
 // NOT marked synced (the baseline can't be trusted current until the full sync reconciles).
 func TestResumeReturnsNeedsFullSyncOn410(t *testing.T) {
 	lw := &cache.ListWatch{
-		WatchFunc: func(metav1.ListOptions) (watch.Interface, error) {
+		WatchFuncWithContext: func(context.Context, metav1.ListOptions) (watch.Interface, error) {
 			return nil, apierrors.NewResourceExpired("resourceVersion too old")
 		},
 	}
@@ -79,7 +79,7 @@ func TestResumeReturnsNeedsFullSyncOn410(t *testing.T) {
 func TestResumeReturnsNeedsFullSyncOnErrorEvent(t *testing.T) {
 	fw := watch.NewFake()
 	lw := &cache.ListWatch{
-		WatchFunc: func(metav1.ListOptions) (watch.Interface, error) { return fw, nil },
+		WatchFuncWithContext: func(context.Context, metav1.ListOptions) (watch.Interface, error) { return fw, nil },
 	}
 	store := nameProjectingStore()
 
@@ -96,7 +96,7 @@ func TestResumeReturnsNeedsFullSyncOnErrorEvent(t *testing.T) {
 func TestRunWithResumeHealthyDoesNotFullSync(t *testing.T) {
 	fw := watch.NewFake()
 	lw := &cache.ListWatch{
-		WatchFunc: func(metav1.ListOptions) (watch.Interface, error) { return fw, nil },
+		WatchFuncWithContext: func(context.Context, metav1.ListOptions) (watch.Interface, error) { return fw, nil },
 	}
 	store := nameProjectingStore()
 
@@ -120,7 +120,7 @@ func TestRunWithResumeHealthyDoesNotFullSync(t *testing.T) {
 // full sync (which reconciles — stage 4).
 func TestRunWithResume410FallsBackToFullSync(t *testing.T) {
 	lw := &cache.ListWatch{
-		WatchFunc: func(metav1.ListOptions) (watch.Interface, error) {
+		WatchFuncWithContext: func(context.Context, metav1.ListOptions) (watch.Interface, error) {
 			return nil, apierrors.NewResourceExpired("resourceVersion too old")
 		},
 	}

@@ -2,11 +2,11 @@
 # Canonical tool versions. Compatibility metadata in go.mod and
 # frontend/package.json must mirror these values.
 go = "1.26.6"
-node = "26.7.0"
+node = "26.8.1"
 npm = "12.0.2"
-"go:honnef.co/go/tools/cmd/staticcheck" = "0.7.0"
+"go:honnef.co/go/tools/cmd/staticcheck" = "0.8.0"
 trivy = "0.74.0"
-"go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.14"
+"go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.16"
 
 [vars]
 # NSIS is installed by the Windows-specific release action rather than Mise.
