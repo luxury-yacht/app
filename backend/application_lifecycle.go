@@ -8,6 +8,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -96,8 +97,9 @@ type refreshSubsystemTeardowner interface {
 
 type lifecycleWorkspace interface {
 	ReleaseWorkspaceWindow(string)
+	connectSelectedClustersAtStartup(context.Context) error
 	consumeClusterRuntimeIntent(ClusterRuntimeIntent)
-	initializeSelectedClustersAtStartup() (int, error)
+	initializeSelectedClustersAtStartup() (int, context.Context, error)
 	waitForSelectionMutationIdle(time.Duration) bool
 }
 
@@ -307,14 +309,24 @@ func (a *ApplicationLifecycle) initializeStartupClusters() {
 		a.logger.Info(fmt.Sprintf("Found %d kubeconfig file(s)", len(result.Kubeconfigs)), logsources.App)
 	}
 
-	// The window is already visible, so settings restore and client initialization
-	// share the runtime selection coordinator with any frontend mutation.
-	selectedCount, err := a.workspace.initializeSelectedClustersAtStartup()
+	// Restore the durable selection before the frontend hydrates. Cluster client
+	// and refresh initialization continues independently so an unreachable API
+	// server cannot block the native runtime or workspace reads.
+	selectedCount, connectionCtx, err := a.workspace.initializeSelectedClustersAtStartup()
 	if selectedCount > 0 {
 		if err != nil {
-			a.logger.ErrorWithCause(err, "Failed to connect to cluster(s)", logsources.App)
+			a.logger.ErrorWithCause(err, "Failed to restore selected cluster(s)", logsources.App)
 		} else {
-			a.logger.Info("Successfully connected to Kubernetes cluster(s)", logsources.App)
+			go func() {
+				if connectErr := a.workspace.connectSelectedClustersAtStartup(connectionCtx); connectErr != nil {
+					if errors.Is(connectErr, context.Canceled) {
+						return
+					}
+					a.logger.ErrorWithCause(connectErr, "Failed to connect to cluster(s)", logsources.App)
+					return
+				}
+				a.logger.Info("Successfully connected to Kubernetes cluster(s)", logsources.App)
+			}()
 		}
 	} else {
 		a.logger.Warn("No kubeconfig selections found - please select a cluster", logsources.App)

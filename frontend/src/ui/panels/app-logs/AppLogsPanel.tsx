@@ -45,6 +45,7 @@ import {
 } from 'react';
 import { readAppLogs, readAppLogsSince } from '@/core/app-state-access';
 import { ClearAppLogs, SetAppLogsPanelVisible } from '@/core/backend-api';
+import { writeClipboardText } from '@/core/desktop-runtime';
 import { type AppLogsAddedEvent, subscribeAppLogsAdded } from '@/core/logging/appLogsClient';
 import './AppLogsPanel.css';
 import { compareUtf16Strings } from '@/shared/utils/sort';
@@ -754,7 +755,7 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
       .join('\n');
 
     try {
-      await navigator.clipboard.writeText(formattedLogs);
+      await writeClipboardText(formattedLogs);
       setCopyFeedback('copied');
     } catch (err) {
       setCopyFeedback('error');

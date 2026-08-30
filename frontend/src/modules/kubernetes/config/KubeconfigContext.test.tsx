@@ -203,6 +203,42 @@ describe('KubeconfigContext', () => {
     expect(initialLoadingState).toBe(true);
   });
 
+  it('publishes discovered kubeconfigs while initial foreground activation is pending', async () => {
+    const kubeconfigs: types.KubeconfigInfo[] = [
+      {
+        name: 'alpha',
+        path: '/kube/alpha',
+        context: 'dev',
+        isDefault: false,
+        isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
+      },
+    ];
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
+    getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev']);
+    let resolveActivation!: () => void;
+    setVisibleClusterMock.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveActivation = resolve;
+      })
+    );
+
+    const { getContext, unmount } = await renderProvider();
+
+    expect(setVisibleClusterMock).toHaveBeenCalledWith('alpha:dev');
+    expect(getContext().kubeconfigs).toEqual(kubeconfigs);
+    expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev']);
+    expect(getContext().selectedClusterId).toBe('alpha:dev');
+    expect(getContext().kubeconfigsLoading).toBe(false);
+
+    await act(async () => {
+      resolveActivation();
+      await flushPromises();
+    });
+    unmount();
+  });
+
   it('exposes missing search paths as a non-error discovery state', async () => {
     getKubeconfigsMock.mockResolvedValue({
       kubeconfigs: [],

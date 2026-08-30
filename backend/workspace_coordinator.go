@@ -102,13 +102,14 @@ type WorkspaceCoordinator struct {
 	context               func() context.Context
 	runtimeAvailableFn    func() bool
 	emitEventFn           func(string, ...interface{})
-	kubeClientInitializer func() error
+	kubeClientInitializer func(context.Context) error
 
 	selectedKubeconfigs []string
 	kubeconfigsMu       sync.RWMutex
 
-	selectionMutationMu sync.Mutex
-	workspaceSelections map[string][]string
+	selectionMutationMu   sync.Mutex
+	workspaceSelectionsMu sync.RWMutex
+	workspaceSelections   map[string][]string
 
 	selectionMutationDrainMu   sync.Mutex
 	selectionMutationDrainCond *sync.Cond
@@ -153,7 +154,6 @@ func newWorkspaceCoordinator(dependencies WorkspaceCoordinatorDependencies) *Wor
 		workspaceSelections: make(map[string][]string),
 		clusterIntentLatest: make(map[clusterRuntimeIntentKey]uint64),
 	}
-	workspace.kubeClientInitializer = workspace.initKubernetesClient
 	return workspace
 }
 

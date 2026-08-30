@@ -23,7 +23,7 @@ func TestInitializeSelectedClustersAtStartupUsesSelectionMutationCoordinator(t *
 	require.NoError(t, app.Preferences.saveSettingsFile(settings))
 
 	initializerCalled := make(chan struct{})
-	app.Workspace.kubeClientInitializer = func() error {
+	app.Workspace.kubeClientInitializer = func(context.Context) error {
 		close(initializerCalled)
 		return nil
 	}
@@ -31,12 +31,13 @@ func TestInitializeSelectedClustersAtStartupUsesSelectionMutationCoordinator(t *
 	app.Workspace.selectionMutationMu.Lock()
 	type startupResult struct {
 		selectedCount int
+		connectionCtx context.Context
 		err           error
 	}
 	result := make(chan startupResult, 1)
 	go func() {
-		selectedCount, err := app.Workspace.initializeSelectedClustersAtStartup()
-		result <- startupResult{selectedCount: selectedCount, err: err}
+		selectedCount, connectionCtx, err := app.Workspace.initializeSelectedClustersAtStartup()
+		result <- startupResult{selectedCount: selectedCount, connectionCtx: connectionCtx, err: err}
 	}()
 
 	select {
@@ -51,6 +52,8 @@ func TestInitializeSelectedClustersAtStartupUsesSelectionMutationCoordinator(t *
 	require.NoError(t, startup.err)
 	require.Equal(t, 1, startup.selectedCount)
 	require.Equal(t, []string{selection}, app.Workspace.GetSelectedKubeconfigs())
+
+	require.NoError(t, app.Workspace.connectSelectedClustersAtStartup(startup.connectionCtx))
 	require.Eventually(t, func() bool {
 		select {
 		case <-initializerCalled:
@@ -59,6 +62,62 @@ func TestInitializeSelectedClustersAtStartupUsesSelectionMutationCoordinator(t *
 			return false
 		}
 	}, time.Second, 10*time.Millisecond)
+}
+
+func TestStartupClusterConnectionDoesNotBlockWorkspaceSelectionMutation(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	selection := "/tmp/config:cluster-a"
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{{
+		Name:    "config",
+		Path:    "/tmp/config",
+		Context: "cluster-a",
+	}}
+	settings := defaultSettingsFile()
+	settings.Kubeconfig.Selected = []string{selection}
+	require.NoError(t, app.Preferences.saveSettingsFile(settings))
+	selectedCount, startupContext, err := app.Workspace.initializeSelectedClustersAtStartup()
+	require.NoError(t, err)
+	require.Equal(t, 1, selectedCount)
+	app.Workspace.GetClusterWorkspaceStateForWindow("workspace-1")
+
+	connectionStarted := make(chan struct{})
+	releaseConnection := make(chan struct{})
+	app.Workspace.kubeClientInitializer = func(ctx context.Context) error {
+		close(connectionStarted)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-releaseConnection:
+			return nil
+		}
+	}
+	connectionResult := make(chan error, 1)
+	startupGeneration := app.Workspace.selectionGeneration.Load()
+	go func() {
+		connectionResult <- app.Workspace.connectSelectedClustersAtStartup(startupContext)
+	}()
+	<-connectionStarted
+
+	selectionResult := make(chan ClusterWorkspaceResult, 1)
+	go func() {
+		selectionResult <- app.Workspace.ApplyClusterWorkspace(ClusterWorkspaceCommand{
+			WindowID:                  "workspace-1",
+			UpdateSelectedKubeconfigs: true,
+		})
+	}()
+
+	select {
+	case result := <-selectionResult:
+		require.Empty(t, result.Error)
+	case <-time.After(50 * time.Millisecond):
+		close(releaseConnection)
+		<-connectionResult
+		<-selectionResult
+		t.Fatal("workspace selection mutation was blocked by startup cluster connection work")
+	}
+	require.ErrorIs(t, <-connectionResult, context.Canceled)
+	require.Greater(t, app.Workspace.selectionGeneration.Load(), startupGeneration)
 }
 
 // TestInitKubernetesClient_FailsWithNoSelections verifies that initKubernetesClient

@@ -64,30 +64,56 @@ func TestClusterWorkspaceSnapshotSourcesAdvanceRevision(t *testing.T) {
 	})
 }
 
-func TestGetClusterWorkspaceStateWaitsForSelectionMutation(t *testing.T) {
+func TestGetClusterWorkspaceStateRemainsReadableDuringSelectionMutation(t *testing.T) {
 	app := newWorkspaceCoordinatorTestFixture(t)
+	app.Workspace.kubeconfigsMu.Lock()
+	app.Workspace.setSelectedKubeconfigsLocked([]string{"/tmp/config:prod"})
+	app.Workspace.kubeconfigsMu.Unlock()
 	app.Workspace.selectionMutationMu.Lock()
-	started := make(chan struct{})
 	result := make(chan ClusterWorkspaceState, 1)
 	go func() {
-		close(started)
-		result <- app.Workspace.GetClusterWorkspaceState()
+		result <- app.Workspace.GetClusterWorkspaceStateForWindow("workspace-1")
 	}()
-	<-started
 
 	select {
-	case <-result:
+	case state := <-result:
+		require.Equal(t, []string{"/tmp/config:prod"}, state.SelectedKubeconfigs)
+	case <-time.After(50 * time.Millisecond):
 		app.Workspace.selectionMutationMu.Unlock()
-		t.Fatal("workspace snapshot escaped an active selection mutation")
-	case <-time.After(20 * time.Millisecond):
+		t.Fatal("workspace snapshot was blocked by cluster connection work")
 	}
-
 	app.Workspace.selectionMutationMu.Unlock()
+}
+
+func TestApplyClusterWorkspaceVisibilityRemainsWritableDuringSelectionMutation(t *testing.T) {
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.Workspace.kubeconfigsMu.Lock()
+	app.Workspace.setSelectedKubeconfigsLocked([]string{"/tmp/config:prod"})
+	app.Workspace.kubeconfigsMu.Unlock()
+	generation := app.Workspace.selectionGeneration.Add(1)
+	generationContext := app.Workspace.activateSelectionGeneration()
+	defer app.Workspace.cancelActiveSelectionGeneration()
+	app.Workspace.selectionMutationMu.Lock()
+	result := make(chan ClusterWorkspaceResult, 1)
+	go func() {
+		result <- app.Workspace.ApplyClusterWorkspace(ClusterWorkspaceCommand{
+			WindowID:         "workspace-1",
+			VisibleClusterID: "cluster-a",
+		})
+	}()
+
 	select {
-	case <-result:
-	case <-time.After(time.Second):
-		t.Fatal("workspace snapshot did not resume after the selection mutation")
+	case state := <-result:
+		require.Empty(t, state.Error)
+		require.Equal(t, "cluster-a", state.State.VisibleClusterID)
+		require.Equal(t, generation, app.Workspace.selectionGeneration.Load())
+		require.NoError(t, generationContext.Err())
+	case <-time.After(50 * time.Millisecond):
+		app.Workspace.selectionMutationMu.Unlock()
+		<-result
+		t.Fatal("visibility-only workspace update was blocked by cluster connection work")
 	}
+	app.Workspace.selectionMutationMu.Unlock()
 }
 
 func TestClusterWorkspaceStateCombinesClusterFacts(t *testing.T) {
@@ -206,16 +232,16 @@ func TestReleaseWorkspaceWindowDropsOnlyThatWindowsTabOwnership(t *testing.T) {
 
 	require.Equal(t, []string{selection}, app.Workspace.GetSelectedKubeconfigs())
 	require.Equal(t, []string{selection}, app.Workspace.GetClusterWorkspaceStateForWindow("workspace-2").SelectedKubeconfigs)
-	app.Workspace.selectionMutationMu.Lock()
+	app.Workspace.workspaceSelectionsMu.RLock()
 	require.NotContains(t, app.Workspace.workspaceSelections, "workspace-1")
-	app.Workspace.selectionMutationMu.Unlock()
+	app.Workspace.workspaceSelectionsMu.RUnlock()
 
 	app.Workspace.ReleaseWorkspaceWindow("workspace-2")
 
 	require.Empty(t, app.Workspace.GetSelectedKubeconfigs())
 }
 
-func TestConcurrentPeerWorkspaceCommandsPreserveEachWindowsLatestTabs(t *testing.T) {
+func TestVisibilityUpdateBypassesQueuedPeerSelectionAndPreservesTabOwnership(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newWorkspaceCoordinatorTestFixture(t)
 	selection := "/tmp/config:prod"
@@ -246,15 +272,16 @@ func TestConcurrentPeerWorkspaceCommandsPreserveEachWindowsLatestTabs(t *testing
 			VisibleClusterID: "cluster-a",
 		})
 	}()
+	requireWorkspaceResult(t, secondResult)
+	require.Equal(t, "cluster-a", app.Workspace.GetClusterWorkspaceStateForWindow("workspace-2").VisibleClusterID)
 	require.Eventually(t, func() bool {
 		app.Workspace.selectionMutationDrainMu.Lock()
 		defer app.Workspace.selectionMutationDrainMu.Unlock()
-		return app.Workspace.selectionMutationPending == 2
+		return app.Workspace.selectionMutationPending == 1
 	}, time.Second, time.Millisecond)
 	app.Workspace.selectionMutationMu.Unlock()
 
 	requireWorkspaceResult(t, firstResult)
-	requireWorkspaceResult(t, secondResult)
 	require.Empty(t, app.Workspace.GetClusterWorkspaceStateForWindow("workspace-1").SelectedKubeconfigs)
 	require.Equal(t, []string{selection}, app.Workspace.GetClusterWorkspaceStateForWindow("workspace-2").SelectedKubeconfigs)
 	require.Equal(t, []string{selection}, app.Workspace.GetSelectedKubeconfigs())
@@ -390,50 +417,6 @@ func TestApplyClusterWorkspaceReturnsAuthoritativeActivationState(t *testing.T) 
 	require.Empty(t, result.Error)
 	require.Equal(t, "cluster-a", result.State.VisibleClusterID)
 	require.Equal(t, ClusterStateReady, result.State.Clusters["cluster-a"].Lifecycle)
-}
-
-func TestApplyClusterWorkspaceSupersedesOlderQueuedActivation(t *testing.T) {
-	app := newWorkspaceCoordinatorTestFixture(t)
-	app.Refresh.governorApplied["cluster-a"] = system.TierForeground
-	app.Refresh.governorPlanned["cluster-a"] = system.TierForeground
-	app.Refresh.governorApplied["cluster-b"] = system.TierForeground
-	app.Refresh.governorPlanned["cluster-b"] = system.TierForeground
-
-	app.Workspace.selectionMutationMu.Lock()
-	olderResult := make(chan ClusterWorkspaceResult, 1)
-	go func() {
-		olderResult <- app.Workspace.ApplyClusterWorkspace(ClusterWorkspaceCommand{VisibleClusterID: "cluster-a"})
-	}()
-
-	require.Eventually(t, func() bool {
-		app.Workspace.selectionMutationDrainMu.Lock()
-		defer app.Workspace.selectionMutationDrainMu.Unlock()
-		return app.Workspace.selectionMutationPending == 1
-	}, time.Second, time.Millisecond)
-	newerResult := make(chan ClusterWorkspaceResult, 1)
-	go func() {
-		newerResult <- app.Workspace.ApplyClusterWorkspace(ClusterWorkspaceCommand{VisibleClusterID: "cluster-b"})
-	}()
-	require.Eventually(t, func() bool {
-		app.Workspace.selectionMutationDrainMu.Lock()
-		defer app.Workspace.selectionMutationDrainMu.Unlock()
-		return app.Workspace.selectionMutationPending == 2
-	}, time.Second, time.Millisecond)
-
-	select {
-	case <-olderResult:
-		app.Workspace.selectionMutationMu.Unlock()
-		t.Fatal("older workspace command completed outside the selection mutation boundary")
-	case <-newerResult:
-		app.Workspace.selectionMutationMu.Unlock()
-		t.Fatal("newer workspace command completed outside the selection mutation boundary")
-	default:
-	}
-
-	app.Workspace.selectionMutationMu.Unlock()
-	requireWorkspaceResult(t, olderResult)
-	requireWorkspaceResult(t, newerResult)
-	require.Equal(t, "cluster-b", app.Workspace.GetClusterWorkspaceState().VisibleClusterID)
 }
 
 func requireWorkspaceResult(t *testing.T, result <-chan ClusterWorkspaceResult) {

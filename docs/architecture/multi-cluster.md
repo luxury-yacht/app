@@ -115,19 +115,29 @@ process shutdown and its tabs remain the next-start persisted selection.
 
 The backend snapshot is revision-consistent: every owning state writer advances
 the workspace revision while holding its own lock, and the aggregate retries if
-that revision changes during capture. Public reads wait for the serialized
-selection boundary; peer commands are ordered so one window cannot supersede a
-different window's tab mutation, and `ApplyClusterWorkspace` captures an
-applied command's snapshot before releasing that boundary. Do not add a
-workspace-visible state writer without advancing the revision in the same
-locked commit.
+that revision changes during capture. Public reads use the peer-selection lock,
+not the serialized selection-work boundary, so slow or unreachable clusters
+cannot prevent the frontend from hydrating tabs and lifecycle state.
+Visibility-only `ApplyClusterWorkspace` commands bypass that selection boundary
+and do not advance or cancel its generation; commands that change a peer's tab
+set remain ordered so one window cannot supersede another window's mutation and
+capture their applied snapshot before releasing the boundary. Do not add a
+workspace-visible state writer without advancing the revision in the same locked
+commit.
 
 Startup calls `PreferencesService.EnsureLoadedForStartup` before entering the
 selection mutation, then restores the immutable selected-kubeconfig snapshot
-inside that boundary. Search-path changes persist first, ask Cluster Runtime to
-rediscover and retarget the watcher, classify removed selections, and only then
-reconcile refresh, selections, clients/auth, operations, projection state, and
-the persisted remaining selection.
+inside that boundary. Client preflight then reuses the restored selection
+generation's cancellation context outside the mutation lock. A later tab
+mutation can therefore acquire the lock, cancel stale startup connection work,
+and reconcile its newer selection without waiting for an unreachable API
+server. Successful startup preflight re-enters the selection boundary before it
+publishes refresh and catalog state, preventing stale startup work from racing a
+newer selection. Startup connection work never holds the native runtime-ready
+callback. Search-path changes persist first, ask Cluster Runtime to rediscover
+and retarget the watcher, classify removed selections, and only then reconcile
+refresh, selections, clients/auth, operations, projection state, and the
+persisted remaining selection.
 
 The React-free `clusterWorkspaceStore` subscribes to runtime events before its
 initial hydration. Live fields win only over hydration responses that were
@@ -138,6 +148,12 @@ foreground activation/serviceability boundary and exposes immutable snapshots;
 readiness are selector/facade layers, not additional state owners. Existing
 internal event-bus emissions are downstream wake-up notifications for refresh
 consumers and must not become a second state cache.
+
+Initial frontend hydration publishes discovered kubeconfigs and the restored tab
+set before awaiting foreground activation. The workspace store's foreground
+activation hold gates cluster-data refresh until that independent activation
+settles; activation failure cannot erase the app-global discovery result or tab
+selection.
 
 The `no-direct-cluster-workspace` Biome plugin enforces this ownership boundary:
 only `frontend/src/core/cluster-workspace` may call the combined workspace RPC

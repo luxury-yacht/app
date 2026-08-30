@@ -282,7 +282,7 @@ func (a *WorkspaceCoordinator) reconcileRefreshSubsystemSelections(selections []
 // clearKubeconfigSelection clears the active selection and resets client state.
 func (a *WorkspaceCoordinator) clearKubeconfigSelection() error {
 	a.logger.Info("Clearing kubeconfig selection", logsources.KubeconfigManager)
-	a.retainWorkspaceSelectionsLocked(nil)
+	a.retainWorkspaceSelections(nil)
 	a.kubeconfigsMu.Lock()
 	a.setSelectedKubeconfigsLocked(nil)
 	a.kubeconfigsMu.Unlock()
@@ -514,7 +514,7 @@ func (a *WorkspaceCoordinator) applySelectionPrune(
 		a.refresh.teardownRefreshSubsystem()
 	}
 
-	a.retainWorkspaceSelectionsLocked(remainingSelections)
+	a.retainWorkspaceSelections(remainingSelections)
 	a.kubeconfigsMu.Lock()
 	a.setSelectedKubeconfigsLocked(remainingSelections)
 	a.kubeconfigsMu.Unlock()

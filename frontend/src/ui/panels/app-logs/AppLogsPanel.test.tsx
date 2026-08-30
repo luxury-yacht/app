@@ -36,6 +36,7 @@ const dropdownInstances = vi.hoisted(() => [] as CapturedDropdownProps[]);
 const runtimeEventHandlers = vi.hoisted(() => new Map<string, (...args: unknown[]) => void>());
 const runtimeDisposerMock = vi.hoisted(() => vi.fn());
 const clipboardWriteTextMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const nativeClipboardWriteTextMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 // AppLogsPanel no longer calls useDockablePanelState — its open/close
 // state is now driven by props from AppLayout (which reads from
@@ -76,6 +77,7 @@ vi.mock('@core/backend-api', () => ({
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => true,
+  writeClipboardText: (...args: unknown[]) => nativeClipboardWriteTextMock(...args),
   onEvent: (eventName: string, handler: (...args: unknown[]) => void) => {
     runtimeEventHandlers.set(eventName, handler);
     return runtimeDisposerMock;
@@ -149,6 +151,8 @@ beforeEach(() => {
   runtimeDisposerMock.mockReset();
   clipboardWriteTextMock.mockReset();
   clipboardWriteTextMock.mockResolvedValue(undefined);
+  nativeClipboardWriteTextMock.mockReset();
+  nativeClipboardWriteTextMock.mockResolvedValue(undefined);
   const previousClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
@@ -636,6 +640,30 @@ describe('AppLogsPanel', () => {
     cleanup();
   });
 
+  it('copies logs through the native desktop clipboard', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
+    ]);
+
+    const { container, cleanup } = await renderPanel();
+    await flushInitialLoad();
+
+    const copyButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Copy logs to clipboard"]'
+    );
+    await act(async () => {
+      copyButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(nativeClipboardWriteTextMock).toHaveBeenCalledOnce();
+    expect(nativeClipboardWriteTextMock.mock.calls[0]?.[0]).toContain('[core] [Global] Ready');
+    expect(clipboardWriteTextMock).not.toHaveBeenCalled();
+
+    cleanup();
+  });
+
   it('applies text filters and shows empty state when no matches', async () => {
     vi.useFakeTimers();
     getAppLogsMock.mockResolvedValue([
@@ -744,7 +772,7 @@ describe('AppLogsPanel', () => {
   it('reports clipboard failures when copying logs', async () => {
     vi.useFakeTimers();
     const clipboardError = new Error('clipboard blocked');
-    clipboardWriteTextMock.mockRejectedValueOnce(clipboardError);
+    nativeClipboardWriteTextMock.mockRejectedValueOnce(clipboardError);
     getAppLogsMock.mockResolvedValue([
       { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
     ]);

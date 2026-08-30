@@ -21,8 +21,6 @@ func (a *WorkspaceCoordinator) GetClusterWorkspaceState() ClusterWorkspaceState 
 	if a == nil {
 		return ClusterWorkspaceState{Clusters: make(map[string]ClusterWorkspaceClusterState)}
 	}
-	a.selectionMutationMu.Lock()
-	defer a.selectionMutationMu.Unlock()
 	return a.captureClusterWorkspaceState("")
 }
 
@@ -32,17 +30,17 @@ func (a *WorkspaceCoordinator) GetClusterWorkspaceStateForWindow(windowID string
 	if a == nil {
 		return ClusterWorkspaceState{Clusters: make(map[string]ClusterWorkspaceClusterState)}
 	}
-	a.selectionMutationMu.Lock()
-	defer a.selectionMutationMu.Unlock()
 	windowID = strings.TrimSpace(windowID)
-	a.ensureWorkspaceSelectionsLocked(windowID)
+	a.ensureWorkspaceSelections(windowID)
 	return a.captureClusterWorkspaceState(windowID)
 }
 
-// captureClusterWorkspaceState requires the caller to hold the serialized
-// selection-mutation boundary. Independent workspace sources remain protected
+// captureClusterWorkspaceState reads peer selection state independently from
+// slow cluster connection work. Independent workspace sources remain protected
 // by the revision retry below.
 func (a *WorkspaceCoordinator) captureClusterWorkspaceState(windowID string) ClusterWorkspaceState {
+	a.workspaceSelectionsMu.RLock()
+	defer a.workspaceSelectionsMu.RUnlock()
 	return readConsistentClusterWorkspaceState(a.clusterWorkspace.revision, func() ClusterWorkspaceState {
 		return a.buildClusterWorkspaceState(windowID)
 	})
@@ -62,9 +60,15 @@ func (a *WorkspaceCoordinator) buildClusterWorkspaceState(windowID string) Clust
 	return state
 }
 
+func (a *WorkspaceCoordinator) ensureWorkspaceSelections(windowID string) {
+	a.workspaceSelectionsMu.Lock()
+	defer a.workspaceSelectionsMu.Unlock()
+	a.ensureWorkspaceSelectionsLocked(windowID)
+}
+
 // ensureWorkspaceSelectionsLocked gives a newly observed peer the current
 // process selection as its initial tab set. The caller must hold
-// selectionMutationMu.
+// workspaceSelectionsMu.
 func (a *WorkspaceCoordinator) ensureWorkspaceSelectionsLocked(windowID string) {
 	if a == nil || windowID == "" {
 		return
@@ -81,7 +85,7 @@ func (a *WorkspaceCoordinator) ensureWorkspaceSelectionsLocked(windowID string) 
 
 // selectedKubeconfigsForWorkspaceLocked projects the process union for legacy
 // callers and one peer's owned tabs for window-aware callers. The caller must
-// hold selectionMutationMu.
+// hold workspaceSelectionsMu for reading.
 func (a *WorkspaceCoordinator) selectedKubeconfigsForWorkspaceLocked(windowID string) []string {
 	if windowID == "" {
 		return a.GetSelectedKubeconfigs()
@@ -101,10 +105,11 @@ func (a *WorkspaceCoordinator) setWorkspaceSelectionsLocked(windowID string, sel
 	a.clusterWorkspace.markClusterWorkspaceChanged()
 }
 
-// retainWorkspaceSelectionsLocked removes selections that an external source
-// (for example kubeconfig discovery) removed from the process selection. The
-// caller must hold selectionMutationMu.
-func (a *WorkspaceCoordinator) retainWorkspaceSelectionsLocked(remaining []string) {
+// retainWorkspaceSelections removes selections that an external source (for
+// example kubeconfig discovery) removed from the process selection.
+func (a *WorkspaceCoordinator) retainWorkspaceSelections(remaining []string) {
+	a.workspaceSelectionsMu.Lock()
+	defer a.workspaceSelectionsMu.Unlock()
 	allowed := make(map[string]struct{}, len(remaining))
 	for _, selection := range remaining {
 		allowed[selection] = struct{}{}
@@ -120,10 +125,11 @@ func (a *WorkspaceCoordinator) retainWorkspaceSelectionsLocked(remaining []strin
 	}
 }
 
-// replaceWorkspaceSelectionsLocked projects a process-level selection restore
-// into peers that registered before startup settings finished loading. The
-// caller must hold selectionMutationMu.
-func (a *WorkspaceCoordinator) replaceWorkspaceSelectionsLocked(selections []string) {
+// replaceWorkspaceSelections projects a process-level selection restore into
+// peers that registered before startup settings finished loading.
+func (a *WorkspaceCoordinator) replaceWorkspaceSelections(selections []string) {
+	a.workspaceSelectionsMu.Lock()
+	defer a.workspaceSelectionsMu.Unlock()
 	for windowID := range a.workspaceSelections {
 		a.setWorkspaceSelectionsLocked(windowID, selections)
 	}
@@ -131,7 +137,7 @@ func (a *WorkspaceCoordinator) replaceWorkspaceSelectionsLocked(selections []str
 
 // aggregateWorkspaceSelectionsLocked returns a deterministic union while
 // preserving the current process order for tabs that remain owned. The caller
-// must hold selectionMutationMu.
+// must hold workspaceSelectionsMu.
 func (a *WorkspaceCoordinator) aggregateWorkspaceSelectionsLocked() []string {
 	wanted := make(map[string]struct{})
 	for _, selections := range a.workspaceSelections {
@@ -182,8 +188,10 @@ func (a *WorkspaceCoordinator) applyWorkspaceSelections(
 		}
 		normalized = normalizedSelections
 	}
+	a.workspaceSelectionsMu.Lock()
 	a.setWorkspaceSelectionsLocked(windowID, normalized)
 	union := a.aggregateWorkspaceSelectionsLocked()
+	a.workspaceSelectionsMu.Unlock()
 	if selectionSetsEqual(union, a.GetSelectedKubeconfigs()) {
 		return nil
 	}
@@ -200,12 +208,15 @@ func (a *WorkspaceCoordinator) ReleaseWorkspaceWindow(windowID string) {
 	}
 	a.refresh.releaseWorkspaceWindowForeground(windowID)
 	if err := a.runOrderedSelectionMutation("release-workspace-window", func(mutation *selectionMutation) error {
+		a.workspaceSelectionsMu.Lock()
 		if _, tracked := a.workspaceSelections[windowID]; !tracked {
+			a.workspaceSelectionsMu.Unlock()
 			return nil
 		}
 		delete(a.workspaceSelections, windowID)
 		a.clusterWorkspace.markClusterWorkspaceChanged()
 		union := a.aggregateWorkspaceSelectionsLocked()
+		a.workspaceSelectionsMu.Unlock()
 		if selectionSetsEqual(union, a.GetSelectedKubeconfigs()) {
 			return nil
 		}
@@ -218,10 +229,18 @@ func (a *WorkspaceCoordinator) ReleaseWorkspaceWindow(windowID string) {
 	}
 }
 
-// ApplyClusterWorkspace serializes selection mutation before foreground
-// activation and returns the resulting authoritative workspace snapshot.
+// ApplyClusterWorkspace serializes commands that mutate cluster selections and
+// applies visibility-only commands independently. Foreground intent must remain
+// writable while a selected cluster is still connecting.
 func (a *WorkspaceCoordinator) ApplyClusterWorkspace(command ClusterWorkspaceCommand) ClusterWorkspaceResult {
 	windowID := strings.TrimSpace(command.WindowID)
+	if !command.UpdateSelectedKubeconfigs {
+		if windowID != "" {
+			a.ensureWorkspaceSelections(windowID)
+		}
+		a.updateClusterWorkspaceVisibility(windowID, command)
+		return clusterWorkspaceResult(a.latestClusterWorkspaceState(windowID), nil)
+	}
 	var state ClusterWorkspaceState
 	captured := false
 	err := a.runClusterWorkspaceMutation(windowID, func(mutation *selectionMutation) error {
@@ -273,7 +292,7 @@ func (a *WorkspaceCoordinator) updateClusterWorkspaceSelections(
 ) error {
 	if !command.UpdateSelectedKubeconfigs {
 		if windowID != "" {
-			a.ensureWorkspaceSelectionsLocked(windowID)
+			a.ensureWorkspaceSelections(windowID)
 		}
 		return nil
 	}

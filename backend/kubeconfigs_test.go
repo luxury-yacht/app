@@ -592,7 +592,7 @@ func TestApp_SetSelectedKubeconfigs(t *testing.T) {
 
 	app := newWorkspaceCoordinatorTestFixture(t)
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
-	app.Workspace.kubeClientInitializer = func() error { return nil }
+	app.Workspace.kubeClientInitializer = func(context.Context) error { return nil }
 
 	require.NoError(t, app.ClusterRuntime.discoverKubeconfigs())
 
@@ -622,7 +622,7 @@ func TestApp_SetSelectedKubeconfigsAllowsSameContextNameFromDifferentFiles(t *te
 
 	app := newWorkspaceCoordinatorTestFixture(t)
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
-	app.Workspace.kubeClientInitializer = func() error { return nil }
+	app.Workspace.kubeClientInitializer = func(context.Context) error { return nil }
 
 	require.NoError(t, app.ClusterRuntime.discoverKubeconfigs())
 
@@ -644,7 +644,7 @@ func TestApp_SetSelectedKubeconfigsRejectsDuplicateSelections(t *testing.T) {
 
 	app := newWorkspaceCoordinatorTestFixture(t)
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
-	app.Workspace.kubeClientInitializer = func() error { return nil }
+	app.Workspace.kubeClientInitializer = func(context.Context) error { return nil }
 
 	require.NoError(t, app.ClusterRuntime.discoverKubeconfigs())
 

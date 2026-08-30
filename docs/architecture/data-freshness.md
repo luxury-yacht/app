@@ -194,12 +194,15 @@ application transport between them.
   and the refresh-readiness boundary, so a missed earlier event cannot leave the
   tab behind the serving gate. Runtime lifecycle events that arrive before
   hydration take precedence over that older snapshot.
-- Startup settings restore, saved-selection restore, and client initialization
-  use the same serialized selection-mutation boundary as runtime selection
-  changes. Each completed cluster client is published independently; one slow
-  sibling may not delay it. After a cluster enters `loading`, `loading_slow`, or
-  `ready`, a late `connecting`/`connected` result cannot move it back behind the
-  frontend serving gate.
+- Startup settings and saved-selection restore use the serialized
+  selection-mutation boundary. Client preflight then runs outside that lock with
+  the restored generation's cancellation context, so a newer selection can
+  cancel stale startup work without waiting for an unreachable API server.
+  Successful preflight re-enters the boundary before refresh and catalog
+  publication. Each completed cluster client is published independently; one
+  slow sibling may not delay it. After a cluster enters `loading`,
+  `loading_slow`, or `ready`, a late `connecting`/`connected` result cannot move
+  it back behind the frontend serving gate.
 - `RefreshCoordinator` owns subsystem/catalog replacement, refresh telemetry,
   Attention-target registration, and handler/stream publication. Replacement
   publishes new routing before stopping old producers; teardown unpublishes

@@ -1,15 +1,16 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
 
-func (a *WorkspaceCoordinator) initializeSelectedClustersAtStartup() (int, error) {
+func (a *WorkspaceCoordinator) initializeSelectedClustersAtStartup() (int, context.Context, error) {
 	snapshot, settingsErr := a.preferences.EnsureLoadedForStartup()
 	if settingsErr != nil {
-		return 0, settingsErr
+		return 0, nil, settingsErr
 	}
 	if snapshot.Provenance == PreferencesStartupDefault {
 		a.logger.Info("Initialized app settings with defaults", logsources.App)
@@ -18,24 +19,62 @@ func (a *WorkspaceCoordinator) initializeSelectedClustersAtStartup() (int, error
 	}
 
 	selectedCount := 0
-	err := a.runSelectionMutation("startup-initialize-selected-clusters", func(*selectionMutation) error {
+	var connectionCtx context.Context
+	err := a.runSelectionMutation("startup-initialize-selected-clusters", func(mutation *selectionMutation) error {
 		a.restoreKubeconfigSelection()
 		selectedCount = len(a.GetSelectedKubeconfigs())
-		if selectedCount == 0 {
-			return nil
-		}
-
-		a.logger.Info(fmt.Sprintf("Connecting to %d selected cluster(s)", selectedCount), logsources.App)
-		initializer := a.kubeClientInitializer
-		if initializer == nil {
-			initializer = a.initKubernetesClient
-		}
-		return initializer()
+		connectionCtx = mutation.context()
+		return nil
 	})
-	return selectedCount, err
+	return selectedCount, connectionCtx, err
 }
 
-func (a *WorkspaceCoordinator) initKubernetesClient() (err error) {
+func (a *WorkspaceCoordinator) connectSelectedClustersAtStartup(ctx context.Context) error {
+	if ctx == nil {
+		ctx = a.CtxOrBackground()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	selectedCount := len(a.GetSelectedKubeconfigs())
+	if selectedCount == 0 {
+		return nil
+	}
+	a.logger.Info(fmt.Sprintf("Connecting to %d selected cluster(s)", selectedCount), logsources.App)
+	if a.kubeClientInitializer != nil {
+		return a.kubeClientInitializer(ctx)
+	}
+	a.logger.Info("Initializing Kubernetes client", logsources.KubernetesClient)
+	selections, err := a.selectedKubeconfigSelections()
+	if err != nil {
+		return err
+	}
+	if len(selections) == 0 {
+		return fmt.Errorf("no kubeconfig selections available")
+	}
+	if err := a.syncClusterClientPoolWithContext(ctx, selections); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// Client preflight is cancellable and runs outside the selection lock. The
+	// publication phase re-enters the boundary so stale startup work cannot race
+	// a newer tab selection's refresh and catalog state.
+	a.selectionMutationMu.Lock()
+	defer a.selectionMutationMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return a.finishKubernetesClientInitialization(ctx, selections)
+}
+
+func (a *WorkspaceCoordinator) initKubernetesClient() error {
+	return a.initKubernetesClientWithContext(a.CtxOrBackground())
+}
+
+func (a *WorkspaceCoordinator) initKubernetesClientWithContext(ctx context.Context) (err error) {
 	a.logger.Info("Initializing Kubernetes client", logsources.KubernetesClient)
 
 	selections, err := a.selectedKubeconfigSelections()
@@ -46,13 +85,25 @@ func (a *WorkspaceCoordinator) initKubernetesClient() (err error) {
 		return fmt.Errorf("no kubeconfig selections available")
 	}
 
-	if err := a.syncClusterClientPool(selections); err != nil {
+	if err := a.syncClusterClientPoolWithContext(ctx, selections); err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return a.finishKubernetesClientInitialization(ctx, selections)
+}
 
+func (a *WorkspaceCoordinator) finishKubernetesClientInitialization(
+	ctx context.Context,
+	selections []kubeconfigSelection,
+) error {
 	if err := a.refresh.updateRefreshSubsystemSelections(selections); err != nil {
 		a.logger.ErrorWithCause(err, "Failed to initialise refresh subsystem", logsources.Refresh)
 		return fmt.Errorf("failed to initialise refresh subsystem: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	a.startObjectCatalog()
@@ -85,7 +136,7 @@ func (a *WorkspaceCoordinator) restoreKubeconfigSelection() {
 	a.kubeconfigsMu.Lock()
 	a.setSelectedKubeconfigsLocked(normalized)
 	a.kubeconfigsMu.Unlock()
-	a.replaceWorkspaceSelectionsLocked(normalized)
+	a.replaceWorkspaceSelections(normalized)
 
 	if len(normalized) > 0 {
 		a.preferences.SetSelectedKubeconfigsSnapshot(normalized)

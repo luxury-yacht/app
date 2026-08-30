@@ -356,6 +356,34 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     updateRefreshContext(committedSelectedClusterMeta, committedSelectedClusterIds);
   }, [committedSelectedClusterIds, committedSelectedClusterMeta, updateRefreshContext]);
 
+  const activateVisibleCluster = useCallback((clusterId: string, reportFailure = false) => {
+    clusterReadiness.beginForegroundActivation(clusterId);
+    void ApplyClusterWorkspace({
+      windowId: getWindowIdentity(),
+      selectedKubeconfigs: [],
+      updateSelectedKubeconfigs: false,
+      visibleClusterId: clusterId,
+    })
+      .then((result) => {
+        clusterWorkspaceStore.applyWireState(result.state);
+        if (result.error) {
+          throw new Error(result.error);
+        }
+      })
+      .catch((error) => {
+        if (reportFailure) {
+          errorHandler.handle(
+            error,
+            { action: 'activateInitialCluster' },
+            'Failed to activate the initial cluster'
+          );
+        }
+      })
+      .finally(() => {
+        clusterReadiness.endForegroundActivation(clusterId);
+      });
+  }, []);
+
   const loadKubeconfigs = useCallback(
     async (refreshWorkspace = false) => {
       setKubeconfigsLoading(true);
@@ -378,18 +406,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           currentSelection?.selectedKubeconfigs || []
         );
         const initialMeta = resolveClusterMeta(normalizedSelection[0] || '', configs);
-        if (initialMeta.id) {
-          const activation = await ApplyClusterWorkspace({
-            windowId: getWindowIdentity(),
-            selectedKubeconfigs: [],
-            updateSelectedKubeconfigs: false,
-            visibleClusterId: initialMeta.id,
-          });
-          clusterWorkspaceStore.applyWireState(activation.state);
-          if (activation.error) {
-            throw new Error(activation.error);
-          }
-        }
         selectedKubeconfigsRef.current = normalizedSelection;
         selectedKubeconfigRef.current = normalizedSelection[0] || '';
         committedSelectionsRef.current = normalizedSelection;
@@ -398,6 +414,9 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         setSelectedKubeconfigState(normalizedSelection[0] || '');
         setCommittedSelectedKubeconfigs(normalizedSelection);
         setCommittedSelectedKubeconfig(normalizedSelection[0] || '');
+        if (initialMeta.id) {
+          activateVisibleCluster(initialMeta.id, true);
+        }
       } catch (error) {
         errorHandler.handle(
           error,
@@ -411,7 +430,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         setKubeconfigsLoading(false);
       }
     },
-    [normalizeSelections, resolveClusterMeta]
+    [activateVisibleCluster, normalizeSelections, resolveClusterMeta]
   );
 
   const applyVisibleSelection = useCallback((selections: string[], activeSelection: string) => {
@@ -635,31 +654,11 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           // data. Hold new refresh dispatch until the backend has re-established
           // producers for a cooled cluster; the retained snapshot remains
           // visible throughout this activation window.
-          clusterReadiness.beginForegroundActivation(meta.id);
-          void ApplyClusterWorkspace({
-            windowId: getWindowIdentity(),
-            selectedKubeconfigs: [],
-            updateSelectedKubeconfigs: false,
-            visibleClusterId: meta.id,
-          })
-            .then((result) => {
-              clusterWorkspaceStore.applyWireState(result.state);
-              if (result.error) {
-                throw new Error(result.error);
-              }
-            })
-            .catch(() => {
-              // The retained snapshot remains usable if the Wails binding is
-              // temporarily unavailable; once the hold releases, the refresh
-              // path reports any persistent backend error itself.
-            })
-            .finally(() => {
-              clusterReadiness.endForegroundActivation(meta.id);
-            });
+          activateVisibleCluster(meta.id);
         }
       }
     },
-    [resolveClusterMeta, selectedKubeconfig, selectedKubeconfigs]
+    [activateVisibleCluster, resolveClusterMeta, selectedKubeconfig, selectedKubeconfigs]
   );
 
   // Load kubeconfigs on mount

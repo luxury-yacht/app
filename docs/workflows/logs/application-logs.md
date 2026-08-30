@@ -14,6 +14,9 @@ Kubernetes container logs or node logs.
 - Avoid feedback loops where reading logs writes more log entries.
 - Clearing Application Logs clears the app diagnostic buffer only; it must not
   affect Kubernetes log viewers.
+- Copying Application Logs uses the native clipboard through
+  `frontend/src/core/desktop-runtime`; it does not depend on browser clipboard
+  permissions.
 - Keep source names and levels stable enough for filters and support workflows.
 - Cluster, component, and level multiselects use explicit `all`, `some`, and
   `none` states. Deselecting the final option must show no entries; it must not

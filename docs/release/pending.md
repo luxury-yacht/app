@@ -34,3 +34,7 @@
 ### Fixed
 
 - Duplicate Favorite names are now rejected. It's no longer possible to create different Favorites with the same name.
+- An unreachable previously opened cluster no longer blocks startup UI,
+  kubeconfig discovery, cluster-tab changes, or app-global controls while its
+  cancellable connection attempt continues in the background.
+- Copy Application Logs now uses the native desktop clipboard.

@@ -35,6 +35,27 @@ func (c failingStartupStateCleaner) CleanupStaleWrites() error {
 	return c.err
 }
 
+type blockingStartupWorkspace struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (*blockingStartupWorkspace) ReleaseWorkspaceWindow(string) {}
+
+func (*blockingStartupWorkspace) consumeClusterRuntimeIntent(ClusterRuntimeIntent) {}
+
+func (*blockingStartupWorkspace) initializeSelectedClustersAtStartup() (int, context.Context, error) {
+	return 1, context.Background(), nil
+}
+
+func (w *blockingStartupWorkspace) connectSelectedClustersAtStartup(context.Context) error {
+	close(w.started)
+	<-w.release
+	return nil
+}
+
+func (*blockingStartupWorkspace) waitForSelectionMutationIdle(time.Duration) bool { return true }
+
 func TestSetupEnvironmentAddsHomeLocalBin(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin")
 	homeDir := t.TempDir()
@@ -373,6 +394,47 @@ func TestEveryPeerHandlesRuntimeReadyWhileProcessStartupRunsOnce(t *testing.T) {
 	require.True(t, app.Lifecycle.WindowRuntimeReady("workspace-1", true))
 	require.False(t, app.Lifecycle.WindowRuntimeReady("workspace-2", false))
 	require.True(t, app.Lifecycle.runtimeAvailable())
+}
+
+func TestWindowRuntimeReadyDoesNotWaitForStartupClusterConnections(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	app := NewApplicationRuntime(nil)
+	workspace := &blockingStartupWorkspace{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	app.Lifecycle.workspace = workspace
+	app.Lifecycle.updates = nil
+	app.Lifecycle.setApplicationContext(context.Background())
+
+	returned := make(chan bool, 1)
+	go func() {
+		returned <- app.Lifecycle.WindowRuntimeReady("workspace-1", false)
+	}()
+
+	select {
+	case <-workspace.started:
+	case <-time.After(time.Second):
+		close(workspace.release)
+		t.Fatal("startup cluster initialization did not begin")
+	}
+
+	returnedWhileClusterBlocked := false
+	select {
+	case firstReady := <-returned:
+		returnedWhileClusterBlocked = firstReady
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(workspace.release)
+	if !returnedWhileClusterBlocked {
+		select {
+		case <-returned:
+		case <-time.After(time.Second):
+			t.Fatal("runtime-ready callback did not return after cluster initialization was released")
+		}
+	}
+
+	require.True(t, returnedWhileClusterBlocked, "cluster connectivity must not block the native runtime-ready callback")
 }
 
 func TestServiceStartupRemovesOnlyStaleAppAtomicWriteFiles(t *testing.T) {

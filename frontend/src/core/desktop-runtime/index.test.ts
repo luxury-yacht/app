@@ -2,6 +2,7 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 const runtimeMocks = vi.hoisted(() => ({
   browserOpenURL: vi.fn(),
+  clipboardSetText: vi.fn(),
   clipboardText: vi.fn(),
   environment: vi.fn(),
   eventsOn: vi.fn<
@@ -18,7 +19,7 @@ const runtimeMocks = vi.hoisted(() => ({
 
 vi.mock('@wailsio/runtime', () => ({
   Browser: { OpenURL: runtimeMocks.browserOpenURL },
-  Clipboard: { Text: runtimeMocks.clipboardText },
+  Clipboard: { SetText: runtimeMocks.clipboardSetText, Text: runtimeMocks.clipboardText },
   Events: { On: runtimeMocks.eventsOn },
   System: { Environment: runtimeMocks.environment },
   Window: {
@@ -43,6 +44,7 @@ import {
   openURL,
   readClipboardText,
   toggleMaximise,
+  writeClipboardText,
 } from './index';
 
 describe('desktop runtime adapter', () => {
@@ -93,6 +95,7 @@ describe('desktop runtime adapter', () => {
     await closeWindow();
     await openDevTools();
     await toggleMaximise();
+    await writeClipboardText('copied');
 
     await expect(readClipboardText()).resolves.toBe('clipboard');
     await expect(getEnvironment()).resolves.toEqual({ OS: 'darwin' });
@@ -100,6 +103,7 @@ describe('desktop runtime adapter', () => {
     expect(runtimeMocks.closeWindow).toHaveBeenCalledOnce();
     expect(runtimeMocks.openDevTools).toHaveBeenCalledOnce();
     expect(runtimeMocks.toggleMaximise).toHaveBeenCalledOnce();
+    expect(runtimeMocks.clipboardSetText).toHaveBeenCalledWith('copied');
   });
 
   it('detects the environment injected by the Wails host', () => {
