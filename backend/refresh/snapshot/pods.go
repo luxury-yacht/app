@@ -383,6 +383,9 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 	// Serve the query branch through the querypage engine (proven byte-equivalent to
 	// the bespoke typed-table executor in querypage_pods_test.go); the window branch
 	// and all envelope wiring are unchanged.
+	sources := withTypedTableResourceReadiness(ctx, podDomainName, []typedTableResourceSource{{
+		Kind: podres.Identity.Kind, Group: "", Resource: "pods", State: typedTableResourceAvailable,
+	}})
 	resolved := resolveTypedSnapshotPageViaStore(
 		podDomainName,
 		summaries,
@@ -394,7 +397,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 			config.SnapshotNamespacePodsEntryLimit,
 			"pods",
 			func(PodSummary) string { return podres.Identity.Kind },
-			nil,
+			typedTableQueryResourceIssues(ctx, podDomainName, query, sources),
 		),
 		withPerBuildCache(b.perBuild, strconv.FormatUint(version, 10)),
 	)

@@ -29,9 +29,10 @@ func testClusterMeta() ClusterMeta {
 }
 
 type fakeInformerHub struct {
-	mu      sync.RWMutex
-	synced  bool
-	pending map[string]bool
+	mu        sync.RWMutex
+	synced    bool
+	pending   map[string]bool
+	readiness map[string]refresh.ResourceReadiness
 }
 
 func (h *fakeInformerHub) Start(context.Context) error { return nil }
@@ -57,6 +58,16 @@ func (h *fakeInformerHub) ResourcesSettled(keys []string) bool {
 
 func (h *fakeInformerHub) Shutdown() error { return nil }
 
+func (h *fakeInformerHub) ResourceReadiness(keys []string) map[string]refresh.ResourceReadiness {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	result := make(map[string]refresh.ResourceReadiness, len(keys))
+	for _, key := range keys {
+		result[key] = h.readiness[key]
+	}
+	return result
+}
+
 func (h *fakeInformerHub) setSynced(synced bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -70,6 +81,48 @@ func (h *fakeInformerHub) setPending(key string, pending bool) {
 		h.pending = make(map[string]bool)
 	}
 	h.pending[key] = pending
+}
+
+func (h *fakeInformerHub) setReadiness(key string, readiness refresh.ResourceReadiness) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.readiness == nil {
+		h.readiness = make(map[string]refresh.ResourceReadiness)
+	}
+	h.readiness[key] = readiness
+}
+
+func TestServiceBuildCarriesResourceReadinessAndInvalidatesItsCacheIdentity(t *testing.T) {
+	const key = "core/pods"
+	require.Equal(t, refresh.ResourceReadinessUnknown, resourceReadinessFromContext(context.Background(), key))
+	reg := domain.New()
+	builds := 0
+	require.NoError(t, reg.Register(refresh.DomainConfig{
+		Name: "demo-readiness",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			builds++
+			return &refresh.Snapshot{
+				Domain:  "demo-readiness",
+				Scope:   scope,
+				Payload: resourceReadinessFromContext(ctx, key).String(),
+			}, nil
+		},
+	}))
+	hub := &fakeInformerHub{synced: true}
+	hub.setReadiness(key, refresh.ResourceReadinessDegraded)
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil).
+		WithInformerHub(hub).
+		WithDomainReadiness(map[string][]string{"demo-readiness": {key}})
+
+	first, err := service.Build(context.Background(), "demo-readiness", "cluster-a|")
+	require.NoError(t, err)
+	require.Equal(t, "degraded", first.Payload)
+
+	hub.setReadiness(key, refresh.ResourceReadinessReady)
+	second, err := service.Build(context.Background(), "demo-readiness", "cluster-a|")
+	require.NoError(t, err)
+	require.Equal(t, "ready", second.Payload)
+	require.Equal(t, 2, builds, "a ready source must not reuse a degraded cached snapshot")
 }
 
 // TestServiceSetInformerHubSwapsSyncGate proves the cool path can swap a Service's informer

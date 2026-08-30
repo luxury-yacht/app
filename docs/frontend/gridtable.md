@@ -438,11 +438,12 @@ bespoke display path:
 - `useResourceInventoryTable` / `deriveResourceInventoryRenderState`
   (`useResourceInventoryTable.ts`) is the pure controller: it projects a source's
   lifecycle into a display status (`initializing`, `loading`, `refreshing`,
-  `ready`, `empty`, `blocked`, `error`). **Empty is decided from lifecycle, never
-  from raw `rows.length`.** A refresh that transiently reports zero rows resolves
-  to `loading`, not empty — this is the structural fix for the "No X found"
-  false-empty flash, and it must not be reintroduced by checking `rows.length` in
-  a view.
+  `ready`, `degraded`, `empty`, `blocked`, `error`). **Empty is decided from
+  lifecycle, never from raw `rows.length`.** A refresh that transiently reports
+  zero rows resolves to `loading`, not empty. A settled zero-row result whose
+  envelope is partial resolves to `degraded` and renders its partial reason, not
+  the view's authoritative "No X found" copy. These are structural false-empty
+  protections and must not be reintroduced in a view.
 
 ### Source adapters
 

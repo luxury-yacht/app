@@ -58,6 +58,46 @@ type InformerHub interface {
 	Shutdown() error
 }
 
+// ResourceReadiness describes whether one declared Kubernetes resource can
+// currently provide authoritative data to a snapshot builder. It is separate
+// from InformerHub.ResourcesSettled: a source may stop blocking subsystem
+// liveness after the sync deadline while its initial LIST is still retrying.
+type ResourceReadiness uint8
+
+const (
+	// ResourceReadinessUnknown means the hub has no readiness detail for the key.
+	// Snapshot builders preserve their existing availability behavior in this
+	// state so test/list-only hubs do not invent degradation.
+	ResourceReadinessUnknown ResourceReadiness = iota
+	ResourceReadinessPending
+	ResourceReadinessReady
+	ResourceReadinessDegraded
+	ResourceReadinessUnavailable
+)
+
+func (state ResourceReadiness) String() string {
+	switch state {
+	case ResourceReadinessPending:
+		return "pending"
+	case ResourceReadinessReady:
+		return "ready"
+	case ResourceReadinessDegraded:
+		return "degraded"
+	case ResourceReadinessUnavailable:
+		return "unavailable"
+	default:
+		return "unknown"
+	}
+}
+
+// ResourceReadinessReporter is the optional data-availability side of an
+// InformerHub. The base lifecycle interface remains small for retained/Cold and
+// test hubs; live hubs implement this reporter so snapshot builds can remain
+// honest after a liveness deadline degrades an unsynced source.
+type ResourceReadinessReporter interface {
+	ResourceReadiness(keys []string) map[string]ResourceReadiness
+}
+
 // SnapshotBuilder builds and caches snapshots per domain.
 type SnapshotBuilder interface {
 	Build(ctx context.Context, domain, scope string) (*Snapshot, error)

@@ -85,6 +85,8 @@ export type ResourceInventoryCompleteness = 'complete' | 'partial';
  *   reload that is momentarily empty. Both show the loading boundary, NOT empty.
  * - `refreshing` — rows are already visible and a request is in flight.
  * - `ready` — settled with rows.
+ * - `degraded` — settled with zero rows, but the source says its result is
+ *   partial. This must explain the degradation rather than claim no objects exist.
  * - `empty` — settled with zero rows and no error/blocker. The ONLY state that
  *   renders the empty message.
  * - `blocked` — the source cannot run (no scope, disabled, awaiting context).
@@ -96,6 +98,7 @@ export type ResourceInventoryStatus =
   | 'loading'
   | 'refreshing'
   | 'ready'
+  | 'degraded'
   | 'empty'
   | 'blocked'
   | 'error';
@@ -163,13 +166,16 @@ function deriveStatus<T>(source: ResourceInventorySourceState<T>): ResourceInven
   // Settled at least once with no rows. A request in flight here is a warm
   // reload that is momentarily empty — show the boundary, not the empty state,
   // so a refresh that briefly returns nothing never flashes "No X found".
-  return source.loading ? 'loading' : 'empty';
+  if (source.loading) {
+    return 'loading';
+  }
+  return source.completeness === 'partial' ? 'degraded' : 'empty';
 }
 
 /**
  * Pure lifecycle → display projection. Kept free of React so every state in the
  * matrix (initializing, ready, refreshing-with-rows, refreshing-empty, settled
- * empty, blocked, error, partial, paginated) is directly unit-testable.
+ * empty, degraded, blocked, error, partial, paginated) is directly unit-testable.
  */
 export function deriveResourceInventoryRenderState<T>(
   source: ResourceInventorySourceState<T>

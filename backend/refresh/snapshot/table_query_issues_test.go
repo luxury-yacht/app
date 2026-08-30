@@ -18,10 +18,10 @@ func TestCapabilitiesWithAvailableKindsFiltersUnavailableSources(t *testing.T) {
 	)
 
 	filtered := capabilitiesWithAvailableKinds(capabilities, []typedTableResourceSource{
-		{Kind: "Service", Available: true},
-		{Kind: "Ingress", Available: true},
-		{Kind: "Gateway", Available: false},
-		{Kind: "HTTPRoute", Available: false},
+		{Kind: "Service", State: typedTableResourceAvailable},
+		{Kind: "Ingress", State: typedTableResourceAvailable},
+		{Kind: "Gateway", State: typedTableResourceUnavailable},
+		{Kind: "HTTPRoute", State: typedTableResourceUnavailable},
 	})
 
 	if got, want := filtered.KindVocabulary, []string{"Service", "Ingress"}; !equalStringSlices(got, want) {
@@ -43,7 +43,7 @@ func TestCapabilitiesWithAvailableKindsKeepsKindsWithoutSources(t *testing.T) {
 
 	// Only ConfigMap has a source entry; Secret is unconditional and stays.
 	filtered := capabilitiesWithAvailableKinds(capabilities, []typedTableResourceSource{
-		{Kind: "ConfigMap", Available: true},
+		{Kind: "ConfigMap", State: typedTableResourceAvailable},
 	})
 	if got, want := filtered.KindVocabulary, []string{"ConfigMap", "Secret"}; !equalStringSlices(got, want) {
 		t.Errorf("kind vocabulary mismatch\n got: %v\nwant: %v", got, want)

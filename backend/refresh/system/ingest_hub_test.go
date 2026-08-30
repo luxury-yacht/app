@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
@@ -81,6 +82,27 @@ func TestIngestInformerHubGlobalReadinessTracksFactoryOnly(t *testing.T) {
 	require.NoError(t, hub.Shutdown())
 }
 
+func TestIngestInformerHubRoutesPerResourceDataReadiness(t *testing.T) {
+	const configMapsKey = "core/configmaps"
+	const namespacesKey = "core/namespaces"
+	manager := &recordingHubManager{
+		started:   make(chan struct{}),
+		readiness: refresh.ResourceReadinessDegraded,
+	}
+	factory := &reportingHubFactory{readiness: map[string]refresh.ResourceReadiness{
+		namespacesKey: refresh.ResourceReadinessReady,
+	}}
+	hub := newIngestInformerHub(factory, manager)
+
+	got := hub.ResourceReadiness([]string{configMapsKey, namespacesKey})
+	require.Equal(t, refresh.ResourceReadinessDegraded, got[configMapsKey])
+	require.Equal(t, refresh.ResourceReadinessReady, got[namespacesKey])
+
+	hubWithoutIngest := newIngestInformerHub(factory, nil)
+	require.Equal(t, refresh.ResourceReadinessUnavailable, hubWithoutIngest.ResourceReadiness([]string{configMapsKey})[configMapsKey])
+	require.Empty(t, ingestGVRForKey("unknown.example.com/unknowns").Resource)
+}
+
 func newTestInformerFactory() *informer.Factory {
 	checker := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		return true, nil
@@ -100,6 +122,22 @@ type blockingHubFactory struct {
 	release chan struct{}
 }
 
+type reportingHubFactory struct {
+	readiness map[string]refresh.ResourceReadiness
+}
+
+func (f *reportingHubFactory) Start(context.Context) error    { return nil }
+func (f *reportingHubFactory) HasSynced(context.Context) bool { return true }
+func (f *reportingHubFactory) ResourcesSettled([]string) bool { return true }
+func (f *reportingHubFactory) Shutdown() error                { return nil }
+func (f *reportingHubFactory) ResourceReadiness(keys []string) map[string]refresh.ResourceReadiness {
+	result := make(map[string]refresh.ResourceReadiness, len(keys))
+	for _, key := range keys {
+		result[key] = f.readiness[key]
+	}
+	return result
+}
+
 func (f *blockingHubFactory) Start(ctx context.Context) error {
 	close(f.started)
 	select {
@@ -117,7 +155,8 @@ func (f *blockingHubFactory) ResourcesSettled([]string) bool { return false }
 func (f *blockingHubFactory) Shutdown() error { return nil }
 
 type recordingHubManager struct {
-	started chan struct{}
+	started   chan struct{}
+	readiness refresh.ResourceReadiness
 }
 
 func (m *recordingHubManager) Start(context.Context) { close(m.started) }
@@ -129,3 +168,7 @@ func (m *recordingHubManager) StoreFor(schema.GroupVersionResource) *ingest.Proj
 }
 
 func (m *recordingHubManager) HasSyncedFor(schema.GroupVersionResource) bool { return false }
+
+func (m *recordingHubManager) ResourceReadinessFor(schema.GroupVersionResource) refresh.ResourceReadiness {
+	return m.readiness
+}

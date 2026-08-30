@@ -304,6 +304,64 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     );
   });
 
+  it('carries a degraded typed-query envelope into the inventory source', async () => {
+    let result:
+      | ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>>
+      | undefined;
+    const Probe: React.FC = () => {
+      result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'Namespace Pods',
+        selectRows,
+        viewId: 'namespace-pods',
+        namespace: 'team-a',
+        columns,
+        keyExtractor: (item) => item.name,
+        supportsCustomMetadataColumns: false,
+      });
+      return null;
+    };
+    useTypedResourceQueryMock.mockReturnValue({
+      rows: [],
+      payload: {
+        rows: [],
+        completeness: 'partial',
+        issues: [{ kind: 'Pod', message: 'Pod data is still syncing' }],
+      },
+      loading: false,
+      loaded: true,
+      error: null,
+      continueToken: null,
+      hasPrevious: false,
+      isRequestingMore: false,
+      loadMore: vi.fn(),
+      loadPrevious: vi.fn(),
+      pageIndex: 1,
+      pageSize: 50,
+      totalCount: 0,
+      totalIsExact: false,
+      filterOptions: { partialDataLabel: 'Pod: Pod data is still syncing' },
+      dynamic: null,
+    });
+    useNamespaceResourceGridTableMock.mockReturnValue({
+      gridTableProps: { data: [] },
+      favModal: null,
+    });
+
+    act(() => {
+      root.render(<Probe />);
+    });
+    await act(async () => {
+      const calls = useNamespaceResourceGridTableMock.mock.calls;
+      requireTableStatePublisher(calls[calls.length - 1]?.[0])(publishedTableState);
+      await Promise.resolve();
+    });
+
+    expect(result?.source.completeness).toBe('partial');
+    expect(result?.source.partialLabel).toContain('Pod data is still syncing');
+  });
+
   it('issues exactly one typed query per render — metrics are joined at serve, never a second domain query', async () => {
     const cpuSortState = {
       filters: DEFAULT_GRID_TABLE_FILTER_STATE,

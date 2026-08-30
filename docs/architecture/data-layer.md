@@ -87,7 +87,10 @@ the completed `v2` rewrite plan.
   WatchList at first connect and disables the client-go gate if the
   `initial-events-end` bookmark is stripped (Teleport-style proxies) → robust LIST+WATCH.
   A per-GVR sync-deadline degrades a hung GVR instead of wedging the cluster
-  (`informer/factory.go`). WatchList is **beta** — the LIST fallback is load-bearing.
+  (`informer/factory.go`). Deadline settlement is only a liveness decision: until
+  the source completes a real initial list, snapshots that depend on it report
+  partial/inexact data with a syncing issue instead of an authoritative empty
+  result. WatchList is **beta** — the LIST fallback is load-bearing.
 - **Two cutover shapes.** Registry-driven single-object kinds flip a descriptor
   `IngestOwned` flag (the generic path wires maintained store, catalog, object-map,
   response-cache). Cross-kind-join domains (pods, workloads, network, nodes) use a

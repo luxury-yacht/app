@@ -23,6 +23,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
@@ -515,6 +516,91 @@ func (f *Factory) ResourcesSettled(keys []string) bool {
 		}
 	}
 	return true
+}
+
+// ResourceReadiness reports whether each requested informer's cache contains an
+// authoritative initial list. This deliberately preserves the distinction that
+// ResourcesSettled erases for liveness: terminal and deadline-degraded sources
+// no longer block startup, but they are not ready data sources.
+func (f *Factory) ResourceReadiness(keys []string) map[string]refresh.ResourceReadiness {
+	result := make(map[string]refresh.ResourceReadiness, len(keys))
+	if f == nil {
+		return result
+	}
+	f.syncStatesMu.Lock()
+	shutdown := f.shutdown
+	states := make([]*informerSyncState, len(f.syncStates))
+	copy(states, f.syncStates)
+	f.syncStatesMu.Unlock()
+
+	wanted := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		wanted[key] = struct{}{}
+		result[key] = refresh.ResourceReadinessUnknown
+	}
+	if shutdown {
+		for key := range wanted {
+			result[key] = refresh.ResourceReadinessPending
+		}
+		return result
+	}
+
+	found := make(map[string]bool, len(keys))
+	for _, state := range states {
+		if _, ok := wanted[state.key]; !ok {
+			continue
+		}
+		found[state.key] = true
+		readiness := f.stateReadiness(state)
+		result[state.key] = mergeResourceReadiness(result[state.key], readiness)
+	}
+	for key := range wanted {
+		if !found[key] {
+			result[key] = refresh.ResourceReadinessUnavailable
+		}
+	}
+	return result
+}
+
+func (f *Factory) stateReadiness(state *informerSyncState) refresh.ResourceReadiness {
+	if state.hasSynced() {
+		return refresh.ResourceReadinessReady
+	}
+	if state.terminal.Load() {
+		return refresh.ResourceReadinessUnavailable
+	}
+	_ = f.stateSettled(state)
+	if state.hasSynced() {
+		return refresh.ResourceReadinessReady
+	}
+	if state.degraded.Load() {
+		return refresh.ResourceReadinessDegraded
+	}
+	return refresh.ResourceReadinessPending
+}
+
+// mergeResourceReadiness combines duplicate registrations for one canonical
+// key. Any pending or degraded partition keeps the whole resource non-ready;
+// an unavailable partition keeps an otherwise-ready aggregate partial.
+func mergeResourceReadiness(current, next refresh.ResourceReadiness) refresh.ResourceReadiness {
+	severity := func(state refresh.ResourceReadiness) int {
+		switch state {
+		case refresh.ResourceReadinessPending:
+			return 4
+		case refresh.ResourceReadinessDegraded:
+			return 3
+		case refresh.ResourceReadinessUnavailable:
+			return 2
+		case refresh.ResourceReadinessReady:
+			return 1
+		default:
+			return 0
+		}
+	}
+	if severity(next) > severity(current) {
+		return next
+	}
+	return current
 }
 
 // Shutdown clears factory references to allow garbage collection.

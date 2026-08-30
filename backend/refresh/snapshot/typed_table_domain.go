@@ -55,14 +55,17 @@ func typedTableSources(
 	sources := make([]typedTableResourceSource, 0, len(descriptors))
 	available := make(map[string]bool, len(descriptors))
 	for _, d := range descriptors {
-		ok := collectIndexer(d) != nil && runtimeResourceAllowed(ctx, domainName, d.Group, d.Resource)
+		ok := collectIndexer(d) != nil
 		sources = append(sources, typedTableResourceSource{
-			Kind:      d.Kind,
-			Group:     d.Group,
-			Resource:  d.Resource,
-			Available: ok,
+			Kind:     d.Kind,
+			Group:    d.Group,
+			Resource: d.Resource,
+			State:    typedTableSourceState(ok),
 		})
-		available[d.Kind] = ok
+	}
+	sources = withTypedTableResourceReadiness(ctx, domainName, sources)
+	for _, source := range sources {
+		available[source.Kind] = source.State.servesRows()
 	}
 	return sources, available
 }

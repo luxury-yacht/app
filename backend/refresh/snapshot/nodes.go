@@ -19,6 +19,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	nodepkg "github.com/luxury-yacht/app/backend/resources/nodes"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -387,6 +388,10 @@ func finishNodeSnapshot(
 		// default-ordered rows under the requested identity is a contract hole.
 		return nil, err
 	}
+	issues := typedTableQueryResourceIssues(ctx, "nodes", query, []typedTableResourceSource{
+		{Kind: nodepkg.Identity.Kind, Group: "", Resource: "nodes", State: typedTableResourceAvailable},
+		{Kind: podres.Identity.Kind, Group: "", Resource: "pods", State: typedTableResourceAvailable, QueryKinds: []string{nodepkg.Identity.Kind}},
+	})
 
 	resolved := resolveTypedSnapshotPageViaStore(
 		"nodes",
@@ -399,7 +404,7 @@ func finishNodeSnapshot(
 			config.SnapshotClusterNodesEntryLimit,
 			"nodes",
 			func(NodeSummary) string { return nodepkg.Identity.Kind },
-			nil,
+			issues,
 		),
 		opts...,
 	)

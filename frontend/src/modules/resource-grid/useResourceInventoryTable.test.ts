@@ -91,6 +91,21 @@ describe('deriveResourceInventoryRenderState', () => {
     expect(render.showRefreshOverlay).toBe(false);
   });
 
+  it('partial zero-row data is degraded rather than authoritatively empty', () => {
+    const render = deriveResourceInventoryRenderState(
+      source({
+        rows: [],
+        loaded: true,
+        completeness: 'partial',
+        partialLabel: 'Pod data is still syncing',
+      })
+    );
+    expect(render.status).toBe('degraded');
+    expect(render.isEmpty).toBe(false);
+    expect(render.isPartial).toBe(true);
+    expect(render.partialLabel).toBe('Pod data is still syncing');
+  });
+
   it('blocked is neither loading nor empty', () => {
     const render = deriveResourceInventoryRenderState(
       source({ rows: [], loaded: false, loading: false, blocked: true })

@@ -10,6 +10,7 @@ import type {
   ResourceQueryAnchor,
   ResourceQueryAnchorResult,
   ResourceQueryCapabilities,
+  ResourceQueryCompleteness,
   ResourceQueryDynamicRef,
   ResourceQueryFacetValues,
   ResourceQueryIssue,
@@ -32,6 +33,7 @@ export interface TypedQueryPayload {
   // Items in scope before the request's filters — the "of M" in "Showing N of M items".
   unfilteredTotal?: number;
   totalIsExact?: boolean;
+  completeness?: ResourceQueryCompleteness;
   namespaces?: string[];
   kinds?: string[];
   facetValues?: ResourceQueryFacetValues[];

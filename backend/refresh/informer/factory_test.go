@@ -20,6 +20,7 @@ import (
 	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
 
@@ -182,6 +183,61 @@ func TestResourcesSettledUnknownKeyIsSettled(t *testing.T) {
 	if !factory.ResourcesSettled([]string{"gateway.networking.k8s.io/grpcroutes"}) {
 		t.Fatalf("expected a key with no registered informer to be settled")
 	}
+}
+
+func TestResourceReadinessKeepsDeadlineDegradationDistinctFromReady(t *testing.T) {
+	const key = "gateway.networking.k8s.io/tlsroutes"
+	factory := &Factory{
+		syncDeadline: time.Millisecond,
+		startedAt:    time.Now().Add(-time.Second),
+		syncStates: []*informerSyncState{{
+			key:       key,
+			hasSynced: func() bool { return false },
+		}},
+	}
+
+	require.True(t, factory.ResourcesSettled([]string{key}), "deadline releases the liveness gate")
+	require.Equal(t, refresh.ResourceReadinessDegraded, factory.ResourceReadiness([]string{key})[key],
+		"an unsynced source must not become authoritative merely because it settled")
+}
+
+func TestResourceReadinessClassifiesRegisteredAndMissingSources(t *testing.T) {
+	const (
+		readyKey    = "core/configmaps"
+		terminalKey = "gateway.networking.k8s.io/tlsroutes"
+		pendingKey  = "apps/deployments"
+		missingKey  = "core/secrets"
+	)
+	terminal := &informerSyncState{key: terminalKey, hasSynced: func() bool { return false }}
+	terminal.terminal.Store(true)
+	factory := &Factory{
+		syncDeadline: time.Hour,
+		startedAt:    time.Now(),
+		syncStates: []*informerSyncState{
+			{key: readyKey, hasSynced: func() bool { return true }},
+			terminal,
+			{key: pendingKey, hasSynced: func() bool { return false }},
+		},
+	}
+
+	got := factory.ResourceReadiness([]string{readyKey, terminalKey, pendingKey, missingKey})
+	require.Equal(t, refresh.ResourceReadinessReady, got[readyKey])
+	require.Equal(t, refresh.ResourceReadinessUnavailable, got[terminalKey])
+	require.Equal(t, refresh.ResourceReadinessPending, got[pendingKey])
+	require.Equal(t, refresh.ResourceReadinessUnavailable, got[missingKey])
+
+	factory.shutdown = true
+	require.Equal(t, refresh.ResourceReadinessPending, factory.ResourceReadiness([]string{readyKey})[readyKey])
+	var nilFactory *Factory
+	require.Empty(t, nilFactory.ResourceReadiness([]string{readyKey}))
+}
+
+func TestMergeResourceReadinessKeepsLeastReadyDuplicate(t *testing.T) {
+	require.Equal(t, refresh.ResourceReadinessReady, mergeResourceReadiness(refresh.ResourceReadinessUnknown, refresh.ResourceReadinessReady))
+	require.Equal(t, refresh.ResourceReadinessUnavailable, mergeResourceReadiness(refresh.ResourceReadinessReady, refresh.ResourceReadinessUnavailable))
+	require.Equal(t, refresh.ResourceReadinessDegraded, mergeResourceReadiness(refresh.ResourceReadinessUnavailable, refresh.ResourceReadinessDegraded))
+	require.Equal(t, refresh.ResourceReadinessPending, mergeResourceReadiness(refresh.ResourceReadinessDegraded, refresh.ResourceReadinessPending))
+	require.Equal(t, refresh.ResourceReadinessPending, mergeResourceReadiness(refresh.ResourceReadinessPending, refresh.ResourceReadinessReady))
 }
 
 func TestResourcesSettledFalseAfterShutdown(t *testing.T) {

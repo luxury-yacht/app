@@ -163,15 +163,15 @@ func collectDescriptorSources(
 	sources := make([]typedTableResourceSource, 0, len(descriptors))
 	for _, d := range descriptors {
 		indexer := indexerFor(d)
-		available := indexer != nil && runtimeResourceAllowed(ctx, domainName, d.Group, d.Resource)
+		available := indexer != nil
 		sources = append(sources, typedTableResourceSource{
-			Kind:      d.Kind,
-			Group:     d.Group,
-			Resource:  d.Resource,
-			Available: available,
+			Kind:     d.Kind,
+			Group:    d.Group,
+			Resource: d.Resource,
+			State:    typedTableSourceState(available),
 		})
 	}
-	return sources
+	return withTypedTableResourceReadiness(ctx, domainName, sources)
 }
 
 func collectDescriptorTableRows[Row any](
@@ -186,7 +186,7 @@ func collectDescriptorTableRows[Row any](
 	descriptors := kindregistry.StreamDescriptorsForDomain(domainName)
 	var version uint64
 	for i, d := range descriptors {
-		if !sources[i].Available {
+		if !sources[i].State.servesRows() {
 			continue
 		}
 		objects, err := descriptorObjects(indexerFor(d), namespace)

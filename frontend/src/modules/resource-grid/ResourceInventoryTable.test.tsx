@@ -112,6 +112,19 @@ describe('ResourceInventoryTable error surface', () => {
     expect(container.textContent).not.toContain('No rows found');
   });
 
+  it('does not present a partial empty result as authoritatively empty', () => {
+    renderTable(
+      src({
+        completeness: 'partial',
+        partialLabel:
+          'Pod data is still syncing; table data is partial while the initial list retries',
+      })
+    );
+
+    expect(container.textContent).toContain('Pod data is still syncing');
+    expect(container.textContent).not.toContain('No rows found');
+  });
+
   it('shows no banner on a healthy result', () => {
     renderTable(src({ rows: [{ name: 'row-1' }] }));
     expect(container.querySelector('[role="alert"]')).toBeNull();

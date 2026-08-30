@@ -33,6 +33,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -1142,6 +1143,39 @@ func (m *IngestManager) HasSyncedFor(gvr schema.GroupVersionResource) bool {
 		return e.store.HasSynced()
 	}
 	return m.entrySettled(e)
+}
+
+// ResourceReadinessFor reports the data-availability state for one ingest
+// source. Unlike HasSyncedFor, deadline degradation is not reported as ready:
+// it releases the liveness gate while keeping downstream snapshot envelopes
+// visibly partial until the store completes a real initial sync.
+func (m *IngestManager) ResourceReadinessFor(gvr schema.GroupVersionResource) refresh.ResourceReadiness {
+	m.mu.Lock()
+	e, ok := m.entries[gvr]
+	m.mu.Unlock()
+	if !ok {
+		return refresh.ResourceReadinessUnavailable
+	}
+	if e.allPartsSkipped() {
+		return refresh.ResourceReadinessUnavailable
+	}
+	if e.store.HasSynced() {
+		return refresh.ResourceReadinessReady
+	}
+	if e.onDemand.Load() {
+		return refresh.ResourceReadinessPending
+	}
+	// entrySettled owns the one-shot deadline transition and warning. Re-check
+	// the concrete state afterward rather than treating settlement itself as
+	// data availability.
+	_ = m.entrySettled(e)
+	if e.store.HasSynced() {
+		return refresh.ResourceReadinessReady
+	}
+	if e.degraded.Load() {
+		return refresh.ResourceReadinessDegraded
+	}
+	return refresh.ResourceReadinessPending
 }
 
 // RawHasSyncedFor reports whether gvr's store has completed an actual initial

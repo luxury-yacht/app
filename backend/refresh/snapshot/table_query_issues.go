@@ -4,14 +4,58 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/luxury-yacht/app/backend/refresh"
 )
 
 type typedTableResourceSource struct {
 	Kind       string
 	Group      string
 	Resource   string
-	Available  bool
+	State      typedTableResourceState
 	QueryKinds []string
+}
+
+type typedTableResourceState uint8
+
+const (
+	typedTableResourceAvailable typedTableResourceState = iota
+	typedTableResourceUnavailable
+	typedTableResourceSyncing
+	typedTableResourceDegraded
+)
+
+func typedTableSourceState(available bool) typedTableResourceState {
+	if available {
+		return typedTableResourceAvailable
+	}
+	return typedTableResourceUnavailable
+}
+
+func (state typedTableResourceState) servesRows() bool {
+	return state != typedTableResourceUnavailable
+}
+
+func withTypedTableResourceReadiness(ctx context.Context, domainName string, sources []typedTableResourceSource) []typedTableResourceSource {
+	result := append([]typedTableResourceSource(nil), sources...)
+	for index := range result {
+		source := &result[index]
+		if source.State == typedTableResourceUnavailable || !runtimeResourceAllowed(ctx, domainName, source.Group, source.Resource) {
+			source.State = typedTableResourceUnavailable
+			continue
+		}
+		switch resourceReadinessFor(ctx, source.Group, source.Resource) {
+		case refresh.ResourceReadinessPending:
+			source.State = typedTableResourceSyncing
+		case refresh.ResourceReadinessDegraded:
+			source.State = typedTableResourceDegraded
+		case refresh.ResourceReadinessUnavailable:
+			source.State = typedTableResourceUnavailable
+		default:
+			source.State = typedTableResourceAvailable
+		}
+	}
+	return result
 }
 
 // typedTableQueryResourceIssues reports the sources that are unavailable or
@@ -20,17 +64,22 @@ type typedTableResourceSource struct {
 // reduces the rows in either mode, so both must surface it rather than present a
 // partial table as complete.
 func typedTableQueryResourceIssues(ctx context.Context, domainName string, query typedTableQuery, sources []typedTableResourceSource) []ResourceQueryIssue {
+	sources = withTypedTableResourceReadiness(ctx, domainName, sources)
 	issues := make([]ResourceQueryIssue, 0)
 	for _, source := range sources {
 		if !typedTableQueryNeedsSource(query, source) {
 			continue
 		}
-		if source.Available && runtimeResourceAllowed(ctx, domainName, source.Group, source.Resource) {
+		if source.State == typedTableResourceAvailable {
 			continue
+		}
+		message := fmt.Sprintf("%s resources are unavailable; table data is partial", source.Kind)
+		if source.State == typedTableResourceSyncing || source.State == typedTableResourceDegraded {
+			message = fmt.Sprintf("%s data is still syncing; table data is partial while the initial list retries", source.Kind)
 		}
 		issues = append(issues, ResourceQueryIssue{
 			Kind:    source.Kind,
-			Message: fmt.Sprintf("%s resources are unavailable; table data is partial", source.Kind),
+			Message: message,
 		})
 	}
 	return issues
@@ -77,7 +126,7 @@ func capabilitiesWithAvailableKinds(capabilities ResourceQueryCapabilities, sour
 	}
 	unavailable := make(map[string]bool, len(sources))
 	for _, source := range sources {
-		if !source.Available {
+		if !source.State.servesRows() {
 			unavailable[normalizeTypedTableKind(source.Kind)] = true
 		}
 	}

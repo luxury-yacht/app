@@ -89,6 +89,8 @@ export default function ResourceInventoryTable<T>({
 
   if (render.isEmpty) {
     emptyMessageForState = emptyMessage;
+  } else if (render.isPartial && render.rows.length === 0) {
+    emptyMessageForState = render.partialLabel ?? 'Data is temporarily unavailable';
   } else if (render.error) {
     emptyMessageForState = resolveEmptyStateMessage(render.error, 'Unable to load data');
   } else {

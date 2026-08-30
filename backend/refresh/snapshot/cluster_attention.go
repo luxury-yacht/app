@@ -1257,14 +1257,14 @@ func RegisterClusterAttentionDomain(
 
 func clusterAttentionSources(permissions ClusterAttentionPermissions) []typedTableResourceSource {
 	return []typedTableResourceSource{
-		{Kind: "Pod", Group: "", Resource: "pods", Available: permissions.IncludePods},
-		{Kind: "Deployment", Group: "apps", Resource: "deployments", Available: permissions.IncludeDeployments},
-		{Kind: "StatefulSet", Group: "apps", Resource: "statefulsets", Available: permissions.IncludeStatefulSets},
-		{Kind: "DaemonSet", Group: "apps", Resource: "daemonsets", Available: permissions.IncludeDaemonSets},
-		{Kind: "Job", Group: "batch", Resource: "jobs", Available: permissions.IncludeJobs},
-		{Kind: "CronJob", Group: "batch", Resource: "cronjobs", Available: permissions.IncludeCronJobs},
-		{Kind: "Node", Group: "", Resource: "nodes", Available: permissions.IncludeNodes},
-		{Kind: "Event", Group: "", Resource: "events", Available: permissions.IncludeEvents},
+		{Kind: "Pod", Group: "", Resource: "pods", State: typedTableSourceState(permissions.IncludePods)},
+		{Kind: "Deployment", Group: "apps", Resource: "deployments", State: typedTableSourceState(permissions.IncludeDeployments)},
+		{Kind: "StatefulSet", Group: "apps", Resource: "statefulsets", State: typedTableSourceState(permissions.IncludeStatefulSets)},
+		{Kind: "DaemonSet", Group: "apps", Resource: "daemonsets", State: typedTableSourceState(permissions.IncludeDaemonSets)},
+		{Kind: "Job", Group: "batch", Resource: "jobs", State: typedTableSourceState(permissions.IncludeJobs)},
+		{Kind: "CronJob", Group: "batch", Resource: "cronjobs", State: typedTableSourceState(permissions.IncludeCronJobs)},
+		{Kind: "Node", Group: "", Resource: "nodes", State: typedTableSourceState(permissions.IncludeNodes)},
+		{Kind: "Event", Group: "", Resource: "events", State: typedTableSourceState(permissions.IncludeEvents)},
 	}
 }
 

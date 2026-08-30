@@ -245,9 +245,14 @@ func (s *Service) prepareBuildRequest(ctx context.Context, req BuildRequest) (co
 		s.recordInformerSyncFailure(req.Domain, req.Scope, syncWait, err)
 		return nil, snapshotBuildRequestPlan{}, err
 	}
+	readiness := s.resourceReadiness(req.Domain)
+	ctx = withResourceReadiness(ctx, readiness)
 	cacheKey := s.cacheKey(req.Domain, req.Scope)
 	if permissionCacheKey != "" {
 		cacheKey += ":permissions:" + permissionCacheKey
+	}
+	if readinessKey := resourceReadinessFingerprint(readiness); readinessKey != "" {
+		cacheKey += ":readiness:" + readinessKey
 	}
 	bypassSnapshotCache := s.shouldBypassSnapshotCache(req.Domain)
 	return ctx, snapshotBuildRequestPlan{
@@ -259,6 +264,18 @@ func (s *Service) prepareBuildRequest(ctx context.Context, req BuildRequest) (co
 		skipCacheLoad:       refresh.HasCacheBypass(ctx) || bypassSnapshotCache,
 		syncWait:            syncWait,
 	}, nil
+}
+
+func (s *Service) resourceReadiness(domainName string) map[string]refresh.ResourceReadiness {
+	keys, scoped := s.domainReadiness[domainName]
+	if !scoped || len(keys) == 0 {
+		return nil
+	}
+	reporter, ok := s.currentInformerHub().(refresh.ResourceReadinessReporter)
+	if !ok {
+		return nil
+	}
+	return reporter.ResourceReadiness(keys)
 }
 
 func (s *Service) recordInformerSyncFailure(domainName, scope string, syncWait time.Duration, err error) {

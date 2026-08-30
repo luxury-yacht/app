@@ -411,8 +411,8 @@ func TestTypedTableQueryResourceIssuesHonorRequestedKinds(t *testing.T) {
 		},
 	}
 	issues := typedTableQueryResourceIssues(context.Background(), "namespace-config", query, []typedTableResourceSource{
-		{Kind: "ConfigMap", Group: "", Resource: "configmaps", Available: false},
-		{Kind: "Secret", Group: "", Resource: "secrets", Available: true},
+		{Kind: "ConfigMap", Group: "", Resource: "configmaps", State: typedTableResourceUnavailable},
+		{Kind: "Secret", Group: "", Resource: "secrets", State: typedTableResourceAvailable},
 	})
 	if len(issues) != 0 {
 		t.Fatalf("expected unavailable unrequested source to be ignored, got %+v", issues)
@@ -424,7 +424,7 @@ func TestTypedTableQueryResourceIssuesHonorRequestedKinds(t *testing.T) {
 			Kind:       "Pod",
 			Group:      "",
 			Resource:   "pods",
-			Available:  false,
+			State:      typedTableResourceUnavailable,
 			QueryKinds: []string{"Pod", "Deployment"},
 		},
 	})

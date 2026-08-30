@@ -554,6 +554,8 @@ function useQueryBackedGridResult<
       loading,
       loaded,
       error,
+      completeness: query.payload?.completeness === 'partial' ? 'partial' : 'complete',
+      partialLabel: query.filterOptions.partialDataLabel,
       cacheKey,
     }),
   };

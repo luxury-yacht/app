@@ -240,7 +240,10 @@ query `baseScope` (`namespace:<name>`) so pagination and table semantics are
 uniform across every scope, not just all-namespaces and cluster.
 Degraded and unavailable-source reasons are computed and surfaced on both paths;
 a window missing a permission-blocked source is reported inexact and
-issue-bearing, never as a complete table.
+issue-bearing, never as a complete table. The same rule applies when an
+informer/ingest sync deadline releases the liveness gate before its initial list
+succeeds: the typed envelope stays partial and inexact until raw source readiness
+becomes authoritative.
 
 Object-panel related-resource tables stay local while their owner-scoped domain
 keeps them naturally bounded. They move to typed query-backed mode only if an

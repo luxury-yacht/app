@@ -1,8 +1,10 @@
 package snapshot
 
 import (
+	"context"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
@@ -10,12 +12,37 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
+	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func TestNamespaceWorkloadsBuilderDoesNotPublishUnsyncedPodsAsAuthoritativelyEmpty(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}
+	builder := &NamespaceWorkloadsBuilder{
+		includePods:         true,
+		includeDeployments:  true,
+		hpaLister:           testsupport.NewHorizontalPodAutoscalerLister(t),
+		workloadsMaintained: newTypedMaintainedStore(meta, workloadsQuerypageSchema(), workloadTableQueryAdapter()),
+		perBuild:            &perBuildStoreCache[WorkloadSummary]{},
+	}
+	ctx := WithClusterMeta(context.Background(), meta)
+	ctx = withResourceReadiness(ctx, map[string]refresh.ResourceReadiness{
+		"core/pods": refresh.ResourceReadinessDegraded,
+	})
+
+	snapshot, err := builder.Build(ctx, refresh.JoinClusterScope(meta.ClusterID, "namespace:default?limit=50"))
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
+	require.Empty(t, payload.Rows)
+	require.Equal(t, ResourceQueryPartial, payload.Completeness)
+	require.False(t, payload.TotalIsExact)
+	require.NotEmpty(t, payload.Issues)
+	require.Contains(t, payload.Issues[0].Message, "still syncing")
+}
 
 func TestBuildDeploymentSummaryCarriesCanonicalResourceRef(t *testing.T) {
 	object := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{

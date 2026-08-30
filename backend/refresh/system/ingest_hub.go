@@ -32,6 +32,7 @@ type ingestHubManager interface {
 	Stop()
 	StoreFor(schema.GroupVersionResource) *ingest.ProjectingStore
 	HasSyncedFor(schema.GroupVersionResource) bool
+	ResourceReadinessFor(schema.GroupVersionResource) refresh.ResourceReadiness
 }
 
 // ingestInformerHub adapts a *informer.Factory plus a *ingest.IngestManager to the
@@ -108,6 +109,42 @@ func (h *ingestInformerHub) ResourcesSettled(keys []string) bool {
 		return true
 	}
 	return h.factory.ResourcesSettled(factoryKeys)
+}
+
+// ResourceReadiness preserves the per-resource data state that the boolean
+// settlement gate intentionally collapses for liveness. Ingest-owned keys read
+// the owned reflector state; all remaining keys delegate to the shared
+// informer factory when it exposes the optional reporter contract.
+func (h *ingestInformerHub) ResourceReadiness(keys []string) map[string]refresh.ResourceReadiness {
+	result := make(map[string]refresh.ResourceReadiness, len(keys))
+	factoryKeys := make([]string, 0, len(keys))
+	for _, key := range keys {
+		result[key] = refresh.ResourceReadinessUnknown
+		if _, owned := h.ingestKeys[key]; !owned {
+			factoryKeys = append(factoryKeys, key)
+			continue
+		}
+		if h.ingest == nil {
+			result[key] = refresh.ResourceReadinessUnavailable
+			continue
+		}
+		result[key] = h.ingest.ResourceReadinessFor(ingestGVRForKey(key))
+	}
+	if reporter, ok := h.factory.(refresh.ResourceReadinessReporter); ok {
+		for key, readiness := range reporter.ResourceReadiness(factoryKeys) {
+			result[key] = readiness
+		}
+	}
+	return result
+}
+
+func ingestGVRForKey(key string) schema.GroupVersionResource {
+	for _, descriptor := range kindregistry.IngestOwnedDescriptors() {
+		if permissions.ResourceKey(descriptor.Identity.Group, descriptor.Identity.Resource) == key {
+			return descriptor.Identity.GVR()
+		}
+	}
+	return schema.GroupVersionResource{}
 }
 
 // ingestKeySettled reports whether the ingest store(s) backing a canonical resource

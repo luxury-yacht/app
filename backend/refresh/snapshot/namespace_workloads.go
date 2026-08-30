@@ -490,14 +490,14 @@ func (b *NamespaceWorkloadsBuilder) resourceSources() []typedTableResourceSource
 			Kind:       podres.Identity.Kind,
 			Group:      "",
 			Resource:   "pods",
-			Available:  b.includePods,
+			State:      typedTableSourceState(b.includePods),
 			QueryKinds: []string{podres.Identity.Kind, deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind, jobres.Identity.Kind, cronjob.Identity.Kind},
 		},
-		{Kind: deployment.Identity.Kind, Group: "apps", Resource: "deployments", Available: b.includeDeployments},
-		{Kind: statefulset.Identity.Kind, Group: "apps", Resource: "statefulsets", Available: b.includeStatefulSets},
-		{Kind: daemonset.Identity.Kind, Group: "apps", Resource: "daemonsets", Available: b.includeDaemonSets},
-		{Kind: jobres.Identity.Kind, Group: "batch", Resource: "jobs", Available: b.includeJobs},
-		{Kind: cronjob.Identity.Kind, Group: "batch", Resource: "cronjobs", Available: b.includeCronJobs},
+		{Kind: deployment.Identity.Kind, Group: "apps", Resource: "deployments", State: typedTableSourceState(b.includeDeployments)},
+		{Kind: statefulset.Identity.Kind, Group: "apps", Resource: "statefulsets", State: typedTableSourceState(b.includeStatefulSets)},
+		{Kind: daemonset.Identity.Kind, Group: "apps", Resource: "daemonsets", State: typedTableSourceState(b.includeDaemonSets)},
+		{Kind: jobres.Identity.Kind, Group: "batch", Resource: "jobs", State: typedTableSourceState(b.includeJobs)},
+		{Kind: cronjob.Identity.Kind, Group: "batch", Resource: "cronjobs", State: typedTableSourceState(b.includeCronJobs)},
 	}
 }
 

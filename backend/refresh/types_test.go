@@ -11,6 +11,26 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 )
 
+func TestResourceReadinessString(t *testing.T) {
+	tests := []struct {
+		state refresh.ResourceReadiness
+		want  string
+	}{
+		{state: refresh.ResourceReadinessUnknown, want: "unknown"},
+		{state: refresh.ResourceReadinessPending, want: "pending"},
+		{state: refresh.ResourceReadinessReady, want: "ready"},
+		{state: refresh.ResourceReadinessDegraded, want: "degraded"},
+		{state: refresh.ResourceReadinessUnavailable, want: "unavailable"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			if got := tt.state.String(); got != tt.want {
+				t.Fatalf("String() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 type queueSpy struct {
 	queue *refresh.InMemoryQueue
 	mu    sync.RWMutex

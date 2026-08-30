@@ -20,6 +20,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
@@ -35,6 +36,27 @@ func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rs
 		rsLister:   rsLister,
 		projCache:  newPodProjectionCache(),
 	}
+}
+
+func TestPodBuilderDoesNotPublishAnUnsyncedStoreAsAuthoritativelyEmpty(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}
+	builder := &PodBuilder{
+		maintained: newTypedMaintainedStore(meta, podQuerypageSchema(), podTableQueryAdapter()),
+		perBuild:   &perBuildStoreCache[PodSummary]{},
+	}
+	ctx := WithClusterMeta(context.Background(), meta)
+	ctx = withResourceReadiness(ctx, map[string]refresh.ResourceReadiness{
+		"core/pods": refresh.ResourceReadinessDegraded,
+	})
+
+	snapshot, err := builder.Build(ctx, refresh.JoinClusterScope(meta.ClusterID, "namespace:default?limit=50"))
+	require.NoError(t, err)
+	payload := snapshot.Payload.(PodSnapshot)
+	require.Empty(t, payload.Rows)
+	require.Equal(t, ResourceQueryPartial, payload.Completeness)
+	require.False(t, payload.TotalIsExact)
+	require.NotEmpty(t, payload.Issues)
+	require.Contains(t, payload.Issues[0].Message, "still syncing")
 }
 
 type fakePodMetricsProvider struct {
