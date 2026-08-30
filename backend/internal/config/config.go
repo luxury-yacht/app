@@ -26,6 +26,12 @@ const (
 
 // Refresh subsystem settings.
 const (
+	// RefreshIngestInitialSyncConcurrency caps the ingest-owned initial snapshots
+	// admitted concurrently before the shared liveness deadline. The six slots
+	// match the six ingest-owned Pod/workload feeds, which are launched first;
+	// the typed informer factory continues independently for ReplicaSets and HPA.
+	RefreshIngestInitialSyncConcurrency = 6
+
 	// RefreshResyncInterval controls how often shared informers perform a full resync sweep.
 	// This is the cadence we hand to Kubernetes SharedInformers for their built-in "full resync" sweep.
 	// At that interval the informer re-lists the resource from the API to reconcile any missed events.

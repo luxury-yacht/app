@@ -76,7 +76,11 @@ type ObjectMapProjector func(obj metav1.Object) interface{}
 // entry is one ingested kind: the reflector that drives intake and the store
 // that holds its projected rows.
 type entry struct {
-	desc  streamspec.Descriptor
+	desc streamspec.Descriptor
+	// gvr is the concrete resource identity used to register this entry. Bespoke
+	// reflectors have no stream descriptor, so readiness diagnostics must use
+	// this field rather than desc.GVR() (whose zero value logs as /, Resource=).
+	gvr   schema.GroupVersionResource
 	store *ProjectingStore
 
 	// parts are the kind's reflectors: one per configured scope namespace for
@@ -196,8 +200,12 @@ type IngestManager struct {
 	// which Start stamps once. now is the clock, injectable in tests.
 	syncDeadline time.Duration
 	now          func() time.Time
-	startedAtMu  sync.Mutex
-	startedAt    time.Time
+	// initialSyncConcurrency bounds only the startup queue. A zero value uses
+	// config.RefreshIngestInitialSyncConcurrency, which keeps white-box managers
+	// in tests on the production default unless a test deliberately overrides it.
+	initialSyncConcurrency int
+	startedAtMu            sync.Mutex
+	startedAt              time.Time
 
 	// permissionFilter, when set, reports whether the identity may list+watch a kind
 	// in the given namespace ("" = cluster-wide). Start skips (does not launch) any
@@ -233,15 +241,16 @@ func NewIngestManager(
 		namespaced[d.Identity.GVR()] = d.Identity.Namespaced
 	}
 	m := &IngestManager{
-		meta:          meta,
-		kube:          kube,
-		apiext:        apiext,
-		gateway:       gateway,
-		entries:       make(map[schema.GroupVersionResource]*entry),
-		syncDeadline:  config.RefreshInformerSyncDeadline,
-		now:           time.Now,
-		scope:         append([]string(nil), allowedNamespaces...),
-		namespacedGVR: namespaced,
+		meta:                   meta,
+		kube:                   kube,
+		apiext:                 apiext,
+		gateway:                gateway,
+		entries:                make(map[schema.GroupVersionResource]*entry),
+		syncDeadline:           config.RefreshInformerSyncDeadline,
+		now:                    time.Now,
+		initialSyncConcurrency: config.RefreshIngestInitialSyncConcurrency,
+		scope:                  append([]string(nil), allowedNamespaces...),
+		namespacedGVR:          namespaced,
 	}
 	for _, desc := range kindregistry.StreamDescriptors() {
 		m.addDescriptor(desc)
@@ -291,6 +300,7 @@ func (m *IngestManager) addDescriptor(desc streamspec.Descriptor) {
 // kinds) build a single cluster-wide part; a namespace scope fans one part
 // per configured namespace, each writing its own store partition.
 func (m *IngestManager) installReflector(e *entry, gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, restClient rest.Interface, example apiruntime.Object) {
+	e.gvr = gvr
 	e.example = example
 	for _, namespace := range m.partitionNamespaces(gvr) {
 		lw := cache.NewListWatchFromClient(restClient, gvr.Resource, namespace, fields.Everything())
@@ -368,7 +378,7 @@ func (m *IngestManager) RegisterDynamicCatalogReflector(gvr schema.GroupVersionR
 	if _, exists := m.entries[gvr]; exists {
 		return false
 	}
-	e := &entry{store: newIngestProjectingStore(catalogProjectionFor(project))}
+	e := &entry{gvr: gvr, store: newIngestProjectingStore(catalogProjectionFor(project))}
 	e.onDemand.Store(true)
 	example := &unstructuredv1.Unstructured{}
 	example.SetGroupVersionKind(gvk)
@@ -603,9 +613,12 @@ func (m *IngestManager) Start(ctx context.Context) {
 		return
 	}
 	m.markStarted()
-	for _, launch := range entries {
-		launchIngestEntry(runCtx, launch, filter)
-	}
+	tasks := prepareInitialIngestTasks(entries, filter)
+	initialWaveStarted := make(chan struct{})
+	go m.runInitialIngestQueue(runCtx, tasks, initialWaveStarted)
+	// Preserve the hub's ordering contract: the workload-priority ingest wave is
+	// launched before Start returns and the shared informer factory begins.
+	<-initialWaveStarted
 
 	// One log line when the initial syncs settle, naming the slowest kinds — the
 	// per-kind cold-start telemetry (see InitialSyncDurations).
@@ -635,44 +648,6 @@ func (m *IngestManager) markStarted() {
 	m.startedAtMu.Lock()
 	m.startedAt = m.now()
 	m.startedAtMu.Unlock()
-}
-
-func launchIngestEntry(runCtx context.Context, launch ingestLaunchEntry, filter func(string, string, string) bool) {
-	launched := permittedIngestPartitions(launch, filter)
-	// Expected partitions must be declared BEFORE any reflector of the
-	// entry runs, so the store's sync gate counts exactly the launched set.
-	launch.e.store.SetExpectedPartitions(launched)
-	for _, part := range launch.e.parts {
-		if part.skipped.Load() {
-			continue
-		}
-		part := part
-		// Resume from a persisted resourceVersion when one was set (the store was
-		// restored full from disk); otherwise — the default — this is exactly
-		// part.reflector.Run.
-		go runWithResume(runCtx, part.lw, part.view, part.resumeRV, func() { part.reflector.Run(runCtx) })
-	}
-}
-
-func permittedIngestPartitions(launch ingestLaunchEntry, filter func(string, string, string) bool) []string {
-	launched := make([]string, 0, len(launch.e.parts))
-	for _, part := range launch.e.parts {
-		if filter != nil && !filter(launch.gvr.Group, launch.gvr.Resource, part.namespace) {
-			part.skipped.Store(true)
-			logSkippedIngestPart(launch.gvr, part.namespace)
-			continue
-		}
-		launched = append(launched, part.namespace)
-	}
-	return launched
-}
-
-func logSkippedIngestPart(gvr schema.GroupVersionResource, namespace string) {
-	if namespace == "" {
-		klog.V(2).Infof("ingest: skipping %s — identity cannot list/watch it (logged once)", gvr)
-		return
-	}
-	klog.V(2).Infof("ingest: skipping %s in %q — identity cannot list/watch it there (logged once)", gvr, namespace)
 }
 
 // SetResumeResourceVersion records the resourceVersion gvr's reflector should resume its
@@ -883,7 +858,7 @@ func (m *IngestManager) entrySettled(e *entry) bool {
 		// into the settled decision made a raced HasSynced return a false
 		// negative, which can block Manager.Start's readiness wait.
 		if e.degraded.CompareAndSwap(false, true) {
-			klog.Warningf("ingest store for %s did not sync within the deadline — marking degraded and excluding from readiness (LIST+WATCH retries continue in the background)", e.desc.GVR())
+			klog.Warningf("ingest store for %s did not sync within the deadline — marking degraded and excluding from readiness (LIST+WATCH retries continue in the background)", e.gvr)
 		}
 		return true
 	}

@@ -31,6 +31,16 @@ func (s *ProjectingStore) SetExpectedPartitions(namespaces []string) {
 	}
 }
 
+// HasSyncedPartition reports whether one reflector's initial snapshot has
+// landed. The bounded startup queue uses this narrower signal so a completed
+// namespace can release its slot before sibling partitions finish.
+func (s *ProjectingStore) HasSyncedPartition(namespace string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.syncedPartitions[namespace]
+	return ok
+}
+
 // PartitionView returns the cache.Store a single namespace's reflector writes
 // through. namespace "" is the cluster-wide view (classic Replace semantics).
 func (s *ProjectingStore) PartitionView(namespace string) *StorePartitionView {

@@ -36,6 +36,10 @@
 - Resource tables no longer claim that no workloads, pods, or other resources
   exist when an initial Kubernetes list misses its sync deadline. They remain
   visibly partial while the list retries and become complete once it succeeds.
+- Initial cluster loading now limits the pre-deadline ingest request burst and
+  starts the Pod/workload feeds first, avoiding contention that could delay the
+  Workloads view past its readiness deadline. Degraded-ingest warnings now name
+  bespoke resources instead of logging an empty resource identity.
 - Duplicate Favorite names are now rejected. It's no longer possible to create different Favorites with the same name.
 - An unreachable previously opened cluster no longer blocks startup UI,
   kubeconfig discovery, cluster-tab changes, or app-global controls while its
