@@ -278,16 +278,7 @@ func TestStdLogBridgeWritesToLogger(t *testing.T) {
 	require.Equal(t, "INFO", entries[4].Level)
 }
 
-func TestInitKubernetesClientRequiresSelections(t *testing.T) {
-	app := NewApplicationRuntime(nil)
-	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
-
-	err := app.Workspace.initKubernetesClient()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "no kubeconfig selections available")
-}
-
-func TestInitKubernetesClientFailsWhenRefreshSubsystemFails(t *testing.T) {
+func TestStartupClusterConnectionFailsWhenRefreshSubsystemFails(t *testing.T) {
 	app := NewApplicationRuntime(nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -314,7 +305,7 @@ users:
 	configDir := t.TempDir()
 	configPath := filepath.Join(configDir, "config")
 	require.NoError(t, os.WriteFile(configPath, []byte(kubeconfig), 0o600))
-	// Seed a valid selection/client pool so initKubernetesClient only exercises refresh setup.
+	// Seed a valid selection/client pool so startup connection only exercises refresh setup.
 	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{{
 		Name:    "config",
 		Path:    configPath,
@@ -341,7 +332,7 @@ users:
 	}
 	defer func() { newRefreshSubsystemWithServices = original }()
 
-	err := app.Workspace.initKubernetesClient()
+	err := app.Workspace.connectSelectedClustersAtStartup(ctx)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to initialise refresh subsystem")
 	require.Nil(t, app.Refresh.objectCatalogServiceForCluster(""))

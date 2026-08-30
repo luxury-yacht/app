@@ -85,9 +85,9 @@ func (a *WorkspaceCoordinator) SetKubeconfig(selection string) error {
 //  4. Initializes or updates the refresh subsystem (the HTTP server that serves data to the frontend)
 //  5. Starts the object catalog service (required for the Browse/All Objects views)
 //
-// IMPORTANT: This function is called at runtime when the user changes their cluster selection,
-// which is different from app startup where initKubernetesClient() handles the initial setup.
-// Both code paths must perform the same initialization steps to ensure consistent behavior.
+// IMPORTANT: This function is called at runtime when the user changes their cluster selection.
+// Startup follows the same client, refresh, and object-catalog initialization sequence through
+// connectSelectedClustersAtStartup.
 func (a *WorkspaceCoordinator) SetSelectedKubeconfigs(selections []string) error {
 	return a.runSelectionMutation("set-selected-kubeconfigs", func(mutation *selectionMutation) error {
 		return a.setSelectedKubeconfigs(mutation, selections)

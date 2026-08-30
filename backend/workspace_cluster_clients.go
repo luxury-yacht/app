@@ -44,18 +44,8 @@ func (a *WorkspaceCoordinator) connectSelectedClustersAtStartup(ctx context.Cont
 	if a.kubeClientInitializer != nil {
 		return a.kubeClientInitializer(ctx)
 	}
-	a.logger.Info("Initializing Kubernetes client", logsources.KubernetesClient)
-	selections, err := a.selectedKubeconfigSelections()
+	selections, err := a.preflightSelectedClusterClients(ctx)
 	if err != nil {
-		return err
-	}
-	if len(selections) == 0 {
-		return fmt.Errorf("no kubeconfig selections available")
-	}
-	if err := a.syncClusterClientPoolWithContext(ctx, selections); err != nil {
-		return err
-	}
-	if err := ctx.Err(); err != nil {
 		return err
 	}
 
@@ -70,28 +60,24 @@ func (a *WorkspaceCoordinator) connectSelectedClustersAtStartup(ctx context.Cont
 	return a.finishKubernetesClientInitialization(ctx, selections)
 }
 
-func (a *WorkspaceCoordinator) initKubernetesClient() error {
-	return a.initKubernetesClientWithContext(a.CtxOrBackground())
-}
-
-func (a *WorkspaceCoordinator) initKubernetesClientWithContext(ctx context.Context) (err error) {
+func (a *WorkspaceCoordinator) preflightSelectedClusterClients(ctx context.Context) ([]kubeconfigSelection, error) {
 	a.logger.Info("Initializing Kubernetes client", logsources.KubernetesClient)
 
 	selections, err := a.selectedKubeconfigSelections()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(selections) == 0 {
-		return fmt.Errorf("no kubeconfig selections available")
+		return nil, fmt.Errorf("no kubeconfig selections available")
 	}
 
 	if err := a.syncClusterClientPoolWithContext(ctx, selections); err != nil {
-		return err
+		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return nil, err
 	}
-	return a.finishKubernetesClientInitialization(ctx, selections)
+	return selections, nil
 }
 
 func (a *WorkspaceCoordinator) finishKubernetesClientInitialization(
