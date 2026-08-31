@@ -8,7 +8,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-type mutableClientFeatureGates interface {
+type clientFeatureGateSetter interface {
 	Set(clientfeatures.Feature, bool) error
 }
 
@@ -24,7 +24,7 @@ func DisableWatchList() error {
 }
 
 func disableWatchList(gates clientfeatures.Gates) error {
-	setter, ok := gates.(mutableClientFeatureGates)
+	setter, ok := gates.(clientFeatureGateSetter)
 	if !ok {
 		return fmt.Errorf("client-go feature gates %T cannot disable %s", gates, clientfeatures.WatchListClient)
 	}
