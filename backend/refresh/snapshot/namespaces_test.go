@@ -499,8 +499,8 @@ func TestNamespaceBuilderDoesNotBlockOnUnsyncedIngest(t *testing.T) {
 
 // TestNamespaceBuilderWorkloadsReadyTracksIngestSync pins the readiness signal the cluster
 // lifecycle gate reads: the snapshot's WorkloadsReady is false until the pod/workload ingest
-// stores settle and true once they have, so "Ready" means data has loaded (not just that the
-// namespace list served immediately).
+// stores actually sync (or are permission-skipped) and true once they have, so "Ready" means
+// available data has loaded (not just that the namespace list served immediately).
 func TestNamespaceBuilderWorkloadsReadyTracksIngestSync(t *testing.T) {
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
 	build := func(source fakePodAggregateSource) NamespaceSnapshot {

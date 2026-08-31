@@ -183,6 +183,10 @@ kind metadata. See [large-data.md](large-data.md) and
   than disappearing or retrying indefinitely.
 - The server owns cluster loading-to-ready progression. A governor replacement
   must not demote an already-ready cluster.
+- Initial cluster Ready requires a real initial sync (or explicit permission skip)
+  for every tracked Pod/workload source. Deadline degradation may release a domain's
+  liveness gate and allow partial snapshots, but the cluster remains Loading Slowly
+  until those essential sources actually become ready.
 - Snapshot caches are allowed only for cache-tolerant data. Live app-managed
   operation state bypasses stale snapshot/singleflight paths.
 - Frontend snapshot request ownership is an explicit per-scope `idle`/`fetching`

@@ -25,12 +25,15 @@ var trackedWorkloadGVRs = []schema.GroupVersionResource{
 	DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR, PodGVR,
 }
 
-// trackerSyncSource is the ingest surface the gate waits on: whether the manager has an entry
-// for a kind (Tracks) and whether that kind's store has settled (HasSyncedFor).
+// trackerSyncSource is the ingest surface the cluster lifecycle gate waits on: whether the
+// manager has an entry for a kind (Tracks), whether that store completed a real initial sync,
+// and whether an explicit permission decision made the data unavailable. Deadline degradation
+// is intentionally excluded: it releases per-domain liveness gates but does not mean data loaded.
 // *ingest.IngestManager satisfies it.
 type trackerSyncSource interface {
 	Tracks(gvr schema.GroupVersionResource) bool
-	HasSyncedFor(gvr schema.GroupVersionResource) bool
+	RawHasSyncedFor(gvr schema.GroupVersionResource) bool
+	PermissionSkippedFor(gvr schema.GroupVersionResource) bool
 }
 
 func newNamespaceWorkloadTracker() *NamespaceWorkloadTracker {
@@ -39,8 +42,8 @@ func newNamespaceWorkloadTracker() *NamespaceWorkloadTracker {
 
 // NewNamespaceWorkloadTracker wires the sync gate over the cut workload + pod ingest stores.
 // It waits ONLY on kinds the manager actually has an entry for (Tracks): a kind with no entry
-// reports HasSyncedFor=false forever (an unavailable client/scheme at registration), which would
-// otherwise wedge the wait-for-all-synced gate and leave every namespace reported not-yet-known.
+// reports RawHasSyncedFor=false forever (an unavailable client/scheme at registration), which
+// would otherwise wedge the wait-for-all-synced gate and leave every namespace not-yet-known.
 // ingestManager may be nil (a unit test), in which case the gate is immediately satisfied.
 func NewNamespaceWorkloadTracker(ingestManager trackerSyncSource) *NamespaceWorkloadTracker {
 	t := newNamespaceWorkloadTracker()
@@ -53,16 +56,19 @@ func NewNamespaceWorkloadTracker(ingestManager trackerSyncSource) *NamespaceWork
 			continue
 		}
 		gvr := gvr
-		t.syncFns = append(t.syncFns, func() bool { return ingestManager.HasSyncedFor(gvr) })
+		t.syncFns = append(t.syncFns, func() bool {
+			return ingestManager.RawHasSyncedFor(gvr) || ingestManager.PermissionSkippedFor(gvr)
+		})
 	}
 	return t
 }
 
-// Synced reports, WITHOUT blocking, whether every tracked ingest store has synced, latching
-// synced once true so later builds skip the per-store check. The namespace build calls this
-// rather than waiting on the stores: a false result makes a namespace's absence of workloads
-// report as not-yet-known, and the build's workload-presence source clock re-delivers the
-// authoritative snapshot once the stores settle (see NamespaceBuilder.Build).
+// Synced reports, WITHOUT blocking, whether every tracked ingest store completed its real
+// initial sync or was explicitly permission-skipped, latching once true so later builds skip
+// the per-store check. The namespace build calls this rather than waiting on the stores: a false
+// result makes a namespace's absence of workloads report as not-yet-known, and the build's
+// workload-presence source clock re-delivers the authoritative snapshot once data is ready (see
+// NamespaceBuilder.Build).
 func (t *NamespaceWorkloadTracker) Synced() bool {
 	if t == nil {
 		return false

@@ -67,6 +67,14 @@ func (s *coldPreparationNamespaceSource) HasSyncedFor(schema.GroupVersionResourc
 	return s.synced
 }
 
+func (s *coldPreparationNamespaceSource) RawHasSyncedFor(gvr schema.GroupVersionResource) bool {
+	return s.HasSyncedFor(gvr)
+}
+
+func (s *coldPreparationNamespaceSource) PermissionSkippedFor(schema.GroupVersionResource) bool {
+	return false
+}
+
 func (s *coldPreparationNamespaceSource) CatalogRows(schema.GroupVersionResource) []interface{} {
 	return nil
 }
@@ -407,7 +415,7 @@ func TestColdPreparationRequiresCurrentSubsystemWorkloadReadiness(t *testing.T) 
 
 	source.setSynced(true)
 	require.Eventually(t, subsystem.ColdServingReady, time.Second, 10*time.Millisecond,
-		"preparation must continue after the current subsystem settles")
+		"preparation must continue after the current subsystem really syncs")
 	require.Equal(t, []string{"cluster-overview@cluster-a|"}, service.callsSnapshot())
 }
 

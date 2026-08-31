@@ -217,7 +217,7 @@ func TestServiceBuildRecordsInformerSyncWait(t *testing.T) {
 }
 
 // TestServiceDoesNotCacheNotReadyNamespaceSnapshots pins the cache rule for the fast
-// namespace paint: a snapshot built BEFORE the workload ingest stores settle
+// namespace paint: a snapshot built BEFORE the workload ingest stores are genuinely ready
 // (WorkloadsReady=false) must not be cached — the TTL would pin the pre-sync flags and
 // delay the cluster Ready flip by up to cache TTL + poll. Once ready, caching resumes.
 func TestServiceDoesNotCacheNotReadyNamespaceSnapshots(t *testing.T) {

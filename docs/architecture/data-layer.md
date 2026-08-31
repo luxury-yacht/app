@@ -139,16 +139,17 @@ the completed `v2` rewrite plan.
   restarts as part of re-warm. Starting points:
   `domain/maintained_stores.go`, `querypage/columnstore_mmap.go`, `refresh_spill.go`.
 - **Cold has a server-owned entry gate.** A desired Cold tier stays unapplied while
-  the live subsystem builds settled `namespaces` and `cluster-overview` snapshots
+  the live subsystem builds ready `namespaces` and `cluster-overview` snapshots
   for its cluster scope. The namespace build uses the aggregate lifecycle callback,
   so Ready and the retained sidebar/Global payloads exist before any producer stops.
   Preparation waits on that lifecycle state and the current subsystem generation's
   namespace workload tracker without polling namespace snapshots, retries the overview
   from the backend, and does not wait for tab activation. This generation-local gate
   prevents a retained Ready state from cooling a replacement subsystem before its own
-  stores settle. Only a successful preparation marks the subsystem eligible for
-  cooling; the governor records Cold after the executor reaches it. Preparation is
-  owned by that subsystem generation: replacement or teardown cancels an in-flight
+  stores actually sync or are explicitly permission-skipped. Only a successful
+  preparation marks the subsystem eligible for cooling; the governor records Cold
+  after the executor reaches it. Preparation is owned by that subsystem generation:
+  replacement or teardown cancels an in-flight
   build, and the retry loop exits as soon as the generation is no longer current.
   Under sustained HeapInuse pressure only, an unsettled preparation that exceeds one
   bounded snapshot-attempt grace degrades to the normal full teardown path. Available
@@ -177,8 +178,10 @@ the completed `v2` rewrite plan.
   closes before cooling stops feeds and opens before re-warm starts the catalog. A live
   tier is reached only when both the subsystem and its cluster object catalog exist.
 - **Cluster-Ready is server-driven.** The loading→ready transition rides a namespaces
-  snapshot build after the workload stores settle; the backend self-builds it on each
-  pre-Ready namespaces doorbell (`runNamespacesReadinessSelfBuild` via the
+  snapshot build after the workload stores actually sync or are explicitly
+  permission-skipped. Deadline degradation releases domain liveness gates but cannot
+  trigger the initial cluster Ready transition. The backend self-builds the snapshot
+  on each pre-Ready namespaces doorbell (`runNamespacesReadinessSelfBuild` via the
   `Subsystem.NamespacesDoorbell` observer, wired per cluster in
   `buildRefreshSubsystemForSelection`). Readiness never depends on the frontend
   asking first.

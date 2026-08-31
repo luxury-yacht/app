@@ -356,7 +356,7 @@ func TestNamespaceNotifierCoalescesBursts(t *testing.T) {
 }
 
 // The cluster-Ready lifecycle gate needs a namespaces BUILD after the workload
-// stores settle. The notifier must therefore re-arm while the tracker is not
+// stores actually sync. The notifier must therefore re-arm while the tracker is not
 // ready and broadcast when readiness flips — even if no further ingest event
 // arrives — then stop re-arming.
 func TestNamespaceNotifierSignalsTrackerReadinessFlip(t *testing.T) {

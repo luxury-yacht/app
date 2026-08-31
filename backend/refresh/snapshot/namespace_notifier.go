@@ -32,12 +32,12 @@ const namespaceNotifierNotReadySettleInterval = 2 * time.Second
 //     clock), so steady pod churn stays silent;
 //   - Events informer mutations broadcast ONLY when the per-namespace Warning
 //     count or its availability state changes, so Normal-event churn stays silent;
-//   - while the workload tracker has not settled, the notifier re-arms itself so
+//   - while the workload tracker is not ready, the notifier re-arms itself so
 //     the readiness flip broadcasts even with no further ingest event — the
-//     cluster-Ready lifecycle gate needs a namespaces build AFTER settling. It
+//     cluster-Ready lifecycle gate needs a namespaces build AFTER real sync. It
 //     also re-arms while an expected Events informer is warming, so an empty
-//     synced cache becomes an authoritative zero. The re-arm stops once both
-//     expected sources settle.
+//     synced cache becomes an authoritative zero. The re-arm stops once every
+//     expected signal source is ready.
 //
 // Inputs may fire from informer/reflector goroutines; the broadcast sink is
 // wired later (the resource-stream manager is built after domain registration),
@@ -61,7 +61,7 @@ type NamespaceChangeNotifier struct {
 	signatureKnown bool
 	lastSignature  string
 	// lastSignatureReady records whether lastSignature was computed AFTER the
-	// tracker settled; a not-ready signature must be recomputed on the rearm
+	// tracker became ready; a not-ready signature must be recomputed on the rearm
 	// tick even with no new events, so the readiness flip itself broadcasts.
 	lastSignatureReady  bool
 	eventSignatureKnown bool
@@ -94,7 +94,8 @@ func NewNamespaceChangeNotifier(ingest namespacePodIngestSource, tracker *Namesp
 	return notifier
 }
 
-// WorkloadsReady reports whether this notifier's workload tracker has settled.
+// WorkloadsReady reports whether this notifier's workload tracker has real data or an explicit
+// permission skip for every tracked source. Deadline degradation alone does not make it ready.
 // The notifier and tracker belong to one refresh subsystem generation, so this
 // is the generation-local readiness check used before that subsystem may cool.
 func (n *NamespaceChangeNotifier) WorkloadsReady() bool {

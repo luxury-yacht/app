@@ -485,7 +485,7 @@ func (a *RefreshCoordinator) transitionClusterToLoading(clusterID string) {
 // loading→ready transition rides). Readiness must never depend on the
 // frontend's fetch machinery asking first. This is wired at the per-cluster
 // subsystem chokepoint — NOT in a one-shot loop at aggregate construction —
-// because the notifier's post-settle doorbell is ONE-SHOT and subsystems
+// because the notifier's post-readiness doorbell is ONE-SHOT and subsystems
 // built later (selector-opened clusters, auth-recovery rebuilds) would drop
 // it on an empty observer slot and wedge in loading until visited. The
 // aggregate service is resolved at ring time: it is (re)built after

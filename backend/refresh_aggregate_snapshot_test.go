@@ -119,7 +119,7 @@ func TestAggregateSnapshotServiceNamespaceSnapshotTriggersLifecycleCallback(t *t
 }
 
 func TestAggregateSnapshotServiceNamespaceSnapshotSkipsCallbackUntilWorkloadsReady(t *testing.T) {
-	// A namespace snapshot served BEFORE its pod/workload ingest stores have settled carries
+	// A namespace snapshot served BEFORE its pod/workload ingest stores are genuinely ready carries
 	// WorkloadsReady=false (the lever-A fast paint). The readiness gate must NOT fire on it —
 	// otherwise the cluster reports "Ready" before any data has loaded.
 	notReady := &refresh.Snapshot{

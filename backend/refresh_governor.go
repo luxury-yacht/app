@@ -487,7 +487,8 @@ func (a *RefreshCoordinator) startColdPreparation(clusterID string, subsystem *s
 			}
 			// The aggregate lifecycle may still carry Ready from a subsystem this
 			// one replaced. When the namespace domain is registered, also require
-			// this generation's own workload tracker to have settled.
+			// this generation's own workload tracker to have real data or explicit
+			// permission skips.
 			return subsystem.NamespaceNotifier == nil || subsystem.NamespaceNotifier.WorkloadsReady()
 		}
 		stillCurrent := func() bool { return a.getRefreshSubsystem(clusterID) == subsystem }

@@ -156,13 +156,15 @@ func scopeProbeSignature(statuses map[string]NamespaceScopeStatus) string {
 	return strconv.FormatUint(h.Sum64(), 16)
 }
 
-// namespacePodIngestSource is the ingest surface the namespace domain reads: the per-kind sync
-// gate (Tracks/HasSyncedFor, used by NewNamespaceWorkloadTracker) plus the projected rows the
-// per-build workload-presence set is computed from (the cut workload kinds' Catalog rows and the
-// pod and ResourceQuota kinds' Aggregate rows).
+// namespacePodIngestSource is the ingest surface the namespace domain reads: the per-kind
+// settlement and concrete data-readiness state used by NewNamespaceWorkloadTracker, plus the
+// projected rows the per-build workload-presence set is computed from (the cut workload kinds'
+// Catalog rows and the pod and ResourceQuota kinds' Aggregate rows).
 type namespacePodIngestSource interface {
 	Tracks(gvr schema.GroupVersionResource) bool
 	HasSyncedFor(gvr schema.GroupVersionResource) bool
+	RawHasSyncedFor(gvr schema.GroupVersionResource) bool
+	PermissionSkippedFor(gvr schema.GroupVersionResource) bool
 	CatalogRows(gvr schema.GroupVersionResource) []interface{}
 	AggregateRows(gvr schema.GroupVersionResource) []interface{}
 	ObjectMapRows(gvr schema.GroupVersionResource) []interface{}
@@ -173,9 +175,9 @@ type NamespaceSnapshot struct {
 	ClusterMeta
 	Namespaces []NamespaceSummary `json:"namespaces"`
 	// WorkloadsReady reports whether the pod + workload ingest stores this snapshot's
-	// workload-presence flags derive from have SETTLED (synced/degraded/permission-skipped).
+	// workload-presence flags come from stores that actually synced or were permission-skipped.
 	// It is a backend-internal readiness signal — the cluster lifecycle gate flips a cluster
-	// to Ready only on a namespace snapshot with this true, so "Ready" means data has loaded
+	// to Ready only on a namespace snapshot with this true, so "Ready" means available data loaded
 	// rather than merely "the namespace list served" (which is immediate). Not serialized: the
 	// frontend derives per-namespace state from workloadsUnknown, not this whole-snapshot flag.
 	WorkloadsReady bool `json:"-"`
@@ -498,8 +500,9 @@ func (b *NamespaceBuilder) workloadTrackerReady() bool {
 	// Non-blocking: read whether the cut workload + pod ingest stores have synced rather than
 	// waiting on them. The namespace list must paint without blocking on the pod/workload initial
 	// LIST. Positive workload rows are usable immediately; a namespace's absence of workloads is
-	// authoritative only once the tracked stores settle, so before then it is reported as
-	// not-yet-known and the workload-presence source clock re-delivers the corrected snapshot.
+	// authoritative only once the tracked stores actually sync or are permission-skipped, so
+	// before then it is reported as not-yet-known and the workload-presence source clock
+	// re-delivers the corrected snapshot.
 	return b.tracker.Synced()
 }
 

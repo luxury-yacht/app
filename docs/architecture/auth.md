@@ -113,9 +113,11 @@ normal selection setup may reopen the runtime. Recovery must successfully
 schedule the rebuilt manager before aggregate routing and catalog collection may
 expose the recovered subsystem; inability to schedule it aborts publication.
 Informer and ingest startup then runs concurrently with downstream readiness
-gates. A namespace snapshot with unsettled workload stores remains Loading; the
-readiness sweep or namespace doorbell rebuilds it after those stores settle and
-transitions the cluster to Ready. Pinned by
+gates. A namespace snapshot whose workload stores have not completed a real
+initial sync remains Loading (or Loading Slowly), even after the ingest liveness
+deadline releases domain requests. The readiness sweep or namespace doorbell
+rebuilds it after those stores actually sync, or are explicitly permission-skipped,
+and transitions the cluster to Ready. Pinned by
 `TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness`,
 `TestClusterSubsystemRebuildDoesNotPublishWhenRefreshRuntimeStopped`, and
 `TestTeardownRefreshSubsystemBlocksRuntimeResurrectionUntilSetup`.
