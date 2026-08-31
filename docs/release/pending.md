@@ -40,12 +40,8 @@
   deadline, then becomes **Data incomplete** if a Pod or workload source is still
   missing. Available views and actions remain usable while retries continue; the
   cluster reports **Ready** only after its available Pod and workload data loads.
-- Initial cluster loading now limits the pre-deadline ingest request burst and
-  starts the Pod/workload feeds first, avoiding contention that could delay the
-  Workloads view past its readiness deadline. Degraded-ingest warnings now name
-  bespoke resources instead of logging an empty resource identity. On slow
-  clusters, lower-priority sources may briefly report degraded while queued;
-  they remain visibly partial and recover through background LIST+WATCH.
+- Degraded-ingest warnings now name bespoke resources instead of logging an
+  empty resource identity.
 - Kubernetes informer startup now uses a complete LIST followed by WATCH instead
   of the beta WatchList stream, bypassing the minute-long initial streams observed
   for large Pod and Secret collections on otherwise compatible clusters or proxies.

@@ -26,12 +26,6 @@ const (
 
 // Refresh subsystem settings.
 const (
-	// RefreshIngestInitialSyncConcurrency caps the ingest-owned initial snapshots
-	// admitted concurrently before the shared liveness deadline. This is an API
-	// pressure budget independent of how many resources the workload-priority set
-	// currently contains.
-	RefreshIngestInitialSyncConcurrency = 6
-
 	// RefreshResyncInterval controls how often shared informers perform a full resync sweep.
 	// This is the cadence we hand to Kubernetes SharedInformers for their built-in "full resync" sweep.
 	// At that interval the informer re-lists the resource from the API to reconcile any missed events.
@@ -51,11 +45,10 @@ const (
 
 	// RefreshInformerSyncDeadline bounds how long a single informer may take to reach
 	// its initial sync after Start before it is marked DEGRADED and excluded from the
-	// "all settled" readiness gate. A WatchList stream behind a bookmark-stripping proxy
-	// never signals sync completion, so without this deadline one hung GVR would block
-	// the whole cluster's readiness forever. A degraded informer is logged once and keeps
-	// retrying in the background; it stops gating readiness so the rest of the cluster
-	// becomes usable.
+	// "all settled" readiness gate. Without this deadline, an unavailable API or a hung
+	// initial LIST for one GVR would block the whole cluster's readiness forever. A
+	// degraded informer is logged once and keeps retrying in the background; it stops
+	// gating readiness so the rest of the cluster becomes usable.
 	RefreshInformerSyncDeadline = 15 * time.Second
 
 	// RefreshMetricsInterval determines the cadence for the metrics poller (node/pod metrics).

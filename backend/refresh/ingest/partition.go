@@ -2,7 +2,6 @@ package ingest
 
 import (
 	"strings"
-	"sync"
 
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -30,16 +29,6 @@ func (s *ProjectingStore) SetExpectedPartitions(namespaces []string) {
 	if s.syncedPartitions == nil {
 		s.syncedPartitions = make(map[string]struct{}, len(namespaces))
 	}
-}
-
-// HasSyncedPartition reports whether one reflector's initial snapshot has
-// landed. The bounded startup queue uses this narrower signal so a completed
-// namespace can release its slot before sibling partitions finish.
-func (s *ProjectingStore) HasSyncedPartition(namespace string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	_, ok := s.syncedPartitions[namespace]
-	return ok
 }
 
 // PartitionView returns the cache.Store a single namespace's reflector writes
@@ -199,10 +188,8 @@ func (s *ProjectingStore) PartitionResourceVersions() map[string]string {
 // per-object mutations pass straight to the shared store; Replace, MarkSynced,
 // and Bookmark are scoped to the view's namespace partition.
 type StorePartitionView struct {
-	store               *ProjectingStore
-	namespace           string
-	initialSyncOnce     sync.Once
-	initialSyncObserver func()
+	store     *ProjectingStore
+	namespace string
 }
 
 var _ cache.Store = (*StorePartitionView)(nil)
@@ -221,16 +208,11 @@ func (v *StorePartitionView) GetByKey(key string) (interface{}, bool, error) {
 func (v *StorePartitionView) Resync() error { return v.store.Resync() }
 
 func (v *StorePartitionView) Replace(list []interface{}, resourceVersion string) error {
-	if err := v.store.ReplacePartition(v.namespace, list, resourceVersion); err != nil {
-		return err
-	}
-	v.notifyInitialSync()
-	return nil
+	return v.store.ReplacePartition(v.namespace, list, resourceVersion)
 }
 
 func (v *StorePartitionView) MarkSynced() {
 	v.store.MarkPartitionSynced(v.namespace)
-	v.notifyInitialSync()
 }
 
 func (v *StorePartitionView) Bookmark(rv string) {
@@ -243,18 +225,4 @@ func (v *StorePartitionView) LastStoreSyncResourceVersion() string {
 	v.store.mu.RLock()
 	defer v.store.mu.RUnlock()
 	return v.store.partitionRVs[v.namespace]
-}
-
-// setInitialSyncObserver installs the startup timing callback before this
-// partition's reflector launches. sync.Once keeps later relists from reporting
-// duplicate initial-sync recovery events.
-func (v *StorePartitionView) setInitialSyncObserver(observer func()) {
-	v.initialSyncObserver = observer
-}
-
-func (v *StorePartitionView) notifyInitialSync() {
-	if v.initialSyncObserver == nil {
-		return
-	}
-	v.initialSyncOnce.Do(v.initialSyncObserver)
 }

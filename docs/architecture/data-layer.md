@@ -93,20 +93,12 @@ the completed `v2` rewrite plan.
   the source completes a real initial list, snapshots that depend on it report
   partial/inexact data with a syncing issue instead of an authoritative empty
   result.
-- **Bounded, workload-first cold start.** The ingest manager declares every
-  permission-approved partition before launching reflectors, then admits a bounded
-  number of initial snapshots before the liveness deadline. The priority order is the
-  shared Workloads domain composition intersected with the registry's ingest-owned
-  resources; ReplicaSets and HPA currently start through the typed informer factory. A
-  slot opens when its partition lands or the shared 15-second liveness deadline expires.
-  On a slow cluster, lower-priority resources can therefore reach the deadline while
-  still queued; they report degraded/partial rather than empty, launch as the deadline
-  releases the queue, and continue LIST+WATCH recovery in the background.
-  Startup diagnostics split queue wait from active request time for every
-  GVR/namespace partition and record its priority, queue position, LIST/WatchList/watch
-  attempt counts, in-flight request count, last LIST size/duration, last request error,
-  deadline state, and eventual recovery. Deadline warnings include the slowest pending
-  partitions; the settled summary includes both completed and incomplete task timing.
+- **Immediate parallel cold start.** The ingest manager declares each kind's
+  permission-approved partitions before launching that kind, then starts every permitted
+  reflector without an additional application-level admission queue. Client-go's
+  per-cluster REST rate limiter remains the request-pressure boundary. The shared
+  15-second liveness deadline can mark a still-syncing source degraded, but never delays
+  another source from beginning its initial LIST.
 - **Two cutover shapes.** Registry-driven single-object kinds flip a descriptor
   `IngestOwned` flag (the generic path wires maintained store, catalog, object-map,
   response-cache). Cross-kind-join domains (pods, workloads, network, nodes) use a

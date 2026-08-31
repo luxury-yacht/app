@@ -78,8 +78,8 @@ type ObjectMapProjector func(obj metav1.Object) interface{}
 type entry struct {
 	desc streamspec.Descriptor
 	// gvr is the concrete resource identity used to register this entry. Bespoke
-	// reflectors have no stream descriptor, so readiness diagnostics must use
-	// this field rather than desc.GVR() (whose zero value logs as /, Resource=).
+	// reflectors have no stream descriptor, so readiness warnings must use this
+	// field rather than desc.GVR() (whose zero value logs as /, Resource=).
 	gvr   schema.GroupVersionResource
 	store *ProjectingStore
 
@@ -106,7 +106,7 @@ type entry struct {
 	objectMapProject ObjectMapProjector
 
 	// degraded latches true when this kind's store has not synced within the manager's
-	// sync deadline, so a single never-syncing reflector (RBAC denial, hung WatchList,
+	// sync deadline, so a single never-syncing reflector (RBAC denial, hung initial LIST,
 	// projection error) is excluded from the readiness gate instead of blocking it
 	// forever — mirroring the informer factory's per-informer degrade (issue #225,
 	// informer/factory.go stateSettled). The reflector keeps retrying LIST+WATCH in the
@@ -142,7 +142,6 @@ type ingestPart struct {
 	lw        cache.ListerWatcher
 	reflector *ProjectingReflector
 	view      *StorePartitionView
-	startup   *initialIngestTaskTelemetry
 
 	// resumeRV, when set (RestoreStores, before Start), makes Start attempt a
 	// delta resume of THIS part's watch from the persisted resourceVersion
@@ -201,12 +200,8 @@ type IngestManager struct {
 	// which Start stamps once. now is the clock, injectable in tests.
 	syncDeadline time.Duration
 	now          func() time.Time
-	// initialSyncConcurrency bounds only the startup queue. A zero value uses
-	// config.RefreshIngestInitialSyncConcurrency, which keeps white-box managers
-	// in tests on the production default unless a test deliberately overrides it.
-	initialSyncConcurrency int
-	startedAtMu            sync.Mutex
-	startedAt              time.Time
+	startedAtMu  sync.Mutex
+	startedAt    time.Time
 
 	// permissionFilter, when set, reports whether the identity may list+watch a kind
 	// in the given namespace ("" = cluster-wide). Start skips (does not launch) any
@@ -242,16 +237,15 @@ func NewIngestManager(
 		namespaced[d.Identity.GVR()] = d.Identity.Namespaced
 	}
 	m := &IngestManager{
-		meta:                   meta,
-		kube:                   kube,
-		apiext:                 apiext,
-		gateway:                gateway,
-		entries:                make(map[schema.GroupVersionResource]*entry),
-		syncDeadline:           config.RefreshInformerSyncDeadline,
-		now:                    time.Now,
-		initialSyncConcurrency: config.RefreshIngestInitialSyncConcurrency,
-		scope:                  append([]string(nil), allowedNamespaces...),
-		namespacedGVR:          namespaced,
+		meta:          meta,
+		kube:          kube,
+		apiext:        apiext,
+		gateway:       gateway,
+		entries:       make(map[schema.GroupVersionResource]*entry),
+		syncDeadline:  config.RefreshInformerSyncDeadline,
+		now:           time.Now,
+		scope:         append([]string(nil), allowedNamespaces...),
+		namespacedGVR: namespaced,
 	}
 	for _, desc := range kindregistry.StreamDescriptors() {
 		m.addDescriptor(desc)
@@ -309,8 +303,6 @@ func (m *IngestManager) installReflector(e *entry, gvr schema.GroupVersionResour
 		// informers do. The process-wide startup transport policy currently disables
 		// WatchList before any reflector is constructed.
 		wrapped := cache.ToListWatcherWithWatchListSemantics(lw, restClient)
-		startup := newInitialIngestTaskTelemetry()
-		instrumented := newStartupDiagnosticListerWatcher(wrapped, startup, func() time.Time { return m.now() })
 		name := gvk.String()
 		if namespace != "" {
 			name += " ns=" + namespace
@@ -318,10 +310,9 @@ func (m *IngestManager) installReflector(e *entry, gvr schema.GroupVersionResour
 		view := e.store.PartitionView(namespace)
 		e.parts = append(e.parts, &ingestPart{
 			namespace: namespace,
-			lw:        instrumented,
-			reflector: NewProjectingReflector(name, instrumented, example, view, resyncDisabled),
+			lw:        wrapped,
+			reflector: NewProjectingReflector(name, wrapped, example, view, resyncDisabled),
 			view:      view,
-			startup:   startup,
 		})
 	}
 	m.entries[gvr] = e
@@ -616,12 +607,9 @@ func (m *IngestManager) Start(ctx context.Context) {
 		return
 	}
 	m.markStarted()
-	tasks := prepareInitialIngestTasks(entries, filter)
-	initialWaveStarted := make(chan struct{})
-	go m.runInitialIngestQueue(runCtx, tasks, initialWaveStarted)
-	// Preserve the hub's ordering contract: the workload-priority ingest wave is
-	// launched before Start returns and the shared informer factory begins.
-	<-initialWaveStarted
+	for _, launch := range entries {
+		launchIngestEntry(runCtx, launch, filter)
+	}
 
 	// One log line when the initial syncs settle, naming the slowest kinds — the
 	// per-kind cold-start telemetry (see InitialSyncDurations).
@@ -646,11 +634,49 @@ func (m *IngestManager) beginRun(ctx context.Context) (context.Context, []ingest
 }
 
 func (m *IngestManager) markStarted() {
-	// Stamp one readiness window for the whole startup queue. Data still queued
-	// or actively syncing when it expires degrades rather than blocking startup.
+	// Stamp the readiness deadline from a single moment, so a kind whose initial
+	// relist never completes degrades out of the gate rather than blocking it.
 	m.startedAtMu.Lock()
 	m.startedAt = m.now()
 	m.startedAtMu.Unlock()
+}
+
+func launchIngestEntry(runCtx context.Context, launch ingestLaunchEntry, filter func(string, string, string) bool) {
+	launched := permittedIngestPartitions(launch, filter)
+	// Expected partitions must be declared BEFORE any reflector of the entry
+	// runs, so the store's sync gate counts exactly the launched set.
+	launch.e.store.SetExpectedPartitions(launched)
+	for _, part := range launch.e.parts {
+		if part.skipped.Load() {
+			continue
+		}
+		part := part
+		// Resume from a persisted resourceVersion when one was set (the store was
+		// restored full from disk); otherwise — the default — this is exactly
+		// part.reflector.Run.
+		go runWithResume(runCtx, part.lw, part.view, part.resumeRV, func() { part.reflector.Run(runCtx) })
+	}
+}
+
+func permittedIngestPartitions(launch ingestLaunchEntry, filter func(string, string, string) bool) []string {
+	launched := make([]string, 0, len(launch.e.parts))
+	for _, part := range launch.e.parts {
+		if filter != nil && !filter(launch.gvr.Group, launch.gvr.Resource, part.namespace) {
+			part.skipped.Store(true)
+			logSkippedIngestPart(launch.gvr, part.namespace)
+			continue
+		}
+		launched = append(launched, part.namespace)
+	}
+	return launched
+}
+
+func logSkippedIngestPart(gvr schema.GroupVersionResource, namespace string) {
+	if namespace == "" {
+		klog.V(2).Infof("ingest: skipping %s — identity cannot list/watch it (logged once)", gvr)
+		return
+	}
+	klog.V(2).Infof("ingest: skipping %s in %q — identity cannot list/watch it there (logged once)", gvr, namespace)
 }
 
 // SetResumeResourceVersion records the resourceVersion gvr's reflector should resume its
@@ -812,7 +838,7 @@ func (m *IngestManager) Stop() {
 
 // HasSynced reports whether every kind's store has SETTLED — synced or degraded past
 // the sync deadline. It is the readiness gate the composite hub blocks on; gating it
-// on raw sync alone let a single never-syncing reflector (RBAC denial, hung WatchList,
+// on raw sync alone let a single never-syncing reflector (RBAC denial, hung initial LIST,
 // projection error) wedge the whole subsystem's readiness — and, because Manager.Start
 // blocks on it before starting the metrics poller, wedge metrics too. The deadline
 // degrade mirrors the informer factory's stateSettled (issue #225).
@@ -838,11 +864,10 @@ func (m *IngestManager) HasSynced() bool {
 }
 
 // entrySettled reports whether one kind's store has stopped gating readiness: it has
-// synced, was permission-skipped, or its data was not ready when the shared startup
-// deadline expired (flipped to degraded here, logged once). The source may still be
-// queued or already syncing; either way its reflector runs after the deadline and keeps
-// retrying LIST+WATCH, so a later real sync replaces the degraded data state. Degradation
-// only stops the source BLOCKING the initial gate.
+// synced, was permission-skipped, or exceeded the initial-sync deadline (flipped to
+// degraded here, logged once). A degraded reflector keeps retrying LIST+WATCH, so a
+// later real sync replaces the degraded data state. Degradation only stops the source
+// BLOCKING the initial gate.
 func (m *IngestManager) entrySettled(e *entry) bool {
 	if e.allPartsSkipped() {
 		// Permission-skipped: reflector never launched, store stays empty; settled so it
@@ -862,20 +887,18 @@ func (m *IngestManager) entrySettled(e *entry) bool {
 		// into the settled decision made a raced HasSynced return a false
 		// negative, which can block Manager.Start's readiness wait.
 		if e.degraded.CompareAndSwap(false, true) {
-			klog.Warningf("ingest data for %s in cluster %s was not ready within the startup deadline — marking degraded and excluding from readiness; LIST+WATCH continues in the background; %s",
-				e.gvr, m.meta.ClusterName, m.formatEntryInitialSyncDiagnostics(e))
+			klog.Warningf("ingest data for %s in cluster %s did not sync within the deadline — marking degraded and excluding from readiness (LIST+WATCH retries continue in the background)",
+				e.gvr, m.meta.ClusterName)
 		}
 		return true
 	}
 	return false
 }
 
-// syncDeadlineExceeded reports whether the per-cluster ingest startup deadline has
-// passed since Start stamped startedAt. The deadline includes time waiting in the
-// bounded startup queue, so a queued resource can degrade before its first request;
-// once the deadline passes, queue waiters release and every remaining reflector starts
-// while readiness honestly reports its source as degraded until a real sync lands. A
-// zero startedAt (Start not yet called) or non-positive deadline never fires.
+// syncDeadlineExceeded reports whether the per-cluster ingest sync deadline has passed
+// since Start stamped startedAt. A zero startedAt (Start not yet called) or a
+// non-positive deadline never fires, so the deadline can only degrade a store after its
+// reflector has been launched.
 func (m *IngestManager) syncDeadlineExceeded() bool {
 	if m.syncDeadline <= 0 {
 		return false
@@ -1249,25 +1272,6 @@ func (m *IngestManager) logInitialSyncSummary(ctx context.Context) {
 		}
 		parts = append(parts, fmt.Sprintf("%s=%dms", kd.gvr.Resource, kd.d.Milliseconds()))
 	}
-
-	taskDiagnostics := m.initialSyncDiagnostics()
-	sort.Slice(taskDiagnostics, func(i, j int) bool { return taskDiagnostics[i].Total > taskDiagnostics[j].Total })
-	const maxTaskDiagnostics = 8
-	slowTasks := make([]string, 0, maxTaskDiagnostics)
-	incompleteTasks := make([]string, 0, maxTaskDiagnostics)
-	for _, diagnostic := range taskDiagnostics {
-		if diagnostic.Phase == initialSyncPhaseSynced && len(slowTasks) < maxTaskDiagnostics {
-			slowTasks = append(slowTasks, formatInitialSyncDiagnostic(diagnostic))
-		}
-		if diagnostic.Degraded && diagnostic.Phase != initialSyncPhaseSynced && len(incompleteTasks) < maxTaskDiagnostics {
-			incompleteTasks = append(incompleteTasks, formatInitialSyncDiagnostic(diagnostic))
-		}
-	}
-	klog.Infof("ingest initial sync settled for cluster %s: %d kind(s) synced; slowest: %s; task timing: %s; incomplete: %s",
-		m.meta.ClusterName,
-		len(durations),
-		strings.Join(parts, " "),
-		strings.Join(slowTasks, "; "),
-		strings.Join(incompleteTasks, "; "),
-	)
+	klog.Infof("ingest initial sync settled for cluster %s: %d kind(s) synced; slowest: %s",
+		m.meta.ClusterName, len(durations), strings.Join(parts, " "))
 }
