@@ -16,6 +16,7 @@ const (
 	ClusterStateConnected    ClusterLifecycleState = "connected"
 	ClusterStateLoading      ClusterLifecycleState = "loading"
 	ClusterStateLoadingSlow  ClusterLifecycleState = "loading_slow"
+	ClusterStateDegraded     ClusterLifecycleState = "degraded"
 	ClusterStateReady        ClusterLifecycleState = "ready"
 	ClusterStateDisconnected ClusterLifecycleState = "disconnected"
 	ClusterStateReconnecting ClusterLifecycleState = "reconnecting"
@@ -143,7 +144,7 @@ func isClientInitializationState(state ClusterLifecycleState) bool {
 }
 
 func isRefreshServingState(state ClusterLifecycleState) bool {
-	return state == ClusterStateLoading || state == ClusterStateLoadingSlow || state == ClusterStateReady
+	return state == ClusterStateLoading || state == ClusterStateLoadingSlow || state == ClusterStateDegraded || state == ClusterStateReady
 }
 
 // GetState returns the current lifecycle state for a cluster.

@@ -174,13 +174,10 @@ type namespacePodIngestSource interface {
 type NamespaceSnapshot struct {
 	ClusterMeta
 	Namespaces []NamespaceSummary `json:"namespaces"`
-	// WorkloadsReady reports whether the pod + workload ingest stores this snapshot's
-	// workload-presence flags come from stores that actually synced or were permission-skipped.
-	// It is a backend-internal readiness signal — the cluster lifecycle gate flips a cluster
-	// to Ready only on a namespace snapshot with this true, so "Ready" means available data loaded
-	// rather than merely "the namespace list served" (which is immediate). Not serialized: the
-	// frontend derives per-namespace state from workloadsUnknown, not this whole-snapshot flag.
-	WorkloadsReady bool `json:"-"`
+	// WorkloadReadiness is the backend-internal startup state of the pod + workload sources.
+	// It is not serialized: rows expose uncertainty through workloadsUnknown, while the aggregate
+	// lifecycle consumes this typed state to distinguish pending, degraded, and ready.
+	WorkloadReadiness NamespaceWorkloadReadiness `json:"-"`
 }
 
 // NamespaceSummary provides high level namespace metadata.
@@ -408,7 +405,7 @@ type namespaceBuildInputs struct {
 	meta               ClusterMeta
 	namespaces         []*corev1.Namespace
 	scopeStatuses      map[string]NamespaceScopeStatus
-	trackerReady       bool
+	workloadReadiness  NamespaceWorkloadReadiness
 	workloadRollups    namespaceWorkloadRollups
 	warningEvents      map[string]int
 	warningEventsState NamespaceSignalState
@@ -425,7 +422,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		return nil, err
 	}
 	sortNamespaces(namespaces)
-	trackerReady := b.workloadTrackerReady()
+	workloadReadiness := b.workloadTrackerReadiness()
 	workloadRollups := namespaceWorkloadRollupsFromIngest(b.ingest)
 	warningEvents, warningEventsState := b.warningEventRollups()
 	quotaRollups, quotaState := namespaceQuotaRollupsFromIngest(b.ingest)
@@ -433,7 +430,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		meta:               meta,
 		namespaces:         namespaces,
 		scopeStatuses:      scopeStatuses,
-		trackerReady:       trackerReady,
+		workloadReadiness:  workloadReadiness,
 		workloadRollups:    workloadRollups,
 		warningEvents:      warningEvents,
 		warningEventsState: warningEventsState,
@@ -493,9 +490,9 @@ func sortNamespaces(namespaces []*corev1.Namespace) {
 	}
 }
 
-func (b *NamespaceBuilder) workloadTrackerReady() bool {
+func (b *NamespaceBuilder) workloadTrackerReadiness() NamespaceWorkloadReadiness {
 	if b.tracker == nil {
-		return true
+		return NamespaceWorkloadReady
 	}
 	// Non-blocking: read whether the cut workload + pod ingest stores have synced rather than
 	// waiting on them. The namespace list must paint without blocking on the pod/workload initial
@@ -503,7 +500,7 @@ func (b *NamespaceBuilder) workloadTrackerReady() bool {
 	// authoritative only once the tracked stores actually sync or are permission-skipped, so
 	// before then it is reported as not-yet-known and the workload-presence source clock
 	// re-delivers the corrected snapshot.
-	return b.tracker.Synced()
+	return b.tracker.Readiness()
 }
 
 func (b *NamespaceBuilder) buildNamespaceSummaries(inputs namespaceBuildInputs) ([]NamespaceSummary, uint64) {
@@ -518,7 +515,7 @@ func (b *NamespaceBuilder) buildNamespaceSummaries(inputs namespaceBuildInputs) 
 		// tracked (every workload kind permission-skipped) means presence is
 		// genuinely unknown — reporting it as authoritative would dim every
 		// configured namespace. Unscoped behavior is unchanged.
-		workloadsKnown := hasWorkloads || (inputs.trackerReady && (len(b.scope) == 0 || b.tracksAnyWorkloadKind()))
+		workloadsKnown := hasWorkloads || (inputs.workloadReadiness == NamespaceWorkloadReady && (len(b.scope) == 0 || b.tracksAnyWorkloadKind()))
 		model := namespacepkg.BuildResourceModel(inputs.meta.ClusterID, ns, hasWorkloads, workloadsKnown, nil, nil)
 		facts := namespacepkg.BuildFacts(inputs.meta.ClusterID, ns, hasWorkloads, workloadsKnown, nil, nil, resourcemodel.ResourceModelBuildOptions{})
 		items = append(items, NamespaceSummary{
@@ -563,7 +560,7 @@ func (b *NamespaceBuilder) namespaceSnapshot(
 		Domain:  "namespaces",
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceSnapshot{ClusterMeta: inputs.meta, Namespaces: items, WorkloadsReady: inputs.trackerReady},
+		Payload: NamespaceSnapshot{ClusterMeta: inputs.meta, Namespaces: items, WorkloadReadiness: inputs.workloadReadiness},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(items),
 		},
@@ -575,7 +572,7 @@ func (b *NamespaceBuilder) namespaceSnapshot(
 		// readiness changes; otherwise an unchanged validator makes the delivery layer return
 		// 304 Not Modified and the client keeps a stale (e.g. the first, pre-sync) snapshot.
 		SourceVersions: map[string]string{
-			"workloads":      workloadRollupSignature(inputs.workloadRollups, inputs.trackerReady),
+			"workloads":      workloadRollupSignature(inputs.workloadRollups, inputs.workloadReadiness),
 			"warning-events": warningEventRollupSignature(inputs.warningEvents, inputs.warningEventsState),
 			"quota-pressure": namespaceQuotaRollupSignature(inputs.quotaRollups, inputs.quotaState),
 		},
@@ -726,7 +723,7 @@ func namespaceQuotaRollupSignature(rollups map[string]namespaceQuotaRollup, stat
 // presence, health, and active-pod reservations plus whether empty absence is
 // authoritative yet. Namespace resourceVersions do not capture those values,
 // so every rollup change needs a new snapshot validator.
-func workloadRollupSignature(rollups namespaceWorkloadRollups, ready bool) string {
+func workloadRollupSignature(rollups namespaceWorkloadRollups, readiness NamespaceWorkloadReadiness) string {
 	names := make([]string, 0, len(rollups.namespaces)+len(rollups.unhealthy)+len(rollups.reservations))
 	seen := make(map[string]struct{}, len(rollups.namespaces)+len(rollups.unhealthy)+len(rollups.reservations))
 	for ns := range rollups.namespaces {
@@ -743,11 +740,7 @@ func workloadRollupSignature(rollups namespaceWorkloadRollups, ready bool) strin
 	}
 	sort.Strings(names)
 	h := fnv.New64a()
-	if ready {
-		_, _ = h.Write([]byte("ready"))
-	} else {
-		_, _ = h.Write([]byte("not-ready"))
-	}
+	_, _ = h.Write([]byte(readiness.String()))
 	_, _ = h.Write([]byte{0})
 	for _, ns := range names {
 		_, _ = h.Write([]byte(ns))

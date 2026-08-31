@@ -116,7 +116,7 @@ interface NamespaceProviderProps {
 }
 
 export const isNamespaceRefreshAvailable = (state: ClusterLifecycleState | undefined): boolean =>
-  state === 'loading' || state === 'loading_slow' || state === 'ready';
+  state === 'loading' || state === 'loading_slow' || state === 'degraded' || state === 'ready';
 
 const buildNamespaceScopes = (clusterIds: string[]): string[] => {
   const seen = new Set<string>();

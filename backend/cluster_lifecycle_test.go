@@ -90,6 +90,13 @@ func TestClusterLifecycleRejectsLateClientPhaseAfterSubsystemStarted(t *testing.
 	cl.SetState("cluster-a", ClusterStateReady)
 	cl.SetState("cluster-a", ClusterStateConnecting)
 	require.Equal(t, ClusterStateReady, cl.GetState("cluster-a"))
+
+	cl.SetState("cluster-b", ClusterStateDegraded)
+	cl.SetState("cluster-b", ClusterStateConnecting)
+	require.Equal(t, ClusterStateDegraded, cl.GetState("cluster-b"))
+	cl.SetState("cluster-b", ClusterStateConnected)
+	require.Equal(t, ClusterStateDegraded, cl.GetState("cluster-b"))
+	require.True(t, isRefreshServingState(ClusterStateDegraded))
 	cl.SetState("cluster-a", ClusterStateConnected)
 	require.Equal(t, ClusterStateReady, cl.GetState("cluster-a"))
 
@@ -98,6 +105,7 @@ func TestClusterLifecycleRejectsLateClientPhaseAfterSubsystemStarted(t *testing.
 		{"cluster-a", ClusterStateConnected, ClusterStateConnecting},
 		{"cluster-a", ClusterStateLoading, ClusterStateConnected},
 		{"cluster-a", ClusterStateReady, ClusterStateLoading},
+		{"cluster-b", ClusterStateDegraded, ""},
 	}, getEvents())
 }
 

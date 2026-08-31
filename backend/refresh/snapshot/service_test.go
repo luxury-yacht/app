@@ -218,7 +218,7 @@ func TestServiceBuildRecordsInformerSyncWait(t *testing.T) {
 
 // TestServiceDoesNotCacheNotReadyNamespaceSnapshots pins the cache rule for the fast
 // namespace paint: a snapshot built BEFORE the workload ingest stores are genuinely ready
-// (WorkloadsReady=false) must not be cached — the TTL would pin the pre-sync flags and
+// (pending readiness) must not be cached — the TTL would pin the pre-sync flags and
 // delay the cluster Ready flip by up to cache TTL + poll. Once ready, caching resumes.
 func TestServiceDoesNotCacheNotReadyNamespaceSnapshots(t *testing.T) {
 	reg := domain.New()
@@ -231,7 +231,7 @@ func TestServiceDoesNotCacheNotReadyNamespaceSnapshots(t *testing.T) {
 			return &refresh.Snapshot{
 				Domain:  "namespaces",
 				Scope:   scope,
-				Payload: NamespaceSnapshot{WorkloadsReady: ready},
+				Payload: NamespaceSnapshot{WorkloadReadiness: map[bool]NamespaceWorkloadReadiness{false: NamespaceWorkloadPending, true: NamespaceWorkloadReady}[ready]},
 			}, nil
 		},
 	}))
@@ -249,6 +249,29 @@ func TestServiceDoesNotCacheNotReadyNamespaceSnapshots(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.Equal(t, 3, builds, "ready namespace snapshots must be cached again")
+}
+
+func TestServiceDoesNotCacheDegradedNamespaceSnapshots(t *testing.T) {
+	reg := domain.New()
+	builds := 0
+	require.NoError(t, reg.Register(refresh.DomainConfig{
+		Name: "namespaces",
+		BuildSnapshot: func(_ context.Context, scope string) (*refresh.Snapshot, error) {
+			builds++
+			return &refresh.Snapshot{
+				Domain:  "namespaces",
+				Scope:   scope,
+				Payload: NamespaceSnapshot{WorkloadReadiness: NamespaceWorkloadDegraded},
+			}, nil
+		},
+	}))
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
+
+	for i := 0; i < 2; i++ {
+		_, err := service.Build(context.Background(), "namespaces", "cluster-a|")
+		require.NoError(t, err)
+	}
+	require.Equal(t, 2, builds, "degraded namespace snapshots must rebuild so late recovery is immediate")
 }
 
 func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {

@@ -16,6 +16,7 @@ export type ClusterLifecycleState =
   | 'connected'
   | 'loading'
   | 'loading_slow'
+  | 'degraded'
   | 'ready'
   | 'disconnected'
   | 'reconnecting';
@@ -26,10 +27,14 @@ export const CLUSTER_LIFECYCLE_STATES: ReadonlySet<string> = new Set<ClusterLife
   'connected',
   'loading',
   'loading_slow',
+  'degraded',
   'ready',
   'disconnected',
   'reconnecting',
 ]);
+
+export const isClusterOperationalState = (state: ClusterLifecycleState | undefined): boolean =>
+  state === 'degraded' || state === 'ready';
 
 // Log each distinct unrecognized state at most once per session (the backend
 // emitter is typed, so this should only fire on backend/frontend version skew).

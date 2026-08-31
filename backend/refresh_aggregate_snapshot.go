@@ -21,9 +21,9 @@ type aggregateSnapshotService struct {
 	services     map[string]refresh.SnapshotBuilder
 	mu           sync.RWMutex
 
-	// onNamespaceSnapshot is called when a namespace snapshot builds successfully.
-	// Used by the lifecycle module to transition loading -> ready.
-	onNamespaceSnapshot func(clusterID string)
+	// onNamespaceSnapshot is called when a namespace snapshot reaches a settled workload state.
+	// Used by the lifecycle module to transition loading -> degraded -> ready.
+	onNamespaceSnapshot func(clusterID string, readiness snapshot.NamespaceWorkloadReadiness)
 }
 
 // newAggregateSnapshotService builds an aggregator for the provided cluster snapshot services.
@@ -82,34 +82,35 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 		// "loading" forever. The error still propagates: the client renders
 		// the permission message instead of a namespace list.
 		if domain == "namespaces" && refresh.IsPermissionDenied(err) {
-			s.notifyNamespaceSnapshot(target)
+			s.notifyNamespaceSnapshot(target, snapshot.NamespaceWorkloadReady)
 		}
 		return nil, err
 	}
 
-	// Notify the lifecycle module only on a namespace snapshot whose pod/workload ingest stores
-	// have actually synced or were permission-skipped (WorkloadsReady). The namespace list serves
-	// immediately (it no longer blocks on that sync — the sidebar paints fast), so firing on every
-	// namespace serve would flip the cluster to Ready before any data has loaded. Gating on
-	// WorkloadsReady restores the pre-fast-paint meaning of Ready ("data is loaded") while keeping
-	// the fast list. The callback is itself state-gated, so this also recovers clusters that
-	// re-enter loading after an in-place subsystem rebuild once their stores become genuinely ready.
-	if domain == "namespaces" && namespaceSnapshotWorkloadsReady(snapshotData) {
-		s.notifyNamespaceSnapshot(target)
+	// Notify the lifecycle module only once workload startup is settled. Deadline settlement
+	// produces Degraded (usable but incomplete); actual sync or an explicit permission skip
+	// produces Ready. Pending snapshots still serve the fast namespace paint without claiming
+	// either settled state. Later builds carry Degraded -> Ready recovery through the same callback.
+	if domain == "namespaces" {
+		readiness := namespaceSnapshotWorkloadReadiness(snapshotData)
+		if readiness != snapshot.NamespaceWorkloadPending {
+			s.notifyNamespaceSnapshot(target, readiness)
+		}
 	}
 	return snapshotData, nil
 }
 
-// namespaceSnapshotWorkloadsReady reports whether a namespaces snapshot's pod/workload ingest
-// stores actually synced or were permission-skipped, so the readiness gate fires only when the
-// cluster's available data has loaded. A snapshot with a non-namespace payload (defensive) is
-// treated as not ready.
-func namespaceSnapshotWorkloadsReady(snap *refresh.Snapshot) bool {
+// namespaceSnapshotWorkloadReadiness reads the typed backend-only workload startup state. A
+// non-namespace payload is defensively treated as pending.
+func namespaceSnapshotWorkloadReadiness(snap *refresh.Snapshot) snapshot.NamespaceWorkloadReadiness {
 	if snap == nil {
-		return false
+		return snapshot.NamespaceWorkloadPending
 	}
 	payload, ok := snap.Payload.(snapshot.NamespaceSnapshot)
-	return ok && payload.WorkloadsReady
+	if !ok {
+		return snapshot.NamespaceWorkloadPending
+	}
+	return payload.WorkloadReadiness
 }
 
 // resolveTarget chooses which cluster should handle the requested domain/scope pair.
@@ -153,24 +154,24 @@ func (s *aggregateSnapshotService) Update(clusterOrder []string, subsystems map[
 }
 
 // notifyNamespaceSnapshot fires the lifecycle callback for a successful namespace snapshot.
-func (s *aggregateSnapshotService) notifyNamespaceSnapshot(clusterID string) {
+func (s *aggregateSnapshotService) notifyNamespaceSnapshot(clusterID string, readiness snapshot.NamespaceWorkloadReadiness) {
 	if s.onNamespaceSnapshot == nil {
 		return
 	}
-	s.onNamespaceSnapshot(clusterID)
+	s.onNamespaceSnapshot(clusterID, readiness)
 }
 
-// runNamespacesReadinessSelfBuild closes the cluster-Ready loop server-side.
-// The Ready transition only ever fires from a namespaces snapshot build
+// runNamespacesReadinessSelfBuild closes the cluster workload-readiness loop server-side.
+// Settled and Ready transitions only ever fire from a namespaces snapshot build
 // (Build → notifyNamespaceSnapshot above), and historically that build was
 // requested by the FRONTEND — a chain of lifecycle-event relays, scope
 // derivation, and fetch machinery whose failure wedged clusters in
 // loading/loading_slow with no retry (observed in the field: app opened on
 // the Overview view, zero namespaces requests, status stuck until a view
 // switch). The namespaces doorbell notifier re-arms until a post-settle
-// build lands, so self-building here on each pre-Ready doorbell converges to
-// Ready with no frontend involvement — and pre-warms the cache the doorbell
-// just invalidated. In steady state (ready) it is a no-op.
+// build lands, so self-building here on each pending/degraded doorbell converges
+// without frontend involvement — and pre-warms the cache the doorbell just
+// invalidated. In steady state (ready) it is a no-op.
 func runNamespacesReadinessSelfBuild(
 	lifecycle *clusterLifecycle,
 	aggregate *aggregateSnapshotService,
@@ -180,7 +181,7 @@ func runNamespacesReadinessSelfBuild(
 		return
 	}
 	state := lifecycle.GetState(clusterID)
-	if state != ClusterStateLoading && state != ClusterStateLoadingSlow {
+	if state != ClusterStateLoading && state != ClusterStateLoadingSlow && state != ClusterStateDegraded {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

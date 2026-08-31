@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useOptionalClusterLifecycle } from '@/core/contexts/ClusterLifecycleContext';
+import { isClusterOperationalState } from '@/core/contexts/clusterLifecycleState';
 import { eventBus } from '@/core/events';
 import { type QueryPayloadItem, queryPermissions } from './permissionRead';
 import {
@@ -123,7 +124,7 @@ export const useCapabilities = (
         (descriptor) =>
           descriptor.clusterId &&
           clusterLifecycle !== undefined &&
-          !clusterLifecycle.isClusterReady(descriptor.clusterId)
+          !isClusterOperationalState(clusterLifecycle.getClusterState(descriptor.clusterId))
       ),
     [clusterLifecycle, namedDescriptors]
   );
@@ -134,7 +135,7 @@ export const useCapabilities = (
         (descriptor) =>
           !descriptor.clusterId ||
           clusterLifecycle === undefined ||
-          clusterLifecycle.isClusterReady(descriptor.clusterId)
+          isClusterOperationalState(clusterLifecycle.getClusterState(descriptor.clusterId))
       ),
     [clusterLifecycle, namedDescriptors]
   );
@@ -154,7 +155,7 @@ export const useCapabilities = (
       setRetryVersion((version) => version + 1);
     });
     const unsubscribeLifecycle = eventBus.on('cluster:lifecycle', (payload) => {
-      if (payload.state === 'ready' && clusterIds.has(payload.clusterId)) {
+      if (isClusterOperationalState(payload.state) && clusterIds.has(payload.clusterId)) {
         setRetryVersion((version) => version + 1);
       }
     });

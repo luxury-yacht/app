@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CLUSTER_LIFECYCLE_STATES,
   type ClusterLifecycleState,
+  isClusterOperationalState,
   parseClusterLifecycleState,
 } from './clusterLifecycleState';
 
@@ -26,6 +27,7 @@ describe('parseClusterLifecycleState', () => {
       'connected',
       'loading',
       'loading_slow',
+      'degraded',
       'ready',
       'disconnected',
       'reconnecting',
@@ -35,6 +37,13 @@ describe('parseClusterLifecycleState', () => {
     }
     // The runtime set and the union must not drift.
     expect([...CLUSTER_LIFECYCLE_STATES].sort()).toEqual([...known].sort());
+  });
+
+  it('treats degraded and ready clusters as operational without conflating them', () => {
+    expect(isClusterOperationalState('degraded')).toBe(true);
+    expect(isClusterOperationalState('ready')).toBe(true);
+    expect(isClusterOperationalState('loading_slow')).toBe(false);
+    expect(isClusterOperationalState(undefined)).toBe(false);
   });
 
   it('treats absence as undefined without warning', () => {

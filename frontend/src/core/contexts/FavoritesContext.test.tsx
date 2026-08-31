@@ -227,6 +227,18 @@ describe('FavoritesContext', () => {
     expect(mockSetActiveClusterView).toHaveBeenCalledWith(null);
   });
 
+  it('applies favorite navigation when the cluster is operational but data is incomplete', async () => {
+    mockClusterLifecycleState = 'degraded';
+    await renderProvider();
+
+    act(() => {
+      stateRef.current?.setPendingFavorite(makeFavorite());
+    });
+
+    expect(mockSetViewType).toHaveBeenCalledWith('namespace');
+    expect(mockOnNamespaceSelect).toHaveBeenCalledWith('default');
+  });
+
   it('waits for namespaces before applying namespace favorite navigation', async () => {
     mockNamespaceReady = false;
     await renderProvider();

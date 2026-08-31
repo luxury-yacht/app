@@ -4,8 +4,29 @@ import (
 	"sync/atomic"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/tools/cache"
 )
+
+// NamespaceWorkloadReadiness separates three states that used to collapse into one bool:
+// startup has not settled, the startup deadline settled without complete data, and every
+// workload source has produced an authoritative result.
+type NamespaceWorkloadReadiness uint8
+
+const (
+	NamespaceWorkloadPending NamespaceWorkloadReadiness = iota
+	NamespaceWorkloadDegraded
+	NamespaceWorkloadReady
+)
+
+func (r NamespaceWorkloadReadiness) String() string {
+	switch r {
+	case NamespaceWorkloadDegraded:
+		return "degraded"
+	case NamespaceWorkloadReady:
+		return "ready"
+	default:
+		return "pending"
+	}
+}
 
 // NamespaceWorkloadTracker is the namespace domain's sync-readiness gate over the cut workload
 // and pod ingest stores. Workload presence itself is read authoritatively from those stores on
@@ -13,10 +34,11 @@ import (
 // reads — so there is no incremental presence map to drift. This gate reports (non-blocking)
 // whether those stores have synced; until they have, a namespace's absence of workloads is
 // reported as not-yet-known rather than as a definitive "no workloads", so the build never has
-// to wait out the pod/workload initial LIST before the namespace list can paint.
+// to wait out the pod/workload initial LIST before the namespace list can paint. Its typed state
+// also lets the cluster become operational after deadline settlement without claiming Ready.
 type NamespaceWorkloadTracker struct {
-	syncFns []cache.InformerSynced
-	synced  atomic.Bool
+	readinessFns []func() NamespaceWorkloadReadiness
+	ready        atomic.Bool
 }
 
 // trackedWorkloadGVRs are the cut workload + pod kinds whose ingest-store sync the namespace
@@ -26,12 +48,13 @@ var trackedWorkloadGVRs = []schema.GroupVersionResource{
 }
 
 // trackerSyncSource is the ingest surface the cluster lifecycle gate waits on: whether the
-// manager has an entry for a kind (Tracks), whether that store completed a real initial sync,
-// and whether an explicit permission decision made the data unavailable. Deadline degradation
-// is intentionally excluded: it releases per-domain liveness gates but does not mean data loaded.
+// manager has an entry for a kind (Tracks), whether its liveness gate settled (HasSyncedFor),
+// whether the store completed a real initial sync, and whether an explicit permission decision
+// made the data unavailable. Deadline settlement is exposed as Degraded, never as Ready.
 // *ingest.IngestManager satisfies it.
 type trackerSyncSource interface {
 	Tracks(gvr schema.GroupVersionResource) bool
+	HasSyncedFor(gvr schema.GroupVersionResource) bool
 	RawHasSyncedFor(gvr schema.GroupVersionResource) bool
 	PermissionSkippedFor(gvr schema.GroupVersionResource) bool
 }
@@ -48,7 +71,7 @@ func newNamespaceWorkloadTracker() *NamespaceWorkloadTracker {
 func NewNamespaceWorkloadTracker(ingestManager trackerSyncSource) *NamespaceWorkloadTracker {
 	t := newNamespaceWorkloadTracker()
 	if ingestManager == nil {
-		t.synced.Store(true)
+		t.ready.Store(true)
 		return t
 	}
 	for _, gvr := range trackedWorkloadGVRs {
@@ -56,35 +79,51 @@ func NewNamespaceWorkloadTracker(ingestManager trackerSyncSource) *NamespaceWork
 			continue
 		}
 		gvr := gvr
-		t.syncFns = append(t.syncFns, func() bool {
-			return ingestManager.RawHasSyncedFor(gvr) || ingestManager.PermissionSkippedFor(gvr)
+		t.readinessFns = append(t.readinessFns, func() NamespaceWorkloadReadiness {
+			if ingestManager.RawHasSyncedFor(gvr) || ingestManager.PermissionSkippedFor(gvr) {
+				return NamespaceWorkloadReady
+			}
+			if ingestManager.HasSyncedFor(gvr) {
+				return NamespaceWorkloadDegraded
+			}
+			return NamespaceWorkloadPending
 		})
 	}
 	return t
 }
 
 // Synced reports, WITHOUT blocking, whether every tracked ingest store completed its real
-// initial sync or was explicitly permission-skipped, latching once true so later builds skip
-// the per-store check. The namespace build calls this rather than waiting on the stores: a false
-// result makes a namespace's absence of workloads report as not-yet-known, and the build's
-// workload-presence source clock re-delivers the authoritative snapshot once data is ready (see
-// NamespaceBuilder.Build).
+// initial sync or was explicitly permission-skipped. It remains the strict predicate used by
+// governor Cold admission; namespace lifecycle builds use Readiness so they retain Degraded.
 func (t *NamespaceWorkloadTracker) Synced() bool {
+	return t.Readiness() == NamespaceWorkloadReady
+}
+
+// Readiness reports the aggregate startup state without blocking. Pending dominates degraded,
+// and Ready latches because an informer that completed its initial sync remains authoritative
+// through transient watch reconnects.
+func (t *NamespaceWorkloadTracker) Readiness() NamespaceWorkloadReadiness {
 	if t == nil {
-		return false
+		return NamespaceWorkloadPending
 	}
-	if t.synced.Load() {
-		return true
+	if t.ready.Load() {
+		return NamespaceWorkloadReady
 	}
-	if len(t.syncFns) == 0 {
-		t.synced.Store(true)
-		return true
+	if len(t.readinessFns) == 0 {
+		t.ready.Store(true)
+		return NamespaceWorkloadReady
 	}
-	for _, synced := range t.syncFns {
-		if !synced() {
-			return false
+	readiness := NamespaceWorkloadReady
+	for _, sourceReadiness := range t.readinessFns {
+		switch sourceReadiness() {
+		case NamespaceWorkloadPending:
+			return NamespaceWorkloadPending
+		case NamespaceWorkloadDegraded:
+			readiness = NamespaceWorkloadDegraded
 		}
 	}
-	t.synced.Store(true)
-	return true
+	if readiness == NamespaceWorkloadReady {
+		t.ready.Store(true)
+	}
+	return readiness
 }

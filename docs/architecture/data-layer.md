@@ -177,20 +177,25 @@ the completed `v2` rewrite plan.
   the applied tier only after that work completes. Catalog gating reads the plan: it
   closes before cooling stops feeds and opens before re-warm starts the catalog. A live
   tier is reached only when both the subsystem and its cluster object catalog exist.
-- **Cluster-Ready is server-driven.** The loading→ready transition rides a namespaces
-  snapshot build after the workload stores actually sync or are explicitly
-  permission-skipped. Deadline degradation releases domain liveness gates but cannot
-  trigger the initial cluster Ready transition. The backend self-builds the snapshot
-  on each pre-Ready namespaces doorbell (`runNamespacesReadinessSelfBuild` via the
+- **Cluster workload readiness is server-driven.** A namespaces snapshot moves
+  `loading`/`loading_slow` to `degraded` once every workload source has settled but at
+  least one missed the deadline. `degraded` is operational: available refresh data,
+  permissions, actions, and navigation remain usable while incomplete tables stay
+  labelled. Only actual initial sync or an explicit permission skip moves the cluster
+  to `ready`. The backend self-builds the snapshot on each pending/degraded namespaces
+  doorbell (`runNamespacesReadinessSelfBuild` via the
   `Subsystem.NamespacesDoorbell` observer, wired per cluster in
   `buildRefreshSubsystemForSelection`). Readiness never depends on the frontend
-  asking first.
+  asking first. Idle re-arm ticks inspect only source readiness; they rebuild workload
+  rollups on an ingest event, a readiness edge, or a throttled pending change. Governor
+  Cold admission remains stricter and requires actual `ready` data for the current
+  subsystem generation.
 - **Client publication and lifecycle are ordered per cluster.** Startup settings and
   saved-selection restore run through the runtime selection coordinator. A completed
   client is installed inside its per-cluster operation before that operation publishes
   `connected`, without waiting for sibling builds. Building the refresh subsystem then
   advances the cluster to `loading`; stale client-build completions cannot demote
-  `loading`, `loading_slow`, or `ready` back to `connecting`/`connected`.
+  `loading`, `loading_slow`, `degraded`, or `ready` back to `connecting`/`connected`.
 
 ## Delivery — page + refetch-on-signal
 

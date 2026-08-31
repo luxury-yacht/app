@@ -37,6 +37,8 @@ describe('clusterReadiness', () => {
     expect(clusterReadiness.isServiceable('cluster-a')).toBe(true);
     lifecycle('cluster-a', 'loading_slow');
     expect(clusterReadiness.isServiceable('cluster-a')).toBe(true);
+    lifecycle('cluster-a', 'degraded');
+    expect(clusterReadiness.isServiceable('cluster-a')).toBe(true);
     lifecycle('cluster-a', 'ready');
     expect(clusterReadiness.isServiceable('cluster-a')).toBe(true);
   });

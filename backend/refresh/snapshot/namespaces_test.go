@@ -283,7 +283,7 @@ func TestNamespaceBuilderScopePayloadIdentityAndCatalogProjectionContract(t *tes
 
 func TestNamespaceBuilderReportsWorkloadsFromSyncedIngestStore(t *testing.T) {
 	tracker := newNamespaceWorkloadTracker()
-	tracker.synced.Store(true)
+	tracker.ready.Store(true)
 
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "100"},
@@ -324,7 +324,7 @@ func TestNamespaceBuilderReportsWorkloadsFromSyncedIngestStore(t *testing.T) {
 
 func TestNamespaceBuilderReportsUnhealthyWorkloadsWithoutDoubleCountingOwnedPods(t *testing.T) {
 	tracker := newNamespaceWorkloadTracker()
-	tracker.synced.Store(true)
+	tracker.ready.Store(true)
 
 	source := fakePodAggregateSource{
 		aggregates: []streamrows.PodAggregate{
@@ -365,7 +365,7 @@ func TestNamespaceBuilderWorkloadHealthChangesSourceVersion(t *testing.T) {
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
 	buildVersion := func(presentation string) string {
 		tracker := newNamespaceWorkloadTracker()
-		tracker.synced.Store(true)
+		tracker.ready.Store(true)
 		builder := &NamespaceBuilder{
 			namespaces: testsupport.NewNamespaceLister(t, ns),
 			ingest: fakePodAggregateSource{
@@ -393,7 +393,7 @@ func TestNamespaceBuilderDoesNotDimWhenTrackerMissesButIngestHasWorkloads(t *tes
 	// authoritative ingest store, so a tracker-map miss can never dim a namespace that has
 	// workloads.
 	tracker := newNamespaceWorkloadTracker()
-	tracker.synced.Store(true) // synced, but no incremental map records "alpha"
+	tracker.ready.Store(true) // synced, but no incremental map records "alpha"
 
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "100"},
@@ -497,11 +497,9 @@ func TestNamespaceBuilderDoesNotBlockOnUnsyncedIngest(t *testing.T) {
 	}
 }
 
-// TestNamespaceBuilderWorkloadsReadyTracksIngestSync pins the readiness signal the cluster
-// lifecycle gate reads: the snapshot's WorkloadsReady is false until the pod/workload ingest
-// stores actually sync (or are permission-skipped) and true once they have, so "Ready" means
-// available data has loaded (not just that the namespace list served immediately).
-func TestNamespaceBuilderWorkloadsReadyTracksIngestSync(t *testing.T) {
+// TestNamespaceBuilderWorkloadReadinessTracksIngestSync pins the typed readiness signal the
+// cluster lifecycle reads: pending stores do not claim readiness, while real sync produces Ready.
+func TestNamespaceBuilderWorkloadReadinessTracksIngestSync(t *testing.T) {
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
 	build := func(source fakePodAggregateSource) NamespaceSnapshot {
 		builder := &NamespaceBuilder{
@@ -517,7 +515,7 @@ func TestNamespaceBuilderWorkloadsReadyTracksIngestSync(t *testing.T) {
 	}
 
 	// Workload stores not yet synced (zero value) -> not ready.
-	require.False(t, build(fakePodAggregateSource{}).WorkloadsReady)
+	require.Equal(t, NamespaceWorkloadPending, build(fakePodAggregateSource{}).WorkloadReadiness)
 
 	// Every tracked workload store synced -> ready.
 	synced := fakePodAggregateSource{}.
@@ -526,7 +524,7 @@ func TestNamespaceBuilderWorkloadsReadyTracksIngestSync(t *testing.T) {
 		withWorkloadCatalog(DaemonSetGVR, "unused", 0).
 		withWorkloadCatalog(JobGVR, "unused", 0).
 		withWorkloadCatalog(CronJobGVR, "unused", 0)
-	require.True(t, build(synced).WorkloadsReady)
+	require.Equal(t, NamespaceWorkloadReady, build(synced).WorkloadReadiness)
 }
 
 func TestNamespaceBuilderWorkloadPresenceChangesSourceVersion(t *testing.T) {
@@ -538,7 +536,7 @@ func TestNamespaceBuilderWorkloadPresenceChangesSourceVersion(t *testing.T) {
 
 	workloadsSourceVersion := func(catalogCount int) string {
 		tracker := newNamespaceWorkloadTracker()
-		tracker.synced.Store(true)
+		tracker.ready.Store(true)
 		builder := &NamespaceBuilder{
 			namespaces: testsupport.NewNamespaceLister(t, ns),
 			ingest:     fakePodAggregateSource{}.withWorkloadCatalog(DeploymentGVR, "alpha", catalogCount),
@@ -635,7 +633,7 @@ func TestNamespaceBuilderScopedSynthesizesConfiguredNames(t *testing.T) {
 
 	payload, ok := snap.Payload.(NamespaceSnapshot)
 	require.True(t, ok)
-	require.True(t, payload.WorkloadsReady, "scoped snapshot must satisfy the lifecycle Ready gate")
+	require.Equal(t, NamespaceWorkloadReady, payload.WorkloadReadiness, "scoped snapshot must satisfy the lifecycle Ready gate")
 	require.Len(t, payload.Namespaces, 2)
 	require.Equal(t, "dev", payload.Namespaces[0].Ref.Name)
 	require.Equal(t, "prod", payload.Namespaces[1].Ref.Name)
@@ -654,7 +652,7 @@ func TestNamespaceBuilderScopedReportsPresenceOnceIngestTracksWorkloads(t *testi
 	// Post-Phase-4 scoped cluster: ingest tracks workload kinds and has rows
 	// for one configured namespace. Presence becomes known for every row.
 	tracker := newNamespaceWorkloadTracker()
-	tracker.synced.Store(true)
+	tracker.ready.Store(true)
 
 	builder := &NamespaceBuilder{
 		scope:   []string{"prod", "dev"},

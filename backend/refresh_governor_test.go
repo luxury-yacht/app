@@ -103,7 +103,7 @@ func (s *coldPreparationSnapshotService) Build(_ context.Context, domainName, sc
 			Domain: domainName,
 			Scope:  scope,
 			Payload: snapshot.NamespaceSnapshot{
-				WorkloadsReady: s.namespaceReady,
+				WorkloadReadiness: map[bool]snapshot.NamespaceWorkloadReadiness{false: snapshot.NamespaceWorkloadPending, true: snapshot.NamespaceWorkloadReady}[s.namespaceReady],
 			},
 		}, nil
 	case "cluster-overview":
@@ -343,7 +343,10 @@ func TestColdPreparationUsesAggregateLifecycleBeforeCooling(t *testing.T) {
 		[]string{"cluster-a"},
 		map[string]*system.Subsystem{"cluster-a": subsystem},
 	)
-	aggregate.onNamespaceSnapshot = func(clusterID string) {
+	aggregate.onNamespaceSnapshot = func(clusterID string, readiness snapshot.NamespaceWorkloadReadiness) {
+		if readiness != snapshot.NamespaceWorkloadReady {
+			return
+		}
 		state := app.ClusterRuntime.clusterLifecycle.GetState(clusterID)
 		if state == ClusterStateLoading || state == ClusterStateLoadingSlow {
 			app.ClusterRuntime.clusterLifecycle.SetState(clusterID, ClusterStateReady)

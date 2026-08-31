@@ -86,6 +86,12 @@ describe('buildConnectivityPresentation', () => {
       summary: 'Still loading cluster data',
     },
     {
+      name: 'operational with incomplete data',
+      overrides: { lifecycleState: 'degraded' as const },
+      status: 'degraded',
+      summary: 'Connected — data incomplete',
+    },
+    {
       name: 'namespace startup after lifecycle readiness',
       overrides: { namespaceReady: false },
       status: 'refreshing',

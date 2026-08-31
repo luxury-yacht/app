@@ -137,6 +137,13 @@ const buildLifecyclePresentation: ConnectivityPresentationStage = (
         detail: `Initial data for ${clusterLabel} is taking longer than expected to become usable.`,
         actionLabel: 'Refresh Now',
       };
+    case 'degraded':
+      return {
+        status: 'degraded',
+        summary: 'Connected — data incomplete',
+        detail: `Some initial data for ${clusterLabel} did not finish loading. Available views remain usable while retries continue in the background.`,
+        actionLabel: 'Refresh Now',
+      };
     default:
       return null;
   }

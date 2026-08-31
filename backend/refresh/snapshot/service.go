@@ -533,7 +533,7 @@ func (s *Service) shouldCacheSnapshot(snap *refresh.Snapshot) bool {
 	// Serving it from cache would pin that pre-sync state for the TTL; rebuilding on
 	// the next poll lets the corrected flags and the Ready flip land immediately
 	// after the stores actually sync or are permission-skipped.
-	if payload, ok := snap.Payload.(NamespaceSnapshot); ok && !payload.WorkloadsReady {
+	if payload, ok := snap.Payload.(NamespaceSnapshot); ok && payload.WorkloadReadiness != NamespaceWorkloadReady {
 		return false
 	}
 	return true

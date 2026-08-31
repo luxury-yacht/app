@@ -1,8 +1,12 @@
-import type { ClusterLifecycleState } from '@core/contexts/clusterLifecycleState';
+import {
+  type ClusterLifecycleState,
+  isClusterOperationalState,
+} from '@core/contexts/clusterLifecycleState';
 
 const clusterOverviewRefreshableStates = new Set<ClusterLifecycleState>([
   'loading',
   'loading_slow',
+  'degraded',
   'ready',
 ]);
 
@@ -20,5 +24,5 @@ export const shouldSuppressClusterOverviewUnavailableError = (
     return false;
   }
 
-  return lifecycleState !== 'ready';
+  return !isClusterOperationalState(lifecycleState);
 };

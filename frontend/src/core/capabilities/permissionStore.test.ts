@@ -434,7 +434,7 @@ describe('queryNamespacesPermissions transient errors', () => {
 
     eventBus.emit('cluster:lifecycle', {
       clusterId: 'cluster-1',
-      state: 'ready',
+      state: 'degraded',
     });
 
     await vi.waitFor(() =>
@@ -565,7 +565,7 @@ describe('permission store notifications', () => {
 // ---------------------------------------------------------------------------
 
 describe('setActivePermissionCluster', () => {
-  it('initializes and queries cluster permissions when the cluster is ready', async () => {
+  it('initializes and queries cluster permissions when the cluster is operational', async () => {
     mockSuccessfulQueryPermissions();
 
     setActivePermissionCluster('cluster-a');
@@ -589,14 +589,14 @@ describe('setActivePermissionCluster', () => {
     expect(queries.every((query) => query.clusterId === 'cluster-a')).toBe(true);
   });
 
-  it('keeps existing entries and issues no query for a not-ready cluster', async () => {
+  it('keeps existing entries and issues no query for a non-operational cluster', async () => {
     mockSuccessfulQueryPermissions();
     setActivePermissionCluster('cluster-a');
     await vi.waitFor(() => expect(getUserPermissionMap().size).toBeGreaterThan(0));
     const sizeBefore = getUserPermissionMap().size;
     hoisted.readQueryPermissions.mockClear();
 
-    setActivePermissionCluster('cluster-b', { ready: false });
+    setActivePermissionCluster('cluster-b', { operational: false });
 
     // A not-ready ACTIVE cluster must not wipe the store: other clusters'
     // and other namespaces' permissions stay valid, and one-shot consumers
@@ -607,13 +607,13 @@ describe('setActivePermissionCluster', () => {
     expect(getPermissionKey('Pod', 'get', 'ns')).toMatch(/^cluster-b\|/);
   });
 
-  it('queries after a previously waiting cluster becomes ready', async () => {
+  it('queries after a previously waiting cluster becomes operational', async () => {
     mockSuccessfulQueryPermissions();
 
-    setActivePermissionCluster('cluster-a', { ready: false });
+    setActivePermissionCluster('cluster-a', { operational: false });
     expect(hoisted.readQueryPermissions).not.toHaveBeenCalled();
 
-    setActivePermissionCluster('cluster-a', { ready: true });
+    setActivePermissionCluster('cluster-a', { operational: true });
     await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1));
   });
 

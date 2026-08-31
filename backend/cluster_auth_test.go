@@ -202,13 +202,16 @@ func TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness(t *te
 	service := stubSnapshotService{build: func(context.Context, string, string) (*refresh.Snapshot, error) {
 		return &refresh.Snapshot{
 			Domain:  "namespaces",
-			Payload: snapshot.NamespaceSnapshot{WorkloadsReady: hub.isStarted()},
+			Payload: snapshot.NamespaceSnapshot{WorkloadReadiness: map[bool]snapshot.NamespaceWorkloadReadiness{false: snapshot.NamespaceWorkloadPending, true: snapshot.NamespaceWorkloadReady}[hub.isStarted()]},
 		}, nil
 	}}
 	aggregate := &aggregateSnapshotService{
 		clusterOrder: []string{clusterID},
 		services:     map[string]refresh.SnapshotBuilder{clusterID: service},
-		onNamespaceSnapshot: func(id string) {
+		onNamespaceSnapshot: func(id string, readiness snapshot.NamespaceWorkloadReadiness) {
+			if readiness != snapshot.NamespaceWorkloadReady {
+				return
+			}
 			if app.ClusterRuntime.clusterLifecycle.GetState(id) == ClusterStateLoading {
 				app.ClusterRuntime.clusterLifecycle.SetState(id, ClusterStateReady)
 			}

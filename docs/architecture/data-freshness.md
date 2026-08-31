@@ -202,7 +202,7 @@ application transport between them.
   Successful preflight re-enters the boundary before refresh and catalog
   publication. Each completed cluster client is published independently; one
   slow sibling may not delay it. After a cluster enters `loading`,
-  `loading_slow`, or `ready`, a late `connecting`/`connected` result cannot move
+  `loading_slow`, `degraded`, or `ready`, a late `connecting`/`connected` result cannot move
   it back behind the frontend serving gate.
 - `RefreshCoordinator` owns subsystem/catalog replacement, refresh telemetry,
   Attention-target registration, and handler/stream publication. Replacement

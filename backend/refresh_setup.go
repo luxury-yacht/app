@@ -13,6 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
+	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -381,12 +382,13 @@ func (a *RefreshCoordinator) buildRefreshMux(
 	// Wrap the base refresh API with aggregate services for multi-cluster domains.
 	aggregateService := newAggregateSnapshotService(clusterOrder, subsystems)
 
-	// Wire the lifecycle transition: when a cluster's namespace domain serves
-	// data successfully, move it from loading/loading_slow to ready.
-	aggregateService.onNamespaceSnapshot = func(clusterID string) {
+	// Wire the workload lifecycle transition: deadline-settled data becomes
+	// operational-but-degraded; a later authoritative sync becomes ready.
+	aggregateService.onNamespaceSnapshot = func(clusterID string, readiness snapshot.NamespaceWorkloadReadiness) {
 		state := a.clusterRuntime.clusterLifecycleState(clusterID)
-		if state == ClusterStateLoading || state == ClusterStateLoadingSlow {
-			a.clusterRuntime.setClusterLifecycleState(clusterID, ClusterStateReady)
+		next := namespaceLifecycleStateForWorkloadReadiness(state, readiness)
+		if next != state {
+			a.clusterRuntime.setClusterLifecycleState(clusterID, next)
 		}
 	}
 	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)
@@ -418,6 +420,23 @@ func (a *RefreshCoordinator) buildRefreshMux(
 		metrics:       aggregateMetrics,
 	}
 	return mux, aggregates, nil
+}
+
+func namespaceLifecycleStateForWorkloadReadiness(
+	current ClusterLifecycleState,
+	readiness snapshot.NamespaceWorkloadReadiness,
+) ClusterLifecycleState {
+	switch readiness {
+	case snapshot.NamespaceWorkloadReady:
+		if current == ClusterStateLoading || current == ClusterStateLoadingSlow || current == ClusterStateDegraded {
+			return ClusterStateReady
+		}
+	case snapshot.NamespaceWorkloadDegraded:
+		if current == ClusterStateLoading || current == ClusterStateLoadingSlow {
+			return ClusterStateDegraded
+		}
+	}
+	return current
 }
 
 // refreshAggregateHandlers stores aggregate endpoints that need live cluster updates.

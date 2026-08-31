@@ -210,7 +210,12 @@ const authStateFromWire = (
 };
 
 const fieldKey = (clusterId: string, field: string): string => `${clusterId}\0${field}`;
-const serviceableStates = new Set<ClusterLifecycleState>(['loading', 'loading_slow', 'ready']);
+const serviceableStates = new Set<ClusterLifecycleState>([
+  'loading',
+  'loading_slow',
+  'degraded',
+  'ready',
+]);
 
 const isWireFieldLive = (
   liveFields: ReadonlySet<string> | undefined,

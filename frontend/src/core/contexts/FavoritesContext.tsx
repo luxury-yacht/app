@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { isClusterOperationalState } from '@/core/contexts/clusterLifecycleState';
 import { resolveFavoriteRoute } from '@/core/navigation/favoriteRoute';
 import type { Favorite } from '@/core/persistence/favorites';
 import {
@@ -82,21 +83,21 @@ interface FavoriteNavigationReadiness {
   selectedKubeconfig: string;
   selectedClusterId: string;
   namespaceReady: boolean;
-  isClusterReady: ClusterLifecycle['isClusterReady'];
+  getClusterState: ClusterLifecycle['getClusterState'];
 }
 
-const isFavoriteClusterReady = ({
+const isFavoriteClusterOperational = ({
   favorite,
   route,
   selectedKubeconfig,
   selectedClusterId,
-  isClusterReady,
+  getClusterState,
 }: FavoriteNavigationReadiness): boolean => {
   const favoriteClusterId = favorite.clusterId?.trim() ?? '';
   const isClusterSpecific =
     route.scope !== 'global' && (favorite.clusterSelection !== '' || favoriteClusterId !== '');
   if (!isClusterSpecific) {
-    return !selectedClusterId || isClusterReady(selectedClusterId);
+    return !selectedClusterId || isClusterOperationalState(getClusterState(selectedClusterId));
   }
   if (favoriteClusterId && selectedClusterId !== favoriteClusterId) {
     return false;
@@ -104,11 +105,11 @@ const isFavoriteClusterReady = ({
   if (!favoriteClusterId && selectedKubeconfig !== favorite.clusterSelection) {
     return false;
   }
-  return isClusterReady(favoriteClusterId || selectedClusterId);
+  return isClusterOperationalState(getClusterState(favoriteClusterId || selectedClusterId));
 };
 
 const canApplyFavoriteNavigation = (readiness: FavoriteNavigationReadiness): boolean =>
-  isFavoriteClusterReady(readiness) &&
+  isFavoriteClusterOperational(readiness) &&
   (readiness.route.scope !== 'namespace' || readiness.namespaceReady);
 
 const applyNamespaceFavoriteNavigation = (
@@ -159,7 +160,7 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
     setPendingFavoriteState(favorite);
   }, []);
   const { selectedKubeconfig, selectedClusterId } = useKubeconfig();
-  const { getClusterState, isClusterReady } = useClusterLifecycle();
+  const { getClusterState } = useClusterLifecycle();
   const viewState = useViewState();
   const namespaceCtx = useNamespace();
   const namespaceReady = namespaceCtx.namespaceReady;
@@ -205,9 +206,9 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
   }, []);
 
   // Apply navigation state (view, namespace, sidebar) from a pending favorite
-  // once the correct cluster is active and ready. The isClusterReady gate replaces
+  // once the correct cluster is operational. The lifecycle gate replaces
   // the old queueMicrotask timing hack — the effect re-runs when cluster lifecycle
-  // state changes, so navigation applies exactly when the cluster is ready.
+  // state changes, so navigation applies once data services are usable.
   useEffect(() => {
     if (!pendingFavorite) {
       navigationAppliedRef.current = false;
@@ -225,7 +226,7 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
         selectedKubeconfig,
         selectedClusterId,
         namespaceReady,
-        isClusterReady,
+        getClusterState,
       })
     ) {
       return;
@@ -237,7 +238,7 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
     pendingFavorite,
     selectedKubeconfig,
     selectedClusterId,
-    isClusterReady,
+    getClusterState,
     namespaceReady,
     viewState,
     namespaceCtx,

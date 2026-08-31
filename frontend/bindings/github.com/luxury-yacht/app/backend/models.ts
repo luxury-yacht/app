@@ -240,6 +240,7 @@ export enum ClusterLifecycleState {
     ClusterStateConnected = "connected",
     ClusterStateLoading = "loading",
     ClusterStateLoadingSlow = "loading_slow",
+    ClusterStateDegraded = "degraded",
     ClusterStateReady = "ready",
     ClusterStateDisconnected = "disconnected",
     ClusterStateReconnecting = "reconnecting",

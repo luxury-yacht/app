@@ -6,6 +6,7 @@
  * Manages periodic refresh, diagnostics, and event bus integration.
  */
 
+import { isClusterOperationalState } from '@/core/contexts/clusterLifecycleState';
 import { eventBus, type UnsubscribeFn } from '@/core/events';
 import { resolveBuiltinGroupVersion } from '@/shared/constants/builtinGroupVersions';
 import { PERMISSION_FEATURES, type PermissionFeatureKey } from './permissionFeatures';
@@ -1213,14 +1214,14 @@ export const initializePermissionStore = (clusterId: string): void => {
     }
   });
   unsubClusterLifecycle ??= eventBus.on('cluster:lifecycle', (payload) => {
-    if (payload.state !== 'ready') {
+    if (!isClusterOperationalState(payload.state)) {
       return;
     }
     if (payload.clusterId === currentClusterId) {
       queryClusterPermissions(currentClusterId);
     }
     // Re-issue recorded namespace queries for the cluster that just became
-    // ready. Surfaces that queried while it was connecting (e.g. restored
+    // operational. Surfaces that queried while it was connecting (e.g. restored
     // object panels) got transient errors and have no other re-query
     // trigger of their own.
     for (const metadata of namespaceQueryMetadata.values()) {
@@ -1240,20 +1241,20 @@ export const initializePermissionStore = (clusterId: string): void => {
  * lifecycle entry point for selection changes:
  *
  * - no cluster selected → clear all permission state;
- * - selected but not ready → record the id (key-building fallback) and keep
- *   existing state: a not-ready ACTIVE cluster must not invalidate other
+ * - selected but not operational → record the id (key-building fallback) and keep
+ *   existing state: a non-operational ACTIVE cluster must not invalidate other
  *   clusters' (or other namespaces') entries, and one-shot consumers such as
  *   open object panels have no re-query path after a wipe. Stale-allowed is
  *   safe — the backend re-validates every action — and the store re-queries
- *   on the cluster:lifecycle ready event and the periodic TTL refresh;
- * - selected and ready → initialize and query cluster-scoped permissions.
+ *   on an operational cluster:lifecycle event and the periodic TTL refresh;
+ * - selected and operational → initialize and query cluster-scoped permissions.
  */
 export const setActivePermissionCluster = (
   clusterId?: string | null,
-  options: { ready?: boolean } = {}
+  options: { operational?: boolean } = {}
 ): void => {
   const cid = clusterId?.trim() || '';
-  const ready = options.ready ?? true;
+  const operational = options.operational ?? true;
   currentClusterId = cid;
 
   if (!cid) {
@@ -1261,7 +1262,7 @@ export const setActivePermissionCluster = (
     return;
   }
 
-  if (!ready) {
+  if (!operational) {
     return;
   }
 

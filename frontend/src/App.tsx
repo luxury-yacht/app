@@ -31,6 +31,7 @@ import { installTypingAssistPolicyObserver } from '@utils/inputAssistPolicy';
 import { applyLinkColor } from '@utils/linkColor';
 import { applyTintedPalette, isPaletteActive } from '@utils/paletteTint';
 import { setActivePermissionCluster } from '@/core/capabilities';
+import { isClusterOperationalState } from '@/core/contexts/clusterLifecycleState';
 import { requestContextRefresh } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import {
@@ -78,14 +79,16 @@ const applyAppearanceOverrides = (mode: 'light' | 'dark') => {
 function AppContent() {
   const viewState = useViewState();
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
-  const { isClusterReady } = useClusterLifecycle();
-  const selectedClusterReady = selectedClusterId ? isClusterReady(selectedClusterId) : false;
+  const { getClusterState } = useClusterLifecycle();
+  const selectedClusterOperational = selectedClusterId
+    ? isClusterOperationalState(getClusterState(selectedClusterId))
+    : false;
   const themeApplyRunRef = useRef(0);
 
   // Track the selected cluster in the permission store.
   useEffect(() => {
-    setActivePermissionCluster(selectedClusterId, { ready: selectedClusterReady });
-  }, [selectedClusterId, selectedClusterReady]);
+    setActivePermissionCluster(selectedClusterId, { operational: selectedClusterOperational });
+  }, [selectedClusterId, selectedClusterOperational]);
 
   // main.ts hydrates preferences before first render. This effect only replays
   // the hydrated appearance values into CSS and keeps them synced on mode changes.

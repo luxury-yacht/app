@@ -36,9 +36,10 @@
 - Resource tables no longer claim that no workloads, pods, or other resources
   exist when an initial Kubernetes list misses its sync deadline. They remain
   visibly partial while the list retries and become complete once it succeeds.
-  During initial startup, the cluster now remains **Loading slowly** during that
-  interval instead of reporting **Ready** before its Pod and workload data has
-  actually loaded.
+  During initial startup, the cluster remains **Loading slowly** until the startup
+  deadline, then becomes **Data incomplete** if a Pod or workload source is still
+  missing. Available views and actions remain usable while retries continue; the
+  cluster reports **Ready** only after its available Pod and workload data loads.
 - Initial cluster loading now limits the pre-deadline ingest request burst and
   starts the Pod/workload feeds first, avoiding contention that could delay the
   Workloads view past its readiness deadline. Degraded-ingest warnings now name

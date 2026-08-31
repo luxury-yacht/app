@@ -103,6 +103,8 @@ const connectionFor = (
       return 'Loading';
     case 'loading_slow':
       return 'Loading slowly';
+    case 'degraded':
+      return 'Data incomplete';
     case 'connecting':
     case 'connected':
       return 'Connecting';

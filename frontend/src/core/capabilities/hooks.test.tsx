@@ -19,7 +19,9 @@ const lifecycleMock = vi.hoisted(() => ({
   current: undefined as
     | undefined
     | {
-        isClusterReady: (clusterId: string) => boolean;
+        getClusterState: (
+          clusterId: string
+        ) => 'connecting' | 'loading_slow' | 'degraded' | 'ready' | undefined;
       },
 }));
 const queryPermissionsBridge = vi.hoisted(() => ({
@@ -467,9 +469,9 @@ describe('useCapabilities', () => {
     restoreQueryPermissions();
   });
 
-  it('waits for cluster readiness before querying named-resource descriptors', async () => {
+  it('waits for an operational cluster before querying named-resource descriptors', async () => {
     lifecycleMock.current = {
-      isClusterReady: () => false,
+      getClusterState: () => 'loading_slow',
     };
     const mockQueryPermissions = vi.fn().mockResolvedValue({
       results: [
@@ -517,12 +519,13 @@ describe('useCapabilities', () => {
     });
 
     lifecycleMock.current = {
-      isClusterReady: (clusterId: string) => clusterId === 'test-cluster',
+      getClusterState: (clusterId: string) =>
+        clusterId === 'test-cluster' ? 'degraded' : undefined,
     };
     await act(async () => {
       eventBus.emit('cluster:lifecycle', {
         clusterId: 'test-cluster',
-        state: 'ready',
+        state: 'degraded',
       });
       await Promise.resolve();
       await Promise.resolve();

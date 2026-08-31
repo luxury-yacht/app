@@ -33,8 +33,8 @@ const namespaceNotifierNotReadySettleInterval = 2 * time.Second
 //   - Events informer mutations broadcast ONLY when the per-namespace Warning
 //     count or its availability state changes, so Normal-event churn stays silent;
 //   - while the workload tracker is not ready, the notifier re-arms itself so
-//     the readiness flip broadcasts even with no further ingest event — the
-//     cluster-Ready lifecycle gate needs a namespaces build AFTER real sync. It
+//     pending→degraded→ready edges broadcast even with no further ingest event.
+//     Idle ticks inspect only readiness; they do not re-walk workload rows. It
 //     also re-arms while an expected Events informer is warming, so an empty
 //     synced cache becomes an authoritative zero. The re-arm stops once every
 //     expected signal source is ready.
@@ -50,26 +50,25 @@ type NamespaceChangeNotifier struct {
 	eventsExpected bool
 	eventsSynced   cache.InformerSynced
 
-	mu             sync.Mutex
-	broadcast      func(version, reason string)
-	timer          *time.Timer
-	debounce       time.Duration
-	namespaceDirty bool
-	workloadDirty  bool
-	eventDirty     bool
-	quotaDirty     bool
-	signatureKnown bool
-	lastSignature  string
-	// lastSignatureReady records whether lastSignature was computed AFTER the
-	// tracker became ready; a not-ready signature must be recomputed on the rearm
-	// tick even with no new events, so the readiness flip itself broadcasts.
-	lastSignatureReady  bool
-	eventSignatureKnown bool
-	lastEventSignature  string
-	lastEventReady      bool
-	quotaSignatureKnown bool
-	lastQuotaSignature  string
-	lastQuotaReady      bool
+	mu                       sync.Mutex
+	broadcast                func(version, reason string)
+	timer                    *time.Timer
+	debounce                 time.Duration
+	namespaceDirty           bool
+	workloadDirty            bool
+	eventDirty               bool
+	quotaDirty               bool
+	signatureKnown           bool
+	lastSignature            string
+	workloadReadinessKnown   bool
+	lastWorkloadReadiness    NamespaceWorkloadReadiness
+	workloadSignaturePending bool
+	eventSignatureKnown      bool
+	lastEventSignature       string
+	lastEventReady           bool
+	quotaSignatureKnown      bool
+	lastQuotaSignature       string
+	lastQuotaReady           bool
 	// notReadyMinInterval floors presence-only broadcasts while settling; see
 	// namespaceNotifierNotReadySettleInterval. Overridable in tests.
 	notReadyMinInterval time.Duration
@@ -265,40 +264,49 @@ func namespaceFlushReasons(namespaceDirty bool) []string {
 }
 
 func (n *NamespaceChangeNotifier) workloadFlushReasons(workloadDirty, namespaceDirty bool) ([]string, bool) {
-	ready := n.tracker.Synced()
+	readiness := n.tracker.Readiness()
+	ready := readiness == NamespaceWorkloadReady
 	n.mu.Lock()
-	needSignature := workloadDirty || !n.signatureKnown || !n.lastSignatureReady
+	readinessChanged := !n.workloadReadinessKnown || n.lastWorkloadReadiness != readiness
+	needSignature := workloadDirty || !n.signatureKnown || readinessChanged || n.workloadSignaturePending
 	n.mu.Unlock()
 	if !needSignature {
 		return nil, ready
 	}
-	signature := workloadRollupSignature(namespaceWorkloadRollupsFromIngest(n.ingest), ready)
+	signature := workloadRollupSignature(namespaceWorkloadRollupsFromIngest(n.ingest), readiness)
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	n.lastSignatureReady = ready
+	n.workloadReadinessKnown = true
+	n.lastWorkloadReadiness = readiness
 	if n.signatureKnown && signature == n.lastSignature {
+		n.workloadSignaturePending = false
 		return nil, ready
 	}
 	hadSignature := n.signatureKnown
-	if n.workloadSignatureThrottled(hadSignature, ready, namespaceDirty) {
+	if n.workloadSignatureThrottled(hadSignature, readinessChanged, ready, namespaceDirty) {
+		n.workloadSignaturePending = true
 		return nil, ready
 	}
+	n.workloadSignaturePending = false
 	n.signatureKnown = true
 	n.lastSignature = signature
 	n.lastPresenceAt = time.Now()
-	return []string{workloadFlushReason(hadSignature, ready)}, ready
+	return []string{workloadFlushReason(hadSignature, readiness)}, ready
 }
 
-func (n *NamespaceChangeNotifier) workloadSignatureThrottled(hadSignature, ready, namespaceDirty bool) bool {
-	return hadSignature && !ready && !namespaceDirty && time.Since(n.lastPresenceAt) < n.notReadyMinInterval
+func (n *NamespaceChangeNotifier) workloadSignatureThrottled(hadSignature, readinessChanged, ready, namespaceDirty bool) bool {
+	return hadSignature && !readinessChanged && !ready && !namespaceDirty && time.Since(n.lastPresenceAt) < n.notReadyMinInterval
 }
 
-func workloadFlushReason(hadSignature, ready bool) string {
+func workloadFlushReason(hadSignature bool, readiness NamespaceWorkloadReadiness) string {
 	if !hadSignature {
 		return "workload-presence baseline established"
 	}
-	if !ready {
+	if readiness == NamespaceWorkloadPending {
 		return "workload rollup changed while stores are still settling"
+	}
+	if readiness == NamespaceWorkloadDegraded {
+		return "workload sources settled with incomplete data"
 	}
 	return "workload rollup changed (presence, health, reservations, or store readiness changed)"
 }

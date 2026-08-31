@@ -67,11 +67,13 @@ func TestNamespaceWorkloadTrackerNotSyncedWhenATrackedStoreNeverSyncs(t *testing
 
 func TestNamespaceWorkloadTrackerDeadlineDegradationDoesNotReportDataReady(t *testing.T) {
 	source := allTrackedSyncSource(false)
+	tracker := NewNamespaceWorkloadTracker(source)
+	requireEqualReadiness(t, NamespaceWorkloadPending, tracker.Readiness())
+
 	for _, gvr := range trackedWorkloadGVRs {
 		source.settled[gvr] = true
 	}
-
-	tracker := NewNamespaceWorkloadTracker(source)
+	requireEqualReadiness(t, NamespaceWorkloadDegraded, tracker.Readiness())
 	if tracker.Synced() {
 		t.Fatal("deadline-degraded stores must not make the cluster Ready before data loads")
 	}
@@ -81,6 +83,14 @@ func TestNamespaceWorkloadTrackerDeadlineDegradationDoesNotReportDataReady(t *te
 	}
 	if !tracker.Synced() {
 		t.Fatal("a later real sync must still allow the cluster to become Ready")
+	}
+	requireEqualReadiness(t, NamespaceWorkloadReady, tracker.Readiness())
+}
+
+func requireEqualReadiness(t *testing.T, want, got NamespaceWorkloadReadiness) {
+	t.Helper()
+	if got != want {
+		t.Fatalf("readiness = %v, want %v", got, want)
 	}
 }
 

@@ -23,23 +23,27 @@ import (
 // fakeNamespaceIngest is a minimal namespacePodIngestSource whose presence rows
 // and sync state the tests mutate directly.
 type fakeNamespaceIngest struct {
-	mu           sync.Mutex
-	synced       bool
-	workloadNS   []string
-	presentation string
-	podRows      []streamrows.PodAggregate
-	quotaRows    []streamrows.ResourceQuotaAggregate
-	quotaReads   int
+	mu            sync.Mutex
+	settled       bool
+	synced        bool
+	workloadNS    []string
+	presentation  string
+	podRows       []streamrows.PodAggregate
+	quotaRows     []streamrows.ResourceQuotaAggregate
+	quotaReads    int
+	workloadReads int
 }
 
 func (f *fakeNamespaceIngest) Tracks(schema.GroupVersionResource) bool { return true }
 func (f *fakeNamespaceIngest) HasSyncedFor(schema.GroupVersionResource) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.synced
+	return f.settled
 }
 func (f *fakeNamespaceIngest) RawHasSyncedFor(gvr schema.GroupVersionResource) bool {
-	return f.HasSyncedFor(gvr)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.synced
 }
 func (f *fakeNamespaceIngest) PermissionSkippedFor(schema.GroupVersionResource) bool {
 	return false
@@ -47,6 +51,7 @@ func (f *fakeNamespaceIngest) PermissionSkippedFor(schema.GroupVersionResource) 
 func (f *fakeNamespaceIngest) CatalogRows(gvr schema.GroupVersionResource) []interface{} {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.workloadReads++
 	if gvr != DeploymentGVR {
 		return nil
 	}
@@ -60,6 +65,7 @@ func (f *fakeNamespaceIngest) AggregateRows(gvr schema.GroupVersionResource) []i
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if gvr == PodGVR {
+		f.workloadReads++
 		rows := make([]interface{}, 0, len(f.podRows))
 		for _, row := range f.podRows {
 			rows = append(rows, row)
@@ -79,6 +85,7 @@ func (f *fakeNamespaceIngest) AggregateRows(gvr schema.GroupVersionResource) []i
 func (f *fakeNamespaceIngest) ObjectMapRows(gvr schema.GroupVersionResource) []interface{} {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.workloadReads++
 	if gvr != DeploymentGVR {
 		return nil
 	}
@@ -95,8 +102,16 @@ func (f *fakeNamespaceIngest) ObjectMapRows(gvr schema.GroupVersionResource) []i
 
 func (f *fakeNamespaceIngest) set(synced bool, workloadNS ...string) {
 	f.mu.Lock()
+	f.settled = synced
 	f.synced = synced
 	f.workloadNS = workloadNS
+	f.mu.Unlock()
+}
+
+func (f *fakeNamespaceIngest) setReadiness(settled, synced bool) {
+	f.mu.Lock()
+	f.settled = settled
+	f.synced = synced
 	f.mu.Unlock()
 }
 
@@ -128,6 +143,12 @@ func (f *fakeNamespaceIngest) quotaReadCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.quotaReads
+}
+
+func (f *fakeNamespaceIngest) workloadReadCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.workloadReads
 }
 
 type broadcastRecorder struct {
@@ -482,6 +503,35 @@ func TestNamespaceNotifierThrottlesPresenceBroadcastsWhileSettling(t *testing.T)
 
 	// The throttled change is not lost: it lands once the floor elapses.
 	waitForBroadcasts(t, recorder, 2)
+}
+
+func TestNamespaceNotifierIdlePendingRearmChecksReadinessWithoutRescanningWorkloads(t *testing.T) {
+	ingest := &fakeNamespaceIngest{}
+	ingest.set(false, "ns-1")
+	recorder := &broadcastRecorder{}
+	notifier := newNotifierForTest(ingest, recorder)
+	defer notifier.Stop()
+
+	notifier.WorkloadChanged()
+	waitForBroadcasts(t, recorder, 1)
+	readsAfterBaseline := ingest.workloadReadCount()
+	require.Positive(t, readsAfterBaseline)
+
+	// The notifier keeps polling the cheap readiness bits while startup is
+	// incomplete, but unchanged idle ticks must not walk every workload row.
+	time.Sleep(5 * notifier.debounce)
+	require.Equal(t, readsAfterBaseline, ingest.workloadReadCount())
+
+	// A deadline settlement and a later real sync are readiness edges. Each edge
+	// must produce one fresh rollup so the degraded and ready snapshots are built.
+	ingest.setReadiness(true, false)
+	waitForBroadcasts(t, recorder, 2)
+	readsAfterDegraded := ingest.workloadReadCount()
+	require.Greater(t, readsAfterDegraded, readsAfterBaseline)
+
+	ingest.setReadiness(true, true)
+	waitForBroadcasts(t, recorder, 3)
+	require.Greater(t, ingest.workloadReadCount(), readsAfterDegraded)
 }
 
 // Events arriving before the broadcast sink is wired are retained, not lost.
