@@ -46,6 +46,9 @@
   bespoke resources instead of logging an empty resource identity. On slow
   clusters, lower-priority sources may briefly report degraded while queued;
   they remain visibly partial and recover through background LIST+WATCH.
+- Kubernetes informer startup now uses a complete LIST followed by WATCH instead
+  of the beta WatchList stream, bypassing the minute-long initial streams observed
+  for large Pod and Secret collections on otherwise compatible clusters or proxies.
 - Duplicate Favorite names are now rejected. It's no longer possible to create different Favorites with the same name.
 - An unreachable previously opened cluster no longer blocks startup UI,
   kubeconfig discovery, cluster-tab changes, or app-global controls while its

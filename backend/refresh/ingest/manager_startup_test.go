@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/watchlist"
 )
 
 // TestInitialIngestStartupIsBoundedAndWorkloadFirst reproduces the cold-start
@@ -83,21 +82,6 @@ func TestInitialIngestStartupIsBoundedAndWorkloadFirst(t *testing.T) {
 	delete(releases, launchOrder[0])
 	if next := receiveStarted(t, started, 1, time.Second)[0]; next != launchOrder[firstWaveCount] {
 		t.Fatalf("first queued request = %s, want %s", next, launchOrder[firstWaveCount])
-	}
-}
-
-func TestInitialIngestWorkloadPriorityUsesListThenWatch(t *testing.T) {
-	for _, gvr := range initialIngestPriorityGVRs() {
-		lw := newInitialIngestListWatcher(gvr, &cache.ListWatch{}, struct{}{})
-		if !watchlist.DoesClientNotSupportWatchListSemantics(lw) {
-			t.Errorf("priority resource %s allows WatchList, want ordinary LIST followed by WATCH", gvr)
-		}
-	}
-
-	nonPriority := schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"}
-	lw := newInitialIngestListWatcher(nonPriority, &cache.ListWatch{}, struct{}{})
-	if watchlist.DoesClientNotSupportWatchListSemantics(lw) {
-		t.Fatalf("non-priority resource %s disables WatchList, want the client capability policy preserved", nonPriority)
 	}
 }
 

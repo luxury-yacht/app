@@ -10,9 +10,9 @@ the completed `v2` rewrite plan.
 
 - **Store + query engine:** `backend/refresh/querypage/` — the owned columnar
   `Store[R]` and the `Query → Page` engine.
-- **Ingestion:** `backend/refresh/ingest/` — owned-reflector WatchList ingestion with
+- **Ingestion:** `backend/refresh/ingest/` — owned-reflector LIST+WATCH ingestion with
   projection-at-intake; `backend/refresh/informer/` — the shared typed-informer factory
-  (uncut kinds), projection transform, and WatchList probe.
+  (uncut kinds), projection transform, and process-wide startup transport policy.
 - **Per-domain serve + maintained stores:** `backend/refresh/snapshot/` —
   `querypage_typed.go` (`resolveTypedSnapshotPageViaStore`, `resolveMaintainedDirect`,
   `typedMaintainedStore`); `backend/objectcatalog/` for Browse.
@@ -76,21 +76,23 @@ the completed `v2` rewrite plan.
   cross-kind-join domains); Browse → `objectcatalog` `queryViaEngine`. Each domain is
   gated byte-identical to a brute list+project path (`…MaintainedMatchesListPath`).
 
-## Ingestion (owned-reflector WatchList + projection-at-intake)
+## Ingestion (owned-reflector LIST+WATCH + projection-at-intake)
 
 - **Project at intake, discard the typed object.** `ingest.ProjectingReflector` borrows
   client-go's List/Watch/relist/RV machinery and feeds a `ProjectingStore` that keeps
   only the projected bundle. `informer.StripManagedFields` (a `WithTransform` on every
   factory) drops `managedFields` before any cache — the core memory lever. Starting
   points: `ingest/manager.go`, `ingest/projecting_store.go`, `informer/projection.go`.
-- **WatchList, capability-probed, LIST fallback.** `informer/watchlist_probe.go` probes
-  WatchList at first connect and disables the client-go gate if the
-  `initial-events-end` bookmark is stripped (Teleport-style proxies) → robust LIST+WATCH.
+- **LIST+WATCH is the startup transport.** `informer/watchlist_config.go` disables
+  client-go's beta WatchList gate before reflectors are constructed. A capability probe
+  is insufficient because a proxy can deliver the required terminal bookmark while
+  streaming a large initial collection too slowly for an interactive application.
+  Ordinary LIST establishes the complete baseline; WATCH then carries live changes.
   A per-GVR sync-deadline degrades a hung GVR instead of wedging the cluster
   (`informer/factory.go`). Deadline settlement is only a liveness decision: until
   the source completes a real initial list, snapshots that depend on it report
   partial/inexact data with a syncing issue instead of an authoritative empty
-  result. WatchList is **beta** — the LIST fallback is load-bearing.
+  result.
 - **Bounded, workload-first cold start.** The ingest manager declares every
   permission-approved partition before launching reflectors, then admits a bounded
   number of initial snapshots before the liveness deadline. The priority order is the

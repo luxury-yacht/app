@@ -22,10 +22,27 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	clientfeatures "k8s.io/client-go/features"
+	clientfeaturestesting "k8s.io/client-go/features/testing"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	cgotesting "k8s.io/client-go/testing"
 )
+
+func TestNewInformerInfrastructureDisablesWatchList(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
+
+	checker, factory, err := newInformerInfrastructure(Config{
+		KubernetesClient:  kubernetesfake.NewClientset(),
+		ResyncInterval:    time.Minute,
+		AllowedNamespaces: []string{"default"},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, checker)
+	require.NotNil(t, factory)
+	require.False(t, clientfeatures.FeatureGates().Enabled(clientfeatures.WatchListClient))
+}
 
 func TestRegisterWorkloadReflectorsRejectsMissingRequiredStore(t *testing.T) {
 	mgr := ingest.NewIngestManager(

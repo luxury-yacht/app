@@ -241,17 +241,17 @@ func scopedResourcePredicate() func(group, resource string) bool {
 	}
 }
 
-func newInformerInfrastructure(cfg Config) (*permissions.Checker, *informer.Factory) {
+func newInformerInfrastructure(cfg Config) (*permissions.Checker, *informer.Factory, error) {
 	runtimePerms := permissions.NewChecker(cfg.KubernetesClient, cfg.ClusterID, 0)
 	if len(cfg.AllowedNamespaces) > 0 {
 		runtimePerms.SetScope(cfg.AllowedNamespaces, scopedResourcePredicate())
 	}
-	// Decide once per process whether WatchList is usable before the first
-	// informer factory issues a watch; client-go reads and caches the gate lazily.
-	informer.EnsureWatchListDecision(context.Background(), cfg.KubernetesClient)
+	if err := informer.DisableWatchList(); err != nil {
+		return nil, nil, fmt.Errorf("configure informer startup transport: %w", err)
+	}
 	factory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, runtimePerms).
 		WithGatewayFactory(cfg.GatewayInformerFactory, cfg.GatewayAPIPresence)
-	return runtimePerms, factory
+	return runtimePerms, factory, nil
 }
 
 func newIngestInfrastructure(cfg Config, factory *informer.Factory, runtimePerms *permissions.Checker) (*ingest.IngestManager, error) {
@@ -404,7 +404,10 @@ func wireMetricsObserver(metricsPoller refresh.MetricsPoller, resourceManager *r
 // NewSubsystemWithServices returns a fully wired refresh subsystem.
 func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	registry := domain.New()
-	runtimePerms, informerFactory := newInformerInfrastructure(cfg)
+	runtimePerms, informerFactory, err := newInformerInfrastructure(cfg)
+	if err != nil {
+		return nil, err
+	}
 	ingestManager, err := newIngestInfrastructure(cfg, informerFactory, runtimePerms)
 	if err != nil {
 		return nil, err

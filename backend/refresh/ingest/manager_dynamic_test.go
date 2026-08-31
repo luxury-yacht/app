@@ -18,9 +18,7 @@ import (
 )
 
 // disableWatchList turns off the client-go WatchListClient feature gate for the test, so
-// the reflector uses LIST+WATCH — the dynamicfake client serves those but not WatchList's
-// SendInitialEvents stream. Production keeps WatchList (governed by EnsureWatchListDecision);
-// the projection/store/sink/readiness behavior under test is identical either way.
+// the reflector uses the same LIST+WATCH startup transport as production.
 func disableWatchList(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 }

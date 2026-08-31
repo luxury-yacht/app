@@ -305,10 +305,9 @@ func (m *IngestManager) installReflector(e *entry, gvr schema.GroupVersionResour
 	e.example = example
 	for _, namespace := range m.partitionNamespaces(gvr) {
 		lw := cache.NewListWatchFromClient(restClient, gvr.Resource, namespace, fields.Everything())
-		// ToListWatcherWithWatchListSemantics lets the reflector use WatchList when the
-		// client advertises support and fall back to LIST+WATCH otherwise — exactly as
-		// the generated informers do. The client argument is the typed group client so
-		// its WatchList capability is detected.
+		// Preserve client-go's capability metadata on the ListWatcher just as generated
+		// informers do. The process-wide startup transport policy currently disables
+		// WatchList before any reflector is constructed.
 		wrapped := cache.ToListWatcherWithWatchListSemantics(lw, restClient)
 		startup := newInitialIngestTaskTelemetry()
 		instrumented := newStartupDiagnosticListerWatcher(wrapped, startup, func() time.Time { return m.now() })
