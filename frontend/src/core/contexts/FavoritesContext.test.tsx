@@ -58,7 +58,6 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
   useClusterLifecycle: () => ({
     getClusterState: () => mockClusterLifecycleState,
-    isClusterReady: () => mockClusterLifecycleState === 'ready',
   }),
   ClusterLifecycleProvider: ({ children }: { children: React.ReactNode }) => children,
 }));

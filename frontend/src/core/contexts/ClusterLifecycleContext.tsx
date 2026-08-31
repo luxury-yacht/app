@@ -5,7 +5,6 @@ import type { ClusterLifecycleState } from './clusterLifecycleState';
 
 interface ClusterLifecycleContextType {
   getClusterState: (clusterId: string) => ClusterLifecycleState | undefined;
-  isClusterReady: (clusterId: string) => boolean;
 }
 
 const ClusterLifecycleContext = createContext<ClusterLifecycleContextType | undefined>(undefined);
@@ -27,14 +26,7 @@ export const ClusterLifecycleProvider: React.FC<{ children: React.ReactNode }> =
     (clusterId: string) => workspace.clusters.get(clusterId)?.lifecycle,
     [workspace.clusters]
   );
-  const isClusterReady = useCallback(
-    (clusterId: string) => workspace.clusters.get(clusterId)?.lifecycle === 'ready',
-    [workspace.clusters]
-  );
-  const value = useMemo(
-    () => ({ getClusterState, isClusterReady }),
-    [getClusterState, isClusterReady]
-  );
+  const value = useMemo(() => ({ getClusterState }), [getClusterState]);
   return (
     <ClusterLifecycleContext.Provider value={value}>{children}</ClusterLifecycleContext.Provider>
   );

@@ -109,6 +109,21 @@ func TestClusterLifecycleRejectsLateClientPhaseAfterSubsystemStarted(t *testing.
 	}, getEvents())
 }
 
+func TestClusterLifecycleReadyDoesNotRegressToDegraded(t *testing.T) {
+	emitter, getEvents := collectingEmitter()
+	cl := newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
+
+	cl.SetState("cluster-a", ClusterStateLoading)
+	cl.SetState("cluster-a", ClusterStateReady)
+	cl.SetState("cluster-a", ClusterStateDegraded)
+
+	require.Equal(t, ClusterStateReady, cl.GetState("cluster-a"))
+	require.Equal(t, []emittedEvent{
+		{"cluster-a", ClusterStateLoading, ""},
+		{"cluster-a", ClusterStateReady, ClusterStateLoading},
+	}, getEvents())
+}
+
 func TestClusterLifecycleSlowLoading(t *testing.T) {
 	emitter, getEvents := collectingEmitter()
 	threshold := 50 * time.Millisecond

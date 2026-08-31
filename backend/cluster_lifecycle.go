@@ -78,7 +78,10 @@ func (cl *clusterLifecycle) SetState(clusterId string, state ClusterLifecycleSta
 	entry := cl.entryForClusterLocked(clusterId)
 
 	previousState := entry.state
-	if isRefreshServingState(previousState) && isClientInitializationState(state) {
+	// Ignore stale asynchronous completions at the state owner. Client setup cannot move a
+	// serving cluster backwards, and an older degraded snapshot cannot demote latched Ready.
+	if (isRefreshServingState(previousState) && isClientInitializationState(state)) ||
+		(previousState == ClusterStateReady && state == ClusterStateDegraded) {
 		cl.mu.Unlock()
 		return
 	}

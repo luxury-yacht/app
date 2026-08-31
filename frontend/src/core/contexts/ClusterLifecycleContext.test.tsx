@@ -128,15 +128,6 @@ describe('ClusterLifecycleContext', () => {
     expect(stateRef.current?.getClusterState('nonexistent')).toBeUndefined();
   });
 
-  it('isClusterReady() returns true when state is ready', async () => {
-    mockGetAllStates.mockResolvedValue({ 'cluster-a': 'ready' });
-
-    await renderProvider();
-
-    expect(stateRef.current?.isClusterReady('cluster-a')).toBe(true);
-    expect(stateRef.current?.isClusterReady('cluster-b')).toBe(false);
-  });
-
   it('hydrates from GetClusterWorkspaceStateForWindow on mount', async () => {
     mockGetAllStates.mockResolvedValue({
       'cluster-a': 'connecting',

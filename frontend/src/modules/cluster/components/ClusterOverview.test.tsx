@@ -198,7 +198,6 @@ vi.mock('@core/desktop-runtime', () => ({
 vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
   useClusterLifecycle: () => ({
     getClusterState: () => mockLifecycleState,
-    isClusterReady: () => mockLifecycleState === 'ready',
   }),
 }));
 

@@ -129,7 +129,6 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
   useClusterLifecycle: () => ({
     getClusterState: (clusterId: string) => mockClusterLifecycleStates.get(clusterId),
-    isClusterReady: (clusterId: string) => mockClusterLifecycleStates.get(clusterId) === 'ready',
   }),
 }));
 
