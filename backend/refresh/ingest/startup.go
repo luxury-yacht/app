@@ -13,8 +13,9 @@ import (
 )
 
 type initialIngestTask struct {
-	launch ingestLaunchEntry
-	part   *ingestPart
+	launch   ingestLaunchEntry
+	part     *ingestPart
+	priority bool
 }
 
 // initialIngestPriority is derived from the Workloads domain's canonical
@@ -82,7 +83,11 @@ func prepareInitialIngestTasks(entries []ingestLaunchEntry, filter func(string, 
 			if part.skipped.Load() {
 				continue
 			}
-			parts = append(parts, initialIngestTask{launch: launch, part: part})
+			if part.startup == nil {
+				part.startup = newInitialIngestTaskTelemetry()
+			}
+			_, priority := priorityRank[launch.gvr]
+			parts = append(parts, initialIngestTask{launch: launch, part: part, priority: priority})
 		}
 		if _, priority := priorityRank[launch.gvr]; priority {
 			priorityParts = append(priorityParts, parts)
@@ -128,6 +133,13 @@ func (m *IngestManager) runInitialIngestQueue(runCtx context.Context, tasks []in
 		limit = config.RefreshIngestInitialSyncConcurrency
 	}
 	settled := make(chan struct{}, limit)
+	queuedAt := m.initialSyncStartedAt()
+	if queuedAt.IsZero() {
+		queuedAt = m.now()
+	}
+	for index := range tasks {
+		tasks[index].part.startup.markQueued(index, tasks[index].priority, queuedAt)
+	}
 	next := 0
 	active := 0
 	for next < len(tasks) || active > 0 {
@@ -135,6 +147,12 @@ func (m *IngestManager) runInitialIngestQueue(runCtx context.Context, tasks []in
 			task := tasks[next]
 			next++
 			active++
+			task.part.startup.markStarted(m.now())
+			task.part.view.setInitialSyncObserver(func() {
+				if task.part.startup.markSynced(m.now()) {
+					m.logInitialIngestRecovery(task)
+				}
+			})
 			go runWithResume(runCtx, task.part.lw, task.part.view, task.part.resumeRV, func() {
 				task.part.reflector.Run(runCtx)
 			})
@@ -157,7 +175,15 @@ func (m *IngestManager) waitForInitialIngestTask(runCtx context.Context, task in
 	ticker := time.NewTicker(config.RefreshInformerSyncPollInterval)
 	defer ticker.Stop()
 	for {
-		if task.launch.e.store.HasSyncedPartition(task.part.namespace) || m.syncDeadlineExceeded() {
+		if task.launch.e.store.HasSyncedPartition(task.part.namespace) {
+			select {
+			case settled <- struct{}{}:
+			case <-runCtx.Done():
+			}
+			return
+		}
+		if m.syncDeadlineExceeded() {
+			task.part.startup.markDeadlineReleased(m.now())
 			select {
 			case settled <- struct{}{}:
 			case <-runCtx.Done():

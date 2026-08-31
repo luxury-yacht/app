@@ -100,6 +100,11 @@ the completed `v2` rewrite plan.
   On a slow cluster, lower-priority resources can therefore reach the deadline while
   still queued; they report degraded/partial rather than empty, launch as the deadline
   releases the queue, and continue LIST+WATCH recovery in the background.
+  Startup diagnostics split queue wait from active request time for every
+  GVR/namespace partition and record its priority, queue position, LIST/WatchList/watch
+  attempt counts, in-flight request count, last LIST size/duration, last request error,
+  deadline state, and eventual recovery. Deadline warnings include the slowest pending
+  partitions; the settled summary includes both completed and incomplete task timing.
 - **Two cutover shapes.** Registry-driven single-object kinds flip a descriptor
   `IngestOwned` flag (the generic path wires maintained store, catalog, object-map,
   response-cache). Cross-kind-join domains (pods, workloads, network, nodes) use a

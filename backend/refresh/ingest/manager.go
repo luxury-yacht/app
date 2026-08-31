@@ -142,6 +142,7 @@ type ingestPart struct {
 	lw        cache.ListerWatcher
 	reflector *ProjectingReflector
 	view      *StorePartitionView
+	startup   *initialIngestTaskTelemetry
 
 	// resumeRV, when set (RestoreStores, before Start), makes Start attempt a
 	// delta resume of THIS part's watch from the persisted resourceVersion
@@ -309,6 +310,8 @@ func (m *IngestManager) installReflector(e *entry, gvr schema.GroupVersionResour
 		// the generated informers do. The client argument is the typed group client so
 		// its WatchList capability is detected.
 		wrapped := cache.ToListWatcherWithWatchListSemantics(lw, restClient)
+		startup := newInitialIngestTaskTelemetry()
+		instrumented := newStartupDiagnosticListerWatcher(wrapped, startup, func() time.Time { return m.now() })
 		name := gvk.String()
 		if namespace != "" {
 			name += " ns=" + namespace
@@ -316,9 +319,10 @@ func (m *IngestManager) installReflector(e *entry, gvr schema.GroupVersionResour
 		view := e.store.PartitionView(namespace)
 		e.parts = append(e.parts, &ingestPart{
 			namespace: namespace,
-			lw:        wrapped,
-			reflector: NewProjectingReflector(name, wrapped, example, view, resyncDisabled),
+			lw:        instrumented,
+			reflector: NewProjectingReflector(name, instrumented, example, view, resyncDisabled),
 			view:      view,
+			startup:   startup,
 		})
 	}
 	m.entries[gvr] = e
@@ -859,7 +863,8 @@ func (m *IngestManager) entrySettled(e *entry) bool {
 		// into the settled decision made a raced HasSynced return a false
 		// negative, which can block Manager.Start's readiness wait.
 		if e.degraded.CompareAndSwap(false, true) {
-			klog.Warningf("ingest data for %s was not ready within the startup deadline — marking degraded and excluding from readiness (queued or active LIST+WATCH continues in the background)", e.gvr)
+			klog.Warningf("ingest data for %s in cluster %s was not ready within the startup deadline — marking degraded and excluding from readiness; LIST+WATCH continues in the background; %s",
+				e.gvr, m.meta.ClusterName, m.formatEntryInitialSyncDiagnostics(e))
 		}
 		return true
 	}
@@ -1245,6 +1250,25 @@ func (m *IngestManager) logInitialSyncSummary(ctx context.Context) {
 		}
 		parts = append(parts, fmt.Sprintf("%s=%dms", kd.gvr.Resource, kd.d.Milliseconds()))
 	}
-	klog.Infof("ingest initial sync settled for cluster %s: %d kind(s) synced; slowest: %s",
-		m.meta.ClusterName, len(durations), strings.Join(parts, " "))
+
+	taskDiagnostics := m.initialSyncDiagnostics()
+	sort.Slice(taskDiagnostics, func(i, j int) bool { return taskDiagnostics[i].Total > taskDiagnostics[j].Total })
+	const maxTaskDiagnostics = 8
+	slowTasks := make([]string, 0, maxTaskDiagnostics)
+	incompleteTasks := make([]string, 0, maxTaskDiagnostics)
+	for _, diagnostic := range taskDiagnostics {
+		if diagnostic.Phase == initialSyncPhaseSynced && len(slowTasks) < maxTaskDiagnostics {
+			slowTasks = append(slowTasks, formatInitialSyncDiagnostic(diagnostic))
+		}
+		if diagnostic.Degraded && diagnostic.Phase != initialSyncPhaseSynced && len(incompleteTasks) < maxTaskDiagnostics {
+			incompleteTasks = append(incompleteTasks, formatInitialSyncDiagnostic(diagnostic))
+		}
+	}
+	klog.Infof("ingest initial sync settled for cluster %s: %d kind(s) synced; slowest: %s; task timing: %s; incomplete: %s",
+		m.meta.ClusterName,
+		len(durations),
+		strings.Join(parts, " "),
+		strings.Join(slowTasks, "; "),
+		strings.Join(incompleteTasks, "; "),
+	)
 }
