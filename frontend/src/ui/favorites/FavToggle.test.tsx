@@ -26,8 +26,8 @@ const mockUpdateFavorite = vi.fn().mockResolvedValue(undefined);
 const mockDeleteFavorite = vi.fn().mockResolvedValue(undefined);
 const favSaveModalPropsRef: { current: FavSaveModalProps | null } = { current: null };
 
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
+vi.mock('@core/contexts/FavoritesContext', () => {
+  const useFavorites = () => ({
     favorites: mockFavorites,
     addFavorite: mockAddFavorite,
     updateFavorite: mockUpdateFavorite,
@@ -35,8 +35,9 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
     reorderFavorites: vi.fn().mockResolvedValue(undefined),
     pendingFavorite: mockPendingFavorite,
     setPendingFavorite: mockSetPendingFavorite,
-  }),
-}));
+  });
+  return { useFavorites, useOptionalFavorites: useFavorites };
+});
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
@@ -54,8 +55,8 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   }),
 }));
 
-vi.mock('@core/contexts/ViewStateContext', () => ({
-  useViewState: () => ({
+vi.mock('@core/contexts/ViewStateContext', () => {
+  const useViewState = () => ({
     viewType: 'namespace',
     previousView: 'overview',
     activeNamespaceTab: 'pods',
@@ -91,8 +92,9 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
     setIsSettingsOpen: vi.fn(),
     isAboutOpen: false,
     setIsAboutOpen: vi.fn(),
-  }),
-}));
+  });
+  return { useViewState, useOptionalViewState: useViewState };
+});
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   useNamespace: () => ({

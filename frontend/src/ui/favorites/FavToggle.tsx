@@ -7,8 +7,8 @@
  * update, or delete the favorite.
  */
 
-import { useFavorites } from '@core/contexts/FavoritesContext';
-import { useViewState } from '@core/contexts/ViewStateContext';
+import { useOptionalFavorites } from '@core/contexts/FavoritesContext';
+import { useOptionalViewState, type useViewState } from '@core/contexts/ViewStateContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import {
@@ -24,6 +24,7 @@ import type {
 } from '@shared/components/tables/GridTable.types';
 import {
   areGridTableFilterStatesEqual,
+  DEFAULT_GRID_TABLE_FILTER_STATE,
   normalizeGridTableQueryFacets,
 } from '@shared/components/tables/gridTableFilterState';
 import type React from 'react';
@@ -42,11 +43,23 @@ import type { Favorite, FavoritePaneState } from '@/core/persistence/favorites';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import FavSaveModal, { type FavoriteModalColumn } from './FavSaveModal';
 
+const DISABLED_FAVORITES_CONTEXT = {
+  favorites: [],
+  addFavorite: (favorite: Favorite) => Promise.resolve(favorite),
+  updateFavorite: () => Promise.resolve(),
+  deleteFavorite: () => Promise.resolve(),
+  reorderFavorites: () => Promise.resolve(),
+  pendingFavorite: null,
+  setPendingFavorite: () => undefined,
+} satisfies NonNullable<ReturnType<typeof useOptionalFavorites>>;
+
 type ActiveViewType = ReturnType<typeof useViewState>['viewType'];
 
 /** Current view state that the FavToggle needs to snapshot when saving a favorite.
  *  Also accepts setters for restoring state from a pending favorite on navigation. */
 export interface FavToggleState {
+  /** Embedded surfaces can opt out when they do not own a workspace route. */
+  enabled?: boolean;
   /** Current grid table filter state (search, kinds, namespaces, caseSensitive). */
   filters: GridTableFilterState;
   /** Current sort column key, or null if unsorted. */
@@ -352,8 +365,17 @@ const restoreFavoritePane = ({ pane, savedPane }: FavoritePaneRestoreEntry) => {
  */
 export function useFavToggle(state: FavToggleState): {
   item: IconBarItem | null;
-  modal: React.JSX.Element;
+  modal: React.JSX.Element | null;
 } {
+  const enabled = state.enabled !== false;
+  const favoritesContext = useOptionalFavorites();
+  const viewState = useOptionalViewState();
+  if (enabled && !favoritesContext) {
+    throw new Error('useFavorites must be used within FavoritesProvider');
+  }
+  if (enabled && !viewState) {
+    throw new Error('useViewState must be used within ViewStateProvider');
+  }
   const {
     favorites,
     addFavorite,
@@ -361,9 +383,12 @@ export function useFavToggle(state: FavToggleState): {
     deleteFavorite,
     pendingFavorite,
     setPendingFavorite,
-  } = useFavorites();
+  } = favoritesContext ?? DISABLED_FAVORITES_CONTEXT;
   const { selectedKubeconfig, selectedClusterId, selectedClusterName } = useKubeconfig();
-  const { viewType, activeNamespaceTab, activeClusterTab, activeGlobalTab } = useViewState();
+  const viewType = viewState?.viewType ?? 'cluster';
+  const activeNamespaceTab = viewState?.activeNamespaceTab ?? 'workloads';
+  const activeClusterTab = viewState?.activeClusterTab ?? null;
+  const activeGlobalTab = viewState?.activeGlobalTab ?? 'fleet';
   const { selectedNamespace } = useNamespace();
   const paneGroup = useContext(FavoritePaneGroupContext);
   const paneId = state.paneId ?? 'main';
@@ -378,7 +403,13 @@ export function useFavToggle(state: FavToggleState): {
       },
     [state.availableFilterNamespaces, state.availableKinds, state.filterOptions]
   );
-  const currentPane = useMemo(() => snapshotFavoritePane(state), [state]);
+  const currentPane = useMemo(
+    () =>
+      snapshotFavoritePane(
+        enabled ? state : { ...state, filters: DEFAULT_GRID_TABLE_FILTER_STATE }
+      ),
+    [enabled, state]
+  );
   const paneSignature = useMemo(
     () =>
       JSON.stringify(currentPane) +
@@ -386,8 +417,8 @@ export function useFavToggle(state: FavToggleState): {
       favoriteColumnsSignature(state.columns),
     [currentPane, filterOptions, state.columns]
   );
-  const updateGroupedPane = paneGroup?.updatePane;
-  const removeGroupedPane = paneGroup?.removePane;
+  const updateGroupedPane = enabled ? paneGroup?.updatePane : undefined;
+  const removeGroupedPane = enabled ? paneGroup?.removePane : undefined;
 
   useEffect(() => {
     updateGroupedPane?.({
@@ -589,7 +620,7 @@ export function useFavToggle(state: FavToggleState): {
 
   // Build the IconBarItem returned to the caller.
   const item = useMemo<IconBarItem | null>(() => {
-    if (!isPrimaryPane) {
+    if (!enabled || !isPrimaryPane) {
       return null;
     }
     return {
@@ -605,11 +636,11 @@ export function useFavToggle(state: FavToggleState): {
       onClick: () => setModalOpen(true),
       title: isFavorited ? 'Edit favorite' : 'Save as favorite',
     };
-  }, [groupReady, isFavorited, isPrimaryPane]);
+  }, [enabled, groupReady, isFavorited, isPrimaryPane]);
 
   return {
     item,
-    modal: (
+    modal: enabled ? (
       <FavSaveModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -631,6 +662,6 @@ export function useFavToggle(state: FavToggleState): {
         onSave={handleSave}
         onDelete={handleDelete}
       />
-    ),
+    ) : null,
   };
 }

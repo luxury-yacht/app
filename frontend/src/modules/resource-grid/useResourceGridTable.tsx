@@ -321,6 +321,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   showKindDropdown = false,
   getTrailingFilterActions,
   transformSortedData,
+  showFavoriteToggle = true,
   favoritePane,
 }: ResourceGridCommonParams<T>): ResourceGridTableResult<T> {
   const binding = useGridTableBinding({
@@ -467,6 +468,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     [columns, persistence.customColumns, supportsCustomMetadataColumns]
   );
   const { item: favToggle, modal: favModal } = useFavToggle({
+    enabled: showFavoriteToggle,
     filters: persistence.filters,
     sortColumn: sortConfig?.key ?? null,
     sortDirection: sortConfig?.direction ?? 'asc',

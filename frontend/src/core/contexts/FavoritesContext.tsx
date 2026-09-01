@@ -66,6 +66,9 @@ export const useFavorites = (): FavoritesContextType => {
   return context;
 };
 
+export const useOptionalFavorites = (): FavoritesContextType | undefined =>
+  useContext(FavoritesContext);
+
 // ---------- Provider ----------
 
 interface FavoritesProviderProps {

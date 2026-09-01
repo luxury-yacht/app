@@ -48,6 +48,10 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   }),
 }));
 
+vi.mock('@/core/panel-windows/PanelWindowRoleContext', () => ({
+  usePanelWindowRole: () => ({ windowName: 'panel-1' }),
+}));
+
 // Provide a DIFFERENT global clusterId to prove PodsTab uses the panel scope, not this one.
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
@@ -73,31 +77,6 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   NamespaceContext: React.createContext({ namespaces: [] }),
   useNamespace: () => ({
     setSelectedNamespace: vi.fn(),
-  }),
-}));
-
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: [],
-    addFavorite: vi.fn(),
-    updateFavorite: vi.fn(),
-    deleteFavorite: vi.fn(),
-    reorderFavorites: vi.fn(),
-  }),
-  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: () => ({
-    item: {
-      type: 'toggle',
-      id: 'favorite',
-      icon: null,
-      active: false,
-      onClick: () => undefined,
-      title: 'Save as favorite',
-    },
-    modal: null,
   }),
 }));
 
@@ -324,7 +303,7 @@ describe('PodsTab (query-backed)', () => {
     });
   };
 
-  it('issues a workload-scoped pods query and renders the returned page when active', async () => {
+  it('renders a workload-scoped page in a native panel without workspace favorites providers', async () => {
     mockQueryRows([createPod({ ref: { name: 'query-pod' } })]);
 
     await renderPods();
