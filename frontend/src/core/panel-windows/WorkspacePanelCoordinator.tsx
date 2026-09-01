@@ -194,15 +194,11 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     [activeTabs, guards, openPanels, ownerWindowName]
   );
 
-  useEffect(
-    () =>
-      onPanelWindowOpened((event) => {
-        if (event.snapshot.ownerWindowName !== ownerWindowName) {
-          return;
-        }
-        commitPanelWindow(event.snapshot, event.windowName);
-      }),
-    [commitPanelWindow, ownerWindowName]
+  const handlePanelWindowOpened = useCallback(
+    (event: panelwindow.WindowOpenedEvent) => {
+      commitPanelWindow(event.snapshot, event.windowName);
+    },
+    [commitPanelWindow]
   );
 
   useEffect(
@@ -538,6 +534,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       <WorkspaceObjectRouteCoordinator
         ownerWindowName={ownerWindowName}
         pendingDockRequest={pendingDockRequest}
+        onWindowOpened={handlePanelWindowOpened}
         onDockRequest={handlePanelWindowDockRequested}
         onDockRequestSettled={handleDockRequestSettled}
         onOwnedPanelWindowClosed={handlePanelWindowClosed}
@@ -551,6 +548,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
 function WorkspaceObjectRouteCoordinator({
   ownerWindowName,
   pendingDockRequest,
+  onWindowOpened,
   onDockRequest,
   onDockRequestSettled,
   onOwnedPanelWindowClosed,
@@ -558,6 +556,7 @@ function WorkspaceObjectRouteCoordinator({
 }: Readonly<{
   ownerWindowName: string;
   pendingDockRequest: panelwindow.WindowDockRequestedEvent | null;
+  onWindowOpened: (event: panelwindow.WindowOpenedEvent) => void;
   onDockRequest: (
     request: panelwindow.WindowDockRequestedEvent,
     targetPosition: 'right' | 'bottom'
@@ -580,7 +579,8 @@ function WorkspaceObjectRouteCoordinator({
     setActiveKubeconfig,
     selectedClusterId,
   } = useKubeconfig();
-  const { tabGroups, focusPanel, dockPanelGroup, discardPanelLayouts } = useDockablePanelContext();
+  const { tabGroups, focusPanel, dockPanelGroup, detachPanelGroup, discardPanelLayouts } =
+    useDockablePanelContext();
   const pendingDockedFocusRef = useRef<string | null>(null);
   const pendingObjectClaimsRef = useRef(new Set<string>());
   const dockAttemptRef = useRef<{
@@ -588,6 +588,21 @@ function WorkspaceObjectRouteCoordinator({
     timeout: number;
     acknowledging: boolean;
   } | null>(null);
+
+  useEffect(
+    () =>
+      onPanelWindowOpened((event) => {
+        if (event.snapshot.ownerWindowName !== ownerWindowName) {
+          return;
+        }
+        detachPanelGroup(
+          event.snapshot.clusterId,
+          (event.snapshot.tabs ?? []).map((tab) => tab.panelId)
+        );
+        onWindowOpened(event);
+      }),
+    [detachPanelGroup, onWindowOpened, ownerWindowName]
+  );
 
   useEffect(
     () =>

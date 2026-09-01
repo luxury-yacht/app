@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   nativeWindowNamesForCluster: vi.fn(() => ['panel-1']),
   focusPanel: vi.fn(),
   dockPanelGroup: vi.fn(),
+  detachPanelGroup: vi.fn(),
   discardPanelLayouts: vi.fn(),
   focusOwnerWindow: vi.fn(async () => undefined),
   objectPanelLayoutDefaults: {
@@ -159,6 +160,7 @@ vi.mock('@/ui/dockable', () => ({
     },
     focusPanel: mocks.focusPanel,
     dockPanelGroup: mocks.dockPanelGroup,
+    detachPanelGroup: mocks.detachPanelGroup,
     discardPanelLayouts: mocks.discardPanelLayouts,
   }),
 }));
@@ -206,12 +208,26 @@ describe('WorkspacePanelCoordinator', () => {
     });
     expect(mocks.beginOpen).toHaveBeenCalledOnce();
     expect(mocks.commitWindow).not.toHaveBeenCalled();
+    expect(mocks.detachPanelGroup).not.toHaveBeenCalled();
 
     const snapshot = mocks.beginOpen.mock.calls[0]?.[1] as Record<string, unknown>;
     await act(async () =>
+      mocks.eventHandlers.opened?.({
+        windowName: 'panel-other',
+        snapshot: { ...snapshot, ownerWindowName: 'workspace-other' },
+      } as never)
+    );
+    expect(mocks.commitWindow).not.toHaveBeenCalled();
+    expect(mocks.detachPanelGroup).not.toHaveBeenCalled();
+
+    await act(async () =>
       mocks.eventHandlers.opened?.({ windowName: 'panel-1', snapshot } as never)
     );
+    expect(mocks.detachPanelGroup).toHaveBeenCalledWith('cluster-1', ['panel-a']);
     expect(mocks.commitWindow).toHaveBeenCalledWith(snapshot, 'panel-1');
+    expect(mocks.detachPanelGroup.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.commitWindow.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
+    );
   });
 
   it('waits for native child close acknowledgement before allowing cluster close', async () => {

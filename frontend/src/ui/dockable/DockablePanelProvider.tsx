@@ -110,6 +110,8 @@ interface DockablePanelContextValue {
     activePanelId: string,
     targetPosition: 'right' | 'bottom'
   ) => void;
+  // Remove a group transferred to a native window while retaining its layout state.
+  detachPanelGroup: (clusterId: string, panelIds: readonly string[]) => void;
   // Remove closed native-panel layout and group state from its owning cluster.
   discardPanelLayouts: (clusterId: string, panelIds: readonly string[]) => void;
   requestGroupMove?: (groupKey: GroupKey, targetPosition: DockPosition) => boolean;
@@ -822,6 +824,19 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
     [getOrCreateStoreForCluster]
   );
 
+  const detachPanelGroup = useCallback((clusterId: string, panelIds: readonly string[]) => {
+    const store = storesRef.current.get(clusterId);
+    if (!store) {
+      return;
+    }
+    store.setTabGroups((previous) =>
+      Array.from(new Set(panelIds)).reduce(
+        (current, panelId) => removePanelFromGroup(current, panelId),
+        previous
+      )
+    );
+  }, []);
+
   const requestGroupMove = useCallback(
     (groupKey: GroupKey, targetPosition: DockPosition): boolean => {
       if (!onGroupMoveRequest) {
@@ -866,6 +881,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       focusPanel,
       applyLayoutDefaultsAcrossClusters,
       dockPanelGroup,
+      detachPanelGroup,
       discardPanelLayouts,
       requestGroupMove,
       nativeWindowMode,
@@ -893,6 +909,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       focusPanel,
       applyLayoutDefaultsAcrossClusters,
       dockPanelGroup,
+      detachPanelGroup,
       discardPanelLayouts,
       requestGroupMove,
       nativeWindowMode,

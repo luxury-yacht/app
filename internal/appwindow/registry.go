@@ -1009,7 +1009,6 @@ func panelWindowOptionsForPlatform(
 
 	options := application.WebviewWindowOptions{
 		Name:               name,
-		Title:              "Luxury Yacht",
 		Width:              500,
 		Height:             400,
 		MinWidth:           450,

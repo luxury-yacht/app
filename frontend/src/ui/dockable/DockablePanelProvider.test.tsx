@@ -327,6 +327,36 @@ describe('DockablePanelProvider', () => {
     }
   );
 
+  it('removes a transferred native group so a new workspace panel can lead the dock', async () => {
+    const contextRef: { current: DockablePanelContextValue | null } = { current: null };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      const context = requireDockableContext(contextRef.current);
+      context.syncPanelGroup('native-panel', 'right');
+      context.detachPanelGroup('cluster-a', ['native-panel']);
+      context.syncPanelGroup('new-workspace-panel', 'right');
+      await Promise.resolve();
+    });
+
+    expect(requireDockableContext(contextRef.current).tabGroups.right).toEqual({
+      tabs: ['new-workspace-panel'],
+      activeTab: 'new-workspace-panel',
+    });
+
+    await unmount();
+  });
+
   it('does not create an in-page floating group when no native move owner is installed', async () => {
     const contextRef: { current: DockablePanelContextValue | null } = { current: null };
 

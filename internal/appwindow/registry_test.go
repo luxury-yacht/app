@@ -93,7 +93,7 @@ func TestPanelOptionsUseSharedEntryAndIndependentNativeFrame(t *testing.T) {
 			options := panelWindowOptionsForPlatform("panel-7", nativeMenu, goos, nil)
 
 			require.Equal(t, "panel-7", options.Name)
-			require.Equal(t, "Luxury Yacht", options.Title)
+			require.Empty(t, options.Title)
 			require.Equal(t, "/", options.URL)
 			require.Equal(t, 500, options.Width)
 			require.Equal(t, 400, options.Height)
