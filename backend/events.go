@@ -18,7 +18,12 @@ const (
 	clusterLifecycleEventName           = "cluster:lifecycle"
 	clusterScopeChangedEventName        = "cluster:scope:changed"
 	kubeconfigAvailableChangedEventName = "kubeconfig:available-changed"
+	appearanceModeChangedEventName      = "settings:appearance-mode-changed"
 )
+
+type AppearanceModeChangedEvent struct {
+	Mode string `json:"mode"`
+}
 
 type ClusterAuthEvent struct {
 	ClusterID   string `json:"clusterId"`
@@ -80,6 +85,7 @@ func init() {
 	application.RegisterEvent[ClusterLifecycleEvent](clusterLifecycleEventName)
 	application.RegisterEvent[ClusterScopeChangedEvent](clusterScopeChangedEventName)
 	application.RegisterEvent[application.Void](kubeconfigAvailableChangedEventName)
+	application.RegisterEvent[AppearanceModeChangedEvent](appearanceModeChangedEventName)
 
 	application.RegisterEvent[application.Void]("debug:open-inspector")
 	application.RegisterEvent[application.Void]("debug:toggle-error-overlay")

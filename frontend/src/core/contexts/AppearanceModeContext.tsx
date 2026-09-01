@@ -7,8 +7,14 @@
  */
 import type React from 'react';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { desktopRuntimeAvailable, onBroadcastEvent } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
-import { type AppearanceMode, getAppearanceModePreference } from '@/core/settings/appPreferences';
+import {
+  type AppearanceMode,
+  applyBroadcastAppearanceModePreference,
+  getAppearanceModePreference,
+} from '@/core/settings/appPreferences';
+import { applyAppearanceOverrides } from '@/utils/appearanceMode';
 
 type ResolvedAppearanceMode = 'light' | 'dark';
 
@@ -52,6 +58,7 @@ export const AppearanceModeProvider: React.FC<AppearanceModeProviderProps> = ({ 
   const applyResolvedMode = useCallback((next: ResolvedAppearanceMode) => {
     document.documentElement.dataset.appearanceMode = next;
     document.documentElement.className = next;
+    applyAppearanceOverrides(next);
     setResolvedMode((prev) => {
       if (prev !== next) {
         // Emit after state update via microtask so subscribers see the new value.
@@ -88,11 +95,17 @@ export const AppearanceModeProvider: React.FC<AppearanceModeProviderProps> = ({ 
     };
 
     const unsubscribeAppearanceMode = eventBus.on('settings:appearance-mode', applyModePreference);
+    const unsubscribeBroadcast = desktopRuntimeAvailable()
+      ? onBroadcastEvent('settings:appearance-mode-changed', ({ mode: nextMode }) => {
+          applyBroadcastAppearanceModePreference(nextMode);
+        })
+      : () => undefined;
 
     // Cleanup function
     return () => {
       mediaQuery.removeEventListener('change', handleSystemModeChange);
       unsubscribeAppearanceMode();
+      unsubscribeBroadcast();
     };
   }, [applyResolvedMode]);
 

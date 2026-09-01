@@ -20,4 +20,9 @@ func TestCustomWailsEventsEnforceTheirPayloadTypes(t *testing.T) {
 
 	require.False(t, wailsApp.Event.Emit("open-cluster"))
 	require.True(t, wailsApp.Event.Emit("open-cluster", "wrong payload"))
+
+	require.False(t, wailsApp.Event.Emit("settings:appearance-mode-changed", AppearanceModeChangedEvent{
+		Mode: "dark",
+	}))
+	require.True(t, wailsApp.Event.Emit("settings:appearance-mode-changed", "wrong payload"))
 }

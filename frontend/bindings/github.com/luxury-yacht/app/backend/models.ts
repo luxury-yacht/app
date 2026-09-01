@@ -164,6 +164,10 @@ export type AppSettings = types$0.AppSettings;
  */
 export type AppSettingsSchema = types$0.AppSettingsSchema;
 
+export interface AppearanceModeChangedEvent {
+    "mode": string;
+}
+
 export interface BackendErrorEvent {
     "clusterId": string;
     "resourceKind"?: string;

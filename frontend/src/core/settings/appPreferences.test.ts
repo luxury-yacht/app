@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import {
   type AppPreferenceKey,
+  applyBroadcastAppearanceModePreference,
   commitIntegerPreferenceInput,
   createPaletteTintPreferenceWorkflow,
   getAccentColor,
@@ -89,6 +90,10 @@ const telemetryMocks = vi.hoisted(() => ({
   captureUserVisibleError: vi.fn(),
   recordBrokerRequestCompleted: vi.fn(),
   recordBrokerRequestStarted: vi.fn(),
+}));
+
+const desktopRuntimeMocks = vi.hoisted(() => ({
+  emitBroadcastEvent: vi.fn(),
 }));
 
 vi.mock('@/core/telemetry/sentry', () => telemetryMocks);
@@ -410,6 +415,7 @@ vi.mock('@core/backend-api', () => ({
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => true,
+  emitBroadcastEvent: (...args: unknown[]) => desktopRuntimeMocks.emitBroadcastEvent(...args),
 }));
 
 describe('appPreferences', () => {
@@ -423,6 +429,8 @@ describe('appPreferences', () => {
     telemetryMocks.captureUserVisibleError.mockReset();
     telemetryMocks.recordBrokerRequestCompleted.mockReset();
     telemetryMocks.recordBrokerRequestStarted.mockReset();
+    desktopRuntimeMocks.emitBroadcastEvent.mockReset();
+    desktopRuntimeMocks.emitBroadcastEvent.mockResolvedValue(false);
     appMocks.GetAppSettingsSchema.mockResolvedValue(null);
     appMocks.UpdateAppPreferences.mockResolvedValue({ settings: {}, changedKeys: [] });
   });
@@ -800,6 +808,37 @@ describe('appPreferences', () => {
     expect(getGridTablePersistenceMode()).toBe('namespaced');
   });
 
+  it('broadcasts an appearance mode only after persistence succeeds', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'light' });
+    await hydrateAppPreferences({ force: true });
+
+    await setAppearanceModePreference('dark');
+
+    expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
+      changes: [{ key: 'appearanceMode', value: 'dark' }],
+    });
+    expect(desktopRuntimeMocks.emitBroadcastEvent).toHaveBeenCalledWith(
+      'settings:appearance-mode-changed',
+      { mode: 'dark' }
+    );
+  });
+
+  it('applies a valid peer appearance mode to the local cache and storage', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'light' });
+    await hydrateAppPreferences({ force: true });
+    const modes: string[] = [];
+    const unsubscribe = eventBus.on('settings:appearance-mode', (mode) => modes.push(mode));
+
+    applyBroadcastAppearanceModePreference('dark');
+    applyBroadcastAppearanceModePreference('invalid');
+
+    expect(getAppearanceModePreference()).toBe('dark');
+    expect(localStorage.getItem('app-appearance-mode-preference')).toBe('dark');
+    expect(modes).toEqual(['dark']);
+    expect(appMocks.UpdateAppPreferences).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
   it('hydrates, persists, and emits the error reporting preference', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ errorReportingEnabled: false });
     await hydrateAppPreferences({ force: true });
@@ -903,6 +942,7 @@ describe('appPreferences', () => {
     expect(getAppearanceModePreference()).toBe('system');
     expect(localStorage.getItem('app-appearance-mode-preference')).toBe('system');
     expect(localStorage.getItem('app-appearance-bootstrap-v1')).toBe('previous-bootstrap');
+    expect(desktopRuntimeMocks.emitBroadcastEvent).not.toHaveBeenCalled();
   });
 
   it('rejects invalid Object Panel Logs Tab API timestamp formats before persisting', async () => {

@@ -26,7 +26,7 @@ import {
   UpdateAppPreferences,
   ValidateThemeClusterPattern,
 } from '@/core/backend-api';
-import { desktopRuntimeAvailable } from '@/core/desktop-runtime';
+import { desktopRuntimeAvailable, emitBroadcastEvent } from '@/core/desktop-runtime';
 import { type AppEvents, eventBus } from '@/core/events';
 import { captureBootstrapError } from '@/core/telemetry/sentry';
 import {
@@ -611,6 +611,9 @@ const normalizeColorPreferenceValue = (
 const normalizeAppearanceMode = (value: string | undefined): AppearanceMode =>
   normalizeEnumPreferenceValue<AppearanceMode>('appearanceMode', value);
 
+const isAppearanceMode = (value: string): value is AppearanceMode =>
+  value === 'light' || value === 'dark' || value === 'system';
+
 const normalizeGridTableMode = (value: string | undefined): GridTablePersistenceMode =>
   normalizeEnumPreferenceValue<GridTablePersistenceMode>('gridTablePersistenceMode', value);
 
@@ -1187,6 +1190,14 @@ export const getAppearanceModePreference = (): AppearanceMode => {
   return preferenceCache.appearanceMode;
 };
 
+export const applyBroadcastAppearanceModePreference = (mode: string): void => {
+  if (!isAppearanceMode(mode)) {
+    return;
+  }
+  updatePreferenceCache({ appearanceMode: mode });
+  persistAppearanceModeToLocalStorage(mode);
+};
+
 export const getUseShortResourceNames = (): boolean => {
   return preferenceCache.useShortResourceNames;
 };
@@ -1351,6 +1362,16 @@ export const setAppearanceModePreference = async (mode: AppearanceMode): Promise
     persistAppearanceMode: normalized,
   });
   await optimisticPreferenceUpdate(mutation.updates, mutation.changes, mutation.options);
+  if (wailsRuntimeAvailable()) {
+    try {
+      await emitBroadcastEvent('settings:appearance-mode-changed', { mode: normalized });
+    } catch (error) {
+      reportOperationalError(error, {
+        source: 'AppPreferences',
+        action: 'broadcast-appearance-mode',
+      });
+    }
+  }
 };
 
 export const setUseShortResourceNames = async (useShort: boolean): Promise<void> => {

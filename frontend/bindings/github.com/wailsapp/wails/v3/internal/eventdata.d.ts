@@ -62,6 +62,7 @@ declare module "@wailsio/runtime" {
             "portforward:list": backend$0.PortForwardSession[] | null;
             "portforward:status": backend$0.PortForwardStatusEvent;
             "runtime-operations:list": backend$0.RuntimeOperation[] | null;
+            "settings:appearance-mode-changed": backend$0.AppearanceModeChangedEvent;
             "toggle-app-logs-panel": void;
             "toggle-diagnostics": void;
             "toggle-object-diff": void;

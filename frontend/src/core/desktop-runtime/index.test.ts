@@ -5,6 +5,7 @@ const runtimeMocks = vi.hoisted(() => ({
   clipboardSetText: vi.fn(),
   clipboardText: vi.fn(),
   environment: vi.fn(),
+  eventsEmit: vi.fn(),
   eventsOn: vi.fn<
     (
       eventName: string,
@@ -20,7 +21,7 @@ const runtimeMocks = vi.hoisted(() => ({
 vi.mock('@wailsio/runtime', () => ({
   Browser: { OpenURL: runtimeMocks.browserOpenURL },
   Clipboard: { SetText: runtimeMocks.clipboardSetText, Text: runtimeMocks.clipboardText },
-  Events: { On: runtimeMocks.eventsOn },
+  Events: { Emit: runtimeMocks.eventsEmit, On: runtimeMocks.eventsOn },
   System: { Environment: runtimeMocks.environment },
   Window: {
     Close: runtimeMocks.closeWindow,
@@ -36,9 +37,11 @@ import {
   type DesktopEventName,
   type DesktopEventPayload,
   desktopRuntimeAvailable,
+  emitBroadcastEvent,
   getEnvironment,
   getWindowIdentity,
   initializeWindowIdentity,
+  onBroadcastEvent,
   onEvent,
   openDevTools,
   openURL,
@@ -85,6 +88,27 @@ describe('desktop runtime adapter', () => {
     runtimeHandler?.({ name: 'menu:copy', data: undefined, sender: getWindowIdentity() });
 
     expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('sends and receives process-wide events across peer windows', async () => {
+    runtimeMocks.windowName.mockResolvedValue('panel-2');
+    runtimeMocks.eventsEmit.mockResolvedValue(false);
+    await initializeWindowIdentity();
+    const handler = vi.fn();
+
+    onBroadcastEvent('settings:appearance-mode-changed', handler);
+    const runtimeHandler = runtimeMocks.eventsOn.mock.calls[0]?.[1];
+    runtimeHandler?.({
+      name: 'settings:appearance-mode-changed',
+      data: { mode: 'dark' },
+      sender: 'workspace-1',
+    });
+    await emitBroadcastEvent('settings:appearance-mode-changed', { mode: 'light' });
+
+    expect(handler).toHaveBeenCalledWith({ mode: 'dark' });
+    expect(runtimeMocks.eventsEmit).toHaveBeenCalledWith('settings:appearance-mode-changed', {
+      mode: 'light',
+    });
   });
 
   it('delegates desktop capabilities to the v3 runtime', async () => {

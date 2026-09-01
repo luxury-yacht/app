@@ -24,11 +24,8 @@ import { AppErrorBoundary } from '@ui/errors';
 import { AppLayout } from '@ui/layout/AppLayout';
 import { GlobalShortcuts, KeyboardProvider } from '@ui/shortcuts';
 import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
-import { applyAccentBg, applyAccentColor } from '@utils/accentColor';
 import { errorHandler } from '@utils/errorHandler';
 import { installTypingAssistPolicyObserver } from '@utils/inputAssistPolicy';
-import { applyLinkColor } from '@utils/linkColor';
-import { applyTintedPalette, isPaletteActive } from '@utils/paletteTint';
 import { setActivePermissionCluster } from '@/core/capabilities';
 import { isClusterOperationalState } from '@/core/contexts/clusterLifecycleState';
 import { requestContextRefresh } from '@/core/data-access';
@@ -37,9 +34,6 @@ import { PanelLifecycleGuardProvider } from '@/core/panel-windows/panelLifecycle
 import { WorkspacePanelCoordinator } from '@/core/panel-windows/WorkspacePanelCoordinator';
 import {
   applyTheme,
-  getAccentColor,
-  getLinkColor,
-  getPaletteTint,
   hydrateAppPreferences,
   matchThemeForCluster,
 } from '@/core/settings/appPreferences';
@@ -48,31 +42,7 @@ import { autoApplyClusterTheme } from '@/core/settings/clusterThemeAutoApply';
 import { useBackendErrorHandler } from '@/hooks/useBackendErrorHandler';
 import { useSidebarResize } from '@/hooks/useSidebarResize';
 import { useWailsRuntimeEvents } from '@/hooks/useWailsRuntimeEvents';
-
-// Resolve the current active appearance mode from the document attribute.
-const resolveAppearanceMode = (): 'light' | 'dark' => {
-  const attr = document.documentElement.dataset.appearanceMode;
-  return attr === 'dark' ? 'dark' : 'light';
-};
-
-// Apply palette tint and accent color overrides for the given mode.
-const applyAppearanceOverrides = (mode: 'light' | 'dark') => {
-  const tint = getPaletteTint(mode);
-  if (isPaletteActive(tint.saturation, tint.brightness)) {
-    applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
-  } else {
-    applyTintedPalette(0, 0, 0);
-  }
-
-  const lightAccent = getAccentColor('light');
-  const darkAccent = getAccentColor('dark');
-  applyAccentColor(lightAccent, darkAccent);
-  applyAccentBg(mode === 'light' ? lightAccent : darkAccent, mode);
-
-  const lightLink = getLinkColor('light');
-  const darkLink = getLinkColor('dark');
-  applyLinkColor(mode === 'light' ? lightLink : darkLink, mode);
-};
+import { applyAppearanceOverrides, resolveAppearanceMode } from '@/utils/appearanceMode';
 
 /**
  * AppContent - The main app content that uses the contexts
@@ -90,27 +60,6 @@ function AppContent() {
   useEffect(() => {
     setActivePermissionCluster(selectedClusterId, { operational: selectedClusterOperational });
   }, [selectedClusterId, selectedClusterOperational]);
-
-  // main.ts hydrates preferences before first render. This effect only replays
-  // the hydrated appearance values into CSS and keeps them synced on mode changes.
-  useEffect(() => {
-    let active = true;
-
-    applyAppearanceOverrides(resolveAppearanceMode());
-
-    // When the resolved mode changes, apply the palette for the new mode.
-    const unsubscribeModeResolved = eventBus.on('settings:appearance-mode-resolved', (newMode) => {
-      if (!active) {
-        return;
-      }
-      applyAppearanceOverrides(newMode);
-    });
-
-    return () => {
-      active = false;
-      unsubscribeModeResolved();
-    };
-  }, []);
 
   // Disable browser typing assistance for every current and future input-like
   // field in the app. This keeps search boxes, forms, and editable surfaces
