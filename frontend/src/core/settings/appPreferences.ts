@@ -250,9 +250,9 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   defaultTablePageSize: DEFAULT_TABLE_PAGE_SIZE,
   defaultObjectPanelPosition: 'right',
   objectPanelDockedRightWidth: 600,
-  objectPanelDockedBottomHeight: 400,
-  objectPanelFloatingWidth: 500,
-  objectPanelFloatingHeight: 400,
+  objectPanelDockedBottomHeight: 600,
+  objectPanelFloatingWidth: 600,
+  objectPanelFloatingHeight: 800,
   objectPanelFloatingX: 100,
   objectPanelFloatingY: 100,
 };

@@ -212,6 +212,10 @@ func TestAppGetAppSettingsReturnsDefaultWhenMissing(t *testing.T) {
 	expected.AnonymizedID = settings.AnonymizedID
 	require.Equal(t, expected, settings)
 	require.Equal(t, settings, app.Preferences.appSettings)
+	require.Equal(t, 600, settings.ObjectPanelDockedRightWidth)
+	require.Equal(t, 600, settings.ObjectPanelDockedBottomHeight)
+	require.Equal(t, 600, settings.ObjectPanelFloatingWidth)
+	require.Equal(t, 800, settings.ObjectPanelFloatingHeight)
 }
 
 func TestErrorReportingPreferenceDefaultsEnabledInSettingsAndSchema(t *testing.T) {
@@ -987,7 +991,10 @@ func TestAppGetAppSettingsSchemaIncludesBackendOwnedDefaults(t *testing.T) {
 	require.True(t, byKey[appPreferenceAppearanceMode].RuntimeSideEffect)
 	require.Equal(t, defaultObjectPanelPosition, byKey[appPreferenceDefaultObjectPanelPosition].DefaultValue)
 	require.Equal(t, defaultObjectPanelPosition, byKey[appPreferenceDefaultObjectPanelPosition].CurrentValue)
-	require.Equal(t, defaultObjectPanelDockedRightWidth, byKey[appPreferenceObjectPanelDockedRightWidth].DefaultValue)
+	require.Equal(t, 600, byKey[appPreferenceObjectPanelDockedRightWidth].DefaultValue)
+	require.Equal(t, 600, byKey[appPreferenceObjectPanelDockedBottomHeight].DefaultValue)
+	require.Equal(t, 600, byKey[appPreferenceObjectPanelFloatingWidth].DefaultValue)
+	require.Equal(t, 800, byKey[appPreferenceObjectPanelFloatingHeight].DefaultValue)
 	require.Equal(t, defaultKubernetesClientQPS, byKey[appPreferenceKubernetesClientQPS].DefaultValue)
 	require.Equal(t, minKubernetesClientQPS, *byKey[appPreferenceKubernetesClientQPS].Min)
 	require.Equal(t, maxKubernetesClientQPS, *byKey[appPreferenceKubernetesClientQPS].Max)

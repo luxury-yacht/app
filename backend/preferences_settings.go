@@ -218,9 +218,9 @@ const (
 	maxTablePageSize                     = 1000
 	defaultObjectPanelPosition           = "right"
 	defaultObjectPanelDockedRightWidth   = 600
-	defaultObjectPanelDockedBottomHeight = 400
-	defaultObjectPanelFloatingWidth      = 500
-	defaultObjectPanelFloatingHeight     = 400
+	defaultObjectPanelDockedBottomHeight = 600
+	defaultObjectPanelFloatingWidth      = 600
+	defaultObjectPanelFloatingHeight     = 800
 	defaultObjectPanelFloatingX          = 100
 	defaultObjectPanelFloatingY          = 100
 	minObjectPanelDockedRightWidth       = 500

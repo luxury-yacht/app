@@ -262,8 +262,8 @@ const preferenceSchema = (overrides: Record<string, Partial<Record<string, unkno
     {
       key: 'objectPanelDockedBottomHeight',
       type: 'integer',
-      defaultValue: 400,
-      currentValue: 400,
+      defaultValue: 600,
+      currentValue: 600,
       min: 200,
       max: 9999,
       runtimeSideEffect: false,
@@ -271,8 +271,8 @@ const preferenceSchema = (overrides: Record<string, Partial<Record<string, unkno
     {
       key: 'objectPanelFloatingWidth',
       type: 'integer',
-      defaultValue: 500,
-      currentValue: 500,
+      defaultValue: 600,
+      currentValue: 600,
       min: 450,
       max: 9999,
       runtimeSideEffect: false,
@@ -280,8 +280,8 @@ const preferenceSchema = (overrides: Record<string, Partial<Record<string, unkno
     {
       key: 'objectPanelFloatingHeight',
       type: 'integer',
-      defaultValue: 400,
-      currentValue: 400,
+      defaultValue: 800,
+      currentValue: 800,
       min: 200,
       max: 9999,
       runtimeSideEffect: false,
@@ -442,6 +442,17 @@ describe('appPreferences', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('uses the backend-aligned Object Panel layout defaults before hydration', () => {
+    expect(getObjectPanelLayoutDefaults()).toEqual({
+      dockedRightWidth: 600,
+      dockedBottomHeight: 600,
+      floatingWidth: 600,
+      floatingHeight: 800,
+      floatingX: 100,
+      floatingY: 100,
+    });
   });
 
   it('hydrates preferences from backend settings', async () => {
