@@ -5,6 +5,7 @@
  */
 
 import type { Meta, StoryObj } from '@storybook/react';
+import { DockablePanelProvider } from '@ui/dockable';
 import { AppearanceModeProviderDecorator } from '../../../.storybook/decorators/AppearanceModeProviderDecorator';
 import { KeyboardProviderDecorator } from '../../../.storybook/decorators/KeyboardProviderDecorator';
 import { KubeconfigProviderDecorator } from '../../../.storybook/decorators/KubeconfigProviderDecorator';
@@ -21,6 +22,11 @@ const meta: Meta<typeof SettingsModal> = {
     KeyboardProviderDecorator,
     ZoomProviderDecorator,
     AppearanceModeProviderDecorator,
+    (Story) => (
+      <DockablePanelProvider>
+        <Story />
+      </DockablePanelProvider>
+    ),
     KubeconfigProviderDecorator,
   ],
   args: {

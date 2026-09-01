@@ -36,14 +36,16 @@ const objectPanelPositionOptions = [
   icon: FC<{ width?: number; height?: number; fill?: string }>;
 }>;
 
-type LayoutField = 'dockedRightWidth' | 'dockedBottomHeight';
+type LayoutField = 'dockedRightWidth' | 'dockedBottomHeight' | 'floatingWidth' | 'floatingHeight';
 
 const fieldPreferenceKeys: Record<LayoutField, AppPreferenceKey> = {
   dockedRightWidth: 'objectPanelDockedRightWidth',
   dockedBottomHeight: 'objectPanelDockedBottomHeight',
+  floatingWidth: 'objectPanelFloatingWidth',
+  floatingHeight: 'objectPanelFloatingHeight',
 };
 
-// The three layout rows, each a pair of bounded pixel inputs.
+// Each layout row is a pair of bounded pixel inputs.
 const layoutRows: Array<{
   title: string;
   help: string;
@@ -67,6 +69,24 @@ const layoutRows: Array<{
       },
     ],
   },
+  {
+    title: 'Floating size',
+    help: 'Default dimensions of floating panel windows.',
+    fields: [
+      {
+        field: 'floatingWidth',
+        label: 'Width',
+        aria: 'Floating width',
+        idSuffix: 'panel-floating-width',
+      },
+      {
+        field: 'floatingHeight',
+        label: 'Height',
+        aria: 'Floating height',
+        idSuffix: 'panel-floating-height',
+      },
+    ],
+  },
 ];
 
 function ObjectPanelSection() {
@@ -86,6 +106,8 @@ function ObjectPanelSection() {
     return {
       dockedRightWidth: String(defaults.dockedRightWidth),
       dockedBottomHeight: String(defaults.dockedBottomHeight),
+      floatingWidth: String(defaults.floatingWidth),
+      floatingHeight: String(defaults.floatingHeight),
     };
   });
 

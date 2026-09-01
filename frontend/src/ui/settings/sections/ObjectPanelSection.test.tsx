@@ -4,6 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 import ObjectPanelSection from './ObjectPanelSection';
 
+const setInputValue = (input: HTMLInputElement, value: string): void => {
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  valueSetter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
 const appPreferenceMocks = vi.hoisted(() => ({
   getDefaultObjectPanelPosition: vi.fn(() => 'right'),
   setDefaultObjectPanelPosition: vi.fn(),
@@ -117,5 +123,35 @@ describe('ObjectPanelSection', () => {
 
     expect(appPreferenceMocks.setDefaultObjectPanelPosition).toHaveBeenCalledWith('bottom');
     expect(bottomButton?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('lets users configure the default floating window width and height', () => {
+    const widthInput = requireValue(
+      container.querySelector<HTMLInputElement>('input[aria-label="Floating width"]'),
+      'expected a floating window width setting'
+    );
+    const heightInput = requireValue(
+      container.querySelector<HTMLInputElement>('input[aria-label="Floating height"]'),
+      'expected a floating window height setting'
+    );
+
+    expect(widthInput.value).toBe('720');
+    expect(widthInput.min).toBe('450');
+    expect(heightInput.value).toBe('520');
+    expect(heightInput.min).toBe('200');
+
+    act(() => {
+      setInputValue(widthInput, '810');
+    });
+
+    expect(appPreferenceMocks.setObjectPanelLayoutDefaults).toHaveBeenLastCalledWith({
+      dockedRightWidth: 420,
+      dockedBottomHeight: 260,
+      floatingWidth: 810,
+      floatingHeight: 520,
+      floatingX: 60,
+      floatingY: 60,
+    });
+    expect(dockableMocks.applyLayoutDefaultsAcrossClusters).toHaveBeenCalledOnce();
   });
 });
