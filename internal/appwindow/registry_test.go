@@ -85,7 +85,7 @@ func TestOptionsPreserveTheSharedPeerContract(t *testing.T) {
 	}
 }
 
-func TestPanelOptionsUseSharedEntryAndIndependentNativeFrame(t *testing.T) {
+func TestPanelOptionsUseSharedEntryAndPlatformNativeFrame(t *testing.T) {
 	nativeMenu := application.NewMenu()
 
 	for _, goos := range []string{"darwin", "windows", "linux"} {
@@ -103,8 +103,10 @@ func TestPanelOptionsUseSharedEntryAndIndependentNativeFrame(t *testing.T) {
 			require.False(t, options.AlwaysOnTop)
 			require.False(t, options.DisableResize)
 			require.False(t, options.Frameless)
-			require.False(t, options.Mac.TitleBar.AppearsTransparent)
-			require.False(t, options.Mac.TitleBar.FullSizeContent)
+			require.True(t, options.Mac.TitleBar.AppearsTransparent)
+			require.True(t, options.Mac.TitleBar.FullSizeContent)
+			require.True(t, options.Mac.TitleBar.HideTitle)
+			require.True(t, options.Mac.TitleBar.HideToolbarSeparator)
 			require.Zero(t, options.InitialPosition)
 			require.Zero(t, options.StartState)
 			require.Nil(t, options.Screen)
@@ -352,7 +354,7 @@ func TestRegistryBeginsHiddenPanelTransferWithOrdinaryWindowOptions(t *testing.T
 	require.False(t, createdOptions.AlwaysOnTop)
 	require.False(t, createdOptions.DisableResize)
 	require.False(t, createdOptions.Frameless)
-	require.False(t, createdOptions.Mac.TitleBar.FullSizeContent)
+	require.True(t, createdOptions.Mac.TitleBar.FullSizeContent)
 	require.Equal(t, 1, registry.Count())
 }
 

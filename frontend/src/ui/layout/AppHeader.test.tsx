@@ -75,6 +75,20 @@ describe('AppHeader', () => {
     ).toEqual(['Toggle window maximize', 'Favorites', 'Command Palette']);
   });
 
+  it('renders only draggable window chrome for a panel window', () => {
+    act(() => {
+      root.render(<AppHeader mode="panel" />);
+    });
+
+    expect(container.querySelector('.app-header-drag-control')).not.toBeNull();
+    expect(container.querySelector('.app-header-controls')).toBeNull();
+    expect(container.textContent).not.toContain('Connectivity');
+    expect(container.textContent).not.toContain('Metrics');
+    expect(container.textContent).not.toContain('Sessions');
+    expect(container.textContent).not.toContain('Favorites');
+    expect(container.querySelector('[aria-label="Command Palette"]')).toBeNull();
+  });
+
   it('does not toggle maximise from the header while a modal is open', () => {
     document.body.classList.add('modal-surface-open');
     act(() => {

@@ -17,7 +17,11 @@ import { eventBus } from '@/core/events';
 import { isMacPlatform } from '@/utils/platform';
 import './AppHeader.css';
 
-const AppHeader: React.FC = () => {
+interface AppHeaderProps {
+  mode?: 'workspace' | 'panel';
+}
+
+const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
   const isMac = isMacPlatform();
   const isModalOpen = () =>
     typeof document !== 'undefined' && document.body.classList.contains('modal-surface-open');
@@ -42,25 +46,27 @@ const AppHeader: React.FC = () => {
         }}
         onDoubleClick={toggleWindowMaximize}
       />
-      <div className="app-header-controls">
-        <UpdateStatus />
-        <div className="status-indicators">
-          <ConnectivityStatus />
-          <MetricsStatus />
-          <SessionsStatus />
+      {mode === 'workspace' ? (
+        <div className="app-header-controls">
+          <UpdateStatus />
+          <div className="status-indicators">
+            <ConnectivityStatus />
+            <MetricsStatus />
+            <SessionsStatus />
+          </div>
+          <FavMenuDropdown />
+          <button
+            type="button"
+            className="settings-button"
+            onClick={() => eventBus.emit('command-palette:open')}
+            title={`Command Palette (${isMac ? '⇧⌘P' : 'Ctrl+Shift+P'})`}
+            aria-label="Command Palette"
+            data-app-header-last-focusable="true"
+          >
+            <SearchIcon width={14} height={14} />
+          </button>
         </div>
-        <FavMenuDropdown />
-        <button
-          type="button"
-          className="settings-button"
-          onClick={() => eventBus.emit('command-palette:open')}
-          title={`Command Palette (${isMac ? '⇧⌘P' : 'Ctrl+Shift+P'})`}
-          aria-label="Command Palette"
-          data-app-header-last-focusable="true"
-        >
-          <SearchIcon width={14} height={14} />
-        </button>
-      </div>
+      ) : null}
     </header>
   );
 };

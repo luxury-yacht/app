@@ -17,6 +17,7 @@ import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
 import { DockablePanelProvider } from '@ui/dockable';
 import type { TabGroupState } from '@ui/dockable/tabGroupTypes';
 import { AppErrorBoundary, PanelErrorBoundary } from '@ui/errors';
+import AppHeader from '@ui/layout/AppHeader';
 import { KeyboardProvider } from '@ui/shortcuts';
 import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
 import { useCallback, useEffect, useState } from 'react';
@@ -150,6 +151,7 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
     >
       <PanelWindowShortcuts descriptor={descriptor} ready={ready} />
       <TextContextMenu />
+      <AppHeader mode="panel" />
       <div className="panel-window-content content">
         {Array.from(openPanels.entries()).map(([panelId, objectRef]) => (
           <PanelErrorBoundary

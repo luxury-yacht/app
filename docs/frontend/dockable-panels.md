@@ -18,6 +18,11 @@ floating, viewport-relative geometry, blank-space drag, or HTML maximize mode.
 - Docked and native renderers share the group chrome and object content
   contract. Native snapshots contain serializable identity and view state, not
   React nodes, refs, fetched data, credentials, drafts, or terminal buffers.
+- Native panel windows reuse the workspace window chrome: macOS uses the
+  transparent full-size titlebar with native traffic-light controls, while
+  Windows and Linux retain their native frame controls. The panel's HTML header
+  is only the shared drag/maximize surface; workspace status, favorites, and
+  command-palette controls do not render there.
 - The owner directory is authoritative for panel location. A child renderer is
   a projection and acknowledges changes through its owner.
 - Transient unmounts such as workspace cluster switches preserve panel refresh

@@ -7,8 +7,12 @@
 }
 
 .panel-window-content {
-  position: fixed;
-  inset: 0;
+  position: relative;
+  flex: 1;
+}
+
+.panel-window-app > .app-header {
+  flex: 0 0 var(--app-header-height);
 }
 
 .panel-window-app .dockable-panel--right,

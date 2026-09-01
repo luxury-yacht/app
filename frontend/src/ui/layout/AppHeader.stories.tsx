@@ -24,3 +24,8 @@ type Story = StoryObj<typeof AppHeader>;
 
 /** Default header — now includes the real FavMenuDropdown. */
 export const Default: Story = {};
+
+/** Native panel header — shared drag surface without workspace controls. */
+export const PanelWindow: Story = {
+  args: { mode: 'panel' },
+};

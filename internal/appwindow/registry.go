@@ -1016,6 +1016,7 @@ func panelWindowOptionsForPlatform(
 		URL:                "/",
 		BackgroundColour:   application.NewRGB(30, 30, 30),
 		BackgroundType:     backgroundType,
+		Mac:                sharedMacWindowChrome(),
 		Windows:            application.WindowsWindow{Theme: application.SystemDefault},
 		Linux:              application.LinuxWindow{Menu: nativeMenu},
 		UseApplicationMenu: true,
@@ -1064,28 +1065,32 @@ func windowOptionsForPlatform(name string, nativeMenu *application.Menu, goos st
 	}
 
 	return application.WebviewWindowOptions{
-		Name:             name,
-		Title:            "Luxury Yacht",
-		Width:            1200,
-		Height:           800,
-		MinWidth:         1100,
-		MinHeight:        600,
-		URL:              "/",
-		BackgroundColour: application.NewRGB(30, 30, 30),
-		BackgroundType:   backgroundType,
-		Mac: application.MacWindow{
-			TitleBar: application.MacTitleBar{
-				AppearsTransparent:   true,
-				FullSizeContent:      true,
-				HideTitle:            true,
-				HideToolbarSeparator: true,
-			},
-		},
+		Name:               name,
+		Title:              "Luxury Yacht",
+		Width:              1200,
+		Height:             800,
+		MinWidth:           1100,
+		MinHeight:          600,
+		URL:                "/",
+		BackgroundColour:   application.NewRGB(30, 30, 30),
+		BackgroundType:     backgroundType,
+		Mac:                sharedMacWindowChrome(),
 		Windows:            application.WindowsWindow{Theme: application.SystemDefault},
 		Linux:              application.LinuxWindow{Menu: nativeMenu},
 		UseApplicationMenu: true,
 		Zoom:               1,
 		ZoomControlEnabled: false,
 		Hidden:             goos != "linux",
+	}
+}
+
+func sharedMacWindowChrome() application.MacWindow {
+	return application.MacWindow{
+		TitleBar: application.MacTitleBar{
+			AppearsTransparent:   true,
+			FullSizeContent:      true,
+			HideTitle:            true,
+			HideToolbarSeparator: true,
+		},
 	}
 }
