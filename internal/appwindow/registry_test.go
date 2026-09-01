@@ -690,6 +690,18 @@ func TestRegistryFocusesAuthorizesAndClosesAnOwnedPanelWindow(t *testing.T) {
 	require.ErrorContains(t, err, "not live")
 }
 
+func TestRegistryTreatsAnUncancelledWindowEventAsDelivered(t *testing.T) {
+	wailsApp := application.New(application.Options{})
+	registry := NewRegistry(wailsApp, nil, nil)
+	owner := registry.Create(true)
+
+	require.True(t, registry.emitWindowEvent(
+		owner.Name(),
+		panelwindow.WindowClosedEventName,
+		panelwindow.WindowClosedEvent{WindowName: "panel-1"},
+	))
+}
+
 func TestRegistryClosesClusterPanelsBeforeAuthorizingTheirOwnerClose(t *testing.T) {
 	wailsApp := application.New(application.Options{})
 	registry := NewRegistry(wailsApp, nil, nil)

@@ -103,6 +103,8 @@ interface DockablePanelContextValue {
 
   // Fan out applyObjectPanelLayoutDefaults to every cluster's store.
   applyLayoutDefaultsAcrossClusters: () => void;
+  // Remove closed native-panel layout and group state from its owning cluster.
+  discardPanelLayouts: (clusterId: string, panelIds: readonly string[]) => void;
   requestGroupMove?: (groupKey: GroupKey, targetPosition: DockPosition) => boolean;
   nativeWindowMode: boolean;
 }
@@ -777,6 +779,17 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
     });
   }, []);
 
+  const discardPanelLayouts = useCallback((clusterId: string, panelIds: readonly string[]) => {
+    const store = storesRef.current.get(clusterId);
+    if (!store) {
+      return;
+    }
+    for (const panelId of panelIds) {
+      store.handoffLayoutBeforeClose(panelId);
+      store.clearPanelState(panelId);
+    }
+  }, []);
+
   const requestGroupMove = useCallback(
     (groupKey: GroupKey, targetPosition: DockPosition): boolean => {
       if (!onGroupMoveRequest) {
@@ -820,6 +833,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       getLastFocusedPosition,
       focusPanel,
       applyLayoutDefaultsAcrossClusters,
+      discardPanelLayouts,
       requestGroupMove,
       nativeWindowMode,
     }),
@@ -845,6 +859,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       getLastFocusedPosition,
       focusPanel,
       applyLayoutDefaultsAcrossClusters,
+      discardPanelLayouts,
       requestGroupMove,
       nativeWindowMode,
     ]

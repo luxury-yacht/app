@@ -112,7 +112,8 @@ interface ObjectPanelStateContextType {
   setObjectPanelActiveTab: (panelId: string, tab: ViewType) => void;
   commitPanelWindow: (snapshot: panelwindow.GroupSnapshot, windowName: string) => void;
   dockPanelWindow: (snapshot: panelwindow.GroupSnapshot, edge: 'right' | 'bottom') => void;
-  removePanelWindow: (windowName: string) => void;
+  removePanelWindow: (clusterId: string, windowName: string) => void;
+  panelIdsForPanelWindow: (clusterId: string, windowName: string) => string[];
   getOwnedPanel: (
     clusterId: string,
     panelId: string
@@ -443,40 +444,56 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
     []
   );
 
-  const removePanelWindow = useCallback((windowName: string) => {
+  const removePanelWindow = useCallback((clusterId: string, windowName: string) => {
     setObjectPanelStateByCluster((previous) => {
-      const next = { ...previous };
-      for (const [clusterId, current] of Object.entries(previous)) {
-        const removedPanelIds = Array.from(current.nativeLocations.entries())
-          .filter(([, location]) => location.windowName === windowName)
-          .map(([panelId]) => panelId);
-        if (removedPanelIds.length === 0) {
-          continue;
+      const current = previous[clusterId];
+      if (!current) {
+        return previous;
+      }
+      const removedPanelIds = Array.from(current.nativeLocations.entries())
+        .filter(([, location]) => location.windowName === windowName)
+        .map(([panelId]) => panelId);
+      if (removedPanelIds.length === 0) {
+        return previous;
+      }
+      const nextOpenPanels = new Map(current.openPanels);
+      const nextActiveTabs = new Map(current.activeTabs);
+      const nextNativeLocations = new Map(current.nativeLocations);
+      const nextDockedEdges = new Map(current.dockedEdges);
+      for (const panelId of removedPanelIds) {
+        const ref = nextOpenPanels.get(panelId);
+        if (ref) {
+          evictPanelScopes(ref);
         }
-        const nextOpenPanels = new Map(current.openPanels);
-        const nextActiveTabs = new Map(current.activeTabs);
-        const nextNativeLocations = new Map(current.nativeLocations);
-        const nextDockedEdges = new Map(current.dockedEdges);
-        for (const panelId of removedPanelIds) {
-          const ref = nextOpenPanels.get(panelId);
-          if (ref) {
-            evictPanelScopes(ref);
-          }
-          nextOpenPanels.delete(panelId);
-          nextActiveTabs.delete(panelId);
-          nextNativeLocations.delete(panelId);
-          nextDockedEdges.delete(panelId);
-        }
-        next[clusterId] = {
+        clearLogViewerPrefs(panelId);
+        nextOpenPanels.delete(panelId);
+        nextActiveTabs.delete(panelId);
+        nextNativeLocations.delete(panelId);
+        nextDockedEdges.delete(panelId);
+      }
+      return {
+        ...previous,
+        [clusterId]: {
           openPanels: nextOpenPanels,
           activeTabs: nextActiveTabs,
           nativeLocations: nextNativeLocations,
           dockedEdges: nextDockedEdges,
-        };
-      }
-      return next;
+        },
+      };
     });
   }, []);
+
+  const panelIdsForPanelWindow = useCallback(
+    (clusterId: string, windowName: string): string[] =>
+      Array.from(
+        (
+          stateByClusterRef.current[clusterId] ?? DEFAULT_OBJECT_PANEL_STATE
+        ).nativeLocations.entries()
+      )
+        .filter(([, location]) => location.windowName === windowName)
+        .map(([panelId]) => panelId),
+    []
+  );
 
   const getOwnedPanel = useCallback((clusterId: string, panelId: string) => {
     const current = stateByClusterRef.current[clusterId] ?? DEFAULT_OBJECT_PANEL_STATE;
@@ -651,6 +668,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       commitPanelWindow,
       dockPanelWindow,
       removePanelWindow,
+      panelIdsForPanelWindow,
       getOwnedPanel,
       upsertOwnedPanel,
       removeOwnedPanel,
@@ -671,6 +689,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       commitPanelWindow,
       dockPanelWindow,
       removePanelWindow,
+      panelIdsForPanelWindow,
       getOwnedPanel,
       upsertOwnedPanel,
       removeOwnedPanel,

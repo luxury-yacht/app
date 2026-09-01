@@ -89,7 +89,6 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     nativeLocations,
     commitPanelWindow,
     dockPanelWindow,
-    removePanelWindow,
     getOwnedPanel,
     panelIdsForCluster,
     nativeWindowNamesForCluster,
@@ -264,30 +263,25 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     [dockPanelWindow, ownerWindowName]
   );
 
-  useEffect(
-    () =>
-      onPanelWindowClosed(({ windowName }) => {
-        removePanelWindow(windowName);
-        setPendingOwnerCloseWindows((previous) => {
-          if (!previous?.has(windowName)) {
-            return previous;
-          }
-          const next = new Set(previous);
-          next.delete(windowName);
-          return next;
-        });
-        for (const [clusterId, pending] of pendingClusterClosesRef.current) {
-          pending.remaining.delete(windowName);
-          if (pending.remaining.size > 0) {
-            continue;
-          }
-          window.clearTimeout(pending.timeout);
-          pendingClusterClosesRef.current.delete(clusterId);
-          pending.resolve(true);
-        }
-      }),
-    [removePanelWindow]
-  );
+  const handlePanelWindowClosed = useCallback((windowName: string) => {
+    setPendingOwnerCloseWindows((previous) => {
+      if (!previous?.has(windowName)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.delete(windowName);
+      return next;
+    });
+    for (const [clusterId, pending] of pendingClusterClosesRef.current) {
+      pending.remaining.delete(windowName);
+      if (pending.remaining.size > 0) {
+        continue;
+      }
+      window.clearTimeout(pending.timeout);
+      pendingClusterClosesRef.current.delete(clusterId);
+      pending.resolve(true);
+    }
+  }, []);
 
   useEffect(
     () =>
@@ -549,6 +543,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         ownerWindowName={ownerWindowName}
         pendingDockRequest={pendingDockRequest}
         onDockRequestSettled={handleDockRequestSettled}
+        onOwnedPanelWindowClosed={handlePanelWindowClosed}
       >
         {children}
       </WorkspaceObjectRouteCoordinator>
@@ -560,14 +555,22 @@ function WorkspaceObjectRouteCoordinator({
   ownerWindowName,
   pendingDockRequest,
   onDockRequestSettled,
+  onOwnedPanelWindowClosed,
   children,
 }: Readonly<{
   ownerWindowName: string;
   pendingDockRequest: panelwindow.WindowDockRequestedEvent | null;
   onDockRequestSettled: (request: panelwindow.WindowDockRequestedEvent, committed: boolean) => void;
+  onOwnedPanelWindowClosed: (windowName: string) => void;
   children: React.ReactNode;
 }>) {
-  const { getOwnedPanel, upsertOwnedPanel, removeOwnedPanel } = useObjectPanelState();
+  const {
+    getOwnedPanel,
+    upsertOwnedPanel,
+    removeOwnedPanel,
+    removePanelWindow,
+    panelIdsForPanelWindow,
+  } = useObjectPanelState();
   const {
     selectedClusterIds,
     selectedKubeconfigs,
@@ -575,7 +578,7 @@ function WorkspaceObjectRouteCoordinator({
     setActiveKubeconfig,
     selectedClusterId,
   } = useKubeconfig();
-  const { tabGroups, focusPanel } = useDockablePanelContext();
+  const { tabGroups, focusPanel, discardPanelLayouts } = useDockablePanelContext();
   const pendingDockedFocusRef = useRef<string | null>(null);
   const pendingObjectClaimsRef = useRef(new Set<string>());
   const dockAttemptRef = useRef<{
@@ -583,6 +586,17 @@ function WorkspaceObjectRouteCoordinator({
     timeout: number;
     acknowledging: boolean;
   } | null>(null);
+
+  useEffect(
+    () =>
+      onPanelWindowClosed(({ windowName, clusterId }) => {
+        const panelIds = panelIdsForPanelWindow(clusterId, windowName);
+        discardPanelLayouts(clusterId, panelIds);
+        removePanelWindow(clusterId, windowName);
+        onOwnedPanelWindowClosed(windowName);
+      }),
+    [discardPanelLayouts, onOwnedPanelWindowClosed, panelIdsForPanelWindow, removePanelWindow]
+  );
 
   const settleDockAttempt = useCallback(
     (request: panelwindow.WindowDockRequestedEvent, committed: boolean, error?: unknown) => {

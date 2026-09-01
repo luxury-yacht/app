@@ -24,12 +24,14 @@ const mocks = vi.hoisted(() => ({
   focusPanelWindow: vi.fn(async () => undefined),
   requestPanelClose: vi.fn(async () => undefined),
   syncPanelWindowSnapshot: vi.fn(),
+  panelIdsForPanelWindow: vi.fn(() => ['panel-a']),
   removeOwnedPanel: vi.fn(),
   upsertOwnedPanel: vi.fn(),
   getOwnedPanel: vi.fn((_clusterId: string, _panelId: string): unknown => null),
   panelIdsForCluster: vi.fn(() => ['panel-a']),
   nativeWindowNamesForCluster: vi.fn(() => ['panel-1']),
   focusPanel: vi.fn(),
+  discardPanelLayouts: vi.fn(),
   focusOwnerWindow: vi.fn(async () => undefined),
   openPanels: new Map<string, typeof objectRef>(),
   nativeLocations: new Map<string, { windowName: string; groupId: string }>(),
@@ -93,6 +95,7 @@ vi.mock('@/modules/object-panel/contexts/ObjectPanelStateContext', () => ({
     getOwnedPanel: mocks.getOwnedPanel,
     panelIdsForCluster: mocks.panelIdsForCluster,
     nativeWindowNamesForCluster: mocks.nativeWindowNamesForCluster,
+    panelIdsForPanelWindow: mocks.panelIdsForPanelWindow,
     syncPanelWindowSnapshot: mocks.syncPanelWindowSnapshot,
     removeOwnedPanel: mocks.removeOwnedPanel,
     upsertOwnedPanel: mocks.upsertOwnedPanel,
@@ -141,6 +144,7 @@ vi.mock('@/ui/dockable', () => ({
       floating: [],
     },
     focusPanel: mocks.focusPanel,
+    discardPanelLayouts: mocks.discardPanelLayouts,
   }),
 }));
 
@@ -157,6 +161,7 @@ describe('WorkspacePanelCoordinator', () => {
     mocks.getOwnedPanel.mockReturnValue(null);
     mocks.panelIdsForCluster.mockReturnValue(['panel-a']);
     mocks.nativeWindowNamesForCluster.mockReturnValue(['panel-1']);
+    mocks.panelIdsForPanelWindow.mockReturnValue(['panel-a']);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -206,10 +211,28 @@ describe('WorkspacePanelCoordinator', () => {
     expect(result).toBeUndefined();
 
     await act(async () => {
-      mocks.eventHandlers.closed?.({ windowName: 'panel-1' } as never);
+      mocks.eventHandlers.closed?.({ windowName: 'panel-1', clusterId: 'cluster-1' } as never);
       await Promise.resolve();
     });
     expect(result).toBe(true);
+  });
+
+  it('discards cluster-scoped source layouts before forgetting a closed native window', async () => {
+    mocks.panelIdsForPanelWindow.mockReturnValue(['panel-a', 'panel-b']);
+
+    await act(async () => {
+      mocks.eventHandlers.closed?.({
+        windowName: 'panel-1',
+        clusterId: 'cluster-1',
+      } as never);
+      await Promise.resolve();
+    });
+
+    expect(mocks.discardPanelLayouts).toHaveBeenCalledWith('cluster-1', ['panel-a', 'panel-b']);
+    expect(mocks.removeWindow).toHaveBeenCalledWith('cluster-1', 'panel-1');
+    expect(mocks.discardPanelLayouts.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.removeWindow.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
+    );
   });
 
   it('acknowledges a dock handoff once after the owner target is mounted', async () => {
@@ -519,7 +542,7 @@ describe('WorkspacePanelCoordinator', () => {
     expect(mocks.acknowledgeWorkspaceClose).not.toHaveBeenCalled();
 
     await act(async () => {
-      mocks.eventHandlers.closed?.({ windowName: 'panel-1' } as never);
+      mocks.eventHandlers.closed?.({ windowName: 'panel-1', clusterId: 'cluster-1' } as never);
       await Promise.resolve();
     });
     expect(mocks.acknowledgeWorkspaceClose).toHaveBeenCalledWith('workspace-1');

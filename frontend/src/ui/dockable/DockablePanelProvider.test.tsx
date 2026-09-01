@@ -63,6 +63,12 @@ const render = async (element: React.ReactElement) => {
 
   return {
     container,
+    rerender: async (nextElement: React.ReactElement) => {
+      await act(async () => {
+        root.render(<TabDragProvider>{nextElement}</TabDragProvider>);
+        await Promise.resolve();
+      });
+    },
     unmount: async () => {
       await act(async () => {
         root.unmount();
@@ -234,6 +240,53 @@ describe('DockablePanelProvider', () => {
       requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
         .tabGroups.right.tabs
     ).toEqual(['logs']);
+
+    await unmount();
+  });
+
+  it('discards closed native-panel layouts from their owning cluster while another cluster is active', async () => {
+    const contextRef: { current: DockablePanelContextValue | null } = { current: null };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    const renderProvider = () => (
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+    const { rerender, unmount } = await render(renderProvider());
+
+    await act(async () => {
+      requireDockableContext(contextRef.current).syncPanelGroup('panel-a', 'right');
+      await Promise.resolve();
+    });
+
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-b',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    await rerender(renderProvider());
+
+    await act(async () => {
+      requireDockableContext(contextRef.current).syncPanelGroup('panel-b', 'bottom');
+      requireDockableContext(contextRef.current).discardPanelLayouts('cluster-a', ['panel-a']);
+      await Promise.resolve();
+    });
+    expect(requireDockableContext(contextRef.current).tabGroups.bottom.tabs).toEqual(['panel-b']);
+
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    await rerender(renderProvider());
+    expect(requireDockableContext(contextRef.current).tabGroups.right.tabs).toEqual([]);
 
     await unmount();
   });

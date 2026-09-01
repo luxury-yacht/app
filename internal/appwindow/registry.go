@@ -117,7 +117,9 @@ func NewRegistry(
 		if !ok {
 			return false
 		}
-		return window.EmitEvent(eventName, payload)
+		// Wails reports whether an event was cancelled, while registry callers
+		// need to know whether delivery was accepted.
+		return !window.EmitEvent(eventName, payload)
 	}
 	registry.windowGeometry = func(name string) (geometry, bool) {
 		window, ok := app.Window.GetByName(name)
