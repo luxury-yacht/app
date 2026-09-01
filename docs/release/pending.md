@@ -1,5 +1,6 @@
 ### Changed
 
+- Floating object-panel groups now open as independent native application windows owned by their workspace. Groups can dock back to the right or bottom with acknowledged, rollback-safe handoffs; unsaved YAML and in-flight mutations protect moves and every close path.
 - The Network view's generic `Details` column has been replaced by three more specific columns (`Context`, `Network`, and `Summary`) to provide more useful data without having to open the Object Panel.
 - Namespaces in the Attention view are now clickable.
 - Clicked Namespace links should now properly scroll into view, and default to the Workloads view instead of Browse.

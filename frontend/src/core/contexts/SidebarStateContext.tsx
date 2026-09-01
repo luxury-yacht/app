@@ -40,6 +40,8 @@ export const useSidebarState = () => {
   return context;
 };
 
+export const useOptionalSidebarState = () => useContext(SidebarStateContext);
+
 interface SidebarStateProviderProps {
   children: React.ReactNode;
 }

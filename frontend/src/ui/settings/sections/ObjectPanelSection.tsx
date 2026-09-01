@@ -36,15 +36,11 @@ const objectPanelPositionOptions = [
   icon: FC<{ width?: number; height?: number; fill?: string }>;
 }>;
 
-type LayoutField = keyof ObjectPanelLayoutDefaults;
+type LayoutField = 'dockedRightWidth' | 'dockedBottomHeight';
 
 const fieldPreferenceKeys: Record<LayoutField, AppPreferenceKey> = {
   dockedRightWidth: 'objectPanelDockedRightWidth',
   dockedBottomHeight: 'objectPanelDockedBottomHeight',
-  floatingWidth: 'objectPanelFloatingWidth',
-  floatingHeight: 'objectPanelFloatingHeight',
-  floatingX: 'objectPanelFloatingX',
-  floatingY: 'objectPanelFloatingY',
 };
 
 // The three layout rows, each a pair of bounded pixel inputs.
@@ -71,42 +67,6 @@ const layoutRows: Array<{
       },
     ],
   },
-  {
-    title: 'Floating size',
-    help: 'Default dimensions of floating panels.',
-    fields: [
-      {
-        field: 'floatingWidth',
-        label: 'Width',
-        aria: 'Floating width',
-        idSuffix: 'panel-floating-width',
-      },
-      {
-        field: 'floatingHeight',
-        label: 'Height',
-        aria: 'Floating height',
-        idSuffix: 'panel-floating-height',
-      },
-    ],
-  },
-  {
-    title: 'Floating position',
-    help: 'Default position of floating panels.',
-    fields: [
-      {
-        field: 'floatingY',
-        label: 'Top',
-        aria: 'Floating top position',
-        idSuffix: 'panel-floating-y',
-      },
-      {
-        field: 'floatingX',
-        label: 'Left',
-        aria: 'Floating left position',
-        idSuffix: 'panel-floating-x',
-      },
-    ],
-  },
 ];
 
 function ObjectPanelSection() {
@@ -126,10 +86,6 @@ function ObjectPanelSection() {
     return {
       dockedRightWidth: String(defaults.dockedRightWidth),
       dockedBottomHeight: String(defaults.dockedBottomHeight),
-      floatingWidth: String(defaults.floatingWidth),
-      floatingHeight: String(defaults.floatingHeight),
-      floatingX: String(defaults.floatingX),
-      floatingY: String(defaults.floatingY),
     };
   });
 
@@ -168,24 +124,6 @@ function ObjectPanelSection() {
     if (panelLayout.dockedBottomHeight > content.height) {
       issues.push('docked height exceeds content area');
       fields.add('dockedBottomHeight');
-    }
-    if (panelLayout.floatingWidth > content.width) {
-      issues.push('floating width exceeds content area');
-      fields.add('floatingWidth');
-    }
-    if (panelLayout.floatingHeight > content.height) {
-      issues.push('floating height exceeds content area');
-      fields.add('floatingHeight');
-    }
-    if (panelLayout.floatingX + panelLayout.floatingWidth > content.width) {
-      issues.push('floating panel extends beyond right edge');
-      fields.add('floatingX');
-      fields.add('floatingWidth');
-    }
-    if (panelLayout.floatingY + panelLayout.floatingHeight > content.height) {
-      issues.push('floating panel extends beyond bottom edge');
-      fields.add('floatingY');
-      fields.add('floatingHeight');
     }
     return issues.length > 0 ? { issues, fields } : null;
   }, [panelLayout]);
@@ -248,7 +186,7 @@ function ObjectPanelSection() {
             <div className="setting-item setting-item-inline">
               {row.fields.map((field, index) => renderLayoutInput(field, index === 0))}
             </div>
-            {row.title === 'Floating position' && panelLayoutWarning && (
+            {panelLayoutWarning && (
               <div className="setting-item opd-warning">
                 <p>One or more values will be adjusted to fit at render time:</p>
                 <ul>

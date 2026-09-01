@@ -115,7 +115,6 @@ describe('useDockablePanelState', () => {
       state.initialize({
         position: 'bottom',
         size: { width: 420, height: 260 },
-        floatingPosition: { x: 110, y: 160 },
         isOpen: false,
       })
     );
@@ -123,7 +122,6 @@ describe('useDockablePanelState', () => {
     expect(hook.current.isInitialized).toBe(true);
     expect(hook.current.position).toBe('bottom');
     expect(hook.current.size.height).toBe(260);
-    expect(hook.current.floatingPosition).toEqual({ x: 110, y: 160 });
     expect(hook.current.isOpen).toBe(false);
 
     await hook.unmount();
@@ -143,26 +141,6 @@ describe('useDockablePanelState', () => {
 
     expect(hook.current.bottomSize).toEqual({ width: 400, height: 310 });
     expect(hook.current.size.height).toBe(310);
-
-    await hook.unmount();
-  });
-
-  it('clamps floating position within viewport bounds', async () => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 });
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
-
-    const hook = await renderHook('dockable-floating');
-
-    await hook.update((state) => state.setPosition('floating'));
-    await hook.update((state) => state.setFloatingPosition({ x: -40, y: -10 }));
-
-    expect(hook.current.floatingPosition.x).toBeGreaterThanOrEqual(0);
-    expect(hook.current.floatingPosition.y).toBeGreaterThanOrEqual(0);
-
-    await hook.update((state) => state.setFloatingPosition({ x: 2000, y: 2000 }));
-    // Max position = viewport - panel size. Position must stay within viewport bounds.
-    expect(hook.current.floatingPosition.x).toBeLessThanOrEqual(800);
-    expect(hook.current.floatingPosition.y).toBeLessThanOrEqual(600);
 
     await hook.unmount();
   });
@@ -216,15 +194,13 @@ describe('useDockablePanelState', () => {
       restorePanelStates({
         'dockable-global': {
           ...snapshot['dockable-global'],
-          position: 'floating',
-          floatingPosition: { x: 200, y: 180 },
+          position: 'right',
         },
       });
     });
 
     await hook.rerender();
-    expect(hook.current.position).toBe('floating');
-    expect(hook.current.floatingPosition).toEqual({ x: 200, y: 180 });
+    expect(hook.current.position).toBe('right');
 
     await hook.unmount();
   });

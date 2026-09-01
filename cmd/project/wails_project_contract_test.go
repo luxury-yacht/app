@@ -343,10 +343,17 @@ func TestApplicationRuntimeComposesLeafOwners(t *testing.T) {
 	require.Contains(t, mainSource, "Reporter: reporter,")
 	require.Contains(t, mainSource, "ApplicationUpdates: backend.ApplicationUpdateOptions{")
 	require.Contains(t, mainSource, "CreateWorkspaceWindow: func() {")
+	require.Contains(t, mainSource, "NativeWindowDescriptor: func(windowName string)")
+	require.Contains(t, mainSource, "BeginPanelWindowOpen: func(snapshot panelwindow.GroupSnapshot)")
+	require.Contains(t, mainSource, "AcknowledgePanelReady: func(windowName, transferID string)")
+	require.Contains(t, mainSource, "UpdatePanelSnapshot: func(windowName string, snapshot panelwindow.GroupSnapshot)")
+	require.Contains(t, mainSource, "RequestPanelTabClose: func(windowName, panelID string)")
+	require.Contains(t, mainSource, "AuthorizePanelTabClose: func(ownerWindowName, windowName, panelID string)")
 	require.Contains(t, mainSource, "desktopShell := backendRuntime.DesktopShell")
 	require.Contains(t, mainSource, "Preferences:    backendRuntime.Preferences,")
 	require.Contains(t, mainSource, "Updates:        backendRuntime.Updates,")
 	require.Contains(t, mainSource, "DesktopShell:   desktopShell,")
+	require.Contains(t, mainSource, "PanelWindows:   desktopShell,")
 	require.Contains(t, mainSource, "backend.InitializeErrorReporting(composition.preferences, composition.reporting)")
 }
 
@@ -391,7 +398,7 @@ func TestDirectWailsCompositionContractRejectsBoundaryRegressions(t *testing.T) 
 			main: mainSource, window: strings.Replace(windowSource, "events.Common.WindowRuntimeReady", "events.Common.WindowOpened", 1), runtime: runtimeSource, menu: menuSource,
 		},
 		"missing closing hook": {
-			main: mainSource, window: strings.Replace(windowSource, "events.Common.WindowClosing", "events.Common.WindowClosed", 1), runtime: runtimeSource, menu: menuSource,
+			main: mainSource, window: strings.ReplaceAll(windowSource, "events.Common.WindowClosing", "events.Common.WindowClosed"), runtime: runtimeSource, menu: menuSource,
 		},
 	}
 

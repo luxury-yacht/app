@@ -15,7 +15,12 @@ import { assertObjectRefHasRequiredIdentity } from '@shared/utils/objectIdentity
 import { useDockablePanelContext } from '@ui/dockable';
 import { getGroupForPanel } from '@ui/dockable/tabGroupState';
 import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
+import { getWindowIdentity } from '@/core/desktop-runtime';
+import { focusPanelWindow, requestPanelObjectOpen } from '@/core/panel-windows';
+import { usePanelWindowRole } from '@/core/panel-windows/PanelWindowRoleContext';
+import { getDefaultObjectPanelPosition } from '@/core/settings/appPreferences';
 import type { KubernetesObjectReference } from '@/types/view-state';
+import { reportOperationalError } from '@/utils/errorHandler';
 
 export interface OpenWithObjectOptions {
   /**
@@ -55,7 +60,7 @@ export const CurrentObjectPanelContext = createContext<CurrentObjectPanelContext
 });
 
 // Read the current panel's object data. Only meaningful inside a <ObjectPanel> tree.
-const useCurrentObjectPanel = () => useContext(CurrentObjectPanelContext);
+export const useCurrentObjectPanel = () => useContext(CurrentObjectPanelContext);
 
 // ---------------------------------------------------------------------------
 // closeObjectPanelGlobal  (test-only)
@@ -88,8 +93,10 @@ export function useObjectPanel() {
     onCloseObjectPanel,
     hydrateClusterMeta,
     setObjectPanelActiveTab,
+    nativeLocations,
   } = useObjectPanelState();
-  const { tabGroups, focusPanel } = useDockablePanelContext();
+  const { tabGroups, focusPanel, requestGroupMove } = useDockablePanelContext();
+  const panelWindowRole = usePanelWindowRole();
 
   // Per-instance object data (only set when called inside an ObjectPanel tree).
   const {
@@ -99,6 +106,7 @@ export function useObjectPanel() {
     lastModified,
   } = useCurrentObjectPanel();
   const pendingFocusPanelIdRef = useRef<string | null>(null);
+  const pendingFloatPanelIdRef = useRef<string | null>(null);
 
   // Keep the close callback updated for closeObjectPanelGlobal (test-only).
   // Last mount wins — not safe for concurrent multi-panel production use.
@@ -124,13 +132,47 @@ export function useObjectPanel() {
     focusPanel(pendingPanelId);
   }, [tabGroups, focusPanel]);
 
+  useEffect(() => {
+    const panelId = pendingFloatPanelIdRef.current;
+    if (!panelId) {
+      return;
+    }
+    const groupKey = getGroupForPanel(tabGroups, panelId);
+    if (!groupKey || !requestGroupMove?.(groupKey, 'floating')) {
+      return;
+    }
+    pendingFloatPanelIdRef.current = null;
+  }, [requestGroupMove, tabGroups]);
+
   const openWithObject = useCallback(
     (obj: KubernetesObjectReference, options?: OpenWithObjectOptions) => {
       const enriched = hydrateClusterMeta(obj);
       // Runtime defense for incomplete object refs. Catches programmatic ref
       // constructions that the openWithObjectAudit literal walker can't see.
       assertObjectRefHasRequiredIdentity(enriched);
+      if (panelWindowRole) {
+        void requestPanelObjectOpen(
+          panelWindowRole.windowName,
+          {
+            clusterId: enriched.clusterId ?? '',
+            group: enriched.group ?? '',
+            version: enriched.version ?? '',
+            kind: enriched.kind ?? '',
+            namespace: enriched.namespace ?? '',
+            name: enriched.name ?? '',
+          },
+          options?.initialTab ?? 'details'
+        ).catch((error) =>
+          reportOperationalError(error, {
+            source: 'useObjectPanel',
+            action: 'request-panel-object-open',
+            clusterId: enriched.clusterId,
+          })
+        );
+        return;
+      }
       const panelId = onRowClick(enriched);
+      const wasAlreadyOwned = openPanels.has(panelId);
 
       // Set the requested initial tab BEFORE focusing so the panel
       // mounts on the right tab instead of flashing Details first. The
@@ -139,6 +181,23 @@ export function useObjectPanel() {
       // — which is what we want for "right-click → Map".
       if (options?.initialTab) {
         setObjectPanelActiveTab(panelId, options.initialTab);
+      }
+
+      const nativeLocation = nativeLocations.get(panelId);
+      if (nativeLocation) {
+        void focusPanelWindow(getWindowIdentity(), nativeLocation.windowName, panelId).catch(
+          (error) =>
+            reportOperationalError(error, {
+              source: 'useObjectPanel',
+              action: 'focus-native-panel',
+              clusterId: enriched.clusterId,
+            })
+        );
+        return;
+      }
+
+      if (!wasAlreadyOwned && getDefaultObjectPanelPosition() === 'floating') {
+        pendingFloatPanelIdRef.current = panelId;
       }
 
       // If the panel already exists in the dockable system, activate its tab
@@ -153,7 +212,16 @@ export function useObjectPanel() {
         pendingFocusPanelIdRef.current = panelId;
       }
     },
-    [onRowClick, hydrateClusterMeta, tabGroups, focusPanel, setObjectPanelActiveTab]
+    [
+      onRowClick,
+      hydrateClusterMeta,
+      tabGroups,
+      focusPanel,
+      setObjectPanelActiveTab,
+      nativeLocations,
+      panelWindowRole,
+      openPanels,
+    ]
   );
 
   const close = useCallback(() => {
@@ -169,6 +237,7 @@ export function useObjectPanel() {
   return {
     // Object data for the current panel instance (null outside an ObjectPanel tree).
     objectData,
+    panelId: currentPanelId,
     // Object creation time (RFC3339 UTC) for the current object (when available);
     // the shared ResourceHeader formats it into Age.
     creationTimestamp,

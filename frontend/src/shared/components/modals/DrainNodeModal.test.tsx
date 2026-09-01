@@ -181,6 +181,31 @@ describe('DrainNodeModal', () => {
     });
   });
 
+  it('reports the mutation boundary while a drain request is in flight', async () => {
+    let releaseDrain!: () => void;
+    mocks.runStartDrain.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseDrain = resolve;
+        })
+    );
+    const onMutationChange = vi.fn();
+    await renderModal({ onMutationChange });
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-test="drain-modal-start"]')?.click();
+      await Promise.resolve();
+    });
+    expect(onMutationChange).toHaveBeenLastCalledWith(true);
+
+    await act(async () => {
+      releaseDrain();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(onMutationChange).toHaveBeenLastCalledWith(false);
+  });
+
   it('projects advanced option changes into the normalized drain payload', async () => {
     await renderModal();
     const click = (selector: string) => {

@@ -20,17 +20,14 @@ vi.mock('@core/backend-api', () => ({
 interface PanelStateOptions {
   position: 'floating' | 'right' | 'bottom';
   size: { width: number; height: number };
-  floatingPosition: { x: number; y: number };
 }
 
 const Harness: React.FC<{
   panelState: {
     position: 'floating' | 'right' | 'bottom';
     size: { width: number; height: number };
-    floatingPosition: { x: number; y: number };
     isOpen: boolean;
     setSize: (size: { width: number; height: number }) => void;
-    setFloatingPosition: (pos: { x: number; y: number }) => void;
   };
   options: {
     minWidth: number;
@@ -99,53 +96,16 @@ describe('useWindowBoundsConstraint', () => {
 
   const createPanelState = (overrides: Partial<PanelStateOptions>) => {
     const defaults: PanelStateOptions = {
-      position: 'floating',
+      position: 'right',
       size: { width: 400, height: 300 },
-      floatingPosition: { x: 100, y: 100 },
     };
     return {
       ...defaults,
       ...overrides,
       isOpen: true,
       setSize: vi.fn(),
-      setFloatingPosition: vi.fn(),
     };
   };
-
-  it('constrains floating size and position within window bounds', async () => {
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      writable: true,
-      value: 800,
-    });
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      writable: true,
-      value: 600,
-    });
-
-    const panelState = createPanelState({
-      position: 'floating',
-      size: { width: 900, height: 700 },
-      floatingPosition: { x: -20, y: -10 },
-    });
-
-    const { unmount } = await renderHarness(panelState, {
-      minWidth: 200,
-      isResizing: false,
-      isMaximized: false,
-    });
-
-    // Flush the debounce timer chain to apply the constraint updates.
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(panelState.setSize).toHaveBeenCalledWith({ width: 800, height: 600 });
-    expect(panelState.setFloatingPosition).toHaveBeenCalledWith({ x: 0, y: 0 });
-
-    await unmount();
-  });
 
   it('constrains right-docked width within the available window space', async () => {
     Object.defineProperty(window, 'innerWidth', {

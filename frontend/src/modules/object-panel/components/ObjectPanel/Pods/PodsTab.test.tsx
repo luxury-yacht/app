@@ -61,6 +61,10 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
     onNamespaceSelect: vi.fn(),
     setActiveNamespaceTab: vi.fn(),
   }),
+  useOptionalViewState: () => ({
+    onNamespaceSelect: vi.fn(),
+    setActiveNamespaceTab: vi.fn(),
+  }),
 }));
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({

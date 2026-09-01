@@ -4,10 +4,6 @@
   color: var(--color-text);
 }
 
-.dockable-panel.diagnostics-panel.dockable-panel--floating {
-  box-shadow: var(--diagnostics-floating-shadow);
-}
-
 .diagnostics-content {
   background: var(--color-bg);
   color: var(--color-text);

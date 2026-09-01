@@ -30,6 +30,7 @@ interface DockablePanelControlsProps {
   onDock: (position: DockPosition) => void;
   onToggleMaximize: () => void;
   onClose: () => void;
+  nativeWindowMode?: boolean;
 }
 
 interface DockAction {
@@ -92,8 +93,24 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
   onDock,
   onToggleMaximize,
   onClose,
+  nativeWindowMode = false,
 }) => {
-  const dockActions = dockActionsByPosition[position];
+  const dockActions = nativeWindowMode
+    ? [
+        {
+          target: 'right' as const,
+          title: 'Dock to right',
+          ariaLabel: 'Dock panel to right side',
+          renderIcon: () => <DockRightIcon width={16} height={16} />,
+        },
+        {
+          target: 'bottom' as const,
+          title: 'Dock to bottom',
+          ariaLabel: 'Dock panel to bottom',
+          renderIcon: () => <DockBottomIcon width={16} height={16} />,
+        },
+      ]
+    : dockActionsByPosition[position];
 
   return (
     <div className="dockable-panel__controls">
@@ -111,7 +128,7 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
             {action.renderIcon()}
           </button>
         ))}
-      {!!allowMaximize && (
+      {!nativeWindowMode && !!allowMaximize && (
         <button
           type="button"
           className="dockable-panel__control-btn"
@@ -126,15 +143,17 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
           )}
         </button>
       )}
-      <button
-        type="button"
-        className="dockable-panel__control-btn dockable-panel__control-btn--close"
-        onClick={onClose}
-        title="Close all tabs in this panel"
-        aria-label="Close all tabs in this panel"
-      >
-        <CloseIcon width={16} height={16} />
-      </button>
+      {!nativeWindowMode && (
+        <button
+          type="button"
+          className="dockable-panel__control-btn dockable-panel__control-btn--close"
+          onClick={onClose}
+          title="Close all tabs in this panel"
+          aria-label="Close all tabs in this panel"
+        >
+          <CloseIcon width={16} height={16} />
+        </button>
+      )}
     </div>
   );
 };

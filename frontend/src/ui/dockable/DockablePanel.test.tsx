@@ -311,6 +311,38 @@ describe('DockablePanel', () => {
     unmount();
   });
 
+  it('never renders the legacy in-page floating shell', async () => {
+    const { unmount } = await renderPanel(
+      <DockablePanel panelId="native-float-only" defaultPosition="floating" isOpen>
+        <div>panel-body</div>
+      </DockablePanel>
+    );
+
+    const panel = document.querySelector('.dockable-panel');
+    expect(panel?.classList.contains('dockable-panel--floating')).toBe(false);
+    expect(document.querySelector('.dockable-panel__resize-zone')).toBeNull();
+
+    unmount();
+  });
+
+  it('uses native window geometry instead of docked inline dimensions in native mode', async () => {
+    const { unmount } = await renderPanel(
+      <DockablePanelProvider nativeWindowMode>
+        <DockablePanel panelId="native-window-panel" defaultPosition="right" isOpen>
+          <div>panel-body</div>
+        </DockablePanel>
+      </DockablePanelProvider>
+    );
+
+    const panel = document.querySelector('.dockable-panel') as HTMLElement | null;
+    expect(panel?.style.inset).toBe('0px');
+    expect(panel?.style.width).toBe('100%');
+    expect(panel?.style.height).toBe('100%');
+    expect(panel?.style.transform).toBe('none');
+
+    unmount();
+  });
+
   it('keeps Tab navigation contained within the panel once focus is inside it', async () => {
     const { unmount } = await renderPanel(
       <DockablePanel panelId="dockable-panel-tab-trap" defaultPosition="floating" isOpen>

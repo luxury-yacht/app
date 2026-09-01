@@ -12,8 +12,8 @@ import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { buildGridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
 import { setPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
 import { useCallback } from 'react';
-import { useSidebarState } from '@/core/contexts/SidebarStateContext';
-import { useViewState } from '@/core/contexts/ViewStateContext';
+import { useOptionalSidebarState } from '@/core/contexts/SidebarStateContext';
+import { useOptionalViewState } from '@/core/contexts/ViewStateContext';
 import { eventBus } from '@/core/events';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 import type { KubernetesObjectReference } from '@/types/view-state';
@@ -24,14 +24,14 @@ export interface NavigateToViewResult {
 }
 
 export function useNavigateToView(): NavigateToViewResult {
-  const { setViewType, setActiveNamespaceTab, setActiveClusterView } = useViewState();
-  const { setSidebarSelection } = useSidebarState();
+  const viewState = useOptionalViewState();
+  const sidebarState = useOptionalSidebarState();
   const { setSelectedNamespace } = useNamespace();
 
   const navigateToView = useCallback(
     (objectRef: KubernetesObjectReference) => {
       const kind = objectRef.kind ?? objectRef.metadata?.kind;
-      if (!kind) {
+      if (!kind || !viewState || !sidebarState) {
         return;
       }
 
@@ -51,11 +51,11 @@ export function useNavigateToView(): NavigateToViewResult {
         | undefined;
 
       // 1. Navigate to the target view type
-      setViewType(destination.viewType);
+      viewState.setViewType(destination.viewType);
 
       // 2. Set the correct tab within the view
       if (destination.viewType === 'namespace') {
-        setActiveNamespaceTab(destination.tab as NamespaceViewType);
+        viewState.setActiveNamespaceTab(destination.tab as NamespaceViewType);
 
         // 3. Select the namespace so the view loads the right data
         if (namespace && isNamespaceScopedKind(kind)) {
@@ -64,13 +64,13 @@ export function useNavigateToView(): NavigateToViewResult {
 
         // 4. Update sidebar to reflect the namespace selection
         if (namespace) {
-          setSidebarSelection({ type: 'namespace', value: namespace });
+          sidebarState.setSidebarSelection({ type: 'namespace', value: namespace });
         }
       } else if (destination.viewType === 'cluster') {
-        setActiveClusterView(destination.tab as ClusterViewType);
+        viewState.setActiveClusterView(destination.tab as ClusterViewType);
 
         // Update sidebar to reflect cluster view
-        setSidebarSelection({ type: 'cluster', value: 'cluster' });
+        sidebarState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
       }
 
       // 5. Emit focus request so the target GridTable highlights the row.
@@ -90,13 +90,7 @@ export function useNavigateToView(): NavigateToViewResult {
         eventBus.emit('gridtable:focus-request', request);
       }
     },
-    [
-      setViewType,
-      setActiveNamespaceTab,
-      setActiveClusterView,
-      setSidebarSelection,
-      setSelectedNamespace,
-    ]
+    [viewState, sidebarState, setSelectedNamespace]
   );
 
   return { navigateToView };

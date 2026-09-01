@@ -30,15 +30,12 @@ export const PANEL_DEFAULTS = {
   DEFAULT_HEIGHT: 600,
   RIGHT_MIN_WIDTH: 450,
   BOTTOM_MIN_HEIGHT: 200,
-  FLOATING_MIN_WIDTH: 450,
-  FLOATING_MIN_HEIGHT: 200,
 } as const;
 
 /** Per-dock-mode minimum size constraints. */
 export interface PanelSizeConstraints {
   right: { minWidth: number };
   bottom: { minHeight: number };
-  floating: { minWidth: number; minHeight: number };
 }
 
 /**
@@ -50,10 +47,6 @@ export function getPanelSizeConstraints(panel?: HTMLElement | null): PanelSizeCo
     return {
       right: { minWidth: PANEL_DEFAULTS.RIGHT_MIN_WIDTH },
       bottom: { minHeight: PANEL_DEFAULTS.BOTTOM_MIN_HEIGHT },
-      floating: {
-        minWidth: PANEL_DEFAULTS.FLOATING_MIN_WIDTH,
-        minHeight: PANEL_DEFAULTS.FLOATING_MIN_HEIGHT,
-      },
     };
   }
   const style = getComputedStyle(panel);
@@ -71,11 +64,6 @@ export function getPanelSizeConstraints(panel?: HTMLElement | null): PanelSizeCo
     },
     bottom: {
       minHeight: readOpt('--dockable-panel-bottom-min-height') ?? PANEL_DEFAULTS.BOTTOM_MIN_HEIGHT,
-    },
-    floating: {
-      minWidth: readOpt('--dockable-panel-floating-min-width') ?? PANEL_DEFAULTS.FLOATING_MIN_WIDTH,
-      minHeight:
-        readOpt('--dockable-panel-floating-min-height') ?? PANEL_DEFAULTS.FLOATING_MIN_HEIGHT,
     },
   };
 }

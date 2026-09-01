@@ -31,6 +31,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import type { panelwindow } from '@/core/backend-api/models';
 import { eventBus } from '@/core/events';
 import { shouldSyncClusterNavigationTarget } from '@/core/navigation/workspace';
 import { refreshOrchestrator } from '@/core/refresh';
@@ -496,6 +497,8 @@ export const useViewState = () => {
   return context;
 };
 
+export const useOptionalViewState = () => useContext(ViewStateContext);
+
 /**
  * Internal provider that combines all contexts
  */
@@ -520,15 +523,19 @@ const CombinedViewStateProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
 interface ViewStateProviderProps {
   children: React.ReactNode;
+  initialPanelGroupSnapshot?: panelwindow.GroupSnapshot;
 }
 
 /**
  * Main ViewStateProvider that composes all specialized providers
  */
-export const ViewStateProvider: React.FC<ViewStateProviderProps> = ({ children }) => {
+export const ViewStateProvider: React.FC<ViewStateProviderProps> = ({
+  children,
+  initialPanelGroupSnapshot,
+}) => {
   return (
     <SidebarStateProvider>
-      <ObjectPanelStateProvider>
+      <ObjectPanelStateProvider initialGroupSnapshot={initialPanelGroupSnapshot}>
         <ModalStateProvider>
           <NavigationStateProvider>
             <RefreshSyncProvider>

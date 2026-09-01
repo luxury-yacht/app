@@ -281,9 +281,9 @@ describe('scrollbar activity tracking', () => {
     expect(thumb?.style.top).toBe('51px');
   });
 
-  it('keeps floating panel scrollbars flush with the scroll area edge', () => {
+  it('keeps docked panel scrollbars flush with the scroll area edge', () => {
     const panel = document.createElement('div');
-    panel.className = 'dockable-panel dockable-panel--floating';
+    panel.className = 'dockable-panel dockable-panel--right';
     panel.getBoundingClientRect = () =>
       ({
         bottom: 225,

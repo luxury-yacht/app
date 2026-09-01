@@ -5,7 +5,6 @@
  */
 
 import { getObjectPanelLayoutDefaults } from '@core/settings/appPreferences';
-import { getContentBounds } from './dockablePanelLayout';
 import {
   createInitialTabGroupState,
   getGroupForPanel,
@@ -18,10 +17,8 @@ export type DockPosition = 'right' | 'bottom' | 'floating';
 
 export interface PanelLayoutState {
   position: DockPosition;
-  floatingSize: { width: number; height: number };
   rightSize: { width: number; height: number };
   bottomSize: { width: number; height: number };
-  floatingPosition: { x: number; y: number };
   isMaximized: boolean;
   isOpen: boolean;
   isInitialized: boolean;
@@ -40,7 +37,6 @@ export interface PanelLayoutStore {
   subscribe: (panelId: string, listener: PanelListener) => () => void;
   focusPanelById: (panelId: string) => void;
   setPanelPositionById: (panelId: string, position: DockPosition) => void;
-  setPanelFloatingPositionById: (panelId: string, position: { x: number; y: number }) => void;
   setPanelOpenById: (panelId: string, isOpen: boolean) => void;
   copyPanelLayoutState: (sourcePanelId: string, targetPanelId: string) => void;
   clearPanelState: (panelId: string) => void;
@@ -85,25 +81,7 @@ export interface PanelLayoutStore {
   subscribeTabGroups(listener: () => void): () => void;
 }
 
-/**
- * Clamp floating position to keep full panel visible inside content bounds
- * whenever possible.
- */
-function clampFloatingPosition(
-  position: { x: number; y: number },
-  panelSize: { width: number; height: number }
-): { x: number; y: number } {
-  const content = getContentBounds();
-  const maxX = Math.max(0, content.width - panelSize.width);
-  const maxY = Math.max(0, content.height - panelSize.height);
-
-  return {
-    x: Math.max(0, Math.min(position.x, maxX)),
-    y: Math.max(0, Math.min(position.y, maxY)),
-  };
-}
-
-export function createPanelLayoutStore(): PanelLayoutStore {
+export function createPanelLayoutStore(initialTabGroups?: TabGroupState): PanelLayoutStore {
   const panelStates = new Map<string, PanelLayoutState>();
   const panelListeners = new Map<string, Set<PanelListener>>();
   const panelCloseHandlers = new Map<string, Set<(reason: PanelCloseReason) => void>>();
@@ -113,7 +91,7 @@ export function createPanelLayoutStore(): PanelLayoutStore {
   // tabGroups slice — owned by each store instance, independent of
   // per-panel state listeners. Cluster scoping happens at the store
   // boundary: the provider holds one store per cluster.
-  let tabGroups: TabGroupState = createInitialTabGroupState();
+  let tabGroups: TabGroupState = initialTabGroups ?? createInitialTabGroupState();
   const tabGroupsListeners = new Set<() => void>();
 
   const setTabGroups = (updater: (prev: TabGroupState) => TabGroupState) => {
@@ -142,10 +120,8 @@ export function createPanelLayoutStore(): PanelLayoutStore {
     const layout = getObjectPanelLayoutDefaults();
     const initialState: PanelLayoutState = {
       position: 'right',
-      floatingSize: { width: layout.floatingWidth, height: layout.floatingHeight },
       rightSize: { width: layout.dockedRightWidth, height: 300 },
       bottomSize: { width: 400, height: layout.dockedBottomHeight },
-      floatingPosition: { x: layout.floatingX, y: layout.floatingY },
       isMaximized: false,
       isOpen: false,
       isInitialized: false,
@@ -199,12 +175,6 @@ export function createPanelLayoutStore(): PanelLayoutStore {
     setPanelPositionById: (panelId: string, position: DockPosition) => {
       updateState(panelId, { position });
     },
-    setPanelFloatingPositionById: (panelId: string, position: { x: number; y: number }) => {
-      const currentState = getInitialState(panelId);
-      updateState(panelId, {
-        floatingPosition: clampFloatingPosition(position, currentState.floatingSize),
-      });
-    },
     setPanelOpenById: (panelId: string, isOpen: boolean) => {
       setPanelOpenState(panelId, isOpen);
     },
@@ -221,10 +191,8 @@ export function createPanelLayoutStore(): PanelLayoutStore {
         // Copy geometry only; group membership controls dock position.
         // Copying `position` here can race with tab-group moves and send tabs to
         // unintended groups when leadership transfers during dock/float actions.
-        floatingSize: { ...sourceState.floatingSize },
         rightSize: { ...sourceState.rightSize },
         bottomSize: { ...sourceState.bottomSize },
-        floatingPosition: { ...sourceState.floatingPosition },
         isMaximized: sourceState.isMaximized,
         zIndex: Math.max(targetState.zIndex, sourceState.zIndex),
       });
@@ -248,10 +216,8 @@ export function createPanelLayoutStore(): PanelLayoutStore {
         }
         const targetState = getInitialState(nextLeader);
         updateState(nextLeader, {
-          floatingSize: { ...sourceState.floatingSize },
           rightSize: { ...sourceState.rightSize },
           bottomSize: { ...sourceState.bottomSize },
-          floatingPosition: { ...sourceState.floatingPosition },
           isMaximized: sourceState.isMaximized,
           zIndex: Math.max(targetState.zIndex, sourceState.zIndex),
         });
@@ -307,8 +273,6 @@ export function createPanelLayoutStore(): PanelLayoutStore {
         updateState(panelId, {
           rightSize: { width: layout.dockedRightWidth, height: state.rightSize.height },
           bottomSize: { width: state.bottomSize.width, height: layout.dockedBottomHeight },
-          floatingSize: { width: layout.floatingWidth, height: layout.floatingHeight },
-          floatingPosition: { x: layout.floatingX, y: layout.floatingY },
         });
       });
     },

@@ -2,6 +2,7 @@ package appwindow
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 )
 
@@ -63,6 +64,12 @@ func (l *lifecycle) Count() int {
 	return len(l.windows)
 }
 
+func (l *lifecycle) Contains(name string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.windows[name]
+}
+
 func (l *lifecycle) MostRecent() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -72,6 +79,17 @@ func (l *lifecycle) MostRecent() string {
 		}
 	}
 	return ""
+}
+
+func (l *lifecycle) Names() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	names := make([]string, 0, len(l.windows))
+	for name := range l.windows {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func (l *lifecycle) touchLocked(name string) {

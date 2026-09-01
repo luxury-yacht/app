@@ -7,7 +7,7 @@
  * table. The query is gated to the active pods tab.
  */
 
-import { useViewState } from '@core/contexts/ViewStateContext';
+import { useOptionalViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import {
@@ -79,7 +79,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   const { openWithObject, objectData } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
   const objectLink = useObjectLink();
-  const viewState = useViewState();
+  const viewState = useOptionalViewState();
   const namespaceContext = useNamespace();
   // Per-pod staleness comes from the pods query payload's metrics meta, which
   // is scoped to the PANEL OBJECT's cluster (the globally selected cluster can
@@ -115,7 +115,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   const handlePodOpen = openPod;
   const handleNamespaceSelect = useCallback(
     (pod: PodSnapshotEntry) => {
-      if (!pod.ref.namespace) {
+      if (!pod.ref.namespace || !viewState) {
         return;
       }
       // Route namespace clicks to the sidebar selection instead of the object panel.

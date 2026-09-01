@@ -12,13 +12,11 @@ import type { DockPosition } from './useDockablePanelState';
 interface DockablePanelState {
   position: DockPosition;
   size: { width: number; height: number };
-  floatingPosition: { x: number; y: number };
   isMaximized: boolean;
   isOpen: boolean;
   focus: () => void;
   setPosition: (position: DockPosition) => void;
   setSize: (size: { width: number; height: number }) => void;
-  setFloatingPosition: (position: { x: number; y: number }) => void;
   setMaximized: (isMaximized: boolean) => void;
 }
 
@@ -39,7 +37,6 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
   const restoreStateRef = useRef<{
     position: DockPosition;
     size: { width: number; height: number };
-    floatingPosition: { x: number; y: number };
   } | null>(null);
   const maximizeTargetRef = useRef<HTMLElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -151,12 +148,7 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
         if (panelState.position !== restore.position) {
           panelState.setPosition(restore.position);
         }
-        if (restore.position === 'floating') {
-          panelState.setSize({ ...restore.size });
-          panelState.setFloatingPosition({ ...restore.floatingPosition });
-        } else {
-          panelState.setSize({ ...restore.size });
-        }
+        panelState.setSize({ ...restore.size });
       }
       return;
     }
@@ -164,7 +156,6 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
     restoreStateRef.current = {
       position: panelState.position,
       size: { width: panelState.size.width, height: panelState.size.height },
-      floatingPosition: { ...panelState.floatingPosition },
     };
 
     panelState.focus();

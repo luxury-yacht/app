@@ -6,7 +6,7 @@
  */
 
 import type { types } from '@core/backend-api/models';
-import { useViewState } from '@core/contexts/ViewStateContext';
+import { useOptionalViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import {
@@ -80,7 +80,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
 }) => {
   const { openWithObject, objectData } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
-  const viewState = useViewState();
+  const viewState = useOptionalViewState();
   const namespaceContext = useNamespace();
 
   // Augment each job with cluster context from the panel.
@@ -128,7 +128,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
 
   const handleNamespaceSelect = useCallback(
     (job: JobRow) => {
-      if (!job.namespace) {
+      if (!job.namespace || !viewState) {
         return;
       }
       namespaceContext.setSelectedNamespace(job.namespace, job.clusterId ?? undefined);

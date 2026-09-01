@@ -8,6 +8,9 @@ import type { Events } from "@wailsio/runtime";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import type * as backend$0 from "../../../../luxury-yacht/app/backend/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import type * as panelwindow$0 from "../../../../luxury-yacht/app/internal/panelwindow/models.js";
 
 declare module "@wailsio/runtime" {
     namespace Events {
@@ -42,6 +45,20 @@ declare module "@wailsio/runtime" {
             "open-cluster": void;
             "open-command-palette": void;
             "open-settings": void;
+            "panel-window:application-quit-preflight-requested": panelwindow$0.ApplicationQuitPreflightRequestedEvent;
+            "panel-window:close-requested": panelwindow$0.WindowCloseRequestedEvent;
+            "panel-window:closed": panelwindow$0.WindowClosedEvent;
+            "panel-window:dock-requested": panelwindow$0.WindowDockRequestedEvent;
+            "panel-window:focus-requested": panelwindow$0.WindowFocusRequestedEvent;
+            "panel-window:guard-requested": panelwindow$0.WindowGuardRequestedEvent;
+            "panel-window:guard-result": panelwindow$0.WindowGuardResultEvent;
+            "panel-window:object-open-authorized": panelwindow$0.ObjectOpenAuthorizedEvent;
+            "panel-window:object-open-requested": panelwindow$0.ObjectOpenRequestEvent;
+            "panel-window:opened": panelwindow$0.WindowOpenedEvent;
+            "panel-window:owner-close-requested": panelwindow$0.OwnerCloseRequestedEvent;
+            "panel-window:snapshot-updated": panelwindow$0.SnapshotUpdatedEvent;
+            "panel-window:tab-close-authorized": panelwindow$0.TabCloseAuthorizedEvent;
+            "panel-window:tab-close-requested": panelwindow$0.TabCloseRequestedEvent;
             "portforward:list": backend$0.PortForwardSession[] | null;
             "portforward:status": backend$0.PortForwardStatusEvent;
             "runtime-operations:list": backend$0.RuntimeOperation[] | null;

@@ -43,6 +43,7 @@ interface DrainNodeModalProps {
   nodeName: string;
   permissions?: NodeDrainOperationPermissions;
   onClose: () => void;
+  onMutationChange?: (inFlight: boolean) => void;
 }
 
 const toScope = (nodeName: string): string =>
@@ -62,6 +63,7 @@ const DrainNodeModal = ({
   nodeName,
   permissions,
   onClose,
+  onMutationChange,
 }: DrainNodeModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
@@ -194,6 +196,7 @@ const DrainNodeModal = ({
     }
     setDrainError(null);
     setDrainPending(true);
+    onMutationChange?.(true);
     try {
       await runStartDrain(
         buildObjectActionTarget({ clusterId, kind: 'Node', name: nodeName }, 'drain'),
@@ -208,8 +211,9 @@ const DrainNodeModal = ({
       setDrainError(details.message);
     } finally {
       setDrainPending(false);
+      onMutationChange?.(false);
     }
-  }, [clusterId, drainOptions, nodeName, refreshMaintenance, startDisabled]);
+  }, [clusterId, drainOptions, nodeName, onMutationChange, refreshMaintenance, startDisabled]);
 
   const cancelActiveDrain = useCallback(async () => {
     if (!clusterId || !activeDrainJob || cancelDrainPending) {
@@ -217,6 +221,7 @@ const DrainNodeModal = ({
     }
     setDrainError(null);
     setCancelDrainPending(true);
+    onMutationChange?.(true);
     try {
       await CancelDrainNodeJob(clusterId, activeDrainJob.id);
       await refreshMaintenance();
@@ -228,8 +233,16 @@ const DrainNodeModal = ({
       setDrainError(details.message);
     } finally {
       setCancelDrainPending(false);
+      onMutationChange?.(false);
     }
-  }, [activeDrainJob, cancelDrainPending, clusterId, nodeName, refreshMaintenance]);
+  }, [
+    activeDrainJob,
+    cancelDrainPending,
+    clusterId,
+    nodeName,
+    onMutationChange,
+    refreshMaintenance,
+  ]);
 
   if (!isOpen) {
     return null;

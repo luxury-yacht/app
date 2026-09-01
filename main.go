@@ -2,11 +2,13 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/luxury-yacht/app/backend"
 	"github.com/luxury-yacht/app/internal/appwindow"
+	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/luxury-yacht/app/internal/updateidentity"
 	"github.com/luxury-yacht/app/internal/updatetemp"
@@ -120,6 +122,126 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 				windows.Create(false)
 			}
 		},
+		NativeWindowDescriptor: func(windowName string) (panelwindow.NativeDescriptor, error) {
+			if windows == nil {
+				return panelwindow.NativeDescriptor{}, fmt.Errorf("native window registry is not available")
+			}
+			return windows.WindowDescriptor(windowName)
+		},
+		BeginPanelWindowOpen: func(snapshot panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error) {
+			if windows == nil {
+				return panelwindow.WindowDescriptor{}, fmt.Errorf("native window registry is not available")
+			}
+			return windows.BeginPanelWindowOpen(snapshot)
+		},
+		AcknowledgePanelReady: func(windowName, transferID string) (panelwindow.WindowDescriptor, error) {
+			if windows == nil {
+				return panelwindow.WindowDescriptor{}, fmt.Errorf("native window registry is not available")
+			}
+			return windows.AcknowledgePanelWindowReady(windowName, transferID)
+		},
+		BeginPanelWindowDock: func(windowName, targetPosition string, snapshot panelwindow.GroupSnapshot) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.BeginPanelWindowDock(windowName, targetPosition, snapshot)
+		},
+		AcknowledgePanelDock: func(ownerWindowName, windowName, transferID string) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.AcknowledgePanelWindowDock(ownerWindowName, windowName, transferID)
+		},
+		FailPanelTransfer: func(callerWindowName, windowName, transferID string) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.FailPanelWindowTransfer(callerWindowName, windowName, transferID)
+		},
+		FocusPanelWindow: func(ownerWindowName, windowName, panelID string) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.FocusPanelWindow(ownerWindowName, windowName, panelID)
+		},
+		RequestPanelClose: func(callerWindowName, windowName, reason string) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.RequestPanelWindowClose(callerWindowName, windowName, reason)
+		},
+		AcknowledgePanelClose: func(windowName string) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.AcknowledgePanelWindowClose(windowName)
+		},
+		RequestClusterPanelsClose: func(ownerWindowName, clusterID string) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.RequestClosePanelWindowsForCluster(ownerWindowName, clusterID)
+		},
+		AcknowledgeWorkspaceClose: func(ownerWindowName string) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.AcknowledgeWorkspaceWindowClose(ownerWindowName)
+		},
+		RoutePanelCommand: func(windowName, eventName string) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.RoutePanelWindowCommand(windowName, eventName)
+		},
+		RequestPanelObjectOpen: func(windowName string, ref panelwindow.ObjectReference, activeView string) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.RequestPanelObjectOpen(windowName, ref, activeView)
+		},
+		AuthorizePanelObjectOpen: func(ownerWindowName, windowName, panelID string, ref panelwindow.ObjectReference, activeView string) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.AuthorizePanelObjectOpen(ownerWindowName, windowName, panelID, ref, activeView)
+		},
+		UpdatePanelSnapshot: func(windowName string, snapshot panelwindow.GroupSnapshot) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.UpdatePanelWindowSnapshot(windowName, snapshot)
+		},
+		RequestPanelTabClose: func(windowName, panelID string) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.RequestPanelTabClose(windowName, panelID)
+		},
+		AuthorizePanelTabClose: func(ownerWindowName, windowName, panelID string) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.AuthorizePanelTabClose(ownerWindowName, windowName, panelID)
+		},
+		RequestPanelGuard: func(ownerWindowName, windowName, requestID, reason string) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.RequestPanelWindowGuard(ownerWindowName, windowName, requestID, reason)
+		},
+		AcknowledgePanelGuard: func(windowName, requestID string, allowed bool) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.AcknowledgePanelWindowGuard(windowName, requestID, allowed)
+		},
+		AcknowledgeApplicationQuit: func(ownerWindowName, transactionID string, allowed bool) error {
+			if windows == nil {
+				return fmt.Errorf("native window registry is not available")
+			}
+			return windows.AcknowledgeApplicationQuitPreflight(ownerWindowName, transactionID, allowed)
+		},
 	})
 	operationsCoordinator := backendRuntime.Operations
 	desktopShell := backendRuntime.DesktopShell
@@ -136,6 +258,7 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 		Updates:        backendRuntime.Updates,
 		Logs:           backendRuntime.AppLogs,
 		DesktopShell:   desktopShell,
+		PanelWindows:   desktopShell,
 		Lifecycle:      backendRuntime.Lifecycle,
 		HTTP:           backendRuntime.Refresh,
 	})

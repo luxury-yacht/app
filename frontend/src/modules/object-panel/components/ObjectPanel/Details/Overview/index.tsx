@@ -55,7 +55,7 @@ const parseDesiredReplicaCount = (value: unknown): number | null => {
 };
 
 const Overview: React.FC<OverviewProps> = (props) => {
-  const { objectData } = useObjectPanel();
+  const { objectData, panelId } = useObjectPanel();
 
   // Get cluster info from objectData (the source of truth for the current object)
   const clusterId = objectData?.clusterId || '';
@@ -110,7 +110,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
     () => (isNode && clusterId ? [clusterId] : undefined),
     [isNode, clusterId]
   );
-  const nodeMaintenance = useNodeMaintenanceActions({ watchClusterIds });
+  const nodeMaintenance = useNodeMaintenanceActions({ watchClusterIds, panelId });
   const activeDrainJob = isNode ? nodeMaintenance.activeDrainFor(clusterId, props.name) : null;
   const onOpenDrain =
     isNode && clusterId && props.name

@@ -1,6 +1,9 @@
 package backend
 
-import "github.com/wailsapp/wails/v3/pkg/application"
+import (
+	"github.com/luxury-yacht/app/internal/panelwindow"
+	"github.com/wailsapp/wails/v3/pkg/application"
+)
 
 const (
 	appLogsAddedEventName               = "app-logs:added"
@@ -100,6 +103,20 @@ func init() {
 	application.RegisterEvent[application.Void]("zoom-in")
 	application.RegisterEvent[application.Void]("zoom-out")
 	application.RegisterEvent[application.Void]("zoom-reset")
+	application.RegisterEvent[panelwindow.WindowOpenedEvent](panelwindow.WindowOpenedEventName)
+	application.RegisterEvent[panelwindow.WindowDockRequestedEvent](panelwindow.WindowDockRequestedEventName)
+	application.RegisterEvent[panelwindow.WindowFocusRequestedEvent](panelwindow.WindowFocusRequestedEventName)
+	application.RegisterEvent[panelwindow.WindowCloseRequestedEvent](panelwindow.WindowCloseRequestedEventName)
+	application.RegisterEvent[panelwindow.WindowClosedEvent](panelwindow.WindowClosedEventName)
+	application.RegisterEvent[panelwindow.OwnerCloseRequestedEvent](panelwindow.OwnerCloseRequestedEventName)
+	application.RegisterEvent[panelwindow.ObjectOpenRequestEvent](panelwindow.ObjectOpenRequestedEventName)
+	application.RegisterEvent[panelwindow.ObjectOpenAuthorizedEvent](panelwindow.ObjectOpenAuthorizedEventName)
+	application.RegisterEvent[panelwindow.SnapshotUpdatedEvent](panelwindow.SnapshotUpdatedEventName)
+	application.RegisterEvent[panelwindow.TabCloseRequestedEvent](panelwindow.TabCloseRequestedEventName)
+	application.RegisterEvent[panelwindow.TabCloseAuthorizedEvent](panelwindow.TabCloseAuthorizedEventName)
+	application.RegisterEvent[panelwindow.ApplicationQuitPreflightRequestedEvent](panelwindow.ApplicationQuitPreflightRequestedEventName)
+	application.RegisterEvent[panelwindow.WindowGuardRequestedEvent](panelwindow.WindowGuardRequestedEventName)
+	application.RegisterEvent[panelwindow.WindowGuardResultEvent](panelwindow.WindowGuardResultEventName)
 
 	application.RegisterEvent[[]ShellSessionInfo](shellListEventName)
 	application.RegisterEvent[ShellOutputEvent](shellOutputEventName)

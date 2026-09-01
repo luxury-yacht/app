@@ -9,6 +9,7 @@ import { initializeScrollbarActivityTracking } from '@shared/scrollbars/scrollba
 import React from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { initializeWindowIdentity } from '@/core/desktop-runtime';
+import { resolveNativeWindowDescriptor } from '@/core/panel-windows';
 import { initializeAutoRefresh } from '@/core/refresh';
 import { hydrateAppPreferences } from '@/core/settings/appPreferences';
 import {
@@ -32,21 +33,29 @@ if (appElement) {
       sentryRuntimeConfig,
       hydrateAppPreferences
     );
-    await initializeWindowIdentity();
+    const windowName = await initializeWindowIdentity();
+    const descriptor = await resolveNativeWindowDescriptor(windowName);
     initializeScrollbarActivityTracking();
-    initializeAutoRefresh();
 
     // Imported here rather than at module scope so the application module graph
     // is evaluated after the SDK is initialized. A module-level failure in that
     // graph then rejects this bootstrap and is captured by Sentry's global
     // unhandled-rejection handler instead of crashing an uninstrumented page.
-    const { default: App } = await import('./App.tsx');
+    let rootElement: React.ReactElement;
+    if (descriptor.role === 'panel' && descriptor.panel) {
+      const PanelWindowRoot = (await import('./PanelWindowApp.tsx')).default;
+      rootElement = React.createElement(PanelWindowRoot, { descriptor: descriptor.panel });
+    } else {
+      initializeAutoRefresh();
+      const WorkspaceRoot = (await import('./WorkspaceApp.tsx')).default;
+      rootElement = React.createElement(WorkspaceRoot);
+    }
 
     const root = ReactDOM.createRoot(
       appElement,
       createReactRootErrorHandlers(errorReportingAvailable)
     );
-    root.render(React.createElement(React.StrictMode, null, React.createElement(App, null)));
+    root.render(React.createElement(React.StrictMode, null, rootElement));
   };
 
   void bootstrap();

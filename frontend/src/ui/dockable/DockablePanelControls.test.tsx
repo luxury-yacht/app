@@ -213,4 +213,37 @@ describe('DockablePanelControls', () => {
 
     await unmount();
   });
+
+  it('uses native-window dock controls without HTML float, maximize, or close actions', async () => {
+    const onDock = vi.fn();
+    const { host, unmount } = await renderControls(
+      <DockablePanelControls
+        position="right"
+        isMaximized={false}
+        allowMaximize
+        nativeWindowMode
+        onDock={onDock}
+        onToggleMaximize={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    const right = host.querySelector(
+      '[aria-label="Dock panel to right side"]'
+    ) as HTMLButtonElement;
+    const bottom = host.querySelector('[aria-label="Dock panel to bottom"]') as HTMLButtonElement;
+    expect(right).toBeTruthy();
+    expect(bottom).toBeTruthy();
+    expect(host.querySelector('[aria-label="Undock panel to floating window"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Maximize panel"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Close all tabs in this panel"]')).toBeNull();
+
+    await act(async () => {
+      right.click();
+      bottom.click();
+    });
+    expect(onDock).toHaveBeenNthCalledWith(1, 'right');
+    expect(onDock).toHaveBeenNthCalledWith(2, 'bottom');
+    await unmount();
+  });
 });

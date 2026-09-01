@@ -60,8 +60,6 @@ const panelStateMock = vi.hoisted(() => ({
   setPosition: vi.fn(),
   size: { width: 350, height: 400 },
   setSize: vi.fn(),
-  floatingPosition: { x: 100, y: 100 },
-  setFloatingPosition: vi.fn(),
 }));
 
 vi.mock('@ui/dockable', () => ({

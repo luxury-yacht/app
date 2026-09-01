@@ -9,6 +9,7 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -147,6 +148,30 @@ type DesktopShellCommands interface {
 	SetSidebarVisible(bool)
 }
 
+// PanelWindowCommands is the native panel-window protocol owned by DesktopShell.
+type PanelWindowCommands interface {
+	GetNativeWindowDescriptor(string) (panelwindow.NativeDescriptor, error)
+	BeginPanelWindowOpen(string, panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
+	AcknowledgePanelWindowReady(string, string) (panelwindow.WindowDescriptor, error)
+	BeginPanelWindowDock(string, string, panelwindow.GroupSnapshot) error
+	AcknowledgePanelWindowDock(string, string, string) error
+	FailPanelWindowTransfer(string, string, string) error
+	FocusPanelWindow(string, string, string) error
+	RequestPanelWindowClose(string, string, string) error
+	AcknowledgePanelWindowClose(string) error
+	RequestClosePanelWindowsForCluster(string, string) error
+	AcknowledgeWorkspaceWindowClose(string) error
+	RoutePanelWindowCommand(string, string) error
+	RequestPanelObjectOpen(string, panelwindow.ObjectReference, string) error
+	AuthorizePanelObjectOpen(string, string, string, panelwindow.ObjectReference, string) error
+	UpdatePanelWindowSnapshot(string, panelwindow.GroupSnapshot) error
+	RequestPanelTabClose(string, string) error
+	AuthorizePanelTabClose(string, string, string) error
+	RequestPanelWindowGuard(string, string, string, string) error
+	AcknowledgePanelWindowGuard(string, string, bool) error
+	AcknowledgeApplicationQuitPreflight(string, string, bool) error
+}
+
 // DesktopServiceLifecycle owns Wails service startup and shutdown.
 type DesktopServiceLifecycle interface {
 	ServiceStartup(context.Context, application.ServiceOptions) error
@@ -170,6 +195,7 @@ type DesktopServiceDependencies struct {
 	Updates        UpdateCommands
 	Logs           AppLogCommands
 	DesktopShell   DesktopShellCommands
+	PanelWindows   PanelWindowCommands
 	Lifecycle      DesktopServiceLifecycle
 	HTTP           http.Handler
 }
@@ -191,6 +217,7 @@ type DesktopService struct {
 	updates        UpdateCommands
 	logs           AppLogCommands
 	desktopShell   DesktopShellCommands
+	panelWindows   PanelWindowCommands
 	lifecycle      DesktopServiceLifecycle
 	http           http.Handler
 }
@@ -210,6 +237,7 @@ func NewDesktopService(dependencies DesktopServiceDependencies) *DesktopService 
 		updates:        dependencies.Updates,
 		logs:           dependencies.Logs,
 		desktopShell:   dependencies.DesktopShell,
+		panelWindows:   dependencies.PanelWindows,
 		lifecycle:      dependencies.Lifecycle,
 		http:           dependencies.HTTP,
 	}
@@ -573,4 +601,92 @@ func (s *DesktopService) SetAppLogsPanelVisible(visible bool) {
 
 func (s *DesktopService) SetSidebarVisible(visible bool) {
 	s.desktopShell.SetSidebarVisible(visible)
+}
+
+func (s *DesktopService) GetNativeWindowDescriptor(
+	windowName string,
+) (panelwindow.NativeDescriptor, error) {
+	return s.panelWindows.GetNativeWindowDescriptor(windowName)
+}
+
+func (s *DesktopService) BeginPanelWindowOpen(
+	windowName string,
+	snapshot panelwindow.GroupSnapshot,
+) (panelwindow.WindowDescriptor, error) {
+	return s.panelWindows.BeginPanelWindowOpen(windowName, snapshot)
+}
+
+func (s *DesktopService) AcknowledgePanelWindowReady(
+	windowName string,
+	transferID string,
+) (panelwindow.WindowDescriptor, error) {
+	return s.panelWindows.AcknowledgePanelWindowReady(windowName, transferID)
+}
+
+func (s *DesktopService) BeginPanelWindowDock(windowName, targetPosition string, snapshot panelwindow.GroupSnapshot) error {
+	return s.panelWindows.BeginPanelWindowDock(windowName, targetPosition, snapshot)
+}
+
+func (s *DesktopService) AcknowledgePanelWindowDock(ownerWindowName, windowName, transferID string) error {
+	return s.panelWindows.AcknowledgePanelWindowDock(ownerWindowName, windowName, transferID)
+}
+
+func (s *DesktopService) FailPanelWindowTransfer(callerWindowName, windowName, transferID string) error {
+	return s.panelWindows.FailPanelWindowTransfer(callerWindowName, windowName, transferID)
+}
+
+func (s *DesktopService) FocusPanelWindow(ownerWindowName, windowName, panelID string) error {
+	return s.panelWindows.FocusPanelWindow(ownerWindowName, windowName, panelID)
+}
+
+func (s *DesktopService) RequestPanelWindowClose(callerWindowName, windowName, reason string) error {
+	return s.panelWindows.RequestPanelWindowClose(callerWindowName, windowName, reason)
+}
+
+func (s *DesktopService) AcknowledgePanelWindowClose(windowName string) error {
+	return s.panelWindows.AcknowledgePanelWindowClose(windowName)
+}
+
+func (s *DesktopService) RequestClosePanelWindowsForCluster(ownerWindowName, clusterID string) error {
+	return s.panelWindows.RequestClosePanelWindowsForCluster(ownerWindowName, clusterID)
+}
+
+func (s *DesktopService) AcknowledgeWorkspaceWindowClose(ownerWindowName string) error {
+	return s.panelWindows.AcknowledgeWorkspaceWindowClose(ownerWindowName)
+}
+
+func (s *DesktopService) RoutePanelWindowCommand(windowName, eventName string) error {
+	return s.panelWindows.RoutePanelWindowCommand(windowName, eventName)
+}
+
+func (s *DesktopService) RequestPanelObjectOpen(windowName string, ref panelwindow.ObjectReference, activeView string) error {
+	return s.panelWindows.RequestPanelObjectOpen(windowName, ref, activeView)
+}
+
+func (s *DesktopService) AuthorizePanelObjectOpen(ownerWindowName, windowName, panelID string, ref panelwindow.ObjectReference, activeView string) error {
+	return s.panelWindows.AuthorizePanelObjectOpen(ownerWindowName, windowName, panelID, ref, activeView)
+}
+
+func (s *DesktopService) UpdatePanelWindowSnapshot(windowName string, snapshot panelwindow.GroupSnapshot) error {
+	return s.panelWindows.UpdatePanelWindowSnapshot(windowName, snapshot)
+}
+
+func (s *DesktopService) RequestPanelTabClose(windowName, panelID string) error {
+	return s.panelWindows.RequestPanelTabClose(windowName, panelID)
+}
+
+func (s *DesktopService) AuthorizePanelTabClose(ownerWindowName, windowName, panelID string) error {
+	return s.panelWindows.AuthorizePanelTabClose(ownerWindowName, windowName, panelID)
+}
+
+func (s *DesktopService) RequestPanelWindowGuard(ownerWindowName, windowName, requestID, reason string) error {
+	return s.panelWindows.RequestPanelWindowGuard(ownerWindowName, windowName, requestID, reason)
+}
+
+func (s *DesktopService) AcknowledgePanelWindowGuard(windowName, requestID string, allowed bool) error {
+	return s.panelWindows.AcknowledgePanelWindowGuard(windowName, requestID, allowed)
+}
+
+func (s *DesktopService) AcknowledgeApplicationQuitPreflight(ownerWindowName, transactionID string, allowed bool) error {
+	return s.panelWindows.AcknowledgeApplicationQuitPreflight(ownerWindowName, transactionID, allowed)
 }

@@ -1,71 +1,113 @@
-# Dockable Panels Contract
+# Dockable and Native Panel Windows Contract
 
-Dockable panels let object panels live in docked, floating, and grouped tab
-surfaces. They are app-shell state, but the objects inside them remain
-cluster/object scoped.
+Object panels can be docked on the workspace's right or bottom edge, or moved
+as a complete tab group into an ordinary native application window. “Floating”
+is a product action that creates that native window; there is no in-page HTML
+floating, viewport-relative geometry, blank-space drag, or HTML maximize mode.
 
 ## Agent Contract
 
-- Panel tabs must preserve full object identity, including `clusterId`, `group`,
-  `version`, `kind`, namespace, and name.
-- Opening an object should use the dockable panel context; do not manually splice
-  panel state from feature code.
-- Moving tabs between groups must preserve active tab, group membership, and
-  object-panel state.
-- Floating group ids must remain stable for the lifetime of the group.
-- The visible group shell owns focus and keyboard behavior for the group.
-- Closing a panel tab must clean only that tab's state and must not affect other
-  clusters or groups.
-- Transient unmounts such as cluster-tab switches should preserve object-panel
-  refresh/cache state. Actual panel close is the cache-eviction boundary.
-- **Tab-group content renders in the group LEADER's React subtree.** The
-  leader renders every tab's captured children, so React context resolves
-  against the leader's tree, not the originating panel's. Any per-panel
-  context provider (e.g. `CurrentObjectPanelContext`) must wrap the children
-  passed INTO `DockablePanel` so the provider travels with the content.
-  Wrapping `DockablePanel` itself silently feeds grouped tabs the leader
-  panel's context (regression test:
-  `ObjectPanel.groupLeaderContext.test.tsx`).
-- Layout CSS and measured group geometry are part of behavior; do not remove
-  geometry transfer without replacing it.
-- Menus and other transient surfaces opened from docked content must render
-  through their shared body-level portal. Do not weaken the panel's scrolling
-  or overflow boundaries to make an inline surface visible.
+- Panel tabs preserve complete object identity: `clusterId`, `group`,
+  `version`, `kind`, `namespace`, and `name`.
+- Opening an object goes through the object-panel and native-panel boundaries;
+  feature code must not splice panel location state directly.
+- One owner workspace may contain an object only once across its docked and
+  native groups. Another workspace may open the same object independently.
+- One native window represents one tab group with an immutable owner,
+  `clusterId`, and `groupId`. Tabs from different clusters never share a group.
+- Docked and native renderers share the group chrome and object content
+  contract. Native snapshots contain serializable identity and view state, not
+  React nodes, refs, fetched data, credentials, drafts, or terminal buffers.
+- The owner directory is authoritative for panel location. A child renderer is
+  a projection and acknowledges changes through its owner.
+- Transient unmounts such as workspace cluster switches preserve panel refresh
+  state. Actual tab close is the cache-eviction boundary.
+- Menus and other transient surfaces render through their shared body-level
+  portal. Do not weaken scrolling or overflow boundaries to expose them.
 
 ## Ownership
 
-- Dockable provider/state/actions: `frontend/src/ui/dockable`
-- Object panel integration and cache eviction:
-  `frontend/src/modules/object-panel`,
-  `frontend/src/modules/object-panel/contexts/ObjectPanelStateContext.tsx`
+- Docked group state and rendering: `frontend/src/ui/dockable`
+- Native protocol, owner coordination, and lifecycle guards:
+  `frontend/src/core/panel-windows`
+- Object identity, per-cluster directory, and cache eviction:
+  `frontend/src/modules/object-panel`
+- Native role and transfer registry: `internal/appwindow`, with serializable
+  DTOs in `internal/panelwindow`
 - Shared tab behavior: [tabs.md](tabs.md)
-- Keyboard/focus behavior: [keyboard.md](keyboard.md)
+- Keyboard and focus behavior: [keyboard.md](keyboard.md)
+- Native close and application lifecycle:
+  [application-lifecycle.md](../architecture/application-lifecycle.md)
 
-## Placement Rules
+## Placement and Uniqueness
 
-- Prefer opening in the currently active compatible group.
-- Preserve existing tab state when an already-open object is focused.
-- Dragging within a tab bar reorders.
-- Dragging to another compatible tab bar moves.
-- Dropping away from a tab bar may create or use a floating group according to
-  dockable state rules.
-- A floating group moves from any non-interactive header space, including blank
-  tab-strip space. Tabs, close buttons, and panel controls retain their own
-  pointer behavior and must not start a group move.
+- Prefer the active compatible docked group when opening a new object.
+- A default or explicit Floating action first mounts the object at a docked
+  source, then asks the native coordinator to transfer the complete group.
+- If an object is already docked, focus its owner and docked tab. If it is in a
+  native group, focus that window and tab.
+- A same-cluster link opened in a child may join that child group after owner
+  authorization. A cross-cluster link routes to the matching owner slice and is
+  rejected with an actionable error when that cluster is not open.
+- Dragging within a tab bar reorders. Dragging between compatible docked tab
+  bars moves. Cross-window dragging and workspace reparenting are out of scope.
+
+## Acknowledged Handoffs
+
+Float and dock-back are transactions. Before a move, the source checks every
+tab guard and creates a complete group snapshot. The source stays mounted until
+the target has reconstructed the group and acknowledged readiness. The owner
+then commits each location exactly once and unmounts the source. A failed,
+stale, or timed-out acknowledgement rolls back the target and leaves the source
+unchanged.
+
+Dock-back moves the entire native group to right or bottom while preserving tab
+order, active tab, and active object sub-tabs. Moving one child tab out of a
+native group is out of scope.
+
+## Refresh and Runtime State
+
+A panel child uses a fixed-cluster provider from its immutable descriptor; it
+does not register a workspace or cluster-tab owner. Switching the owner's
+active cluster does not retarget or hide the child. Visible child content owns
+its normal panel-scoped refresh demand. Hiding or minimizing releases visible
+demand while retaining cached data; restoring paints retained data and
+reacquires the scopes.
+
+Object and view identity transfer. Read-only detail, YAML, events, map, and log
+data are reconstructed from the shared refresh system. Shells reconnect by
+backend session identity. Unsaved YAML drafts, YAML saves, and in-flight
+mutations do not transfer and block moves and closes until resolved. Native
+geometry is not persisted for relaunch.
+
+## Close Ordering
+
+- Active-tab close: guard tab, remove it from the owner directory, release its
+  child-local scopes/caches, then unmount it; close the native window when the
+  group becomes empty.
+- Native titlebar close: guard the whole group, remove it from the owner
+  directory, release child state, then authorize the second native close.
+- Cluster-tab or owner close: guard matching docked panels and children, close
+  children, then release the existing workspace/cluster ownership.
+- Application quit: all ready workspaces preflight first; no owner closes until
+  every owner approves.
+- Forced child disappearance removes only the panel role and tells the owner to
+  reconcile its directory. It never releases a workspace.
+
+All asynchronous handoff and close timeouts fail closed and preserve the source
+state.
 
 ## Change Checklist
 
-When changing dockable behavior:
-
-1. Trace object identity from link/action to panel tab state.
-2. Verify docked, floating, grouped, close, and move behavior.
-3. Confirm focus stays in the visible group shell.
-4. Confirm cluster tab switches do not rewrite object-panel identity.
-5. Confirm unmount preserves scoped refresh state and close evicts only the
-   closed panel's scopes.
-6. Add reducer tests for state changes and component tests for visible behavior.
-
-## Validation
-
-Run targeted dockable/object-panel tests and typecheck. For drag/floating
-changes, verify manually in the app.
+1. Trace complete object identity from the initiating link/action through the
+   owner directory and snapshot.
+2. Prove the source remains live until target acknowledgement and remains
+   unchanged on failure or timeout.
+3. Verify dock-right, dock-bottom, native float, dock-back, group order, active
+   tabs, uniqueness, and focus.
+4. Verify cluster switching does not rewrite child identity or workspace
+   ownership, and child visibility controls only its scoped demand.
+5. Exercise clean, unsaved-YAML, saving, and mutation-in-flight guards across
+   move, tab close, titlebar close, cluster close, owner close, and quit.
+6. Add reducer/protocol tests and visible component tests. Run typecheck and the
+   targeted dockable, object-panel, shortcut, and appwindow suites.

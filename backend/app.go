@@ -6,6 +6,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -43,9 +44,29 @@ type ApplicationRuntime struct {
 // known only by the process entry point. Owners receive them before their
 // constructors return; the runtime is never configured afterward.
 type ApplicationRuntimeOptions struct {
-	Reporter              sentryreporting.Reporter
-	ApplicationUpdates    ApplicationUpdateOptions
-	CreateWorkspaceWindow func()
+	Reporter                   sentryreporting.Reporter
+	ApplicationUpdates         ApplicationUpdateOptions
+	CreateWorkspaceWindow      func()
+	NativeWindowDescriptor     func(string) (panelwindow.NativeDescriptor, error)
+	BeginPanelWindowOpen       func(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
+	AcknowledgePanelReady      func(string, string) (panelwindow.WindowDescriptor, error)
+	BeginPanelWindowDock       func(string, string, panelwindow.GroupSnapshot) error
+	AcknowledgePanelDock       func(string, string, string) error
+	FailPanelTransfer          func(string, string, string) error
+	FocusPanelWindow           func(string, string, string) error
+	RequestPanelClose          func(string, string, string) error
+	AcknowledgePanelClose      func(string) error
+	RequestClusterPanelsClose  func(string, string) error
+	AcknowledgeWorkspaceClose  func(string) error
+	RoutePanelCommand          func(string, string) error
+	RequestPanelObjectOpen     func(string, panelwindow.ObjectReference, string) error
+	AuthorizePanelObjectOpen   func(string, string, string, panelwindow.ObjectReference, string) error
+	UpdatePanelSnapshot        func(string, panelwindow.GroupSnapshot) error
+	RequestPanelTabClose       func(string, string) error
+	AuthorizePanelTabClose     func(string, string, string) error
+	RequestPanelGuard          func(string, string, string, string) error
+	AcknowledgePanelGuard      func(string, string, bool) error
+	AcknowledgeApplicationQuit func(string, string, bool) error
 }
 
 // NewApplicationRuntime composes focused backend owners around the concrete
@@ -79,7 +100,27 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		wailsApplication, signals.runtimeAvailable, signals.emitEvent, appLogs.Logger(),
 		DesktopShellBindings{
 			UpdateCheck: updateCheck.check, KubeconfigSearchPaths: kubeconfigSearchPaths.read,
-			CreateWorkspaceWindow: options.CreateWorkspaceWindow,
+			CreateWorkspaceWindow:      options.CreateWorkspaceWindow,
+			NativeWindowDescriptor:     options.NativeWindowDescriptor,
+			BeginPanelWindowOpen:       options.BeginPanelWindowOpen,
+			AcknowledgePanelReady:      options.AcknowledgePanelReady,
+			BeginPanelWindowDock:       options.BeginPanelWindowDock,
+			AcknowledgePanelDock:       options.AcknowledgePanelDock,
+			FailPanelTransfer:          options.FailPanelTransfer,
+			FocusPanelWindow:           options.FocusPanelWindow,
+			RequestPanelClose:          options.RequestPanelClose,
+			AcknowledgePanelClose:      options.AcknowledgePanelClose,
+			RequestClusterPanelsClose:  options.RequestClusterPanelsClose,
+			AcknowledgeWorkspaceClose:  options.AcknowledgeWorkspaceClose,
+			RoutePanelCommand:          options.RoutePanelCommand,
+			RequestPanelObjectOpen:     options.RequestPanelObjectOpen,
+			AuthorizePanelObjectOpen:   options.AuthorizePanelObjectOpen,
+			UpdatePanelSnapshot:        options.UpdatePanelSnapshot,
+			RequestPanelTabClose:       options.RequestPanelTabClose,
+			AuthorizePanelTabClose:     options.AuthorizePanelTabClose,
+			RequestPanelGuard:          options.RequestPanelGuard,
+			AcknowledgePanelGuard:      options.AcknowledgePanelGuard,
+			AcknowledgeApplicationQuit: options.AcknowledgeApplicationQuit,
 		},
 	)
 	updates := NewUpdateCoordinator(

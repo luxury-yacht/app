@@ -26,6 +26,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import type { panelwindow } from '@/core/backend-api/models';
 import { resetRefreshDomain } from '@/core/data-access';
 import type { KubernetesObjectReference } from '@/types/view-state';
 
@@ -62,11 +63,15 @@ interface ObjectPanelState {
   // useReducer state inside the panel is lost on remount. Persisting
   // the activeTab here means switching back restores the same sub-tab.
   activeTabs: Map<string, ViewType>;
+  nativeLocations: Map<string, { windowName: string; groupId: string }>;
+  dockedEdges: Map<string, 'right' | 'bottom'>;
 }
 
 const DEFAULT_OBJECT_PANEL_STATE: ObjectPanelState = {
   openPanels: new Map(),
   activeTabs: new Map(),
+  nativeLocations: new Map(),
+  dockedEdges: new Map(),
 };
 
 interface ObjectPanelStateContextType {
@@ -74,6 +79,8 @@ interface ObjectPanelStateContextType {
   showObjectPanel: boolean;
   // The full map of open panels
   openPanels: Map<string, ObjectPanelRef>;
+  nativeLocations: Map<string, { windowName: string; groupId: string }>;
+  dockedEdges: Map<string, 'right' | 'bottom'>;
 
   // Open/activate a panel for the given object reference.
   // If the object is already open, activates the existing tab.
@@ -103,6 +110,29 @@ interface ObjectPanelStateContextType {
    * every consumer.
    */
   setObjectPanelActiveTab: (panelId: string, tab: ViewType) => void;
+  commitPanelWindow: (snapshot: panelwindow.GroupSnapshot, windowName: string) => void;
+  dockPanelWindow: (snapshot: panelwindow.GroupSnapshot, edge: 'right' | 'bottom') => void;
+  removePanelWindow: (windowName: string) => void;
+  getOwnedPanel: (
+    clusterId: string,
+    panelId: string
+  ) => {
+    objectRef: ObjectPanelRef;
+    activeView: ViewType;
+    nativeLocation?: { windowName: string; groupId: string };
+    dockedEdge?: 'right' | 'bottom';
+  } | null;
+  upsertOwnedPanel: (
+    objectRef: KubernetesObjectReference,
+    activeView: ViewType,
+    location:
+      | { kind: 'docked'; edge: 'right' | 'bottom' }
+      | { kind: 'panel-window'; windowName: string; groupId: string }
+  ) => string;
+  removeOwnedPanel: (clusterId: string, panelId: string) => void;
+  panelIdsForCluster: (clusterId: string) => string[];
+  nativeWindowNamesForCluster: (clusterId: string) => string[];
+  syncPanelWindowSnapshot: (snapshot: panelwindow.GroupSnapshot, windowName: string) => void;
 }
 
 const ObjectPanelStateContext = createContext<ObjectPanelStateContextType | undefined>(undefined);
@@ -114,6 +144,8 @@ export const useObjectPanelState = () => {
   }
   return context;
 };
+
+export const useOptionalObjectPanelState = () => useContext(ObjectPanelStateContext);
 
 /**
  * Volatile context carrying only the per-panel active-tab map. Kept separate
@@ -134,24 +166,60 @@ const ObjectPanelActiveTabsContext = createContext<Map<string, ViewType>>(
 export const useObjectPanelActiveTab = (panelId: string): ViewType | undefined =>
   useContext(ObjectPanelActiveTabsContext).get(panelId);
 
+export const useObjectPanelActiveTabs = (): Map<string, ViewType> =>
+  useContext(ObjectPanelActiveTabsContext);
+
 interface ObjectPanelStateProviderProps {
   children: React.ReactNode;
+  initialGroupSnapshot?: panelwindow.GroupSnapshot;
 }
 
 const EMPTY_CLUSTER_IDS: string[] = [];
 
-export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> = ({ children }) => {
+const stateFromGroupSnapshot = (
+  snapshot: panelwindow.GroupSnapshot | undefined
+): Record<string, ObjectPanelState> => {
+  if (!snapshot) {
+    return {};
+  }
+  const openPanels = new Map<string, ObjectPanelRef>();
+  const activeTabs = new Map<string, ViewType>();
+  for (const tab of snapshot.tabs ?? []) {
+    openPanels.set(
+      tab.panelId,
+      buildObjectPanelRef(tab.objectRef as unknown as KubernetesObjectReference)
+    );
+    activeTabs.set(tab.panelId, tab.activeView as ViewType);
+  }
+  return {
+    [snapshot.clusterId]: {
+      openPanels,
+      activeTabs,
+      nativeLocations: new Map(),
+      dockedEdges: new Map(),
+    },
+  };
+};
+
+export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> = ({
+  children,
+  initialGroupSnapshot,
+}) => {
   const { selectedClusterId, selectedClusterName, selectedClusterIds } = useKubeconfig();
   // Ensure a stable fallback array when kubeconfig mocks omit selectedClusterIds.
   const activeClusterIds = selectedClusterIds ?? EMPTY_CLUSTER_IDS;
   // Keep object panel state scoped per cluster tab to avoid cross-tab state leakage.
   const [objectPanelStateByCluster, setObjectPanelStateByCluster] = useState<
     Record<string, ObjectPanelState>
-  >({});
+  >(() => stateFromGroupSnapshot(initialGroupSnapshot));
   const clusterKey = selectedClusterId || '__default__';
   const activeState = objectPanelStateByCluster[clusterKey] ?? DEFAULT_OBJECT_PANEL_STATE;
   const { openPanels } = activeState;
-  const showObjectPanel = openPanels.size > 0;
+  const { nativeLocations } = activeState;
+  const { dockedEdges } = activeState;
+  const showObjectPanel = Array.from(openPanels.keys()).some(
+    (panelId) => !nativeLocations.has(panelId)
+  );
 
   // Mirror the per-cluster state in a ref so imperative callbacks (e.g.
   // onCloseObjectPanel) can read the current slice without depending on
@@ -271,7 +339,16 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         nextPanels.delete(panelId);
         const nextActiveTabs = new Map(prev.activeTabs);
         nextActiveTabs.delete(panelId);
-        return { openPanels: nextPanels, activeTabs: nextActiveTabs };
+        const nextNativeLocations = new Map(prev.nativeLocations);
+        const nextDockedEdges = new Map(prev.dockedEdges);
+        nextNativeLocations.delete(panelId);
+        nextDockedEdges.delete(panelId);
+        return {
+          openPanels: nextPanels,
+          activeTabs: nextActiveTabs,
+          nativeLocations: nextNativeLocations,
+          dockedEdges: nextDockedEdges,
+        };
       });
       // Clear the dockable panel state so reopening gets fresh defaults
       // instead of remembering the old dock position.
@@ -308,10 +385,257 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
     [updateActiveState]
   );
 
+  const commitPanelWindow = useCallback(
+    (snapshot: panelwindow.GroupSnapshot, windowName: string) => {
+      if (snapshot.clusterId !== selectedClusterId) {
+        setObjectPanelStateByCluster((previous) => {
+          const current = previous[snapshot.clusterId] ?? DEFAULT_OBJECT_PANEL_STATE;
+          const nextNativeLocations = new Map(current.nativeLocations);
+          for (const tab of snapshot.tabs ?? []) {
+            nextNativeLocations.set(tab.panelId, { windowName, groupId: snapshot.groupId });
+          }
+          return {
+            ...previous,
+            [snapshot.clusterId]: { ...current, nativeLocations: nextNativeLocations },
+          };
+        });
+        return;
+      }
+      updateActiveState((previous) => {
+        const nextNativeLocations = new Map(previous.nativeLocations);
+        for (const tab of snapshot.tabs ?? []) {
+          nextNativeLocations.set(tab.panelId, { windowName, groupId: snapshot.groupId });
+        }
+        return { ...previous, nativeLocations: nextNativeLocations };
+      });
+    },
+    [selectedClusterId, updateActiveState]
+  );
+
+  const dockPanelWindow = useCallback(
+    (snapshot: panelwindow.GroupSnapshot, edge: 'right' | 'bottom') => {
+      setObjectPanelStateByCluster((previous) => {
+        const current = previous[snapshot.clusterId] ?? DEFAULT_OBJECT_PANEL_STATE;
+        const nextPanels = new Map(current.openPanels);
+        const nextActiveTabs = new Map(current.activeTabs);
+        const nextNativeLocations = new Map(current.nativeLocations);
+        const nextDockedEdges = new Map(current.dockedEdges);
+        for (const tab of snapshot.tabs ?? []) {
+          nextPanels.set(
+            tab.panelId,
+            buildObjectPanelRef(tab.objectRef as unknown as KubernetesObjectReference)
+          );
+          nextActiveTabs.set(tab.panelId, tab.activeView as ViewType);
+          nextNativeLocations.delete(tab.panelId);
+          nextDockedEdges.set(tab.panelId, edge);
+        }
+        return {
+          ...previous,
+          [snapshot.clusterId]: {
+            openPanels: nextPanels,
+            activeTabs: nextActiveTabs,
+            nativeLocations: nextNativeLocations,
+            dockedEdges: nextDockedEdges,
+          },
+        };
+      });
+    },
+    []
+  );
+
+  const removePanelWindow = useCallback((windowName: string) => {
+    setObjectPanelStateByCluster((previous) => {
+      const next = { ...previous };
+      for (const [clusterId, current] of Object.entries(previous)) {
+        const removedPanelIds = Array.from(current.nativeLocations.entries())
+          .filter(([, location]) => location.windowName === windowName)
+          .map(([panelId]) => panelId);
+        if (removedPanelIds.length === 0) {
+          continue;
+        }
+        const nextOpenPanels = new Map(current.openPanels);
+        const nextActiveTabs = new Map(current.activeTabs);
+        const nextNativeLocations = new Map(current.nativeLocations);
+        const nextDockedEdges = new Map(current.dockedEdges);
+        for (const panelId of removedPanelIds) {
+          const ref = nextOpenPanels.get(panelId);
+          if (ref) {
+            evictPanelScopes(ref);
+          }
+          nextOpenPanels.delete(panelId);
+          nextActiveTabs.delete(panelId);
+          nextNativeLocations.delete(panelId);
+          nextDockedEdges.delete(panelId);
+        }
+        next[clusterId] = {
+          openPanels: nextOpenPanels,
+          activeTabs: nextActiveTabs,
+          nativeLocations: nextNativeLocations,
+          dockedEdges: nextDockedEdges,
+        };
+      }
+      return next;
+    });
+  }, []);
+
+  const getOwnedPanel = useCallback((clusterId: string, panelId: string) => {
+    const current = stateByClusterRef.current[clusterId] ?? DEFAULT_OBJECT_PANEL_STATE;
+    const objectRef = current.openPanels.get(panelId);
+    if (!objectRef) {
+      return null;
+    }
+    return {
+      objectRef,
+      activeView: current.activeTabs.get(panelId) ?? ('details' as ViewType),
+      nativeLocation: current.nativeLocations.get(panelId),
+      dockedEdge: current.dockedEdges.get(panelId),
+    };
+  }, []);
+
+  const upsertOwnedPanel = useCallback(
+    (
+      data: KubernetesObjectReference,
+      activeView: ViewType,
+      location:
+        | { kind: 'docked'; edge: 'right' | 'bottom' }
+        | { kind: 'panel-window'; windowName: string; groupId: string }
+    ): string => {
+      const panelRef = buildObjectPanelRef(data);
+      const panelId = objectPanelId(panelRef);
+      setObjectPanelStateByCluster((previous) => {
+        const current = previous[panelRef.clusterId] ?? DEFAULT_OBJECT_PANEL_STATE;
+        const nextOpenPanels = new Map(current.openPanels);
+        const nextActiveTabs = new Map(current.activeTabs);
+        const nextNativeLocations = new Map(current.nativeLocations);
+        const nextDockedEdges = new Map(current.dockedEdges);
+        nextOpenPanels.set(panelId, panelRef);
+        nextActiveTabs.set(panelId, activeView);
+        if (location.kind === 'panel-window') {
+          nextNativeLocations.set(panelId, {
+            windowName: location.windowName,
+            groupId: location.groupId,
+          });
+          nextDockedEdges.delete(panelId);
+        } else {
+          nextNativeLocations.delete(panelId);
+          nextDockedEdges.set(panelId, location.edge);
+        }
+        return {
+          ...previous,
+          [panelRef.clusterId]: {
+            openPanels: nextOpenPanels,
+            activeTabs: nextActiveTabs,
+            nativeLocations: nextNativeLocations,
+            dockedEdges: nextDockedEdges,
+          },
+        };
+      });
+      return panelId;
+    },
+    []
+  );
+
+  const removeOwnedPanel = useCallback((clusterId: string, panelId: string) => {
+    setObjectPanelStateByCluster((previous) => {
+      const current = previous[clusterId];
+      if (!current?.openPanels.has(panelId)) {
+        return previous;
+      }
+      const objectRef = current.openPanels.get(panelId);
+      if (objectRef) {
+        evictPanelScopes(objectRef);
+      }
+      clearLogViewerPrefs(panelId);
+      const nextOpenPanels = new Map(current.openPanels);
+      const nextActiveTabs = new Map(current.activeTabs);
+      const nextNativeLocations = new Map(current.nativeLocations);
+      const nextDockedEdges = new Map(current.dockedEdges);
+      nextOpenPanels.delete(panelId);
+      nextActiveTabs.delete(panelId);
+      nextNativeLocations.delete(panelId);
+      nextDockedEdges.delete(panelId);
+      return {
+        ...previous,
+        [clusterId]: {
+          openPanels: nextOpenPanels,
+          activeTabs: nextActiveTabs,
+          nativeLocations: nextNativeLocations,
+          dockedEdges: nextDockedEdges,
+        },
+      };
+    });
+  }, []);
+
+  const panelIdsForCluster = useCallback(
+    (clusterId: string): string[] =>
+      Array.from(
+        (stateByClusterRef.current[clusterId] ?? DEFAULT_OBJECT_PANEL_STATE).openPanels.keys()
+      ),
+    []
+  );
+
+  const nativeWindowNamesForCluster = useCallback(
+    (clusterId: string): string[] =>
+      Array.from(
+        new Set(
+          Array.from(
+            (
+              stateByClusterRef.current[clusterId] ?? DEFAULT_OBJECT_PANEL_STATE
+            ).nativeLocations.values(),
+            (location) => location.windowName
+          )
+        )
+      ),
+    []
+  );
+
+  const syncPanelWindowSnapshot = useCallback(
+    (snapshot: panelwindow.GroupSnapshot, windowName: string) => {
+      setObjectPanelStateByCluster((previous) => {
+        const current = previous[snapshot.clusterId] ?? DEFAULT_OBJECT_PANEL_STATE;
+        const incoming = new Set((snapshot.tabs ?? []).map((tab) => tab.panelId));
+        const nextOpenPanels = new Map(current.openPanels);
+        const nextActiveTabs = new Map(current.activeTabs);
+        const nextNativeLocations = new Map(current.nativeLocations);
+        const nextDockedEdges = new Map(current.dockedEdges);
+        for (const [panelId, location] of current.nativeLocations) {
+          if (location.windowName !== windowName || incoming.has(panelId)) {
+            continue;
+          }
+          nextOpenPanels.delete(panelId);
+          nextActiveTabs.delete(panelId);
+          nextNativeLocations.delete(panelId);
+          nextDockedEdges.delete(panelId);
+        }
+        for (const tab of snapshot.tabs ?? []) {
+          nextOpenPanels.set(
+            tab.panelId,
+            buildObjectPanelRef({ ...tab.objectRef } as KubernetesObjectReference)
+          );
+          nextActiveTabs.set(tab.panelId, tab.activeView as ViewType);
+          nextNativeLocations.set(tab.panelId, { windowName, groupId: snapshot.groupId });
+          nextDockedEdges.delete(tab.panelId);
+        }
+        return {
+          ...previous,
+          [snapshot.clusterId]: {
+            openPanels: nextOpenPanels,
+            activeTabs: nextActiveTabs,
+            nativeLocations: nextNativeLocations,
+            dockedEdges: nextDockedEdges,
+          },
+        };
+      });
+    },
+    []
+  );
+
   const value = useMemo(
     () => ({
       showObjectPanel,
       openPanels,
+      nativeLocations,
+      dockedEdges,
       onRowClick,
       closePanel,
       onCloseObjectPanel,
@@ -324,15 +648,35 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       },
       hydrateClusterMeta,
       setObjectPanelActiveTab,
+      commitPanelWindow,
+      dockPanelWindow,
+      removePanelWindow,
+      getOwnedPanel,
+      upsertOwnedPanel,
+      removeOwnedPanel,
+      panelIdsForCluster,
+      nativeWindowNamesForCluster,
+      syncPanelWindowSnapshot,
     }),
     [
       showObjectPanel,
       openPanels,
+      nativeLocations,
+      dockedEdges,
       onRowClick,
       closePanel,
       onCloseObjectPanel,
       hydrateClusterMeta,
       setObjectPanelActiveTab,
+      commitPanelWindow,
+      dockPanelWindow,
+      removePanelWindow,
+      getOwnedPanel,
+      upsertOwnedPanel,
+      removeOwnedPanel,
+      panelIdsForCluster,
+      nativeWindowNamesForCluster,
+      syncPanelWindowSnapshot,
     ]
   );
 

@@ -41,5 +41,6 @@ export * as serviceaccount from '@bindings/github.com/luxury-yacht/app/backend/r
 export * as statefulset from '@bindings/github.com/luxury-yacht/app/backend/resources/statefulset/models';
 export * as storageclass from '@bindings/github.com/luxury-yacht/app/backend/resources/storageclass/models';
 export * as types from '@bindings/github.com/luxury-yacht/app/backend/resources/types/models';
+export * as panelwindow from '@bindings/github.com/luxury-yacht/app/internal/panelwindow/models';
 export * as updateidentity from '@bindings/github.com/luxury-yacht/app/internal/updateidentity/models';
 export * as v1 from '@bindings/k8s.io/apimachinery/pkg/apis/meta/v1/models';

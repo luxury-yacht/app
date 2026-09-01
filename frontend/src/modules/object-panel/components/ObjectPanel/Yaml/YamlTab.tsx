@@ -6,6 +6,8 @@
  * in yamlTransaction.
  */
 
+import { useOptionalObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
+import { useCurrentObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
@@ -20,6 +22,7 @@ import { errorHandler } from '@utils/errorHandler';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as YAML from 'yaml';
+import { usePanelLifecycleGuard } from '@/core/panel-windows/panelLifecycleGuards';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
@@ -31,6 +34,7 @@ import {
   YamlSaveIcon,
 } from '@shared/components/icons/YamlIcons';
 import { resolveProtectedYamlRanges } from './yamlFieldPolicy';
+import { getYamlPanelBlockReason } from './yamlPanelGuard';
 import { INACTIVE_SCOPE, LARGE_MANIFEST_THRESHOLD, YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
 import type { YamlTabProps } from './yamlTabTypes';
 import { prepareDraftYaml } from './yamlTabUtils';
@@ -612,6 +616,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const [wrapLines, setWrapLines] = useState(true);
   const [expandedDiffs, setExpandedDiffs] = useState<Record<string, boolean>>({});
   const yamlEditorRef = useRef<YamlEditorHandle>(null);
+  const { panelId } = useCurrentObjectPanel();
+  const objectPanelState = useOptionalObjectPanelState();
 
   const effectiveScope = scope ?? INACTIVE_SCOPE;
   const snapshot = useRefreshScopedDomain('object-yaml', effectiveScope);
@@ -664,6 +670,27 @@ const YamlTab: React.FC<YamlTabProps> = ({
     yamlContent,
     showManagedFields,
     prepareVisibleDraftYaml,
+  });
+
+  usePanelLifecycleGuard(panelId, () => {
+    const reason = getYamlPanelBlockReason({
+      isEditing,
+      isSaving,
+      draftYaml,
+      baselineYaml: effectiveYamlContent ?? '',
+    });
+    if (!reason) {
+      return null;
+    }
+    return {
+      reason,
+      focus: () => {
+        if (panelId) {
+          objectPanelState?.setObjectPanelActiveTab(panelId, 'yaml');
+        }
+        window.requestAnimationFrame(() => yamlEditorRef.current?.focus());
+      },
+    };
   });
 
   const displayYaml = useMemo(() => {

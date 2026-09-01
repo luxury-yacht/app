@@ -6,7 +6,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getContentBounds } from './dockablePanelLayout';
 import {
   type DockPosition,
   getActivePanelLayoutStore,
@@ -18,7 +17,6 @@ import { usePanelLayoutStoreContext } from './panelLayoutStoreContext';
 interface InitializeOptions {
   position?: DockPosition;
   size?: { width?: number; height?: number };
-  floatingPosition?: { x?: number; y?: number };
   isOpen?: boolean;
 }
 
@@ -37,13 +35,6 @@ export function focusPanelById(panelId: string) {
  */
 export function setPanelPositionById(panelId: string, position: DockPosition) {
   getActivePanelLayoutStore().setPanelPositionById(panelId, position);
-}
-
-/**
- * Set a panel's floating position by ID.
- */
-export function setPanelFloatingPositionById(panelId: string, position: { x: number; y: number }) {
-  getActivePanelLayoutStore().setPanelFloatingPositionById(panelId, position);
 }
 
 /**
@@ -112,14 +103,10 @@ export function useDockablePanelState(panelId: string) {
           prevState.position !== newState.position ||
           prevState.isMaximized !== newState.isMaximized ||
           prevState.isOpen !== newState.isOpen ||
-          prevState.floatingSize.width !== newState.floatingSize.width ||
-          prevState.floatingSize.height !== newState.floatingSize.height ||
           prevState.rightSize.width !== newState.rightSize.width ||
           prevState.rightSize.height !== newState.rightSize.height ||
           prevState.bottomSize.width !== newState.bottomSize.width ||
           prevState.bottomSize.height !== newState.bottomSize.height ||
-          prevState.floatingPosition.x !== newState.floatingPosition.x ||
-          prevState.floatingPosition.y !== newState.floatingPosition.y ||
           prevState.isInitialized !== newState.isInitialized ||
           prevState.zIndex !== newState.zIndex;
 
@@ -148,14 +135,6 @@ export function useDockablePanelState(panelId: string) {
       const isObjectPanel = panelId.startsWith('obj:');
       store.updateState(panelId, {
         position: targetPosition,
-        floatingSize: {
-          width:
-            (isObjectPanel ? localState.floatingSize.width : defaultSize.width) ??
-            localState.floatingSize.width,
-          height:
-            (isObjectPanel ? localState.floatingSize.height : defaultSize.height) ??
-            localState.floatingSize.height,
-        },
         rightSize: {
           width:
             (isObjectPanel ? localState.rightSize.width : defaultSize.width) ??
@@ -167,10 +146,6 @@ export function useDockablePanelState(panelId: string) {
           height:
             (isObjectPanel ? localState.bottomSize.height : defaultSize.height) ??
             localState.bottomSize.height,
-        },
-        floatingPosition: {
-          x: options.floatingPosition?.x ?? localState.floatingPosition.x,
-          y: options.floatingPosition?.y ?? localState.floatingPosition.y,
         },
         isMaximized: localState.isMaximized,
         isOpen: finalIsOpen,
@@ -192,7 +167,7 @@ export function useDockablePanelState(panelId: string) {
       const updates: Partial<PanelLayoutState> = {};
       switch (localState.position) {
         case 'floating':
-          updates.floatingSize = size;
+          updates.rightSize = { width: size.width, height: localState.rightSize.height };
           break;
         case 'right':
           updates.rightSize = { width: size.width, height: localState.rightSize.height };
@@ -209,22 +184,15 @@ export function useDockablePanelState(panelId: string) {
   const getCurrentSize = useCallback(() => {
     switch (localState.position) {
       case 'floating':
-        return localState.floatingSize;
+        return localState.rightSize;
       case 'right':
         return localState.rightSize;
       case 'bottom':
         return localState.bottomSize;
       default:
-        return localState.floatingSize;
+        return localState.rightSize;
     }
-  }, [localState.position, localState.floatingSize, localState.rightSize, localState.bottomSize]);
-
-  const setFloatingPosition = useCallback(
-    (position: { x: number; y: number }) => {
-      store.setPanelFloatingPositionById(panelId, position);
-    },
-    [panelId, store]
-  );
+  }, [localState.position, localState.rightSize, localState.bottomSize]);
 
   const setOpen = useCallback(
     (isOpen: boolean) => {
@@ -249,18 +217,10 @@ export function useDockablePanelState(panelId: string) {
   }, [panelId, store]);
 
   const reset = useCallback(() => {
-    const defaultFloatingWidth = 600;
-    const defaultFloatingHeight = 400;
-    const content = getContentBounds();
-    const centerX = Math.max(100, (content.width - defaultFloatingWidth) / 2);
-    const centerY = Math.max(100, (content.height - defaultFloatingHeight) / 2);
-
     store.updateState(panelId, {
       position: 'right',
-      floatingSize: { width: defaultFloatingWidth, height: defaultFloatingHeight },
       rightSize: { width: 400, height: 300 },
       bottomSize: { width: 400, height: 300 },
-      floatingPosition: { x: centerX, y: centerY },
       isMaximized: false,
       isOpen: false,
       isInitialized: false,
@@ -272,10 +232,8 @@ export function useDockablePanelState(panelId: string) {
     () => ({
       position: localState.position,
       size: getCurrentSize(),
-      floatingSize: localState.floatingSize,
       rightSize: localState.rightSize,
       bottomSize: localState.bottomSize,
-      floatingPosition: localState.floatingPosition,
       isMaximized: localState.isMaximized,
       isOpen: localState.isOpen,
       isInitialized: localState.isInitialized,
@@ -283,7 +241,6 @@ export function useDockablePanelState(panelId: string) {
       initialize,
       setPosition,
       setSize,
-      setFloatingPosition,
       setOpen,
       setMaximized,
       toggle,
@@ -296,7 +253,6 @@ export function useDockablePanelState(panelId: string) {
       initialize,
       setPosition,
       setSize,
-      setFloatingPosition,
       setOpen,
       setMaximized,
       toggle,

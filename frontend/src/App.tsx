@@ -18,7 +18,6 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
-import { DockablePanelProvider } from '@ui/dockable';
 // Error Boundary
 import { AppErrorBoundary } from '@ui/errors';
 // App components
@@ -34,6 +33,8 @@ import { setActivePermissionCluster } from '@/core/capabilities';
 import { isClusterOperationalState } from '@/core/contexts/clusterLifecycleState';
 import { requestContextRefresh } from '@/core/data-access';
 import { eventBus } from '@/core/events';
+import { PanelLifecycleGuardProvider } from '@/core/panel-windows/panelLifecycleGuards';
+import { WorkspacePanelCoordinator } from '@/core/panel-windows/WorkspacePanelCoordinator';
 import {
   applyTheme,
   getAccentColor,
@@ -224,9 +225,11 @@ function App() {
                 <KubernetesProvider>
                   <FavoritesProvider>
                     <TabDragProvider>
-                      <DockablePanelProvider>
-                        <AppContent />
-                      </DockablePanelProvider>
+                      <PanelLifecycleGuardProvider>
+                        <WorkspacePanelCoordinator>
+                          <AppContent />
+                        </WorkspacePanelCoordinator>
+                      </PanelLifecycleGuardProvider>
                     </TabDragProvider>
                   </FavoritesProvider>
                 </KubernetesProvider>

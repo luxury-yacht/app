@@ -47,6 +47,7 @@ interface PortForwardModalProps {
   onClose: () => void;
   /** Optional callback when port forward is successfully started */
   onStarted?: (sessionId: string) => void;
+  onMutationChange?: (inFlight: boolean) => void;
 }
 
 /**
@@ -69,7 +70,12 @@ function getDefaultLocalPort(containerPort: number): number {
  * Supports both predefined container ports (via radio selection) and
  * custom port input when no ports are available.
  */
-const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps) => {
+const PortForwardModal = ({
+  target,
+  onClose,
+  onStarted,
+  onMutationChange,
+}: PortForwardModalProps) => {
   const elementIdPrefix = useId();
   // Selected container port (either from predefined list or manual input)
   const [containerPort, setContainerPort] = useState<number>(0);
@@ -228,6 +234,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
     }
 
     setIsLoading(true);
+    onMutationChange?.(true);
     setError(null);
 
     try {
@@ -255,8 +262,9 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
       setError(details.message || 'Failed to start port forward');
     } finally {
       setIsLoading(false);
+      onMutationChange?.(false);
     }
-  }, [target, containerPort, localPort, onStarted, onClose]);
+  }, [target, containerPort, localPort, onStarted, onClose, onMutationChange]);
 
   // Don't render if no target
   if (!target) {

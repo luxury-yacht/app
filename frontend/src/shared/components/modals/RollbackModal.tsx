@@ -38,6 +38,7 @@ interface RollbackModalProps {
   version: string;
   name: string;
   kind: string; // "Deployment" | "StatefulSet" | "DaemonSet"
+  onMutationChange?: (inFlight: boolean) => void;
 }
 
 const ROLLBACK_DIFF_TOO_LARGE_MESSAGE = 'This diff is too large to display in the current view.';
@@ -83,6 +84,7 @@ const RollbackModal = ({
   version,
   name,
   kind,
+  onMutationChange,
 }: RollbackModalProps) => {
   // Revision history state.
   const [revisions, setRevisions] = useState<backend.RevisionEntry[]>([]);
@@ -233,6 +235,7 @@ const RollbackModal = ({
       return;
     }
     setRollbackLoading(true);
+    onMutationChange?.(true);
     setRollbackError(null);
 
     runObjectRollback(
@@ -254,8 +257,19 @@ const RollbackModal = ({
       })
       .finally(() => {
         setRollbackLoading(false);
+        onMutationChange?.(false);
       });
-  }, [clusterId, namespace, group, version, name, kind, selectedRevision, onClose]);
+  }, [
+    clusterId,
+    namespace,
+    group,
+    version,
+    name,
+    kind,
+    selectedRevision,
+    onClose,
+    onMutationChange,
+  ]);
 
   // Return null when the modal is not open.
   if (!isOpen) {

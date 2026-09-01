@@ -29,6 +29,7 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 		"UpdateCommands":         {field: "updates", count: 6},
 		"AppLogCommands":         {field: "logs", count: 5},
 		"DesktopShellCommands":   {field: "desktopShell", count: 4},
+		"PanelWindowCommands":    {field: "panelWindows", count: 20},
 	}
 
 	parsed, err := parser.ParseFile(token.NewFileSet(), "desktop_service.go", nil, 0)
@@ -49,8 +50,8 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 			require.Equal(t, owner.field+"."+method, delegations[method], method)
 		}
 	}
-	require.Len(t, seen, 87)
-	require.Len(t, delegations, 87)
+	require.Len(t, seen, 107)
+	require.Len(t, delegations, 107)
 }
 
 func desktopCommandInterfaces(
@@ -93,7 +94,7 @@ func desktopCommandInterfaces(
 
 func desktopCommandDelegations(t *testing.T, parsed *ast.File) map[string]string {
 	t.Helper()
-	result := make(map[string]string, 87)
+	result := make(map[string]string, 101)
 	frameworkMethods := map[string]struct{}{
 		"ServiceStartup":  {},
 		"ServiceShutdown": {},

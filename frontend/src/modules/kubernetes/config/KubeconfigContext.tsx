@@ -63,6 +63,7 @@ interface KubeconfigContextType {
   setActiveKubeconfig: (config: string) => void;
   getClusterMeta: (config: string) => { id: string; name: string };
   loadKubeconfigs: () => Promise<void>;
+  registerClusterClosePreflight: (preflight: (clusterId: string) => Promise<boolean>) => () => void;
 }
 
 const KubeconfigContext = createContext<KubeconfigContextType | undefined>(undefined);
@@ -109,6 +110,46 @@ export const useKubeconfig = () => {
 interface KubeconfigProviderProps {
   children: ReactNode;
 }
+
+interface FixedClusterProviderProps {
+  children: ReactNode;
+  clusterId: string;
+  clusterName?: string;
+}
+
+/**
+ * Read-only cluster identity for a native panel webview. It deliberately omits
+ * KubeconfigProvider's workspace acquisition and selection transitions: the
+ * owner workspace already owns this open cluster tab.
+ */
+export const FixedClusterProvider: React.FC<FixedClusterProviderProps> = ({
+  children,
+  clusterId,
+  clusterName = clusterId,
+}) => {
+  const value = useMemo<KubeconfigContextType>(
+    () => ({
+      kubeconfigs: [],
+      kubeconfigDiscoveryState: 'available',
+      kubeconfigSearchPaths: [],
+      selectedKubeconfigs: [clusterId],
+      selectedKubeconfig: clusterId,
+      selectedClusterId: clusterId,
+      selectedClusterName: clusterName,
+      selectedClusterIds: [clusterId],
+      kubeconfigsLoading: false,
+      setSelectedKubeconfigs: async () => undefined,
+      openKubeconfig: async () => undefined,
+      closeKubeconfig: async () => undefined,
+      setActiveKubeconfig: () => undefined,
+      getClusterMeta: () => ({ id: clusterId, name: clusterName }),
+      loadKubeconfigs: async () => undefined,
+      registerClusterClosePreflight: () => () => undefined,
+    }),
+    [clusterId, clusterName]
+  );
+  return <KubeconfigContext.Provider value={value}>{children}</KubeconfigContext.Provider>;
+};
 
 type SelectionTransitionOptions = {
   configs: string[];
@@ -220,6 +261,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const committedSelectionsRef = useRef<string[]>([]);
   const committedActiveRef = useRef<string>('');
   const latestSelectionRequestIdRef = useRef(0);
+  const clusterClosePreflightsRef = useRef(new Set<(clusterId: string) => Promise<boolean>>());
   // Prevent refresh context churn until the backend confirms selection updates.
   const selectionPendingRef = useRef(false);
 
@@ -609,6 +651,21 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         return;
       }
 
+      const targetSelection = selectedKubeconfigsRef.current.find((selection) => {
+        if (selection === target) {
+          return true;
+        }
+        return resolveClusterMeta(selection, kubeconfigsRef.current).id === target;
+      });
+      const targetClusterId = targetSelection
+        ? resolveClusterMeta(targetSelection, kubeconfigsRef.current).id
+        : target;
+      for (const preflight of clusterClosePreflightsRef.current) {
+        if (!(await preflight(targetClusterId))) {
+          return;
+        }
+      }
+
       const requestId = latestSelectionRequestIdRef.current + 1;
       latestSelectionRequestIdRef.current = requestId;
 
@@ -630,6 +687,15 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       });
     },
     [applySelectionTransition, normalizeSelections, resolveClusterMeta]
+  );
+
+  const registerClusterClosePreflight = useCallback(
+    (preflight: (clusterId: string) => Promise<boolean>) => {
+      const preflights = clusterClosePreflightsRef.current;
+      preflights.add(preflight);
+      return () => preflights.delete(preflight);
+    },
+    []
   );
 
   const setActiveKubeconfig = useCallback(
@@ -718,6 +784,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       setActiveKubeconfig,
       getClusterMeta,
       loadKubeconfigs,
+      registerClusterClosePreflight,
     }),
     [
       kubeconfigs,
@@ -735,6 +802,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       setActiveKubeconfig,
       getClusterMeta,
       loadKubeconfigs,
+      registerClusterClosePreflight,
     ]
   );
 

@@ -40,6 +40,9 @@ export const writeClipboardText = (text: string): Promise<void> => Clipboard.Set
 
 export const closeWindow = (): Promise<void> => WailsWindow.Close();
 
+export const focusWindow = (windowName: string): Promise<void> =>
+  WailsWindow.Get(windowName).Focus();
+
 export const openDevTools = (): Promise<void> => WailsWindow.OpenDevTools();
 
 export const toggleMaximise = (): Promise<void> => WailsWindow.ToggleMaximise();

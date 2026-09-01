@@ -58,10 +58,20 @@ Surface kinds include:
   whole app.
 - Editors may own editor-specific keys; app-level `Escape` wins unless the
   editor has a documented transient UI reason.
-- The sender-targeted `Cmd/Ctrl+W` close command closes the active cluster tab
-  through `KubeconfigContext`. When the current peer has no cluster tabs, the
-  same command closes that Wails window instead; the native window-closing hook
-  still owns last-window application shutdown.
+- The native menu labels `Cmd/Ctrl+W` as context-neutral `Close`; the focused
+  window role decides what closes. In a workspace, it closes the active cluster
+  tab through `KubeconfigContext`, or the workspace when it has no cluster tabs.
+  In a panel window, it guards and closes the active object tab; closing the
+  last tab closes that native panel window. The panel titlebar closes the whole
+  group through the same guards.
+- Panel windows mount `PanelWindowShortcuts`, not workspace
+  `GlobalShortcuts`. Cut, copy, paste, select-all, and zoom stay local.
+  Workspace-only commands such as Settings, About, Open Cluster, sidebar,
+  diagnostics, object diff, and Application Logs focus the immutable owner and
+  route the sender-targeted command there.
+- Blocking modals and editors keep their existing priority. An unsaved YAML
+  draft or in-flight mutation may reject a tab/group/window close and focuses
+  the first deterministic blocker.
 
 ## Change Checklist
 

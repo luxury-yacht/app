@@ -20,7 +20,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
-import { getContentBounds } from './dockablePanelLayout';
+import { useOptionalPanelLifecycleGuardRegistry } from '@/core/panel-windows/panelLifecycleGuards';
 import type { PanelLayoutStore } from './panelLayoutStore';
 import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
 import { PanelLayoutStoreContext } from './panelLayoutStoreContext';
@@ -37,12 +37,7 @@ import {
 } from './tabGroupState';
 import type { GroupKey, PanelRegistration, TabGroupState } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
-import {
-  focusPanelById,
-  setPanelFloatingPositionById,
-  setPanelOpenById,
-  setPanelPositionById,
-} from './useDockablePanelState';
+import { focusPanelById, setPanelOpenById, setPanelPositionById } from './useDockablePanelState';
 
 interface DockablePanelContextValue {
   // Tab group state
@@ -87,14 +82,6 @@ interface DockablePanelContextValue {
     targetGroupId: string,
     insertIndex: number
   ) => void;
-  // Adapter for the container-level empty-space drop target. Moves a
-  // panel into a brand-new floating group at the cursor position.
-  createFloatingGroupWithPanel: (
-    panelId: string,
-    sourceGroupId: string,
-    cursorPos: { x: number; y: number }
-  ) => void;
-
   // Content registry -- allows the group leader to render other panels' body content.
   panelContentRefsMap: React.MutableRefObject<Map<string, React.MutableRefObject<React.ReactNode>>>;
   notifyContentChange: (groupKey: GroupKey) => void;
@@ -116,6 +103,8 @@ interface DockablePanelContextValue {
 
   // Fan out applyObjectPanelLayoutDefaults to every cluster's store.
   applyLayoutDefaultsAcrossClusters: () => void;
+  requestGroupMove?: (groupKey: GroupKey, targetPosition: DockPosition) => boolean;
+  nativeWindowMode: boolean;
 }
 
 const DockablePanelContext = createContext<DockablePanelContextValue | null>(null);
@@ -246,9 +235,21 @@ export const useDockablePanelHost = (): HTMLElement | null => {
 
 interface DockablePanelProviderProps {
   children: React.ReactNode;
+  initialTabGroups?: TabGroupState;
+  onGroupMoveRequest?: (
+    group: { groupKey: GroupKey; tabs: string[]; activeTab: string | null },
+    targetPosition: DockPosition
+  ) => boolean;
+  nativeWindowMode?: boolean;
 }
 
-export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ children }) => {
+export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
+  children,
+  initialTabGroups,
+  onGroupMoveRequest,
+  nativeWindowMode = false,
+}) => {
+  const lifecycleGuards = useOptionalPanelLifecycleGuardRegistry();
   // Per-cluster panel layout stores. Each open cluster gets its own
   // PanelLayoutStore that holds BOTH per-panel state and tabGroups for
   // that cluster. The active store mirrors selectedClusterId. Cluster
@@ -256,14 +257,17 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   const { selectedClusterId, selectedClusterIds } = useKubeconfig();
   const storesRef = useRef<Map<string, PanelLayoutStore>>(new Map());
 
-  const getOrCreateStoreForCluster = useCallback((clusterKey: string): PanelLayoutStore => {
-    let store = storesRef.current.get(clusterKey);
-    if (!store) {
-      store = createPanelLayoutStore();
-      storesRef.current.set(clusterKey, store);
-    }
-    return store;
-  }, []);
+  const getOrCreateStoreForCluster = useCallback(
+    (clusterKey: string): PanelLayoutStore => {
+      let store = storesRef.current.get(clusterKey);
+      if (!store) {
+        store = createPanelLayoutStore(initialTabGroups);
+        storesRef.current.set(clusterKey, store);
+      }
+      return store;
+    },
+    [initialTabGroups]
+  );
 
   // CRITICAL: activeStore is computed in render via useMemo, NOT via
   // useState + useLayoutEffect. The useState approach has a one-render
@@ -554,6 +558,11 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // -----------------------------------------------------------------------
   const closeTab = useCallback(
     (panelId: string, activationPreference: AdjacentTabActivationPreference = 'right') => {
+      const blocker = lifecycleGuards?.firstBlocker([panelId]);
+      if (blocker) {
+        blocker.focus();
+        return;
+      }
       const registration = panelRegistrationsRef.current.get(panelId);
       const currentTabGroups = activeStore.getTabGroups();
       const currentGroupKey = getGroupForPanel(currentTabGroups, panelId);
@@ -589,7 +598,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       }
       setPanelOpenById(panelId, false);
     },
-    [activeStore, reconcileLastFocusedGroup]
+    [activeStore, lifecycleGuards, reconcileLastFocusedGroup]
   );
 
   // -----------------------------------------------------------------------
@@ -607,6 +616,26 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // -----------------------------------------------------------------------
   const movePanelBetweenGroups = useCallback(
     (panelId: string, targetGroupKey: GroupKey, insertIndex?: number) => {
+      if (targetGroupKey === 'floating') {
+        if (!onGroupMoveRequest) {
+          return;
+        }
+        const sourceGroupKey = getGroupForPanel(activeStore.getTabGroups(), panelId);
+        const sourceGroup = sourceGroupKey
+          ? getGroupTabs(activeStore.getTabGroups(), sourceGroupKey)
+          : null;
+        if (sourceGroupKey && sourceGroup) {
+          onGroupMoveRequest(
+            {
+              groupKey: sourceGroupKey,
+              tabs: sourceGroup.tabs,
+              activeTab: sourceGroup.activeTab,
+            },
+            'floating'
+          );
+        }
+        return;
+      }
       activeStore.setTabGroups((prev) =>
         movePanelToGroup(prev, panelId, targetGroupKey, insertIndex)
       );
@@ -625,7 +654,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
         targetGroupKey === 'right' || targetGroupKey === 'bottom' ? targetGroupKey : 'floating';
       setPanelPositionById(panelId, targetPosition);
     },
-    [activeStore, setLastFocusedGroupKey]
+    [activeStore, onGroupMoveRequest, setLastFocusedGroupKey]
   );
 
   // -----------------------------------------------------------------------
@@ -678,28 +707,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       movePanelBetweenGroups(panelId, targetGroupId as GroupKey, insertIndex);
     },
     [activeStore, reorderTabInGroup, movePanelBetweenGroups]
-  );
-
-  // -----------------------------------------------------------------------
-  // createFloatingGroupWithPanel -- adapter called by the container-level
-  // empty-space drop target. Wraps the existing movePanelBetweenGroups +
-  // setPanelFloatingPositionById calls so a drop outside any tab bar
-  // spawns a brand-new floating group positioned at the cursor. Preserves
-  // the legacy "undock by dragging away from the source bar" feature,
-  // now keyed on an explicit drop event rather than a cursor-distance
-  // gesture. `_sourceGroupId` is accepted for API symmetry but unused —
-  // `movePanelBetweenGroups` resolves the source internally.
-  // -----------------------------------------------------------------------
-  const createFloatingGroupWithPanel = useCallback(
-    (panelId: string, _sourceGroupId: string, cursorPos: { x: number; y: number }) => {
-      movePanelBetweenGroups(panelId, 'floating');
-      const contentBounds = getContentBounds();
-      setPanelFloatingPositionById(panelId, {
-        x: cursorPos.x - contentBounds.left,
-        y: cursorPos.y - contentBounds.top,
-      });
-    },
-    [movePanelBetweenGroups]
   );
 
   // -----------------------------------------------------------------------
@@ -770,6 +777,23 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     });
   }, []);
 
+  const requestGroupMove = useCallback(
+    (groupKey: GroupKey, targetPosition: DockPosition): boolean => {
+      if (!onGroupMoveRequest) {
+        return false;
+      }
+      const group = getGroupTabs(tabGroups, groupKey);
+      if (!group || group.tabs.length === 0) {
+        return false;
+      }
+      return onGroupMoveRequest(
+        { groupKey, tabs: group.tabs, activeTab: group.activeTab },
+        targetPosition
+      );
+    },
+    [onGroupMoveRequest, tabGroups]
+  );
+
   const value: DockablePanelContextValue = useMemo(
     () => ({
       tabGroups,
@@ -785,7 +809,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       movePanelBetweenGroupsAndFocus,
       dragPreviewRef,
       movePanel,
-      createFloatingGroupWithPanel,
       panelContentRefsMap,
       notifyContentChange,
       subscribeContentChange,
@@ -797,6 +820,8 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       getLastFocusedPosition,
       focusPanel,
       applyLayoutDefaultsAcrossClusters,
+      requestGroupMove,
+      nativeWindowMode,
     }),
     [
       tabGroups,
@@ -811,7 +836,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       movePanelBetweenGroups,
       movePanelBetweenGroupsAndFocus,
       movePanel,
-      createFloatingGroupWithPanel,
       notifyContentChange,
       subscribeContentChange,
       updateGridTableHoverSuppression,
@@ -821,6 +845,8 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       getLastFocusedPosition,
       focusPanel,
       applyLayoutDefaultsAcrossClusters,
+      requestGroupMove,
+      nativeWindowMode,
     ]
   );
 

@@ -39,6 +39,7 @@ import { getObjectPanelScopes } from '@modules/object-panel/objectPanelRef';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import type { DockPosition } from '@ui/dockable';
 import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
+import type { GroupKey } from '@ui/dockable/tabGroupTypes';
 import { buildObjectDetailModel } from './Details/objectDetailModel';
 import { resetObjectPanelScopedDomain } from './hooks/useObjectPanelScopedDomainLifecycle';
 
@@ -50,20 +51,29 @@ interface ObjectPanelProps {
   panelId: string;
   /** The cluster-complete object reference this panel displays. */
   objectRef: ObjectPanelRef;
+  defaultPosition?: DockPosition;
+  defaultGroupKey?: GroupKey | 'floating';
 }
 
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
-function ObjectPanel({ panelId, objectRef }: Readonly<ObjectPanelProps>) {
+function ObjectPanel({
+  panelId,
+  objectRef,
+  defaultPosition,
+  defaultGroupKey,
+}: Readonly<ObjectPanelProps>) {
   const objectData = objectRef;
   const { closePanel, setObjectPanelActiveTab } = useObjectPanelState();
   const { tabGroups, getPreferredOpenGroupKey } = useDockablePanelContext();
-  const openTargetGroupKey = getPreferredOpenGroupKey(getDefaultObjectPanelPosition());
+  const openTargetGroupKey =
+    defaultGroupKey ?? getPreferredOpenGroupKey(defaultPosition ?? getDefaultObjectPanelPosition());
   const openTargetPosition: DockPosition =
-    openTargetGroupKey === 'right' || openTargetGroupKey === 'bottom'
+    defaultPosition ??
+    (openTargetGroupKey === 'right' || openTargetGroupKey === 'bottom'
       ? openTargetGroupKey
-      : 'floating';
+      : 'floating');
 
   // Determine whether this tab is active within its group (for polling control).
   const groupKey = getGroupForPanel(tabGroups, panelId);

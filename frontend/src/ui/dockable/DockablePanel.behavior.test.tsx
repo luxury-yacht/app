@@ -1,20 +1,13 @@
-/**
- * frontend/src/components/dockable/DockablePanel.behavior.test.tsx
- *
- * Test suite for DockablePanel.behavior.
- * Covers key behaviors and edge cases for DockablePanel.behavior.
- */
-
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { KeyboardProvider } from '@ui/shortcuts/context';
-import React, { act } from 'react';
+import type React from 'react';
+import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { requireValue } from '@/test-utils/requireValue';
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider } from './DockablePanelProvider';
 import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
-import { type DockPosition, getAllPanelStates, restorePanelStates } from './useDockablePanelState';
+import { getAllPanelStates } from './useDockablePanelState';
 
 vi.mock('@core/backend-api', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),
@@ -28,29 +21,15 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   })),
 }));
 
-const removePanelLayers = () => {
-  document.querySelectorAll('.dockable-panel-layer').forEach((node) => {
-    node.remove();
-  });
-};
-
 const ensureContentElement = () => {
-  if (!document.querySelector('.content')) {
-    const el = document.createElement('div');
-    el.className = 'content';
-    const contentBody = document.createElement('div');
-    contentBody.className = 'content-body';
-    el.appendChild(contentBody);
-    document.body.appendChild(el);
-    // JSDOM doesn't do layout, so mock getBoundingClientRect to return realistic dimensions.
-    el.getBoundingClientRect = () =>
-      DOMRect.fromRect({
-        x: 0,
-        y: 0,
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-  }
+  const content = document.createElement('div');
+  content.className = 'content';
+  const body = document.createElement('div');
+  body.className = 'content-body';
+  content.appendChild(body);
+  content.getBoundingClientRect = () =>
+    DOMRect.fromRect({ x: 0, y: 0, width: window.innerWidth, height: window.innerHeight });
+  document.body.appendChild(content);
 };
 
 const renderPanel = async (element: React.ReactElement) => {
@@ -60,94 +39,43 @@ const renderPanel = async (element: React.ReactElement) => {
   const root = ReactDOM.createRoot(host);
 
   await act(async () => {
-    const wrapped =
-      element.type === DockablePanelProvider ? (
-        <KeyboardProvider>
+    root.render(
+      <KeyboardProvider>
+        <DockablePanelProvider>
           <ZoomProvider>{element}</ZoomProvider>
-        </KeyboardProvider>
-      ) : (
-        <KeyboardProvider>
-          <DockablePanelProvider>
-            <ZoomProvider>{element}</ZoomProvider>
-          </DockablePanelProvider>
-        </KeyboardProvider>
-      );
-    root.render(wrapped);
+        </DockablePanelProvider>
+      </KeyboardProvider>
+    );
     await Promise.resolve();
   });
 
-  return {
-    host,
-    rerender: async (nextElement: React.ReactElement) => {
-      await act(async () => {
-        const wrapped =
-          nextElement.type === DockablePanelProvider ? (
-            <KeyboardProvider>
-              <ZoomProvider>{nextElement}</ZoomProvider>
-            </KeyboardProvider>
-          ) : (
-            <KeyboardProvider>
-              <DockablePanelProvider>
-                <ZoomProvider>{nextElement}</ZoomProvider>
-              </DockablePanelProvider>
-            </KeyboardProvider>
-          );
-        root.render(wrapped);
-        await Promise.resolve();
-      });
-    },
-    unmount: async () => {
-      await act(async () => {
-        root.unmount();
-      });
-      host.remove();
-    },
+  return async () => {
+    await act(async () => root.unmount());
+    host.remove();
   };
 };
 
-describe('DockablePanel behaviour (real hook)', () => {
-  const originalInnerWidth = window.innerWidth;
-  const originalInnerHeight = window.innerHeight;
+const panelState = (panelId: string) => {
+  const state = getAllPanelStates()[panelId];
+  if (!state) {
+    throw new Error(`missing panel state for ${panelId}`);
+  }
+  return state;
+};
 
+describe('DockablePanel docked behaviour', () => {
   beforeEach(() => {
     setActivePanelLayoutStore(createPanelLayoutStore());
-    restorePanelStates({});
-    vi.useRealTimers();
   });
 
   afterEach(() => {
-    removePanelLayers();
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      writable: true,
-      value: originalInnerWidth,
-    });
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      writable: true,
-      value: originalInnerHeight,
-    });
-    vi.useRealTimers();
+    document.body.replaceChildren();
+    document.body.className = '';
     setActivePanelLayoutStore(createPanelLayoutStore());
   });
 
-  const getPanelState = (panelId: string) => {
-    const states = getAllPanelStates();
-    const state = states[panelId];
-    if (!state) {
-      throw new Error(`Panel state for "${panelId}" not found`);
-    }
-    return state;
-  };
-
-  const flushEffects = async () => {
-    await act(async () => {
-      await Promise.resolve();
-    });
-  };
-
-  it('initializes panel state with provided defaults', async () => {
-    const { unmount } = await renderPanel(
+  it('initializes bottom-docked geometry from the provided size', async () => {
+    const unmount = await renderPanel(
       <DockablePanel
         panelId="panel-init"
         defaultPosition="bottom"
@@ -158,1147 +86,101 @@ describe('DockablePanel behaviour (real hook)', () => {
       </DockablePanel>
     );
 
-    await flushEffects();
-
-    const state = getPanelState('panel-init');
-    expect(state.position).toBe('bottom');
-    expect(state.bottomSize.height).toBe(260);
-    expect(state.rightSize.width).toBe(480);
-    expect(state.isOpen).toBe(true);
-
+    expect(panelState('panel-init')).toMatchObject({
+      position: 'bottom',
+      bottomSize: { height: 260 },
+      rightSize: { width: 480 },
+      isOpen: true,
+    });
     await unmount();
   });
 
-  it('syncs controlled isOpen changes with the dock state', async () => {
-    let setVisibility: ((value: boolean) => void) | undefined;
-    const Host: React.FC = () => {
-      const [open, setOpen] = React.useState(true);
-      React.useEffect(() => {
-        setVisibility = setOpen;
-      }, []);
-      return (
-        <DockablePanel panelId="panel-controlled" isOpen={open}>
-          <div>panel</div>
-        </DockablePanel>
-      );
-    };
-
-    const { unmount } = await renderPanel(<Host />);
-    await flushEffects();
-    expect(getPanelState('panel-controlled').isOpen).toBe(true);
-
-    await act(async () => {
-      setVisibility?.(false);
-      await Promise.resolve();
-    });
-    expect(getPanelState('panel-controlled').isOpen).toBe(false);
-
-    await unmount();
-  });
-
-  it('resizes a right-docked panel when dragging the left handle', async () => {
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      writable: true,
-      value: 1280,
-    });
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
-      cb(0);
-      return 1;
-    });
-    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
-
-    const { unmount } = await renderPanel(
+  it('resizes a right-docked panel from its separator', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1200 });
+    const unmount = await renderPanel(
       <DockablePanel panelId="panel-right" defaultPosition="right" isOpen>
         <div>panel</div>
       </DockablePanel>
     );
-
-    await flushEffects();
-    const initialWidth = getPanelState('panel-right').rightSize.width;
-
-    const resizeHandle = document.querySelector(
-      '.dockable-panel__resize-handle--left'
-    ) as HTMLDivElement | null;
-    expect(resizeHandle).toBeTruthy();
+    const initialWidth = panelState('panel-right').rightSize.width;
+    const handle = document.querySelector<HTMLElement>('[aria-label="Resize panel width"]');
 
     await act(async () => {
-      requireValue(
-        resizeHandle,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 600, clientY: 200 }));
-    });
-    await act(async () => {
-      document.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 500, clientY: 200 })
-      );
-    });
-    await act(async () => {
-      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-    });
-
-    await flushEffects();
-    const widths = getPanelState('panel-right');
-    expect(widths.rightSize.width).toBeGreaterThan(initialWidth);
-
-    rafSpy.mockRestore();
-    cafSpy.mockRestore();
-    await unmount();
-  });
-
-  it('resizes a right-docked panel with the separator keyboard controls', async () => {
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      writable: true,
-      value: 1280,
-    });
-
-    const { unmount } = await renderPanel(
-      <DockablePanel panelId="panel-right-keyboard" defaultPosition="right" isOpen>
-        <div>panel</div>
-      </DockablePanel>
-    );
-
-    await flushEffects();
-    const initialWidth = getPanelState('panel-right-keyboard').rightSize.width;
-    const resizeHandle = document.querySelector<HTMLElement>(
-      '.dockable-panel__resize-handle--left'
-    );
-    expect(resizeHandle?.tagName).toBe('HR');
-    expect(resizeHandle?.getAttribute('aria-valuemax')).toBeTruthy();
-
-    await act(async () => {
-      resizeHandle?.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true })
+      handle?.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, clientX: 700, clientY: 200 })
       );
       await Promise.resolve();
     });
-
-    const updatedWidth = getPanelState('panel-right-keyboard').rightSize.width;
-    expect(updatedWidth).toBeGreaterThan(initialWidth);
-    expect(resizeHandle?.getAttribute('aria-valuenow')).toBe(String(updatedWidth));
-
+    expect(document.body.classList.contains('dockable-panel-resizing-w')).toBe(true);
     await act(async () => {
-      resizeHandle?.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true })
+      window.dispatchEvent(
+        new MouseEvent('mousemove', { bubbles: true, clientX: 620, clientY: 200 })
       );
-      await Promise.resolve();
     });
-    expect(getPanelState('panel-right-keyboard').rightSize.width).toBe(
-      Number(resizeHandle?.getAttribute('aria-valuemin'))
-    );
-
     await act(async () => {
-      resizeHandle?.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true })
-      );
-      await Promise.resolve();
-    });
-    expect(getPanelState('panel-right-keyboard').rightSize.width).toBe(
-      Number(resizeHandle?.getAttribute('aria-valuemax'))
-    );
-
-    await unmount();
-  });
-
-  it('maximizes within the content body and restores previous layout', async () => {
-    const contentBody = document.createElement('div');
-    contentBody.className = 'content-body';
-    contentBody.style.position = 'absolute';
-    contentBody.style.top = '42px';
-    contentBody.style.left = '120px';
-    contentBody.style.width = '800px';
-    contentBody.style.height = '600px';
-    document.body.appendChild(contentBody);
-
-    const onMaximizeChange = vi.fn();
-    const { unmount } = await renderPanel(
-      <DockablePanel
-        panelId="panel-maximize"
-        defaultPosition="right"
-        defaultSize={{ width: 420, height: 500 }}
-        allowMaximize
-        maximizeTargetSelector=".content-body"
-        onMaximizeChange={onMaximizeChange}
-        isOpen
-      >
-        <div>panel</div>
-      </DockablePanel>
-    );
-
-    await flushEffects();
-    const maximizeBtn = document.querySelector(
-      '[aria-label="Maximize panel"]'
-    ) as HTMLButtonElement | null;
-    expect(maximizeBtn).toBeTruthy();
-
-    await act(async () => {
-      maximizeBtn?.click();
-    });
-    await flushEffects();
-    const maximized = document.querySelector('.dockable-panel--maximized') as HTMLDivElement | null;
-    expect(maximized).toBeTruthy();
-    expect(onMaximizeChange).toHaveBeenCalledWith(true);
-    const rect = maximized?.getBoundingClientRect();
-    expect(rect?.top).toBeCloseTo(contentBody.getBoundingClientRect().top);
-    expect(rect?.left).toBeCloseTo(contentBody.getBoundingClientRect().left);
-    expect(rect?.width).toBeCloseTo(contentBody.getBoundingClientRect().width);
-    expect(rect?.height).toBeCloseTo(contentBody.getBoundingClientRect().height);
-    expect(maximized?.querySelector('.dockable-panel__resize-handle')).toBeNull();
-
-    const stateBeforeRestore = getPanelState('panel-maximize');
-    expect(stateBeforeRestore.position).toBe('right');
-
-    const restoreBtn = document.querySelector(
-      '[aria-label="Restore panel size"]'
-    ) as HTMLButtonElement | null;
-    expect(restoreBtn).toBeTruthy();
-
-    await act(async () => {
-      restoreBtn?.click();
-    });
-    await flushEffects();
-    expect(document.querySelector('.dockable-panel--maximized')).toBeNull();
-    expect(getPanelState('panel-maximize').position).toBe('right');
-    expect(onMaximizeChange).toHaveBeenCalledWith(false);
-
-    await unmount();
-    contentBody.remove();
-  });
-
-  it('clamps bottom-docked height based on window resize bounds', async () => {
-    vi.useFakeTimers();
-    // Set a window height smaller than the panel's default height so clamping occurs.
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      writable: true,
-      value: 300,
-    });
-
-    const { unmount } = await renderPanel(
-      <DockablePanel
-        panelId="panel-bottom"
-        defaultPosition="bottom"
-        defaultSize={{ height: 360 }}
-        isOpen
-      >
-        <div>panel</div>
-      </DockablePanel>
-    );
-
-    await flushEffects();
-
-    await act(async () => {
-      window.dispatchEvent(new Event('resize'));
-      vi.runAllTimers();
-    });
-    await flushEffects();
-
-    const bottomState = getPanelState('panel-bottom');
-    // The height is clamped to the content area height (fallback = window.innerHeight)
-    expect(bottomState.bottomSize.height).toBe(window.innerHeight);
-
-    await unmount();
-  });
-
-  it('emits onPositionChange when docking is toggled', async () => {
-    const onPositionChange = vi.fn();
-
-    const { unmount } = await renderPanel(
-      <DockablePanel
-        panelId="panel-position"
-        defaultPosition="floating"
-        onPositionChange={onPositionChange}
-      >
-        <div>panel</div>
-      </DockablePanel>
-    );
-
-    await flushEffects();
-    const initialCall = onPositionChange.mock.calls[onPositionChange.mock.calls.length - 1]?.[0];
-    expect(initialCall).toBe('floating');
-
-    const dockRightButton = document.querySelector(
-      "[aria-label='Dock panel to right side']"
-    ) as HTMLButtonElement | null;
-    expect(dockRightButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(
-        dockRightButton,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).click();
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
       await Promise.resolve();
     });
 
-    await flushEffects();
-    const finalCall = onPositionChange.mock.calls[onPositionChange.mock.calls.length - 1]?.[0];
-    expect(finalCall).toBe('right');
-    expect(getPanelState('panel-position').position).toBe<DockPosition>('right');
-
+    expect(panelState('panel-right').rightSize.width).toBeGreaterThan(initialWidth);
     await unmount();
   });
 
-  it('keeps child components mounted while switching between docked and floating states', async () => {
-    const mountTracker = vi.fn();
-    const Child: React.FC = () => {
-      React.useEffect(() => {
-        mountTracker('mount');
-        return () => mountTracker('unmount');
-      }, []);
-      return <div data-testid="panel-child">child</div>;
-    };
-
-    const { unmount } = await renderPanel(
-      <DockablePanel panelId="panel-mount-stability" defaultPosition="right" isOpen>
-        <Child />
-      </DockablePanel>
-    );
-
-    await flushEffects();
-    expect(mountTracker).toHaveBeenCalledTimes(1);
-    expect(mountTracker).toHaveBeenCalledWith('mount');
-
-    const dockBottomButtonWhileRight = document.querySelector(
-      "[aria-label='Dock panel to bottom']"
-    ) as HTMLButtonElement | null;
-    expect(dockBottomButtonWhileRight).toBeTruthy();
-
-    await act(async () => {
-      requireValue(
-        dockBottomButtonWhileRight,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).click();
-      await Promise.resolve();
-    });
-    await flushEffects();
-    expect(getPanelState('panel-mount-stability').position).toBe<DockPosition>('bottom');
-
-    const floatButtonWhileBottom = document.querySelector(
-      "[aria-label='Undock panel to floating window']"
-    ) as HTMLButtonElement | null;
-    expect(floatButtonWhileBottom).toBeTruthy();
-
-    await act(async () => {
-      requireValue(
-        floatButtonWhileBottom,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).click();
-      await Promise.resolve();
-    });
-    await flushEffects();
-    expect(getPanelState('panel-mount-stability').position).toBe<DockPosition>('floating');
-
-    expect(mountTracker).toHaveBeenCalledTimes(1);
-    expect(mountTracker).not.toHaveBeenCalledWith('unmount');
-
-    await unmount();
-    expect(mountTracker).toHaveBeenLastCalledWith('unmount');
-  });
-
-  it('moves from blank tab-bar space without moving from tabs or control buttons', async () => {
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      writable: true,
-      value: 1400,
-    });
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      writable: true,
-      value: 900,
-    });
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
-      cb(0);
-      return 1;
-    });
-    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
-
-    const { unmount } = await renderPanel(
-      <DockablePanel panelId="panel-drag" defaultPosition="floating" isOpen>
+  it('supports keyboard resizing for a bottom-docked separator', async () => {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1000 });
+    const unmount = await renderPanel(
+      <DockablePanel panelId="panel-bottom" defaultPosition="bottom" isOpen>
         <div>panel</div>
       </DockablePanel>
     );
-
-    await flushEffects();
-    const panelElement = document.querySelector('.dockable-panel') as HTMLDivElement | null;
-    expect(panelElement).toBeTruthy();
-
-    Object.defineProperty(
-      requireValue(panelElement, 'expected test value in DockablePanel.behavior.test.tsx'),
-      'getBoundingClientRect',
-      {
-        configurable: true,
-        value: () => ({
-          left: 300,
-          top: 180,
-          width: 500,
-          height: 320,
-          right: 800,
-          bottom: 500,
-        }),
-      }
-    );
-
-    const tabBar = document.querySelector('.dockable-tab-bar') as HTMLDivElement | null;
-    expect(tabBar).toBeTruthy();
+    const initialHeight = panelState('panel-bottom').bottomSize.height;
+    const handle = document.querySelector<HTMLElement>('[aria-label="Resize panel height"]');
 
     await act(async () => {
-      requireValue(tabBar, 'expected test value in DockablePanel.behavior.test.tsx').dispatchEvent(
-        new MouseEvent('mousedown', { bubbles: true, clientX: 350, clientY: 220 })
-      );
-    });
-    await act(async () => {
-      document.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 720, clientY: 520 })
-      );
-    });
-    await act(async () => {
-      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-    });
-
-    await flushEffects();
-    const floatingState = getPanelState('panel-drag').floatingPosition;
-    expect(floatingState.x).toBeGreaterThan(300);
-    expect(floatingState.y).toBeGreaterThan(180);
-
-    const positionAfterBlankSpaceDrag = { ...floatingState };
-    const activeTab = document.querySelector<HTMLElement>('.dockable-tab-bar [role="tab"]');
-    const controlButton = document.querySelector<HTMLButtonElement>(
-      '.dockable-panel__controls .dockable-panel__control-btn'
-    );
-    expect(activeTab).toBeTruthy();
-    expect(controlButton).toBeTruthy();
-
-    for (const interactiveTarget of [activeTab, controlButton]) {
-      await act(async () => {
-        requireValue(
-          interactiveTarget,
-          'expected test value in DockablePanel.behavior.test.tsx'
-        ).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 720, clientY: 520 }));
-      });
-      await act(async () => {
-        document.dispatchEvent(
-          new MouseEvent('mousemove', { bubbles: true, clientX: 820, clientY: 620 })
-        );
-      });
-      await act(async () => {
-        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-      });
-      await flushEffects();
-
-      expect(getPanelState('panel-drag').floatingPosition).toEqual(positionAfterBlankSpaceDrag);
-    }
-
-    rafSpy.mockRestore();
-    cafSpy.mockRestore();
-    await unmount();
-  });
-
-  it('moves a floating panel from the native header control with arrow keys', async () => {
-    const { unmount } = await renderPanel(
-      <DockablePanel panelId="panel-keyboard-move" defaultPosition="floating" isOpen>
-        <div>panel</div>
-      </DockablePanel>
-    );
-    await flushEffects();
-
-    const initial = getPanelState('panel-keyboard-move').floatingPosition;
-    const moveControl = document.querySelector<HTMLButtonElement>('.dockable-panel__drag-control');
-    expect(moveControl?.type).toBe('button');
-
-    await act(async () => {
-      moveControl?.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })
-      );
-    });
-    await flushEffects();
-
-    expect(getPanelState('panel-keyboard-move').floatingPosition.x).toBeGreaterThan(initial.x);
-    await unmount();
-  });
-
-  it('resizes floating panel from the east edge', async () => {
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      writable: true,
-      value: 1400,
-    });
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      writable: true,
-      value: 900,
-    });
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
-      cb(0);
-      return 1;
-    });
-    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
-
-    const { unmount } = await renderPanel(
-      <DockablePanel panelId="panel-floating-resize" defaultPosition="floating" isOpen>
-        <div>panel</div>
-      </DockablePanel>
-    );
-
-    await flushEffects();
-    const initialWidth = getPanelState('panel-floating-resize').floatingSize.width;
-
-    const resizeZone = document.querySelector(
-      '.dockable-panel__resize-zone--right'
-    ) as HTMLDivElement | null;
-    expect(resizeZone).toBeTruthy();
-
-    await act(async () => {
-      requireValue(
-        resizeZone,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 800, clientY: 320 }));
-    });
-    await act(async () => {
-      document.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 900, clientY: 320 })
-      );
-    });
-    await act(async () => {
-      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-    });
-
-    await flushEffects();
-    const width = getPanelState('panel-floating-resize').floatingSize.width;
-    expect(width).toBeGreaterThan(initialWidth);
-
-    rafSpy.mockRestore();
-    cafSpy.mockRestore();
-    await unmount();
-  });
-
-  it('closes the panel when the close button is clicked', async () => {
-    const Host: React.FC = () => {
-      const [open, setOpen] = React.useState(true);
-      return (
-        <DockablePanel
-          panelId="panel-close"
-          defaultPosition="right"
-          isOpen={open}
-          onClose={() => setOpen(false)}
-        >
-          <div>panel</div>
-        </DockablePanel>
-      );
-    };
-
-    const { unmount } = await renderPanel(<Host />);
-
-    await flushEffects();
-
-    const closeButton = document.querySelector(
-      "[aria-label='Close all tabs in this panel']"
-    ) as HTMLButtonElement | null;
-    expect(closeButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(
-        closeButton,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    await flushEffects();
-    expect(getPanelState('panel-close').isOpen).toBe(false);
-
-    await unmount();
-  });
-
-  it('docks a floating panel to the bottom via the control button', async () => {
-    const { unmount } = await renderPanel(
-      <DockablePanel panelId="panel-dock-bottom" defaultPosition="floating" isOpen>
-        <div>panel</div>
-      </DockablePanel>
-    );
-
-    await flushEffects();
-
-    const portal = document.querySelector('.dockable-panel-layer') as HTMLDivElement | null;
-    expect(portal).toBeTruthy();
-
-    const dockBottomButton = requireValue(
-      portal,
-      'expected test value in DockablePanel.behavior.test.tsx'
-    ).querySelector("[aria-label='Dock panel to bottom']") as HTMLButtonElement | null;
-    expect(dockBottomButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(
-        dockBottomButton,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    await flushEffects();
-    expect(getPanelState('panel-dock-bottom').position).toBe<DockPosition>('bottom');
-
-    await unmount();
-  });
-
-  it('falls back to synchronous updates when requestAnimationFrame is unavailable', async () => {
-    const originalRAF = window.requestAnimationFrame;
-    const originalCAF = window.cancelAnimationFrame;
-    Object.defineProperty(window, 'requestAnimationFrame', {
-      configurable: true,
-      writable: true,
-      value: undefined,
-    });
-    Object.defineProperty(window, 'cancelAnimationFrame', {
-      configurable: true,
-      writable: true,
-      value: undefined,
-    });
-
-    const { unmount } = await renderPanel(
-      <DockablePanel panelId="panel-raf-fallback" defaultPosition="floating" isOpen>
-        <div>panel</div>
-      </DockablePanel>
-    );
-
-    await flushEffects();
-
-    const panelElement = document.querySelector('.dockable-panel') as HTMLDivElement | null;
-    expect(panelElement).toBeTruthy();
-
-    Object.defineProperty(
-      requireValue(panelElement, 'expected test value in DockablePanel.behavior.test.tsx'),
-      'getBoundingClientRect',
-      {
-        configurable: true,
-        value: () => ({ left: 200, top: 160, width: 400, height: 280, right: 600, bottom: 440 }),
-      }
-    );
-
-    const header = document.querySelector(
-      '.dockable-panel__drag-control'
-    ) as HTMLButtonElement | null;
-    expect(header).toBeTruthy();
-
-    await act(async () => {
-      requireValue(header, 'expected test value in DockablePanel.behavior.test.tsx').dispatchEvent(
-        new MouseEvent('mousedown', { bubbles: true, clientX: 240, clientY: 180 })
-      );
-    });
-    await act(async () => {
-      document.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 400, clientY: 340 })
-      );
-    });
-    await act(async () => {
-      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-    });
-
-    const position = getPanelState('panel-raf-fallback').floatingPosition;
-    expect(position.x).toBeGreaterThan(200);
-    expect(position.y).toBeGreaterThan(160);
-
-    Object.defineProperty(window, 'requestAnimationFrame', {
-      configurable: true,
-      writable: true,
-      value: originalRAF,
-    });
-    Object.defineProperty(window, 'cancelAnimationFrame', {
-      configurable: true,
-      writable: true,
-      value: originalCAF,
-    });
-
-    await unmount();
-  });
-
-  it('resizes a bottom-docked panel when dragging the top handle', async () => {
-    // Use a height larger than the default panel height so the drag can
-    // increase the panel size without being clamped by the content bounds.
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      writable: true,
-      value: 900,
-    });
-
-    const { unmount } = await renderPanel(
-      <DockablePanel panelId="panel-bottom-resize" defaultPosition="bottom" isOpen>
-        <div>panel</div>
-      </DockablePanel>
-    );
-
-    await flushEffects();
-    const initialHeight = getPanelState('panel-bottom-resize').bottomSize.height;
-
-    const resizeHandle = document.querySelector(
-      '.dockable-panel__resize-handle--top'
-    ) as HTMLDivElement | null;
-    expect(resizeHandle).toBeTruthy();
-
-    await act(async () => {
-      requireValue(
-        resizeHandle,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 400, clientY: 400 }));
-    });
-    await act(async () => {
-      document.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 400, clientY: 250 })
-      );
-    });
-    await act(async () => {
-      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-    });
-
-    await flushEffects();
-    expect(getPanelState('panel-bottom-resize').bottomSize.height).not.toBe(initialHeight);
-
-    await unmount();
-  });
-
-  it('resizes a bottom-docked panel with the separator keyboard controls', async () => {
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      writable: true,
-      value: 900,
-    });
-
-    const { unmount } = await renderPanel(
-      <DockablePanel panelId="panel-bottom-keyboard" defaultPosition="bottom" isOpen>
-        <div>panel</div>
-      </DockablePanel>
-    );
-
-    await flushEffects();
-    const initialHeight = getPanelState('panel-bottom-keyboard').bottomSize.height;
-    const resizeHandle = document.querySelector<HTMLElement>('.dockable-panel__resize-handle--top');
-    expect(resizeHandle?.tagName).toBe('HR');
-    expect(resizeHandle?.getAttribute('aria-valuemax')).toBeTruthy();
-
-    await act(async () => {
-      resizeHandle?.dispatchEvent(
+      handle?.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true })
       );
       await Promise.resolve();
     });
 
-    const updatedHeight = getPanelState('panel-bottom-keyboard').bottomSize.height;
-    expect(updatedHeight).toBeGreaterThan(initialHeight);
-    expect(resizeHandle?.getAttribute('aria-valuenow')).toBe(String(updatedHeight));
-
+    expect(panelState('panel-bottom').bottomSize.height).toBeGreaterThan(initialHeight);
     await unmount();
   });
 
-  it('resizes a floating panel from the bottom-right corner', async () => {
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      writable: true,
-      value: 1400,
-    });
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      writable: true,
-      value: 900,
-    });
-
-    const { unmount } = await renderPanel(
-      <DockablePanel panelId="panel-floating-corner" defaultPosition="floating" isOpen>
+  it('maximizes docked content and restores its prior edge and size', async () => {
+    const unmount = await renderPanel(
+      <DockablePanel panelId="panel-maximize" defaultPosition="right" allowMaximize isOpen>
         <div>panel</div>
       </DockablePanel>
     );
+    const before = panelState('panel-maximize').rightSize;
+    const maximize = document.querySelector<HTMLButtonElement>('[aria-label="Maximize panel"]');
 
-    await flushEffects();
-    const portal = document.querySelector('.dockable-panel-layer') as HTMLDivElement | null;
-    expect(portal).toBeTruthy();
+    await act(async () => maximize?.click());
+    expect(document.querySelector('.dockable-panel--maximized')).toBeTruthy();
 
-    const initialSize = getPanelState('panel-floating-corner').floatingSize;
-
-    const cornerZone = requireValue(
-      portal,
-      'expected test value in DockablePanel.behavior.test.tsx'
-    ).querySelector('.dockable-panel__resize-zone--bottom-right') as HTMLDivElement | null;
-    expect(cornerZone).toBeTruthy();
-
-    await act(async () => {
-      requireValue(
-        cornerZone,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 800, clientY: 500 }));
-    });
-    await act(async () => {
-      document.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 900, clientY: 640 })
-      );
-    });
-    await act(async () => {
-      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-    });
-
-    await flushEffects();
-    const updatedSize = getPanelState('panel-floating-corner').floatingSize;
-    expect(updatedSize.width).toBeGreaterThan(initialSize.width);
-    expect(updatedSize.height).toBeGreaterThan(initialSize.height);
-
+    const restore = document.querySelector<HTMLButtonElement>('[aria-label="Restore panel size"]');
+    await act(async () => restore?.click());
+    expect(panelState('panel-maximize').rightSize).toEqual(before);
+    expect(panelState('panel-maximize').position).toBe('right');
     await unmount();
   });
 
-  it('logs a warning and renders nothing when panelId is missing', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-
-    const { unmount } = await renderPanel(
-      <DockablePanel panelId={'' as unknown as string}>
-        <div>panel</div>
-      </DockablePanel>
-    );
-
-    await flushEffects();
-    expect(warnSpy).toHaveBeenCalledWith('DockablePanel: panelId prop is required');
-
-    await unmount();
-    warnSpy.mockRestore();
-  });
-
-  it('allows panels docked on the same side to coexist as tabs', async () => {
-    const { unmount } = await renderPanel(
-      <div>
-        <DockablePanel panelId="panel-side-a" defaultPosition="right" isOpen>
-          <div>panel A</div>
-        </DockablePanel>
-        <DockablePanel panelId="panel-side-b" defaultPosition="floating" isOpen>
-          <div>panel B</div>
-        </DockablePanel>
-      </div>
-    );
-
-    await flushEffects();
-
-    const floatingPanel = document.querySelector(
-      '.dockable-panel--floating'
-    ) as HTMLDivElement | null;
-    expect(floatingPanel).toBeTruthy();
-    const dockRightButton = floatingPanel?.querySelector(
-      'button[aria-label="Dock panel to right side"]'
-    ) as HTMLButtonElement | null;
-    expect(dockRightButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(
-        dockRightButton,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await flushEffects();
-
-    // With tabs, both panels stay open and coexist in the right group.
-    expect(getPanelState('panel-side-a').isOpen).toBe(true);
-    expect(getPanelState('panel-side-b').position).toBe('right');
-    expect(getPanelState('panel-side-b').isOpen).toBe(true);
-
-    await unmount();
-  });
-
-  it('applies dock controls to the active tab when multiple tabs share a dock group', async () => {
-    const { unmount } = await renderPanel(
-      <DockablePanelProvider>
-        <div>
-          <DockablePanel panelId="panel-active-controls-a" defaultPosition="right" isOpen>
-            <div>panel A</div>
-          </DockablePanel>
-          <DockablePanel panelId="panel-active-controls-b" defaultPosition="right" isOpen>
-            <div>panel B</div>
-          </DockablePanel>
-        </div>
-      </DockablePanelProvider>
-    );
-
-    await flushEffects();
-
-    // Newest tab is active; docking should move that active tab only.
-    const dockBottomButton = document.querySelector(
-      'button[aria-label="Dock panel to bottom"]'
-    ) as HTMLButtonElement | null;
-    expect(dockBottomButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(
-        dockBottomButton,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await flushEffects();
-
-    expect(getPanelState('panel-active-controls-a').position).toBe('right');
-    expect(getPanelState('panel-active-controls-b').position).toBe('bottom');
-    expect(getPanelState('panel-active-controls-a').isOpen).toBe(true);
-    expect(getPanelState('panel-active-controls-b').isOpen).toBe(true);
-
-    await unmount();
-  });
-
-  it('brings the destination group to front when docking an active tab into an existing group', async () => {
-    const { unmount } = await renderPanel(
-      <DockablePanelProvider>
-        <div>
-          <DockablePanel panelId="panel-target-bottom" defaultPosition="bottom" isOpen>
-            <div>target bottom</div>
-          </DockablePanel>
-          <DockablePanel panelId="panel-source-right-a" defaultPosition="right" isOpen>
-            <div>source right A</div>
-          </DockablePanel>
-          <DockablePanel panelId="panel-source-right-b" defaultPosition="right" isOpen>
-            <div>source right B</div>
-          </DockablePanel>
-        </div>
-      </DockablePanelProvider>
-    );
-
-    await flushEffects();
-
-    const beforeMoveStates = getAllPanelStates();
-    expect(beforeMoveStates['panel-target-bottom'].zIndex).toBeLessThan(
-      beforeMoveStates['panel-source-right-a'].zIndex
-    );
-
-    // Right group's active tab is panel-source-right-b; docking should move it
-    // into the existing bottom group and bring that destination group forward.
-    const dockBottomButton = document.querySelector(
-      'button[aria-label="Dock panel to bottom"]'
-    ) as HTMLButtonElement | null;
-    expect(dockBottomButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(
-        dockBottomButton,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await flushEffects();
-
-    const afterMoveStates = getAllPanelStates();
-    expect(afterMoveStates['panel-source-right-b'].position).toBe('bottom');
-    expect(afterMoveStates['panel-target-bottom'].zIndex).toBeGreaterThan(
-      afterMoveStates['panel-source-right-a'].zIndex
-    );
-
-    await unmount();
-  });
-
-  it('closes all tabs when the panel close button is clicked', async () => {
-    const { unmount } = await renderPanel(
-      <DockablePanelProvider>
-        <div>
-          <DockablePanel panelId="panel-close-fallback-a" defaultPosition="right">
-            <div>panel A</div>
-          </DockablePanel>
-          <DockablePanel panelId="panel-close-fallback-b" defaultPosition="right">
-            <div>panel B</div>
-          </DockablePanel>
-        </div>
-      </DockablePanelProvider>
-    );
-
-    await flushEffects();
-
-    const closeButton = document.querySelector(
-      'button[aria-label="Close all tabs in this panel"]'
-    ) as HTMLButtonElement | null;
-    expect(closeButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(
-        closeButton,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await flushEffects();
-
-    // Panel close button closes all tabs, not just the active one.
-    expect(getPanelState('panel-close-fallback-b').isOpen).toBe(false);
-    expect(getPanelState('panel-close-fallback-a').isOpen).toBe(false);
-
-    await unmount();
-  });
-
-  it('allows multiple floating panels to remain open simultaneously', async () => {
-    const { unmount } = await renderPanel(
-      <div>
-        <DockablePanel panelId="panel-floating-a" defaultPosition="floating" isOpen>
-          <div>panel A</div>
-        </DockablePanel>
-        <DockablePanel panelId="panel-floating-b" defaultPosition="floating" isOpen>
-          <div>panel B</div>
-        </DockablePanel>
-      </div>
-    );
-
-    await flushEffects();
-
-    expect(getPanelState('panel-floating-a').isOpen).toBe(true);
-    expect(getPanelState('panel-floating-b').isOpen).toBe(true);
-
-    await unmount();
-  });
-
-  it('allows multiple panels docked on the bottom edge to coexist as tabs', async () => {
-    const { unmount } = await renderPanel(
-      <div>
-        <DockablePanel panelId="panel-bottom-a" defaultPosition="bottom" isOpen>
-          <div>panel A</div>
-        </DockablePanel>
-        <DockablePanel panelId="panel-bottom-b" defaultPosition="bottom" isOpen>
-          <div>panel B</div>
-        </DockablePanel>
-      </div>
-    );
-
-    await flushEffects();
-
-    // With tabs, both panels stay open and coexist in the bottom group.
-    expect(getPanelState('panel-bottom-a').isOpen).toBe(true);
-    expect(getPanelState('panel-bottom-a').position).toBe('bottom');
-    expect(getPanelState('panel-bottom-b').isOpen).toBe(true);
-    expect(getPanelState('panel-bottom-b').position).toBe('bottom');
-
-    await unmount();
-  });
-
-  it('keeps an existing bottom-docked panel open when a controlled panel opens there (tab coexistence)', async () => {
-    const Host: React.FC<{ diagnosticsOpen: boolean }> = ({ diagnosticsOpen }) => (
+  it('keeps same-edge panels open as tabs', async () => {
+    const unmount = await renderPanel(
       <>
-        <DockablePanel panelId="panel-bottom-existing" defaultPosition="bottom" isOpen>
-          <div>Existing</div>
+        <DockablePanel panelId="panel-a" defaultPosition="right" isOpen>
+          <div>A</div>
         </DockablePanel>
-        <DockablePanel
-          panelId="panel-bottom-controlled"
-          defaultPosition="bottom"
-          isOpen={diagnosticsOpen}
-        >
-          <div>Diagnostics</div>
+        <DockablePanel panelId="panel-b" defaultPosition="right" isOpen>
+          <div>B</div>
         </DockablePanel>
       </>
     );
 
-    const { rerender, unmount } = await renderPanel(<Host diagnosticsOpen={false} />);
-
-    await flushEffects();
-    expect(getPanelState('panel-bottom-existing').isOpen).toBe(true);
-    expect(getPanelState('panel-bottom-controlled').isOpen).toBe(false);
-
-    await rerender(<Host diagnosticsOpen />);
-    await flushEffects();
-
-    // With tabs, both panels stay open and coexist in the bottom group.
-    expect(getPanelState('panel-bottom-existing').isOpen).toBe(true);
-    expect(getPanelState('panel-bottom-controlled').isOpen).toBe(true);
-
-    await unmount();
-  });
-
-  it('resizes a floating panel from the top edge', async () => {
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      writable: true,
-      value: 1400,
-    });
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      writable: true,
-      value: 900,
-    });
-
-    const { unmount } = await renderPanel(
-      <DockablePanel panelId="panel-floating-top" defaultPosition="floating" isOpen>
-        <div>panel</div>
-      </DockablePanel>
-    );
-
-    await flushEffects();
-    const portal = document.querySelector('.dockable-panel-layer') as HTMLDivElement | null;
-    expect(portal).toBeTruthy();
-
-    const initialSize = getPanelState('panel-floating-top').floatingSize;
-
-    const topZone = requireValue(
-      portal,
-      'expected test value in DockablePanel.behavior.test.tsx'
-    ).querySelector('.dockable-panel__resize-zone--top') as HTMLDivElement | null;
-    expect(topZone).toBeTruthy();
-
-    await act(async () => {
-      requireValue(topZone, 'expected test value in DockablePanel.behavior.test.tsx').dispatchEvent(
-        new MouseEvent('mousedown', { bubbles: true, clientX: 350, clientY: 200 })
-      );
-    });
-    await act(async () => {
-      document.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 350, clientY: 120 })
-      );
-    });
-    await act(async () => {
-      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-    });
-
-    await flushEffects();
-    const updatedSize = getPanelState('panel-floating-top').floatingSize;
-    expect(updatedSize.height).not.toBe(initialSize.height);
-
-    await unmount();
-  });
-
-  it('resizes a floating panel from the left edge', async () => {
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      writable: true,
-      value: 1400,
-    });
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      writable: true,
-      value: 900,
-    });
-
-    const { unmount } = await renderPanel(
-      <DockablePanel panelId="panel-floating-left" defaultPosition="floating" isOpen>
-        <div>panel</div>
-      </DockablePanel>
-    );
-
-    await flushEffects();
-    const portal = document.querySelector('.dockable-panel-layer') as HTMLDivElement | null;
-    expect(portal).toBeTruthy();
-
-    const initialSize = getPanelState('panel-floating-left').floatingSize;
-
-    const leftZone = requireValue(
-      portal,
-      'expected test value in DockablePanel.behavior.test.tsx'
-    ).querySelector('.dockable-panel__resize-zone--left') as HTMLDivElement | null;
-    expect(leftZone).toBeTruthy();
-
-    await act(async () => {
-      requireValue(
-        leftZone,
-        'expected test value in DockablePanel.behavior.test.tsx'
-      ).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 200, clientY: 300 }));
-    });
-    await act(async () => {
-      document.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 100, clientY: 300 })
-      );
-    });
-    await act(async () => {
-      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-    });
-
-    await flushEffects();
-    const updatedSize = getPanelState('panel-floating-left').floatingSize;
-    expect(updatedSize.width).not.toBe(initialSize.width);
-
+    expect(panelState('panel-a').isOpen).toBe(true);
+    expect(panelState('panel-b').isOpen).toBe(true);
+    expect(document.querySelectorAll('.dockable-panel [role="tab"]')).toHaveLength(2);
     await unmount();
   });
 });

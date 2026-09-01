@@ -18,9 +18,6 @@
   --dockable-panel-right-min-width: 500;
   /* Docked bottom: only height matters */
   --dockable-panel-bottom-min-height: 200;
-  /* Floating: both matter */
-  --dockable-panel-floating-min-width: 450;
-  --dockable-panel-floating-min-height: 200;
   transition: filter 150ms ease;
   pointer-events: auto;
 }
@@ -47,16 +44,6 @@
   top: auto;
   border-top: 2px solid var(--color-border);
   border-bottom: none;
-}
-
-.dockable-panel--floating {
-  border-radius: 8px;
-  box-shadow: 0 10px 40px rgb(0 0 0 / 50%);
-  border: 1px solid var(--color-border);
-  top: 0;
-  left: 0;
-  contain: layout;
-  will-change: transform;
 }
 
 .dockable-panel--maximized {
@@ -86,40 +73,15 @@
   border-radius: 8px 8px 0 0;
 }
 
-.dockable-panel--floating .dockable-panel__header {
-  cursor: move;
-  border-radius: 8px 8px 0 0;
-}
-
 .dockable-panel__header-content {
   flex: 1 1 0; /* Use flex-basis: 0 to ensure proper shrinking */
   display: flex;
   align-items: center;
   align-self: stretch;
   min-width: 0; /* Allow text truncation */
-  padding-right: 16px; /* Leave a bit of space between the tabs and controls for dragging the window */
+  padding-right: 16px;
   overflow: visible;
   max-width: 100%;
-}
-
-.dockable-panel__drag-control {
-  align-self: stretch;
-  flex: 0 0 24px;
-  min-width: 24px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: move;
-}
-
-.dockable-panel__drag-control:disabled {
-  cursor: default;
-}
-
-.dockable-panel__drag-control:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
 }
 
 .dockable-panel__title {
@@ -260,105 +222,6 @@
   background: var(--color-resize-handle);
 }
 
-/* Invisible resize zones for floating panels */
-.dockable-panel__resize-zone {
-  position: absolute;
-  z-index: calc(var(--z-index-scrollbar-overlay) + 1);
-  border: 0;
-  background: transparent;
-  padding: 0;
-}
-
-.dockable-panel__resize-zone--top {
-  top: calc(var(--dockable-panel-floating-resize-zone) * -1);
-  left: 0;
-  right: 0;
-  height: var(--dockable-panel-floating-resize-zone);
-  cursor:
-    url("../../shared/components/icons/cursors/ns-resize.svg") 12 12,
-    row-resize;
-}
-
-.dockable-panel__resize-zone--bottom {
-  bottom: calc(var(--dockable-panel-floating-resize-zone) * -1);
-  left: 0;
-  right: 0;
-  height: var(--dockable-panel-floating-resize-zone);
-  cursor:
-    url("../../shared/components/icons/cursors/ns-resize.svg") 12 12,
-    row-resize;
-}
-
-.dockable-panel__resize-zone--left {
-  left: calc(var(--dockable-panel-floating-resize-zone) * -1);
-  top: 0;
-  bottom: 0;
-  width: var(--dockable-panel-floating-resize-zone);
-  cursor:
-    url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,
-    col-resize;
-}
-
-.dockable-panel__resize-zone--right {
-  right: calc(var(--dockable-panel-floating-resize-zone) * -1);
-  top: 0;
-  bottom: 0;
-  width: var(--dockable-panel-floating-resize-zone);
-  cursor:
-    url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,
-    col-resize;
-}
-
-.dockable-panel__resize-zone--top-left {
-  top: calc(var(--dockable-panel-floating-resize-zone) * -1);
-  left: calc(var(--dockable-panel-floating-resize-zone) * -1);
-  width: var(--dockable-panel-floating-resize-zone);
-  height: var(--dockable-panel-floating-resize-zone);
-  cursor:
-    url("../../shared/components/icons/cursors/nwse-resize.svg") 12 12,
-    nwse-resize;
-}
-
-.dockable-panel__resize-zone--top-right {
-  top: calc(var(--dockable-panel-floating-resize-zone) * -1);
-  right: calc(var(--dockable-panel-floating-resize-zone) * -1);
-  width: var(--dockable-panel-floating-resize-zone);
-  height: var(--dockable-panel-floating-resize-zone);
-  cursor:
-    url("../../shared/components/icons/cursors/nesw-resize.svg") 12 12,
-    nesw-resize;
-}
-
-.dockable-panel__resize-zone--bottom-left {
-  bottom: calc(var(--dockable-panel-floating-resize-zone) * -1);
-  left: calc(var(--dockable-panel-floating-resize-zone) * -1);
-  width: var(--dockable-panel-floating-resize-zone);
-  height: var(--dockable-panel-floating-resize-zone);
-  cursor:
-    url("../../shared/components/icons/cursors/nesw-resize.svg") 12 12,
-    nesw-resize;
-}
-
-.dockable-panel__resize-zone--bottom-right {
-  bottom: calc(var(--dockable-panel-floating-resize-zone) * -1);
-  right: calc(var(--dockable-panel-floating-resize-zone) * -1);
-  width: var(--dockable-panel-floating-resize-zone);
-  height: var(--dockable-panel-floating-resize-zone);
-  cursor:
-    url("../../shared/components/icons/cursors/nwse-resize.svg") 12 12,
-    nwse-resize;
-}
-
-/* Dragging state */
-.dockable-panel--dragging {
-  cursor: move;
-}
-
-.dockable-panel--dragging * {
-  cursor: move;
-  user-select: none;
-}
-
 /* Resizing state */
 .dockable-panel--resizing {
   user-select: none;
@@ -372,12 +235,10 @@
 /* A document-level interaction shield owns the pointer during drag/resize.
    Because underlying controls are no longer pointer targets, their local
    cursor and selection declarations do not need cascade overrides. */
-body.dockable-panel-dragging,
 body.dockable-panel-resizing {
   user-select: none;
 }
 
-body.dockable-panel-dragging::after,
 body.dockable-panel-resizing::after {
   position: fixed;
   z-index: 2147483647;
@@ -386,39 +247,16 @@ body.dockable-panel-resizing::after {
   cursor: move;
 }
 
-body.dockable-panel-resizing-n::after,
-body.dockable-panel-resizing-s::after {
+body.dockable-panel-resizing-n::after {
   cursor:
     url("../../shared/components/icons/cursors/ns-resize.svg") 12 12,
     row-resize;
 }
 
-body.dockable-panel-resizing-e::after,
 body.dockable-panel-resizing-w::after {
   cursor:
     url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,
     col-resize;
-}
-
-body.dockable-panel-resizing-nw::after,
-body.dockable-panel-resizing-se::after {
-  cursor:
-    url("../../shared/components/icons/cursors/nwse-resize.svg") 12 12,
-    nwse-resize;
-}
-
-body.dockable-panel-resizing-ne::after,
-body.dockable-panel-resizing-sw::after {
-  cursor:
-    url("../../shared/components/icons/cursors/nesw-resize.svg") 12 12,
-    nesw-resize;
-}
-
-/* Dark mode adjustments */
-@media (prefers-color-scheme: dark) {
-  .dockable-panel--floating {
-    box-shadow: 0 10px 50px rgb(0 0 0 / 70%);
-  }
 }
 
 /* Tab bar */
