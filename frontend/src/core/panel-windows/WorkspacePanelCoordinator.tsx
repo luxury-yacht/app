@@ -2,6 +2,7 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { panelwindow } from '@/core/backend-api/models';
 import { focusWindow, getWindowIdentity } from '@/core/desktop-runtime';
+import { getObjectPanelLayoutDefaults } from '@/core/settings/appPreferences';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import type { ViewType } from '@/modules/object-panel/components/ObjectPanel/types';
 import {
@@ -64,9 +65,10 @@ const initialWindowBounds = (panelIds: readonly string[]): panelwindow.WindowBou
   if (typeof document === 'undefined') {
     return undefined;
   }
-  const panel = Array.from(document.querySelectorAll<HTMLElement>('[data-panel-id]')).find(
-    (element) => panelIds.includes(element.dataset.panelId ?? '')
-  );
+  const sourceTab = Array.from(
+    document.querySelectorAll<HTMLElement>('[role="tab"][data-panel-id]')
+  ).find((element) => panelIds.includes(element.dataset.panelId ?? ''));
+  const panel = sourceTab?.closest<HTMLElement>('[data-dockable-group-key]');
   if (!panel) {
     return undefined;
   }
@@ -74,11 +76,12 @@ const initialWindowBounds = (panelIds: readonly string[]): panelwindow.WindowBou
   if (rect.width <= 0 || rect.height <= 0) {
     return undefined;
   }
+  const { floatingWidth: width, floatingHeight: height } = getObjectPanelLayoutDefaults();
   return {
-    x: Math.round(window.screenX + rect.left),
-    y: Math.round(window.screenY + rect.top),
-    width: Math.round(rect.width),
-    height: Math.round(rect.height),
+    x: 0,
+    y: 0,
+    width,
+    height,
   };
 };
 

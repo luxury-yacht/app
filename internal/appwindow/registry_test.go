@@ -127,6 +127,66 @@ func TestPanelOptionsUseTransferredInitialBoundsOnce(t *testing.T) {
 	require.Equal(t, 560, options.Height)
 }
 
+func TestRegistryCentersPanelWindowBoundsOnTheOwnerNativeFrame(t *testing.T) {
+	wailsApp := application.New(application.Options{})
+	registry := NewRegistry(wailsApp, nil, nil)
+	owner := registry.Create(true)
+	registry.panelOpenTimeout = 0
+	registry.windowGeometry = func(name string) (geometry, bool) {
+		require.Equal(t, owner.Name(), name)
+		return geometry{
+			AbsoluteX: 2000,
+			AbsoluteY: 80,
+			Width:     1000,
+			Height:    700,
+			Screen: &application.Screen{
+				WorkArea: application.Rect{X: 1920, Y: 40, Width: 1200, Height: 760},
+			},
+		}, true
+	}
+	var createdOptions application.WebviewWindowOptions
+	registry.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
+		createdOptions = options
+		return application.NewWindow(options)
+	}
+	snapshot := validPanelGroupSnapshot()
+	snapshot.OwnerWindowName = owner.Name()
+	snapshot.InitialBounds = &panelwindow.WindowBounds{X: 2900, Y: 700, Width: 720, Height: 560}
+
+	_, err := registry.BeginPanelWindowOpen(snapshot)
+
+	require.NoError(t, err)
+	require.Equal(t, 2140, createdOptions.X)
+	require.Equal(t, 150, createdOptions.Y)
+	require.Equal(t, 720, createdOptions.Width)
+	require.Equal(t, 560, createdOptions.Height)
+}
+
+func TestRegistryCentersPanelWindowWhenOwnerNativeGeometryIsUnavailable(t *testing.T) {
+	wailsApp := application.New(application.Options{})
+	registry := NewRegistry(wailsApp, nil, nil)
+	owner := registry.Create(true)
+	registry.panelOpenTimeout = 0
+	registry.windowGeometry = func(string) (geometry, bool) {
+		return geometry{}, false
+	}
+	var createdOptions application.WebviewWindowOptions
+	registry.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
+		createdOptions = options
+		return application.NewWindow(options)
+	}
+	snapshot := validPanelGroupSnapshot()
+	snapshot.OwnerWindowName = owner.Name()
+	snapshot.InitialBounds = &panelwindow.WindowBounds{X: 2900, Y: 700, Width: 720, Height: 560}
+
+	_, err := registry.BeginPanelWindowOpen(snapshot)
+
+	require.NoError(t, err)
+	require.Equal(t, application.WindowCentered, createdOptions.InitialPosition)
+	require.Equal(t, 720, createdOptions.Width)
+	require.Equal(t, 560, createdOptions.Height)
+}
+
 func TestReadyWorkspaceCloseAlwaysRunsFrontendPreflight(t *testing.T) {
 	backend := &recordingLifecycleBackend{}
 	lifecycle := newLifecycle()

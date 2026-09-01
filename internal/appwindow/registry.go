@@ -55,6 +55,8 @@ type panelGuardRequest struct {
 }
 
 type geometry struct {
+	AbsoluteX int
+	AbsoluteY int
 	X         int
 	Y         int
 	Width     int
@@ -135,6 +137,7 @@ func NewRegistry(
 			Height:    height,
 			Maximised: window.IsMaximised(),
 		}
+		windowGeometry.AbsoluteX, windowGeometry.AbsoluteY = window.Position()
 		if screen, err := window.GetScreen(); err == nil && screen != nil {
 			windowGeometry.X, windowGeometry.Y = window.RelativePosition()
 			windowGeometry.Screen = screen
@@ -159,7 +162,19 @@ func (r *Registry) BeginPanelWindowOpen(
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
-	window := r.newWindow(panelWindowOptions(descriptor.WindowName, r.menu, snapshot.InitialBounds))
+	options := panelWindowOptions(descriptor.WindowName, r.menu, snapshot.InitialBounds)
+	if snapshot.InitialBounds != nil {
+		positioned := false
+		if r.windowGeometry != nil {
+			if ownerGeometry, ok := r.windowGeometry(snapshot.OwnerWindowName); ok {
+				positioned = positionPanelWindowOptions(&options, ownerGeometry)
+			}
+		}
+		if !positioned {
+			options.InitialPosition = application.WindowCentered
+		}
+	}
+	window := r.newWindow(options)
 	if window == nil {
 		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
 		return PanelWindowDescriptor{}, fmt.Errorf(
@@ -1017,6 +1032,30 @@ func panelWindowOptionsForPlatform(
 		options.Y = initialBounds.Y
 	}
 	return options
+}
+
+func constrainPanelWindowOptions(options *application.WebviewWindowOptions, workArea application.Rect) {
+	if options == nil || workArea.Width <= 0 || workArea.Height <= 0 {
+		return
+	}
+	options.Width = min(options.Width, max(workArea.Width, options.MinWidth))
+	options.Height = min(options.Height, max(workArea.Height, options.MinHeight))
+	maxX := workArea.X + max(workArea.Width-options.Width, 0)
+	maxY := workArea.Y + max(workArea.Height-options.Height, 0)
+	options.X = min(max(options.X, workArea.X), maxX)
+	options.Y = min(max(options.Y, workArea.Y), maxY)
+}
+
+func positionPanelWindowOptions(options *application.WebviewWindowOptions, owner geometry) bool {
+	if options == nil || owner.Width <= 0 || owner.Height <= 0 {
+		return false
+	}
+	options.X = owner.AbsoluteX + (owner.Width-options.Width)/2
+	options.Y = owner.AbsoluteY + (owner.Height-options.Height)/2
+	if owner.Screen != nil {
+		constrainPanelWindowOptions(options, owner.Screen.WorkArea)
+	}
+	return true
 }
 
 func windowOptionsForPlatform(name string, nativeMenu *application.Menu, goos string) application.WebviewWindowOptions {

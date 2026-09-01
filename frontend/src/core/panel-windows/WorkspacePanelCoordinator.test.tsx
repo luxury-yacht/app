@@ -33,10 +33,23 @@ const mocks = vi.hoisted(() => ({
   focusPanel: vi.fn(),
   discardPanelLayouts: vi.fn(),
   focusOwnerWindow: vi.fn(async () => undefined),
+  objectPanelLayoutDefaults: {
+    dockedRightWidth: 500,
+    dockedBottomHeight: 300,
+    floatingWidth: 720,
+    floatingHeight: 560,
+    floatingX: 100,
+    floatingY: 100,
+  },
   openPanels: new Map<string, typeof objectRef>(),
   nativeLocations: new Map<string, { windowName: string; groupId: string }>(),
   blocker: null as null | { reason: 'unsaved-yaml'; focus: () => void },
   reportError: vi.fn(),
+}));
+
+vi.mock('@/core/settings/appPreferences', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getObjectPanelLayoutDefaults: () => mocks.objectPanelLayoutDefaults,
 }));
 
 vi.mock('@/core/desktop-runtime', () => ({
@@ -407,8 +420,15 @@ describe('WorkspacePanelCoordinator', () => {
     mocks.openPanels.set('panel-a', objectRef);
     mocks.openPanels.set('panel-other', { ...objectRef, clusterId: 'cluster-2', name: 'other' });
     const panel = document.createElement('div');
-    panel.dataset.panelId = 'panel-a';
-    panel.getBoundingClientRect = () => ({ left: 10, top: 20, width: 600, height: 400 }) as DOMRect;
+    panel.dataset.dockableGroupKey = 'bottom';
+    panel.getBoundingClientRect = () =>
+      ({ left: 0, top: 700, width: 1200, height: 300 }) as DOMRect;
+    const tabButton = document.createElement('button');
+    tabButton.dataset.panelId = 'panel-a';
+    tabButton.setAttribute('role', 'tab');
+    tabButton.getBoundingClientRect = () =>
+      ({ left: 40, top: 750, width: 112, height: 32 }) as DOMRect;
+    panel.appendChild(tabButton);
     document.body.appendChild(panel);
     await act(async () => {
       mocks.moveRequest?.(
@@ -425,10 +445,10 @@ describe('WorkspacePanelCoordinator', () => {
 
     const transferred = mocks.beginOpen.mock.calls[mocks.beginOpen.mock.calls.length - 1]?.[1] as {
       tabs: Array<{ panelId: string }>;
-      initialBounds: { width: number; height: number };
+      initialBounds: { x: number; y: number; width: number; height: number };
     };
-    expect(transferred.tabs.map((tab) => tab.panelId)).toEqual(['panel-a']);
-    expect(transferred.initialBounds).toMatchObject({ width: 600, height: 400 });
+    expect(transferred.tabs.map((panelTab) => panelTab.panelId)).toEqual(['panel-a']);
+    expect(transferred.initialBounds).toEqual({ x: 0, y: 0, width: 720, height: 560 });
   });
 
   it('routes snapshot and tab-close events only for this immutable owner', async () => {
