@@ -251,19 +251,12 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     [getOwnedPanel, ownerWindowName, removeOwnedPanel, upsertOwnedPanel]
   );
 
-  useEffect(
-    () =>
-      onPanelWindowDockRequested((event) => {
-        if (
-          event.snapshot.ownerWindowName !== ownerWindowName ||
-          (event.targetPosition !== 'right' && event.targetPosition !== 'bottom')
-        ) {
-          return;
-        }
-        dockPanelWindow(event.snapshot, event.targetPosition);
-        setPendingDockRequest(event);
-      }),
-    [dockPanelWindow, ownerWindowName]
+  const handlePanelWindowDockRequested = useCallback(
+    (event: panelwindow.WindowDockRequestedEvent, targetPosition: 'right' | 'bottom') => {
+      dockPanelWindow(event.snapshot, targetPosition);
+      setPendingDockRequest(event);
+    },
+    [dockPanelWindow]
   );
 
   const handlePanelWindowClosed = useCallback((windowName: string) => {
@@ -545,6 +538,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       <WorkspaceObjectRouteCoordinator
         ownerWindowName={ownerWindowName}
         pendingDockRequest={pendingDockRequest}
+        onDockRequest={handlePanelWindowDockRequested}
         onDockRequestSettled={handleDockRequestSettled}
         onOwnedPanelWindowClosed={handlePanelWindowClosed}
       >
@@ -557,12 +551,17 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
 function WorkspaceObjectRouteCoordinator({
   ownerWindowName,
   pendingDockRequest,
+  onDockRequest,
   onDockRequestSettled,
   onOwnedPanelWindowClosed,
   children,
 }: Readonly<{
   ownerWindowName: string;
   pendingDockRequest: panelwindow.WindowDockRequestedEvent | null;
+  onDockRequest: (
+    request: panelwindow.WindowDockRequestedEvent,
+    targetPosition: 'right' | 'bottom'
+  ) => void;
   onDockRequestSettled: (request: panelwindow.WindowDockRequestedEvent, committed: boolean) => void;
   onOwnedPanelWindowClosed: (windowName: string) => void;
   children: React.ReactNode;
@@ -581,7 +580,7 @@ function WorkspaceObjectRouteCoordinator({
     setActiveKubeconfig,
     selectedClusterId,
   } = useKubeconfig();
-  const { tabGroups, focusPanel, discardPanelLayouts } = useDockablePanelContext();
+  const { tabGroups, focusPanel, dockPanelGroup, discardPanelLayouts } = useDockablePanelContext();
   const pendingDockedFocusRef = useRef<string | null>(null);
   const pendingObjectClaimsRef = useRef(new Set<string>());
   const dockAttemptRef = useRef<{
@@ -589,6 +588,26 @@ function WorkspaceObjectRouteCoordinator({
     timeout: number;
     acknowledging: boolean;
   } | null>(null);
+
+  useEffect(
+    () =>
+      onPanelWindowDockRequested((event) => {
+        if (
+          event.snapshot.ownerWindowName !== ownerWindowName ||
+          (event.targetPosition !== 'right' && event.targetPosition !== 'bottom')
+        ) {
+          return;
+        }
+        dockPanelGroup(
+          event.snapshot.clusterId,
+          (event.snapshot.tabs ?? []).map((tab) => tab.panelId),
+          event.snapshot.activePanelId,
+          event.targetPosition
+        );
+        onDockRequest(event, event.targetPosition);
+      }),
+    [dockPanelGroup, onDockRequest, ownerWindowName]
+  );
 
   useEffect(
     () =>

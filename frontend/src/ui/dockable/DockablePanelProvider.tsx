@@ -103,6 +103,13 @@ interface DockablePanelContextValue {
 
   // Fan out applyObjectPanelLayoutDefaults to every cluster's store.
   applyLayoutDefaultsAcrossClusters: () => void;
+  // Move a native panel group to the requested owner dock before it remounts.
+  dockPanelGroup: (
+    clusterId: string,
+    panelIds: readonly string[],
+    activePanelId: string,
+    targetPosition: 'right' | 'bottom'
+  ) => void;
   // Remove closed native-panel layout and group state from its owning cluster.
   discardPanelLayouts: (clusterId: string, panelIds: readonly string[]) => void;
   requestGroupMove?: (groupKey: GroupKey, targetPosition: DockPosition) => boolean;
@@ -790,6 +797,31 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
     }
   }, []);
 
+  const dockPanelGroup = useCallback(
+    (
+      clusterId: string,
+      panelIds: readonly string[],
+      activePanelId: string,
+      targetPosition: 'right' | 'bottom'
+    ) => {
+      const store = getOrCreateStoreForCluster(clusterId);
+      const uniquePanelIds = Array.from(new Set(panelIds));
+      for (const panelId of uniquePanelIds) {
+        store.setPanelPositionById(panelId, targetPosition);
+      }
+      store.setTabGroups((previous) => {
+        const next = uniquePanelIds.reduce(
+          (current, panelId) => addPanelToGroup(current, panelId, targetPosition),
+          previous
+        );
+        return uniquePanelIds.includes(activePanelId)
+          ? setActiveTab(next, activePanelId, targetPosition)
+          : next;
+      });
+    },
+    [getOrCreateStoreForCluster]
+  );
+
   const requestGroupMove = useCallback(
     (groupKey: GroupKey, targetPosition: DockPosition): boolean => {
       if (!onGroupMoveRequest) {
@@ -833,6 +865,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       getLastFocusedPosition,
       focusPanel,
       applyLayoutDefaultsAcrossClusters,
+      dockPanelGroup,
       discardPanelLayouts,
       requestGroupMove,
       nativeWindowMode,
@@ -859,6 +892,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       getLastFocusedPosition,
       focusPanel,
       applyLayoutDefaultsAcrossClusters,
+      dockPanelGroup,
       discardPanelLayouts,
       requestGroupMove,
       nativeWindowMode,

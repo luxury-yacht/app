@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   panelIdsForCluster: vi.fn(() => ['panel-a']),
   nativeWindowNamesForCluster: vi.fn(() => ['panel-1']),
   focusPanel: vi.fn(),
+  dockPanelGroup: vi.fn(),
   discardPanelLayouts: vi.fn(),
   focusOwnerWindow: vi.fn(async () => undefined),
   objectPanelLayoutDefaults: {
@@ -157,6 +158,7 @@ vi.mock('@/ui/dockable', () => ({
       floating: [],
     },
     focusPanel: mocks.focusPanel,
+    dockPanelGroup: mocks.dockPanelGroup,
     discardPanelLayouts: mocks.discardPanelLayouts,
   }),
 }));
@@ -262,6 +264,7 @@ describe('WorkspacePanelCoordinator', () => {
       groupId: 'group-1',
       transferId: 'dock-transfer-1',
       tabs: [{ panelId: 'panel-a' }],
+      activePanelId: 'panel-a',
     };
 
     await act(async () => {
@@ -273,7 +276,16 @@ describe('WorkspacePanelCoordinator', () => {
       } as never);
       await Promise.resolve();
     });
+    expect(mocks.dockPanelGroup).toHaveBeenCalledWith(
+      'cluster-1',
+      ['panel-a'],
+      'panel-a',
+      'bottom'
+    );
     expect(mocks.dockWindow).toHaveBeenCalledWith(snapshot, 'bottom');
+    expect(mocks.dockPanelGroup.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.dockWindow.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
+    );
     expect(mocks.acknowledgeDock).toHaveBeenCalledOnce();
 
     await act(async () => {

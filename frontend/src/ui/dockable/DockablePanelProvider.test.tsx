@@ -291,6 +291,42 @@ describe('DockablePanelProvider', () => {
     await unmount();
   });
 
+  it.each([
+    { previousPosition: 'right', targetPosition: 'bottom' },
+    { previousPosition: 'bottom', targetPosition: 'right' },
+  ] as const)(
+    'moves a returning native group from $previousPosition to requested $targetPosition dock',
+    async ({ previousPosition, targetPosition }) => {
+      const contextRef: { current: DockablePanelContextValue | null } = { current: null };
+
+      const Consumer: React.FC = () => {
+        contextRef.current = useDockablePanelContext();
+        return null;
+      };
+
+      const { unmount } = await render(
+        <DockablePanelProvider>
+          <Consumer />
+        </DockablePanelProvider>
+      );
+
+      await act(async () => {
+        const context = requireDockableContext(contextRef.current);
+        context.syncPanelGroup('panel-a', previousPosition);
+        context.syncPanelGroup('panel-b', previousPosition);
+        context.dockPanelGroup('cluster-a', ['panel-a', 'panel-b'], 'panel-a', targetPosition);
+        await Promise.resolve();
+      });
+
+      const groups = requireDockableContext(contextRef.current).tabGroups;
+      expect(groups[previousPosition].tabs).toEqual([]);
+      expect(groups[targetPosition].tabs).toEqual(['panel-a', 'panel-b']);
+      expect(groups[targetPosition].activeTab).toBe('panel-a');
+
+      await unmount();
+    }
+  );
+
   it('does not create an in-page floating group when no native move owner is installed', async () => {
     const contextRef: { current: DockablePanelContextValue | null } = { current: null };
 
