@@ -167,6 +167,24 @@ func (registry *recordingNativeWindowRegistry) AuthorizePanelTabClose(string, st
 	return nil
 }
 
+func (registry *recordingNativeWindowRegistry) RequestPanelTabTransfer(
+	string,
+	panelwindow.TabTransferRequest,
+) error {
+	registry.record("request-tab-transfer")
+	return nil
+}
+
+func (registry *recordingNativeWindowRegistry) AcceptPanelTabTransfer(string, string) error {
+	registry.record("accept-tab-transfer")
+	return nil
+}
+
+func (registry *recordingNativeWindowRegistry) FailPanelTabTransfer(string, string) error {
+	registry.record("fail-tab-transfer")
+	return nil
+}
+
 func (registry *recordingNativeWindowRegistry) RequestPanelWindowGuard(
 	string,
 	string,
@@ -285,6 +303,12 @@ func TestWindowRegistryBridgePreservesUnboundStartupSemantics(t *testing.T) {
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.AuthorizePanelTabClose("workspace-1", "panel-1", "tab-1")
 	require.ErrorContains(t, err, "native window registry is not available")
+	err = options.RequestPanelTabTransfer("panel-1", panelwindow.TabTransferRequest{})
+	require.ErrorContains(t, err, "native window registry is not available")
+	err = options.AcceptPanelTabTransfer("workspace-1", "tab-transfer-1")
+	require.ErrorContains(t, err, "native window registry is not available")
+	err = options.FailPanelTabTransfer("panel-1", "tab-transfer-1")
+	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.RequestPanelGuard("workspace-1", "panel-1", "guard-1", "close")
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.AcknowledgePanelGuard("panel-1", "guard-1", true)
@@ -330,6 +354,9 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 	require.NoError(t, options.UpdatePanelSnapshot("panel-1", snapshot))
 	require.NoError(t, options.RequestPanelTabClose("panel-1", "tab-1"))
 	require.NoError(t, options.AuthorizePanelTabClose("workspace-1", "panel-1", "tab-1"))
+	require.NoError(t, options.RequestPanelTabTransfer("panel-1", panelwindow.TabTransferRequest{}))
+	require.NoError(t, options.AcceptPanelTabTransfer("workspace-1", "tab-transfer-1"))
+	require.NoError(t, options.FailPanelTabTransfer("panel-1", "tab-transfer-1"))
 	require.NoError(t, options.RequestPanelGuard("workspace-1", "panel-1", "guard-1", "close"))
 	require.NoError(t, options.AcknowledgePanelGuard("panel-1", "guard-1", true))
 	require.NoError(t, options.AcknowledgeApplicationQuit("workspace-1", "quit-1", true))
@@ -355,6 +382,9 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 		"update-snapshot",
 		"request-tab-close",
 		"authorize-tab-close",
+		"request-tab-transfer",
+		"accept-tab-transfer",
+		"fail-tab-transfer",
 		"request-guard",
 		"acknowledge-guard",
 		"acknowledge-quit",

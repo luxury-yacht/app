@@ -1,4 +1,5 @@
 import {
+  AcceptPanelTabTransfer,
   AcknowledgeApplicationQuitPreflight,
   AcknowledgePanelWindowClose,
   AcknowledgePanelWindowDock,
@@ -9,11 +10,13 @@ import {
   AuthorizePanelTabClose,
   BeginPanelWindowDock,
   BeginPanelWindowOpen,
+  FailPanelTabTransfer,
   FailPanelWindowTransfer,
   FocusPanelWindow,
   GetNativeWindowDescriptor,
   RequestPanelObjectOpen,
   RequestPanelTabClose,
+  RequestPanelTabTransfer,
   RequestPanelWindowClose,
   RequestPanelWindowGuard,
   RoutePanelWindowCommand,
@@ -147,6 +150,19 @@ export const authorizePanelTabClose = (
   panelId: string
 ): Promise<void> => AuthorizePanelTabClose(ownerWindowName, windowName, panelId);
 
+export const requestPanelTabTransfer = (
+  callerWindowName: string,
+  request: panelwindow.TabTransferRequest
+): Promise<void> => RequestPanelTabTransfer(callerWindowName, request);
+
+export const acceptPanelTabTransfer = (
+  ownerWindowName: string,
+  transferId: string
+): Promise<void> => AcceptPanelTabTransfer(ownerWindowName, transferId);
+
+export const failPanelTabTransfer = (callerWindowName: string, transferId: string): Promise<void> =>
+  FailPanelTabTransfer(callerWindowName, transferId);
+
 export const onPanelWindowOpened = (handler: (event: panelwindow.WindowOpenedEvent) => void) =>
   onEvent('panel-window:opened', handler);
 
@@ -188,6 +204,22 @@ export const onPanelTabCloseRequested = (
 export const onPanelTabCloseAuthorized = (
   handler: (event: panelwindow.TabCloseAuthorizedEvent) => void
 ) => onEvent('panel-window:tab-close-authorized', handler);
+
+export const onPanelTabTransferRequested = (
+  handler: (event: panelwindow.TabTransferRequestedEvent) => void
+) => onEvent('panel-window:tab-transfer-requested', handler);
+
+export const onPanelTabTransferInsertRequested = (
+  handler: (event: panelwindow.TabTransferInsertRequestedEvent) => void
+) => onEvent('panel-window:tab-transfer-insert-requested', handler);
+
+export const onPanelTabTransferCommitted = (
+  handler: (event: panelwindow.TabTransferCommittedEvent) => void
+) => onEvent('panel-window:tab-transfer-committed', handler);
+
+export const onPanelTabTransferFailed = (
+  handler: (event: panelwindow.TabTransferFailedEvent) => void
+) => onEvent('panel-window:tab-transfer-failed', handler);
 
 export const onApplicationQuitPreflightRequested = (
   handler: (event: panelwindow.ApplicationQuitPreflightRequestedEvent) => void

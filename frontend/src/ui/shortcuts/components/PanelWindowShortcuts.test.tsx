@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   blocker: null as null | { panelId?: string; reason: 'unsaved-yaml'; focus: () => void },
   tabs: ['panel-a', 'panel-b'] as string[],
   acknowledgeGuard: vi.fn(async () => undefined),
+  failTabTransfer: vi.fn(async () => undefined),
+  upsertOwnedPanel: vi.fn(() => 'panel-c'),
+  movePanelBetweenGroups: vi.fn(),
 }));
 
 vi.mock('@/core/panel-windows', () => ({
@@ -44,6 +47,19 @@ vi.mock('@/core/panel-windows', () => ({
     return () => undefined;
   },
   acknowledgePanelWindowGuard: mocks.acknowledgeGuard,
+  failPanelTabTransfer: mocks.failTabTransfer,
+  onPanelTabTransferInsertRequested: (handler: (event: never) => void) => {
+    mocks.handlers.tabTransferInsert = handler;
+    return () => undefined;
+  },
+  onPanelTabTransferCommitted: (handler: (event: never) => void) => {
+    mocks.handlers.tabTransferCommitted = handler;
+    return () => undefined;
+  },
+  onPanelTabTransferFailed: (handler: (event: never) => void) => {
+    mocks.handlers.tabTransferFailed = handler;
+    return () => undefined;
+  },
 }));
 
 vi.mock('@/core/panel-windows/panelLifecycleGuards', () => ({
@@ -89,6 +105,7 @@ vi.mock('@/modules/object-panel/contexts/ObjectPanelStateContext', () => ({
         },
       ],
     ]),
+    upsertOwnedPanel: mocks.upsertOwnedPanel,
   }),
 }));
 
@@ -101,6 +118,7 @@ vi.mock('@/ui/dockable', () => ({
     },
     focusPanel: mocks.focusPanel,
     commitTabClose: mocks.commitTabClose,
+    movePanelBetweenGroups: mocks.movePanelBetweenGroups,
   }),
 }));
 
@@ -158,6 +176,73 @@ describe('PanelWindowShortcuts', () => {
     await act(async () => mocks.handlers.authorized?.({ panelId: 'panel-a' } as never));
     expect(mocks.commitTabClose).toHaveBeenCalledWith('panel-a');
     expect(mocks.closePanel).not.toHaveBeenCalled();
+  });
+
+  it('inserts an authorized transferred tab at the requested native-window index', async () => {
+    const request = {
+      transferId: 'tab-transfer-1',
+      sourceWindowName: 'panel-2',
+      targetWindowName: 'panel-1',
+      ownerWindowName: 'workspace-1',
+      clusterId: 'cluster-1',
+      sourceGroupId: 'group-2',
+      targetGroupId: 'group-1',
+      targetIndex: 1,
+      targetKind: 'panel-window',
+      tab: {
+        kind: 'object',
+        panelId: 'panel-c',
+        activeView: 'details',
+        objectRef: {
+          clusterId: 'cluster-1',
+          group: 'apps',
+          version: 'v1',
+          kind: 'Deployment',
+          namespace: 'default',
+          name: 'worker',
+        },
+      },
+    };
+
+    await act(async () => mocks.handlers.tabTransferInsert?.({ request } as never));
+
+    expect(mocks.upsertOwnedPanel).toHaveBeenCalledWith(request.tab.objectRef, 'details', {
+      kind: 'panel-window',
+      windowName: 'panel-1',
+      groupId: 'group-1',
+    });
+    expect(mocks.movePanelBetweenGroups).toHaveBeenCalledWith('panel-c', 'right', 1);
+    expect(mocks.failTabTransfer).not.toHaveBeenCalled();
+  });
+
+  it('removes only the committed source tab and closes a source window that becomes empty', async () => {
+    const request = {
+      transferId: 'tab-transfer-1',
+      sourceWindowName: 'panel-1',
+      targetWindowName: 'panel-2',
+      ownerWindowName: 'workspace-1',
+      clusterId: 'cluster-1',
+      sourceGroupId: 'group-1',
+      targetGroupId: 'group-2',
+      targetKind: 'panel-window',
+      tab: { panelId: 'panel-a' },
+    };
+
+    await act(async () => mocks.handlers.tabTransferCommitted?.({ request } as never));
+    expect(mocks.commitTabClose).toHaveBeenCalledWith('panel-a');
+    expect(mocks.acknowledgeClose).not.toHaveBeenCalled();
+
+    mocks.commitTabClose.mockClear();
+    await act(async () => root.unmount());
+    mocks.tabs = ['panel-a'];
+    root = ReactDOM.createRoot(container);
+    await act(async () =>
+      root.render(<PanelWindowShortcuts descriptor={descriptor} ready={true} />)
+    );
+    await act(async () => mocks.handlers.tabTransferCommitted?.({ request } as never));
+
+    expect(mocks.commitTabClose).not.toHaveBeenCalled();
+    expect(mocks.acknowledgeClose).toHaveBeenCalledWith('panel-1');
   });
 
   it('closes the native window only after owner authorization for the last tab', async () => {

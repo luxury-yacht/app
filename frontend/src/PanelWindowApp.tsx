@@ -13,7 +13,6 @@ import {
   useObjectPanelActiveTabs,
   useObjectPanelState,
 } from '@modules/object-panel/contexts/ObjectPanelStateContext';
-import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
 import { DockablePanelProvider } from '@ui/dockable';
 import type { TabGroupState } from '@ui/dockable/tabGroupTypes';
 import { AppErrorBoundary, PanelErrorBoundary } from '@ui/errors';
@@ -30,6 +29,7 @@ import {
   onPanelObjectOpenAuthorized,
   type PanelWindowDescriptor,
   requestPanelTabClose,
+  requestPanelTabTransfer,
 } from '@/core/panel-windows';
 import { PanelWindowRoleProvider } from '@/core/panel-windows/PanelWindowRoleContext';
 import {
@@ -37,6 +37,11 @@ import {
   usePanelLifecycleGuardRegistry,
 } from '@/core/panel-windows/panelLifecycleGuards';
 import { resolvePanelWindowClusterName } from '@/core/panel-windows/panelWindowClusterName';
+import {
+  type DockableTabDragPayload,
+  objectPanelTabSnapshot,
+  tabTransferRequestFromDragPayload,
+} from '@/core/panel-windows/tabTransfer';
 import { PanelWindowShortcuts } from '@/ui/shortcuts/components/PanelWindowShortcuts';
 import { reportOperationalError } from '@/utils/errorHandler';
 import '@styles/index.css';
@@ -170,12 +175,93 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
     [activeTabs, descriptor, guards, openPanels]
   );
 
+  const getTabSnapshot = useCallback(
+    (panelId: string) => {
+      const objectRef = openPanels.get(panelId);
+      return objectRef
+        ? objectPanelTabSnapshot(panelId, objectRef, activeTabs.get(panelId) ?? 'details')
+        : undefined;
+    },
+    [activeTabs, openPanels]
+  );
+
+  const tabDragIdentity = useMemo(
+    () => ({
+      windowName: descriptor.windowName,
+      ownerWindowName: descriptor.ownerWindowName,
+      clusterId: descriptor.clusterId,
+      nativeGroupId: descriptor.groupId,
+      getTabSnapshot,
+    }),
+    [descriptor, getTabSnapshot]
+  );
+
+  const canStartTabDrag = useCallback(
+    (panelId: string) => {
+      const blocker = guards.firstBlocker([panelId]);
+      blocker?.focus();
+      return blocker === null;
+    },
+    [guards]
+  );
+
+  const handleExternalTabDrop = useCallback(
+    (payload: DockableTabDragPayload, _targetGroupId: string, insertIndex: number) => {
+      const request = tabTransferRequestFromDragPayload(payload, {
+        transferId: createTransferId(),
+        targetWindowName: descriptor.windowName,
+        targetGroupId: descriptor.groupId,
+        targetIndex: insertIndex,
+        targetKind: 'panel-window' as panelwindow.TabTransferTarget,
+      });
+      if (!request) {
+        return;
+      }
+      void requestPanelTabTransfer(descriptor.windowName, request).catch((error) =>
+        reportOperationalError(error, {
+          source: 'PanelWindowApp',
+          action: 'request-tab-drop',
+          clusterId: descriptor.clusterId,
+        })
+      );
+    },
+    [descriptor]
+  );
+
+  const handleTabTearOff = useCallback(
+    (payload: DockableTabDragPayload, cursor: { x: number; y: number }) => {
+      const request = tabTransferRequestFromDragPayload(payload, {
+        transferId: createTransferId(),
+        targetWindowName: '',
+        targetGroupId: `panel-group-${createTransferId()}`,
+        targetIndex: 0,
+        targetKind: 'new-window' as panelwindow.TabTransferTarget,
+        cursor,
+      });
+      if (!request || request.sourceWindowName !== descriptor.windowName) {
+        return;
+      }
+      void requestPanelTabTransfer(descriptor.windowName, request).catch((error) =>
+        reportOperationalError(error, {
+          source: 'PanelWindowApp',
+          action: 'tear-off-tab',
+          clusterId: descriptor.clusterId,
+        })
+      );
+    },
+    [descriptor]
+  );
+
   return (
     <DockablePanelProvider
       initialTabGroups={initialTabGroups}
       onGroupMoveRequest={handleGroupMove}
       onTabCloseRequest={requestTabClose}
       nativeWindowMode={true}
+      tabDragIdentity={tabDragIdentity}
+      onExternalTabDrop={handleExternalTabDrop}
+      onTabTearOff={handleTabTearOff}
+      canStartTabDrag={canStartTabDrag}
     >
       <PanelWindowShortcuts descriptor={descriptor} ready={ready} />
       <TextContextMenu />
@@ -229,9 +315,7 @@ export default function PanelWindowApp({
                           <ClusterLifecycleProvider>
                             <NamespaceProvider>
                               <PanelLifecycleGuardProvider>
-                                <TabDragProvider>
-                                  <PanelWindowSurface descriptor={descriptor} />
-                                </TabDragProvider>
+                                <PanelWindowSurface descriptor={descriptor} />
                               </PanelLifecycleGuardProvider>
                             </NamespaceProvider>
                           </ClusterLifecycleProvider>

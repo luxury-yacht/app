@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 
 import { TabDragContext, TabDragProvider } from './TabDragProvider';
-import { TAB_DRAG_DATA_TYPE, type TabDragPayload } from './types';
+import { TAB_DRAG_DATA_TYPE, type TabDragPayload, tabDragKindDataType } from './types';
 import { useTabDragSource, useTabDragSourceFactory } from './useTabDragSource';
 import { useTabDropTarget } from './useTabDropTarget';
 
@@ -88,6 +88,45 @@ describe('TabDragProvider', () => {
         'expected the tab drag context after rendering'
       ).currentDrag
     ).toBeNull();
+  });
+
+  it('tears off an unconsumed drag outside the source webview at screen coordinates', () => {
+    const onTearOff = vi.fn();
+    let context: React.ContextType<typeof TabDragContext> | null = null;
+    const payload: TabDragPayload = {
+      kind: 'dockable-tab',
+      panelId: 'panel-a',
+      sourceGroupId: 'right',
+    };
+    function Probe() {
+      context = useContext(TabDragContext);
+      return null;
+    }
+
+    act(() => {
+      root.render(
+        <TabDragProvider onTearOff={onTearOff}>
+          <Probe />
+        </TabDragProvider>
+      );
+    });
+    const coordinator = requireValue<React.ContextType<typeof TabDragContext> | null>(
+      context,
+      'expected drag coordinator'
+    );
+
+    act(() => {
+      coordinator.beginDrag(payload);
+      coordinator.endDrag({
+        clientX: -1,
+        clientY: 30,
+        screenX: 2200,
+        screenY: 300,
+        dataTransfer: { dropEffect: 'none' } as DataTransfer,
+      });
+    });
+
+    expect(onTearOff).toHaveBeenCalledWith(payload, { x: 2200, y: 300 });
   });
 });
 
@@ -194,6 +233,41 @@ describe('useTabDragSource', () => {
       TAB_DRAG_DATA_TYPE,
       JSON.stringify({ kind: 'cluster-tab', clusterId: 'c1' })
     );
+    expect(setData).toHaveBeenCalledWith(tabDragKindDataType('cluster-tab'), '1');
+  });
+
+  it('does not begin a drag when the source guard blocks it', () => {
+    const canStart = vi.fn(() => false);
+    let captured: ReturnType<typeof useTabDragSource> | null = null;
+    function Probe() {
+      captured = useTabDragSource(
+        { kind: 'dockable-tab', panelId: 'panel-a', sourceGroupId: 'right' },
+        { canStart }
+      );
+      return <button {...captured}>drag</button>;
+    }
+    act(() => {
+      root.render(
+        <TabDragProvider>
+          <Probe />
+        </TabDragProvider>
+      );
+    });
+    const preventDefault = vi.fn();
+    const setData = vi.fn();
+    act(() => {
+      requireValue(
+        requireDragSource(captured).onDragStart,
+        'expected drag start'
+      )({
+        preventDefault,
+        dataTransfer: { setData },
+      } as unknown as React.DragEvent<HTMLElement>);
+    });
+
+    expect(canStart).toHaveBeenCalledOnce();
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(setData).not.toHaveBeenCalled();
   });
 
   it('calls setDragImage when getDragImage returns an element', () => {
@@ -452,6 +526,55 @@ describe('useTabDropTarget', () => {
       throw new Error('expected a cluster-tab drop payload');
     }
     expect(payload.clusterId).toBe('c1');
+  });
+
+  it('accepts protected-mode dragover from an isolated window provider', () => {
+    const onDrop = vi.fn<(payload: TabDragPayload) => void>();
+
+    function Target() {
+      const { ref } = useTabDropTarget({ accepts: ['dockable-tab'], onDrop });
+      return <div ref={ref} data-testid="cross-window-target" />;
+    }
+
+    act(() => {
+      root.render(
+        <TabDragProvider>
+          <Target />
+        </TabDragProvider>
+      );
+    });
+
+    const payload: TabDragPayload = {
+      kind: 'dockable-tab',
+      panelId: 'panel-a',
+      sourceGroupId: 'right',
+      sourceWindowName: 'panel-1',
+      sourceWindowGroupId: 'group-1',
+      ownerWindowName: 'workspace-1',
+      clusterId: 'cluster-1',
+    };
+    const protectedTransfer = {
+      getData: vi.fn(() => ''),
+      types: [TAB_DRAG_DATA_TYPE, tabDragKindDataType('dockable-tab')],
+      dropEffect: 'none',
+    };
+    const target = requireValue(
+      container.querySelector<HTMLElement>('[data-testid="cross-window-target"]'),
+      'expected isolated drag target'
+    );
+    const dragOver = createTestDragEvent('dragover', protectedTransfer);
+
+    act(() => target.dispatchEvent(dragOver));
+
+    expect(dragOver.defaultPrevented).toBe(true);
+
+    const readableTransfer = {
+      ...protectedTransfer,
+      getData: vi.fn(() => JSON.stringify(payload)),
+    };
+    act(() => target.dispatchEvent(createTestDragEvent('drop', readableTransfer)));
+
+    expect(onDrop).toHaveBeenCalledWith(payload, expect.any(Event), 0);
   });
 
   it('calls preventDefault on dragover under HTML5 "protected mode" semantics', () => {

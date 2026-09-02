@@ -197,6 +197,38 @@ func TestRegistryCentersPanelWindowWhenOwnerNativeGeometryIsUnavailable(t *testi
 	require.Equal(t, 560, createdOptions.Height)
 }
 
+func TestRegistryUsesTearOffCursorPositionOnItsTargetScreen(t *testing.T) {
+	wailsApp := application.New(application.Options{})
+	registry := NewRegistry(wailsApp, nil, nil)
+	owner := registry.Create(true)
+	registry.panelOpenTimeout = 0
+	registry.panelScreenWorkAreas = func() []application.Rect {
+		return []application.Rect{
+			{X: 0, Y: 0, Width: 1920, Height: 1040},
+			{X: 1920, Y: 0, Width: 1200, Height: 760},
+		}
+	}
+	var createdOptions application.WebviewWindowOptions
+	registry.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
+		createdOptions = options
+		return application.NewWindow(options)
+	}
+	snapshot := validPanelGroupSnapshot()
+	snapshot.OwnerWindowName = owner.Name()
+	snapshot.UseInitialPosition = true
+	snapshot.InitialBounds = &panelwindow.WindowBounds{X: 1805, Y: 76, Width: 600, Height: 800}
+	snapshot.InitialPositionAnchor = &panelwindow.WindowPoint{X: 1925, Y: 100}
+
+	_, err := registry.BeginPanelWindowOpen(snapshot)
+
+	require.NoError(t, err)
+	require.Equal(t, application.WindowXY, createdOptions.InitialPosition)
+	require.Equal(t, 1920, createdOptions.X)
+	require.Equal(t, 0, createdOptions.Y)
+	require.Equal(t, 600, createdOptions.Width)
+	require.Equal(t, 760, createdOptions.Height)
+}
+
 func TestReadyWorkspaceCloseAlwaysRunsFrontendPreflight(t *testing.T) {
 	backend := &recordingLifecycleBackend{}
 	lifecycle := newLifecycle()

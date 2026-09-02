@@ -47,15 +47,22 @@ type WindowBounds struct {
 	Height int `json:"height"`
 }
 
+type WindowPoint struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+}
+
 type GroupSnapshot struct {
-	SchemaVersion   int           `json:"schemaVersion"`
-	TransferID      string        `json:"transferId"`
-	OwnerWindowName string        `json:"ownerWindowName"`
-	ClusterID       string        `json:"clusterId"`
-	GroupID         string        `json:"groupId"`
-	Tabs            []TabSnapshot `json:"tabs"`
-	ActivePanelID   string        `json:"activePanelId"`
-	InitialBounds   *WindowBounds `json:"initialBounds,omitempty"`
+	SchemaVersion         int           `json:"schemaVersion"`
+	TransferID            string        `json:"transferId"`
+	OwnerWindowName       string        `json:"ownerWindowName"`
+	ClusterID             string        `json:"clusterId"`
+	GroupID               string        `json:"groupId"`
+	Tabs                  []TabSnapshot `json:"tabs"`
+	ActivePanelID         string        `json:"activePanelId"`
+	InitialBounds         *WindowBounds `json:"initialBounds,omitempty"`
+	InitialPositionAnchor *WindowPoint  `json:"initialPositionAnchor,omitempty"`
+	UseInitialPosition    bool          `json:"useInitialPosition,omitempty"`
 }
 
 func validateGroupSnapshotHeader(snapshot GroupSnapshot) error {
@@ -74,6 +81,10 @@ func validateGroupSnapshotHeader(snapshot GroupSnapshot) error {
 	if snapshot.InitialBounds != nil &&
 		(snapshot.InitialBounds.Width <= 0 || snapshot.InitialBounds.Height <= 0) {
 		return fmt.Errorf("panel initial bounds require positive width and height")
+	}
+	if snapshot.InitialPositionAnchor != nil &&
+		(snapshot.InitialBounds == nil || !snapshot.UseInitialPosition) {
+		return fmt.Errorf("panel initial position anchor requires transferred initial bounds")
 	}
 	return nil
 }

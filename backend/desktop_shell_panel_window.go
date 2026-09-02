@@ -137,6 +137,30 @@ func (s *DesktopShell) AuthorizePanelTabClose(ownerWindowName, windowName, panel
 	return s.authorizePanelTabClose(ownerWindowName, windowName, panelID)
 }
 
+func (s *DesktopShell) RequestPanelTabTransfer(
+	callerWindowName string,
+	request panelwindow.TabTransferRequest,
+) error {
+	if s == nil || s.requestPanelTabTransfer == nil {
+		return fmt.Errorf("panel-window registry is not available")
+	}
+	return s.requestPanelTabTransfer(callerWindowName, request)
+}
+
+func (s *DesktopShell) AcceptPanelTabTransfer(ownerWindowName, transferID string) error {
+	if s == nil || s.acceptPanelTabTransfer == nil {
+		return fmt.Errorf("panel-window registry is not available")
+	}
+	return s.acceptPanelTabTransfer(ownerWindowName, transferID)
+}
+
+func (s *DesktopShell) FailPanelTabTransfer(callerWindowName, transferID string) error {
+	if s == nil || s.failPanelTabTransfer == nil {
+		return fmt.Errorf("panel-window registry is not available")
+	}
+	return s.failPanelTabTransfer(callerWindowName, transferID)
+}
+
 func (s *DesktopShell) RequestPanelWindowGuard(
 	ownerWindowName, windowName, requestID, reason string,
 ) error {

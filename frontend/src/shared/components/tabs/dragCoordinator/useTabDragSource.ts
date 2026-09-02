@@ -19,9 +19,11 @@
 import { type DragEventHandler, useContext } from 'react';
 
 import { TabDragContext } from './TabDragProvider';
-import { TAB_DRAG_DATA_TYPE, type TabDragPayload } from './types';
+import { TAB_DRAG_DATA_TYPE, type TabDragPayload, tabDragKindDataType } from './types';
 
 export interface UseTabDragSourceOptions {
+  /** Refuse a drag that is blocked by live panel state. */
+  canStart?: () => boolean;
   /**
    * Optional custom drag preview. Invoked synchronously at dragstart.
    * Return the element + cursor offset to use as the drag image, or
@@ -48,7 +50,13 @@ export interface TabDragSourceProps {
 function createTabDragSourceProps(
   payload: TabDragPayload | null,
   beginDrag: (payload: TabDragPayload) => void,
-  endDrag: () => void,
+  endDrag: (event?: {
+    clientX: number;
+    clientY: number;
+    screenX: number;
+    screenY: number;
+    dataTransfer: DataTransfer | null;
+  }) => void,
   options?: UseTabDragSourceOptions
 ): TabDragSourceProps {
   if (!payload) {
@@ -57,7 +65,12 @@ function createTabDragSourceProps(
   return {
     draggable: true,
     onDragStart: (event) => {
+      if (options?.canStart && !options.canStart()) {
+        event.preventDefault();
+        return;
+      }
       event.dataTransfer.setData(TAB_DRAG_DATA_TYPE, JSON.stringify(payload));
+      event.dataTransfer.setData(tabDragKindDataType(payload.kind), '1');
       event.dataTransfer.effectAllowed = 'move';
       if (options?.getDragImage) {
         const result = options.getDragImage();
@@ -67,8 +80,14 @@ function createTabDragSourceProps(
       }
       beginDrag(payload);
     },
-    onDragEnd: () => {
-      endDrag();
+    onDragEnd: (event) => {
+      endDrag({
+        clientX: event.clientX,
+        clientY: event.clientY,
+        screenX: event.screenX,
+        screenY: event.screenY,
+        dataTransfer: event.dataTransfer,
+      });
     },
   };
 }

@@ -24,15 +24,13 @@
  *   1. Check `event.dataTransfer.types.includes(TAB_DRAG_DATA_TYPE)` —
  *      "is this a Luxury Yacht tab drag at all?" This works in every
  *      browser during protected mode.
- *   2. Read the payload KIND from the provider's `currentDrag` state,
- *      which was set at dragstart by the source hook via `beginDrag`.
- *      This is a plain React state, bridged into event handlers via a
- *      ref so the (memoised) listeners always see the latest value.
+ *   2. Read the payload kind from the provider's `currentDrag` state, or
+ *      from the source's kind-specific MIME marker when the source is in
+ *      another native webview and therefore has a different provider.
  *
  * At drop time we still read the full payload from `getData()` — that
  * path works in read-only mode and preserves the contract that the
- * payload survives the DataTransfer round trip (important for the
- * future tear-off case where drops may happen in a different window).
+ * payload survives the DataTransfer round trip across native webviews.
  *
  * Earlier implementations called `getData()` inside dragenter/dragover
  * and relied on jsdom's permissive mock to pass tests. In real browsers
@@ -52,7 +50,7 @@ import {
   useState,
 } from 'react';
 import { type DropTargetRegistration, TabDragContext } from './TabDragProvider';
-import { TAB_DRAG_DATA_TYPE, type TabDragPayload } from './types';
+import { TAB_DRAG_DATA_TYPE, type TabDragPayload, tabDragKindFromDataTypes } from './types';
 
 export interface UseTabDropTargetOptions<K extends TabDragPayload['kind']> {
   accepts: K[];
@@ -135,12 +133,15 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
       return;
     }
     const drag = currentDragRef.current;
-    if (!drag || !acceptsRef.current.includes(drag.kind as K)) {
+    const kind = drag?.kind ?? tabDragKindFromDataTypes(event.dataTransfer?.types);
+    if (!kind || !acceptsRef.current.includes(kind as K)) {
       return;
     }
     event.preventDefault();
     setIsDragOver(true);
-    onDragEnterRef.current?.(drag as Extract<TabDragPayload, { kind: K }>);
+    if (drag) {
+      onDragEnterRef.current?.(drag as Extract<TabDragPayload, { kind: K }>);
+    }
   }, []);
 
   const handleDragOver = useCallback((event: DragEvent) => {
@@ -148,7 +149,8 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
       return;
     }
     const drag = currentDragRef.current;
-    if (!drag || !acceptsRef.current.includes(drag.kind as K)) {
+    const kind = drag?.kind ?? tabDragKindFromDataTypes(event.dataTransfer?.types);
+    if (!kind || !acceptsRef.current.includes(kind as K)) {
       return;
     }
     event.preventDefault();

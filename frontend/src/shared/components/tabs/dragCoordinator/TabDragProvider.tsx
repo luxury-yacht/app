@@ -4,20 +4,11 @@
  * Scopes a single tab drag operation. Holds the current payload and a
  * registry of drop targets. Built on HTML5 native drag events.
  *
- * Future seam: when Wails v3 multi-window arrives (or a fake equivalent
- * lands), `onTearOff` will fire on `dragend` events that fall outside
- * any registered target AND outside the window bounds. The seam is
- * stubbed today and not wired by any consumer.
+ * `onTearOff` fires when an unconsumed drag ends outside the source
+ * webview. Native panel consumers use the screen coordinates to request
+ * a one-tab window transfer.
  */
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { createContext, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 
 import type { TabDragPayload } from './types';
 
@@ -32,7 +23,13 @@ export interface DropTargetRegistration {
 interface TabDragContextValue {
   currentDrag: TabDragPayload | null;
   beginDrag: (payload: TabDragPayload) => void;
-  endDrag: () => void;
+  endDrag: (event?: {
+    clientX: number;
+    clientY: number;
+    screenX: number;
+    screenY: number;
+    dataTransfer: DataTransfer | null;
+  }) => void;
   registerTarget: (id: number, registration: DropTargetRegistration) => void;
   unregisterTarget: (id: number) => void;
 }
@@ -47,11 +44,7 @@ export const TabDragContext = createContext<TabDragContextValue>({
 
 export interface TabDragProviderProps {
   children: ReactNode;
-  /**
-   * Future. Fires on `dragend` when no target consumed the drop AND the
-   * cursor is outside the window bounds. Wrappers can implement this to
-   * spawn a new floating panel or (eventually) a new OS window.
-   */
+  /** Fires for an unconsumed drag that ends outside the source webview. */
   onTearOff?: (payload: TabDragPayload, cursor: { x: number; y: number }) => void;
 }
 
@@ -65,10 +58,34 @@ export function TabDragProvider({ children, onTearOff }: Readonly<TabDragProvide
     setCurrentDrag(payload);
   }, []);
 
-  const endDrag = useCallback(() => {
-    lastDragRef.current = null;
-    setCurrentDrag(null);
-  }, []);
+  const endDrag = useCallback(
+    (event?: {
+      clientX: number;
+      clientY: number;
+      screenX: number;
+      screenY: number;
+      dataTransfer: DataTransfer | null;
+    }) => {
+      const payload = lastDragRef.current;
+      if (payload && event && onTearOff && event.dataTransfer?.dropEffect === 'none') {
+        const outsideClientBounds =
+          event.clientX < 0 ||
+          event.clientY < 0 ||
+          event.clientX > window.innerWidth ||
+          event.clientY > window.innerHeight;
+        const webviewReportedOutsideOrigin =
+          event.clientX === 0 &&
+          event.clientY === 0 &&
+          (event.screenX !== 0 || event.screenY !== 0);
+        if (outsideClientBounds || webviewReportedOutsideOrigin) {
+          onTearOff(payload, { x: event.screenX, y: event.screenY });
+        }
+      }
+      lastDragRef.current = null;
+      setCurrentDrag(null);
+    },
+    [onTearOff]
+  );
 
   const registerTarget = useCallback((id: number, registration: DropTargetRegistration) => {
     targetsRef.current.set(id, registration);
@@ -77,35 +94,6 @@ export function TabDragProvider({ children, onTearOff }: Readonly<TabDragProvide
   const unregisterTarget = useCallback((id: number) => {
     targetsRef.current.delete(id);
   }, []);
-
-  // Tear-off seam: a global dragend listener that fires onTearOff when
-  // no drop target consumed the drag AND the cursor is outside the
-  // window bounds. Stubbed for now — no production consumer wires it.
-  useEffect(() => {
-    if (!onTearOff) {
-      return;
-    }
-    const handler = (event: DragEvent) => {
-      const payload = lastDragRef.current;
-      if (!payload) {
-        return;
-      }
-      if (event.dataTransfer && event.dataTransfer.dropEffect !== 'none') {
-        return;
-      }
-      const { clientX, clientY } = event;
-      if (
-        clientX < 0 ||
-        clientY < 0 ||
-        clientX > window.innerWidth ||
-        clientY > window.innerHeight
-      ) {
-        onTearOff(payload, { x: clientX, y: clientY });
-      }
-    };
-    document.addEventListener('dragend', handler);
-    return () => document.removeEventListener('dragend', handler);
-  }, [onTearOff]);
 
   const value = useMemo<TabDragContextValue>(
     () => ({

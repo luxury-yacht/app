@@ -20,9 +20,11 @@ static void hide_panel_window_menu(void *native_window) {
 	}
 }
 */
-import "C"
+import (
+	"C"
 
-import "github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/application"
+)
 
 func hideNativePanelWindowMenu(window *application.WebviewWindow) {
 	nativeWindow := window.NativeWindow()

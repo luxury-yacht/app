@@ -90,6 +90,9 @@ type nativeWindowRegistry interface {
 	UpdatePanelWindowSnapshot(string, panelwindow.GroupSnapshot) error
 	RequestPanelTabClose(string, string) error
 	AuthorizePanelTabClose(string, string, string) error
+	RequestPanelTabTransfer(string, panelwindow.TabTransferRequest) error
+	AcceptPanelTabTransfer(string, string) error
+	FailPanelTabTransfer(string, string) error
 	RequestPanelWindowGuard(string, string, string, string) error
 	AcknowledgePanelWindowGuard(string, string, bool) error
 	AcknowledgeApplicationQuitPreflight(string, string, bool) error
@@ -303,6 +306,37 @@ func (bridge *windowRegistryBridge) authorizePanelTabClose(
 	return registry.AuthorizePanelTabClose(ownerWindowName, windowName, panelID)
 }
 
+func (bridge *windowRegistryBridge) requestPanelTabTransfer(
+	callerWindowName string,
+	request panelwindow.TabTransferRequest,
+) error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
+	}
+	return registry.RequestPanelTabTransfer(callerWindowName, request)
+}
+
+func (bridge *windowRegistryBridge) acceptPanelTabTransfer(
+	ownerWindowName, transferID string,
+) error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
+	}
+	return registry.AcceptPanelTabTransfer(ownerWindowName, transferID)
+}
+
+func (bridge *windowRegistryBridge) failPanelTabTransfer(
+	callerWindowName, transferID string,
+) error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
+	}
+	return registry.FailPanelTabTransfer(callerWindowName, transferID)
+}
+
 func (bridge *windowRegistryBridge) requestPanelGuard(
 	ownerWindowName, windowName, requestID, reason string,
 ) error {
@@ -360,6 +394,9 @@ func (bridge *windowRegistryBridge) runtimeOptions(
 		UpdatePanelSnapshot:        bridge.updatePanelSnapshot,
 		RequestPanelTabClose:       bridge.requestPanelTabClose,
 		AuthorizePanelTabClose:     bridge.authorizePanelTabClose,
+		RequestPanelTabTransfer:    bridge.requestPanelTabTransfer,
+		AcceptPanelTabTransfer:     bridge.acceptPanelTabTransfer,
+		FailPanelTabTransfer:       bridge.failPanelTabTransfer,
 		RequestPanelGuard:          bridge.requestPanelGuard,
 		AcknowledgePanelGuard:      bridge.acknowledgePanelGuard,
 		AcknowledgeApplicationQuit: bridge.acknowledgeApplicationQuit,

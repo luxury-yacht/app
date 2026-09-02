@@ -64,6 +64,9 @@ type ApplicationRuntimeOptions struct {
 	UpdatePanelSnapshot        func(string, panelwindow.GroupSnapshot) error
 	RequestPanelTabClose       func(string, string) error
 	AuthorizePanelTabClose     func(string, string, string) error
+	RequestPanelTabTransfer    func(string, panelwindow.TabTransferRequest) error
+	AcceptPanelTabTransfer     func(string, string) error
+	FailPanelTabTransfer       func(string, string) error
 	RequestPanelGuard          func(string, string, string, string) error
 	AcknowledgePanelGuard      func(string, string, bool) error
 	AcknowledgeApplicationQuit func(string, string, bool) error
@@ -121,6 +124,9 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 			UpdatePanelSnapshot:        options.UpdatePanelSnapshot,
 			RequestPanelTabClose:       options.RequestPanelTabClose,
 			AuthorizePanelTabClose:     options.AuthorizePanelTabClose,
+			RequestPanelTabTransfer:    options.RequestPanelTabTransfer,
+			AcceptPanelTabTransfer:     options.AcceptPanelTabTransfer,
+			FailPanelTabTransfer:       options.FailPanelTabTransfer,
 			RequestPanelGuard:          options.RequestPanelGuard,
 			AcknowledgePanelGuard:      options.AcknowledgePanelGuard,
 			AcknowledgeApplicationQuit: options.AcknowledgeApplicationQuit,

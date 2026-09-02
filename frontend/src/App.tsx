@@ -17,7 +17,6 @@ import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
 // Error Boundary
 import { AppErrorBoundary } from '@ui/errors';
 // App components
@@ -173,13 +172,11 @@ function App() {
               <div className="app">
                 <KubernetesProvider>
                   <FavoritesProvider>
-                    <TabDragProvider>
-                      <PanelLifecycleGuardProvider>
-                        <WorkspacePanelCoordinator>
-                          <AppContent />
-                        </WorkspacePanelCoordinator>
-                      </PanelLifecycleGuardProvider>
-                    </TabDragProvider>
+                    <PanelLifecycleGuardProvider>
+                      <WorkspacePanelCoordinator>
+                        <AppContent />
+                      </WorkspacePanelCoordinator>
+                    </PanelLifecycleGuardProvider>
                   </FavoritesProvider>
                 </KubernetesProvider>
               </div>

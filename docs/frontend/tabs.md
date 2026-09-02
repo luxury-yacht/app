@@ -36,12 +36,20 @@ also use the shared drag coordinator.
 
 ## Drag Rules
 
-- `TabDragProvider` is mounted at the app root.
-- Drag payloads must identify the source kind and stable tab id.
+- `DockablePanelProvider` mounts one `TabDragProvider` per native document so
+  dockable and cluster tabs in that document share one coordinator. Consumers
+  must not add a nested provider around it.
+- Drag payloads must identify the source kind and stable tab id. Dockable
+  cross-window payloads also carry source window/group, immutable owner,
+  cluster, complete object identity, and active view.
+- Cross-document dragover uses a kind-specific MIME marker because protected
+  HTML drag data exposes types but not payload values. The destination reads
+  and validates the complete payload only at drop time.
 - Reorder, cross-strip move, and empty-space drop behavior belongs in the
   consumer wrapper, not the base `Tabs` component.
 - Dockable tab movement must preserve panel identity, group membership, active
-  tab state, and cluster/object identity.
+  tab state, and cluster/object identity. Local drops apply immediately;
+  cross-window drops use the acknowledged native-panel transfer transaction.
 
 ## Global Workspace Tab
 

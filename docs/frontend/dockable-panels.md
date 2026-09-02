@@ -63,27 +63,48 @@ maximize and restore.
 - A same-cluster link opened in a child may join that child group after owner
   authorization. A cross-cluster link routes to the matching owner slice and is
   rejected with an actionable error when that cluster is not open.
-- Dragging within a tab bar reorders. Dragging between compatible docked tab
-  bars moves. Cross-window dragging and workspace reparenting are out of scope.
+- Dragging within a tab bar reorders one tab. Dragging between compatible tab
+  bars moves that one tab, including workspace-to-native, native-to-workspace,
+  and native-to-native moves under the same owner and cluster. Cross-owner and
+  cross-cluster drops are rejected.
+- Dropping an unconsumed tab drag outside its source window creates a new
+  one-tab native window near the pointer, using the configured floating size
+  and the pointer's monitor work area. This differs from the Float button,
+  which always transfers the complete current group. On macOS, the native drag
+  session recognizes the dockable-tab MIME marker and suppresses AppKit's
+  failed-drop return animation because that otherwise-successful tear-off is
+  intentionally represented as `dropEffect: none` by the source webview.
 
 ## Acknowledged Handoffs
 
-Float and dock-back are transactions. Before a move, the source checks every
-tab guard and creates a complete group snapshot. An explicit Float source stays
-visible until the target has reconstructed the group and acknowledged
-readiness. A new default-Floating panel keeps its source registration and group
-mounted but suppresses its workspace surface during that same interval. The
-owner then commits each location exactly once and unmounts the source. A failed,
-stale, or timed-out explicit Float leaves its source unchanged; a failed
-default-Floating open reveals the new panel by docking its source on the right.
-Opening has one terminal owner outcome: if readiness succeeds but the opened
-event cannot reach the owner, the registry closes and removes the native target
-and reports the failed transfer. A native target that has already disappeared
-still produces the same owner-side closed outcome.
+Float, dock-back, and cross-window tab moves are transactions. Before a group
+move, the source checks every tab guard and creates a complete group snapshot.
+An explicit Float source stays visible until the target has reconstructed the
+group and acknowledged readiness. A new default-Floating panel keeps its source
+registration and group mounted but suppresses its workspace surface during
+that same interval. The owner then commits each location exactly once and
+unmounts the source. A failed, stale, or timed-out explicit Float leaves its
+source unchanged; a failed default-Floating open reveals the new panel by
+docking its source on the right. Opening has one terminal owner outcome: if
+readiness succeeds but the opened event cannot reach the owner, the registry
+closes and removes the native target and reports the failed transfer. A native
+target that has already disappeared still produces the same owner-side closed
+outcome.
+
+A tab drag carries the source window, immutable owner, cluster, source group,
+complete object identity, and active object sub-tab. The registry reserves the
+source tab for one transfer and asks the owner to validate its authoritative
+directory entry. The source remains mounted while the destination reconstructs
+the tab. An existing native destination publishes a snapshot containing the
+exact tab before commit; a new native destination acknowledges window
+readiness; a workspace destination waits until its docked tab is mounted. Only
+then does the source remove the tab. Failure or timeout removes a provisional
+destination and leaves or restores the source. Removing the final tab closes
+the now-empty native source.
 
 Dock-back moves the entire native group to right or bottom while preserving tab
-order, active tab, and active object sub-tabs. Moving one child tab out of a
-native group is out of scope.
+order, active tab, and active object sub-tabs. Dragging one child tab moves only
+that tab; the Float and dock-back buttons remain group-wide actions.
 
 ## Refresh and Runtime State
 

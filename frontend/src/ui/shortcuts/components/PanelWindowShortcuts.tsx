@@ -4,7 +4,11 @@ import type { PanelWindowDescriptor } from '@/core/panel-windows';
 import {
   acknowledgePanelWindowClose,
   acknowledgePanelWindowGuard,
+  failPanelTabTransfer,
   onPanelTabCloseAuthorized,
+  onPanelTabTransferCommitted,
+  onPanelTabTransferFailed,
+  onPanelTabTransferInsertRequested,
   onPanelWindowCloseRequested,
   onPanelWindowFocusRequested,
   onPanelWindowGuardRequested,
@@ -14,10 +18,12 @@ import {
 } from '@/core/panel-windows';
 import type { PanelLifecycleBlocker } from '@/core/panel-windows/panelLifecycleGuards';
 import { usePanelLifecycleGuardRegistry } from '@/core/panel-windows/panelLifecycleGuards';
+import type { ViewType } from '@/modules/object-panel/components/ObjectPanel/types';
 import {
   useObjectPanelActiveTabs,
   useObjectPanelState,
 } from '@/modules/object-panel/contexts/ObjectPanelStateContext';
+import type { KubernetesObjectReference } from '@/types/view-state';
 import { useDockablePanelContext } from '@/ui/dockable';
 import { getGroupTabs } from '@/ui/dockable/tabGroupState';
 import { reportOperationalError } from '@/utils/errorHandler';
@@ -37,11 +43,13 @@ export function PanelWindowShortcuts({
   descriptor,
   ready,
 }: Readonly<{ descriptor: PanelWindowDescriptor; ready: boolean }>) {
-  const { openPanels } = useObjectPanelState();
+  const { openPanels, upsertOwnedPanel } = useObjectPanelState();
   const activeTabs = useObjectPanelActiveTabs();
-  const { tabGroups, focusPanel, commitTabClose } = useDockablePanelContext();
+  const { tabGroups, focusPanel, commitTabClose, movePanelBetweenGroups } =
+    useDockablePanelContext();
   const guards = usePanelLifecycleGuardRegistry();
   const snapshotUpdateQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const insertedTabTransfersRef = useRef(new Map<string, string>());
   const focusLifecycleBlocker = useCallback(
     (blocker: PanelLifecycleBlocker) => {
       if (blocker.panelId) {
@@ -102,6 +110,76 @@ export function PanelWindowShortcuts({
         commitTabClose(panelId);
       }),
     [commitTabClose, descriptor, tabGroups]
+  );
+
+  useEffect(
+    () =>
+      onPanelTabTransferInsertRequested(({ request }) => {
+        if (
+          request.targetWindowName !== descriptor.windowName ||
+          request.ownerWindowName !== descriptor.ownerWindowName ||
+          request.clusterId !== descriptor.clusterId ||
+          request.targetGroupId !== descriptor.groupId ||
+          openPanels.has(request.tab.panelId)
+        ) {
+          void failPanelTabTransfer(descriptor.windowName, request.transferId);
+          return;
+        }
+        const panelId = upsertOwnedPanel(
+          { ...request.tab.objectRef } as KubernetesObjectReference,
+          request.tab.activeView as ViewType,
+          {
+            kind: 'panel-window',
+            windowName: descriptor.windowName,
+            groupId: descriptor.groupId,
+          }
+        );
+        if (panelId !== request.tab.panelId) {
+          void failPanelTabTransfer(descriptor.windowName, request.transferId);
+          return;
+        }
+        insertedTabTransfersRef.current.set(request.transferId, panelId);
+        movePanelBetweenGroups(panelId, 'right', request.targetIndex);
+      }),
+    [descriptor, movePanelBetweenGroups, openPanels, upsertOwnedPanel]
+  );
+
+  useEffect(
+    () =>
+      onPanelTabTransferCommitted(({ request }) => {
+        insertedTabTransfersRef.current.delete(request.transferId);
+        if (request.sourceWindowName !== descriptor.windowName) {
+          return;
+        }
+        const group = getGroupTabs(tabGroups, 'right') ?? getGroupTabs(tabGroups, 'bottom');
+        if (!group?.tabs.includes(request.tab.panelId)) {
+          return;
+        }
+        if (group.tabs.length <= 1) {
+          void acknowledgePanelWindowClose(descriptor.windowName).catch((error) =>
+            reportOperationalError(error, {
+              source: 'PanelWindowShortcuts',
+              action: 'close-empty-tab-transfer-source',
+            })
+          );
+          return;
+        }
+        commitTabClose(request.tab.panelId);
+      }),
+    [commitTabClose, descriptor, tabGroups]
+  );
+
+  useEffect(
+    () =>
+      onPanelTabTransferFailed(({ request }) => {
+        const insertedPanelId = insertedTabTransfersRef.current.get(request.transferId);
+        if (request.targetWindowName !== descriptor.windowName || !insertedPanelId) {
+          return;
+        }
+        insertedTabTransfersRef.current.delete(request.transferId);
+        commitTabClose(insertedPanelId);
+      }),
+    [commitTabClose, descriptor.windowName]
   );
 
   useEffect(() => {

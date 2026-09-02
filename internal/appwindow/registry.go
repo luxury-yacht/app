@@ -31,6 +31,7 @@ type Registry struct {
 	focusWindow          func(string) bool
 	emitWindowEvent      func(string, string, any) bool
 	windowGeometry       func(string) (geometry, bool)
+	panelScreenWorkAreas func() []application.Rect
 	closeMu              sync.Mutex
 	authorizedClose      map[string]struct{}
 	workspaceReady       map[string]struct{}
@@ -43,6 +44,10 @@ type Registry struct {
 	quitPreflightTimeout time.Duration
 	guardMu              sync.Mutex
 	pendingGuards        map[string]panelGuardRequest
+	tabTransferMu        sync.Mutex
+	pendingTabTransfers  map[string]*panelTabTransfer
+	usedTabTransferIDs   map[string]struct{}
+	tabTransferTimeout   time.Duration
 }
 
 type applicationQuitPreflight struct {
@@ -178,6 +183,7 @@ func NewRegistry(
 	backend lifecycleBackend,
 	menu *application.Menu,
 ) *Registry {
+	configureNativeTabDragAnimation()
 	registry := &Registry{
 		application:          app,
 		backend:              backend,
@@ -189,9 +195,25 @@ func NewRegistry(
 		panelOpenTimeout:     15 * time.Second,
 		quitPreflightTimeout: 20 * time.Second,
 		pendingGuards:        make(map[string]panelGuardRequest),
+		pendingTabTransfers:  make(map[string]*panelTabTransfer),
+		usedTabTransferIDs:   make(map[string]struct{}),
+		tabTransferTimeout:   15 * time.Second,
 		configurePanelWindow: configureNativePanelWindow,
 	}
 	bindApplicationWindowOperations(registry, app)
+	registry.panelScreenWorkAreas = func() []application.Rect {
+		if app == nil || app.Screen == nil {
+			return nil
+		}
+		screens := app.Screen.GetAll()
+		areas := make([]application.Rect, 0, len(screens))
+		for _, screen := range screens {
+			if screen != nil {
+				areas = append(areas, screen.WorkArea)
+			}
+		}
+		return areas
+	}
 	return registry
 }
 
@@ -206,14 +228,20 @@ func (r *Registry) BeginPanelWindowOpen(
 			snapshot.OwnerWindowName,
 		)
 	}
-	descriptor, err := r.panels.BeginOpen(snapshot)
+	descriptor, err := r.beginPanelWindowOpenTransfer(snapshot)
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
 	options := panelWindowOptions(descriptor.WindowName, snapshot.InitialBounds)
 	if snapshot.InitialBounds != nil {
 		positioned := false
-		if r.windowGeometry != nil {
+		if snapshot.UseInitialPosition {
+			positioned = r.positionPanelWindowAtTransferredBounds(
+				&options,
+				*snapshot.InitialBounds,
+				snapshot.InitialPositionAnchor,
+			)
+		} else if r.windowGeometry != nil {
 			if ownerGeometry, ok := r.windowGeometry(snapshot.OwnerWindowName); ok {
 				positioned = positionPanelWindowOptions(&options, ownerGeometry)
 			}
@@ -225,6 +253,7 @@ func (r *Registry) BeginPanelWindowOpen(
 	window := r.newWindow(options)
 	if window == nil {
 		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
+		r.failPanelTabTransfer(snapshot.TransferID, "new panel target could not be created")
 		return PanelWindowDescriptor{}, fmt.Errorf(
 			"create native panel window %q",
 			descriptor.WindowName,
@@ -240,6 +269,35 @@ func (r *Registry) BeginPanelWindowOpen(
 		})
 	}
 	return descriptor, nil
+}
+
+func (r *Registry) positionPanelWindowAtTransferredBounds(
+	options *application.WebviewWindowOptions,
+	bounds panelwindow.WindowBounds,
+	anchor *panelwindow.WindowPoint,
+) bool {
+	if options == nil {
+		return false
+	}
+	options.InitialPosition = application.WindowXY
+	options.X = bounds.X
+	options.Y = bounds.Y
+	if r.panelScreenWorkAreas == nil {
+		return true
+	}
+	anchorX, anchorY := bounds.X, bounds.Y
+	if anchor != nil {
+		anchorX, anchorY = anchor.X, anchor.Y
+	}
+	for _, area := range r.panelScreenWorkAreas() {
+		if anchorX < area.X || anchorY < area.Y ||
+			anchorX >= area.X+area.Width || anchorY >= area.Y+area.Height {
+			continue
+		}
+		constrainPanelWindowOptions(options, area)
+		return true
+	}
+	return true
 }
 
 func (r *Registry) expirePanelOpen(windowName, transferID string) {
@@ -436,6 +494,7 @@ func (r *Registry) AcknowledgePanelWindowReady(
 			GroupID:    descriptor.GroupID,
 			Snapshot:   descriptor.Snapshot,
 		}) {
+			r.completePanelTabTransferForOpenedWindow(descriptor)
 			return descriptor, nil
 		}
 		r.authorizeClose(name)
@@ -443,6 +502,7 @@ func (r *Registry) AcknowledgePanelWindowReady(
 			r.consumeAuthorizedClose(name)
 		}
 		r.panels.Remove(name)
+		r.failPanelTabTransfer(descriptor.Snapshot.TransferID, "new panel target could not reach its owner")
 		r.emitPanelClosed(descriptor)
 		return PanelWindowDescriptor{}, fmt.Errorf(
 			"owner workspace %q is not available for panel open",
@@ -450,6 +510,7 @@ func (r *Registry) AcknowledgePanelWindowReady(
 		)
 	}
 	r.panels.Remove(name)
+	r.failPanelTabTransfer(descriptor.Snapshot.TransferID, "new panel target disappeared before ready")
 	r.emitPanelClosed(descriptor)
 	return PanelWindowDescriptor{}, fmt.Errorf("panel window %q disappeared before ready", name)
 }
@@ -512,6 +573,7 @@ func (r *Registry) AcknowledgePanelWindowDock(
 	if err := r.panels.ValidateDock(windowName, transferID); err != nil {
 		return err
 	}
+	r.failPanelTabTransfersForWindow(windowName, "panel window moved as a whole group")
 	r.authorizeClose(windowName)
 	if !r.closeWindow(windowName) {
 		r.consumeAuthorizedClose(windowName)
@@ -540,6 +602,7 @@ func (r *Registry) FailPanelWindowTransfer(callerWindowName, windowName, transfe
 	if !wasOpening {
 		return nil
 	}
+	r.failPanelTabTransfer(transferID, "new panel target failed before readiness")
 	r.authorizeClose(windowName)
 	if !r.closeWindow(windowName) {
 		r.consumeAuthorizedClose(windowName)
@@ -662,6 +725,7 @@ func (r *Registry) UpdatePanelWindowSnapshot(windowName string, snapshot PanelGr
 	) {
 		return fmt.Errorf("owner workspace %q is not available", descriptor.OwnerWindowName)
 	}
+	r.completePanelTabTransferForSnapshot(windowName, descriptor.Snapshot)
 	return nil
 }
 
@@ -814,6 +878,7 @@ func (r *Registry) AcknowledgePanelWindowClose(windowName string) error {
 		r.consumeAuthorizedClose(windowName)
 		return fmt.Errorf("panel window %q is not available", windowName)
 	}
+	r.failPanelTabTransfersForWindow(windowName, "panel window closed during tab transfer")
 	r.panels.Remove(windowName)
 	r.emitPanelClosed(descriptor)
 	return nil

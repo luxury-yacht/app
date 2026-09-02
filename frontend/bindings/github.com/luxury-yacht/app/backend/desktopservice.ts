@@ -34,6 +34,10 @@ import * as panelwindow$0 from "../internal/panelwindow/models.js";
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+export function AcceptPanelTabTransfer(ownerWindowName: string, transferID: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcceptPanelTabTransfer", ownerWindowName, transferID);
+}
+
 export function AcknowledgeApplicationQuitPreflight(ownerWindowName: string, transactionID: string, allowed: boolean): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgeApplicationQuitPreflight", ownerWindowName, transactionID, allowed);
 }
@@ -152,6 +156,10 @@ export function ExportFavorites(): $CancellablePromise<$models.DataManagementRes
 
 export function ExportSettings(): $CancellablePromise<$models.DataManagementResult> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ExportSettings");
+}
+
+export function FailPanelTabTransfer(callerWindowName: string, transferID: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.FailPanelTabTransfer", callerWindowName, transferID);
 }
 
 export function FailPanelWindowTransfer(callerWindowName: string, windowName: string, transferID: string): $CancellablePromise<void> {
@@ -348,6 +356,10 @@ export function RequestPanelObjectOpen(windowName: string, ref: panelwindow$0.Ob
 
 export function RequestPanelTabClose(windowName: string, panelID: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.RequestPanelTabClose", windowName, panelID);
+}
+
+export function RequestPanelTabTransfer(callerWindowName: string, request: panelwindow$0.TabTransferRequest): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.RequestPanelTabTransfer", callerWindowName, request);
 }
 
 export function RequestPanelWindowClose(callerWindowName: string, windowName: string, reason: string): $CancellablePromise<void> {

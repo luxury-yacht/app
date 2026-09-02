@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { panelwindow } from '@/core/backend-api/models';
 import { focusWindow, getWindowIdentity } from '@/core/desktop-runtime';
 import { getObjectPanelLayoutDefaults } from '@/core/settings/appPreferences';
@@ -12,30 +12,43 @@ import {
 import { buildObjectPanelRef, objectPanelId } from '@/modules/object-panel/objectPanelRef';
 import type { DockPosition } from '@/ui/dockable';
 import { DockablePanelProvider, useDockablePanelContext } from '@/ui/dockable';
+import { getGroupForPanel } from '@/ui/dockable/tabGroupState';
 import type { GroupKey } from '@/ui/dockable/tabGroupTypes';
 import { reportOperationalError } from '@/utils/errorHandler';
 import {
+  acceptPanelTabTransfer,
   acknowledgeApplicationQuitPreflight,
   acknowledgePanelWindowDock,
   acknowledgeWorkspaceWindowClose,
   authorizePanelObjectOpen,
   authorizePanelTabClose,
   beginPanelWindowOpen,
+  failPanelTabTransfer,
   failPanelWindowTransfer,
   focusPanelWindow,
   onApplicationQuitPreflightRequested,
   onOwnerCloseRequested,
   onPanelObjectOpenRequested,
   onPanelTabCloseRequested,
+  onPanelTabTransferCommitted,
+  onPanelTabTransferFailed,
+  onPanelTabTransferRequested,
   onPanelWindowClosed,
   onPanelWindowDockRequested,
   onPanelWindowGuardResult,
   onPanelWindowOpened,
   onPanelWindowSnapshotUpdated,
+  requestPanelTabTransfer,
   requestPanelWindowClose,
   requestPanelWindowGuard,
 } from './index';
 import { usePanelLifecycleGuardRegistry } from './panelLifecycleGuards';
+import {
+  type DockableTabDragPayload,
+  objectPanelTabSnapshot,
+  singleTabGroupSnapshot,
+  tabTransferRequestFromDragPayload,
+} from './tabTransfer';
 
 const newIdentity = (prefix: string): string =>
   `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
@@ -47,17 +60,7 @@ const objectSnapshot = (
     : never,
   activeView: string
 ): panelwindow.TabSnapshot => ({
-  kind: 'object' as panelwindow.TabKind,
-  panelId,
-  objectRef: {
-    clusterId: objectRef.clusterId,
-    group: objectRef.group,
-    version: objectRef.version,
-    kind: objectRef.kind,
-    namespace: objectRef.namespace ?? '',
-    name: objectRef.name,
-  },
-  activeView,
+  ...objectPanelTabSnapshot(panelId, objectRef, activeView),
 });
 
 const initialWindowBounds = (panelIds: readonly string[]): panelwindow.WindowBounds | undefined => {
@@ -73,6 +76,23 @@ const initialWindowBounds = (panelIds: readonly string[]): panelwindow.WindowBou
   };
 };
 
+const sameTransferredTab = (
+  owned: ReturnType<typeof useObjectPanelState>['getOwnedPanel'] extends (
+    clusterId: string,
+    panelId: string
+  ) => infer Owned
+    ? NonNullable<Owned>
+    : never,
+  tab: panelwindow.TabSnapshot
+): boolean =>
+  owned.objectRef.clusterId === tab.objectRef.clusterId &&
+  owned.objectRef.group === tab.objectRef.group &&
+  owned.objectRef.version === tab.objectRef.version &&
+  owned.objectRef.kind === tab.objectRef.kind &&
+  (owned.objectRef.namespace ?? '') === tab.objectRef.namespace &&
+  owned.objectRef.name === tab.objectRef.name &&
+  owned.activeView === tab.activeView;
+
 export function WorkspacePanelCoordinator({ children }: Readonly<{ children: React.ReactNode }>) {
   const ownerWindowName = getWindowIdentity();
   const {
@@ -87,7 +107,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     syncPanelWindowSnapshot,
   } = useObjectPanelState();
   const activeTabs = useObjectPanelActiveTabs();
-  const { registerClusterClosePreflight } = useKubeconfig();
+  const { registerClusterClosePreflight, selectedClusterId } = useKubeconfig();
   const guards = usePanelLifecycleGuardRegistry();
   const [pendingOwnerCloseWindows, setPendingOwnerCloseWindows] = useState<Set<string> | null>(
     null
@@ -229,6 +249,85 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       pendingNativeOpenPanelIds,
       queueAutoFloatRollback,
     ]
+  );
+
+  const getTabSnapshot = useCallback(
+    (panelId: string) => {
+      const objectRef = openPanels.get(panelId);
+      return objectRef
+        ? objectSnapshot(panelId, objectRef, activeTabs.get(panelId) ?? 'details')
+        : undefined;
+    },
+    [activeTabs, openPanels]
+  );
+
+  const tabDragIdentity = useMemo(
+    () => ({
+      windowName: ownerWindowName,
+      ownerWindowName,
+      clusterId: selectedClusterId,
+      getTabSnapshot,
+    }),
+    [getTabSnapshot, ownerWindowName, selectedClusterId]
+  );
+
+  const canStartTabDrag = useCallback(
+    (panelId: string) => {
+      const blocker = guards.firstBlocker([panelId]);
+      blocker?.focus();
+      return blocker === null;
+    },
+    [guards]
+  );
+
+  const handleExternalTabDrop = useCallback(
+    (payload: DockableTabDragPayload, targetGroupId: string, insertIndex: number) => {
+      if (targetGroupId !== 'right' && targetGroupId !== 'bottom') {
+        return;
+      }
+      const request = tabTransferRequestFromDragPayload(payload, {
+        transferId: newIdentity('panel-tab-transfer'),
+        targetWindowName: ownerWindowName,
+        targetGroupId,
+        targetIndex: insertIndex,
+        targetKind: 'workspace' as panelwindow.TabTransferTarget,
+      });
+      if (!request) {
+        return;
+      }
+      void requestPanelTabTransfer(ownerWindowName, request).catch((error) =>
+        reportOperationalError(error, {
+          source: 'WorkspacePanelCoordinator',
+          action: 'request-tab-drop',
+          clusterId: request.clusterId,
+        })
+      );
+    },
+    [ownerWindowName]
+  );
+
+  const handleTabTearOff = useCallback(
+    (payload: DockableTabDragPayload, cursor: { x: number; y: number }) => {
+      const request = tabTransferRequestFromDragPayload(payload, {
+        transferId: newIdentity('panel-tab-transfer'),
+        targetWindowName: '',
+        targetGroupId: newIdentity('panel-group'),
+        targetIndex: 0,
+        targetKind: 'new-window' as panelwindow.TabTransferTarget,
+        cursor,
+      });
+      if (!request || request.sourceWindowName !== ownerWindowName) {
+        return;
+      }
+      void requestPanelTabTransfer(ownerWindowName, request).catch((error) =>
+        reportOperationalError(error, {
+          source: 'WorkspacePanelCoordinator',
+          action: 'tear-off-tab',
+          clusterId: request.clusterId,
+        })
+      );
+    },
+    [ownerWindowName]
   );
 
   const handlePanelWindowOpened = useCallback(
@@ -662,7 +761,13 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
   );
 
   return (
-    <DockablePanelProvider onGroupMoveRequest={handleGroupMove}>
+    <DockablePanelProvider
+      onGroupMoveRequest={handleGroupMove}
+      tabDragIdentity={tabDragIdentity}
+      onExternalTabDrop={handleExternalTabDrop}
+      onTabTearOff={handleTabTearOff}
+      canStartTabDrag={canStartTabDrag}
+    >
       <WorkspaceObjectRouteCoordinator
         ownerWindowName={ownerWindowName}
         pendingDockRequest={pendingDockRequest}
@@ -703,8 +808,14 @@ function WorkspaceObjectRouteCoordinator({
   onAutoFloatRollbackSettled: (transferId: string) => void;
   children: React.ReactNode;
 }>) {
-  const { getOwnedPanel, upsertOwnedPanel, removePanelWindow, panelIdsForPanelWindow } =
-    useObjectPanelState();
+  const {
+    commitPanelWindow,
+    dockPanelWindow,
+    getOwnedPanel,
+    upsertOwnedPanel,
+    removePanelWindow,
+    panelIdsForPanelWindow,
+  } = useObjectPanelState();
   const {
     selectedClusterIds,
     selectedKubeconfigs,
@@ -714,6 +825,11 @@ function WorkspaceObjectRouteCoordinator({
   } = useKubeconfig();
   const { tabGroups, focusPanel, dockPanelGroup, detachPanelGroup, discardPanelLayouts } =
     useDockablePanelContext();
+  const guards = usePanelLifecycleGuardRegistry();
+  const [pendingTabDockRequests, setPendingTabDockRequests] = useState(
+    new Map<string, panelwindow.TabTransferRequest>()
+  );
+  const acceptingTabDockRef = useRef(new Set<string>());
   const pendingDockedFocusRef = useRef<string | null>(null);
   const pendingObjectClaimsRef = useRef(new Set<string>());
   const dockAttemptRef = useRef<{
@@ -733,6 +849,214 @@ function WorkspaceObjectRouteCoordinator({
       onAutoFloatRollbackSettled(snapshot.transferId);
     }
   }, [dockPanelGroup, onAutoFloatRollbackSettled, pendingAutoFloatRollbacks]);
+
+  const restoreNativeTabSource = useCallback(
+    (request: panelwindow.TabTransferRequest) => {
+      if (request.sourceWindowName === request.ownerWindowName) {
+        return;
+      }
+      commitPanelWindow(
+        {
+          ...singleTabGroupSnapshot(request),
+          groupId: request.sourceGroupId,
+        },
+        request.sourceWindowName
+      );
+    },
+    [commitPanelWindow]
+  );
+
+  const rollbackWorkspaceTabTarget = useCallback(
+    (request: panelwindow.TabTransferRequest) => {
+      detachPanelGroup(request.clusterId, [request.tab.panelId]);
+      restoreNativeTabSource(request);
+      acceptingTabDockRef.current.delete(request.transferId);
+      setPendingTabDockRequests((current) => {
+        if (!current.has(request.transferId)) {
+          return current;
+        }
+        const next = new Map(current);
+        next.delete(request.transferId);
+        return next;
+      });
+    },
+    [detachPanelGroup, restoreNativeTabSource]
+  );
+
+  useEffect(
+    () =>
+      onPanelTabTransferRequested(({ request }) => {
+        if (request.ownerWindowName !== ownerWindowName) {
+          return;
+        }
+        const owned = getOwnedPanel(request.clusterId, request.tab.panelId);
+        const sourceGroup = getGroupForPanel(tabGroups, request.tab.panelId);
+        const validSource =
+          !!owned &&
+          sameTransferredTab(owned, request.tab) &&
+          (request.sourceWindowName === ownerWindowName
+            ? !owned.nativeLocation && sourceGroup === request.sourceGroupId
+            : owned.nativeLocation?.windowName === request.sourceWindowName &&
+              owned.nativeLocation?.groupId === request.sourceGroupId);
+        if (!validSource) {
+          void failPanelTabTransfer(ownerWindowName, request.transferId);
+          return;
+        }
+        if (request.sourceWindowName === ownerWindowName) {
+          const blocker = guards.firstBlocker([request.tab.panelId]);
+          if (blocker) {
+            blocker.focus();
+            void failPanelTabTransfer(ownerWindowName, request.transferId);
+            return;
+          }
+        }
+
+        if (request.targetKind === 'workspace') {
+          if (request.targetGroupId !== 'right' && request.targetGroupId !== 'bottom') {
+            void failPanelTabTransfer(ownerWindowName, request.transferId);
+            return;
+          }
+          const snapshot = singleTabGroupSnapshot(request);
+          dockPanelWindow(snapshot, request.targetGroupId);
+          dockPanelGroup(
+            request.clusterId,
+            [request.tab.panelId],
+            request.tab.panelId,
+            request.targetGroupId,
+            request.targetIndex
+          );
+          setPendingTabDockRequests((current) => {
+            const next = new Map(current);
+            next.set(request.transferId, request);
+            return next;
+          });
+          return;
+        }
+
+        if (request.targetKind === 'panel-window') {
+          void acceptPanelTabTransfer(ownerWindowName, request.transferId).catch((error) => {
+            void failPanelTabTransfer(ownerWindowName, request.transferId);
+            reportOperationalError(error, {
+              source: 'WorkspacePanelCoordinator',
+              action: 'accept-native-tab-target',
+              clusterId: request.clusterId,
+            });
+          });
+          return;
+        }
+
+        if (request.targetKind === 'new-window') {
+          const snapshot = singleTabGroupSnapshot(request);
+          const bounds = initialWindowBounds([request.tab.panelId]);
+          if (bounds && (request.cursorX !== 0 || request.cursorY !== 0)) {
+            bounds.x = request.cursorX - 120;
+            bounds.y = request.cursorY - 24;
+            snapshot.initialPositionAnchor = {
+              x: request.cursorX,
+              y: request.cursorY,
+            };
+            snapshot.useInitialPosition = true;
+          }
+          snapshot.initialBounds = bounds;
+          void acceptPanelTabTransfer(ownerWindowName, request.transferId)
+            .then(() => beginPanelWindowOpen(ownerWindowName, snapshot))
+            .catch((error) => {
+              void failPanelTabTransfer(ownerWindowName, request.transferId);
+              reportOperationalError(error, {
+                source: 'WorkspacePanelCoordinator',
+                action: 'open-torn-off-tab',
+                clusterId: request.clusterId,
+              });
+            });
+        }
+      }),
+    [dockPanelGroup, dockPanelWindow, getOwnedPanel, guards, ownerWindowName, tabGroups]
+  );
+
+  useEffect(() => {
+    const request = Array.from(pendingTabDockRequests.values()).find(
+      (candidate) => !acceptingTabDockRef.current.has(candidate.transferId)
+    );
+    if (!request) {
+      return;
+    }
+    if (selectedClusterId !== request.clusterId) {
+      const selection = selectedKubeconfigs.find(
+        (candidate) => getClusterMeta(candidate).id === request.clusterId
+      );
+      if (selection) {
+        setActiveKubeconfig(selection);
+      }
+      return;
+    }
+    const target = request.targetGroupId === 'right' ? tabGroups.right : tabGroups.bottom;
+    if (!target.tabs.includes(request.tab.panelId)) {
+      return;
+    }
+    acceptingTabDockRef.current.add(request.transferId);
+    void acceptPanelTabTransfer(ownerWindowName, request.transferId)
+      .then(() => {
+        acceptingTabDockRef.current.delete(request.transferId);
+        setPendingTabDockRequests((current) => {
+          const next = new Map(current);
+          next.delete(request.transferId);
+          return next;
+        });
+      })
+      .catch((error) => {
+        rollbackWorkspaceTabTarget(request);
+        void failPanelTabTransfer(ownerWindowName, request.transferId);
+        reportOperationalError(error, {
+          source: 'WorkspacePanelCoordinator',
+          action: 'commit-workspace-tab-target',
+          clusterId: request.clusterId,
+        });
+      });
+  }, [
+    getClusterMeta,
+    ownerWindowName,
+    pendingTabDockRequests,
+    rollbackWorkspaceTabTarget,
+    selectedClusterId,
+    selectedKubeconfigs,
+    setActiveKubeconfig,
+    tabGroups,
+  ]);
+
+  useEffect(
+    () =>
+      onPanelTabTransferCommitted(({ request }) => {
+        if (request.ownerWindowName !== ownerWindowName) {
+          return;
+        }
+        if (request.sourceWindowName === ownerWindowName) {
+          detachPanelGroup(request.clusterId, [request.tab.panelId]);
+        }
+        acceptingTabDockRef.current.delete(request.transferId);
+        setPendingTabDockRequests((current) => {
+          if (!current.has(request.transferId)) {
+            return current;
+          }
+          const next = new Map(current);
+          next.delete(request.transferId);
+          return next;
+        });
+      }),
+    [detachPanelGroup, ownerWindowName]
+  );
+
+  useEffect(
+    () =>
+      onPanelTabTransferFailed(({ request }) => {
+        if (request.ownerWindowName !== ownerWindowName) {
+          return;
+        }
+        if (request.targetKind === 'workspace') {
+          rollbackWorkspaceTabTarget(request);
+        }
+      }),
+    [ownerWindowName, rollbackWorkspaceTabTarget]
+  );
 
   useEffect(
     () =>

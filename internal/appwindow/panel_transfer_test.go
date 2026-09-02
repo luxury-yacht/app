@@ -3,6 +3,7 @@ package appwindow
 import (
 	"testing"
 
+	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,6 +22,12 @@ func TestValidatePanelGroupSnapshotRequiresCompleteConsistentIdentity(t *testing
 		{name: "group", mutate: func(snapshot *PanelGroupSnapshot) { snapshot.GroupID = "" }},
 		{name: "tabs", mutate: func(snapshot *PanelGroupSnapshot) { snapshot.Tabs = nil }},
 		{name: "active panel", mutate: func(snapshot *PanelGroupSnapshot) { snapshot.ActivePanelID = "missing" }},
+		{
+			name: "position anchor without transferred bounds",
+			mutate: func(snapshot *PanelGroupSnapshot) {
+				snapshot.InitialPositionAnchor = &panelwindow.WindowPoint{X: 20, Y: 30}
+			},
+		},
 		{name: "tab kind", mutate: func(snapshot *PanelGroupSnapshot) { snapshot.Tabs[0].Kind = "unknown" }},
 		{name: "panel id", mutate: func(snapshot *PanelGroupSnapshot) { snapshot.Tabs[0].PanelID = "" }},
 		{name: "active view", mutate: func(snapshot *PanelGroupSnapshot) { snapshot.Tabs[0].ActiveView = "" }},

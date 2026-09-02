@@ -51,9 +51,15 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   onTabClick,
   groupKey,
 }) => {
-  // Only `dragPreviewRef` (for getDragImage) and `movePanel` (for onDrop)
-  // plus `closeTab` (for per-tab close) are read from the provider.
-  const { dragPreviewRef, movePanel, closeTab } = useDockablePanelContext();
+  // The provider owns local moves and routes cross-window drops through
+  // the acknowledged native tab-transfer coordinator.
+  const {
+    dragPreviewRef,
+    closeTab,
+    createDockableTabDragPayload,
+    dropDockableTab,
+    canStartDockableTabDrag,
+  } = useDockablePanelContext();
 
   // One useContext call for the whole bar regardless of tab count. The
   // returned factory is a plain closure that's legal to call inside .map().
@@ -66,37 +72,33 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       // dispatches internally between reorderTabInGroup (same group)
       // and movePanelBetweenGroups (cross group) based on whether
       // source and target groups match.
-      movePanel(payload.panelId, payload.sourceGroupId, groupKey, insertIndex);
+      dropDockableTab(payload, groupKey, insertIndex);
     },
   });
 
   const tabDescriptors: TabDescriptor[] = tabs.map((tab) => {
-    const dragProps = makeDragSource(
-      { kind: 'dockable-tab', panelId: tab.panelId, sourceGroupId: groupKey },
-      {
-        getDragImage: () => {
-          const previewEl = dragPreviewRef.current;
-          if (!previewEl) {
-            return null;
-          }
-          const labelEl = previewEl.querySelector<HTMLSpanElement>(
-            '.dockable-tab-drag-preview__label'
-          );
-          if (labelEl) {
-            labelEl.textContent = tab.title;
-          }
-          const kindEl = previewEl.querySelector<HTMLSpanElement>(
-            '.dockable-tab-drag-preview__kind'
-          );
-          if (kindEl) {
-            kindEl.className = `dockable-tab-drag-preview__kind kind-badge${
-              tab.kindClass ? ` ${tab.kindClass}` : ''
-            }`;
-          }
-          return { element: previewEl, offsetX: 14, offsetY: 16 };
-        },
-      }
-    );
+    const dragProps = makeDragSource(createDockableTabDragPayload(tab.panelId, groupKey), {
+      canStart: () => canStartDockableTabDrag(tab.panelId),
+      getDragImage: () => {
+        const previewEl = dragPreviewRef.current;
+        if (!previewEl) {
+          return null;
+        }
+        const labelEl = previewEl.querySelector<HTMLSpanElement>(
+          '.dockable-tab-drag-preview__label'
+        );
+        if (labelEl) {
+          labelEl.textContent = tab.title;
+        }
+        const kindEl = previewEl.querySelector<HTMLSpanElement>('.dockable-tab-drag-preview__kind');
+        if (kindEl) {
+          kindEl.className = `dockable-tab-drag-preview__kind kind-badge${
+            tab.kindClass ? ` ${tab.kindClass}` : ''
+          }`;
+        }
+        return { element: previewEl, offsetX: 14, offsetY: 16 };
+      },
+    });
     return {
       id: tab.panelId,
       label: tab.title,

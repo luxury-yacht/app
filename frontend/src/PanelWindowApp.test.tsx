@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   authorizedHandler: null as ((event: Record<string, unknown>) => void) | null,
   reportOperationalError: vi.fn(),
   requestTabClose: vi.fn(() => Promise.resolve()),
+  requestTabTransfer: vi.fn(() => Promise.resolve()),
   setObjectPanelActiveTab: vi.fn(),
 }));
 
@@ -106,6 +107,8 @@ vi.mock('@/core/panel-windows', () => ({
   },
   requestPanelTabClose: (...args: unknown[]) =>
     (mocks.requestTabClose as (...values: unknown[]) => Promise<void>)(...args),
+  requestPanelTabTransfer: (...args: unknown[]) =>
+    (mocks.requestTabTransfer as (...values: unknown[]) => Promise<void>)(...args),
 }));
 vi.mock('@/core/panel-windows/PanelWindowRoleContext', () => ({
   PanelWindowRoleProvider: PassThrough,
@@ -180,6 +183,7 @@ describe('PanelWindowApp', () => {
     mocks.onRowClick.mockReturnValue('panel-pod');
     mocks.setObjectPanelActiveTab.mockClear();
     mocks.requestTabClose.mockClear();
+    mocks.requestTabTransfer.mockClear();
     mocks.reportOperationalError.mockClear();
     mocks.authorizedHandler = null;
     mocks.dockProviderProps = null;
@@ -316,6 +320,58 @@ describe('PanelWindowApp', () => {
             activeView: 'events',
           }),
         ],
+      })
+    );
+  });
+
+  it('routes one-tab native-window drops and tear-offs through the transfer protocol', async () => {
+    await act(async () => {
+      root.render(<PanelWindowApp descriptor={descriptorWithTransfer('transfer-tab-drag')} />);
+      await Promise.resolve();
+    });
+    const props = mocks.dockProviderProps as {
+      tabDragIdentity: { getTabSnapshot: (panelId: string) => unknown };
+      onExternalTabDrop: (payload: unknown, targetGroup: string, index: number) => void;
+      onTabTearOff: (payload: unknown, cursor: { x: number; y: number }) => void;
+    };
+    const tab = props.tabDragIdentity.getTabSnapshot('panel-pod');
+    const payload = {
+      kind: 'dockable-tab',
+      panelId: 'panel-pod',
+      sourceGroupId: 'right',
+      sourceWindowGroupId: 'group-2',
+      sourceWindowName: 'panel-2',
+      ownerWindowName: 'workspace-1',
+      clusterId: 'cluster-a',
+      tab,
+    };
+
+    act(() => props.onExternalTabDrop(payload, 'right', 1));
+    expect(mocks.requestTabTransfer).toHaveBeenLastCalledWith(
+      'panel-1',
+      expect.objectContaining({
+        sourceWindowName: 'panel-2',
+        targetWindowName: 'panel-1',
+        targetGroupId: 'group-1',
+        targetIndex: 1,
+        targetKind: 'panel-window',
+      })
+    );
+
+    const sourcePayload = {
+      ...payload,
+      sourceWindowName: 'panel-1',
+      sourceWindowGroupId: 'group-1',
+    };
+    act(() => props.onTabTearOff(sourcePayload, { x: 2100, y: 400 }));
+    expect(mocks.requestTabTransfer).toHaveBeenLastCalledWith(
+      'panel-1',
+      expect.objectContaining({
+        sourceWindowName: 'panel-1',
+        targetWindowName: '',
+        targetKind: 'new-window',
+        cursorX: 2100,
+        cursorY: 400,
       })
     );
   });

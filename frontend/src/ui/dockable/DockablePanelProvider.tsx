@@ -8,6 +8,7 @@
  */
 
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { type TabDragPayload, TabDragProvider } from '@shared/components/tabs/dragCoordinator';
 import type React from 'react';
 import {
   createContext,
@@ -83,6 +84,13 @@ interface DockablePanelContextValue {
     targetGroupId: string,
     insertIndex: number
   ) => void;
+  createDockableTabDragPayload: (panelId: string, sourceGroupId: string) => TabDragPayload;
+  dropDockableTab: (
+    payload: Extract<TabDragPayload, { kind: 'dockable-tab' }>,
+    targetGroupId: string,
+    insertIndex: number
+  ) => void;
+  canStartDockableTabDrag: (panelId: string) => boolean;
   // Content registry -- allows the group leader to render other panels' body content.
   panelContentRefsMap: React.MutableRefObject<Map<string, React.MutableRefObject<React.ReactNode>>>;
   notifyContentChange: (groupKey: GroupKey) => void;
@@ -108,7 +116,8 @@ interface DockablePanelContextValue {
     clusterId: string,
     panelIds: readonly string[],
     activePanelId: string,
-    targetPosition: 'right' | 'bottom'
+    targetPosition: 'right' | 'bottom',
+    insertIndex?: number
   ) => void;
   // Remove a group transferred to a native window while retaining its layout state.
   detachPanelGroup: (clusterId: string, panelIds: readonly string[]) => void;
@@ -253,6 +262,25 @@ interface DockablePanelProviderProps {
   ) => boolean | undefined;
   onTabCloseRequest?: (panelId: string) => void;
   nativeWindowMode?: boolean;
+  tabDragIdentity?: {
+    windowName: string;
+    ownerWindowName: string;
+    clusterId: string;
+    nativeGroupId?: string;
+    getTabSnapshot: (
+      panelId: string
+    ) => Extract<TabDragPayload, { kind: 'dockable-tab' }>['tab'] | undefined;
+  };
+  onExternalTabDrop?: (
+    payload: Extract<TabDragPayload, { kind: 'dockable-tab' }>,
+    targetGroupId: string,
+    insertIndex: number
+  ) => void;
+  onTabTearOff?: (
+    payload: Extract<TabDragPayload, { kind: 'dockable-tab' }>,
+    cursor: { x: number; y: number }
+  ) => void;
+  canStartTabDrag?: (panelId: string) => boolean;
 }
 
 export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
@@ -261,6 +289,10 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   onGroupMoveRequest,
   onTabCloseRequest,
   nativeWindowMode = false,
+  tabDragIdentity,
+  onExternalTabDrop,
+  onTabTearOff,
+  canStartTabDrag,
 }) => {
   const lifecycleGuards = useOptionalPanelLifecycleGuardRegistry();
   // Per-cluster panel layout stores. Each open cluster gets its own
@@ -712,6 +744,61 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
     [activeStore, reorderTabInGroup, movePanelBetweenGroups]
   );
 
+  const createDockableTabDragPayload = useCallback(
+    (panelId: string, sourceGroupId: string): TabDragPayload => ({
+      kind: 'dockable-tab',
+      panelId,
+      sourceGroupId,
+      sourceWindowName: tabDragIdentity?.windowName,
+      sourceWindowGroupId: tabDragIdentity?.nativeGroupId ?? sourceGroupId,
+      ownerWindowName: tabDragIdentity?.ownerWindowName,
+      clusterId: tabDragIdentity?.clusterId,
+      tab: tabDragIdentity?.getTabSnapshot(panelId),
+    }),
+    [tabDragIdentity]
+  );
+
+  const dropDockableTab = useCallback(
+    (
+      payload: Extract<TabDragPayload, { kind: 'dockable-tab' }>,
+      targetGroupId: string,
+      insertIndex: number
+    ) => {
+      const isExternal =
+        !!payload.sourceWindowName &&
+        !!tabDragIdentity?.windowName &&
+        payload.sourceWindowName !== tabDragIdentity.windowName;
+      if (!isExternal) {
+        movePanel(payload.panelId, payload.sourceGroupId, targetGroupId, insertIndex);
+        return;
+      }
+      if (
+        !onExternalTabDrop ||
+        payload.ownerWindowName !== tabDragIdentity.ownerWindowName ||
+        payload.clusterId !== tabDragIdentity.clusterId ||
+        !payload.tab
+      ) {
+        return;
+      }
+      onExternalTabDrop(payload, targetGroupId, insertIndex);
+    },
+    [movePanel, onExternalTabDrop, tabDragIdentity]
+  );
+
+  const canStartDockableTabDrag = useCallback(
+    (panelId: string) => canStartTabDrag?.(panelId) ?? true,
+    [canStartTabDrag]
+  );
+
+  const handleTabTearOff = useCallback(
+    (payload: TabDragPayload, cursor: { x: number; y: number }) => {
+      if (payload.kind === 'dockable-tab') {
+        onTabTearOff?.(payload, cursor);
+      }
+    },
+    [onTabTearOff]
+  );
+
   // -----------------------------------------------------------------------
   // Content registry -- allows the group leader to render other panels' body
   // content. Each panel stores its children in a ref so the leader can
@@ -777,7 +864,8 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       clusterId: string,
       panelIds: readonly string[],
       activePanelId: string,
-      targetPosition: 'right' | 'bottom'
+      targetPosition: 'right' | 'bottom',
+      insertIndex?: number
     ) => {
       const store = getOrCreateStoreForCluster(clusterId);
       const uniquePanelIds = Array.from(new Set(panelIds));
@@ -786,7 +874,13 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       }
       store.setTabGroups((previous) => {
         const next = uniquePanelIds.reduce(
-          (current, panelId) => addPanelToGroup(current, panelId, targetPosition),
+          (current, panelId, panelIndex) =>
+            addPanelToGroup(
+              current,
+              panelId,
+              targetPosition,
+              insertIndex === undefined ? undefined : insertIndex + panelIndex
+            ),
           previous
         );
         return uniquePanelIds.includes(activePanelId)
@@ -845,6 +939,9 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       movePanelBetweenGroupsAndFocus,
       dragPreviewRef,
       movePanel,
+      createDockableTabDragPayload,
+      dropDockableTab,
+      canStartDockableTabDrag,
       panelContentRefsMap,
       notifyContentChange,
       subscribeContentChange,
@@ -875,6 +972,9 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       movePanelBetweenGroups,
       movePanelBetweenGroupsAndFocus,
       movePanel,
+      createDockableTabDragPayload,
+      dropDockableTab,
+      canStartDockableTabDrag,
       notifyContentChange,
       subscribeContentChange,
       lastFocusedGroupKey,
@@ -940,19 +1040,21 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   return (
     <PanelLayoutStoreContext.Provider value={activeStore}>
       <DockablePanelContext.Provider value={value}>
-        <DockablePanelHostContext.Provider value={hostNode}>
-          {children}
-          {/* Permanently mounted drag preview. The browser screenshots
+        <TabDragProvider onTearOff={handleTabTearOff}>
+          <DockablePanelHostContext.Provider value={hostNode}>
+            {children}
+            {/* Permanently mounted drag preview. The browser screenshots
               this element via setDragImage at dragstart; DockableTabBar's
               per-tab getDragImage callback writes the dragged tab's
               label + kind class into the inner spans before handing the
               element off. Offscreen by default via CSS fallback
               (`transform: translate3d(var(--dockable-tab-drag-x, -9999px), ...)`). */}
-          <div ref={dragPreviewRef} className="dockable-tab-drag-preview" aria-hidden="true">
-            <span className="dockable-tab-drag-preview__kind kind-badge" aria-hidden="true" />
-            <span className="dockable-tab-drag-preview__label" />
-          </div>
-        </DockablePanelHostContext.Provider>
+            <div ref={dragPreviewRef} className="dockable-tab-drag-preview" aria-hidden="true">
+              <span className="dockable-tab-drag-preview__kind kind-badge" aria-hidden="true" />
+              <span className="dockable-tab-drag-preview__label" />
+            </div>
+          </DockablePanelHostContext.Provider>
+        </TabDragProvider>
       </DockablePanelContext.Provider>
     </PanelLayoutStoreContext.Provider>
   );

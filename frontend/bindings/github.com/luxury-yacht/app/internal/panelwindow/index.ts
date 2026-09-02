@@ -4,6 +4,7 @@
 export {
     NativeRole,
     TabKind,
+    TabTransferTarget,
     WindowState
 } from "./models.js";
 
@@ -19,6 +20,11 @@ export type {
     TabCloseAuthorizedEvent,
     TabCloseRequestedEvent,
     TabSnapshot,
+    TabTransferCommittedEvent,
+    TabTransferFailedEvent,
+    TabTransferInsertRequestedEvent,
+    TabTransferRequest,
+    TabTransferRequestedEvent,
     WindowBounds,
     WindowCloseRequestedEvent,
     WindowClosedEvent,
@@ -28,5 +34,6 @@ export type {
     WindowGuardRequestedEvent,
     WindowGuardResultEvent,
     WindowOpenedEvent,
+    WindowPoint,
     WorkspaceDescriptor
 } from "./models.js";

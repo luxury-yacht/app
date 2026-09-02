@@ -169,6 +169,16 @@ stale, or timed-out transfers fail closed and keep the source live. Native panel
 geometry is used only for initial placement and is not persisted or restored
 after relaunch.
 
+Dragging a tab between workspace and panel windows, between panel windows, or
+out to a new panel window is a separate one-tab transaction. The registry
+validates immutable owner and cluster identity, reserves one source tab per
+pending transfer, and commits only after the destination publishes the exact
+tab or acknowledges native-window readiness. The source removes only that tab
+after commit and closes only when it becomes empty. Failure and timeout events
+roll back provisional target state while retaining the source. A tear-off uses
+the configured floating dimensions and selects/constrains against the monitor
+containing the drag pointer.
+
 Native close hooks are synchronous while YAML and mutation guards cross
 webviews. The first close is therefore cancelled and converted into an
 asynchronous transaction. Guarded state includes unsaved YAML, a YAML save, and

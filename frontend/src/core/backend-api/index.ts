@@ -4,6 +4,7 @@
  * frontend boundary decision before application code can call them.
  */
 export {
+  AcceptPanelTabTransfer,
   AcknowledgeApplicationQuitPreflight,
   AcknowledgePanelWindowClose,
   AcknowledgePanelWindowDock,
@@ -33,6 +34,7 @@ export {
   DownloadApplicationUpdate,
   ExportFavorites,
   ExportSettings,
+  FailPanelTabTransfer,
   FailPanelWindowTransfer,
   FetchContainerLogs,
   FetchNodeLogs,
@@ -82,6 +84,7 @@ export {
   ReorderThemes,
   RequestPanelObjectOpen,
   RequestPanelTabClose,
+  RequestPanelTabTransfer,
   RequestPanelWindowClose,
   RequestPanelWindowGuard,
   ResizeShellSession,

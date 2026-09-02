@@ -24,6 +24,9 @@ const mocks = vi.hoisted(() => ({
     UpdatePanelWindowSnapshot: vi.fn(),
     RequestPanelTabClose: vi.fn(),
     AuthorizePanelTabClose: vi.fn(),
+    RequestPanelTabTransfer: vi.fn(),
+    AcceptPanelTabTransfer: vi.fn(),
+    FailPanelTabTransfer: vi.fn(),
   },
 }));
 
@@ -34,6 +37,7 @@ vi.mock('@/core/desktop-runtime', () => ({
 }));
 
 import {
+  acceptPanelTabTransfer,
   acknowledgeApplicationQuitPreflight,
   acknowledgePanelWindowClose,
   acknowledgePanelWindowDock,
@@ -44,6 +48,7 @@ import {
   authorizePanelTabClose,
   beginPanelWindowDock,
   beginPanelWindowOpen,
+  failPanelTabTransfer,
   failPanelWindowTransfer,
   focusPanelWindow,
   onApplicationQuitPreflightRequested,
@@ -52,6 +57,10 @@ import {
   onPanelObjectOpenRequested,
   onPanelTabCloseAuthorized,
   onPanelTabCloseRequested,
+  onPanelTabTransferCommitted,
+  onPanelTabTransferFailed,
+  onPanelTabTransferInsertRequested,
+  onPanelTabTransferRequested,
   onPanelWindowClosed,
   onPanelWindowCloseRequested,
   onPanelWindowDockRequested,
@@ -62,6 +71,7 @@ import {
   onPanelWindowSnapshotUpdated,
   requestPanelObjectOpen,
   requestPanelTabClose,
+  requestPanelTabTransfer,
   requestPanelWindowClose,
   requestPanelWindowGuard,
   resolveNativeWindowDescriptor,
@@ -87,6 +97,21 @@ const objectRef = {
   namespace: 'default',
   name: 'api',
 } as panelwindow.ObjectReference;
+
+const tabTransfer = {
+  transferId: 'tab-transfer-1',
+  sourceWindowName: 'panel-1',
+  targetWindowName: 'workspace-1',
+  ownerWindowName: 'workspace-1',
+  clusterId: 'cluster-1',
+  sourceGroupId: 'group-1',
+  targetGroupId: 'right',
+  targetIndex: 0,
+  targetKind: 'workspace',
+  cursorX: 0,
+  cursorY: 0,
+  tab: { kind: 'object', panelId: 'panel-a', objectRef, activeView: 'details' },
+} as panelwindow.TabTransferRequest;
 
 describe('native panel-window transport', () => {
   beforeEach(() => {
@@ -154,6 +179,9 @@ describe('native panel-window transport', () => {
     await updatePanelWindowSnapshot('panel-1', snapshot);
     await requestPanelTabClose('panel-1', 'panel-a');
     await authorizePanelTabClose('workspace-1', 'panel-1', 'panel-a');
+    await requestPanelTabTransfer('workspace-1', tabTransfer);
+    await acceptPanelTabTransfer('workspace-1', 'tab-transfer-1');
+    await failPanelTabTransfer('panel-1', 'tab-transfer-1');
 
     expect(mocks.backend.BeginPanelWindowOpen).toHaveBeenCalledWith('workspace-1', snapshot);
     expect(mocks.backend.AcknowledgePanelWindowReady).toHaveBeenCalledWith('panel-1', 'transfer-1');
@@ -216,6 +244,12 @@ describe('native panel-window transport', () => {
       'panel-1',
       'panel-a'
     );
+    expect(mocks.backend.RequestPanelTabTransfer).toHaveBeenCalledWith('workspace-1', tabTransfer);
+    expect(mocks.backend.AcceptPanelTabTransfer).toHaveBeenCalledWith(
+      'workspace-1',
+      'tab-transfer-1'
+    );
+    expect(mocks.backend.FailPanelTabTransfer).toHaveBeenCalledWith('panel-1', 'tab-transfer-1');
   });
 
   it('subscribes every role event through the desktop runtime', () => {
@@ -232,6 +266,10 @@ describe('native panel-window transport', () => {
       [onPanelWindowSnapshotUpdated, 'panel-window:snapshot-updated'],
       [onPanelTabCloseRequested, 'panel-window:tab-close-requested'],
       [onPanelTabCloseAuthorized, 'panel-window:tab-close-authorized'],
+      [onPanelTabTransferRequested, 'panel-window:tab-transfer-requested'],
+      [onPanelTabTransferInsertRequested, 'panel-window:tab-transfer-insert-requested'],
+      [onPanelTabTransferCommitted, 'panel-window:tab-transfer-committed'],
+      [onPanelTabTransferFailed, 'panel-window:tab-transfer-failed'],
       [onApplicationQuitPreflightRequested, 'panel-window:application-quit-preflight-requested'],
       [onPanelWindowGuardRequested, 'panel-window:guard-requested'],
       [onPanelWindowGuardResult, 'panel-window:guard-result'],

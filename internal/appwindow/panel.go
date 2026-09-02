@@ -320,5 +320,9 @@ func clonePanelGroupSnapshot(snapshot PanelGroupSnapshot) PanelGroupSnapshot {
 		bounds := *snapshot.InitialBounds
 		result.InitialBounds = &bounds
 	}
+	if snapshot.InitialPositionAnchor != nil {
+		anchor := *snapshot.InitialPositionAnchor
+		result.InitialPositionAnchor = &anchor
+	}
 	return result
 }

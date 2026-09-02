@@ -20,7 +20,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   })),
 }));
 
-import { TAB_DRAG_DATA_TYPE, TabDragProvider } from '@shared/components/tabs/dragCoordinator';
+import { TAB_DRAG_DATA_TYPE } from '@shared/components/tabs/dragCoordinator';
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 import { DockableTabBar } from './DockableTabBar';
 
@@ -30,11 +30,7 @@ const renderWithProvider = async (ui: React.ReactElement) => {
   const root = ReactDOM.createRoot(host);
 
   await act(async () => {
-    root.render(
-      <TabDragProvider>
-        <DockablePanelProvider>{ui}</DockablePanelProvider>
-      </TabDragProvider>
-    );
+    root.render(<DockablePanelProvider>{ui}</DockablePanelProvider>);
     await Promise.resolve();
   });
 

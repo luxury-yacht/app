@@ -167,6 +167,9 @@ type PanelWindowCommands interface {
 	UpdatePanelWindowSnapshot(string, panelwindow.GroupSnapshot) error
 	RequestPanelTabClose(string, string) error
 	AuthorizePanelTabClose(string, string, string) error
+	RequestPanelTabTransfer(string, panelwindow.TabTransferRequest) error
+	AcceptPanelTabTransfer(string, string) error
+	FailPanelTabTransfer(string, string) error
 	RequestPanelWindowGuard(string, string, string, string) error
 	AcknowledgePanelWindowGuard(string, string, bool) error
 	AcknowledgeApplicationQuitPreflight(string, string, bool) error
@@ -744,6 +747,37 @@ func (s *DesktopService) AuthorizePanelTabClose(ctx context.Context, ownerWindow
 		return err
 	}
 	return s.panelWindows.AuthorizePanelTabClose(ownerWindowName, windowName, panelID)
+}
+
+func (s *DesktopService) RequestPanelTabTransfer(
+	ctx context.Context,
+	callerWindowName string,
+	request panelwindow.TabTransferRequest,
+) error {
+	if err := validatePanelCommandCaller(ctx, callerWindowName); err != nil {
+		return err
+	}
+	return s.panelWindows.RequestPanelTabTransfer(callerWindowName, request)
+}
+
+func (s *DesktopService) AcceptPanelTabTransfer(
+	ctx context.Context,
+	ownerWindowName, transferID string,
+) error {
+	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
+		return err
+	}
+	return s.panelWindows.AcceptPanelTabTransfer(ownerWindowName, transferID)
+}
+
+func (s *DesktopService) FailPanelTabTransfer(
+	ctx context.Context,
+	callerWindowName, transferID string,
+) error {
+	if err := validatePanelCommandCaller(ctx, callerWindowName); err != nil {
+		return err
+	}
+	return s.panelWindows.FailPanelTabTransfer(callerWindowName, transferID)
 }
 
 func (s *DesktopService) RequestPanelWindowGuard(ctx context.Context, ownerWindowName, windowName, requestID, reason string) error {

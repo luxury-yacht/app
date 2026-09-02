@@ -63,6 +63,9 @@ type DesktopShellBindings struct {
 	UpdatePanelSnapshot        func(string, panelwindow.GroupSnapshot) error
 	RequestPanelTabClose       func(string, string) error
 	AuthorizePanelTabClose     func(string, string, string) error
+	RequestPanelTabTransfer    func(string, panelwindow.TabTransferRequest) error
+	AcceptPanelTabTransfer     func(string, string) error
+	FailPanelTabTransfer       func(string, string) error
 	RequestPanelGuard          func(string, string, string, string) error
 	AcknowledgePanelGuard      func(string, string, bool) error
 	AcknowledgeApplicationQuit func(string, string, bool) error
@@ -93,6 +96,9 @@ type DesktopShell struct {
 	updatePanelSnapshot        func(string, panelwindow.GroupSnapshot) error
 	requestPanelTabClose       func(string, string) error
 	authorizePanelTabClose     func(string, string, string) error
+	requestPanelTabTransfer    func(string, panelwindow.TabTransferRequest) error
+	acceptPanelTabTransfer     func(string, string) error
+	failPanelTabTransfer       func(string, string) error
 	requestPanelGuard          func(string, string, string, string) error
 	acknowledgePanelGuard      func(string, string, bool) error
 	acknowledgeApplicationQuit func(string, string, bool) error
@@ -143,6 +149,9 @@ func NewDesktopShell(
 		shell.updatePanelSnapshot = bindings[0].UpdatePanelSnapshot
 		shell.requestPanelTabClose = bindings[0].RequestPanelTabClose
 		shell.authorizePanelTabClose = bindings[0].AuthorizePanelTabClose
+		shell.requestPanelTabTransfer = bindings[0].RequestPanelTabTransfer
+		shell.acceptPanelTabTransfer = bindings[0].AcceptPanelTabTransfer
+		shell.failPanelTabTransfer = bindings[0].FailPanelTabTransfer
 		shell.requestPanelGuard = bindings[0].RequestPanelGuard
 		shell.acknowledgePanelGuard = bindings[0].AcknowledgePanelGuard
 		shell.acknowledgeApplicationQuit = bindings[0].AcknowledgeApplicationQuit

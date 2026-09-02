@@ -16,6 +16,8 @@ export interface GroupSnapshot {
     "tabs": TabSnapshot[] | null;
     "activePanelId": string;
     "initialBounds"?: WindowBounds | null;
+    "initialPositionAnchor"?: WindowPoint | null;
+    "useInitialPosition"?: boolean;
 }
 
 export interface NativeDescriptor {
@@ -102,6 +104,49 @@ export interface TabSnapshot {
     "activeView": string;
 }
 
+export interface TabTransferCommittedEvent {
+    "request": TabTransferRequest;
+}
+
+export interface TabTransferFailedEvent {
+    "request": TabTransferRequest;
+    "reason": string;
+}
+
+export interface TabTransferInsertRequestedEvent {
+    "request": TabTransferRequest;
+}
+
+export interface TabTransferRequest {
+    "transferId": string;
+    "sourceWindowName": string;
+    "targetWindowName": string;
+    "ownerWindowName": string;
+    "clusterId": string;
+    "sourceGroupId": string;
+    "targetGroupId": string;
+    "targetIndex": number;
+    "targetKind": TabTransferTarget;
+    "cursorX": number;
+    "cursorY": number;
+    "tab": TabSnapshot;
+}
+
+export interface TabTransferRequestedEvent {
+    "request": TabTransferRequest;
+}
+
+export enum TabTransferTarget {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    TabTransferTargetWorkspace = "workspace",
+    TabTransferTargetPanelWindow = "panel-window",
+    TabTransferTargetNewWindow = "new-window",
+};
+
 export interface WindowBounds {
     "x": number;
     "y": number;
@@ -158,6 +203,11 @@ export interface WindowOpenedEvent {
     "clusterId": string;
     "groupId": string;
     "snapshot": GroupSnapshot;
+}
+
+export interface WindowPoint {
+    "x": number;
+    "y": number;
 }
 
 export enum WindowState {

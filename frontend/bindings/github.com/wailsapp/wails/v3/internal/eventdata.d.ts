@@ -59,6 +59,10 @@ declare module "@wailsio/runtime" {
             "panel-window:snapshot-updated": panelwindow$0.SnapshotUpdatedEvent;
             "panel-window:tab-close-authorized": panelwindow$0.TabCloseAuthorizedEvent;
             "panel-window:tab-close-requested": panelwindow$0.TabCloseRequestedEvent;
+            "panel-window:tab-transfer-committed": panelwindow$0.TabTransferCommittedEvent;
+            "panel-window:tab-transfer-failed": panelwindow$0.TabTransferFailedEvent;
+            "panel-window:tab-transfer-insert-requested": panelwindow$0.TabTransferInsertRequestedEvent;
+            "panel-window:tab-transfer-requested": panelwindow$0.TabTransferRequestedEvent;
             "portforward:list": backend$0.PortForwardSession[] | null;
             "portforward:status": backend$0.PortForwardStatusEvent;
             "runtime-operations:list": backend$0.RuntimeOperation[] | null;
