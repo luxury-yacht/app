@@ -386,15 +386,6 @@ func (r *Registry) PanelNamesOwnedByWorkspace(ownerWindowName string) []string {
 	return r.panels.NamesOwnedBy(ownerWindowName, "")
 }
 
-// PanelNamesOwnedByCluster lists one workspace's native children fixed to a
-// particular cluster.
-func (r *Registry) PanelNamesOwnedByCluster(ownerWindowName, clusterID string) []string {
-	if r == nil || r.panels == nil {
-		return nil
-	}
-	return r.panels.NamesOwnedBy(ownerWindowName, clusterID)
-}
-
 // AcknowledgePanelWindowReady commits an opening transfer and reveals the
 // hidden native target. A stale acknowledgement leaves the source transfer pending.
 func (r *Registry) AcknowledgePanelWindowReady(
@@ -416,7 +407,16 @@ func (r *Registry) AcknowledgePanelWindowReady(
 		return descriptor, nil
 	}
 	r.panels.Remove(name)
+	r.emitPanelClosed(descriptor)
 	return PanelWindowDescriptor{}, fmt.Errorf("panel window %q disappeared before ready", name)
+}
+
+func (r *Registry) emitPanelClosed(descriptor PanelWindowDescriptor) {
+	r.emitWindowEvent(descriptor.OwnerWindowName, panelwindow.WindowClosedEventName, panelwindow.WindowClosedEvent{
+		WindowName: descriptor.WindowName,
+		ClusterID:  descriptor.ClusterID,
+		GroupID:    descriptor.GroupID,
+	})
 }
 
 // BeginPanelWindowDock records a target handoff while the native source stays
@@ -504,11 +504,7 @@ func (r *Registry) FailPanelWindowTransfer(callerWindowName, windowName, transfe
 		r.consumeAuthorizedClose(windowName)
 		return fmt.Errorf("panel window %q is not available", windowName)
 	}
-	r.emitWindowEvent(descriptor.OwnerWindowName, panelwindow.WindowClosedEventName, panelwindow.WindowClosedEvent{
-		WindowName: windowName,
-		ClusterID:  descriptor.ClusterID,
-		GroupID:    descriptor.GroupID,
-	})
+	r.emitPanelClosed(descriptor)
 	return nil
 }
 
@@ -780,23 +776,7 @@ func (r *Registry) AcknowledgePanelWindowClose(windowName string) error {
 		return fmt.Errorf("panel window %q is not available", windowName)
 	}
 	r.panels.Remove(windowName)
-	r.emitWindowEvent(descriptor.OwnerWindowName, panelwindow.WindowClosedEventName, panelwindow.WindowClosedEvent{
-		WindowName: windowName,
-		ClusterID:  descriptor.ClusterID,
-		GroupID:    descriptor.GroupID,
-	})
-	return nil
-}
-
-func (r *Registry) RequestClosePanelWindowsForCluster(ownerWindowName, clusterID string) error {
-	if r.lifecycle == nil || !r.lifecycle.Contains(ownerWindowName) {
-		return fmt.Errorf("owner workspace %q is not live", ownerWindowName)
-	}
-	for _, windowName := range r.PanelNamesOwnedByCluster(ownerWindowName, clusterID) {
-		if err := r.RequestPanelWindowClose(ownerWindowName, windowName, "cluster-close"); err != nil {
-			return err
-		}
-	}
+	r.emitPanelClosed(descriptor)
 	return nil
 }
 

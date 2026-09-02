@@ -80,7 +80,6 @@ export {
   QueryPermissions,
   RemoveApplicationUpdateSkip,
   ReorderThemes,
-  RequestClosePanelWindowsForCluster,
   RequestPanelObjectOpen,
   RequestPanelTabClose,
   RequestPanelWindowClose,

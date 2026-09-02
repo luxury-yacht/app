@@ -26,12 +26,12 @@ const panel: {
 };
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => panel.current,
+  useObjectPanel: () => ({ ...panel.current, openWithObject: vi.fn() }),
 }));
 
 const navigateToView = vi.fn();
 vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView }),
+  useNavigateToView: () => ({ available: true, navigateToView }),
 }));
 
 import { ResourceHeader } from './ResourceHeader';

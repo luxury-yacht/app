@@ -78,7 +78,7 @@ const workloadNameFromOwner = (pod: PodSnapshotEntry) => {
 
 export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   const { openWithObject, objectData } = useObjectPanel();
-  const { navigateToView } = useNavigateToView();
+  const { available: navigationAvailable, navigateToView } = useNavigateToView();
   const objectLink = useObjectLink();
   const viewState = useOptionalViewState();
   const namespaceContext = useNamespace();
@@ -105,7 +105,8 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     openWithObject,
     navigateToView,
   });
-  const { open: openPod, navigate: navigatePod } = podIdentity;
+  const { open: openPod, navigate: navigatePodForWorkspace } = podIdentity;
+  const navigatePod = navigationAvailable ? navigatePodForWorkspace : undefined;
   // Ensure pod navigation keeps the active cluster context for object detail scopes.
   const getPodClusterMeta = useCallback(
     (pod: PodSnapshotEntry) => ({
@@ -217,8 +218,8 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
       afterColumnKey: 'name',
       accessor: (pod) => pod.ref.namespace,
       onClick: handleNamespaceSelect,
-      isInteractive: (pod) => Boolean(pod.ref.namespace),
-      getClassName: () => 'object-panel-link',
+      isInteractive: (pod) => Boolean(pod.ref.namespace && viewState),
+      getClassName: (pod) => (pod.ref.namespace && viewState ? 'object-panel-link' : undefined),
     });
 
     withNamespace.push(
@@ -264,6 +265,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     objectLink,
     getPodClusterMeta,
     navigatePod,
+    viewState,
   ]);
 
   const { gridTableProps, favModal, source, queryPayload } = useQueryBackedClusterResourceGridTable<

@@ -342,10 +342,6 @@ export function ReorderThemes(ids: string[] | null): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ReorderThemes", ids);
 }
 
-export function RequestClosePanelWindowsForCluster(ownerWindowName: string, clusterID: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.RequestClosePanelWindowsForCluster", ownerWindowName, clusterID);
-}
-
 export function RequestPanelObjectOpen(windowName: string, ref: panelwindow$0.ObjectReference, activeView: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.RequestPanelObjectOpen", windowName, ref, activeView);
 }

@@ -25,7 +25,7 @@ import type { KubernetesObjectReference } from '@/types/view-state';
 
 export function useObjectLink() {
   const { openWithObject } = useObjectPanel();
-  const { navigateToView } = useNavigateToView();
+  const { available: navigationAvailable, navigateToView } = useNavigateToView();
 
   return useCallback(
     <T>(getRef: (item: T) => KubernetesObjectReference | undefined) => ({
@@ -35,13 +35,15 @@ export function useObjectLink() {
           openWithObject(ref);
         }
       },
-      onAltClick: (item: T) => {
-        const ref = getRef(item);
-        if (ref) {
-          navigateToView(ref);
-        }
-      },
+      onAltClick: navigationAvailable
+        ? (item: T) => {
+            const ref = getRef(item);
+            if (ref) {
+              navigateToView(ref);
+            }
+          }
+        : undefined,
     }),
-    [openWithObject, navigateToView]
+    [navigationAvailable, openWithObject, navigateToView]
   );
 }

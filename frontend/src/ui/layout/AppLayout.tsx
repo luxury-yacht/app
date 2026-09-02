@@ -48,6 +48,7 @@ import ClusterTabs from '@ui/layout/ClusterTabs';
 import { getClusterSelectionPhase } from '@ui/layout/clusterSelectionPhase';
 import { DebugOverlay } from '@ui/layout/DebugOverlay';
 import { IconDebugOverlay } from '@ui/layout/IconDebugOverlay';
+import { resolveObjectPanelMountTarget } from '@ui/layout/objectPanelMountTarget';
 import { useAppDebugShortcuts } from '@ui/layout/useAppDebugShortcuts';
 import type { NamespaceViewType } from '@ui/navigation/types';
 // Auth Failure Overlay
@@ -56,6 +57,7 @@ import { setLastSettingsTab } from '@ui/settings/settingsTabPreference';
 import { eventBus } from '@/core/events';
 import { shouldShowActiveClusterAuthFailure } from '@/core/navigation/workspace';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
+import { getDefaultObjectPanelPosition } from '@/core/settings/appPreferences';
 import {
   getSidebarWidthFromKey,
   SIDEBAR_MAX_WIDTH,
@@ -401,20 +403,26 @@ export const AppLayout: React.FC = () => {
 
       {Array.from(openPanels.entries())
         .filter(([panelId]) => !nativeLocations.has(panelId))
-        .map(([panelId, objectRef]) => (
-          <PanelErrorBoundary
-            key={panelId}
-            onClose={() => closePanel(panelId)}
-            panelName="object-details"
-          >
-            <ObjectPanel
-              panelId={panelId}
-              objectRef={objectRef}
-              defaultPosition={dockedEdges.get(panelId) ?? 'right'}
-              defaultGroupKey={dockedEdges.get(panelId)}
-            />
-          </PanelErrorBoundary>
-        ))}
+        .map(([panelId, objectRef]) => {
+          const mountTarget = resolveObjectPanelMountTarget(
+            dockedEdges.get(panelId),
+            getDefaultObjectPanelPosition()
+          );
+          return (
+            <PanelErrorBoundary
+              key={panelId}
+              onClose={() => closePanel(panelId)}
+              panelName="object-details"
+            >
+              <ObjectPanel
+                panelId={panelId}
+                objectRef={objectRef}
+                defaultPosition={mountTarget.position}
+                defaultGroupKey={mountTarget.groupKey}
+              />
+            </PanelErrorBoundary>
+          );
+        })}
 
       <PanelErrorBoundary onClose={() => viewState.setIsSettingsOpen(false)} panelName="settings">
         <SettingsModal

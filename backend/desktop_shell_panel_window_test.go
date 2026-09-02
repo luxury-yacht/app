@@ -29,7 +29,6 @@ func TestPanelWindowCommandsFailWhenTheNativeRegistryIsUnavailable(t *testing.T)
 	require.ErrorContains(t, shell.FocusPanelWindow("workspace-1", "panel-1", "panel-a"), "panel-window registry is not available")
 	require.ErrorContains(t, shell.RequestPanelWindowClose("workspace-1", "panel-1", "cluster-close"), "panel-window registry is not available")
 	require.ErrorContains(t, shell.AcknowledgePanelWindowClose("panel-1"), "panel-window registry is not available")
-	require.ErrorContains(t, shell.RequestClosePanelWindowsForCluster("workspace-1", "cluster-1"), "panel-window registry is not available")
 	require.ErrorContains(t, shell.AcknowledgeWorkspaceWindowClose("workspace-1"), "panel-window registry is not available")
 	require.ErrorContains(t, shell.RequestPanelWindowGuard("workspace-1", "panel-1", "guard-1", "application-quit"), "panel-window registry is not available")
 	require.ErrorContains(t, shell.AcknowledgePanelWindowGuard("panel-1", "guard-1", true), "panel-window registry is not available")
@@ -100,7 +99,6 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 		FocusPanelWindow:          func(string, string, string) error { mark(); return nil },
 		RequestPanelClose:         func(string, string, string) error { mark(); return nil },
 		AcknowledgePanelClose:     func(string) error { mark(); return nil },
-		RequestClusterPanelsClose: func(string, string) error { mark(); return nil },
 		AcknowledgeWorkspaceClose: func(string) error { mark(); return nil },
 		RoutePanelCommand:         func(string, string) error { mark(); return nil },
 		RequestPanelObjectOpen: func(string, panelwindow.ObjectReference, string) error {
@@ -138,7 +136,6 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 	require.NoError(t, service.FocusPanelWindow(ctx, "workspace-1", "panel-1", "panel-a"))
 	require.NoError(t, service.RequestPanelWindowClose(ctx, "workspace-1", "panel-1", "owner-close"))
 	require.NoError(t, service.AcknowledgePanelWindowClose(ctx, "panel-1"))
-	require.NoError(t, service.RequestClosePanelWindowsForCluster(ctx, "workspace-1", "cluster-1"))
 	require.NoError(t, service.AcknowledgeWorkspaceWindowClose(ctx, "workspace-1"))
 	require.NoError(t, service.RoutePanelWindowCommand(ctx, "panel-1", "menu:settings"))
 	require.NoError(t, service.RequestPanelObjectOpen(ctx, "panel-1", ref, "details"))
@@ -149,7 +146,7 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 	require.NoError(t, service.RequestPanelWindowGuard(ctx, "workspace-1", "panel-1", "guard-1", "quit"))
 	require.NoError(t, service.AcknowledgePanelWindowGuard(ctx, "panel-1", "guard-1", true))
 	require.NoError(t, service.AcknowledgeApplicationQuitPreflight(ctx, "workspace-1", "quit-1", true))
-	require.Equal(t, 20, called)
+	require.Equal(t, 19, called)
 }
 
 func TestDesktopServiceRejectsPanelCommandsWhoseClaimedCallerDoesNotMatchTheWailsSender(t *testing.T) {

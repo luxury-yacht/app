@@ -8,6 +8,7 @@
 import type React from 'react';
 import { createContext, type ReactNode, useContext, useEffect } from 'react';
 import { eventBus } from '@/core/events';
+import { initializeAutoRefresh } from '../hooks/useAutoRefresh';
 import { refreshManager } from '../RefreshManager';
 
 interface RefreshManagerContextType {
@@ -39,7 +40,7 @@ export const RefreshManagerProvider: React.FC<RefreshManagerProviderProps> = ({ 
         refreshManager.pause();
         eventBus.emit('app:visibility-hidden');
       } else {
-        refreshManager.resume();
+        initializeAutoRefresh();
         eventBus.emit('app:visibility-visible');
       }
     };

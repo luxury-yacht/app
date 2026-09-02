@@ -94,7 +94,7 @@ interface EventDisplay {
 const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope, panelId }) => {
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const { openWithObject } = useObjectPanel();
-  const { navigateToView } = useNavigateToView();
+  const { available: navigationAvailable, navigateToView } = useNavigateToView();
   const resolveClusterName = useClusterNameResolver();
   const openWithObjectRef = useRef(openWithObject);
   useEffect(() => {
@@ -423,9 +423,11 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           onClick: (item) => {
             void openRelatedObject(item);
           },
-          onAltClick: (item) => {
-            void navigateToRelatedObject(item);
-          },
+          onAltClick: navigationAvailable
+            ? (item) => {
+                void navigateToRelatedObject(item);
+              }
+            : undefined,
           getClassName: () => 'object-panel-link',
           isInteractive: canOpenRelatedObject,
         }
@@ -473,7 +475,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
       age: { width: 100, minWidth: 80 },
     };
     return withColumnSizing(base, sizing);
-  }, [canOpenRelatedObject, navigateToRelatedObject, openRelatedObject]);
+  }, [canOpenRelatedObject, navigateToRelatedObject, navigationAvailable, openRelatedObject]);
 
   const { sortedData, sortConfig, handleSort } = useTableSort(events, 'age', 'desc', {
     columns,

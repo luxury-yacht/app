@@ -3,7 +3,9 @@
 Object panels can be docked on the workspace's right or bottom edge, or moved
 as a complete tab group into an ordinary native application window. “Floating”
 is a product action that creates that native window; there is no in-page HTML
-floating, viewport-relative geometry, blank-space drag, or HTML maximize mode.
+floating, viewport-relative geometry, or blank-space drag. Docked panels retain
+their existing in-page maximize behavior; native panel windows use OS window
+maximize and restore.
 
 ## Agent Contract
 
@@ -20,9 +22,10 @@ floating, viewport-relative geometry, blank-space drag, or HTML maximize mode.
   React nodes, refs, fetched data, credentials, drafts, or terminal buffers.
 - Native panel windows reuse the workspace window chrome: macOS uses the
   transparent full-size titlebar with native traffic-light controls, while
-  Windows and Linux retain their native frame controls. The panel's HTML header
-  is only the shared drag/maximize surface; workspace status, favorites, and
-  command-palette controls do not render there.
+  Windows and Linux retain their native frame controls. The native window's
+  outer `AppHeader` is the drag/maximize surface; the inner
+  `DockablePanelHeader` remains tab and panel controls only. Workspace status,
+  favorites, and command-palette controls do not render in the panel window.
 - The owner directory is authoritative for panel location. A child renderer is
   a projection and acknowledges changes through its owner.
 - Transient unmounts such as workspace cluster switches preserve panel refresh
@@ -47,8 +50,9 @@ floating, viewport-relative geometry, blank-space drag, or HTML maximize mode.
 ## Placement and Uniqueness
 
 - Prefer the active compatible docked group when opening a new object.
-- A default or explicit Floating action first mounts the object at a docked
-  source, then asks the native coordinator to transfer the complete group.
+- A default or explicit Floating action first creates a transient one-tab
+  source group, then asks the native coordinator to transfer that complete
+  group.
 - If an object is already docked, focus its owner and docked tab. If it is in a
   native group, focus that window and tab.
 - A same-cluster link opened in a child may join that child group after owner
@@ -96,9 +100,6 @@ geometry is not persisted for relaunch.
   children, then release the existing workspace/cluster ownership.
 - Application quit: all ready workspaces preflight first; no owner closes until
   every owner approves.
-- Forced child disappearance removes only the panel role and tells the owner to
-  reconcile its directory. It never releases a workspace.
-
 All asynchronous handoff and close timeouts fail closed and preserve the source
 state.
 

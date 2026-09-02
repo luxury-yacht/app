@@ -162,16 +162,6 @@ export interface AppSettings {
     "objectPanelFloatingHeight": number;
 
     /**
-     * Default floating X position (px)
-     */
-    "objectPanelFloatingX": number;
-
-    /**
-     * Default floating Y position (px)
-     */
-    "objectPanelFloatingY": number;
-
-    /**
      * Hue for gray palette tint in light mode (0-360)
      */
     "paletteHueLight": number;

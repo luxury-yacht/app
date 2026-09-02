@@ -48,8 +48,6 @@ const (
 	appPreferenceObjectPanelDockedBottomHeight            = "objectPanelDockedBottomHeight"
 	appPreferenceObjectPanelFloatingWidth                 = "objectPanelFloatingWidth"
 	appPreferenceObjectPanelFloatingHeight                = "objectPanelFloatingHeight"
-	appPreferenceObjectPanelFloatingX                     = "objectPanelFloatingX"
-	appPreferenceObjectPanelFloatingY                     = "objectPanelFloatingY"
 	appPreferencePaletteHueLight                          = "paletteHueLight"
 	appPreferencePaletteSaturationLight                   = "paletteSaturationLight"
 	appPreferencePaletteBrightnessLight                   = "paletteBrightnessLight"
@@ -116,8 +114,6 @@ type settingsPreferences struct {
 	ObjectPanelDockedBottomHeight int                    `json:"objectPanelDockedBottomHeight"`
 	ObjectPanelFloatingWidth      int                    `json:"objectPanelFloatingWidth"`
 	ObjectPanelFloatingHeight     int                    `json:"objectPanelFloatingHeight"`
-	ObjectPanelFloatingX          int                    `json:"objectPanelFloatingX"`
-	ObjectPanelFloatingY          int                    `json:"objectPanelFloatingY"`
 
 	// Migration: old single-value palette fields, read-only, omitted when zero.
 	PaletteHue        int `json:"paletteHue,omitempty"`
@@ -221,14 +217,10 @@ const (
 	defaultObjectPanelDockedBottomHeight = 600
 	defaultObjectPanelFloatingWidth      = 600
 	defaultObjectPanelFloatingHeight     = 800
-	defaultObjectPanelFloatingX          = 100
-	defaultObjectPanelFloatingY          = 100
 	minObjectPanelDockedRightWidth       = 500
 	minObjectPanelDockedBottomHeight     = 200
 	minObjectPanelFloatingWidth          = 450
 	minObjectPanelFloatingHeight         = 200
-	minObjectPanelFloatingX              = 1
-	minObjectPanelFloatingY              = 1
 	maxObjectPanelLayoutValue            = 9999
 	minPaletteHue                        = 0
 	maxPaletteHue                        = 360
@@ -306,8 +298,6 @@ func defaultSettingsFile() *settingsFile {
 			ObjectPanelDockedBottomHeight: defaultObjectPanelDockedBottomHeight,
 			ObjectPanelFloatingWidth:      defaultObjectPanelFloatingWidth,
 			ObjectPanelFloatingHeight:     defaultObjectPanelFloatingHeight,
-			ObjectPanelFloatingX:          defaultObjectPanelFloatingX,
-			ObjectPanelFloatingY:          defaultObjectPanelFloatingY,
 			Themes:                        []Theme{defaultTheme()},
 		},
 		Kubeconfig: settingsKubeconfig{
@@ -417,8 +407,6 @@ func normalizeLayoutPreferences(preferences *settingsPreferences) {
 	preferences.ObjectPanelDockedBottomHeight = defaultOrClampInt(preferences.ObjectPanelDockedBottomHeight, defaultObjectPanelDockedBottomHeight, minObjectPanelDockedBottomHeight, maxObjectPanelLayoutValue)
 	preferences.ObjectPanelFloatingWidth = defaultOrClampInt(preferences.ObjectPanelFloatingWidth, defaultObjectPanelFloatingWidth, minObjectPanelFloatingWidth, maxObjectPanelLayoutValue)
 	preferences.ObjectPanelFloatingHeight = defaultOrClampInt(preferences.ObjectPanelFloatingHeight, defaultObjectPanelFloatingHeight, minObjectPanelFloatingHeight, maxObjectPanelLayoutValue)
-	preferences.ObjectPanelFloatingX = defaultOrClampInt(preferences.ObjectPanelFloatingX, defaultObjectPanelFloatingX, minObjectPanelFloatingX, maxObjectPanelLayoutValue)
-	preferences.ObjectPanelFloatingY = defaultOrClampInt(preferences.ObjectPanelFloatingY, defaultObjectPanelFloatingY, minObjectPanelFloatingY, maxObjectPanelLayoutValue)
 }
 
 func defaultOrClampInt(value, defaultValue, minValue, maxValue int) int {
@@ -716,8 +704,6 @@ func getDefaultAppSettings() *AppSettings {
 		ObjectPanelDockedBottomHeight:            defaultObjectPanelDockedBottomHeight,
 		ObjectPanelFloatingWidth:                 defaultObjectPanelFloatingWidth,
 		ObjectPanelFloatingHeight:                defaultObjectPanelFloatingHeight,
-		ObjectPanelFloatingX:                     defaultObjectPanelFloatingX,
-		ObjectPanelFloatingY:                     defaultObjectPanelFloatingY,
 		Themes:                                   []Theme{defaultTheme()},
 	}
 }
@@ -770,8 +756,6 @@ func appSettingsFromFile(settings *settingsFile) *AppSettings {
 		ObjectPanelDockedBottomHeight:            settings.Preferences.ObjectPanelDockedBottomHeight,
 		ObjectPanelFloatingWidth:                 settings.Preferences.ObjectPanelFloatingWidth,
 		ObjectPanelFloatingHeight:                settings.Preferences.ObjectPanelFloatingHeight,
-		ObjectPanelFloatingX:                     settings.Preferences.ObjectPanelFloatingX,
-		ObjectPanelFloatingY:                     settings.Preferences.ObjectPanelFloatingY,
 		PaletteHueLight:                          settings.Preferences.PaletteHueLight,
 		PaletteSaturationLight:                   settings.Preferences.PaletteSaturationLight,
 		PaletteBrightnessLight:                   settings.Preferences.PaletteBrightnessLight,
@@ -900,8 +884,6 @@ func (p *PreferencesService) saveAppSettings() error {
 	settings.Preferences.ObjectPanelDockedBottomHeight = p.appSettings.ObjectPanelDockedBottomHeight
 	settings.Preferences.ObjectPanelFloatingWidth = p.appSettings.ObjectPanelFloatingWidth
 	settings.Preferences.ObjectPanelFloatingHeight = p.appSettings.ObjectPanelFloatingHeight
-	settings.Preferences.ObjectPanelFloatingX = p.appSettings.ObjectPanelFloatingX
-	settings.Preferences.ObjectPanelFloatingY = p.appSettings.ObjectPanelFloatingY
 	// Write per-mode palette fields; leave old fields zeroed so omitempty drops them.
 	settings.Preferences.PaletteHueLight = p.appSettings.PaletteHueLight
 	settings.Preferences.PaletteSaturationLight = p.appSettings.PaletteSaturationLight

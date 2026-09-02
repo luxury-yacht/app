@@ -392,22 +392,34 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         setObjectPanelStateByCluster((previous) => {
           const current = previous[snapshot.clusterId] ?? DEFAULT_OBJECT_PANEL_STATE;
           const nextNativeLocations = new Map(current.nativeLocations);
+          const nextDockedEdges = new Map(current.dockedEdges);
           for (const tab of snapshot.tabs ?? []) {
             nextNativeLocations.set(tab.panelId, { windowName, groupId: snapshot.groupId });
+            nextDockedEdges.delete(tab.panelId);
           }
           return {
             ...previous,
-            [snapshot.clusterId]: { ...current, nativeLocations: nextNativeLocations },
+            [snapshot.clusterId]: {
+              ...current,
+              nativeLocations: nextNativeLocations,
+              dockedEdges: nextDockedEdges,
+            },
           };
         });
         return;
       }
       updateActiveState((previous) => {
         const nextNativeLocations = new Map(previous.nativeLocations);
+        const nextDockedEdges = new Map(previous.dockedEdges);
         for (const tab of snapshot.tabs ?? []) {
           nextNativeLocations.set(tab.panelId, { windowName, groupId: snapshot.groupId });
+          nextDockedEdges.delete(tab.panelId);
         }
-        return { ...previous, nativeLocations: nextNativeLocations };
+        return {
+          ...previous,
+          nativeLocations: nextNativeLocations,
+          dockedEdges: nextDockedEdges,
+        };
       });
     },
     [selectedClusterId, updateActiveState]

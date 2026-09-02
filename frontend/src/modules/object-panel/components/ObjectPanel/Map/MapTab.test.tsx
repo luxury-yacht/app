@@ -26,7 +26,12 @@ const objectPanelMocks = vi.hoisted(() => ({
 }));
 
 const navigateMocks = vi.hoisted(() => ({
+  available: true,
   navigateToView: vi.fn(),
+}));
+
+const objectMapProps = vi.hoisted(() => ({
+  current: null as Record<string, unknown> | null,
 }));
 
 const errorHandlerMocks = vi.hoisted(() => ({
@@ -60,7 +65,10 @@ vi.mock('@/utils/errorHandler', () => ({
 }));
 
 vi.mock('@modules/object-map/ObjectMap', () => ({
-  default: () => <div data-testid="object-map" />,
+  default: (props: Record<string, unknown>) => {
+    objectMapProps.current = props;
+    return <div data-testid="object-map" />;
+  },
 }));
 
 type SnapshotStatus = 'idle' | 'loading' | 'ready' | 'updating' | 'initialising' | 'error';
@@ -160,7 +168,9 @@ beforeEach(() => {
   refreshMocks.setScopedDomainEnabled.mockClear();
   refreshMocks.fetchScopedDomain.mockClear();
   objectPanelMocks.openWithObject.mockClear();
+  navigateMocks.available = true;
   navigateMocks.navigateToView.mockClear();
+  objectMapProps.current = null;
   errorHandlerMocks.handle.mockClear();
 });
 
@@ -231,6 +241,21 @@ describe('MapTab', () => {
     expect(container.querySelector('[data-testid="object-map"]')).toBeTruthy();
     expect(container.textContent).not.toContain('Loading object map');
 
+    await unmount();
+  });
+
+  it('omits workspace navigation from the object map in a panel window', async () => {
+    navigateMocks.available = false;
+    snapshotState.current = {
+      status: 'ready',
+      data: mapPayload,
+      error: null,
+    };
+
+    const { unmount } = await renderMapTab();
+
+    expect(objectMapProps.current?.onNavigateView).toBeUndefined();
+    expect(objectMapProps.current?.onOpenPanel).toEqual(expect.any(Function));
     await unmount();
   });
 });

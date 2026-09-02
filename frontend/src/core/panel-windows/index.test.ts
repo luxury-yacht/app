@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
     FocusPanelWindow: vi.fn(),
     RequestPanelWindowClose: vi.fn(),
     AcknowledgePanelWindowClose: vi.fn(),
-    RequestClosePanelWindowsForCluster: vi.fn(),
     AcknowledgeWorkspaceWindowClose: vi.fn(),
     RequestPanelWindowGuard: vi.fn(),
     AcknowledgePanelWindowGuard: vi.fn(),
@@ -61,7 +60,6 @@ import {
   onPanelWindowGuardResult,
   onPanelWindowOpened,
   onPanelWindowSnapshotUpdated,
-  requestClosePanelWindowsForCluster,
   requestPanelObjectOpen,
   requestPanelTabClose,
   requestPanelWindowClose,
@@ -146,7 +144,6 @@ describe('native panel-window transport', () => {
     await focusPanelWindow('workspace-1', 'panel-1', 'panel-a');
     await requestPanelWindowClose('workspace-1', 'panel-1', 'owner-close');
     await acknowledgePanelWindowClose('panel-1');
-    await requestClosePanelWindowsForCluster('workspace-1', 'cluster-1');
     await acknowledgeWorkspaceWindowClose('workspace-1');
     await requestPanelWindowGuard('workspace-1', 'panel-1', 'guard-1', 'application-quit');
     await acknowledgePanelWindowGuard('panel-1', 'guard-1', true);
@@ -182,10 +179,6 @@ describe('native panel-window transport', () => {
       'owner-close'
     );
     expect(mocks.backend.AcknowledgePanelWindowClose).toHaveBeenCalledWith('panel-1');
-    expect(mocks.backend.RequestClosePanelWindowsForCluster).toHaveBeenCalledWith(
-      'workspace-1',
-      'cluster-1'
-    );
     expect(mocks.backend.AcknowledgeWorkspaceWindowClose).toHaveBeenCalledWith('workspace-1');
     expect(mocks.backend.RequestPanelWindowGuard).toHaveBeenCalledWith(
       'workspace-1',

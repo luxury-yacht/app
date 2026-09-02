@@ -56,7 +56,6 @@ type DesktopShellBindings struct {
 	FocusPanelWindow           func(string, string, string) error
 	RequestPanelClose          func(string, string, string) error
 	AcknowledgePanelClose      func(string) error
-	RequestClusterPanelsClose  func(string, string) error
 	AcknowledgeWorkspaceClose  func(string) error
 	RoutePanelCommand          func(string, string) error
 	RequestPanelObjectOpen     func(string, panelwindow.ObjectReference, string) error
@@ -87,7 +86,6 @@ type DesktopShell struct {
 	focusPanelWindow           func(string, string, string) error
 	requestPanelClose          func(string, string, string) error
 	acknowledgePanelClose      func(string) error
-	requestClusterPanelsClose  func(string, string) error
 	acknowledgeWorkspaceClose  func(string) error
 	routePanelCommand          func(string, string) error
 	requestPanelObjectOpen     func(string, panelwindow.ObjectReference, string) error
@@ -138,7 +136,6 @@ func NewDesktopShell(
 		shell.focusPanelWindow = bindings[0].FocusPanelWindow
 		shell.requestPanelClose = bindings[0].RequestPanelClose
 		shell.acknowledgePanelClose = bindings[0].AcknowledgePanelClose
-		shell.requestClusterPanelsClose = bindings[0].RequestClusterPanelsClose
 		shell.acknowledgeWorkspaceClose = bindings[0].AcknowledgeWorkspaceClose
 		shell.routePanelCommand = bindings[0].RoutePanelCommand
 		shell.requestPanelObjectOpen = bindings[0].RequestPanelObjectOpen

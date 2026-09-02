@@ -183,12 +183,6 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 			}
 			return windows.AcknowledgePanelWindowClose(windowName)
 		},
-		RequestClusterPanelsClose: func(ownerWindowName, clusterID string) error {
-			if windows == nil {
-				return fmt.Errorf("native window registry is not available")
-			}
-			return windows.RequestClosePanelWindowsForCluster(ownerWindowName, clusterID)
-		},
 		AcknowledgeWorkspaceClose: func(ownerWindowName string) error {
 			if windows == nil {
 				return fmt.Errorf("native window registry is not available")

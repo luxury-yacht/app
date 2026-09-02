@@ -265,14 +265,6 @@ func appPreferenceDescriptors() []preferenceDescriptor {
 			"", clampRange(minObjectPanelFloatingHeight, maxObjectPanelLayoutValue), nil,
 			func(s *AppSettings) *int { return &s.ObjectPanelFloatingHeight }),
 
-		intPreference(appPreferenceObjectPanelFloatingX, intPreferenceLimits{defaultValue: defaultObjectPanelFloatingX, minValue: intPtr(minObjectPanelFloatingX), maxValue: intPtr(maxObjectPanelLayoutValue)}, false,
-			"", zeroDefaulted(defaultObjectPanelFloatingX, clampRange(minObjectPanelFloatingX, maxObjectPanelLayoutValue)), nil,
-			func(s *AppSettings) *int { return &s.ObjectPanelFloatingX }),
-
-		intPreference(appPreferenceObjectPanelFloatingY, intPreferenceLimits{defaultValue: defaultObjectPanelFloatingY, minValue: intPtr(minObjectPanelFloatingY), maxValue: intPtr(maxObjectPanelLayoutValue)}, false,
-			"", zeroDefaulted(defaultObjectPanelFloatingY, clampRange(minObjectPanelFloatingY, maxObjectPanelLayoutValue)), nil,
-			func(s *AppSettings) *int { return &s.ObjectPanelFloatingY }),
-
 		intPreference(appPreferencePaletteHueLight, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteHue), maxValue: intPtr(maxPaletteHue)}, false,
 			"Palette hue light changed to", clampRange(minPaletteHue, maxPaletteHue), nil,
 			func(s *AppSettings) *int { return &s.PaletteHueLight }),

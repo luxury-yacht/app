@@ -39,8 +39,6 @@ const mocks = vi.hoisted(() => ({
     dockedBottomHeight: 300,
     floatingWidth: 720,
     floatingHeight: 560,
-    floatingX: 100,
-    floatingY: 100,
   },
   openPanels: new Map<string, typeof objectRef>(),
   nativeLocations: new Map<string, { windowName: string; groupId: string }>(),

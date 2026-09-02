@@ -84,13 +84,6 @@ func (s *DesktopShell) AcknowledgePanelWindowClose(windowName string) error {
 	return s.acknowledgePanelClose(windowName)
 }
 
-func (s *DesktopShell) RequestClosePanelWindowsForCluster(ownerWindowName, clusterID string) error {
-	if s == nil || s.requestClusterPanelsClose == nil {
-		return fmt.Errorf("panel-window registry is not available")
-	}
-	return s.requestClusterPanelsClose(ownerWindowName, clusterID)
-}
-
 func (s *DesktopShell) AcknowledgeWorkspaceWindowClose(ownerWindowName string) error {
 	if s == nil || s.acknowledgeWorkspaceClose == nil {
 		return fmt.Errorf("panel-window registry is not available")

@@ -35,7 +35,7 @@ interface MapTabProps {
 
 const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
   const { openWithObject } = useObjectPanel();
-  const { navigateToView } = useNavigateToView();
+  const { available: navigationAvailable, navigateToView } = useNavigateToView();
   const handleFetchError = useCallback((error: unknown) => {
     errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
       source: 'object-map-fetch',
@@ -98,7 +98,7 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
           <ObjectMap
             payload={payload}
             onOpenPanel={handleOpenPanel}
-            onNavigateView={handleNavigateView}
+            onNavigateView={navigationAvailable ? handleNavigateView : undefined}
             onOpenObjectMap={handleOpenObjectMap}
           />
         )}

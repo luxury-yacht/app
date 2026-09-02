@@ -14,6 +14,7 @@ import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { panelwindow } from '@/core/backend-api/models';
 
 const clearPanelStateMock = vi.fn();
 const handoffLayoutBeforeCloseMock = vi.fn();
@@ -454,5 +455,122 @@ describe('ObjectPanelStateContext', () => {
 
     // Two panels × at least one scope each → at least 2 eviction calls.
     expect(resetScopedDomainMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('indexes owned panels across native and docked locations', async () => {
+    await renderProvider();
+    const objectRef = {
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      namespace: 'default',
+      name: 'api',
+    };
+
+    let panelId = '';
+    act(() => {
+      panelId =
+        stateRef.current?.upsertOwnedPanel(objectRef, 'events', {
+          kind: 'panel-window',
+          windowName: 'panel-1',
+          groupId: 'group-1',
+        }) ?? '';
+    });
+
+    expect(stateRef.current?.getOwnedPanel('cluster-a', panelId)).toMatchObject({
+      objectRef,
+      activeView: 'events',
+      nativeLocation: { windowName: 'panel-1', groupId: 'group-1' },
+    });
+    expect(stateRef.current?.panelIdsForPanelWindow('cluster-a', 'panel-1')).toEqual([panelId]);
+    expect(stateRef.current?.panelIdsForCluster('cluster-a')).toEqual([panelId]);
+    expect(stateRef.current?.nativeWindowNamesForCluster('cluster-a')).toEqual(['panel-1']);
+
+    act(() => {
+      stateRef.current?.upsertOwnedPanel(objectRef, 'yaml', { kind: 'docked', edge: 'bottom' });
+    });
+
+    expect(stateRef.current?.getOwnedPanel('cluster-a', panelId)).toMatchObject({
+      activeView: 'yaml',
+      dockedEdge: 'bottom',
+    });
+    expect(stateRef.current?.getOwnedPanel('cluster-a', panelId)?.nativeLocation).toBeUndefined();
+    expect(stateRef.current?.nativeWindowNamesForCluster('cluster-a')).toEqual([]);
+
+    act(() => {
+      stateRef.current?.removeOwnedPanel('cluster-a', panelId);
+    });
+    expect(stateRef.current?.getOwnedPanel('cluster-a', panelId)).toBeNull();
+    expect(stateRef.current?.panelIdsForCluster('cluster-a')).toEqual([]);
+  });
+
+  it('synchronizes, docks, recommits, and removes a native group snapshot', async () => {
+    await renderProvider();
+    const podRef = {
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      namespace: 'default',
+      name: 'api',
+    };
+    const deploymentRef = {
+      clusterId: 'cluster-a',
+      group: 'apps',
+      version: 'v1',
+      kind: 'Deployment',
+      namespace: 'default',
+      name: 'web',
+    };
+    const snapshot = {
+      schemaVersion: 1,
+      transferId: 'transfer-1',
+      ownerWindowName: 'workspace-1',
+      clusterId: 'cluster-a',
+      groupId: 'group-1',
+      activePanelId: 'panel-deployment',
+      tabs: [
+        { panelId: 'panel-pod', objectRef: podRef, activeView: 'details' },
+        { panelId: 'panel-deployment', objectRef: deploymentRef, activeView: 'map' },
+      ],
+    } as panelwindow.GroupSnapshot;
+
+    act(() => {
+      stateRef.current?.syncPanelWindowSnapshot(snapshot, 'panel-1');
+    });
+    expect(stateRef.current?.panelIdsForPanelWindow('cluster-a', 'panel-1')).toEqual([
+      'panel-pod',
+      'panel-deployment',
+    ]);
+
+    const trimmedSnapshot = {
+      ...snapshot,
+      tabs: [{ panelId: 'panel-deployment', objectRef: deploymentRef, activeView: 'yaml' }],
+    } as panelwindow.GroupSnapshot;
+    act(() => {
+      stateRef.current?.syncPanelWindowSnapshot(trimmedSnapshot, 'panel-1');
+      stateRef.current?.dockPanelWindow(trimmedSnapshot, 'bottom');
+    });
+    expect(stateRef.current?.getOwnedPanel('cluster-a', 'panel-pod')).toBeNull();
+    expect(stateRef.current?.getOwnedPanel('cluster-a', 'panel-deployment')).toMatchObject({
+      activeView: 'yaml',
+      dockedEdge: 'bottom',
+    });
+
+    act(() => {
+      stateRef.current?.commitPanelWindow(trimmedSnapshot, 'panel-1');
+    });
+    expect(stateRef.current?.getOwnedPanel('cluster-a', 'panel-deployment')).toMatchObject({
+      nativeLocation: { windowName: 'panel-1', groupId: 'group-1' },
+    });
+    expect(
+      stateRef.current?.getOwnedPanel('cluster-a', 'panel-deployment')?.dockedEdge
+    ).toBeUndefined();
+
+    act(() => {
+      stateRef.current?.removePanelWindow('cluster-a', 'panel-1');
+    });
+    expect(stateRef.current?.getOwnedPanel('cluster-a', 'panel-deployment')).toBeNull();
   });
 });

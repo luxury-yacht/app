@@ -160,7 +160,6 @@ type PanelWindowCommands interface {
 	FocusPanelWindow(string, string, string) error
 	RequestPanelWindowClose(string, string, string) error
 	AcknowledgePanelWindowClose(string) error
-	RequestClosePanelWindowsForCluster(string, string) error
 	AcknowledgeWorkspaceWindowClose(string) error
 	RoutePanelWindowCommand(string, string) error
 	RequestPanelObjectOpen(string, panelwindow.ObjectReference, string) error
@@ -696,13 +695,6 @@ func (s *DesktopService) AcknowledgePanelWindowClose(ctx context.Context, window
 		return err
 	}
 	return s.panelWindows.AcknowledgePanelWindowClose(windowName)
-}
-
-func (s *DesktopService) RequestClosePanelWindowsForCluster(ctx context.Context, ownerWindowName, clusterID string) error {
-	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
-		return err
-	}
-	return s.panelWindows.RequestClosePanelWindowsForCluster(ownerWindowName, clusterID)
 }
 
 func (s *DesktopService) AcknowledgeWorkspaceWindowClose(ctx context.Context, ownerWindowName string) error {

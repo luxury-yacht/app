@@ -18,8 +18,6 @@ const appPreferenceMocks = vi.hoisted(() => ({
     dockedBottomHeight: 260,
     floatingWidth: 720,
     floatingHeight: 520,
-    floatingX: 60,
-    floatingY: 60,
   })),
   getIntegerPreferenceMetadata: vi.fn((key: string) => ({
     key,
@@ -149,8 +147,6 @@ describe('ObjectPanelSection', () => {
       dockedBottomHeight: 260,
       floatingWidth: 810,
       floatingHeight: 520,
-      floatingX: 60,
-      floatingY: 60,
     });
     expect(dockableMocks.applyLayoutDefaultsAcrossClusters).toHaveBeenCalledOnce();
   });

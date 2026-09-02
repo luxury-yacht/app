@@ -292,24 +292,6 @@ const preferenceSchema = (overrides: Record<string, Partial<Record<string, unkno
       runtimeSideEffect: false,
     },
     {
-      key: 'objectPanelFloatingX',
-      type: 'integer',
-      defaultValue: 100,
-      currentValue: 100,
-      min: 1,
-      max: 9999,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'objectPanelFloatingY',
-      type: 'integer',
-      defaultValue: 100,
-      currentValue: 100,
-      min: 1,
-      max: 9999,
-      runtimeSideEffect: false,
-    },
-    {
       key: 'paletteHueLight',
       type: 'integer',
       defaultValue: 0,
@@ -458,8 +440,6 @@ describe('appPreferences', () => {
       dockedBottomHeight: 600,
       floatingWidth: 600,
       floatingHeight: 800,
-      floatingX: 100,
-      floatingY: 100,
     });
   });
 
@@ -879,8 +859,6 @@ describe('appPreferences', () => {
       dockedBottomHeight: 20_000,
       floatingWidth: 1,
       floatingHeight: 20_000,
-      floatingX: -5,
-      floatingY: 20_000,
     });
 
     expect(getObjectPanelLayoutDefaults()).toEqual({
@@ -888,8 +866,6 @@ describe('appPreferences', () => {
       dockedBottomHeight: 9999,
       floatingWidth: 450,
       floatingHeight: 9999,
-      floatingX: 100,
-      floatingY: 9999,
     });
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [
@@ -897,8 +873,6 @@ describe('appPreferences', () => {
         { key: 'objectPanelDockedBottomHeight', value: 9999 },
         { key: 'objectPanelFloatingWidth', value: 450 },
         { key: 'objectPanelFloatingHeight', value: 9999 },
-        { key: 'objectPanelFloatingX', value: 100 },
-        { key: 'objectPanelFloatingY', value: 9999 },
       ],
     });
   });

@@ -13,12 +13,13 @@ import { requireValue } from '@/test-utils/requireValue';
 
 const openWithObject = vi.fn();
 const navigateToView = vi.fn();
+const navigationState = vi.hoisted(() => ({ available: true }));
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({ openWithObject }),
 }));
 vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView }),
+  useNavigateToView: () => ({ available: navigationState.available, navigateToView }),
 }));
 
 import { ObjectPanelLink } from './ObjectPanelLink';
@@ -35,6 +36,7 @@ describe('ObjectPanelLink', () => {
     root = ReactDOM.createRoot(container);
     openWithObject.mockClear();
     navigateToView.mockClear();
+    navigationState.available = true;
   });
   afterEach(() => {
     act(() => root.unmount());
@@ -78,5 +80,14 @@ describe('ObjectPanelLink', () => {
 
     click(link, false);
     expect(openWithObject).toHaveBeenCalledWith(objectRef);
+  });
+
+  it('falls back to opening the object when workspace navigation is unavailable', () => {
+    navigationState.available = false;
+
+    click(renderLink(), true);
+
+    expect(openWithObject).toHaveBeenCalledWith(objectRef);
+    expect(navigateToView).not.toHaveBeenCalled();
   });
 });

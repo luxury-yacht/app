@@ -20,6 +20,8 @@ const {
   gridTablePropsRef,
   mockOpenWithObject,
   objectPanelRef,
+  navigationAvailable,
+  optionalViewState,
   navigateToViewMock,
   useTableSortMock,
   requestRefreshDomainStateMock,
@@ -30,6 +32,16 @@ const {
   gridTablePropsRef: { current: null as GridTableProps<PodSnapshotEntry> | null },
   mockOpenWithObject: vi.fn(),
   objectPanelRef: { current: null as unknown },
+  navigationAvailable: { current: true },
+  optionalViewState: {
+    current: {
+      onNamespaceSelect: vi.fn(),
+      setActiveNamespaceTab: vi.fn(),
+    } as {
+      onNamespaceSelect: ReturnType<typeof vi.fn>;
+      setActiveNamespaceTab: ReturnType<typeof vi.fn>;
+    } | null,
+  },
   navigateToViewMock: vi.fn(),
   useTableSortMock: vi.fn(),
   requestRefreshDomainStateMock: vi.fn(),
@@ -65,10 +77,7 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
     onNamespaceSelect: vi.fn(),
     setActiveNamespaceTab: vi.fn(),
   }),
-  useOptionalViewState: () => ({
-    onNamespaceSelect: vi.fn(),
-    setActiveNamespaceTab: vi.fn(),
-  }),
+  useOptionalViewState: () => optionalViewState.current,
 }));
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
@@ -103,7 +112,10 @@ vi.mock('@shared/components/tables/GridTable', () => ({
 }));
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: navigateToViewMock }),
+  useNavigateToView: () => ({
+    available: navigationAvailable.current,
+    navigateToView: navigateToViewMock,
+  }),
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -256,6 +268,11 @@ describe('PodsTab (query-backed)', () => {
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
     objectPanelRef.current = DEPLOYMENT_OBJECT_DATA;
+    navigationAvailable.current = true;
+    optionalViewState.current = {
+      onNamespaceSelect: vi.fn(),
+      setActiveNamespaceTab: vi.fn(),
+    };
     mockOpenWithObject.mockReset();
     navigateToViewMock.mockReset();
     requestRefreshDomainStateMock.mockReset();
@@ -317,6 +334,22 @@ describe('PodsTab (query-backed)', () => {
     expect(getGridTableProps().data.map((pod: PodSnapshotEntry) => pod.ref.name)).toEqual([
       'query-pod',
     ]);
+  });
+
+  it('omits workspace-only Pod and namespace navigation in a panel window', async () => {
+    navigationAvailable.current = false;
+    optionalViewState.current = null;
+
+    await renderPods();
+
+    const row = requireValue(getGridTableProps().data[0], 'expected Pod row');
+    const nameCell = requireReactElement<{ onClick: (event: { altKey: boolean }) => void }>(
+      getGridColumn('name').render(row),
+      'expected interactive Pod name'
+    );
+    act(() => nameCell.props.onClick({ altKey: true }));
+    expect(mockOpenWithObject).toHaveBeenCalledOnce();
+    expect(getGridColumn('namespace').render(row)).toBe('team-a');
   });
 
   it('omits Status while preserving the backend-owned Node query facet', async () => {

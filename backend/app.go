@@ -57,7 +57,6 @@ type ApplicationRuntimeOptions struct {
 	FocusPanelWindow           func(string, string, string) error
 	RequestPanelClose          func(string, string, string) error
 	AcknowledgePanelClose      func(string) error
-	RequestClusterPanelsClose  func(string, string) error
 	AcknowledgeWorkspaceClose  func(string) error
 	RoutePanelCommand          func(string, string) error
 	RequestPanelObjectOpen     func(string, panelwindow.ObjectReference, string) error
@@ -115,7 +114,6 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 			FocusPanelWindow:           options.FocusPanelWindow,
 			RequestPanelClose:          options.RequestPanelClose,
 			AcknowledgePanelClose:      options.AcknowledgePanelClose,
-			RequestClusterPanelsClose:  options.RequestClusterPanelsClose,
 			AcknowledgeWorkspaceClose:  options.AcknowledgeWorkspaceClose,
 			RoutePanelCommand:          options.RoutePanelCommand,
 			RequestPanelObjectOpen:     options.RequestPanelObjectOpen,

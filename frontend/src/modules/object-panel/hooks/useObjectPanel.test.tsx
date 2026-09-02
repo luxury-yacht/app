@@ -16,6 +16,8 @@ import { requireValue } from '@/test-utils/requireValue';
 
 // Mock dockable panel context (replaces the old useDockablePanelState mock).
 const mockFocusPanel = vi.fn();
+const mockRequestGroupMove = vi.fn(() => true);
+let mockDefaultObjectPanelPosition: 'right' | 'bottom' | 'floating' = 'right';
 let mockTabGroups: TabGroupState = {
   right: { tabs: [], activeTab: null },
   bottom: { tabs: [], activeTab: null },
@@ -25,7 +27,13 @@ vi.mock('@ui/dockable', () => ({
   useDockablePanelContext: () => ({
     tabGroups: mockTabGroups,
     focusPanel: mockFocusPanel,
+    requestGroupMove: mockRequestGroupMove,
   }),
+}));
+
+vi.mock('@/core/settings/appPreferences', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/core/settings/appPreferences')>()),
+  getDefaultObjectPanelPosition: () => mockDefaultObjectPanelPosition,
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -87,6 +95,8 @@ describe('useObjectPanel', () => {
       floating: [],
     };
     mockFocusPanel.mockClear();
+    mockRequestGroupMove.mockClear();
+    mockDefaultObjectPanelPosition = 'right';
     if (!useObjectPanel || !closeObjectPanelGlobal) {
       throw new Error('Object panel hooks failed to load');
     }
@@ -185,6 +195,37 @@ describe('useObjectPanel', () => {
     });
 
     expect(mockFocusPanel).toHaveBeenCalledWith(panelId);
+  });
+
+  it('floats only the new panel group when floating is the default', async () => {
+    mockDefaultObjectPanelPosition = 'floating';
+    const pod = {
+      kind: 'Pod',
+      group: '',
+      version: 'v1',
+      name: 'api',
+      namespace: 'default',
+      clusterId: 'test-cluster',
+    };
+    const panelId = objectPanelId({ ...pod, clusterName: 'test' });
+
+    await act(async () => {
+      hookResult.openWithObject(pod);
+      await Promise.resolve();
+    });
+    mockTabGroups = {
+      right: { tabs: ['existing-panel'], activeTab: 'existing-panel' },
+      bottom: { tabs: [], activeTab: null },
+      floating: [{ groupId: 'new-panel-group', tabs: [panelId], activeTab: panelId }],
+    };
+
+    await act(async () => {
+      root.render(<WrappedTestComponent />);
+      await Promise.resolve();
+    });
+
+    expect(mockRequestGroupMove).toHaveBeenCalledWith('new-panel-group', 'floating');
+    expect(mockRequestGroupMove).not.toHaveBeenCalledWith('right', 'floating');
   });
 
   it('closes all panels via close()', () => {

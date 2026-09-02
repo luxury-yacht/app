@@ -32,6 +32,7 @@ interface RefreshManagerMock {
 // Capture the openWithObject calls so we can inspect clusterId.
 const mockOpenWithObject = vi.fn();
 const mockFindCatalogObjectByUID = vi.fn();
+const navigationMocks = vi.hoisted(() => ({ available: true, navigateToView: vi.fn() }));
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
@@ -40,7 +41,7 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+  useNavigateToView: () => navigationMocks,
 }));
 
 vi.mock('@core/backend-api', () => ({
@@ -211,6 +212,8 @@ describe('EventsTab', () => {
 
   beforeEach(() => {
     mockOpenWithObject.mockClear();
+    navigationMocks.available = true;
+    navigationMocks.navigateToView.mockClear();
     mockFindCatalogObjectByUID.mockReset();
     mockFetchScopedDomain.mockClear();
     refreshOrchestrator.setScopedDomainEnabled.mockClear();
@@ -267,6 +270,36 @@ describe('EventsTab', () => {
     expect(refreshManagerMock.register).toHaveBeenCalledWith(
       expect.objectContaining({ name: `object-deployment:${PANEL_ID}-events` })
     );
+  });
+
+  it('falls back to opening the related object when workspace navigation is unavailable', async () => {
+    navigationMocks.available = false;
+    hoistedSnapshot.data = { events: [makeEvent()] };
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          panelId={PANEL_ID}
+          eventsScope="cluster-a:events"
+          isActive
+        />
+      );
+    });
+
+    const objectNameColumn = requireValue(
+      gridTableState.lastProps?.columns.find((column) => column.key === 'objectName'),
+      'expected object name column'
+    );
+    const row = requireValue(gridTableState.lastProps?.data[0], 'expected event row');
+    const objectNameCell = requireReactElement<{
+      onClick: (event: { altKey: boolean }) => void;
+    }>(objectNameColumn.render(row), 'expected interactive event object name');
+    await act(async () => {
+      objectNameCell.props.onClick({ altKey: true });
+      await Promise.resolve();
+    });
+    expect(navigationMocks.navigateToView).not.toHaveBeenCalled();
+    expect(mockOpenWithObject).toHaveBeenCalledOnce();
   });
 
   it('defaults the visible Last Seen column to newest-event sorting', async () => {

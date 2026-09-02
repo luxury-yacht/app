@@ -495,6 +495,36 @@ func TestRegistryShowsPanelOnlyAfterMatchingReadyAcknowledgement(t *testing.T) {
 	require.Equal(t, []string{descriptor.WindowName}, shown)
 }
 
+func TestRegistryReportsPanelClosedWhenReadyWindowDisappearsBeforeShow(t *testing.T) {
+	wailsApp := application.New(application.Options{})
+	registry := NewRegistry(wailsApp, nil, nil)
+	owner := registry.Create(true)
+	snapshot := validPanelGroupSnapshot()
+	snapshot.OwnerWindowName = owner.Name()
+	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	require.NoError(t, err)
+	registry.showWindow = func(string) bool { return false }
+
+	var closed panelwindow.WindowClosedEvent
+	registry.emitWindowEvent = func(target, eventName string, payload any) bool {
+		require.Equal(t, owner.Name(), target)
+		require.Equal(t, panelwindow.WindowClosedEventName, eventName)
+		closed = payload.(panelwindow.WindowClosedEvent)
+		return true
+	}
+
+	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
+
+	require.ErrorContains(t, err, "disappeared before ready")
+	require.Equal(t, panelwindow.WindowClosedEvent{
+		WindowName: descriptor.WindowName,
+		ClusterID:  descriptor.ClusterID,
+		GroupID:    descriptor.GroupID,
+	}, closed)
+	_, descriptorErr := registry.PanelDescriptor(descriptor.WindowName)
+	require.Error(t, descriptorErr)
+}
+
 func TestRegistryRoutesAcknowledgedOpenAndDockToTheImmutableOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
 	registry := NewRegistry(wailsApp, nil, nil)
@@ -786,7 +816,7 @@ func TestRegistryTreatsAnUncancelledWindowEventAsDelivered(t *testing.T) {
 	))
 }
 
-func TestRegistryClosesClusterPanelsBeforeAuthorizingTheirOwnerClose(t *testing.T) {
+func TestRegistryBlocksOwnerCloseUntilPanelChildrenAcknowledge(t *testing.T) {
 	wailsApp := application.New(application.Options{})
 	registry := NewRegistry(wailsApp, nil, nil)
 	owner := registry.Create(true)
@@ -817,10 +847,11 @@ func TestRegistryClosesClusterPanelsBeforeAuthorizingTheirOwnerClose(t *testing.
 		return true
 	}
 
-	require.NoError(t, registry.RequestClosePanelWindowsForCluster(owner.Name(), "cluster-1"))
+	require.NoError(t, registry.RequestPanelWindowClose(owner.Name(), clusterPanel, "cluster-close"))
 	require.Equal(t, []string{clusterPanel}, requested)
 	require.ErrorContains(t, registry.AcknowledgeWorkspaceWindowClose(owner.Name()), "still has live")
 
+	require.NoError(t, registry.RequestPanelWindowClose(owner.Name(), otherPanel, "cluster-close"))
 	require.NoError(t, registry.AcknowledgePanelWindowClose(clusterPanel))
 	require.NoError(t, registry.AcknowledgePanelWindowClose(otherPanel))
 	require.NoError(t, registry.AcknowledgeWorkspaceWindowClose(owner.Name()))
@@ -901,12 +932,7 @@ func TestRegistryRejectsPanelCommandsAcrossOwnerAndTransportBoundaries(t *testin
 		require.ErrorContains(t, registry.AcknowledgePanelWindowClose(descriptor.WindowName), "not available")
 	})
 
-	t.Run("cluster and workspace close preserve live ownership", func(t *testing.T) {
-		registry, owner, _, snapshot := setup(t)
-		require.ErrorContains(t, registry.RequestClosePanelWindowsForCluster("workspace-missing", snapshot.ClusterID), "not live")
-		registry.emitWindowEvent = func(string, string, any) bool { return false }
-		require.ErrorContains(t, registry.RequestClosePanelWindowsForCluster(owner, snapshot.ClusterID), "not available")
-
+	t.Run("workspace close preserves live ownership", func(t *testing.T) {
 		empty := NewRegistry(application.New(application.Options{}), nil, nil)
 		emptyOwner := empty.Create(true).Name()
 		empty.closeWindow = func(string) bool { return false }
@@ -978,11 +1004,6 @@ func TestRegistryIndexesPanelWindowsByOwnerAndCluster(t *testing.T) {
 		t,
 		[]string{panelA1, panelA2, panelA3},
 		registry.PanelNamesOwnedByWorkspace(ownerA.Name()),
-	)
-	require.ElementsMatch(
-		t,
-		[]string{panelA1, panelA2},
-		registry.PanelNamesOwnedByCluster(ownerA.Name(), "cluster-1"),
 	)
 	require.Equal(
 		t,

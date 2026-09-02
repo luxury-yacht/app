@@ -36,12 +36,12 @@ export const ObjectPanelLink: React.FC<ObjectPanelLinkProps> = ({
   className,
 }) => {
   const { openWithObject } = useObjectPanel();
-  const { navigateToView } = useNavigateToView();
+  const { available: navigationAvailable, navigateToView } = useNavigateToView();
   const navigateTarget = navigateRef ?? objectRef;
 
   const handleClick = useCallback(
     (event: React.MouseEvent) => {
-      if (event.altKey) {
+      if (event.altKey && navigationAvailable) {
         event.preventDefault();
         event.stopPropagation();
         navigateToView(navigateTarget);
@@ -49,21 +49,21 @@ export const ObjectPanelLink: React.FC<ObjectPanelLinkProps> = ({
         openWithObject(objectRef);
       }
     },
-    [objectRef, navigateTarget, openWithObject, navigateToView]
+    [navigationAvailable, objectRef, navigateTarget, openWithObject, navigateToView]
   );
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        if (event.altKey) {
+        if (event.altKey && navigationAvailable) {
           navigateToView(navigateTarget);
         } else {
           openWithObject(objectRef);
         }
       }
     },
-    [objectRef, navigateTarget, openWithObject, navigateToView]
+    [navigationAvailable, objectRef, navigateTarget, openWithObject, navigateToView]
   );
 
   const combinedClassName = ['object-panel-link', className].filter(Boolean).join(' ');

@@ -59,8 +59,6 @@ type AppSettings struct {
 	ObjectPanelDockedBottomHeight            int      `json:"objectPanelDockedBottomHeight"`            // Default height when docked bottom (px)
 	ObjectPanelFloatingWidth                 int      `json:"objectPanelFloatingWidth"`                 // Default floating width (px)
 	ObjectPanelFloatingHeight                int      `json:"objectPanelFloatingHeight"`                // Default floating height (px)
-	ObjectPanelFloatingX                     int      `json:"objectPanelFloatingX"`                     // Default floating X position (px)
-	ObjectPanelFloatingY                     int      `json:"objectPanelFloatingY"`                     // Default floating Y position (px)
 	PaletteHueLight                          int      `json:"paletteHueLight"`                          // Hue for gray palette tint in light mode (0-360)
 	PaletteSaturationLight                   int      `json:"paletteSaturationLight"`                   // Saturation intensity for gray palette tint in light mode (0-100)
 	PaletteBrightnessLight                   int      `json:"paletteBrightnessLight"`                   // Brightness offset for gray palette in light mode (-50 to +50)

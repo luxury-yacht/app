@@ -6,11 +6,11 @@ import {
 
 describe('resolveObjectActionGuardPanelId', () => {
   it('keeps grid actions inside an object panel in that panel lifecycle', () => {
-    expect(resolveObjectActionGuardPanelId('gridtable', 'panel-a')).toBe('panel-a');
+    expect(resolveObjectActionGuardPanelId('panel-a')).toBe('panel-a');
   });
 
   it('does not register actions rendered outside an object panel', () => {
-    expect(resolveObjectActionGuardPanelId('gridtable', null)).toBeNull();
+    expect(resolveObjectActionGuardPanelId(null)).toBeNull();
   });
 });
 

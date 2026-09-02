@@ -54,6 +54,16 @@ const PANEL_CLUSTER_ID = 'panel-cluster-A';
 const SIDEBAR_CLUSTER_ID = 'sidebar-cluster-B';
 
 const mockOpenWithObject = vi.fn();
+const navigationMocks = vi.hoisted(() => ({ available: true, navigateToView: vi.fn() }));
+const optionalViewState = vi.hoisted(() => ({
+  current: {
+    onNamespaceSelect: vi.fn(),
+    setActiveNamespaceTab: vi.fn(),
+  } as {
+    onNamespaceSelect: ReturnType<typeof vi.fn>;
+    setActiveNamespaceTab: ReturnType<typeof vi.fn>;
+  } | null,
+}));
 
 // Return a panel-scoped objectData with a specific clusterId.
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
@@ -82,10 +92,7 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
     onNamespaceSelect: vi.fn(),
     setActiveNamespaceTab: vi.fn(),
   }),
-  useOptionalViewState: () => ({
-    onNamespaceSelect: vi.fn(),
-    setActiveNamespaceTab: vi.fn(),
-  }),
+  useOptionalViewState: () => optionalViewState.current,
 }));
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
@@ -122,7 +129,7 @@ const getContextMenuItems = (row: CapturedJobRow) =>
   )(row, 'name');
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+  useNavigateToView: () => navigationMocks,
 }));
 
 vi.mock('../shared.css', () => ({}));
@@ -151,6 +158,11 @@ describe('JobsTab', () => {
   beforeEach(() => {
     mockUseGridTablePersistence.mockClear();
     mockOpenWithObject.mockClear();
+    navigationMocks.available = true;
+    optionalViewState.current = {
+      onNamespaceSelect: vi.fn(),
+      setActiveNamespaceTab: vi.fn(),
+    };
     gridTablePropsRef.current = null;
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -203,6 +215,23 @@ describe('JobsTab', () => {
     });
 
     expect(container.querySelector('[data-testid="grid-table"]')).toBeTruthy();
+  });
+
+  it('omits workspace-only navigation handlers in a panel window', () => {
+    navigationMocks.available = false;
+    optionalViewState.current = null;
+    act(() => {
+      root.render(<JobsTab jobs={[makeJob()]} loading={false} isActive={true} />);
+    });
+
+    const row = requireValue(getGridTableProps().data[0], 'expected job row');
+    const nameCell = requireReactElement<{ onClick: (event: { altKey: boolean }) => void }>(
+      getGridColumn('name').render(row),
+      'expected interactive Job name'
+    );
+    act(() => nameCell.props.onClick({ altKey: true }));
+    expect(mockOpenWithObject).toHaveBeenCalledOnce();
+    expect(getGridColumn('namespace').render(row)).toBe('default');
   });
 
   it('does not offer custom metadata columns for JobSimpleInfo rows', () => {

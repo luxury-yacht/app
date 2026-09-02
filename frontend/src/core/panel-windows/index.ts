@@ -12,7 +12,6 @@ import {
   FailPanelWindowTransfer,
   FocusPanelWindow,
   GetNativeWindowDescriptor,
-  RequestClosePanelWindowsForCluster,
   RequestPanelObjectOpen,
   RequestPanelTabClose,
   RequestPanelWindowClose,
@@ -93,11 +92,6 @@ export const requestPanelWindowClose = (
 
 export const acknowledgePanelWindowClose = (windowName: string): Promise<void> =>
   AcknowledgePanelWindowClose(windowName);
-
-export const requestClosePanelWindowsForCluster = (
-  ownerWindowName: string,
-  clusterId: string
-): Promise<void> => RequestClosePanelWindowsForCluster(ownerWindowName, clusterId);
 
 export const acknowledgeWorkspaceWindowClose = (ownerWindowName: string): Promise<void> =>
   AcknowledgeWorkspaceWindowClose(ownerWindowName);
