@@ -1,11 +1,17 @@
 package backend
 
 import (
+	"context"
 	"testing"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/stretchr/testify/require"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+type panelCommandCaller string
+
+func (caller panelCommandCaller) Name() string { return string(caller) }
 
 func TestPanelWindowCommandsFailWhenTheNativeRegistryIsUnavailable(t *testing.T) {
 	shell := NewDesktopShell(nil, nil, nil, nil)
@@ -113,34 +119,52 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 		AcknowledgeApplicationQuit: func(string, string, bool) error { mark(); return nil },
 	})
 	service := NewDesktopService(DesktopServiceDependencies{PanelWindows: shell})
+	ctx := context.Background()
 	snapshot := panelwindow.GroupSnapshot{OwnerWindowName: "workspace-1"}
 	ref := panelwindow.ObjectReference{ClusterID: "cluster-1"}
 
-	gotNative, err := service.GetNativeWindowDescriptor("workspace-1")
+	gotNative, err := service.GetNativeWindowDescriptor(ctx, "workspace-1")
 	require.NoError(t, err)
 	require.Equal(t, native, gotNative)
-	gotWindow, err := service.BeginPanelWindowOpen("workspace-1", snapshot)
+	gotWindow, err := service.BeginPanelWindowOpen(ctx, "workspace-1", snapshot)
 	require.NoError(t, err)
 	require.Equal(t, window, gotWindow)
-	gotWindow, err = service.AcknowledgePanelWindowReady("panel-1", "transfer-1")
+	gotWindow, err = service.AcknowledgePanelWindowReady(ctx, "panel-1", "transfer-1")
 	require.NoError(t, err)
 	require.Equal(t, window, gotWindow)
-	require.NoError(t, service.BeginPanelWindowDock("panel-1", "right", snapshot))
-	require.NoError(t, service.AcknowledgePanelWindowDock("workspace-1", "panel-1", "transfer-1"))
-	require.NoError(t, service.FailPanelWindowTransfer("workspace-1", "panel-1", "transfer-1"))
-	require.NoError(t, service.FocusPanelWindow("workspace-1", "panel-1", "panel-a"))
-	require.NoError(t, service.RequestPanelWindowClose("workspace-1", "panel-1", "owner-close"))
-	require.NoError(t, service.AcknowledgePanelWindowClose("panel-1"))
-	require.NoError(t, service.RequestClosePanelWindowsForCluster("workspace-1", "cluster-1"))
-	require.NoError(t, service.AcknowledgeWorkspaceWindowClose("workspace-1"))
-	require.NoError(t, service.RoutePanelWindowCommand("panel-1", "menu:settings"))
-	require.NoError(t, service.RequestPanelObjectOpen("panel-1", ref, "details"))
-	require.NoError(t, service.AuthorizePanelObjectOpen("workspace-1", "panel-1", "panel-a", ref, "details"))
-	require.NoError(t, service.UpdatePanelWindowSnapshot("panel-1", snapshot))
-	require.NoError(t, service.RequestPanelTabClose("panel-1", "panel-a"))
-	require.NoError(t, service.AuthorizePanelTabClose("workspace-1", "panel-1", "panel-a"))
-	require.NoError(t, service.RequestPanelWindowGuard("workspace-1", "panel-1", "guard-1", "quit"))
-	require.NoError(t, service.AcknowledgePanelWindowGuard("panel-1", "guard-1", true))
-	require.NoError(t, service.AcknowledgeApplicationQuitPreflight("workspace-1", "quit-1", true))
+	require.NoError(t, service.BeginPanelWindowDock(ctx, "panel-1", "right", snapshot))
+	require.NoError(t, service.AcknowledgePanelWindowDock(ctx, "workspace-1", "panel-1", "transfer-1"))
+	require.NoError(t, service.FailPanelWindowTransfer(ctx, "workspace-1", "panel-1", "transfer-1"))
+	require.NoError(t, service.FocusPanelWindow(ctx, "workspace-1", "panel-1", "panel-a"))
+	require.NoError(t, service.RequestPanelWindowClose(ctx, "workspace-1", "panel-1", "owner-close"))
+	require.NoError(t, service.AcknowledgePanelWindowClose(ctx, "panel-1"))
+	require.NoError(t, service.RequestClosePanelWindowsForCluster(ctx, "workspace-1", "cluster-1"))
+	require.NoError(t, service.AcknowledgeWorkspaceWindowClose(ctx, "workspace-1"))
+	require.NoError(t, service.RoutePanelWindowCommand(ctx, "panel-1", "menu:settings"))
+	require.NoError(t, service.RequestPanelObjectOpen(ctx, "panel-1", ref, "details"))
+	require.NoError(t, service.AuthorizePanelObjectOpen(ctx, "workspace-1", "panel-1", "panel-a", ref, "details"))
+	require.NoError(t, service.UpdatePanelWindowSnapshot(ctx, "panel-1", snapshot))
+	require.NoError(t, service.RequestPanelTabClose(ctx, "panel-1", "panel-a"))
+	require.NoError(t, service.AuthorizePanelTabClose(ctx, "workspace-1", "panel-1", "panel-a"))
+	require.NoError(t, service.RequestPanelWindowGuard(ctx, "workspace-1", "panel-1", "guard-1", "quit"))
+	require.NoError(t, service.AcknowledgePanelWindowGuard(ctx, "panel-1", "guard-1", true))
+	require.NoError(t, service.AcknowledgeApplicationQuitPreflight(ctx, "workspace-1", "quit-1", true))
 	require.Equal(t, 20, called)
+}
+
+func TestDesktopServiceRejectsPanelCommandsWhoseClaimedCallerDoesNotMatchTheWailsSender(t *testing.T) {
+	called := false
+	shell := NewDesktopShell(nil, nil, nil, nil, DesktopShellBindings{
+		RequestPanelClose: func(string, string, string) error {
+			called = true
+			return nil
+		},
+	})
+	service := NewDesktopService(DesktopServiceDependencies{PanelWindows: shell})
+	ctx := context.WithValue(context.Background(), application.WindowKey, panelCommandCaller("panel-1"))
+
+	err := service.RequestPanelWindowClose(ctx, "workspace-1", "panel-1", "owner-close")
+
+	require.ErrorContains(t, err, "does not match Wails sender")
+	require.False(t, called)
 }

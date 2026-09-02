@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { order, bootstrap } = vi.hoisted(() => ({
   order: [] as string[],
   bootstrap: {
+    failPanelRender: false,
     descriptor: {
       schemaVersion: 1,
       role: 'workspace' as 'workspace' | 'panel',
@@ -27,12 +28,32 @@ const { order, bootstrap } = vi.hoisted(() => ({
   },
 }));
 
+const identityMocks = vi.hoisted(() => ({
+  setWorkspaceProjectionIdentity: vi.fn(),
+}));
+
+const desktopRuntimeMocks = vi.hoisted(() => ({
+  onBroadcastEvent: vi.fn(),
+}));
+
+const panelTransferMocks = vi.hoisted(() => ({
+  failPanelWindowTransfer: vi.fn(),
+}));
+
+const reactRootMocks = vi.hoisted(() => ({
+  render: vi.fn(),
+}));
+
 vi.mock('@/core/telemetry/sentry', () => ({
   configureErrorReportingFromPreferences: vi.fn(async () => {
     order.push('error-reporting-configured');
     return { available: true, preferences: { errorReportingEnabled: true } };
   }),
   createReactRootErrorHandlers: vi.fn(() => ({})),
+}));
+
+vi.mock('@/utils/errorHandler', () => ({
+  reportOperationalError: vi.fn(),
 }));
 
 // The factory runs when the module is first imported, so the recorded position
@@ -49,10 +70,17 @@ vi.mock('./PanelWindowApp.tsx', () => {
 
 vi.mock('@/core/panel-windows', () => ({
   resolveNativeWindowDescriptor: vi.fn(async () => bootstrap.descriptor),
+  failPanelWindowTransfer: (...args: unknown[]) =>
+    panelTransferMocks.failPanelWindowTransfer(...args),
 }));
 
 vi.mock('@/core/desktop-runtime', () => ({
   initializeWindowIdentity: vi.fn(async () => 'main'),
+  onBroadcastEvent: (...args: unknown[]) => desktopRuntimeMocks.onBroadcastEvent(...args),
+}));
+
+vi.mock('@/core/window-identity', () => ({
+  setWorkspaceProjectionIdentity: identityMocks.setWorkspaceProjectionIdentity,
 }));
 
 vi.mock('@shared/scrollbars/scrollbarActivity', () => ({
@@ -68,19 +96,32 @@ vi.mock('@/core/settings/appPreferences', () => ({
 }));
 
 vi.mock('react-dom/client', () => ({
-  createRoot: vi.fn(() => ({ render: vi.fn() })),
+  createRoot: vi.fn(() => ({
+    render: (...args: unknown[]) => {
+      if (bootstrap.failPanelRender) {
+        throw new Error('forced panel bootstrap failure');
+      }
+      return reactRootMocks.render(...args);
+    },
+  })),
 }));
 
 describe('application bootstrap', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     order.length = 0;
+    desktopRuntimeMocks.onBroadcastEvent.mockReset();
+    desktopRuntimeMocks.onBroadcastEvent.mockReturnValue(() => undefined);
     bootstrap.descriptor = {
       schemaVersion: 1,
       role: 'workspace',
       workspace: { windowName: 'main' },
       panel: undefined,
     };
+    bootstrap.failPanelRender = false;
+    panelTransferMocks.failPanelWindowTransfer.mockReset();
+    panelTransferMocks.failPanelWindowTransfer.mockResolvedValue(undefined);
+    reactRootMocks.render.mockReset();
     vi.resetModules();
     document.body.innerHTML = '<div id="app"></div>';
   });
@@ -97,7 +138,7 @@ describe('application bootstrap', () => {
     expect(order).toEqual(['error-reporting-configured', 'workspace-module-evaluated']);
   });
 
-  it('loads only the panel root and skips workspace auto-refresh for a panel descriptor', async () => {
+  it('loads the panel root under its owner workspace projection and initializes auto-refresh', async () => {
     bootstrap.descriptor = {
       schemaVersion: 1,
       role: 'panel',
@@ -127,6 +168,47 @@ describe('application bootstrap', () => {
     });
 
     expect(order).toEqual(['error-reporting-configured', 'panel-module-evaluated']);
-    expect(initializeAutoRefresh).not.toHaveBeenCalled();
+    expect(identityMocks.setWorkspaceProjectionIdentity).toHaveBeenCalledWith('main');
+    expect(initializeAutoRefresh).toHaveBeenCalledOnce();
+    expect(desktopRuntimeMocks.onBroadcastEvent).toHaveBeenCalledWith(
+      'settings:preferences-changed',
+      expect.any(Function)
+    );
+  });
+
+  it('shows a visible error and fails an opening panel transfer when bootstrap crashes', async () => {
+    bootstrap.failPanelRender = true;
+    bootstrap.descriptor = {
+      schemaVersion: 1,
+      role: 'panel',
+      workspace: undefined,
+      panel: {
+        windowName: 'panel-1',
+        ownerWindowName: 'main',
+        clusterId: 'cluster-1',
+        groupId: 'group-1',
+        state: 'opening',
+        snapshot: {
+          schemaVersion: 1,
+          transferId: 'transfer-1',
+          ownerWindowName: 'main',
+          clusterId: 'cluster-1',
+          groupId: 'group-1',
+          activePanelId: 'panel-a',
+          tabs: [],
+        },
+      },
+    };
+
+    await import('@/main');
+
+    await vi.waitFor(() => {
+      expect(document.getElementById('app')?.textContent).toContain('Could not open this panel');
+    });
+    expect(panelTransferMocks.failPanelWindowTransfer).toHaveBeenCalledWith(
+      'panel-1',
+      'panel-1',
+      'transfer-1'
+    );
   });
 });

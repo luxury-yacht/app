@@ -47,6 +47,7 @@ type ApplicationRuntimeOptions struct {
 	Reporter                   sentryreporting.Reporter
 	ApplicationUpdates         ApplicationUpdateOptions
 	CreateWorkspaceWindow      func()
+	IsWorkspaceWindow          func(string) bool
 	NativeWindowDescriptor     func(string) (panelwindow.NativeDescriptor, error)
 	BeginPanelWindowOpen       func(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	AcknowledgePanelReady      func(string, string) (panelwindow.WindowDescriptor, error)
@@ -78,6 +79,10 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 	var options ApplicationRuntimeOptions
 	if len(configured) == 1 {
 		options = configured[0]
+	}
+	isWorkspaceWindow := options.IsWorkspaceWindow
+	if isWorkspaceWindow == nil {
+		isWorkspaceWindow = func(string) bool { return true }
 	}
 	var reporters []sentryreporting.Reporter
 	if options.Reporter != nil {
@@ -197,6 +202,7 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		ClusterRuntime: clusterRuntime, ClusterWorkspace: clusterWorkspace, Refresh: refresh,
 		Preferences: preferences, Operations: operations, Logger: appLogs.Logger(),
 		Context: signals.CtxOrBackground, RuntimeAvailable: signals.runtimeAvailable, EmitEvent: signals.emitEvent,
+		IsWorkspaceWindow: isWorkspaceWindow,
 	})
 	favorites := NewFavoritesService()
 	uiState := NewUIStateStore()

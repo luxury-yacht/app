@@ -20,6 +20,7 @@ import type { KubernetesObjectReference } from '@/types/view-state';
 import { getViewForKind, isNamespaceScopedKind } from '@/utils/kindViewMap';
 
 export interface NavigateToViewResult {
+  available: boolean;
   navigateToView: (objectRef: KubernetesObjectReference) => void;
 }
 
@@ -93,5 +94,5 @@ export function useNavigateToView(): NavigateToViewResult {
     [viewState, sidebarState, setSelectedNamespace]
   );
 
-  return { navigateToView };
+  return { available: Boolean(viewState && sidebarState), navigateToView };
 }

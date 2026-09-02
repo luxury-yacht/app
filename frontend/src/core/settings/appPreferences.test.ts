@@ -823,6 +823,19 @@ describe('appPreferences', () => {
     );
   });
 
+  it('broadcasts persisted preference changes to peer webviews', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ autoRefreshEnabled: true });
+    await hydrateAppPreferences({ force: true });
+
+    setAutoRefreshEnabled(false);
+    await flushPromises();
+
+    expect(desktopRuntimeMocks.emitBroadcastEvent).toHaveBeenCalledWith(
+      'settings:preferences-changed',
+      undefined
+    );
+  });
+
   it('applies a valid peer appearance mode to the local cache and storage', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'light' });
     await hydrateAppPreferences({ force: true });

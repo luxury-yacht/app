@@ -979,8 +979,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       style.bottom = 'auto';
       style.transform = 'none';
       style.cursor = 'default';
-      style['--dockable-panel-translate-x'] = '0px';
-      style['--dockable-panel-translate-y'] = '0px';
       return style;
     }
 

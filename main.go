@@ -122,6 +122,13 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 				windows.Create(false)
 			}
 		},
+		IsWorkspaceWindow: func(windowName string) bool {
+			if windows == nil {
+				return false
+			}
+			descriptor, err := windows.WindowDescriptor(windowName)
+			return err == nil && descriptor.Role == panelwindow.NativeRoleWorkspace
+		},
 		NativeWindowDescriptor: func(windowName string) (panelwindow.NativeDescriptor, error) {
 			if windows == nil {
 				return panelwindow.NativeDescriptor{}, fmt.Errorf("native window registry is not available")

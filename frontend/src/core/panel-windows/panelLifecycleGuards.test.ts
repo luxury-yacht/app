@@ -34,6 +34,7 @@ describe('PanelLifecycleGuardRegistry', () => {
     blocker?.focus();
 
     expect(blocker?.reason).toBe('mutation-in-flight');
+    expect(blocker?.panelId).toBe('panel-b');
     expect(focusB).toHaveBeenCalledOnce();
     expect(focusA).not.toHaveBeenCalled();
   });

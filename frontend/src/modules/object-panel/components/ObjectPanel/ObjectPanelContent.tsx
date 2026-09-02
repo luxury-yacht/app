@@ -221,6 +221,10 @@ export function ObjectPanelContent({
   const showJobs = activeTab === 'jobs';
   const showEvents = activeTab === 'events';
   const showYaml = activeTab === 'yaml';
+  const hasRenderedYamlRef = React.useRef(false);
+  if (showYaml) {
+    hasRenderedYamlRef.current = true;
+  }
   const showMap = activeTab === 'map';
   const showManifest = activeTab === 'manifest';
   const showValues = activeTab === 'values';
@@ -361,22 +365,28 @@ export function ObjectPanelContent({
         </ErrorBoundary>
       )}
 
-      {showYaml && (
-        <ErrorBoundary
-          scope="panel-yaml"
-          resetKeys={detailScope ? [detailScope] : undefined}
-          fallback={(_, reset) => <TabErrorFallback tabName="YAML" reset={reset} />}
+      {!!hasRenderedYamlRef.current && (
+        <div
+          className={`object-panel-retained-tab${showYaml ? '' : ' object-panel-retained-tab--inactive'}`}
+          aria-hidden={!showYaml}
+          inert={!showYaml}
         >
-          <LazyTabContent name="YAML">
-            <YamlTab
-              scope={detailScope}
-              isActive={isPanelOpen && activeTab === 'yaml'}
-              canEdit={capabilities.canEditYaml}
-              editDisabledReason={capabilityReasons.editYaml}
-              clusterId={objectData?.clusterId ?? null}
-            />
-          </LazyTabContent>
-        </ErrorBoundary>
+          <ErrorBoundary
+            scope="panel-yaml"
+            resetKeys={detailScope ? [detailScope] : undefined}
+            fallback={(_, reset) => <TabErrorFallback tabName="YAML" reset={reset} />}
+          >
+            <LazyTabContent name="YAML">
+              <YamlTab
+                scope={detailScope}
+                isActive={isPanelOpen && showYaml}
+                canEdit={capabilities.canEditYaml}
+                editDisabledReason={capabilityReasons.editYaml}
+                clusterId={objectData?.clusterId ?? null}
+              />
+            </LazyTabContent>
+          </ErrorBoundary>
+        </div>
       )}
 
       {showMap && (

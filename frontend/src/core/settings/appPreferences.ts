@@ -922,6 +922,17 @@ const optimisticPreferenceUpdate = async (
     restoreLocalStorageSnapshot(previousStorage);
     throw error;
   }
+
+  if (wailsRuntimeAvailable()) {
+    try {
+      await emitBroadcastEvent('settings:preferences-changed', undefined);
+    } catch (error) {
+      reportOperationalError(error, {
+        source: 'AppPreferences',
+        action: 'broadcast-preference-change',
+      });
+    }
+  }
 };
 
 const fireAndForgetPreferenceUpdate = (

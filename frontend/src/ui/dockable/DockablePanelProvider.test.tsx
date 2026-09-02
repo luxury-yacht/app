@@ -130,6 +130,44 @@ describe('DockablePanelProvider', () => {
     await unmount();
   });
 
+  it('routes native tab close intent without removing the local tab before authorization', async () => {
+    const contextRef: { current: DockablePanelContextValue | null } = { current: null };
+    const requestClose = vi.fn();
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+    const Provider = DockablePanelProvider as React.ComponentType<
+      React.PropsWithChildren<{
+        nativeWindowMode: boolean;
+        onTabCloseRequest: (panelId: string) => void;
+      }>
+    >;
+    const { unmount } = await render(
+      <Provider nativeWindowMode onTabCloseRequest={requestClose}>
+        <Consumer />
+      </Provider>
+    );
+
+    await act(async () => {
+      requireDockableContext(contextRef.current).registerPanel({
+        panelId: 'panel-a',
+        title: 'A',
+        position: 'right',
+      });
+      requireDockableContext(contextRef.current).syncPanelGroup('panel-a', 'right');
+      await Promise.resolve();
+    });
+    await act(async () => {
+      requireDockableContext(contextRef.current).closeTab('panel-a');
+      await Promise.resolve();
+    });
+
+    expect(requestClose).toHaveBeenCalledWith('panel-a');
+    expect(requireDockableContext(contextRef.current).tabGroups.right.tabs).toEqual(['panel-a']);
+    await unmount();
+  });
+
   it('exposes tabGroups state that reflects explicit group sync actions', async () => {
     const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
       current: null,

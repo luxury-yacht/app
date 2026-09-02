@@ -31,7 +31,9 @@ func (a *WorkspaceCoordinator) GetClusterWorkspaceStateForWindow(windowID string
 		return ClusterWorkspaceState{Clusters: make(map[string]ClusterWorkspaceClusterState)}
 	}
 	windowID = strings.TrimSpace(windowID)
-	a.ensureWorkspaceSelections(windowID)
+	if a.isWorkspaceWindowFn != nil && a.isWorkspaceWindowFn(windowID) {
+		a.ensureWorkspaceSelections(windowID)
+	}
 	return a.captureClusterWorkspaceState(windowID)
 }
 

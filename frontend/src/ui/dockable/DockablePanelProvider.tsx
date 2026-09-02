@@ -57,6 +57,7 @@ interface DockablePanelContextValue {
   // Tab actions
   switchTab: (groupKey: GroupKey, panelId: string) => void;
   closeTab: (panelId: string, activationPreference?: AdjacentTabActivationPreference) => void;
+  commitTabClose: (panelId: string, activationPreference?: AdjacentTabActivationPreference) => void;
   reorderTabInGroup: (groupKey: GroupKey, panelId: string, newIndex: number) => void;
   movePanelBetweenGroups: (panelId: string, targetGroupKey: GroupKey, insertIndex?: number) => void;
   // Move a panel and bring the target container/frontmost panel into focus.
@@ -88,7 +89,6 @@ interface DockablePanelContextValue {
   subscribeContentChange: (groupKey: GroupKey, fn: () => void) => () => void;
   // Runtime refs currently shared across panels in this provider.
   groupLeaderByKeyRef: React.MutableRefObject<Map<string, string>>;
-  updateGridTableHoverSuppression: (shouldSuppress: boolean) => void;
 
   // Last-focused group -- tracks which panel group was most recently interacted with,
   // so new panels (e.g. object tabs) can open in the same group.
@@ -251,6 +251,7 @@ interface DockablePanelProviderProps {
     group: { groupKey: GroupKey; tabs: string[]; activeTab: string | null },
     targetPosition: DockPosition
   ) => boolean;
+  onTabCloseRequest?: (panelId: string) => void;
   nativeWindowMode?: boolean;
 }
 
@@ -258,6 +259,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   children,
   initialTabGroups,
   onGroupMoveRequest,
+  onTabCloseRequest,
   nativeWindowMode = false,
 }) => {
   const lifecycleGuards = useOptionalPanelLifecycleGuardRegistry();
@@ -565,15 +567,10 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   );
 
   // -----------------------------------------------------------------------
-  // closeTab -- removes a panel from its group AND fires onClose callback.
+  // commitTabClose -- applies an already-authorized local close.
   // -----------------------------------------------------------------------
-  const closeTab = useCallback(
+  const commitTabClose = useCallback(
     (panelId: string, activationPreference: AdjacentTabActivationPreference = 'right') => {
-      const blocker = lifecycleGuards?.firstBlocker([panelId]);
-      if (blocker) {
-        blocker.focus();
-        return;
-      }
       const registration = panelRegistrationsRef.current.get(panelId);
       const currentTabGroups = activeStore.getTabGroups();
       const currentGroupKey = getGroupForPanel(currentTabGroups, panelId);
@@ -609,7 +606,26 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       }
       setPanelOpenById(panelId, false);
     },
-    [activeStore, lifecycleGuards, reconcileLastFocusedGroup]
+    [activeStore, reconcileLastFocusedGroup]
+  );
+
+  // -----------------------------------------------------------------------
+  // closeTab -- validates close intent and lets a native owner authorize it.
+  // -----------------------------------------------------------------------
+  const closeTab = useCallback(
+    (panelId: string, activationPreference: AdjacentTabActivationPreference = 'right') => {
+      const blocker = lifecycleGuards?.firstBlocker([panelId]);
+      if (blocker) {
+        blocker.focus();
+        return;
+      }
+      if (nativeWindowMode && onTabCloseRequest) {
+        onTabCloseRequest(panelId);
+        return;
+      }
+      commitTabClose(panelId, activationPreference);
+    },
+    [commitTabClose, lifecycleGuards, nativeWindowMode, onTabCloseRequest]
   );
 
   // -----------------------------------------------------------------------
@@ -758,25 +774,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   // Shared runtime refs for panel-level coordination inside this provider.
   // -----------------------------------------------------------------------
   const groupLeaderByKeyRef = useRef(new Map<string, string>());
-  const hoverSuppressionCountRef = useRef(0);
-  const updateGridTableHoverSuppression = useCallback((shouldSuppress: boolean) => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    if (shouldSuppress) {
-      if (hoverSuppressionCountRef.current === 0) {
-        document.body.classList.add('gridtable-disable-hover');
-      }
-      hoverSuppressionCountRef.current += 1;
-      return;
-    }
-    if (hoverSuppressionCountRef.current > 0) {
-      hoverSuppressionCountRef.current -= 1;
-      if (hoverSuppressionCountRef.current === 0) {
-        document.body.classList.remove('gridtable-disable-hover');
-      }
-    }
-  }, []);
 
   // Fan out applyObjectPanelLayoutDefaults to every cluster's store.
   // Called by Settings.tsx when the user changes the default object
@@ -864,6 +861,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       removePanelFromGroups,
       switchTab,
       closeTab,
+      commitTabClose,
       reorderTabInGroup,
       movePanelBetweenGroups,
       movePanelBetweenGroupsAndFocus,
@@ -873,7 +871,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       notifyContentChange,
       subscribeContentChange,
       groupLeaderByKeyRef,
-      updateGridTableHoverSuppression,
       lastFocusedGroupKey,
       setLastFocusedGroupKey,
       getPreferredOpenGroupKey,
@@ -895,13 +892,13 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       removePanelFromGroups,
       switchTab,
       closeTab,
+      commitTabClose,
       reorderTabInGroup,
       movePanelBetweenGroups,
       movePanelBetweenGroupsAndFocus,
       movePanel,
       notifyContentChange,
       subscribeContentChange,
-      updateGridTableHoverSuppression,
       lastFocusedGroupKey,
       setLastFocusedGroupKey,
       getPreferredOpenGroupKey,

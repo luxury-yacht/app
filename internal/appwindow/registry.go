@@ -38,6 +38,7 @@ type Registry struct {
 	nextQuit             uint64
 	pendingQuit          *applicationQuitPreflight
 	quitApproved         bool
+	quitApprovalTimeout  *time.Timer
 	quitPreflightTimeout time.Duration
 	guardMu              sync.Mutex
 	pendingGuards        map[string]panelGuardRequest
@@ -52,6 +53,23 @@ type applicationQuitPreflight struct {
 type panelGuardRequest struct {
 	ownerWindowName string
 	panelWindowName string
+}
+
+func (r *Registry) setQuitApprovedLocked(approved bool) {
+	if r.quitApprovalTimeout != nil {
+		r.quitApprovalTimeout.Stop()
+		r.quitApprovalTimeout = nil
+	}
+	r.quitApproved = approved
+	if !approved || r.quitPreflightTimeout <= 0 {
+		return
+	}
+	r.quitApprovalTimeout = time.AfterFunc(r.quitPreflightTimeout, func() {
+		r.quitMu.Lock()
+		defer r.quitMu.Unlock()
+		r.quitApproved = false
+		r.quitApprovalTimeout = nil
+	})
 }
 
 type geometry struct {
@@ -327,18 +345,6 @@ func (r *Registry) handlePanelClosingEvent(event *application.WindowEvent, name 
 	})
 }
 
-func (r *Registry) handlePanelClosing(name string) {
-	descriptor, err := r.panels.Descriptor(name)
-	if err != nil || !r.panels.Remove(name) {
-		return
-	}
-	r.emitWindowEvent(descriptor.OwnerWindowName, panelwindow.WindowClosedEventName, panelwindow.WindowClosedEvent{
-		WindowName: name,
-		ClusterID:  descriptor.ClusterID,
-		GroupID:    descriptor.GroupID,
-	})
-}
-
 // PanelDescriptor returns the immutable identity and current transfer state of
 // a live native panel window.
 func (r *Registry) PanelDescriptor(name string) (PanelWindowDescriptor, error) {
@@ -462,6 +468,9 @@ func (r *Registry) AcknowledgePanelWindowDock(
 			ownerWindowName,
 		)
 	}
+	if err := r.panels.ValidateDock(windowName, transferID); err != nil {
+		return err
+	}
 	r.authorizeClose(windowName)
 	if !r.closeWindow(windowName) {
 		r.consumeAuthorizedClose(windowName)
@@ -469,6 +478,7 @@ func (r *Registry) AcknowledgePanelWindowDock(
 		return fmt.Errorf("panel window %q is not available for dock commit", windowName)
 	}
 	if err := r.panels.AcknowledgeDock(windowName, transferID); err != nil {
+		r.consumeAuthorizedClose(windowName)
 		return err
 	}
 	return nil
@@ -494,6 +504,11 @@ func (r *Registry) FailPanelWindowTransfer(callerWindowName, windowName, transfe
 		r.consumeAuthorizedClose(windowName)
 		return fmt.Errorf("panel window %q is not available", windowName)
 	}
+	r.emitWindowEvent(descriptor.OwnerWindowName, panelwindow.WindowClosedEventName, panelwindow.WindowClosedEvent{
+		WindowName: windowName,
+		ClusterID:  descriptor.ClusterID,
+		GroupID:    descriptor.GroupID,
+	})
 	return nil
 }
 
@@ -817,7 +832,7 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 			pending.timeout.Stop()
 		}
 		r.pendingQuit = nil
-		r.quitApproved = false
+		r.setQuitApprovedLocked(false)
 		r.quitMu.Unlock()
 		r.forgetPanelGuardsForOwner(ownerWindowName)
 		return nil
@@ -831,7 +846,7 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 		pending.timeout.Stop()
 	}
 	r.pendingQuit = nil
-	r.quitApproved = true
+	r.setQuitApprovedLocked(true)
 	r.quitMu.Unlock()
 
 	for _, workspaceName := range r.lifecycle.Names() {
@@ -839,6 +854,9 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 			OwnerWindowName: workspaceName,
 			PanelWindows:    r.PanelNamesOwnedByWorkspace(workspaceName),
 		}) {
+			r.quitMu.Lock()
+			r.setQuitApprovedLocked(false)
+			r.quitMu.Unlock()
 			return fmt.Errorf("workspace %q is not available for application quit", workspaceName)
 		}
 	}
@@ -872,7 +890,7 @@ func (r *Registry) handleClosing(event *application.WindowEvent, name string) {
 		return
 	}
 	r.quitMu.Lock()
-	r.quitApproved = false
+	r.setQuitApprovedLocked(false)
 	r.quitMu.Unlock()
 	r.lifecycle.CancelClose(name)
 	event.Cancel()
@@ -921,6 +939,11 @@ func (r *Registry) PrepareApplicationQuit() bool {
 	}
 	r.quitMu.Lock()
 	if r.quitApproved {
+		if r.lifecycle.Count() > 0 {
+			r.quitMu.Unlock()
+			return false
+		}
+		r.setQuitApprovedLocked(false)
 		r.quitMu.Unlock()
 		return r.backend.PrepareQuitFromWindow(r.lifecycle.MostRecent())
 	}

@@ -32,7 +32,6 @@ import {
   onPanelWindowGuardResult,
   onPanelWindowOpened,
   onPanelWindowSnapshotUpdated,
-  requestClosePanelWindowsForCluster,
   requestPanelWindowClose,
   requestPanelWindowGuard,
 } from './index';
@@ -116,14 +115,18 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         promise: Promise<boolean>;
         resolve: (allowed: boolean) => void;
         timeout: number;
+        guardRequests: Map<string, string>;
       }
     >()
   );
+  const pendingOwnerCloseGuardRequestsRef = useRef(new Map<string, string>());
   const pendingApplicationQuitRef = useRef<{
     transactionId: string;
     remaining: Set<string>;
     timeout: number;
   } | null>(null);
+  const pendingFloatGroupsRef = useRef(new Set<GroupKey>());
+  const pendingFloatGroupIdsRef = useRef(new Map<string, GroupKey>());
 
   const settleApplicationQuit = useCallback(
     (transactionId: string, allowed: boolean, error?: unknown) => {
@@ -158,6 +161,9 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       if (targetPosition !== 'floating') {
         return false;
       }
+      if (pendingFloatGroupsRef.current.has(group.groupKey)) {
+        return true;
+      }
       const blocker = guards.firstBlocker(group.tabs);
       if (blocker) {
         blocker.focus();
@@ -167,12 +173,13 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       if (!firstRef?.clusterId) {
         return true;
       }
+      const groupId = newIdentity('panel-group');
       const snapshot: panelwindow.GroupSnapshot = {
         schemaVersion: 1,
         transferId: newIdentity('panel-transfer'),
         ownerWindowName,
         clusterId: firstRef.clusterId,
-        groupId: newIdentity('panel-group'),
+        groupId,
         tabs: group.tabs.flatMap((panelId) => {
           const objectRef = openPanels.get(panelId);
           if (!objectRef || objectRef.clusterId !== firstRef.clusterId) {
@@ -183,12 +190,16 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         activePanelId: group.activeTab ?? group.tabs[0] ?? '',
         initialBounds: initialWindowBounds(group.tabs),
       };
-      void beginPanelWindowOpen(ownerWindowName, snapshot).catch((error) =>
+      pendingFloatGroupsRef.current.add(group.groupKey);
+      pendingFloatGroupIdsRef.current.set(groupId, group.groupKey);
+      void beginPanelWindowOpen(ownerWindowName, snapshot).catch((error) => {
+        pendingFloatGroupsRef.current.delete(group.groupKey);
+        pendingFloatGroupIdsRef.current.delete(groupId);
         reportOperationalError(error, {
           source: 'WorkspacePanelCoordinator',
           action: 'float-group',
-        })
-      );
+        });
+      });
       return true;
     },
     [activeTabs, guards, openPanels, ownerWindowName]
@@ -196,6 +207,11 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
 
   const handlePanelWindowOpened = useCallback(
     (event: panelwindow.WindowOpenedEvent) => {
+      const sourceGroup = pendingFloatGroupIdsRef.current.get(event.groupId);
+      if (sourceGroup) {
+        pendingFloatGroupsRef.current.delete(sourceGroup);
+        pendingFloatGroupIdsRef.current.delete(event.groupId);
+      }
       commitPanelWindow(event.snapshot, event.windowName);
     },
     [commitPanelWindow]
@@ -255,7 +271,14 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     [dockPanelWindow]
   );
 
-  const handlePanelWindowClosed = useCallback((windowName: string) => {
+  const handlePanelWindowClosed = useCallback((windowName: string, groupId?: string) => {
+    if (groupId) {
+      const sourceGroup = pendingFloatGroupIdsRef.current.get(groupId);
+      if (sourceGroup) {
+        pendingFloatGroupsRef.current.delete(sourceGroup);
+        pendingFloatGroupIdsRef.current.delete(groupId);
+      }
+    }
     setPendingOwnerCloseWindows((previous) => {
       if (!previous?.has(windowName)) {
         return previous;
@@ -272,6 +295,49 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       window.clearTimeout(pending.timeout);
       pendingClusterClosesRef.current.delete(clusterId);
       pending.resolve(true);
+    }
+  }, []);
+
+  const settleClusterClose = useCallback(
+    (clusterId: string, allowed: boolean, error?: unknown, action = 'cluster-close') => {
+      const pending = pendingClusterClosesRef.current.get(clusterId);
+      if (!pending) {
+        return;
+      }
+      window.clearTimeout(pending.timeout);
+      pendingClusterClosesRef.current.delete(clusterId);
+      pending.resolve(allowed);
+      if (error) {
+        reportOperationalError(error, {
+          source: 'WorkspacePanelCoordinator',
+          action,
+          clusterId,
+        });
+      }
+    },
+    []
+  );
+
+  const cancelOwnerClose = useCallback((error?: unknown, focusWindowName?: string) => {
+    if (pendingOwnerCloseTimeoutRef.current !== null) {
+      window.clearTimeout(pendingOwnerCloseTimeoutRef.current);
+      pendingOwnerCloseTimeoutRef.current = null;
+    }
+    pendingOwnerCloseGuardRequestsRef.current.clear();
+    setPendingOwnerCloseWindows(null);
+    if (focusWindowName) {
+      void focusWindow(focusWindowName).catch((focusError) =>
+        reportOperationalError(focusError, {
+          source: 'WorkspacePanelCoordinator',
+          action: 'focus-close-blocker',
+        })
+      );
+    }
+    if (error) {
+      reportOperationalError(error, {
+        source: 'WorkspacePanelCoordinator',
+        action: 'request-owner-close',
+      });
     }
   }, []);
 
@@ -313,20 +379,22 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
           promise,
           resolve: resolveClose,
           timeout,
+          guardRequests: new Map(),
         });
-        void requestClosePanelWindowsForCluster(ownerWindowName, clusterId).catch((error) => {
-          const pending = pendingClusterClosesRef.current.get(clusterId);
-          if (pending) {
-            window.clearTimeout(pending.timeout);
-            pendingClusterClosesRef.current.delete(clusterId);
-            pending.resolve(false);
-          }
-          reportOperationalError(error, {
-            source: 'WorkspacePanelCoordinator',
-            action: 'request-cluster-close',
-            clusterId,
-          });
-        });
+        const pending = pendingClusterClosesRef.current.get(clusterId);
+        if (!pending) {
+          return promise;
+        }
+        for (const windowName of remaining) {
+          const requestId = newIdentity('cluster-close-guard');
+          pending.guardRequests.set(requestId, windowName);
+          void requestPanelWindowGuard(
+            ownerWindowName,
+            windowName,
+            requestId,
+            'cluster-close'
+          ).catch((error) => settleClusterClose(clusterId, false, error, 'request-cluster-guard'));
+        }
         return promise;
       }),
     [
@@ -336,6 +404,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       ownerWindowName,
       panelIdsForCluster,
       registerClusterClosePreflight,
+      settleClusterClose,
     ]
   );
 
@@ -346,6 +415,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         pending.resolve(false);
       }
       pendingClusterClosesRef.current.clear();
+      pendingOwnerCloseGuardRequestsRef.current.clear();
       if (pendingApplicationQuitRef.current) {
         window.clearTimeout(pendingApplicationQuitRef.current.timeout);
         pendingApplicationQuitRef.current = null;
@@ -425,22 +495,56 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       onPanelWindowGuardResult((event) => {
         const pending = pendingApplicationQuitRef.current;
         if (
-          !pending ||
-          event.requestId !== `${pending.transactionId}:${event.windowName}` ||
-          !pending.remaining.has(event.windowName)
+          pending &&
+          event.requestId === `${pending.transactionId}:${event.windowName}` &&
+          pending.remaining.has(event.windowName)
         ) {
+          if (!event.allowed) {
+            settleApplicationQuit(pending.transactionId, false);
+            return;
+          }
+          pending.remaining.delete(event.windowName);
+          if (pending.remaining.size === 0) {
+            settleApplicationQuit(pending.transactionId, true);
+          }
           return;
         }
+
+        for (const [clusterId, clusterClose] of pendingClusterClosesRef.current) {
+          if (clusterClose.guardRequests.get(event.requestId) !== event.windowName) {
+            continue;
+          }
+          clusterClose.guardRequests.delete(event.requestId);
+          if (!event.allowed) {
+            void focusWindow(event.windowName).catch((error) =>
+              reportOperationalError(error, {
+                source: 'WorkspacePanelCoordinator',
+                action: 'focus-close-blocker',
+                clusterId,
+              })
+            );
+            settleClusterClose(clusterId, false);
+            return;
+          }
+          void requestPanelWindowClose(ownerWindowName, event.windowName, 'cluster-close').catch(
+            (error) => settleClusterClose(clusterId, false, error, 'request-cluster-close')
+          );
+          return;
+        }
+
+        if (pendingOwnerCloseGuardRequestsRef.current.get(event.requestId) !== event.windowName) {
+          return;
+        }
+        pendingOwnerCloseGuardRequestsRef.current.delete(event.requestId);
         if (!event.allowed) {
-          settleApplicationQuit(pending.transactionId, false);
+          cancelOwnerClose(undefined, event.windowName);
           return;
         }
-        pending.remaining.delete(event.windowName);
-        if (pending.remaining.size === 0) {
-          settleApplicationQuit(pending.transactionId, true);
-        }
+        void requestPanelWindowClose(ownerWindowName, event.windowName, 'owner-close').catch(
+          (error) => cancelOwnerClose(error)
+        );
       }),
-    [settleApplicationQuit]
+    [cancelOwnerClose, ownerWindowName, settleApplicationQuit, settleClusterClose]
   );
 
   useEffect(
@@ -462,10 +566,12 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
           window.clearTimeout(pendingOwnerCloseTimeoutRef.current);
           pendingOwnerCloseTimeoutRef.current = null;
         }
+        pendingOwnerCloseGuardRequestsRef.current.clear();
         setPendingOwnerCloseWindows(new Set(requestedPanelWindows));
         if (requestedPanelWindows.length > 0) {
           pendingOwnerCloseTimeoutRef.current = window.setTimeout(() => {
             pendingOwnerCloseTimeoutRef.current = null;
+            pendingOwnerCloseGuardRequestsRef.current.clear();
             setPendingOwnerCloseWindows(null);
             reportOperationalError(
               new Error(`Panel close timed out for owner ${ownerWindowName}`),
@@ -477,15 +583,14 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
           }, 15_000);
         }
         for (const windowName of requestedPanelWindows) {
-          void requestPanelWindowClose(ownerWindowName, windowName, 'owner-close').catch((error) =>
-            reportOperationalError(error, {
-              source: 'WorkspacePanelCoordinator',
-              action: 'request-owner-close',
-            })
+          const requestId = newIdentity('owner-close-guard');
+          pendingOwnerCloseGuardRequestsRef.current.set(requestId, windowName);
+          void requestPanelWindowGuard(ownerWindowName, windowName, requestId, 'owner-close').catch(
+            (error) => cancelOwnerClose(error)
           );
         }
       }),
-    [guards, nativeLocations, openPanels, ownerWindowName]
+    [cancelOwnerClose, guards, nativeLocations, openPanels, ownerWindowName]
   );
 
   useEffect(() => {
@@ -497,6 +602,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       pendingOwnerCloseTimeoutRef.current = null;
     }
     setPendingOwnerCloseWindows(null);
+    pendingOwnerCloseGuardRequestsRef.current.clear();
     void acknowledgeWorkspaceWindowClose(ownerWindowName).catch((error) =>
       reportOperationalError(error, {
         source: 'WorkspacePanelCoordinator',
@@ -511,6 +617,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         window.clearTimeout(pendingOwnerCloseTimeoutRef.current);
         pendingOwnerCloseTimeoutRef.current = null;
       }
+      pendingOwnerCloseGuardRequestsRef.current.clear();
     },
     []
   );
@@ -562,7 +669,7 @@ function WorkspaceObjectRouteCoordinator({
     targetPosition: 'right' | 'bottom'
   ) => void;
   onDockRequestSettled: (request: panelwindow.WindowDockRequestedEvent, committed: boolean) => void;
-  onOwnedPanelWindowClosed: (windowName: string) => void;
+  onOwnedPanelWindowClosed: (windowName: string, groupId?: string) => void;
   children: React.ReactNode;
 }>) {
   const {
@@ -626,11 +733,11 @@ function WorkspaceObjectRouteCoordinator({
 
   useEffect(
     () =>
-      onPanelWindowClosed(({ windowName, clusterId }) => {
+      onPanelWindowClosed(({ windowName, clusterId, groupId }) => {
         const panelIds = panelIdsForPanelWindow(clusterId, windowName);
         discardPanelLayouts(clusterId, panelIds);
         removePanelWindow(clusterId, windowName);
-        onOwnedPanelWindowClosed(windowName);
+        onOwnedPanelWindowClosed(windowName, groupId);
       }),
     [discardPanelLayouts, onOwnedPanelWindowClosed, panelIdsForPanelWindow, removePanelWindow]
   );
@@ -643,6 +750,12 @@ function WorkspaceObjectRouteCoordinator({
       }
       window.clearTimeout(dockAttemptRef.current.timeout);
       dockAttemptRef.current = null;
+      if (!committed) {
+        detachPanelGroup(
+          request.snapshot.clusterId,
+          (request.snapshot.tabs ?? []).map((tab) => tab.panelId)
+        );
+      }
       onDockRequestSettled(request, committed);
       if (error) {
         reportOperationalError(error, {
@@ -652,7 +765,7 @@ function WorkspaceObjectRouteCoordinator({
         });
       }
     },
-    [onDockRequestSettled]
+    [detachPanelGroup, onDockRequestSettled]
   );
 
   useEffect(() => {

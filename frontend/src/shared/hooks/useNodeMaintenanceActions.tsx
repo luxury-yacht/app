@@ -82,6 +82,9 @@ export interface UseNodeMaintenanceActionsOptions {
   onAfterAction?: (action: 'cordon' | 'uncordon' | 'drain', target: NodeActionTarget) => void;
 }
 
+export const applyNestedMutationChange = (count: number, inFlight: boolean): number =>
+  Math.max(0, count + (inFlight ? 1 : -1));
+
 export const useNodeMaintenanceActions = ({
   watchClusterIds,
   panelId,
@@ -90,11 +93,15 @@ export const useNodeMaintenanceActions = ({
   const [cordonTarget, setCordonTarget] = useState<NodeActionTarget | null>(null);
   const [drainTarget, setDrainTarget] = useState<NodeActionTarget | null>(null);
   const [cordonPending, setCordonPending] = useState(false);
-  const [nestedMutationInFlight, setNestedMutationInFlight] = useState(false);
+  const [nestedMutationCount, setNestedMutationCount] = useState(0);
   const permissionMap = useUserPermissions();
 
+  const handleNestedMutationChange = useCallback((inFlight: boolean) => {
+    setNestedMutationCount((count) => applyNestedMutationChange(count, inFlight));
+  }, []);
+
   usePanelLifecycleGuard(panelId ?? null, () => {
-    if (!cordonPending && !nestedMutationInFlight) {
+    if (!cordonPending && nestedMutationCount === 0) {
       return null;
     }
     return {
@@ -266,7 +273,7 @@ export const useNodeMaintenanceActions = ({
           nodeName={drainTarget.name}
           permissions={getDrainPermissions(drainTarget.clusterId)}
           onClose={() => setDrainTarget(null)}
-          onMutationChange={setNestedMutationInFlight}
+          onMutationChange={handleNestedMutationChange}
         />
       )}
     </>

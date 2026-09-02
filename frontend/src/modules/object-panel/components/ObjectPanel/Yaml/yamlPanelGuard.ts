@@ -1,4 +1,5 @@
 import type { PanelBlockReason } from '@/core/panel-windows/panelLifecycleGuards';
+import { sanitizeYamlForSemanticCompare } from './yamlFieldPolicy';
 
 interface YamlPanelGuardState {
   isEditing: boolean;
@@ -7,7 +8,8 @@ interface YamlPanelGuardState {
   baselineYaml: string;
 }
 
-const normalizeYamlText = (value: string): string => value.replace(/\r\n/g, '\n').trimEnd();
+const normalizeYamlText = (value: string): string =>
+  sanitizeYamlForSemanticCompare(value).replace(/\r\n/g, '\n').trimEnd();
 
 export const getYamlPanelBlockReason = ({
   isEditing,

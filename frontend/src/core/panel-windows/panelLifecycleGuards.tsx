@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 export type PanelBlockReason = 'unsaved-yaml' | 'mutation-in-flight';
 
 export interface PanelLifecycleBlocker {
+  panelId?: string;
   reason: PanelBlockReason;
   focus: () => void;
 }
@@ -30,7 +31,7 @@ export class PanelLifecycleGuardRegistry {
       for (const guard of this.#guards.get(panelId) ?? []) {
         const blocker = guard();
         if (blocker) {
-          return blocker;
+          return { ...blocker, panelId };
         }
       }
     }

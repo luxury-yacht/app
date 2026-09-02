@@ -52,7 +52,9 @@ export function useAutoRefresh() {
  */
 export function initializeAutoRefresh() {
   const enabled = getAutoRefreshEnabled();
-  if (!enabled) {
+  if (enabled) {
+    refreshManager.resume();
+  } else {
     refreshManager.pause();
   }
 }

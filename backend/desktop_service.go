@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
@@ -603,90 +604,173 @@ func (s *DesktopService) SetSidebarVisible(visible bool) {
 	s.desktopShell.SetSidebarVisible(visible)
 }
 
+func validatePanelCommandCaller(ctx context.Context, claimedWindowName string) error {
+	if ctx == nil {
+		return nil
+	}
+	caller, ok := ctx.Value(application.WindowKey).(interface{ Name() string })
+	if !ok || caller.Name() == "" {
+		// Direct Go callers and non-window test transports do not carry a Wails
+		// sender. Native webview calls always do, and are authenticated below.
+		return nil
+	}
+	if caller.Name() != claimedWindowName {
+		return fmt.Errorf(
+			"claimed panel command caller %q does not match Wails sender %q",
+			claimedWindowName,
+			caller.Name(),
+		)
+	}
+	return nil
+}
+
 func (s *DesktopService) GetNativeWindowDescriptor(
+	ctx context.Context,
 	windowName string,
 ) (panelwindow.NativeDescriptor, error) {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return panelwindow.NativeDescriptor{}, err
+	}
 	return s.panelWindows.GetNativeWindowDescriptor(windowName)
 }
 
 func (s *DesktopService) BeginPanelWindowOpen(
+	ctx context.Context,
 	windowName string,
 	snapshot panelwindow.GroupSnapshot,
 ) (panelwindow.WindowDescriptor, error) {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return panelwindow.WindowDescriptor{}, err
+	}
 	return s.panelWindows.BeginPanelWindowOpen(windowName, snapshot)
 }
 
 func (s *DesktopService) AcknowledgePanelWindowReady(
+	ctx context.Context,
 	windowName string,
 	transferID string,
 ) (panelwindow.WindowDescriptor, error) {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return panelwindow.WindowDescriptor{}, err
+	}
 	return s.panelWindows.AcknowledgePanelWindowReady(windowName, transferID)
 }
 
-func (s *DesktopService) BeginPanelWindowDock(windowName, targetPosition string, snapshot panelwindow.GroupSnapshot) error {
+func (s *DesktopService) BeginPanelWindowDock(ctx context.Context, windowName, targetPosition string, snapshot panelwindow.GroupSnapshot) error {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return err
+	}
 	return s.panelWindows.BeginPanelWindowDock(windowName, targetPosition, snapshot)
 }
 
-func (s *DesktopService) AcknowledgePanelWindowDock(ownerWindowName, windowName, transferID string) error {
+func (s *DesktopService) AcknowledgePanelWindowDock(ctx context.Context, ownerWindowName, windowName, transferID string) error {
+	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
+		return err
+	}
 	return s.panelWindows.AcknowledgePanelWindowDock(ownerWindowName, windowName, transferID)
 }
 
-func (s *DesktopService) FailPanelWindowTransfer(callerWindowName, windowName, transferID string) error {
+func (s *DesktopService) FailPanelWindowTransfer(ctx context.Context, callerWindowName, windowName, transferID string) error {
+	if err := validatePanelCommandCaller(ctx, callerWindowName); err != nil {
+		return err
+	}
 	return s.panelWindows.FailPanelWindowTransfer(callerWindowName, windowName, transferID)
 }
 
-func (s *DesktopService) FocusPanelWindow(ownerWindowName, windowName, panelID string) error {
+func (s *DesktopService) FocusPanelWindow(ctx context.Context, ownerWindowName, windowName, panelID string) error {
+	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
+		return err
+	}
 	return s.panelWindows.FocusPanelWindow(ownerWindowName, windowName, panelID)
 }
 
-func (s *DesktopService) RequestPanelWindowClose(callerWindowName, windowName, reason string) error {
+func (s *DesktopService) RequestPanelWindowClose(ctx context.Context, callerWindowName, windowName, reason string) error {
+	if err := validatePanelCommandCaller(ctx, callerWindowName); err != nil {
+		return err
+	}
 	return s.panelWindows.RequestPanelWindowClose(callerWindowName, windowName, reason)
 }
 
-func (s *DesktopService) AcknowledgePanelWindowClose(windowName string) error {
+func (s *DesktopService) AcknowledgePanelWindowClose(ctx context.Context, windowName string) error {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return err
+	}
 	return s.panelWindows.AcknowledgePanelWindowClose(windowName)
 }
 
-func (s *DesktopService) RequestClosePanelWindowsForCluster(ownerWindowName, clusterID string) error {
+func (s *DesktopService) RequestClosePanelWindowsForCluster(ctx context.Context, ownerWindowName, clusterID string) error {
+	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
+		return err
+	}
 	return s.panelWindows.RequestClosePanelWindowsForCluster(ownerWindowName, clusterID)
 }
 
-func (s *DesktopService) AcknowledgeWorkspaceWindowClose(ownerWindowName string) error {
+func (s *DesktopService) AcknowledgeWorkspaceWindowClose(ctx context.Context, ownerWindowName string) error {
+	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
+		return err
+	}
 	return s.panelWindows.AcknowledgeWorkspaceWindowClose(ownerWindowName)
 }
 
-func (s *DesktopService) RoutePanelWindowCommand(windowName, eventName string) error {
+func (s *DesktopService) RoutePanelWindowCommand(ctx context.Context, windowName, eventName string) error {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return err
+	}
 	return s.panelWindows.RoutePanelWindowCommand(windowName, eventName)
 }
 
-func (s *DesktopService) RequestPanelObjectOpen(windowName string, ref panelwindow.ObjectReference, activeView string) error {
+func (s *DesktopService) RequestPanelObjectOpen(ctx context.Context, windowName string, ref panelwindow.ObjectReference, activeView string) error {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return err
+	}
 	return s.panelWindows.RequestPanelObjectOpen(windowName, ref, activeView)
 }
 
-func (s *DesktopService) AuthorizePanelObjectOpen(ownerWindowName, windowName, panelID string, ref panelwindow.ObjectReference, activeView string) error {
+func (s *DesktopService) AuthorizePanelObjectOpen(ctx context.Context, ownerWindowName, windowName, panelID string, ref panelwindow.ObjectReference, activeView string) error {
+	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
+		return err
+	}
 	return s.panelWindows.AuthorizePanelObjectOpen(ownerWindowName, windowName, panelID, ref, activeView)
 }
 
-func (s *DesktopService) UpdatePanelWindowSnapshot(windowName string, snapshot panelwindow.GroupSnapshot) error {
+func (s *DesktopService) UpdatePanelWindowSnapshot(ctx context.Context, windowName string, snapshot panelwindow.GroupSnapshot) error {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return err
+	}
 	return s.panelWindows.UpdatePanelWindowSnapshot(windowName, snapshot)
 }
 
-func (s *DesktopService) RequestPanelTabClose(windowName, panelID string) error {
+func (s *DesktopService) RequestPanelTabClose(ctx context.Context, windowName, panelID string) error {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return err
+	}
 	return s.panelWindows.RequestPanelTabClose(windowName, panelID)
 }
 
-func (s *DesktopService) AuthorizePanelTabClose(ownerWindowName, windowName, panelID string) error {
+func (s *DesktopService) AuthorizePanelTabClose(ctx context.Context, ownerWindowName, windowName, panelID string) error {
+	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
+		return err
+	}
 	return s.panelWindows.AuthorizePanelTabClose(ownerWindowName, windowName, panelID)
 }
 
-func (s *DesktopService) RequestPanelWindowGuard(ownerWindowName, windowName, requestID, reason string) error {
+func (s *DesktopService) RequestPanelWindowGuard(ctx context.Context, ownerWindowName, windowName, requestID, reason string) error {
+	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
+		return err
+	}
 	return s.panelWindows.RequestPanelWindowGuard(ownerWindowName, windowName, requestID, reason)
 }
 
-func (s *DesktopService) AcknowledgePanelWindowGuard(windowName, requestID string, allowed bool) error {
+func (s *DesktopService) AcknowledgePanelWindowGuard(ctx context.Context, windowName, requestID string, allowed bool) error {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return err
+	}
 	return s.panelWindows.AcknowledgePanelWindowGuard(windowName, requestID, allowed)
 }
 
-func (s *DesktopService) AcknowledgeApplicationQuitPreflight(ownerWindowName, transactionID string, allowed bool) error {
+func (s *DesktopService) AcknowledgeApplicationQuitPreflight(ctx context.Context, ownerWindowName, transactionID string, allowed bool) error {
+	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
+		return err
+	}
 	return s.panelWindows.AcknowledgeApplicationQuitPreflight(ownerWindowName, transactionID, allowed)
 }

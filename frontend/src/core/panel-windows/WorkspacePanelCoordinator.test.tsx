@@ -15,9 +15,8 @@ const mocks = vi.hoisted(() => ({
   removeWindow: vi.fn(),
   acknowledgeDock: vi.fn<() => Promise<void>>(async () => undefined),
   failTransfer: vi.fn<() => Promise<void>>(async () => undefined),
-  requestGuard: vi.fn(async () => undefined),
+  requestGuard: vi.fn(async (..._args: unknown[]) => undefined),
   acknowledgeQuit: vi.fn(async () => undefined),
-  requestClusterClose: vi.fn(async () => undefined),
   acknowledgeWorkspaceClose: vi.fn(async () => undefined),
   authorizeObjectOpen: vi.fn(async () => undefined),
   authorizeTabClose: vi.fn(async () => undefined),
@@ -74,7 +73,6 @@ vi.mock('@/core/panel-windows', async (importOriginal) => {
     authorizePanelTabClose: mocks.authorizeTabClose,
     focusPanelWindow: mocks.focusPanelWindow,
     failPanelWindowTransfer: mocks.failTransfer,
-    requestClosePanelWindowsForCluster: mocks.requestClusterClose,
     requestPanelWindowClose: mocks.requestPanelClose,
     requestPanelWindowGuard: mocks.requestGuard,
     acknowledgeApplicationQuitPreflight: mocks.acknowledgeQuit,
@@ -230,6 +228,18 @@ describe('WorkspacePanelCoordinator', () => {
     );
   });
 
+  it('starts only one native transfer while a group is already floating', async () => {
+    const request = { groupKey: 'right', tabs: ['panel-a'], activeTab: 'panel-a' } as never;
+
+    await act(async () => {
+      mocks.moveRequest?.(request, 'floating');
+      mocks.moveRequest?.(request, 'floating');
+      await Promise.resolve();
+    });
+
+    expect(mocks.beginOpen).toHaveBeenCalledOnce();
+  });
+
   it('waits for native child close acknowledgement before allowing cluster close', async () => {
     let result: boolean | undefined;
     await act(async () => {
@@ -238,8 +248,24 @@ describe('WorkspacePanelCoordinator', () => {
       });
       await Promise.resolve();
     });
-    expect(mocks.requestClusterClose).toHaveBeenCalledWith('workspace-1', 'cluster-1');
+    expect(mocks.requestGuard).toHaveBeenCalledWith(
+      'workspace-1',
+      'panel-1',
+      expect.any(String),
+      'cluster-close'
+    );
     expect(result).toBeUndefined();
+
+    const requestId = mocks.requestGuard.mock.calls[0]?.[2];
+    await act(async () => {
+      mocks.eventHandlers.guardResult?.({
+        requestId,
+        windowName: 'panel-1',
+        allowed: true,
+      } as never);
+      await Promise.resolve();
+    });
+    expect(mocks.requestPanelClose).toHaveBeenCalledWith('workspace-1', 'panel-1', 'cluster-close');
 
     await act(async () => {
       mocks.eventHandlers.closed?.({ windowName: 'panel-1', clusterId: 'cluster-1' } as never);
@@ -349,6 +375,7 @@ describe('WorkspacePanelCoordinator', () => {
       'dock-transfer-timeout'
     );
     expect(mocks.commitWindow).toHaveBeenCalledWith(snapshot, 'panel-1');
+    expect(mocks.detachPanelGroup).toHaveBeenCalledWith('cluster-1', ['panel-a']);
   });
 
   it('fails an unresponsive owner close closed without acknowledging the workspace', async () => {
@@ -553,12 +580,36 @@ describe('WorkspacePanelCoordinator', () => {
     await expect(mocks.clusterPreflight?.('cluster-empty')).resolves.toBe(true);
 
     mocks.nativeWindowNamesForCluster.mockReturnValue(['panel-1']);
-    mocks.requestClusterClose.mockRejectedValueOnce(new Error('native close failed'));
+    mocks.requestGuard.mockRejectedValueOnce(new Error('native guard failed'));
     await expect(mocks.clusterPreflight?.('cluster-failed')).resolves.toBe(false);
     expect(mocks.reportError).toHaveBeenCalledWith(
       expect.any(Error),
-      expect.objectContaining({ action: 'request-cluster-close' })
+      expect.objectContaining({ action: 'request-cluster-guard' })
     );
+  });
+
+  it('rejects a cluster close immediately when a native child guard denies it', async () => {
+    let result: boolean | undefined;
+    await act(async () => {
+      void mocks.clusterPreflight?.('cluster-1').then((allowed) => {
+        result = allowed;
+      });
+      await Promise.resolve();
+    });
+    const requestId = mocks.requestGuard.mock.calls[0]?.[2];
+
+    await act(async () => {
+      mocks.eventHandlers.guardResult?.({
+        requestId,
+        windowName: 'panel-1',
+        allowed: false,
+      } as never);
+      await Promise.resolve();
+    });
+
+    expect(result).toBe(false);
+    expect(mocks.requestPanelClose).not.toHaveBeenCalled();
+    expect(mocks.focusOwnerWindow).toHaveBeenCalledWith('panel-1');
   });
 
   it('fails a cluster close closed when its child never acknowledges', async () => {
@@ -586,8 +637,24 @@ describe('WorkspacePanelCoordinator', () => {
       } as never);
       await Promise.resolve();
     });
-    expect(mocks.requestPanelClose).toHaveBeenCalledWith('workspace-1', 'panel-1', 'owner-close');
+    expect(mocks.requestGuard).toHaveBeenCalledWith(
+      'workspace-1',
+      'panel-1',
+      expect.any(String),
+      'owner-close'
+    );
     expect(mocks.acknowledgeWorkspaceClose).not.toHaveBeenCalled();
+
+    const requestId = mocks.requestGuard.mock.calls[0]?.[2];
+    await act(async () => {
+      mocks.eventHandlers.guardResult?.({
+        requestId,
+        windowName: 'panel-1',
+        allowed: true,
+      } as never);
+      await Promise.resolve();
+    });
+    expect(mocks.requestPanelClose).toHaveBeenCalledWith('workspace-1', 'panel-1', 'owner-close');
 
     await act(async () => {
       mocks.eventHandlers.closed?.({ windowName: 'panel-1', clusterId: 'cluster-1' } as never);

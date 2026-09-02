@@ -93,7 +93,8 @@ func TestOwnerConstructorsRejectIncompleteDependencyGraphs(t *testing.T) {
 			Refresh: fixture.Refresh, Preferences: fixture.Preferences,
 			Operations: fixture.Operations, Logger: fixture.AppLogs.Logger(),
 			Context: fixture.Lifecycle.CtxOrBackground, RuntimeAvailable: fixture.Lifecycle.runtimeAvailable,
-			EmitEvent: fixture.Lifecycle.emitEvent,
+			IsWorkspaceWindow: func(string) bool { return true },
+			EmitEvent:         fixture.Lifecycle.emitEvent,
 		}
 	}
 	workspaceCases := []struct {
@@ -108,6 +109,7 @@ func TestOwnerConstructorsRejectIncompleteDependencyGraphs(t *testing.T) {
 		{"Logger", func(deps *WorkspaceCoordinatorDependencies) { deps.Logger = nil }},
 		{"Context", func(deps *WorkspaceCoordinatorDependencies) { deps.Context = nil }},
 		{"RuntimeAvailable", func(deps *WorkspaceCoordinatorDependencies) { deps.RuntimeAvailable = nil }},
+		{"IsWorkspaceWindow", func(deps *WorkspaceCoordinatorDependencies) { deps.IsWorkspaceWindow = nil }},
 		{"EmitEvent", func(deps *WorkspaceCoordinatorDependencies) { deps.EmitEvent = nil }},
 	}
 	for _, testCase := range workspaceCases {

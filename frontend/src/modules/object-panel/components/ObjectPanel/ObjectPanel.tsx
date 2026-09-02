@@ -33,6 +33,7 @@ import { useObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel
 import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
 import { ObjectPanelHeader } from '@modules/object-panel/components/ObjectPanel/ObjectPanelHeader';
 import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/ObjectPanelTabs';
+import { resolveObjectPanelOpenTarget } from '@modules/object-panel/components/ObjectPanel/objectPanelOpenTarget';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import { getObjectPanelScopes } from '@modules/object-panel/objectPanelRef';
@@ -67,13 +68,13 @@ function ObjectPanel({
   const objectData = objectRef;
   const { closePanel, setObjectPanelActiveTab } = useObjectPanelState();
   const { tabGroups, getPreferredOpenGroupKey } = useDockablePanelContext();
-  const openTargetGroupKey =
-    defaultGroupKey ?? getPreferredOpenGroupKey(defaultPosition ?? getDefaultObjectPanelPosition());
-  const openTargetPosition: DockPosition =
-    defaultPosition ??
-    (openTargetGroupKey === 'right' || openTargetGroupKey === 'bottom'
-      ? openTargetGroupKey
-      : 'floating');
+  const openTarget = resolveObjectPanelOpenTarget(
+    defaultPosition ?? getDefaultObjectPanelPosition(),
+    defaultGroupKey,
+    getPreferredOpenGroupKey
+  );
+  const openTargetGroupKey = openTarget.groupKey;
+  const openTargetPosition = openTarget.position;
 
   // Determine whether this tab is active within its group (for polling control).
   const groupKey = getGroupForPanel(tabGroups, panelId);

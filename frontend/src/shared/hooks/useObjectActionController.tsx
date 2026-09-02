@@ -49,12 +49,24 @@ import {
   queryKindPermissions,
   useUserPermissions,
 } from '@/core/capabilities';
+import { usePanelWindowRole } from '@/core/panel-windows/PanelWindowRoleContext';
 import { usePanelLifecycleGuard } from '@/core/panel-windows/panelLifecycleGuards';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { errorHandler } from '@/utils/errorHandler';
 
 type ObjectActionContext = 'gridtable' | 'object-map' | 'object-panel';
 type ObjectActionReference = ObjectActionData & KubernetesObjectReference;
+
+export const resolveObjectActionGuardPanelId = (
+  _context: ObjectActionContext,
+  panelId: string | null
+): string | null => panelId;
+
+export const resolveNavigateViewHandler = (
+  explicitHandler: (() => void) | undefined,
+  fallbackHandler: () => void,
+  fallbackAvailable: boolean
+): (() => void) | undefined => explicitHandler ?? (fallbackAvailable ? fallbackHandler : undefined);
 
 interface PerObjectHandlers {
   onCordon?: (object: ObjectActionData) => void;
@@ -245,6 +257,7 @@ interface NavigationHandlerOptions {
   onViewInvolvedObject: ObjectActionControllerOptions['onViewInvolvedObject'];
   openWithObject: ReturnType<typeof useObjectPanel>['openWithObject'];
   navigateToView: ReturnType<typeof useNavigateToView>['navigateToView'];
+  navigateToViewAvailable: boolean;
 }
 
 const buildNavigationHandlers = ({
@@ -255,17 +268,16 @@ const buildNavigationHandlers = ({
   onViewInvolvedObject,
   openWithObject,
   navigateToView,
+  navigateToViewAvailable,
 }: NavigationHandlerOptions): ObjectActionHandlers => {
   const actionObject = object as ObjectActionReference;
   return {
     onOpen: onOpen ? () => onOpen(actionObject) : undefined,
-    onNavigateView: () => {
-      if (onNavigateView) {
-        onNavigateView(actionObject);
-        return;
-      }
-      navigateToView(actionObject);
-    },
+    onNavigateView: resolveNavigateViewHandler(
+      onNavigateView ? () => onNavigateView(actionObject) : undefined,
+      () => navigateToView(actionObject),
+      navigateToViewAvailable
+    ),
     onObjectMap: isObjectMapSupportedKind(object.kind)
       ? () => {
           if (onOpenObjectMap) {
@@ -429,7 +441,9 @@ export const useObjectActionController = ({
 }: ObjectActionControllerOptions) => {
   const permissionMap = useUserPermissions();
   const { openWithObject, panelId } = useObjectPanel();
-  const { navigateToView } = useNavigateToView();
+  const panelWindowRole = usePanelWindowRole();
+  const { available: navigateToViewAvailable, navigateToView } = useNavigateToView();
+  const navigateFallbackAvailable = panelWindowRole === null || navigateToViewAvailable;
   const [restartTarget, setRestartTarget] = useState<ObjectActionData | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ObjectActionData | null>(null);
   const [triggerTarget, setTriggerTarget] = useState<ObjectActionData | null>(null);
@@ -460,7 +474,7 @@ export const useObjectActionController = ({
     mutationCountRef.current = Math.max(0, mutationCountRef.current + (inFlight ? 1 : -1));
     setMutationRevision((revision) => revision + 1);
   }, []);
-  usePanelLifecycleGuard(context === 'object-panel' ? panelId : null, () => {
+  usePanelLifecycleGuard(resolveObjectActionGuardPanelId(context, panelId), () => {
     if (!actionLoading && mutationCountRef.current === 0) {
       return null;
     }
@@ -515,6 +529,7 @@ export const useObjectActionController = ({
           onViewInvolvedObject,
           openWithObject,
           navigateToView,
+          navigateToViewAvailable: navigateFallbackAvailable,
           setters: {
             setRestartTarget,
             setRollbackTarget,
@@ -544,6 +559,7 @@ export const useObjectActionController = ({
       permissionMap,
       queryMissingPermissions,
       navigateToView,
+      navigateFallbackAvailable,
       useDefaultHandlers,
       executeMutation,
     ]

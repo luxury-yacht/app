@@ -346,6 +346,23 @@ describe('ObjectPanelContent', () => {
     });
   });
 
+  it('keeps an opened YAML editor mounted while another tab is active', async () => {
+    await renderContent({ activeTab: 'yaml' });
+    const mountedYaml = requireValue(
+      container.querySelector<HTMLElement>('[data-testid="yaml-tab"]'),
+      'expected mounted YAML tab'
+    );
+
+    await renderContent({ activeTab: 'details' });
+
+    expect(mountedYaml.isConnected).toBe(true);
+    expect(mountedYaml.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(hoistedRefs.yamlTabProps.current).toMatchObject({ isActive: false });
+
+    await renderContent({ activeTab: 'yaml' });
+    expect(container.querySelector('[data-testid="yaml-tab"]')).toBe(mountedYaml);
+  });
+
   it('renders helm manifest and values tabs with scope', async () => {
     await renderContent({ activeTab: 'manifest' });
     expect(hoistedRefs.manifestTabProps.current).toMatchObject({

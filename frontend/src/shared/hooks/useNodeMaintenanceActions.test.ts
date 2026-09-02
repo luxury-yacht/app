@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NodeMaintenanceDrainJob } from '@/core/refresh/types';
 import {
+  applyNestedMutationChange,
   buildNodeMaintenanceAggregateScope,
   collectNodeMaintenanceDrains,
 } from './useNodeMaintenanceActions';
@@ -25,6 +26,16 @@ const drainJob = (overrides: Partial<NodeMaintenanceDrainJob>): NodeMaintenanceD
 });
 
 describe('node maintenance aggregate helpers', () => {
+  it('keeps the panel guarded until overlapping nested mutations both finish', () => {
+    let count = 0;
+    count = applyNestedMutationChange(count, true);
+    count = applyNestedMutationChange(count, true);
+    count = applyNestedMutationChange(count, false);
+    expect(count).toBe(1);
+    count = applyNestedMutationChange(count, false);
+    expect(count).toBe(0);
+  });
+
   it('builds the same aggregate scope that the refresh domain stores', () => {
     expect(buildNodeMaintenanceAggregateScope('cluster-a')).toBe('cluster-a|aggregate');
   });

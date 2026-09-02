@@ -20,20 +20,23 @@ import { AppErrorBoundary, PanelErrorBoundary } from '@ui/errors';
 import AppHeader from '@ui/layout/AppHeader';
 import { KeyboardProvider } from '@ui/shortcuts';
 import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { panelwindow } from '@/core/backend-api/models';
+import { useClusterWorkspaceSnapshot } from '@/core/cluster-workspace/useClusterWorkspace';
 import {
   acknowledgePanelWindowReady,
   beginPanelWindowDock,
   failPanelWindowTransfer,
   onPanelObjectOpenAuthorized,
   type PanelWindowDescriptor,
+  requestPanelTabClose,
 } from '@/core/panel-windows';
 import { PanelWindowRoleProvider } from '@/core/panel-windows/PanelWindowRoleContext';
 import {
   PanelLifecycleGuardProvider,
   usePanelLifecycleGuardRegistry,
 } from '@/core/panel-windows/panelLifecycleGuards';
+import { resolvePanelWindowClusterName } from '@/core/panel-windows/panelWindowClusterName';
 import { PanelWindowShortcuts } from '@/ui/shortcuts/components/PanelWindowShortcuts';
 import { reportOperationalError } from '@/utils/errorHandler';
 import '@styles/index.css';
@@ -55,10 +58,24 @@ const createTransferId = (): string =>
   globalThis.crypto?.randomUUID?.() ?? `panel-transfer-${Date.now()}`;
 
 function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDescriptor }>) {
-  const { openPanels, closePanel, onRowClick, setObjectPanelActiveTab } = useObjectPanelState();
+  const { openPanels, onRowClick, setObjectPanelActiveTab } = useObjectPanelState();
   const activeTabs = useObjectPanelActiveTabs();
   const guards = usePanelLifecycleGuardRegistry();
   const [ready, setReady] = useState(false);
+  const initialTabGroups = useMemo(() => initialGroups(descriptor.snapshot), [descriptor.snapshot]);
+
+  const requestTabClose = useCallback(
+    (panelId: string) => {
+      void requestPanelTabClose(descriptor.windowName, panelId).catch((error) =>
+        reportOperationalError(error, {
+          source: 'PanelWindowApp',
+          action: 'request-tab-close',
+          clusterId: descriptor.clusterId,
+        })
+      );
+    },
+    [descriptor.clusterId, descriptor.windowName]
+  );
 
   useEffect(() => {
     if (acknowledgedTransfers.has(descriptor.snapshot.transferId)) {
@@ -145,8 +162,9 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
 
   return (
     <DockablePanelProvider
-      initialTabGroups={initialGroups(descriptor.snapshot)}
+      initialTabGroups={initialTabGroups}
       onGroupMoveRequest={handleGroupMove}
+      onTabCloseRequest={requestTabClose}
       nativeWindowMode={true}
     >
       <PanelWindowShortcuts descriptor={descriptor} ready={ready} />
@@ -156,7 +174,7 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
         {Array.from(openPanels.entries()).map(([panelId, objectRef]) => (
           <PanelErrorBoundary
             key={panelId}
-            onClose={() => closePanel(panelId)}
+            onClose={() => requestTabClose(panelId)}
             panelName="object-details"
           >
             <ObjectPanel
@@ -175,6 +193,11 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
 export default function PanelWindowApp({
   descriptor,
 }: Readonly<{ descriptor: PanelWindowDescriptor }>) {
+  const clusterWorkspace = useClusterWorkspaceSnapshot();
+  const clusterName = resolvePanelWindowClusterName(
+    clusterWorkspace.clusters,
+    descriptor.clusterId
+  );
   return (
     <AppErrorBoundary>
       <ErrorProvider>
@@ -188,7 +211,10 @@ export default function PanelWindowApp({
                 <PanelWindowRoleProvider descriptor={descriptor}>
                   <AppearanceModeProvider>
                     <RefreshManagerProvider>
-                      <FixedClusterProvider clusterId={descriptor.clusterId}>
+                      <FixedClusterProvider
+                        clusterId={descriptor.clusterId}
+                        clusterName={clusterName}
+                      >
                         <ObjectPanelStateProvider initialGroupSnapshot={descriptor.snapshot}>
                           <ClusterLifecycleProvider>
                             <NamespaceProvider>

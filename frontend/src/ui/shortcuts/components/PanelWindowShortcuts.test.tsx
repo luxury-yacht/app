@@ -12,7 +12,9 @@ const mocks = vi.hoisted(() => ({
   closePanel: vi.fn(),
   closeAll: vi.fn(),
   focusPanel: vi.fn(),
-  blocker: null as null | { reason: 'unsaved-yaml'; focus: () => void },
+  focusWindow: vi.fn(async () => undefined),
+  commitTabClose: vi.fn(),
+  blocker: null as null | { panelId?: string; reason: 'unsaved-yaml'; focus: () => void },
   tabs: ['panel-a', 'panel-b'] as string[],
   acknowledgeGuard: vi.fn(async () => undefined),
 }));
@@ -52,6 +54,7 @@ vi.mock('@/core/desktop-runtime', () => ({
     mocks.handlers[name] = handler;
     return () => undefined;
   },
+  focusWindow: mocks.focusWindow,
 }));
 
 vi.mock('@/modules/object-panel/contexts/ObjectPanelStateContext', () => ({
@@ -94,6 +97,7 @@ vi.mock('@/ui/dockable', () => ({
       floating: [],
     },
     focusPanel: mocks.focusPanel,
+    commitTabClose: mocks.commitTabClose,
   }),
 }));
 
@@ -145,7 +149,8 @@ describe('PanelWindowShortcuts', () => {
     expect(mocks.closePanel).not.toHaveBeenCalled();
 
     await act(async () => mocks.handlers.authorized?.({ panelId: 'panel-a' } as never));
-    expect(mocks.closePanel).toHaveBeenCalledWith('panel-a');
+    expect(mocks.commitTabClose).toHaveBeenCalledWith('panel-a');
+    expect(mocks.closePanel).not.toHaveBeenCalled();
   });
 
   it('closes the native window only after owner authorization for the last tab', async () => {
@@ -163,17 +168,19 @@ describe('PanelWindowShortcuts', () => {
       await Promise.resolve();
     });
 
-    expect(mocks.closeAll).toHaveBeenCalledOnce();
+    expect(mocks.commitTabClose).toHaveBeenCalledWith('panel-a');
     expect(mocks.acknowledgeClose).toHaveBeenCalledWith('panel-1');
   });
 
   it('keeps the tab open and focuses a lifecycle blocker', async () => {
     const focus = vi.fn();
-    mocks.blocker = { reason: 'unsaved-yaml', focus };
+    mocks.blocker = { panelId: 'panel-b', reason: 'unsaved-yaml', focus };
 
     await act(async () => mocks.handlers['menu:close']?.(undefined as never));
 
     expect(focus).toHaveBeenCalledOnce();
+    expect(mocks.focusPanel).toHaveBeenCalledWith('panel-b');
+    expect(mocks.focusWindow).toHaveBeenCalledWith('panel-1');
     expect(mocks.requestTabClose).not.toHaveBeenCalled();
   });
 

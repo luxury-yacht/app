@@ -158,6 +158,13 @@ func (p *panelIndex) AcknowledgeDock(windowName, transferID string) error {
 	return nil
 }
 
+func (p *panelIndex) ValidateDock(windowName, transferID string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, err := p.pendingLocked(windowName, transferID, PanelWindowStateDocking)
+	return err
+}
+
 func (p *panelIndex) FailTransfer(windowName, transferID string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()

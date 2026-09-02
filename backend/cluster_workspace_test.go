@@ -241,6 +241,26 @@ func TestReleaseWorkspaceWindowDropsOnlyThatWindowsTabOwnership(t *testing.T) {
 	require.Empty(t, app.Workspace.GetSelectedKubeconfigs())
 }
 
+func TestClusterWorkspaceProjectionDoesNotRegisterPanelWindowsAsWorkspacePeers(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	selection := "/tmp/config:prod"
+	app.Workspace.isWorkspaceWindowFn = func(windowID string) bool {
+		return windowID == "workspace-1"
+	}
+	app.Workspace.kubeconfigsMu.Lock()
+	app.Workspace.setSelectedKubeconfigsLocked([]string{selection})
+	app.Workspace.kubeconfigsMu.Unlock()
+
+	require.Equal(t, []string{selection}, app.Workspace.GetClusterWorkspaceStateForWindow("workspace-1").SelectedKubeconfigs)
+	panelState := app.Workspace.GetClusterWorkspaceStateForWindow("panel-1")
+
+	require.Empty(t, panelState.SelectedKubeconfigs)
+	app.Workspace.workspaceSelectionsMu.RLock()
+	require.NotContains(t, app.Workspace.workspaceSelections, "panel-1")
+	app.Workspace.workspaceSelectionsMu.RUnlock()
+}
+
 func TestVisibilityUpdateBypassesQueuedPeerSelectionAndPreservesTabOwnership(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newWorkspaceCoordinatorTestFixture(t)

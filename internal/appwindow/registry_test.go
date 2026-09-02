@@ -425,35 +425,6 @@ func TestRegistryRejectsDuplicatePanelGroupWithinOwner(t *testing.T) {
 	require.Equal(t, 1, registry.Count())
 }
 
-func TestPanelCloseRemovesOnlyThePanelRole(t *testing.T) {
-	wailsApp := application.New(application.Options{})
-	backend := &recordingLifecycleBackend{allowQuit: true}
-	registry := NewRegistry(wailsApp, backend, nil)
-	owner := registry.Create(true)
-	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
-	require.NoError(t, err)
-	var closed panelwindow.WindowClosedEvent
-	registry.emitWindowEvent = func(target, eventName string, payload any) bool {
-		require.Equal(t, owner.Name(), target)
-		require.Equal(t, panelwindow.WindowClosedEventName, eventName)
-		closed = payload.(panelwindow.WindowClosedEvent)
-		return true
-	}
-
-	registry.handlePanelClosing(descriptor.WindowName)
-
-	_, err = registry.PanelDescriptor(descriptor.WindowName)
-	require.ErrorContains(t, err, "not live")
-	require.Equal(t, 1, registry.Count())
-	require.Empty(t, backend.releasedWindow)
-	require.Empty(t, backend.preparedWindow)
-	require.Empty(t, backend.readyWindows)
-	require.Equal(t, descriptor.WindowName, closed.WindowName)
-	require.Equal(t, descriptor.ClusterID, closed.ClusterID)
-}
-
 func TestAuthorizedPanelClosingHookLeavesCommitToTheRequestTransaction(t *testing.T) {
 	wailsApp := application.New(application.Options{})
 	registry := NewRegistry(wailsApp, nil, nil)
@@ -752,6 +723,57 @@ func TestRegistryFocusesAuthorizesAndClosesAnOwnedPanelWindow(t *testing.T) {
 	require.ErrorContains(t, err, "not live")
 }
 
+func TestRegistryValidatesDockAcknowledgementBeforeClosingThePanelWindow(t *testing.T) {
+	wailsApp := application.New(application.Options{})
+	registry := NewRegistry(wailsApp, nil, nil)
+	owner := registry.Create(true)
+	snapshot := validPanelGroupSnapshot()
+	snapshot.OwnerWindowName = owner.Name()
+	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	require.NoError(t, err)
+	registry.emitWindowEvent = func(string, string, any) bool { return true }
+	registry.showWindow = func(string) bool { return true }
+	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
+	require.NoError(t, err)
+	dock := snapshot
+	dock.TransferID = "dock-transfer-1"
+	require.NoError(t, registry.BeginPanelWindowDock(descriptor.WindowName, "right", dock))
+	var closed []string
+	registry.closeWindow = func(windowName string) bool {
+		closed = append(closed, windowName)
+		return true
+	}
+
+	err = registry.AcknowledgePanelWindowDock(owner.Name(), descriptor.WindowName, "stale-transfer")
+
+	require.ErrorContains(t, err, "stale")
+	require.Empty(t, closed)
+	require.Equal(t, PanelWindowStateDocking, registry.panels.State(descriptor.WindowName))
+}
+
+func TestRegistryReportsAnOpeningTransferFailureToItsOwner(t *testing.T) {
+	registry := NewRegistry(application.New(application.Options{}), nil, nil)
+	owner := registry.Create(true)
+	snapshot := validPanelGroupSnapshot()
+	snapshot.OwnerWindowName = owner.Name()
+	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	require.NoError(t, err)
+	registry.closeWindow = func(string) bool { return true }
+	var closed panelwindow.WindowClosedEvent
+	registry.emitWindowEvent = func(target, eventName string, payload any) bool {
+		require.Equal(t, owner.Name(), target)
+		require.Equal(t, panelwindow.WindowClosedEventName, eventName)
+		closed = payload.(panelwindow.WindowClosedEvent)
+		return true
+	}
+
+	require.NoError(t, registry.FailPanelWindowTransfer(descriptor.WindowName, descriptor.WindowName, snapshot.TransferID))
+
+	require.Equal(t, descriptor.WindowName, closed.WindowName)
+	require.Equal(t, descriptor.ClusterID, closed.ClusterID)
+	require.Equal(t, descriptor.GroupID, closed.GroupID)
+}
+
 func TestRegistryTreatsAnUncancelledWindowEventAsDelivered(t *testing.T) {
 	wailsApp := application.New(application.Options{})
 	registry := NewRegistry(wailsApp, nil, nil)
@@ -1024,6 +1046,7 @@ func TestApplicationQuitPreflightCommitsOnlyAfterEveryWorkspaceAllows(t *testing
 	require.Empty(t, closeRequests)
 	require.NoError(t, registry.AcknowledgeApplicationQuitPreflight(second.Name(), transactionID, true))
 	require.ElementsMatch(t, []string{first.Name(), second.Name()}, closeRequests)
+	require.False(t, registry.PrepareApplicationQuit())
 }
 
 func TestApplicationQuitPreflightCancellationLeavesEveryWorkspaceOpen(t *testing.T) {
