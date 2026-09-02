@@ -508,6 +508,82 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     }
   }, []);
 
+  const handleApplicationQuitGuardResult = useCallback(
+    (event: panelwindow.WindowGuardResultEvent): boolean => {
+      const pending = pendingApplicationQuitRef.current;
+      if (
+        !pending ||
+        event.requestId !== `${pending.transactionId}:${event.windowName}` ||
+        !pending.remaining.has(event.windowName)
+      ) {
+        return false;
+      }
+      if (!event.allowed) {
+        settleApplicationQuit(pending.transactionId, false);
+        return true;
+      }
+      pending.remaining.delete(event.windowName);
+      if (pending.remaining.size === 0) {
+        settleApplicationQuit(pending.transactionId, true);
+      }
+      return true;
+    },
+    [settleApplicationQuit]
+  );
+
+  const handleClusterCloseGuardResult = useCallback(
+    (event: panelwindow.WindowGuardResultEvent): boolean => {
+      for (const [clusterId, clusterClose] of pendingClusterClosesRef.current) {
+        if (clusterClose.guardRequests.get(event.requestId) !== event.windowName) {
+          continue;
+        }
+        clusterClose.guardRequests.delete(event.requestId);
+        if (!event.allowed) {
+          void focusWindow(event.windowName).catch((error) =>
+            reportOperationalError(error, {
+              source: 'WorkspacePanelCoordinator',
+              action: 'focus-close-blocker',
+              clusterId,
+            })
+          );
+          settleClusterClose(clusterId, false);
+          return true;
+        }
+        if (clusterClose.guardRequests.size === 0) {
+          for (const windowName of clusterClose.remaining) {
+            void requestPanelWindowClose(ownerWindowName, windowName, 'cluster-close').catch(
+              (error) => settleClusterClose(clusterId, false, error, 'request-cluster-close')
+            );
+          }
+        }
+        return true;
+      }
+      return false;
+    },
+    [ownerWindowName, settleClusterClose]
+  );
+
+  const handleOwnerCloseGuardResult = useCallback(
+    (event: panelwindow.WindowGuardResultEvent) => {
+      if (pendingOwnerCloseGuardRequestsRef.current.get(event.requestId) !== event.windowName) {
+        return;
+      }
+      pendingOwnerCloseGuardRequestsRef.current.delete(event.requestId);
+      if (!event.allowed) {
+        cancelOwnerClose(undefined, event.windowName);
+        return;
+      }
+      if (pendingOwnerCloseGuardRequestsRef.current.size === 0) {
+        for (const windowName of pendingOwnerCloseWindowNamesRef.current) {
+          void requestPanelWindowClose(ownerWindowName, windowName, 'owner-close').catch((error) =>
+            cancelOwnerClose(error)
+          );
+        }
+      }
+    },
+    [cancelOwnerClose, ownerWindowName]
+  );
+
   useEffect(
     () =>
       registerClusterClosePreflight(async (clusterId) => {
@@ -660,66 +736,15 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
   useEffect(
     () =>
       onPanelWindowGuardResult((event) => {
-        const pending = pendingApplicationQuitRef.current;
-        if (
-          pending &&
-          event.requestId === `${pending.transactionId}:${event.windowName}` &&
-          pending.remaining.has(event.windowName)
-        ) {
-          if (!event.allowed) {
-            settleApplicationQuit(pending.transactionId, false);
-            return;
-          }
-          pending.remaining.delete(event.windowName);
-          if (pending.remaining.size === 0) {
-            settleApplicationQuit(pending.transactionId, true);
-          }
+        if (handleApplicationQuitGuardResult(event)) {
           return;
         }
-
-        for (const [clusterId, clusterClose] of pendingClusterClosesRef.current) {
-          if (clusterClose.guardRequests.get(event.requestId) !== event.windowName) {
-            continue;
-          }
-          clusterClose.guardRequests.delete(event.requestId);
-          if (!event.allowed) {
-            void focusWindow(event.windowName).catch((error) =>
-              reportOperationalError(error, {
-                source: 'WorkspacePanelCoordinator',
-                action: 'focus-close-blocker',
-                clusterId,
-              })
-            );
-            settleClusterClose(clusterId, false);
-            return;
-          }
-          if (clusterClose.guardRequests.size === 0) {
-            for (const windowName of clusterClose.remaining) {
-              void requestPanelWindowClose(ownerWindowName, windowName, 'cluster-close').catch(
-                (error) => settleClusterClose(clusterId, false, error, 'request-cluster-close')
-              );
-            }
-          }
+        if (handleClusterCloseGuardResult(event)) {
           return;
         }
-
-        if (pendingOwnerCloseGuardRequestsRef.current.get(event.requestId) !== event.windowName) {
-          return;
-        }
-        pendingOwnerCloseGuardRequestsRef.current.delete(event.requestId);
-        if (!event.allowed) {
-          cancelOwnerClose(undefined, event.windowName);
-          return;
-        }
-        if (pendingOwnerCloseGuardRequestsRef.current.size === 0) {
-          for (const windowName of pendingOwnerCloseWindowNamesRef.current) {
-            void requestPanelWindowClose(ownerWindowName, windowName, 'owner-close').catch(
-              (error) => cancelOwnerClose(error)
-            );
-          }
-        }
+        handleOwnerCloseGuardResult(event);
       }),
-    [cancelOwnerClose, ownerWindowName, settleApplicationQuit, settleClusterClose]
+    [handleApplicationQuitGuardResult, handleClusterCloseGuardResult, handleOwnerCloseGuardResult]
   );
 
   useEffect(
