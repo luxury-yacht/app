@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   requestTabClose: vi.fn(() => Promise.resolve()),
   requestTabTransfer: vi.fn(() => Promise.resolve()),
   setObjectPanelActiveTab: vi.fn(),
+  openPanels: new Map<string, Record<string, string>>(),
 }));
 
 function PassThrough({ children }: Readonly<{ children: ReactNode }>) {
@@ -55,19 +56,7 @@ vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
   ObjectPanelStateProvider: PassThrough,
   useObjectPanelActiveTabs: () => new Map([['panel-pod', 'events']]),
   useObjectPanelState: () => ({
-    openPanels: new Map([
-      [
-        'panel-pod',
-        {
-          clusterId: 'cluster-a',
-          group: '',
-          version: 'v1',
-          kind: 'Pod',
-          namespace: 'default',
-          name: 'api',
-        },
-      ],
-    ]),
+    openPanels: mocks.openPanels,
     onRowClick: mocks.onRowClick,
     setObjectPanelActiveTab: mocks.setObjectPanelActiveTab,
   }),
@@ -190,6 +179,15 @@ describe('PanelWindowApp', () => {
     mocks.fixedClusterProps = null;
     mocks.objectPanelProps = null;
     mocks.shortcutsProps = null;
+    mocks.openPanels.clear();
+    mocks.openPanels.set('panel-pod', {
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      namespace: 'default',
+      name: 'api',
+    });
   });
 
   afterEach(() => {
@@ -324,7 +322,7 @@ describe('PanelWindowApp', () => {
     );
   });
 
-  it('routes one-tab native-window drops and tear-offs through the transfer protocol', async () => {
+  it('routes native-window drops but leaves a one-tab native source unchanged on tear-off', async () => {
     await act(async () => {
       root.render(<PanelWindowApp descriptor={descriptorWithTransfer('transfer-tab-drag')} />);
       await Promise.resolve();
@@ -363,8 +361,46 @@ describe('PanelWindowApp', () => {
       sourceWindowName: 'panel-1',
       sourceWindowGroupId: 'group-1',
     };
+    mocks.requestTabTransfer.mockClear();
     act(() => props.onTabTearOff(sourcePayload, { x: 2100, y: 400 }));
-    expect(mocks.requestTabTransfer).toHaveBeenLastCalledWith(
+    expect(mocks.requestTabTransfer).not.toHaveBeenCalled();
+  });
+
+  it('tears a tab out of a multi-tab native source into a new window', async () => {
+    mocks.openPanels.set('panel-service', {
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      kind: 'Service',
+      namespace: 'default',
+      name: 'api',
+    });
+    await act(async () => {
+      root.render(<PanelWindowApp descriptor={descriptorWithTransfer('transfer-tab-tear-off')} />);
+      await Promise.resolve();
+    });
+    const props = mocks.dockProviderProps as {
+      tabDragIdentity: { getTabSnapshot: (panelId: string) => unknown };
+      onTabTearOff: (payload: unknown, cursor: { x: number; y: number }) => void;
+    };
+    const tab = props.tabDragIdentity.getTabSnapshot('panel-pod');
+
+    act(() =>
+      props.onTabTearOff(
+        {
+          kind: 'dockable-tab',
+          panelId: 'panel-pod',
+          sourceGroupId: 'right',
+          sourceWindowGroupId: 'group-1',
+          sourceWindowName: 'panel-1',
+          ownerWindowName: 'workspace-1',
+          clusterId: 'cluster-a',
+          tab,
+        },
+        { x: 2100, y: 400 }
+      )
+    );
+    expect(mocks.requestTabTransfer).toHaveBeenCalledWith(
       'panel-1',
       expect.objectContaining({
         sourceWindowName: 'panel-1',

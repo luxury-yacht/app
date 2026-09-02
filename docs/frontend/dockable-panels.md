@@ -67,12 +67,14 @@ maximize and restore.
   bars moves that one tab, including workspace-to-native, native-to-workspace,
   and native-to-native moves under the same owner and cluster. Cross-owner and
   cross-cluster drops are rejected.
-- Dropping an unconsumed tab drag outside its source window creates a new
-  one-tab native window near the pointer, using the configured floating size
-  and the pointer's monitor work area. This differs from the Float button,
-  which always transfers the complete current group. On macOS, the native drag
-  session recognizes the dockable-tab MIME marker and suppresses AppKit's
-  failed-drop return animation because that otherwise-successful tear-off is
+- Dropping an unconsumed tab drag outside a workspace or a multi-tab native
+  source creates a new one-tab native window near the pointer, using the
+  configured floating size and the pointer's monitor work area. Dragging the
+  only tab out of a native source leaves that window unchanged because replacing
+  it with an equivalent one-tab native window has no effect. This differs from
+  the Float button, which always transfers the complete current group. On macOS,
+  the native drag session recognizes the dockable-tab MIME marker and suppresses
+  AppKit's failed-drop return animation because an accepted tear-off is
   intentionally represented as `dropEffect: none` by the source webview.
 
 ## Acknowledged Handoffs

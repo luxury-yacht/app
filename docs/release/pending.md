@@ -1,7 +1,7 @@
 ### Changed
 
 - Floating object-panel groups now open as independent native application windows owned by their workspace. Groups can dock back to the right or bottom with acknowledged, rollback-safe handoffs; unsaved YAML and in-flight mutations protect moves and every close path. Default right and bottom docks are 600 pixels, and native panel windows default to 600 by 800 pixels; these defaults remain configurable in Settings.
-- Object-panel tabs can now be dragged between docked and native panel windows, or torn off into a new one-tab native window without the macOS drag preview snapping back to its source. Tab moves preserve owner, cluster, object, ordering, and active-view identity and leave the source intact until the destination is ready.
+- Object-panel tabs can now be dragged between docked and native panel windows, or torn off into a new one-tab native window without the macOS drag preview snapping back to its source. Tearing off the only tab in a native source leaves that window unchanged. Tab moves preserve owner, cluster, object, ordering, and active-view identity and leave the source intact until the destination is ready.
 - The Network view's generic `Details` column has been replaced by three more specific columns (`Context`, `Network`, and `Summary`) to provide more useful data without having to open the Object Panel.
 - Namespaces in the Attention view are now clickable.
 - Clicked Namespace links should now properly scroll into view, and default to the Workloads view instead of Browse.

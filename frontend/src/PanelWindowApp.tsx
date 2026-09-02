@@ -230,6 +230,9 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
 
   const handleTabTearOff = useCallback(
     (payload: DockableTabDragPayload, cursor: { x: number; y: number }) => {
+      if (openPanels.size <= 1 || payload.sourceWindowName !== descriptor.windowName) {
+        return;
+      }
       const request = tabTransferRequestFromDragPayload(payload, {
         transferId: createTransferId(),
         targetWindowName: '',
@@ -238,7 +241,7 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
         targetKind: 'new-window' as panelwindow.TabTransferTarget,
         cursor,
       });
-      if (!request || request.sourceWindowName !== descriptor.windowName) {
+      if (!request) {
         return;
       }
       void requestPanelTabTransfer(descriptor.windowName, request).catch((error) =>
@@ -249,7 +252,7 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
         })
       );
     },
-    [descriptor]
+    [descriptor, openPanels.size]
   );
 
   return (
