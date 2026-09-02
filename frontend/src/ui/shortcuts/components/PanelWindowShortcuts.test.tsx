@@ -7,13 +7,16 @@ const mocks = vi.hoisted(() => ({
   handlers: {} as Record<string, (event: never) => void>,
   requestTabClose: vi.fn(async () => undefined),
   acknowledgeClose: vi.fn(async () => undefined),
-  updateSnapshot: vi.fn(async () => undefined),
+  updateSnapshot: vi.fn<(_windowName: string, _snapshot: unknown) => Promise<void>>(
+    async () => undefined
+  ),
   routeCommand: vi.fn(async () => undefined),
   closePanel: vi.fn(),
   closeAll: vi.fn(),
   focusPanel: vi.fn(),
   focusWindow: vi.fn(async () => undefined),
   commitTabClose: vi.fn(),
+  reportError: vi.fn(),
   blocker: null as null | { panelId?: string; reason: 'unsaved-yaml'; focus: () => void },
   tabs: ['panel-a', 'panel-b'] as string[],
   acknowledgeGuard: vi.fn(async () => undefined),
@@ -101,6 +104,10 @@ vi.mock('@/ui/dockable', () => ({
   }),
 }));
 
+vi.mock('@/utils/errorHandler', () => ({
+  reportOperationalError: mocks.reportError,
+}));
+
 const descriptor = {
   windowName: 'panel-1',
   ownerWindowName: 'workspace-1',
@@ -168,8 +175,111 @@ describe('PanelWindowShortcuts', () => {
       await Promise.resolve();
     });
 
-    expect(mocks.commitTabClose).toHaveBeenCalledWith('panel-a');
+    expect(mocks.commitTabClose).not.toHaveBeenCalled();
     expect(mocks.acknowledgeClose).toHaveBeenCalledWith('panel-1');
+  });
+
+  it('preserves the last tab when the native close commit fails', async () => {
+    await act(async () => root.unmount());
+    mocks.tabs = ['panel-a'];
+    mocks.acknowledgeClose.mockRejectedValueOnce(new Error('native close failed'));
+    root = ReactDOM.createRoot(container);
+    await act(async () =>
+      root.render(<PanelWindowShortcuts descriptor={descriptor} ready={true} />)
+    );
+
+    await act(async () => {
+      mocks.handlers.authorized?.({ panelId: 'panel-a' } as never);
+      await Promise.resolve();
+    });
+
+    expect(mocks.commitTabClose).not.toHaveBeenCalled();
+    expect(mocks.closeAll).not.toHaveBeenCalled();
+  });
+
+  it('preserves the native group when a whole-window close commit fails', async () => {
+    mocks.acknowledgeClose.mockRejectedValueOnce(new Error('native close failed'));
+
+    await act(async () => {
+      mocks.handlers.windowClose?.({} as never);
+      await Promise.resolve();
+    });
+
+    expect(mocks.closeAll).not.toHaveBeenCalled();
+    expect(mocks.commitTabClose).not.toHaveBeenCalled();
+  });
+
+  it('serializes live snapshot writes', async () => {
+    await act(async () => root.unmount());
+    mocks.updateSnapshot.mockReset();
+    let resolveFirst: (() => void) | undefined;
+    mocks.updateSnapshot
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveFirst = resolve;
+          })
+      )
+      .mockResolvedValue(undefined);
+    root = ReactDOM.createRoot(container);
+    await act(async () =>
+      root.render(<PanelWindowShortcuts descriptor={descriptor} ready={true} />)
+    );
+    expect(mocks.updateSnapshot).toHaveBeenCalledTimes(1);
+
+    mocks.tabs = ['panel-b', 'panel-a'];
+    await act(async () =>
+      root.render(<PanelWindowShortcuts descriptor={descriptor} ready={true} />)
+    );
+    expect(mocks.updateSnapshot).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFirst?.();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(mocks.updateSnapshot).toHaveBeenCalledTimes(2);
+    expect(mocks.updateSnapshot.mock.calls[1]?.[1]).toMatchObject({
+      tabs: [
+        expect.objectContaining({ panelId: 'panel-b' }),
+        expect.objectContaining({ panelId: 'panel-a' }),
+      ],
+      activePanelId: 'panel-b',
+    });
+  });
+
+  it('continues serialized snapshot writes after an earlier write fails', async () => {
+    await act(async () => root.unmount());
+    mocks.updateSnapshot.mockReset();
+    let rejectFirst: ((error: Error) => void) | undefined;
+    mocks.updateSnapshot
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectFirst = reject;
+          })
+      )
+      .mockResolvedValue(undefined);
+    root = ReactDOM.createRoot(container);
+    await act(async () =>
+      root.render(<PanelWindowShortcuts descriptor={descriptor} ready={true} />)
+    );
+
+    mocks.tabs = ['panel-b', 'panel-a'];
+    await act(async () =>
+      root.render(<PanelWindowShortcuts descriptor={descriptor} ready={true} />)
+    );
+    await act(async () => {
+      rejectFirst?.(new Error('owner temporarily unavailable'));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.updateSnapshot).toHaveBeenCalledTimes(2);
+    expect(mocks.reportError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ action: 'sync-panel-window-snapshot' })
+    );
   });
 
   it('keeps the tab open and focuses a lifecycle blocker', async () => {

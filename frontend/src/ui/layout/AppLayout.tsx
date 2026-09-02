@@ -407,7 +407,8 @@ export const AppLayout: React.FC = () => {
         .map(([panelId, objectRef]) => {
           const mountTarget = resolveObjectPanelMountTarget(
             dockedEdges.get(panelId),
-            getDefaultObjectPanelPosition()
+            getDefaultObjectPanelPosition(),
+            pendingNativeOpenPanelIds.has(panelId) ? panelId : undefined
           );
           return (
             <PanelErrorBoundary

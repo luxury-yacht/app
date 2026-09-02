@@ -193,7 +193,7 @@ describe('PanelWindowApp', () => {
     container.remove();
   });
 
-  it('renders the real child-window composition from its immutable descriptor', async () => {
+  it('wires the child-window shell from its immutable descriptor', async () => {
     await act(async () => {
       root.render(<PanelWindowApp descriptor={descriptor} />);
       await Promise.resolve();
@@ -238,6 +238,26 @@ describe('PanelWindowApp', () => {
     expect(mocks.reportOperationalError).toHaveBeenCalledWith(readyError, {
       source: 'PanelWindowApp',
       action: 'acknowledge-ready',
+    });
+  });
+
+  it('reports when ready-failure cleanup was already completed by the registry', async () => {
+    const readyError = new Error('owner unavailable');
+    const cleanupError = new Error('panel window is not live');
+    mocks.acknowledgeReady.mockRejectedValueOnce(readyError);
+    mocks.failTransfer.mockRejectedValueOnce(cleanupError);
+    const failedDescriptor = descriptorWithTransfer('transfer-cleanup-complete');
+
+    await act(async () => {
+      root.render(<PanelWindowApp descriptor={failedDescriptor} />);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.reportOperationalError).toHaveBeenCalledWith(cleanupError, {
+      source: 'PanelWindowApp',
+      action: 'fail-ready-transfer',
     });
   });
 

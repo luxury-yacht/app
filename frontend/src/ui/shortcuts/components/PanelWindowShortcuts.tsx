@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { type DesktopEventName, focusWindow, onEvent } from '@/core/desktop-runtime';
 import type { PanelWindowDescriptor } from '@/core/panel-windows';
 import {
@@ -37,10 +37,11 @@ export function PanelWindowShortcuts({
   descriptor,
   ready,
 }: Readonly<{ descriptor: PanelWindowDescriptor; ready: boolean }>) {
-  const { onCloseObjectPanel, openPanels } = useObjectPanelState();
+  const { openPanels } = useObjectPanelState();
   const activeTabs = useObjectPanelActiveTabs();
   const { tabGroups, focusPanel, commitTabClose } = useDockablePanelContext();
   const guards = usePanelLifecycleGuardRegistry();
+  const snapshotUpdateQueueRef = useRef<Promise<void>>(Promise.resolve());
   const focusLifecycleBlocker = useCallback(
     (blocker: PanelLifecycleBlocker) => {
       if (blocker.panelId) {
@@ -89,7 +90,6 @@ export function PanelWindowShortcuts({
       onPanelTabCloseAuthorized(({ panelId }) => {
         const group = getGroupTabs(tabGroups, 'right') ?? getGroupTabs(tabGroups, 'bottom');
         const tabs = group?.tabs ?? [];
-        commitTabClose(panelId);
         if (tabs.length <= 1) {
           void acknowledgePanelWindowClose(descriptor.windowName).catch((error) =>
             reportOperationalError(error, {
@@ -99,6 +99,7 @@ export function PanelWindowShortcuts({
           );
           return;
         }
+        commitTabClose(panelId);
       }),
     [commitTabClose, descriptor, tabGroups]
   );
@@ -139,12 +140,14 @@ export function PanelWindowShortcuts({
       }),
       activePanelId: group.activeTab ?? group.tabs[0],
     };
-    void updatePanelWindowSnapshot(descriptor.windowName, snapshot).catch((error) =>
-      reportOperationalError(error, {
-        source: 'PanelWindowShortcuts',
-        action: 'sync-panel-window-snapshot',
-      })
-    );
+    snapshotUpdateQueueRef.current = snapshotUpdateQueueRef.current
+      .then(() => updatePanelWindowSnapshot(descriptor.windowName, snapshot))
+      .catch((error) => {
+        reportOperationalError(error, {
+          source: 'PanelWindowShortcuts',
+          action: 'sync-panel-window-snapshot',
+        });
+      });
   }, [activeTabs, descriptor, openPanels, ready, tabGroups]);
 
   useEffect(
@@ -157,12 +160,11 @@ export function PanelWindowShortcuts({
           focusLifecycleBlocker(blocker);
           return;
         }
-        onCloseObjectPanel();
         void acknowledgePanelWindowClose(descriptor.windowName).catch((error) =>
           reportOperationalError(error, { source: 'PanelWindowShortcuts', action: 'close-window' })
         );
       }),
-    [descriptor, focusLifecycleBlocker, guards, onCloseObjectPanel, tabGroups]
+    [descriptor, focusLifecycleBlocker, guards, tabGroups]
   );
 
   useEffect(() => onPanelWindowFocusRequested(({ panelId }) => focusPanel(panelId)), [focusPanel]);

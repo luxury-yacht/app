@@ -397,14 +397,25 @@ func (r *Registry) AcknowledgePanelWindowReady(
 		return PanelWindowDescriptor{}, err
 	}
 	if r.showWindow(name) {
-		r.emitWindowEvent(descriptor.OwnerWindowName, panelwindow.WindowOpenedEventName, panelwindow.WindowOpenedEvent{
+		if r.emitWindowEvent(descriptor.OwnerWindowName, panelwindow.WindowOpenedEventName, panelwindow.WindowOpenedEvent{
 			WindowName: descriptor.WindowName,
 			TransferID: descriptor.Snapshot.TransferID,
 			ClusterID:  descriptor.ClusterID,
 			GroupID:    descriptor.GroupID,
 			Snapshot:   descriptor.Snapshot,
-		})
-		return descriptor, nil
+		}) {
+			return descriptor, nil
+		}
+		r.authorizeClose(name)
+		if !r.closeWindow(name) {
+			r.consumeAuthorizedClose(name)
+		}
+		r.panels.Remove(name)
+		r.emitPanelClosed(descriptor)
+		return PanelWindowDescriptor{}, fmt.Errorf(
+			"owner workspace %q is not available for panel open",
+			descriptor.OwnerWindowName,
+		)
 	}
 	r.panels.Remove(name)
 	r.emitPanelClosed(descriptor)
@@ -502,6 +513,7 @@ func (r *Registry) FailPanelWindowTransfer(callerWindowName, windowName, transfe
 	r.authorizeClose(windowName)
 	if !r.closeWindow(windowName) {
 		r.consumeAuthorizedClose(windowName)
+		r.emitPanelClosed(descriptor)
 		return fmt.Errorf("panel window %q is not available", windowName)
 	}
 	r.emitPanelClosed(descriptor)

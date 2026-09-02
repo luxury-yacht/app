@@ -50,8 +50,9 @@ maximize and restore.
 ## Placement and Uniqueness
 
 - Prefer the active compatible docked group when opening a new object.
-- A new panel whose default is Floating creates a transient, hidden one-tab
-  source group, then asks the native coordinator to transfer it.
+- A new panel whose default is Floating creates a uniquely isolated, transient,
+  hidden one-tab source group, then asks the native coordinator to transfer it.
+  It never joins a focused floating group whose transfer is already pending.
 - An explicit Float action transfers the complete current docked group,
   including every tab in that group.
 - If an object is already docked, focus its owner and docked tab. If it is in a
@@ -72,6 +73,10 @@ mounted but suppresses its workspace surface during that same interval. The
 owner then commits each location exactly once and unmounts the source. A failed,
 stale, or timed-out explicit Float leaves its source unchanged; a failed
 default-Floating open reveals the new panel by docking its source on the right.
+Opening has one terminal owner outcome: if readiness succeeds but the opened
+event cannot reach the owner, the registry closes and removes the native target
+and reports the failed transfer. A native target that has already disappeared
+still produces the same owner-side closed outcome.
 
 Dock-back moves the entire native group to right or bottom while preserving tab
 order, active tab, and active object sub-tabs. Moving one child tab out of a
@@ -92,13 +97,21 @@ backend session identity. Unsaved YAML drafts, YAML saves, and in-flight
 mutations do not transfer and block moves and closes until resolved. Native
 geometry is not persisted for relaunch.
 
+The child is the sole producer of live group snapshots. It serializes snapshot
+writes so an older tab or view state cannot arrive after a newer state. The
+owner commits object additions, non-final tab removals, and active-view changes
+from those acknowledged snapshots rather than mutating its directory before
+the child applies an authorization.
+
 ## Close Ordering
 
-- Active-tab close: guard tab, remove it from the owner directory, release its
-  child-local scopes/caches, then unmount it; close the native window when the
-  group becomes empty.
-- Native titlebar close: guard the whole group, remove it from the owner
-  directory, release child state, then authorize the second native close.
+- Active-tab close: guard the tab and ask the owner to authorize it without
+  changing the directory. For a non-final tab, the child releases its local
+  state and publishes the resulting snapshot; the owner commits that snapshot.
+  For the final tab, the child preserves local state until native close commits,
+  and the owner removes it from the closed event.
+- Native titlebar close: guard the whole group, preserve child and owner state
+  until the native close commits, then remove the group from the closed event.
 - Cluster-tab or owner close: guard matching docked panels and children, close
   children, then release the existing workspace/cluster ownership.
 - Application quit: all ready workspaces preflight first; no owner closes until

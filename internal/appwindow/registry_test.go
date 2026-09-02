@@ -525,6 +525,39 @@ func TestRegistryReportsPanelClosedWhenReadyWindowDisappearsBeforeShow(t *testin
 	require.Error(t, descriptorErr)
 }
 
+func TestRegistryClosesReadyPanelWhenOpenedEventCannotReachOwner(t *testing.T) {
+	wailsApp := application.New(application.Options{})
+	registry := NewRegistry(wailsApp, nil, nil)
+	owner := registry.Create(true)
+	snapshot := validPanelGroupSnapshot()
+	snapshot.OwnerWindowName = owner.Name()
+	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	require.NoError(t, err)
+	registry.showWindow = func(string) bool { return true }
+	var closedNative string
+	registry.closeWindow = func(name string) bool {
+		closedNative = name
+		return true
+	}
+	var closed panelwindow.WindowClosedEvent
+	registry.emitWindowEvent = func(target, eventName string, payload any) bool {
+		require.Equal(t, owner.Name(), target)
+		if eventName == panelwindow.WindowOpenedEventName {
+			return false
+		}
+		require.Equal(t, panelwindow.WindowClosedEventName, eventName)
+		closed = payload.(panelwindow.WindowClosedEvent)
+		return true
+	}
+
+	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
+
+	require.ErrorContains(t, err, "owner workspace")
+	require.Equal(t, descriptor.WindowName, closedNative)
+	require.Equal(t, descriptor.WindowName, closed.WindowName)
+	require.Equal(t, PanelWindowStateMissing, registry.panels.State(descriptor.WindowName))
+}
+
 func TestRegistryRoutesAcknowledgedOpenAndDockToTheImmutableOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
 	registry := NewRegistry(wailsApp, nil, nil)
@@ -802,6 +835,33 @@ func TestRegistryReportsAnOpeningTransferFailureToItsOwner(t *testing.T) {
 	require.Equal(t, descriptor.WindowName, closed.WindowName)
 	require.Equal(t, descriptor.ClusterID, closed.ClusterID)
 	require.Equal(t, descriptor.GroupID, closed.GroupID)
+}
+
+func TestRegistryReportsAnOpeningTransferFailureWhenNativeWindowAlreadyDisappeared(t *testing.T) {
+	registry := NewRegistry(application.New(application.Options{}), nil, nil)
+	owner := registry.Create(true)
+	snapshot := validPanelGroupSnapshot()
+	snapshot.OwnerWindowName = owner.Name()
+	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	require.NoError(t, err)
+	registry.closeWindow = func(string) bool { return false }
+	var closed panelwindow.WindowClosedEvent
+	registry.emitWindowEvent = func(target, eventName string, payload any) bool {
+		require.Equal(t, owner.Name(), target)
+		require.Equal(t, panelwindow.WindowClosedEventName, eventName)
+		closed = payload.(panelwindow.WindowClosedEvent)
+		return true
+	}
+
+	err = registry.FailPanelWindowTransfer(
+		descriptor.WindowName,
+		descriptor.WindowName,
+		snapshot.TransferID,
+	)
+
+	require.ErrorContains(t, err, "not available")
+	require.Equal(t, descriptor.WindowName, closed.WindowName)
+	require.Equal(t, PanelWindowStateMissing, registry.panels.State(descriptor.WindowName))
 }
 
 func TestRegistryTreatsAnUncancelledWindowEventAsDelivered(t *testing.T) {

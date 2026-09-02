@@ -8,8 +8,13 @@ export interface ObjectPanelMountTarget {
 
 export const resolveObjectPanelMountTarget = (
   dockedEdge: 'right' | 'bottom' | undefined,
-  defaultPosition: DockPosition
+  defaultPosition: DockPosition,
+  pendingNativePanelId?: string
 ): ObjectPanelMountTarget => ({
   position: dockedEdge ?? defaultPosition,
-  groupKey: dockedEdge,
+  groupKey:
+    dockedEdge ??
+    (defaultPosition === 'floating' && pendingNativePanelId
+      ? `pending-native:${pendingNativePanelId}`
+      : undefined),
 });

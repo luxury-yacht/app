@@ -85,8 +85,6 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     panelIdsForCluster,
     nativeWindowNamesForCluster,
     syncPanelWindowSnapshot,
-    removeOwnedPanel,
-    upsertOwnedPanel,
   } = useObjectPanelState();
   const activeTabs = useObjectPanelActiveTabs();
   const { registerClusterClosePreflight } = useKubeconfig();
@@ -262,24 +260,11 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         if (event.ownerWindowName !== ownerWindowName) {
           return;
         }
-        const existing = getOwnedPanel(event.clusterId, event.panelId);
-        if (!existing) {
+        if (!getOwnedPanel(event.clusterId, event.panelId)) {
           return;
         }
-        removeOwnedPanel(event.clusterId, event.panelId);
         void authorizePanelTabClose(ownerWindowName, event.sourceWindowName, event.panelId).catch(
           (error) => {
-            upsertOwnedPanel(
-              existing.objectRef,
-              existing.activeView,
-              existing.nativeLocation
-                ? {
-                    kind: 'panel-window',
-                    windowName: existing.nativeLocation.windowName,
-                    groupId: existing.nativeLocation.groupId,
-                  }
-                : { kind: 'docked', edge: existing.dockedEdge ?? 'right' }
-            );
             reportOperationalError(error, {
               source: 'WorkspacePanelCoordinator',
               action: 'authorize-panel-tab-close',
@@ -288,7 +273,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
           }
         );
       }),
-    [getOwnedPanel, ownerWindowName, removeOwnedPanel, upsertOwnedPanel]
+    [getOwnedPanel, ownerWindowName]
   );
 
   const handlePanelWindowDockRequested = useCallback(
@@ -718,13 +703,8 @@ function WorkspaceObjectRouteCoordinator({
   onAutoFloatRollbackSettled: (transferId: string) => void;
   children: React.ReactNode;
 }>) {
-  const {
-    getOwnedPanel,
-    upsertOwnedPanel,
-    removeOwnedPanel,
-    removePanelWindow,
-    panelIdsForPanelWindow,
-  } = useObjectPanelState();
+  const { getOwnedPanel, upsertOwnedPanel, removePanelWindow, panelIdsForPanelWindow } =
+    useObjectPanelState();
   const {
     selectedClusterIds,
     selectedKubeconfigs,
@@ -982,14 +962,10 @@ function WorkspaceObjectRouteCoordinator({
         pendingObjectClaimsRef.current.add(claimKey);
 
         if (objectRef.clusterId !== event.objectRef.clusterId) {
+          pendingObjectClaimsRef.current.delete(claimKey);
           return;
         }
         if (objectRef.clusterId === event.clusterId) {
-          upsertOwnedPanel(objectRef, event.activeView as ViewType, {
-            kind: 'panel-window',
-            windowName: event.sourceWindowName,
-            groupId: event.groupId,
-          });
           void authorizePanelObjectOpen(
             ownerWindowName,
             event.sourceWindowName,
@@ -998,7 +974,6 @@ function WorkspaceObjectRouteCoordinator({
             event.activeView
           ).catch((error) => {
             pendingObjectClaimsRef.current.delete(claimKey);
-            removeOwnedPanel(objectRef.clusterId, panelId);
             reportOperationalError(error, {
               source: 'WorkspacePanelCoordinator',
               action: 'authorize-panel-object-open',
@@ -1030,7 +1005,6 @@ function WorkspaceObjectRouteCoordinator({
       getClusterMeta,
       getOwnedPanel,
       ownerWindowName,
-      removeOwnedPanel,
       selectedClusterIds,
       selectedKubeconfigs,
       setActiveKubeconfig,

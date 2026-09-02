@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { resolveObjectPanelMountTarget } from './objectPanelMountTarget';
 
 describe('resolveObjectPanelMountTarget', () => {
-  it('passes the floating preference through when the panel has no persisted docked edge', () => {
+  it('isolates a pending default-floating panel from any focused floating group', () => {
+    expect(resolveObjectPanelMountTarget(undefined, 'floating', 'panel-a')).toEqual({
+      position: 'floating',
+      groupKey: 'pending-native:panel-a',
+    });
+  });
+
+  it('passes the floating preference through for an established panel', () => {
     expect(resolveObjectPanelMountTarget(undefined, 'floating')).toEqual({
       position: 'floating',
       groupKey: undefined,

@@ -13,6 +13,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
+import { resolveObjectPanelMountTarget } from '@/ui/layout/objectPanelMountTarget';
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 import { clearPanelState } from './useDockablePanelState';
 
@@ -558,6 +559,43 @@ describe('DockablePanelProvider', () => {
       requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
         .tabGroups.floating[0].activeTab
     ).toBe('float-b');
+
+    await unmount();
+  });
+
+  it('isolates a new floating panel when it has a unique preferred source group', async () => {
+    const contextRef: { current: DockablePanelContextValue | null } = { current: null };
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      const context = requireDockableContext(contextRef.current);
+      context.registerPanel({ panelId: 'float-a', title: 'Float A', position: 'floating' });
+      context.syncPanelGroup('float-a', 'floating');
+      context.setLastFocusedGroupKey('floating-1');
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      const context = requireDockableContext(contextRef.current);
+      const mountTarget = resolveObjectPanelMountTarget(undefined, 'floating', 'float-b');
+      context.registerPanel({ panelId: 'float-b', title: 'Float B', position: 'floating' });
+      context.syncPanelGroup('float-b', mountTarget.position, mountTarget.groupKey);
+      await Promise.resolve();
+    });
+
+    expect(requireDockableContext(contextRef.current).tabGroups.floating).toEqual([
+      { groupId: 'floating-1', tabs: ['float-a'], activeTab: 'float-a' },
+      { groupId: 'floating-2', tabs: ['float-b'], activeTab: 'float-b' },
+    ]);
 
     await unmount();
   });

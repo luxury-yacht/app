@@ -594,11 +594,11 @@ describe('WorkspacePanelCoordinator', () => {
       } as never);
       await Promise.resolve();
     });
-    expect(mocks.removeOwnedPanel).toHaveBeenCalledWith('cluster-1', 'panel-a');
+    expect(mocks.removeOwnedPanel).not.toHaveBeenCalled();
     expect(mocks.authorizeTabClose).toHaveBeenCalledWith('workspace-1', 'panel-1', 'panel-a');
   });
 
-  it('rolls a tab directory entry back when child authorization fails', async () => {
+  it('leaves the tab directory unchanged when child authorization fails', async () => {
     const existing = {
       objectRef,
       activeView: 'details',
@@ -619,10 +619,8 @@ describe('WorkspacePanelCoordinator', () => {
       await Promise.resolve();
     });
 
-    expect(mocks.upsertOwnedPanel).toHaveBeenCalledWith(objectRef, 'details', {
-      kind: 'docked',
-      edge: 'bottom',
-    });
+    expect(mocks.removeOwnedPanel).not.toHaveBeenCalled();
+    expect(mocks.upsertOwnedPanel).not.toHaveBeenCalled();
     expect(mocks.reportError).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({ action: 'authorize-panel-tab-close' })
@@ -802,11 +800,7 @@ describe('WorkspacePanelCoordinator', () => {
       mocks.eventHandlers.objectOpen?.(request as never);
       await Promise.resolve();
     });
-    expect(mocks.upsertOwnedPanel).toHaveBeenCalledWith(
-      expect.objectContaining(objectRef),
-      'details',
-      { kind: 'panel-window', windowName: 'panel-1', groupId: 'group-1' }
-    );
+    expect(mocks.upsertOwnedPanel).not.toHaveBeenCalled();
     expect(mocks.authorizeObjectOpen).toHaveBeenCalledWith(
       'workspace-1',
       'panel-1',

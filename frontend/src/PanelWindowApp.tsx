@@ -82,17 +82,28 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
       return;
     }
     acknowledgedTransfers.add(descriptor.snapshot.transferId);
-    void acknowledgePanelWindowReady(descriptor.windowName, descriptor.snapshot.transferId)
-      .then(() => setReady(true))
-      .catch((error) => {
+    const acknowledgeReady = async () => {
+      try {
+        await acknowledgePanelWindowReady(descriptor.windowName, descriptor.snapshot.transferId);
+        setReady(true);
+      } catch (error) {
         acknowledgedTransfers.delete(descriptor.snapshot.transferId);
-        void failPanelWindowTransfer(
-          descriptor.windowName,
-          descriptor.windowName,
-          descriptor.snapshot.transferId
-        );
+        try {
+          await failPanelWindowTransfer(
+            descriptor.windowName,
+            descriptor.windowName,
+            descriptor.snapshot.transferId
+          );
+        } catch (cleanupError) {
+          reportOperationalError(cleanupError, {
+            source: 'PanelWindowApp',
+            action: 'fail-ready-transfer',
+          });
+        }
         reportOperationalError(error, { source: 'PanelWindowApp', action: 'acknowledge-ready' });
-      });
+      }
+    };
+    void acknowledgeReady();
   }, [descriptor]);
 
   useEffect(
