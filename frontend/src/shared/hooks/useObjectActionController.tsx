@@ -57,8 +57,6 @@ import { errorHandler } from '@/utils/errorHandler';
 type ObjectActionContext = 'gridtable' | 'object-map' | 'object-panel';
 type ObjectActionReference = ObjectActionData & KubernetesObjectReference;
 
-export const resolveObjectActionGuardPanelId = (panelId: string | null): string | null => panelId;
-
 export const resolveNavigateViewHandler = (
   explicitHandler: (() => void) | undefined,
   fallbackHandler: () => void,
@@ -471,7 +469,7 @@ export const useObjectActionController = ({
     mutationCountRef.current = Math.max(0, mutationCountRef.current + (inFlight ? 1 : -1));
     advanceMutationRevision();
   }, []);
-  usePanelLifecycleGuard(resolveObjectActionGuardPanelId(panelId), () => {
+  usePanelLifecycleGuard(panelId, () => {
     if (!actionLoading && mutationCountRef.current === 0) {
       return null;
     }

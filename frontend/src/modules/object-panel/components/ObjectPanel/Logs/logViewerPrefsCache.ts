@@ -15,9 +15,9 @@
  *     by cluster switches, so a useRef inside ObjectPanelContent isn't
  *     enough — that ref dies with the component.
  *
- * Eviction is driven explicitly from ObjectPanelStateContext: closePanel,
- * onCloseObjectPanel, and the cluster-tab cleanup useEffect call
- * clearLogViewerPrefs for any panel that's actually going away. The
+ * Eviction is driven explicitly from ObjectPanelStateContext: close paths,
+ * cluster-tab cleanup, and committed handoffs to another native renderer call
+ * clearLogViewerPrefs once this renderer no longer owns the panel. The
  * panelId itself is cluster-prefixed (see objectPanelId), so two panels
  * for the same object across different clusters get distinct cache
  * entries and don't collide.

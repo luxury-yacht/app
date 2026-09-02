@@ -32,7 +32,9 @@ maximize and restore.
 - The owner directory is authoritative for panel location. A child renderer is
   a projection and acknowledges changes through its owner.
 - Transient unmounts such as workspace cluster switches preserve panel refresh
-  state. Actual tab close is the cache-eviction boundary.
+  state. Actual tab close evicts the current renderer's caches; a committed
+  native handoff also evicts the source renderer's caches after the destination
+  has reconstructed them.
 - Menus and other transient surfaces render through their shared body-level
   portal. Do not weaken scrolling or overflow boundaries to expose them.
 
@@ -121,7 +123,9 @@ Object and view identity transfer. Read-only detail, YAML, events, map, and log
 data are reconstructed from the shared refresh system. Shells reconnect by
 backend session identity. Unsaved YAML drafts, YAML saves, and in-flight
 mutations do not transfer and block moves and closes until resolved. Native
-geometry is not persisted for relaunch.
+geometry is not persisted for relaunch. Once a native destination commits, the
+workspace releases its panel-scoped refresh, log-viewer, and dock-layout caches;
+dock-back reconstructs those caches from the transferred identity and view.
 
 The child is the sole producer of live group snapshots. It serializes snapshot
 writes so an older tab or view state cannot arrive after a newer state. The

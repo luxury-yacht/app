@@ -44,6 +44,7 @@ type Registry struct {
 	quitPreflightTimeout time.Duration
 	guardMu              sync.Mutex
 	pendingGuards        map[string]panelGuardRequest
+	panelTransferMu      sync.Mutex
 	tabTransferMu        sync.Mutex
 	pendingTabTransfers  map[string]*panelTabTransfer
 	usedTabTransferIDs   map[string]struct{}
@@ -482,6 +483,8 @@ func (r *Registry) PanelNamesOwnedByWorkspace(ownerWindowName string) []string {
 func (r *Registry) AcknowledgePanelWindowReady(
 	name, transferID string,
 ) (PanelWindowDescriptor, error) {
+	r.panelTransferMu.Lock()
+	defer r.panelTransferMu.Unlock()
 	descriptor, err := r.panels.AcknowledgeOpen(name, transferID)
 	if err != nil {
 		return PanelWindowDescriptor{}, err
@@ -530,6 +533,8 @@ func (r *Registry) BeginPanelWindowDock(
 	targetPosition string,
 	snapshot PanelGroupSnapshot,
 ) error {
+	r.panelTransferMu.Lock()
+	defer r.panelTransferMu.Unlock()
 	if targetPosition != "right" && targetPosition != "bottom" {
 		return fmt.Errorf("unsupported panel dock position %q", targetPosition)
 	}
@@ -558,6 +563,8 @@ func (r *Registry) BeginPanelWindowDock(
 func (r *Registry) AcknowledgePanelWindowDock(
 	ownerWindowName, windowName, transferID string,
 ) error {
+	r.panelTransferMu.Lock()
+	defer r.panelTransferMu.Unlock()
 	descriptor, err := r.panels.Descriptor(windowName)
 	if err != nil {
 		return err
@@ -588,6 +595,8 @@ func (r *Registry) AcknowledgePanelWindowDock(
 }
 
 func (r *Registry) FailPanelWindowTransfer(callerWindowName, windowName, transferID string) error {
+	r.panelTransferMu.Lock()
+	defer r.panelTransferMu.Unlock()
 	descriptor, err := r.panels.Descriptor(windowName)
 	if err != nil {
 		return err

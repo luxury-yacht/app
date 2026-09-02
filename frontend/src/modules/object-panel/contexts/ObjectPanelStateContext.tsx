@@ -35,13 +35,13 @@ export { objectPanelId } from '@modules/object-panel/objectPanelRef';
 /**
  * Evict every scoped-domain entry that belongs to a single object panel.
  *
- * The five scopes (object-details, object-events, object-yaml,
+ * The six scopes (object-details, object-events, object-yaml,
  * object-helm-manifest, object-helm-values, container-logs) live in the
  * global refresh store keyed by cluster-prefixed scope strings, so an
  * unmount alone does NOT free them — that's deliberate, so a transient
  * unmount caused by a cluster switch can render from cache on the way
- * back. The cache should only be freed when the user actually closes
- * the panel for good, which is what this helper enforces.
+ * back. The cache is freed when the user closes the panel or after the
+ * panel commits to another native renderer.
  */
 const evictPanelScopes = (ref: ObjectPanelRef): void => {
   getObjectPanelScopeEvictions(ref).forEach(({ domain, scope }) => {
@@ -50,6 +50,13 @@ const evictPanelScopes = (ref: ObjectPanelRef): void => {
       clearContainerLogsStreamScopeParams(scope);
     }
   });
+};
+
+const evictOwnerRendererCaches = (panelId: string, ref: ObjectPanelRef | undefined): void => {
+  if (ref) {
+    evictPanelScopes(ref);
+  }
+  clearLogViewerPrefs(panelId);
 };
 
 interface ObjectPanelState {
@@ -415,7 +422,17 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         const nextDockedEdges = new Map(previous.dockedEdges);
         const nextPendingNativeOpenPanelIds = new Set(previous.pendingNativeOpenPanelIds);
         for (const tab of snapshot.tabs ?? []) {
-          nextNativeLocations.set(tab.panelId, { windowName, groupId: snapshot.groupId });
+          const previousLocation = previous.nativeLocations.get(tab.panelId);
+          if (
+            previousLocation?.windowName !== windowName ||
+            previousLocation.groupId !== snapshot.groupId
+          ) {
+            evictOwnerRendererCaches(tab.panelId, previous.openPanels.get(tab.panelId));
+          }
+          nextNativeLocations.set(tab.panelId, {
+            windowName,
+            groupId: snapshot.groupId,
+          });
           nextDockedEdges.delete(tab.panelId);
           nextPendingNativeOpenPanelIds.delete(tab.panelId);
         }
@@ -656,12 +673,24 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
           nextPendingNativeOpenPanelIds.delete(panelId);
         }
         for (const tab of snapshot.tabs ?? []) {
+          const previousLocation = current.nativeLocations.get(tab.panelId);
+          if (
+            previousLocation?.windowName !== windowName ||
+            previousLocation.groupId !== snapshot.groupId
+          ) {
+            evictOwnerRendererCaches(tab.panelId, current.openPanels.get(tab.panelId));
+          }
           nextOpenPanels.set(
             tab.panelId,
-            buildObjectPanelRef({ ...tab.objectRef } as KubernetesObjectReference)
+            buildObjectPanelRef({
+              ...tab.objectRef,
+            } as KubernetesObjectReference)
           );
           nextActiveTabs.set(tab.panelId, tab.activeView as ViewType);
-          nextNativeLocations.set(tab.panelId, { windowName, groupId: snapshot.groupId });
+          nextNativeLocations.set(tab.panelId, {
+            windowName,
+            groupId: snapshot.groupId,
+          });
           nextDockedEdges.delete(tab.panelId);
           nextPendingNativeOpenPanelIds.delete(tab.panelId);
         }

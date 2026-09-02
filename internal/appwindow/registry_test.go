@@ -2,6 +2,7 @@ package appwindow
 
 import (
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/stretchr/testify/require"
@@ -488,6 +489,29 @@ func TestAuthorizedPanelClosingHookLeavesCommitToTheRequestTransaction(t *testin
 	require.Equal(t, descriptor.WindowName, stored.WindowName)
 }
 
+func TestPanelClosingHookCancelsAndRoutesAnUnauthorizedNativeClose(t *testing.T) {
+	registry := NewRegistry(application.New(application.Options{}), nil, nil)
+	owner := registry.Create(true)
+	snapshot := validPanelGroupSnapshot()
+	snapshot.OwnerWindowName = owner.Name()
+	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	require.NoError(t, err)
+	var routed panelwindow.WindowCloseRequestedEvent
+	registry.emitWindowEvent = func(target, eventName string, payload any) bool {
+		require.Equal(t, descriptor.WindowName, target)
+		require.Equal(t, panelwindow.WindowCloseRequestedEventName, eventName)
+		routed = payload.(panelwindow.WindowCloseRequestedEvent)
+		return true
+	}
+	event := application.NewWindowEvent()
+
+	registry.handlePanelClosingEvent(event, descriptor.WindowName)
+
+	require.True(t, event.IsCancelled())
+	require.Equal(t, descriptor.WindowName, routed.WindowName)
+	require.Equal(t, "titlebar", routed.Reason)
+}
+
 func TestRegistryRoutesPanelMenuCommandsAndFocusesTheOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
 	registry := NewRegistry(wailsApp, nil, nil)
@@ -860,6 +884,52 @@ func TestRegistryValidatesDockAcknowledgementBeforeClosingThePanelWindow(t *test
 	require.Equal(t, PanelWindowStateDocking, registry.panels.State(descriptor.WindowName))
 }
 
+func TestRegistrySerializesDockCommitAgainstTransferFailure(t *testing.T) {
+	registry := NewRegistry(application.New(application.Options{}), nil, nil)
+	owner := registry.Create(true)
+	snapshot := validPanelGroupSnapshot()
+	snapshot.OwnerWindowName = owner.Name()
+	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	require.NoError(t, err)
+	registry.emitWindowEvent = func(string, string, any) bool { return true }
+	registry.showWindow = func(string) bool { return true }
+	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
+	require.NoError(t, err)
+	dockSnapshot := snapshot
+	dockSnapshot.TransferID = "dock-transfer-serialized"
+	require.NoError(t, registry.BeginPanelWindowDock(descriptor.WindowName, "right", dockSnapshot))
+	closeStarted := make(chan struct{})
+	releaseClose := make(chan struct{})
+	registry.closeWindow = func(string) bool {
+		close(closeStarted)
+		<-releaseClose
+		return true
+	}
+	acknowledged := make(chan error, 1)
+	go func() {
+		acknowledged <- registry.AcknowledgePanelWindowDock(
+			owner.Name(), descriptor.WindowName, dockSnapshot.TransferID,
+		)
+	}()
+	<-closeStarted
+	failed := make(chan error, 1)
+	go func() {
+		failed <- registry.FailPanelWindowTransfer(
+			owner.Name(), descriptor.WindowName, dockSnapshot.TransferID,
+		)
+	}()
+
+	select {
+	case err := <-failed:
+		t.Fatalf("transfer failure raced ahead of dock commit: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(releaseClose)
+	require.NoError(t, <-acknowledged)
+	require.ErrorContains(t, <-failed, "not live")
+	require.Equal(t, PanelWindowStateMissing, registry.panels.State(descriptor.WindowName))
+}
+
 func TestRegistryReportsAnOpeningTransferFailureToItsOwner(t *testing.T) {
 	registry := NewRegistry(application.New(application.Options{}), nil, nil)
 	owner := registry.Create(true)
@@ -1199,6 +1269,57 @@ func TestApplicationQuitPreflightCancellationLeavesEveryWorkspaceOpen(t *testing
 	require.NoError(t, registry.AcknowledgeApplicationQuitPreflight(first.Name(), transactionID, false))
 	require.Empty(t, closeRequests)
 	require.Equal(t, 2, registry.Count())
+}
+
+func TestApplicationQuitPreflightTimeoutAllowsAFreshTransaction(t *testing.T) {
+	registry := NewRegistry(
+		application.New(application.Options{}),
+		&recordingLifecycleBackend{allowQuit: true},
+		nil,
+	)
+	owner := registry.Create(true)
+	registry.markWorkspaceReady(owner.Name())
+	registry.quitPreflightTimeout = time.Millisecond
+	transactions := make(chan string, 2)
+	registry.emitWindowEvent = func(_ string, eventName string, payload any) bool {
+		if eventName == panelwindow.ApplicationQuitPreflightRequestedEventName {
+			transactions <- payload.(panelwindow.ApplicationQuitPreflightRequestedEvent).TransactionID
+		}
+		return true
+	}
+
+	require.False(t, registry.PrepareApplicationQuit())
+	first := <-transactions
+	require.Eventually(t, func() bool {
+		registry.quitMu.Lock()
+		defer registry.quitMu.Unlock()
+		return registry.pendingQuit == nil
+	}, time.Second, time.Millisecond)
+	require.False(t, registry.PrepareApplicationQuit())
+	second := <-transactions
+	require.NotEqual(t, first, second)
+}
+
+func TestApplicationQuitPreflightDeliveryFailureAllowsAFreshTransaction(t *testing.T) {
+	registry := NewRegistry(
+		application.New(application.Options{}),
+		&recordingLifecycleBackend{allowQuit: true},
+		nil,
+	)
+	owner := registry.Create(true)
+	registry.markWorkspaceReady(owner.Name())
+	deliver := false
+	registry.emitWindowEvent = func(string, string, any) bool { return deliver }
+
+	require.False(t, registry.PrepareApplicationQuit())
+	registry.quitMu.Lock()
+	require.Nil(t, registry.pendingQuit)
+	registry.quitMu.Unlock()
+	deliver = true
+	require.False(t, registry.PrepareApplicationQuit())
+	registry.quitMu.Lock()
+	require.NotNil(t, registry.pendingQuit)
+	registry.quitMu.Unlock()
 }
 
 func TestRegistryUsesItsLifecycleConsumerWithoutConcreteBackendOwnership(t *testing.T) {

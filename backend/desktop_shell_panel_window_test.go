@@ -112,6 +112,9 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 		UpdatePanelSnapshot:        func(string, panelwindow.GroupSnapshot) error { mark(); return nil },
 		RequestPanelTabClose:       func(string, string) error { mark(); return nil },
 		AuthorizePanelTabClose:     func(string, string, string) error { mark(); return nil },
+		RequestPanelTabTransfer:    func(string, panelwindow.TabTransferRequest) error { mark(); return nil },
+		AcceptPanelTabTransfer:     func(string, string) error { mark(); return nil },
+		FailPanelTabTransfer:       func(string, string) error { mark(); return nil },
 		RequestPanelGuard:          func(string, string, string, string) error { mark(); return nil },
 		AcknowledgePanelGuard:      func(string, string, bool) error { mark(); return nil },
 		AcknowledgeApplicationQuit: func(string, string, bool) error { mark(); return nil },
@@ -143,10 +146,13 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 	require.NoError(t, service.UpdatePanelWindowSnapshot(ctx, "panel-1", snapshot))
 	require.NoError(t, service.RequestPanelTabClose(ctx, "panel-1", "panel-a"))
 	require.NoError(t, service.AuthorizePanelTabClose(ctx, "workspace-1", "panel-1", "panel-a"))
+	require.NoError(t, service.RequestPanelTabTransfer(ctx, "workspace-1", panelwindow.TabTransferRequest{}))
+	require.NoError(t, service.AcceptPanelTabTransfer(ctx, "workspace-1", "tab-transfer-1"))
+	require.NoError(t, service.FailPanelTabTransfer(ctx, "panel-1", "tab-transfer-1"))
 	require.NoError(t, service.RequestPanelWindowGuard(ctx, "workspace-1", "panel-1", "guard-1", "quit"))
 	require.NoError(t, service.AcknowledgePanelWindowGuard(ctx, "panel-1", "guard-1", true))
 	require.NoError(t, service.AcknowledgeApplicationQuitPreflight(ctx, "workspace-1", "quit-1", true))
-	require.Equal(t, 19, called)
+	require.Equal(t, 22, called)
 }
 
 func TestDesktopServiceRejectsPanelCommandsWhoseClaimedCallerDoesNotMatchTheWailsSender(t *testing.T) {
@@ -164,4 +170,51 @@ func TestDesktopServiceRejectsPanelCommandsWhoseClaimedCallerDoesNotMatchTheWail
 
 	require.ErrorContains(t, err, "does not match Wails sender")
 	require.False(t, called)
+}
+
+func TestDesktopServiceRejectsPanelTabTransfersWhoseClaimedCallerDoesNotMatchTheWailsSender(t *testing.T) {
+	called := false
+	shell := NewDesktopShell(nil, nil, nil, nil, DesktopShellBindings{
+		RequestPanelTabTransfer: func(string, panelwindow.TabTransferRequest) error {
+			called = true
+			return nil
+		},
+		AcceptPanelTabTransfer: func(string, string) error {
+			called = true
+			return nil
+		},
+		FailPanelTabTransfer: func(string, string) error {
+			called = true
+			return nil
+		},
+	})
+	service := NewDesktopService(DesktopServiceDependencies{PanelWindows: shell})
+	ctx := context.WithValue(context.Background(), application.WindowKey, panelCommandCaller("panel-1"))
+
+	tests := []struct {
+		name string
+		run  func() error
+	}{
+		{
+			name: "request",
+			run: func() error {
+				return service.RequestPanelTabTransfer(ctx, "workspace-1", panelwindow.TabTransferRequest{})
+			},
+		},
+		{
+			name: "accept",
+			run:  func() error { return service.AcceptPanelTabTransfer(ctx, "workspace-1", "transfer-1") },
+		},
+		{
+			name: "fail",
+			run:  func() error { return service.FailPanelTabTransfer(ctx, "workspace-1", "transfer-1") },
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			called = false
+			require.ErrorContains(t, test.run(), "does not match Wails sender")
+			require.False(t, called)
+		})
+	}
 }

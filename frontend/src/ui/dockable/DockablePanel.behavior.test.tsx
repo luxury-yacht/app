@@ -28,7 +28,12 @@ const ensureContentElement = () => {
   body.className = 'content-body';
   content.appendChild(body);
   content.getBoundingClientRect = () =>
-    DOMRect.fromRect({ x: 0, y: 0, width: window.innerWidth, height: window.innerHeight });
+    DOMRect.fromRect({
+      x: 0,
+      y: 0,
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
   document.body.appendChild(content);
 };
 
@@ -96,7 +101,10 @@ describe('DockablePanel docked behaviour', () => {
   });
 
   it('resizes a right-docked panel from its separator', async () => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1200 });
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 1200,
+    });
     const unmount = await renderPanel(
       <DockablePanel panelId="panel-right" defaultPosition="right" isOpen>
         <div>panel</div>
@@ -107,14 +115,22 @@ describe('DockablePanel docked behaviour', () => {
 
     await act(async () => {
       handle?.dispatchEvent(
-        new MouseEvent('mousedown', { bubbles: true, clientX: 700, clientY: 200 })
+        new MouseEvent('mousedown', {
+          bubbles: true,
+          clientX: 700,
+          clientY: 200,
+        })
       );
       await Promise.resolve();
     });
     expect(document.body.classList.contains('dockable-panel-resizing-w')).toBe(true);
     await act(async () => {
       window.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 620, clientY: 200 })
+        new MouseEvent('mousemove', {
+          bubbles: true,
+          clientX: 620,
+          clientY: 200,
+        })
       );
     });
     await act(async () => {
@@ -127,7 +143,10 @@ describe('DockablePanel docked behaviour', () => {
   });
 
   it('supports keyboard resizing for a bottom-docked separator', async () => {
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1000 });
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 1000,
+    });
     const unmount = await renderPanel(
       <DockablePanel panelId="panel-bottom" defaultPosition="bottom" isOpen>
         <div>panel</div>
@@ -138,7 +157,11 @@ describe('DockablePanel docked behaviour', () => {
 
     await act(async () => {
       handle?.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true })
+        new KeyboardEvent('keydown', {
+          key: 'ArrowUp',
+          bubbles: true,
+          cancelable: true,
+        })
       );
       await Promise.resolve();
     });
@@ -181,6 +204,96 @@ describe('DockablePanel docked behaviour', () => {
     expect(panelState('panel-a').isOpen).toBe(true);
     expect(panelState('panel-b').isOpen).toBe(true);
     expect(document.querySelectorAll('.dockable-panel [role="tab"]')).toHaveLength(2);
+    await unmount();
+  });
+
+  it('logs a warning and renders nothing when panelId is missing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const unmount = await renderPanel(
+      <DockablePanel panelId={'' as unknown as string}>
+        <div>panel</div>
+      </DockablePanel>
+    );
+
+    expect(warn).toHaveBeenCalledWith('DockablePanel: panelId prop is required');
+    expect(document.querySelector('.dockable-panel')).toBeNull();
+    warn.mockRestore();
+    await unmount();
+  });
+
+  it('applies dock controls to the active tab in a shared docked group', async () => {
+    const unmount = await renderPanel(
+      <>
+        <DockablePanel panelId="panel-controls-a" defaultPosition="right" isOpen>
+          <div>A</div>
+        </DockablePanel>
+        <DockablePanel panelId="panel-controls-b" defaultPosition="right" isOpen>
+          <div>B</div>
+        </DockablePanel>
+      </>
+    );
+
+    const dockBottom = document.querySelector<HTMLButtonElement>(
+      '.dockable-panel--right [aria-label="Dock panel to bottom"]'
+    );
+    await act(async () => dockBottom?.click());
+
+    expect(panelState('panel-controls-a').position).toBe('right');
+    expect(panelState('panel-controls-b').position).toBe('bottom');
+    await unmount();
+  });
+
+  it('brings an existing destination group forward when docking the active tab into it', async () => {
+    const unmount = await renderPanel(
+      <>
+        <DockablePanel panelId="panel-target-bottom" defaultPosition="bottom" isOpen>
+          <div>Target</div>
+        </DockablePanel>
+        <DockablePanel panelId="panel-source-a" defaultPosition="right" isOpen>
+          <div>Source A</div>
+        </DockablePanel>
+        <DockablePanel panelId="panel-source-b" defaultPosition="right" isOpen>
+          <div>Source B</div>
+        </DockablePanel>
+      </>
+    );
+    const before = getAllPanelStates();
+    expect(before['panel-target-bottom']?.zIndex).toBeLessThan(
+      before['panel-source-a']?.zIndex ?? Number.NEGATIVE_INFINITY
+    );
+
+    const dockBottom = document.querySelector<HTMLButtonElement>(
+      '.dockable-panel--right [aria-label="Dock panel to bottom"]'
+    );
+    await act(async () => dockBottom?.click());
+
+    const after = getAllPanelStates();
+    expect(after['panel-source-b']?.position).toBe('bottom');
+    expect(after['panel-target-bottom']?.zIndex).toBeGreaterThan(
+      after['panel-source-a']?.zIndex ?? Number.POSITIVE_INFINITY
+    );
+    await unmount();
+  });
+
+  it('closes every tab when the panel close control is clicked', async () => {
+    const unmount = await renderPanel(
+      <>
+        <DockablePanel panelId="panel-close-a" defaultPosition="right">
+          <div>A</div>
+        </DockablePanel>
+        <DockablePanel panelId="panel-close-b" defaultPosition="right">
+          <div>B</div>
+        </DockablePanel>
+      </>
+    );
+
+    const close = document.querySelector<HTMLButtonElement>(
+      '[aria-label="Close all tabs in this panel"]'
+    );
+    await act(async () => close?.click());
+
+    expect(panelState('panel-close-a').isOpen).toBe(false);
+    expect(panelState('panel-close-b').isOpen).toBe(false);
     await unmount();
   });
 });
