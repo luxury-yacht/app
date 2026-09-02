@@ -360,10 +360,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   // Keep both state (for rendering) and a ref (for same-tick reads in callbacks).
   const [lastFocusedGroupKey, setLastFocusedGroupKeyState] = useState<GroupKey | null>(null);
   const lastFocusedGroupKeyRef = useRef<GroupKey | null>(null);
-  // When a tab is moved to a *new* floating group, the final group key
-  // is only known after tabGroups updates. Track the moved panel id so we
-  // can resolve and store the focused floating group in an effect.
-  const pendingFocusPanelIdRef = useRef<string | null>(null);
   const setLastFocusedGroupKeyValue = useCallback((key: GroupKey | null) => {
     if (lastFocusedGroupKeyRef.current === key) {
       return;
@@ -491,19 +487,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
     },
     [activeStore, setLastFocusedGroupKey]
   );
-
-  useLayoutEffect(() => {
-    const pendingPanelId = pendingFocusPanelIdRef.current;
-    if (!pendingPanelId) {
-      return;
-    }
-    const resolvedGroupKey = getGroupForPanel(tabGroups, pendingPanelId);
-    if (!resolvedGroupKey) {
-      return;
-    }
-    pendingFocusPanelIdRef.current = null;
-    setLastFocusedGroupKey(resolvedGroupKey);
-  }, [tabGroups, setLastFocusedGroupKey]);
 
   // -----------------------------------------------------------------------
   // registerPanel stores panel metadata only.
@@ -667,14 +650,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
         movePanelToGroup(prev, panelId, targetGroupKey, insertIndex)
       );
 
-      if (targetGroupKey === 'floating') {
-        // New floating group id is generated during the tabGroups update;
-        // resolve it in the layout effect above.
-        pendingFocusPanelIdRef.current = panelId;
-      } else {
-        pendingFocusPanelIdRef.current = null;
-        setLastFocusedGroupKey(targetGroupKey);
-      }
+      setLastFocusedGroupKey(targetGroupKey);
 
       // Keep panel-state position aligned with tab-group destination.
       const targetPosition: DockPosition =

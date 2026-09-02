@@ -65,6 +65,7 @@ interface ObjectPanelState {
   activeTabs: Map<string, ViewType>;
   nativeLocations: Map<string, { windowName: string; groupId: string }>;
   dockedEdges: Map<string, 'right' | 'bottom'>;
+  pendingNativeOpenPanelIds: Set<string>;
 }
 
 const DEFAULT_OBJECT_PANEL_STATE: ObjectPanelState = {
@@ -72,6 +73,7 @@ const DEFAULT_OBJECT_PANEL_STATE: ObjectPanelState = {
   activeTabs: new Map(),
   nativeLocations: new Map(),
   dockedEdges: new Map(),
+  pendingNativeOpenPanelIds: new Set(),
 };
 
 interface ObjectPanelStateContextType {
@@ -81,14 +83,18 @@ interface ObjectPanelStateContextType {
   openPanels: Map<string, ObjectPanelRef>;
   nativeLocations: Map<string, { windowName: string; groupId: string }>;
   dockedEdges: Map<string, 'right' | 'bottom'>;
+  pendingNativeOpenPanelIds: Set<string>;
 
   // Open/activate a panel for the given object reference.
   // If the object is already open, activates the existing tab.
   // Returns the panelId for the object.
-  onRowClick: (data: KubernetesObjectReference) => string;
+  onRowClick: (
+    data: KubernetesObjectReference,
+    options?: { pendingNativeOpen?: boolean }
+  ) => string;
 
   // Close a single object panel by its panelId.
-  closePanel: (panelId: string) => void;
+  closePanel: (clusterId: string, panelId: string) => void;
 
   // Close all object panels (backward compat).
   onCloseObjectPanel: () => void;
@@ -100,16 +106,15 @@ interface ObjectPanelStateContextType {
   hydrateClusterMeta: (data: KubernetesObjectReference) => KubernetesObjectReference;
 
   /**
-   * Persist the active sub-tab for an object panel into the active
-   * cluster's slice. Survives unmount/remount cycles caused by cluster
-   * switching.
+   * Persist the active sub-tab for an object panel into its owning cluster's
+   * slice. Survives unmount/remount cycles caused by cluster switching.
    *
    * Reading the active tab is intentionally NOT on this context — use the
    * reactive useObjectPanelActiveTab hook. Keeping the read separate stops a
    * tab switch from churning this (otherwise stable) value and re-rendering
    * every consumer.
    */
-  setObjectPanelActiveTab: (panelId: string, tab: ViewType) => void;
+  setObjectPanelActiveTab: (clusterId: string, panelId: string, tab: ViewType) => void;
   commitPanelWindow: (snapshot: panelwindow.GroupSnapshot, windowName: string) => void;
   dockPanelWindow: (snapshot: panelwindow.GroupSnapshot, edge: 'right' | 'bottom') => void;
   removePanelWindow: (clusterId: string, windowName: string) => void;
@@ -198,6 +203,7 @@ const stateFromGroupSnapshot = (
       activeTabs,
       nativeLocations: new Map(),
       dockedEdges: new Map(),
+      pendingNativeOpenPanelIds: new Set(),
     },
   };
 };
@@ -218,6 +224,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   const { openPanels } = activeState;
   const { nativeLocations } = activeState;
   const { dockedEdges } = activeState;
+  const { pendingNativeOpenPanelIds } = activeState;
   const showObjectPanel = Array.from(openPanels.keys()).some(
     (panelId) => !nativeLocations.has(panelId)
   );
@@ -229,18 +236,18 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   const stateByClusterRef = useRef(objectPanelStateByCluster);
   stateByClusterRef.current = objectPanelStateByCluster;
 
-  const updateActiveState = useCallback(
-    (updater: (prev: ObjectPanelState) => ObjectPanelState) => {
+  const updateClusterState = useCallback(
+    (targetClusterId: string, updater: (prev: ObjectPanelState) => ObjectPanelState) => {
       setObjectPanelStateByCluster((prev) => {
-        const current = prev[clusterKey] ?? DEFAULT_OBJECT_PANEL_STATE;
+        const current = prev[targetClusterId] ?? DEFAULT_OBJECT_PANEL_STATE;
         const next = updater(current);
         return {
           ...prev,
-          [clusterKey]: next,
+          [targetClusterId]: next,
         };
       });
     },
-    [clusterKey]
+    []
   );
 
   // Clean up state for removed cluster tabs.
@@ -296,30 +303,42 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   );
 
   const onRowClick = useCallback(
-    (data: KubernetesObjectReference): string => {
+    (data: KubernetesObjectReference, options?: { pendingNativeOpen?: boolean }): string => {
       const enriched = hydrateClusterMeta(data);
       const panelRef = buildObjectPanelRef(enriched);
       const panelId = objectPanelId(panelRef);
 
-      updateActiveState((prev) => {
-        // If panel already exists, no state change needed (activation handled by dockable system).
-        if (prev.openPanels.has(panelId)) {
+      updateClusterState(panelRef.clusterId, (prev) => {
+        const shouldMarkPending = options?.pendingNativeOpen === true;
+        // If panel already exists and its pending state is unchanged, activation
+        // is handled by the dockable system.
+        if (
+          prev.openPanels.has(panelId) &&
+          (!shouldMarkPending || prev.pendingNativeOpenPanelIds.has(panelId))
+        ) {
           return prev;
         }
-        // Add new panel to the map.
         const nextPanels = new Map(prev.openPanels);
         nextPanels.set(panelId, panelRef);
-        return { ...prev, openPanels: nextPanels };
+        const nextPendingNativeOpenPanelIds = new Set(prev.pendingNativeOpenPanelIds);
+        if (shouldMarkPending) {
+          nextPendingNativeOpenPanelIds.add(panelId);
+        }
+        return {
+          ...prev,
+          openPanels: nextPanels,
+          pendingNativeOpenPanelIds: nextPendingNativeOpenPanelIds,
+        };
       });
 
       return panelId;
     },
-    [hydrateClusterMeta, updateActiveState]
+    [hydrateClusterMeta, updateClusterState]
   );
 
   const closePanel = useCallback(
-    (panelId: string) => {
-      updateActiveState((prev) => {
+    (targetClusterId: string, panelId: string) => {
+      updateClusterState(targetClusterId, (prev) => {
         if (!prev.openPanels.has(panelId) && !prev.activeTabs.has(panelId)) {
           return prev;
         }
@@ -342,13 +361,16 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         nextActiveTabs.delete(panelId);
         const nextNativeLocations = new Map(prev.nativeLocations);
         const nextDockedEdges = new Map(prev.dockedEdges);
+        const nextPendingNativeOpenPanelIds = new Set(prev.pendingNativeOpenPanelIds);
         nextNativeLocations.delete(panelId);
         nextDockedEdges.delete(panelId);
+        nextPendingNativeOpenPanelIds.delete(panelId);
         return {
           openPanels: nextPanels,
           activeTabs: nextActiveTabs,
           nativeLocations: nextNativeLocations,
           dockedEdges: nextDockedEdges,
+          pendingNativeOpenPanelIds: nextPendingNativeOpenPanelIds,
         };
       });
       // Clear the dockable panel state so reopening gets fresh defaults
@@ -356,7 +378,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       handoffLayoutBeforeClose(panelId);
       clearPanelState(panelId);
     },
-    [updateActiveState]
+    [updateClusterState]
   );
 
   const onCloseObjectPanel = useCallback(() => {
@@ -369,12 +391,12 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       handoffLayoutBeforeClose(panelId);
       clearPanelState(panelId);
     });
-    updateActiveState(() => DEFAULT_OBJECT_PANEL_STATE);
-  }, [updateActiveState, clusterKey]);
+    updateClusterState(clusterKey, () => DEFAULT_OBJECT_PANEL_STATE);
+  }, [updateClusterState, clusterKey]);
 
   const setObjectPanelActiveTab = useCallback(
-    (panelId: string, tab: ViewType) => {
-      updateActiveState((prev) => {
+    (targetClusterId: string, panelId: string, tab: ViewType) => {
+      updateClusterState(targetClusterId, (prev) => {
         if (prev.activeTabs.get(panelId) === tab) {
           return prev;
         }
@@ -383,46 +405,29 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         return { ...prev, activeTabs: nextActiveTabs };
       });
     },
-    [updateActiveState]
+    [updateClusterState]
   );
 
   const commitPanelWindow = useCallback(
     (snapshot: panelwindow.GroupSnapshot, windowName: string) => {
-      if (snapshot.clusterId !== selectedClusterId) {
-        setObjectPanelStateByCluster((previous) => {
-          const current = previous[snapshot.clusterId] ?? DEFAULT_OBJECT_PANEL_STATE;
-          const nextNativeLocations = new Map(current.nativeLocations);
-          const nextDockedEdges = new Map(current.dockedEdges);
-          for (const tab of snapshot.tabs ?? []) {
-            nextNativeLocations.set(tab.panelId, { windowName, groupId: snapshot.groupId });
-            nextDockedEdges.delete(tab.panelId);
-          }
-          return {
-            ...previous,
-            [snapshot.clusterId]: {
-              ...current,
-              nativeLocations: nextNativeLocations,
-              dockedEdges: nextDockedEdges,
-            },
-          };
-        });
-        return;
-      }
-      updateActiveState((previous) => {
+      updateClusterState(snapshot.clusterId, (previous) => {
         const nextNativeLocations = new Map(previous.nativeLocations);
         const nextDockedEdges = new Map(previous.dockedEdges);
+        const nextPendingNativeOpenPanelIds = new Set(previous.pendingNativeOpenPanelIds);
         for (const tab of snapshot.tabs ?? []) {
           nextNativeLocations.set(tab.panelId, { windowName, groupId: snapshot.groupId });
           nextDockedEdges.delete(tab.panelId);
+          nextPendingNativeOpenPanelIds.delete(tab.panelId);
         }
         return {
           ...previous,
           nativeLocations: nextNativeLocations,
           dockedEdges: nextDockedEdges,
+          pendingNativeOpenPanelIds: nextPendingNativeOpenPanelIds,
         };
       });
     },
-    [selectedClusterId, updateActiveState]
+    [updateClusterState]
   );
 
   const dockPanelWindow = useCallback(
@@ -433,6 +438,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         const nextActiveTabs = new Map(current.activeTabs);
         const nextNativeLocations = new Map(current.nativeLocations);
         const nextDockedEdges = new Map(current.dockedEdges);
+        const nextPendingNativeOpenPanelIds = new Set(current.pendingNativeOpenPanelIds);
         for (const tab of snapshot.tabs ?? []) {
           nextPanels.set(
             tab.panelId,
@@ -441,6 +447,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
           nextActiveTabs.set(tab.panelId, tab.activeView as ViewType);
           nextNativeLocations.delete(tab.panelId);
           nextDockedEdges.set(tab.panelId, edge);
+          nextPendingNativeOpenPanelIds.delete(tab.panelId);
         }
         return {
           ...previous,
@@ -449,6 +456,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
             activeTabs: nextActiveTabs,
             nativeLocations: nextNativeLocations,
             dockedEdges: nextDockedEdges,
+            pendingNativeOpenPanelIds: nextPendingNativeOpenPanelIds,
           },
         };
       });
@@ -472,6 +480,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       const nextActiveTabs = new Map(current.activeTabs);
       const nextNativeLocations = new Map(current.nativeLocations);
       const nextDockedEdges = new Map(current.dockedEdges);
+      const nextPendingNativeOpenPanelIds = new Set(current.pendingNativeOpenPanelIds);
       for (const panelId of removedPanelIds) {
         const ref = nextOpenPanels.get(panelId);
         if (ref) {
@@ -482,6 +491,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         nextActiveTabs.delete(panelId);
         nextNativeLocations.delete(panelId);
         nextDockedEdges.delete(panelId);
+        nextPendingNativeOpenPanelIds.delete(panelId);
       }
       return {
         ...previous,
@@ -490,6 +500,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
           activeTabs: nextActiveTabs,
           nativeLocations: nextNativeLocations,
           dockedEdges: nextDockedEdges,
+          pendingNativeOpenPanelIds: nextPendingNativeOpenPanelIds,
         },
       };
     });
@@ -537,8 +548,10 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         const nextActiveTabs = new Map(current.activeTabs);
         const nextNativeLocations = new Map(current.nativeLocations);
         const nextDockedEdges = new Map(current.dockedEdges);
+        const nextPendingNativeOpenPanelIds = new Set(current.pendingNativeOpenPanelIds);
         nextOpenPanels.set(panelId, panelRef);
         nextActiveTabs.set(panelId, activeView);
+        nextPendingNativeOpenPanelIds.delete(panelId);
         if (location.kind === 'panel-window') {
           nextNativeLocations.set(panelId, {
             windowName: location.windowName,
@@ -556,6 +569,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
             activeTabs: nextActiveTabs,
             nativeLocations: nextNativeLocations,
             dockedEdges: nextDockedEdges,
+            pendingNativeOpenPanelIds: nextPendingNativeOpenPanelIds,
           },
         };
       });
@@ -579,10 +593,12 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       const nextActiveTabs = new Map(current.activeTabs);
       const nextNativeLocations = new Map(current.nativeLocations);
       const nextDockedEdges = new Map(current.dockedEdges);
+      const nextPendingNativeOpenPanelIds = new Set(current.pendingNativeOpenPanelIds);
       nextOpenPanels.delete(panelId);
       nextActiveTabs.delete(panelId);
       nextNativeLocations.delete(panelId);
       nextDockedEdges.delete(panelId);
+      nextPendingNativeOpenPanelIds.delete(panelId);
       return {
         ...previous,
         [clusterId]: {
@@ -590,6 +606,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
           activeTabs: nextActiveTabs,
           nativeLocations: nextNativeLocations,
           dockedEdges: nextDockedEdges,
+          pendingNativeOpenPanelIds: nextPendingNativeOpenPanelIds,
         },
       };
     });
@@ -627,6 +644,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         const nextActiveTabs = new Map(current.activeTabs);
         const nextNativeLocations = new Map(current.nativeLocations);
         const nextDockedEdges = new Map(current.dockedEdges);
+        const nextPendingNativeOpenPanelIds = new Set(current.pendingNativeOpenPanelIds);
         for (const [panelId, location] of current.nativeLocations) {
           if (location.windowName !== windowName || incoming.has(panelId)) {
             continue;
@@ -635,6 +653,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
           nextActiveTabs.delete(panelId);
           nextNativeLocations.delete(panelId);
           nextDockedEdges.delete(panelId);
+          nextPendingNativeOpenPanelIds.delete(panelId);
         }
         for (const tab of snapshot.tabs ?? []) {
           nextOpenPanels.set(
@@ -644,6 +663,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
           nextActiveTabs.set(tab.panelId, tab.activeView as ViewType);
           nextNativeLocations.set(tab.panelId, { windowName, groupId: snapshot.groupId });
           nextDockedEdges.delete(tab.panelId);
+          nextPendingNativeOpenPanelIds.delete(tab.panelId);
         }
         return {
           ...previous,
@@ -652,6 +672,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
             activeTabs: nextActiveTabs,
             nativeLocations: nextNativeLocations,
             dockedEdges: nextDockedEdges,
+            pendingNativeOpenPanelIds: nextPendingNativeOpenPanelIds,
           },
         };
       });
@@ -665,6 +686,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       openPanels,
       nativeLocations,
       dockedEdges,
+      pendingNativeOpenPanelIds,
       onRowClick,
       closePanel,
       onCloseObjectPanel,
@@ -693,6 +715,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       openPanels,
       nativeLocations,
       dockedEdges,
+      pendingNativeOpenPanelIds,
       onRowClick,
       closePanel,
       onCloseObjectPanel,

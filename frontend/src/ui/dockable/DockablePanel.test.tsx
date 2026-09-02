@@ -325,6 +325,35 @@ describe('DockablePanel', () => {
     unmount();
   });
 
+  it('keeps a pending native transfer mounted without rendering its workspace surface', async () => {
+    let revealPanel: (() => void) | undefined;
+    const Host = () => {
+      const [suppressed, setSuppressed] = React.useState(true);
+      revealPanel = () => setSuppressed(false);
+      return (
+        <DockablePanel
+          panelId="pending-native-panel"
+          defaultPosition="floating"
+          isOpen
+          suppressSurface={suppressed}
+        >
+          <div>panel-body</div>
+        </DockablePanel>
+      );
+    };
+
+    const { unmount } = await renderPanel(<Host />);
+
+    expect(document.querySelector('.dockable-panel')).toBeNull();
+
+    act(() => {
+      revealPanel?.();
+    });
+
+    expect(document.querySelector('.dockable-panel')).toBeTruthy();
+    unmount();
+  });
+
   it('uses native window geometry instead of docked inline dimensions in native mode', async () => {
     const { unmount } = await renderPanel(
       <DockablePanelProvider nativeWindowMode>

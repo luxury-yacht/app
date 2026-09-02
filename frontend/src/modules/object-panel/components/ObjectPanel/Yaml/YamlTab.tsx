@@ -685,8 +685,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
     return {
       reason,
       focus: () => {
-        if (panelId) {
-          objectPanelState?.setObjectPanelActiveTab(panelId, 'yaml');
+        if (panelId && clusterId) {
+          objectPanelState?.setObjectPanelActiveTab(clusterId, panelId, 'yaml');
         }
         window.requestAnimationFrame(() => yamlEditorRef.current?.focus());
       },

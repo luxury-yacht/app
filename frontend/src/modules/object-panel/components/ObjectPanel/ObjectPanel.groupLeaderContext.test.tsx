@@ -74,7 +74,8 @@ vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
     onCloseObjectPanel: vi.fn(),
     setShowObjectPanel: vi.fn(),
     hydrateClusterMeta: vi.fn((d: unknown) => d),
-    setObjectPanelActiveTab: tabStore.set,
+    setObjectPanelActiveTab: (_clusterId: string, panelId: string, tab: string) =>
+      tabStore.set(panelId, tab),
   }),
   useObjectPanelActiveTab: (panelId: string) =>
     useSyncExternalStore(tabStore.subscribe, tabStore.getSnapshot).get(panelId),

@@ -6,6 +6,11 @@ import (
 	"github.com/luxury-yacht/app/internal/panelwindow"
 )
 
+// Panel-window registry commands intentionally do not use the workspace
+// runtime-ready gate. A child calls GetNativeWindowDescriptor during frontend
+// bootstrap, before it can render and acknowledge readiness; sender identity
+// and the registry transfer state are the authorization boundary for the
+// remaining commands in this file.
 func (s *DesktopShell) GetNativeWindowDescriptor(
 	windowName string,
 ) (panelwindow.NativeDescriptor, error) {

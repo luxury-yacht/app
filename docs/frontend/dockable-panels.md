@@ -50,9 +50,10 @@ maximize and restore.
 ## Placement and Uniqueness
 
 - Prefer the active compatible docked group when opening a new object.
-- A default or explicit Floating action first creates a transient one-tab
-  source group, then asks the native coordinator to transfer that complete
-  group.
+- A new panel whose default is Floating creates a transient, hidden one-tab
+  source group, then asks the native coordinator to transfer it.
+- An explicit Float action transfers the complete current docked group,
+  including every tab in that group.
 - If an object is already docked, focus its owner and docked tab. If it is in a
   native group, focus that window and tab.
 - A same-cluster link opened in a child may join that child group after owner
@@ -64,11 +65,13 @@ maximize and restore.
 ## Acknowledged Handoffs
 
 Float and dock-back are transactions. Before a move, the source checks every
-tab guard and creates a complete group snapshot. The source stays mounted until
-the target has reconstructed the group and acknowledged readiness. The owner
-then commits each location exactly once and unmounts the source. A failed,
-stale, or timed-out acknowledgement rolls back the target and leaves the source
-unchanged.
+tab guard and creates a complete group snapshot. An explicit Float source stays
+visible until the target has reconstructed the group and acknowledged
+readiness. A new default-Floating panel keeps its source registration and group
+mounted but suppresses its workspace surface during that same interval. The
+owner then commits each location exactly once and unmounts the source. A failed,
+stale, or timed-out explicit Float leaves its source unchanged; a failed
+default-Floating open reveals the new panel by docking its source on the right.
 
 Dock-back moves the entire native group to right or bottom while preserving tab
 order, active tab, and active object sub-tabs. Moving one child tab out of a

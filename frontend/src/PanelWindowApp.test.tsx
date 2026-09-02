@@ -267,7 +267,7 @@ describe('PanelWindowApp', () => {
     }
     act(() => mocks.authorizedHandler?.({ panelId: 'panel-pod', objectRef, activeView: 'yaml' }));
     expect(mocks.onRowClick).toHaveBeenCalledWith(objectRef);
-    expect(mocks.setObjectPanelActiveTab).toHaveBeenCalledWith('panel-pod', 'yaml');
+    expect(mocks.setObjectPanelActiveTab).toHaveBeenCalledWith('cluster-a', 'panel-pod', 'yaml');
 
     expect(
       dockProviderProps.onGroupMoveRequest(

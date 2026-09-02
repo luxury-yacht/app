@@ -1,6 +1,7 @@
 import type { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { objectPanelId } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import type { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { buildObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import {
   canResolveEventObjectReference,
   resolveEventObjectReference,
@@ -49,11 +50,12 @@ export const useRecentClusterOverviewEvents = ({
       if (!ref) {
         return;
       }
-      openWithObject(ref);
+      const panelRef = buildObjectPanelRef(hydrateClusterMeta(ref));
+      openWithObject(panelRef);
       // The panel id comes from the fully hydrated ref so events never cross
       // cluster or object identity boundaries.
-      const panelId = objectPanelId(hydrateClusterMeta(ref));
-      setObjectPanelActiveTab(panelId, 'events');
+      const panelId = objectPanelId(panelRef);
+      setObjectPanelActiveTab(panelRef.clusterId, panelId, 'events');
     },
     [getObjectRefInput, hydrateClusterMeta, openWithObject, setObjectPanelActiveTab]
   );

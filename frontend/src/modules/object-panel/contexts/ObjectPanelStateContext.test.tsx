@@ -143,6 +143,65 @@ describe('ObjectPanelStateContext', () => {
     expect(clusterAEntries[0]?.name).toBe('api');
   });
 
+  it('stores a cross-cluster object in the cluster identified by the object reference', async () => {
+    await renderProvider();
+
+    act(() => {
+      stateRef.current?.onRowClick({
+        group: '',
+        version: 'v1',
+        kind: 'Namespace',
+        name: 'team-b',
+        clusterId: 'cluster-b',
+      });
+    });
+
+    expect(stateRef.current?.openPanels.size).toBe(0);
+
+    mockClusterId = 'cluster-b';
+    mockClusterName = 'Cluster B';
+    await renderProvider();
+
+    expect(Array.from(stateRef.current?.openPanels.values() ?? [])).toEqual([
+      expect.objectContaining({ clusterId: 'cluster-b', kind: 'Namespace', name: 'team-b' }),
+    ]);
+  });
+
+  it('tracks a hidden native-open handoff until the panel is committed or docked', async () => {
+    await renderProvider();
+    const objectRef = {
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      namespace: 'default',
+      name: 'api',
+    };
+    let panelId = '';
+
+    act(() => {
+      panelId = stateRef.current?.onRowClick(objectRef, { pendingNativeOpen: true }) ?? '';
+    });
+
+    expect(stateRef.current?.pendingNativeOpenPanelIds.has(panelId)).toBe(true);
+
+    const snapshot = {
+      schemaVersion: 1,
+      transferId: 'transfer-pending',
+      ownerWindowName: 'workspace-1',
+      clusterId: 'cluster-a',
+      groupId: 'group-pending',
+      activePanelId: panelId,
+      tabs: [{ panelId, objectRef, activeView: 'details' }],
+    } as panelwindow.GroupSnapshot;
+
+    act(() => {
+      stateRef.current?.dockPanelWindow(snapshot, 'right');
+    });
+
+    expect(stateRef.current?.pendingNativeOpenPanelIds.has(panelId)).toBe(false);
+  });
+
   it('does not re-render state-only consumers when a panel tab changes', async () => {
     // A consumer that uses the object-panel state context but never reads the
     // active tab must not re-render when some panel switches its sub-tab.
@@ -180,7 +239,7 @@ describe('ObjectPanelStateContext', () => {
     const rendersAfterOpen = stateConsumerRenders;
 
     act(() => {
-      stateRef.current?.setObjectPanelActiveTab(panelId, 'logs');
+      stateRef.current?.setObjectPanelActiveTab('cluster-a', panelId, 'logs');
     });
 
     expect(stateConsumerRenders).toBe(rendersAfterOpen);
@@ -201,7 +260,7 @@ describe('ObjectPanelStateContext', () => {
         }) ?? '';
     });
     act(() => {
-      stateRef.current?.setObjectPanelActiveTab(panelId, 'logs');
+      stateRef.current?.setObjectPanelActiveTab('cluster-a', panelId, 'logs');
     });
     // Mount the probe for this panel now that we know its id; it reads the
     // active tab reactively through the public hook.
@@ -224,7 +283,7 @@ describe('ObjectPanelStateContext', () => {
       });
     });
     act(() => {
-      stateRef.current?.setObjectPanelActiveTab(panelId, 'yaml');
+      stateRef.current?.setObjectPanelActiveTab('cluster-b', panelId, 'yaml');
     });
     expect(activeTabProbeRef.current).toBe('yaml');
 
@@ -249,13 +308,13 @@ describe('ObjectPanelStateContext', () => {
         }) ?? '';
     });
     act(() => {
-      stateRef.current?.setObjectPanelActiveTab(panelId, 'events');
+      stateRef.current?.setObjectPanelActiveTab('cluster-a', panelId, 'events');
     });
     await renderProvider(panelId);
     expect(activeTabProbeRef.current).toBe('events');
 
     act(() => {
-      stateRef.current?.closePanel(panelId);
+      stateRef.current?.closePanel('cluster-a', panelId);
     });
     expect(stateRef.current?.openPanels.has(panelId)).toBe(false);
     expect(activeTabProbeRef.current).toBeUndefined();
@@ -348,7 +407,7 @@ describe('ObjectPanelStateContext', () => {
     resetScopedDomainMock.mockClear();
 
     act(() => {
-      stateRef.current?.closePanel(panelId);
+      stateRef.current?.closePanel('cluster-a', panelId);
     });
 
     // Pod has 4 scopes that need eviction: details, yaml (both
@@ -377,7 +436,7 @@ describe('ObjectPanelStateContext', () => {
     resetScopedDomainMock.mockClear();
 
     act(() => {
-      stateRef.current?.closePanel(panelId);
+      stateRef.current?.closePanel('cluster-a', panelId);
     });
 
     const calls = resetScopedDomainMock.mock.calls.map(([domain]) => domain);

@@ -106,9 +106,9 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
           });
           return;
         }
-        setObjectPanelActiveTab(panelId, event.activeView as ViewType);
+        setObjectPanelActiveTab(descriptor.clusterId, panelId, event.activeView as ViewType);
       }),
-    [onRowClick, setObjectPanelActiveTab]
+    [descriptor.clusterId, onRowClick, setObjectPanelActiveTab]
   );
 
   const handleGroupMove = useCallback(

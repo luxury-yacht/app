@@ -283,7 +283,8 @@ export const AppLayout: React.FC = () => {
   const viewState = useViewState();
   const kubeconfig = useKubeconfig();
   const { tabGroups, focusPanel, setLastFocusedGroupKey } = useDockablePanelContext();
-  const { openPanels, nativeLocations, dockedEdges, closePanel } = useObjectPanelState();
+  const { openPanels, nativeLocations, dockedEdges, pendingNativeOpenPanelIds, closePanel } =
+    useObjectPanelState();
   const commands = useCommandPaletteCommands();
   const contentBodyRef = useRef<HTMLDivElement | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -411,7 +412,7 @@ export const AppLayout: React.FC = () => {
           return (
             <PanelErrorBoundary
               key={panelId}
-              onClose={() => closePanel(panelId)}
+              onClose={() => closePanel(objectRef.clusterId, panelId)}
               panelName="object-details"
             >
               <ObjectPanel
@@ -419,6 +420,7 @@ export const AppLayout: React.FC = () => {
                 objectRef={objectRef}
                 defaultPosition={mountTarget.position}
                 defaultGroupKey={mountTarget.groupKey}
+                suppressWorkspaceSurface={pendingNativeOpenPanelIds.has(panelId)}
               />
             </PanelErrorBoundary>
           );

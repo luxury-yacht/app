@@ -89,6 +89,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
   const {
     openPanels,
     nativeLocations,
+    pendingNativeOpenPanelIds,
     commitPanelWindow,
     dockPanelWindow,
     getOwnedPanel,
@@ -126,7 +127,27 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     timeout: number;
   } | null>(null);
   const pendingFloatGroupsRef = useRef(new Set<GroupKey>());
-  const pendingFloatGroupIdsRef = useRef(new Map<string, GroupKey>());
+  const pendingFloatGroupIdsRef = useRef(
+    new Map<
+      string,
+      { sourceGroup: GroupKey; snapshot: panelwindow.GroupSnapshot; autoFloat: boolean }
+    >()
+  );
+  const [pendingAutoFloatRollbacks, setPendingAutoFloatRollbacks] = useState<
+    panelwindow.GroupSnapshot[]
+  >([]);
+
+  const queueAutoFloatRollback = useCallback(
+    (snapshot: panelwindow.GroupSnapshot) => {
+      dockPanelWindow(snapshot, 'right');
+      setPendingAutoFloatRollbacks((previous) =>
+        previous.some((candidate) => candidate.transferId === snapshot.transferId)
+          ? previous
+          : [...previous, snapshot]
+      );
+    },
+    [dockPanelWindow]
+  );
 
   const settleApplicationQuit = useCallback(
     (transactionId: string, allowed: boolean, error?: unknown) => {
@@ -190,11 +211,22 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         activePanelId: group.activeTab ?? group.tabs[0] ?? '',
         initialBounds: initialWindowBounds(group.tabs),
       };
+      const autoFloat =
+        group.tabs.length > 0 &&
+        group.tabs.every((panelId) => pendingNativeOpenPanelIds.has(panelId));
       pendingFloatGroupsRef.current.add(group.groupKey);
-      pendingFloatGroupIdsRef.current.set(groupId, group.groupKey);
+      pendingFloatGroupIdsRef.current.set(groupId, {
+        sourceGroup: group.groupKey,
+        snapshot,
+        autoFloat,
+      });
       void beginPanelWindowOpen(ownerWindowName, snapshot).catch((error) => {
-        pendingFloatGroupsRef.current.delete(group.groupKey);
+        const pending = pendingFloatGroupIdsRef.current.get(groupId);
+        pendingFloatGroupsRef.current.delete(pending?.sourceGroup ?? group.groupKey);
         pendingFloatGroupIdsRef.current.delete(groupId);
+        if (pending?.autoFloat) {
+          queueAutoFloatRollback(pending.snapshot);
+        }
         reportOperationalError(error, {
           source: 'WorkspacePanelCoordinator',
           action: 'float-group',
@@ -202,14 +234,21 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       });
       return true;
     },
-    [activeTabs, guards, openPanels, ownerWindowName]
+    [
+      activeTabs,
+      guards,
+      openPanels,
+      ownerWindowName,
+      pendingNativeOpenPanelIds,
+      queueAutoFloatRollback,
+    ]
   );
 
   const handlePanelWindowOpened = useCallback(
     (event: panelwindow.WindowOpenedEvent) => {
-      const sourceGroup = pendingFloatGroupIdsRef.current.get(event.groupId);
-      if (sourceGroup) {
-        pendingFloatGroupsRef.current.delete(sourceGroup);
+      const pending = pendingFloatGroupIdsRef.current.get(event.groupId);
+      if (pending) {
+        pendingFloatGroupsRef.current.delete(pending.sourceGroup);
         pendingFloatGroupIdsRef.current.delete(event.groupId);
       }
       commitPanelWindow(event.snapshot, event.windowName);
@@ -271,31 +310,43 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     [dockPanelWindow]
   );
 
-  const handlePanelWindowClosed = useCallback((windowName: string, groupId?: string) => {
-    if (groupId) {
-      const sourceGroup = pendingFloatGroupIdsRef.current.get(groupId);
-      if (sourceGroup) {
-        pendingFloatGroupsRef.current.delete(sourceGroup);
-        pendingFloatGroupIdsRef.current.delete(groupId);
+  const handlePanelWindowClosed = useCallback(
+    (windowName: string, groupId?: string) => {
+      if (groupId) {
+        const pending = pendingFloatGroupIdsRef.current.get(groupId);
+        if (pending) {
+          pendingFloatGroupsRef.current.delete(pending.sourceGroup);
+          pendingFloatGroupIdsRef.current.delete(groupId);
+          if (pending.autoFloat) {
+            queueAutoFloatRollback(pending.snapshot);
+          }
+        }
       }
-    }
-    setPendingOwnerCloseWindows((previous) => {
-      if (!previous?.has(windowName)) {
-        return previous;
+      setPendingOwnerCloseWindows((previous) => {
+        if (!previous?.has(windowName)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.delete(windowName);
+        return next;
+      });
+      for (const [clusterId, pending] of pendingClusterClosesRef.current) {
+        pending.remaining.delete(windowName);
+        if (pending.remaining.size > 0) {
+          continue;
+        }
+        window.clearTimeout(pending.timeout);
+        pendingClusterClosesRef.current.delete(clusterId);
+        pending.resolve(true);
       }
-      const next = new Set(previous);
-      next.delete(windowName);
-      return next;
-    });
-    for (const [clusterId, pending] of pendingClusterClosesRef.current) {
-      pending.remaining.delete(windowName);
-      if (pending.remaining.size > 0) {
-        continue;
-      }
-      window.clearTimeout(pending.timeout);
-      pendingClusterClosesRef.current.delete(clusterId);
-      pending.resolve(true);
-    }
+    },
+    [queueAutoFloatRollback]
+  );
+
+  const handleAutoFloatRollbackSettled = useCallback((transferId: string) => {
+    setPendingAutoFloatRollbacks((previous) =>
+      previous.filter((snapshot) => snapshot.transferId !== transferId)
+    );
   }, []);
 
   const settleClusterClose = useCallback(
@@ -641,10 +692,12 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       <WorkspaceObjectRouteCoordinator
         ownerWindowName={ownerWindowName}
         pendingDockRequest={pendingDockRequest}
+        pendingAutoFloatRollbacks={pendingAutoFloatRollbacks}
         onWindowOpened={handlePanelWindowOpened}
         onDockRequest={handlePanelWindowDockRequested}
         onDockRequestSettled={handleDockRequestSettled}
         onOwnedPanelWindowClosed={handlePanelWindowClosed}
+        onAutoFloatRollbackSettled={handleAutoFloatRollbackSettled}
       >
         {children}
       </WorkspaceObjectRouteCoordinator>
@@ -655,14 +708,17 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
 function WorkspaceObjectRouteCoordinator({
   ownerWindowName,
   pendingDockRequest,
+  pendingAutoFloatRollbacks,
   onWindowOpened,
   onDockRequest,
   onDockRequestSettled,
   onOwnedPanelWindowClosed,
+  onAutoFloatRollbackSettled,
   children,
 }: Readonly<{
   ownerWindowName: string;
   pendingDockRequest: panelwindow.WindowDockRequestedEvent | null;
+  pendingAutoFloatRollbacks: panelwindow.GroupSnapshot[];
   onWindowOpened: (event: panelwindow.WindowOpenedEvent) => void;
   onDockRequest: (
     request: panelwindow.WindowDockRequestedEvent,
@@ -670,6 +726,7 @@ function WorkspaceObjectRouteCoordinator({
   ) => void;
   onDockRequestSettled: (request: panelwindow.WindowDockRequestedEvent, committed: boolean) => void;
   onOwnedPanelWindowClosed: (windowName: string, groupId?: string) => void;
+  onAutoFloatRollbackSettled: (transferId: string) => void;
   children: React.ReactNode;
 }>) {
   const {
@@ -695,6 +752,18 @@ function WorkspaceObjectRouteCoordinator({
     timeout: number;
     acknowledging: boolean;
   } | null>(null);
+
+  useEffect(() => {
+    for (const snapshot of pendingAutoFloatRollbacks) {
+      dockPanelGroup(
+        snapshot.clusterId,
+        (snapshot.tabs ?? []).map((tab) => tab.panelId),
+        snapshot.activePanelId,
+        'right'
+      );
+      onAutoFloatRollbackSettled(snapshot.transferId);
+    }
+  }, [dockPanelGroup, onAutoFloatRollbackSettled, pendingAutoFloatRollbacks]);
 
   useEffect(
     () =>

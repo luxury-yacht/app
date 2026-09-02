@@ -944,6 +944,7 @@ describe('ClusterOverview', () => {
       version: 'v1',
     });
     expect(setObjectPanelActiveTabMock).toHaveBeenCalledWith(
+      'cluster-1',
       'obj:cluster-1:/v1/pod:default:api-7c8d9',
       'events'
     );

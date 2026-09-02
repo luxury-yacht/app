@@ -70,6 +70,9 @@ interface DockablePanelProps {
 
   // Whether the panel is currently open
   isOpen?: boolean;
+  // Keep registration and tab-group membership alive without mounting a
+  // workspace surface while a native-window transfer is pending.
+  suppressSurface?: boolean;
 
   // Class names for styling
   className?: string;
@@ -457,6 +460,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     onMaximizeChange,
     maximizeTargetSelector = '.content-body',
     panelRef: forwardedPanelRef,
+    suppressSurface = false,
   } = props;
   const defaultSize = useMemo(
     () => resolveDefaultPanelSize(defaultSizeOverride?.width, defaultSizeOverride?.height),
@@ -704,7 +708,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   // Set CSS variables on the shared content container so both the route layout
   // and the portal-mounted dock layer can read the same dock geometry.
   useLayoutEffect(() => {
-    if (!panelState.isOpen || isMaximized || !isGroupLeader) {
+    if (!panelState.isOpen || suppressSurface || isMaximized || !isGroupLeader) {
       return;
     }
     const target = document.querySelector('.content');
@@ -736,6 +740,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     panelState.size.height,
     isMaximized,
     isGroupLeader,
+    suppressSurface,
   ]);
 
   // Content change notification:
@@ -863,7 +868,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   useKeyboardSurface({
     kind: 'panel',
     rootRef: panelRef,
-    active: panelState.isOpen && isGroupLeader,
+    active: panelState.isOpen && !suppressSurface && isGroupLeader,
     priority: KeyboardScopePriority.OBJECT_PANEL,
     captureWhenActive:
       closeActiveTabOnEscape && (!lastFocusedGroupKey || lastFocusedGroupKey === groupKey),
@@ -898,7 +903,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   }, []);
 
   useEffect(() => {
-    if (!panelState.isOpen || !isGroupLeader) {
+    if (!panelState.isOpen || suppressSurface || !isGroupLeader) {
       restoreSuppressedTabbables();
       return;
     }
@@ -924,7 +929,13 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       document.removeEventListener('focusin', syncPanelTabbables);
       restoreSuppressedTabbables();
     };
-  }, [isGroupLeader, panelState.isOpen, restoreSuppressedTabbables, suppressPanelTabbables]);
+  }, [
+    isGroupLeader,
+    panelState.isOpen,
+    restoreSuppressedTabbables,
+    suppressPanelTabbables,
+    suppressSurface,
+  ]);
 
   // Memoize panel classes and styles
   const panelClassName = useMemo(() => {
@@ -1004,7 +1015,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     nativeWindowMode,
   ]);
 
-  if (!panelState.isOpen) {
+  if (!panelState.isOpen || suppressSurface) {
     return null;
   }
   if (!panelHostNode) {

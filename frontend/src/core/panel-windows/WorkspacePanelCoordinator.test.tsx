@@ -42,6 +42,7 @@ const mocks = vi.hoisted(() => ({
   },
   openPanels: new Map<string, typeof objectRef>(),
   nativeLocations: new Map<string, { windowName: string; groupId: string }>(),
+  pendingNativeOpenPanelIds: new Set<string>(),
   blocker: null as null | { reason: 'unsaved-yaml'; focus: () => void },
   reportError: vi.fn(),
 }));
@@ -100,6 +101,7 @@ vi.mock('@/modules/object-panel/contexts/ObjectPanelStateContext', () => ({
   useObjectPanelState: () => ({
     openPanels: mocks.openPanels,
     nativeLocations: mocks.nativeLocations,
+    pendingNativeOpenPanelIds: mocks.pendingNativeOpenPanelIds,
     commitPanelWindow: mocks.commitWindow,
     dockPanelWindow: mocks.dockWindow,
     removePanelWindow: mocks.removeWindow,
@@ -171,6 +173,7 @@ describe('WorkspacePanelCoordinator', () => {
     mocks.openPanels.clear();
     mocks.openPanels.set('panel-a', objectRef);
     mocks.nativeLocations.clear();
+    mocks.pendingNativeOpenPanelIds.clear();
     mocks.getOwnedPanel.mockReturnValue(null);
     mocks.panelIdsForCluster.mockReturnValue(['panel-a']);
     mocks.nativeWindowNamesForCluster.mockReturnValue(['panel-1']);
@@ -217,7 +220,11 @@ describe('WorkspacePanelCoordinator', () => {
     expect(mocks.detachPanelGroup).not.toHaveBeenCalled();
 
     await act(async () =>
-      mocks.eventHandlers.opened?.({ windowName: 'panel-1', snapshot } as never)
+      mocks.eventHandlers.opened?.({
+        windowName: 'panel-1',
+        groupId: snapshot.groupId,
+        snapshot,
+      } as never)
     );
     expect(mocks.detachPanelGroup).toHaveBeenCalledWith('cluster-1', ['panel-a']);
     expect(mocks.commitWindow).toHaveBeenCalledWith(snapshot, 'panel-1');
@@ -236,6 +243,56 @@ describe('WorkspacePanelCoordinator', () => {
     });
 
     expect(mocks.beginOpen).toHaveBeenCalledOnce();
+  });
+
+  it('docks a hidden default-floating source on the right when native open fails', async () => {
+    mocks.pendingNativeOpenPanelIds.add('panel-a');
+    mocks.beginOpen.mockRejectedValueOnce(new Error('native open failed'));
+
+    await act(async () => {
+      mocks.moveRequest?.(
+        { groupKey: 'floating-1', tabs: ['panel-a'], activeTab: 'panel-a' } as never,
+        'floating'
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const snapshot = mocks.beginOpen.mock.calls[0]?.[1];
+    expect(mocks.dockWindow).toHaveBeenCalledWith(snapshot, 'right');
+    expect(mocks.dockPanelGroup).toHaveBeenCalledWith('cluster-1', ['panel-a'], 'panel-a', 'right');
+    expect(mocks.reportError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ action: 'float-group' })
+    );
+  });
+
+  it('docks a hidden default-floating source when the child closes before readiness', async () => {
+    mocks.pendingNativeOpenPanelIds.add('panel-a');
+
+    await act(async () => {
+      mocks.moveRequest?.(
+        { groupKey: 'floating-1', tabs: ['panel-a'], activeTab: 'panel-a' } as never,
+        'floating'
+      );
+      await Promise.resolve();
+    });
+
+    const snapshot = mocks.beginOpen.mock.calls[0]?.[1] as {
+      groupId: string;
+      transferId: string;
+    };
+    await act(async () => {
+      mocks.eventHandlers.closed?.({
+        windowName: 'panel-1',
+        clusterId: 'cluster-1',
+        groupId: snapshot.groupId,
+      } as never);
+      await Promise.resolve();
+    });
+
+    expect(mocks.dockWindow).toHaveBeenCalledWith(snapshot, 'right');
+    expect(mocks.dockPanelGroup).toHaveBeenCalledWith('cluster-1', ['panel-a'], 'panel-a', 'right');
   });
 
   it('waits for native child close acknowledgement before allowing cluster close', async () => {
@@ -659,6 +716,30 @@ describe('WorkspacePanelCoordinator', () => {
       await Promise.resolve();
     });
     expect(mocks.acknowledgeWorkspaceClose).toHaveBeenCalledWith('workspace-1');
+  });
+
+  it('cancels owner close and focuses the child when a panel guard denies it', async () => {
+    await act(async () => {
+      mocks.eventHandlers.ownerClose?.({
+        ownerWindowName: 'workspace-1',
+        panelWindows: ['panel-1'],
+      } as never);
+      await Promise.resolve();
+    });
+    const requestId = mocks.requestGuard.mock.calls[0]?.[2];
+
+    await act(async () => {
+      mocks.eventHandlers.guardResult?.({
+        requestId,
+        windowName: 'panel-1',
+        allowed: false,
+      } as never);
+      await Promise.resolve();
+    });
+
+    expect(mocks.focusOwnerWindow).toHaveBeenCalledWith('panel-1');
+    expect(mocks.requestPanelClose).not.toHaveBeenCalled();
+    expect(mocks.acknowledgeWorkspaceClose).not.toHaveBeenCalled();
   });
 
   it('allows immediate quit and fails closed on child denial or timeout', async () => {

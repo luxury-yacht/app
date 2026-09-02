@@ -8,9 +8,10 @@
  * instance can access the correct objectData for their specific panel.
  */
 
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
-import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import { type ObjectPanelRef, objectPanelId } from '@modules/object-panel/objectPanelRef';
 import { assertObjectRefHasRequiredIdentity } from '@shared/utils/objectIdentity';
 import { useDockablePanelContext } from '@ui/dockable';
 import { getGroupForPanel } from '@ui/dockable/tabGroupState';
@@ -93,8 +94,10 @@ export function useObjectPanel() {
     onCloseObjectPanel,
     hydrateClusterMeta,
     setObjectPanelActiveTab,
-    nativeLocations,
+    getOwnedPanel,
   } = useObjectPanelState();
+  const { selectedClusterId, selectedKubeconfigs, getClusterMeta, setActiveKubeconfig } =
+    useKubeconfig();
   const { tabGroups, focusPanel, requestGroupMove } = useDockablePanelContext();
   const panelWindowRole = usePanelWindowRole();
 
@@ -171,20 +174,14 @@ export function useObjectPanel() {
         );
         return;
       }
-      const panelId = onRowClick(enriched);
-      const wasAlreadyOwned = openPanels.has(panelId);
+      const panelId = objectPanelId(enriched);
+      const ownedPanel = getOwnedPanel(enriched.clusterId, panelId);
 
-      // Set the requested initial tab BEFORE focusing so the panel
-      // mounts on the right tab instead of flashing Details first. The
-      // active-tab map is per-panel sticky state, so calling this for
-      // a re-opened panel will also override the user's last selection
-      // — which is what we want for "right-click → Map".
-      if (options?.initialTab) {
-        setObjectPanelActiveTab(panelId, options.initialTab);
-      }
-
-      const nativeLocation = nativeLocations.get(panelId);
+      const nativeLocation = ownedPanel?.nativeLocation;
       if (nativeLocation) {
+        if (options?.initialTab) {
+          setObjectPanelActiveTab(enriched.clusterId, panelId, options.initialTab);
+        }
         void focusPanelWindow(getWindowIdentity(), nativeLocation.windowName, panelId).catch(
           (error) =>
             reportOperationalError(error, {
@@ -196,7 +193,32 @@ export function useObjectPanel() {
         return;
       }
 
-      if (!wasAlreadyOwned && getDefaultObjectPanelPosition() === 'floating') {
+      if (enriched.clusterId !== selectedClusterId) {
+        const targetSelection = selectedKubeconfigs.find(
+          (selection) => getClusterMeta(selection).id === enriched.clusterId
+        );
+        if (!targetSelection) {
+          reportOperationalError(
+            new Error(`Object panel cluster is not open: ${enriched.clusterId}`),
+            {
+              source: 'useObjectPanel',
+              action: 'activate-object-panel-cluster',
+              clusterId: enriched.clusterId,
+            }
+          );
+          return;
+        }
+        setActiveKubeconfig(targetSelection);
+      }
+
+      const shouldAutoFloat = ownedPanel === null && getDefaultObjectPanelPosition() === 'floating';
+      onRowClick(enriched, { pendingNativeOpen: shouldAutoFloat });
+      // Set the requested initial tab in the same React batch as the open so
+      // the panel mounts on that tab instead of flashing Details first.
+      if (options?.initialTab) {
+        setObjectPanelActiveTab(enriched.clusterId, panelId, options.initialTab);
+      }
+      if (shouldAutoFloat) {
         pendingFloatPanelIdRef.current = panelId;
       }
 
@@ -218,21 +240,24 @@ export function useObjectPanel() {
       tabGroups,
       focusPanel,
       setObjectPanelActiveTab,
-      nativeLocations,
+      getOwnedPanel,
       panelWindowRole,
-      openPanels,
+      selectedClusterId,
+      selectedKubeconfigs,
+      getClusterMeta,
+      setActiveKubeconfig,
     ]
   );
 
   const close = useCallback(() => {
-    if (currentPanelId) {
+    if (currentPanelId && objectData?.clusterId) {
       // Close just this panel.
-      closePanel(currentPanelId);
+      closePanel(objectData.clusterId, currentPanelId);
     } else {
       // No panel context -- close all panels (legacy behavior).
       onCloseObjectPanel();
     }
-  }, [currentPanelId, closePanel, onCloseObjectPanel]);
+  }, [currentPanelId, objectData?.clusterId, closePanel, onCloseObjectPanel]);
 
   return {
     // Object data for the current panel instance (null outside an ObjectPanel tree).
