@@ -245,6 +245,23 @@ describe('WorkspacePanelCoordinator', () => {
     expect(mocks.beginOpen).toHaveBeenCalledOnce();
   });
 
+  it('uses floating preferences when a hidden default-floating source has no DOM surface', async () => {
+    mocks.pendingNativeOpenPanelIds.add('panel-a');
+
+    await act(async () => {
+      mocks.moveRequest?.(
+        { groupKey: 'floating-1', tabs: ['panel-a'], activeTab: 'panel-a' } as never,
+        'floating'
+      );
+      await Promise.resolve();
+    });
+
+    const snapshot = mocks.beginOpen.mock.calls[0]?.[1] as {
+      initialBounds?: { x: number; y: number; width: number; height: number };
+    };
+    expect(snapshot.initialBounds).toEqual({ x: 0, y: 0, width: 720, height: 560 });
+  });
+
   it('docks a hidden default-floating source on the right when native open fails', async () => {
     mocks.pendingNativeOpenPanelIds.add('panel-a');
     mocks.beginOpen.mockRejectedValueOnce(new Error('native open failed'));
@@ -529,17 +546,6 @@ describe('WorkspacePanelCoordinator', () => {
 
     mocks.openPanels.set('panel-a', objectRef);
     mocks.openPanels.set('panel-other', { ...objectRef, clusterId: 'cluster-2', name: 'other' });
-    const panel = document.createElement('div');
-    panel.dataset.dockableGroupKey = 'bottom';
-    panel.getBoundingClientRect = () =>
-      ({ left: 0, top: 700, width: 1200, height: 300 }) as DOMRect;
-    const tabButton = document.createElement('button');
-    tabButton.dataset.panelId = 'panel-a';
-    tabButton.setAttribute('role', 'tab');
-    tabButton.getBoundingClientRect = () =>
-      ({ left: 40, top: 750, width: 112, height: 32 }) as DOMRect;
-    panel.appendChild(tabButton);
-    document.body.appendChild(panel);
     await act(async () => {
       mocks.moveRequest?.(
         {
@@ -551,7 +557,6 @@ describe('WorkspacePanelCoordinator', () => {
       );
       await Promise.resolve();
     });
-    panel.remove();
 
     const transferred = mocks.beginOpen.mock.calls[mocks.beginOpen.mock.calls.length - 1]?.[1] as {
       tabs: Array<{ panelId: string }>;

@@ -61,18 +61,7 @@ const objectSnapshot = (
 });
 
 const initialWindowBounds = (panelIds: readonly string[]): panelwindow.WindowBounds | undefined => {
-  if (typeof document === 'undefined') {
-    return undefined;
-  }
-  const sourceTab = Array.from(
-    document.querySelectorAll<HTMLElement>('[role="tab"][data-panel-id]')
-  ).find((element) => panelIds.includes(element.dataset.panelId ?? ''));
-  const panel = sourceTab?.closest<HTMLElement>('[data-dockable-group-key]');
-  if (!panel) {
-    return undefined;
-  }
-  const rect = panel.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) {
+  if (panelIds.length === 0) {
     return undefined;
   }
   const { floatingWidth: width, floatingHeight: height } = getObjectPanelLayoutDefaults();
