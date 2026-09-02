@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     | ((group: never, position: 'right' | 'bottom' | 'floating') => boolean),
   externalTabDrop: null as null | ((payload: never, group: string, index: number) => void),
   tabTearOff: null as null | ((payload: never, cursor: { x: number; y: number }) => void),
+  canStartTabDrag: null as null | ((panelId: string) => boolean),
   tabDragIdentity: null as null | {
     windowName: string;
     ownerWindowName: string;
@@ -113,6 +114,27 @@ const objectRef = {
   name: 'api',
 };
 
+const tabTransferRequest = (overrides: Record<string, unknown> = {}) => ({
+  transferId: 'tab-transfer-test',
+  sourceWindowName: 'workspace-1',
+  targetWindowName: 'panel-2',
+  ownerWindowName: 'workspace-1',
+  clusterId: 'cluster-1',
+  sourceGroupId: 'right',
+  targetGroupId: 'native-group-2',
+  targetIndex: 0,
+  targetKind: 'panel-window',
+  cursorX: 0,
+  cursorY: 0,
+  tab: {
+    kind: 'object',
+    panelId: 'panel-a',
+    objectRef: { ...objectRef, namespace: objectRef.namespace ?? '' },
+    activeView: 'details',
+  },
+  ...overrides,
+});
+
 vi.mock('@/modules/object-panel/contexts/ObjectPanelStateContext', () => ({
   useObjectPanelActiveTabs: () => new Map([['panel-a', 'details']]),
   useObjectPanelState: () => ({
@@ -163,17 +185,20 @@ vi.mock('@/ui/dockable', () => ({
     onExternalTabDrop,
     onTabTearOff,
     tabDragIdentity,
+    canStartTabDrag,
   }: {
     children: React.ReactNode;
     onGroupMoveRequest: typeof mocks.moveRequest;
     onExternalTabDrop: typeof mocks.externalTabDrop;
     onTabTearOff: typeof mocks.tabTearOff;
     tabDragIdentity: typeof mocks.tabDragIdentity;
+    canStartTabDrag: typeof mocks.canStartTabDrag;
   }) => {
     mocks.moveRequest = onGroupMoveRequest;
     mocks.externalTabDrop = onExternalTabDrop;
     mocks.tabTearOff = onTabTearOff;
     mocks.tabDragIdentity = tabDragIdentity;
+    mocks.canStartTabDrag = canStartTabDrag;
     return children;
   },
   useDockablePanelContext: () => ({
@@ -269,6 +294,103 @@ describe('WorkspacePanelCoordinator', () => {
     });
 
     expect(mocks.beginOpen).toHaveBeenCalledOnce();
+  });
+
+  it('allows clean tab drags and blocks guarded ones', () => {
+    expect(mocks.canStartTabDrag?.('panel-a')).toBe(true);
+
+    const focus = vi.fn();
+    mocks.blocker = { reason: 'unsaved-yaml', focus };
+    expect(mocks.canStartTabDrag?.('panel-a')).toBe(false);
+    expect(focus).toHaveBeenCalledOnce();
+  });
+
+  it('rejects workspace drops outside the docked edges', () => {
+    const tab = mocks.tabDragIdentity?.getTabSnapshot('panel-a');
+    mocks.externalTabDrop?.(
+      {
+        kind: 'dockable-tab',
+        panelId: 'panel-a',
+        sourceGroupId: 'right',
+        sourceWindowGroupId: 'right',
+        sourceWindowName: 'workspace-1',
+        ownerWindowName: 'workspace-1',
+        clusterId: 'cluster-1',
+        tab,
+      } as never,
+      'floating-1',
+      0
+    );
+
+    expect(mocks.requestTabTransfer).not.toHaveBeenCalled();
+  });
+
+  it('reports a workspace drop request that the registry rejects', async () => {
+    const requestError = new Error('registry unavailable');
+    mocks.requestTabTransfer.mockRejectedValueOnce(requestError);
+    const tab = mocks.tabDragIdentity?.getTabSnapshot('panel-a');
+
+    await act(async () => {
+      mocks.externalTabDrop?.(
+        {
+          kind: 'dockable-tab',
+          panelId: 'panel-a',
+          sourceGroupId: 'native-group-1',
+          sourceWindowGroupId: 'native-group-1',
+          sourceWindowName: 'panel-1',
+          ownerWindowName: 'workspace-1',
+          clusterId: 'cluster-1',
+          tab,
+        } as never,
+        'right',
+        0
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.reportError).toHaveBeenCalledWith(requestError, {
+      source: 'WorkspacePanelCoordinator',
+      action: 'request-tab-drop',
+      clusterId: 'cluster-1',
+    });
+  });
+
+  it('ignores foreign tear-offs and reports an owned tear-off request failure', async () => {
+    const tab = mocks.tabDragIdentity?.getTabSnapshot('panel-a');
+    const payload = {
+      kind: 'dockable-tab',
+      panelId: 'panel-a',
+      sourceGroupId: 'right',
+      sourceWindowGroupId: 'right',
+      sourceWindowName: 'panel-1',
+      ownerWindowName: 'workspace-1',
+      clusterId: 'cluster-1',
+      tab,
+    };
+
+    mocks.tabTearOff?.(payload as never, { x: 1800, y: 500 });
+    expect(mocks.requestTabTransfer).not.toHaveBeenCalled();
+
+    const requestError = new Error('registry unavailable');
+    mocks.requestTabTransfer.mockRejectedValueOnce(requestError);
+    await act(async () => {
+      mocks.tabTearOff?.(
+        {
+          ...payload,
+          sourceWindowName: 'workspace-1',
+        } as never,
+        { x: 1800, y: 500 }
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.reportError).toHaveBeenCalledWith(requestError, {
+      source: 'WorkspacePanelCoordinator',
+      action: 'tear-off-tab',
+      clusterId: 'cluster-1',
+    });
   });
 
   it('tears off only the dragged tab and keeps its docked source until native readiness', async () => {
@@ -441,6 +563,153 @@ describe('WorkspacePanelCoordinator', () => {
 
     await act(async () => mocks.eventHandlers.tabTransferCommitted?.({ request } as never));
     expect(mocks.detachPanelGroup).toHaveBeenCalledWith('cluster-1', ['panel-a']);
+  });
+
+  it('rejects a tab transfer whose claimed source group is not authoritative', async () => {
+    mocks.getOwnedPanel.mockReturnValue({
+      objectRef,
+      activeView: 'details',
+      dockedEdge: 'right',
+    });
+    const request = {
+      transferId: 'tab-transfer-wrong-source-group',
+      sourceWindowName: 'workspace-1',
+      targetWindowName: 'panel-2',
+      ownerWindowName: 'workspace-1',
+      clusterId: 'cluster-1',
+      sourceGroupId: 'bottom',
+      targetGroupId: 'native-group-2',
+      targetIndex: 0,
+      targetKind: 'panel-window',
+      cursorX: 0,
+      cursorY: 0,
+      tab: {
+        kind: 'object',
+        panelId: 'panel-a',
+        objectRef: { ...objectRef, namespace: objectRef.namespace ?? '' },
+        activeView: 'details',
+      },
+    };
+
+    await act(async () => {
+      mocks.eventHandlers.tabTransferRequested?.({ request } as never);
+      await Promise.resolve();
+    });
+
+    expect(mocks.failTabTransfer).toHaveBeenCalledWith(
+      'workspace-1',
+      'tab-transfer-wrong-source-group'
+    );
+    expect(mocks.acceptTabTransfer).not.toHaveBeenCalled();
+    expect(mocks.beginOpen).not.toHaveBeenCalled();
+  });
+
+  it('rejects a tab transfer after its source owner no longer contains the tab', async () => {
+    const request = tabTransferRequest();
+
+    await act(async () => {
+      mocks.eventHandlers.tabTransferRequested?.({ request } as never);
+      await Promise.resolve();
+    });
+
+    expect(mocks.failTabTransfer).toHaveBeenCalledWith('workspace-1', 'tab-transfer-test');
+    expect(mocks.acceptTabTransfer).not.toHaveBeenCalled();
+  });
+
+  it('rejects a guarded docked source before accepting its tab transfer', async () => {
+    const focus = vi.fn();
+    mocks.blocker = { reason: 'unsaved-yaml', focus };
+    mocks.getOwnedPanel.mockReturnValue({
+      objectRef,
+      activeView: 'details',
+      dockedEdge: 'right',
+    });
+    const request = tabTransferRequest();
+
+    await act(async () => {
+      mocks.eventHandlers.tabTransferRequested?.({ request } as never);
+      await Promise.resolve();
+    });
+
+    expect(focus).toHaveBeenCalledOnce();
+    expect(mocks.failTabTransfer).toHaveBeenCalledWith('workspace-1', 'tab-transfer-test');
+    expect(mocks.acceptTabTransfer).not.toHaveBeenCalled();
+  });
+
+  it('rejects a workspace transfer whose target is not a docked edge', async () => {
+    mocks.getOwnedPanel.mockReturnValue({
+      objectRef,
+      activeView: 'details',
+      dockedEdge: 'right',
+    });
+    const request = tabTransferRequest({
+      targetKind: 'workspace',
+      targetWindowName: 'workspace-1',
+      targetGroupId: 'floating-1',
+    });
+
+    await act(async () => {
+      mocks.eventHandlers.tabTransferRequested?.({ request } as never);
+      await Promise.resolve();
+    });
+
+    expect(mocks.failTabTransfer).toHaveBeenCalledWith('workspace-1', 'tab-transfer-test');
+    expect(mocks.dockWindow).not.toHaveBeenCalled();
+  });
+
+  it('fails and reports an existing native target that cannot accept the transfer', async () => {
+    const acceptError = new Error('target unavailable');
+    mocks.acceptTabTransfer.mockRejectedValueOnce(acceptError);
+    mocks.getOwnedPanel.mockReturnValue({
+      objectRef,
+      activeView: 'details',
+      dockedEdge: 'right',
+    });
+    const request = tabTransferRequest();
+
+    await act(async () => {
+      mocks.eventHandlers.tabTransferRequested?.({ request } as never);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.failTabTransfer).toHaveBeenCalledWith('workspace-1', 'tab-transfer-test');
+    expect(mocks.reportError).toHaveBeenCalledWith(acceptError, {
+      source: 'WorkspacePanelCoordinator',
+      action: 'accept-native-tab-target',
+      clusterId: 'cluster-1',
+    });
+  });
+
+  it('fails and reports a torn-off tab whose new window cannot open', async () => {
+    const openError = new Error('window unavailable');
+    mocks.beginOpen.mockRejectedValueOnce(openError);
+    mocks.getOwnedPanel.mockReturnValue({
+      objectRef,
+      activeView: 'details',
+      dockedEdge: 'right',
+    });
+    const request = tabTransferRequest({
+      targetWindowName: '',
+      targetGroupId: 'new-native-group',
+      targetKind: 'new-window',
+      cursorX: 1800,
+      cursorY: 500,
+    });
+
+    await act(async () => {
+      mocks.eventHandlers.tabTransferRequested?.({ request } as never);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.failTabTransfer).toHaveBeenCalledWith('workspace-1', 'tab-transfer-test');
+    expect(mocks.reportError).toHaveBeenCalledWith(openError, {
+      source: 'WorkspacePanelCoordinator',
+      action: 'open-torn-off-tab',
+      clusterId: 'cluster-1',
+    });
   });
 
   it('uses floating preferences when a hidden default-floating source has no DOM surface', async () => {

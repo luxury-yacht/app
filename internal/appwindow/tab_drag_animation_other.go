@@ -2,4 +2,6 @@
 
 package appwindow
 
-func configureNativeTabDragAnimation() {}
+func configureNativeTabDragAnimation() {
+	// Only the macOS WebKit implementation needs a native failed-drag animation override.
+}

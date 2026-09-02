@@ -93,6 +93,42 @@ const sameTransferredTab = (
   owned.objectRef.name === tab.objectRef.name &&
   owned.activeView === tab.activeView;
 
+type OwnedPanel = Parameters<typeof sameTransferredTab>[0];
+
+const isAuthoritativeTransferSource = (
+  request: panelwindow.TabTransferRequest,
+  owned: OwnedPanel | null,
+  sourceGroup: GroupKey | null,
+  ownerWindowName: string
+): boolean => {
+  if (!owned || !sameTransferredTab(owned, request.tab)) {
+    return false;
+  }
+  if (request.sourceWindowName === ownerWindowName) {
+    return !owned.nativeLocation && sourceGroup === request.sourceGroupId;
+  }
+  return (
+    owned.nativeLocation?.windowName === request.sourceWindowName &&
+    owned.nativeLocation.groupId === request.sourceGroupId
+  );
+};
+
+const tornOffTabSnapshot = (request: panelwindow.TabTransferRequest): panelwindow.GroupSnapshot => {
+  const snapshot = singleTabGroupSnapshot(request);
+  const bounds = initialWindowBounds([request.tab.panelId]);
+  if (bounds && (request.cursorX !== 0 || request.cursorY !== 0)) {
+    bounds.x = request.cursorX - 120;
+    bounds.y = request.cursorY - 24;
+    snapshot.initialPositionAnchor = {
+      x: request.cursorX,
+      y: request.cursorY,
+    };
+    snapshot.useInitialPosition = true;
+  }
+  snapshot.initialBounds = bounds;
+  return snapshot;
+};
+
 export function WorkspacePanelCoordinator({ children }: Readonly<{ children: React.ReactNode }>) {
   const ownerWindowName = getWindowIdentity();
   const {
@@ -316,7 +352,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         targetKind: 'new-window' as panelwindow.TabTransferTarget,
         cursor,
       });
-      if (!request || request.sourceWindowName !== ownerWindowName) {
+      if (request?.sourceWindowName !== ownerWindowName) {
         return;
       }
       void requestPanelTabTransfer(ownerWindowName, request).catch((error) =>
@@ -891,13 +927,12 @@ function WorkspaceObjectRouteCoordinator({
         }
         const owned = getOwnedPanel(request.clusterId, request.tab.panelId);
         const sourceGroup = getGroupForPanel(tabGroups, request.tab.panelId);
-        const validSource =
-          !!owned &&
-          sameTransferredTab(owned, request.tab) &&
-          (request.sourceWindowName === ownerWindowName
-            ? !owned.nativeLocation && sourceGroup === request.sourceGroupId
-            : owned.nativeLocation?.windowName === request.sourceWindowName &&
-              owned.nativeLocation?.groupId === request.sourceGroupId);
+        const validSource = isAuthoritativeTransferSource(
+          request,
+          owned,
+          sourceGroup,
+          ownerWindowName
+        );
         if (!validSource) {
           void failPanelTabTransfer(ownerWindowName, request.transferId);
           return;
@@ -946,18 +981,7 @@ function WorkspaceObjectRouteCoordinator({
         }
 
         if (request.targetKind === 'new-window') {
-          const snapshot = singleTabGroupSnapshot(request);
-          const bounds = initialWindowBounds([request.tab.panelId]);
-          if (bounds && (request.cursorX !== 0 || request.cursorY !== 0)) {
-            bounds.x = request.cursorX - 120;
-            bounds.y = request.cursorY - 24;
-            snapshot.initialPositionAnchor = {
-              x: request.cursorX,
-              y: request.cursorY,
-            };
-            snapshot.useInitialPosition = true;
-          }
-          snapshot.initialBounds = bounds;
+          const snapshot = tornOffTabSnapshot(request);
           void acceptPanelTabTransfer(ownerWindowName, request.transferId)
             .then(() => beginPanelWindowOpen(ownerWindowName, snapshot))
             .catch((error) => {
