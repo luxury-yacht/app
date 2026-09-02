@@ -223,7 +223,8 @@ func TestWailsProjectUsesFrameworkSingleInstanceHandling(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	require.Contains(t, mainSource, "&application.SingleInstanceOptions{")
 	require.Contains(t, mainSource, "applicationProductIdentifier = updateidentity.ProductIdentifier")
-	require.Contains(t, mainSource, "windows.FocusMostRecent()")
+	require.Contains(t, mainSource, "OnSecondInstanceLaunch: windowBridge.onSecondInstanceLaunch")
+	require.Contains(t, mainSource, "bridge.registry.FocusMostRecent()")
 	require.NotContains(t, mainSource, "SecondLaunchCoordinator")
 
 	buildConfig := readTestFile(t, repositoryPath("build", "config.yml"))
@@ -339,16 +340,18 @@ func TestApplicationRuntimeComposesLeafOwners(t *testing.T) {
 	}
 
 	mainSource := readTestFile(t, repositoryPath("main.go"))
-	require.Contains(t, mainSource, "backend.NewApplicationRuntime(wailsApp, backend.ApplicationRuntimeOptions{")
-	require.Contains(t, mainSource, "Reporter: reporter,")
-	require.Contains(t, mainSource, "ApplicationUpdates: backend.ApplicationUpdateOptions{")
-	require.Contains(t, mainSource, "CreateWorkspaceWindow: func() {")
-	require.Contains(t, mainSource, "NativeWindowDescriptor: func(windowName string)")
-	require.Contains(t, mainSource, "BeginPanelWindowOpen: func(snapshot panelwindow.GroupSnapshot)")
-	require.Contains(t, mainSource, "AcknowledgePanelReady: func(windowName, transferID string)")
-	require.Contains(t, mainSource, "UpdatePanelSnapshot: func(windowName string, snapshot panelwindow.GroupSnapshot)")
-	require.Contains(t, mainSource, "RequestPanelTabClose: func(windowName, panelID string)")
-	require.Contains(t, mainSource, "AuthorizePanelTabClose: func(ownerWindowName, windowName, panelID string)")
+	compactMainSource := strings.Join(strings.Fields(mainSource), " ")
+	require.Contains(t, compactMainSource, "windowBridge := &windowRegistryBridge{}")
+	require.Contains(t, compactMainSource, "backend.NewApplicationRuntime(wailsApp, windowBridge.runtimeOptions(")
+	require.Contains(t, compactMainSource, "Reporter: reporter,")
+	require.Contains(t, compactMainSource, "ApplicationUpdates: updates,")
+	require.Contains(t, compactMainSource, "CreateWorkspaceWindow: bridge.createWorkspaceWindow,")
+	require.Contains(t, compactMainSource, "NativeWindowDescriptor: bridge.nativeWindowDescriptor,")
+	require.Contains(t, compactMainSource, "BeginPanelWindowOpen: bridge.beginPanelWindowOpen,")
+	require.Contains(t, compactMainSource, "AcknowledgePanelReady: bridge.acknowledgePanelReady,")
+	require.Contains(t, compactMainSource, "UpdatePanelSnapshot: bridge.updatePanelSnapshot,")
+	require.Contains(t, compactMainSource, "RequestPanelTabClose: bridge.requestPanelTabClose,")
+	require.Contains(t, compactMainSource, "AuthorizePanelTabClose: bridge.authorizePanelTabClose,")
 	require.Contains(t, mainSource, "desktopShell := backendRuntime.DesktopShell")
 	require.Contains(t, mainSource, "Preferences:    backendRuntime.Preferences,")
 	require.Contains(t, mainSource, "Updates:        backendRuntime.Updates,")
@@ -371,10 +374,10 @@ func TestDirectWailsCompositionContractRejectsBoundaryRegressions(t *testing.T) 
 		desktopExists bool
 	}{
 		"missing direct application injection": {
-			main: strings.Replace(mainSource, "backend.NewApplicationRuntime(wailsApp, backend.ApplicationRuntimeOptions{", "backend.NewApplicationRuntime(nil, backend.ApplicationRuntimeOptions{", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
+			main: strings.Replace(mainSource, "backend.NewApplicationRuntime(wailsApp, windowBridge.runtimeOptions(", "backend.NewApplicationRuntime(nil, windowBridge.runtimeOptions(", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
 		},
 		"native adapter": {
-			main: strings.Replace(mainSource, "backend.NewApplicationRuntime(wailsApp, backend.ApplicationRuntimeOptions{", "backend.NewAdapter(wailsApp, backend.ApplicationRuntimeOptions{", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
+			main: strings.Replace(mainSource, "backend.NewApplicationRuntime(wailsApp, windowBridge.runtimeOptions(", "backend.NewAdapter(wailsApp, windowBridge.runtimeOptions(", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
 		},
 		"missing generated service registration": {
 			main: strings.Replace(mainSource, "wailsApp.RegisterService(", "wailsApp.RegisterBackend(", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
@@ -422,8 +425,8 @@ func TestCompositionOrderingContractRejectsReorderedFixtures(t *testing.T) {
 		{"reporter, reporterErr := newSentryReporter(", "composition := newApplicationComposition("},
 		{"composition := newApplicationComposition(", "backend.InitializeErrorReporting(composition.preferences, composition.reporting)"},
 		{"backend.InitializeErrorReporting(composition.preferences, composition.reporting)", "composition.application.Run()"},
-		{"backendRuntime = backend.NewApplicationRuntime(wailsApp, backend.ApplicationRuntimeOptions{", "ApplicationUpdates: backend.ApplicationUpdateOptions{"},
-		{"ApplicationUpdates: backend.ApplicationUpdateOptions{", "desktopService = backend.NewDesktopService("},
+		{"backendRuntime = backend.NewApplicationRuntime(wailsApp, windowBridge.runtimeOptions(", "\t\tbackend.ApplicationUpdateOptions{"},
+		{"\t\tbackend.ApplicationUpdateOptions{", "desktopService = backend.NewDesktopService("},
 		{"desktopService = backend.NewDesktopService(", "wailsApp.HandleStream(backend.RefreshResourceStreamName"},
 		{"wailsApp.HandleStream(backend.RefreshResourceStreamName", "wailsApp.HandleStream(backend.RefreshContainerLogsStreamName"},
 		{"wailsApp.HandleStream(backend.RefreshContainerLogsStreamName", "wailsApp.RegisterService("},
@@ -500,7 +503,7 @@ func TestWailsTransportEventsAndPeerHooksHaveOneCompositionOwner(t *testing.T) {
 
 func validateDirectWailsComposition(mainSource, windowSource, runtimeSource, menuSource string, desktopExists bool) error {
 	for description, required := range map[string]string{
-		"direct application.App injection": "backend.NewApplicationRuntime(wailsApp, backend.ApplicationRuntimeOptions{",
+		"direct application.App injection": "backend.NewApplicationRuntime(wailsApp, windowBridge.runtimeOptions(",
 		"desktop service construction":     "desktopService = backend.NewDesktopService(",
 		"generated service registration":   "wailsApp.RegisterService(application.NewServiceWithOptions(\n\t\tdesktopService,",
 		"runtime-ready peer-window hook":   "events.Common.WindowRuntimeReady",
@@ -553,8 +556,8 @@ func validateCompositionOrdering(mainSource string) error {
 			"composition.application.Run()",
 		},
 		{
-			"backendRuntime = backend.NewApplicationRuntime(wailsApp, backend.ApplicationRuntimeOptions{",
-			"ApplicationUpdates: backend.ApplicationUpdateOptions{",
+			"backendRuntime = backend.NewApplicationRuntime(wailsApp, windowBridge.runtimeOptions(",
+			"\t\tbackend.ApplicationUpdateOptions{",
 			"desktopService = backend.NewDesktopService(",
 			"wailsApp.HandleStream(backend.RefreshResourceStreamName",
 			"wailsApp.HandleStream(backend.RefreshContainerLogsStreamName",

@@ -53,7 +53,7 @@ interface ObjectPanelProps {
   /** The cluster-complete object reference this panel displays. */
   objectRef: ObjectPanelRef;
   defaultPosition?: DockPosition;
-  defaultGroupKey?: GroupKey | 'floating';
+  defaultGroupKey?: GroupKey;
   suppressWorkspaceSurface?: boolean;
 }
 

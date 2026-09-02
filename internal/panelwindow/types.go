@@ -58,7 +58,7 @@ type GroupSnapshot struct {
 	InitialBounds   *WindowBounds `json:"initialBounds,omitempty"`
 }
 
-func ValidateGroupSnapshot(snapshot GroupSnapshot) error {
+func validateGroupSnapshotHeader(snapshot GroupSnapshot) error {
 	if snapshot.SchemaVersion != GroupSchemaVersion {
 		return fmt.Errorf("unsupported panel group schema version %d", snapshot.SchemaVersion)
 	}
@@ -75,41 +75,61 @@ func ValidateGroupSnapshot(snapshot GroupSnapshot) error {
 		(snapshot.InitialBounds.Width <= 0 || snapshot.InitialBounds.Height <= 0) {
 		return fmt.Errorf("panel initial bounds require positive width and height")
 	}
+	return nil
+}
 
+func validateGroupTab(
+	index int,
+	tab TabSnapshot,
+	clusterID string,
+	panelIDs map[string]struct{},
+) error {
+	if tab.Kind != TabKindObject {
+		return fmt.Errorf("panel tab %d has unsupported kind %q", index, tab.Kind)
+	}
+	if strings.TrimSpace(tab.PanelID) == "" || strings.TrimSpace(tab.ActiveView) == "" {
+		return fmt.Errorf("panel tab %d requires panel identity and active view", index)
+	}
+	if _, exists := panelIDs[tab.PanelID]; exists {
+		return fmt.Errorf("panel group contains duplicate panel id %q", tab.PanelID)
+	}
+	panelIDs[tab.PanelID] = struct{}{}
+	if err := ValidateObjectReference(tab.ObjectRef); err != nil {
+		return fmt.Errorf("panel tab %q has incomplete object identity", tab.PanelID)
+	}
+	if tab.ObjectRef.ClusterID != clusterID {
+		return fmt.Errorf(
+			"panel tab %q belongs to cluster %q, not group cluster %q",
+			tab.PanelID,
+			tab.ObjectRef.ClusterID,
+			clusterID,
+		)
+	}
+	return nil
+}
+
+func validateGroupTabs(snapshot GroupSnapshot) error {
 	panelIDs := make(map[string]struct{}, len(snapshot.Tabs))
 	activeFound := false
 	for index, tab := range snapshot.Tabs {
-		if tab.Kind != TabKindObject {
-			return fmt.Errorf("panel tab %d has unsupported kind %q", index, tab.Kind)
+		if err := validateGroupTab(index, tab, snapshot.ClusterID, panelIDs); err != nil {
+			return err
 		}
-		if strings.TrimSpace(tab.PanelID) == "" || strings.TrimSpace(tab.ActiveView) == "" {
-			return fmt.Errorf("panel tab %d requires panel identity and active view", index)
-		}
-		if _, exists := panelIDs[tab.PanelID]; exists {
-			return fmt.Errorf("panel group contains duplicate panel id %q", tab.PanelID)
-		}
-		panelIDs[tab.PanelID] = struct{}{}
 		if tab.PanelID == snapshot.ActivePanelID {
 			activeFound = true
-		}
-
-		ref := tab.ObjectRef
-		if err := ValidateObjectReference(ref); err != nil {
-			return fmt.Errorf("panel tab %q has incomplete object identity", tab.PanelID)
-		}
-		if ref.ClusterID != snapshot.ClusterID {
-			return fmt.Errorf(
-				"panel tab %q belongs to cluster %q, not group cluster %q",
-				tab.PanelID,
-				ref.ClusterID,
-				snapshot.ClusterID,
-			)
 		}
 	}
 	if !activeFound {
 		return fmt.Errorf("active panel %q is not present in the group", snapshot.ActivePanelID)
 	}
 	return nil
+}
+
+func ValidateGroupSnapshot(snapshot GroupSnapshot) error {
+	if err := validateGroupSnapshotHeader(snapshot); err != nil {
+		return err
+	}
+	return validateGroupTabs(snapshot)
 }
 
 type WindowState string

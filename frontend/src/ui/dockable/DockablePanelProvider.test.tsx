@@ -169,6 +169,44 @@ describe('DockablePanelProvider', () => {
     await unmount();
   });
 
+  it('treats a void group-move callback as an intercepted request', async () => {
+    const contextRef: { current: DockablePanelContextValue | null } = { current: null };
+    const requestMove = vi.fn();
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+    const Provider = DockablePanelProvider as React.ComponentType<
+      React.PropsWithChildren<{
+        onGroupMoveRequest: (
+          group: { groupKey: string; tabs: string[]; activeTab: string | null },
+          targetPosition: 'right' | 'bottom' | 'floating'
+        ) => void;
+      }>
+    >;
+    const { unmount } = await render(
+      <Provider onGroupMoveRequest={requestMove}>
+        <Consumer />
+      </Provider>
+    );
+
+    await act(async () => {
+      const context = requireDockableContext(contextRef.current);
+      context.registerPanel({ panelId: 'panel-a', title: 'A', position: 'right' });
+      context.syncPanelGroup('panel-a', 'right');
+      await Promise.resolve();
+    });
+
+    expect(requireDockableContext(contextRef.current).requestGroupMove?.('right', 'bottom')).toBe(
+      true
+    );
+    expect(requestMove).toHaveBeenCalledWith(
+      { groupKey: 'right', tabs: ['panel-a'], activeTab: 'panel-a' },
+      'bottom'
+    );
+    await unmount();
+  });
+
   it('exposes tabGroups state that reflects explicit group sync actions', async () => {
     const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
       current: null,

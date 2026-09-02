@@ -79,8 +79,7 @@ func (p *panelIndex) BeginOpen(snapshot PanelGroupSnapshot) (PanelWindowDescript
 }
 
 func (p *panelIndex) AcknowledgeOpen(
-	windowName string,
-	transferID string,
+	windowName, transferID string,
 ) (PanelWindowDescriptor, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

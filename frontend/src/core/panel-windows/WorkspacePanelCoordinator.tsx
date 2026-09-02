@@ -139,7 +139,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
   const settleApplicationQuit = useCallback(
     (transactionId: string, allowed: boolean, error?: unknown) => {
       const pending = pendingApplicationQuitRef.current;
-      if (!pending || pending.transactionId !== transactionId) {
+      if (pending?.transactionId !== transactionId) {
         return;
       }
       window.clearTimeout(pending.timeout);
@@ -854,7 +854,7 @@ function WorkspaceObjectRouteCoordinator({
       return;
     }
     const attempt = dockAttemptRef.current;
-    if (!attempt || attempt.key !== key || attempt.acknowledging) {
+    if (attempt?.key !== key || attempt.acknowledging) {
       return;
     }
     attempt.acknowledging = true;

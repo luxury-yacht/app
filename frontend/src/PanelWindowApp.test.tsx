@@ -274,7 +274,7 @@ describe('PanelWindowApp', () => {
       onGroupMoveRequest: (
         group: { tabs: string[]; activeTab: string | null },
         target: 'right' | 'bottom' | 'floating'
-      ) => boolean;
+      ) => void;
       onTabCloseRequest: (panelId: string) => void;
     };
 
@@ -289,12 +289,10 @@ describe('PanelWindowApp', () => {
     expect(mocks.onRowClick).toHaveBeenCalledWith(objectRef);
     expect(mocks.setObjectPanelActiveTab).toHaveBeenCalledWith('cluster-a', 'panel-pod', 'yaml');
 
-    expect(
-      dockProviderProps.onGroupMoveRequest(
-        { tabs: ['panel-pod'], activeTab: 'panel-pod' },
-        'floating'
-      )
-    ).toBe(true);
+    dockProviderProps.onGroupMoveRequest(
+      { tabs: ['panel-pod'], activeTab: 'panel-pod' },
+      'floating'
+    );
     expect(mocks.beginDock).not.toHaveBeenCalled();
 
     const focus = vi.fn();

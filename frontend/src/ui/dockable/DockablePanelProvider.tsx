@@ -250,7 +250,7 @@ interface DockablePanelProviderProps {
   onGroupMoveRequest?: (
     group: { groupKey: GroupKey; tabs: string[]; activeTab: string | null },
     targetPosition: DockPosition
-  ) => boolean;
+  ) => boolean | undefined;
   onTabCloseRequest?: (panelId: string) => void;
   nativeWindowMode?: boolean;
 }
@@ -819,9 +819,11 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       if (!group || group.tabs.length === 0) {
         return false;
       }
-      return onGroupMoveRequest(
-        { groupKey, tabs: group.tabs, activeTab: group.activeTab },
-        targetPosition
+      return (
+        onGroupMoveRequest(
+          { groupKey, tabs: group.tabs, activeTab: group.activeTab },
+          targetPosition
+        ) !== false
       );
     },
     [onGroupMoveRequest, tabGroups]

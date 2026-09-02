@@ -126,47 +126,46 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
     (
       group: { tabs: string[]; activeTab: string | null },
       targetPosition: 'right' | 'bottom' | 'floating'
-    ) => {
-      if (targetPosition === 'floating') {
-        return true;
+    ): undefined => {
+      if (targetPosition !== 'floating') {
+        const blocker = guards.firstBlocker(group.tabs);
+        if (blocker) {
+          blocker.focus();
+        } else {
+          const snapshot: panelwindow.GroupSnapshot = {
+            schemaVersion: 1,
+            transferId: createTransferId(),
+            ownerWindowName: descriptor.ownerWindowName,
+            clusterId: descriptor.clusterId,
+            groupId: descriptor.groupId,
+            tabs: group.tabs.flatMap((panelId) => {
+              const objectRef = openPanels.get(panelId);
+              return objectRef
+                ? [
+                    {
+                      kind: 'object' as panelwindow.TabKind,
+                      panelId,
+                      objectRef: {
+                        clusterId: objectRef.clusterId,
+                        group: objectRef.group,
+                        version: objectRef.version,
+                        kind: objectRef.kind,
+                        namespace: objectRef.namespace ?? '',
+                        name: objectRef.name,
+                      },
+                      activeView: activeTabs.get(panelId) ?? 'details',
+                    },
+                  ]
+                : [];
+            }),
+            activePanelId: group.activeTab ?? group.tabs[0] ?? '',
+          };
+          void beginPanelWindowDock(descriptor.windowName, targetPosition, snapshot).catch(
+            (error) =>
+              reportOperationalError(error, { source: 'PanelWindowApp', action: 'dock-group' })
+          );
+        }
       }
-      const blocker = guards.firstBlocker(group.tabs);
-      if (blocker) {
-        blocker.focus();
-        return true;
-      }
-      const snapshot: panelwindow.GroupSnapshot = {
-        schemaVersion: 1,
-        transferId: createTransferId(),
-        ownerWindowName: descriptor.ownerWindowName,
-        clusterId: descriptor.clusterId,
-        groupId: descriptor.groupId,
-        tabs: group.tabs.flatMap((panelId) => {
-          const objectRef = openPanels.get(panelId);
-          return objectRef
-            ? [
-                {
-                  kind: 'object' as panelwindow.TabKind,
-                  panelId,
-                  objectRef: {
-                    clusterId: objectRef.clusterId,
-                    group: objectRef.group,
-                    version: objectRef.version,
-                    kind: objectRef.kind,
-                    namespace: objectRef.namespace ?? '',
-                    name: objectRef.name,
-                  },
-                  activeView: activeTabs.get(panelId) ?? 'details',
-                },
-              ]
-            : [];
-        }),
-        activePanelId: group.activeTab ?? group.tabs[0] ?? '',
-      };
-      void beginPanelWindowDock(descriptor.windowName, targetPosition, snapshot).catch((error) =>
-        reportOperationalError(error, { source: 'PanelWindowApp', action: 'dock-group' })
-      );
-      return true;
     },
     [activeTabs, descriptor, guards, openPanels]
   );

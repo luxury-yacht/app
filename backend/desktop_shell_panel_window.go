@@ -38,8 +38,7 @@ func (s *DesktopShell) BeginPanelWindowOpen(
 }
 
 func (s *DesktopShell) AcknowledgePanelWindowReady(
-	windowName string,
-	transferID string,
+	windowName, transferID string,
 ) (panelwindow.WindowDescriptor, error) {
 	if s == nil || s.acknowledgePanelReady == nil {
 		return panelwindow.WindowDescriptor{}, fmt.Errorf("panel-window registry is not available")

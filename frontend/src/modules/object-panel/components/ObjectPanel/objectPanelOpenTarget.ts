@@ -2,14 +2,14 @@ import type { DockPosition } from '@/ui/dockable';
 import type { GroupKey } from '@/ui/dockable/tabGroupTypes';
 
 export interface ObjectPanelOpenTarget {
-  groupKey: GroupKey | 'floating';
+  groupKey: GroupKey;
   position: DockPosition;
 }
 
 export const resolveObjectPanelOpenTarget = (
   requestedPosition: DockPosition,
-  defaultGroupKey: GroupKey | 'floating' | undefined,
-  getPreferredOpenGroupKey: (position: DockPosition) => GroupKey | 'floating'
+  defaultGroupKey: GroupKey | undefined,
+  getPreferredOpenGroupKey: (position: DockPosition) => GroupKey
 ): ObjectPanelOpenTarget => {
   const groupKey =
     defaultGroupKey ??

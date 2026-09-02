@@ -42,7 +42,7 @@ import {
   type ObjectActionData,
   type ObjectActionHandlers,
 } from '@shared/hooks/useObjectActions';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useReducer, useRef, useState } from 'react';
 import {
   getPermissionKey,
   type PermissionMap,
@@ -456,20 +456,20 @@ export const useObjectActionController = ({
     error: null,
   });
   const mutationCountRef = useRef(0);
-  const [, setMutationRevision] = useState(0);
+  const [, advanceMutationRevision] = useReducer((revision: number) => revision + 1, 0);
   const executeMutation = useCallback(async <T,>(execute: () => Promise<T>): Promise<T> => {
     mutationCountRef.current += 1;
-    setMutationRevision((revision) => revision + 1);
+    advanceMutationRevision();
     try {
       return await execute();
     } finally {
       mutationCountRef.current = Math.max(0, mutationCountRef.current - 1);
-      setMutationRevision((revision) => revision + 1);
+      advanceMutationRevision();
     }
   }, []);
   const setNestedMutationInFlight = useCallback((inFlight: boolean) => {
     mutationCountRef.current = Math.max(0, mutationCountRef.current + (inFlight ? 1 : -1));
-    setMutationRevision((revision) => revision + 1);
+    advanceMutationRevision();
   }, []);
   usePanelLifecycleGuard(resolveObjectActionGuardPanelId(panelId), () => {
     if (!actionLoading && mutationCountRef.current === 0) {

@@ -85,6 +85,92 @@ type geometry struct {
 
 const cascadeOffset = 24
 
+func showApplicationWindow(app *application.App, name string) bool {
+	window, ok := app.Window.GetByName(name)
+	if !ok {
+		return false
+	}
+	window.Show()
+	return true
+}
+
+func closeApplicationWindow(app *application.App, name string) bool {
+	window, ok := app.Window.GetByName(name)
+	if !ok {
+		return false
+	}
+	window.Close()
+	return true
+}
+
+func focusApplicationWindow(app *application.App, name string) bool {
+	window, ok := app.Window.GetByName(name)
+	if !ok {
+		return false
+	}
+	window.Show()
+	if window.IsMinimised() {
+		window.Restore()
+	}
+	window.Focus()
+	return true
+}
+
+func emitApplicationWindowEvent(
+	app *application.App,
+	windowName, eventName string,
+	payload any,
+) bool {
+	window, ok := app.Window.GetByName(windowName)
+	if !ok {
+		return false
+	}
+	// Wails reports whether an event was cancelled, while registry callers
+	// need to know whether delivery was accepted.
+	return !window.EmitEvent(eventName, payload)
+}
+
+func applicationWindowGeometry(app *application.App, name string) (geometry, bool) {
+	window, ok := app.Window.GetByName(name)
+	if !ok {
+		return geometry{}, false
+	}
+	width, height := window.Size()
+	if width <= 0 || height <= 0 {
+		return geometry{}, false
+	}
+	result := geometry{
+		Width:     width,
+		Height:    height,
+		Maximised: window.IsMaximised(),
+	}
+	result.AbsoluteX, result.AbsoluteY = window.Position()
+	if screen, err := window.GetScreen(); err == nil && screen != nil {
+		result.X, result.Y = window.RelativePosition()
+		result.Screen = screen
+	}
+	return result, true
+}
+
+func bindApplicationWindowOperations(registry *Registry, app *application.App) {
+	registry.newWindow = app.Window.NewWithOptions
+	registry.showWindow = func(name string) bool {
+		return showApplicationWindow(app, name)
+	}
+	registry.closeWindow = func(name string) bool {
+		return closeApplicationWindow(app, name)
+	}
+	registry.focusWindow = func(name string) bool {
+		return focusApplicationWindow(app, name)
+	}
+	registry.emitWindowEvent = func(windowName, eventName string, payload any) bool {
+		return emitApplicationWindowEvent(app, windowName, eventName, payload)
+	}
+	registry.windowGeometry = func(name string) (geometry, bool) {
+		return applicationWindowGeometry(app, name)
+	}
+}
+
 // NewRegistry creates the peer-window registry for a Wails application.
 func NewRegistry(
 	app *application.App,
@@ -103,65 +189,7 @@ func NewRegistry(
 		quitPreflightTimeout: 20 * time.Second,
 		pendingGuards:        make(map[string]panelGuardRequest),
 	}
-	registry.newWindow = app.Window.NewWithOptions
-	registry.showWindow = func(name string) bool {
-		window, ok := app.Window.GetByName(name)
-		if !ok {
-			return false
-		}
-		window.Show()
-		return true
-	}
-	registry.closeWindow = func(name string) bool {
-		window, ok := app.Window.GetByName(name)
-		if !ok {
-			return false
-		}
-		window.Close()
-		return true
-	}
-	registry.focusWindow = func(name string) bool {
-		window, ok := app.Window.GetByName(name)
-		if !ok {
-			return false
-		}
-		window.Show()
-		if window.IsMinimised() {
-			window.Restore()
-		}
-		window.Focus()
-		return true
-	}
-	registry.emitWindowEvent = func(windowName, eventName string, payload any) bool {
-		window, ok := app.Window.GetByName(windowName)
-		if !ok {
-			return false
-		}
-		// Wails reports whether an event was cancelled, while registry callers
-		// need to know whether delivery was accepted.
-		return !window.EmitEvent(eventName, payload)
-	}
-	registry.windowGeometry = func(name string) (geometry, bool) {
-		window, ok := app.Window.GetByName(name)
-		if !ok {
-			return geometry{}, false
-		}
-		width, height := window.Size()
-		if width <= 0 || height <= 0 {
-			return geometry{}, false
-		}
-		windowGeometry := geometry{
-			Width:     width,
-			Height:    height,
-			Maximised: window.IsMaximised(),
-		}
-		windowGeometry.AbsoluteX, windowGeometry.AbsoluteY = window.Position()
-		if screen, err := window.GetScreen(); err == nil && screen != nil {
-			windowGeometry.X, windowGeometry.Y = window.RelativePosition()
-			windowGeometry.Screen = screen
-		}
-		return windowGeometry, true
-	}
+	bindApplicationWindowOperations(registry, app)
 	return registry
 }
 
@@ -389,8 +417,7 @@ func (r *Registry) PanelNamesOwnedByWorkspace(ownerWindowName string) []string {
 // AcknowledgePanelWindowReady commits an opening transfer and reveals the
 // hidden native target. A stale acknowledgement leaves the source transfer pending.
 func (r *Registry) AcknowledgePanelWindowReady(
-	name string,
-	transferID string,
+	name, transferID string,
 ) (PanelWindowDescriptor, error) {
 	descriptor, err := r.panels.AcknowledgeOpen(name, transferID)
 	if err != nil {
@@ -463,9 +490,7 @@ func (r *Registry) BeginPanelWindowDock(
 // AcknowledgePanelWindowDock commits the owner's reconstructed docked target,
 // removes the native role, and closes the now-redundant source window.
 func (r *Registry) AcknowledgePanelWindowDock(
-	ownerWindowName string,
-	windowName string,
-	transferID string,
+	ownerWindowName, windowName, transferID string,
 ) error {
 	descriptor, err := r.panels.Descriptor(windowName)
 	if err != nil {
@@ -704,10 +729,7 @@ func (r *Registry) RequestPanelWindowClose(callerWindowName, windowName, reason 
 }
 
 func (r *Registry) RequestPanelWindowGuard(
-	ownerWindowName string,
-	windowName string,
-	requestID string,
-	reason string,
+	ownerWindowName, windowName, requestID, reason string,
 ) error {
 	if requestID == "" || reason == "" {
 		return fmt.Errorf("panel guard request requires request and reason")
@@ -924,39 +946,42 @@ func (r *Registry) FocusMostRecent() {
 	window.Focus()
 }
 
-// PrepareApplicationQuit performs the shared last-window quit preparation.
-func (r *Registry) PrepareApplicationQuit() bool {
-	if r == nil || r.backend == nil || r.lifecycle == nil {
-		return true
-	}
-	r.quitMu.Lock()
-	if r.quitApproved {
-		if r.lifecycle.Count() > 0 {
-			r.quitMu.Unlock()
-			return false
-		}
-		r.setQuitApprovedLocked(false)
-		r.quitMu.Unlock()
-		return r.backend.PrepareQuitFromWindow(r.lifecycle.MostRecent())
-	}
-	if r.pendingQuit != nil {
-		r.quitMu.Unlock()
-		return false
-	}
+func (r *Registry) readyWorkspaceNames() []string {
 	readyWorkspaces := make([]string, 0, r.lifecycle.Count())
 	for _, workspaceName := range r.lifecycle.Names() {
 		if r.isWorkspaceReady(workspaceName) {
 			readyWorkspaces = append(readyWorkspaces, workspaceName)
 		}
 	}
-	if len(readyWorkspaces) == 0 {
-		r.quitMu.Unlock()
-		return r.backend.PrepareQuitFromWindow(r.lifecycle.MostRecent())
+	return readyWorkspaces
+}
+
+func (r *Registry) expireApplicationQuitPreflight(pending *applicationQuitPreflight) {
+	r.quitMu.Lock()
+	defer r.quitMu.Unlock()
+	if r.pendingQuit == pending {
+		r.pendingQuit = nil
 	}
+}
+
+func (r *Registry) cancelApplicationQuitPreflight(pending *applicationQuitPreflight) {
+	r.quitMu.Lock()
+	defer r.quitMu.Unlock()
+	if r.pendingQuit != pending {
+		return
+	}
+	if pending.timeout != nil {
+		pending.timeout.Stop()
+	}
+	r.pendingQuit = nil
+}
+
+func (r *Registry) beginApplicationQuitPreflightLocked(
+	readyWorkspaces []string,
+) *applicationQuitPreflight {
 	r.nextQuit++
-	transactionID := fmt.Sprintf("application-quit-%d", r.nextQuit)
 	pending := &applicationQuitPreflight{
-		transactionID: transactionID,
+		transactionID: fmt.Sprintf("application-quit-%d", r.nextQuit),
 		waiting:       make(map[string]struct{}, len(readyWorkspaces)),
 	}
 	for _, workspaceName := range readyWorkspaces {
@@ -964,33 +989,62 @@ func (r *Registry) PrepareApplicationQuit() bool {
 	}
 	if r.quitPreflightTimeout > 0 {
 		pending.timeout = time.AfterFunc(r.quitPreflightTimeout, func() {
-			r.quitMu.Lock()
-			defer r.quitMu.Unlock()
-			if r.pendingQuit == pending {
-				r.pendingQuit = nil
-			}
+			r.expireApplicationQuitPreflight(pending)
 		})
 	}
 	r.pendingQuit = pending
-	r.quitMu.Unlock()
+	return pending
+}
 
+func (r *Registry) emitApplicationQuitPreflight(
+	pending *applicationQuitPreflight,
+	readyWorkspaces []string,
+) {
 	for _, workspaceName := range readyWorkspaces {
 		if !r.emitWindowEvent(workspaceName, panelwindow.ApplicationQuitPreflightRequestedEventName, panelwindow.ApplicationQuitPreflightRequestedEvent{
-			TransactionID:   transactionID,
+			TransactionID:   pending.transactionID,
 			OwnerWindowName: workspaceName,
 			PanelWindows:    r.PanelNamesOwnedByWorkspace(workspaceName),
 		}) {
-			r.quitMu.Lock()
-			if r.pendingQuit == pending {
-				if pending.timeout != nil {
-					pending.timeout.Stop()
-				}
-				r.pendingQuit = nil
-			}
-			r.quitMu.Unlock()
-			return false
+			r.cancelApplicationQuitPreflight(pending)
+			return
 		}
 	}
+}
+
+func (r *Registry) finishApprovedApplicationQuitLocked() bool {
+	if r.lifecycle.Count() > 0 {
+		r.quitMu.Unlock()
+		return false
+	}
+	r.setQuitApprovedLocked(false)
+	mostRecent := r.lifecycle.MostRecent()
+	r.quitMu.Unlock()
+	return r.backend.PrepareQuitFromWindow(mostRecent)
+}
+
+// PrepareApplicationQuit performs the shared last-window quit preparation.
+func (r *Registry) PrepareApplicationQuit() bool {
+	if r == nil || r.backend == nil || r.lifecycle == nil {
+		return true
+	}
+	r.quitMu.Lock()
+	if r.quitApproved {
+		return r.finishApprovedApplicationQuitLocked()
+	}
+	if r.pendingQuit != nil {
+		r.quitMu.Unlock()
+		return false
+	}
+	readyWorkspaces := r.readyWorkspaceNames()
+	if len(readyWorkspaces) == 0 {
+		mostRecent := r.lifecycle.MostRecent()
+		r.quitMu.Unlock()
+		return r.backend.PrepareQuitFromWindow(mostRecent)
+	}
+	pending := r.beginApplicationQuitPreflightLocked(readyWorkspaces)
+	r.quitMu.Unlock()
+	r.emitApplicationQuitPreflight(pending, readyWorkspaces)
 	return false
 }
 
