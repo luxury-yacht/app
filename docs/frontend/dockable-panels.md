@@ -22,10 +22,13 @@ maximize and restore.
   React nodes, refs, fetched data, credentials, drafts, or terminal buffers.
 - Native panel windows reuse the workspace window chrome: macOS uses the
   transparent full-size titlebar with native traffic-light controls, while
-  Windows and Linux retain their native frame controls. The native window's
-  outer `AppHeader` is the drag/maximize surface; the inner
-  `DockablePanelHeader` remains tab and panel controls only. Workspace status,
-  favorites, and command-palette controls do not render in the panel window.
+  Windows and Linux retain their native frame controls without a native menu
+  bar or title text. Linux clears the framework's initial internal-name title
+  and hides its inherited application-menu widget before the hidden window is
+  shown. The native window's outer `AppHeader` is the drag/maximize surface; the
+  inner `DockablePanelHeader` remains tab and panel controls only. Workspace
+  status, favorites, and command-palette controls do not render in the panel
+  window.
 - The owner directory is authoritative for panel location. A child renderer is
   a projection and acknowledges changes through its owner.
 - Transient unmounts such as workspace cluster switches preserve panel refresh

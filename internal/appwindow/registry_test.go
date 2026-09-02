@@ -86,14 +86,21 @@ func TestOptionsPreserveTheSharedPeerContract(t *testing.T) {
 }
 
 func TestPanelOptionsUseSharedEntryAndPlatformNativeFrame(t *testing.T) {
-	nativeMenu := application.NewMenu()
-
-	for _, goos := range []string{"darwin", "windows", "linux"} {
-		t.Run(goos, func(t *testing.T) {
-			options := panelWindowOptionsForPlatform("panel-7", nativeMenu, goos, nil)
+	for _, test := range []struct {
+		goos                string
+		wantTitle           string
+		wantApplicationMenu bool
+		wantWindowsMenuOff  bool
+	}{
+		{goos: "darwin", wantApplicationMenu: true},
+		{goos: "windows", wantWindowsMenuOff: true},
+		{goos: "linux", wantTitle: " "},
+	} {
+		t.Run(test.goos, func(t *testing.T) {
+			options := panelWindowOptionsForPlatform("panel-7", test.goos, nil)
 
 			require.Equal(t, "panel-7", options.Name)
-			require.Empty(t, options.Title)
+			require.Equal(t, test.wantTitle, options.Title)
 			require.Equal(t, "/", options.URL)
 			require.Equal(t, 500, options.Width)
 			require.Equal(t, 400, options.Height)
@@ -110,15 +117,16 @@ func TestPanelOptionsUseSharedEntryAndPlatformNativeFrame(t *testing.T) {
 			require.Zero(t, options.InitialPosition)
 			require.Zero(t, options.StartState)
 			require.Nil(t, options.Screen)
-			require.Same(t, nativeMenu, options.Linux.Menu)
-			require.True(t, options.UseApplicationMenu)
+			require.Nil(t, options.Linux.Menu)
+			require.Equal(t, test.wantApplicationMenu, options.UseApplicationMenu)
+			require.Equal(t, test.wantWindowsMenuOff, options.Windows.DisableMenu)
 		})
 	}
 }
 
 func TestPanelOptionsUseTransferredInitialBoundsOnce(t *testing.T) {
 	options := panelWindowOptionsForPlatform(
-		"panel-7", nil, "darwin",
+		"panel-7", "darwin",
 		&panelwindow.WindowBounds{X: 140, Y: 80, Width: 720, Height: 560},
 	)
 
@@ -334,9 +342,13 @@ func TestRegistryBeginsHiddenPanelTransferWithOrdinaryWindowOptions(t *testing.T
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
 	var createdOptions application.WebviewWindowOptions
+	var configuredWindow *application.WebviewWindow
 	registry.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
 		createdOptions = options
 		return application.NewWindow(options)
+	}
+	registry.configurePanelWindow = func(window *application.WebviewWindow) {
+		configuredWindow = window
 	}
 
 	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
@@ -355,6 +367,8 @@ func TestRegistryBeginsHiddenPanelTransferWithOrdinaryWindowOptions(t *testing.T
 	require.False(t, createdOptions.DisableResize)
 	require.False(t, createdOptions.Frameless)
 	require.True(t, createdOptions.Mac.TitleBar.FullSizeContent)
+	require.NotNil(t, configuredWindow)
+	require.Equal(t, descriptor.WindowName, configuredWindow.Name())
 	require.Equal(t, 1, registry.Count())
 }
 

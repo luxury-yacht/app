@@ -25,6 +25,7 @@ type Registry struct {
 	lifecycle            *lifecycle
 	panels               *panelIndex
 	newWindow            func(application.WebviewWindowOptions) *application.WebviewWindow
+	configurePanelWindow func(*application.WebviewWindow)
 	showWindow           func(string) bool
 	closeWindow          func(string) bool
 	focusWindow          func(string) bool
@@ -188,6 +189,7 @@ func NewRegistry(
 		panelOpenTimeout:     15 * time.Second,
 		quitPreflightTimeout: 20 * time.Second,
 		pendingGuards:        make(map[string]panelGuardRequest),
+		configurePanelWindow: configureNativePanelWindow,
 	}
 	bindApplicationWindowOperations(registry, app)
 	return registry
@@ -208,7 +210,7 @@ func (r *Registry) BeginPanelWindowOpen(
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
-	options := panelWindowOptions(descriptor.WindowName, r.menu, snapshot.InitialBounds)
+	options := panelWindowOptions(descriptor.WindowName, snapshot.InitialBounds)
 	if snapshot.InitialBounds != nil {
 		positioned := false
 		if r.windowGeometry != nil {
@@ -227,6 +229,9 @@ func (r *Registry) BeginPanelWindowOpen(
 			"create native panel window %q",
 			descriptor.WindowName,
 		)
+	}
+	if r.configurePanelWindow != nil {
+		r.configurePanelWindow(window)
 	}
 	r.registerPanelLifecycleHooks(window, descriptor.WindowName)
 	if r.panelOpenTimeout > 0 {
@@ -1059,15 +1064,13 @@ func windowOptions(name string, nativeMenu *application.Menu) application.Webvie
 
 func panelWindowOptions(
 	name string,
-	nativeMenu *application.Menu,
 	initialBounds *panelwindow.WindowBounds,
 ) application.WebviewWindowOptions {
-	return panelWindowOptionsForPlatform(name, nativeMenu, runtime.GOOS, initialBounds)
+	return panelWindowOptionsForPlatform(name, runtime.GOOS, initialBounds)
 }
 
 func panelWindowOptionsForPlatform(
 	name string,
-	nativeMenu *application.Menu,
 	goos string,
 	initialBounds *panelwindow.WindowBounds,
 ) application.WebviewWindowOptions {
@@ -1075,20 +1078,29 @@ func panelWindowOptionsForPlatform(
 	if goos == "windows" {
 		backgroundType = application.BackgroundTypeSolid
 	}
+	windowTitle := ""
+	if goos == "linux" {
+		// Wails substitutes Name when Title is empty on initial Linux creation.
+		// A space prevents that fallback until the native title is cleared.
+		windowTitle = " "
+	}
 
 	options := application.WebviewWindowOptions{
-		Name:               name,
-		Width:              500,
-		Height:             400,
-		MinWidth:           450,
-		MinHeight:          200,
-		URL:                "/",
-		BackgroundColour:   application.NewRGB(30, 30, 30),
-		BackgroundType:     backgroundType,
-		Mac:                sharedMacWindowChrome(),
-		Windows:            application.WindowsWindow{Theme: application.SystemDefault},
-		Linux:              application.LinuxWindow{Menu: nativeMenu},
-		UseApplicationMenu: true,
+		Name:             name,
+		Title:            windowTitle,
+		Width:            500,
+		Height:           400,
+		MinWidth:         450,
+		MinHeight:        200,
+		URL:              "/",
+		BackgroundColour: application.NewRGB(30, 30, 30),
+		BackgroundType:   backgroundType,
+		Mac:              sharedMacWindowChrome(),
+		Windows: application.WindowsWindow{
+			Theme:       application.SystemDefault,
+			DisableMenu: goos == "windows",
+		},
+		UseApplicationMenu: goos == "darwin",
 		Zoom:               1,
 		ZoomControlEnabled: false,
 		Hidden:             true,
