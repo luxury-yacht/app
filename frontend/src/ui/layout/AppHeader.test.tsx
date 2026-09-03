@@ -154,7 +154,7 @@ describe('AppHeader', () => {
     expect(glyphs.map((glyph) => glyph.querySelector('path')?.getAttribute('d'))).toEqual([
       'M5 12h8',
       'M6.5 4.5h-2v2M11.5 4.5h2v2M6.5 13.5h-2v-2M11.5 13.5h2v-2',
-      'm6 6 6 6m0-6-6 6',
+      'm5 5 8 8m0-8-8 8',
     ]);
   });
 

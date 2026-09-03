@@ -125,7 +125,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
               aria-hidden="true"
               focusable="false"
             >
-              <path d="m6 6 6 6m0-6-6 6" />
+              <path d="m5 5 8 8m0-8-8 8" />
             </svg>
           </button>
         </div>

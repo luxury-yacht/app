@@ -301,6 +301,7 @@ describe('strict CSS cascade contracts', () => {
 
     expect(windowControls).toContain('align-items: center');
     expect(windowControls).toContain('gap: var(--border-radius-xs)');
+    expect(windowControls).toContain('padding-left: var(--spacing-sm)');
     expect(windowControl).toContain('width: var(--app-header-window-control-size)');
     expect(windowControl).toContain('height: var(--app-header-window-control-size)');
     expect(windowControl).toContain('border-radius: var(--border-radius-sm)');

@@ -57,6 +57,7 @@
   align-self: stretch;
   align-items: center;
   gap: var(--border-radius-xs);
+  padding-left: var(--spacing-sm);
   padding-right: var(--spacing-xs);
   flex-shrink: 0;
   --wails-draggable: no-drag;
