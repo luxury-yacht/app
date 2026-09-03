@@ -104,7 +104,9 @@ describe('AppMenuBar', () => {
 
     expect(fileButton?.classList.contains('app-menu-trigger--open')).toBe(true);
     expect(editButton?.classList.contains('app-menu-trigger--open')).toBe(false);
-    expect(container.querySelector('[role="menu"]')?.getAttribute('aria-activedescendant')).toBeNull();
+    expect(
+      container.querySelector('[role="menu"]')?.getAttribute('aria-activedescendant')
+    ).toBeNull();
     expect(container.querySelector('.app-menu-item--focused')).toBeNull();
 
     act(() => {
@@ -165,7 +167,9 @@ describe('AppMenuBar', () => {
       });
     };
 
-    expect(container.querySelector('[role="menu"]')?.getAttribute('aria-activedescendant')).toBeNull();
+    expect(
+      container.querySelector('[role="menu"]')?.getAttribute('aria-activedescendant')
+    ).toBeNull();
     sendKey('ArrowDown');
     expect(container.querySelector('[role="menu"]')?.getAttribute('aria-activedescendant')).toBe(
       'app-menu-file-item-0'
