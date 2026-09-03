@@ -293,6 +293,22 @@ describe('strict CSS cascade contracts', () => {
     expect(menuBar).toContain('app-region: no-drag');
   });
 
+  it('presents frameless window actions as compact app toolbar controls', () => {
+    const appHeaderCSS = readProjectFile('src/ui/layout/AppHeader.css');
+    const windowControls = appHeaderCSS.match(/\.app-header-window-controls \{([\s\S]*?)\}/)?.[1];
+    const windowControl = appHeaderCSS.match(/\.app-header-window-control \{([\s\S]*?)\}/)?.[1];
+    const glyph = appHeaderCSS.match(/\.app-header-window-control-glyph \{([\s\S]*?)\}/)?.[1];
+
+    expect(windowControls).toContain('align-items: center');
+    expect(windowControls).toContain('gap: var(--border-radius-xs)');
+    expect(windowControl).toContain('width: var(--app-header-window-control-size)');
+    expect(windowControl).toContain('height: var(--app-header-window-control-size)');
+    expect(windowControl).toContain('border-radius: var(--border-radius-sm)');
+    expect(glyph).toContain('width: var(--app-header-window-control-icon-size)');
+    expect(glyph).toContain('height: var(--app-header-window-control-icon-size)');
+    expect(appHeaderCSS).not.toContain('.app-header-window-control--close:hover');
+  });
+
   it('keeps the workspace menu above main chrome and below blocking modals', () => {
     const appMenuCSS = readProjectFile('src/ui/layout/AppMenuBar.css');
     const elevationCSS = readProjectFile('styles/tokens/elevation.css');

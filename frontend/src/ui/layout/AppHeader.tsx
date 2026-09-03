@@ -87,7 +87,14 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
             title="Minimise"
             onClick={() => void minimiseWindow()}
           >
-            <span className="app-header-window-control-glyph" aria-hidden="true" />
+            <svg
+              className="app-header-window-control-glyph"
+              viewBox="0 0 18 18"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M5 12h8" />
+            </svg>
           </button>
           <button
             type="button"
@@ -96,7 +103,14 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
             title="Maximise or restore"
             onClick={toggleWindowMaximize}
           >
-            <span className="app-header-window-control-glyph" aria-hidden="true" />
+            <svg
+              className="app-header-window-control-glyph"
+              viewBox="0 0 18 18"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M6.5 4.5h-2v2M11.5 4.5h2v2M6.5 13.5h-2v-2M11.5 13.5h2v-2" />
+            </svg>
           </button>
           <button
             type="button"
@@ -105,7 +119,14 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
             title="Close"
             onClick={() => void closeWindow()}
           >
-            <span className="app-header-window-control-glyph" aria-hidden="true" />
+            <svg
+              className="app-header-window-control-glyph"
+              viewBox="0 0 18 18"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="m6 6 6 6m0-6-6 6" />
+            </svg>
           </button>
         </div>
       ) : null}

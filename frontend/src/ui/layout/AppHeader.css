@@ -55,28 +55,36 @@
 .app-header-window-controls {
   display: flex;
   align-self: stretch;
+  align-items: center;
+  gap: var(--border-radius-xs);
+  padding-right: var(--spacing-xs);
   flex-shrink: 0;
   --wails-draggable: no-drag;
   app-region: no-drag;
 }
 
 .app-header-window-control {
-  position: relative;
   display: flex;
-  width: 42px;
+  width: var(--app-header-window-control-size);
+  height: var(--app-header-window-control-size);
   align-items: center;
   justify-content: center;
   padding: 0;
   border: 0;
+  border-radius: var(--border-radius-sm);
   background: transparent;
-  color: var(--text-primary);
+  color: var(--color-text-secondary);
   cursor: default;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
   --wails-draggable: no-drag;
   app-region: no-drag;
 }
 
 .app-header-window-control:hover {
-  background: var(--hover-bg);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
 }
 
 .app-header-window-control:active {
@@ -88,49 +96,16 @@
   outline-offset: -2px;
 }
 
-.app-header-window-control--close:hover {
-  background: var(--button-danger-bg);
-  color: var(--button-danger-text);
-}
-
-.app-header-window-control--close:active {
-  background: var(--button-danger-hover);
-  color: var(--button-danger-text);
-}
-
 .app-header-window-control-glyph {
-  position: relative;
   display: block;
-  width: 10px;
-  height: 10px;
-}
-
-.app-header-window-control--minimise .app-header-window-control-glyph {
-  height: 1px;
-  background: currentColor;
-}
-
-.app-header-window-control--maximise .app-header-window-control-glyph {
-  border: 1px solid currentColor;
-}
-
-.app-header-window-control--close .app-header-window-control-glyph::before,
-.app-header-window-control--close .app-header-window-control-glyph::after {
-  position: absolute;
-  top: 4px;
-  left: -1px;
-  width: 12px;
-  height: 1px;
-  background: currentColor;
-  content: "";
-}
-
-.app-header-window-control--close .app-header-window-control-glyph::before {
-  transform: rotate(45deg);
-}
-
-.app-header-window-control--close .app-header-window-control-glyph::after {
-  transform: rotate(-45deg);
+  width: var(--app-header-window-control-icon-size);
+  height: var(--app-header-window-control-icon-size);
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.45;
 }
 
 .status-indicators {

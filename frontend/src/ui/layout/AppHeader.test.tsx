@@ -142,6 +142,22 @@ describe('AppHeader', () => {
     expect(container.querySelector('[aria-label="Command Palette"]')).toBeNull();
   });
 
+  it('uses compact app-owned glyphs instead of operating-system chrome symbols', () => {
+    act(() => {
+      root.render(<AppHeader mode="panel" />);
+    });
+
+    const glyphs = Array.from(
+      container.querySelectorAll<SVGElement>('.app-header-window-control-glyph')
+    );
+    expect(glyphs).toHaveLength(3);
+    expect(glyphs.map((glyph) => glyph.querySelector('path')?.getAttribute('d'))).toEqual([
+      'M5 12h8',
+      'M6.5 4.5h-2v2M11.5 4.5h2v2M6.5 13.5h-2v-2M11.5 13.5h2v-2',
+      'm6 6 6 6m0-6-6 6',
+    ]);
+  });
+
   it('routes custom panel controls through the desktop runtime', () => {
     act(() => {
       root.render(<AppHeader mode="panel" />);

@@ -22,4 +22,6 @@
   --modal-height-lg: 40rem;
   --modal-viewport-gutter: var(--spacing-xxl);
   --control-height-md: 2.25rem;
+  --app-header-window-control-size: 1.5rem;
+  --app-header-window-control-icon-size: 0.8125rem;
 }
