@@ -95,6 +95,26 @@ describe('AppMenuBar', () => {
     expect(container.querySelector('[role="menu"]')).toBeNull();
   });
 
+  it('highlights the open title without preselecting pointer-opened menu items', () => {
+    renderMenu();
+
+    const fileButton = container.querySelector<HTMLButtonElement>('[aria-label="File menu"]');
+    const editButton = container.querySelector<HTMLButtonElement>('[aria-label="Edit menu"]');
+    act(() => fileButton?.click());
+
+    expect(fileButton?.classList.contains('app-menu-trigger--open')).toBe(true);
+    expect(editButton?.classList.contains('app-menu-trigger--open')).toBe(false);
+    expect(container.querySelector('[role="menu"]')?.getAttribute('aria-activedescendant')).toBeNull();
+    expect(container.querySelector('.app-menu-item--focused')).toBeNull();
+
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>('[data-menu-command="new-window"]')
+        ?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    });
+    expect(container.querySelector('.app-menu-item--focused')).toBeNull();
+  });
+
   it('uses Quit on Linux and keeps keyboard activation inside the menu surface', async () => {
     platformMock.isWindowsPlatform.mockReturnValue(false);
     renderMenu();
@@ -145,6 +165,8 @@ describe('AppMenuBar', () => {
       });
     };
 
+    expect(container.querySelector('[role="menu"]')?.getAttribute('aria-activedescendant')).toBeNull();
+    sendKey('ArrowDown');
     expect(container.querySelector('[role="menu"]')?.getAttribute('aria-activedescendant')).toBe(
       'app-menu-file-item-0'
     );

@@ -19,17 +19,20 @@
   padding: 0 var(--spacing-sm);
   border: 0;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--color-text);
   font: inherit;
-  font-size: var(--font-size-button);
+  font-size: var(--font-size-normal);
   cursor: default;
   --wails-draggable: no-drag;
   app-region: no-drag;
 }
 
-.app-menu-trigger:hover,
+.app-menu-trigger:hover {
+  background: var(--color-bg-tertiary);
+}
+
 .app-menu-trigger--open {
-  background: var(--hover-bg);
+  background: var(--color-bg-tertiary);
 }
 
 .app-menu-trigger:focus-visible {

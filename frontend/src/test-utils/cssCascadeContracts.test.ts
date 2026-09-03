@@ -310,6 +310,16 @@ describe('strict CSS cascade contracts', () => {
     expect(appHeaderCSS).not.toContain('.app-header-window-control--close:hover');
   });
 
+  it('highlights only the active menu title and uses the menu item text size', () => {
+    const appMenuCSS = readProjectFile('src/ui/layout/AppMenuBar.css');
+    const trigger = appMenuCSS.match(/\.app-menu-trigger \{([\s\S]*?)\}/)?.[1];
+    const openTrigger = appMenuCSS.match(/\.app-menu-trigger--open \{([\s\S]*?)\}/)?.[1];
+
+    expect(trigger).toContain('font-size: var(--font-size-normal)');
+    expect(openTrigger).toContain('background: var(--color-bg-tertiary)');
+    expect(appMenuCSS).not.toContain('var(--hover-bg)');
+  });
+
   it('keeps the workspace menu above main chrome and below blocking modals', () => {
     const appMenuCSS = readProjectFile('src/ui/layout/AppMenuBar.css');
     const elevationCSS = readProjectFile('styles/tokens/elevation.css');

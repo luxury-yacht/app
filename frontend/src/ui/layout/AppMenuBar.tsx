@@ -149,7 +149,7 @@ const nextCommandIndex = (section: AppMenuSection, current: number, direction: 1
     .map((entry, index) => (isCommandItem(entry) ? index : -1))
     .filter((index) => index >= 0);
   const currentPosition = commandIndexes.indexOf(current);
-  const start = currentPosition >= 0 ? currentPosition : 0;
+  const start = currentPosition >= 0 ? currentPosition : direction === 1 ? -1 : 0;
   return commandIndexes[(start + direction + commandIndexes.length) % commandIndexes.length] ?? -1;
 };
 
@@ -189,13 +189,13 @@ const AppMenuBar = () => {
   }, []);
 
   const openSection = useCallback(
-    (index: number) => {
+    (index: number, focusFirstCommand = false) => {
       const section = sections[index];
       if (!section) {
         return;
       }
       setOpenSectionIndex(index);
-      setFocusedItemIndex(firstCommandIndex(section));
+      setFocusedItemIndex(focusFirstCommand ? firstCommandIndex(section) : -1);
     },
     [sections]
   );
@@ -270,7 +270,7 @@ const AppMenuBar = () => {
       if (openSectionIndex === null) {
         return;
       }
-      openSection((openSectionIndex + direction + sections.length) % sections.length);
+      openSection((openSectionIndex + direction + sections.length) % sections.length, true);
     },
     [openSection, openSectionIndex, sections.length]
   );
@@ -376,7 +376,7 @@ const AppMenuBar = () => {
                 event.preventDefault();
                 event.stopPropagation();
                 rememberPriorFocus();
-                openSection(sectionIndex);
+                openSection(sectionIndex, true);
               }}
             >
               {section.label}
@@ -405,7 +405,7 @@ const AppMenuBar = () => {
                       tabIndex={-1}
                       data-menu-command={entry.command}
                       key={entry.command}
-                      onMouseEnter={() => setFocusedItemIndex(itemIndex)}
+                      onMouseEnter={() => setFocusedItemIndex(-1)}
                       onClick={() => executeCommand(entry.command)}
                     >
                       <span className="app-menu-item-label">{entry.label}</span>
