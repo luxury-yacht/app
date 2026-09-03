@@ -270,9 +270,8 @@ export function GlobalShortcuts({
     enabled: !!onToggleDiagnostics,
   });
 
-  // Zoom shortcuts — the Wails native menu accelerators for +/- don't work on
-  // Windows (the keys are missing from the Windows keyMap), so we register them
-  // here in the frontend shortcut system where they work on all platforms.
+  // Zoom shortcuts stay in the frontend shortcut system so they work with the
+  // native macOS menu and the app-rendered Windows/Linux menu alike.
   useShortcut({
     key: '=',
     modifiers: macPlatform ? { meta: true } : { ctrl: true },
@@ -306,7 +305,7 @@ export function GlobalShortcuts({
     category: 'View',
   });
 
-  // Handle menu:close event from the backend (Cmd/Ctrl+W via native menu).
+  // Handle the backend menu:close event from either workspace menu.
   // Closes the active cluster tab, or the current peer window when it has no
   // cluster tabs left.
   useEffect(() => {

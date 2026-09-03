@@ -126,9 +126,9 @@ func TestNativeMenuRefreshUsesPlatformOwner(t *testing.T) {
 		goos string
 		want string
 	}{
-		{goos: "linux", want: "update-menu"},
+		{goos: "linux", want: ""},
 		{goos: "darwin", want: "set-application-menu"},
-		{goos: "windows", want: "set-window-menu"},
+		{goos: "windows", want: ""},
 		{goos: "unsupported", want: ""},
 	} {
 		t.Run(test.goos, func(t *testing.T) {
@@ -136,9 +136,7 @@ func TestNativeMenuRefreshUsesPlatformOwner(t *testing.T) {
 
 			applyNativeMenuRefresh(
 				test.goos,
-				func() { called = "update-menu" },
 				func() { called = "set-application-menu" },
-				func() { called = "set-window-menu" },
 			)
 
 			require.Equal(t, test.want, called)

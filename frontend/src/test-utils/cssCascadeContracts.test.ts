@@ -273,6 +273,26 @@ describe('strict CSS cascade contracts', () => {
     }
   });
 
+  it('keeps frameless window drag regions out of every header control surface', () => {
+    const appHeaderCSS = readProjectFile('src/ui/layout/AppHeader.css');
+    const appMenuCSS = readProjectFile('src/ui/layout/AppMenuBar.css');
+    const customFrame = appHeaderCSS.match(/\.app-header--custom-frame \{([\s\S]*?)\}/)?.[1];
+    const headerControls = appHeaderCSS.match(/\.app-header-controls \{([\s\S]*?)\}/)?.[1];
+    const windowControls = appHeaderCSS.match(/\.app-header-window-controls \{([\s\S]*?)\}/)?.[1];
+    const windowControl = appHeaderCSS.match(/\.app-header-window-control \{([\s\S]*?)\}/)?.[1];
+    const menuBar = appMenuCSS.match(/\.app-menu-bar \{([\s\S]*?)\}/)?.[1];
+
+    expect(customFrame).toContain('app-region: drag');
+    expect(headerControls).toContain('--wails-draggable: no-drag');
+    expect(headerControls).toContain('app-region: no-drag');
+    expect(windowControls).toContain('--wails-draggable: no-drag');
+    expect(windowControls).toContain('app-region: no-drag');
+    expect(windowControl).toContain('--wails-draggable: no-drag');
+    expect(windowControl).toContain('app-region: no-drag');
+    expect(menuBar).toContain('--wails-draggable: no-drag');
+    expect(menuBar).toContain('app-region: no-drag');
+  });
+
   it('gives the reduced-motion rule app-root specificity', () => {
     const motion = readProjectFile('styles/utilities/motion.css');
 

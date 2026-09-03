@@ -1,8 +1,10 @@
 package backend
 
 import (
+	"fmt"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -103,13 +105,17 @@ func TestMenuEventCallbacksRequireRuntimeReadiness(t *testing.T) {
 	app := NewDesktopShell(nil, func() bool { return ready }, func(name string, _ ...interface{}) {
 		events = append(events, name)
 	}, NewLogger(10))
-	callback := emitMenuEventWhenReady(app, "open-cluster")
-
-	callback()
+	require.Error(
+		t,
+		app.ExecuteWorkspaceMenuCommand("", WorkspaceMenuCommandOpenCluster),
+	)
 	require.Empty(t, events)
 
 	ready = true
-	callback()
+	require.NoError(
+		t,
+		app.ExecuteWorkspaceMenuCommand("", WorkspaceMenuCommandOpenCluster),
+	)
 	require.Equal(t, []string{"open-cluster"}, events)
 }
 
@@ -156,15 +162,15 @@ func TestDebugMenuEventsUseReadinessGuard(t *testing.T) {
 		events = append(events, name)
 	}, NewLogger(10))
 
-	for _, event := range []string{
-		"debug:open-inspector",
-		"debug:toggle-focus-overlay",
-		"debug:toggle-panel-overlay",
-		"debug:toggle-map-overlay",
-		"debug:toggle-icon-overlay",
-		"debug:toggle-error-overlay",
+	for _, command := range []WorkspaceMenuCommand{
+		WorkspaceMenuCommandOpenInspector,
+		WorkspaceMenuCommandToggleFocusDebug,
+		WorkspaceMenuCommandTogglePanelDebug,
+		WorkspaceMenuCommandToggleMapDebug,
+		WorkspaceMenuCommandToggleIconDebug,
+		WorkspaceMenuCommandToggleErrorDebug,
 	} {
-		emitMenuEventWhenReady(app, event)()
+		require.NoError(t, app.ExecuteWorkspaceMenuCommand("", command))
 	}
 
 	require.Equal(t, []string{
@@ -202,4 +208,154 @@ func TestDesktopShellReceivesWorkspaceWindowCreatorAtConstruction(t *testing.T) 
 	require.NotNil(t, app.createWorkspaceWindow)
 	app.createWorkspaceWindowFromMenu()
 	require.True(t, called)
+}
+
+func TestWorkspaceMenuCommandsShareOneTypedDispatcher(t *testing.T) {
+	events := []string{}
+	created := false
+	shell := NewDesktopShell(
+		nil,
+		func() bool { return true },
+		func(name string, _ ...interface{}) { events = append(events, name) },
+		NewLogger(10),
+		DesktopShellBindings{
+			CreateWorkspaceWindow: func() { created = true },
+			IsWorkspaceWindow:     func(name string) bool { return name == "workspace-1" },
+		},
+	)
+
+	require.NoError(t, shell.ExecuteWorkspaceMenuCommand("", WorkspaceMenuCommandNewWindow))
+	require.True(t, created)
+	require.NoError(t, shell.ExecuteWorkspaceMenuCommand("", WorkspaceMenuCommandOpenCluster))
+	require.Equal(t, []string{"open-cluster"}, events)
+	require.ErrorContains(
+		t,
+		shell.ExecuteWorkspaceMenuCommand("panel-1", WorkspaceMenuCommandOpenCluster),
+		`window "panel-1" is not a workspace`,
+	)
+	require.ErrorContains(
+		t,
+		shell.ExecuteWorkspaceMenuCommand("workspace-1", WorkspaceMenuCommand("unknown")),
+		`unknown workspace menu command "unknown"`,
+	)
+}
+
+func TestWorkspaceMenuCommandCatalogIsUniqueAndHandled(t *testing.T) {
+	commands := []WorkspaceMenuCommand{
+		WorkspaceMenuCommandNewWindow,
+		WorkspaceMenuCommandOpenCluster,
+		WorkspaceMenuCommandClose,
+		WorkspaceMenuCommandSettings,
+		WorkspaceMenuCommandQuit,
+		WorkspaceMenuCommandHide,
+		WorkspaceMenuCommandCut,
+		WorkspaceMenuCommandCopy,
+		WorkspaceMenuCommandPaste,
+		WorkspaceMenuCommandSelectAll,
+		WorkspaceMenuCommandCommandPalette,
+		WorkspaceMenuCommandZoomIn,
+		WorkspaceMenuCommandZoomOut,
+		WorkspaceMenuCommandZoomReset,
+		WorkspaceMenuCommandToggleSidebar,
+		WorkspaceMenuCommandToggleObjectDiff,
+		WorkspaceMenuCommandToggleAppLogs,
+		WorkspaceMenuCommandToggleDiagnostics,
+		WorkspaceMenuCommandOpenInspector,
+		WorkspaceMenuCommandToggleFocusDebug,
+		WorkspaceMenuCommandTogglePanelDebug,
+		WorkspaceMenuCommandToggleMapDebug,
+		WorkspaceMenuCommandToggleIconDebug,
+		WorkspaceMenuCommandToggleErrorDebug,
+		WorkspaceMenuCommandMinimise,
+		WorkspaceMenuCommandMaximise,
+		WorkspaceMenuCommandRestore,
+		WorkspaceMenuCommandToggleMaximise,
+		WorkspaceMenuCommandBringAllToFront,
+		WorkspaceMenuCommandAbout,
+		WorkspaceMenuCommandCheckForUpdates,
+	}
+	seen := make(map[WorkspaceMenuCommand]struct{}, len(commands))
+	shell := NewDesktopShell(
+		nil,
+		func() bool { return true },
+		func(string, ...interface{}) {},
+		NewLogger(10),
+	)
+
+	for _, command := range commands {
+		_, duplicate := seen[command]
+		require.Falsef(t, duplicate, "duplicate workspace menu command %q", command)
+		seen[command] = struct{}{}
+
+		err := shell.ExecuteWorkspaceMenuCommand("", command)
+		require.NotContains(t, fmt.Sprint(err), "unknown workspace menu command")
+	}
+}
+
+func TestWorkspaceMenuCommandsTargetTheClaimedWorkspace(t *testing.T) {
+	wailsApp := application.New(application.Options{})
+	wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{Name: "workspace-1"})
+	shell := NewDesktopShell(
+		wailsApp,
+		func() bool { return true },
+		nil,
+		NewLogger(10),
+		DesktopShellBindings{
+			IsWorkspaceWindow: func(name string) bool { return name == "workspace-1" },
+		},
+	)
+
+	require.NoError(
+		t,
+		shell.ExecuteWorkspaceMenuCommand("workspace-1", WorkspaceMenuCommandOpenCluster),
+	)
+	for _, command := range []WorkspaceMenuCommand{
+		WorkspaceMenuCommandMinimise,
+		WorkspaceMenuCommandMaximise,
+		WorkspaceMenuCommandRestore,
+		WorkspaceMenuCommandToggleMaximise,
+	} {
+		require.NoError(t, shell.ExecuteWorkspaceMenuCommand("workspace-1", command))
+	}
+	require.ErrorContains(
+		t,
+		shell.executeWorkspaceWindowCommand("workspace-1", WorkspaceMenuCommand("unknown")),
+		"unknown workspace window command",
+	)
+
+	shell.isWorkspaceWindow = func(string) bool { return true }
+	require.ErrorContains(
+		t,
+		shell.ExecuteWorkspaceMenuCommand("workspace-missing", WorkspaceMenuCommandOpenCluster),
+		`window "workspace-missing" is not available`,
+	)
+}
+
+func TestWorkspaceMenuUpdateCheckTargetsTheCallerBeforeStartingDiscovery(t *testing.T) {
+	events := []string{}
+	checked := make(chan struct{}, 1)
+	shell := NewDesktopShell(
+		nil,
+		func() bool { return true },
+		func(name string, _ ...interface{}) { events = append(events, name) },
+		NewLogger(10),
+		DesktopShellBindings{
+			IsWorkspaceWindow: func(name string) bool { return name == "workspace-1" },
+			UpdateCheck: func() error {
+				checked <- struct{}{}
+				return nil
+			},
+		},
+	)
+
+	require.NoError(
+		t,
+		shell.ExecuteWorkspaceMenuCommand("workspace-1", WorkspaceMenuCommandCheckForUpdates),
+	)
+	require.Equal(t, []string{"open-about"}, events)
+	select {
+	case <-checked:
+	case <-time.After(time.Second):
+		t.Fatal("update check did not start")
+	}
 }

@@ -58,12 +58,17 @@ Surface kinds include:
   whole app.
 - Editors may own editor-specific keys; app-level `Escape` wins unless the
   editor has a documented transient UI reason.
-- The native menu labels `Cmd/Ctrl+W` as context-neutral `Close`; the focused
-  window role decides what closes. In a workspace, it closes the active cluster
-  tab through `KubeconfigContext`, or the workspace when it has no cluster tabs.
-  In a panel window, it guards and closes the active object tab; closing the
+- The native macOS menu and app-rendered Windows/Linux workspace menu label
+  `Cmd/Ctrl+W` as context-neutral `Close`; the focused window role decides what
+  closes. In a workspace, it closes the active cluster tab through
+  `KubeconfigContext`, or the workspace when it has no cluster tabs. In a panel
+  window, the shortcut guards and closes the active object tab; closing the
   last tab closes that native panel window. The panel titlebar closes the whole
   group through the same guards.
+- The app-rendered workspace menu is a `menu` keyboard surface. It owns arrows,
+  `Enter`, `Space`, and `Escape` while open, restores the prior content focus
+  before executing a command, and routes its typed command through the backend
+  owner shared with the native macOS menu.
 - Panel windows mount `PanelWindowShortcuts`, not workspace
   `GlobalShortcuts`. Cut, copy, paste, select-all, and zoom stay local.
   Workspace-only commands such as Settings, About, Open Cluster, sidebar,

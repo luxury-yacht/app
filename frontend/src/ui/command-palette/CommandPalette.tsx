@@ -1023,8 +1023,8 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     priority: 100,
   });
 
-  // Also open from the native "View → Command Palette" menu item, which emits
-  // this runtime event. Held in a ref so the subscription stays stable across
+  // Also open from the native or app-rendered "View → Command Palette" item,
+  // which emits this runtime event. Held in a ref so the subscription stays stable across
   // the open/close re-renders that recreate handleGlobalOpenShortcut.
   const openShortcutRef = useRef(handleGlobalOpenShortcut);
   useEffect(() => {
@@ -1064,8 +1064,8 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   const openInNamespaceMode = useCallback(() => openInSelectMode('namespaces'), [openInSelectMode]);
   // The search button in the sidebar's Namespaces header emits this event.
   useEventBus('command-palette:open-namespaces', openInNamespaceMode, [openInNamespaceMode]);
-  // Open the palette straight into namespace selection. Registered in the
-  // frontend shortcut system (not the native menu), like ⌘⇧P above.
+  // Open the palette straight into namespace selection through the frontend
+  // shortcut system, like ⌘⇧P above.
   useShortcut({
     key: 'n',
     modifiers: macPlatform ? { meta: true, shift: true } : { ctrl: true, shift: true },

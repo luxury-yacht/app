@@ -75,6 +75,38 @@ func TestPanelWindowCommandsDelegateBeforeWorkspaceRuntimeReadiness(t *testing.T
 	require.ErrorContains(t, err, "does not match source window")
 }
 
+func TestDesktopServiceUsesTheWailsSenderForWorkspaceMenuCommands(t *testing.T) {
+	events := []string{}
+	shell := NewDesktopShell(
+		nil,
+		func() bool { return true },
+		func(name string, _ ...interface{}) { events = append(events, name) },
+		NewLogger(10),
+		DesktopShellBindings{
+			IsWorkspaceWindow: func(name string) bool { return name == "workspace-1" },
+		},
+	)
+	service := NewDesktopService(DesktopServiceDependencies{DesktopShell: shell})
+
+	workspaceContext := context.WithValue(
+		context.Background(), application.WindowKey, panelCommandCaller("workspace-1"),
+	)
+	require.NoError(
+		t,
+		service.ExecuteWorkspaceMenuCommand(workspaceContext, WorkspaceMenuCommandOpenCluster),
+	)
+	require.Equal(t, []string{"open-cluster"}, events)
+
+	panelContext := context.WithValue(
+		context.Background(), application.WindowKey, panelCommandCaller("panel-1"),
+	)
+	require.ErrorContains(
+		t,
+		service.ExecuteWorkspaceMenuCommand(panelContext, WorkspaceMenuCommandOpenCluster),
+		`window "panel-1" is not a workspace`,
+	)
+}
+
 func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *testing.T) {
 	called := 0
 	mark := func() { called++ }

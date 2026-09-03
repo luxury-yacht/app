@@ -96,9 +96,19 @@ actions, refresh snapshots, and operation cleanup. None of these owners retains
 the composition root.
 
 `DesktopShell` owns the process-wide, unpersisted sidebar, diagnostics-panel,
-and Application Logs panel visibility used by native menu projection.
+and Application Logs panel visibility used by native macOS menu projection.
 `UIStateStore` owns only persisted UI documents; it is not a second owner of
 those live visibility flags.
+
+Workspace and panel chrome is platform-adaptive. macOS retains Wails' native
+frame and application menu with a transparent full-size titlebar. Windows and
+Linux use frameless workspace and panel windows; `AppHeader` supplies the drag
+surface and window controls, and workspace headers also render the application
+menu bar. Windows enables Wails' WebView2 non-client region support without
+enabling composition hosting. The native macOS menu and app-rendered desktop
+menu use the same typed `WorkspaceMenuCommand` dispatcher. Wails injects the
+calling window into the desktop-service context, and the shell rejects an
+app-rendered workspace command when that sender is not a registered workspace.
 
 `PreferencesService.EnsureLoaded` coalesces concurrent normal callers. Startup
 selection uses the same attempt through `EnsureLoadedForStartup`, which alone
@@ -132,14 +142,14 @@ callback, or frontend owner and must not gain a second event subscription.
 | Subsequent process launch and focus | `application.SingleInstanceOptions.OnSecondInstanceLaunch` | No | May arrive before the webview is ready; it does not start a second backend lifecycle | Shows, restores when minimized, and focuses the most recently focused live peer; ignores launch arguments and additional data. Proof: `main.go`, `internal/appwindow/registry.go`, and `cmd/project/wails_project_contract_test.go`. |
 | Ordinary focus changes | Peer `events.Common.WindowFocus` listener | No | Updates only the registry's most-recent ordering | Focus does not trigger refresh or cluster selection. It chooses the peer used by subsequent-launch focus and explicit application-quit geometry persistence. |
 | System appearance changes | Browser `matchMedia('(prefers-color-scheme: dark)')`; persisted preference changes use the frontend settings event bus | No | The React subscription exists only after the runtime mounts; system changes apply only while the preference is `system` | Process preference, not cluster data. The React effect removes the media-query and settings-event subscriptions on unmount. Proof: `frontend/src/core/contexts/AppearanceModeContext.tsx`. |
-| Dynamic menu labels | `backend.DesktopShell.UpdateMenu`; no Wails application event | No | Runs only after runtime-ready state changes such as sidebar or panel visibility | Mutates the persistent menu. Linux updates it in place, macOS resets the application menu, and Windows reinstalls it on workspace peers; native panel windows suppress Windows menu installation. Proof: `backend/desktop_shell_ui.go`, `internal/appwindow/registry.go`, and `backend/desktop_shell_ui_test.go`. |
+| Dynamic native-menu labels | `backend.DesktopShell.UpdateMenu`; no Wails application event | No | Runs only after runtime-ready state changes such as sidebar or panel visibility | Rebuilds the persistent menu and resets the macOS application menu. Windows and Linux use neutral labels in the app-rendered menu and do not install the native menu on frameless windows. Proof: `backend/desktop_shell_ui.go`, `frontend/src/ui/layout/AppMenuBar.tsx`, and `backend/desktop_shell_ui_test.go`. |
 | Workspace-window close | Every workspace's `events.Common.WindowClosing` cancellable hook starts an asynchronous owner preflight | Yes | The owner guards docked panels and every owned child before the registry authorizes a second close. Children close before foreground demand and cluster-tab ownership are released. Shared cluster teardown occurs only when no remaining workspace owns the selection. | The owner relationship is immutable. A denial or timeout leaves owner and children live. The last workspace keeps its tab union for next-start persistence. Proof: `internal/appwindow/registry.go`, `internal/appwindow/panel.go`, `frontend/src/core/panel-windows/WorkspacePanelCoordinator.tsx`, and `internal/appwindow/lifecycle_test.go`. |
 | Panel-window close | A panel's cancellable native close hook routes a guard request to its child renderer and immutable owner | Yes | The child guards every tab and preserves its state until a registry-authorized second close succeeds. The owner removes the group only from the closed event. Failed opening transfers publish the same terminal owner outcome even when the native target has already disappeared. | Panel close never releases a workspace or cluster-tab owner. A denial, failed native close, or timeout leaves the panel and owner directory unchanged. Proof: `internal/appwindow/registry.go`, `internal/appwindow/panel.go`, `internal/appwindow/panel_transfer.go`, and `frontend/src/ui/shortcuts/components/PanelWindowShortcuts.tsx`. |
 | Application quit | `application.Options.ShouldQuit` asks every ready workspace to acknowledge one two-phase preflight | Yes | No workspace closes until all ready workspaces have guarded their docked and child panels. Only unanimous approval authorizes normal owner close transactions and the existing once-only persistence flush. | A denial, stale response, or timeout cancels the transaction without partially closing another owner. The most recently focused live workspace supplies geometry. Proof: `main.go`, `internal/appwindow/registry.go`, `frontend/src/core/panel-windows/WorkspacePanelCoordinator.tsx`, and `backend/application_lifecycle.go`. |
 | Service cancellation and shutdown | Wails cancels the service context, then calls `backend.DesktopService.ServiceShutdown`, which delegates to the lifecycle owner | No | Occurs after quit is accepted and after pre-quit persistence | Process-scoped teardown stops auth recovery, runtime operations, kubeconfig watching, and refresh before clearing the application context. Proof: `backend/desktop_service.go`, `backend/application_lifecycle.go`, and the pinned framework's `pkg/application/application.go`. |
-| Initial hidden-window workaround | `windowOptionsForPlatform`; no event | No | macOS/Windows peers start hidden until runtime ready; Linux starts visible because its native window/menu construction differs | Applies equally to every `workspace-N` peer. Option mapping proof: `internal/appwindow/registry.go` and `internal/appwindow/registry_test.go`. |
-| Native menu ownership workarounds | `backend.DesktopShell.UpdateMenu`; no event | No | The persistent menu is created before workspace windows and refreshed through the platform owner. Windows workspace peers use Wails' solid window background so the native menu remains opaque; macOS and Linux retain the transparent workspace background. Native panel windows keep OS frame controls but suppress menu installation on Windows and hide Wails' inherited GTK menu widget on Linux before they are shown. | Linux workspaces retain the same menu, macOS owns the application menu, and Windows installs the menu on workspace peers. Native panel windows on Windows and Linux expose neither that menu nor native title text. Proof: `main.go`, `internal/appwindow/registry.go`, `internal/appwindow/panel_chrome_linux.go`, `internal/appwindow/registry_test.go`, and `backend/desktop_shell_ui.go`. |
-| Windows zoom accelerators | Menu construction uses explicit labels instead of native accelerators on Windows; no event | No | The frontend zoom custom events remain the action owner | Commands target the current peer and carry Wails sender identity; no shutdown work. Proof: `backend/menu.go` and `frontend/src/core/desktop-runtime/index.ts`. |
+| Initial hidden-window workaround | `windowOptionsForPlatform`; no event | No | macOS/Windows peers start hidden until runtime ready; Linux retains its existing visible-start contract | Applies equally to every `workspace-N` peer. Option mapping proof: `internal/appwindow/registry.go` and `internal/appwindow/registry_test.go`. |
+| Platform window chrome and menus | `windowOptionsForPlatform`, `panelWindowOptionsForPlatform`, and `backend.DesktopShell.ExecuteWorkspaceMenuCommand` | No | The native menu is created before windows for macOS. Windows/Linux windows are frameless and render controls in `AppHeader`; workspace windows additionally render `AppMenuBar`. | macOS owns the application menu and native traffic lights. Windows/Linux install no native window menu. App-rendered menu calls carry Wails sender identity and are accepted only from a registered workspace; native and app-rendered items share the typed dispatcher. Proof: `internal/appwindow/registry.go`, `backend/workspace_menu_commands.go`, `frontend/src/ui/layout/AppMenuBar.tsx`, `frontend/src/ui/layout/AppHeader.tsx`, and their focused tests. |
+| Workspace zoom accelerators | Native macOS menu accelerators and frontend Windows/Linux shortcuts both reach the shared zoom events | No | The frontend zoom context remains the action owner | Menu commands target the calling workspace and carry Wails sender identity; no shutdown work. Proof: `backend/menu.go`, `backend/workspace_menu_commands.go`, and `frontend/src/core/contexts/ZoomContext.tsx`. |
 
 ## Native panel-window ownership and transfers
 
@@ -192,8 +202,9 @@ Timeouts fail closed.
 
 Every workspace window is a peer named `workspace-N`; no name is privileged.
 Creation, focus ordering, readiness, and close accounting belong to
-`appwindow.Registry`. Native menu actions and dialogs use Wails' current
-window, while lifecycle and persistence operations resolve an explicit name.
+`appwindow.Registry`. Native macOS menu actions and dialogs use Wails' current
+window. App-rendered Windows/Linux menu actions, lifecycle operations, and
+persistence operations resolve an explicit window name.
 
 The frontend reads its Wails window name before starting refresh work. Cluster
 workspace commands include that identity. Backend foreground demand is a map

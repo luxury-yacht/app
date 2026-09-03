@@ -21,14 +21,15 @@ maximize and restore.
   contract. Native snapshots contain serializable identity and view state, not
   React nodes, refs, fetched data, credentials, drafts, or terminal buffers.
 - Native panel windows reuse the workspace window chrome: macOS uses the
-  transparent full-size titlebar with native traffic-light controls, while
-  Windows and Linux retain their native frame controls without a native menu
-  bar or title text. Linux clears the framework's initial internal-name title
-  and hides its inherited application-menu widget before the hidden window is
-  shown. The native window's outer `AppHeader` is the drag/maximize surface; the
-  inner `DockablePanelHeader` remains tab and panel controls only. Workspace
-  status, favorites, and command-palette controls do not render in the panel
-  window.
+  transparent full-size titlebar with native traffic-light controls. Windows
+  and Linux use a frameless window with minimize, maximize/restore, and close
+  controls in the outer `AppHeader`; Windows also enables WebView2 non-client
+  drag regions while retaining Wails' standard frameless decorations. Linux
+  clears the framework's initial internal-name title and hides its inherited
+  application-menu widget before the hidden window is shown. The outer
+  `AppHeader` remains the drag/maximize surface, while the inner
+  `DockablePanelHeader` remains tab and panel controls only. Workspace status,
+  favorites, and command-palette controls do not render in the panel window.
 - The owner directory is authoritative for panel location. A child renderer is
   a projection and acknowledges changes through its owner.
 - Transient unmounts such as workspace cluster switches preserve panel refresh
@@ -140,7 +141,7 @@ the child applies an authorization.
   state and publishes the resulting snapshot; the owner commits that snapshot.
   For the final tab, the child preserves local state until native close commits,
   and the owner removes it from the closed event.
-- Native titlebar close: guard the whole group, preserve child and owner state
+- Native-window titlebar close: guard the whole group, preserve child and owner state
   until the native close commits, then remove the group from the closed event.
 - Cluster-tab or owner close: guard matching docked panels and children, close
   children, then release the existing workspace/cluster ownership.

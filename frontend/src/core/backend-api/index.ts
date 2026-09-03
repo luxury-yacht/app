@@ -32,6 +32,7 @@ export {
   DeleteTheme,
   DiscoverNodeLogs,
   DownloadApplicationUpdate,
+  ExecuteWorkspaceMenuCommand,
   ExportFavorites,
   ExportSettings,
   FailPanelTabTransfer,

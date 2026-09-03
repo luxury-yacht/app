@@ -143,6 +143,7 @@ type AppLogCommands interface {
 
 // DesktopShellCommands is the frontend command surface owned by DesktopShell.
 type DesktopShellCommands interface {
+	ExecuteWorkspaceMenuCommand(string, WorkspaceMenuCommand) error
 	OpenKubeconfigSearchPathDialog() (string, error)
 	SaveCsvFile(string, string) (CatalogQueryCSVExport, error)
 	SetAppLogsPanelVisible(bool)
@@ -592,6 +593,19 @@ func (s *DesktopService) LogAppLogsFromFrontendWithCluster(level, message, sourc
 
 func (s *DesktopService) OpenKubeconfigSearchPathDialog() (string, error) {
 	return s.desktopShell.OpenKubeconfigSearchPathDialog()
+}
+
+func (s *DesktopService) ExecuteWorkspaceMenuCommand(
+	ctx context.Context,
+	command WorkspaceMenuCommand,
+) error {
+	windowName := ""
+	if ctx != nil {
+		if caller, ok := ctx.Value(application.WindowKey).(interface{ Name() string }); ok {
+			windowName = caller.Name()
+		}
+	}
+	return s.desktopShell.ExecuteWorkspaceMenuCommand(windowName, command)
 }
 
 func (s *DesktopService) SaveCsvFile(defaultFilename, content string) (CatalogQueryCSVExport, error) {

@@ -150,6 +150,10 @@ export function DownloadApplicationUpdate(version: string): $CancellablePromise<
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DownloadApplicationUpdate", version);
 }
 
+export function ExecuteWorkspaceMenuCommand(command: $models.WorkspaceMenuCommand): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ExecuteWorkspaceMenuCommand", command);
+}
+
 export function ExportFavorites(): $CancellablePromise<$models.DataManagementResult> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ExportFavorites");
 }

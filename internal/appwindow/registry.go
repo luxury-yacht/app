@@ -1169,10 +1169,12 @@ func panelWindowOptionsForPlatform(
 		URL:              "/",
 		BackgroundColour: application.NewRGB(30, 30, 30),
 		BackgroundType:   backgroundType,
+		Frameless:        goos != "darwin",
 		Mac:              sharedMacWindowChrome(),
 		Windows: application.WindowsWindow{
-			Theme:       application.SystemDefault,
-			DisableMenu: goos == "windows",
+			Theme:                  application.SystemDefault,
+			DisableMenu:            goos == "windows",
+			NonClientRegionSupport: goos == "windows",
 		},
 		UseApplicationMenu: goos == "darwin",
 		Zoom:               1,
@@ -1213,26 +1215,30 @@ func positionPanelWindowOptions(options *application.WebviewWindowOptions, owner
 	return true
 }
 
-func windowOptionsForPlatform(name string, nativeMenu *application.Menu, goos string) application.WebviewWindowOptions {
+func windowOptionsForPlatform(name string, _ *application.Menu, goos string) application.WebviewWindowOptions {
 	backgroundType := application.BackgroundTypeTransparent
 	if goos == "windows" {
 		backgroundType = application.BackgroundTypeSolid
 	}
 
 	return application.WebviewWindowOptions{
-		Name:               name,
-		Title:              "Luxury Yacht",
-		Width:              1200,
-		Height:             800,
-		MinWidth:           1100,
-		MinHeight:          600,
-		URL:                "/",
-		BackgroundColour:   application.NewRGB(30, 30, 30),
-		BackgroundType:     backgroundType,
-		Mac:                sharedMacWindowChrome(),
-		Windows:            application.WindowsWindow{Theme: application.SystemDefault},
-		Linux:              application.LinuxWindow{Menu: nativeMenu},
-		UseApplicationMenu: true,
+		Name:             name,
+		Title:            "Luxury Yacht",
+		Width:            1200,
+		Height:           800,
+		MinWidth:         1100,
+		MinHeight:        600,
+		URL:              "/",
+		BackgroundColour: application.NewRGB(30, 30, 30),
+		BackgroundType:   backgroundType,
+		Frameless:        goos != "darwin",
+		Mac:              sharedMacWindowChrome(),
+		Windows: application.WindowsWindow{
+			Theme:                  application.SystemDefault,
+			DisableMenu:            goos == "windows",
+			NonClientRegionSupport: goos == "windows",
+		},
+		UseApplicationMenu: goos == "darwin",
 		Zoom:               1,
 		ZoomControlEnabled: false,
 		Hidden:             goos != "linux",

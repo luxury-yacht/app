@@ -11,7 +11,8 @@ export {
     ClusterLifecycleState,
     KubeconfigDiscoveryState,
     PortForwardStatus,
-    RuntimeOperationType
+    RuntimeOperationType,
+    WorkspaceMenuCommand
 } from "./models.js";
 
 export type {

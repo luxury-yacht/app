@@ -108,6 +108,7 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		DesktopShellBindings{
 			UpdateCheck: updateCheck.check, KubeconfigSearchPaths: kubeconfigSearchPaths.read,
 			CreateWorkspaceWindow:      options.CreateWorkspaceWindow,
+			IsWorkspaceWindow:          isWorkspaceWindow,
 			NativeWindowDescriptor:     options.NativeWindowDescriptor,
 			BeginPanelWindowOpen:       options.BeginPanelWindowOpen,
 			AcknowledgePanelReady:      options.AcknowledgePanelReady,

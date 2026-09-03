@@ -5,7 +5,7 @@
  * Implements AppHeader logic for the UI layer.
  */
 
-import { toggleMaximise } from '@core/desktop-runtime';
+import { closeWindow, minimiseWindow, toggleMaximise } from '@core/desktop-runtime';
 import { SearchIcon } from '@shared/components/icons/SharedIcons';
 import FavMenuDropdown from '@ui/favorites/FavMenuDropdown';
 import ConnectivityStatus from '@ui/status/ConnectivityStatus';
@@ -16,6 +16,7 @@ import React from 'react';
 import { eventBus } from '@/core/events';
 import { isMacPlatform } from '@/utils/platform';
 import './AppHeader.css';
+import AppMenuBar from './AppMenuBar';
 
 interface AppHeaderProps {
   mode?: 'workspace' | 'panel';
@@ -23,6 +24,7 @@ interface AppHeaderProps {
 
 const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
   const isMac = isMacPlatform();
+  const usesCustomFrame = !isMac;
   const isModalOpen = () =>
     typeof document !== 'undefined' && document.body.classList.contains('modal-surface-open');
 
@@ -32,8 +34,17 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
     }
   };
 
+  const headerClassName = [
+    'app-header',
+    isMac ? 'app-header--mac' : '',
+    usesCustomFrame ? 'app-header--custom-frame' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <header className={`app-header${isMac ? ' app-header--mac' : ''}`} data-app-region="header">
+    <header className={headerClassName} data-app-region="header">
+      {mode === 'workspace' && usesCustomFrame ? <AppMenuBar /> : null}
       <button
         type="button"
         className="app-header-drag-control"
@@ -64,6 +75,37 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
             data-app-header-last-focusable="true"
           >
             <SearchIcon width={14} height={14} />
+          </button>
+        </div>
+      ) : null}
+      {usesCustomFrame ? (
+        <div className="app-header-window-controls">
+          <button
+            type="button"
+            className="app-header-window-control app-header-window-control--minimise"
+            aria-label="Minimise window"
+            title="Minimise"
+            onClick={() => void minimiseWindow()}
+          >
+            <span className="app-header-window-control-glyph" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="app-header-window-control app-header-window-control--maximise"
+            aria-label="Maximise or restore window"
+            title="Maximise or restore"
+            onClick={toggleWindowMaximize}
+          >
+            <span className="app-header-window-control-glyph" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="app-header-window-control app-header-window-control--close"
+            aria-label="Close window"
+            title="Close"
+            onClick={() => void closeWindow()}
+          >
+            <span className="app-header-window-control-glyph" aria-hidden="true" />
           </button>
         </div>
       ) : null}

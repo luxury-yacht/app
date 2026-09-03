@@ -16,6 +16,11 @@
   padding-left: calc(80px / var(--app-zoom-factor, 1));
 }
 
+.app-header--custom-frame {
+  padding-right: 0;
+  app-region: drag;
+}
+
 .app-header-drag-control {
   align-self: stretch;
   flex: 1;
@@ -26,6 +31,10 @@
   background: transparent;
   cursor: default;
   --wails-draggable: drag;
+}
+
+.app-header--custom-frame .app-header-drag-control {
+  app-region: drag;
 }
 
 .app-header-drag-control:focus-visible {
@@ -40,6 +49,88 @@
   flex-shrink: 0;
   margin-left: 0.5rem;
   --wails-draggable: no-drag;
+  app-region: no-drag;
+}
+
+.app-header-window-controls {
+  display: flex;
+  align-self: stretch;
+  flex-shrink: 0;
+  --wails-draggable: no-drag;
+  app-region: no-drag;
+}
+
+.app-header-window-control {
+  position: relative;
+  display: flex;
+  width: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: default;
+  --wails-draggable: no-drag;
+  app-region: no-drag;
+}
+
+.app-header-window-control:hover {
+  background: var(--hover-bg);
+}
+
+.app-header-window-control:active {
+  background: var(--active-bg);
+}
+
+.app-header-window-control:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.app-header-window-control--close:hover {
+  background: var(--button-danger-bg);
+  color: var(--button-danger-text);
+}
+
+.app-header-window-control--close:active {
+  background: var(--button-danger-hover);
+  color: var(--button-danger-text);
+}
+
+.app-header-window-control-glyph {
+  position: relative;
+  display: block;
+  width: 10px;
+  height: 10px;
+}
+
+.app-header-window-control--minimise .app-header-window-control-glyph {
+  height: 1px;
+  background: currentColor;
+}
+
+.app-header-window-control--maximise .app-header-window-control-glyph {
+  border: 1px solid currentColor;
+}
+
+.app-header-window-control--close .app-header-window-control-glyph::before,
+.app-header-window-control--close .app-header-window-control-glyph::after {
+  position: absolute;
+  top: 4px;
+  left: -1px;
+  width: 12px;
+  height: 1px;
+  background: currentColor;
+  content: "";
+}
+
+.app-header-window-control--close .app-header-window-control-glyph::before {
+  transform: rotate(45deg);
+}
+
+.app-header-window-control--close .app-header-window-control-glyph::after {
+  transform: rotate(-45deg);
 }
 
 .status-indicators {

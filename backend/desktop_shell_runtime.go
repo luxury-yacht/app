@@ -68,42 +68,6 @@ func (s *DesktopShell) emitCurrentWindowEvent(name string, data ...any) {
 	window.EmitEvent(name, data...)
 }
 
-func (s *DesktopShell) minimiseCurrentWindow() error {
-	window, err := s.currentWindowWhenReady()
-	if err != nil {
-		return err
-	}
-	window.Minimise()
-	return nil
-}
-
-func (s *DesktopShell) maximiseCurrentWindow() error {
-	window, err := s.currentWindowWhenReady()
-	if err != nil {
-		return err
-	}
-	window.Maximise()
-	return nil
-}
-
-func (s *DesktopShell) restoreCurrentWindow() error {
-	window, err := s.currentWindowWhenReady()
-	if err != nil {
-		return err
-	}
-	window.Restore()
-	return nil
-}
-
-func (s *DesktopShell) toggleCurrentWindowMaximise() error {
-	window, err := s.currentWindowWhenReady()
-	if err != nil {
-		return err
-	}
-	window.ToggleMaximise()
-	return nil
-}
-
 func (s *DesktopShell) promptForOpenFile(options *application.OpenFileDialogOptions) (string, error) {
 	if s != nil && s.openFileDialog != nil {
 		return s.openFileDialog(options)

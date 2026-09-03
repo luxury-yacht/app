@@ -932,6 +932,49 @@ export interface UpdateInfo {
 }
 
 /**
+ * WorkspaceMenuCommand is the shared command identity used by both the native
+ * macOS menu and the app-rendered Windows/Linux menu bar.
+ */
+export enum WorkspaceMenuCommand {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    WorkspaceMenuCommandNewWindow = "new-window",
+    WorkspaceMenuCommandOpenCluster = "open-cluster",
+    WorkspaceMenuCommandClose = "close",
+    WorkspaceMenuCommandSettings = "settings",
+    WorkspaceMenuCommandQuit = "quit",
+    WorkspaceMenuCommandHide = "hide",
+    WorkspaceMenuCommandCut = "cut",
+    WorkspaceMenuCommandCopy = "copy",
+    WorkspaceMenuCommandPaste = "paste",
+    WorkspaceMenuCommandSelectAll = "select-all",
+    WorkspaceMenuCommandCommandPalette = "command-palette",
+    WorkspaceMenuCommandZoomIn = "zoom-in",
+    WorkspaceMenuCommandZoomOut = "zoom-out",
+    WorkspaceMenuCommandZoomReset = "zoom-reset",
+    WorkspaceMenuCommandToggleSidebar = "toggle-sidebar",
+    WorkspaceMenuCommandToggleObjectDiff = "toggle-object-diff",
+    WorkspaceMenuCommandToggleAppLogs = "toggle-app-logs",
+    WorkspaceMenuCommandToggleDiagnostics = "toggle-diagnostics",
+    WorkspaceMenuCommandOpenInspector = "open-inspector",
+    WorkspaceMenuCommandToggleFocusDebug = "toggle-focus-debug",
+    WorkspaceMenuCommandTogglePanelDebug = "toggle-panel-debug",
+    WorkspaceMenuCommandToggleMapDebug = "toggle-map-debug",
+    WorkspaceMenuCommandToggleIconDebug = "toggle-icon-debug",
+    WorkspaceMenuCommandToggleErrorDebug = "toggle-error-debug",
+    WorkspaceMenuCommandMinimise = "minimise",
+    WorkspaceMenuCommandMaximise = "maximise",
+    WorkspaceMenuCommandRestore = "restore",
+    WorkspaceMenuCommandToggleMaximise = "toggle-maximise",
+    WorkspaceMenuCommandBringAllToFront = "bring-all-to-front",
+    WorkspaceMenuCommandAbout = "about",
+    WorkspaceMenuCommandCheckForUpdates = "check-for-updates",
+};
+
+/**
  * BindingModelAnchor keeps object-detail DTOs reachable by the Wails generator
  * without exporting the backend-only Get<Kind> wrappers to TypeScript.
  */

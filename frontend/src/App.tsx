@@ -125,7 +125,7 @@ function AppContent() {
 
   // The command palette (CommandPaletteCommands.tsx) emits this event when
   // the user picks "Toggle Application Logs". Forward it to the shared
-  // handler also used by keyboard shortcuts and native menu events, so every
+  // handler also used by keyboard shortcuts and workspace-menu events, so every
   // path shares the single source of truth in ModalStateContext.
   useEffect(() => {
     return eventBus.on('view:toggle-app-logs-panel', handleToggleAppLogsPanel);
