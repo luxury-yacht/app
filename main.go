@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 
@@ -410,6 +411,12 @@ func singleInstanceUniqueID(configured string) string {
 	return applicationProductIdentifier
 }
 
+func installNativeApplicationMenuForPlatform(goos string, install func()) {
+	if goos == "darwin" && install != nil {
+		install()
+	}
+}
+
 func newApplicationComposition(reporter sentryreporting.Reporter, options compositionOptions) *applicationComposition {
 	var backendRuntime *backend.ApplicationRuntime
 	var desktopService *backend.DesktopService
@@ -472,7 +479,9 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	))
 
 	nativeMenu := backend.CreateMenu(desktopShell)
-	wailsApp.Menu.SetApplicationMenu(nativeMenu)
+	installNativeApplicationMenuForPlatform(runtime.GOOS, func() {
+		wailsApp.Menu.SetApplicationMenu(nativeMenu)
+	})
 
 	windows = appwindow.NewRegistry(wailsApp, backendRuntime.Lifecycle, nativeMenu)
 	windowBridge.bind(windows)

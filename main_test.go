@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -34,6 +35,24 @@ func sharedTestComposition() *applicationComposition {
 
 func testSingleInstanceID() string {
 	return fmt.Sprintf("%s.test.%d", applicationProductIdentifier, os.Getpid())
+}
+
+func TestNativeApplicationMenuIsInstalledOnlyOnDarwin(t *testing.T) {
+	for _, test := range []struct {
+		goos      string
+		wantCalls int
+	}{
+		{goos: "darwin", wantCalls: 1},
+		{goos: "windows"},
+		{goos: "linux"},
+	} {
+		t.Run(test.goos, func(t *testing.T) {
+			calls := 0
+			installNativeApplicationMenuForPlatform(test.goos, func() { calls++ })
+
+			require.Equal(t, test.wantCalls, calls)
+		})
+	}
 }
 
 type mainRecordingReporter struct {
@@ -415,7 +434,11 @@ func TestApplicationCompositionOwnsPeerWindowRegistryMenuAndService(t *testing.T
 	require.NotNil(t, composition.service)
 	require.NotNil(t, composition.operations)
 	require.NotNil(t, composition.menu)
-	require.Equal(t, composition.menu, composition.application.Menu.GetApplicationMenu())
+	if runtime.GOOS == "darwin" {
+		require.Equal(t, composition.menu, composition.application.Menu.GetApplicationMenu())
+	} else {
+		require.Nil(t, composition.application.Menu.GetApplicationMenu())
+	}
 
 	window, ok := composition.application.Window.GetByName("workspace-1")
 	require.True(t, ok)

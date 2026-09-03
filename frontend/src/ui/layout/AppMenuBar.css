@@ -4,7 +4,7 @@
   align-self: stretch;
   align-items: stretch;
   flex-shrink: 0;
-  z-index: var(--z-index-base);
+  z-index: var(--z-index-app-menu);
   --wails-draggable: no-drag;
   app-region: no-drag;
 }

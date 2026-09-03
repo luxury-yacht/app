@@ -25,9 +25,8 @@ maximize and restore.
   and Linux use a frameless window with minimize, maximize/restore, and close
   controls in the outer `AppHeader`; Windows also enables WebView2 non-client
   drag regions while retaining Wails' standard frameless decorations. Linux
-  clears the framework's initial internal-name title and hides its inherited
-  application-menu widget before the hidden window is shown. The outer
-  `AppHeader` remains the drag/maximize surface, while the inner
+  clears the framework's initial internal-name title. The outer `AppHeader`
+  remains the drag/maximize surface, while the inner
   `DockablePanelHeader` remains tab and panel controls only. Workspace status,
   favorites, and command-palette controls do not render in the panel window.
 - The owner directory is authoritative for panel location. A child renderer is

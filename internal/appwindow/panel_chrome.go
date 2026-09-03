@@ -7,5 +7,4 @@ func configureNativePanelWindow(window *application.WebviewWindow) {
 		return
 	}
 	window.SetTitle("")
-	hideNativePanelWindowMenu(window)
 }

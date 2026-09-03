@@ -105,10 +105,12 @@ frame and application menu with a transparent full-size titlebar. Windows and
 Linux use frameless workspace and panel windows; `AppHeader` supplies the drag
 surface and window controls, and workspace headers also render the application
 menu bar. Windows enables Wails' WebView2 non-client region support without
-enabling composition hosting. The native macOS menu and app-rendered desktop
-menu use the same typed `WorkspaceMenuCommand` dispatcher. Wails injects the
-calling window into the desktop-service context, and the shell rejects an
-app-rendered workspace command when that sender is not a registered workspace.
+enabling composition hosting. Composition installs Wails' global native menu
+only on macOS, so the Linux constructor cannot inherit it alongside the
+app-rendered menu. The native macOS menu and app-rendered desktop menu use the
+same typed `WorkspaceMenuCommand` dispatcher. Wails injects the calling window
+into the desktop-service context, and the shell rejects an app-rendered
+workspace command when that sender is not a registered workspace.
 
 `PreferencesService.EnsureLoaded` coalesces concurrent normal callers. Startup
 selection uses the same attempt through `EnsureLoadedForStartup`, which alone

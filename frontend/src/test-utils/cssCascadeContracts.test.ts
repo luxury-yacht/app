@@ -293,6 +293,18 @@ describe('strict CSS cascade contracts', () => {
     expect(menuBar).toContain('app-region: no-drag');
   });
 
+  it('keeps the workspace menu above main chrome and below blocking modals', () => {
+    const appMenuCSS = readProjectFile('src/ui/layout/AppMenuBar.css');
+    const elevationCSS = readProjectFile('styles/tokens/elevation.css');
+    const menuBar = appMenuCSS.match(/\.app-menu-bar \{([\s\S]*?)\}/)?.[1];
+    const tokenValue = (name: string) =>
+      Number(elevationCSS.match(new RegExp(`--${name}:\\s*(\\d+)`))?.[1]);
+
+    expect(menuBar).toContain('z-index: var(--z-index-app-menu)');
+    expect(tokenValue('z-index-panel')).toBeLessThan(tokenValue('z-index-app-menu'));
+    expect(tokenValue('z-index-app-menu')).toBeLessThan(tokenValue('z-index-modal-backdrop'));
+  });
+
   it('gives the reduced-motion rule app-root specificity', () => {
     const motion = readProjectFile('styles/utilities/motion.css');
 

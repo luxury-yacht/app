@@ -101,7 +101,7 @@ The final command-to-owner map is:
 | `OperationsCoordinator` | 10 | Shell, port-forward, drain, and live-operation lifecycle |
 | `UpdateCoordinator` | 6 | Update checks, download, skip, and restart |
 | `AppLogService` | 5 | Process log reads, writes, and clear |
-| `DesktopShell` | 4 | Native dialogs, CSV save, and process UI visibility |
+| `DesktopShell` | 5 | Native dialogs, CSV save, workspace-menu dispatch, and process UI visibility |
 
 Wails generates the callable module at
 `frontend/bindings/github.com/luxury-yacht/app/backend/desktopservice.ts` and
