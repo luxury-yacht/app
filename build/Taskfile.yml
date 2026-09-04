@@ -224,6 +224,11 @@ tasks:
     deps:
       - task: install:frontend:deps
     cmds:
+      - task: dev:frontend:serve
+
+  dev:frontend:serve:
+    summary: Starts the frontend development server with dependencies already installed
+    cmds:
       - task: frontend:dev:{{.PACKAGE_MANAGER}}
 
   frontend:dev:npm:

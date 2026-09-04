@@ -51,7 +51,7 @@ dev_mode:
   executes:
     - cmd: wails3 build DEV=true
       type: blocking
-    - cmd: wails3 task common:dev:frontend
+    - cmd: wails3 task common:dev:frontend:serve
       type: background
     - cmd: wails3 task run
       type: primary
