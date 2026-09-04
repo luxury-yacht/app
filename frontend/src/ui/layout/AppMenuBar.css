@@ -43,10 +43,10 @@
 .app-menu-dropdown {
   position: absolute;
   top: 100%;
-  left: 0;
+  left: calc(-1 * var(--border-width));
   min-width: 220px;
   padding: var(--spacing-xs) 0;
-  border: 1px solid var(--dropdown-menu-border);
+  border: var(--border-width) solid var(--dropdown-menu-border);
   background: var(--dropdown-menu-bg);
   box-shadow: var(--dropdown-menu-shadow);
   color: var(--color-text);
