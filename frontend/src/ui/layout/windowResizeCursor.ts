@@ -16,6 +16,8 @@ interface ResolveDirectionalWindowResizeCursorOptions {
   height: number;
 }
 
+type WindowResizeQuadrant = 'nw' | 'ne' | 'sw' | 'se';
+
 const directionalResizeCursors = new Set<DirectionalWindowResizeCursor>([
   'n-resize',
   'ne-resize',
@@ -26,6 +28,42 @@ const directionalResizeCursors = new Set<DirectionalWindowResizeCursor>([
   'w-resize',
   'nw-resize',
 ]);
+
+const projectedResizeCursors: Readonly<
+  Record<string, Readonly<Partial<Record<WindowResizeQuadrant, DirectionalWindowResizeCursor>>>>
+> = {
+  'ew-resize': {
+    nw: 'w-resize',
+    ne: 'e-resize',
+    sw: 'w-resize',
+    se: 'e-resize',
+  },
+  'ns-resize': {
+    nw: 'n-resize',
+    ne: 'n-resize',
+    sw: 's-resize',
+    se: 's-resize',
+  },
+  'nwse-resize': {
+    nw: 'nw-resize',
+    se: 'se-resize',
+  },
+  'nesw-resize': {
+    ne: 'ne-resize',
+    sw: 'sw-resize',
+  },
+};
+
+const resolveWindowResizeQuadrant = (
+  clientX: number,
+  clientY: number,
+  width: number,
+  height: number
+): WindowResizeQuadrant => {
+  const verticalHalf = clientY < height / 2 ? 'n' : 's';
+  const horizontalHalf = clientX < width / 2 ? 'w' : 'e';
+  return `${verticalHalf}${horizontalHalf}`;
+};
 
 export function resolveDirectionalWindowResizeCursor({
   wailsCursor,
@@ -41,26 +79,8 @@ export function resolveDirectionalWindowResizeCursor({
     return undefined;
   }
 
-  const west = clientX < width / 2;
-  const north = clientY < height / 2;
-  switch (wailsCursor) {
-    case 'ew-resize':
-      return west ? 'w-resize' : 'e-resize';
-    case 'ns-resize':
-      return north ? 'n-resize' : 's-resize';
-    case 'nwse-resize':
-      if (north && west) {
-        return 'nw-resize';
-      }
-      return !north && !west ? 'se-resize' : undefined;
-    case 'nesw-resize':
-      if (north && !west) {
-        return 'ne-resize';
-      }
-      return !north && west ? 'sw-resize' : undefined;
-    default:
-      return undefined;
-  }
+  const quadrant = resolveWindowResizeQuadrant(clientX, clientY, width, height);
+  return projectedResizeCursors[wailsCursor]?.[quadrant];
 }
 
 export function installDirectionalWindowResizeCursor(

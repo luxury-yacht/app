@@ -364,7 +364,7 @@ describe('strict CSS cascade contracts', () => {
     const openTrigger = appMenuCSS.match(/\.app-menu-trigger--open \{([\s\S]*?)\}/)?.[1];
 
     expect(trigger).toContain('font-size: var(--font-size-normal)');
-    expect(openTrigger).toContain('background: var(--color-bg-tertiary)');
+    expect(openTrigger).toContain('background: var(--color-bg)');
     expect(appMenuCSS).not.toContain('var(--hover-bg)');
   });
 

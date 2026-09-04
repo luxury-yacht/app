@@ -35,6 +35,33 @@ describe('frameless window resize cursor', () => {
     }
   );
 
+  it('preserves an already-directional Wails cursor', () => {
+    expect(
+      resolveDirectionalWindowResizeCursor({
+        wailsCursor: 'ne-resize',
+        clientX: 400,
+        clientY: 300,
+        ...viewport,
+      })
+    ).toBe('ne-resize');
+  });
+
+  it.each([
+    ['invalid viewport', 'ew-resize', 799, 1, 0, 600],
+    ['unknown cursor', 'crosshair', 799, 1, 800, 600],
+    ['incompatible diagonal quadrant', 'nwse-resize', 799, 1, 800, 600],
+  ] as const)('rejects an %s', (_case, wailsCursor, clientX, clientY, width, height) => {
+    expect(
+      resolveDirectionalWindowResizeCursor({
+        wailsCursor,
+        clientX,
+        clientY,
+        width,
+        height,
+      })
+    ).toBeUndefined();
+  });
+
   it('projects the active Wails edge onto the document and clears it outside resize regions', () => {
     const cleanup = installDirectionalWindowResizeCursor(window, document);
 

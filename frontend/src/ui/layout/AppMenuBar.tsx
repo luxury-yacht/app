@@ -149,7 +149,8 @@ const nextCommandIndex = (section: AppMenuSection, current: number, direction: 1
     .map((entry, index) => (isCommandItem(entry) ? index : -1))
     .filter((index) => index >= 0);
   const currentPosition = commandIndexes.indexOf(current);
-  const start = currentPosition >= 0 ? currentPosition : direction === 1 ? -1 : 0;
+  const initialPosition = direction === 1 ? -1 : 0;
+  const start = currentPosition >= 0 ? currentPosition : initialPosition;
   return commandIndexes[(start + direction + commandIndexes.length) % commandIndexes.length] ?? -1;
 };
 

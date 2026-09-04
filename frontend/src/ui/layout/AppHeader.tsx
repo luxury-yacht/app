@@ -29,6 +29,43 @@ interface AppHeaderProps {
   mode?: 'workspace' | 'panel';
 }
 
+interface AppHeaderClassOptions {
+  isMac: boolean;
+  isLinux: boolean;
+  usesCustomFrame: boolean;
+}
+
+interface MaximiseControlPresentation {
+  ariaLabel: string;
+  title: string;
+  path: string;
+}
+
+const buildAppHeaderClassName = ({ isMac, isLinux, usesCustomFrame }: AppHeaderClassOptions) =>
+  [
+    'app-header',
+    isMac ? 'app-header--mac' : '',
+    isLinux ? 'app-header--linux' : '',
+    usesCustomFrame ? 'app-header--custom-frame' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+const getMaximiseControlPresentation = (isMaximised: boolean): MaximiseControlPresentation => {
+  if (isMaximised) {
+    return {
+      ariaLabel: 'Restore window',
+      title: 'Restore',
+      path: 'M5.5 6.5v7h7v-7h-7Zm2-2h7v7',
+    };
+  }
+  return {
+    ariaLabel: 'Maximise window',
+    title: 'Maximise',
+    path: 'M6.5 4.5h-2v2M11.5 4.5h2v2M6.5 13.5h-2v-2M11.5 13.5h2v-2',
+  };
+};
+
 const isModalSurfaceOpen = () =>
   typeof document !== 'undefined' && document.body.classList.contains('modal-surface-open');
 
@@ -37,6 +74,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
   const isLinux = !isMac && !isWindowsPlatform();
   const usesCustomFrame = !isMac;
   const [isMaximised, setIsMaximised] = useState(false);
+  const maximiseControl = getMaximiseControlPresentation(isMaximised);
   const maximiseStateRequestRef = useRef(0);
   const refreshMaximiseState = useCallback(async () => {
     const request = ++maximiseStateRequestRef.current;
@@ -85,14 +123,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
     await refreshMaximiseState();
   }, [refreshMaximiseState]);
 
-  const headerClassName = [
-    'app-header',
-    isMac ? 'app-header--mac' : '',
-    isLinux ? 'app-header--linux' : '',
-    usesCustomFrame ? 'app-header--custom-frame' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const headerClassName = buildAppHeaderClassName({ isMac, isLinux, usesCustomFrame });
 
   return (
     <header className={headerClassName} data-app-region="header">
@@ -151,8 +182,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
           <button
             type="button"
             className="app-header-window-control app-header-window-control--maximise"
-            aria-label={isMaximised ? 'Restore window' : 'Maximise window'}
-            title={isMaximised ? 'Restore' : 'Maximise'}
+            aria-label={maximiseControl.ariaLabel}
+            title={maximiseControl.title}
             onClick={() => void toggleWindowMaximize()}
           >
             <svg
@@ -161,13 +192,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
               aria-hidden="true"
               focusable="false"
             >
-              <path
-                d={
-                  isMaximised
-                    ? 'M5.5 6.5v7h7v-7h-7Zm2-2h7v7'
-                    : 'M6.5 4.5h-2v2M11.5 4.5h2v2M6.5 13.5h-2v-2M11.5 13.5h2v-2'
-                }
-              />
+              <path d={maximiseControl.path} />
             </svg>
           </button>
           <button
