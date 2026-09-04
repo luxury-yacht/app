@@ -5,8 +5,11 @@ import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { backend } from '@/core/backend-api/models';
 import { eventBus } from '@/core/events';
 import { requireValue } from '@/test-utils/requireValue';
+import { ApplicationMenuCommandProvider } from '@/ui/layout/ApplicationMenuCommandContext';
+import { ApplicationMenuShortcuts } from '@/ui/shortcuts/components/ApplicationMenuShortcuts';
 import { CommandPalette } from './CommandPalette';
 import type { Command } from './CommandPaletteCommands';
 
@@ -28,6 +31,11 @@ vi.mock('@hooks/useShortNames', () => ({
 
 vi.mock('@/core/refresh/client', () => ({
   fetchSnapshot: vi.fn().mockResolvedValue({ snapshot: null }),
+}));
+
+vi.mock('@/utils/platform', () => ({
+  isMacPlatform: () => false,
+  usesCustomWindowFrame: () => true,
 }));
 
 const dispatchOpenCommand = () => eventBus.emit('command-palette:open');
@@ -117,6 +125,99 @@ describe('CommandPalette keyboard integration', () => {
     });
     container.remove();
     vi.useRealTimers();
+  });
+
+  it('keeps an open palette intact when its application accelerator is pressed again', async () => {
+    const execute = (menuCommand: backend.ApplicationMenuCommand) => {
+      if (menuCommand === backend.ApplicationMenuCommand.ApplicationMenuCommandCommandPalette) {
+        eventBus.emit('command-palette:open');
+      }
+    };
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <ApplicationMenuCommandProvider execute={execute}>
+            <ApplicationMenuShortcuts />
+            <CommandPalette
+              commands={[{ id: 'first', label: 'First', category: 'Application', action: vi.fn() }]}
+            />
+          </ApplicationMenuCommandProvider>
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      eventBus.emit('command-palette:open');
+      await Promise.resolve();
+    });
+
+    const input = requireValue(
+      document.querySelector<HTMLInputElement>('.command-palette-input'),
+      'expected command palette input'
+    );
+    await act(async () => {
+      input.value = 'fir';
+      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'p',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('.command-palette')).not.toBeNull();
+    expect(input.value).toBe('fir');
+  });
+
+  it('switches an open palette into kubeconfig mode when Ctrl+O is pressed', async () => {
+    const execute = (menuCommand: backend.ApplicationMenuCommand) => {
+      if (menuCommand === backend.ApplicationMenuCommand.ApplicationMenuCommandOpenCluster) {
+        eventBus.emit('command-palette:open-kubeconfigs');
+      }
+    };
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <ApplicationMenuCommandProvider execute={execute}>
+            <ApplicationMenuShortcuts />
+            <CommandPalette
+              commands={[
+                { id: 'kc-a', label: 'cluster-a', category: 'Kubeconfigs', action: vi.fn() },
+              ]}
+            />
+          </ApplicationMenuCommandProvider>
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      eventBus.emit('command-palette:open');
+      await Promise.resolve();
+    });
+
+    const input = requireValue(
+      document.querySelector<HTMLInputElement>('.command-palette-input'),
+      'expected command palette input'
+    );
+    await act(async () => {
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'o',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('.command-palette')).not.toBeNull();
+    expect(input.placeholder).toBe('Select a kubeconfig...');
   });
 
   it('navigates and activates results through the palette surface while the input is focused', async () => {

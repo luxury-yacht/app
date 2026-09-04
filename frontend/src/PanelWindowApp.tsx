@@ -42,7 +42,6 @@ import {
   objectPanelTabSnapshot,
   tabTransferRequestFromDragPayload,
 } from '@/core/panel-windows/tabTransfer';
-import { ApplicationMenuShortcuts } from '@/ui/shortcuts/components/ApplicationMenuShortcuts';
 import { PanelWindowShortcuts } from '@/ui/shortcuts/components/PanelWindowShortcuts';
 import { reportOperationalError } from '@/utils/errorHandler';
 import '@styles/index.css';
@@ -267,7 +266,6 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
       onTabTearOff={handleTabTearOff}
       canStartTabDrag={canStartTabDrag}
     >
-      <ApplicationMenuShortcuts enabled={ready} />
       <PanelWindowShortcuts descriptor={descriptor} ready={ready} />
       <TextContextMenu />
       <AppHeader mode="panel" />

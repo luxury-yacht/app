@@ -95,11 +95,11 @@ func (s *DesktopShell) AcknowledgeWorkspaceWindowClose(ownerWindowName string) e
 	return s.acknowledgeWorkspaceClose(ownerWindowName)
 }
 
-func (s *DesktopShell) RoutePanelWindowCommand(windowName, eventName string) error {
+func (s *DesktopShell) RoutePanelWindowCommand(windowName string, command panelwindow.OwnerCommand) error {
 	if s == nil || s.routePanelCommand == nil {
 		return fmt.Errorf("panel-window registry is not available")
 	}
-	return s.routePanelCommand(windowName, eventName)
+	return s.routePanelCommand(windowName, command)
 }
 
 func (s *DesktopShell) RequestPanelObjectOpen(windowName string, ref panelwindow.ObjectReference, activeView string) error {

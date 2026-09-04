@@ -636,16 +636,9 @@ func (r *Registry) FocusPanelWindow(ownerWindowName, windowName string, panelID 
 	return nil
 }
 
-var ownerRoutedPanelCommands = map[string]struct{}{
-	"open-about": {}, "open-cluster": {}, "open-command-palette": {}, "open-settings": {},
-	"toggle-app-logs-panel": {}, "toggle-diagnostics": {}, "toggle-object-diff": {}, "toggle-sidebar": {},
-	"debug:toggle-error-overlay": {}, "debug:toggle-focus-overlay": {},
-	"debug:toggle-icon-overlay": {}, "debug:toggle-map-overlay": {}, "debug:toggle-panel-overlay": {},
-}
-
-func (r *Registry) RoutePanelWindowCommand(windowName, eventName string) error {
-	if _, allowed := ownerRoutedPanelCommands[eventName]; !allowed {
-		return fmt.Errorf("panel command %q cannot be routed", eventName)
+func (r *Registry) RoutePanelWindowCommand(windowName string, command panelwindow.OwnerCommand) error {
+	if !command.Valid() {
+		return fmt.Errorf("panel command %q cannot be routed", command)
 	}
 	descriptor, err := r.panels.Descriptor(windowName)
 	if err != nil {
@@ -654,7 +647,7 @@ func (r *Registry) RoutePanelWindowCommand(windowName, eventName string) error {
 	if !r.focusWindow(descriptor.OwnerWindowName) {
 		return fmt.Errorf("owner workspace %q is not available", descriptor.OwnerWindowName)
 	}
-	if !r.emitWindowEvent(descriptor.OwnerWindowName, eventName, nil) {
+	if !r.emitWindowEvent(descriptor.OwnerWindowName, string(command), nil) {
 		return fmt.Errorf("owner workspace %q is not available", descriptor.OwnerWindowName)
 	}
 	return nil

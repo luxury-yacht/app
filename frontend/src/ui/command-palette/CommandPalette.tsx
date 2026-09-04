@@ -912,7 +912,6 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     active: isOpen,
     blocking: true,
     suppressShortcuts: true,
-    onApplicationMenuShortcut: close,
     onKeyDown: (event) => {
       if (event.metaKey || event.ctrlKey || event.altKey) {
         return false;

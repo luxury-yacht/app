@@ -24,7 +24,9 @@ export interface ShortcutDefinition {
   description: string;
   category?: string; // For grouping in help menu
   enabled?: boolean; // Can be dynamically disabled
+  discoverable?: boolean; // Include in shortcut help even when native chrome owns dispatch
   scope?: ShortcutScope; // Application-menu accelerators may pass through transient surfaces
+  applicationMenuCommand?: string; // Typed menu identity exposed to an opted-in surface
 }
 
 export interface RegisteredShortcut extends ShortcutDefinition {

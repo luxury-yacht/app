@@ -53,22 +53,13 @@ type applicationMenuCaller struct {
 
 func (s *DesktopShell) resolveApplicationMenuCaller(windowName string) (applicationMenuCaller, error) {
 	if windowName == "" {
-		// Native menu callbacks do not carry a service context. Resolve the
-		// focused Wails window when one exists; headless tests retain the existing
-		// fallback event path.
-		if s == nil || s.application == nil || s.nativeWindowDescriptor == nil {
-			return applicationMenuCaller{}, nil
-		}
 		window, err := s.currentWindowWhenReady()
 		if err != nil {
 			return applicationMenuCaller{}, err
 		}
 		windowName = window.Name()
 	}
-	if s == nil || s.nativeWindowDescriptor == nil {
-		return applicationMenuCaller{}, fmt.Errorf("native-window registry is not available")
-	}
-	descriptor, err := s.nativeWindowDescriptor(windowName)
+	descriptor, err := s.GetNativeWindowDescriptor(windowName)
 	if err != nil {
 		return applicationMenuCaller{}, err
 	}
@@ -80,9 +71,6 @@ func (s *DesktopShell) resolveApplicationMenuCaller(windowName string) (applicat
 	case panelwindow.NativeRolePanel:
 		if descriptor.Panel == nil || descriptor.Panel.WindowName != windowName {
 			return applicationMenuCaller{}, fmt.Errorf("panel descriptor for %q is invalid", windowName)
-		}
-		if descriptor.Panel.State != panelwindow.WindowStateLive {
-			return applicationMenuCaller{}, fmt.Errorf("panel window %q is not ready", windowName)
 		}
 	default:
 		return applicationMenuCaller{}, fmt.Errorf("native window %q has unknown role %q", windowName, descriptor.Role)
@@ -116,16 +104,14 @@ func (s *DesktopShell) emitApplicationWindowEvent(
 	return nil
 }
 
-func (s *DesktopShell) emitApplicationMenuEvent(
+func (s *DesktopShell) emitOwnerApplicationMenuEvent(
 	caller applicationMenuCaller,
-	ownerRouted bool,
-	name string,
-	data ...any,
+	command panelwindow.OwnerCommand,
 ) error {
-	if ownerRouted && caller.descriptor.Role == panelwindow.NativeRolePanel {
-		return s.RoutePanelWindowCommand(caller.windowName, name)
+	if caller.descriptor.Role == panelwindow.NativeRolePanel {
+		return s.RoutePanelWindowCommand(caller.windowName, command)
 	}
-	return s.emitApplicationWindowEvent(caller.windowName, name, data...)
+	return s.emitApplicationWindowEvent(caller.windowName, string(command))
 }
 
 func (s *DesktopShell) applicationMenuWindow(windowName string) (application.Window, error) {
@@ -135,15 +121,11 @@ func (s *DesktopShell) applicationMenuWindow(windowName string) (application.Win
 	return s.workspaceWindowWhenReady(windowName)
 }
 
-func (s *DesktopShell) toggleSidebarForWindow(windowName string) error {
-	return s.toggleSidebarForCaller(applicationMenuCaller{windowName: windowName})
-}
-
 func (s *DesktopShell) toggleSidebarForCaller(caller applicationMenuCaller) error {
 	if !s.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
 	}
-	if err := s.emitApplicationMenuEvent(caller, true, "toggle-sidebar"); err != nil {
+	if err := s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandToggleSidebar); err != nil {
 		return err
 	}
 	s.sidebarVisible = !s.sidebarVisible
@@ -151,22 +133,11 @@ func (s *DesktopShell) toggleSidebarForCaller(caller applicationMenuCaller) erro
 	return nil
 }
 
-func (s *DesktopShell) toggleObjectDiffForWindow(windowName string) error {
-	if !s.runtimeAvailable() {
-		return fmt.Errorf("application context not available")
-	}
-	return s.emitApplicationWindowEvent(windowName, "toggle-object-diff")
-}
-
-func (s *DesktopShell) toggleAppLogsForWindow(windowName string) error {
-	return s.toggleAppLogsForCaller(applicationMenuCaller{windowName: windowName})
-}
-
 func (s *DesktopShell) toggleAppLogsForCaller(caller applicationMenuCaller) error {
 	if !s.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
 	}
-	if err := s.emitApplicationMenuEvent(caller, true, "toggle-app-logs-panel"); err != nil {
+	if err := s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandToggleAppLogs); err != nil {
 		return err
 	}
 	s.appLogsPanelVisible = !s.appLogsPanelVisible
@@ -177,15 +148,11 @@ func (s *DesktopShell) toggleAppLogsForCaller(caller applicationMenuCaller) erro
 	return nil
 }
 
-func (s *DesktopShell) toggleDiagnosticsForWindow(windowName string) error {
-	return s.toggleDiagnosticsForCaller(applicationMenuCaller{windowName: windowName})
-}
-
 func (s *DesktopShell) toggleDiagnosticsForCaller(caller applicationMenuCaller) error {
 	if !s.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
 	}
-	if err := s.emitApplicationMenuEvent(caller, true, "toggle-diagnostics"); err != nil {
+	if err := s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandToggleDiagnostics); err != nil {
 		return err
 	}
 	s.diagnosticsPanelVisible = !s.diagnosticsPanelVisible
@@ -197,21 +164,45 @@ func (s *DesktopShell) toggleDiagnosticsForCaller(caller applicationMenuCaller) 
 }
 
 func (s *DesktopShell) showAboutAndCheckForUpdatesForCaller(caller applicationMenuCaller) error {
-	if caller.windowName == "" {
-		s.showAboutAndCheckForUpdates()
-		return nil
-	}
-	if err := s.emitApplicationMenuEvent(caller, true, "open-about"); err != nil {
+	if err := s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandOpenAbout); err != nil {
 		return err
 	}
-	if s.checkForUpdates != nil {
-		go func() {
-			if err := s.checkForUpdates(); err != nil && s.logger != nil {
-				s.logger.Warn(fmt.Sprintf("Application update check failed: %v", err), logsources.App)
-			}
-		}()
-	}
+	s.checkForUpdatesInBackground()
 	return nil
+}
+
+func (s *DesktopShell) executeProcessApplicationMenuCommand(
+	windowName string,
+	command ApplicationMenuCommand,
+) bool {
+	switch command {
+	case ApplicationMenuCommandNewWindow:
+		s.createWorkspaceWindowFromMenu()
+	case ApplicationMenuCommandQuit:
+		s.quitApplicationFromMenu()
+	case ApplicationMenuCommandHide:
+		go s.hideApplicationFromMenu()
+	case ApplicationMenuCommandBringAllToFront:
+		go s.bringAllWindowsToFront()
+	case ApplicationMenuCommandSettings:
+		if windowName != "" {
+			return false
+		}
+		s.ShowSettings()
+	case ApplicationMenuCommandAbout:
+		if windowName != "" {
+			return false
+		}
+		s.ShowAbout()
+	case ApplicationMenuCommandCheckForUpdates:
+		if windowName != "" {
+			return false
+		}
+		s.showAboutAndCheckForUpdates()
+	default:
+		return false
+	}
+	return true
 }
 
 func (s *DesktopShell) executeApplicationWindowCommand(
@@ -243,85 +234,68 @@ func (s *DesktopShell) ExecuteApplicationMenuCommand(
 	windowName string,
 	command ApplicationMenuCommand,
 ) error {
+	if s.executeProcessApplicationMenuCommand(windowName, command) {
+		return nil
+	}
 	caller, err := s.resolveApplicationMenuCaller(windowName)
 	if err != nil {
 		return err
 	}
 
 	switch command {
-	case ApplicationMenuCommandNewWindow:
-		s.createWorkspaceWindowFromMenu()
-		return nil
 	case ApplicationMenuCommandOpenCluster:
-		return s.emitApplicationMenuEvent(caller, true, "open-cluster")
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandOpenCluster)
 	case ApplicationMenuCommandClose:
-		return s.emitApplicationMenuEvent(caller, false, "menu:close")
+		return s.emitApplicationWindowEvent(caller.windowName, "menu:close")
 	case ApplicationMenuCommandSettings:
-		if caller.windowName == "" {
-			s.ShowSettings()
-			return nil
-		}
-		return s.emitApplicationMenuEvent(caller, true, "open-settings")
-	case ApplicationMenuCommandQuit:
-		s.quitApplicationFromMenu()
-		return nil
-	case ApplicationMenuCommandHide:
-		go s.hideApplicationFromMenu()
-		return nil
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandOpenSettings)
 	case ApplicationMenuCommandCut:
-		return s.emitApplicationMenuEvent(caller, false, "menu:cut")
+		return s.emitApplicationWindowEvent(caller.windowName, "menu:cut")
 	case ApplicationMenuCommandCopy:
-		return s.emitApplicationMenuEvent(caller, false, "menu:copy")
+		return s.emitApplicationWindowEvent(caller.windowName, "menu:copy")
 	case ApplicationMenuCommandPaste:
 		text, err := s.clipboardText()
 		if err != nil {
 			return err
 		}
-		return s.emitApplicationMenuEvent(caller, false, "menu:paste", text)
+		return s.emitApplicationWindowEvent(caller.windowName, "menu:paste", text)
 	case ApplicationMenuCommandSelectAll:
-		return s.emitApplicationMenuEvent(caller, false, "menu:selectAll")
+		return s.emitApplicationWindowEvent(caller.windowName, "menu:selectAll")
 	case ApplicationMenuCommandCommandPalette:
-		return s.emitApplicationMenuEvent(caller, true, "open-command-palette")
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandOpenCommandPalette)
 	case ApplicationMenuCommandZoomIn:
-		return s.emitApplicationMenuEvent(caller, false, "zoom-in")
+		return s.emitApplicationWindowEvent(caller.windowName, "zoom-in")
 	case ApplicationMenuCommandZoomOut:
-		return s.emitApplicationMenuEvent(caller, false, "zoom-out")
+		return s.emitApplicationWindowEvent(caller.windowName, "zoom-out")
 	case ApplicationMenuCommandZoomReset:
-		return s.emitApplicationMenuEvent(caller, false, "zoom-reset")
+		return s.emitApplicationWindowEvent(caller.windowName, "zoom-reset")
 	case ApplicationMenuCommandToggleSidebar:
 		return s.toggleSidebarForCaller(caller)
 	case ApplicationMenuCommandToggleObjectDiff:
-		return s.emitApplicationMenuEvent(caller, true, "toggle-object-diff")
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandToggleObjectDiff)
 	case ApplicationMenuCommandToggleAppLogs:
 		return s.toggleAppLogsForCaller(caller)
 	case ApplicationMenuCommandToggleDiagnostics:
 		return s.toggleDiagnosticsForCaller(caller)
 	case ApplicationMenuCommandOpenInspector:
-		return s.emitApplicationMenuEvent(caller, false, "debug:open-inspector")
+		return s.emitApplicationWindowEvent(caller.windowName, "debug:open-inspector")
 	case ApplicationMenuCommandToggleFocusDebug:
-		return s.emitApplicationMenuEvent(caller, true, "debug:toggle-focus-overlay")
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandToggleFocusDebug)
 	case ApplicationMenuCommandTogglePanelDebug:
-		return s.emitApplicationMenuEvent(caller, true, "debug:toggle-panel-overlay")
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandTogglePanelDebug)
 	case ApplicationMenuCommandToggleMapDebug:
-		return s.emitApplicationMenuEvent(caller, true, "debug:toggle-map-overlay")
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandToggleMapDebug)
 	case ApplicationMenuCommandToggleIconDebug:
-		return s.emitApplicationMenuEvent(caller, true, "debug:toggle-icon-overlay")
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandToggleIconDebug)
 	case ApplicationMenuCommandToggleErrorDebug:
-		return s.emitApplicationMenuEvent(caller, true, "debug:toggle-error-overlay")
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandToggleErrorDebug)
 	case ApplicationMenuCommandMinimise,
 		ApplicationMenuCommandMaximise,
 		ApplicationMenuCommandRestore,
 		ApplicationMenuCommandToggleMaximise:
 		return s.executeApplicationWindowCommand(caller.windowName, command)
-	case ApplicationMenuCommandBringAllToFront:
-		go s.bringAllWindowsToFront()
-		return nil
 	case ApplicationMenuCommandAbout:
-		if caller.windowName == "" {
-			s.ShowAbout()
-			return nil
-		}
-		return s.emitApplicationMenuEvent(caller, true, "open-about")
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.OwnerCommandOpenAbout)
 	case ApplicationMenuCommandCheckForUpdates:
 		return s.showAboutAndCheckForUpdatesForCaller(caller)
 	default:

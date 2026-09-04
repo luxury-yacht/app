@@ -2,20 +2,18 @@ import { act, useRef } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { backend } from '@/core/backend-api/models';
-import { KeyboardProvider, useKeyboardSurface } from '@/ui/shortcuts';
+import { ApplicationMenuCommandProvider } from '@/ui/layout/ApplicationMenuCommandContext';
+import { KeyboardProvider, useKeyboardContext, useKeyboardSurface } from '@/ui/shortcuts';
 import { ApplicationMenuShortcuts } from './ApplicationMenuShortcuts';
 
 const mocks = vi.hoisted(() => ({
-  execute: vi.fn((_command: unknown) => Promise.resolve()),
+  execute: vi.fn((_command: unknown) => undefined),
   isMac: vi.fn(() => false),
-}));
-
-vi.mock('@/core/backend-api', () => ({
-  ExecuteApplicationMenuCommand: mocks.execute,
 }));
 
 vi.mock('@/utils/platform', () => ({
   isMacPlatform: mocks.isMac,
+  usesCustomWindowFrame: () => !mocks.isMac(),
 }));
 
 describe('ApplicationMenuShortcuts', () => {
@@ -24,7 +22,6 @@ describe('ApplicationMenuShortcuts', () => {
 
   beforeEach(() => {
     mocks.execute.mockClear();
-    mocks.execute.mockResolvedValue(undefined);
     mocks.isMac.mockReturnValue(false);
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -56,8 +53,10 @@ describe('ApplicationMenuShortcuts', () => {
     await act(async () => {
       root.render(
         <KeyboardProvider>
-          <ApplicationMenuShortcuts enabled={enabled} />
-          <SuppressingSurface />
+          <ApplicationMenuCommandProvider execute={mocks.execute}>
+            <ApplicationMenuShortcuts enabled={enabled} />
+            <SuppressingSurface />
+          </ApplicationMenuCommandProvider>
         </KeyboardProvider>
       );
       await Promise.resolve();
@@ -79,25 +78,44 @@ describe('ApplicationMenuShortcuts', () => {
     });
   };
 
-  it('routes close and quit through the same typed dispatcher from a suppressing surface', async () => {
+  it('routes every Windows and Linux accelerator through the shared typed dispatcher', async () => {
     await renderShortcuts();
 
-    press('w');
-    press('q');
+    const shortcuts: Array<[string, KeyboardEventInit, backend.ApplicationMenuCommand]> = [
+      ['n', {}, backend.ApplicationMenuCommand.ApplicationMenuCommandNewWindow],
+      ['o', {}, backend.ApplicationMenuCommand.ApplicationMenuCommandOpenCluster],
+      ['w', {}, backend.ApplicationMenuCommand.ApplicationMenuCommandClose],
+      [',', {}, backend.ApplicationMenuCommand.ApplicationMenuCommandSettings],
+      ['q', {}, backend.ApplicationMenuCommand.ApplicationMenuCommandQuit],
+      [
+        'p',
+        { shiftKey: true },
+        backend.ApplicationMenuCommand.ApplicationMenuCommandCommandPalette,
+      ],
+      ['=', {}, backend.ApplicationMenuCommand.ApplicationMenuCommandZoomIn],
+      ['-', {}, backend.ApplicationMenuCommand.ApplicationMenuCommandZoomOut],
+      ['0', {}, backend.ApplicationMenuCommand.ApplicationMenuCommandZoomReset],
+      ['b', {}, backend.ApplicationMenuCommand.ApplicationMenuCommandToggleSidebar],
+      ['d', {}, backend.ApplicationMenuCommand.ApplicationMenuCommandToggleObjectDiff],
+      ['l', { shiftKey: true }, backend.ApplicationMenuCommand.ApplicationMenuCommandToggleAppLogs],
+      [
+        'd',
+        { shiftKey: true },
+        backend.ApplicationMenuCommand.ApplicationMenuCommandToggleDiagnostics,
+      ],
+      ['m', {}, backend.ApplicationMenuCommand.ApplicationMenuCommandMinimise],
+      [
+        'F12',
+        { shiftKey: true },
+        backend.ApplicationMenuCommand.ApplicationMenuCommandOpenInspector,
+      ],
+    ];
+    shortcuts.forEach(([key, options]) => {
+      press(key, options);
+    });
 
-    expect(mocks.execute.mock.calls).toEqual([
-      [backend.ApplicationMenuCommand.ApplicationMenuCommandClose],
-      [backend.ApplicationMenuCommand.ApplicationMenuCommandQuit],
-    ]);
-  });
-
-  it('binds the inspector accelerator advertised by the app menu', async () => {
-    await renderShortcuts();
-
-    press('F12', { shiftKey: true });
-
-    expect(mocks.execute).toHaveBeenCalledWith(
-      backend.ApplicationMenuCommand.ApplicationMenuCommandOpenInspector
+    expect(mocks.execute.mock.calls.map(([command]) => command)).toEqual(
+      shortcuts.map(([, , command]) => command)
     );
   });
 
@@ -118,5 +136,44 @@ describe('ApplicationMenuShortcuts', () => {
     press('w');
 
     expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it('keeps native macOS accelerators discoverable in shortcut help', async () => {
+    mocks.isMac.mockReturnValue(true);
+    let getAvailable: ReturnType<typeof useKeyboardContext>['getAvailableShortcuts'] = () => [];
+    const Capture = () => {
+      const keyboard = useKeyboardContext();
+      getAvailable = keyboard.getAvailableShortcuts;
+      return null;
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <ApplicationMenuCommandProvider execute={mocks.execute}>
+            <ApplicationMenuShortcuts />
+            <Capture />
+          </ApplicationMenuCommandProvider>
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const application = getAvailable().find(({ category }) => category === 'Application');
+    expect(application?.shortcuts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'b', modifiers: expect.objectContaining({ meta: true }) }),
+        expect.objectContaining({
+          key: 'l',
+          modifiers: expect.objectContaining({ ctrl: true, shift: true }),
+        }),
+        expect.objectContaining({ key: '=', modifiers: expect.objectContaining({ meta: true }) }),
+        expect.objectContaining({
+          key: 'p',
+          modifiers: expect.objectContaining({ meta: true, shift: true }),
+        }),
+      ])
+    );
   });
 });

@@ -22,3 +22,5 @@ export const isWindowsPlatform = (): boolean => {
   const userAgent = navigator.userAgent || '';
   return /win/i.test(platform) || /windows/i.test(userAgent);
 };
+
+export const usesCustomWindowFrame = (): boolean => !isMacPlatform();

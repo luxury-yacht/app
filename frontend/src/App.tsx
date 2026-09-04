@@ -15,7 +15,7 @@ import { FavoritesProvider } from '@core/contexts/FavoritesContext';
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
 import { useViewState } from '@core/contexts/ViewStateContext';
-import { ZoomProvider } from '@core/contexts/ZoomContext';
+import { useZoom, ZoomProvider } from '@core/contexts/ZoomContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 // Error Boundary
 import { AppErrorBoundary } from '@ui/errors';
@@ -25,9 +25,11 @@ import { ApplicationMenuShortcuts, GlobalShortcuts, KeyboardProvider } from '@ui
 import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
 import { errorHandler } from '@utils/errorHandler';
 import { installTypingAssistPolicyObserver } from '@utils/inputAssistPolicy';
+import type { backend } from '@/core/backend-api/models';
 import { setActivePermissionCluster } from '@/core/capabilities';
 import { isClusterOperationalState } from '@/core/contexts/clusterLifecycleState';
 import { requestContextRefresh } from '@/core/data-access';
+import { openDevTools } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import { PanelLifecycleGuardProvider } from '@/core/panel-windows/panelLifecycleGuards';
 import { WorkspacePanelCoordinator } from '@/core/panel-windows/WorkspacePanelCoordinator';
@@ -41,6 +43,14 @@ import { autoApplyClusterTheme } from '@/core/settings/clusterThemeAutoApply';
 import { useBackendErrorHandler } from '@/hooks/useBackendErrorHandler';
 import { useSidebarResize } from '@/hooks/useSidebarResize';
 import { useWailsRuntimeEvents } from '@/hooks/useWailsRuntimeEvents';
+import {
+  ApplicationMenuCommandProvider,
+  executeBackendApplicationMenuCommand,
+} from '@/ui/layout/ApplicationMenuCommandContext';
+import {
+  dispatchWorkspaceApplicationMenuCommand,
+  type WorkspaceApplicationMenuActions,
+} from '@/ui/layout/workspaceApplicationMenuCommands';
 import { applyAppearanceOverrides, resolveAppearanceMode } from '@/utils/appearanceMode';
 
 /**
@@ -49,6 +59,7 @@ import { applyAppearanceOverrides, resolveAppearanceMode } from '@/utils/appeara
 function AppContent() {
   const viewState = useViewState();
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
+  const { resetZoom, zoomIn, zoomOut } = useZoom();
   const { getClusterState } = useClusterLifecycle();
   const selectedClusterOperational = selectedClusterId
     ? isClusterOperationalState(getClusterState(selectedClusterId))
@@ -105,9 +116,57 @@ function AppContent() {
     viewState.setIsObjectDiffOpen(!viewState.isObjectDiffOpen);
   }, [viewState]);
 
+  const handleToggleSettings = useCallback(() => {
+    viewState.setIsSettingsOpen(!viewState.isSettingsOpen);
+  }, [viewState]);
+
+  const executeApplicationMenuCommand = useCallback(
+    (menuCommand: backend.ApplicationMenuCommand) => {
+      const actions: WorkspaceApplicationMenuActions = {
+        close: () => eventBus.emit('application-menu:close'),
+        openCluster: () => eventBus.emit('command-palette:open-kubeconfigs'),
+        toggleSettings: handleToggleSettings,
+        openCommandPalette: () => eventBus.emit('command-palette:open'),
+        zoomIn,
+        zoomOut,
+        zoomReset: resetZoom,
+        toggleSidebar: viewState.toggleSidebar,
+        toggleObjectDiff: handleToggleObjectDiff,
+        toggleAppLogs: handleToggleAppLogsPanel,
+        toggleDiagnostics: handleToggleDiagnostics,
+        openInspector: () => {
+          void openDevTools().catch((error) =>
+            errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
+              source: 'application-menu-inspector',
+            })
+          );
+        },
+        toggleFocusDebug: () => eventBus.emit('debug:toggle-focus-overlay'),
+        togglePanelDebug: () => eventBus.emit('debug:toggle-panel-overlay'),
+        toggleMapDebug: () => eventBus.emit('debug:toggle-map-overlay'),
+        toggleIconDebug: () => eventBus.emit('debug:toggle-icon-overlay'),
+        toggleErrorDebug: () => eventBus.emit('debug:toggle-error-overlay'),
+        openAbout: () => viewState.setIsAboutOpen(true),
+      };
+      if (!dispatchWorkspaceApplicationMenuCommand(menuCommand, actions)) {
+        executeBackendApplicationMenuCommand(menuCommand);
+      }
+    },
+    [
+      handleToggleAppLogsPanel,
+      handleToggleDiagnostics,
+      handleToggleObjectDiff,
+      handleToggleSettings,
+      resetZoom,
+      viewState,
+      zoomIn,
+      zoomOut,
+    ]
+  );
+
   // Handle Wails runtime events (menu items, etc.)
   useWailsRuntimeEvents({
-    onOpenSettings: () => viewState.setIsSettingsOpen(true),
+    onOpenSettings: handleToggleSettings,
     onOpenAbout: () => viewState.setIsAboutOpen(true),
     onOpenCluster: () => eventBus.emit('command-palette:open-kubeconfigs'),
     onToggleSidebar: () => viewState.toggleSidebar(),
@@ -141,11 +200,11 @@ function AppContent() {
   }, []);
 
   return (
-    <>
+    <ApplicationMenuCommandProvider execute={executeApplicationMenuCommand}>
       <ApplicationMenuShortcuts />
       <GlobalShortcuts
         onToggleAppLogsPanel={handleToggleAppLogsPanel}
-        onToggleSettings={() => viewState.setIsSettingsOpen(!viewState.isSettingsOpen)}
+        onToggleSettings={handleToggleSettings}
         onRefresh={handleManualRefresh}
         isAppLogsPanelOpen={viewState.showAppLogsPanel}
         isObjectPanelOpen={viewState.showObjectPanel}
@@ -153,7 +212,7 @@ function AppContent() {
       />
       <TextContextMenu />
       <AppLayout />
-    </>
+    </ApplicationMenuCommandProvider>
   );
 }
 

@@ -575,10 +575,10 @@ func TestRegistryRoutesPanelMenuCommandsAndFocusesTheOwner(t *testing.T) {
 		return true
 	}
 
-	require.NoError(t, registry.RoutePanelWindowCommand(descriptor.WindowName, "open-settings"))
+	require.NoError(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.OwnerCommandOpenSettings))
 	require.NoError(
 		t,
-		registry.RoutePanelWindowCommand(descriptor.WindowName, "debug:toggle-panel-overlay"),
+		registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.OwnerCommandTogglePanelDebug),
 	)
 	require.Equal(t, owner.Name(), focused)
 	require.Equal(t, []string{"open-settings", "debug:toggle-panel-overlay"}, routedEvents)
@@ -1107,12 +1107,12 @@ func TestRegistryRejectsPanelCommandsAcrossOwnerAndTransportBoundaries(t *testin
 
 	t.Run("menu routing permits only owner commands and requires owner delivery", func(t *testing.T) {
 		registry, _, descriptor, _ := setup(t)
-		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, "delete-object"), "cannot be routed")
+		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.OwnerCommand("delete-object")), "cannot be routed")
 		registry.focusWindow = func(string) bool { return false }
-		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, "open-settings"), "not available")
+		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.OwnerCommandOpenSettings), "not available")
 		registry.focusWindow = func(string) bool { return true }
 		registry.emitWindowEvent = func(string, string, any) bool { return false }
-		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, "open-settings"), "not available")
+		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.OwnerCommandOpenSettings), "not available")
 	})
 
 	t.Run("object open validates identity view owner cluster and delivery", func(t *testing.T) {

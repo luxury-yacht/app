@@ -114,20 +114,26 @@ func addZoomMenuItems(viewMenu *application.Menu, app menuController) {
 	zoomInLabel := "Zoom In"
 	zoomOutLabel := "Zoom Out"
 	resetZoomLabel := "Reset Zoom"
-	zoomInAccelerator := "CmdOrCtrl+plus"
+	zoomInAccelerator := zoomInAccelerator(runtime.GOOS)
 	zoomOutAccelerator := "CmdOrCtrl+-"
 	resetZoomAccelerator := "CmdOrCtrl+0"
 	if runtime.GOOS == "windows" {
 		zoomInLabel = "Zoom In\tCtrl+="
 		zoomOutLabel = "Zoom Out\tCtrl+-"
 		resetZoomLabel = "Reset Zoom\tCtrl+0"
-		zoomInAccelerator = ""
 		zoomOutAccelerator = ""
 		resetZoomAccelerator = ""
 	}
 	addMenuText(viewMenu, zoomInLabel, zoomInAccelerator, applicationMenuCallback(app, ApplicationMenuCommandZoomIn))
 	addMenuText(viewMenu, zoomOutLabel, zoomOutAccelerator, applicationMenuCallback(app, ApplicationMenuCommandZoomOut))
 	addMenuText(viewMenu, resetZoomLabel, resetZoomAccelerator, applicationMenuCallback(app, ApplicationMenuCommandZoomReset))
+}
+
+func zoomInAccelerator(goos string) string {
+	if goos == "windows" {
+		return ""
+	}
+	return "CmdOrCtrl+="
 }
 
 func addViewToggleMenuItems(viewMenu *application.Menu, app menuController) {

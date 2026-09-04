@@ -1,40 +1,41 @@
-import { useCallback, useMemo } from 'react';
-import { ExecuteApplicationMenuCommand } from '@/core/backend-api';
-import type { backend } from '@/core/backend-api/models';
+import { useMemo } from 'react';
+import {
+  type ApplicationMenuCommandExecutor,
+  useApplicationMenuCommandExecutor,
+} from '@/ui/layout/ApplicationMenuCommandContext';
 import { applicationMenuAccelerators } from '@/ui/layout/applicationMenuCommands';
-import { reportOperationalError } from '@/utils/errorHandler';
-import { isMacPlatform } from '@/utils/platform';
+import { isMacPlatform, usesCustomWindowFrame } from '@/utils/platform';
 import { useShortcuts } from '../hooks';
 
-export function ApplicationMenuShortcuts({ enabled = true }: Readonly<{ enabled?: boolean }>) {
-  const dispatchCommand = useCallback((menuCommand: backend.ApplicationMenuCommand) => {
-    void ExecuteApplicationMenuCommand(menuCommand).catch((error) => {
-      reportOperationalError(error, {
-        source: 'ApplicationMenuShortcuts',
-        action: `execute:${menuCommand}`,
-      });
-    });
-  }, []);
+export function ApplicationMenuShortcuts({
+  enabled = true,
+  execute,
+}: Readonly<{ enabled?: boolean; execute?: ApplicationMenuCommandExecutor }>) {
+  const contextExecutor = useApplicationMenuCommandExecutor();
+  const executeCommand = execute ?? contextExecutor;
+  const macPlatform = isMacPlatform();
 
   const shortcuts = useMemo(
     () =>
-      applicationMenuAccelerators().map((accelerator) => ({
+      applicationMenuAccelerators(import.meta.env.DEV, macPlatform).map((accelerator) => ({
         key: accelerator.key,
         modifiers: accelerator.modifiers,
         description: accelerator.label,
+        applicationMenuCommand: accelerator.command,
         handler: (event?: KeyboardEvent) => {
           if (!event?.repeat) {
-            dispatchCommand(accelerator.command);
+            executeCommand(accelerator.command);
           }
           return true;
         },
       })),
-    [dispatchCommand]
+    [executeCommand, macPlatform]
   );
 
   useShortcuts(shortcuts, {
     category: 'Application',
-    enabled: enabled && !isMacPlatform(),
+    enabled: enabled && usesCustomWindowFrame(),
+    discoverable: enabled && macPlatform,
     priority: 1000,
     scope: 'application-menu',
   });

@@ -61,7 +61,7 @@ export interface KeyboardSurfaceOptions {
   blocking?: boolean;
   captureWhenActive?: boolean;
   suppressShortcuts?: boolean;
-  onApplicationMenuShortcut?: (event: KeyboardEvent) => void;
+  onApplicationMenuShortcut?: (event: KeyboardEvent, command?: string) => void;
   onKeyDown?: (event: KeyboardEvent) => KeyboardSurfaceKeyResult;
   onEscape?: (event: KeyboardEvent) => KeyboardSurfaceKeyResult;
   onNativeAction?: (context: KeyboardSurfaceNativeActionContext) => boolean | undefined;
@@ -396,7 +396,7 @@ const routeKeyboardEvent = (event: KeyboardEvent, context: KeyboardEventRoutingC
   }
   if (isApplicationMenuShortcut) {
     if (targetSurface?.suppressShortcuts) {
-      targetSurface.onApplicationMenuShortcut?.(event);
+      targetSurface.onApplicationMenuShortcut?.(event, shortcut.applicationMenuCommand);
     }
     dispatchShortcut(event, shortcut);
     return;
@@ -706,7 +706,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
 
     for (const shortcutList of shortcuts.values()) {
       for (const shortcut of shortcutList) {
-        if (shortcut.enabled || shortcut.enabled === undefined) {
+        if (shortcut.enabled !== false || shortcut.discoverable) {
           const category = shortcut.category || 'General';
           const existing = groups.get(category) || [];
           existing.push({

@@ -1341,7 +1341,6 @@ const Dropdown = <TMetadata,>({
     active: shortcutsEnabled,
     priority: 350,
     suppressShortcuts: true,
-    onApplicationMenuShortcut: closeDropdown,
     onKeyDown: handleDropdownKeyDown,
   });
 
@@ -1351,7 +1350,6 @@ const Dropdown = <TMetadata,>({
     active: isOpen,
     priority: 350,
     suppressShortcuts: true,
-    onApplicationMenuShortcut: closeDropdown,
     onKeyDown: handleDropdownKeyDown,
   });
 

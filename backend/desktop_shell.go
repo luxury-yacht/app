@@ -57,7 +57,7 @@ type DesktopShellBindings struct {
 	RequestPanelClose          func(string, string, string) error
 	AcknowledgePanelClose      func(string) error
 	AcknowledgeWorkspaceClose  func(string) error
-	RoutePanelCommand          func(string, string) error
+	RoutePanelCommand          func(string, panelwindow.OwnerCommand) error
 	RequestPanelObjectOpen     func(string, panelwindow.ObjectReference, string) error
 	AuthorizePanelObjectOpen   func(string, string, string, panelwindow.ObjectReference, string) error
 	UpdatePanelSnapshot        func(string, panelwindow.GroupSnapshot) error
@@ -90,7 +90,7 @@ type DesktopShell struct {
 	requestPanelClose          func(string, string, string) error
 	acknowledgePanelClose      func(string) error
 	acknowledgeWorkspaceClose  func(string) error
-	routePanelCommand          func(string, string) error
+	routePanelCommand          func(string, panelwindow.OwnerCommand) error
 	requestPanelObjectOpen     func(string, panelwindow.ObjectReference, string) error
 	authorizePanelObjectOpen   func(string, string, string, panelwindow.ObjectReference, string) error
 	updatePanelSnapshot        func(string, panelwindow.GroupSnapshot) error
@@ -257,7 +257,11 @@ func (s *DesktopShell) showAboutAndCheckForUpdates() {
 		return
 	}
 	s.ShowAbout()
-	if s.checkForUpdates == nil {
+	s.checkForUpdatesInBackground()
+}
+
+func (s *DesktopShell) checkForUpdatesInBackground() {
+	if s == nil || s.checkForUpdates == nil {
 		return
 	}
 	go func() {

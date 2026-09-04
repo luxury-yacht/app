@@ -133,7 +133,6 @@ export function ShortcutHelpModal({ isOpen, onClose }: Readonly<ShortcutHelpModa
     ref: modalRef,
     disabled: !shouldRender,
     suppressShortcuts: true,
-    onApplicationMenuShortcut: onClose,
     onEscape: () => {
       onClose();
       return true;

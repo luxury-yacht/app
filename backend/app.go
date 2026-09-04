@@ -58,7 +58,7 @@ type ApplicationRuntimeOptions struct {
 	RequestPanelClose          func(string, string, string) error
 	AcknowledgePanelClose      func(string) error
 	AcknowledgeWorkspaceClose  func(string) error
-	RoutePanelCommand          func(string, string) error
+	RoutePanelCommand          func(string, panelwindow.OwnerCommand) error
 	RequestPanelObjectOpen     func(string, panelwindow.ObjectReference, string) error
 	AuthorizePanelObjectOpen   func(string, string, string, panelwindow.ObjectReference, string) error
 	UpdatePanelSnapshot        func(string, panelwindow.GroupSnapshot) error

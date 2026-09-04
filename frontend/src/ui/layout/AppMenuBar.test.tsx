@@ -26,6 +26,7 @@ vi.mock('@/core/backend-api', () => ({
 vi.mock('@/utils/platform', () => ({
   isMacPlatform: platformMock.isMacPlatform,
   isWindowsPlatform: platformMock.isWindowsPlatform,
+  usesCustomWindowFrame: () => !platformMock.isMacPlatform(),
 }));
 
 vi.mock('@/utils/errorHandler', () => ({
@@ -229,7 +230,7 @@ describe('AppMenuBar', () => {
 
     expect(document.activeElement).toBe(input);
     expect(errorMock.reportOperationalError).toHaveBeenCalledWith(expect.any(Error), {
-      source: 'AppMenuBar',
+      source: 'ApplicationMenuCommands',
       action: 'execute:copy',
     });
     input.remove();

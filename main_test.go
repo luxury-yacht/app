@@ -143,7 +143,7 @@ func (registry *recordingNativeWindowRegistry) AcknowledgeWorkspaceWindowClose(s
 	return nil
 }
 
-func (registry *recordingNativeWindowRegistry) RoutePanelWindowCommand(string, string) error {
+func (registry *recordingNativeWindowRegistry) RoutePanelWindowCommand(string, panelwindow.OwnerCommand) error {
 	registry.record("route-command")
 	return nil
 }

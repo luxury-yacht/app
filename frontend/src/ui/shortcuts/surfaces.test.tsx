@@ -851,7 +851,7 @@ describe('keyboard surfaces', () => {
     expect(shortcutHandler).not.toHaveBeenCalled();
   });
 
-  it('lets an application-menu accelerator dismiss and pass through a suppressing surface', async () => {
+  it('passes command identity to an opted-in surface before dispatching an application-menu accelerator', async () => {
     const shortcutHandler = vi.fn();
     const dismissSurface = vi.fn();
 
@@ -871,6 +871,7 @@ describe('keyboard surfaces', () => {
         key: 'w',
         modifiers: { ctrl: true },
         scope: 'application-menu',
+        applicationMenuCommand: 'close',
         handler: () => {
           shortcutHandler();
           return true;
@@ -912,7 +913,7 @@ describe('keyboard surfaces', () => {
       );
     });
 
-    expect(dismissSurface).toHaveBeenCalledTimes(1);
+    expect(dismissSurface).toHaveBeenCalledWith(expect.any(KeyboardEvent), 'close');
     expect(shortcutHandler).toHaveBeenCalledTimes(1);
   });
 

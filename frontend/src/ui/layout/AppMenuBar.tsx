@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ExecuteApplicationMenuCommand } from '@/core/backend-api';
 import type { backend } from '@/core/backend-api/models';
 import { useKeyboardSurface } from '@/ui/shortcuts';
 import { formatShortcut } from '@/ui/shortcuts/utils';
-import { reportOperationalError } from '@/utils/errorHandler';
 import { isWindowsPlatform } from '@/utils/platform';
+import { useApplicationMenuCommandExecutor } from './ApplicationMenuCommandContext';
 import {
   type ApplicationMenuSection,
   buildApplicationMenuSections,
@@ -34,6 +33,7 @@ const AppMenuBar = () => {
   const triggerRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const priorFocusRef = useRef<HTMLElement | null>(null);
   const activeSection = openSectionIndex === null ? null : sections[openSectionIndex];
+  const dispatchCommand = useApplicationMenuCommandExecutor();
 
   const rememberPriorFocus = useCallback(() => {
     const active = document.activeElement;
@@ -60,15 +60,6 @@ const AppMenuBar = () => {
         triggerRefs.current[current]?.focus();
       }
       return null;
-    });
-  }, []);
-
-  const dispatchCommand = useCallback((menuCommand: backend.ApplicationMenuCommand) => {
-    void ExecuteApplicationMenuCommand(menuCommand).catch((error) => {
-      reportOperationalError(error, {
-        source: 'AppMenuBar',
-        action: `execute:${menuCommand}`,
-      });
     });
   }, []);
 

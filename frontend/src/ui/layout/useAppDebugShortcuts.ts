@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { onEvent, openDevTools } from '@/core/desktop-runtime';
+import { eventBus } from '@/core/events';
 
 interface AppDebugShortcutHandlers {
   onTogglePanelDebug: () => void;
@@ -40,6 +41,26 @@ export const useAppDebugShortcuts = ({
         dispose();
       });
     };
+  }, [
+    onToggleErrorDebug,
+    onToggleFocusDebug,
+    onToggleIconDebug,
+    onToggleMapDebug,
+    onTogglePanelDebug,
+  ]);
+
+  useEffect(() => {
+    const disposers = [
+      eventBus.on('debug:toggle-panel-overlay', onTogglePanelDebug),
+      eventBus.on('debug:toggle-focus-overlay', onToggleFocusDebug),
+      eventBus.on('debug:toggle-error-overlay', onToggleErrorDebug),
+      eventBus.on('debug:toggle-map-overlay', onToggleMapDebug),
+      eventBus.on('debug:toggle-icon-overlay', onToggleIconDebug),
+    ];
+    return () =>
+      disposers.forEach((dispose) => {
+        dispose();
+      });
   }, [
     onToggleErrorDebug,
     onToggleFocusDebug,

@@ -33,8 +33,10 @@ interface UseShortcutOptions {
   description?: string;
   category?: string;
   enabled?: boolean;
+  discoverable?: boolean;
   priority?: number;
   scope?: ShortcutScope;
+  applicationMenuCommand?: string;
 }
 
 /**
@@ -73,8 +75,10 @@ export function useShortcut(options: UseShortcutOptions) {
     description = '',
     category,
     enabled = true,
+    discoverable,
     priority,
     scope,
+    applicationMenuCommand,
   } = options;
 
   const { registerShortcut, unregisterShortcut } = useKeyboardContext();
@@ -107,7 +111,9 @@ export function useShortcut(options: UseShortcutOptions) {
       description,
       category,
       enabled,
+      discoverable,
       scope,
+      applicationMenuCommand,
     });
 
     shortcutIdRef.current = id;
@@ -123,6 +129,8 @@ export function useShortcut(options: UseShortcutOptions) {
     description,
     category,
     enabled,
+    discoverable,
+    applicationMenuCommand,
     registerShortcut,
     unregisterShortcut,
     normalizedModifiers,
@@ -143,7 +151,10 @@ export function useShortcut(options: UseShortcutOptions) {
  */
 export function useShortcuts(
   shortcuts: Array<Omit<UseShortcutOptions, 'priority'>>,
-  commonOptions?: Pick<UseShortcutOptions, 'priority' | 'category' | 'enabled' | 'scope'>
+  commonOptions?: Pick<
+    UseShortcutOptions,
+    'priority' | 'category' | 'enabled' | 'discoverable' | 'scope'
+  >
 ) {
   const { registerShortcut, unregisterShortcut } = useKeyboardContext();
   const handlerRefs = useRef<Array<UseShortcutOptions['handler']>>([]);
@@ -197,7 +208,9 @@ export function useShortcuts(
         description: merged.description || '',
         category: merged.category,
         enabled: merged.enabled ?? true,
+        discoverable: merged.discoverable,
         scope: merged.scope,
+        applicationMenuCommand: merged.applicationMenuCommand,
       });
     });
 

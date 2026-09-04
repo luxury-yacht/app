@@ -17,7 +17,7 @@ func newUIShellFixture() *uiShellFixture {
 	fixture := &uiShellFixture{}
 	fixture.shell = NewDesktopShell(nil, func() bool { return fixture.ready }, func(name string, _ ...interface{}) {
 		fixture.events = append(fixture.events, name)
-	}, NewLogger(100))
+	}, NewLogger(100), DesktopShellBindings{NativeWindowDescriptor: workspaceNativeDescriptor})
 	return fixture
 }
 
@@ -38,7 +38,7 @@ func viewMenuItem(t *testing.T, shell *DesktopShell, label string) *application.
 func TestToggleAppLogsPanelRequiresContext(t *testing.T) {
 	fixture := newUIShellFixture()
 
-	err := fixture.shell.ToggleAppLogsPanel()
+	err := fixture.shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandToggleAppLogs)
 	require.Error(t, err)
 	require.False(t, fixture.shell.IsAppLogsPanelVisible())
 }
@@ -46,7 +46,7 @@ func TestToggleAppLogsPanelRequiresContext(t *testing.T) {
 func TestToggleDiagnosticsPanelRequiresContext(t *testing.T) {
 	fixture := newUIShellFixture()
 
-	err := fixture.shell.ToggleDiagnosticsPanel()
+	err := fixture.shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandToggleDiagnostics)
 	require.Error(t, err)
 	require.False(t, fixture.shell.IsDiagnosticsPanelVisible())
 }
@@ -56,7 +56,7 @@ func TestToggleAppLogsPanelTogglesAndEmits(t *testing.T) {
 	CreateMenu(fixture.shell)
 	fixture.ready = true
 
-	err := fixture.shell.ToggleAppLogsPanel()
+	err := fixture.shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandToggleAppLogs)
 	require.NoError(t, err)
 	require.True(t, fixture.shell.IsAppLogsPanelVisible())
 	require.Equal(t, []string{"toggle-app-logs-panel"}, fixture.events)
@@ -66,7 +66,7 @@ func TestToggleAppLogsPanelTogglesAndEmits(t *testing.T) {
 func TestToggleSidebarRequiresContext(t *testing.T) {
 	fixture := newUIShellFixture()
 
-	err := fixture.shell.ToggleSidebar()
+	err := fixture.shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandToggleSidebar)
 	require.Error(t, err)
 	require.True(t, fixture.shell.IsSidebarVisible())
 }
@@ -76,7 +76,7 @@ func TestToggleSidebarTogglesAndEmits(t *testing.T) {
 	CreateMenu(fixture.shell)
 	fixture.ready = true
 
-	err := fixture.shell.ToggleSidebar()
+	err := fixture.shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandToggleSidebar)
 	require.NoError(t, err)
 	require.False(t, fixture.shell.IsSidebarVisible())
 	require.Equal(t, []string{"toggle-sidebar"}, fixture.events)
@@ -86,7 +86,7 @@ func TestToggleSidebarTogglesAndEmits(t *testing.T) {
 func TestToggleObjectDiffRequiresContext(t *testing.T) {
 	fixture := newUIShellFixture()
 
-	err := fixture.shell.ToggleObjectDiff()
+	err := fixture.shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandToggleObjectDiff)
 	require.Error(t, err)
 }
 
@@ -94,7 +94,7 @@ func TestToggleObjectDiffEmits(t *testing.T) {
 	fixture := newUIShellFixture()
 	fixture.ready = true
 
-	err := fixture.shell.ToggleObjectDiff()
+	err := fixture.shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandToggleObjectDiff)
 	require.NoError(t, err)
 	require.Equal(t, []string{"toggle-object-diff"}, fixture.events)
 }
@@ -185,7 +185,7 @@ func TestToggleDiagnosticsPanelTogglesAndEmits(t *testing.T) {
 	CreateMenu(fixture.shell)
 	fixture.ready = true
 
-	err := fixture.shell.ToggleDiagnosticsPanel()
+	err := fixture.shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandToggleDiagnostics)
 	require.NoError(t, err)
 	require.True(t, fixture.shell.IsDiagnosticsPanelVisible())
 	require.Equal(t, []string{"toggle-diagnostics"}, fixture.events)

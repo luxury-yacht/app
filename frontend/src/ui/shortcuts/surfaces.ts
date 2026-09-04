@@ -71,7 +71,7 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
         ? (context) => onNativeActionRef.current?.(context)
         : undefined,
       onApplicationMenuShortcut: hasOnApplicationMenuShortcut
-        ? (event) => onApplicationMenuShortcutRef.current?.(event)
+        ? (event, command) => onApplicationMenuShortcutRef.current?.(event, command)
         : undefined,
     };
 

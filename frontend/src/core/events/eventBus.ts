@@ -66,6 +66,7 @@ export interface AppEvents {
   // Open the command palette in its normal (search) mode — the header search
   // button.
   'command-palette:open': undefined;
+  'application-menu:close': undefined;
 
   // Auth events — bridged from Wails runtime by AuthErrorContext.
   'cluster:auth:failed': { clusterId: string };
@@ -81,6 +82,11 @@ export interface AppEvents {
   'view:reset': undefined;
   'view:toggle-diagnostics': undefined;
   'view:toggle-app-logs-panel': undefined;
+  'debug:toggle-focus-overlay': undefined;
+  'debug:toggle-panel-overlay': undefined;
+  'debug:toggle-map-overlay': undefined;
+  'debug:toggle-icon-overlay': undefined;
+  'debug:toggle-error-overlay': undefined;
   'view:open-object-diff': ObjectDiffOpenRequest;
   'cluster-tabs:order': string[];
 

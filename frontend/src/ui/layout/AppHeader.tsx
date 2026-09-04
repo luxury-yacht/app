@@ -19,7 +19,7 @@ import SessionsStatus from '@ui/status/SessionsStatus';
 import UpdateStatus from '@ui/status/UpdateStatus';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { eventBus } from '@/core/events';
-import { isMacPlatform, isWindowsPlatform } from '@/utils/platform';
+import { isMacPlatform, isWindowsPlatform, usesCustomWindowFrame } from '@/utils/platform';
 import './AppHeader.css';
 import AppMenuBar from './AppMenuBar';
 import { installDirectionalWindowResizeCursor } from './windowResizeCursor';
@@ -72,7 +72,7 @@ const isModalSurfaceOpen = () =>
 const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
   const isMac = isMacPlatform();
   const isLinux = !isMac && !isWindowsPlatform();
-  const usesCustomFrame = !isMac;
+  const usesCustomFrame = usesCustomWindowFrame();
   const [isMaximised, setIsMaximised] = useState(false);
   const maximiseControl = getMaximiseControlPresentation(isMaximised);
   const maximiseStateRequestRef = useRef(0);

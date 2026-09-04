@@ -18,8 +18,8 @@ own focus trap, backdrop, escape handling, or app-background blocking.
 - Do not add direct document listeners unless the shared layer cannot express
   the behavior.
 - Do not let command-palette or ordinary global shortcuts bypass a blocking
-  modal. Application-menu accelerators retain their platform command semantics;
-  a modal must opt in explicitly if it should dismiss itself before one runs.
+  modal. Application-menu accelerators retain their platform command semantics
+  without implicitly dismissing the modal.
 
 ## Ownership
 

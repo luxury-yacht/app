@@ -14,6 +14,7 @@ import {
 } from '@core/persistence/clusterTabOrder';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { eventBus } from '@/core/events';
 import { closeActiveClusterOrWindow } from '@/ui/navigation/closeActiveClusterOrWindow';
 import { isMacPlatform } from '@/utils/platform';
 import { KeyCodes } from '../constants';
@@ -197,6 +198,11 @@ export function GlobalShortcuts({
 
     return onEvent('menu:close', handleMenuClose);
   }, [handleCloseClusterTab]);
+
+  useEffect(
+    () => eventBus.on('application-menu:close', handleCloseClusterTab),
+    [handleCloseClusterTab]
+  );
 
   useShortcut({
     key: KeyCodes.ARROW_LEFT,

@@ -47,6 +47,7 @@ vi.mock('@core/desktop-runtime', async () => {
 vi.mock('@/utils/platform', () => ({
   isMacPlatform: platformMock.isMacPlatform,
   isWindowsPlatform: platformMock.isWindowsPlatform,
+  usesCustomWindowFrame: () => !platformMock.isMacPlatform(),
 }));
 
 describe('AppHeader', () => {

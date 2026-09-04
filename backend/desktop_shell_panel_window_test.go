@@ -78,7 +78,10 @@ func TestPanelWindowCommandsDelegateBeforeWorkspaceRuntimeReadiness(t *testing.T
 
 func TestDesktopServiceUsesTheWailsSenderForRoleAwareMenuCommands(t *testing.T) {
 	events := []string{}
-	ownerRoutes := [][2]string{}
+	ownerRoutes := []struct {
+		windowName string
+		command    panelwindow.OwnerCommand
+	}{}
 	shell := NewDesktopShell(
 		nil,
 		func() bool { return true },
@@ -107,8 +110,11 @@ func TestDesktopServiceUsesTheWailsSenderForRoleAwareMenuCommands(t *testing.T) 
 					return panelwindow.NativeDescriptor{}, fmt.Errorf("native window %q is not registered", name)
 				}
 			},
-			RoutePanelCommand: func(windowName, eventName string) error {
-				ownerRoutes = append(ownerRoutes, [2]string{windowName, eventName})
+			RoutePanelCommand: func(windowName string, command panelwindow.OwnerCommand) error {
+				ownerRoutes = append(ownerRoutes, struct {
+					windowName string
+					command    panelwindow.OwnerCommand
+				}{windowName: windowName, command: command})
 				return nil
 			},
 		},
@@ -150,9 +156,15 @@ func TestDesktopServiceUsesTheWailsSenderForRoleAwareMenuCommands(t *testing.T) 
 	for _, test := range ownerCommands {
 		require.NoError(t, service.ExecuteApplicationMenuCommand(panelContext, test.command))
 	}
-	wantOwnerRoutes := make([][2]string, 0, len(ownerCommands))
+	wantOwnerRoutes := make([]struct {
+		windowName string
+		command    panelwindow.OwnerCommand
+	}, 0, len(ownerCommands))
 	for _, test := range ownerCommands {
-		wantOwnerRoutes = append(wantOwnerRoutes, [2]string{"panel-1", test.event})
+		wantOwnerRoutes = append(wantOwnerRoutes, struct {
+			windowName string
+			command    panelwindow.OwnerCommand
+		}{windowName: "panel-1", command: panelwindow.OwnerCommand(test.event)})
 	}
 	require.Equal(t, wantOwnerRoutes, ownerRoutes)
 	require.NoError(
@@ -168,7 +180,7 @@ func TestDesktopServiceUsesTheWailsSenderForRoleAwareMenuCommands(t *testing.T) 
 	require.Equal(t, wantOwnerRoutes, ownerRoutes)
 }
 
-func TestApplicationMenuRejectsPanelCommandsUntilTheRegistryMarksTheWindowLive(t *testing.T) {
+func TestApplicationMenuAllowsPanelCommandsDuringDocking(t *testing.T) {
 	events := []string{}
 	shell := NewDesktopShell(
 		nil,
@@ -183,7 +195,7 @@ func TestApplicationMenuRejectsPanelCommandsUntilTheRegistryMarksTheWindowLive(t
 					Panel: &panelwindow.WindowDescriptor{
 						WindowName:      name,
 						OwnerWindowName: "workspace-1",
-						State:           panelwindow.WindowStateOpening,
+						State:           panelwindow.WindowStateDocking,
 					},
 				}, nil
 			},
@@ -194,13 +206,12 @@ func TestApplicationMenuRejectsPanelCommandsUntilTheRegistryMarksTheWindowLive(t
 		context.Background(), application.WindowKey, panelCommandCaller("panel-1"),
 	)
 
-	err := service.ExecuteApplicationMenuCommand(panelContext, ApplicationMenuCommandClose)
-
-	require.ErrorContains(t, err, `panel window "panel-1" is not ready`)
-	require.Empty(t, events)
+	require.NoError(t, service.ExecuteApplicationMenuCommand(panelContext, ApplicationMenuCommandClose))
+	require.NoError(t, service.ExecuteApplicationMenuCommand(panelContext, ApplicationMenuCommandQuit))
+	require.Equal(t, []string{"menu:close"}, events)
 }
 
-func TestDesktopServiceRejectsApplicationMenuCommandsWithoutAWailsSender(t *testing.T) {
+func TestDesktopServiceAllowsUntargetedApplicationMenuCommandsWithoutAWailsSender(t *testing.T) {
 	events := []string{}
 	shell := NewDesktopShell(
 		nil,
@@ -212,11 +223,11 @@ func TestDesktopServiceRejectsApplicationMenuCommandsWithoutAWailsSender(t *test
 
 	err := service.ExecuteApplicationMenuCommand(
 		context.Background(),
-		ApplicationMenuCommandOpenCluster,
+		ApplicationMenuCommandSettings,
 	)
 
-	require.ErrorContains(t, err, "application menu command requires a Wails window sender")
-	require.Empty(t, events)
+	require.NoError(t, err)
+	require.Equal(t, []string{"open-settings"}, events)
 }
 
 func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *testing.T) {
@@ -244,7 +255,7 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 		RequestPanelClose:         func(string, string, string) error { mark(); return nil },
 		AcknowledgePanelClose:     func(string) error { mark(); return nil },
 		AcknowledgeWorkspaceClose: func(string) error { mark(); return nil },
-		RoutePanelCommand:         func(string, string) error { mark(); return nil },
+		RoutePanelCommand:         func(string, panelwindow.OwnerCommand) error { mark(); return nil },
 		RequestPanelObjectOpen: func(string, panelwindow.ObjectReference, string) error {
 			mark()
 			return nil

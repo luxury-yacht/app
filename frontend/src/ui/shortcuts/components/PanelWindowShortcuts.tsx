@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { focusWindow, onEvent, openDevTools } from '@/core/desktop-runtime';
+import type { backend } from '@/core/backend-api/models';
+import { useZoom } from '@/core/contexts/ZoomContext';
+import {
+  focusWindow,
+  maximiseWindow,
+  minimiseWindow,
+  onEvent,
+  openDevTools,
+  restoreWindow,
+  toggleMaximise,
+} from '@/core/desktop-runtime';
 import type { PanelWindowDescriptor } from '@/core/panel-windows';
 import {
   acknowledgePanelWindowClose,
@@ -25,7 +35,13 @@ import {
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { useDockablePanelContext } from '@/ui/dockable';
 import { getGroupTabs } from '@/ui/dockable/tabGroupState';
+import { executeBackendApplicationMenuCommand } from '@/ui/layout/ApplicationMenuCommandContext';
 import { reportOperationalError } from '@/utils/errorHandler';
+import { ApplicationMenuShortcuts } from './ApplicationMenuShortcuts';
+import {
+  dispatchPanelApplicationMenuCommand,
+  type PanelApplicationMenuActions,
+} from './panelApplicationMenuCommands';
 
 export function PanelWindowShortcuts({
   descriptor,
@@ -36,6 +52,7 @@ export function PanelWindowShortcuts({
   const { tabGroups, focusPanel, commitTabClose, movePanelBetweenGroups } =
     useDockablePanelContext();
   const guards = usePanelLifecycleGuardRegistry();
+  const { resetZoom, zoomIn, zoomOut } = useZoom();
   const snapshotUpdateQueueRef = useRef<Promise<void>>(Promise.resolve());
   const insertedTabTransfersRef = useRef(new Map<string, string>());
   const focusLifecycleBlocker = useCallback(
@@ -54,46 +71,84 @@ export function PanelWindowShortcuts({
     [descriptor.windowName, focusPanel]
   );
 
+  const closeActiveTab = useCallback(async () => {
+    if (!ready) {
+      return;
+    }
+    const group = getGroupTabs(tabGroups, 'right') ?? getGroupTabs(tabGroups, 'bottom');
+    const activePanelId = group?.activeTab ?? descriptor.snapshot.activePanelId;
+    const tabs = group?.tabs ?? descriptor.snapshot.tabs?.map((tab) => tab.panelId) ?? [];
+    const blocker = guards.firstBlocker(activePanelId ? [activePanelId] : tabs);
+    if (blocker) {
+      focusLifecycleBlocker(blocker);
+      return;
+    }
+    if (activePanelId) {
+      await requestPanelTabClose(descriptor.windowName, activePanelId);
+    }
+  }, [descriptor, focusLifecycleBlocker, guards, ready, tabGroups]);
+
+  const requestActiveTabClose = useCallback(() => {
+    void closeActiveTab().catch((error) =>
+      reportOperationalError(error, {
+        source: 'PanelWindowShortcuts',
+        action: 'close-active-tab',
+      })
+    );
+  }, [closeActiveTab]);
+
+  const requestInspector = useCallback(() => {
+    void openDevTools().catch((error) =>
+      reportOperationalError(error, {
+        source: 'PanelWindowShortcuts',
+        action: 'open-inspector',
+      })
+    );
+  }, []);
+
+  const runWindowOperation = useCallback((action: string, operation: () => Promise<void>) => {
+    void operation().catch((error) =>
+      reportOperationalError(error, { source: 'PanelWindowShortcuts', action })
+    );
+  }, []);
+
+  const executeApplicationMenuCommand = useCallback(
+    (menuCommand: backend.ApplicationMenuCommand) => {
+      const actions: PanelApplicationMenuActions = {
+        close: requestActiveTabClose,
+        zoomIn,
+        zoomOut,
+        zoomReset: resetZoom,
+        minimise: () => runWindowOperation('minimise-window', minimiseWindow),
+        maximise: () => runWindowOperation('maximise-window', maximiseWindow),
+        restore: () => runWindowOperation('restore-window', restoreWindow),
+        toggleMaximise: () => runWindowOperation('toggle-maximise-window', toggleMaximise),
+        openInspector: requestInspector,
+      };
+      if (!dispatchPanelApplicationMenuCommand(menuCommand, actions)) {
+        executeBackendApplicationMenuCommand(menuCommand);
+      }
+    },
+    [requestActiveTabClose, requestInspector, resetZoom, runWindowOperation, zoomIn, zoomOut]
+  );
+
   useEffect(() => {
     if (!ready) {
       return;
     }
-    const closeActiveTab = async () => {
-      const group = getGroupTabs(tabGroups, 'right') ?? getGroupTabs(tabGroups, 'bottom');
-      const activePanelId = group?.activeTab ?? descriptor.snapshot.activePanelId;
-      const tabs = group?.tabs ?? descriptor.snapshot.tabs?.map((tab) => tab.panelId) ?? [];
-      const blocker = guards.firstBlocker(activePanelId ? [activePanelId] : tabs);
-      if (blocker) {
-        focusLifecycleBlocker(blocker);
-        return;
-      }
-      if (activePanelId) {
-        await requestPanelTabClose(descriptor.windowName, activePanelId);
-      }
-    };
     return onEvent('menu:close', () => {
-      void closeActiveTab().catch((error) =>
-        reportOperationalError(error, {
-          source: 'PanelWindowShortcuts',
-          action: 'close-active-tab',
-        })
-      );
+      requestActiveTabClose();
     });
-  }, [descriptor, focusLifecycleBlocker, guards, ready, tabGroups]);
+  }, [ready, requestActiveTabClose]);
 
   useEffect(() => {
     if (!ready) {
       return;
     }
     return onEvent('debug:open-inspector', () => {
-      void openDevTools().catch((error) =>
-        reportOperationalError(error, {
-          source: 'PanelWindowShortcuts',
-          action: 'open-inspector',
-        })
-      );
+      requestInspector();
     });
-  }, [ready]);
+  }, [ready, requestInspector]);
 
   useEffect(
     () =>
@@ -272,5 +327,5 @@ export function PanelWindowShortcuts({
     [descriptor, focusLifecycleBlocker, guards, tabGroups]
   );
 
-  return null;
+  return <ApplicationMenuShortcuts enabled={ready} execute={executeApplicationMenuCommand} />;
 }

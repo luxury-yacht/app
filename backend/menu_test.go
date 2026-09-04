@@ -116,17 +116,17 @@ func TestMenuEventCallbacksRequireRuntimeReadiness(t *testing.T) {
 	events := []string{}
 	app := NewDesktopShell(nil, func() bool { return ready }, func(name string, _ ...interface{}) {
 		events = append(events, name)
-	}, NewLogger(10))
+	}, NewLogger(10), DesktopShellBindings{NativeWindowDescriptor: workspaceNativeDescriptor})
 	require.Error(
 		t,
-		app.ExecuteApplicationMenuCommand("", ApplicationMenuCommandOpenCluster),
+		app.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandOpenCluster),
 	)
 	require.Empty(t, events)
 
 	ready = true
 	require.NoError(
 		t,
-		app.ExecuteApplicationMenuCommand("", ApplicationMenuCommandOpenCluster),
+		app.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandOpenCluster),
 	)
 	require.Equal(t, []string{"open-cluster"}, events)
 }
@@ -154,6 +154,11 @@ func TestViewMenuOffersCommandPalette(t *testing.T) {
 	require.Contains(t, menuLabels(findSubmenu(t, menu, "View")), "Command Palette")
 }
 
+func TestZoomInAcceleratorUsesThePhysicalEqualsKeyOnMacOS(t *testing.T) {
+	require.Equal(t, "CmdOrCtrl+=", zoomInAccelerator("darwin"))
+	require.Equal(t, "", zoomInAccelerator("windows"))
+}
+
 func TestMacApplicationMenuOffersCheckForUpdates(t *testing.T) {
 	menu := application.NewMenu()
 	addMacApplicationMenu(menu, &DesktopShell{sidebarVisible: true})
@@ -172,7 +177,7 @@ func TestDebugMenuEventsUseReadinessGuard(t *testing.T) {
 	events := []string{}
 	app := NewDesktopShell(nil, func() bool { return true }, func(name string, _ ...interface{}) {
 		events = append(events, name)
-	}, NewLogger(10))
+	}, NewLogger(10), DesktopShellBindings{NativeWindowDescriptor: workspaceNativeDescriptor})
 
 	for _, command := range []ApplicationMenuCommand{
 		ApplicationMenuCommandOpenInspector,
@@ -182,7 +187,7 @@ func TestDebugMenuEventsUseReadinessGuard(t *testing.T) {
 		ApplicationMenuCommandToggleIconDebug,
 		ApplicationMenuCommandToggleErrorDebug,
 	} {
-		require.NoError(t, app.ExecuteApplicationMenuCommand("", command))
+		require.NoError(t, app.ExecuteApplicationMenuCommand("workspace-1", command))
 	}
 
 	require.Equal(t, []string{
@@ -238,7 +243,7 @@ func TestApplicationMenuCommandsShareOneTypedRoleAwareDispatcher(t *testing.T) {
 
 	require.NoError(t, shell.ExecuteApplicationMenuCommand("", ApplicationMenuCommandNewWindow))
 	require.True(t, created)
-	require.NoError(t, shell.ExecuteApplicationMenuCommand("", ApplicationMenuCommandOpenCluster))
+	require.NoError(t, shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandOpenCluster))
 	require.Equal(t, []string{"open-cluster"}, events)
 	require.ErrorContains(
 		t,
@@ -250,6 +255,40 @@ func TestApplicationMenuCommandsShareOneTypedRoleAwareDispatcher(t *testing.T) {
 		shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommand("unknown")),
 		`unknown application menu command "unknown"`,
 	)
+}
+
+func TestUntargetedNativeApplicationCommandsDoNotRequireACurrentWindow(t *testing.T) {
+	events := []string{}
+	created := false
+	quit := false
+	checked := make(chan struct{}, 1)
+	shell := NewDesktopShell(
+		nil,
+		func() bool { return true },
+		func(name string, _ ...interface{}) { events = append(events, name) },
+		NewLogger(10),
+		DesktopShellBindings{
+			CreateWorkspaceWindow:  func() { created = true },
+			NativeWindowDescriptor: workspaceNativeDescriptor,
+			UpdateCheck:            func() error { checked <- struct{}{}; return nil },
+		},
+	)
+	shell.quitApplication = func() { quit = true }
+
+	require.NoError(t, shell.ExecuteApplicationMenuCommand("", ApplicationMenuCommandNewWindow))
+	require.NoError(t, shell.ExecuteApplicationMenuCommand("", ApplicationMenuCommandQuit))
+	require.NoError(t, shell.ExecuteApplicationMenuCommand("", ApplicationMenuCommandSettings))
+	require.NoError(t, shell.ExecuteApplicationMenuCommand("", ApplicationMenuCommandAbout))
+	require.NoError(t, shell.ExecuteApplicationMenuCommand("", ApplicationMenuCommandCheckForUpdates))
+
+	require.True(t, created)
+	require.True(t, quit)
+	require.Equal(t, []string{"open-settings", "open-about", "open-about"}, events)
+	select {
+	case <-checked:
+	case <-time.After(time.Second):
+		t.Fatal("expected update check")
+	}
 }
 
 func TestApplicationMenuCommandCatalogIsUniqueAndHandled(t *testing.T) {
@@ -292,6 +331,7 @@ func TestApplicationMenuCommandCatalogIsUniqueAndHandled(t *testing.T) {
 		func() bool { return true },
 		func(string, ...interface{}) {},
 		NewLogger(10),
+		DesktopShellBindings{NativeWindowDescriptor: workspaceNativeDescriptor},
 	)
 
 	for _, command := range commands {
@@ -299,7 +339,7 @@ func TestApplicationMenuCommandCatalogIsUniqueAndHandled(t *testing.T) {
 		require.Falsef(t, duplicate, "duplicate application menu command %q", command)
 		seen[command] = struct{}{}
 
-		err := shell.ExecuteApplicationMenuCommand("", command)
+		err := shell.ExecuteApplicationMenuCommand("workspace-1", command)
 		require.NotContains(t, fmt.Sprint(err), "unknown application menu command")
 	}
 }

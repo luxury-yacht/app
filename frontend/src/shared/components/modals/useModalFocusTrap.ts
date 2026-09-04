@@ -11,7 +11,6 @@ interface UseModalFocusTrapOptions {
   suppressShortcuts?: boolean;
   onKeyDown?: (event: KeyboardEvent) => KeyboardSurfaceKeyResult;
   onEscape?: (event: KeyboardEvent) => boolean | undefined;
-  onApplicationMenuShortcut?: (event: KeyboardEvent) => void;
 }
 
 interface OpenModalEntry {
@@ -135,7 +134,6 @@ export const useModalFocusTrap = ({
   suppressShortcuts = false,
   onKeyDown,
   onEscape,
-  onApplicationMenuShortcut,
 }: UseModalFocusTrapOptions) => {
   const modalIdRef = useRef(Symbol('modal-focus-trap'));
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
@@ -148,7 +146,6 @@ export const useModalFocusTrap = ({
     suppressShortcuts,
     onKeyDown,
     onEscape,
-    onApplicationMenuShortcut,
   });
 
   const getFocusableItems = useCallback(() => {

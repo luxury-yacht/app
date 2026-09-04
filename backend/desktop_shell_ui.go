@@ -2,23 +2,6 @@ package backend
 
 import "runtime"
 
-func (s *DesktopShell) ToggleDiagnosticsPanel() error {
-	return s.toggleDiagnosticsForWindow("")
-}
-
-func (s *DesktopShell) ToggleAppLogsPanel() error {
-	return s.toggleAppLogsForWindow("")
-}
-
-func (s *DesktopShell) ToggleSidebar() error {
-	return s.toggleSidebarForWindow("")
-}
-
-// ToggleObjectDiff emits an event that opens or closes the object diff modal.
-func (s *DesktopShell) ToggleObjectDiff() error {
-	return s.toggleObjectDiffForWindow("")
-}
-
 func (s *DesktopShell) UpdateMenu() {
 	if s == nil || !s.runtimeAvailable() || s.menu == nil {
 		return

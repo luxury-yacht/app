@@ -598,14 +598,13 @@ func (s *DesktopService) ExecuteApplicationMenuCommand(
 	ctx context.Context,
 	command ApplicationMenuCommand,
 ) error {
-	if ctx == nil {
-		return fmt.Errorf("application menu command requires a Wails window sender")
+	windowName := ""
+	if ctx != nil {
+		if caller, ok := ctx.Value(application.WindowKey).(interface{ Name() string }); ok {
+			windowName = caller.Name()
+		}
 	}
-	caller, ok := ctx.Value(application.WindowKey).(interface{ Name() string })
-	if !ok || caller.Name() == "" {
-		return fmt.Errorf("application menu command requires a Wails window sender")
-	}
-	return s.desktopShell.ExecuteApplicationMenuCommand(caller.Name(), command)
+	return s.desktopShell.ExecuteApplicationMenuCommand(windowName, command)
 }
 
 func (s *DesktopService) SaveCsvFile(defaultFilename, content string) (CatalogQueryCSVExport, error) {

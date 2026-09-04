@@ -85,7 +85,7 @@ type nativeWindowRegistry interface {
 	RequestPanelWindowClose(string, string, string) error
 	AcknowledgePanelWindowClose(string) error
 	AcknowledgeWorkspaceWindowClose(string) error
-	RoutePanelWindowCommand(string, string) error
+	RoutePanelWindowCommand(string, panelwindow.OwnerCommand) error
 	RequestPanelObjectOpen(string, panelwindow.ObjectReference, string) error
 	AuthorizePanelObjectOpen(string, string, string, panelwindow.ObjectReference, string) error
 	UpdatePanelWindowSnapshot(string, panelwindow.GroupSnapshot) error
@@ -240,12 +240,12 @@ func (bridge *windowRegistryBridge) acknowledgeWorkspaceClose(ownerWindowName st
 	return registry.AcknowledgeWorkspaceWindowClose(ownerWindowName)
 }
 
-func (bridge *windowRegistryBridge) routePanelCommand(windowName, eventName string) error {
+func (bridge *windowRegistryBridge) routePanelCommand(windowName string, command panelwindow.OwnerCommand) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
-	return registry.RoutePanelWindowCommand(windowName, eventName)
+	return registry.RoutePanelWindowCommand(windowName, command)
 }
 
 func (bridge *windowRegistryBridge) requestPanelObjectOpen(

@@ -4,6 +4,7 @@ import type { ShortcutModifiers } from '@/types/shortcuts';
 export interface ApplicationMenuAccelerator {
   key: string;
   modifiers: ShortcutModifiers;
+  macModifiers?: ShortcutModifiers;
   dispatchFromFrontend?: boolean;
 }
 
@@ -27,12 +28,17 @@ export interface ApplicationMenuSection {
 }
 
 const command = backend.ApplicationMenuCommand;
-const ctrl = (key: string, shift = false): ApplicationMenuAccelerator => ({
+const primary = (key: string, shift = false): ApplicationMenuAccelerator => ({
+  key,
+  modifiers: { ctrl: true, shift },
+  macModifiers: { meta: true, shift },
+});
+const control = (key: string, shift = false): ApplicationMenuAccelerator => ({
   key,
   modifiers: { ctrl: true, shift },
 });
 const nativeEdit = (key: string): ApplicationMenuAccelerator => ({
-  ...ctrl(key),
+  ...primary(key),
   dispatchFromFrontend: false,
 });
 const separator = (id: string): ApplicationMenuSeparator => ({ id, separator: true });
@@ -52,30 +58,30 @@ export const buildApplicationMenuSections = (
       items: [
         {
           label: 'New Window',
-          accelerator: ctrl('n'),
+          accelerator: primary('n'),
           command: command.ApplicationMenuCommandNewWindow,
         },
         separator('new-window'),
         {
           label: 'Open Cluster',
-          accelerator: ctrl('o'),
+          accelerator: primary('o'),
           command: command.ApplicationMenuCommandOpenCluster,
         },
         {
           label: 'Close',
-          accelerator: ctrl('w'),
+          accelerator: primary('w'),
           command: command.ApplicationMenuCommandClose,
         },
         separator('close'),
         {
           label: 'Settings…',
-          accelerator: ctrl(','),
+          accelerator: primary(','),
           command: command.ApplicationMenuCommandSettings,
         },
         separator('settings'),
         {
           label: windows ? 'Exit' : 'Quit',
-          accelerator: ctrl('q'),
+          accelerator: primary('q'),
           command: command.ApplicationMenuCommandQuit,
         },
       ],
@@ -112,44 +118,44 @@ export const buildApplicationMenuSections = (
       items: [
         {
           label: 'Command Palette',
-          accelerator: ctrl('p', true),
+          accelerator: primary('p', true),
           command: command.ApplicationMenuCommandCommandPalette,
         },
         separator('palette'),
         {
           label: 'Zoom In',
-          accelerator: ctrl('='),
+          accelerator: primary('='),
           command: command.ApplicationMenuCommandZoomIn,
         },
         {
           label: 'Zoom Out',
-          accelerator: ctrl('-'),
+          accelerator: primary('-'),
           command: command.ApplicationMenuCommandZoomOut,
         },
         {
           label: 'Reset Zoom',
-          accelerator: ctrl('0'),
+          accelerator: primary('0'),
           command: command.ApplicationMenuCommandZoomReset,
         },
         separator('zoom'),
         {
           label: 'Toggle Sidebar',
-          accelerator: ctrl('b'),
+          accelerator: primary('b'),
           command: command.ApplicationMenuCommandToggleSidebar,
         },
         {
           label: 'Diff Objects',
-          accelerator: ctrl('d'),
+          accelerator: primary('d'),
           command: command.ApplicationMenuCommandToggleObjectDiff,
         },
         {
           label: 'Application Logs',
-          accelerator: ctrl('l', true),
+          accelerator: control('l', true),
           command: command.ApplicationMenuCommandToggleAppLogs,
         },
         {
           label: 'Diagnostics Panel',
-          accelerator: ctrl('d', true),
+          accelerator: control('d', true),
           command: command.ApplicationMenuCommandToggleDiagnostics,
         },
       ],
@@ -160,7 +166,7 @@ export const buildApplicationMenuSections = (
       items: [
         {
           label: 'Minimize',
-          accelerator: ctrl('m'),
+          accelerator: primary('m'),
           command: command.ApplicationMenuCommandMinimise,
         },
         { label: 'Maximize', command: command.ApplicationMenuCommandMaximise },
@@ -176,7 +182,7 @@ export const buildApplicationMenuSections = (
       items: [
         {
           label: 'Open Inspector',
-          accelerator: ctrl('F12', true),
+          accelerator: primary('F12', true),
           command: command.ApplicationMenuCommandOpenInspector,
         },
         separator('inspector'),
@@ -204,7 +210,8 @@ export const buildApplicationMenuSections = (
 };
 
 export const applicationMenuAccelerators = (
-  includeDebug = import.meta.env.DEV
+  includeDebug = import.meta.env.DEV,
+  macPlatform = false
 ): Array<
   Required<Pick<ApplicationMenuCommandItem, 'command' | 'label'>> & ApplicationMenuAccelerator
 > =>
@@ -217,6 +224,14 @@ export const applicationMenuAccelerators = (
       ) {
         return [];
       }
-      return [{ command: entry.command, label: entry.label, ...entry.accelerator }];
+      const { macModifiers, ...accelerator } = entry.accelerator;
+      return [
+        {
+          command: entry.command,
+          label: entry.label,
+          ...accelerator,
+          modifiers: macPlatform && macModifiers ? macModifiers : accelerator.modifiers,
+        },
+      ];
     })
   );
