@@ -1,5 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { type RefObject, useEffect, useRef } from 'react';
 import { type KeyboardSurfaceOptions, useOptionalKeyboardContext } from './context';
+
+const forwardSurfaceHandler = <Args extends unknown[], Result>(
+  enabled: boolean,
+  handlerRef: RefObject<((...args: Args) => Result) | undefined>
+) => (enabled ? (...args: Args) => handlerRef.current?.(...args) : undefined);
 
 export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
   const keyboardContext = useOptionalKeyboardContext();
@@ -65,14 +70,13 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
       blocking,
       captureWhenActive,
       suppressShortcuts,
-      onKeyDown: hasOnKeyDown ? (event) => onKeyDownRef.current?.(event) : undefined,
-      onEscape: hasOnEscape ? (event) => onEscapeRef.current?.(event) : undefined,
-      onNativeAction: hasOnNativeAction
-        ? (context) => onNativeActionRef.current?.(context)
-        : undefined,
-      onApplicationMenuShortcut: hasOnApplicationMenuShortcut
-        ? (event, command) => onApplicationMenuShortcutRef.current?.(event, command)
-        : undefined,
+      onKeyDown: forwardSurfaceHandler(hasOnKeyDown, onKeyDownRef),
+      onEscape: forwardSurfaceHandler(hasOnEscape, onEscapeRef),
+      onNativeAction: forwardSurfaceHandler(hasOnNativeAction, onNativeActionRef),
+      onApplicationMenuShortcut: forwardSurfaceHandler(
+        hasOnApplicationMenuShortcut,
+        onApplicationMenuShortcutRef
+      ),
     };
 
     if (!surfaceIdRef.current) {

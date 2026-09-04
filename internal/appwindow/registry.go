@@ -1208,7 +1208,7 @@ func positionPanelWindowOptions(options *application.WebviewWindowOptions, owner
 	return true
 }
 
-func windowOptionsForPlatform(name string, goos string) application.WebviewWindowOptions {
+func windowOptionsForPlatform(name, goos string) application.WebviewWindowOptions {
 	backgroundType := application.BackgroundTypeTransparent
 	if goos == "windows" {
 		backgroundType = application.BackgroundTypeSolid

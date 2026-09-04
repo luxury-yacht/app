@@ -150,7 +150,7 @@ describe('useColumnResizeController', () => {
   it.each(['windows', 'linux'] as const)(
     'does not restore a finished column cursor after leaving a %s window edge',
     async (os) => {
-      const runtime = installWailsDragRuntime(os);
+      const runtime = await installWailsDragRuntime(os);
       const harness = await renderHarness();
       try {
         await act(async () => {

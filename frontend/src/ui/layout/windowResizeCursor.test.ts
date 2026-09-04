@@ -87,8 +87,8 @@ describe('frameless window resize cursor', () => {
     [1, 767, 'sw-resize'],
     [400, 767, 's-resize'],
     [1023, 767, 'se-resize'],
-  ] as const)('preserves runtime resize invocation at (%s, %s)', (clientX, clientY, edge) => {
-    const runtime = installWailsDragRuntime();
+  ] as const)('preserves runtime resize invocation at (%s, %s)', async (clientX, clientY, edge) => {
+    const runtime = await installWailsDragRuntime();
     const cleanup = installDirectionalWindowResizeCursor();
     try {
       const move = () =>

@@ -127,6 +127,8 @@ export function createViteConfig(
       globals: true,
       environment: 'jsdom',
       setupFiles: './vitest.setup.ts',
+      // Runtime contract tests import its real drag module and mock native calls.
+      server: { deps: { inline: ['@wailsio/runtime'] } },
       // The jsdom suite is memory-heavy; unconstrained CPU-count parallelism
       // can starve fork startup and cascade into unrelated test timeouts.
       maxWorkers: 4,

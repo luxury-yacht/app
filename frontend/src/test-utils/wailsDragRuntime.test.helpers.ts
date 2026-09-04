@@ -1,58 +1,76 @@
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { runInNewContext } from 'node:vm';
 import { vi } from 'vitest';
 
-// Execute the installed runtime's actual drag handler, with only its native
-// transport and layout measurements supplied by the test environment.
-export const installWailsDragRuntime = (os: 'windows' | 'linux' = 'windows') => {
-  const disposers: Array<() => void> = [];
-  const listen =
-    (target: EventTarget) =>
-    (type: string, listener: EventListener, options?: AddEventListenerOptions) => {
-      target.addEventListener(type, listener, options);
-      disposers.push(() => target.removeEventListener(type, listener, options));
-    };
-  const runtimeWindow = {
-    _wails: { environment: { OS: os }, setResizable: (_value: boolean) => undefined },
-    innerWidth: window.innerWidth,
-    innerHeight: window.innerHeight,
-    addEventListener: listen(window),
-    getComputedStyle: window.getComputedStyle.bind(window),
-    // Handlers initialise immediately on desktop; no fallback polling needed.
-    setInterval: () => 0,
-  };
+// Import the installed runtime normally; only its native transport and layout
+// measurements are supplied by the test environment.
+export const installWailsDragRuntime = async (os: 'windows' | 'linux' = 'windows') => {
+  vi.resetModules();
   const invoke = vi.fn();
-  const runtimeEntry = createRequire(import.meta.url).resolve('@wailsio/runtime');
-  const source = readFileSync(join(dirname(runtimeEntry), 'drag.js'), 'utf8').replace(
-    /^import .*;$/gm,
-    ''
-  );
-  runInNewContext(source, {
-    window: runtimeWindow,
-    document: {
-      body: document.body,
-      documentElement: { clientWidth: window.innerWidth, clientHeight: window.innerHeight },
-      addEventListener: listen(document),
-    },
-    navigator,
-    hasDOM: true,
-    canTrackButtons: () => true,
-    eventTarget: (event: MouseEvent) =>
-      event.target instanceof Element ? event.target : document.body,
+  vi.doMock('../../node_modules/@wailsio/runtime/dist/system.js', () => ({
+    invoke,
     IsWindows: () => os === 'windows',
     IsLinux: () => os === 'linux',
     IsMac: () => false,
-    GetFlag: (name: string) => name === 'frameless',
-    invoke,
-  });
-  runtimeWindow._wails.setResizable(true);
-  return {
-    invoke,
-    cleanup: () =>
-      disposers.forEach((dispose) => {
-        dispose();
-      }),
+  }));
+
+  const disposers: Array<() => void> = [];
+  const trackListeners = (target: EventTarget) => {
+    const add = target.addEventListener.bind(target);
+    return vi.spyOn(target, 'addEventListener').mockImplementation((type, listener, options) => {
+      add(type, listener, options);
+      disposers.push(() => target.removeEventListener(type, listener, options));
+    });
   };
+  const windowListeners = trackListeners(window);
+  const documentListeners = trackListeners(document);
+  const width = vi
+    .spyOn(document.documentElement, 'clientWidth', 'get')
+    .mockReturnValue(window.innerWidth);
+  const height = vi
+    .spyOn(document.documentElement, 'clientHeight', 'get')
+    .mockReturnValue(window.innerHeight);
+  const interval = vi.spyOn(window, 'setInterval');
+  const originalRuntime = Object.getOwnPropertyDescriptor(window, '_wails');
+  const runtimeState = {
+    environment: { OS: os },
+    flags: { frameless: true },
+    setResizable: (_value: boolean) => undefined,
+  };
+  Object.defineProperty(window, '_wails', {
+    configurable: true,
+    writable: true,
+    value: runtimeState,
+  });
+
+  const cleanup = () => {
+    runtimeState.setResizable(false);
+    disposers.forEach((dispose) => {
+      dispose();
+    });
+    width.mockRestore();
+    height.mockRestore();
+    if (originalRuntime) {
+      Object.defineProperty(window, '_wails', originalRuntime);
+    } else {
+      Reflect.deleteProperty(window, '_wails');
+    }
+    vi.doUnmock('../../node_modules/@wailsio/runtime/dist/system.js');
+  };
+
+  try {
+    await vi.importActual('../../node_modules/@wailsio/runtime/dist/drag.js');
+    runtimeState.setResizable(true);
+    return { invoke, cleanup };
+  } catch (error) {
+    cleanup();
+    throw error;
+  } finally {
+    windowListeners.mockRestore();
+    documentListeners.mockRestore();
+    for (const result of interval.mock.results) {
+      if (result.type === 'return') {
+        window.clearInterval(result.value);
+      }
+    }
+    interval.mockRestore();
+  }
 };

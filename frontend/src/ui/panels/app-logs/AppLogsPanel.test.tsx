@@ -286,7 +286,7 @@ describe('AppLogsPanel', () => {
 
   it('does not restore a finished log-column cursor after leaving a window edge', async () => {
     vi.useFakeTimers();
-    const runtime = installWailsDragRuntime('linux');
+    const runtime = await installWailsDragRuntime('linux');
     const { container, cleanup } = await renderPanel();
     try {
       await flushInitialLoad();
