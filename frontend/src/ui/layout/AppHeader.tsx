@@ -19,7 +19,7 @@ import SessionsStatus from '@ui/status/SessionsStatus';
 import UpdateStatus from '@ui/status/UpdateStatus';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { eventBus } from '@/core/events';
-import { isMacPlatform } from '@/utils/platform';
+import { isMacPlatform, isWindowsPlatform } from '@/utils/platform';
 import './AppHeader.css';
 import AppMenuBar from './AppMenuBar';
 import { installDirectionalWindowResizeCursor } from './windowResizeCursor';
@@ -34,6 +34,7 @@ const isModalSurfaceOpen = () =>
 
 const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
   const isMac = isMacPlatform();
+  const isLinux = !isMac && !isWindowsPlatform();
   const usesCustomFrame = !isMac;
   const [isMaximised, setIsMaximised] = useState(false);
   const maximiseStateRequestRef = useRef(0);
@@ -87,6 +88,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
   const headerClassName = [
     'app-header',
     isMac ? 'app-header--mac' : '',
+    isLinux ? 'app-header--linux' : '',
     usesCustomFrame ? 'app-header--custom-frame' : '',
   ]
     .filter(Boolean)

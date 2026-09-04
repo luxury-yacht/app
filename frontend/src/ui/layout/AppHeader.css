@@ -15,6 +15,15 @@
   padding-left: calc(80px / var(--app-zoom-factor, 1));
 }
 
+.app-header--linux::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-index-topmost);
+  pointer-events: none;
+  box-shadow: inset 0 0 0 var(--border-width) var(--color-border);
+}
+
 .app-header--custom-frame {
   padding-right: 0;
   app-region: drag;

@@ -58,6 +58,7 @@ describe('AppHeader', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     platformMock.isMacPlatform.mockReturnValue(false);
+    platformMock.isWindowsPlatform.mockReturnValue(true);
     runtimeMock.closeWindow.mockReset();
     runtimeMock.isWindowMaximised.mockReset();
     runtimeMock.isWindowMaximised.mockResolvedValue(false);
@@ -146,6 +147,17 @@ describe('AppHeader', () => {
     expect(container.textContent).not.toContain('Sessions');
     expect(container.textContent).not.toContain('Favorites');
     expect(container.querySelector('[aria-label="Command Palette"]')).toBeNull();
+    expect(container.querySelector('.app-header--linux')).toBeNull();
+  });
+
+  it('marks Linux custom frames for the shared window outline', () => {
+    platformMock.isWindowsPlatform.mockReturnValue(false);
+
+    act(() => {
+      root.render(<AppHeader mode="panel" />);
+    });
+
+    expect(container.querySelector('.app-header--linux')).not.toBeNull();
   });
 
   it('projects Wails edge detection to a directional cursor for custom frames', () => {
@@ -258,6 +270,7 @@ describe('AppHeader', () => {
     });
 
     expect(container.querySelector('.app-header--mac')).not.toBeNull();
+    expect(container.querySelector('.app-header--linux')).toBeNull();
     expect(container.querySelector('.app-header--custom-frame')).toBeNull();
     expect(container.querySelector('.app-header-window-controls')).toBeNull();
   });

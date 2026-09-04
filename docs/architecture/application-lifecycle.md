@@ -118,6 +118,9 @@ edge and corner hit testing and native resize invocation for resizable
 Windows/Linux windows. Because that runtime collapses the eight hit regions to
 four axis cursors, the custom-frame shell projects its result to the matching
 directional cursor and keeps that cursor active over descendant controls.
+Linux adds a theme-aware inset outline at the shared header boundary because
+Wails removes GTK window decorations and exposes no Linux shadow option;
+Windows and macOS retain their native decoration behavior.
 App-owned controls query the native maximise state on mount and after
 maximise/restore actions; a debounced resize sync keeps the label and glyph
 correct when a menu or window manager changes the state.

@@ -303,6 +303,22 @@ describe('strict CSS cascade contracts', () => {
     expect(body).toContain('--wails-resize: all');
   });
 
+  it('keeps the Linux window outline fixed above app content without intercepting input', () => {
+    const appHeaderCSS = readProjectFile('src/ui/layout/AppHeader.css');
+    const linuxOutline = appHeaderCSS.match(/\.app-header--linux::after \{([\s\S]*?)\}/)?.[1];
+
+    expect(linuxOutline).toContain('content: ""');
+    expect(linuxOutline).toContain('position: fixed');
+    expect(linuxOutline).toContain('inset: 0');
+    expect(linuxOutline).toContain('z-index: var(--z-index-topmost)');
+    expect(linuxOutline).toContain('pointer-events: none');
+    expect(linuxOutline).toContain(
+      'box-shadow: inset 0 0 0 var(--border-width) var(--color-border)'
+    );
+    expect(appHeaderCSS).not.toContain('.app-header--custom-frame::after');
+    expect(appHeaderCSS).not.toContain('.app-header--mac::after');
+  });
+
   it('keeps the native directional resize cursor above descendant cursor rules', () => {
     const windowResizeCursorCSS = readProjectFile('src/ui/layout/windowResizeCursor.css');
     const directionalCursors = [
