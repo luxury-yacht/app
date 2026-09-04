@@ -5,6 +5,7 @@
  * Re-exports public APIs for the UI layer.
  */
 
+export { ApplicationMenuShortcuts } from './components/ApplicationMenuShortcuts';
 export { GlobalShortcuts } from './components/GlobalShortcuts';
 // Main exports for keyboard/shortcut module
 export { KeyboardProvider, useKeyboardContext } from './context';

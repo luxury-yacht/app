@@ -7,7 +7,7 @@ import (
 )
 
 type menuController interface {
-	ExecuteWorkspaceMenuCommand(string, WorkspaceMenuCommand) error
+	ExecuteApplicationMenuCommand(string, ApplicationMenuCommand) error
 	IsSidebarVisible() bool
 	IsAppLogsPanelVisible() bool
 	IsDiagnosticsPanelVisible() bool
@@ -52,20 +52,20 @@ func createApplicationMenu(appMenu *application.Menu, app menuController) {
 
 func addMacApplicationMenu(appMenu *application.Menu, app menuController) {
 	appSubmenu := appMenu.AddSubmenu("Luxury Yacht")
-	addMenuText(appSubmenu, "About Luxury Yacht", "", workspaceMenuCallback(app, WorkspaceMenuCommandAbout))
-	addMenuText(appSubmenu, "Check for Updates…", "", workspaceMenuCallback(app, WorkspaceMenuCommandCheckForUpdates))
+	addMenuText(appSubmenu, "About Luxury Yacht", "", applicationMenuCallback(app, ApplicationMenuCommandAbout))
+	addMenuText(appSubmenu, "Check for Updates…", "", applicationMenuCallback(app, ApplicationMenuCommandCheckForUpdates))
 	appSubmenu.AddSeparator()
-	addMenuText(appSubmenu, "Settings...", "CmdOrCtrl+,", workspaceMenuCallback(app, WorkspaceMenuCommandSettings))
-	addMenuText(appSubmenu, "Hide Luxury Yacht", "CmdOrCtrl+h", workspaceMenuCallback(app, WorkspaceMenuCommandHide))
-	addMenuText(appSubmenu, "Quit", "CmdOrCtrl+q", workspaceMenuCallback(app, WorkspaceMenuCommandQuit))
+	addMenuText(appSubmenu, "Settings...", "CmdOrCtrl+,", applicationMenuCallback(app, ApplicationMenuCommandSettings))
+	addMenuText(appSubmenu, "Hide Luxury Yacht", "CmdOrCtrl+h", applicationMenuCallback(app, ApplicationMenuCommandHide))
+	addMenuText(appSubmenu, "Quit", "CmdOrCtrl+q", applicationMenuCallback(app, ApplicationMenuCommandQuit))
 }
 
 func addFileMenu(appMenu *application.Menu, app menuController) {
 	fileMenu := appMenu.AddSubmenu("File")
-	addMenuText(fileMenu, "New Window", "CmdOrCtrl+n", workspaceMenuCallback(app, WorkspaceMenuCommandNewWindow))
+	addMenuText(fileMenu, "New Window", "CmdOrCtrl+n", applicationMenuCallback(app, ApplicationMenuCommandNewWindow))
 	fileMenu.AddSeparator()
-	addMenuText(fileMenu, "Open Cluster", "CmdOrCtrl+o", workspaceMenuCallback(app, WorkspaceMenuCommandOpenCluster))
-	addMenuText(fileMenu, "Close", "CmdOrCtrl+w", workspaceMenuCallback(app, WorkspaceMenuCommandClose))
+	addMenuText(fileMenu, "Open Cluster", "CmdOrCtrl+o", applicationMenuCallback(app, ApplicationMenuCommandOpenCluster))
+	addMenuText(fileMenu, "Close", "CmdOrCtrl+w", applicationMenuCallback(app, ApplicationMenuCommandClose))
 	if runtime.GOOS != "darwin" {
 		addDesktopFileMenuItems(fileMenu, app)
 	}
@@ -73,34 +73,34 @@ func addFileMenu(appMenu *application.Menu, app menuController) {
 
 func addDesktopFileMenuItems(fileMenu *application.Menu, app menuController) {
 	fileMenu.AddSeparator()
-	addMenuText(fileMenu, "Settings...", "CmdOrCtrl+,", workspaceMenuCallback(app, WorkspaceMenuCommandSettings))
+	addMenuText(fileMenu, "Settings...", "CmdOrCtrl+,", applicationMenuCallback(app, ApplicationMenuCommandSettings))
 	fileMenu.AddSeparator()
 	exitLabel := "Quit"
 	if runtime.GOOS == "windows" {
 		exitLabel = "Exit"
 	}
-	addMenuText(fileMenu, exitLabel, "CmdOrCtrl+q", workspaceMenuCallback(app, WorkspaceMenuCommandQuit))
+	addMenuText(fileMenu, exitLabel, "CmdOrCtrl+q", applicationMenuCallback(app, ApplicationMenuCommandQuit))
 }
 
-func workspaceMenuCallback(app menuController, command WorkspaceMenuCommand) func() {
+func applicationMenuCallback(app menuController, command ApplicationMenuCommand) func() {
 	return func() {
-		if err := app.ExecuteWorkspaceMenuCommand("", command); err != nil {
-			println("Failed to execute workspace menu command:", err.Error())
+		if err := app.ExecuteApplicationMenuCommand("", command); err != nil {
+			println("Failed to execute application menu command:", err.Error())
 		}
 	}
 }
 
 func createEditMenu(appMenu *application.Menu, app menuController) {
 	editMenu := appMenu.AddSubmenu("Edit")
-	addMenuText(editMenu, "Cut", "CmdOrCtrl+x", workspaceMenuCallback(app, WorkspaceMenuCommandCut))
-	addMenuText(editMenu, "Copy", "CmdOrCtrl+c", workspaceMenuCallback(app, WorkspaceMenuCommandCopy))
-	addMenuText(editMenu, "Paste", "CmdOrCtrl+v", workspaceMenuCallback(app, WorkspaceMenuCommandPaste))
-	addMenuText(editMenu, "Select All", "CmdOrCtrl+a", workspaceMenuCallback(app, WorkspaceMenuCommandSelectAll))
+	addMenuText(editMenu, "Cut", "CmdOrCtrl+x", applicationMenuCallback(app, ApplicationMenuCommandCut))
+	addMenuText(editMenu, "Copy", "CmdOrCtrl+c", applicationMenuCallback(app, ApplicationMenuCommandCopy))
+	addMenuText(editMenu, "Paste", "CmdOrCtrl+v", applicationMenuCallback(app, ApplicationMenuCommandPaste))
+	addMenuText(editMenu, "Select All", "CmdOrCtrl+a", applicationMenuCallback(app, ApplicationMenuCommandSelectAll))
 }
 
 func createViewMenu(appMenu *application.Menu, app menuController) {
 	viewMenu := appMenu.AddSubmenu("View")
-	addMenuText(viewMenu, "Command Palette", "CmdOrCtrl+Shift+p", workspaceMenuCallback(app, WorkspaceMenuCommandCommandPalette))
+	addMenuText(viewMenu, "Command Palette", "CmdOrCtrl+Shift+p", applicationMenuCallback(app, ApplicationMenuCommandCommandPalette))
 	viewMenu.AddSeparator()
 	addZoomMenuItems(viewMenu, app)
 	viewMenu.AddSeparator()
@@ -125,9 +125,9 @@ func addZoomMenuItems(viewMenu *application.Menu, app menuController) {
 		zoomOutAccelerator = ""
 		resetZoomAccelerator = ""
 	}
-	addMenuText(viewMenu, zoomInLabel, zoomInAccelerator, workspaceMenuCallback(app, WorkspaceMenuCommandZoomIn))
-	addMenuText(viewMenu, zoomOutLabel, zoomOutAccelerator, workspaceMenuCallback(app, WorkspaceMenuCommandZoomOut))
-	addMenuText(viewMenu, resetZoomLabel, resetZoomAccelerator, workspaceMenuCallback(app, WorkspaceMenuCommandZoomReset))
+	addMenuText(viewMenu, zoomInLabel, zoomInAccelerator, applicationMenuCallback(app, ApplicationMenuCommandZoomIn))
+	addMenuText(viewMenu, zoomOutLabel, zoomOutAccelerator, applicationMenuCallback(app, ApplicationMenuCommandZoomOut))
+	addMenuText(viewMenu, resetZoomLabel, resetZoomAccelerator, applicationMenuCallback(app, ApplicationMenuCommandZoomReset))
 }
 
 func addViewToggleMenuItems(viewMenu *application.Menu, app menuController) {
@@ -135,59 +135,59 @@ func addViewToggleMenuItems(viewMenu *application.Menu, app menuController) {
 	if !app.IsSidebarVisible() {
 		sidebarText = "Show Sidebar"
 	}
-	addMenuText(viewMenu, sidebarText, "CmdOrCtrl+b", workspaceMenuCallback(app, WorkspaceMenuCommandToggleSidebar))
-	addMenuText(viewMenu, "Diff Objects", "CmdOrCtrl+d", workspaceMenuCallback(app, WorkspaceMenuCommandToggleObjectDiff))
+	addMenuText(viewMenu, sidebarText, "CmdOrCtrl+b", applicationMenuCallback(app, ApplicationMenuCommandToggleSidebar))
+	addMenuText(viewMenu, "Diff Objects", "CmdOrCtrl+d", applicationMenuCallback(app, ApplicationMenuCommandToggleObjectDiff))
 
 	logsText := "Show Application Logs"
 	if app.IsAppLogsPanelVisible() {
 		logsText = "Hide Application Logs"
 	}
-	addMenuText(viewMenu, logsText, "Ctrl+Shift+l", workspaceMenuCallback(app, WorkspaceMenuCommandToggleAppLogs))
+	addMenuText(viewMenu, logsText, "Ctrl+Shift+l", applicationMenuCallback(app, ApplicationMenuCommandToggleAppLogs))
 
 	diagnosticsText := "Show Diagnostics Panel"
 	if app.IsDiagnosticsPanelVisible() {
 		diagnosticsText = "Hide Diagnostics Panel"
 	}
-	addMenuText(viewMenu, diagnosticsText, "Ctrl+Shift+d", workspaceMenuCallback(app, WorkspaceMenuCommandToggleDiagnostics))
+	addMenuText(viewMenu, diagnosticsText, "Ctrl+Shift+d", applicationMenuCallback(app, ApplicationMenuCommandToggleDiagnostics))
 }
 
 func createDebugMenu(appMenu *application.Menu, app menuController) {
 	debugMenu := appMenu.AddSubmenu("Debug")
-	addMenuText(debugMenu, "Open Inspector", "CmdOrCtrl+Shift+f12", workspaceMenuCallback(app, WorkspaceMenuCommandOpenInspector))
+	addMenuText(debugMenu, "Open Inspector", "CmdOrCtrl+Shift+f12", applicationMenuCallback(app, ApplicationMenuCommandOpenInspector))
 	debugMenu.AddSeparator()
-	addDebugOverlayMenuItem(debugMenu, app, "Keyboard Focus Overlay", "k", WorkspaceMenuCommandToggleFocusDebug)
-	addDebugOverlayMenuItem(debugMenu, app, "Panel Debug Overlay", "p", WorkspaceMenuCommandTogglePanelDebug)
-	addDebugOverlayMenuItem(debugMenu, app, "Map Debug Overlay", "m", WorkspaceMenuCommandToggleMapDebug)
-	addDebugOverlayMenuItem(debugMenu, app, "Icon Debug Overlay", "i", WorkspaceMenuCommandToggleIconDebug)
-	addDebugOverlayMenuItem(debugMenu, app, "Error Boundary Tests", "e", WorkspaceMenuCommandToggleErrorDebug)
+	addDebugOverlayMenuItem(debugMenu, app, "Keyboard Focus Overlay", "k", ApplicationMenuCommandToggleFocusDebug)
+	addDebugOverlayMenuItem(debugMenu, app, "Panel Debug Overlay", "p", ApplicationMenuCommandTogglePanelDebug)
+	addDebugOverlayMenuItem(debugMenu, app, "Map Debug Overlay", "m", ApplicationMenuCommandToggleMapDebug)
+	addDebugOverlayMenuItem(debugMenu, app, "Icon Debug Overlay", "i", ApplicationMenuCommandToggleIconDebug)
+	addDebugOverlayMenuItem(debugMenu, app, "Error Boundary Tests", "e", ApplicationMenuCommandToggleErrorDebug)
 }
 
-func addDebugOverlayMenuItem(debugMenu *application.Menu, app menuController, label, key string, command WorkspaceMenuCommand) {
-	addMenuText(debugMenu, label, "Ctrl+OptionOrAlt+"+key, workspaceMenuCallback(app, command))
+func addDebugOverlayMenuItem(debugMenu *application.Menu, app menuController, label, key string, command ApplicationMenuCommand) {
+	addMenuText(debugMenu, label, "Ctrl+OptionOrAlt+"+key, applicationMenuCallback(app, command))
 }
 
 func createWindowMenu(appMenu *application.Menu, app menuController) {
 	windowMenu := appMenu.AddSubmenu("Window")
-	addWindowMenuAction(windowMenu, app, "Minimize", "CmdOrCtrl+m", WorkspaceMenuCommandMinimise)
+	addWindowMenuAction(windowMenu, app, "Minimize", "CmdOrCtrl+m", ApplicationMenuCommandMinimise)
 	switch runtime.GOOS {
 	case "darwin":
 		addDarwinWindowMenu(windowMenu, app)
 	case "windows":
-		addWindowMenuAction(windowMenu, app, "Maximize", "", WorkspaceMenuCommandMaximise)
-		addWindowMenuAction(windowMenu, app, "Restore", "", WorkspaceMenuCommandRestore)
+		addWindowMenuAction(windowMenu, app, "Maximize", "", ApplicationMenuCommandMaximise)
+		addWindowMenuAction(windowMenu, app, "Restore", "", ApplicationMenuCommandRestore)
 	default:
-		addWindowMenuAction(windowMenu, app, "Maximize", "", WorkspaceMenuCommandToggleMaximise)
+		addWindowMenuAction(windowMenu, app, "Maximize", "", ApplicationMenuCommandToggleMaximise)
 	}
 }
 
-func addWindowMenuAction(windowMenu *application.Menu, app menuController, label, accelerator string, command WorkspaceMenuCommand) {
-	addMenuText(windowMenu, label, accelerator, workspaceMenuCallback(app, command))
+func addWindowMenuAction(windowMenu *application.Menu, app menuController, label, accelerator string, command ApplicationMenuCommand) {
+	addMenuText(windowMenu, label, accelerator, applicationMenuCallback(app, command))
 }
 
 func addDarwinWindowMenu(windowMenu *application.Menu, app menuController) {
-	addWindowMenuAction(windowMenu, app, "Zoom", "", WorkspaceMenuCommandToggleMaximise)
+	addWindowMenuAction(windowMenu, app, "Zoom", "", ApplicationMenuCommandToggleMaximise)
 	windowMenu.AddSeparator()
-	addMenuText(windowMenu, "Bring All to Front", "", workspaceMenuCallback(app, WorkspaceMenuCommandBringAllToFront))
+	addMenuText(windowMenu, "Bring All to Front", "", applicationMenuCallback(app, ApplicationMenuCommandBringAllToFront))
 	windowMenu.AddSeparator()
 }
 
@@ -200,8 +200,8 @@ func createHelpMenu(appMenu *application.Menu, app menuController) {
 
 func addDesktopHelpMenu(appMenu *application.Menu, app menuController) {
 	helpMenu := appMenu.AddSubmenu("Help")
-	addMenuText(helpMenu, "About Luxury Yacht", "", workspaceMenuCallback(app, WorkspaceMenuCommandAbout))
-	addMenuText(helpMenu, "Check for Updates…", "", workspaceMenuCallback(app, WorkspaceMenuCommandCheckForUpdates))
+	addMenuText(helpMenu, "About Luxury Yacht", "", applicationMenuCallback(app, ApplicationMenuCommandAbout))
+	addMenuText(helpMenu, "Check for Updates…", "", applicationMenuCallback(app, ApplicationMenuCommandCheckForUpdates))
 }
 
 func (s *DesktopShell) setApplicationMenu(menu *application.Menu) {
@@ -221,8 +221,8 @@ func (s *DesktopShell) hideApplicationFromMenu() {
 }
 
 func (s *DesktopShell) quitApplicationFromMenu() {
-	if s != nil && s.runtimeAvailable() && s.application != nil {
-		s.application.Quit()
+	if s != nil && s.runtimeAvailable() {
+		s.QuitApplication()
 	}
 }
 

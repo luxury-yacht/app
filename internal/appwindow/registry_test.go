@@ -568,14 +568,20 @@ func TestRegistryRoutesPanelMenuCommandsAndFocusesTheOwner(t *testing.T) {
 		focused = windowName
 		return true
 	}
+	routedEvents := []string{}
 	registry.emitWindowEvent = func(target, eventName string, _ any) bool {
 		require.Equal(t, owner.Name(), target)
-		require.Equal(t, "open-settings", eventName)
+		routedEvents = append(routedEvents, eventName)
 		return true
 	}
 
 	require.NoError(t, registry.RoutePanelWindowCommand(descriptor.WindowName, "open-settings"))
+	require.NoError(
+		t,
+		registry.RoutePanelWindowCommand(descriptor.WindowName, "debug:toggle-panel-overlay"),
+	)
 	require.Equal(t, owner.Name(), focused)
+	require.Equal(t, []string{"open-settings", "debug:toggle-panel-overlay"}, routedEvents)
 }
 
 func TestRegistryShowsPanelOnlyAfterMatchingReadyAcknowledgement(t *testing.T) {

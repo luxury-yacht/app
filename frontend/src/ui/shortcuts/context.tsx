@@ -61,6 +61,7 @@ export interface KeyboardSurfaceOptions {
   blocking?: boolean;
   captureWhenActive?: boolean;
   suppressShortcuts?: boolean;
+  onApplicationMenuShortcut?: (event: KeyboardEvent) => void;
   onKeyDown?: (event: KeyboardEvent) => KeyboardSurfaceKeyResult;
   onEscape?: (event: KeyboardEvent) => KeyboardSurfaceKeyResult;
   onNativeAction?: (context: KeyboardSurfaceNativeActionContext) => boolean | undefined;
@@ -343,11 +344,7 @@ const findHighestPriorityShortcut = (
   );
 };
 
-const dispatchRegisteredShortcut = (event: KeyboardEvent, shortcuts: ShortcutMap) => {
-  const shortcut = findHighestPriorityShortcut(event, shortcuts);
-  if (!shortcut) {
-    return;
-  }
+const dispatchShortcut = (event: KeyboardEvent, shortcut: RegisteredShortcut) => {
   const result = shortcut.handler(event);
   if (result !== false) {
     event.preventDefault();
@@ -389,13 +386,25 @@ const routeKeyboardEvent = (event: KeyboardEvent, context: KeyboardEventRoutingC
   if (routeTargetSurfaceKey(event, targetSurface)) {
     return;
   }
-  if (targetSurface?.suppressShortcuts) {
+  const shortcut = findHighestPriorityShortcut(event, context.shortcuts);
+  if (!shortcut) {
+    return;
+  }
+  const isApplicationMenuShortcut = shortcut.scope === 'application-menu';
+  if (targetSurface?.suppressShortcuts && !isApplicationMenuShortcut) {
+    return;
+  }
+  if (isApplicationMenuShortcut) {
+    if (targetSurface?.suppressShortcuts) {
+      targetSurface.onApplicationMenuShortcut?.(event);
+    }
+    dispatchShortcut(event, shortcut);
     return;
   }
   if (shouldDeferToNativeEditing(event)) {
     return;
   }
-  dispatchRegisteredShortcut(event, context.shortcuts);
+  dispatchShortcut(event, shortcut);
 };
 
 export function KeyboardProvider({ children, disabled = false }: Readonly<KeyboardProviderProps>) {

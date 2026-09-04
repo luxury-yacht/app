@@ -283,97 +283,12 @@ describe('GlobalShortcuts', () => {
     expect(refreshHandlerCtrl).toHaveBeenCalledTimes(1);
   });
 
-  it('toggles sidebar when the shortcut fires', async () => {
-    const toggleSidebar = vi.fn();
-    await renderComponent({ onToggleSidebar: toggleSidebar });
-
-    act(() => {
-      findShortcut('b').handler();
-    });
-
-    expect(toggleSidebar).toHaveBeenCalledTimes(1);
-  });
-
-  it('toggles Application Logs Panel via Ctrl+Shift+L shortcut', async () => {
-    const toggleAppLogsPanel = vi.fn();
-    await renderComponent({ onToggleAppLogsPanel: toggleAppLogsPanel });
-
-    act(() => {
-      findShortcut('l', { ctrl: true, shift: true }).handler();
-    });
-
-    expect(toggleAppLogsPanel).toHaveBeenCalledTimes(1);
-  });
-
-  it('toggles diagnostics panel via Ctrl+Shift+D shortcut', async () => {
-    const toggleDiagnostics = vi.fn();
-    await renderComponent({ onToggleDiagnostics: toggleDiagnostics });
-
-    act(() => {
-      findShortcut('d', { ctrl: true, shift: true }).handler();
-    });
-
-    expect(toggleDiagnostics).toHaveBeenCalledTimes(1);
-  });
-
   it('does not register an active sessions shortcut', async () => {
     isMacPlatformMock.mockReturnValue(true);
     registeredShortcuts.length = 0;
     await renderComponent({});
 
     expect(() => findShortcut('s', { meta: true, shift: true })).toThrow('not registered');
-  });
-
-  it('toggles object diff viewer via Cmd+D shortcut', async () => {
-    const toggleDiff = vi.fn();
-    isMacPlatformMock.mockReturnValue(true);
-    registeredShortcuts.length = 0;
-    await renderComponent({ onToggleObjectDiff: toggleDiff });
-
-    act(() => {
-      findShortcut('d', { meta: true }).handler();
-    });
-
-    expect(toggleDiff).toHaveBeenCalledTimes(1);
-  });
-
-  it('toggles object diff viewer via Ctrl+D shortcut', async () => {
-    const toggleDiff = vi.fn();
-    isMacPlatformMock.mockReturnValue(false);
-    registeredShortcuts.length = 0;
-    await renderComponent({ onToggleObjectDiff: toggleDiff });
-
-    act(() => {
-      findShortcut('d', { ctrl: true }).handler();
-    });
-
-    expect(toggleDiff).toHaveBeenCalledTimes(1);
-  });
-
-  it('invokes settings toggle when Cmd+, shortcut fires', async () => {
-    const toggleSettings = vi.fn();
-    isMacPlatformMock.mockReturnValue(true);
-    registeredShortcuts.length = 0;
-    await renderComponent({ onToggleSettings: toggleSettings });
-
-    act(() => {
-      findShortcut(',', { meta: true }).handler();
-    });
-
-    expect(toggleSettings).toHaveBeenCalledTimes(1);
-  });
-
-  it('invokes settings toggle when Ctrl+, shortcut fires', async () => {
-    const toggleSettings = vi.fn();
-    isMacPlatformMock.mockReturnValue(false);
-    registeredShortcuts.length = 0;
-    await renderComponent({ onToggleSettings: toggleSettings });
-
-    act(() => {
-      findShortcut(',', { ctrl: true }).handler();
-    });
-
-    expect(toggleSettings).toHaveBeenCalledTimes(1);
   });
 
   it('closes the active cluster tab on menu:close when multiple tabs open', async () => {

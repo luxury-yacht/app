@@ -80,6 +80,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
     active: true,
     priority: 925,
     suppressShortcuts: true,
+    onApplicationMenuShortcut: onClose,
     onEscape: () => {
       onClose();
       return true;

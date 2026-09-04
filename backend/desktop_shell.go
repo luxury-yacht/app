@@ -47,7 +47,6 @@ type DesktopShellBindings struct {
 	UpdateCheck                func() error
 	KubeconfigSearchPaths      func() ([]string, error)
 	CreateWorkspaceWindow      func()
-	IsWorkspaceWindow          func(string) bool
 	NativeWindowDescriptor     func(string) (panelwindow.NativeDescriptor, error)
 	BeginPanelWindowOpen       func(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	AcknowledgePanelReady      func(string, string) (panelwindow.WindowDescriptor, error)
@@ -81,7 +80,6 @@ type DesktopShell struct {
 	logger                     *Logger
 	menu                       *application.Menu
 	createWorkspaceWindow      func()
-	isWorkspaceWindow          func(string) bool
 	nativeWindowDescriptor     func(string) (panelwindow.NativeDescriptor, error)
 	beginPanelWindowOpen       func(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	acknowledgePanelReady      func(string, string) (panelwindow.WindowDescriptor, error)
@@ -135,7 +133,6 @@ func NewDesktopShell(
 		shell.checkForUpdates = bindings[0].UpdateCheck
 		shell.kubeconfigSearchPaths = bindings[0].KubeconfigSearchPaths
 		shell.createWorkspaceWindow = bindings[0].CreateWorkspaceWindow
-		shell.isWorkspaceWindow = bindings[0].IsWorkspaceWindow
 		shell.nativeWindowDescriptor = bindings[0].NativeWindowDescriptor
 		shell.beginPanelWindowOpen = bindings[0].BeginPanelWindowOpen
 		shell.acknowledgePanelReady = bindings[0].AcknowledgePanelReady

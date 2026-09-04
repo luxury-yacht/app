@@ -6,9 +6,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+func workspaceNativeDescriptor(name string) (panelwindow.NativeDescriptor, error) {
+	if name != "workspace-1" {
+		return panelwindow.NativeDescriptor{}, fmt.Errorf("native window %q is not registered", name)
+	}
+	return panelwindow.NativeDescriptor{
+		SchemaVersion: panelwindow.NativeDescriptorSchemaVersion,
+		Role:          panelwindow.NativeRoleWorkspace,
+		Workspace:     &panelwindow.WorkspaceDescriptor{WindowName: name},
+	}, nil
+}
 
 func menuItems(menu *application.Menu) []*application.MenuItem {
 	items := []*application.MenuItem{}
@@ -107,14 +119,14 @@ func TestMenuEventCallbacksRequireRuntimeReadiness(t *testing.T) {
 	}, NewLogger(10))
 	require.Error(
 		t,
-		app.ExecuteWorkspaceMenuCommand("", WorkspaceMenuCommandOpenCluster),
+		app.ExecuteApplicationMenuCommand("", ApplicationMenuCommandOpenCluster),
 	)
 	require.Empty(t, events)
 
 	ready = true
 	require.NoError(
 		t,
-		app.ExecuteWorkspaceMenuCommand("", WorkspaceMenuCommandOpenCluster),
+		app.ExecuteApplicationMenuCommand("", ApplicationMenuCommandOpenCluster),
 	)
 	require.Equal(t, []string{"open-cluster"}, events)
 }
@@ -162,15 +174,15 @@ func TestDebugMenuEventsUseReadinessGuard(t *testing.T) {
 		events = append(events, name)
 	}, NewLogger(10))
 
-	for _, command := range []WorkspaceMenuCommand{
-		WorkspaceMenuCommandOpenInspector,
-		WorkspaceMenuCommandToggleFocusDebug,
-		WorkspaceMenuCommandTogglePanelDebug,
-		WorkspaceMenuCommandToggleMapDebug,
-		WorkspaceMenuCommandToggleIconDebug,
-		WorkspaceMenuCommandToggleErrorDebug,
+	for _, command := range []ApplicationMenuCommand{
+		ApplicationMenuCommandOpenInspector,
+		ApplicationMenuCommandToggleFocusDebug,
+		ApplicationMenuCommandTogglePanelDebug,
+		ApplicationMenuCommandToggleMapDebug,
+		ApplicationMenuCommandToggleIconDebug,
+		ApplicationMenuCommandToggleErrorDebug,
 	} {
-		require.NoError(t, app.ExecuteWorkspaceMenuCommand("", command))
+		require.NoError(t, app.ExecuteApplicationMenuCommand("", command))
 	}
 
 	require.Equal(t, []string{
@@ -210,7 +222,7 @@ func TestDesktopShellReceivesWorkspaceWindowCreatorAtConstruction(t *testing.T) 
 	require.True(t, called)
 }
 
-func TestWorkspaceMenuCommandsShareOneTypedDispatcher(t *testing.T) {
+func TestApplicationMenuCommandsShareOneTypedRoleAwareDispatcher(t *testing.T) {
 	events := []string{}
 	created := false
 	shell := NewDesktopShell(
@@ -219,62 +231,62 @@ func TestWorkspaceMenuCommandsShareOneTypedDispatcher(t *testing.T) {
 		func(name string, _ ...interface{}) { events = append(events, name) },
 		NewLogger(10),
 		DesktopShellBindings{
-			CreateWorkspaceWindow: func() { created = true },
-			IsWorkspaceWindow:     func(name string) bool { return name == "workspace-1" },
+			CreateWorkspaceWindow:  func() { created = true },
+			NativeWindowDescriptor: workspaceNativeDescriptor,
 		},
 	)
 
-	require.NoError(t, shell.ExecuteWorkspaceMenuCommand("", WorkspaceMenuCommandNewWindow))
+	require.NoError(t, shell.ExecuteApplicationMenuCommand("", ApplicationMenuCommandNewWindow))
 	require.True(t, created)
-	require.NoError(t, shell.ExecuteWorkspaceMenuCommand("", WorkspaceMenuCommandOpenCluster))
+	require.NoError(t, shell.ExecuteApplicationMenuCommand("", ApplicationMenuCommandOpenCluster))
 	require.Equal(t, []string{"open-cluster"}, events)
 	require.ErrorContains(
 		t,
-		shell.ExecuteWorkspaceMenuCommand("panel-1", WorkspaceMenuCommandOpenCluster),
-		`window "panel-1" is not a workspace`,
+		shell.ExecuteApplicationMenuCommand("panel-1", ApplicationMenuCommandOpenCluster),
+		`native window "panel-1" is not registered`,
 	)
 	require.ErrorContains(
 		t,
-		shell.ExecuteWorkspaceMenuCommand("workspace-1", WorkspaceMenuCommand("unknown")),
-		`unknown workspace menu command "unknown"`,
+		shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommand("unknown")),
+		`unknown application menu command "unknown"`,
 	)
 }
 
-func TestWorkspaceMenuCommandCatalogIsUniqueAndHandled(t *testing.T) {
-	commands := []WorkspaceMenuCommand{
-		WorkspaceMenuCommandNewWindow,
-		WorkspaceMenuCommandOpenCluster,
-		WorkspaceMenuCommandClose,
-		WorkspaceMenuCommandSettings,
-		WorkspaceMenuCommandQuit,
-		WorkspaceMenuCommandHide,
-		WorkspaceMenuCommandCut,
-		WorkspaceMenuCommandCopy,
-		WorkspaceMenuCommandPaste,
-		WorkspaceMenuCommandSelectAll,
-		WorkspaceMenuCommandCommandPalette,
-		WorkspaceMenuCommandZoomIn,
-		WorkspaceMenuCommandZoomOut,
-		WorkspaceMenuCommandZoomReset,
-		WorkspaceMenuCommandToggleSidebar,
-		WorkspaceMenuCommandToggleObjectDiff,
-		WorkspaceMenuCommandToggleAppLogs,
-		WorkspaceMenuCommandToggleDiagnostics,
-		WorkspaceMenuCommandOpenInspector,
-		WorkspaceMenuCommandToggleFocusDebug,
-		WorkspaceMenuCommandTogglePanelDebug,
-		WorkspaceMenuCommandToggleMapDebug,
-		WorkspaceMenuCommandToggleIconDebug,
-		WorkspaceMenuCommandToggleErrorDebug,
-		WorkspaceMenuCommandMinimise,
-		WorkspaceMenuCommandMaximise,
-		WorkspaceMenuCommandRestore,
-		WorkspaceMenuCommandToggleMaximise,
-		WorkspaceMenuCommandBringAllToFront,
-		WorkspaceMenuCommandAbout,
-		WorkspaceMenuCommandCheckForUpdates,
+func TestApplicationMenuCommandCatalogIsUniqueAndHandled(t *testing.T) {
+	commands := []ApplicationMenuCommand{
+		ApplicationMenuCommandNewWindow,
+		ApplicationMenuCommandOpenCluster,
+		ApplicationMenuCommandClose,
+		ApplicationMenuCommandSettings,
+		ApplicationMenuCommandQuit,
+		ApplicationMenuCommandHide,
+		ApplicationMenuCommandCut,
+		ApplicationMenuCommandCopy,
+		ApplicationMenuCommandPaste,
+		ApplicationMenuCommandSelectAll,
+		ApplicationMenuCommandCommandPalette,
+		ApplicationMenuCommandZoomIn,
+		ApplicationMenuCommandZoomOut,
+		ApplicationMenuCommandZoomReset,
+		ApplicationMenuCommandToggleSidebar,
+		ApplicationMenuCommandToggleObjectDiff,
+		ApplicationMenuCommandToggleAppLogs,
+		ApplicationMenuCommandToggleDiagnostics,
+		ApplicationMenuCommandOpenInspector,
+		ApplicationMenuCommandToggleFocusDebug,
+		ApplicationMenuCommandTogglePanelDebug,
+		ApplicationMenuCommandToggleMapDebug,
+		ApplicationMenuCommandToggleIconDebug,
+		ApplicationMenuCommandToggleErrorDebug,
+		ApplicationMenuCommandMinimise,
+		ApplicationMenuCommandMaximise,
+		ApplicationMenuCommandRestore,
+		ApplicationMenuCommandToggleMaximise,
+		ApplicationMenuCommandBringAllToFront,
+		ApplicationMenuCommandAbout,
+		ApplicationMenuCommandCheckForUpdates,
 	}
-	seen := make(map[WorkspaceMenuCommand]struct{}, len(commands))
+	seen := make(map[ApplicationMenuCommand]struct{}, len(commands))
 	shell := NewDesktopShell(
 		nil,
 		func() bool { return true },
@@ -284,15 +296,15 @@ func TestWorkspaceMenuCommandCatalogIsUniqueAndHandled(t *testing.T) {
 
 	for _, command := range commands {
 		_, duplicate := seen[command]
-		require.Falsef(t, duplicate, "duplicate workspace menu command %q", command)
+		require.Falsef(t, duplicate, "duplicate application menu command %q", command)
 		seen[command] = struct{}{}
 
-		err := shell.ExecuteWorkspaceMenuCommand("", command)
-		require.NotContains(t, fmt.Sprint(err), "unknown workspace menu command")
+		err := shell.ExecuteApplicationMenuCommand("", command)
+		require.NotContains(t, fmt.Sprint(err), "unknown application menu command")
 	}
 }
 
-func TestWorkspaceMenuCommandsTargetTheClaimedWorkspace(t *testing.T) {
+func TestApplicationMenuCommandsTargetTheAuthenticatedWindow(t *testing.T) {
 	wailsApp := application.New(application.Options{})
 	wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{Name: "workspace-1"})
 	shell := NewDesktopShell(
@@ -301,37 +313,69 @@ func TestWorkspaceMenuCommandsTargetTheClaimedWorkspace(t *testing.T) {
 		nil,
 		NewLogger(10),
 		DesktopShellBindings{
-			IsWorkspaceWindow: func(name string) bool { return name == "workspace-1" },
+			NativeWindowDescriptor: workspaceNativeDescriptor,
 		},
 	)
 
 	require.NoError(
 		t,
-		shell.ExecuteWorkspaceMenuCommand("workspace-1", WorkspaceMenuCommandOpenCluster),
+		shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandOpenCluster),
 	)
-	for _, command := range []WorkspaceMenuCommand{
-		WorkspaceMenuCommandMinimise,
-		WorkspaceMenuCommandMaximise,
-		WorkspaceMenuCommandRestore,
-		WorkspaceMenuCommandToggleMaximise,
+	for _, command := range []ApplicationMenuCommand{
+		ApplicationMenuCommandMinimise,
+		ApplicationMenuCommandMaximise,
+		ApplicationMenuCommandRestore,
+		ApplicationMenuCommandToggleMaximise,
 	} {
-		require.NoError(t, shell.ExecuteWorkspaceMenuCommand("workspace-1", command))
+		require.NoError(t, shell.ExecuteApplicationMenuCommand("workspace-1", command))
 	}
 	require.ErrorContains(
 		t,
-		shell.executeWorkspaceWindowCommand("workspace-1", WorkspaceMenuCommand("unknown")),
-		"unknown workspace window command",
+		shell.executeApplicationWindowCommand("workspace-1", ApplicationMenuCommand("unknown")),
+		"unknown application window command",
 	)
 
-	shell.isWorkspaceWindow = func(string) bool { return true }
 	require.ErrorContains(
 		t,
-		shell.ExecuteWorkspaceMenuCommand("workspace-missing", WorkspaceMenuCommandOpenCluster),
-		`window "workspace-missing" is not available`,
+		shell.ExecuteApplicationMenuCommand("workspace-missing", ApplicationMenuCommandOpenCluster),
+		`native window "workspace-missing" is not registered`,
 	)
 }
 
-func TestWorkspaceMenuUpdateCheckTargetsTheCallerBeforeStartingDiscovery(t *testing.T) {
+func TestApplicationMenuWindowCommandsCanTargetALivePanelWindow(t *testing.T) {
+	wailsApp := application.New(application.Options{})
+	wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{Name: "panel-1"})
+	shell := NewDesktopShell(
+		wailsApp,
+		func() bool { return true },
+		nil,
+		NewLogger(10),
+		DesktopShellBindings{
+			NativeWindowDescriptor: func(name string) (panelwindow.NativeDescriptor, error) {
+				return panelwindow.NativeDescriptor{
+					SchemaVersion: panelwindow.NativeDescriptorSchemaVersion,
+					Role:          panelwindow.NativeRolePanel,
+					Panel: &panelwindow.WindowDescriptor{
+						WindowName:      name,
+						OwnerWindowName: "workspace-1",
+						State:           panelwindow.WindowStateLive,
+					},
+				}, nil
+			},
+		},
+	)
+
+	for _, command := range []ApplicationMenuCommand{
+		ApplicationMenuCommandMinimise,
+		ApplicationMenuCommandMaximise,
+		ApplicationMenuCommandRestore,
+		ApplicationMenuCommandToggleMaximise,
+	} {
+		require.NoError(t, shell.ExecuteApplicationMenuCommand("panel-1", command))
+	}
+}
+
+func TestApplicationMenuUpdateCheckTargetsTheCallerBeforeStartingDiscovery(t *testing.T) {
 	events := []string{}
 	checked := make(chan struct{}, 1)
 	shell := NewDesktopShell(
@@ -340,7 +384,7 @@ func TestWorkspaceMenuUpdateCheckTargetsTheCallerBeforeStartingDiscovery(t *test
 		func(name string, _ ...interface{}) { events = append(events, name) },
 		NewLogger(10),
 		DesktopShellBindings{
-			IsWorkspaceWindow: func(name string) bool { return name == "workspace-1" },
+			NativeWindowDescriptor: workspaceNativeDescriptor,
 			UpdateCheck: func() error {
 				checked <- struct{}{}
 				return nil
@@ -350,7 +394,7 @@ func TestWorkspaceMenuUpdateCheckTargetsTheCallerBeforeStartingDiscovery(t *test
 
 	require.NoError(
 		t,
-		shell.ExecuteWorkspaceMenuCommand("workspace-1", WorkspaceMenuCommandCheckForUpdates),
+		shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandCheckForUpdates),
 	)
 	require.Equal(t, []string{"open-about"}, events)
 	select {

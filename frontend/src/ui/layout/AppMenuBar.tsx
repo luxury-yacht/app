@@ -1,152 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ExecuteWorkspaceMenuCommand } from '@/core/backend-api';
-import { backend } from '@/core/backend-api/models';
-import { useKeyboardSurface, useShortcut } from '@/ui/shortcuts';
+import { ExecuteApplicationMenuCommand } from '@/core/backend-api';
+import type { backend } from '@/core/backend-api/models';
+import { useKeyboardSurface } from '@/ui/shortcuts';
+import { formatShortcut } from '@/ui/shortcuts/utils';
 import { reportOperationalError } from '@/utils/errorHandler';
 import { isWindowsPlatform } from '@/utils/platform';
+import {
+  type ApplicationMenuSection,
+  buildApplicationMenuSections,
+  isApplicationMenuCommandItem,
+} from './applicationMenuCommands';
 import './AppMenuBar.css';
 
-interface AppMenuCommandItem {
-  command: backend.WorkspaceMenuCommand;
-  label: string;
-  shortcut?: string;
-}
+const firstCommandIndex = (section: ApplicationMenuSection) =>
+  section.items.findIndex((entry) => isApplicationMenuCommandItem(entry));
 
-interface AppMenuSeparator {
-  id: string;
-  separator: true;
-}
-
-type AppMenuEntry = AppMenuCommandItem | AppMenuSeparator;
-
-interface AppMenuSection {
-  id: string;
-  label: string;
-  items: AppMenuEntry[];
-}
-
-const command = backend.WorkspaceMenuCommand;
-const separator = (id: string): AppMenuSeparator => ({ id, separator: true });
-const isCommandItem = (entry: AppMenuEntry): entry is AppMenuCommandItem => 'command' in entry;
-
-const buildMenuSections = (windows: boolean): AppMenuSection[] => {
-  const sections: AppMenuSection[] = [
-    {
-      id: 'file',
-      label: 'File',
-      items: [
-        { label: 'New Window', shortcut: 'Ctrl+N', command: command.WorkspaceMenuCommandNewWindow },
-        separator('new-window'),
-        {
-          label: 'Open Cluster',
-          shortcut: 'Ctrl+O',
-          command: command.WorkspaceMenuCommandOpenCluster,
-        },
-        { label: 'Close', shortcut: 'Ctrl+W', command: command.WorkspaceMenuCommandClose },
-        separator('close'),
-        { label: 'Settings…', shortcut: 'Ctrl+,', command: command.WorkspaceMenuCommandSettings },
-        separator('settings'),
-        {
-          label: windows ? 'Exit' : 'Quit',
-          shortcut: 'Ctrl+Q',
-          command: command.WorkspaceMenuCommandQuit,
-        },
-      ],
-    },
-    {
-      id: 'edit',
-      label: 'Edit',
-      items: [
-        { label: 'Cut', shortcut: 'Ctrl+X', command: command.WorkspaceMenuCommandCut },
-        { label: 'Copy', shortcut: 'Ctrl+C', command: command.WorkspaceMenuCommandCopy },
-        { label: 'Paste', shortcut: 'Ctrl+V', command: command.WorkspaceMenuCommandPaste },
-        { label: 'Select All', shortcut: 'Ctrl+A', command: command.WorkspaceMenuCommandSelectAll },
-      ],
-    },
-    {
-      id: 'view',
-      label: 'View',
-      items: [
-        {
-          label: 'Command Palette',
-          shortcut: 'Ctrl+Shift+P',
-          command: command.WorkspaceMenuCommandCommandPalette,
-        },
-        separator('palette'),
-        { label: 'Zoom In', shortcut: 'Ctrl+=', command: command.WorkspaceMenuCommandZoomIn },
-        { label: 'Zoom Out', shortcut: 'Ctrl+-', command: command.WorkspaceMenuCommandZoomOut },
-        { label: 'Reset Zoom', shortcut: 'Ctrl+0', command: command.WorkspaceMenuCommandZoomReset },
-        separator('zoom'),
-        {
-          label: 'Toggle Sidebar',
-          shortcut: 'Ctrl+B',
-          command: command.WorkspaceMenuCommandToggleSidebar,
-        },
-        {
-          label: 'Diff Objects',
-          shortcut: 'Ctrl+D',
-          command: command.WorkspaceMenuCommandToggleObjectDiff,
-        },
-        {
-          label: 'Application Logs',
-          shortcut: 'Ctrl+Shift+L',
-          command: command.WorkspaceMenuCommandToggleAppLogs,
-        },
-        {
-          label: 'Diagnostics Panel',
-          shortcut: 'Ctrl+Shift+D',
-          command: command.WorkspaceMenuCommandToggleDiagnostics,
-        },
-      ],
-    },
-    {
-      id: 'window',
-      label: 'Window',
-      items: [
-        { label: 'Minimize', shortcut: 'Ctrl+M', command: command.WorkspaceMenuCommandMinimise },
-        { label: 'Maximize', command: command.WorkspaceMenuCommandMaximise },
-        { label: 'Restore', command: command.WorkspaceMenuCommandRestore },
-      ],
-    },
-  ];
-
-  if (import.meta.env.DEV) {
-    sections.push({
-      id: 'debug',
-      label: 'Debug',
-      items: [
-        {
-          label: 'Open Inspector',
-          shortcut: 'Ctrl+Shift+F12',
-          command: command.WorkspaceMenuCommandOpenInspector,
-        },
-        separator('inspector'),
-        { label: 'Keyboard Focus Overlay', command: command.WorkspaceMenuCommandToggleFocusDebug },
-        { label: 'Panel Debug Overlay', command: command.WorkspaceMenuCommandTogglePanelDebug },
-        { label: 'Map Debug Overlay', command: command.WorkspaceMenuCommandToggleMapDebug },
-        { label: 'Icon Debug Overlay', command: command.WorkspaceMenuCommandToggleIconDebug },
-        { label: 'Error Boundary Tests', command: command.WorkspaceMenuCommandToggleErrorDebug },
-      ],
-    });
-  }
-
-  sections.push({
-    id: 'help',
-    label: 'Help',
-    items: [
-      { label: 'About Luxury Yacht', command: command.WorkspaceMenuCommandAbout },
-      { label: 'Check for Updates…', command: command.WorkspaceMenuCommandCheckForUpdates },
-    ],
-  });
-  return sections;
-};
-
-const firstCommandIndex = (section: AppMenuSection) =>
-  section.items.findIndex((entry) => isCommandItem(entry));
-
-const nextCommandIndex = (section: AppMenuSection, current: number, direction: 1 | -1) => {
+const nextCommandIndex = (section: ApplicationMenuSection, current: number, direction: 1 | -1) => {
   const commandIndexes = section.items
-    .map((entry, index) => (isCommandItem(entry) ? index : -1))
+    .map((entry, index) => (isApplicationMenuCommandItem(entry) ? index : -1))
     .filter((index) => index >= 0);
   const currentPosition = commandIndexes.indexOf(current);
   const initialPosition = direction === 1 ? -1 : 0;
@@ -154,26 +25,8 @@ const nextCommandIndex = (section: AppMenuSection, current: number, direction: 1
   return commandIndexes[(start + direction + commandIndexes.length) % commandIndexes.length] ?? -1;
 };
 
-const useWorkspaceMenuAccelerator = (
-  key: string,
-  menuCommand: backend.WorkspaceMenuCommand,
-  description: string,
-  dispatchCommand: (command: backend.WorkspaceMenuCommand) => void
-) => {
-  useShortcut({
-    key,
-    modifiers: { ctrl: true },
-    handler: () => {
-      dispatchCommand(menuCommand);
-      return undefined;
-    },
-    description,
-    category: 'Application',
-  });
-};
-
 const AppMenuBar = () => {
-  const sections = useMemo(() => buildMenuSections(isWindowsPlatform()), []);
+  const sections = useMemo(() => buildApplicationMenuSections(isWindowsPlatform()), []);
   const [openSectionIndex, setOpenSectionIndex] = useState<number | null>(null);
   const [focusedItemIndex, setFocusedItemIndex] = useState(-1);
   const barRef = useRef<HTMLDivElement>(null);
@@ -210,8 +63,8 @@ const AppMenuBar = () => {
     });
   }, []);
 
-  const dispatchCommand = useCallback((menuCommand: backend.WorkspaceMenuCommand) => {
-    void ExecuteWorkspaceMenuCommand(menuCommand).catch((error) => {
+  const dispatchCommand = useCallback((menuCommand: backend.ApplicationMenuCommand) => {
+    void ExecuteApplicationMenuCommand(menuCommand).catch((error) => {
       reportOperationalError(error, {
         source: 'AppMenuBar',
         action: `execute:${menuCommand}`,
@@ -220,7 +73,7 @@ const AppMenuBar = () => {
   }, []);
 
   const executeCommand = useCallback(
-    (menuCommand: backend.WorkspaceMenuCommand) => {
+    (menuCommand: backend.ApplicationMenuCommand) => {
       setOpenSectionIndex(null);
       priorFocusRef.current?.focus();
       dispatchCommand(menuCommand);
@@ -228,40 +81,9 @@ const AppMenuBar = () => {
     [dispatchCommand]
   );
 
-  useWorkspaceMenuAccelerator(
-    'n',
-    command.WorkspaceMenuCommandNewWindow,
-    'Create a workspace window',
-    dispatchCommand
-  );
-  useWorkspaceMenuAccelerator(
-    'o',
-    command.WorkspaceMenuCommandOpenCluster,
-    'Open a cluster',
-    dispatchCommand
-  );
-  useWorkspaceMenuAccelerator(
-    'w',
-    command.WorkspaceMenuCommandClose,
-    'Close the active cluster tab or workspace',
-    dispatchCommand
-  );
-  useWorkspaceMenuAccelerator(
-    'q',
-    command.WorkspaceMenuCommandQuit,
-    'Quit the application',
-    dispatchCommand
-  );
-  useWorkspaceMenuAccelerator(
-    'm',
-    command.WorkspaceMenuCommandMinimise,
-    'Minimise the workspace window',
-    dispatchCommand
-  );
-
   const activateFocusedItem = useCallback(() => {
     const entry = activeSection?.items[focusedItemIndex];
-    if (entry && isCommandItem(entry)) {
+    if (entry && isApplicationMenuCommandItem(entry)) {
       executeCommand(entry.command);
     }
   }, [activeSection, executeCommand, focusedItemIndex]);
@@ -282,6 +104,10 @@ const AppMenuBar = () => {
     active: openSectionIndex !== null,
     priority: 950,
     suppressShortcuts: true,
+    onApplicationMenuShortcut: () => {
+      setOpenSectionIndex(null);
+      priorFocusRef.current?.focus();
+    },
     onEscape: () => {
       closeSection(true);
       return true;
@@ -394,7 +220,7 @@ const AppMenuBar = () => {
                 }
               >
                 {section.items.map((entry, itemIndex) => {
-                  if (!isCommandItem(entry)) {
+                  if (!isApplicationMenuCommandItem(entry)) {
                     return <hr className="app-menu-separator" key={`separator-${entry.id}`} />;
                   }
                   return (
@@ -410,9 +236,9 @@ const AppMenuBar = () => {
                       onClick={() => executeCommand(entry.command)}
                     >
                       <span className="app-menu-item-label">{entry.label}</span>
-                      {entry.shortcut ? (
+                      {entry.accelerator ? (
                         <span className="app-menu-item-shortcut" aria-hidden="true">
-                          {entry.shortcut}
+                          {formatShortcut(entry.accelerator.key, entry.accelerator.modifiers)}
                         </span>
                       ) : null}
                     </button>

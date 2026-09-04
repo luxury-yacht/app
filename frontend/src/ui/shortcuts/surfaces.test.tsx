@@ -851,6 +851,71 @@ describe('keyboard surfaces', () => {
     expect(shortcutHandler).not.toHaveBeenCalled();
   });
 
+  it('lets an application-menu accelerator dismiss and pass through a suppressing surface', async () => {
+    const shortcutHandler = vi.fn();
+    const dismissSurface = vi.fn();
+
+    const Harness = () => {
+      const surfaceRef = useRef<HTMLDivElement>(null);
+
+      useKeyboardSurface({
+        kind: 'palette',
+        rootRef: surfaceRef,
+        active: true,
+        blocking: true,
+        suppressShortcuts: true,
+        onApplicationMenuShortcut: dismissSurface,
+      });
+
+      useShortcut({
+        key: 'w',
+        modifiers: { ctrl: true },
+        scope: 'application-menu',
+        handler: () => {
+          shortcutHandler();
+          return true;
+        },
+        description: 'Close',
+      });
+
+      return (
+        <div ref={surfaceRef}>
+          <button type="button" data-testid="inside-application-menu-surface">
+            Inside
+          </button>
+        </div>
+      );
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <Harness />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const insideButton = document.querySelector(
+      '[data-testid="inside-application-menu-surface"]'
+    ) as HTMLButtonElement | null;
+    insideButton?.focus();
+
+    act(() => {
+      insideButton?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'w',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
+
+    expect(dismissSurface).toHaveBeenCalledTimes(1);
+    expect(shortcutHandler).toHaveBeenCalledTimes(1);
+  });
+
   it('allows handled-no-prevent surface results to stop propagation without preventing default', async () => {
     const surfaceHandler = vi.fn();
     const shortcutHandler = vi.fn();

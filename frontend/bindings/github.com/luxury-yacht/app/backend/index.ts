@@ -7,12 +7,12 @@ export {
 };
 
 export {
+    ApplicationMenuCommand,
     ClusterHealthState,
     ClusterLifecycleState,
     KubeconfigDiscoveryState,
     PortForwardStatus,
-    RuntimeOperationType,
-    WorkspaceMenuCommand
+    RuntimeOperationType
 } from "./models.js";
 
 export type {

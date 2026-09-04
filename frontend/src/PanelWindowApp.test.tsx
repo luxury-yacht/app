@@ -6,6 +6,7 @@ import type { panelwindow } from '@/core/backend-api/models';
 
 const mocks = vi.hoisted(() => ({
   acknowledgeReady: vi.fn(() => Promise.resolve()),
+  applicationShortcutsProps: null as Record<string, unknown> | null,
   beginDock: vi.fn(() => Promise.resolve()),
   dockProviderProps: null as Record<string, unknown> | null,
   failTransfer: vi.fn(() => Promise.resolve()),
@@ -112,6 +113,12 @@ vi.mock('@/ui/shortcuts/components/PanelWindowShortcuts', () => ({
     return null;
   },
 }));
+vi.mock('@/ui/shortcuts/components/ApplicationMenuShortcuts', () => ({
+  ApplicationMenuShortcuts: (props: Record<string, unknown>) => {
+    mocks.applicationShortcutsProps = props;
+    return null;
+  },
+}));
 vi.mock('@/utils/errorHandler', () => ({
   reportOperationalError: (...args: unknown[]) => mocks.reportOperationalError(...args),
 }));
@@ -179,6 +186,7 @@ describe('PanelWindowApp', () => {
     mocks.fixedClusterProps = null;
     mocks.objectPanelProps = null;
     mocks.shortcutsProps = null;
+    mocks.applicationShortcutsProps = null;
     mocks.openPanels.clear();
     mocks.openPanels.set('panel-pod', {
       clusterId: 'cluster-a',
@@ -223,6 +231,7 @@ describe('PanelWindowApp', () => {
     });
     expect(mocks.acknowledgeReady).toHaveBeenCalledWith('panel-1', 'transfer-panel-window-test');
     expect(mocks.shortcutsProps).toMatchObject({ ready: true });
+    expect(mocks.applicationShortcutsProps).toEqual({ enabled: true });
   });
 
   it('reports and rolls back a failed ready acknowledgement', async () => {

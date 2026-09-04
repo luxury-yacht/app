@@ -30,27 +30,11 @@ vi.mock('@/core/refresh/client', () => ({
   fetchSnapshot: vi.fn().mockResolvedValue({ snapshot: null }),
 }));
 
+const dispatchOpenCommand = () => eventBus.emit('command-palette:open');
+
 const macPlatform =
   typeof navigator !== 'undefined' &&
   /Mac/i.test((navigator.platform || '') + (navigator.userAgent || ''));
-
-const dispatchOpenShortcut = (target: EventTarget = document) => {
-  const event = new KeyboardEvent('keydown', {
-    key: 'P',
-    bubbles: true,
-    cancelable: true,
-    shiftKey: true,
-    ...(macPlatform ? { metaKey: true } : { ctrlKey: true }),
-  });
-
-  if (target instanceof Node) {
-    target.dispatchEvent(event);
-  } else {
-    document.dispatchEvent(event);
-  }
-
-  return event;
-};
 
 const dispatchNamespaceShortcut = (target: EventTarget = document) => {
   const event = new KeyboardEvent('keydown', {
@@ -154,7 +138,7 @@ describe('CommandPalette keyboard integration', () => {
     });
 
     await act(async () => {
-      dispatchOpenShortcut();
+      dispatchOpenCommand();
       await Promise.resolve();
     });
 
@@ -204,7 +188,7 @@ describe('CommandPalette keyboard integration', () => {
     });
 
     await act(async () => {
-      dispatchOpenShortcut();
+      dispatchOpenCommand();
       await Promise.resolve();
     });
 
@@ -333,7 +317,7 @@ describe('CommandPalette keyboard integration', () => {
     });
 
     await act(async () => {
-      dispatchOpenShortcut();
+      dispatchOpenCommand();
       await Promise.resolve();
     });
 
@@ -356,7 +340,7 @@ describe('CommandPalette keyboard integration', () => {
     });
 
     await act(async () => {
-      dispatchOpenShortcut();
+      dispatchOpenCommand();
       await Promise.resolve();
     });
 

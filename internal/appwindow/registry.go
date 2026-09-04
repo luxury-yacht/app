@@ -639,6 +639,8 @@ func (r *Registry) FocusPanelWindow(ownerWindowName, windowName string, panelID 
 var ownerRoutedPanelCommands = map[string]struct{}{
 	"open-about": {}, "open-cluster": {}, "open-command-palette": {}, "open-settings": {},
 	"toggle-app-logs-panel": {}, "toggle-diagnostics": {}, "toggle-object-diff": {}, "toggle-sidebar": {},
+	"debug:toggle-error-overlay": {}, "debug:toggle-focus-overlay": {},
+	"debug:toggle-icon-overlay": {}, "debug:toggle-map-overlay": {}, "debug:toggle-panel-overlay": {},
 }
 
 func (r *Registry) RoutePanelWindowCommand(windowName, eventName string) error {

@@ -21,7 +21,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { AppErrorBoundary } from '@ui/errors';
 // App components
 import { AppLayout } from '@ui/layout/AppLayout';
-import { GlobalShortcuts, KeyboardProvider } from '@ui/shortcuts';
+import { ApplicationMenuShortcuts, GlobalShortcuts, KeyboardProvider } from '@ui/shortcuts';
 import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
 import { errorHandler } from '@utils/errorHandler';
 import { installTypingAssistPolicyObserver } from '@utils/inputAssistPolicy';
@@ -125,7 +125,7 @@ function AppContent() {
 
   // The command palette (CommandPaletteCommands.tsx) emits this event when
   // the user picks "Toggle Application Logs". Forward it to the shared
-  // handler also used by keyboard shortcuts and workspace-menu events, so every
+  // handler also used by keyboard shortcuts and application-menu events, so every
   // path shares the single source of truth in ModalStateContext.
   useEffect(() => {
     return eventBus.on('view:toggle-app-logs-panel', handleToggleAppLogsPanel);
@@ -142,13 +142,11 @@ function AppContent() {
 
   return (
     <>
+      <ApplicationMenuShortcuts />
       <GlobalShortcuts
-        onToggleSidebar={viewState.toggleSidebar}
         onToggleAppLogsPanel={handleToggleAppLogsPanel}
         onToggleSettings={() => viewState.setIsSettingsOpen(!viewState.isSettingsOpen)}
-        onToggleObjectDiff={() => viewState.setIsObjectDiffOpen(!viewState.isObjectDiffOpen)}
         onRefresh={handleManualRefresh}
-        onToggleDiagnostics={handleToggleDiagnostics}
         isAppLogsPanelOpen={viewState.showAppLogsPanel}
         isObjectPanelOpen={viewState.showObjectPanel}
         isSettingsOpen={viewState.isSettingsOpen}

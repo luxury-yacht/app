@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { type DesktopEventName, focusWindow, onEvent } from '@/core/desktop-runtime';
+import { focusWindow, onEvent, openDevTools } from '@/core/desktop-runtime';
 import type { PanelWindowDescriptor } from '@/core/panel-windows';
 import {
   acknowledgePanelWindowClose,
@@ -13,7 +13,6 @@ import {
   onPanelWindowFocusRequested,
   onPanelWindowGuardRequested,
   requestPanelTabClose,
-  routePanelWindowCommand,
   updatePanelWindowSnapshot,
 } from '@/core/panel-windows';
 import type { PanelLifecycleBlocker } from '@/core/panel-windows/panelLifecycleGuards';
@@ -27,17 +26,6 @@ import type { KubernetesObjectReference } from '@/types/view-state';
 import { useDockablePanelContext } from '@/ui/dockable';
 import { getGroupTabs } from '@/ui/dockable/tabGroupState';
 import { reportOperationalError } from '@/utils/errorHandler';
-
-const OWNER_ROUTED_EVENTS: DesktopEventName[] = [
-  'open-about',
-  'open-cluster',
-  'open-command-palette',
-  'open-settings',
-  'toggle-app-logs-panel',
-  'toggle-diagnostics',
-  'toggle-object-diff',
-  'toggle-sidebar',
-];
 
 export function PanelWindowShortcuts({
   descriptor,
@@ -92,6 +80,20 @@ export function PanelWindowShortcuts({
       );
     });
   }, [descriptor, focusLifecycleBlocker, guards, ready, tabGroups]);
+
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+    return onEvent('debug:open-inspector', () => {
+      void openDevTools().catch((error) =>
+        reportOperationalError(error, {
+          source: 'PanelWindowShortcuts',
+          action: 'open-inspector',
+        })
+      );
+    });
+  }, [ready]);
 
   useEffect(
     () =>
@@ -269,24 +271,6 @@ export function PanelWindowShortcuts({
       }),
     [descriptor, focusLifecycleBlocker, guards, tabGroups]
   );
-
-  useEffect(() => {
-    const disposers = OWNER_ROUTED_EVENTS.map((eventName) =>
-      onEvent(eventName, () => {
-        void routePanelWindowCommand(descriptor.windowName, eventName).catch((error) =>
-          reportOperationalError(error, {
-            source: 'PanelWindowShortcuts',
-            action: 'route-owner-command',
-          })
-        );
-      })
-    );
-    return () => {
-      for (const dispose of disposers) {
-        dispose();
-      }
-    };
-  }, [descriptor.windowName]);
 
   return null;
 }

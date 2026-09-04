@@ -18,7 +18,6 @@ const mocks = vi.hoisted(() => ({
     RequestPanelWindowGuard: vi.fn(),
     AcknowledgePanelWindowGuard: vi.fn(),
     AcknowledgeApplicationQuitPreflight: vi.fn(),
-    RoutePanelWindowCommand: vi.fn(),
     RequestPanelObjectOpen: vi.fn(),
     AuthorizePanelObjectOpen: vi.fn(),
     UpdatePanelWindowSnapshot: vi.fn(),
@@ -75,7 +74,6 @@ import {
   requestPanelWindowClose,
   requestPanelWindowGuard,
   resolveNativeWindowDescriptor,
-  routePanelWindowCommand,
   updatePanelWindowSnapshot,
 } from './index';
 
@@ -173,7 +171,6 @@ describe('native panel-window transport', () => {
     await requestPanelWindowGuard('workspace-1', 'panel-1', 'guard-1', 'application-quit');
     await acknowledgePanelWindowGuard('panel-1', 'guard-1', true);
     await acknowledgeApplicationQuitPreflight('workspace-1', 'quit-1', true);
-    await routePanelWindowCommand('panel-1', 'open-settings');
     await requestPanelObjectOpen('panel-1', objectRef, 'details');
     await authorizePanelObjectOpen('workspace-1', 'panel-1', 'panel-a', objectRef, 'details');
     await updatePanelWindowSnapshot('panel-1', snapshot);
@@ -224,7 +221,6 @@ describe('native panel-window transport', () => {
       'quit-1',
       true
     );
-    expect(mocks.backend.RoutePanelWindowCommand).toHaveBeenCalledWith('panel-1', 'open-settings');
     expect(mocks.backend.RequestPanelObjectOpen).toHaveBeenCalledWith(
       'panel-1',
       objectRef,

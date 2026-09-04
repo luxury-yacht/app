@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react';
-import type { ShortcutModifiers } from '@/types/shortcuts';
+import type { ShortcutModifiers, ShortcutScope } from '@/types/shortcuts';
 import { useKeyboardContext } from './context';
 
 const normalizeModifiers = (modifiers?: ShortcutModifiers): ShortcutModifiers | undefined => {
@@ -34,6 +34,7 @@ interface UseShortcutOptions {
   category?: string;
   enabled?: boolean;
   priority?: number;
+  scope?: ShortcutScope;
 }
 
 /**
@@ -65,7 +66,16 @@ interface UseShortcutOptions {
  * });
  */
 export function useShortcut(options: UseShortcutOptions) {
-  const { key, handler, modifiers, description = '', category, enabled = true, priority } = options;
+  const {
+    key,
+    handler,
+    modifiers,
+    description = '',
+    category,
+    enabled = true,
+    priority,
+    scope,
+  } = options;
 
   const { registerShortcut, unregisterShortcut } = useKeyboardContext();
   const shortcutIdRef = useRef<string | null>(null);
@@ -97,6 +107,7 @@ export function useShortcut(options: UseShortcutOptions) {
       description,
       category,
       enabled,
+      scope,
     });
 
     shortcutIdRef.current = id;
@@ -116,6 +127,7 @@ export function useShortcut(options: UseShortcutOptions) {
     unregisterShortcut,
     normalizedModifiers,
     priority,
+    scope,
   ]);
 }
 
@@ -131,7 +143,7 @@ export function useShortcut(options: UseShortcutOptions) {
  */
 export function useShortcuts(
   shortcuts: Array<Omit<UseShortcutOptions, 'priority'>>,
-  commonOptions?: Pick<UseShortcutOptions, 'priority' | 'category' | 'enabled'>
+  commonOptions?: Pick<UseShortcutOptions, 'priority' | 'category' | 'enabled' | 'scope'>
 ) {
   const { registerShortcut, unregisterShortcut } = useKeyboardContext();
   const handlerRefs = useRef<Array<UseShortcutOptions['handler']>>([]);
@@ -185,6 +197,7 @@ export function useShortcuts(
         description: merged.description || '',
         category: merged.category,
         enabled: merged.enabled ?? true,
+        scope: merged.scope,
       });
     });
 

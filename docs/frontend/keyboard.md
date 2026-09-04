@@ -58,7 +58,7 @@ Surface kinds include:
   whole app.
 - Editors may own editor-specific keys; app-level `Escape` wins unless the
   editor has a documented transient UI reason.
-- The native macOS menu and app-rendered Windows/Linux workspace menu label
+- The native macOS menu and app-rendered Windows/Linux menu label
   `Cmd/Ctrl+W` as context-neutral `Close`; the focused window role decides what
   closes. In a workspace, it closes the active cluster tab through
   `KubeconfigContext`, or the workspace when it has no cluster tabs. In a panel
@@ -69,11 +69,19 @@ Surface kinds include:
   `Enter`, `Space`, and `Escape` while open, restores the prior content focus
   before executing a command, and routes its typed command through the backend
   owner shared with the native macOS menu.
+- `ApplicationMenuShortcuts` is the single Windows/Linux accelerator owner for
+  both workspace and panel windows. It is disabled on macOS, where the native
+  application menu owns the same accelerators, and it stays disabled in a panel
+  until that native panel has acknowledged readiness.
+- Application-menu accelerators get the active surface's first chance and then
+  may cross `suppressShortcuts`; the active transient surface can dismiss itself
+  before dispatch. Ordinary registered shortcuts remain suppressed. Standard
+  cut, copy, paste, and select-all keys remain native editing operations.
 - Panel windows mount `PanelWindowShortcuts`, not workspace
-  `GlobalShortcuts`. Cut, copy, paste, select-all, and zoom stay local.
-  Workspace-only commands such as Settings, About, Open Cluster, sidebar,
+  `GlobalShortcuts`. Close, zoom, inspector, and window commands stay local.
+  Workspace commands such as Settings, About, Open Cluster, sidebar,
   diagnostics, object diff, and Application Logs focus the immutable owner and
-  route the sender-targeted command there.
+  route there through the backend's authenticated native-window descriptor.
 - Blocking modals and editors keep their existing priority. An unsaved YAML
   draft or in-flight mutation may reject a tab/group/window close and focuses
   the first deterministic blocker.

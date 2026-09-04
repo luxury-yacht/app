@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
@@ -75,7 +76,99 @@ func TestPanelWindowCommandsDelegateBeforeWorkspaceRuntimeReadiness(t *testing.T
 	require.ErrorContains(t, err, "does not match source window")
 }
 
-func TestDesktopServiceUsesTheWailsSenderForWorkspaceMenuCommands(t *testing.T) {
+func TestDesktopServiceUsesTheWailsSenderForRoleAwareMenuCommands(t *testing.T) {
+	events := []string{}
+	ownerRoutes := [][2]string{}
+	shell := NewDesktopShell(
+		nil,
+		func() bool { return true },
+		func(name string, _ ...interface{}) { events = append(events, name) },
+		NewLogger(10),
+		DesktopShellBindings{
+			NativeWindowDescriptor: func(name string) (panelwindow.NativeDescriptor, error) {
+				switch name {
+				case "workspace-1":
+					return panelwindow.NativeDescriptor{
+						SchemaVersion: panelwindow.NativeDescriptorSchemaVersion,
+						Role:          panelwindow.NativeRoleWorkspace,
+						Workspace:     &panelwindow.WorkspaceDescriptor{WindowName: name},
+					}, nil
+				case "panel-1":
+					return panelwindow.NativeDescriptor{
+						SchemaVersion: panelwindow.NativeDescriptorSchemaVersion,
+						Role:          panelwindow.NativeRolePanel,
+						Panel: &panelwindow.WindowDescriptor{
+							WindowName:      name,
+							OwnerWindowName: "workspace-1",
+							State:           panelwindow.WindowStateLive,
+						},
+					}, nil
+				default:
+					return panelwindow.NativeDescriptor{}, fmt.Errorf("native window %q is not registered", name)
+				}
+			},
+			RoutePanelCommand: func(windowName, eventName string) error {
+				ownerRoutes = append(ownerRoutes, [2]string{windowName, eventName})
+				return nil
+			},
+		},
+	)
+	service := NewDesktopService(DesktopServiceDependencies{DesktopShell: shell})
+	quitCalls := 0
+	shell.quitApplication = func() { quitCalls++ }
+
+	workspaceContext := context.WithValue(
+		context.Background(), application.WindowKey, panelCommandCaller("workspace-1"),
+	)
+	require.NoError(
+		t,
+		service.ExecuteApplicationMenuCommand(workspaceContext, ApplicationMenuCommandOpenCluster),
+	)
+	require.Equal(t, []string{"open-cluster"}, events)
+
+	panelContext := context.WithValue(
+		context.Background(), application.WindowKey, panelCommandCaller("panel-1"),
+	)
+	ownerCommands := []struct {
+		command ApplicationMenuCommand
+		event   string
+	}{
+		{ApplicationMenuCommandOpenCluster, "open-cluster"},
+		{ApplicationMenuCommandSettings, "open-settings"},
+		{ApplicationMenuCommandCommandPalette, "open-command-palette"},
+		{ApplicationMenuCommandToggleSidebar, "toggle-sidebar"},
+		{ApplicationMenuCommandToggleObjectDiff, "toggle-object-diff"},
+		{ApplicationMenuCommandToggleAppLogs, "toggle-app-logs-panel"},
+		{ApplicationMenuCommandToggleDiagnostics, "toggle-diagnostics"},
+		{ApplicationMenuCommandAbout, "open-about"},
+		{ApplicationMenuCommandToggleFocusDebug, "debug:toggle-focus-overlay"},
+		{ApplicationMenuCommandTogglePanelDebug, "debug:toggle-panel-overlay"},
+		{ApplicationMenuCommandToggleMapDebug, "debug:toggle-map-overlay"},
+		{ApplicationMenuCommandToggleIconDebug, "debug:toggle-icon-overlay"},
+		{ApplicationMenuCommandToggleErrorDebug, "debug:toggle-error-overlay"},
+	}
+	for _, test := range ownerCommands {
+		require.NoError(t, service.ExecuteApplicationMenuCommand(panelContext, test.command))
+	}
+	wantOwnerRoutes := make([][2]string, 0, len(ownerCommands))
+	for _, test := range ownerCommands {
+		wantOwnerRoutes = append(wantOwnerRoutes, [2]string{"panel-1", test.event})
+	}
+	require.Equal(t, wantOwnerRoutes, ownerRoutes)
+	require.NoError(
+		t,
+		service.ExecuteApplicationMenuCommand(panelContext, ApplicationMenuCommandClose),
+	)
+	require.Equal(t, []string{"open-cluster", "menu:close"}, events)
+	require.NoError(
+		t,
+		service.ExecuteApplicationMenuCommand(panelContext, ApplicationMenuCommandQuit),
+	)
+	require.Equal(t, 1, quitCalls)
+	require.Equal(t, wantOwnerRoutes, ownerRoutes)
+}
+
+func TestApplicationMenuRejectsPanelCommandsUntilTheRegistryMarksTheWindowLive(t *testing.T) {
 	events := []string{}
 	shell := NewDesktopShell(
 		nil,
@@ -83,28 +176,47 @@ func TestDesktopServiceUsesTheWailsSenderForWorkspaceMenuCommands(t *testing.T) 
 		func(name string, _ ...interface{}) { events = append(events, name) },
 		NewLogger(10),
 		DesktopShellBindings{
-			IsWorkspaceWindow: func(name string) bool { return name == "workspace-1" },
+			NativeWindowDescriptor: func(name string) (panelwindow.NativeDescriptor, error) {
+				return panelwindow.NativeDescriptor{
+					SchemaVersion: panelwindow.NativeDescriptorSchemaVersion,
+					Role:          panelwindow.NativeRolePanel,
+					Panel: &panelwindow.WindowDescriptor{
+						WindowName:      name,
+						OwnerWindowName: "workspace-1",
+						State:           panelwindow.WindowStateOpening,
+					},
+				}, nil
+			},
 		},
 	)
 	service := NewDesktopService(DesktopServiceDependencies{DesktopShell: shell})
-
-	workspaceContext := context.WithValue(
-		context.Background(), application.WindowKey, panelCommandCaller("workspace-1"),
-	)
-	require.NoError(
-		t,
-		service.ExecuteWorkspaceMenuCommand(workspaceContext, WorkspaceMenuCommandOpenCluster),
-	)
-	require.Equal(t, []string{"open-cluster"}, events)
-
 	panelContext := context.WithValue(
 		context.Background(), application.WindowKey, panelCommandCaller("panel-1"),
 	)
-	require.ErrorContains(
-		t,
-		service.ExecuteWorkspaceMenuCommand(panelContext, WorkspaceMenuCommandOpenCluster),
-		`window "panel-1" is not a workspace`,
+
+	err := service.ExecuteApplicationMenuCommand(panelContext, ApplicationMenuCommandClose)
+
+	require.ErrorContains(t, err, `panel window "panel-1" is not ready`)
+	require.Empty(t, events)
+}
+
+func TestDesktopServiceRejectsApplicationMenuCommandsWithoutAWailsSender(t *testing.T) {
+	events := []string{}
+	shell := NewDesktopShell(
+		nil,
+		func() bool { return true },
+		func(name string, _ ...interface{}) { events = append(events, name) },
+		NewLogger(10),
 	)
+	service := NewDesktopService(DesktopServiceDependencies{DesktopShell: shell})
+
+	err := service.ExecuteApplicationMenuCommand(
+		context.Background(),
+		ApplicationMenuCommandOpenCluster,
+	)
+
+	require.ErrorContains(t, err, "application menu command requires a Wails window sender")
+	require.Empty(t, events)
 }
 
 func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *testing.T) {
@@ -172,7 +284,6 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 	require.NoError(t, service.RequestPanelWindowClose(ctx, "workspace-1", "panel-1", "owner-close"))
 	require.NoError(t, service.AcknowledgePanelWindowClose(ctx, "panel-1"))
 	require.NoError(t, service.AcknowledgeWorkspaceWindowClose(ctx, "workspace-1"))
-	require.NoError(t, service.RoutePanelWindowCommand(ctx, "panel-1", "menu:settings"))
 	require.NoError(t, service.RequestPanelObjectOpen(ctx, "panel-1", ref, "details"))
 	require.NoError(t, service.AuthorizePanelObjectOpen(ctx, "workspace-1", "panel-1", "panel-a", ref, "details"))
 	require.NoError(t, service.UpdatePanelWindowSnapshot(ctx, "panel-1", snapshot))
@@ -184,7 +295,7 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 	require.NoError(t, service.RequestPanelWindowGuard(ctx, "workspace-1", "panel-1", "guard-1", "quit"))
 	require.NoError(t, service.AcknowledgePanelWindowGuard(ctx, "panel-1", "guard-1", true))
 	require.NoError(t, service.AcknowledgeApplicationQuitPreflight(ctx, "workspace-1", "quit-1", true))
-	require.Equal(t, 22, called)
+	require.Equal(t, 21, called)
 }
 
 func TestDesktopServiceRejectsPanelCommandsWhoseClaimedCallerDoesNotMatchTheWailsSender(t *testing.T) {

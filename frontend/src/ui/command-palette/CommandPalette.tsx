@@ -912,6 +912,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     active: isOpen,
     blocking: true,
     suppressShortcuts: true,
+    onApplicationMenuShortcut: close,
     onKeyDown: (event) => {
       if (event.metaKey || event.ctrlKey || event.altKey) {
         return false;
@@ -1012,20 +1013,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     return false;
   }, [hasActiveBlockingSurface, isOpen, open]);
 
-  // Register shortcuts for opening the command palette
-  useShortcut({
-    key: 'p',
-    modifiers: macPlatform ? { meta: true, shift: true } : { ctrl: true, shift: true },
-    handler: handleGlobalOpenShortcut,
-    description: 'Open command palette',
-    category: 'Global',
-    enabled: true,
-    priority: 100,
-  });
-
-  // Also open from the native or app-rendered "View → Command Palette" item,
-  // which emits this runtime event. Held in a ref so the subscription stays stable across
-  // the open/close re-renders that recreate handleGlobalOpenShortcut.
+  // The shared application-menu accelerator and the visible menu item both
+  // emit this event. Held in a ref so the subscription stays stable across the
+  // open/close re-renders that recreate handleGlobalOpenShortcut.
   const openShortcutRef = useRef(handleGlobalOpenShortcut);
   useEffect(() => {
     openShortcutRef.current = handleGlobalOpenShortcut;

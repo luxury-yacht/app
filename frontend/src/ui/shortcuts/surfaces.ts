@@ -7,6 +7,7 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
   const onKeyDownRef = useRef(options.onKeyDown);
   const onEscapeRef = useRef(options.onEscape);
   const onNativeActionRef = useRef(options.onNativeAction);
+  const onApplicationMenuShortcutRef = useRef(options.onApplicationMenuShortcut);
   const {
     kind,
     rootRef,
@@ -18,10 +19,12 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
     onKeyDown,
     onEscape,
     onNativeAction,
+    onApplicationMenuShortcut,
   } = options;
   const hasOnKeyDown = !!onKeyDown;
   const hasOnEscape = !!onEscape;
   const hasOnNativeAction = !!onNativeAction;
+  const hasOnApplicationMenuShortcut = !!onApplicationMenuShortcut;
 
   useEffect(() => {
     onKeyDownRef.current = onKeyDown;
@@ -34,6 +37,10 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
   useEffect(() => {
     onNativeActionRef.current = onNativeAction;
   }, [onNativeAction]);
+
+  useEffect(() => {
+    onApplicationMenuShortcutRef.current = onApplicationMenuShortcut;
+  }, [onApplicationMenuShortcut]);
 
   useEffect(() => {
     if (!keyboardContext) {
@@ -63,6 +70,9 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
       onNativeAction: hasOnNativeAction
         ? (context) => onNativeActionRef.current?.(context)
         : undefined,
+      onApplicationMenuShortcut: hasOnApplicationMenuShortcut
+        ? (event) => onApplicationMenuShortcutRef.current?.(event)
+        : undefined,
     };
 
     if (!surfaceIdRef.current) {
@@ -84,6 +94,7 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
     hasOnEscape,
     hasOnKeyDown,
     hasOnNativeAction,
+    hasOnApplicationMenuShortcut,
     kind,
     keyboardContext,
     priority,

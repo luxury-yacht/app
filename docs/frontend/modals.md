@@ -17,7 +17,9 @@ own focus trap, backdrop, escape handling, or app-background blocking.
   form state; closing and reopening starts a new draft from the latest props.
 - Do not add direct document listeners unless the shared layer cannot express
   the behavior.
-- Do not let command palette or global shortcuts bypass a blocking modal.
+- Do not let command-palette or ordinary global shortcuts bypass a blocking
+  modal. Application-menu accelerators retain their platform command semantics;
+  a modal must opt in explicitly if it should dismiss itself before one runs.
 
 ## Ownership
 
@@ -45,7 +47,8 @@ When adding or changing a modal:
 1. Use the shared modal surface.
 2. Confirm focus enters, stays inside, and restores on close.
 3. Confirm `Escape`, backdrop, submit, cancel, and disabled states.
-4. Confirm background app shortcuts and pointer events are blocked.
+4. Confirm background app shortcuts and pointer events are blocked, and verify
+   any explicitly supported application-menu accelerators separately.
 5. Add tests for open, close, keyboard, and critical workflow behavior.
 
 ## Validation

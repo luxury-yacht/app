@@ -14,6 +14,8 @@ export interface ShortcutModifiers {
   meta?: boolean; // Cmd on Mac, Windows key on Windows
 }
 
+export type ShortcutScope = 'default' | 'application-menu';
+
 export interface ShortcutDefinition {
   key: string; // The key to press (e.g., 's', 'Enter', 'Delete')
   modifiers?: ShortcutModifiers;
@@ -22,6 +24,7 @@ export interface ShortcutDefinition {
   description: string;
   category?: string; // For grouping in help menu
   enabled?: boolean; // Can be dynamically disabled
+  scope?: ShortcutScope; // Application-menu accelerators may pass through transient surfaces
 }
 
 export interface RegisteredShortcut extends ShortcutDefinition {

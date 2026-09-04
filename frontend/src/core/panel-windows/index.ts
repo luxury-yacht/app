@@ -19,7 +19,6 @@ import {
   RequestPanelTabTransfer,
   RequestPanelWindowClose,
   RequestPanelWindowGuard,
-  RoutePanelWindowCommand,
   UpdatePanelWindowSnapshot,
 } from '@/core/backend-api';
 import type { panelwindow } from '@/core/backend-api/models';
@@ -117,9 +116,6 @@ export const acknowledgeApplicationQuitPreflight = (
   transactionId: string,
   allowed: boolean
 ): Promise<void> => AcknowledgeApplicationQuitPreflight(ownerWindowName, transactionId, allowed);
-
-export const routePanelWindowCommand = (windowName: string, eventName: string): Promise<void> =>
-  RoutePanelWindowCommand(windowName, eventName);
 
 export const requestPanelObjectOpen = (
   windowName: string,

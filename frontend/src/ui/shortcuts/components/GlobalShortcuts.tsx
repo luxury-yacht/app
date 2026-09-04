@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import { useZoom } from '@core/contexts/ZoomContext';
 import { onEvent } from '@core/desktop-runtime';
 import {
   getClusterTabOrder,
@@ -22,24 +21,18 @@ import { useShortcut } from '../hooks';
 import { ShortcutHelpModal } from './ShortcutHelpModal';
 
 interface GlobalShortcutsProps {
-  onToggleSidebar?: () => void;
   onToggleAppLogsPanel?: () => void;
   onToggleSettings?: () => void;
-  onToggleObjectDiff?: () => void;
   onRefresh?: () => void;
-  onToggleDiagnostics?: () => void;
   isAppLogsPanelOpen?: boolean;
   isObjectPanelOpen?: boolean;
   isSettingsOpen?: boolean;
 }
 
 export function GlobalShortcuts({
-  onToggleSidebar,
   onToggleAppLogsPanel,
   onToggleSettings,
-  onToggleObjectDiff,
   onRefresh,
-  onToggleDiagnostics,
   isAppLogsPanelOpen,
   isObjectPanelOpen,
   isSettingsOpen,
@@ -48,7 +41,6 @@ export function GlobalShortcuts({
   const [isModalAnimating, setIsModalAnimating] = useState(false);
   const { selectedKubeconfig, selectedKubeconfigs, setActiveKubeconfig, closeKubeconfig } =
     useKubeconfig();
-  const { zoomIn, zoomOut, resetZoom } = useZoom();
   const [clusterTabOrder, setClusterTabOrder] = useState<string[]>(() => getClusterTabOrder());
 
   useEffect(() => {
@@ -78,36 +70,6 @@ export function GlobalShortcuts({
   }, [isSettingsOpen, isModalAnimating]);
 
   // Memoize all handlers to prevent re-registration
-  const handleToggleSidebar = useCallback(() => {
-    onToggleSidebar?.();
-    return undefined;
-  }, [onToggleSidebar]);
-
-  const handleToggleAppLogsPanel = useCallback(() => {
-    onToggleAppLogsPanel?.();
-    return undefined;
-  }, [onToggleAppLogsPanel]);
-
-  const handleToggleSettings = useCallback(() => {
-    // Only toggle settings if help modal isn't open or animating
-    if (!isHelpOpen && !isModalAnimating) {
-      onToggleSettings?.();
-    }
-    return undefined;
-  }, [onToggleSettings, isHelpOpen, isModalAnimating]);
-
-  const handleToggleObjectDiff = useCallback(() => {
-    if (!isHelpOpen && !isModalAnimating) {
-      onToggleObjectDiff?.();
-    }
-    return undefined;
-  }, [onToggleObjectDiff, isHelpOpen, isModalAnimating]);
-
-  const handleToggleDiagnostics = useCallback(() => {
-    onToggleDiagnostics?.();
-    return undefined;
-  }, [onToggleDiagnostics]);
-
   const handleRefresh = useCallback(
     (e?: KeyboardEvent) => {
       e?.preventDefault();
@@ -217,42 +179,6 @@ export function GlobalShortcuts({
   });
 
   useShortcut({
-    key: 'b',
-    modifiers: macPlatform ? { meta: true } : { ctrl: true },
-    handler: handleToggleSidebar,
-    description: 'Toggle sidebar',
-    category: 'Global',
-    enabled: !!onToggleSidebar,
-  });
-
-  useShortcut({
-    key: 'l',
-    modifiers: { shift: true, ctrl: true },
-    handler: handleToggleAppLogsPanel,
-    description: 'Toggle Application Logs Panel',
-    category: 'Global',
-    enabled: !!onToggleAppLogsPanel,
-  });
-
-  useShortcut({
-    key: ',',
-    modifiers: macPlatform ? { meta: true } : { ctrl: true },
-    handler: handleToggleSettings,
-    description: 'Toggle settings',
-    category: 'Global',
-    enabled: !!onToggleSettings,
-  });
-
-  useShortcut({
-    key: 'd',
-    modifiers: macPlatform ? { meta: true } : { ctrl: true },
-    handler: handleToggleObjectDiff,
-    description: 'Toggle object diff viewer',
-    category: 'Global',
-    enabled: !!onToggleObjectDiff,
-  });
-
-  useShortcut({
     key: 'r',
     modifiers: macPlatform ? { meta: true } : { ctrl: true },
     handler: handleRefresh,
@@ -261,51 +187,7 @@ export function GlobalShortcuts({
     enabled: !!onRefresh,
   });
 
-  useShortcut({
-    key: 'd',
-    modifiers: { ctrl: true, shift: true },
-    handler: handleToggleDiagnostics,
-    description: 'Toggle diagnostics panel',
-    category: 'Global',
-    enabled: !!onToggleDiagnostics,
-  });
-
-  // Zoom shortcuts stay in the frontend shortcut system so they work with the
-  // native macOS menu and the app-rendered Windows/Linux menu alike.
-  useShortcut({
-    key: '=',
-    modifiers: macPlatform ? { meta: true } : { ctrl: true },
-    handler: () => {
-      zoomIn();
-      return undefined;
-    },
-    description: 'Zoom in',
-    category: 'View',
-  });
-
-  useShortcut({
-    key: '-',
-    modifiers: macPlatform ? { meta: true } : { ctrl: true },
-    handler: () => {
-      zoomOut();
-      return undefined;
-    },
-    description: 'Zoom out',
-    category: 'View',
-  });
-
-  useShortcut({
-    key: '0',
-    modifiers: macPlatform ? { meta: true } : { ctrl: true },
-    handler: () => {
-      resetZoom();
-      return undefined;
-    },
-    description: 'Reset zoom',
-    category: 'View',
-  });
-
-  // Handle the backend menu:close event from either workspace menu.
+  // Handle the backend menu:close event from the role-aware application menu.
   // Closes the active cluster tab, or the current peer window when it has no
   // cluster tabs left.
   useEffect(() => {

@@ -150,8 +150,8 @@ export function DownloadApplicationUpdate(version: string): $CancellablePromise<
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DownloadApplicationUpdate", version);
 }
 
-export function ExecuteWorkspaceMenuCommand(command: $models.WorkspaceMenuCommand): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ExecuteWorkspaceMenuCommand", command);
+export function ExecuteApplicationMenuCommand(command: $models.ApplicationMenuCommand): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ExecuteApplicationMenuCommand", command);
 }
 
 export function ExportFavorites(): $CancellablePromise<$models.DataManagementResult> {
@@ -396,10 +396,6 @@ export function RestoreGlobalAttentionFindingType(clusterID: string, findingType
 
 export function RetryClusterAuth(clusterID: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.RetryClusterAuth", clusterID);
-}
-
-export function RoutePanelWindowCommand(windowName: string, eventName: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.RoutePanelWindowCommand", windowName, eventName);
 }
 
 export function RunObjectAction(request: $models.ObjectActionRequest): $CancellablePromise<$models.ObjectActionResponse> {

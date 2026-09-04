@@ -228,7 +228,7 @@ describe('CommandPalette component behaviour', () => {
     expected: Record<string, boolean>
   ) => modifierKeys.every((mod) => (actual?.[mod] ?? false) === (expected[mod] ?? false));
 
-  const findGlobalShortcut = (expected: Record<string, boolean>, key = 'p') =>
+  const findGlobalShortcut = (expected: Record<string, boolean>, key = 'n') =>
     registeredGlobalShortcuts.find(
       (shortcut) =>
         shortcut.key.toLowerCase() === key && modifiersEqual(shortcut.modifiers, expected)
@@ -237,20 +237,9 @@ describe('CommandPalette component behaviour', () => {
   const macPlatform =
     typeof navigator !== 'undefined' &&
     /Mac/i.test((navigator.platform || '') + (navigator.userAgent || ''));
-  const defaultOpenShortcut: Record<string, boolean> = macPlatform
+  const defaultGlobalModifiers: Record<string, boolean> = macPlatform
     ? { meta: true, shift: true }
     : { ctrl: true, shift: true };
-  const openPalette = async (modifiers?: Record<string, boolean>) => {
-    const shortcut =
-      (modifiers ? findGlobalShortcut(modifiers) : undefined) ??
-      findGlobalShortcut(defaultOpenShortcut) ??
-      findGlobalShortcut(macPlatform ? { ctrl: true, shift: true } : { meta: true, shift: true });
-    const registeredShortcut = requireValue(shortcut, 'expected command palette shortcut');
-    await act(async () => {
-      registeredShortcut.handler();
-      await Promise.resolve();
-    });
-  };
 
   const emitWailsEvent = async (event: string, ...args: unknown[]) => {
     const handler = wailsEventHandlers.get(event);
@@ -260,6 +249,8 @@ describe('CommandPalette component behaviour', () => {
       await Promise.resolve();
     });
   };
+
+  const openPalette = () => emitWailsEvent('open-command-palette');
 
   const queryItems = () =>
     Array.from(container.querySelectorAll<HTMLDivElement>('.command-palette-item'));
@@ -376,7 +367,7 @@ describe('CommandPalette component behaviour', () => {
     await renderPalette(commands);
     expect(container.querySelector('.command-palette')).toBeNull();
 
-    const shortcut = findGlobalShortcut(defaultOpenShortcut, 'n');
+    const shortcut = findGlobalShortcut(defaultGlobalModifiers);
     expect(shortcut).toBeTruthy();
     await act(async () => {
       shortcut?.handler();
@@ -443,7 +434,7 @@ describe('CommandPalette component behaviour', () => {
     const input = queryInput();
     expect(input.placeholder).toBe('Select a kubeconfig...');
 
-    const shortcut = findGlobalShortcut(defaultOpenShortcut, 'n');
+    const shortcut = findGlobalShortcut(defaultGlobalModifiers);
     expect(shortcut).toBeTruthy();
     await act(async () => {
       shortcut?.handler();
@@ -496,7 +487,7 @@ describe('CommandPalette component behaviour', () => {
     ];
 
     await renderPalette(commands);
-    await openPalette({ ctrl: true, shift: true });
+    await openPalette();
 
     expect(container.querySelector('.command-palette')).not.toBeNull();
     expect(queryItems()).toHaveLength(2);
@@ -781,11 +772,11 @@ describe('CommandPalette component behaviour', () => {
     expect(emptyState?.textContent).toBe('No commands available');
   });
 
-  it('closes when clicking outside and does not reopen from the same shortcut', async () => {
+  it('closes when clicking outside and ignores the menu event while already open', async () => {
     await renderPalette([
       { id: 'open-settings', label: 'Open Settings', category: 'Application', action: vi.fn() },
     ]);
-    await openPalette(defaultOpenShortcut);
+    await openPalette();
 
     const paletteBefore = container.querySelector('.command-palette');
     expect(paletteBefore).not.toBeNull();
@@ -797,20 +788,11 @@ describe('CommandPalette component behaviour', () => {
 
     expect(container.querySelector('.command-palette')).toBeNull();
 
-    const globalShortcut = findGlobalShortcut(defaultOpenShortcut);
-    expect(globalShortcut).toBeTruthy();
-    await act(async () => {
-      const result = globalShortcut?.handler();
-      expect(result).toBe(true);
-      await Promise.resolve();
-    });
+    await openPalette();
 
     expect(container.querySelector('.command-palette')).not.toBeNull();
 
-    await act(async () => {
-      globalShortcut?.handler();
-      await Promise.resolve();
-    });
+    await openPalette();
 
     expect(container.querySelector('.command-palette')).not.toBeNull();
   });
