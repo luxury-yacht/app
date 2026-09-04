@@ -12,6 +12,7 @@
 }
 
 .content-body .workloads-pods-split .gridtable-wrapper,
+.content-body .workloads-pods-split .gridtable-filter-container,
 .content-body .workloads-pods-split .gridtable-header-container,
 .content-body .workloads-pods-split .gridtable-pagination {
   margin-right: 0;

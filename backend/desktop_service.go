@@ -604,6 +604,9 @@ func (s *DesktopService) ExecuteApplicationMenuCommand(
 			windowName = caller.Name()
 		}
 	}
+	if windowName == "" {
+		return fmt.Errorf("application menu command requires a Wails sender")
+	}
 	return s.desktopShell.ExecuteApplicationMenuCommand(windowName, command)
 }
 

@@ -4,6 +4,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppHeader from './AppHeader';
+import { focusPreviousRegionBeforeSidebar } from './appFocusRegions';
 
 const runtimeMock = vi.hoisted(() => ({
   closeWindow: vi.fn(),
@@ -11,6 +12,9 @@ const runtimeMock = vi.hoisted(() => ({
   minimiseWindow: vi.fn(),
   toggleMaximise: vi.fn(),
 }));
+
+const reportOperationalError = vi.hoisted(() => vi.fn());
+vi.mock('@/utils/errorHandler', () => ({ reportOperationalError }));
 
 const platformMock = vi.hoisted(() => ({
   isMacPlatform: vi.fn(() => false),
@@ -60,11 +64,12 @@ describe('AppHeader', () => {
     root = ReactDOM.createRoot(container);
     platformMock.isMacPlatform.mockReturnValue(false);
     platformMock.isWindowsPlatform.mockReturnValue(true);
-    runtimeMock.closeWindow.mockReset();
+    reportOperationalError.mockClear();
+    runtimeMock.closeWindow.mockReset().mockResolvedValue(undefined);
     runtimeMock.isWindowMaximised.mockReset();
     runtimeMock.isWindowMaximised.mockResolvedValue(false);
-    runtimeMock.minimiseWindow.mockReset();
-    runtimeMock.toggleMaximise.mockReset();
+    runtimeMock.minimiseWindow.mockReset().mockResolvedValue(undefined);
+    runtimeMock.toggleMaximise.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -86,6 +91,36 @@ describe('AppHeader', () => {
       </ModalStateProvider>
     );
   };
+
+  it.each([false, true])(
+    'returns from the sidebar to the final header control (mac=%s)',
+    (isMac) => {
+      platformMock.isMacPlatform.mockReturnValue(isMac);
+      act(() => renderHeader());
+      expect(focusPreviousRegionBeforeSidebar()).toBe(true);
+      expect(document.activeElement?.getAttribute('aria-label')).toBe(
+        isMac ? 'Command Palette' : 'Close window'
+      );
+      expect(container.querySelectorAll('[data-app-header-last-focusable="true"]')).toHaveLength(1);
+    }
+  );
+
+  it.each([
+    ['Minimise window', 'minimiseWindow', 'minimise-window'],
+    ['Maximise window', 'toggleMaximise', 'toggle-maximise-window'],
+    ['Close window', 'closeWindow', 'close-window'],
+    ['Toggle window maximize', 'toggleMaximise', 'toggle-maximise-window'],
+  ] as const)('reports failures from %s', async (label, operation, action) => {
+    const error = new Error('Window operation failed');
+    runtimeMock[operation].mockRejectedValueOnce(error);
+    await act(async () => {
+      root.render(<AppHeader mode="panel" />);
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.click();
+    });
+    expect(reportOperationalError).toHaveBeenCalledWith(error, { source: 'AppHeader', action });
+  });
 
   it('renders header controls in the expected tab order', () => {
     act(() => {

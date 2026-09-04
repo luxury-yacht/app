@@ -270,7 +270,7 @@ func TestWailsApplicationIsInjectedDirectlyWithoutDesktopAdapter(t *testing.T) {
 	require.NoError(t, validateDirectWailsComposition(mainSource, windowSource, runtimeSource, menuSource, desktopErr == nil))
 	require.Contains(t, windowSource, "type lifecycleBackend interface {")
 	require.NotContains(t, windowSource, "ApplicationRuntime")
-	require.Contains(t, mainSource, "appwindow.NewRegistry(wailsApp, backendRuntime.Lifecycle, nativeMenu)")
+	require.Contains(t, mainSource, "appwindow.NewRegistry(wailsApp, backendRuntime.Lifecycle)")
 }
 
 func TestDesktopServiceOwnsTheWailsBoundaryWithoutTheCompositionRoot(t *testing.T) {

@@ -263,7 +263,8 @@ func (s *DesktopShell) ExecuteApplicationMenuCommand(
 	case ApplicationMenuCommandPaste:
 		text, err := s.clipboardText()
 		if err != nil {
-			return err
+			// Clipboard text can be unavailable (for example, an image-only clipboard).
+			return nil
 		}
 		return s.emitApplicationWindowEvent(caller.windowName, "menu:paste", text)
 	case ApplicationMenuCommandSelectAll:

@@ -6,7 +6,6 @@ html {
 
 body {
   min-height: 100%;
-  --wails-resize: all;
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-family-base);

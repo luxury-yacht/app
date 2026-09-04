@@ -256,6 +256,50 @@ describe('strict CSS cascade contracts', () => {
     expect(filterContainer).toContain('margin-right: var(--dock-right-offset, 0px)');
   });
 
+  it.each([false, true])(
+    'applies the dock offset once to split filters (global styles last=%s)',
+    (globalLast) => {
+      const grid = readProjectFile('styles/components/gridtables.css').replace(
+        /var\(--dock-right-offset, 0px\)/g,
+        '320px'
+      );
+      const split = readProjectFile(
+        'src/modules/namespace/components/WorkloadsPodsSplit.css'
+      ).replace(/var\(--dock-right-offset, 0px\)/g, '320px');
+      const style = installStyles(...(globalLast ? [split, grid] : [grid, split]));
+      style.dataset.cssContract = 'split-filter-offset';
+      document.body.innerHTML = `
+      <div class="content-body">
+        <div class="gridtable-filter-container" id="ordinary"></div>
+        <div class="workloads-pods-split"><div class="gridtable-filter-container" id="split"></div></div>
+      </div>`;
+      expect(
+        window.getComputedStyle(document.querySelector('#ordinary') as HTMLElement).marginRight
+      ).toBe('320px');
+      expect(
+        window.getComputedStyle(document.querySelector('#split') as HTMLElement).marginRight
+      ).toBe('0px');
+    }
+  );
+
+  it('keeps dark dropdown surfaces raised while the application menu matches its page', () => {
+    const darkCSS = readProjectFile('styles/appearance-modes/dark.css');
+    const token = (name: string) => darkCSS.match(new RegExp(`${name}:\\s*([^;]+)`))?.[1];
+    expect(token('--dropdown-menu-bg')).toBe('var(--color-base-800)');
+    expect(token('--dropdown-menu-border')).toBe('var(--color-base-700)');
+    const menuStyle = installStyles(
+      readProjectFile('src/ui/layout/AppMenuBar.css')
+        .replace(/var\(--color-bg\)/g, 'rgb(10, 10, 10)')
+        .replace(/var\(--color-bg-tertiary\)/g, 'rgb(30, 30, 30)')
+    );
+    menuStyle.dataset.cssContract = 'dropdown-surfaces';
+    document.body.innerHTML = '<div class="app-menu-dropdown"></div>';
+    expect(
+      window.getComputedStyle(document.querySelector('.app-menu-dropdown') as HTMLElement)
+        .backgroundColor
+    ).toBe('rgb(10, 10, 10)');
+  });
+
   it('uses appearance-mode tokens for custom-column action hover states', () => {
     const gridTableCSS = readProjectFile('styles/components/gridtables.css');
     const editHover = gridTableCSS.match(
@@ -303,13 +347,6 @@ describe('strict CSS cascade contracts', () => {
     expect(windowControl).toContain('app-region: no-drag');
     expect(menuBar).toContain('--wails-draggable: no-drag');
     expect(menuBar).toContain('app-region: no-drag');
-  });
-
-  it('declares the documented Wails resize contract for resizable frameless windows', () => {
-    const globalsCSS = readProjectFile('styles/base/globals.css');
-    const body = globalsCSS.match(/body \{([\s\S]*?)\}/)?.[1];
-
-    expect(body).toContain('--wails-resize: all');
   });
 
   it('keeps the Linux window outline fixed above app content without intercepting input', () => {

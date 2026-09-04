@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { installWailsDragRuntime } from '@/test-utils/wailsDragRuntime.test.helpers';
 import {
   installDirectionalWindowResizeCursor,
   resolveDirectionalWindowResizeCursor,
@@ -75,6 +76,57 @@ describe('frameless window resize cursor', () => {
     expect(document.body.dataset.windowResizeCursor).toBeUndefined();
 
     cleanup();
+  });
+
+  it.each([
+    [1, 1, 'nw-resize'],
+    [400, 1, 'n-resize'],
+    [1023, 1, 'ne-resize'],
+    [1, 300, 'w-resize'],
+    [1023, 300, 'e-resize'],
+    [1, 767, 'sw-resize'],
+    [400, 767, 's-resize'],
+    [1023, 767, 'se-resize'],
+  ] as const)('preserves runtime resize invocation at (%s, %s)', (clientX, clientY, edge) => {
+    const runtime = installWailsDragRuntime();
+    const cleanup = installDirectionalWindowResizeCursor();
+    try {
+      const move = () =>
+        document.body.dispatchEvent(
+          new MouseEvent('mousemove', { bubbles: true, clientX, clientY })
+        );
+      move();
+      expect(document.body.dataset.windowResizeCursor).toBe(edge);
+      document.body.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, buttons: 1, clientX, clientY })
+      );
+      document.body.dispatchEvent(
+        new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientX, clientY })
+      );
+      expect(runtime.invoke).toHaveBeenCalledWith(`wails:resize:${edge}`);
+    } finally {
+      cleanup();
+      runtime.cleanup();
+    }
+  });
+
+  it('clears on a non-bubbling root mouseleave but preserves the cursor across child boundaries', () => {
+    const cleanup = installDirectionalWindowResizeCursor();
+    const child = document.createElement('button');
+    document.body.appendChild(child);
+    try {
+      document.body.style.cursor = 'ew-resize';
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 1, clientY: 300 }));
+      child.dispatchEvent(
+        new MouseEvent('mouseleave', { bubbles: false, relatedTarget: document.body })
+      );
+      expect(document.body.dataset.windowResizeCursor).toBe('w-resize');
+      document.documentElement.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false }));
+      expect(document.body.dataset.windowResizeCursor).toBeUndefined();
+    } finally {
+      child.remove();
+      cleanup();
+    }
   });
 
   it('clears the projected cursor when the installer is removed', () => {

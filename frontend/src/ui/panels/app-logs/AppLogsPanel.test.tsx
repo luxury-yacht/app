@@ -11,6 +11,7 @@ import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
+import { installWailsDragRuntime } from '@/test-utils/wailsDragRuntime.test.helpers';
 
 interface CapturedDropdownProps {
   options: DropdownOption[];
@@ -281,6 +282,36 @@ describe('AppLogsPanel', () => {
     expect(header?.style.getPropertyValue('--app-log-cluster-width')).toBe('150px');
 
     cleanup();
+  });
+
+  it('does not restore a finished log-column cursor after leaving a window edge', async () => {
+    vi.useFakeTimers();
+    const runtime = installWailsDragRuntime('linux');
+    const { container, cleanup } = await renderPanel();
+    try {
+      await flushInitialLoad();
+      const resizer = container.querySelector<HTMLElement>('[aria-label="Resize Cluster column"]');
+      await act(async () => {
+        resizer?.dispatchEvent(
+          new MouseEvent('pointerdown', { bubbles: true, clientX: 200, button: 0 })
+        );
+      });
+      document.body.dispatchEvent(
+        new MouseEvent('mousemove', { bubbles: true, clientX: 1, clientY: 300, buttons: 1 })
+      );
+      expect(document.body.style.cursor).toBe('ew-resize');
+      await act(async () => {
+        window.dispatchEvent(new MouseEvent('pointerup'));
+      });
+      document.body.dispatchEvent(
+        new MouseEvent('mousemove', { bubbles: true, clientX: 400, clientY: 300 })
+      );
+      expect(document.body.style.cursor).not.toBe('col-resize');
+    } finally {
+      cleanup();
+      runtime.cleanup();
+      document.body.style.cursor = '';
+    }
   });
 
   it('appends new logs from app-logs events using delta reads and listener disposers', async () => {

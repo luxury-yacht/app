@@ -19,6 +19,7 @@ import SessionsStatus from '@ui/status/SessionsStatus';
 import UpdateStatus from '@ui/status/UpdateStatus';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { eventBus } from '@/core/events';
+import { reportOperationalError } from '@/utils/errorHandler';
 import { isMacPlatform, isWindowsPlatform, usesCustomWindowFrame } from '@/utils/platform';
 import './AppHeader.css';
 import AppMenuBar from './AppMenuBar';
@@ -69,6 +70,12 @@ const getMaximiseControlPresentation = (isMaximised: boolean): MaximiseControlPr
 const isModalSurfaceOpen = () =>
   typeof document !== 'undefined' && document.body.classList.contains('modal-surface-open');
 
+const runWindowOperation = (action: string, operation: () => Promise<void>) => {
+  void operation().catch((error: unknown) =>
+    reportOperationalError(error, { source: 'AppHeader', action })
+  );
+};
+
 const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
   const isMac = isMacPlatform();
   const isLinux = !isMac && !isWindowsPlatform();
@@ -115,12 +122,14 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
     return installDirectionalWindowResizeCursor();
   }, [usesCustomFrame]);
 
-  const toggleWindowMaximize = useCallback(async () => {
+  const toggleWindowMaximize = useCallback(() => {
     if (isModalSurfaceOpen()) {
       return;
     }
-    await toggleMaximise();
-    await refreshMaximiseState();
+    runWindowOperation('toggle-maximise-window', async () => {
+      await toggleMaximise();
+      await refreshMaximiseState();
+    });
   }, [refreshMaximiseState]);
 
   const headerClassName = buildAppHeaderClassName({ isMac, isLinux, usesCustomFrame });
@@ -155,7 +164,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
             onClick={() => eventBus.emit('command-palette:open')}
             title={`Command Palette (${isMac ? '⇧⌘P' : 'Ctrl+Shift+P'})`}
             aria-label="Command Palette"
-            data-app-header-last-focusable="true"
+            data-app-header-last-focusable={usesCustomFrame ? undefined : 'true'}
           >
             <SearchIcon width={14} height={14} />
           </button>
@@ -168,7 +177,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
             className="app-header-window-control app-header-window-control--minimise"
             aria-label="Minimise window"
             title="Minimise"
-            onClick={() => void minimiseWindow()}
+            onClick={() => runWindowOperation('minimise-window', minimiseWindow)}
           >
             <svg
               className="app-header-window-control-glyph"
@@ -200,7 +209,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
             className="app-header-window-control app-header-window-control--close"
             aria-label="Close window"
             title="Close"
-            onClick={() => void closeWindow()}
+            data-app-header-last-focusable="true"
+            onClick={() => runWindowOperation('close-window', closeWindow)}
           >
             <svg
               className="app-header-window-control-glyph"

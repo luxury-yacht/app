@@ -12,6 +12,7 @@ import {
   getColumnMaxWidth,
   getColumnMinWidth,
 } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
+import { acquireColumnResizeCursor } from '@shared/utils/columnResizeCursor';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -230,13 +231,13 @@ export function useColumnResizeController<T>({
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = 'col-resize';
+    const releaseCursor = acquireColumnResizeCursor();
     document.body.style.userSelect = 'none';
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
+      releaseCursor();
       document.body.style.userSelect = '';
       if (
         resizeRafRef.current !== null &&

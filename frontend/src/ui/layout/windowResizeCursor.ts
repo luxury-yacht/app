@@ -124,14 +124,20 @@ export function installDirectionalWindowResizeCursor(
     }
   };
 
+  const handleMouseLeave = (event: MouseEvent) => {
+    if (event.target === targetDocument.documentElement) {
+      clearCursor();
+    }
+  };
+
   targetWindow.addEventListener('mousemove', updateCursor, { capture: true });
   targetWindow.addEventListener('blur', clearCursor);
-  targetDocument.addEventListener('mouseleave', clearCursor);
+  targetDocument.addEventListener('mouseleave', handleMouseLeave, { capture: true });
 
   return () => {
     targetWindow.removeEventListener('mousemove', updateCursor, { capture: true });
     targetWindow.removeEventListener('blur', clearCursor);
-    targetDocument.removeEventListener('mouseleave', clearCursor);
+    targetDocument.removeEventListener('mouseleave', handleMouseLeave, { capture: true });
     clearCursor();
   };
 }

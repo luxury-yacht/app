@@ -46,8 +46,8 @@
   left: calc(-1 * var(--border-width));
   min-width: 220px;
   padding: var(--spacing-xs) 0;
-  border: var(--border-width) solid var(--dropdown-menu-border);
-  background: var(--dropdown-menu-bg);
+  border: var(--border-width) solid var(--color-bg-tertiary);
+  background: var(--color-bg);
   box-shadow: var(--dropdown-menu-shadow);
   color: var(--color-text);
   outline: none;

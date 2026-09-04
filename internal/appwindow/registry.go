@@ -21,7 +21,6 @@ type lifecycleBackend interface {
 type Registry struct {
 	application          *application.App
 	backend              lifecycleBackend
-	menu                 *application.Menu
 	lifecycle            *lifecycle
 	panels               *panelIndex
 	newWindow            func(application.WebviewWindowOptions) *application.WebviewWindow
@@ -182,13 +181,11 @@ func bindApplicationWindowOperations(registry *Registry, app *application.App) {
 func NewRegistry(
 	app *application.App,
 	backend lifecycleBackend,
-	menu *application.Menu,
 ) *Registry {
 	configureNativeTabDragAnimation()
 	registry := &Registry{
 		application:          app,
 		backend:              backend,
-		menu:                 menu,
 		lifecycle:            newLifecycle(),
 		panels:               newPanelIndex(),
 		authorizedClose:      make(map[string]struct{}),
@@ -318,7 +315,7 @@ func (r *Registry) Create(restoreGeometry bool) *application.WebviewWindow {
 }
 
 func (r *Registry) optionsForPeer(name, sourceName string, restoreGeometry bool) application.WebviewWindowOptions {
-	options := windowOptions(name, r.menu)
+	options := windowOptions(name)
 	if restoreGeometry || sourceName == "" {
 		return options
 	}
@@ -1127,8 +1124,8 @@ func (r *Registry) Count() int {
 	return r.lifecycle.Count()
 }
 
-func windowOptions(name string, nativeMenu *application.Menu) application.WebviewWindowOptions {
-	return windowOptionsForPlatform(name, nativeMenu, runtime.GOOS)
+func windowOptions(name string) application.WebviewWindowOptions {
+	return windowOptionsForPlatform(name, runtime.GOOS)
 }
 
 func panelWindowOptions(
@@ -1167,9 +1164,10 @@ func panelWindowOptionsForPlatform(
 		Frameless:        goos != "darwin",
 		Mac:              sharedMacWindowChrome(),
 		Windows: application.WindowsWindow{
-			Theme:                  application.SystemDefault,
-			DisableMenu:            goos == "windows",
-			NonClientRegionSupport: goos == "windows",
+			Theme:       application.SystemDefault,
+			DisableMenu: goos == "windows",
+			// Keep pointer input in the DOM so Wails can resize before dragging.
+			NonClientRegionSupport: false,
 		},
 		UseApplicationMenu: goos == "darwin",
 		Zoom:               1,
@@ -1210,7 +1208,7 @@ func positionPanelWindowOptions(options *application.WebviewWindowOptions, owner
 	return true
 }
 
-func windowOptionsForPlatform(name string, _ *application.Menu, goos string) application.WebviewWindowOptions {
+func windowOptionsForPlatform(name string, goos string) application.WebviewWindowOptions {
 	backgroundType := application.BackgroundTypeTransparent
 	if goos == "windows" {
 		backgroundType = application.BackgroundTypeSolid
@@ -1229,9 +1227,10 @@ func windowOptionsForPlatform(name string, _ *application.Menu, goos string) app
 		Frameless:        goos != "darwin",
 		Mac:              sharedMacWindowChrome(),
 		Windows: application.WindowsWindow{
-			Theme:                  application.SystemDefault,
-			DisableMenu:            goos == "windows",
-			NonClientRegionSupport: goos == "windows",
+			Theme:       application.SystemDefault,
+			DisableMenu: goos == "windows",
+			// Keep pointer input in the DOM so Wails can resize before dragging.
+			NonClientRegionSupport: false,
 		},
 		UseApplicationMenu: goos == "darwin",
 		Zoom:               1,

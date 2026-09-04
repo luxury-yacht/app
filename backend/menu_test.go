@@ -492,3 +492,14 @@ func TestApplicationMenuUpdateCheckTargetsTheCallerBeforeStartingDiscovery(t *te
 		t.Fatal("update check did not start")
 	}
 }
+
+func TestApplicationMenuPasteWithoutReadableClipboardIsANoop(t *testing.T) {
+	events := []string{}
+	shell := NewDesktopShell(nil, func() bool { return true },
+		func(name string, _ ...interface{}) { events = append(events, name) }, NewLogger(10),
+		DesktopShellBindings{NativeWindowDescriptor: func(string) (panelwindow.NativeDescriptor, error) {
+			return panelwindow.NativeDescriptor{Role: panelwindow.NativeRoleWorkspace, Workspace: &panelwindow.WorkspaceDescriptor{WindowName: "workspace-1"}}, nil
+		}})
+	require.NoError(t, shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandPaste))
+	require.Empty(t, events)
+}

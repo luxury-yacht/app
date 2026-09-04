@@ -10,6 +10,7 @@ import { useColumnResizeController } from '@shared/components/tables/hooks/useCo
 import React, { act, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { installWailsDragRuntime } from '@/test-utils/wailsDragRuntime.test.helpers';
 
 type SampleRow = {
   name: string;
@@ -146,6 +147,46 @@ afterEach(() => {
 });
 
 describe('useColumnResizeController', () => {
+  it.each(['windows', 'linux'] as const)(
+    'does not restore a finished column cursor after leaving a %s window edge',
+    async (os) => {
+      const runtime = installWailsDragRuntime(os);
+      const harness = await renderHarness();
+      try {
+        await act(async () => {
+          harness.getHandle().beginResize(
+            {
+              clientX: 200,
+              preventDefault: vi.fn(),
+              stopPropagation: vi.fn(),
+            } as unknown as React.MouseEvent,
+            'name',
+            'kind'
+          );
+        });
+        await act(async () => {
+          document.body.dispatchEvent(
+            new MouseEvent('mousemove', { bubbles: true, clientX: 1, clientY: 300, buttons: 1 })
+          );
+        });
+        expect(document.body.style.cursor).toBe('ew-resize');
+        await act(async () => {
+          document.body.dispatchEvent(
+            new MouseEvent('mouseup', { bubbles: true, clientX: 1, clientY: 300 })
+          );
+        });
+        document.body.dispatchEvent(
+          new MouseEvent('mousemove', { bubbles: true, clientX: 400, clientY: 300 })
+        );
+        expect(document.body.style.cursor).not.toBe('col-resize');
+      } finally {
+        await harness.unmount();
+        runtime.cleanup();
+        document.body.style.cursor = '';
+      }
+    }
+  );
+
   it('resizes a column with Arrow, Home, and End keys within its configured bounds', async () => {
     const harness = await renderHarness();
     const handle = harness.getHandle();

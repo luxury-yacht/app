@@ -483,7 +483,7 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 		wailsApp.Menu.SetApplicationMenu(nativeMenu)
 	})
 
-	windows = appwindow.NewRegistry(wailsApp, backendRuntime.Lifecycle, nativeMenu)
+	windows = appwindow.NewRegistry(wailsApp, backendRuntime.Lifecycle)
 	windowBridge.bind(windows)
 	windows.Create(true)
 

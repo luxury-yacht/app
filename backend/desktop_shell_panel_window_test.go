@@ -211,23 +211,26 @@ func TestApplicationMenuAllowsPanelCommandsDuringDocking(t *testing.T) {
 	require.Equal(t, []string{"menu:close"}, events)
 }
 
-func TestDesktopServiceAllowsUntargetedApplicationMenuCommandsWithoutAWailsSender(t *testing.T) {
-	events := []string{}
-	shell := NewDesktopShell(
-		nil,
-		func() bool { return true },
-		func(name string, _ ...interface{}) { events = append(events, name) },
-		NewLogger(10),
-	)
-	service := NewDesktopService(DesktopServiceDependencies{DesktopShell: shell})
-
-	err := service.ExecuteApplicationMenuCommand(
-		context.Background(),
-		ApplicationMenuCommandSettings,
-	)
-
-	require.NoError(t, err)
-	require.Equal(t, []string{"open-settings"}, events)
+func TestDesktopServiceRejectsApplicationMenuCommandsWithoutAWailsSender(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		ctx  context.Context
+	}{
+		{name: "nil context"},
+		{name: "missing sender", ctx: context.Background()},
+		{name: "invalid sender", ctx: context.WithValue(context.Background(), application.WindowKey, "workspace-1")},
+		{name: "empty sender", ctx: context.WithValue(context.Background(), application.WindowKey, panelCommandCaller(""))},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			events := []string{}
+			shell := NewDesktopShell(nil, func() bool { return true },
+				func(name string, _ ...interface{}) { events = append(events, name) }, NewLogger(10))
+			service := NewDesktopService(DesktopServiceDependencies{DesktopShell: shell})
+			err := service.ExecuteApplicationMenuCommand(test.ctx, ApplicationMenuCommandSettings)
+			require.ErrorContains(t, err, "Wails sender")
+			require.Empty(t, events)
+		})
+	}
 }
 
 func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *testing.T) {

@@ -41,7 +41,7 @@ func TestVisibilityPreservesPlatformStartupContract(t *testing.T) {
 		{goos: "linux", wantHidden: false},
 	} {
 		t.Run(test.goos, func(t *testing.T) {
-			options := windowOptionsForPlatform("workspace-7", nil, test.goos)
+			options := windowOptionsForPlatform("workspace-7", test.goos)
 
 			require.Equal(t, test.wantHidden, options.Hidden)
 		})
@@ -49,8 +49,6 @@ func TestVisibilityPreservesPlatformStartupContract(t *testing.T) {
 }
 
 func TestOptionsPreserveTheSharedPeerContract(t *testing.T) {
-	nativeMenu := application.NewMenu()
-
 	for _, test := range []struct {
 		goos                       string
 		wantBackgroundType         application.BackgroundType
@@ -69,7 +67,7 @@ func TestOptionsPreserveTheSharedPeerContract(t *testing.T) {
 			wantBackgroundType:         application.BackgroundTypeSolid,
 			wantFrameless:              true,
 			wantWindowsMenuOff:         true,
-			wantNonClientRegionSupport: true,
+			wantNonClientRegionSupport: false,
 		},
 		{
 			goos:               "linux",
@@ -78,7 +76,7 @@ func TestOptionsPreserveTheSharedPeerContract(t *testing.T) {
 		},
 	} {
 		t.Run(test.goos, func(t *testing.T) {
-			options := windowOptionsForPlatform("workspace-7", nativeMenu, test.goos)
+			options := windowOptionsForPlatform("workspace-7", test.goos)
 
 			require.Equal(t, "workspace-7", options.Name)
 			require.Equal(t, "Luxury Yacht", options.Title)
@@ -128,7 +126,7 @@ func TestPanelOptionsUseSharedEntryAndPlatformWindowChrome(t *testing.T) {
 			goos:                       "windows",
 			wantFrameless:              true,
 			wantWindowsMenuOff:         true,
-			wantNonClientRegionSupport: true,
+			wantNonClientRegionSupport: false,
 		},
 		{goos: "linux", wantTitle: " ", wantFrameless: true},
 	} {
@@ -182,7 +180,7 @@ func TestPanelOptionsUseTransferredInitialBoundsOnce(t *testing.T) {
 
 func TestRegistryCentersPanelWindowBoundsOnTheOwnerNativeFrame(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	registry.panelOpenTimeout = 0
 	registry.windowGeometry = func(name string) (geometry, bool) {
@@ -217,7 +215,7 @@ func TestRegistryCentersPanelWindowBoundsOnTheOwnerNativeFrame(t *testing.T) {
 
 func TestRegistryCentersPanelWindowWhenOwnerNativeGeometryIsUnavailable(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	registry.panelOpenTimeout = 0
 	registry.windowGeometry = func(string) (geometry, bool) {
@@ -242,7 +240,7 @@ func TestRegistryCentersPanelWindowWhenOwnerNativeGeometryIsUnavailable(t *testi
 
 func TestRegistryUsesTearOffCursorPositionOnItsTargetScreen(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	registry.panelOpenTimeout = 0
 	registry.panelScreenWorkAreas = func() []application.Rect {
@@ -385,7 +383,7 @@ func TestPeerOptionsInheritSizeWithoutPositionWhenTheSourceScreenIsUnavailable(t
 
 func TestRegistryCreatesAndCountsPeersThroughTheWailsWindowManager(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 
 	require.Zero(t, registry.Count())
 	first := registry.Create(true)
@@ -398,7 +396,7 @@ func TestRegistryCreatesAndCountsPeersThroughTheWailsWindowManager(t *testing.T)
 
 func TestRegistryCreatesPanelOutsideWorkspaceLifecycleAccounting(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -412,7 +410,7 @@ func TestRegistryCreatesPanelOutsideWorkspaceLifecycleAccounting(t *testing.T) {
 
 func TestRegistryBeginsHiddenPanelTransferWithPlatformWindowOptions(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -441,7 +439,7 @@ func TestRegistryBeginsHiddenPanelTransferWithPlatformWindowOptions(t *testing.T
 	require.False(t, createdOptions.AlwaysOnTop)
 	require.False(t, createdOptions.DisableResize)
 	require.Equal(t, runtime.GOOS != "darwin", createdOptions.Frameless)
-	require.Equal(t, runtime.GOOS == "windows", createdOptions.Windows.NonClientRegionSupport)
+	require.False(t, createdOptions.Windows.NonClientRegionSupport)
 	require.True(t, createdOptions.Mac.TitleBar.FullSizeContent)
 	require.NotNil(t, configuredWindow)
 	require.Equal(t, descriptor.WindowName, configuredWindow.Name())
@@ -450,7 +448,7 @@ func TestRegistryBeginsHiddenPanelTransferWithPlatformWindowOptions(t *testing.T
 
 func TestRegistryRejectsPanelWithUnknownOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = "workspace-missing"
 
@@ -463,7 +461,7 @@ func TestRegistryRejectsPanelWithUnknownOwner(t *testing.T) {
 
 func TestRegistryRejectsIncompletePanelIdentity(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	valid := validPanelGroupSnapshot()
 	valid.OwnerWindowName = owner.Name()
@@ -498,7 +496,7 @@ func TestRegistryRejectsIncompletePanelIdentity(t *testing.T) {
 
 func TestRegistryRejectsDuplicatePanelGroupWithinOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -517,7 +515,7 @@ func TestRegistryRejectsDuplicatePanelGroupWithinOwner(t *testing.T) {
 
 func TestAuthorizedPanelClosingHookLeavesCommitToTheRequestTransaction(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -533,7 +531,7 @@ func TestAuthorizedPanelClosingHookLeavesCommitToTheRequestTransaction(t *testin
 }
 
 func TestPanelClosingHookCancelsAndRoutesAnUnauthorizedNativeClose(t *testing.T) {
-	registry := NewRegistry(application.New(application.Options{}), nil, nil)
+	registry := NewRegistry(application.New(application.Options{}), nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -557,7 +555,7 @@ func TestPanelClosingHookCancelsAndRoutesAnUnauthorizedNativeClose(t *testing.T)
 
 func TestRegistryRoutesPanelMenuCommandsAndFocusesTheOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -586,7 +584,7 @@ func TestRegistryRoutesPanelMenuCommandsAndFocusesTheOwner(t *testing.T) {
 
 func TestRegistryShowsPanelOnlyAfterMatchingReadyAcknowledgement(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -616,7 +614,7 @@ func TestRegistryShowsPanelOnlyAfterMatchingReadyAcknowledgement(t *testing.T) {
 
 func TestRegistryReportsPanelClosedWhenReadyWindowDisappearsBeforeShow(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -646,7 +644,7 @@ func TestRegistryReportsPanelClosedWhenReadyWindowDisappearsBeforeShow(t *testin
 
 func TestRegistryClosesReadyPanelWhenOpenedEventCannotReachOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -679,7 +677,7 @@ func TestRegistryClosesReadyPanelWhenOpenedEventCannotReachOwner(t *testing.T) {
 
 func TestRegistryRoutesAcknowledgedOpenAndDockToTheImmutableOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -728,7 +726,7 @@ func TestRegistryRoutesAcknowledgedOpenAndDockToTheImmutableOwner(t *testing.T) 
 
 func TestRegistryFailedDockCloseLeavesNativeSourceLive(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -753,7 +751,7 @@ func TestRegistryFailedDockCloseLeavesNativeSourceLive(t *testing.T) {
 
 func TestRegistryOpenTimeoutClosesIncompleteChildAndPreservesOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	registry.panelOpenTimeout = 0
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
@@ -775,7 +773,7 @@ func TestRegistryOpenTimeoutClosesIncompleteChildAndPreservesOwner(t *testing.T)
 
 func TestRegistryRoutesChildObjectOpenThroughItsOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -800,7 +798,7 @@ func TestRegistryRoutesChildObjectOpenThroughItsOwner(t *testing.T) {
 
 func TestRegistryRoutesSnapshotAndTabCloseThroughOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -833,7 +831,7 @@ func TestRegistryRoutesSnapshotAndTabCloseThroughOwner(t *testing.T) {
 
 func TestRegistryRoutesQuitGuardChecksBetweenOwnerAndPanel(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -859,7 +857,7 @@ func TestRegistryRoutesQuitGuardChecksBetweenOwnerAndPanel(t *testing.T) {
 
 func TestRegistryFocusesAuthorizesAndClosesAnOwnedPanelWindow(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -907,7 +905,7 @@ func TestRegistryFocusesAuthorizesAndClosesAnOwnedPanelWindow(t *testing.T) {
 
 func TestRegistryValidatesDockAcknowledgementBeforeClosingThePanelWindow(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -934,7 +932,7 @@ func TestRegistryValidatesDockAcknowledgementBeforeClosingThePanelWindow(t *test
 }
 
 func TestRegistrySerializesDockCommitAgainstTransferFailure(t *testing.T) {
-	registry := NewRegistry(application.New(application.Options{}), nil, nil)
+	registry := NewRegistry(application.New(application.Options{}), nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -980,7 +978,7 @@ func TestRegistrySerializesDockCommitAgainstTransferFailure(t *testing.T) {
 }
 
 func TestRegistryReportsAnOpeningTransferFailureToItsOwner(t *testing.T) {
-	registry := NewRegistry(application.New(application.Options{}), nil, nil)
+	registry := NewRegistry(application.New(application.Options{}), nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -1003,7 +1001,7 @@ func TestRegistryReportsAnOpeningTransferFailureToItsOwner(t *testing.T) {
 }
 
 func TestRegistryReportsAnOpeningTransferFailureWhenNativeWindowAlreadyDisappeared(t *testing.T) {
-	registry := NewRegistry(application.New(application.Options{}), nil, nil)
+	registry := NewRegistry(application.New(application.Options{}), nil)
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
 	snapshot.OwnerWindowName = owner.Name()
@@ -1031,7 +1029,7 @@ func TestRegistryReportsAnOpeningTransferFailureWhenNativeWindowAlreadyDisappear
 
 func TestRegistryTreatsAnUncancelledWindowEventAsDelivered(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 
 	require.True(t, registry.emitWindowEvent(
@@ -1043,7 +1041,7 @@ func TestRegistryTreatsAnUncancelledWindowEventAsDelivered(t *testing.T) {
 
 func TestRegistryBlocksOwnerCloseUntilPanelChildrenAcknowledge(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 	createPanel := func(clusterID, groupID, transferID string) string {
 		snapshot := validPanelGroupSnapshot()
@@ -1086,7 +1084,7 @@ func TestRegistryBlocksOwnerCloseUntilPanelChildrenAcknowledge(t *testing.T) {
 func TestRegistryRejectsPanelCommandsAcrossOwnerAndTransportBoundaries(t *testing.T) {
 	setup := func(t *testing.T) (*Registry, string, PanelWindowDescriptor, PanelGroupSnapshot) {
 		t.Helper()
-		registry := NewRegistry(application.New(application.Options{}), nil, nil)
+		registry := NewRegistry(application.New(application.Options{}), nil)
 		owner := registry.Create(true)
 		snapshot := validPanelGroupSnapshot()
 		snapshot.OwnerWindowName = owner.Name()
@@ -1158,7 +1156,7 @@ func TestRegistryRejectsPanelCommandsAcrossOwnerAndTransportBoundaries(t *testin
 	})
 
 	t.Run("workspace close preserves live ownership", func(t *testing.T) {
-		empty := NewRegistry(application.New(application.Options{}), nil, nil)
+		empty := NewRegistry(application.New(application.Options{}), nil)
 		emptyOwner := empty.Create(true).Name()
 		empty.closeWindow = func(string) bool { return false }
 		require.ErrorContains(t, empty.AcknowledgeWorkspaceWindowClose(emptyOwner), "not available")
@@ -1180,7 +1178,7 @@ func TestRegistryRejectsPanelCommandsAcrossOwnerAndTransportBoundaries(t *testin
 
 func TestRegistryResolvesWorkspaceAndPanelRolesFromWindowName(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	owner := registry.Create(true)
 
 	workspace, err := registry.WindowDescriptor(owner.Name())
@@ -1205,7 +1203,7 @@ func TestRegistryResolvesWorkspaceAndPanelRolesFromWindowName(t *testing.T) {
 
 func TestRegistryIndexesPanelWindowsByOwnerAndCluster(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	ownerA := registry.Create(true)
 	ownerB := registry.Create(false)
 
@@ -1247,7 +1245,7 @@ func TestPrepareApplicationQuitAllowsAnUnconfiguredRegistry(t *testing.T) {
 func TestPrepareApplicationQuitPreflightsEveryReadyWorkspaceBeforeClosingAny(t *testing.T) {
 	wailsApp := application.New(application.Options{})
 	backend := &recordingLifecycleBackend{allowQuit: true}
-	registry := NewRegistry(wailsApp, backend, nil)
+	registry := NewRegistry(wailsApp, backend)
 	first := registry.Create(true)
 	second := registry.Create(false)
 	registry.markWorkspaceReady(first.Name())
@@ -1270,7 +1268,7 @@ func TestPrepareApplicationQuitPreflightsEveryReadyWorkspaceBeforeClosingAny(t *
 
 func TestApplicationQuitPreflightCommitsOnlyAfterEveryWorkspaceAllows(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{allowQuit: true}, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{allowQuit: true})
 	first := registry.Create(true)
 	second := registry.Create(false)
 	registry.markWorkspaceReady(first.Name())
@@ -1297,7 +1295,7 @@ func TestApplicationQuitPreflightCommitsOnlyAfterEveryWorkspaceAllows(t *testing
 
 func TestApplicationQuitPreflightCancellationLeavesEveryWorkspaceOpen(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{allowQuit: true}, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{allowQuit: true})
 	first := registry.Create(true)
 	second := registry.Create(false)
 	registry.markWorkspaceReady(first.Name())
@@ -1324,7 +1322,6 @@ func TestApplicationQuitPreflightTimeoutAllowsAFreshTransaction(t *testing.T) {
 	registry := NewRegistry(
 		application.New(application.Options{}),
 		&recordingLifecycleBackend{allowQuit: true},
-		nil,
 	)
 	owner := registry.Create(true)
 	registry.markWorkspaceReady(owner.Name())
@@ -1353,7 +1350,6 @@ func TestApplicationQuitPreflightDeliveryFailureAllowsAFreshTransaction(t *testi
 	registry := NewRegistry(
 		application.New(application.Options{}),
 		&recordingLifecycleBackend{allowQuit: true},
-		nil,
 	)
 	owner := registry.Create(true)
 	registry.markWorkspaceReady(owner.Name())
@@ -1388,7 +1384,7 @@ func TestRegistryUsesItsLifecycleConsumerWithoutConcreteBackendOwnership(t *test
 
 func TestFocusMostRecentIgnoresAnEmptyRegistry(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 
 	registry.FocusMostRecent()
 }

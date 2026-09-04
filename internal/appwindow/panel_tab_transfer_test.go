@@ -146,7 +146,7 @@ func TestPanelTabTransferRejectsCrossClusterNativeTargets(t *testing.T) {
 
 func TestNewPanelWindowTabTransferCommitsOnlyAfterTargetReadiness(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	registry.panelOpenTimeout = 0
 	registry.tabTransferTimeout = 20 * time.Millisecond
 	owner := registry.Create(true)
@@ -284,7 +284,7 @@ func TestWorkspacePanelTabTransferCommitsAfterOwnerAcceptance(t *testing.T) {
 
 func TestFailNewPanelWindowTabTransferClosesItsOpeningTarget(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	registry.panelOpenTimeout = 0
 	registry.tabTransferTimeout = 0
 	owner := registry.Create(true)
@@ -325,7 +325,7 @@ func TestFailNewPanelWindowTabTransferClosesItsOpeningTarget(t *testing.T) {
 
 func TestExpiredNewWindowTabTransferRejectsLateTargetOpen(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil, nil)
+	registry := NewRegistry(wailsApp, nil)
 	registry.panelOpenTimeout = 0
 	registry.tabTransferTimeout = 20 * time.Millisecond
 	owner := registry.Create(true)

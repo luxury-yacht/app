@@ -104,26 +104,32 @@ Workspace and panel chrome is platform-adaptive. macOS retains Wails' native
 frame and application menu with a transparent full-size titlebar. Windows and
 Linux use frameless workspace and panel windows; `AppHeader` supplies the drag
 surface and window controls, and workspace headers also render the application
-menu bar. Windows enables Wails' WebView2 non-client region support without
-enabling composition hosting. Composition installs Wails' global native menu
-only on macOS, so the Linux constructor cannot inherit it alongside the
+menu bar. Windows leaves WebView2 non-client region support and composition
+hosting disabled so pointer input reaches Wails' DOM resize-before-drag handler.
+Composition installs Wails' global native menu only on macOS, so the Linux
+constructor cannot inherit it alongside the
 app-rendered menu. The native macOS menu and app-rendered desktop menu use the
 same typed `ApplicationMenuCommand` dispatcher. Wails injects the calling window
-into the desktop-service context. The shell resolves and validates that sender's
-window identity through the native-window registry, keeps window-local commands
-in the sender, and routes workspace-owned commands from a panel to its immutable
+into the desktop-service context; application-menu service calls without a sender
+are rejected. Only native menu callbacks may resolve the current window. The
+shell resolves and validates that sender's window identity through the native
+window registry, keeps window-local commands in the sender, and routes workspace-owned commands from a panel to its immutable
 owner. The panel renderer keeps its Windows/Linux application-menu accelerators
 disabled until the panel's native ready acknowledgement.
 
-Resizable frameless windows declare Wails' documented all-edge CSS resize
-contract on the document body. The pinned beta.16 runtime supplies the actual
-edge and corner hit testing and native resize invocation for resizable
-Windows/Linux windows. Because that runtime collapses the eight hit regions to
-four axis cursors, the custom-frame shell projects its result to the matching
+The pinned beta.16 runtime supplies edge and corner hit testing and native
+resize invocation for resizable Windows/Linux windows without a CSS resize
+opt-in. Because that runtime collapses the eight hit regions to four axis cursors,
+the custom-frame shell projects its result to the matching
 directional cursor and keeps that cursor active over descendant controls.
+Column drag cursors use a separate body class so Wails cannot restore an expired
+inline column cursor after a window-edge interaction.
 Linux adds a theme-aware inset outline at the shared header boundary because
 Wails removes GTK window decorations and exposes no Linux shadow option;
-Windows and macOS retain their native decoration behavior.
+Windows and macOS retain their native decoration behavior. The pinned Wails
+GTK3 and GTK4 `setTitle` implementations skip frameless windows, so configured
+Linux workspace and panel titles do not currently reach the window manager;
+this requires a Wails title-setter fix.
 App-owned controls query the native maximise state on mount and after
 maximise/restore actions; a debounced resize sync keeps the label and glyph
 correct when a menu or window manager changes the state.

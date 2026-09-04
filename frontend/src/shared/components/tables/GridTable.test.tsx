@@ -2840,8 +2840,7 @@ it('sets col-resize cursor on body during a column drag resize', () => {
     handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 100 }));
   });
 
-  // During drag, body cursor should be 'col-resize'.
-  expect(document.body.style.cursor).toBe('col-resize');
+  expect(document.body.classList.contains('column-resizing')).toBe(true);
 
   // End drag.
   act(() => {
@@ -2849,7 +2848,7 @@ it('sets col-resize cursor on body during a column drag resize', () => {
   });
 
   // Cursor should be restored.
-  expect(document.body.style.cursor).not.toBe('col-resize');
+  expect(document.body.classList.contains('column-resizing')).toBe(false);
 });
 
 it('defers external column width notifications until drag end', () => {

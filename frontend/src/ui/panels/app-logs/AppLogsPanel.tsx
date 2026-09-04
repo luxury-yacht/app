@@ -26,6 +26,7 @@ import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { AriaGridColumnHeader, AriaGridRow } from '@shared/components/tables/AriaGridPrimitives';
 
+import { acquireColumnResizeCursor } from '@shared/utils/columnResizeCursor';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { DockablePanel } from '@ui/dockable';
 import { useKeyboardSurface, useShortcut } from '@ui/shortcuts';
@@ -227,9 +228,8 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
         startX: event.clientX,
         startWidth: columnWidths[column],
       };
-      const previousCursor = document.body.style.cursor;
+      const releaseCursor = acquireColumnResizeCursor();
       const previousUserSelect = document.body.style.userSelect;
-      document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
 
       const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
@@ -248,7 +248,7 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
         window.removeEventListener('pointermove', handlePointerMove);
         window.removeEventListener('pointerup', handlePointerUp);
         window.removeEventListener('pointercancel', handlePointerUp);
-        document.body.style.cursor = previousCursor;
+        releaseCursor();
         document.body.style.userSelect = previousUserSelect;
       };
       window.addEventListener('pointermove', handlePointerMove);
