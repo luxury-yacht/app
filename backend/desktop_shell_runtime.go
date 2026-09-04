@@ -49,7 +49,7 @@ func (s *DesktopShell) currentWindowWhenReady() (application.Window, error) {
 	if s == nil || s.application == nil {
 		return nil, fmt.Errorf("wails application is not available")
 	}
-	window := s.application.Window.Current()
+	window := s.currentWindow()
 	if window == nil {
 		return nil, fmt.Errorf("current window is not available")
 	}

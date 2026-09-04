@@ -257,13 +257,62 @@ func TestApplicationMenuCommandsShareOneTypedRoleAwareDispatcher(t *testing.T) {
 	)
 }
 
+func TestNativeApplicationMenuRoutesDialogsFromTheFocusedPanelToItsOwner(t *testing.T) {
+	for _, test := range []struct {
+		command      ApplicationMenuCommand
+		ownerCommand panelwindow.OwnerCommand
+	}{
+		{ApplicationMenuCommandSettings, panelwindow.OwnerCommandOpenSettings},
+		{ApplicationMenuCommandAbout, panelwindow.OwnerCommandOpenAbout},
+		{ApplicationMenuCommandCheckForUpdates, panelwindow.OwnerCommandOpenAbout},
+	} {
+		t.Run(string(test.command), func(t *testing.T) {
+			wailsApp := application.New(application.Options{})
+			panel := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{Name: "panel-native-menu"})
+			routed := []panelwindow.OwnerCommand{}
+			checked := make(chan []panelwindow.OwnerCommand, 1)
+			shell := NewDesktopShell(wailsApp, func() bool { return true }, nil, NewLogger(10), DesktopShellBindings{
+				NativeWindowDescriptor: func(name string) (panelwindow.NativeDescriptor, error) {
+					require.Equal(t, panel.Name(), name)
+					return panelwindow.NativeDescriptor{
+						Role:  panelwindow.NativeRolePanel,
+						Panel: &panelwindow.WindowDescriptor{WindowName: name, OwnerWindowName: "workspace-1", State: panelwindow.WindowStateLive},
+					}, nil
+				},
+				RoutePanelCommand: func(name string, command panelwindow.OwnerCommand) error {
+					require.Equal(t, panel.Name(), name)
+					routed = append(routed, command)
+					return nil
+				},
+				UpdateCheck: func() error {
+					checked <- append([]panelwindow.OwnerCommand(nil), routed...)
+					return nil
+				},
+			})
+			shell.currentWindow = func() application.Window { return panel }
+
+			applicationMenuCallback(shell, test.command)()
+
+			require.Equal(t, []panelwindow.OwnerCommand{test.ownerCommand}, routed)
+			if test.command == ApplicationMenuCommandCheckForUpdates {
+				select {
+				case commands := <-checked:
+					require.Equal(t, routed, commands, "show About before starting the update check")
+				case <-time.After(time.Second):
+					t.Fatal("expected update check")
+				}
+			}
+		})
+	}
+}
+
 func TestUntargetedNativeApplicationCommandsDoNotRequireACurrentWindow(t *testing.T) {
 	events := []string{}
 	created := false
 	quit := false
 	checked := make(chan struct{}, 1)
 	shell := NewDesktopShell(
-		nil,
+		application.New(application.Options{}),
 		func() bool { return true },
 		func(name string, _ ...interface{}) { events = append(events, name) },
 		NewLogger(10),

@@ -108,6 +108,7 @@ type DesktopShell struct {
 	openFileDialog             func(*application.OpenFileDialogOptions) (string, error)
 	saveFileDialog             func(*application.SaveFileDialogOptions) (string, error)
 	windowGeometry             func() (WindowGeometry, error)
+	currentWindow              func() application.Window
 	openApplicationURL         func(string) error
 	quitApplication            func()
 	checkForUpdates            func() error
@@ -128,6 +129,9 @@ func NewDesktopShell(
 		fallbackEmitter:    fallbackEmitter,
 		logger:             logger,
 		sidebarVisible:     true,
+	}
+	if wailsApplication != nil {
+		shell.currentWindow = wailsApplication.Window.Current
 	}
 	if len(bindings) > 0 {
 		shell.checkForUpdates = bindings[0].UpdateCheck

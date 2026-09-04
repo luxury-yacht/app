@@ -234,6 +234,13 @@ func (s *DesktopShell) ExecuteApplicationMenuCommand(
 	windowName string,
 	command ApplicationMenuCommand,
 ) error {
+	// Native menu callbacks omit the sender. Resolve it before the no-window
+	// Settings/About paths so a focused panel routes through its workspace owner.
+	if windowName == "" {
+		if window, err := s.currentWindowWhenReady(); err == nil {
+			windowName = window.Name()
+		}
+	}
 	if s.executeProcessApplicationMenuCommand(windowName, command) {
 		return nil
 	}
