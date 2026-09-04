@@ -300,8 +300,8 @@
   /* Dropdown */
   --dropdown-trigger-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   --dropdown-trigger-focus-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
-  --dropdown-menu-bg: var(--color-base-800);
-  --dropdown-menu-border: var(--color-base-700);
+  --dropdown-menu-bg: var(--color-bg);
+  --dropdown-menu-border: var(--color-bg-tertiary);
   --dropdown-menu-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 
   /* Actions menu */

@@ -7,6 +7,7 @@
   z-index: var(--z-index-app-menu);
   --wails-draggable: no-drag;
   app-region: no-drag;
+  margin-top: 0.2rem;
 }
 
 .app-menu-section {
@@ -27,11 +28,11 @@
 }
 
 .app-menu-trigger:hover {
-  background: var(--color-bg-tertiary);
+  background: var(--color-bg);
 }
 
 .app-menu-trigger--open {
-  background: var(--color-bg-tertiary);
+  background: var(--color-bg);
 }
 
 .app-menu-trigger:focus-visible {
@@ -45,7 +46,7 @@
   left: 0;
   min-width: 220px;
   padding: var(--spacing-xs) 0;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--dropdown-menu-border);
   background: var(--dropdown-menu-bg);
   box-shadow: var(--dropdown-menu-shadow);
   color: var(--color-text);

@@ -295,8 +295,8 @@
   /* Dropdown */
   --dropdown-trigger-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   --dropdown-trigger-focus-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
-  --dropdown-menu-bg: #ffffff;
-  --dropdown-menu-border: var(--color-base-200);
+  --dropdown-menu-bg: var(--color-bg);
+  --dropdown-menu-border: var(--color-bg-tertiary);
   --dropdown-menu-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 
   /* Actions menu */
