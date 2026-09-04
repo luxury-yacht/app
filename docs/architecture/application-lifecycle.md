@@ -112,6 +112,16 @@ same typed `WorkspaceMenuCommand` dispatcher. Wails injects the calling window
 into the desktop-service context, and the shell rejects an app-rendered
 workspace command when that sender is not a registered workspace.
 
+Resizable frameless windows declare Wails' documented all-edge CSS resize
+contract on the document body. The pinned beta.16 runtime supplies the actual
+edge and corner hit testing and native resize invocation for resizable
+Windows/Linux windows. Because that runtime collapses the eight hit regions to
+four axis cursors, the custom-frame shell projects its result to the matching
+directional cursor and keeps that cursor active over descendant controls.
+App-owned controls query the native maximise state on mount and after
+maximise/restore actions; a debounced resize sync keeps the label and glyph
+correct when a menu or window manager changes the state.
+
 `PreferencesService.EnsureLoaded` coalesces concurrent normal callers. Startup
 selection uses the same attempt through `EnsureLoadedForStartup`, which alone
 may install a default snapshot after a load error. Normal errors install

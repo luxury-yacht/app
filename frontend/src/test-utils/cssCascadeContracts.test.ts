@@ -16,6 +16,8 @@ afterEach(() => {
     style.remove();
   });
   document.body.innerHTML = '';
+  document.body.style.cursor = '';
+  delete document.body.dataset.windowResizeCursor;
 });
 
 describe('strict CSS cascade contracts', () => {
@@ -264,6 +266,7 @@ describe('strict CSS cascade contracts', () => {
       ['src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css', 0],
       ['src/ui/dockable/DockablePanel.css', 0],
       ['src/ui/layout/Sidebar.css', 0],
+      ['src/ui/layout/windowResizeCursor.css', 1],
       ['styles/utilities/motion.css', 0],
     ] as const;
 
@@ -291,6 +294,35 @@ describe('strict CSS cascade contracts', () => {
     expect(windowControl).toContain('app-region: no-drag');
     expect(menuBar).toContain('--wails-draggable: no-drag');
     expect(menuBar).toContain('app-region: no-drag');
+  });
+
+  it('declares the documented Wails resize contract for resizable frameless windows', () => {
+    const globalsCSS = readProjectFile('styles/base/globals.css');
+    const body = globalsCSS.match(/body \{([\s\S]*?)\}/)?.[1];
+
+    expect(body).toContain('--wails-resize: all');
+  });
+
+  it('keeps the native directional resize cursor above descendant cursor rules', () => {
+    const windowResizeCursorCSS = readProjectFile('src/ui/layout/windowResizeCursor.css');
+    const directionalCursors = [
+      'n-resize',
+      'ne-resize',
+      'e-resize',
+      'se-resize',
+      's-resize',
+      'sw-resize',
+      'w-resize',
+      'nw-resize',
+    ] as const;
+
+    for (const cursor of directionalCursors) {
+      expect(windowResizeCursorCSS).toContain(
+        `body[data-window-resize-cursor="${cursor}"] {\n  --window-resize-cursor: ${cursor};\n}`
+      );
+    }
+    expect(windowResizeCursorCSS).toContain('body[data-window-resize-cursor] * {');
+    expect(windowResizeCursorCSS).toContain('cursor: var(--window-resize-cursor) !important;');
   });
 
   it('presents frameless window actions as compact app toolbar controls', () => {

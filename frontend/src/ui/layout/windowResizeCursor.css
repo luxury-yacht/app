@@ -1,0 +1,36 @@
+body[data-window-resize-cursor="n-resize"] {
+  --window-resize-cursor: n-resize;
+}
+
+body[data-window-resize-cursor="ne-resize"] {
+  --window-resize-cursor: ne-resize;
+}
+
+body[data-window-resize-cursor="e-resize"] {
+  --window-resize-cursor: e-resize;
+}
+
+body[data-window-resize-cursor="se-resize"] {
+  --window-resize-cursor: se-resize;
+}
+
+body[data-window-resize-cursor="s-resize"] {
+  --window-resize-cursor: s-resize;
+}
+
+body[data-window-resize-cursor="sw-resize"] {
+  --window-resize-cursor: sw-resize;
+}
+
+body[data-window-resize-cursor="w-resize"] {
+  --window-resize-cursor: w-resize;
+}
+
+body[data-window-resize-cursor="nw-resize"] {
+  --window-resize-cursor: nw-resize;
+}
+
+body[data-window-resize-cursor] * {
+  /* biome-ignore lint/complexity/noImportantStyles: An active window edge must override cursor rules on every descendant control in that edge. */
+  cursor: var(--window-resize-cursor) !important;
+}

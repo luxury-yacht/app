@@ -5,34 +5,84 @@
  * Implements AppHeader logic for the UI layer.
  */
 
-import { closeWindow, minimiseWindow, toggleMaximise } from '@core/desktop-runtime';
+import {
+  closeWindow,
+  isWindowMaximised,
+  minimiseWindow,
+  toggleMaximise,
+} from '@core/desktop-runtime';
 import { SearchIcon } from '@shared/components/icons/SharedIcons';
 import FavMenuDropdown from '@ui/favorites/FavMenuDropdown';
 import ConnectivityStatus from '@ui/status/ConnectivityStatus';
 import MetricsStatus from '@ui/status/MetricsStatus';
 import SessionsStatus from '@ui/status/SessionsStatus';
 import UpdateStatus from '@ui/status/UpdateStatus';
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { eventBus } from '@/core/events';
 import { isMacPlatform } from '@/utils/platform';
 import './AppHeader.css';
 import AppMenuBar from './AppMenuBar';
+import { installDirectionalWindowResizeCursor } from './windowResizeCursor';
+import './windowResizeCursor.css';
 
 interface AppHeaderProps {
   mode?: 'workspace' | 'panel';
 }
 
+const isModalSurfaceOpen = () =>
+  typeof document !== 'undefined' && document.body.classList.contains('modal-surface-open');
+
 const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
   const isMac = isMacPlatform();
   const usesCustomFrame = !isMac;
-  const isModalOpen = () =>
-    typeof document !== 'undefined' && document.body.classList.contains('modal-surface-open');
-
-  const toggleWindowMaximize = () => {
-    if (!isModalOpen()) {
-      toggleMaximise();
+  const [isMaximised, setIsMaximised] = useState(false);
+  const maximiseStateRequestRef = useRef(0);
+  const refreshMaximiseState = useCallback(async () => {
+    const request = ++maximiseStateRequestRef.current;
+    try {
+      const nextState = await isWindowMaximised();
+      if (request === maximiseStateRequestRef.current) {
+        setIsMaximised(nextState);
+      }
+    } catch {
+      // Storybook and browser-only tests intentionally run without a Wails host.
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!usesCustomFrame) {
+      return;
+    }
+
+    let resizeTimer: number | undefined;
+    const handleResize = () => {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => void refreshMaximiseState(), 50);
+    };
+
+    void refreshMaximiseState();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      maximiseStateRequestRef.current += 1;
+      window.clearTimeout(resizeTimer);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [refreshMaximiseState, usesCustomFrame]);
+
+  useEffect(() => {
+    if (!usesCustomFrame) {
+      return;
+    }
+    return installDirectionalWindowResizeCursor();
+  }, [usesCustomFrame]);
+
+  const toggleWindowMaximize = useCallback(async () => {
+    if (isModalSurfaceOpen()) {
+      return;
+    }
+    await toggleMaximise();
+    await refreshMaximiseState();
+  }, [refreshMaximiseState]);
 
   const headerClassName = [
     'app-header',
@@ -52,10 +102,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
         title="Double-click to maximize or restore the window"
         onClick={(event) => {
           if (event.detail === 0) {
-            toggleWindowMaximize();
+            void toggleWindowMaximize();
           }
         }}
-        onDoubleClick={toggleWindowMaximize}
+        onDoubleClick={() => void toggleWindowMaximize()}
       />
       {mode === 'workspace' ? (
         <div className="app-header-controls">
@@ -99,9 +149,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
           <button
             type="button"
             className="app-header-window-control app-header-window-control--maximise"
-            aria-label="Maximise or restore window"
-            title="Maximise or restore"
-            onClick={toggleWindowMaximize}
+            aria-label={isMaximised ? 'Restore window' : 'Maximise window'}
+            title={isMaximised ? 'Restore' : 'Maximise'}
+            onClick={() => void toggleWindowMaximize()}
           >
             <svg
               className="app-header-window-control-glyph"
@@ -109,7 +159,13 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
               aria-hidden="true"
               focusable="false"
             >
-              <path d="M6.5 4.5h-2v2M11.5 4.5h2v2M6.5 13.5h-2v-2M11.5 13.5h2v-2" />
+              <path
+                d={
+                  isMaximised
+                    ? 'M5.5 6.5v7h7v-7h-7Zm2-2h7v7'
+                    : 'M6.5 4.5h-2v2M11.5 4.5h2v2M6.5 13.5h-2v-2M11.5 13.5h2v-2'
+                }
+              />
             </svg>
           </button>
           <button

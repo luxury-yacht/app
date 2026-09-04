@@ -54,6 +54,14 @@ wails3 dev
 
 Note that hot-reload of the Go backend will cause the app to restart, while changes to frontend code will be reflected immediately without an app restart.
 
+### `npm audit` is unresponsive
+
+An unresponsive `npm audit` can cause `wails3 dev` to hang, as the audit never completes. There's nothing you can do about this except to wait out the outage, but you can bypass the audit service with:
+
+```
+NPM_CONFIG_AUDIT=false wails3 dev
+```
+
 ## Storybook
 
 [Storybook](https://storybook.js.org/) is available for developing and previewing UI components in isolation.

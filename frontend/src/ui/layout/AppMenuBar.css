@@ -22,7 +22,6 @@
   color: var(--color-text);
   font: inherit;
   font-size: var(--font-size-normal);
-  cursor: default;
   --wails-draggable: no-drag;
   app-region: no-drag;
 }
@@ -67,7 +66,6 @@
   font: inherit;
   font-size: var(--font-size-normal);
   text-align: left;
-  cursor: default;
 }
 
 .app-menu-item:hover,

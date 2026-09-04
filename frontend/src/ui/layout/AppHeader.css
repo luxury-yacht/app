@@ -7,7 +7,6 @@
   border-bottom: 1px solid var(--border-color);
   --wails-draggable: drag;
   user-select: none;
-  cursor: default;
   padding: 0 12px;
 }
 
@@ -29,7 +28,6 @@
   padding: 0;
   border: 0;
   background: transparent;
-  cursor: default;
   --wails-draggable: drag;
 }
 
@@ -75,7 +73,6 @@
   border-radius: var(--border-radius-sm);
   background: transparent;
   color: var(--color-text-secondary);
-  cursor: default;
   transition:
     background-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
@@ -120,7 +117,6 @@
   border: 1px solid var(--border-color);
   border-radius: 4px;
   padding: 4px 2px;
-  cursor: pointer;
   color: var(--text-primary);
   display: flex;
   align-items: center;

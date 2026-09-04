@@ -7,6 +7,7 @@ import AppHeader from './AppHeader';
 
 const runtimeMock = vi.hoisted(() => ({
   closeWindow: vi.fn(),
+  isWindowMaximised: vi.fn(() => Promise.resolve(false)),
   minimiseWindow: vi.fn(),
   toggleMaximise: vi.fn(),
 }));
@@ -37,6 +38,7 @@ vi.mock('@core/desktop-runtime', async () => {
   return {
     ...actual,
     closeWindow: runtimeMock.closeWindow,
+    isWindowMaximised: runtimeMock.isWindowMaximised,
     minimiseWindow: runtimeMock.minimiseWindow,
     toggleMaximise: runtimeMock.toggleMaximise,
   };
@@ -57,6 +59,8 @@ describe('AppHeader', () => {
     root = ReactDOM.createRoot(container);
     platformMock.isMacPlatform.mockReturnValue(false);
     runtimeMock.closeWindow.mockReset();
+    runtimeMock.isWindowMaximised.mockReset();
+    runtimeMock.isWindowMaximised.mockResolvedValue(false);
     runtimeMock.minimiseWindow.mockReset();
     runtimeMock.toggleMaximise.mockReset();
   });
@@ -67,6 +71,8 @@ describe('AppHeader', () => {
     });
     container.remove();
     document.body.classList.remove('modal-surface-open');
+    document.body.style.cursor = '';
+    delete document.body.dataset.windowResizeCursor;
   });
 
   const renderHeader = () => {
@@ -103,7 +109,7 @@ describe('AppHeader', () => {
       'Favorites',
       'Command Palette',
       'Minimise window',
-      'Maximise or restore window',
+      'Maximise window',
       'Close window',
     ]);
 
@@ -133,13 +139,27 @@ describe('AppHeader', () => {
     expect(container.querySelector('.app-header--custom-frame')).not.toBeNull();
     expect(container.querySelector('.app-header-controls')).toBeNull();
     expect(container.querySelector('[aria-label="Minimise window"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="Maximise or restore window"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Maximise window"]')).not.toBeNull();
     expect(container.querySelector('[aria-label="Close window"]')).not.toBeNull();
     expect(container.textContent).not.toContain('Connectivity');
     expect(container.textContent).not.toContain('Metrics');
     expect(container.textContent).not.toContain('Sessions');
     expect(container.textContent).not.toContain('Favorites');
     expect(container.querySelector('[aria-label="Command Palette"]')).toBeNull();
+  });
+
+  it('projects Wails edge detection to a directional cursor for custom frames', () => {
+    act(() => {
+      root.render(<AppHeader mode="panel" />);
+    });
+    document.body.style.cursor = 'ns-resize';
+
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 400, clientY: 1 }));
+    });
+
+    expect(document.body.style.cursor).toBe('n-resize');
+    expect(document.body.dataset.windowResizeCursor).toBe('n-resize');
   });
 
   it('uses compact app-owned glyphs instead of operating-system chrome symbols', () => {
@@ -165,15 +185,69 @@ describe('AppHeader', () => {
 
     act(() => {
       container.querySelector<HTMLButtonElement>('[aria-label="Minimise window"]')?.click();
-      container
-        .querySelector<HTMLButtonElement>('[aria-label="Maximise or restore window"]')
-        ?.click();
+      container.querySelector<HTMLButtonElement>('[aria-label="Maximise window"]')?.click();
       container.querySelector<HTMLButtonElement>('[aria-label="Close window"]')?.click();
     });
 
     expect(runtimeMock.minimiseWindow).toHaveBeenCalledOnce();
     expect(runtimeMock.toggleMaximise).toHaveBeenCalledOnce();
     expect(runtimeMock.closeWindow).toHaveBeenCalledOnce();
+  });
+
+  it('tracks maximise state in the window action and glyph', async () => {
+    runtimeMock.isWindowMaximised.mockResolvedValue(true);
+
+    await act(async () => {
+      root.render(<AppHeader mode="panel" />);
+      await Promise.resolve();
+    });
+
+    const restoreButton = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Restore window"]'
+    );
+    expect(restoreButton?.title).toBe('Restore');
+    expect(restoreButton?.querySelector('path')?.getAttribute('d')).toBe(
+      'M5.5 6.5v7h7v-7h-7Zm2-2h7v7'
+    );
+  });
+
+  it('refreshes maximise state after toggling the window', async () => {
+    runtimeMock.isWindowMaximised.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    await act(async () => {
+      root.render(<AppHeader mode="panel" />);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[aria-label="Maximise window"]')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(runtimeMock.toggleMaximise).toHaveBeenCalledOnce();
+    expect(runtimeMock.isWindowMaximised).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[aria-label="Restore window"]')).not.toBeNull();
+  });
+
+  it('refreshes maximise state after an external window resize', async () => {
+    vi.useFakeTimers();
+    try {
+      await act(async () => {
+        root.render(<AppHeader mode="panel" />);
+        await Promise.resolve();
+      });
+      runtimeMock.isWindowMaximised.mockResolvedValue(true);
+
+      await act(async () => {
+        window.dispatchEvent(new Event('resize'));
+        await vi.advanceTimersByTimeAsync(50);
+      });
+
+      expect(container.querySelector('[aria-label="Restore window"]')).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps native traffic-light controls for a mac panel window', () => {
@@ -186,6 +260,21 @@ describe('AppHeader', () => {
     expect(container.querySelector('.app-header--mac')).not.toBeNull();
     expect(container.querySelector('.app-header--custom-frame')).toBeNull();
     expect(container.querySelector('.app-header-window-controls')).toBeNull();
+  });
+
+  it('does not override native macOS edge cursors', () => {
+    platformMock.isMacPlatform.mockReturnValue(true);
+    act(() => {
+      root.render(<AppHeader mode="panel" />);
+    });
+    document.body.style.cursor = 'ns-resize';
+
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 400, clientY: 1 }));
+    });
+
+    expect(document.body.style.cursor).toBe('ns-resize');
+    expect(document.body.dataset.windowResizeCursor).toBeUndefined();
   });
 
   it('does not toggle maximise from the header while a modal is open', () => {

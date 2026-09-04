@@ -88,6 +88,7 @@ func TestOptionsPreserveTheSharedPeerContract(t *testing.T) {
 			require.Equal(t, 600, options.MinHeight)
 			require.Zero(t, options.MaxWidth)
 			require.Zero(t, options.MaxHeight)
+			require.False(t, options.DisableResize)
 			require.Equal(t, "/", options.URL)
 			require.Equal(t, application.NewRGB(30, 30, 30), options.BackgroundColour)
 			require.Equal(t, test.wantBackgroundType, options.BackgroundType)
