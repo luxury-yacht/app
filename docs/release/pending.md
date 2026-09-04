@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Closing a right-docked panel on Linux no longer leaves repaint artifacts over GridTable filter controls.
 - Frameless Linux workspace and panel windows now have a theme-aware outline that keeps their edges distinct over similarly coloured windows.
 - Frameless Windows and Linux windows now show the matching directional resize cursor on every edge and corner, including where the resize region overlaps app-header controls.
 - Fixed a performance regression introduced by `client-go`. The bump to `v0.35.0` enabled `WatchList` by default, which degraded data load performance in the app by requiring potentially very large data sets to be sent in total before showing any data. The previous `list -> watch` behavior has been restored.

@@ -58,8 +58,8 @@ textarea,
   overflow: hidden;
   min-height: 0; /* Important for flex children */
   position: relative;
-  /* Dock offsets are handled at the gridtable level so the filter bar and
-     header stay at full size while only the scrollable body area shrinks. */
+  /* Dock offsets are handled by each main-content surface so portaled panels
+     do not cause the surrounding route shell to shrink a second time. */
 }
 
 .loading {

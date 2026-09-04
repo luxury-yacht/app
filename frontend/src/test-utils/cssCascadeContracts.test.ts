@@ -247,6 +247,15 @@ describe('strict CSS cascade contracts', () => {
     expect(window.getComputedStyle(button as HTMLButtonElement).textTransform).toBe('uppercase');
   });
 
+  it('keeps GridTable filters outside the right-docked panel paint area', () => {
+    const gridTableCSS = readProjectFile('styles/components/gridtables.css');
+    const filterContainer = gridTableCSS.match(
+      /\.content-body \.gridtable-filter-container \{([\s\S]*?)\}/
+    )?.[1];
+
+    expect(filterContainer).toContain('margin-right: var(--dock-right-offset, 0px)');
+  });
+
   it('uses appearance-mode tokens for custom-column action hover states', () => {
     const gridTableCSS = readProjectFile('styles/components/gridtables.css');
     const editHover = gridTableCSS.match(

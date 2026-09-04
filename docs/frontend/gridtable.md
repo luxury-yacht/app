@@ -82,6 +82,9 @@ workflow and that exception is documented.
   order. Provider query facets participate in that order alongside structural
   filters, search, actions, and Columns; adding a facet must not create a
   keyboard focus trap.
+- In the main content area, the filter container, header, body viewport, and
+  footer consume the right-dock offset. No GridTable chrome may remain beneath
+  a right-docked panel; closing the panel must resize and repaint each region.
 - A feature-owned structural action that must precede Namespace uses
   `beforeNamespaceActions`; GridTable renders that IconBar after Kind and before
   Namespace rather than forcing the action into the post-search action cluster.
