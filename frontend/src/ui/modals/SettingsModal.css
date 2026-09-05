@@ -5,12 +5,12 @@
 .settings-modal {
   /* Responsive: fill most of the viewport, but constrain to a sensible range
      so the layout looks right on both narrow and ultrawide displays. */
-  width: 90vw;
-  min-width: 720px;
+  width: calc(var(--modal-viewport-width) * 0.9);
+  min-width: min(720px, 100%);
   max-width: 1100px;
   /* Keep the modal a consistent height regardless of active tab, scaled to
-     the app window. The base .modal-container caps height at 85vh. */
-  height: 80vh;
+     the app window. The shared surface caps it to the available space. */
+  height: calc(var(--modal-viewport-height) * 0.8);
   /* Disable text selection across the modal chrome. User data values
      (theme hex/slider values, saved theme name/pattern, kubeconfig paths,
      and form inputs) explicitly re-enable selection below. */
@@ -32,7 +32,7 @@
 @media (max-width: 760px) {
   .settings-modal {
     min-width: 0;
-    width: 95vw;
+    width: calc(var(--modal-viewport-width) * 0.95);
   }
 }
 

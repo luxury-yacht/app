@@ -7,8 +7,8 @@
 
 /* Modal sizing — fixed so toggling "diff only" doesn't resize the modal. */
 .rollback-modal {
-  width: min(1100px, 90vw);
-  height: min(80vh, 800px);
+  width: min(1100px, calc(var(--modal-viewport-width) * 0.9));
+  height: min(calc(var(--modal-viewport-height) * 0.8), 800px);
 }
 
 /* Split body: revision list on the left, diff on the right. */

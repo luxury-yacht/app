@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Modal sizes now account for app zoom and the space below the titlebar, keeping tall dialogs within the window and their controls reachable.
 - Restored Windows and Linux application accelerators in native floating panel windows, including guarded tab close and application quit, while keeping shortcut behavior consistent across transient menus, palettes, and modals. macOS zoom-in now uses the physical `=` key and native accelerators remain visible in keyboard help.
 - Closing a right-docked panel on Linux no longer leaves repaint artifacts over GridTable filter controls.
 - Frameless Linux workspace and panel windows now have a theme-aware outline that keeps their edges distinct over similarly coloured windows.

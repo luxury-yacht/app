@@ -1,6 +1,12 @@
 .attention-ignored-modal {
-  width: min(var(--modal-width-md), calc(100vw - var(--modal-viewport-gutter)));
-  max-height: min(var(--modal-height-lg), calc(100vh - var(--modal-viewport-gutter)));
+  width: min(
+    var(--modal-width-md),
+    calc(var(--modal-viewport-width) - var(--modal-viewport-gutter))
+  );
+  --modal-max-height: min(
+    var(--modal-height-lg),
+    calc(var(--modal-viewport-height) - var(--modal-viewport-gutter))
+  );
 }
 
 .attention-ignored-body {

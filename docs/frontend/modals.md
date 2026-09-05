@@ -39,6 +39,14 @@ own focus trap, backdrop, escape handling, or app-background blocking.
 - Destructive or long-running actions must have clear disabled/loading/error
   states.
 - Nested modals are allowed only through the shared stack behavior.
+- Modal sizing uses the shared surface's `--modal-viewport-height` and
+  `--modal-viewport-width`, which account for app zoom. Do not use raw `vh` or
+  `vw` for modal dimensions under the zoomed body.
+- The shared container caps its height to the backdrop's content box, excluding
+  the app titlebar and outer padding. Modal-specific height limits belong in
+  `--modal-max-height` so they cannot bypass that cap. Content scrolls inside
+  the modal; on very short windows the container can also scroll to keep its
+  header and footer controls reachable.
 
 ## Change Checklist
 
@@ -55,3 +63,8 @@ When adding or changing a modal:
 
 Run focused modal/component tests. For visual or focus changes, verify manually
 in the app.
+
+`Modals/ModalSurface/Sizing` in Storybook contains tall-content regression
+stories for the shared surface and its sizing variants. Their play checks
+assert bounds, centering, and access to the header, footer, and final field.
+Run them at 50%, 100%, 150%, and 200% app zoom, including a short window.

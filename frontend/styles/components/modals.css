@@ -9,6 +9,10 @@
    pops instead of fading. The fade lives on .modal-backdrop's own paint
    properties instead. */
 .modal-overlay {
+  /* Portal content is zoomed with the body; viewport units are not. */
+  --modal-viewport-height: calc(100dvh / var(--app-zoom-factor, 1));
+  --modal-viewport-width: calc(100dvw / var(--app-zoom-factor, 1));
+  --modal-max-height: calc(var(--modal-viewport-height) * 0.85);
   position: fixed;
   inset: 0;
   z-index: var(--z-index-modal, 1050);
@@ -61,12 +65,17 @@
   border-top-color: rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   width: 100%;
-  max-height: 85vh;
+  min-width: 0;
+  min-height: 0;
+  /* The backdrop's content box excludes the titlebar and outer padding. */
+  max-height: min(100%, var(--modal-max-height));
   display: flex;
   flex-direction: column;
   box-shadow: var(--modal-container-shadow);
   animation: modal-slide-up 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
-  overflow: hidden;
+  /* Very short windows may not fit the header, body padding, and footer
+     together. Keep those controls reachable instead of clipping them. */
+  overflow: auto;
 }
 
 /* Closing animations run at 200ms with a held end state because modal owners
@@ -331,13 +340,16 @@
 }
 
 @media (max-width: 640px) {
+  .modal-overlay {
+    --modal-max-height: calc(var(--modal-viewport-height) * 0.9);
+  }
+
   .modal-backdrop {
     padding: 1rem;
   }
 
   .modal-container {
     max-width: 100%;
-    max-height: 90vh;
   }
 
   .modal-header,
