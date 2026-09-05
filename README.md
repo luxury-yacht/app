@@ -32,7 +32,7 @@ Here are some of the features of Luxury Yacht that you might not find in other a
 
 - **Split-Pane Workloads View.** See workloads and their associated Pods in a single view. Highlight a specific workload to filter the view to show only that workload's pods.
 
-- **Flexible panel layouts.** Organize your info however you like. Dock panels to the right, bottom, or float them as a resizable window. Open multiple object tabs in each panel. Drag tabs between panels. On macOS and Windows, drag a tab out to create a new floating panel; Linux drag-out is deferred for this release. On Linux, use Float to move the entire panel group into a native window.
+- **Flexible Layouts.** Organize your info however you like. Open multiple windows. Dock panels to the right, bottom, or float them as a resizable window. Open multiple object tabs in each panel. Drag tabs between panels, or drag out to create a new window.
 
 - **Object Diff.** Can't understand why a deployment is working correctly in one cluster, but not the other? Open both deployments in the Diff Objects panel to see exactly what the differences are. Compare any kind of object to any other object, in any cluster.
 
