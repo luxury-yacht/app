@@ -5,6 +5,6 @@ Comment=__APP_DESCRIPTION__
 Exec=__PORTABLE_EXECUTABLE__ %u
 Terminal=false
 Type=Application
-Icon=__APP_BINARY_NAME__
+Icon=__PORTABLE_DESKTOP_ID__
 Categories=Utility;
 StartupWMClass=__APP_BINARY_NAME__

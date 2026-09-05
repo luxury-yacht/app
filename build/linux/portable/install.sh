@@ -5,6 +5,7 @@ set -eu
 app_name='__APP_NAME__'
 app_version='__APP_VERSION__'
 binary_name='__APP_BINARY_NAME__'
+desktop_id='__PORTABLE_DESKTOP_ID__'
 product_identifier='__APP_IDENTIFIER__'
 portable_architecture='__PORTABLE_ARCHITECTURE__'
 marker_name='luxury-yacht.install.json'
@@ -49,8 +50,8 @@ marker_path=$install_root/$marker_name
 manager_path=$install_root/manage-installation
 readme_path=$install_root/README.txt
 license_path=$install_root/LICENSE
-desktop_path=$data_home/applications/$binary_name.desktop
-icon_path=$data_home/icons/hicolor/128x128/apps/$binary_name.png
+desktop_path=$data_home/applications/$desktop_id.desktop
+icon_path=$data_home/icons/hicolor/128x128/apps/$desktop_id.png
 
 refresh_desktop_database() {
     if command -v update-desktop-database >/dev/null 2>&1; then
@@ -248,6 +249,19 @@ mv -f "$temporary_readme" "$readme_path"
 mv -f "$temporary_license" "$license_path"
 mv -f "$temporary_desktop" "$desktop_path"
 mv -f "$temporary_icon" "$icon_path"
+
+# Remove the old launcher only when it belongs to this portable installation.
+# A user-local launcher for a different installation must remain untouched.
+legacy_desktop_path=$data_home/applications/$binary_name.desktop
+legacy_icon_path=$data_home/icons/hicolor/128x128/apps/$binary_name.png
+if [ -f "$legacy_desktop_path" ] && [ ! -L "$legacy_desktop_path" ] &&
+    grep -Fqx "Exec=\"$desktop_executable\" %u" "$legacy_desktop_path"; then
+    rm -f "$legacy_desktop_path"
+    if [ -f "$legacy_icon_path" ] && [ ! -L "$legacy_icon_path" ] &&
+        cmp -s "$legacy_icon_path" "$icon_path"; then
+        rm -f "$legacy_icon_path"
+    fi
+fi
 
 trap - EXIT HUP INT TERM
 cleanup_temporary_files

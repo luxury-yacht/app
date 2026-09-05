@@ -20,6 +20,9 @@ import (
 const (
 	portableArchitecturePlaceholder = "__PORTABLE_ARCHITECTURE__"
 	portableExecutablePlaceholder   = "__PORTABLE_EXECUTABLE__"
+	// Wails derives the GTK application ID from application.Options.Name
+	// ("Luxury Yacht"). Wayland desktop entries and GTK icons must use that ID.
+	portableDesktopID = "org.wails.luxury_yacht"
 )
 
 type linuxPortableArtifactsConfig struct {
@@ -197,6 +200,7 @@ func renderLinuxPortableInput(path string, metadata projectMetadata, architectur
 		appNamePlaceholder, strings.TrimSpace(metadata.Info.ProductName),
 		appVersionPlaceholder, strings.TrimSpace(metadata.Info.Version),
 		portableArchitecturePlaceholder, architecture,
+		"__PORTABLE_DESKTOP_ID__", portableDesktopID,
 	)
 	return []byte(replacer.Replace(string(contents))), nil
 }
