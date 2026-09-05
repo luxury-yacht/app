@@ -116,11 +116,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
   }, [refreshMaximiseState, usesCustomFrame]);
 
   useEffect(() => {
-    if (!usesCustomFrame) {
+    if (!usesCustomFrame || isMaximised) {
       return;
     }
     return installDirectionalWindowResizeCursor();
-  }, [usesCustomFrame]);
+  }, [isMaximised, usesCustomFrame]);
 
   const toggleWindowMaximize = useCallback(() => {
     if (isModalSurfaceOpen()) {

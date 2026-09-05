@@ -8,7 +8,11 @@
  */
 
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { type TabDragPayload, TabDragProvider } from '@shared/components/tabs/dragCoordinator';
+import {
+  type TabDragPayload,
+  TabDragProvider,
+  type TabDragScope,
+} from '@shared/components/tabs/dragCoordinator';
 import type React from 'react';
 import {
   createContext,
@@ -91,6 +95,7 @@ interface DockablePanelContextValue {
     insertIndex: number
   ) => void;
   canStartDockableTabDrag: (panelId: string) => boolean;
+  tabDropScope?: TabDragScope;
   // Content registry -- allows the group leader to render other panels' body content.
   panelContentRefsMap: React.MutableRefObject<Map<string, React.MutableRefObject<React.ReactNode>>>;
   notifyContentChange: (groupKey: GroupKey) => void;
@@ -942,6 +947,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       createDockableTabDragPayload,
       dropDockableTab,
       canStartDockableTabDrag,
+      tabDropScope: tabDragIdentity,
       panelContentRefsMap,
       notifyContentChange,
       subscribeContentChange,
@@ -975,6 +981,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       createDockableTabDragPayload,
       dropDockableTab,
       canStartDockableTabDrag,
+      tabDragIdentity,
       notifyContentChange,
       subscribeContentChange,
       lastFocusedGroupKey,

@@ -59,6 +59,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     createDockableTabDragPayload,
     dropDockableTab,
     canStartDockableTabDrag,
+    tabDropScope,
   } = useDockablePanelContext();
 
   // One useContext call for the whole bar regardless of tab count. The
@@ -67,6 +68,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
 
   const { ref: dropRef, dropInsertIndex } = useTabDropTarget({
     accepts: ['dockable-tab'],
+    scope: tabDropScope,
     onDrop: (payload, _event, insertIndex) => {
       // Forward to the provider's movePanel adapter. The adapter
       // dispatches internally between reorderTabInGroup (same group)

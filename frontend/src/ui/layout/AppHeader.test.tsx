@@ -254,6 +254,7 @@ describe('AppHeader', () => {
       '[aria-label="Restore window"]'
     );
     expect(restoreButton?.title).toBe('Restore');
+    expect(document.querySelector('.window-resize-frame')).toBeNull();
     expect(restoreButton?.querySelector('path')?.getAttribute('d')).toBe(
       'M5.5 6.5v7h7v-7h-7Zm2-2h7v7'
     );

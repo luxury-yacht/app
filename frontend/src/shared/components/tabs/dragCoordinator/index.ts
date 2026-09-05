@@ -5,7 +5,7 @@
  */
 
 export { TabDragProvider } from './TabDragProvider';
-export type { TabDragPayload } from './types';
+export type { TabDragPayload, TabDragScope } from './types';
 export { TAB_DRAG_DATA_TYPE } from './types';
 export { useTabDragSource, useTabDragSourceFactory } from './useTabDragSource';
 export { useTabDropTarget } from './useTabDropTarget';

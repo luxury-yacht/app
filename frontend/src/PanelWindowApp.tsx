@@ -13,6 +13,7 @@ import {
   useObjectPanelActiveTabs,
   useObjectPanelState,
 } from '@modules/object-panel/contexts/ObjectPanelStateContext';
+import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotificationSystem';
 import { DockablePanelProvider } from '@ui/dockable';
 import type { TabGroupState } from '@ui/dockable/tabGroupTypes';
 import { AppErrorBoundary, PanelErrorBoundary } from '@ui/errors';
@@ -269,6 +270,7 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
       <PanelWindowShortcuts descriptor={descriptor} ready={ready} />
       <TextContextMenu />
       <AppHeader mode="panel" />
+      <ErrorNotificationSystem />
       <div className="panel-window-content content">
         {Array.from(openPanels.entries()).map(([panelId, objectRef]) => (
           <PanelErrorBoundary

@@ -1,4 +1,4 @@
-import { Browser, Clipboard, Events, System, Window as WailsWindow } from '@wailsio/runtime';
+import { Browser, Clipboard, Events, Flags, System, Window as WailsWindow } from '@wailsio/runtime';
 import { getWindowIdentity, setWindowIdentity } from '@/core/window-identity';
 
 export { getWindowIdentity } from '@/core/window-identity';
@@ -70,3 +70,12 @@ export const getEnvironment = (): Promise<System.EnvironmentInfo> => System.Envi
 export const desktopRuntimeAvailable = (): boolean =>
   typeof window !== 'undefined' &&
   Boolean((window as Window & { _wails?: { environment?: unknown } })._wails?.environment);
+
+export const getWindowResizeHandleSize = (): { width: number; height: number } => {
+  const size = (key: string) => {
+    const value: unknown = desktopRuntimeAvailable() ? Flags.GetFlag(key) : undefined;
+    // Match the pinned runtime's fallback when the platform supplies no size.
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 5;
+  };
+  return { width: size('system.resizeHandleWidth'), height: size('system.resizeHandleHeight') };
+};

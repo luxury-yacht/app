@@ -39,6 +39,24 @@ export type TabDragPayload =
  */
 export const TAB_DRAG_DATA_TYPE = 'application/x-luxury-yacht-tab';
 
+export interface TabDragScope {
+  ownerWindowName: string;
+  clusterId: string;
+}
+
+// MIME types remain readable during protected dragover. Hex preserves case in
+// identities even though native drag stores normalize MIME names to lowercase.
+export const tabDragScopeDataType = (scope: TabDragScope): string => {
+  const bytes = new TextEncoder().encode(JSON.stringify([scope.ownerWindowName, scope.clusterId]));
+  const identity = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${TAB_DRAG_DATA_TYPE}-scope-${identity}`;
+};
+
+export const tabDragMatchesScope = (payload: TabDragPayload, scope: TabDragScope): boolean =>
+  payload.kind === 'dockable-tab' &&
+  payload.ownerWindowName === scope.ownerWindowName &&
+  payload.clusterId === scope.clusterId;
+
 export const tabDragKindDataType = (kind: TabDragPayload['kind']): string =>
   `${TAB_DRAG_DATA_TYPE}-${kind}`;
 

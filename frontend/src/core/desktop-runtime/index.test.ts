@@ -5,6 +5,7 @@ const runtimeMocks = vi.hoisted(() => ({
   clipboardSetText: vi.fn(),
   clipboardText: vi.fn(),
   environment: vi.fn(),
+  getFlag: vi.fn(),
   eventsEmit: vi.fn(),
   eventsOn: vi.fn<
     (
@@ -25,6 +26,7 @@ vi.mock('@wailsio/runtime', () => ({
   Clipboard: { SetText: runtimeMocks.clipboardSetText, Text: runtimeMocks.clipboardText },
   Events: { Emit: runtimeMocks.eventsEmit, On: runtimeMocks.eventsOn },
   System: { Environment: runtimeMocks.environment },
+  Flags: { GetFlag: runtimeMocks.getFlag },
   Window: {
     Close: runtimeMocks.closeWindow,
     IsMaximised: runtimeMocks.isWindowMaximised,
@@ -64,6 +66,15 @@ describe('desktop runtime adapter', () => {
 
   it('does not expose event-wide listener removal', () => {
     expect(desktopRuntime).not.toHaveProperty('offEvent');
+  });
+
+  it('uses the platform resize handle dimensions and the runtime defaults', () => {
+    expect(desktopRuntime.getWindowResizeHandleSize()).toEqual({ width: 5, height: 5 });
+    Object.assign(window, { _wails: { environment: { OS: 'windows' } } });
+    runtimeMocks.getFlag.mockImplementation((key) => (key === 'system.resizeHandleWidth' ? 8 : 6));
+    expect(desktopRuntime.getWindowResizeHandleSize()).toEqual({ width: 8, height: 6 });
+    runtimeMocks.getFlag.mockReturnValue(undefined);
+    expect(desktopRuntime.getWindowResizeHandleSize()).toEqual({ width: 5, height: 5 });
   });
 
   it('unwraps v3 event payloads and returns the v3 disposer', () => {

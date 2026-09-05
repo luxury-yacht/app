@@ -42,9 +42,11 @@ also use the shared drag coordinator.
 - Drag payloads must identify the source kind and stable tab id. Dockable
   cross-window payloads also carry source window/group, immutable owner,
   cluster, complete object identity, and active view.
-- Cross-document dragover uses a kind-specific MIME marker because protected
-  HTML drag data exposes types but not payload values. The destination reads
-  and validates the complete payload only at drop time.
+- Cross-document dragover uses kind and owner/cluster MIME markers because
+  protected HTML drag data exposes types but not payload values. Only compatible
+  panel groups show a drop indicator; cluster tabs accept local reorders only.
+  The destination validates the complete payload again at drop time. MIME
+  markers control the preview, not native transfer authorization.
 - Reorder, cross-strip move, and empty-space drop behavior belongs in the
   consumer wrapper, not the base `Tabs` component.
 - Dockable tab movement must preserve panel identity, group membership, active

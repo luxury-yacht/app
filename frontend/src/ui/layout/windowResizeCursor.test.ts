@@ -97,10 +97,12 @@ describe('frameless window resize cursor', () => {
         );
       move();
       expect(document.body.dataset.windowResizeCursor).toBe(edge);
-      document.body.dispatchEvent(
+      const resizeSurface = document.querySelector('.window-resize-frame > div');
+      expect(resizeSurface).not.toBeNull();
+      resizeSurface?.dispatchEvent(
         new MouseEvent('mousedown', { bubbles: true, buttons: 1, clientX, clientY })
       );
-      document.body.dispatchEvent(
+      resizeSurface?.dispatchEvent(
         new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientX, clientY })
       );
       expect(runtime.invoke).toHaveBeenCalledWith(`wails:resize:${edge}`);

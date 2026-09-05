@@ -115,6 +115,7 @@ vi.mock('@wailsio/runtime', () => {
     },
     objectNames: { Call: 0, Browser: 9 },
     System: { Environment: vi.fn() },
+    Flags: { GetFlag: vi.fn(() => undefined) },
     Window: { OpenDevTools: vi.fn(), ToggleMaximise: vi.fn() },
   };
 });

@@ -87,6 +87,38 @@ export function installDirectionalWindowResizeCursor(
   targetWindow: Window = window,
   targetDocument: Document = document
 ): () => void {
+  const frame = targetDocument.createElement('div');
+  frame.className = 'window-resize-frame';
+  frame.setAttribute('aria-hidden', 'true');
+  const handleSize = getWindowResizeHandleSize();
+  frame.style.setProperty('--window-resize-handle-width', `${handleSize.width}px`);
+  frame.style.setProperty('--window-resize-handle-height', `${handleSize.height}px`);
+  for (const edge of ['top', 'right', 'bottom', 'left']) {
+    const surface = targetDocument.createElement('div');
+    surface.className = `window-resize-frame-${edge}`;
+    frame.appendChild(surface);
+  }
+  // Native scrollbars consume the drag after mouse-down. These transparent
+  // surfaces keep the outer resize strip in the DOM; Wails still owns all
+  // edge detection, button tracking, and native resize invocation.
+  targetDocument.body.appendChild(frame);
+  const updateFrameBounds = () => {
+    const root = targetDocument.documentElement;
+    const zoom = Number.parseFloat(targetWindow.getComputedStyle(root).zoom) || 1;
+    frame.style.setProperty(
+      '--window-resize-right-inset',
+      `${Math.max(0, targetWindow.innerWidth - root.clientWidth * zoom)}px`
+    );
+    frame.style.setProperty(
+      '--window-resize-bottom-inset',
+      `${Math.max(0, targetWindow.innerHeight - root.clientHeight * zoom)}px`
+    );
+  };
+  updateFrameBounds();
+  targetWindow.addEventListener('resize', updateFrameBounds);
+  const observer =
+    typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(updateFrameBounds);
+  observer?.observe(targetDocument.documentElement);
   let projectedCursor: DirectionalWindowResizeCursor | undefined;
   const clearCursor = () => {
     const body = targetDocument.body;
@@ -135,9 +167,14 @@ export function installDirectionalWindowResizeCursor(
   targetDocument.addEventListener('mouseleave', handleMouseLeave, { capture: true });
 
   return () => {
+    observer?.disconnect();
+    targetWindow.removeEventListener('resize', updateFrameBounds);
+    frame.remove();
     targetWindow.removeEventListener('mousemove', updateCursor, { capture: true });
     targetWindow.removeEventListener('blur', clearCursor);
     targetDocument.removeEventListener('mouseleave', handleMouseLeave, { capture: true });
     clearCursor();
   };
 }
+
+import { getWindowResizeHandleSize } from '@/core/desktop-runtime';

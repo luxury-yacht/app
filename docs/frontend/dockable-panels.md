@@ -69,6 +69,9 @@ maximize and restore.
   bars moves that one tab, including workspace-to-native, native-to-workspace,
   and native-to-native moves under the same owner and cluster. Cross-owner and
   cross-cluster drops are rejected.
+- Rejected owner/cluster combinations show no insertion indicator. Panel drag
+  scope is available during protected dragover; drop-time and backend checks
+  still authorize the actual transfer.
 - Dropping an unconsumed tab drag outside a workspace or a multi-tab native
   source creates a new one-tab native window near the pointer, using the
   configured floating size and the pointer's monitor work area. Dragging the
@@ -123,6 +126,8 @@ Object and view identity transfer. Read-only detail, YAML, events, map, and log
 data are reconstructed from the shared refresh system. Shells reconnect by
 backend session identity. Unsaved YAML drafts, YAML saves, and in-flight
 mutations do not transfer and block moves and closes until resolved. Native
+and workspace windows show a warning explaining the blocker and how to resolve
+it when the blocked panel receives focus. Native
 geometry is not persisted for relaunch. Once a native destination commits, the
 workspace releases its panel-scoped refresh, log-viewer, and dock-layout caches;
 dock-back reconstructs those caches from the transferred identity and view.

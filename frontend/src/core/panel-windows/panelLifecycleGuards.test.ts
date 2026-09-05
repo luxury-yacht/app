@@ -2,6 +2,7 @@ import * as React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { subscribeToErrors } from '@/utils/errorHandler';
 import {
   PanelLifecycleGuardProvider,
   PanelLifecycleGuardRegistry,
@@ -45,6 +46,32 @@ describe('PanelLifecycleGuardRegistry', () => {
     expect(registry.firstBlocker(['panel-a'])).toBeNull();
     unregister();
     expect(registry.firstBlocker(['panel-a'])).toBeNull();
+  });
+
+  it.each([
+    ['unsaved-yaml', 'Unsaved YAML changes', 'Save or discard'],
+    ['mutation-in-flight', 'Operation in progress', 'Wait for'],
+  ] as const)('explains a %s blocker when it receives focus', (reason, title, message) => {
+    const registry = new PanelLifecycleGuardRegistry();
+    const focus = vi.fn();
+    const notify = vi.fn();
+    const unsubscribe = subscribeToErrors(notify);
+    try {
+      registry.register('panel-a', () => ({ reason, focus }));
+      const blocker = registry.firstBlocker(['panel-a']);
+      expect(notify).not.toHaveBeenCalled();
+      blocker?.focus();
+      expect(focus).toHaveBeenCalledOnce();
+      expect(notify).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          severity: 'warning',
+          title,
+          userMessage: expect.stringContaining(message),
+        })
+      );
+    } finally {
+      unsubscribe();
+    }
   });
 
   it('provides required and optional hooks and registers the current hook guard', async () => {

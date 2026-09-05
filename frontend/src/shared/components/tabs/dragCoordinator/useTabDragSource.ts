@@ -19,7 +19,12 @@
 import { type DragEventHandler, useContext } from 'react';
 
 import { TabDragContext } from './TabDragProvider';
-import { TAB_DRAG_DATA_TYPE, type TabDragPayload, tabDragKindDataType } from './types';
+import {
+  TAB_DRAG_DATA_TYPE,
+  type TabDragPayload,
+  tabDragKindDataType,
+  tabDragScopeDataType,
+} from './types';
 
 export interface UseTabDragSourceOptions {
   /** Refuse a drag that is blocked by live panel state. */
@@ -71,6 +76,15 @@ function createTabDragSourceProps(
       }
       event.dataTransfer.setData(TAB_DRAG_DATA_TYPE, JSON.stringify(payload));
       event.dataTransfer.setData(tabDragKindDataType(payload.kind), '1');
+      if (payload.kind === 'dockable-tab' && payload.ownerWindowName && payload.clusterId) {
+        event.dataTransfer.setData(
+          tabDragScopeDataType({
+            ownerWindowName: payload.ownerWindowName,
+            clusterId: payload.clusterId,
+          }),
+          '1'
+        );
+      }
       event.dataTransfer.effectAllowed = 'move';
       if (options?.getDragImage) {
         const result = options.getDragImage();

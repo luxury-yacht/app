@@ -22,6 +22,7 @@ export interface DropTargetRegistration {
 
 interface TabDragContextValue {
   currentDrag: TabDragPayload | null;
+  getCurrentDrag: () => TabDragPayload | null;
   beginDrag: (payload: TabDragPayload) => void;
   endDrag: (event?: {
     clientX: number;
@@ -36,6 +37,7 @@ interface TabDragContextValue {
 
 export const TabDragContext = createContext<TabDragContextValue>({
   currentDrag: null,
+  getCurrentDrag: () => null,
   beginDrag: () => undefined,
   endDrag: () => undefined,
   registerTarget: () => undefined,
@@ -52,6 +54,7 @@ export function TabDragProvider({ children, onTearOff }: Readonly<TabDragProvide
   const [currentDrag, setCurrentDrag] = useState<TabDragPayload | null>(null);
   const targetsRef = useRef<Map<number, DropTargetRegistration>>(new Map());
   const lastDragRef = useRef<TabDragPayload | null>(null);
+  const getCurrentDrag = useCallback(() => lastDragRef.current, []);
 
   const beginDrag = useCallback((payload: TabDragPayload) => {
     lastDragRef.current = payload;
@@ -98,12 +101,13 @@ export function TabDragProvider({ children, onTearOff }: Readonly<TabDragProvide
   const value = useMemo<TabDragContextValue>(
     () => ({
       currentDrag,
+      getCurrentDrag,
       beginDrag,
       endDrag,
       registerTarget,
       unregisterTarget,
     }),
-    [currentDrag, beginDrag, endDrag, registerTarget, unregisterTarget]
+    [currentDrag, getCurrentDrag, beginDrag, endDrag, registerTarget, unregisterTarget]
   );
 
   return <TabDragContext.Provider value={value}>{children}</TabDragContext.Provider>;

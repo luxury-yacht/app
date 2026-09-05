@@ -1,5 +1,6 @@
 import type React from 'react';
 import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
+import { errorHandler } from '@/utils/errorHandler';
 
 export type PanelBlockReason = 'unsaved-yaml' | 'mutation-in-flight';
 
@@ -31,7 +32,20 @@ export class PanelLifecycleGuardRegistry {
       for (const guard of this.#guards.get(panelId) ?? []) {
         const blocker = guard();
         if (blocker) {
-          return { ...blocker, panelId };
+          return {
+            ...blocker,
+            panelId,
+            focus: () => {
+              blocker.focus();
+              const unsaved = blocker.reason === 'unsaved-yaml';
+              errorHandler.warn(
+                unsaved
+                  ? 'Save or discard your YAML changes before closing or moving this panel.'
+                  : 'Wait for the current operation to finish before closing or moving this panel.',
+                { title: unsaved ? 'Unsaved YAML changes' : 'Operation in progress' }
+              );
+            },
+          };
         }
       }
     }

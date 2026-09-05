@@ -1,3 +1,47 @@
+.window-resize-frame {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: calc(var(--window-resize-right-inset) / var(--app-zoom-factor, 1));
+  bottom: calc(var(--window-resize-bottom-inset) / var(--app-zoom-factor, 1));
+  z-index: var(--z-index-topmost);
+  pointer-events: none;
+  --wails-draggable: no-drag;
+  app-region: no-drag;
+}
+
+.window-resize-frame > div {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.window-resize-frame-top,
+.window-resize-frame-bottom {
+  left: 0;
+  right: 0;
+  height: calc(var(--window-resize-handle-height) / var(--app-zoom-factor, 1));
+}
+
+.window-resize-frame-left,
+.window-resize-frame-right {
+  top: 0;
+  bottom: 0;
+  width: calc(var(--window-resize-handle-width) / var(--app-zoom-factor, 1));
+}
+
+.window-resize-frame-top {
+  top: 0;
+}
+.window-resize-frame-right {
+  right: 0;
+}
+.window-resize-frame-bottom {
+  bottom: 0;
+}
+.window-resize-frame-left {
+  left: 0;
+}
+
 body[data-window-resize-cursor="n-resize"] {
   --window-resize-cursor: n-resize;
 }

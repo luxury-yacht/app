@@ -34,7 +34,6 @@ vi.mock('@core/contexts/AuthErrorContext', () => ({ AuthErrorProvider: PassThrou
 vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
   ClusterLifecycleProvider: PassThrough,
 }));
-vi.mock('@core/contexts/ErrorContext', () => ({ ErrorProvider: PassThrough }));
 vi.mock('@core/contexts/ZoomContext', () => ({ ZoomProvider: PassThrough }));
 vi.mock('@core/refresh', () => ({ RefreshManagerProvider: PassThrough }));
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -112,10 +111,12 @@ vi.mock('@/ui/shortcuts/components/PanelWindowShortcuts', () => ({
     return null;
   },
 }));
-vi.mock('@/utils/errorHandler', () => ({
+vi.mock('@/utils/errorHandler', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/errorHandler')>()),
   reportOperationalError: (...args: unknown[]) => mocks.reportOperationalError(...args),
 }));
 
+import { errorHandler } from '@/utils/errorHandler';
 import PanelWindowApp from './PanelWindowApp';
 
 const descriptor = {
@@ -159,6 +160,7 @@ describe('PanelWindowApp', () => {
   let root: ReactDOM.Root;
 
   beforeEach(() => {
+    errorHandler.clearHistory();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -223,6 +225,19 @@ describe('PanelWindowApp', () => {
     });
     expect(mocks.acknowledgeReady).toHaveBeenCalledWith('panel-1', 'transfer-panel-window-test');
     expect(mocks.shortcutsProps).toMatchObject({ ready: true });
+  });
+
+  it('shows the close-blocker explanation inside the floating window', async () => {
+    await act(async () =>
+      root.render(<PanelWindowApp descriptor={descriptorWithTransfer('warning-surface')} />)
+    );
+    await act(async () => {
+      errorHandler.warn('Save or discard your YAML changes before closing or moving this panel.', {
+        title: 'Unsaved YAML changes',
+      });
+    });
+    expect(container.textContent).toContain('Unsaved YAML changes');
+    expect(container.textContent).toContain('Save or discard your YAML changes');
   });
 
   it('reports and rolls back a failed ready acknowledgement', async () => {

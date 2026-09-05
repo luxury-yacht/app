@@ -124,6 +124,10 @@ the custom-frame shell projects its result to the matching
 directional cursor and keeps that cursor active over descendant controls.
 Column drag cursors use a separate body class so Wails cannot restore an expired
 inline column cursor after a window-edge interaction.
+Transparent DOM edge surfaces keep native scrollbars from taking over a window
+resize gesture. Their dimensions follow the runtime's platform handle sizes;
+they are removed while the window is maximized. Wails remains responsible for
+hit testing and invoking the native resize operation.
 Linux adds a theme-aware inset outline at the shared header boundary because
 Wails removes GTK window decorations and exposes no Linux shadow option;
 Windows and macOS retain their native decoration behavior. The pinned Wails

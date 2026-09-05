@@ -26,7 +26,9 @@
  *      browser during protected mode.
  *   2. Read the payload kind from the provider's `currentDrag` state, or
  *      from the source's kind-specific MIME marker when the source is in
- *      another native webview and therefore has a different provider.
+ *      another native webview and therefore has a different provider. An
+ *      external source must also match the destination's owner/cluster MIME
+ *      marker; targets without a scope accept local drags only.
  *
  * At drop time we still read the full payload from `getData()` — that
  * path works in read-only mode and preserves the contract that the
@@ -50,10 +52,19 @@ import {
   useState,
 } from 'react';
 import { type DropTargetRegistration, TabDragContext } from './TabDragProvider';
-import { TAB_DRAG_DATA_TYPE, type TabDragPayload, tabDragKindFromDataTypes } from './types';
+import {
+  TAB_DRAG_DATA_TYPE,
+  type TabDragPayload,
+  type TabDragScope,
+  tabDragKindFromDataTypes,
+  tabDragMatchesScope,
+  tabDragScopeDataType,
+} from './types';
 
 export interface UseTabDropTargetOptions<K extends TabDragPayload['kind']> {
   accepts: K[];
+  /** Allows cross-document drops only from this owner and cluster. */
+  scope?: TabDragScope;
   /**
    * Fires when a drag of an accepted kind is dropped on the target. The
    * third argument is the computed insert index in `[0, tabCount]` — use
@@ -107,66 +118,91 @@ function readPayloadFromDataTransfer(event: DragEvent): TabDragPayload | null {
 export function useTabDropTarget<K extends TabDragPayload['kind']>(
   opts: UseTabDropTargetOptions<K>
 ): UseTabDropTargetResult {
-  const { accepts, onDrop, onDragEnter, onDragLeave } = opts;
-  const { currentDrag, registerTarget, unregisterTarget } = useContext(TabDragContext);
+  const { accepts, scope, onDrop, onDragEnter, onDragLeave } = opts;
+  const { getCurrentDrag, registerTarget, unregisterTarget } = useContext(TabDragContext);
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropInsertIndex, setDropInsertIndex] = useState<number | null>(null);
   const elementRef = useRef<HTMLElement | null>(null);
   const idRef = useRef<number>(nextTargetId++);
 
   const acceptsRef = useRef(accepts);
+  const scopeRef = useRef(scope);
   const onDropRef = useRef(onDrop);
   const onDragEnterRef = useRef(onDragEnter);
   const onDragLeaveRef = useRef(onDragLeave);
-  // Bridge the React state `currentDrag` into the event listeners, which
-  // are memoised with empty deps and would otherwise capture a stale
-  // value. Updated on every render via the bare assignment below.
-  const currentDragRef = useRef(currentDrag);
   acceptsRef.current = accepts;
+  scopeRef.current = scope;
   onDropRef.current = onDrop;
   onDragEnterRef.current = onDragEnter;
   onDragLeaveRef.current = onDragLeave;
-  currentDragRef.current = currentDrag;
 
-  const handleDragEnter = useCallback((event: DragEvent) => {
-    if (!hasDragDataType(event.dataTransfer, TAB_DRAG_DATA_TYPE)) {
-      return;
-    }
-    const drag = currentDragRef.current;
-    const kind = drag?.kind ?? tabDragKindFromDataTypes(event.dataTransfer?.types);
-    if (!kind || !acceptsRef.current.includes(kind as K)) {
-      return;
-    }
-    event.preventDefault();
-    setIsDragOver(true);
-    if (drag) {
-      onDragEnterRef.current?.(drag as Extract<TabDragPayload, { kind: K }>);
-    }
-  }, []);
-
-  const handleDragOver = useCallback((event: DragEvent) => {
-    if (!hasDragDataType(event.dataTransfer, TAB_DRAG_DATA_TYPE)) {
-      return;
-    }
-    const drag = currentDragRef.current;
-    const kind = drag?.kind ?? tabDragKindFromDataTypes(event.dataTransfer?.types);
-    if (!kind || !acceptsRef.current.includes(kind as K)) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = 'move';
-    }
-    const el = elementRef.current;
-    if (el) {
-      const nextIndex = getHorizontalDropInsertIndex(
-        el.querySelectorAll<HTMLElement>('[role="tab"]'),
-        event.clientX
+  const acceptsDrag = useCallback(
+    (event: DragEvent) => {
+      if (!hasDragDataType(event.dataTransfer, TAB_DRAG_DATA_TYPE)) {
+        return false;
+      }
+      const drag = getCurrentDrag();
+      const kind = drag?.kind ?? tabDragKindFromDataTypes(event.dataTransfer?.types);
+      if (!kind || !acceptsRef.current.includes(kind as K)) {
+        return false;
+      }
+      const targetScope = scopeRef.current;
+      if (drag) {
+        return !targetScope || tabDragMatchesScope(drag, targetScope);
+      }
+      return (
+        !!targetScope && hasDragDataType(event.dataTransfer, tabDragScopeDataType(targetScope))
       );
-      setDropInsertIndex((prev) => (prev === nextIndex ? prev : nextIndex));
+    },
+    [getCurrentDrag]
+  );
+
+  const rejectDrag = useCallback((event: DragEvent) => {
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'none';
     }
+    setIsDragOver(false);
+    setDropInsertIndex(null);
   }, []);
+
+  const handleDragEnter = useCallback(
+    (event: DragEvent) => {
+      if (!acceptsDrag(event)) {
+        rejectDrag(event);
+        return;
+      }
+      const drag = getCurrentDrag();
+      event.preventDefault();
+      setIsDragOver(true);
+      if (drag) {
+        onDragEnterRef.current?.(drag as Extract<TabDragPayload, { kind: K }>);
+      }
+    },
+    [acceptsDrag, getCurrentDrag, rejectDrag]
+  );
+
+  const handleDragOver = useCallback(
+    (event: DragEvent) => {
+      if (!acceptsDrag(event)) {
+        rejectDrag(event);
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'move';
+      }
+      const el = elementRef.current;
+      if (el) {
+        const nextIndex = getHorizontalDropInsertIndex(
+          el.querySelectorAll<HTMLElement>('[role="tab"]'),
+          event.clientX
+        );
+        setDropInsertIndex((prev) => (prev === nextIndex ? prev : nextIndex));
+      }
+    },
+    [acceptsDrag, rejectDrag]
+  );
 
   const handleDragLeave = useCallback((event: DragEvent) => {
     const el = elementRef.current;
@@ -179,30 +215,40 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     onDragLeaveRef.current?.();
   }, []);
 
-  const handleDrop = useCallback((event: DragEvent) => {
-    // At drop time the store is in read-only mode — getData() works and
-    // gives us the authoritative payload. Prefer it over currentDragRef
-    // so that the payload round-trips through DataTransfer correctly
-    // (important for the future tear-off case where drops may land in a
-    // different document/window where the provider's state isn't
-    // visible).
-    const payload = readPayloadFromDataTransfer(event) ?? currentDragRef.current ?? null;
-    if (!payload || !acceptsRef.current.includes(payload.kind as K)) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    const el = elementRef.current;
-    const insertIndex = el
-      ? getHorizontalDropInsertIndex(
-          el.querySelectorAll<HTMLElement>('[role="tab"]'),
-          event.clientX
-        )
-      : 0;
-    setIsDragOver(false);
-    setDropInsertIndex(null);
-    onDropRef.current(payload as Extract<TabDragPayload, { kind: K }>, event, insertIndex);
-  }, []);
+  const handleDrop = useCallback(
+    (event: DragEvent) => {
+      // At drop time the store is in read-only mode — getData() works and
+      // gives us the authoritative payload. Prefer it over the local drag
+      // so that the payload round-trips through DataTransfer correctly
+      // (important for cross-window transfers where drops may land in a
+      // different document/window where the provider's state isn't
+      // visible).
+      const localDrag = getCurrentDrag();
+      const payload = readPayloadFromDataTransfer(event) ?? localDrag;
+      if (
+        !payload ||
+        !acceptsRef.current.includes(payload.kind as K) ||
+        (!scopeRef.current && !localDrag) ||
+        (scopeRef.current && !tabDragMatchesScope(payload, scopeRef.current))
+      ) {
+        rejectDrag(event);
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const el = elementRef.current;
+      const insertIndex = el
+        ? getHorizontalDropInsertIndex(
+            el.querySelectorAll<HTMLElement>('[role="tab"]'),
+            event.clientX
+          )
+        : 0;
+      setIsDragOver(false);
+      setDropInsertIndex(null);
+      onDropRef.current(payload as Extract<TabDragPayload, { kind: K }>, event, insertIndex);
+    },
+    [getCurrentDrag, rejectDrag]
+  );
 
   const ref = useCallback<RefCallback<HTMLElement>>(
     (el) => {

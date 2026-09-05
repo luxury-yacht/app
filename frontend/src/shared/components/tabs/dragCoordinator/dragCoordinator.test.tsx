@@ -9,7 +9,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 
 import { TabDragContext, TabDragProvider } from './TabDragProvider';
-import { TAB_DRAG_DATA_TYPE, type TabDragPayload, tabDragKindDataType } from './types';
+import {
+  TAB_DRAG_DATA_TYPE,
+  type TabDragPayload,
+  tabDragKindDataType,
+  tabDragScopeDataType,
+} from './types';
 import { useTabDragSource, useTabDragSourceFactory } from './useTabDragSource';
 import { useTabDropTarget } from './useTabDropTarget';
 
@@ -530,9 +535,10 @@ describe('useTabDropTarget', () => {
 
   it('accepts protected-mode dragover from an isolated window provider', () => {
     const onDrop = vi.fn<(payload: TabDragPayload) => void>();
+    const scope = { ownerWindowName: 'workspace-1', clusterId: 'cluster-1' };
 
     function Target() {
-      const { ref } = useTabDropTarget({ accepts: ['dockable-tab'], onDrop });
+      const { ref } = useTabDropTarget({ accepts: ['dockable-tab'], scope, onDrop });
       return <div ref={ref} data-testid="cross-window-target" />;
     }
 
@@ -555,7 +561,7 @@ describe('useTabDropTarget', () => {
     };
     const protectedTransfer = {
       getData: vi.fn(() => ''),
-      types: [TAB_DRAG_DATA_TYPE, tabDragKindDataType('dockable-tab')],
+      types: [TAB_DRAG_DATA_TYPE, tabDragKindDataType('dockable-tab'), tabDragScopeDataType(scope)],
       dropEffect: 'none',
     };
     const target = requireValue(
@@ -576,6 +582,47 @@ describe('useTabDropTarget', () => {
 
     expect(onDrop).toHaveBeenCalledWith(payload, expect.any(Event), 0);
   });
+
+  it.each(['cluster-tab', 'dockable-tab'] as const)(
+    'rejects a foreign %s at a local-only target',
+    (kind) => {
+      const onDrop = vi.fn();
+      function Target() {
+        const { ref } = useTabDropTarget({ accepts: [kind], onDrop });
+        return <div ref={ref} data-testid="local-target" />;
+      }
+      act(() =>
+        root.render(
+          <TabDragProvider>
+            <Target />
+          </TabDragProvider>
+        )
+      );
+      const target = requireValue(
+        container.querySelector('[data-testid="local-target"]'),
+        'local target'
+      );
+      const transfer = {
+        types: [TAB_DRAG_DATA_TYPE, tabDragKindDataType(kind)],
+        dropEffect: 'move',
+        getData: () =>
+          JSON.stringify({
+            kind,
+            clusterId: 'foreign',
+            panelId: 'foreign',
+            sourceGroupId: 'right',
+          }),
+      };
+      const over = createTestDragEvent('dragover', transfer);
+      act(() => {
+        target.dispatchEvent(over);
+        target.dispatchEvent(createTestDragEvent('drop', transfer));
+      });
+      expect(over.defaultPrevented).toBe(false);
+      expect(transfer.dropEffect).toBe('none');
+      expect(onDrop).not.toHaveBeenCalled();
+    }
+  );
 
   it('calls preventDefault on dragover under HTML5 "protected mode" semantics', () => {
     // Regression test for a spec-compliance bug: during dragenter/dragover,
@@ -731,8 +778,10 @@ describe('useTabDropTarget', () => {
   it('stops drop-event propagation to ancestor drop targets when nested', () => {
     const outerOnDrop = vi.fn<(payload: TabDragPayload) => void>();
     const innerOnDrop = vi.fn<(payload: TabDragPayload) => void>();
+    let context: React.ContextType<typeof TabDragContext> | null = null;
 
     function Harness() {
+      context = useContext(TabDragContext);
       const { ref: outerRef } = useTabDropTarget({
         accepts: ['cluster-tab'],
         onDrop: outerOnDrop,
@@ -761,6 +810,12 @@ describe('useTabDropTarget', () => {
     const inner = requireValue(
       container.querySelector('[data-testid="inner"]'),
       'expected test value in dragCoordinator.test.tsx'
+    );
+    act(() =>
+      requireValue(context, 'local drag coordinator').beginDrag({
+        kind: 'cluster-tab',
+        clusterId: 'x',
+      })
     );
     // Fire a drop carrying an accepted payload on the inner target.
     const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
