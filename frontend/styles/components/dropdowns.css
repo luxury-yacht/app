@@ -69,6 +69,20 @@
   box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
+.dropdown .dropdown-trigger {
+  /* Default/compact/small all use same styling for consistency */
+  padding: 0 2rem 0 var(--spacing-md);
+  min-height: 12px;
+  font-size: var(--font-size-button);
+  min-width: 50px;
+}
+
+.disabled .dropdown-trigger {
+  cursor: not-allowed;
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+}
+
 .dropdown.open.search-focused .dropdown-trigger {
   border-color: var(--color-border);
   box-shadow: var(--dropdown-trigger-shadow);
@@ -265,6 +279,13 @@
   color: var(--color-text-disabled);
 }
 
+/* The row's actions slot supplies the trailing space here, so the option button
+   does not also need a full right pad — that stacked with the grip's padding and
+   left a visible hole beside the "only" pill. */
+.dropdown-columns-menu .dropdown-option {
+  padding-right: 2px;
+}
+
 /* Shared multi-select filter styling (Browse filters & Application Logs) */
 .dropdown-menu.dropdown-filter-menu .dropdown-option {
   gap: 0;
@@ -373,13 +394,6 @@
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* The row's actions slot supplies the trailing space here, so the option button
-   does not also need a full right pad — that stacked with the grip's padding and
-   left a visible hole beside the "only" pill. */
-.dropdown-columns-menu .dropdown-option {
-  padding-right: 2px;
 }
 
 /* A required column is constrained, not unavailable. The shared disabled
@@ -567,13 +581,6 @@
 /* ============================================
   6. SIZE VARIANTS
   ============================================ */
-.dropdown .dropdown-trigger {
-  /* Default/compact/small all use same styling for consistency */
-  padding: 0 2rem 0 var(--spacing-md);
-  min-height: 12px;
-  font-size: var(--font-size-button);
-  min-width: 50px;
-}
 
 /* ============================================
   7. STYLE VARIANTS
@@ -585,12 +592,6 @@
 .disabled {
   opacity: 0.6;
   pointer-events: none;
-}
-
-.disabled .dropdown-trigger {
-  cursor: not-allowed;
-  background-color: var(--color-bg-tertiary);
-  color: var(--color-text-secondary);
 }
 
 .disabled .dropdown-trigger:hover {

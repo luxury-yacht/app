@@ -128,6 +128,11 @@ Transparent DOM edge surfaces keep native scrollbars from taking over a window
 resize gesture. Their dimensions follow the runtime's platform handle sizes;
 they are removed while the window is maximized. Wails remains responsible for
 hit testing and invoking the native resize operation.
+Application zoom scales the body, including portal content, while leaving the
+root viewport unscaled. The body compensates its height for the zoom factor so
+workspace and panel content still fit the window. Wails compares root client
+dimensions with viewport mouse coordinates to exclude native scrollbars from
+resize hit testing; scaling the root would break that comparison at 200% zoom.
 Linux adds a theme-aware inset outline at the shared header boundary because
 Wails removes GTK window decorations and exposes no Linux shadow option;
 Windows and macOS retain their native decoration behavior. The pinned Wails
@@ -217,7 +222,9 @@ publishes the exact tab or acknowledges native-window readiness. The source
 removes only that tab after commit and closes only when it becomes empty. Failure
 and timeout events roll back provisional target state while retaining the source.
 A tear-off uses the configured floating dimensions and selects/constrains against
-the monitor containing the drag pointer.
+the monitor containing the drag pointer. Drag-out to create a new window is in
+scope on macOS and Windows; Linux drag-out is deferred for this release. Linux
+users can use Float to transfer the entire panel group into a native window.
 
 Native close hooks are synchronous while YAML and mutation guards cross
 webviews. The first close is therefore cancelled and converted into an

@@ -145,8 +145,9 @@
   margin-bottom: var(--dock-bottom-offset, 0px);
 }
 
-.content-body .gridtable-container.has-footer .gridtable-wrapper {
-  margin-bottom: 0;
+.gridtable-container.embedded .gridtable-wrapper {
+  max-height: none;
+  overflow: auto;
 }
 
 .content-body .gridtable-header-container {
@@ -166,17 +167,21 @@ body.dock-bottom-open .content-body .gridtable-wrapper {
   transition: margin-bottom 0.3s ease-out;
 }
 
+body.dockable-panel-resizing .content-body .gridtable-filter-container,
+body.dockable-panel-resizing .content-body .gridtable-wrapper,
+body.dockable-panel-resizing .content-body .gridtable-header-container {
+  transition: none;
+}
+
+.content-body .gridtable-container.has-footer .gridtable-wrapper {
+  margin-bottom: 0;
+}
+
 /* When both panels are open, transition both margins so neither snaps. */
 body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
   transition:
     margin-right 0.3s ease-out,
     margin-bottom 0.3s ease-out;
-}
-
-body.dockable-panel-resizing .content-body .gridtable-filter-container,
-body.dockable-panel-resizing .content-body .gridtable-wrapper,
-body.dockable-panel-resizing .content-body .gridtable-header-container {
-  transition: none;
 }
 
 .gridtable--header {
@@ -602,9 +607,9 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   opacity: 0.4;
 }
 
-.dropdown-option-row[data-column-key]:hover .gridtable-column-drag-handle,
+.gridtable-column-drag-handle:focus-visible,
 .dropdown-option-row.highlighted .gridtable-column-drag-handle,
-.gridtable-column-drag-handle:focus-visible {
+.dropdown-option-row[data-column-key]:hover .gridtable-column-drag-handle {
   opacity: 1;
 }
 
@@ -755,14 +760,14 @@ body.dock-bottom-open .content-body .gridtable-pagination {
   transition: margin-bottom 0.3s ease-out;
 }
 
+body.dockable-panel-resizing .content-body .gridtable-pagination {
+  transition: none;
+}
+
 body.dock-right-open.dock-bottom-open .content-body .gridtable-pagination {
   transition:
     margin-right 0.3s ease-out,
     margin-bottom 0.3s ease-out;
-}
-
-body.dockable-panel-resizing .content-body .gridtable-pagination {
-  transition: none;
 }
 
 .gridtable-pagination:empty {
@@ -772,10 +777,6 @@ body.dockable-panel-resizing .content-body .gridtable-pagination {
 /* ============================================
    9. Embedded & Responsive Tweaks
    ============================================ */
-.gridtable-container.embedded .gridtable-wrapper {
-  max-height: none;
-  overflow: auto;
-}
 
 .gridtable-container.embedded .gridtable-header {
   background-color: var(--grid-bg-primary);

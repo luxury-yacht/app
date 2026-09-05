@@ -12,9 +12,10 @@
 body {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
-  height: 100%;
-  width: 100%;
+  min-height: 0;
+  /* Zoom belongs to the body; keep its rendered bounds at the native viewport. */
+  height: calc(100dvh / var(--app-zoom-factor, 1));
+  width: auto;
   overflow: hidden;
 }
 

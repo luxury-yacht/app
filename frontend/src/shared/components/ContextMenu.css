@@ -91,12 +91,15 @@ button.context-menu-item {
   flex-shrink: 0;
 }
 
+.context-menu-item.danger .context-menu-icon {
+  color: var(--color-error, #ef4444);
+}
+
 .context-menu-item:hover:not(.disabled) .context-menu-icon,
 .context-menu-item.is-focused:not(.disabled) .context-menu-icon {
   color: var(--color-text);
 }
 
-.context-menu-item.danger .context-menu-icon,
 .context-menu-item.danger:hover:not(.disabled) .context-menu-icon,
 .context-menu-item.danger.is-focused:not(.disabled) .context-menu-icon {
   color: var(--color-error, #ef4444);

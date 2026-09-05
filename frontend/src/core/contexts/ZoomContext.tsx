@@ -2,11 +2,10 @@
  * frontend/src/core/contexts/ZoomContext.tsx
  *
  * Manages application zoom level (50% - 200%).
- * Applies CSS zoom to document and listens for zoom events from menu.
+ * Applies CSS zoom to app content and listens for zoom events from menu.
  * Persists zoom level to backend settings.
  */
 
-import { isWindowsPlatform } from '@utils/platform';
 import type React from 'react';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { readZoomLevel, requestAppState } from '@/core/app-state-access';
@@ -22,9 +21,9 @@ const DEFAULT_ZOOM = 100;
 
 /**
  * Viewport dimensions adjusted for CSS zoom.
- * When CSS zoom is applied, window.innerWidth/Height return unzoomed dimensions,
- * but mouse coordinates (clientX/Y) and CSS positioning are in zoomed space.
- * This interface provides dimensions in the zoomed coordinate space.
+ * Window dimensions and clientX/Y remain in viewport pixels. Divide those
+ * values by the zoom factor when positioning content inside the zoomed body.
+ * This interface provides the available dimensions in that content space.
  */
 export interface ZoomAwareViewport {
   /** Viewport width in CSS pixels (zoomed coordinate space) */
@@ -78,15 +77,12 @@ interface ZoomProviderProps {
 export const ZoomProvider: React.FC<ZoomProviderProps> = ({ children }) => {
   const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM);
 
-  // Apply zoom to document.
+  // Keep the root viewport unscaled: Wails compares its client dimensions with
+  // mouse coordinates to distinguish resize edges from native scrollbars.
+  // The body includes app content and portaled menus, dialogs, and panels.
   const applyZoom = useCallback((level: number) => {
-    document.documentElement.style.zoom = `${level}%`;
+    document.body.style.zoom = `${level}%`;
     document.documentElement.style.setProperty('--app-zoom-factor', `${level / 100}`);
-    // Windows (chromium) does not properly adjust viewport units with CSS zoom
-    // so we set a CSS variable to compensate.
-    if (isWindowsPlatform()) {
-      document.documentElement.style.setProperty('--zoom-compensate', `${level / 100}`);
-    }
   }, []);
 
   // Persist zoom level to backend

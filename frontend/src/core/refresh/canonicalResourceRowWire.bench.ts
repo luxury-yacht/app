@@ -1,5 +1,5 @@
 import { structuralShareResourceRows } from '@shared/utils/structuralShareResourceRows';
-import { bench, describe } from 'vitest';
+import { test } from 'vitest';
 import fixtureDocument from '@/test-fixtures/canonical-resource-row-wire.json';
 import { parseRefreshSnapshotValue } from './client';
 import type { CanonicalResourceRef, RefreshDomain } from './types';
@@ -80,12 +80,12 @@ const dynamicPrevious = rowArray(
   dynamicPage.entry.rowPath
 );
 
-describe('1,000-row Go-seeded wire parse and apply', () => {
-  bench('static JSON parse and envelope validation', () => {
+test('1,000-row Go-seeded wire parse and apply', async ({ bench }) => {
+  await bench('static JSON parse and envelope validation', () => {
     parseRefreshSnapshotValue(JSON.parse(staticPage.wire), staticPage.entry.domain);
-  });
+  }).run();
 
-  bench('static parse, validation, and whole-row sharing', () => {
+  await bench('static parse, validation, and whole-row sharing', () => {
     const parsed = parseRefreshSnapshotValue<Record<string, unknown>>(
       JSON.parse(staticPage.wire),
       staticPage.entry.domain
@@ -95,9 +95,9 @@ describe('1,000-row Go-seeded wire parse and apply', () => {
       rowArray(parsed as unknown as Record<string, unknown>, staticPage.entry.rowPath),
       'row-and-ref'
     );
-  });
+  }).run();
 
-  bench('dynamic parse, validation, and ref-only sharing', () => {
+  await bench('dynamic parse, validation, and ref-only sharing', () => {
     const parsed = parseRefreshSnapshotValue<Record<string, unknown>>(
       JSON.parse(dynamicPage.wire),
       dynamicPage.entry.domain
@@ -107,5 +107,5 @@ describe('1,000-row Go-seeded wire parse and apply', () => {
       rowArray(parsed as unknown as Record<string, unknown>, dynamicPage.entry.rowPath),
       'ref-only'
     );
-  });
+  }).run();
 });

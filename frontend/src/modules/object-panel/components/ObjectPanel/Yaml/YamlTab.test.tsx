@@ -428,15 +428,6 @@ refreshStoreMocks.useRefreshScopedDomain.mockImplementation((_domain: string, _s
   return snapshotState.current;
 });
 
-Object.assign(globalThis, {
-  navigator: {
-    clipboard: {
-      readText: vi.fn(() => Promise.resolve('')),
-      writeText: vi.fn(() => Promise.resolve()),
-    },
-  },
-});
-
 const waitForUpdates = async () => {
   await act(async () => {
     await Promise.resolve();
@@ -493,7 +484,15 @@ const renderYamlTab = async (
 };
 
 describe('YamlTab', () => {
+  const previousClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
   beforeEach(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        readText: vi.fn(() => Promise.resolve('')),
+        writeText: vi.fn(() => Promise.resolve()),
+      },
+    });
     snapshotState.current = { status: 'ready', data: { yaml: YAML }, error: null };
     codeMirrorState.selectionText = '';
     codeMirrorState.value = '';
@@ -528,6 +527,11 @@ describe('YamlTab', () => {
   });
 
   afterEach(() => {
+    if (previousClipboard) {
+      Object.defineProperty(navigator, 'clipboard', previousClipboard);
+    } else {
+      Reflect.deleteProperty(navigator, 'clipboard');
+    }
     document.body.innerHTML = '';
   });
 

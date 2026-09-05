@@ -72,8 +72,8 @@ maximize and restore.
 - Rejected owner/cluster combinations show no insertion indicator. Panel drag
   scope is available during protected dragover; drop-time and backend checks
   still authorize the actual transfer.
-- Dropping an unconsumed tab drag outside a workspace or a multi-tab native
-  source creates a new one-tab native window near the pointer, using the
+- On macOS and Windows, dropping an unconsumed tab drag outside a workspace or a
+  multi-tab native source creates a new one-tab native window near the pointer, using the
   configured floating size and the pointer's monitor work area. Dragging the
   only tab out of a native source leaves that window unchanged because replacing
   it with an equivalent one-tab native window has no effect. This differs from
@@ -81,6 +81,9 @@ maximize and restore.
   the native drag session recognizes the dockable-tab MIME marker and suppresses
   AppKit's failed-drop return animation because an accepted tear-off is
   intentionally represented as `dropEffect: none` by the source webview.
+- Linux drag-out to a new window is deferred for this release. Use Float to
+  transfer the entire current panel group into a native window. Tab reordering
+  and moves between existing compatible panels remain in the release scope.
 
 ## Acknowledged Handoffs
 
@@ -168,3 +171,8 @@ state.
    move, tab close, titlebar close, cluster close, owner close, and quit.
 6. Add reducer/protocol tests and visible component tests. Run typecheck and the
    targeted dockable, object-panel, shortcut, and appwindow suites.
+7. On macOS and Windows, exercise single-tab drag-out from a workspace and a
+   multi-tab native window. On Linux, record drag-out as a deferred limitation;
+   still test tab reordering, moves between compatible existing panels, Float,
+   and dock-back. Check that an attempted drag-out or Escape preserves the source
+   tab and its contents.

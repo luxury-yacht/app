@@ -222,6 +222,22 @@
   height: calc(var(--scrollbar-height) - (var(--scrollbar-thumb-inset) * 2));
 }
 
+.scrollbar-virtual--active .scrollbar-virtual-thumb {
+  opacity: var(--scrollbar-thumb-active-opacity);
+  transition:
+    background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease),
+    opacity var(--scrollbar-fade-in-duration) var(--ease-out, ease),
+    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    right var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    bottom var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+}
+
+.scrollbar-virtual-thumb:hover,
+.scrollbar-virtual--dragging .scrollbar-virtual-thumb {
+  background-color: var(--scrollbar-thumb-hover-bg);
+}
+
 .scrollbar-virtual--vertical.scrollbar-virtual--hovered .scrollbar-virtual-thumb,
 .scrollbar-virtual--vertical.scrollbar-virtual--dragging .scrollbar-virtual-thumb {
   right: calc(var(--scrollbar-thumb-inset) * var(--scrollbar-hover-scale));
@@ -238,22 +254,6 @@
     (var(--scrollbar-height) - (var(--scrollbar-thumb-inset) * 2)) *
     var(--scrollbar-hover-scale)
   );
-}
-
-.scrollbar-virtual--active .scrollbar-virtual-thumb {
-  opacity: var(--scrollbar-thumb-active-opacity);
-  transition:
-    background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease),
-    opacity var(--scrollbar-fade-in-duration) var(--ease-out, ease),
-    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    right var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    bottom var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
-}
-
-.scrollbar-virtual-thumb:hover,
-.scrollbar-virtual--dragging .scrollbar-virtual-thumb {
-  background-color: var(--scrollbar-thumb-hover-bg);
 }
 
 .scrollbar-overlay--geometry-updating {

@@ -27,14 +27,14 @@ body.dock-bottom-open .content-body .workloads-pods-split {
   transition: bottom 0.3s ease-out;
 }
 
+body.dockable-panel-resizing .content-body .workloads-pods-split {
+  transition: none;
+}
+
 body.dock-right-open.dock-bottom-open .content-body .workloads-pods-split {
   transition:
     right 0.3s ease-out,
     bottom 0.3s ease-out;
-}
-
-body.dockable-panel-resizing .content-body .workloads-pods-split {
-  transition: none;
 }
 
 .workloads-pods-split--collapsed {

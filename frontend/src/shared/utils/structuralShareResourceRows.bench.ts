@@ -1,4 +1,4 @@
-import { bench, describe } from 'vitest';
+import { test } from 'vitest';
 import type { CanonicalResourceRef } from '@/core/refresh/types';
 import { structuralShareResourceRows } from './structuralShareResourceRows';
 
@@ -31,12 +31,12 @@ const staticIncoming = rows(1_000);
 const dynamicPrevious = rows(1_000);
 const dynamicIncoming = rows(1_000);
 
-describe('1,000-row query-page structural sharing', () => {
-  bench('static row-and-ref comparison', () => {
+test('1,000-row query-page structural sharing', async ({ bench }) => {
+  await bench('static row-and-ref comparison', () => {
     structuralShareResourceRows(staticPrevious, staticIncoming, 'row-and-ref');
-  });
+  }).run();
 
-  bench('dynamic ref-only comparison', () => {
+  await bench('dynamic ref-only comparison', () => {
     structuralShareResourceRows(dynamicPrevious, dynamicIncoming, 'ref-only');
-  });
+  }).run();
 });

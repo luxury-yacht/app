@@ -118,10 +118,6 @@
   line-height: 1.4;
 }
 
-.yaml-validation-message p + p {
-  margin-top: 0.5rem;
-}
-
 .yaml-editor-notice {
   margin-bottom: 0.75rem;
   padding: 0.5rem 0.75rem;
@@ -154,6 +150,10 @@
 
 .yaml-notice-header p {
   flex: 1;
+}
+
+.yaml-validation-message p + p {
+  margin-top: 0.5rem;
 }
 
 .yaml-notice-actions {

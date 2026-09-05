@@ -233,7 +233,7 @@ describe('Dropdown', () => {
   it('anchors the portaled menu to the trigger at 80% app zoom', async () => {
     const originalInnerWidth = window.innerWidth;
     const originalInnerHeight = window.innerHeight;
-    const originalZoom = document.documentElement.style.zoom;
+    const originalZoom = document.body.style.zoom;
     const originalZoomFactor = document.documentElement.style.getPropertyValue('--app-zoom-factor');
     const offsetWidthDescriptor = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,
@@ -247,7 +247,7 @@ describe('Dropdown', () => {
     try {
       Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 });
       Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
-      document.documentElement.style.zoom = '80%';
+      document.body.style.zoom = '80%';
       document.documentElement.style.setProperty('--app-zoom-factor', '0.8');
       Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
         configurable: true,
@@ -303,7 +303,7 @@ describe('Dropdown', () => {
         configurable: true,
         value: originalInnerHeight,
       });
-      document.documentElement.style.zoom = originalZoom;
+      document.body.style.zoom = originalZoom;
       if (originalZoomFactor) {
         document.documentElement.style.setProperty('--app-zoom-factor', originalZoomFactor);
       } else {

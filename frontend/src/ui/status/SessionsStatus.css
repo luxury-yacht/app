@@ -190,8 +190,8 @@
   display: block;
 }
 
-.sessions-status-message .as-shell-session-jump:hover:not(:disabled) .as-shell-open-affordance,
-.sessions-status-message .as-shell-session-jump:focus-visible .as-shell-open-affordance {
+.sessions-status-message .as-shell-session-jump:focus-visible .as-shell-open-affordance,
+.sessions-status-message .as-shell-session-jump:hover:not(:disabled) .as-shell-open-affordance {
   color: var(--color-accent);
   opacity: 1;
   filter: drop-shadow(0 0 5px color-mix(in srgb, var(--color-accent) 70%, transparent));

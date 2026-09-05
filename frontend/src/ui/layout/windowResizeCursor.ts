@@ -104,14 +104,13 @@ export function installDirectionalWindowResizeCursor(
   targetDocument.body.appendChild(frame);
   const updateFrameBounds = () => {
     const root = targetDocument.documentElement;
-    const zoom = Number.parseFloat(targetWindow.getComputedStyle(root).zoom) || 1;
     frame.style.setProperty(
       '--window-resize-right-inset',
-      `${Math.max(0, targetWindow.innerWidth - root.clientWidth * zoom)}px`
+      `${Math.max(0, targetWindow.innerWidth - root.clientWidth)}px`
     );
     frame.style.setProperty(
       '--window-resize-bottom-inset',
-      `${Math.max(0, targetWindow.innerHeight - root.clientHeight * zoom)}px`
+      `${Math.max(0, targetWindow.innerHeight - root.clientHeight)}px`
     );
   };
   updateFrameBounds();

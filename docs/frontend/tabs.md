@@ -52,6 +52,9 @@ also use the shared drag coordinator.
 - Dockable tab movement must preserve panel identity, group membership, active
   tab state, and cluster/object identity. Local drops apply immediately;
   cross-window drops use the acknowledged native-panel transfer transaction.
+- Drag-out to create a new native panel window is in scope on macOS and Windows.
+  Linux drag-out is deferred for this release; see
+  [dockable-panels.md](dockable-panels.md) for the platform validation checklist.
 
 ## Global Workspace Tab
 
