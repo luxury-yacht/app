@@ -116,6 +116,13 @@ installs without elevation below
 `${XDG_DATA_HOME:-$HOME/.local/share}/luxury-yacht`, writes the adjacent
 `luxury-yacht.install.json` marker with `portable` distribution and `user`
 scope, and installs the desktop entry and icon below the same XDG data home.
+The installed desktop entry and icon use `org.wails.luxury_yacht`, matching
+the GTK application ID Wails derives from the runtime name `Luxury Yacht`.
+Keep these aligned when changing the runtime name or upgrading Wails so
+Wayland docks can associate running windows with their launcher. Rerunning
+the portable installer migrates the former `luxury-yacht.desktop` launcher
+when its executable points to this installation. Binary-only automatic
+updates do not migrate desktop integration.
 Portable upgrades validate the installed marker through the same
 schema/product/distribution/scope boundary as fresh installs rather than
 requiring byte-for-byte equality with the next archive's marker.

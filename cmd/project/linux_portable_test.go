@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -97,8 +98,10 @@ func TestPortableInstallerCreatesAndRemovesAnEligibleUserInstallation(t *testing
 	require.Equal(t, []byte("production linux binary"), readTestFileBytes(t, executable))
 	require.Equal(t, readTestFileBytes(t, config.MarkerPath), readTestFileBytes(t, markerPath))
 	require.NoFileExists(t, filepath.Join(installationRoot, "installation-marker.expected.json"))
-	require.Contains(t, readTestFile(t, filepath.Join(dataHome, "applications", "luxury-yacht.desktop")), `Exec="`+executable+`" %u`)
-	require.Equal(t, []byte("icon"), readTestFileBytes(t, filepath.Join(dataHome, "icons", "hicolor", "128x128", "apps", "luxury-yacht.png")))
+	require.Contains(t, readTestFile(t, filepath.Join(dataHome, "applications", "org.wails.luxury_yacht.desktop")), `Exec="`+executable+`" %u`)
+	require.Equal(t, []byte("icon"), readTestFileBytes(t, filepath.Join(dataHome, "icons", "hicolor", "128x128", "apps", "org.wails.luxury_yacht.png")))
+	require.Contains(t, readTestFile(t, filepath.Join(dataHome, "applications", "org.wails.luxury_yacht.desktop")), "Icon=org.wails.luxury_yacht\n")
+	require.NoFileExists(t, filepath.Join(dataHome, "applications", "luxury-yacht.desktop"))
 
 	eligibility := updateidentity.ResolveInstallation(updateidentity.InstallationProbe{
 		Platform: updateidentity.PlatformLinux, Architecture: "amd64", TargetPath: executable,
@@ -113,8 +116,8 @@ func TestPortableInstallerCreatesAndRemovesAnEligibleUserInstallation(t *testing
 	// integration must survive that swap.
 	require.NoError(t, os.WriteFile(executable, []byte("updated binary"), 0o755))
 	require.Equal(t, readTestFileBytes(t, config.MarkerPath), readTestFileBytes(t, markerPath))
-	require.FileExists(t, filepath.Join(dataHome, "applications", "luxury-yacht.desktop"))
-	require.FileExists(t, filepath.Join(dataHome, "icons", "hicolor", "128x128", "apps", "luxury-yacht.png"))
+	require.FileExists(t, filepath.Join(dataHome, "applications", "org.wails.luxury_yacht.desktop"))
+	require.FileExists(t, filepath.Join(dataHome, "icons", "hicolor", "128x128", "apps", "org.wails.luxury_yacht.png"))
 	updaterTempRoot := createOwnedUpdaterTempRoot(t, dataHome)
 	require.NoError(t, os.Mkdir(filepath.Join(updaterTempRoot, "wails-update-stale"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(updaterTempRoot, "wails-update-123.log"), []byte("stale helper log"), 0o600))
@@ -133,10 +136,55 @@ func TestPortableInstallerCreatesAndRemovesAnEligibleUserInstallation(t *testing
 	require.NoError(t, err, string(output))
 	require.NoFileExists(t, executable)
 	require.NoFileExists(t, markerPath)
-	require.NoFileExists(t, filepath.Join(dataHome, "applications", "luxury-yacht.desktop"))
-	require.NoFileExists(t, filepath.Join(dataHome, "icons", "hicolor", "128x128", "apps", "luxury-yacht.png"))
+	require.NoFileExists(t, filepath.Join(dataHome, "applications", "org.wails.luxury_yacht.desktop"))
+	require.NoFileExists(t, filepath.Join(dataHome, "icons", "hicolor", "128x128", "apps", "org.wails.luxury_yacht.png"))
 	require.NoDirExists(t, updaterTempRoot)
 	require.FileExists(t, filepath.Join(lookalikeTempRoot, "keep-me"))
+}
+
+func TestPortableInstallerMigratesOnlyItsOwnLegacyDesktopEntry(t *testing.T) {
+	for _, owned := range []bool{true, false} {
+		t.Run(fmt.Sprintf("owned=%t", owned), func(t *testing.T) {
+			root := t.TempDir()
+			config := testLinuxPortableConfig(t, root)
+			artifacts, err := createLinuxPortableArtifacts(config)
+			require.NoError(t, err)
+			extractRoot := filepath.Join(root, "extract")
+			require.NoError(t, extractRegularTarGz(artifacts.InstallerArchive, extractRoot))
+			installer := filepath.Join(extractRoot, "luxury-yacht-v2.0.0-beta.3-linux-amd64-portable", "install.sh")
+			dataHome := filepath.Join(root, "xdg data")
+			install := func() {
+				command := exec.Command("sh", installer)
+				command.Env = append(os.Environ(), "XDG_DATA_HOME="+dataHome)
+				output, err := command.CombinedOutput()
+				require.NoError(t, err, string(output))
+			}
+			install()
+			desktopPath := filepath.Join(dataHome, "applications", "org.wails.luxury_yacht.desktop")
+			iconPath := filepath.Join(dataHome, "icons", "hicolor", "128x128", "apps", "org.wails.luxury_yacht.png")
+			legacyDesktopPath := filepath.Join(filepath.Dir(desktopPath), "luxury-yacht.desktop")
+			legacyIconPath := filepath.Join(filepath.Dir(iconPath), "luxury-yacht.png")
+			legacyDesktop := strings.ReplaceAll(readTestFile(t, desktopPath), "Icon=org.wails.luxury_yacht", "Icon=luxury-yacht")
+			if !owned {
+				legacyDesktop = strings.ReplaceAll(legacyDesktop, filepath.Join(dataHome, "luxury-yacht", "luxury-yacht"), "/other/luxury-yacht")
+			}
+			require.NoError(t, os.WriteFile(legacyDesktopPath, []byte(legacyDesktop), 0o644))
+			require.NoError(t, os.Rename(iconPath, legacyIconPath))
+			require.NoError(t, os.Remove(desktopPath))
+
+			install()
+			install() // Reinstalling must not recreate a duplicate launcher.
+			require.Contains(t, readTestFile(t, desktopPath), "Icon=org.wails.luxury_yacht\n")
+			require.Equal(t, []byte("icon"), readTestFileBytes(t, iconPath))
+			if owned {
+				require.NoFileExists(t, legacyDesktopPath)
+				require.NoFileExists(t, legacyIconPath)
+			} else {
+				require.Equal(t, legacyDesktop, readTestFile(t, legacyDesktopPath))
+				require.Equal(t, []byte("icon"), readTestFileBytes(t, legacyIconPath))
+			}
+		})
+	}
 }
 
 func TestPortableUninstallerPreservesUpdaterTempRootWithUnknownContents(t *testing.T) {
