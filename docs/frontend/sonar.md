@@ -70,15 +70,47 @@ Sonar's `buildCatalogSummary` finding. Therefore:
 - do not expand the Sonar inventory with Biome-only findings during this plan;
 - wait for the completed Sonar analysis before checking off remediation.
 
+## Local Go signal
+
+Use a pinned gocognit invocation to inspect changed Go production functions and
+their new helpers. This does not add a dependency to the application's module:
+
+```sh
+mise exec -- go run github.com/uudashr/gocognit/cmd/gocognit@v1.2.1 \
+  -json backend/path/to/file.go
+```
+
+gocognit is a directional check, not the Sonar Go analyzer. Its scores can differ
+from Sonar, particularly for nested control flow. Target 12 or lower in changed
+functions; review their scores rather than treating unrelated existing findings
+in the same file as part of the task. Keep Sonar's configured threshold and
+exclusions unchanged. The pinned version's
+[release notes](https://github.com/uudashr/gocognit/releases/tag/v1.2.1) include
+support for integer and iterator range loops.
+
+## Prevent complexity regressions while implementing
+
+Run the applicable local check after adding recovery branches, loops/selects,
+or callback logic, and again before the prerelease gate. A passing gate does not
+include this separate complexity check. Split cohesive responsibilities such as
+operation admission, generation replacement, live delivery, and terminal cleanup
+before adding more nesting. Preserve the timing of stale-generation guards,
+cancellation, publication, and completion while moving code.
+
+Recurring mistakes and their prevention steps are recorded in
+[the shared workflow guidance](../workflows/common-mistakes.md); read it before
+editing.
+
 ## Required remediation loop
 
 1. Record the Sonar key, score, owning contract, consumers, and directly affected
    coverage.
 2. Add or confirm characterization cases before moving branches.
 3. Refactor one responsibility at a time and rerun focused tests.
-4. Run the local Biome signal for the touched function.
+4. Run the applicable local complexity signal for every changed function and
+   new helper, not only the function Sonar originally flagged.
 5. Run frontend check, typecheck, coverage, and the full prerelease gate.
-6. Push the smallest reviewable batch and wait for Sonar.
+6. After an explicitly authorized push, wait for Sonar analysis of that revision.
 7. Run the all-rule PR audit.
 8. After merge and main analysis, run the monotonic main audit and update the
    baseline.

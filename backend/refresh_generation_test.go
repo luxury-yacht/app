@@ -326,3 +326,72 @@ func TestPermissionReplacementFailurePreservesServingGeneration(t *testing.T) {
 	app.Refresh.rebuildForPermissionChange(ctx, "cluster-a", next, &clusterRebuildFailures{})
 	require.Same(t, next, app.Refresh.getRefreshSubsystem("cluster-a"))
 }
+
+func TestPermissionReplacementConstructionOutcomesPreserveOwnership(t *testing.T) {
+	for _, test := range []struct {
+		name             string
+		buildError       error
+		cancelBuild      bool
+		wantPublished    bool
+		wantNextCanceled bool
+	}{
+		{name: "published", wantPublished: true},
+		{name: "construction failed", buildError: errors.New("subsystem construction failed")},
+		{name: "canceled during construction", cancelBuild: true, wantNextCanceled: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			const clusterID = "cluster-a"
+			app := newWorkspaceCoordinatorTestFixture(t)
+			setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+			oldService, newService := &cancelTrackingSnapshotService{}, &cancelTrackingSnapshotService{}
+			previous := &system.Subsystem{SnapshotService: oldService}
+			next := &system.Subsystem{Manager: refresh.NewManager(nil, nil, nil, nil, nil), SnapshotService: newService}
+			app.Refresh.setRefreshSubsystem(clusterID, previous)
+			setRefreshServiceReadyForTest(app.Refresh)
+			aggregate := newAggregateSnapshotService([]string{clusterID}, map[string]*system.Subsystem{clusterID: previous})
+			app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
+			oldClients := &clusterClients{meta: ClusterMeta{ID: clusterID}, kubeconfigPath: "/test/config"}
+			newClients := &clusterClients{meta: oldClients.meta, kubeconfigPath: oldClients.kubeconfigPath}
+			app.ClusterRuntime.clusterClients = map[string]*clusterClients{clusterID: oldClients}
+			app.Refresh.clusterRuntime = &failingPermissionRebuildRuntime{refreshClusterRuntime: app.ClusterRuntime, clients: newClients}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			originalBuilder := newRefreshSubsystemWithServices
+			newRefreshSubsystemWithServices = func(system.Config) (*system.Subsystem, error) {
+				if test.buildError != nil {
+					return nil, test.buildError
+				}
+				if test.cancelBuild {
+					cancel()
+				}
+				return next, nil
+			}
+			t.Cleanup(func() {
+				app.Refresh.stopRefreshGeneration(clusterID, next)
+				app.Refresh.stopRefreshRuntimeContext()
+				newRefreshSubsystemWithServices = originalBuilder
+			})
+			emitted := false
+			app.Refresh.emitEventFn = func(name string, args ...interface{}) {
+				emitted = true
+				require.Equal(t, clusterPermissionsChangedEventName, name)
+				require.Equal(t, []interface{}{ClusterPermissionsChangedEvent{ClusterID: clusterID}}, args)
+				require.Same(t, next, app.Refresh.getRefreshSubsystem(clusterID))
+				require.Same(t, newService, aggregate.snapshotConfig()[clusterID], "route before notifying consumers")
+				require.Same(t, newClients, app.ClusterRuntime.clusterClientsForID(clusterID))
+				require.True(t, oldService.canceled, "retire the previous generation before announcing recovery")
+			}
+
+			app.Refresh.rebuildForPermissionChange(ctx, clusterID, previous, &clusterRebuildFailures{})
+
+			expected := previous
+			if test.wantPublished {
+				expected = next
+			}
+			require.Same(t, expected, app.Refresh.getRefreshSubsystem(clusterID))
+			require.Equal(t, test.wantPublished, emitted)
+			require.Equal(t, test.wantPublished, oldService.canceled)
+			require.Equal(t, test.wantNextCanceled, newService.canceled)
+		})
+	}
+}

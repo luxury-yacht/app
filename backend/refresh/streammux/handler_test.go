@@ -406,6 +406,65 @@ func TestClosedSubscriptionAlwaysNotifiesClient(t *testing.T) {
 	}
 }
 
+func TestForwardSubscriptionPreservesCompletionReason(t *testing.T) {
+	closed := make(chan DropReason)
+	close(closed)
+	queued := make(chan DropReason, 1)
+	queued <- DropReasonBackpressure
+	close(queued)
+	for _, test := range []struct {
+		name  string
+		drops <-chan DropReason
+		want  DropReason
+	}{
+		{name: "absent", want: DropReasonClosed},
+		{name: "open without reason", drops: make(chan DropReason), want: DropReasonClosed},
+		{name: "closed without reason", drops: closed, want: DropReasonClosed},
+		{name: "queued reason", drops: queued, want: DropReasonBackpressure},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			s := newSession(stubConn{}, Config{Logger: applog.Noop})
+			updates := make(chan ServerMessage)
+			close(updates)
+			entry := s.storeSubscription("key", &Subscription{
+				Domain: "pods", Updates: updates, Drops: test.drops, Cancel: func() {},
+			}, "cluster-a", "")
+			s.forwardSubscription("key", entry, 0)
+			if len(s.outgoing) != 1 {
+				t.Fatalf("expected one completion, got %d messages", len(s.outgoing))
+			}
+			msg := <-s.outgoing
+			if msg.Type != MessageTypeComplete || msg.Error != "subscription ended: "+string(test.want) {
+				t.Fatalf("completion lost the drop reason: %+v", msg)
+			}
+		})
+	}
+}
+
+func TestForwardSubscriptionPreservesUnsequencedLiveUpdates(t *testing.T) {
+	s := newSession(stubConn{}, Config{Logger: applog.Noop})
+	updates := make(chan ServerMessage, 3)
+	for _, sequence := range []string{"7", "invalid", "9"} {
+		updates <- ServerMessage{Type: MessageTypeModified, Domain: "pods", Sequence: sequence}
+	}
+	close(updates)
+	entry := s.storeSubscription("key", &Subscription{
+		Domain: "pods", Updates: updates, Cancel: func() {},
+	}, "cluster-a", "")
+	s.forwardSubscription("key", entry, 8)
+	if len(s.outgoing) != 3 {
+		t.Fatalf("expected unsequenced and new live updates, then completion; got %d messages", len(s.outgoing))
+	}
+	for _, sequence := range []string{"invalid", "9"} {
+		if msg := <-s.outgoing; msg.Type != MessageTypeModified || msg.Sequence != sequence {
+			t.Fatalf("unexpected live update after replay: %+v", msg)
+		}
+	}
+	if msg := <-s.outgoing; msg.Type != MessageTypeComplete {
+		t.Fatalf("expected completion after live updates, got %+v", msg)
+	}
+}
+
 func TestOldSubscriptionCannotDeliverIntoReplacement(t *testing.T) {
 	s := newSession(stubConn{}, Config{Logger: applog.Noop, StreamName: "resources"})
 	updates := make(chan ServerMessage)

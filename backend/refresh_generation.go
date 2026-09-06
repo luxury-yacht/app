@@ -331,32 +331,36 @@ func (a *RefreshCoordinator) rebuildForPermissionChange(ctx context.Context, clu
 		return
 	}
 	err := a.clusterRuntime.runBackgroundClusterOperation(ctx, clusterID, func(opCtx context.Context) error {
-		if opCtx.Err() != nil || a.getRefreshSubsystem(clusterID) != expected {
-			return nil
-		}
-		rebuild, ok := a.prepareClusterSubsystemRebuild(clusterID)
-		if !ok {
-			return nil
-		}
-		rebuild.failures = failures
-		clients, ok := rebuild.rebuildClients(opCtx)
-		if !ok || opCtx.Err() != nil || a.getRefreshSubsystem(clusterID) != expected {
-			return nil
-		}
-		next, ok := rebuild.buildSubsystem(clients)
-		if !ok {
-			return nil
-		}
-		if opCtx.Err() != nil || a.getRefreshSubsystem(clusterID) != expected {
-			a.stopRefreshGeneration(clusterID, next)
-			return nil
-		}
-		if rebuild.activateSubsystem(clients, next) && a.emitEventFn != nil {
-			a.emitEventFn(clusterPermissionsChangedEventName, ClusterPermissionsChangedEvent{ClusterID: clusterID})
-		}
+		a.replacePermissionGeneration(opCtx, clusterID, expected, failures)
 		return nil
 	})
 	if err != nil {
 		a.logger.Warn(fmt.Sprintf("Permission refresh replacement for cluster %s failed: %v", clusterID, err), logsources.Refresh, clusterID, expected.ClusterMeta.ClusterName)
+	}
+}
+
+func (a *RefreshCoordinator) replacePermissionGeneration(ctx context.Context, clusterID string, expected *system.Subsystem, failures *clusterRebuildFailures) {
+	if ctx.Err() != nil || a.getRefreshSubsystem(clusterID) != expected {
+		return
+	}
+	rebuild, ok := a.prepareClusterSubsystemRebuild(clusterID)
+	if !ok {
+		return
+	}
+	rebuild.failures = failures
+	clients, ok := rebuild.rebuildClients(ctx)
+	if !ok || ctx.Err() != nil || a.getRefreshSubsystem(clusterID) != expected {
+		return
+	}
+	next, ok := rebuild.buildSubsystem(clients)
+	if !ok {
+		return
+	}
+	if ctx.Err() != nil || a.getRefreshSubsystem(clusterID) != expected {
+		a.stopRefreshGeneration(clusterID, next)
+		return
+	}
+	if rebuild.activateSubsystem(clients, next) && a.emitEventFn != nil {
+		a.emitEventFn(clusterPermissionsChangedEventName, ClusterPermissionsChangedEvent{ClusterID: clusterID})
 	}
 }

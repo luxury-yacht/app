@@ -439,36 +439,48 @@ func (s *session) forwardSubscription(key string, entry *sessionSubscription, re
 			Error: fmt.Sprintf("subscription ended: %s", reason),
 		}, true)
 	}()
+	reason = s.forwardSubscriptionUpdates(key, entry, resumeHighWater)
+}
+
+func (s *session) forwardSubscriptionUpdates(key string, entry *sessionSubscription, resumeHighWater uint64) DropReason {
 	for {
 		select {
 		case update, ok := <-entry.sub.Updates:
 			if !ok {
-				select {
-				case dropped, open := <-entry.sub.Drops:
-					if open {
-						reason = dropped
-					}
-				default:
-				}
-				return
+				return pendingSubscriptionDropReason(entry.sub.Drops)
 			}
-			if resumeHighWater > 0 {
-				if sequence, ok := parseSequence(update.Sequence); ok && sequence <= resumeHighWater {
-					continue
-				}
-			}
-			if !s.deliverSubscriptionMessage(key, entry, s.withClusterInfo(update, entry.clusterID, entry.clusterName), false) {
-				return
+			if !s.forwardLiveSubscriptionUpdate(key, entry, update, resumeHighWater) {
+				return DropReasonClosed
 			}
 		case dropped, ok := <-entry.sub.Drops:
 			if ok {
-				reason = dropped
+				return dropped
 			}
-			return
+			return DropReasonClosed
 		case <-s.done:
-			return
+			return DropReasonClosed
 		}
 	}
+}
+
+func pendingSubscriptionDropReason(drops <-chan DropReason) DropReason {
+	select {
+	case reason, ok := <-drops:
+		if ok {
+			return reason
+		}
+	default:
+	}
+	return DropReasonClosed
+}
+
+func (s *session) forwardLiveSubscriptionUpdate(key string, entry *sessionSubscription, update ServerMessage, resumeHighWater uint64) bool {
+	if resumeHighWater > 0 {
+		if sequence, ok := parseSequence(update.Sequence); ok && sequence <= resumeHighWater {
+			return true
+		}
+	}
+	return s.deliverSubscriptionMessage(key, entry, s.withClusterInfo(update, entry.clusterID, entry.clusterName), false)
 }
 
 // A replaced or explicitly cancelled subscription cannot deliver into its successor.
