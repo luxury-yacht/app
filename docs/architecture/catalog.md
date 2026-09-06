@@ -17,6 +17,10 @@ Keep `catalog-first`. Do not turn that into `catalog-only`.
   identity.
 - Backend lookups that cross app boundaries must require `clusterId`; do not
   guess from current selection.
+- Each running catalog belongs to the exact refresh subsystem whose informer
+  and ingest feeds it reads. Generation retirement cancels and joins that catalog
+  and its bridges before stopping the feeds. Replacing a catalog entry also stops
+  the displaced run; retiring an older generation cannot stop the new catalog.
 - If discovery is degraded, preserve known identity where safe and surface
   degraded confidence instead of acting on ambiguous objects.
 - After discovery and permission preflight, collection waits up to the ingest
@@ -44,6 +48,16 @@ Keep `catalog-first`. Do not turn that into `catalog-only`.
   selection before the dependent query runs.
 - `unfilteredTotal` removes search, Kind, user namespace, and API-group filters
   while retaining the structural boundary.
+
+## Ingest callback ordering
+
+An ingest callback may run while its source store is write-locked. It cannot block
+on the catalog's full-sync lock, because full sync reads those same source stores.
+If the catalog lock is busy, coalesce a pending reconciliation by GVR and reread
+the authoritative kind store after acquiring the sync lock. This applies to
+incremental changes and whole-kind replacement, including changes arriving after
+a full sync collected that kind. Catalog shutdown drains this worker before
+signaling completion.
 
 ## Layer Model
 

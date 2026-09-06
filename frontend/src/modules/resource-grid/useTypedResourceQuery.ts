@@ -242,13 +242,17 @@ const dispatchTypedQueryResult = <TPayload extends TypedQueryPayload>(
     callbacks.onWarmup();
     return;
   }
+  if (result.data?.permissionDenied) {
+    callbacks.onPermissionDenied(result.data.error ?? 'Insufficient permissions');
+    return;
+  }
+  if (result.data?.status === 'error') {
+    callbacks.onError(new Error(result.data.error ?? 'Snapshot request failed'));
+    return;
+  }
   const payload = result.data?.data as TPayload | null | undefined;
   if (!payload) {
-    if (result.data?.permissionDenied) {
-      callbacks.onPermissionDenied(result.data.error ?? 'Insufficient permissions');
-    } else {
-      callbacks.onWarmup();
-    }
+    callbacks.onWarmup();
     return;
   }
   if (payload.cursorInvalid) {

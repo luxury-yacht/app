@@ -49,6 +49,9 @@ source contract is unclear.
 
 ## Working rules
 
+- Read `docs/workflows/common-mistakes.md` before editing and apply its
+  prevention checks to the affected code. Record recurring mistakes and shared
+  prevention rules there so they travel with the repository.
 - Preserve unrelated worktree changes and existing project patterns.
 - Do not change behavior, appearance, dependencies, or unrelated files unless
   required for the requested contract.
@@ -74,6 +77,13 @@ source contract is unclear.
   with `mise exec -- wails3 task test:backend-coverage` or
   `mise exec -- wails3 task test:frontend-coverage`; target 80% statement coverage or
   report the measured gap and ask for guidance.
+- Check cognitive complexity in every changed production function and new
+  helper before the final gate. Follow `docs/frontend/sonar.md` for the Go and
+  TypeScript checks; target a local score of 12 or lower. Preserve lifecycle and
+  ordering contracts when extracting responsibilities. Do not suppress findings
+  or raise thresholds. A prerelease pass is not evidence of Sonar closure;
+  inspect the PR's current Sonar findings when available and distinguish local
+  results from analysis of the pushed revision.
 - Base final evidence on the latest worktree. Before reporting
   non-documentation work, run
   `mise exec -- wails3 task qc:prerelease`, then inspect the worktree because the gate

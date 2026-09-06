@@ -27,6 +27,7 @@ export type {
     ClusterAuthProgressEvent,
     ClusterHealthEvent,
     ClusterLifecycleEvent,
+    ClusterPermissionsChangedEvent,
     ClusterScopeChangedEvent,
     ClusterWorkspaceAuthState,
     ClusterWorkspaceClusterState,

@@ -16,6 +16,7 @@ const (
 	clusterHealthDegradedEventName      = "cluster:health:degraded"
 	clusterHealthHealthyEventName       = "cluster:health:healthy"
 	clusterLifecycleEventName           = "cluster:lifecycle"
+	clusterPermissionsChangedEventName  = "cluster:permissions:changed"
 	clusterScopeChangedEventName        = "cluster:scope:changed"
 	kubeconfigAvailableChangedEventName = "kubeconfig:available-changed"
 	appearanceModeChangedEventName      = "settings:appearance-mode-changed"
@@ -60,6 +61,10 @@ type ClusterLifecycleEvent struct {
 	PreviousState string                `json:"previousState"`
 }
 
+type ClusterPermissionsChangedEvent struct {
+	ClusterID string `json:"clusterId"`
+}
+
 type ClusterScopeChangedEvent struct {
 	ClusterID string `json:"clusterId"`
 }
@@ -84,6 +89,7 @@ func init() {
 	application.RegisterEvent[ClusterHealthEvent](clusterHealthDegradedEventName)
 	application.RegisterEvent[ClusterHealthEvent](clusterHealthHealthyEventName)
 	application.RegisterEvent[ClusterLifecycleEvent](clusterLifecycleEventName)
+	application.RegisterEvent[ClusterPermissionsChangedEvent](clusterPermissionsChangedEventName)
 	application.RegisterEvent[ClusterScopeChangedEvent](clusterScopeChangedEventName)
 	application.RegisterEvent[application.Void](kubeconfigAvailableChangedEventName)
 	application.RegisterEvent[AppearanceModeChangedEvent](appearanceModeChangedEventName)

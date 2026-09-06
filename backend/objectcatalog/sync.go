@@ -298,6 +298,7 @@ func nextCatalogResyncInterval(syncOK bool, current, retry, full time.Duration) 
 func (s *Service) runLoop(ctx context.Context) error {
 	defer close(s.doneCh)
 	defer s.stopDynamicReflectors()
+	defer s.stopIngestReconciliation()
 
 	// Initial sync.
 	initialSyncErr := s.sync(ctx)
@@ -309,8 +310,8 @@ func (s *Service) runLoop(ctx context.Context) error {
 	// sink-registration replay walks populated ingest stores and can take a while,
 	// and a failed initial sync — the startup race — is exactly when the fast retry
 	// below must fire promptly. Registration racing a sync is safe by design: the
-	// incremental appliers TryLock syncMu and DROP their update while a sync runs
-	// (the sync reconciles from the same stores).
+	// contended ingest callbacks queue a trailing authoritative read, including
+	// changes arriving after the full sync already collected their kind.
 	if s.opts.EnableReactiveUpdates && s.deps.InformerFactory != nil {
 		notifier := newWatchNotifier(s)
 		go func() {

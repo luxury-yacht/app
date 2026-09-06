@@ -271,6 +271,41 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 	}
 }
 
+func TestCatalogReplacementStopsPreviousRun(t *testing.T) {
+	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
+	require.NoError(t, app.Refresh.startObjectCatalogForTarget(target))
+	previous := app.Refresh.snapshotObjectCatalogEntries()[0]
+	require.NoError(t, app.Refresh.startObjectCatalogForTarget(target))
+	require.NotSame(t, previous.service, app.Refresh.objectCatalogServiceForCluster(target.meta.ID))
+	select {
+	case <-previous.done:
+	default:
+		t.Fatal("replacing a catalog must cancel and join its previous run")
+	}
+}
+
+func TestCatalogStopsOnlyWithOwningGeneration(t *testing.T) {
+	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
+	owner := app.Refresh.getRefreshSubsystem(target.meta.ID)
+	require.NoError(t, app.Refresh.startObjectCatalogForTarget(target))
+	entry := app.Refresh.snapshotObjectCatalogEntries()[0]
+	other := &objectcatalog.Service{}
+	app.Refresh.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: other})
+
+	app.Refresh.stopRefreshGeneration(target.meta.ID, &system.Subsystem{})
+	require.Same(t, entry.service, app.Refresh.objectCatalogServiceForCluster(target.meta.ID),
+		"retiring another generation must preserve the catalog's owner")
+	app.Refresh.stopRefreshGeneration(target.meta.ID, owner)
+	require.Nil(t, app.Refresh.objectCatalogServiceForCluster(target.meta.ID))
+	require.Nil(t, app.Refresh.resourceProjection.objectCatalogServiceForCluster(target.meta.ID))
+	require.Same(t, other, app.Refresh.objectCatalogServiceForCluster("cluster-b"))
+	select {
+	case <-entry.done:
+	default:
+		t.Fatal("catalog survived retirement of its informer generation")
+	}
+}
+
 func TestStopObjectCatalogDoesNotBlockForeverWaitingForDone(t *testing.T) {
 	app := newWorkspaceCoordinatorTestFixture(t)
 	app.AppLogs = NewAppLogService(NewLogger(10))

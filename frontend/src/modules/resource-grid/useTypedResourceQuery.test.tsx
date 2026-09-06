@@ -1243,4 +1243,17 @@ describe('useTypedResourceQuery', () => {
     expect(result?.pageIndex).toBe(1);
     expect(result?.hasPrevious).toBe(false);
   });
+  it('surfaces a failed snapshot instead of treating it as warmup', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'error',
+        data: null,
+        error: 'Snapshot request failed: 500 Internal Server Error',
+      },
+    });
+    await renderQuery();
+    expect(result?.error).toBe('Snapshot request failed: 500 Internal Server Error');
+    expect(result?.loaded).toBe(true);
+  });
 });

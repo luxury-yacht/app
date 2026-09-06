@@ -117,7 +117,7 @@ window registry, keeps window-local commands in the sender, and routes workspace
 owner. The panel renderer keeps its Windows/Linux application-menu accelerators
 disabled until the panel's native ready acknowledgement.
 
-The pinned beta.16 runtime supplies edge and corner hit testing and native
+The pinned beta.17 runtime supplies edge and corner hit testing and native
 resize invocation for resizable Windows/Linux windows without a CSS resize
 opt-in. Because that runtime collapses the eight hit regions to four axis cursors,
 the custom-frame shell projects its result to the matching

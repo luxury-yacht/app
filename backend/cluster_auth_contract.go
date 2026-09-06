@@ -11,6 +11,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
@@ -83,7 +84,7 @@ func authEventPayload(clusterID, clusterName string, diag authstate.FailureDiagn
 }
 
 func (r clusterSubsystemRebuild) run() {
-	newClients, ok := r.rebuildClients()
+	newClients, ok := r.rebuildClients(context.Background())
 	if !ok {
 		return
 	}
@@ -143,11 +144,45 @@ type clusterSubsystemRebuild struct {
 	clusterName string
 	selection   kubeconfigSelection
 	oldClients  *clusterClients
+	failures    *clusterRebuildFailures
 }
 
-func (r clusterSubsystemRebuild) rebuildClients() (*clusterClients, bool) {
+// A permission revalidator owns this state for one cluster generation. Keep
+// retrying, but report an unchanged failure only once until its stage succeeds.
+type clusterRebuildFailures struct {
+	mu   sync.Mutex
+	last map[string]string
+}
+
+func (f *clusterRebuildFailures) shouldReport(component string, err error) bool {
+	if f == nil {
+		return true
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.last == nil {
+		f.last = make(map[string]string)
+	}
+	message := err.Error()
+	if previous, ok := f.last[component]; ok && previous == message {
+		return false
+	}
+	f.last[component] = message
+	return true
+}
+
+func (f *clusterRebuildFailures) clear(component string) {
+	if f == nil {
+		return
+	}
+	f.mu.Lock()
+	delete(f.last, component)
+	f.mu.Unlock()
+}
+
+func (r clusterSubsystemRebuild) rebuildClients(ctx context.Context) (*clusterClients, bool) {
 	clients, err := r.refresh.clusterRuntime.buildClusterClientsWithManager(
-		context.Background(), r.selection, r.oldClients.meta, r.oldClients.authManager,
+		ctx, r.selection, r.oldClients.meta, r.oldClients.authManager,
 	)
 	if err != nil {
 		r.reportBuildError("clients", "client rebuild failed", err)
@@ -157,6 +192,7 @@ func (r clusterSubsystemRebuild) rebuildClients() (*clusterClients, bool) {
 		r.refresh.logger.Warn(fmt.Sprintf("Skipping subsystem rebuild for cluster %s: auth not valid after client rebuild", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
 		return nil, false
 	}
+	r.failures.clear("clients")
 	return clients, true
 }
 
@@ -170,10 +206,14 @@ func (r clusterSubsystemRebuild) buildSubsystem(clients *clusterClients) (*syste
 		r.reportBuildError("subsystem", "subsystem rebuild failed", err)
 		return nil, false
 	}
+	r.failures.clear("subsystem")
 	return subsystem, true
 }
 
 func (r clusterSubsystemRebuild) reportBuildError(component, capturePrefix string, err error) {
+	if !r.failures.shouldReport(component, err) {
+		return
+	}
 	r.refresh.logger.ErrorWithCause(
 		err, fmt.Sprintf("Failed to rebuild %s for cluster %s", component, r.clusterID),
 		logsources.Auth, r.clusterID, r.clusterName,

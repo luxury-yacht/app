@@ -10,6 +10,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/refresh/system"
 )
 
 // refresh_spill.go wires the querypage maintained-store spill into the governor's
@@ -193,40 +194,40 @@ func (a *RefreshCoordinator) clusterCooledMmapDir(clusterID string) (string, err
 	return filepath.Join(dir, "cooled"), nil
 }
 
-// setCooledClosers records the mmap closers for a cooled cluster so the re-warm/teardown path
+// setCooledClosers records the mmap closers for the current generation so the re-warm/teardown path
 // can release the mappings exactly once. Guarded by cooledMu.
-func (a *RefreshCoordinator) setCooledClosers(clusterID string, closers []func() error) {
-	if a == nil || clusterID == "" {
+func (a *RefreshCoordinator) setCooledClosers(subsystem *system.Subsystem, closers []func() error) {
+	if a == nil || subsystem == nil {
 		return
 	}
 	a.cooledMu.Lock()
 	defer a.cooledMu.Unlock()
 	if a.cooledMmapClosers == nil {
-		a.cooledMmapClosers = make(map[string][]func() error)
+		a.cooledMmapClosers = make(map[*system.Subsystem][]func() error)
 	}
-	a.cooledMmapClosers[clusterID] = closers
+	a.cooledMmapClosers[subsystem] = append(a.cooledMmapClosers[subsystem], closers...)
 }
 
 // takeCooledClosers removes and returns a cooled cluster's mmap closers, returning nil after
 // the first call — so a re-warm followed by a teardown (or vice versa) closes each mapping
 // exactly once and never double-unmaps. Guarded by cooledMu.
-func (a *RefreshCoordinator) takeCooledClosers(clusterID string) []func() error {
-	if a == nil || clusterID == "" {
+func (a *RefreshCoordinator) takeCooledClosers(subsystem *system.Subsystem) []func() error {
+	if a == nil || subsystem == nil {
 		return nil
 	}
 	a.cooledMu.Lock()
 	defer a.cooledMu.Unlock()
-	closers := a.cooledMmapClosers[clusterID]
-	delete(a.cooledMmapClosers, clusterID)
+	closers := a.cooledMmapClosers[subsystem]
+	delete(a.cooledMmapClosers, subsystem)
 	return closers
 }
 
-// closeCooledClosers takes and runs a cooled cluster's mmap closers (a no-op if it was never
+// closeCooledClosers takes and runs a generation's mmap closers (a no-op if it was never
 // cooled or already re-warmed). Each store-level closer waits for any in-flight Query and
 // unmaps once, so this is safe to call only AFTER the cooled subsystem is unrouted (no new
 // Build can reach the mmap stores). Best-effort: a closer error is logged, not propagated.
-func (a *RefreshCoordinator) closeCooledClosers(clusterID string) {
-	for _, closer := range a.takeCooledClosers(clusterID) {
+func (a *RefreshCoordinator) closeCooledClosers(clusterID string, subsystem *system.Subsystem) {
+	for _, closer := range a.takeCooledClosers(subsystem) {
 		if closer == nil {
 			continue
 		}

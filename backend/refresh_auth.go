@@ -13,12 +13,6 @@ func (a *RefreshCoordinator) teardownClusterSubsystem(clusterID string) {
 		return
 	}
 
-	// A cluster torn down while cooled (e.g. closed, or pressure-collapsed after cooling)
-	// must release its mmap mappings FIRST, before its stores are discarded — otherwise the
-	// closers would never run. takeCooledClosers returns each closer exactly once, so this
-	// never double-unmaps a subsequent re-warm.
-	a.closeCooledClosers(clusterID)
-
 	// Get and remove the subsystem for this cluster.
 	subsystem := a.takeRefreshSubsystem(clusterID)
 	if subsystem == nil {
@@ -30,8 +24,14 @@ func (a *RefreshCoordinator) teardownClusterSubsystem(clusterID string) {
 
 	a.logger.Info(fmt.Sprintf("Tearing down subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
 
+	if aggregates := a.refreshAggregates.Load(); aggregates != nil {
+		subsystems, order := refreshSubsystemTopology(a.snapshotRefreshSubsystems())
+		_ = aggregates.Update(order, subsystems)
+	}
+
 	// Stop all feeds through the shared reverse-order generation contract.
-	a.stopRefreshGeneration(clusterID, subsystem)
+	a.stopRefreshGenerationProducers(clusterID, subsystem)
+	subsystem.RetireSnapshotServing()
 
 	// Spill this cluster's stores to disk now that the subsystem is quiescent, so a re-warm
 	// re-paints them fast before its informers re-sync (the heap they hold is reclaimed by the
@@ -40,6 +40,7 @@ func (a *RefreshCoordinator) teardownClusterSubsystem(clusterID string) {
 	// delta instead of a full re-LIST.
 	a.spillClusterStores(clusterID, subsystem.Registry)
 	a.spillClusterIngestStores(clusterID, subsystem.IngestManager)
+	a.closeCooledClosers(clusterID, subsystem)
 }
 
 // rebuildClusterSubsystem rebuilds the cluster clients and refresh subsystem

@@ -2,12 +2,84 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
 )
+
+type failingPermissionRebuildRuntime struct {
+	refreshClusterRuntime
+	attempts int
+	err      error
+	clients  *clusterClients
+}
+
+func (r *failingPermissionRebuildRuntime) buildClusterClientsWithManager(context.Context, kubeconfigSelection, ClusterMeta, *authstate.Manager) (*clusterClients, error) {
+	r.attempts++
+	return r.clients, r.err
+}
+
+func TestPermissionReplacementReportsRepeatedBuildFailureOnce(t *testing.T) {
+	app := newWorkspaceCoordinatorTestFixture(t)
+	reporter := &recordingErrorReporter{}
+	app.Refresh.logger = NewLogger(100, reporter)
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
+		"cluster-a": {meta: ClusterMeta{ID: "cluster-a"}, kubeconfigPath: "/missing/config"},
+	}
+	runtime := &failingPermissionRebuildRuntime{refreshClusterRuntime: app.ClusterRuntime, err: errors.New("client construction failed")}
+	app.Refresh.clusterRuntime = runtime
+	previous := &system.Subsystem{}
+	app.Refresh.setRefreshSubsystem("cluster-a", previous)
+	failures := &clusterRebuildFailures{}
+	for range 3 {
+		app.Refresh.rebuildForPermissionChange(context.Background(), "cluster-a", previous, failures)
+	}
+	require.Equal(t, 3, runtime.attempts, "report suppression must not suppress recovery attempts")
+	require.Len(t, app.Refresh.logger.GetEntries(), 1)
+	runtime.err = errors.New("different construction failure")
+	app.Refresh.rebuildForPermissionChange(context.Background(), "cluster-a", previous, failures)
+	require.Len(t, app.Refresh.logger.GetEntries(), 2, "changed failures must remain visible")
+
+	app.ClusterRuntime.clusterClients["cluster-b"] = &clusterClients{meta: ClusterMeta{ID: "cluster-b"}, kubeconfigPath: "/missing/config"}
+	other := &system.Subsystem{}
+	app.Refresh.setRefreshSubsystem("cluster-b", other)
+	app.Refresh.rebuildForPermissionChange(context.Background(), "cluster-b", other, &clusterRebuildFailures{})
+	require.Len(t, app.Refresh.logger.GetEntries(), 3, "another cluster owns independent failure reporting")
+
+	next := &system.Subsystem{}
+	app.Refresh.setRefreshSubsystem("cluster-a", next)
+	app.Refresh.rebuildForPermissionChange(context.Background(), "cluster-a", next, &clusterRebuildFailures{})
+	require.Len(t, app.Refresh.logger.GetEntries(), 4, "a replacement generation must report its own failures")
+	reporter.mu.Lock()
+	defer reporter.mu.Unlock()
+	require.Len(t, reporter.exceptions, 4)
+}
+
+func TestRebuildFailureReportingResetsOnlyTheRecoveredStage(t *testing.T) {
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.Refresh.logger = NewLogger(100)
+	app.Refresh.clusterRuntime = &failingPermissionRebuildRuntime{
+		refreshClusterRuntime: app.ClusterRuntime,
+		clients:               &clusterClients{},
+	}
+	r := clusterSubsystemRebuild{
+		refresh: app.Refresh, clusterID: "cluster-a", oldClients: &clusterClients{},
+		failures: &clusterRebuildFailures{},
+	}
+	err := errors.New("construction failed")
+	r.reportBuildError("clients", "client rebuild failed", err)
+	r.reportBuildError("subsystem", "subsystem rebuild failed", err)
+	_, ok := r.rebuildClients(context.Background())
+	require.True(t, ok)
+	r.reportBuildError("clients", "client rebuild failed", err)
+	r.reportBuildError("subsystem", "subsystem rebuild failed", err)
+	require.Len(t, app.Refresh.logger.GetEntries(), 3,
+		"client recovery must rearm its report while leaving the unrecovered subsystem failure suppressed")
+}
 
 type cancelTrackingSnapshotService struct {
 	canceled bool
@@ -229,4 +301,97 @@ func TestRefreshGenerationOrphansUseNormalStopContract(t *testing.T) {
 	app.Refresh.stopRemainingRefreshGenerationRuntimes()
 	require.True(t, managerCanceledB)
 	require.True(t, permissionCanceledB)
+}
+
+func TestPermissionReplacementFailurePreservesServingGeneration(t *testing.T) {
+	app := newWorkspaceCoordinatorTestFixture(t)
+	service := &cancelTrackingSnapshotService{}
+	previous := &system.Subsystem{SnapshotService: service}
+	app.Refresh.setRefreshSubsystem("cluster-a", previous)
+	emitted := false
+	app.Refresh.emitEventFn = func(string, ...interface{}) { emitted = true }
+	failures := &clusterRebuildFailures{}
+	for range 2 {
+		app.Refresh.rebuildForPermissionChange(context.Background(), "cluster-a", previous, failures)
+	}
+	require.Same(t, previous, app.Refresh.getRefreshSubsystem("cluster-a"))
+	require.False(t, service.canceled)
+	require.False(t, emitted, "failed replacement must not announce a new permission epoch")
+	next := &system.Subsystem{}
+	app.Refresh.setRefreshSubsystem("cluster-a", next)
+	app.Refresh.rebuildForPermissionChange(context.Background(), "cluster-a", previous, failures)
+	require.Same(t, next, app.Refresh.getRefreshSubsystem("cluster-a"))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	app.Refresh.rebuildForPermissionChange(ctx, "cluster-a", next, &clusterRebuildFailures{})
+	require.Same(t, next, app.Refresh.getRefreshSubsystem("cluster-a"))
+}
+
+func TestPermissionReplacementConstructionOutcomesPreserveOwnership(t *testing.T) {
+	for _, test := range []struct {
+		name             string
+		buildError       error
+		cancelBuild      bool
+		wantPublished    bool
+		wantNextCanceled bool
+	}{
+		{name: "published", wantPublished: true},
+		{name: "construction failed", buildError: errors.New("subsystem construction failed")},
+		{name: "canceled during construction", cancelBuild: true, wantNextCanceled: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			const clusterID = "cluster-a"
+			app := newWorkspaceCoordinatorTestFixture(t)
+			setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+			oldService, newService := &cancelTrackingSnapshotService{}, &cancelTrackingSnapshotService{}
+			previous := &system.Subsystem{SnapshotService: oldService}
+			next := &system.Subsystem{Manager: refresh.NewManager(nil, nil, nil, nil, nil), SnapshotService: newService}
+			app.Refresh.setRefreshSubsystem(clusterID, previous)
+			setRefreshServiceReadyForTest(app.Refresh)
+			aggregate := newAggregateSnapshotService([]string{clusterID}, map[string]*system.Subsystem{clusterID: previous})
+			app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
+			oldClients := &clusterClients{meta: ClusterMeta{ID: clusterID}, kubeconfigPath: "/test/config"}
+			newClients := &clusterClients{meta: oldClients.meta, kubeconfigPath: oldClients.kubeconfigPath}
+			app.ClusterRuntime.clusterClients = map[string]*clusterClients{clusterID: oldClients}
+			app.Refresh.clusterRuntime = &failingPermissionRebuildRuntime{refreshClusterRuntime: app.ClusterRuntime, clients: newClients}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			originalBuilder := newRefreshSubsystemWithServices
+			newRefreshSubsystemWithServices = func(system.Config) (*system.Subsystem, error) {
+				if test.buildError != nil {
+					return nil, test.buildError
+				}
+				if test.cancelBuild {
+					cancel()
+				}
+				return next, nil
+			}
+			t.Cleanup(func() {
+				app.Refresh.stopRefreshGeneration(clusterID, next)
+				app.Refresh.stopRefreshRuntimeContext()
+				newRefreshSubsystemWithServices = originalBuilder
+			})
+			emitted := false
+			app.Refresh.emitEventFn = func(name string, args ...interface{}) {
+				emitted = true
+				require.Equal(t, clusterPermissionsChangedEventName, name)
+				require.Equal(t, []interface{}{ClusterPermissionsChangedEvent{ClusterID: clusterID}}, args)
+				require.Same(t, next, app.Refresh.getRefreshSubsystem(clusterID))
+				require.Same(t, newService, aggregate.snapshotConfig()[clusterID], "route before notifying consumers")
+				require.Same(t, newClients, app.ClusterRuntime.clusterClientsForID(clusterID))
+				require.True(t, oldService.canceled, "retire the previous generation before announcing recovery")
+			}
+
+			app.Refresh.rebuildForPermissionChange(ctx, clusterID, previous, &clusterRebuildFailures{})
+
+			expected := previous
+			if test.wantPublished {
+				expected = next
+			}
+			require.Same(t, expected, app.Refresh.getRefreshSubsystem(clusterID))
+			require.Equal(t, test.wantPublished, emitted)
+			require.Equal(t, test.wantPublished, oldService.canceled)
+			require.Equal(t, test.wantNextCanceled, newService.canceled)
+		})
+	}
 }

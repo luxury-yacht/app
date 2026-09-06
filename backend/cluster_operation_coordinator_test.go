@@ -162,3 +162,27 @@ func TestAppRunClusterOperationSuppressesCancellation(t *testing.T) {
 	require.NoError(t, firstErr)
 	require.NoError(t, secondErr)
 }
+
+func TestBackgroundClusterOperationYieldsToForegroundWork(t *testing.T) {
+	coord := newClusterOperationCoordinator()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started, done := make(chan struct{}), make(chan struct{})
+	var active context.Context
+	go func() {
+		defer close(done)
+		_ = coord.run(ctx, "cluster-a", func(opCtx context.Context) error { active = opCtx; close(started); <-opCtx.Done(); return opCtx.Err() })
+	}()
+	<-started
+	ran := false
+	require.NoError(t, coord.runWhenIdle(context.Background(), "cluster-a", func(context.Context) error { ran = true; return nil }))
+	require.False(t, ran, "background work must leave a busy cluster alone")
+	require.NoError(t, active.Err(), "background revalidation must not cancel foreground work")
+	require.NoError(t, coord.runWhenIdle(context.Background(), "cluster-b", func(context.Context) error { ran = true; return nil }))
+	require.True(t, ran, "another cluster must remain available")
+	cancel()
+	<-done
+	ran = false
+	require.NoError(t, coord.runWhenIdle(context.Background(), "cluster-a", func(context.Context) error { ran = true; return nil }))
+	require.True(t, ran, "deferred background work must be admitted after foreground completion")
+}

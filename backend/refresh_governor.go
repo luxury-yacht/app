@@ -373,32 +373,13 @@ func (e *refreshGovernorExecutor) ensureRunning(clusterID string) bool {
 	return true
 }
 
-// rewarmCooledClusterSubsystem replaces a cooled (mmap-serving) subsystem with a fresh, live
-// one. ORDERING is the safety contract for the mmap closers, whose mappings the cooled stores'
-// rows alias (a read after unmap is a use-after-free):
-//  1. takeRefreshSubsystem removes the cooled subsystem from a.refreshSubsystems, so no NEW
-//     Build resolves it via the per-cluster getter.
-//  2. rebuildClusterSubsystem builds the fresh subsystem, sets it in the map, and calls
-//     refreshAggregates.Update — after which the aggregate snapshot router resolves the FRESH
-//     subsystem's stores, never the cooled mmap stores. The cooled subsystem (and its snapshot
-//     cache holding any mmap-aliased rows) is now fully unreachable for serving.
-//  3. closeCooledClosers takes the closers (exactly once) and runs them. Each store-level
-//     closer waits for the store's write lock, so it serializes after any straggler in-flight
-//     Build that was already reconstructing rows when the swap happened — only then unmapping.
+// rewarmCooledClusterSubsystem retains the cooled generation until replacement
+// routing succeeds. A failed rebuild must leave its mappings available.
 func (a *RefreshCoordinator) rewarmCooledClusterSubsystem(clusterID string) {
 	if a == nil || clusterID == "" {
 		return
 	}
-	// (1) unroute the cooled subsystem so no new Build can reach its mmap stores.
-	a.takeRefreshSubsystem(clusterID)
-	if a.logger != nil {
-		a.logger.Info(fmt.Sprintf("Governor re-warming cooled cluster %s", clusterID), logsources.Refresh, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
-	}
-	// (2) build + start a fresh live subsystem and re-point the aggregate router at it.
 	a.rebuildClusterSubsystem(clusterID)
-	// (3) the cooled subsystem is now unrouted; release its mappings (waits for any straggler
-	// in-flight Build via each closer's store-lock, then unmaps once).
-	a.closeCooledClosers(clusterID)
 }
 
 // teardown moves the cluster to the governor's Cold tier. It first attempts to COOL the
@@ -568,13 +549,14 @@ func (a *RefreshCoordinator) coolClusterToMmapServing(clusterID string) {
 
 	// Stop the generation's feeds WITHOUT removing the subsystem — it stays
 	// registered to serve cooled queries.
-	a.stopRefreshGeneration(clusterID, subsystem)
+	a.stopRefreshGenerationProducers(clusterID, subsystem)
 
 	// Swap the maintained stores to mmap. On error, safe-degrade to full teardown.
 	dir, err := a.clusterCooledMmapDir(clusterID)
 	if err == nil {
 		var closers []func() error
 		closers, err = subsystem.Registry.CoolMaintainedStoresToMmap(dir)
+		a.setCooledClosers(subsystem, closers)
 		if err == nil {
 			// The feeds are stopped, so the manager + informer factory are shut down and the
 			// original hub's HasSynced now reports false — install a cooled hub so the
@@ -583,14 +565,11 @@ func (a *RefreshCoordinator) coolClusterToMmapServing(clusterID string) {
 			if svc, ok := subsystem.SnapshotService.(*snapshot.Service); ok {
 				svc.SetInformerHub(system.NewCooledInformerHub())
 			}
-			a.setCooledClosers(clusterID, closers)
 			subsystem.Cooled = true
 		}
 	}
 	if err != nil {
-		// Cooling failed at some step (mkdir or a store swap). CoolMaintainedStoresToMmap already
-		// closed any mapping it opened, so nothing is left half-mapped. Fall back to a full
-		// teardown: the subsystem is discarded and its heap fully reclaimed.
+		// Retire and spill any partially swapped stores before releasing their mappings.
 		if a.logger != nil {
 			a.logger.Warn(fmt.Sprintf("Governor cool failed for cluster %s, falling back to full teardown: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 		}

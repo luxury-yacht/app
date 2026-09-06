@@ -293,6 +293,10 @@ export enum ClusterLifecycleState {
     ClusterStateReconnecting = "reconnecting",
 };
 
+export interface ClusterPermissionsChangedEvent {
+    "clusterId": string;
+}
+
 export interface ClusterScopeChangedEvent {
     "clusterId": string;
 }

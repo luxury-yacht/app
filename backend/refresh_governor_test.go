@@ -855,3 +855,32 @@ func TestSetVisibleClusterReplaysCurrentLifecycleState(t *testing.T) {
 		previous:  ClusterStateReady,
 	}}, events)
 }
+
+func TestCooledMappingsOutliveSnapshotRouting(t *testing.T) {
+	for _, action := range []string{"teardown", "failed-rewarm"} {
+		t.Run(action, func(t *testing.T) {
+			app := newRefreshCoordinatorTestFixture(t)
+			old := &coldPreparationSnapshotService{}
+			subsystem := &system.Subsystem{Cooled: true, SnapshotService: old, Registry: domain.New()}
+			app.Refresh.spillRoot = t.TempDir()
+			app.Refresh.setRefreshSubsystem("cluster-a", subsystem)
+			aggregate := newAggregateSnapshotService([]string{"cluster-a"}, map[string]*system.Subsystem{"cluster-a": subsystem})
+			app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
+			closed, closedWhileRouted := false, false
+			app.Refresh.setCooledClosers(subsystem, []func() error{func() error {
+				closed = true
+				closedWhileRouted = aggregate.snapshotConfig()["cluster-a"] == old
+				return nil
+			}})
+			if action == "teardown" {
+				app.Refresh.teardownClusterSubsystem("cluster-a")
+				require.True(t, closed)
+			} else {
+				app.Refresh.rewarmCooledClusterSubsystem("cluster-a")
+				require.False(t, closed, "failed rewarm must retain the serving mapping")
+				require.Same(t, subsystem, app.Refresh.getRefreshSubsystem("cluster-a"))
+			}
+			require.False(t, closedWhileRouted, "mmap closer ran while the old store was routed")
+		})
+	}
+}

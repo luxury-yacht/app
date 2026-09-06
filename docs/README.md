@@ -55,6 +55,7 @@ completed phase plans, or test lists that can be discovered with `rg`.
 
 | Question | Start here |
 | --- | --- |
+| Which recurring implementation mistakes must agents prevent? | [workflows/common-mistakes.md](workflows/common-mistakes.md) |
 | How does the object map work? | [workflows/object-map.md](workflows/object-map.md) |
 | How are live operations tracked and cleaned up? | [workflows/operation-lifecycle.md](workflows/operation-lifecycle.md) |
 | How do shell exec and debug containers work? | [workflows/shell-debug.md](workflows/shell-debug.md) |

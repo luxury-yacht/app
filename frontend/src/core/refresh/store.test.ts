@@ -192,7 +192,13 @@ describe('resetPermissionDeniedScopedDomainStates', () => {
       status: 'ready',
     }));
 
-    resetPermissionDeniedScopedDomainStates();
+    setScopedDomainState('namespaces', 'cluster-b|', (prev) => ({
+      ...prev,
+      status: 'error',
+      permissionDenied: true,
+    }));
+    resetPermissionDeniedScopedDomainStates('cluster-a');
+    expect(getScopedDomainState('namespaces', 'cluster-b|').permissionDenied).toBe(true);
 
     expect(getScopedDomainState('namespaces', 'cluster-a|').permissionDenied).not.toBe(true);
     expect(getScopedDomainState('namespaces', 'cluster-a|').status).not.toBe('error');

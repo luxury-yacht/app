@@ -7,8 +7,10 @@ export type InFlightRequest = {
   // Preserve the originating request intent if foreground activation aborts
   // this fetch and replays it after the cluster becomes serviceable.
   streamSignal?: boolean;
+  coalesce?: boolean;
   requestId: number;
   cleanup?: () => void;
+  completion?: Promise<void>;
   contextVersion: number;
   domain: RefreshDomain;
   scope?: string;
@@ -158,6 +160,7 @@ export const transitionScopedActivationState = (
 };
 
 export type PendingClusterReadinessRequest = {
+  coalesce?: boolean;
   domain: RefreshDomain;
   scope: string;
   isManual: boolean;
@@ -186,6 +189,7 @@ export const transitionScopedReadinessState = (
         status: 'waiting',
         request: {
           ...state.request,
+          ...(state.request.coalesce || event.request.coalesce ? { coalesce: true } : {}),
           isManual: state.request.isManual || event.request.isManual,
           streamSignal: state.request.streamSignal || event.request.streamSignal,
           queryReconcile: state.request.queryReconcile || event.request.queryReconcile,
@@ -457,6 +461,7 @@ export const transitionScopedStreamState = (
 type ScopedRefreshState = {
   domain: RefreshDomain;
   scope?: string;
+  reconciliation: { status: 'clean' } | { status: 'pending'; failures: number; retryAt: number };
   activation: ScopedActivationState;
   fetch: ScopedFetchState;
   readiness: ScopedReadinessState;
@@ -553,6 +558,7 @@ export class ClusterRefreshRuntime {
       this.scopedStates.get(makeInFlightKey(domain, scope)) ?? {
         domain,
         scope,
+        reconciliation: { status: 'clean' },
         activation: { status: 'untracked' },
         fetch: { status: 'idle' },
         readiness: { status: 'ready' },
@@ -565,6 +571,7 @@ export class ClusterRefreshRuntime {
   private storeScopeState(state: ScopedRefreshState): void {
     const key = makeInFlightKey(state.domain, state.scope);
     if (
+      state.reconciliation.status === 'clean' &&
       state.activation.status === 'untracked' &&
       state.fetch.status === 'idle' &&
       state.readiness.status === 'ready' &&
@@ -784,6 +791,31 @@ export class ClusterRefreshRuntime {
     return Array.from(this.scopedStates.values()).flatMap((state) =>
       state.readiness.status === 'waiting' ? [state.readiness.request] : []
     );
+  }
+
+  needsReconciliation(domain: RefreshDomain, scope: string): boolean {
+    return this.getScopeState(domain, scope).reconciliation.status === 'pending';
+  }
+
+  canRetryReconciliation(domain: RefreshDomain, scope: string, now = Date.now()): boolean {
+    const pending = this.getScopeState(domain, scope).reconciliation;
+    return pending.status === 'clean' || pending.retryAt <= now;
+  }
+
+  markReconciliationFailed(domain: RefreshDomain, scope: string): void {
+    const state = this.getScopeState(domain, scope);
+    const failures =
+      state.reconciliation.status === 'pending' ? state.reconciliation.failures + 1 : 1;
+    const delay = failures === 1 ? 0 : Math.min(60_000, 1000 * 2 ** Math.min(failures - 2, 6));
+    this.storeScopeState({
+      ...state,
+      reconciliation: { status: 'pending', failures, retryAt: Date.now() + delay },
+    });
+  }
+
+  markReconciled(domain: RefreshDomain, scope: string): void {
+    const state = this.getScopeState(domain, scope);
+    this.storeScopeState({ ...state, reconciliation: { status: 'clean' } });
   }
 
   isPermissionDenied(domain: RefreshDomain, scope: string): boolean {

@@ -706,7 +706,10 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     // updated before this event is emitted. Derive the scope from the event's
     // clusterId and reconcile once without creating a ManualQueue job.
     const handleClusterScopeChanged = (payload: { clusterId: string }) => {
-      const scope = payload.clusterId ? buildClusterScope(payload.clusterId, '') : namespacesScope;
+      if (!payload.clusterId.trim()) {
+        return;
+      }
+      const scope = buildClusterScope(payload.clusterId, '');
       if (!scope) {
         return;
       }
@@ -718,6 +721,10 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     const unsubReset = eventBus.on('view:reset', handleResetViews);
     const unsubChanging = eventBus.on('kubeconfig:changing', handleKubeconfigChanging);
     const unsubChanged = eventBus.on('kubeconfig:changed', handleKubeconfigChanged);
+    const unsubPermissionsChanged = eventBus.on(
+      'cluster:permissions-changed',
+      handleClusterScopeChanged
+    );
     const unsubScopeChanged = eventBus.on('cluster:scope-changed', handleClusterScopeChanged);
 
     return () => {
@@ -725,8 +732,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       unsubChanging();
       unsubChanged();
       unsubScopeChanged();
+      unsubPermissionsChanged();
     };
-  }, [clearSelection, namespaceScopes, namespacesScope, updateNamespaces]);
+  }, [clearSelection, namespaceScopes, updateNamespaces]);
 
   // Structural flag stamped by the orchestrator from the typed 403 (checked
   // once per session; the scope is settled and background retries stop).

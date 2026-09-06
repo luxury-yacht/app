@@ -28,7 +28,7 @@ type refreshClusterRuntime interface {
 	replaceClusterClient(string, *clusterClients)
 	replayClusterLifecycle(string)
 	resourceDependenciesForSelection(kubeconfigSelection, *clusterClients, string) common.Dependencies
-	runClusterOperation(context.Context, string, func(context.Context) error) error
+	runBackgroundClusterOperation(context.Context, string, func(context.Context) error) error
 	setClusterLifecycleState(string, ClusterLifecycleState)
 	snapshotClusterIDs() []string
 	startHeartbeatLoop(context.Context)
@@ -105,7 +105,7 @@ type RefreshCoordinator struct {
 	spillFormat         string
 
 	cooledMu          sync.Mutex
-	cooledMmapClosers map[string][]func() error
+	cooledMmapClosers map[*system.Subsystem][]func() error
 
 	objectCatalogMu      sync.Mutex
 	objectCatalogEntries map[string]*objectCatalogEntry

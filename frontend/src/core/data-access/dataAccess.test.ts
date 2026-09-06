@@ -13,6 +13,8 @@ import {
 const hoisted = vi.hoisted(() => ({
   fetchScopedDomain: vi.fn(),
   setScopedDomainEnabled: vi.fn(),
+  acquireScopedDomainLease: vi.fn(),
+  releaseScopedDomainLease: vi.fn(),
   triggerManualRefreshForContext: vi.fn(),
   getScopedDomainState: vi.fn(),
   getAutoRefreshEnabled: vi.fn(),
@@ -21,6 +23,8 @@ const hoisted = vi.hoisted(() => ({
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: {
     fetchScopedDomain: (...args: unknown[]) => hoisted.fetchScopedDomain(...args),
+    acquireScopedDomainLease: (...args: unknown[]) => hoisted.acquireScopedDomainLease(...args),
+    releaseScopedDomainLease: (...args: unknown[]) => hoisted.releaseScopedDomainLease(...args),
     setScopedDomainEnabled: (...args: unknown[]) => hoisted.setScopedDomainEnabled(...args),
     triggerManualRefreshForContext: (...args: unknown[]) =>
       hoisted.triggerManualRefreshForContext(...args),
@@ -161,34 +165,31 @@ describe('dataAccess', () => {
       data: state,
     });
 
-    expect(hoisted.setScopedDomainEnabled).toHaveBeenNthCalledWith(
-      1,
+    expect(hoisted.acquireScopedDomainLease).toHaveBeenCalledWith(
       'catalog',
       'cluster:alpha|limit=2',
-      true,
       { preserveState: true }
     );
     expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('catalog', 'cluster:alpha|limit=2', {
+      coalesce: true,
       isManual: true,
       streamSignal: false,
       correlationId: 'broker-read-1',
     });
     expect(hoisted.getScopedDomainState).toHaveBeenCalledWith('catalog', 'cluster:alpha|limit=2');
-    expect(hoisted.setScopedDomainEnabled).toHaveBeenNthCalledWith(
-      2,
+    expect(hoisted.releaseScopedDomainLease).toHaveBeenCalledWith(
       'catalog',
       'cluster:alpha|limit=2',
-      false,
       { preserveState: true }
     );
-    expect(hoisted.setScopedDomainEnabled.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(hoisted.acquireScopedDomainLease.mock.invocationCallOrder[0]).toBeLessThan(
       hoisted.fetchScopedDomain.mock.invocationCallOrder[0]
     );
     expect(hoisted.fetchScopedDomain.mock.invocationCallOrder[0]).toBeLessThan(
       hoisted.getScopedDomainState.mock.invocationCallOrder[0]
     );
     expect(hoisted.getScopedDomainState.mock.invocationCallOrder[0]).toBeLessThan(
-      hoisted.setScopedDomainEnabled.mock.invocationCallOrder[1]
+      hoisted.releaseScopedDomainLease.mock.invocationCallOrder[0]
     );
   });
 

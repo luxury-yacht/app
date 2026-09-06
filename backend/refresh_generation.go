@@ -62,7 +62,10 @@ func (a *RefreshCoordinator) startRefreshGeneration(
 	go a.runRefreshGenerationManager(managerCtx, clusterID, clusterName, subsystem.Manager, subsystem.Registry)
 
 	permissionCtx, permissionCancel := context.WithCancel(ctx)
-	subsystem.StartPermissionRevalidation(permissionCtx)
+	failures := &clusterRebuildFailures{}
+	subsystem.StartPermissionRevalidation(permissionCtx, func(ctx context.Context) {
+		a.rebuildForPermissionChange(ctx, clusterID, subsystem, failures)
+	})
 	return &refreshGenerationActivation{
 		refresh:          a,
 		clusterID:        clusterID,
@@ -258,6 +261,19 @@ func (a *RefreshCoordinator) stopRefreshGeneration(clusterID string, subsystem *
 	if a == nil || subsystem == nil {
 		return
 	}
+	a.stopRefreshGenerationProducers(clusterID, subsystem)
+	subsystem.RetireSnapshotServing()
+	a.closeCooledClosers(clusterID, subsystem)
+}
+
+// stopRefreshGenerationProducers is also used by cooling, which keeps reads live.
+func (a *RefreshCoordinator) stopRefreshGenerationProducers(clusterID string, subsystem *system.Subsystem) {
+	if a == nil || subsystem == nil {
+		return
+	}
+	// Catalog sync and its bridges retain this generation's informer and ingest
+	// producers. Join them first, without touching a replacement's catalog.
+	a.stopObjectCatalogEntry(a.removeObjectCatalogEntry(clusterID, subsystem))
 	runtime := a.takeRefreshGenerationRuntime(subsystem)
 	subsystem.CancelColdPreparation()
 	subsystem.CancelInFlightSnapshots()
@@ -305,5 +321,46 @@ func (a *RefreshCoordinator) shutdownRefreshGenerationManager(
 		}
 	case <-timer.C:
 		a.logger.Warn(fmt.Sprintf("Timed out waiting for refresh manager shutdown for cluster %s", clusterID), logsources.Refresh, clusterID, subsystem.ClusterMeta.ClusterName)
+	}
+}
+
+// A revalidator belongs to one generation. Failed builds leave that generation
+// serving and revalidating; stale callbacks cannot replace a newer generation.
+func (a *RefreshCoordinator) rebuildForPermissionChange(ctx context.Context, clusterID string, expected *system.Subsystem, failures *clusterRebuildFailures) {
+	if a == nil || clusterID == "" || expected == nil || ctx.Err() != nil {
+		return
+	}
+	err := a.clusterRuntime.runBackgroundClusterOperation(ctx, clusterID, func(opCtx context.Context) error {
+		a.replacePermissionGeneration(opCtx, clusterID, expected, failures)
+		return nil
+	})
+	if err != nil {
+		a.logger.Warn(fmt.Sprintf("Permission refresh replacement for cluster %s failed: %v", clusterID, err), logsources.Refresh, clusterID, expected.ClusterMeta.ClusterName)
+	}
+}
+
+func (a *RefreshCoordinator) replacePermissionGeneration(ctx context.Context, clusterID string, expected *system.Subsystem, failures *clusterRebuildFailures) {
+	if ctx.Err() != nil || a.getRefreshSubsystem(clusterID) != expected {
+		return
+	}
+	rebuild, ok := a.prepareClusterSubsystemRebuild(clusterID)
+	if !ok {
+		return
+	}
+	rebuild.failures = failures
+	clients, ok := rebuild.rebuildClients(ctx)
+	if !ok || ctx.Err() != nil || a.getRefreshSubsystem(clusterID) != expected {
+		return
+	}
+	next, ok := rebuild.buildSubsystem(clients)
+	if !ok {
+		return
+	}
+	if ctx.Err() != nil || a.getRefreshSubsystem(clusterID) != expected {
+		a.stopRefreshGeneration(clusterID, next)
+		return
+	}
+	if rebuild.activateSubsystem(clients, next) && a.emitEventFn != nil {
+		a.emitEventFn(clusterPermissionsChangedEventName, ClusterPermissionsChangedEvent{ClusterID: clusterID})
 	}
 }

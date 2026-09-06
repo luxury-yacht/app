@@ -33,7 +33,7 @@ import type { RefreshDomain } from '../types';
 
 export const useStreamSignalRefetch = (domain: RefreshDomain, scopes: readonly string[]): void => {
   const domainStates = useRefreshScopedDomainStates(domain);
-  const consumedKeysRef = useRef<Map<string, string>>(new Map());
+  const dispatchedKeysRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     const clocks = doorbellSourceClocks(domain);
@@ -51,18 +51,19 @@ export const useStreamSignalRefetch = (domain: RefreshDomain, scopes: readonly s
       const signalVersions = domainStates[scope]?.signalVersions;
       const key = clocks.map((clock) => `${clock}:${signalVersions?.[clock] ?? ''}`).join(' ');
       const hasSignal = clocks.some((clock) => Boolean(signalVersions?.[clock]));
-      const consumed = consumedKeysRef.current;
-      if (!consumed.has(scope)) {
+      const dispatched = dispatchedKeysRef.current;
+      if (!dispatched.has(scope)) {
         // First observation: whatever doorbell values exist arrived before
         // this consumer mounted — the data it reads was fetched at or after
         // them, fresh by construction.
-        consumed.set(scope, key);
+        dispatched.set(scope, key);
         return;
       }
-      if (consumed.get(scope) === key || !hasSignal) {
+      if (dispatched.get(scope) === key || !hasSignal) {
         return;
       }
-      consumed.set(scope, key);
+      dispatched.set(scope, key);
+      // The runtime retains failed reconciliation and owns its retry backoff.
       void requestRefreshDomain({ domain, scope, reason: 'stream-signal' });
     });
   }, [domainStates, scopes, domain]);

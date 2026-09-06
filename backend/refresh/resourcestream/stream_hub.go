@@ -66,6 +66,9 @@ func validateStreamSelector(m *Manager, selector StreamSelector) error {
 func (m *Manager) addSubscriber(domain, scope string) (uint64, *subscription, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.stopped.Load() {
+		return 0, nil, errors.New("resource stream stopped")
+	}
 	domainSubscribers := m.subscribers[domain]
 	if domainSubscribers == nil {
 		domainSubscribers = make(map[string]map[uint64]*subscription)

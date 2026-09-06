@@ -171,7 +171,8 @@ type ClusterWorkspaceEventName =
   | 'cluster:auth:progress'
   | 'cluster:health:healthy'
   | 'cluster:health:degraded'
-  | 'cluster:scope:changed';
+  | 'cluster:scope:changed'
+  | 'cluster:permissions:changed';
 
 type ClusterWorkspaceEventSubscriber = <E extends ClusterWorkspaceEventName>(
   event: E,
@@ -460,6 +461,11 @@ export class ClusterWorkspaceStore {
     on('cluster:auth:progress', (payload) => this.handleAuthProgress(payload));
     on('cluster:health:healthy', (payload) => this.handleHealth(payload, 'healthy'));
     on('cluster:health:degraded', (payload) => this.handleHealth(payload, 'degraded'));
+    on('cluster:permissions:changed', (payload) => {
+      if (payload.clusterId?.trim()) {
+        eventBus.emit('cluster:permissions-changed', { clusterId: payload.clusterId });
+      }
+    });
     on('cluster:scope:changed', (payload) => this.handleScopeChanged(payload));
 
     void this.hydrate().catch((error) => {

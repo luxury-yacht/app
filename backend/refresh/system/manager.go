@@ -688,3 +688,12 @@ func HealthHandler(hub refresh.InformerHub) http.HandlerFunc {
 		_, _ = w.Write([]byte("ok"))
 	}
 }
+
+// RetireSnapshotServing ends reads permanently before a generation releases stores.
+func (s *Subsystem) RetireSnapshotServing() {
+	if s != nil {
+		if service, ok := s.SnapshotService.(interface{ Retire() }); ok {
+			service.Retire()
+		}
+	}
+}

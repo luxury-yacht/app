@@ -53,6 +53,20 @@ shape, failure behavior, and diagnostics differ.
   informer namespace. Denied namespaces start no informer while permitted
   namespaces continue to provide partial change signals.
 
+Permission revalidation compares both allowed and denied decisions with the exact
+scopes used to build the generation. Revocation and restoration delegate replacement
+to `RefreshCoordinator`; the revalidator does not stop a still-routed subsystem.
+Background revalidation skips a busy cluster instead of canceling its foreground
+operation, and client reconstruction receives the operation cancellation context.
+A failed replacement leaves the old generation serving and revalidating. An
+unchanged construction error is logged and captured once per failing stage in
+that generation; recovery rearms that stage's report, and a changed error is
+reported immediately. Reporting suppression does not suppress rebuild attempts.
+Denied decisions share the normal permission cache and remain part of revalidation
+so restored grants can be detected. After successful publication,
+`cluster:permissions:changed` clears only that cluster's
+frontend denial and stream latches. It does not change namespace-scope revisions.
+
 ## UI Permission Rules
 
 - `QueryPermissions` is the backend query surface for UI permissions.
