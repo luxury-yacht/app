@@ -44,10 +44,13 @@ type Service struct {
 	cacheMu             sync.RWMutex
 	cache               map[string]cacheEntry
 	cacheTTL            time.Duration
+	invalidations       map[string]uint64
 	epoch               string
 	permissionChecker   *permissions.Checker
 	runtimeAccess       domainpermissions.RuntimeAccess
 	requestSerial       uint64
+	servingMu           sync.RWMutex
+	retired             atomic.Bool
 	generationMu        sync.Mutex
 	generationRequests  map[uint64]context.CancelFunc
 	generationRequestID uint64
@@ -57,6 +60,8 @@ type Service struct {
 // informer caches never reported synced within the configured deadline — for
 // example when one informer's watch is RBAC-forbidden and can never complete.
 var errInformerSyncTimeout = errors.New("refresh informer caches not synced")
+
+var errServiceRetired = errors.New("snapshot service retired")
 
 type cacheEntry struct {
 	snapshot  *refresh.Snapshot
@@ -162,6 +167,9 @@ func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh
 }
 
 func (s *Service) BuildRequest(ctx context.Context, req BuildRequest) (*refresh.Snapshot, error) {
+	if s.retired.Load() {
+		return nil, errServiceRetired
+	}
 	ctx, cancel := s.withGenerationContext(ctx)
 	defer cancel()
 	ctx, plan, err := s.prepareBuildRequest(ctx, req)
@@ -184,6 +192,22 @@ func (s *Service) BuildRequest(ctx context.Context, req BuildRequest) (*refresh.
 	case <-flight.done:
 		return flight.snapshot, flight.err
 	}
+}
+
+// Retire rejects future reads and waits for builders to release their stores.
+// CancelInFlight alone allows later reads, which cooling requires.
+func (s *Service) Retire() {
+	if s == nil {
+		return
+	}
+	s.retired.Store(true)
+	s.CancelInFlight()
+	s.servingMu.Lock()
+	defer s.servingMu.Unlock()
+	// No builder can repopulate the cache after this drain.
+	s.cacheMu.Lock()
+	clear(s.cache)
+	s.cacheMu.Unlock()
 }
 
 // CancelInFlight aborts and detaches the builds owned by the current subsystem
@@ -225,6 +249,7 @@ type snapshotBuildRequestPlan struct {
 	domain              string
 	scope               string
 	cacheKey            string
+	invalidation        uint64
 	groupKey            string
 	bypassSnapshotCache bool
 	skipCacheLoad       bool
@@ -254,12 +279,16 @@ func (s *Service) prepareBuildRequest(ctx context.Context, req BuildRequest) (co
 	if readinessKey := resourceReadinessFingerprint(readiness); readinessKey != "" {
 		cacheKey += ":readiness:" + readinessKey
 	}
+	s.cacheMu.RLock()
+	invalidation := s.invalidations[req.Domain]
+	s.cacheMu.RUnlock()
 	bypassSnapshotCache := s.shouldBypassSnapshotCache(req.Domain)
 	return ctx, snapshotBuildRequestPlan{
 		domain:              req.Domain,
 		scope:               req.Scope,
 		cacheKey:            cacheKey,
-		groupKey:            s.snapshotBuildGroupKey(ctx, req.Domain, cacheKey),
+		groupKey:            fmt.Sprintf("%s:invalidation:%d", s.snapshotBuildGroupKey(ctx, req.Domain, cacheKey), invalidation),
+		invalidation:        invalidation,
 		bypassSnapshotCache: bypassSnapshotCache,
 		skipCacheLoad:       refresh.HasCacheBypass(ctx) || bypassSnapshotCache,
 		syncWait:            syncWait,
@@ -302,6 +331,11 @@ func (s *Service) loadBuildRequestCache(plan snapshotBuildRequestPlan) *refresh.
 }
 
 func (s *Service) buildRequestSnapshot(ctx context.Context, plan snapshotBuildRequestPlan) (*refresh.Snapshot, error) {
+	s.servingMu.RLock()
+	defer s.servingMu.RUnlock()
+	if s.retired.Load() {
+		return nil, errServiceRetired
+	}
 	if cached := s.loadBuildRequestCache(plan); cached != nil {
 		return cached, nil
 	}
@@ -319,7 +353,7 @@ func (s *Service) buildRequestSnapshot(ctx context.Context, plan snapshotBuildRe
 	s.finalizeBuiltSnapshot(snapshot, start, duration)
 	s.recordBuildSuccess(plan, snapshot, duration)
 	if !plan.bypassSnapshotCache {
-		s.storeCache(plan.cacheKey, snapshot)
+		s.storeCache(plan, snapshot)
 	}
 	return snapshot, nil
 }
@@ -483,7 +517,7 @@ func (s *Service) loadCache(key string) *refresh.Snapshot {
 	return entry.snapshot
 }
 
-func (s *Service) storeCache(key string, snap *refresh.Snapshot) {
+func (s *Service) storeCache(plan snapshotBuildRequestPlan, snap *refresh.Snapshot) {
 	if s.cacheTTL <= 0 || snap == nil {
 		return
 	}
@@ -491,11 +525,14 @@ func (s *Service) storeCache(key string, snap *refresh.Snapshot) {
 		return
 	}
 	s.cacheMu.Lock()
-	s.cache[key] = cacheEntry{
+	defer s.cacheMu.Unlock()
+	if s.invalidations[plan.domain] != plan.invalidation {
+		return
+	}
+	s.cache[plan.cacheKey] = cacheEntry{
 		snapshot:  snap,
 		expiresAt: time.Now().Add(s.cacheTTL),
 	}
-	s.cacheMu.Unlock()
 }
 
 // InvalidateDomainCache drops every cached snapshot for the domain. The
@@ -509,6 +546,10 @@ func (s *Service) InvalidateDomainCache(domain string) {
 		return
 	}
 	s.cacheMu.Lock()
+	if s.invalidations == nil {
+		s.invalidations = make(map[string]uint64)
+	}
+	s.invalidations[domain]++
 	for key, entry := range s.cache {
 		if entry.snapshot != nil && entry.snapshot.Domain == domain {
 			delete(s.cache, key)

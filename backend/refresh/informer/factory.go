@@ -54,9 +54,9 @@ type Factory struct {
 
 	pendingClusterInformers []clusterInformerRegistration
 
-	// permissionAllowed tracks exact permission scopes that have been allowed at least once.
-	permissionAllowed map[PermissionGrant]struct{}
-	permissionMu      sync.RWMutex
+	// permissionDecisions tracks the exact evaluated scopes and their generation's initial decisions.
+	permissionDecisions map[PermissionGrant]bool
+	permissionMu        sync.RWMutex
 
 	runtimePermissions *permissions.Checker
 
@@ -76,7 +76,7 @@ const (
 )
 
 // PermissionGrant preserves the permission evaluator and scope that originally
-// produced an allowed decision so revalidation can repeat the same check.
+// produced a decision so revalidation can repeat the same check.
 type PermissionGrant struct {
 	group     string
 	resource  string
@@ -179,12 +179,12 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	// Projection-at-intake: strip managedFields before any object enters the cache.
 	kubeFactory := informers.NewSharedInformerFactoryWithOptions(client, resync, informers.WithTransform(StripManagedFields))
 	result := &Factory{
-		kubeClient:         client,
-		resync:             resync,
-		factory:            kubeFactory,
-		syncDeadline:       config.RefreshInformerSyncDeadline,
-		permissionAllowed:  make(map[PermissionGrant]struct{}),
-		runtimePermissions: checker,
+		kubeClient:          client,
+		resync:              resync,
+		factory:             kubeFactory,
+		syncDeadline:        config.RefreshInformerSyncDeadline,
+		permissionDecisions: make(map[PermissionGrant]bool),
+		runtimePermissions:  checker,
 	}
 	// nodes is an owned-reflector ingest kind (IngestOwned): the typed node informer is never
 	// instantiated. Node has no Stream descriptor (its table is the bespoke NodeSummary whose
@@ -624,7 +624,7 @@ func (f *Factory) Shutdown() error {
 	f.syncStatesMu.Unlock()
 
 	f.permissionMu.Lock()
-	f.permissionAllowed = nil
+	f.permissionDecisions = nil
 	f.permissionMu.Unlock()
 
 	// Clear factory references to allow GC
@@ -771,20 +771,20 @@ func (f *Factory) recordPermissionDecision(grant PermissionGrant, decision permi
 	if err != nil {
 		return false, err
 	}
-	if decision.Allowed {
-		f.trackAllowedPermission(grant)
-	}
+	f.trackPermissionDecision(grant, decision.Allowed)
 	return decision.Allowed, nil
 }
 
-// trackAllowedPermission records that an exact permission scope has been granted at least once.
-func (f *Factory) trackAllowedPermission(grant PermissionGrant) {
+// trackPermissionDecision preserves denied scopes so restored grants are detected.
+func (f *Factory) trackPermissionDecision(grant PermissionGrant, allowed bool) {
 	if f == nil {
 		return
 	}
 	f.permissionMu.Lock()
-	if f.permissionAllowed != nil {
-		f.permissionAllowed[grant] = struct{}{}
+	if f.permissionDecisions != nil {
+		if _, recorded := f.permissionDecisions[grant]; !recorded {
+			f.permissionDecisions[grant] = allowed
+		}
 	}
 	f.permissionMu.Unlock()
 }
@@ -811,19 +811,19 @@ func (f *Factory) PrimePermissions(ctx context.Context, requests []PermissionReq
 	return g.Wait()
 }
 
-// PermissionAllowedSnapshot returns exact permission scopes that have been allowed at least once.
-func (f *Factory) PermissionAllowedSnapshot() []PermissionGrant {
+// PermissionSnapshot returns recorded decisions at their original evaluation scopes.
+func (f *Factory) PermissionSnapshot() map[PermissionGrant]bool {
 	if f == nil {
 		return nil
 	}
 	f.permissionMu.RLock()
 	defer f.permissionMu.RUnlock()
-	if len(f.permissionAllowed) == 0 {
+	if len(f.permissionDecisions) == 0 {
 		return nil
 	}
-	grants := make([]PermissionGrant, 0, len(f.permissionAllowed))
-	for grant := range f.permissionAllowed {
-		grants = append(grants, grant)
+	grants := make(map[PermissionGrant]bool, len(f.permissionDecisions))
+	for grant, allowed := range f.permissionDecisions {
+		grants[grant] = allowed
 	}
 	return grants
 }

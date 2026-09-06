@@ -592,9 +592,9 @@ func TestHelmStorageSourceSkipsDeniedKinds(t *testing.T) {
 
 func newMinimalFactory(checker *permissions.Checker) *Factory {
 	return &Factory{
-		kubeClient:         fake.NewClientset(),
-		permissionAllowed:  make(map[PermissionGrant]struct{}),
-		runtimePermissions: checker,
+		kubeClient:          fake.NewClientset(),
+		permissionDecisions: make(map[PermissionGrant]bool),
+		runtimePermissions:  checker,
 	}
 }
 
@@ -622,7 +622,7 @@ func TestCanListWatchInNamespaceChecksTheExactInformerScope(t *testing.T) {
 	}
 }
 
-func TestPermissionAllowedSnapshotPreservesEvaluationScope(t *testing.T) {
+func TestPermissionSnapshotPreservesEvaluationScope(t *testing.T) {
 	allows := func(group, resource, namespace string) bool {
 		return (group == "apps" && resource == "deployments" && namespace == "team-b") ||
 			(group == "example.com" && resource == "widgets" && namespace == "team-a")
@@ -646,10 +646,10 @@ func TestPermissionAllowedSnapshotPreservesEvaluationScope(t *testing.T) {
 		return group == "apps" && resource == "deployments"
 	})
 
-	grants := factory.PermissionAllowedSnapshot()
+	grants := factory.PermissionSnapshot()
 	require.Len(t, grants, 4)
 	identities := make([]string, 0, len(grants))
-	for _, grant := range grants {
+	for grant := range grants {
 		decision, err := grant.Revalidate(context.Background(), revalidationChecker)
 		require.NoError(t, err)
 		require.True(t, decision.Allowed)
@@ -671,14 +671,14 @@ func TestPermissionAllowedSnapshotPreservesEvaluationScope(t *testing.T) {
 	}, identities)
 }
 
-func TestPermissionAllowedSnapshotIsEmptyBeforeAnyGrant(t *testing.T) {
+func TestPermissionSnapshotIsEmptyBeforeAnyGrant(t *testing.T) {
 	var nilFactory *Factory
-	require.Nil(t, nilFactory.PermissionAllowedSnapshot())
+	require.Nil(t, nilFactory.PermissionSnapshot())
 
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		return true, nil
 	})
-	require.Nil(t, newMinimalFactory(checker).PermissionAllowedSnapshot())
+	require.Nil(t, newMinimalFactory(checker).PermissionSnapshot())
 }
 
 // TestFactoryGateExemptInformerDoesNotBlockFactorySync pins the events exclusion: an

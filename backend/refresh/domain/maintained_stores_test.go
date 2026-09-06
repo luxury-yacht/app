@@ -75,21 +75,19 @@ func TestRegistryCoolMaintainedStoresToMmap(t *testing.T) {
 	require.Equal(t, 1, b.closed)
 }
 
-// TestRegistryCoolMaintainedStoresToMmapErrorClosesOpened proves safe-degrade: if any store
-// fails to swap, the registry closes every mapping it already opened and returns the error
-// with NO closers, so the caller can fall back to a full teardown with nothing left mapped.
-func TestRegistryCoolMaintainedStoresToMmapErrorClosesOpened(t *testing.T) {
+// Partial cooling retains already-swapped mappings until the owner retires reads.
+func TestRegistryCoolFailureRetainsMappingsUntilRetirement(t *testing.T) {
 	reg := New()
-	// dom-a swaps first (sorted order), dom-z fails — dom-a's mapping must be closed.
 	a := &fakeSpillable{rows: []string{"a1"}}
 	z := &fakeSpillable{swapErr: errBoom}
 	reg.RegisterMaintainedStore("dom-a", a)
 	reg.RegisterMaintainedStore("dom-z", z)
-
 	closers, err := reg.CoolMaintainedStoresToMmap(t.TempDir())
 	require.ErrorIs(t, err, errBoom)
-	require.Nil(t, closers, "no closers returned on a failed cool")
-	require.Equal(t, 1, a.closed, "the already-opened mapping is closed on cool failure")
+	require.Zero(t, a.closed, "already-swapped stores remain readable until their owner retires them")
+	require.Len(t, closers, 1)
+	require.NoError(t, closers[0]())
+	require.Equal(t, 1, a.closed)
 }
 
 var errBoom = errBoomType("boom")

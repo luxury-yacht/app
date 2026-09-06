@@ -144,6 +144,10 @@ application transport between them.
   advancing one of the domain's declared signal clocks; consumers then perform
   one `stream-signal` reconciliation. A reset must never be accepted as only an
   acknowledgement while retained data remains visible.
+- If a resource replay cannot fit in the remaining outgoing queue, the mux sends
+  an ACK followed by a RESET for that scope instead of enqueueing a partial replay.
+  Updates already queued for other scopes remain intact. Live delivery overflow
+  still closes the session so every subscription recovers through resume or reset.
 - Replacing one cluster's backend stream manager invalidates subscriptions bound
   to the previous manager. After routing the replacement, affected subscriptions
   re-establish against the current manager over the existing aggregate
@@ -183,7 +187,8 @@ application transport between them.
   and replayed after activation with its original `user` or `stream-signal`
   intent; passive background work is dropped. Releasing the boundary also
   restarts retained stream-only leases, which have no snapshot request to queue.
-- A typed permission denial is a settled domain state, not a retry loop.
+- A typed permission denial is settled until manual refresh or a cluster-scoped
+  auth, namespace-scope, or permission recovery resets its epoch.
 - Error notifications are deduplicated by full refresh scope. Re-selecting a
   retained failing scope does not repeat the same notification; leaving the
   error state clears that scope's dedupe so a later failure can notify again.
@@ -256,3 +261,16 @@ For a freshness change, test the contract at the producer/consumer seam:
     transition or the bounded full-teardown fallback completes.
 
 Finish non-documentation changes with `wails3 task qc:prerelease`.
+
+## Snapshot and cooled-store lifetime
+
+Cache invalidation advances a domain generation as well as deleting cache entries.
+New requests cannot join pre-invalidation builds, and those builds cannot populate
+the new generation's cache after completion.
+
+Cooled mmap stores belong to the exact subsystem generation. Replacement publishes
+new aggregate routes before retiring old snapshot serving; retirement rejects late
+reads and drains active builders before releasing mappings. Failed rewarm retains
+the old routed generation and its mappings. Partial cooling returns ownership of
+already-swapped mappings to the coordinator, which retires and spills those stores
+before closing them during fallback teardown.

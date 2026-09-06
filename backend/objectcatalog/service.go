@@ -98,8 +98,12 @@ type Service struct {
 	healthMu sync.RWMutex
 	health   healthStatus
 
-	syncMu         sync.Mutex  // serializes full syncs from the run loop and watch recovery path
-	syncInProgress atomic.Bool // true while sync() is running; prevents watch flush races
+	ingestPendingMu sync.Mutex
+	ingestPending   map[schema.GroupVersionResource]struct{}
+	ingestDrainDone chan struct{}
+	ingestStopped   bool
+	syncMu          sync.Mutex  // serializes full syncs from the run loop and watch recovery path
+	syncInProgress  atomic.Bool // true while sync() is running; prevents watch flush races
 
 	startOnce sync.Once
 	doneCh    chan struct{}

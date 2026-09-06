@@ -1864,3 +1864,39 @@ func customResourceDefinition(
 func ptrBool(value bool) *bool {
 	return &value
 }
+
+func TestStoppedManagerCompletesSubscribersAndRejectsNewOnes(t *testing.T) {
+	manager := NewManager(nil, nil, nil, snapshot.ClusterMeta{ClusterID: "cluster-a"}, nil, nil)
+	sub, err := subscribeForTest(t, manager, "pods", "namespace:default")
+	require.NoError(t, err)
+	manager.Stop()
+	select {
+	case reason := <-sub.Drops:
+		require.Equal(t, DropReasonClosed, reason)
+	default:
+		t.Fatal("stopped producer left a healthy-looking subscription")
+	}
+	_, err = subscribeForTest(t, manager, "pods", "namespace:default")
+	require.Error(t, err, "a stopped producer must not ACK new subscriptions")
+	sub.Cancel()
+	manager.Stop()
+}
+
+func TestSubscriptionCloseSerializesWithDelivery(t *testing.T) {
+	manager := NewManager(nil, nil, nil, snapshot.ClusterMeta{ClusterID: "cluster-a"}, nil, nil)
+	for range 100 {
+		sub := &subscription{ch: make(chan Update, 1), drops: make(chan DropReason, 1)}
+		started := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			close(started)
+			defer close(done)
+			for range 100 {
+				manager.trySend(sub, Update{})
+			}
+		}()
+		<-started
+		sub.close(DropReasonClosed)
+		<-done
+	}
+}

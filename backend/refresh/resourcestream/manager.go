@@ -105,10 +105,11 @@ const (
 )
 
 type subscription struct {
-	ch      chan Update
-	drops   chan DropReason
-	created time.Time
-	once    sync.Once
+	ch         chan Update
+	drops      chan DropReason
+	created    time.Time
+	deliveryMu sync.Mutex
+	closed     bool
 	// resyncing is set when backpressure triggers a RESET for this subscriber.
 	resyncing uint32
 }
@@ -132,16 +133,20 @@ func (s *subscription) close(reason DropReason) {
 	if s == nil {
 		return
 	}
-	s.once.Do(func() {
-		if reason != "" {
-			select {
-			case s.drops <- reason:
-			default:
-			}
+	s.deliveryMu.Lock()
+	defer s.deliveryMu.Unlock()
+	if s.closed {
+		return
+	}
+	s.closed = true
+	if reason != "" {
+		select {
+		case s.drops <- reason:
+		default:
 		}
-		close(s.drops)
-		close(s.ch)
-	})
+	}
+	close(s.drops)
+	close(s.ch)
 }
 
 func (s *subscription) isResyncing() bool {
@@ -243,9 +248,9 @@ type Manager struct {
 	// discarded and replaced by a fresh one. It gates ensureCustomInformer so a
 	// CRD event arriving after teardown (the shared CRD informer can still fire,
 	// including its resync, until the factory is shut down) cannot resurrect a
-	// custom informer whose stopCh nothing would ever close. Guarded by
-	// customInformerMu.
-	stopped bool
+	// custom informer whose stopCh nothing would ever close. Subscription admission
+	// uses the same atomic gate while holding the hub lock.
+	stopped atomic.Bool
 	// customInvalidator evicts cached YAML/details when custom resources change.
 	customInvalidatorMu sync.RWMutex
 	customInvalidator   func(ref resourcemodel.ResourceRef)
@@ -324,7 +329,7 @@ func NewManager(
 	return mgr
 }
 
-// Stop halts any dynamically managed informers that are not owned by the shared factory.
+// Stop closes subscriptions and halts dynamically managed informers. It is terminal.
 func (m *Manager) Stop() {
 	if m == nil {
 		return
@@ -332,9 +337,20 @@ func (m *Manager) Stop() {
 	if m.jobPodOwnerHealSink != nil {
 		m.jobPodOwnerHealSink.Stop()
 	}
+	m.stopped.Store(true)
+	m.mu.Lock()
+	for domain, scopes := range m.subscribers {
+		for scope, subscribers := range scopes {
+			for _, sub := range subscribers {
+				sub.close(DropReasonClosed)
+			}
+			m.clearScopeStateLocked(domain, scope)
+		}
+	}
+	clear(m.subscribers)
+	m.mu.Unlock()
 	m.customInformerMu.Lock()
 	defer m.customInformerMu.Unlock()
-	m.stopped = true
 	for key, informer := range m.customInformers {
 		informer.stop()
 		delete(m.customInformers, key)
@@ -614,7 +630,7 @@ func (m *Manager) applyCustomInformerPlan(plan customInformerPlan) {
 func (m *Manager) reconcileCustomInformerLocked(plan customInformerPlan) *customResourceInformer {
 	// The stopped gate, replacement, and map insert share Stop's lock so an
 	// informer can never be published after terminal teardown.
-	if m.stopped {
+	if m.stopped.Load() {
 		return nil
 	}
 	if plan.action == customInformerPlanRemove {
@@ -1248,13 +1264,11 @@ func (m *Manager) dropSubscriber(domain, scope string, id uint64, sub *subscript
 }
 
 func (m *Manager) trySend(sub *subscription, update Update) (sent bool, closed bool, reset bool) {
-	defer func() {
-		if recover() != nil {
-			closed = true
-			sent = false
-			reset = false
-		}
-	}()
+	sub.deliveryMu.Lock()
+	defer sub.deliveryMu.Unlock()
+	if sub.closed {
+		return false, true, false
+	}
 	select {
 	case sub.ch <- update:
 		return true, false, false

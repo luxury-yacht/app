@@ -172,11 +172,12 @@ type session struct {
 	allowClusterScopedRequest bool
 	resolveClusterName        func(clusterID string) string
 
-	mu        sync.Mutex
-	subs      map[string]*sessionSubscription
-	outgoing  chan ServerMessage
-	done      chan struct{}
-	closeOnce sync.Once
+	deliveryMu sync.Mutex // Orders replacement ACKs after the old subscription's final delivery.
+	mu         sync.Mutex
+	subs       map[string]*sessionSubscription
+	outgoing   chan ServerMessage
+	done       chan struct{}
+	closeOnce  sync.Once
 
 	signalVersionCounter uint64
 }
@@ -296,12 +297,26 @@ func (s *session) handleSubscribe(msg ClientMessage) {
 	}
 
 	key := subscriptionKey(selector)
-	s.storeSubscription(key, sub, clusterID, clusterName)
+	s.deliveryMu.Lock()
+	entry := s.storeSubscription(key, sub, clusterID, clusterName)
+	if entry == nil {
+		s.deliveryMu.Unlock()
+		return
+	}
 	s.enqueueSubscriptionAck(msg.Domain, normalized, clusterID, clusterName)
 	resume := s.resumeSubscription(selector, msg.ResumeToken, msg.Domain, normalized)
+	// A retained resource tail can exceed the shared outgoing queue. Reset that
+	// scope before replaying anything, or reconnect would replay the same backlog
+	// and disconnect again. deliveryMu prevents competing subscription delivery;
+	// the writer may only increase the available capacity while we decide.
+	if s.sendReset && len(resume.updates) > cap(s.outgoing)-len(s.outgoing) {
+		resume.ok = false
+		resume.updates = nil
+	}
 	s.enqueueSubscriptionReset(msg.Domain, normalized, clusterID, clusterName, resume.ok)
 	s.enqueueResumeUpdates(resume.updates, clusterID, clusterName)
-	go s.forwardSubscription(key, resume.highWater)
+	s.deliveryMu.Unlock()
+	go s.forwardSubscription(key, entry, resume.highWater)
 }
 
 func (s *session) enqueueSubscriptionAck(domain, scope, clusterID, clusterName string) {
@@ -393,56 +408,89 @@ func (s *session) handleCancel(msg ClientMessage) {
 	sub.sub.Cancel()
 }
 
-func (s *session) storeSubscription(key string, sub *Subscription, clusterID, clusterName string) {
+func (s *session) storeSubscription(key string, sub *Subscription, clusterID, clusterName string) *sessionSubscription {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.doneError() != nil {
+		sub.Cancel()
+		return nil
+	}
 	if existing := s.subs[key]; existing != nil {
 		existing.sub.Cancel()
 	}
-	s.subs[key] = &sessionSubscription{
+	entry := &sessionSubscription{
 		sub:         sub,
 		clusterID:   clusterID,
 		clusterName: clusterName,
 	}
+	s.subs[key] = entry
+	return entry
 }
 
-func (s *session) forwardSubscription(key string, resumeHighWater uint64) {
-	s.mu.Lock()
-	entry := s.subs[key]
-	s.mu.Unlock()
+func (s *session) forwardSubscription(key string, entry *sessionSubscription, resumeHighWater uint64) {
 	if entry == nil {
 		return
 	}
+	reason := DropReasonClosed
+	defer func() {
+		s.deliverSubscriptionMessage(key, entry, ServerMessage{
+			Type: MessageTypeComplete, Domain: entry.sub.Domain, Scope: entry.sub.Scope,
+			ClusterID: entry.clusterID, ClusterName: entry.clusterName,
+			Error: fmt.Sprintf("subscription ended: %s", reason),
+		}, true)
+	}()
 	for {
 		select {
 		case update, ok := <-entry.sub.Updates:
 			if !ok {
+				select {
+				case dropped, open := <-entry.sub.Drops:
+					if open {
+						reason = dropped
+					}
+				default:
+				}
 				return
 			}
 			if resumeHighWater > 0 {
-				// Skip updates already replayed from the resume buffer.
 				if sequence, ok := parseSequence(update.Sequence); ok && sequence <= resumeHighWater {
 					continue
 				}
 			}
-			s.enqueue(s.withClusterInfo(update, entry.clusterID, entry.clusterName))
-		case reason, ok := <-entry.sub.Drops:
-			if !ok {
+			if !s.deliverSubscriptionMessage(key, entry, s.withClusterInfo(update, entry.clusterID, entry.clusterName), false) {
 				return
 			}
-			s.enqueue(ServerMessage{
-				Type:        MessageTypeComplete,
-				Domain:      entry.sub.Domain,
-				Scope:       entry.sub.Scope,
-				ClusterID:   entry.clusterID,
-				ClusterName: entry.clusterName,
-				Error:       fmt.Sprintf("subscription ended: %s", reason),
-			})
+		case dropped, ok := <-entry.sub.Drops:
+			if ok {
+				reason = dropped
+			}
 			return
 		case <-s.done:
 			return
 		}
 	}
+}
+
+// A replaced or explicitly cancelled subscription cannot deliver into its successor.
+func (s *session) deliverSubscriptionMessage(key string, entry *sessionSubscription, msg ServerMessage, terminal bool) bool {
+	s.deliveryMu.Lock()
+	defer s.deliveryMu.Unlock()
+	s.mu.Lock()
+	current := s.subs[key] == entry
+	if current && terminal {
+		delete(s.subs, key)
+	}
+	s.mu.Unlock()
+	if !current {
+		return false
+	}
+	select {
+	case <-s.done:
+		return false
+	default:
+	}
+	s.enqueue(msg)
+	return true
 }
 
 func (s *session) enqueue(msg ServerMessage) {
@@ -471,46 +519,15 @@ func (s *session) nextSignalVersion(source Source) string {
 
 func (s *session) handleBackpressure(msg ServerMessage) {
 	if msg.Type == MessageTypeHeartbeat {
-		s.logger.Warn("stream mux: outgoing buffer full, dropping heartbeat", logsources.StreamMux, s.clusterID, s.clusterName)
 		return
-	}
-
-	// Drop the oldest message and issue a RESET so only the hot scope resyncs.
-	select {
-	case <-s.outgoing:
-	default:
 	}
 	if s.telemetry != nil {
 		s.telemetry.RecordStreamDelivery(s.streamName, 0, 1)
 	}
-
-	if msg.Domain == "" || msg.Scope == "" {
-		s.logger.Warn("stream mux: outgoing buffer full, dropping message", logsources.StreamMux, s.clusterID, s.clusterName)
-		return
-	}
-
-	clusterID := strings.TrimSpace(msg.ClusterID)
-	if clusterID == "" {
-		clusterID = s.clusterID
-	}
-	clusterName := msg.ClusterName
-	if clusterName == "" {
-		clusterName = s.clusterNameFor(clusterID)
-	}
-	reset := ServerMessage{
-		Type:        MessageTypeReset,
-		Domain:      msg.Domain,
-		Scope:       msg.Scope,
-		ClusterID:   clusterID,
-		ClusterName: clusterName,
-	}
-	reset = s.prepareOutgoingMessage(reset)
-	select {
-	case s.outgoing <- reset:
-		s.logger.Warn(fmt.Sprintf("stream mux: outgoing buffer full, issued reset for %s/%s", msg.Domain, msg.Scope), logsources.StreamMux, clusterID, clusterName)
-	default:
-		s.logger.Warn("stream mux: outgoing buffer full, dropping message", logsources.StreamMux, clusterID, clusterName)
-	}
+	// A shared queue may contain another cluster's last signal. Disconnecting
+	// forces every subscription to resume or reset; dropping one frame cannot.
+	s.logger.Warn("stream mux: outgoing buffer full, reconnect required", logsources.StreamMux, s.clusterID, s.clusterName)
+	s.shutdown()
 }
 
 func (s *session) writeLoop(ctx context.Context) {

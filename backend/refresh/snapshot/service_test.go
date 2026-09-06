@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1209,4 +1210,95 @@ func TestServiceBuildServesRuntimePolicyExemptDomainForDeniedIdentity(t *testing
 	if snap == nil || !called {
 		t.Fatalf("expected the builder to run (called=%v, snap=%v)", called, snap)
 	}
+}
+
+func TestServiceRetirementDrainsBuildersAndRejectsLateReads(t *testing.T) {
+	reg := domain.New()
+	entered, canceled, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	require.NoError(t, reg.Register(refresh.DomainConfig{Name: "demo", BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+		close(entered)
+		<-ctx.Done()
+		close(canceled)
+		<-release
+		return nil, ctx.Err()
+	}}))
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
+	finished := make(chan struct{})
+	go func() { defer close(finished); _, _ = service.Build(context.Background(), "demo", "cluster-a|") }()
+	<-entered
+	retired := make(chan struct{})
+	go func() { service.Retire(); close(retired) }()
+	<-canceled
+	select {
+	case <-retired:
+		t.Error("retired before the builder stopped accessing its store")
+	default:
+	}
+	close(release)
+	<-retired
+	<-finished
+	_, err := service.Build(context.Background(), "demo", "cluster-a|")
+	require.Error(t, err, "a captured old service must reject a new read after retirement")
+}
+
+func TestInvalidationDuringBuildCannotRepopulateOldSnapshot(t *testing.T) {
+	reg := domain.New()
+	captured := make(chan struct{})
+	release := make(chan struct{})
+	builds := 0
+	require.NoError(t, reg.Register(refresh.DomainConfig{Name: "cluster-attention", BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+		builds++
+		payload := builds
+		if builds == 1 {
+			close(captured)
+			<-release
+		}
+		return &refresh.Snapshot{Domain: "cluster-attention", Scope: scope, Payload: payload}, nil
+	}}))
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
+	service.cacheTTL = time.Minute
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		_, _ = service.Build(context.Background(), "cluster-attention", "cluster-a|")
+	}()
+	<-captured
+	service.InvalidateDomainCache("cluster-attention")
+	close(release)
+	<-finished
+	fresh, err := service.Build(context.Background(), "cluster-attention", "cluster-a|")
+	require.NoError(t, err)
+	require.Equal(t, 2, fresh.Payload, "post-doorbell reconciliation must rebuild, not read the invalidated in-flight result")
+}
+
+func TestInvalidationSeparatesNewRequestsFromOldFlights(t *testing.T) {
+	reg := domain.New()
+	captured, release := make(chan struct{}), make(chan struct{})
+	var builds atomic.Int32
+	require.NoError(t, reg.Register(refresh.DomainConfig{Name: "cluster-attention", BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+		value := builds.Add(1)
+		if value == 1 {
+			close(captured)
+			<-release
+		}
+		return &refresh.Snapshot{Domain: "cluster-attention", Scope: scope, Payload: value}, nil
+	}}))
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
+	oldDone := make(chan struct{})
+	go func() {
+		defer close(oldDone)
+		_, _ = service.Build(context.Background(), "cluster-attention", "cluster-a|")
+	}()
+	<-captured
+	service.InvalidateDomainCache("cluster-attention")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	fresh, err := service.Build(ctx, "cluster-attention", "cluster-a|")
+	close(release)
+	<-oldDone
+	require.NoError(t, err, "a post-invalidation request must not wait on the old flight")
+	require.Equal(t, int32(2), fresh.Payload)
+	cached, err := service.Build(context.Background(), "cluster-attention", "cluster-a|")
+	require.NoError(t, err)
+	require.Equal(t, int32(2), cached.Payload, "old completion must not replace the new cached snapshot")
 }

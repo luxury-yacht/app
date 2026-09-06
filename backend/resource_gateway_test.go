@@ -131,7 +131,7 @@ func TestRefreshCoordinatorPublishesCatalogAndTelemetryToResourceProjection(t *t
 	require.Same(t, catalog, refresh.resourceProjection.objectCatalogServiceForCluster("cluster-a"))
 	require.Same(t, recorder, refresh.resourceProjection.currentTelemetry())
 
-	refresh.removeObjectCatalogEntry("cluster-a")
+	refresh.removeObjectCatalogEntry("cluster-a", nil)
 	refresh.setTelemetryRecorder(nil)
 	require.Nil(t, refresh.resourceProjection.objectCatalogServiceForCluster("cluster-a"))
 	require.Nil(t, refresh.resourceProjection.currentTelemetry())

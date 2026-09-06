@@ -68,12 +68,24 @@ describe('scoped readiness, permission, and cluster auth transitions', () => {
     );
     readiness = transitionScopedReadinessState(readiness, {
       type: 'request-deferred',
-      request: { ...first, isManual: true, streamSignal: false, queryReconcile: true },
+      request: {
+        ...first,
+        isManual: true,
+        streamSignal: false,
+        queryReconcile: true,
+        coalesce: true,
+      },
     });
 
     expect(readiness).toEqual({
       status: 'waiting',
-      request: { ...first, isManual: true, streamSignal: true, queryReconcile: true },
+      request: {
+        ...first,
+        isManual: true,
+        streamSignal: true,
+        queryReconcile: true,
+        coalesce: true,
+      },
     });
     expect(transitionScopedReadinessState(readiness, { type: 'cluster-ready' })).toEqual({
       status: 'ready',
@@ -546,5 +558,36 @@ describe('ClusterRefreshRuntime', () => {
       mode: 'skip',
       fallback: false,
     });
+  });
+});
+
+describe('failed reconciliation recovery', () => {
+  it('retains retry intent through stream health changes, bounds backoff, and clears it on success', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1000);
+      const runtime = new ClusterRefreshRuntime('cluster-a');
+      const scope = 'cluster-a|';
+      runtime.markReconciliationFailed('pods', scope);
+      expect(runtime.canRetryReconciliation('pods', scope)).toBe(true);
+      runtime.markReconciliationFailed('pods', scope);
+      expect(runtime.canRetryReconciliation('pods', scope)).toBe(false);
+      vi.advanceTimersByTime(1000);
+      expect(runtime.canRetryReconciliation('pods', scope)).toBe(true);
+      for (let i = 0; i < 20; i++) {
+        runtime.markReconciliationFailed('pods', scope);
+      }
+      runtime.clearAllStreamHealth();
+      expect(runtime.needsReconciliation('pods', scope)).toBe(true);
+      expect(runtime.needsReconciliation('nodes', scope)).toBe(false);
+      vi.advanceTimersByTime(60000);
+      expect(runtime.canRetryReconciliation('pods', scope)).toBe(true);
+      runtime.markReconciled('pods', scope);
+      expect(runtime.needsReconciliation('pods', scope)).toBe(false);
+      runtime.markReconciliationFailed('pods', scope);
+      expect(runtime.canRetryReconciliation('pods', scope)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -76,6 +76,7 @@ export interface AppEvents {
   // rebuilding (docs/architecture/namespace-scope.md) — bridged from the Wails
   // cluster:scope:changed event by KubeconfigContext. Streams must restart
   // and the cluster's domains refetch.
+  'cluster:permissions-changed': { clusterId: string };
   'cluster:scope-changed': { clusterId: string };
 
   // View events

@@ -65,6 +65,8 @@ import { resourceStreamManager } from './streaming/resourceStreamManager';
 import type { DomainPayloadMap, RefreshDomain } from './types';
 
 type DomainFetchOptions = {
+  // One-shot page readers share work, including when initiated by the user.
+  coalesce?: boolean;
   isManual: boolean;
   correlationId?: string;
   signal?: AbortSignal;
@@ -81,6 +83,7 @@ type ScopedFetchExecution<K extends RefreshDomain> = {
   runtime: ClusterRefreshRuntime;
   scope: string;
   previousState: DomainSnapshotState<DomainPayloadMap[K]>;
+  complete: () => void;
   controller: AbortController;
   requestId: number;
   contextVersion: number;
@@ -151,6 +154,7 @@ class RefreshOrchestrator {
     eventBus.on('cluster:auth:failed', this.handleClusterAuthFailed);
     eventBus.on('cluster:auth:recovered', this.handleClusterAuthRecovered);
     eventBus.on('cluster:scope-changed', this.handleClusterScopeChanged);
+    eventBus.on('cluster:permissions-changed', this.handleClusterScopeChanged);
     clusterReadiness.onBecameServiceable((clusterId) =>
       this.handleClusterBecameServiceable(clusterId)
     );
@@ -175,7 +179,7 @@ class RefreshOrchestrator {
   private recordPendingClusterReadiness(
     domain: RefreshDomain,
     scope: string,
-    options?: Pick<DomainFetchOptions, 'isManual' | 'streamSignal' | 'queryReconcile'>
+    options?: Pick<DomainFetchOptions, 'isManual' | 'streamSignal' | 'queryReconcile' | 'coalesce'>
   ): void {
     for (const clusterId of parseClusterScopeList(scope).clusterIds) {
       this.getClusterRuntime(clusterId).deferUntilClusterReady({
@@ -184,6 +188,7 @@ class RefreshOrchestrator {
         isManual: Boolean(options?.isManual),
         streamSignal: Boolean(options?.streamSignal),
         queryReconcile: Boolean(options?.queryReconcile),
+        ...(options?.coalesce ? { coalesce: true } : {}),
       });
     }
   }
@@ -198,6 +203,7 @@ class RefreshOrchestrator {
       if (details.scope && this.isScopedDomainEnabledInternal(details.domain, details.scope)) {
         this.recordPendingClusterReadiness(details.domain, details.scope, {
           isManual: details.isManual,
+          coalesce: details.coalesce,
           streamSignal: Boolean(details.streamSignal || details.trailingStreamSignal),
         });
       }
@@ -225,6 +231,7 @@ class RefreshOrchestrator {
         }
         void this.fetchScopedDomain(domain, scope, {
           isManual: request.isManual,
+          ...(request.coalesce ? { coalesce: true } : {}),
           streamSignal: request.streamSignal,
           queryReconcile: request.queryReconcile,
         }).catch((error) => {
@@ -1175,10 +1182,6 @@ class RefreshOrchestrator {
     });
   }
 
-  private resetAllRuntimePermissionEpochs(): void {
-    this.forEachRuntime((runtime) => this.resetRuntimePermissionEpoch(runtime));
-  }
-
   private pruneRemovedClusterRuntimes(connectedClusterIds: string[]): void {
     const connected = new Set(
       connectedClusterIds.map((clusterId) => clusterId.trim()).filter(Boolean)
@@ -1312,7 +1315,7 @@ class RefreshOrchestrator {
   private async reconcileStreamingFetch(
     domain: RefreshDomain,
     scope: string,
-    options: { isManual?: boolean; streamSignal?: boolean },
+    options: { isManual?: boolean; streamSignal?: boolean; coalesce?: boolean },
     streaming: StreamingRegistration | undefined,
     runtime: ClusterRefreshRuntime
   ): Promise<boolean> {
@@ -1324,6 +1327,7 @@ class RefreshOrchestrator {
     if (
       shouldStream &&
       options.isManual &&
+      !options.coalesce &&
       isResourceStreamDomain(domain) &&
       this.isStreamingActive(domain, scope)
     ) {
@@ -1339,7 +1343,7 @@ class RefreshOrchestrator {
       scope,
       shouldStream,
       isManual: Boolean(options.isManual),
-      streamSignal: Boolean(options.streamSignal),
+      streamSignal: Boolean(options.streamSignal) || runtime.needsReconciliation(domain, scope),
       streamingHealthy: this.isStreamingHealthy(domain, scope),
       hasData: Boolean(getScopedDomainState(domain, scope).data),
     });
@@ -1359,6 +1363,7 @@ class RefreshOrchestrator {
       isManual?: boolean;
       streamSignal?: boolean;
       queryReconcile?: boolean;
+      coalesce?: boolean;
       correlationId?: string;
     } = {}
   ): Promise<void> {
@@ -1381,6 +1386,7 @@ class RefreshOrchestrator {
         isManual: Boolean(options.isManual),
         streamSignal: Boolean(options.streamSignal),
         queryReconcile: Boolean(options.queryReconcile),
+        ...(options.coalesce ? { coalesce: true } : {}),
       });
       return;
     }
@@ -1403,6 +1409,7 @@ class RefreshOrchestrator {
     }
 
     await this.performFetch(domain, normalizedScope, {
+      ...(options.coalesce ? { coalesce: true } : {}),
       isManual: options.isManual ?? true,
       signal: options.signal,
       streamSignal: Boolean(options.streamSignal),
@@ -1415,6 +1422,12 @@ class RefreshOrchestrator {
     scope: string,
     options: DomainFetchOptions
   ): boolean {
+    if (
+      !options.isManual &&
+      !this.getRuntimeForScope(domain, scope).canRetryReconciliation(domain, scope)
+    ) {
+      return false;
+    }
     if (options.signal?.aborted) {
       return false;
     }
@@ -1441,11 +1454,11 @@ class RefreshOrchestrator {
     if (!currentInFlight) {
       return true;
     }
-    if (options.isManual) {
+    if (options.isManual && !options.coalesce) {
       this.teardownInFlight(runtime, makeInFlightKey(domain, scope), currentInFlight);
       return true;
     }
-    if (options.streamSignal) {
+    if (options.streamSignal || options.coalesce) {
       // Coalesce doorbells arriving during the request into one trailing
       // refetch. Aborting here can starve a busy scope indefinitely.
       runtime.latchTrailingStreamSignal(domain, scope);
@@ -1475,10 +1488,16 @@ class RefreshOrchestrator {
     }
     const cleanup = this.forwardAbortSignal(options.signal, controller);
     const requestId = ++this.requestCounter;
+    let complete!: () => void;
+    const completion = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
     const request: InFlightRequest = {
+      completion,
       controller,
       isManual: options.isManual,
       streamSignal: options.streamSignal,
+      coalesce: options.coalesce,
       requestId,
       cleanup,
       contextVersion,
@@ -1487,7 +1506,7 @@ class RefreshOrchestrator {
     };
     runtime.setInFlight(request);
     markPendingRequest(1);
-    return { runtime, scope, previousState, controller, requestId, contextVersion };
+    return { runtime, scope, previousState, controller, requestId, contextVersion, complete };
   }
 
   private forwardAbortSignal(
@@ -1517,6 +1536,7 @@ class RefreshOrchestrator {
     }
   ): void {
     const { scope } = execution;
+    execution.runtime.markReconciled(domain, scope);
     if (result.notModified || !result.snapshot) {
       if (
         !options.allowDisabledRetainedScope &&
@@ -1560,6 +1580,7 @@ class RefreshOrchestrator {
       // A typed 403 is a settled answer and bypasses startup network-error
       // suppression so automatic retries stop for this scope.
       execution.runtime.markPermissionDenied(domain, execution.scope);
+      execution.runtime.markReconciled(domain, execution.scope);
       setScopedDomainState(domain, execution.scope, (previous) => ({
         ...previous,
         status: 'error',
@@ -1570,6 +1591,7 @@ class RefreshOrchestrator {
       this.notifyRefreshError(domain, execution.scope, message, error, options.correlationId);
       return;
     }
+    execution.runtime.markReconciliationFailed(domain, execution.scope);
     if (this.errorNotifier.shouldSuppressNetworkError(message)) {
       setScopedDomainState(domain, execution.scope, (previous) => ({
         ...previous,
@@ -1622,14 +1644,21 @@ class RefreshOrchestrator {
 
     const runtime = this.getRuntimeForScope(domain, normalizedScope);
     if (!this.claimFetchSlot(domain, normalizedScope, options, runtime)) {
+      if (!options.coalesce) {
+        return;
+      }
+      const current = runtime.getInFlight(domain, normalizedScope);
+      await current?.completion;
+      // A signal arriving during a read requires its one trailing snapshot.
+      // Wait for that read, without following an unbounded chain of later signals.
+      await runtime.getInFlight(domain, normalizedScope)?.completion;
       return;
     }
 
     const previousState = getScopedDomainState(domain, normalizedScope);
     // A permission-denied scope is SETTLED: the backend refused it with a
-    // typed 403 and permission changes are not expected mid-session (the
-    // exceptions — a namespace-scope rebuild, and manual refresh below —
-    // clear the latch explicitly; see handleClusterScopeChanged). Background
+    // typed 403. A permission or namespace-scope rebuild, or manual refresh
+    // below, clears the latch explicitly; see handleClusterScopeChanged. Background
     // retries here caused a request every ~2s
     // (the no-data fetch clause) and flicked the state through 'loading' —
     // observed live as a spinner flashing over the permission message. Manual
@@ -1664,6 +1693,7 @@ class RefreshOrchestrator {
       this.handleFetchFailure(domain, execution, options, error);
     } finally {
       this.finishFetch(domain, execution);
+      execution.complete();
     }
   }
 
@@ -1935,27 +1965,27 @@ class RefreshOrchestrator {
   };
 
   private readonly handleClusterScopeChanged = (payload: { clusterId: string }) => {
-    // The cluster's namespace scope changed and the backend finished tearing
-    // down + rebuilding its refresh subsystem (docs/architecture/namespace-scope.md):
-    // every stream to that subsystem is dead and every cached snapshot is
-    // pre-rebuild. Resume exactly as auth recovery does (minus the pause
-    // bookkeeping — auth never went invalid).
-    logInfo('[refresh] namespace scope changed — restarting streams', {
-      clusterId: payload.clusterId,
+    const clusterId = payload.clusterId.trim();
+    if (!clusterId) {
+      return;
+    }
+    const runtime = this.clusterRuntimes.get(clusterId);
+    resetPermissionDeniedScopedDomainStates(clusterId);
+    if (!runtime) {
+      return;
+    }
+    logInfo('[refresh] access changed — restarting cluster streams', { clusterId });
+    this.stopRuntimeStreaming(runtime, false);
+    runtime.forEachInFlight((details, key) => this.teardownInFlight(runtime, key, details));
+    runtime.clearAsyncStreamingBookkeeping();
+    runtime.clearBlockedStreaming();
+    runtime.clearAllStreamHealth();
+    this.resetRuntimePermissionEpoch(runtime);
+    runtime.forEachScopedDomain((domain, scope) => {
+      this.errorNotifier.clear(domain, scope);
+      runtime.markReconciliationFailed(domain, scope);
     });
-    // Permission-denied scopes are settled for the session — EXCEPT across a
-    // scope rebuild, which is a real permission epoch change: domains denied
-    // cluster-wide may now be served per-namespace. Clear the latches so the
-    // affected scopes re-ask (they hold no data, so nothing blanks).
-    resetPermissionDeniedScopedDomainStates();
-    this.resetAllRuntimePermissionEpochs();
-    this.incrementContextVersion();
-    // Suppress transient errors while the rebuilt subsystem starts serving.
-    this.errorNotifier.suppressNetworkErrors(6000);
-    this.clearAllBlockedStreaming();
-    this.clearAllStreamHealth();
-    this.errorNotifier.clearAll();
-    this.handleStreamingScopeChanges();
+    this.handleStreamingScopeChanges([runtime]);
   };
 
   private readonly handleResetViews = () => {
@@ -1989,14 +2019,14 @@ class RefreshOrchestrator {
   };
 
   // Re-evaluate streaming for all scoped domains when the orchestrator context changes.
-  private handleStreamingScopeChanges(): void {
+  private handleStreamingScopeChanges(runtimes = this.getAllRuntimes()): void {
     this.configs.forEach((config, domain) => {
       const streaming = config.streaming;
       if (!streaming) {
         return;
       }
 
-      this.getAllRuntimes().forEach((runtime) => {
+      runtimes.forEach((runtime) => {
         runtime.forEachEnabledScope(domain, (scope) => {
           const shouldStream = this.shouldStreamScope(domain, scope);
           const scopeRuntime = this.getRuntimeForScope(domain, scope);

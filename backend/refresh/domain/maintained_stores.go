@@ -93,11 +93,9 @@ func mmapFileName(dir, name string) string {
 // needed. It is the governor's Cold-tier serving transition: the stores' bulk column data
 // goes off-heap (OS-reclaimable page cache) while the subsystem keeps serving Build queries.
 //
-// It returns one closer per store, which the caller must hold for the cooled subsystem's
-// lifetime and call exactly once on re-warm/teardown (each closer is itself idempotent). On
-// ANY error — mkdir or any store's swap — it closes every mapping it already opened (reverse
-// order) and returns the error with NO closers, so the caller can safely fall back to a full
-// teardown with nothing left half-mapped.
+// It returns closers for every swapped store, including on partial failure.
+// The owner must retire serving before closing them; a swapped store still
+// references its mapping even if a later store fails to cool.
 func (r *Registry) CoolMaintainedStoresToMmap(dir string) ([]func() error, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("domain: cool mkdir %q: %w", dir, err)
@@ -106,11 +104,7 @@ func (r *Registry) CoolMaintainedStoresToMmap(dir string) ([]func() error, error
 	for _, ns := range r.maintainedSnapshot() {
 		closer, err := ns.store.SwapToMmap(mmapFileName(dir, ns.name))
 		if err != nil {
-			// Safe-degrade: unmap everything opened so far before reporting the failure.
-			for i := len(closers) - 1; i >= 0; i-- {
-				_ = closers[i]()
-			}
-			return nil, fmt.Errorf("cool %q: %w", ns.name, err)
+			return closers, fmt.Errorf("cool %q: %w", ns.name, err)
 		}
 		closers = append(closers, closer)
 	}

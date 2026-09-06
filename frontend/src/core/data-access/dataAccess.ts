@@ -85,12 +85,10 @@ export const requestData = async <T>({
   }
 };
 
-export const requestRefreshDomain = async ({
-  domain,
-  scope,
-  reason,
-  label,
-}: RefreshDomainRequest): Promise<DataRequestResult> => {
+const performRefreshDomainRequest = async (
+  { domain, scope, reason, label }: RefreshDomainRequest,
+  coalesce = false
+): Promise<DataRequestResult> => {
   const result = await requestData<void>({
     resource: domain,
     reason,
@@ -99,6 +97,7 @@ export const requestRefreshDomain = async ({
     scope,
     read: async (requestId) => {
       await refreshOrchestrator.fetchScopedDomain(domain, scope, {
+        ...(coalesce ? { coalesce: true } : {}),
         isManual: reason === 'user',
         streamSignal: reason === 'stream-signal',
         ...(requestId ? { correlationId: requestId } : {}),
@@ -112,6 +111,9 @@ export const requestRefreshDomain = async ({
   };
 };
 
+export const requestRefreshDomain = (request: RefreshDomainRequest): Promise<DataRequestResult> =>
+  performRefreshDomainRequest(request);
+
 export const requestRefreshDomainState = async <K extends RefreshDomain>({
   domain,
   scope,
@@ -120,10 +122,14 @@ export const requestRefreshDomainState = async <K extends RefreshDomain>({
   cleanup = true,
   preserveState = false,
 }: RefreshDomainStateRequest<K>): Promise<RefreshDomainStateResult<K>> => {
-  setRefreshDomainEnabled({ domain, scope, enabled: true, preserveState });
+  if (cleanup) {
+    acquireRefreshDomainLease({ domain, scope, preserveState });
+  } else {
+    setRefreshDomainEnabled({ domain, scope, enabled: true, preserveState });
+  }
 
   try {
-    const result = await requestRefreshDomain({ domain, scope, reason, label });
+    const result = await performRefreshDomainRequest({ domain, scope, reason, label }, true);
     if (result.status !== 'executed') {
       return {
         status: result.status,
@@ -137,7 +143,7 @@ export const requestRefreshDomainState = async <K extends RefreshDomain>({
     };
   } finally {
     if (cleanup) {
-      setRefreshDomainEnabled({ domain, scope, enabled: false, preserveState });
+      releaseRefreshDomainLease({ domain, scope, preserveState });
     }
   }
 };

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -147,7 +148,7 @@ func TestClusterSubsystemRebuildHelperPaths(t *testing.T) {
 		oldClients: &clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Cluster A"}},
 	}
 
-	clients, ok := rebuild.rebuildClients()
+	clients, ok := rebuild.rebuildClients(context.Background())
 	require.False(t, ok)
 	require.Nil(t, clients)
 
@@ -339,6 +340,13 @@ func TestClusterSubsystemRebuildRoutesReplacementBeforeStoppingPrevious(t *testi
 		Manager:        oldManager,
 		ResourceStream: oldStream,
 	})
+	catalogStopped := make(chan struct{})
+	app.Refresh.storeObjectCatalogEntry(clusterID, &objectCatalogEntry{
+		service: &objectcatalog.Service{},
+		owner:   app.Refresh.getRefreshSubsystem(clusterID),
+		cancel:  func() { close(catalogStopped) },
+		done:    catalogStopped,
+	})
 
 	newManager := refresh.NewManager(nil, nil, nil, nil, nil)
 	next := &system.Subsystem{Manager: newManager, ResourceStream: newStream}
@@ -355,9 +363,16 @@ func TestClusterSubsystemRebuildRoutesReplacementBeforeStoppingPrevious(t *testi
 	}
 	require.Same(t, newStream, resources.managerFor(clusterID),
 		"aggregate routing must publish the replacement before old stream shutdown can trigger resubscription")
+	select {
+	case <-catalogStopped:
+	default:
+		t.Error("old informer shutdown started before its catalog stopped")
+	}
 
 	oldHub.release()
 	require.True(t, <-result)
+	require.Nil(t, app.Refresh.objectCatalogServiceForCluster(clusterID),
+		"failed catalog startup for the replacement must not leave the previous catalog running")
 	app.Refresh.stopRefreshGeneration(clusterID, next)
 	app.Refresh.stopRefreshRuntimeContext()
 }

@@ -17,6 +17,7 @@ import (
 	refreshinformer "github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
@@ -84,6 +85,7 @@ type CatalogQueryCSVExport struct {
 
 type objectCatalogEntry struct {
 	service *objectcatalog.Service
+	owner   *system.Subsystem
 	cancel  context.CancelFunc
 	done    chan struct{}
 	meta    ClusterMeta
@@ -200,16 +202,21 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 	svc := objectcatalog.NewService(deps, nil)
 	ctx, cancel := context.WithCancel(a.CtxOrBackground())
 	done := make(chan struct{})
+	var bridges sync.WaitGroup
 	if subsystem.ResourceStream != nil {
 		catalogUpdates, cancelCatalogUpdates := svc.SubscribeStreaming()
+		bridges.Add(1)
 		go func() {
+			defer bridges.Done()
 			defer cancelCatalogUpdates()
 			runCatalogDoorbellBridge(ctx, catalogUpdates, subsystem.ResourceStream)
 		}()
 	}
 	if subsystem.AttentionIndex != nil {
 		finalizerUpdates, cancelFinalizerUpdates := svc.SubscribeFinalizerBlockers()
+		bridges.Add(1)
 		go func() {
+			defer bridges.Done()
 			defer cancelFinalizerUpdates()
 			runCatalogFinalizerBridge(ctx, finalizerUpdates, svc.FinalizerBlockers, subsystem.AttentionIndex)
 		}()
@@ -217,6 +224,7 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 
 	a.storeObjectCatalogEntry(target.meta.ID, &objectCatalogEntry{
 		service: svc,
+		owner:   subsystem,
 		cancel:  cancel,
 		done:    done,
 		meta:    target.meta,
@@ -227,7 +235,11 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 	}
 
 	go func() {
-		defer close(done)
+		defer func() {
+			cancel()
+			bridges.Wait()
+			close(done)
+		}()
 		// No cache wait here: the service starts immediately so discovery and the
 		// RBAC preflight overlap the informer factory's initial sync; sync() itself
 		// waits for caches just before the collect (deps.WaitForCaches above).
@@ -320,9 +332,13 @@ func (a *RefreshCoordinator) storeObjectCatalogEntry(clusterID string, entry *ob
 	if a.objectCatalogEntries == nil {
 		a.objectCatalogEntries = make(map[string]*objectCatalogEntry)
 	}
+	previous := a.objectCatalogEntries[clusterID]
 	a.objectCatalogEntries[clusterID] = entry
-	a.objectCatalogMu.Unlock()
 	a.resourceProjection.publishCatalogEntry(clusterID, entry)
+	a.objectCatalogMu.Unlock()
+	if previous != entry {
+		a.stopObjectCatalogEntry(previous)
+	}
 }
 
 func (a *RefreshCoordinator) clearObjectCatalogEntries() []*objectCatalogEntry {
@@ -332,16 +348,19 @@ func (a *RefreshCoordinator) clearObjectCatalogEntries() []*objectCatalogEntry {
 		entries = append(entries, entry)
 	}
 	a.objectCatalogEntries = make(map[string]*objectCatalogEntry)
-	a.objectCatalogMu.Unlock()
 	a.resourceProjection.clearCatalogEntries()
+	a.objectCatalogMu.Unlock()
 	return entries
 }
 
-func (a *RefreshCoordinator) removeObjectCatalogEntry(clusterID string) *objectCatalogEntry {
+func (a *RefreshCoordinator) removeObjectCatalogEntry(clusterID string, owner *system.Subsystem) *objectCatalogEntry {
 	a.objectCatalogMu.Lock()
+	defer a.objectCatalogMu.Unlock()
 	entry := a.objectCatalogEntries[clusterID]
+	if owner != nil && (entry == nil || entry.owner != owner) {
+		return nil
+	}
 	delete(a.objectCatalogEntries, clusterID)
-	a.objectCatalogMu.Unlock()
 	a.resourceProjection.removeCatalogEntry(clusterID)
 	return entry
 }
@@ -350,7 +369,10 @@ func (a *RefreshCoordinator) stopObjectCatalogForCluster(clusterID string) {
 	if a == nil || clusterID == "" {
 		return
 	}
-	entry := a.removeObjectCatalogEntry(clusterID)
+	a.stopObjectCatalogEntry(a.removeObjectCatalogEntry(clusterID, nil))
+}
+
+func (a *RefreshCoordinator) stopObjectCatalogEntry(entry *objectCatalogEntry) {
 	if entry == nil {
 		return
 	}

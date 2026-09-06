@@ -2,6 +2,7 @@ package backend
 
 import (
 	"encoding/gob"
+	"github.com/luxury-yacht/app/backend/refresh/system"
 	"os"
 	"path/filepath"
 	"testing"
@@ -61,18 +62,20 @@ func (s *spillFake) SwapToMmap(path string) (func() error, error) {
 func TestAppCloseCooledClosersRunsEachExactlyOnce(t *testing.T) {
 	app := newRefreshCoordinatorTestFixture(t)
 
+	subsystem := &system.Subsystem{Cooled: true}
+	app.Refresh.setRefreshSubsystem("cluster-1", subsystem)
 	var aCount, bCount int
-	app.Refresh.setCooledClosers("cluster-1", []func() error{
+	app.Refresh.setCooledClosers(subsystem, []func() error{
 		func() error { aCount++; return nil },
 		func() error { bCount++; return nil },
 	})
 
-	app.Refresh.closeCooledClosers("cluster-1")
+	app.Refresh.closeCooledClosers("cluster-1", subsystem)
 	require.Equal(t, 1, aCount)
 	require.Equal(t, 1, bCount)
 
 	// Second call: the closers were already taken, so this is a no-op (no double-unmap).
-	app.Refresh.closeCooledClosers("cluster-1")
+	app.Refresh.closeCooledClosers("cluster-1", subsystem)
 	require.Equal(t, 1, aCount, "closer must not run twice")
 	require.Equal(t, 1, bCount, "closer must not run twice")
 }
@@ -182,4 +185,20 @@ func TestResetSpillRootForFormat(t *testing.T) {
 	app.Refresh.resetSpillRootForFormat()
 	require.NoFileExists(t, filepath.Join(dir, "namespace-config.spill"),
 		"a format change must clear the incompatible spill")
+}
+
+func TestRetiringGenerationClosesOnlyItsOwnMappings(t *testing.T) {
+	app := newRefreshCoordinatorTestFixture(t)
+	old, next := &system.Subsystem{Cooled: true}, &system.Subsystem{Cooled: true}
+	oldClosed, nextClosed := 0, 0
+	app.Refresh.setRefreshSubsystem("cluster-a", old)
+	app.Refresh.setRefreshSubsystem("cluster-a", next)
+	app.Refresh.setCooledClosers(old, []func() error{func() error { oldClosed++; return nil }})
+	app.Refresh.setCooledClosers(next, []func() error{func() error { nextClosed++; return nil }})
+	app.Refresh.stopRefreshGeneration("cluster-a", old)
+	require.Equal(t, 1, oldClosed)
+	require.Zero(t, nextClosed)
+	app.Refresh.stopRefreshGeneration("cluster-a", next)
+	require.Equal(t, 1, oldClosed)
+	require.Equal(t, 1, nextClosed)
 }

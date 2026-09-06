@@ -27,12 +27,17 @@ func newClusterOperationCoordinator() *clusterOperationCoordinator {
 	}
 }
 
-// run executes fn under per-cluster singleflight semantics.
-func (c *clusterOperationCoordinator) run(
-	parent context.Context,
-	clusterID string,
-	fn func(context.Context) error,
-) error {
+// run gives foreground operations priority over older work for the same cluster.
+func (c *clusterOperationCoordinator) run(parent context.Context, clusterID string, fn func(context.Context) error) error {
+	return c.runWithAdmission(parent, clusterID, fn, true)
+}
+
+// runWhenIdle skips a busy cluster. The periodic caller retains retry ownership.
+func (c *clusterOperationCoordinator) runWhenIdle(parent context.Context, clusterID string, fn func(context.Context) error) error {
+	return c.runWithAdmission(parent, clusterID, fn, false)
+}
+
+func (c *clusterOperationCoordinator) runWithAdmission(parent context.Context, clusterID string, fn func(context.Context) error, supersede bool) error {
 	if fn == nil {
 		return nil
 	}
@@ -43,9 +48,9 @@ func (c *clusterOperationCoordinator) run(
 		parent = context.Background()
 	}
 
-	slot, token, opCtx, cancel := c.begin(parent, clusterID)
+	slot, token, opCtx, cancel := c.begin(parent, clusterID, supersede)
 	if slot == nil {
-		return fn(opCtx)
+		return nil
 	}
 	defer c.end(clusterID, slot, token, cancel)
 
@@ -61,6 +66,7 @@ func (c *clusterOperationCoordinator) run(
 func (c *clusterOperationCoordinator) begin(
 	parent context.Context,
 	clusterID string,
+	supersede bool,
 ) (*clusterOperationSlot, uint64, context.Context, context.CancelFunc) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -72,6 +78,9 @@ func (c *clusterOperationCoordinator) begin(
 	}
 
 	if slot.cancel != nil {
+		if !supersede {
+			return nil, 0, nil, nil
+		}
 		slot.cancel()
 	}
 
@@ -102,11 +111,15 @@ func (c *clusterOperationCoordinator) end(
 	slot.cancel = nil
 }
 
-func (m *ClusterRuntimeManager) runClusterOperation(
-	ctx context.Context,
-	clusterID string,
-	fn func(context.Context) error,
-) error {
+func (m *ClusterRuntimeManager) runClusterOperation(ctx context.Context, clusterID string, fn func(context.Context) error) error {
+	return m.runClusterOperationWithAdmission(ctx, clusterID, fn, true)
+}
+
+func (m *ClusterRuntimeManager) runBackgroundClusterOperation(ctx context.Context, clusterID string, fn func(context.Context) error) error {
+	return m.runClusterOperationWithAdmission(ctx, clusterID, fn, false)
+}
+
+func (m *ClusterRuntimeManager) runClusterOperationWithAdmission(ctx context.Context, clusterID string, fn func(context.Context) error, supersede bool) error {
 	if fn == nil {
 		return nil
 	}
@@ -123,7 +136,12 @@ func (m *ClusterRuntimeManager) runClusterOperation(
 		}
 		return err
 	}
-	err := m.clusterOps.run(opCtx, clusterID, fn)
+	var err error
+	if supersede {
+		err = m.clusterOps.run(opCtx, clusterID, fn)
+	} else {
+		err = m.clusterOps.runWhenIdle(opCtx, clusterID, fn)
+	}
 	if errors.Is(err, context.Canceled) {
 		return nil
 	}

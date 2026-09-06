@@ -7,6 +7,7 @@
 
 import { useSyncExternalStore } from 'react';
 import type { SnapshotStats } from './client';
+import { parseClusterScope } from './clusterScope';
 import type { RefreshSourceClock } from './domainRegistry';
 import type { DomainPayloadMap, RefreshDomain } from './types';
 
@@ -27,9 +28,8 @@ export interface DomainSnapshotState<TPayload> {
   // fetch and CANNOT be a signal key — that was the echo-refetch bug).
   signalVersions?: Partial<Record<RefreshSourceClock, string>>;
   // The backend refused this scope for lack of RBAC permission (typed 403).
-  // TERMINAL for the session: background refetches skip the scope entirely
-  // (permission is checked once; recovery is an app restart). Cleared only by
-  // a successful fetch or a scoped-state reset.
+  // Background refetches skip denied scopes until manual refresh or the owning
+  // cluster's auth/scope/permission recovery starts a new permission epoch.
   permissionDenied?: boolean;
   checksum?: string;
   etag?: string;
@@ -309,22 +309,17 @@ export const resetAllScopedDomainStates = <K extends RefreshDomain>(domain: K): 
   notify();
 };
 
-/**
- * Drops every scoped domain state latched permission-denied, so those scopes
- * re-ask on their next (non-manual) refresh. Permission-denied is normally
- * settled for the session, but a namespace-scope rebuild
- * (docs/architecture/namespace-scope.md) is a real permission epoch change: domains
- * denied cluster-wide may now be served per-namespace. Denied scopes hold no
- * data, so dropping them never blanks a rendered view; every other scope
- * state is untouched.
- */
-export const resetPermissionDeniedScopedDomainStates = (): void => {
+/** Resets denied snapshots only for the cluster whose permission epoch changed. */
+export const resetPermissionDeniedScopedDomainStates = (clusterId: string): void => {
+  if (!clusterId.trim()) {
+    return;
+  }
   const denied: Array<{ domain: RefreshDomain; scope: string }> = [];
   for (const [domain, scopes] of Object.entries(state.scopedDomains)) {
     for (const [scope, snapshot] of Object.entries(
       scopes as Record<string, DomainSnapshotState<unknown>>
     )) {
-      if (snapshot.permissionDenied) {
+      if (snapshot.permissionDenied && parseClusterScope(scope).clusterId === clusterId) {
         denied.push({ domain: domain as RefreshDomain, scope });
       }
     }

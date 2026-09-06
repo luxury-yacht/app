@@ -105,7 +105,8 @@ describe('AuthErrorContext', () => {
       root.unmount();
     });
 
-    expect(runtimeHarness.disposerCalls).toHaveLength(8);
+    expect(runtimeHarness.disposerCalls).toHaveLength(9);
+    expect(runtimeHarness.disposerCalls).toContain('cluster:permissions:changed');
     expect(runtimeHarness.disposerCalls).toContain('cluster:auth:failed');
     expect(runtimeHarness.disposerCalls).toContain('cluster:auth:recovering');
     expect(runtimeHarness.disposerCalls).toContain('cluster:auth:recovered');

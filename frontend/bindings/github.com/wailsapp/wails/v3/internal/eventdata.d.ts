@@ -25,6 +25,7 @@ declare module "@wailsio/runtime" {
             "cluster:health:degraded": backend$0.ClusterHealthEvent;
             "cluster:health:healthy": backend$0.ClusterHealthEvent;
             "cluster:lifecycle": backend$0.ClusterLifecycleEvent;
+            "cluster:permissions:changed": backend$0.ClusterPermissionsChangedEvent;
             "cluster:scope:changed": backend$0.ClusterScopeChangedEvent;
             "debug:open-inspector": void;
             "debug:toggle-error-overlay": void;

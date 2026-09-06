@@ -135,8 +135,7 @@ func requestedNamespaceSet(desc resourceDescriptor, namespaces []string) map[str
 // this kind. It serializes against full syncs the same way watchNotifier.flush does.
 func (s *Service) applyIngestCatalogSummary(gvr schema.GroupVersionResource, summary Summary, deleted bool) {
 	if !s.syncMu.TryLock() {
-		// A full sync is in progress and will reconcile this kind from CatalogRows;
-		// dropping the incremental is safe because the sync reads the same store.
+		s.queueIngestReconciliation(gvr)
 		return
 	}
 	defer s.syncMu.Unlock()
@@ -177,13 +176,14 @@ func (s *Service) applyIngestCatalogSummary(gvr schema.GroupVersionResource, sum
 
 func (s *Service) replaceIngestCatalogSummaries(gvr schema.GroupVersionResource, rows []Summary) {
 	if !s.syncMu.TryLock() {
+		s.queueIngestReconciliation(gvr)
 		return
 	}
 	defer s.syncMu.Unlock()
-	if s.syncInProgress.Load() {
-		return
-	}
+	s.replaceIngestCatalogSummariesLocked(gvr, rows)
+}
 
+func (s *Service) replaceIngestCatalogSummariesLocked(gvr schema.GroupVersionResource, rows []Summary) {
 	desc, ok := s.resolveIngestDescriptor(gvr)
 	if !ok {
 		return
@@ -286,4 +286,66 @@ func (s ingestCatalogSink) Replace(rows []interface{}) {
 		summaries = append(summaries, summary)
 	}
 	s.service.replaceIngestCatalogSummaries(s.gvr, summaries)
+}
+
+// Coalesce contention by kind, then reread its authoritative store after the
+// callback releases the store lock. Waiting for syncMu inside a sink would
+// invert the full-sync -> source-store lock order.
+func (s *Service) queueIngestReconciliation(gvr schema.GroupVersionResource) {
+	s.ingestPendingMu.Lock()
+	defer s.ingestPendingMu.Unlock()
+	if s.ingestStopped || s.deps.IngestSource == nil {
+		return
+	}
+	if s.ingestPending == nil {
+		s.ingestPending = make(map[schema.GroupVersionResource]struct{})
+	}
+	s.ingestPending[gvr] = struct{}{}
+	if s.ingestDrainDone != nil {
+		return
+	}
+	done := make(chan struct{})
+	s.ingestDrainDone = done
+	go s.drainIngestReconciliation(done)
+}
+
+func (s *Service) drainIngestReconciliation(done chan struct{}) {
+	defer close(done)
+	for {
+		s.ingestPendingMu.Lock()
+		if s.ingestStopped || len(s.ingestPending) == 0 {
+			s.ingestDrainDone = nil
+			s.ingestPendingMu.Unlock()
+			return
+		}
+		var gvr schema.GroupVersionResource
+		for candidate := range s.ingestPending {
+			gvr = candidate
+			break
+		}
+		delete(s.ingestPending, gvr)
+		s.ingestPendingMu.Unlock()
+
+		s.syncMu.Lock()
+		rows := s.deps.IngestSource.CatalogRows(gvr)
+		summaries := make([]Summary, 0, len(rows))
+		for _, row := range rows {
+			if summary, ok := row.(Summary); ok {
+				summaries = append(summaries, summary)
+			}
+		}
+		s.replaceIngestCatalogSummariesLocked(gvr, summaries)
+		s.syncMu.Unlock()
+	}
+}
+
+func (s *Service) stopIngestReconciliation() {
+	s.ingestPendingMu.Lock()
+	s.ingestStopped = true
+	s.ingestPending = nil
+	done := s.ingestDrainDone
+	s.ingestPendingMu.Unlock()
+	if done != nil {
+		<-done
+	}
 }
