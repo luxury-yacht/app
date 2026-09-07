@@ -40,7 +40,7 @@ type Registry struct {
 	focusWindow            func(string) bool
 	emitWindowEvent        func(string, string, any) bool
 	windowGeometry         func(string) (geometry, bool)
-	panelScreenWorkAreas   func() []application.Rect
+	screenWorkAreas        func() []application.Rect
 	closeMu                sync.Mutex
 	authorizedClose        map[string]struct{}
 	workspaceReady         map[string]struct{}
@@ -207,7 +207,7 @@ func NewRegistry(
 		registry.workspace = backend.PanelWorkspaceDirectory()
 	}
 	bindApplicationWindowOperations(registry, app)
-	registry.panelScreenWorkAreas = func() []application.Rect {
+	registry.screenWorkAreas = func() []application.Rect {
 		if app == nil || app.Screen == nil {
 			return nil
 		}
@@ -271,7 +271,7 @@ func (r *Registry) BeginPanelWindowOpen(
 	return descriptor, nil
 }
 
-func (r *Registry) positionPanelWindowAtTransferredBounds(
+func (r *Registry) positionWindowAtTransferredBounds(
 	options *application.WebviewWindowOptions,
 	bounds panelwindow.WindowBounds,
 	anchor *panelwindow.WindowPoint,
@@ -279,22 +279,24 @@ func (r *Registry) positionPanelWindowAtTransferredBounds(
 	if options == nil {
 		return false
 	}
+	// Transferred bounds are absolute, not relative to the source screen.
+	options.Screen = nil
 	options.InitialPosition = application.WindowXY
 	options.X = bounds.X
 	options.Y = bounds.Y
-	if r.panelScreenWorkAreas == nil {
+	if r.screenWorkAreas == nil {
 		return true
 	}
 	anchorX, anchorY := bounds.X, bounds.Y
 	if anchor != nil {
 		anchorX, anchorY = anchor.X, anchor.Y
 	}
-	for _, area := range r.panelScreenWorkAreas() {
+	for _, area := range r.screenWorkAreas() {
 		if anchorX < area.X || anchorY < area.Y ||
 			anchorX >= area.X+area.Width || anchorY >= area.Y+area.Height {
 			continue
 		}
-		constrainPanelWindowOptions(options, area)
+		constrainWindowOptions(options, area)
 		return true
 	}
 	return true
@@ -1058,7 +1060,7 @@ func panelWindowOptionsForPlatform(
 	return options
 }
 
-func constrainPanelWindowOptions(options *application.WebviewWindowOptions, workArea application.Rect) {
+func constrainWindowOptions(options *application.WebviewWindowOptions, workArea application.Rect) {
 	if options == nil || workArea.Width <= 0 || workArea.Height <= 0 {
 		return
 	}
@@ -1077,7 +1079,7 @@ func positionPanelWindowOptions(options *application.WebviewWindowOptions, owner
 	options.X = owner.AbsoluteX + (owner.Width-options.Width)/2
 	options.Y = owner.AbsoluteY + (owner.Height-options.Height)/2
 	if owner.Screen != nil {
-		constrainPanelWindowOptions(options, owner.Screen.WorkArea)
+		constrainWindowOptions(options, owner.Screen.WorkArea)
 	}
 	return true
 }
@@ -1139,7 +1141,7 @@ func (r *Registry) transferredPanelWindowOptions(windowName string, snapshot Pan
 	if snapshot.InitialBounds != nil {
 		positioned := false
 		if snapshot.UseInitialPosition {
-			positioned = r.positionPanelWindowAtTransferredBounds(
+			positioned = r.positionWindowAtTransferredBounds(
 				&options,
 				*snapshot.InitialBounds,
 				snapshot.InitialPositionAnchor,

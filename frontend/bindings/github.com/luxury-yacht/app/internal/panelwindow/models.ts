@@ -18,6 +18,7 @@ export interface ClusterTabTransferRequest {
     "targetWindowName": string;
     "clusterId": string;
     "targetIndex": number;
+    "dropPosition"?: WindowPoint | null;
 }
 
 export interface ClusterViewSnapshot {

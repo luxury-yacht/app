@@ -23,6 +23,9 @@ const mocks = vi.hoisted(() => ({
     | ((group: never, position: 'right' | 'bottom' | 'floating') => boolean),
   externalTabDrop: null as null | ((payload: never, group: string, index: number) => void),
   tabTearOff: null as null | ((payload: never, cursor: { x: number; y: number }) => void),
+  clusterTearOff: null as null | ((payload: never, cursor: { x: number; y: number }) => void),
+  selectedClusterIds: ['cluster-1'],
+  requestClusterTransfer: vi.fn(async (_caller: string, _request: unknown) => undefined),
   canStartTabDrag: null as null | ((panelId: string) => boolean),
   tabDragIdentity: null as null | {
     windowName: string;
@@ -104,6 +107,7 @@ vi.mock('@/core/panel-windows', async (importOriginal) => {
     authorizePanelObjectOpen: mocks.authorizeObjectOpen,
     authorizePanelTabClose: mocks.authorizeTabClose,
     requestPanelTabTransfer: mocks.requestTabTransfer,
+    requestClusterTabTransfer: mocks.requestClusterTransfer,
     acceptPanelTabTransfer: mocks.acceptTabTransfer,
     failPanelTabTransfer: mocks.failTabTransfer,
     focusPanelWindow: mocks.focusPanelWindow,
@@ -183,7 +187,7 @@ vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
       mocks.clusterPreflight = preflight;
       return () => undefined;
     },
-    selectedClusterIds: ['cluster-1'],
+    selectedClusterIds: mocks.selectedClusterIds,
     selectedKubeconfigs: ['cluster-1'],
     getClusterMeta: (value: string) => ({ id: value, name: value }),
     setActiveKubeconfig: vi.fn(),
@@ -210,6 +214,7 @@ vi.mock('@/ui/dockable', () => ({
     onGroupMoveRequest,
     onExternalTabDrop,
     onTabTearOff,
+    onClusterTabTearOff,
     tabDragIdentity,
     canStartTabDrag,
   }: {
@@ -217,12 +222,14 @@ vi.mock('@/ui/dockable', () => ({
     onGroupMoveRequest: typeof mocks.moveRequest;
     onExternalTabDrop: typeof mocks.externalTabDrop;
     onTabTearOff: typeof mocks.tabTearOff;
+    onClusterTabTearOff: typeof mocks.clusterTearOff;
     tabDragIdentity: typeof mocks.tabDragIdentity;
     canStartTabDrag: typeof mocks.canStartTabDrag;
   }) => {
     mocks.moveRequest = onGroupMoveRequest;
     mocks.externalTabDrop = onExternalTabDrop;
     mocks.tabTearOff = onTabTearOff;
+    mocks.clusterTearOff = onClusterTabTearOff;
     mocks.tabDragIdentity = tabDragIdentity;
     mocks.canStartTabDrag = canStartTabDrag;
     return children;
@@ -243,6 +250,7 @@ describe('WorkspacePanelCoordinator', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mocks.blocker = null;
+    mocks.selectedClusterIds = ['cluster-1'];
     mocks.openPanels.clear();
     mocks.openPanels.set('panel-a', objectRef);
     mocks.nativeLocations.clear();
@@ -271,6 +279,98 @@ describe('WorkspacePanelCoordinator', () => {
     await act(async () => root.unmount());
     container.remove();
     vi.useRealTimers();
+  });
+
+  it.each([
+    { name: 'last cluster tab', clusters: ['cluster-1'], source: 'workspace-1', allowed: true },
+    { name: 'empty window', clusters: [], source: 'workspace-1', allowed: false },
+    {
+      name: 'multiple cluster tabs',
+      clusters: ['cluster-1', 'cluster-2'],
+      source: 'workspace-1',
+      allowed: true,
+    },
+    {
+      name: 'foreign source window',
+      clusters: ['cluster-1', 'cluster-2'],
+      source: 'workspace-2',
+      allowed: false,
+    },
+    {
+      name: 'removed cluster tab',
+      clusters: ['cluster-2', 'cluster-3'],
+      source: 'workspace-1',
+      allowed: false,
+    },
+  ])('gates cluster tear-off for $name', async ({ clusters, source, allowed }) => {
+    mocks.selectedClusterIds = clusters;
+    await act(async () =>
+      root.render(
+        <WorkspacePanelCoordinator>
+          <div />
+        </WorkspacePanelCoordinator>
+      )
+    );
+    expect(mocks.clusterTearOff).toBeTypeOf('function');
+    await act(async () =>
+      mocks.clusterTearOff?.(
+        {
+          kind: 'cluster-tab',
+          clusterId: 'cluster-1',
+          selection: 'cluster-1',
+          sourceWindowName: source,
+        } as never,
+        { x: 0, y: 0 }
+      )
+    );
+
+    if (allowed) {
+      expect(mocks.requestClusterTransfer).toHaveBeenCalledWith(
+        'workspace-1',
+        expect.objectContaining({
+          sourceWindowName: 'workspace-1',
+          targetWindowName: '',
+          clusterId: 'cluster-1',
+        })
+      );
+    } else {
+      expect(mocks.requestClusterTransfer).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([
+    { x: 1925, y: 100 },
+    { x: -1100, y: 200 },
+    { x: 0, y: 0 },
+  ])('preserves cluster tear-off screen position $x, $y', async (cursor) => {
+    mocks.selectedClusterIds = ['cluster-1', 'cluster-2'];
+    await act(async () =>
+      root.render(
+        <WorkspacePanelCoordinator>
+          <div />
+        </WorkspacePanelCoordinator>
+      )
+    );
+    await act(async () =>
+      mocks.clusterTearOff?.(
+        {
+          kind: 'cluster-tab',
+          clusterId: 'cluster-1',
+          selection: 'cluster-1',
+          sourceWindowName: 'workspace-1',
+        } as never,
+        cursor
+      )
+    );
+    expect(mocks.requestClusterTransfer).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({
+        sourceWindowName: 'workspace-1',
+        targetWindowName: '',
+        clusterId: 'cluster-1',
+        dropPosition: cursor,
+      })
+    );
   });
 
   it('closes an app view without guarding or closing cluster panel windows', async () => {

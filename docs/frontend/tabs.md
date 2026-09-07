@@ -48,6 +48,24 @@ also use the shared drag coordinator.
   cross-window moves carrying stable cluster ID, selection, and source window.
   The destination validates the complete payload again at drop time. MIME
   markers control the preview, not native transfer authorization.
+- On macOS, the shared native drag callback suppresses AppKit's failed-drop
+  return animation for both cluster-tab and dockable-tab MIME markers, whether
+  exposed as pasteboard types or wrapped in WebKit custom data. An outside drop
+  uses `dropEffect: none` to trigger tear-off, so its phantom tab must not return
+  to the source strip. Keep native policy tests aligned with both tab kinds.
+- A cluster's last tab can move to an existing or new app window. Close the
+  source app window only after the destination acknowledges reconstruction and
+  the backend commits the transfer, and only if the source's
+  authoritative cluster tab set is empty. A failed or cancelled transfer keeps
+  the source open. The synthetic Global tab does not keep an empty source open.
+  Release the transfer lock before native closure because close hooks can run
+  synchronously. The context-menu move follows the same transfer lifecycle.
+- Cluster tear-offs carry an optional screen-space drop point through the native
+  request. Presence distinguishes a drag at `(0, 0)` from a menu action without a
+  drop point. Reuse panel placement to choose the pointer's monitor, constrain
+  the window to its work area, and position the title bar near the pointer.
+  A dragged app window opens unmaximised; a menu-created window keeps the usual
+  source-window cascade behavior.
 - Reorder, cross-strip move, and empty-space drop behavior belongs in the
   consumer wrapper, not the base `Tabs` component.
 - Dockable tab movement must preserve panel identity, group membership, active

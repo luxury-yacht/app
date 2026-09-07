@@ -7,7 +7,12 @@ const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   open: vi.fn(),
   move: vi.fn(async () => undefined),
-  items: [] as { label?: string; onClick?: () => void }[],
+  clusters: ['production'],
+  moveCluster: vi.fn(async () => undefined),
+  items: [] as { label?: string; disabled?: boolean; onClick?: () => void }[],
+}));
+vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({ selectedClusterIds: mocks.clusters }),
 }));
 vi.mock('@/core/app-state-access', () => ({ readPanelWorkspace: mocks.read }));
 vi.mock('@/core/desktop-runtime', () => ({ getWindowIdentity: () => 'workspace-2' }));
@@ -21,7 +26,7 @@ vi.mock('@/shared/components/ContextMenu', () => ({
   },
 }));
 vi.mock('./index', () => ({
-  requestClusterTabTransfer: vi.fn(),
+  requestClusterTabTransfer: mocks.moveCluster,
   requestPanelTabTransfer: mocks.move,
   onPanelWorkspaceChanged: () => () => undefined,
 }));
@@ -29,6 +34,7 @@ let root: ReactDOM.Root;
 afterEach(async () => {
   await act(async () => root?.unmount());
   vi.clearAllMocks();
+  mocks.clusters = ['production'];
 });
 it('shows shared panels and requests a guarded move from the actual renderer', async () => {
   const tab = {
@@ -85,4 +91,38 @@ it('shows shared panels and requests a guarded move from the actual renderer', a
       tab,
     })
   );
+});
+
+it.each([
+  { clusters: ['production'], disabled: false },
+  { clusters: ['production', 'staging'], disabled: false },
+  { clusters: ['staging', 'development'], disabled: true },
+])('gates the new-window menu action for $clusters', async ({ clusters, disabled }) => {
+  mocks.clusters = clusters;
+  mocks.read.mockResolvedValue({ revision: 1, panels: [] });
+  root = ReactDOM.createRoot(document.createElement('div'));
+  await act(async () =>
+    root.render(
+      <ClusterPanelsMenu
+        clusterId="production"
+        clusterName="Production"
+        position={{ x: 10, y: 10 }}
+        onClose={() => undefined}
+      />
+    )
+  );
+  const move = mocks.items.find((item) => item.label === 'Move cluster to new window');
+  expect(move).toBeDefined();
+  expect(Boolean(move?.disabled)).toBe(disabled);
+  if (!disabled) {
+    await act(async () => move?.onClick?.());
+    expect(mocks.moveCluster).toHaveBeenCalledWith(
+      'workspace-2',
+      expect.objectContaining({
+        clusterId: 'production',
+        sourceWindowName: 'workspace-2',
+        targetWindowName: '',
+      })
+    );
+  }
 });

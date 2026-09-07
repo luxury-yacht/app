@@ -13,6 +13,8 @@ package appwindow
 
 static NSString *const dockableTabDragPasteboardType =
 	@"application/x-luxury-yacht-tab-dockable-tab";
+static NSString *const clusterTabDragPasteboardType =
+	@"application/x-luxury-yacht-tab-cluster-tab";
 static NSString *const webKitCustomPasteboardDataType =
 	@"com.apple.WebKit.custom-pasteboard-data";
 
@@ -26,9 +28,9 @@ typedef void (*DraggingSessionWillBegin)(
 static DraggingSessionWillBegin originalDraggingSessionWillBegin;
 static BOOL installedDraggingSessionWillBegin;
 
-static BOOL pasteboardContainsDockableTabMarker(id pasteboard) {
+static BOOL pasteboardContainsTabMarker(id pasteboard, NSString *marker) {
 	if ([pasteboard respondsToSelector:@selector(types)] &&
-		[[pasteboard types] containsObject:dockableTabDragPasteboardType]) {
+		[[pasteboard types] containsObject:marker]) {
 		return YES;
 	}
 	// WebKit wraps nonstandard DataTransfer types in this binary envelope
@@ -37,7 +39,7 @@ static BOOL pasteboardContainsDockableTabMarker(id pasteboard) {
 		return NO;
 	}
 	NSData *customData = [pasteboard dataForType:webKitCustomPasteboardDataType];
-	NSData *markerData = [dockableTabDragPasteboardType
+	NSData *markerData = [marker
 		dataUsingEncoding:NSUTF8StringEncoding];
 	if (customData == nil || markerData == nil || markerData.length == 0) {
 		return NO;
@@ -47,21 +49,23 @@ static BOOL pasteboardContainsDockableTabMarker(id pasteboard) {
 		range:NSMakeRange(0, customData.length)].location != NSNotFound;
 }
 
-static BOOL isDockableTabDraggingSession(id session) {
+static BOOL isTabDraggingSession(id session) {
 	if (![session respondsToSelector:@selector(draggingPasteboard)]) {
 		return NO;
 	}
-	return pasteboardContainsDockableTabMarker([session draggingPasteboard]);
+	id pasteboard = [session draggingPasteboard];
+	return pasteboardContainsTabMarker(pasteboard, dockableTabDragPasteboardType) ||
+		pasteboardContainsTabMarker(pasteboard, clusterTabDragPasteboardType);
 }
 
-static void applyDockableTabDragSessionPolicy(id session) {
-	if (isDockableTabDraggingSession(session) &&
+static void applyTabDragSessionPolicy(id session) {
+	if (isTabDraggingSession(session) &&
 		[session respondsToSelector:@selector(setAnimatesToStartingPositionsOnCancelOrFail:)]) {
 		[session setAnimatesToStartingPositionsOnCancelOrFail:NO];
 	}
 }
 
-static void dockableTabDraggingSessionWillBegin(
+static void tabDraggingSessionWillBegin(
 	id receiver,
 	SEL selector,
 	NSDraggingSession *session,
@@ -70,15 +74,15 @@ static void dockableTabDraggingSessionWillBegin(
 	if (originalDraggingSessionWillBegin != NULL) {
 		originalDraggingSessionWillBegin(receiver, selector, session, screenPoint);
 	}
-	applyDockableTabDragSessionPolicy(session);
+	applyTabDragSessionPolicy(session);
 }
 
-@interface DockableTabDragSourceCallbackEncoding : NSObject
+@interface TabDragSourceCallbackEncoding : NSObject
 - (void)draggingSession:(NSDraggingSession *)session
 	willBeginAtPoint:(NSPoint)screenPoint;
 @end
 
-@implementation DockableTabDragSourceCallbackEncoding
+@implementation TabDragSourceCallbackEncoding
 - (void)draggingSession:(NSDraggingSession *)session
 	willBeginAtPoint:(NSPoint)screenPoint {
 	(void)session;
@@ -104,7 +108,7 @@ static BOOL installDraggingSessionWillBeginOverride(void) {
 	Class webViewClass = [WKWebView class];
 	SEL selector = @selector(draggingSession:willBeginAtPoint:);
 	Method callbackEncodingMethod = class_getInstanceMethod(
-		[DockableTabDragSourceCallbackEncoding class],
+		[TabDragSourceCallbackEncoding class],
 		selector
 	);
 	if (callbackEncodingMethod == NULL) {
@@ -114,14 +118,14 @@ static BOOL installDraggingSessionWillBeginOverride(void) {
 	IMP current = inheritedOrOwned == NULL
 		? NULL
 		: method_getImplementation(inheritedOrOwned);
-	if (current == (IMP)dockableTabDraggingSessionWillBegin) {
+	if (current == (IMP)tabDraggingSessionWillBegin) {
 		return YES;
 	}
 	const char *encoding = method_getTypeEncoding(callbackEncodingMethod);
 	if (class_addMethod(
 		webViewClass,
 		selector,
-		(IMP)dockableTabDraggingSessionWillBegin,
+		(IMP)tabDraggingSessionWillBegin,
 		encoding
 	)) {
 		originalDraggingSessionWillBegin = (DraggingSessionWillBegin)current;
@@ -133,7 +137,7 @@ static BOOL installDraggingSessionWillBeginOverride(void) {
 	}
 	originalDraggingSessionWillBegin =
 		(DraggingSessionWillBegin)method_getImplementation(owned);
-	method_setImplementation(owned, (IMP)dockableTabDraggingSessionWillBegin);
+	method_setImplementation(owned, (IMP)tabDraggingSessionWillBegin);
 	return YES;
 }
 
@@ -149,12 +153,12 @@ static void configure_native_tab_drag_animation(void) {
 	}
 }
 
-@interface DockableTabDragPasteboardProbe : NSObject
+@interface TabDragPasteboardProbe : NSObject
 @property(nonatomic, retain) NSArray<NSPasteboardType> *types;
 @property(nonatomic, retain) NSData *customData;
 @end
 
-@implementation DockableTabDragPasteboardProbe
+@implementation TabDragPasteboardProbe
 - (NSData *)dataForType:(NSPasteboardType)type {
 	return [type isEqualToString:webKitCustomPasteboardDataType] ? self.customData : nil;
 }
@@ -165,37 +169,37 @@ static void configure_native_tab_drag_animation(void) {
 }
 @end
 
-@interface DockableTabDragSessionProbe : NSObject
-@property(nonatomic, retain) DockableTabDragPasteboardProbe *draggingPasteboard;
+@interface TabDragSessionProbe : NSObject
+@property(nonatomic, retain) TabDragPasteboardProbe *draggingPasteboard;
 @property(nonatomic) BOOL animatesToStartingPositionsOnCancelOrFail;
 @end
 
-@implementation DockableTabDragSessionProbe
+@implementation TabDragSessionProbe
 - (void)dealloc {
 	self.draggingPasteboard = nil;
 	[super dealloc];
 }
 @end
 
-static DockableTabDragSessionProbe *newSessionProbe(
+static TabDragSessionProbe *newSessionProbe(
 	NSArray<NSPasteboardType> *types,
 	NSData *customData
 ) {
-	DockableTabDragPasteboardProbe *pasteboard =
-		[[DockableTabDragPasteboardProbe alloc] init];
+	TabDragPasteboardProbe *pasteboard =
+		[[TabDragPasteboardProbe alloc] init];
 	pasteboard.types = types;
 	pasteboard.customData = customData;
-	DockableTabDragSessionProbe *session = [[DockableTabDragSessionProbe alloc] init];
+	TabDragSessionProbe *session = [[TabDragSessionProbe alloc] init];
 	session.draggingPasteboard = pasteboard;
 	session.animatesToStartingPositionsOnCancelOrFail = YES;
 	[pasteboard release];
 	return session;
 }
 
-static BOOL callbackSuppressesSession(DockableTabDragSessionProbe *session) {
+static BOOL callbackSuppressesSession(TabDragSessionProbe *session) {
 	DraggingSessionWillBegin savedOriginal = originalDraggingSessionWillBegin;
 	originalDraggingSessionWillBegin = NULL;
-	dockableTabDraggingSessionWillBegin(
+	tabDraggingSessionWillBegin(
 		nil,
 		@selector(draggingSession:willBeginAtPoint:),
 		(id)session,
@@ -205,62 +209,46 @@ static BOOL callbackSuppressesSession(DockableTabDragSessionProbe *session) {
 	return !session.animatesToStartingPositionsOnCancelOrFail;
 }
 
-static bool native_tab_drag_snap_back_policy_probe(void) {
-	DockableTabDragSessionProbe *dockable = newSessionProbe(
-		@[dockableTabDragPasteboardType],
-		nil
-	);
-	DockableTabDragSessionProbe *unrelated = newSessionProbe(
-		@[@"application/x-luxury-yacht-unrelated-drag"],
-		nil
-	);
-	BOOL passed = callbackSuppressesSession(dockable) &&
-		!callbackSuppressesSession(unrelated);
-	[dockable release];
-	[unrelated release];
-	return passed;
+static bool native_tab_drag_snap_back_policy_probe(
+	const char *mimeType,
+	bool webKitCustomData
+) {
+	NSString *marker = [NSString stringWithUTF8String:mimeType];
+	NSArray<NSPasteboardType> *types = @[marker];
+	NSData *customData = nil;
+	if (webKitCustomData) {
+		types = @[webKitCustomPasteboardDataType, @"Apple WebKit dummy pasteboard type"];
+		customData = [[NSString stringWithFormat:
+			@"binary-prefix-%@-binary-suffix", marker] dataUsingEncoding:NSUTF8StringEncoding];
+	}
+	TabDragSessionProbe *session = newSessionProbe(types, customData);
+	BOOL suppressed = callbackSuppressesSession(session);
+	[session release];
+	return suppressed;
 }
 
 static bool native_tab_drag_snap_back_policy_installed(void) {
 	SEL selector = @selector(draggingSession:willBeginAtPoint:);
 	return installedDraggingSessionWillBegin &&
 		class_getMethodImplementation([WKWebView class], selector) ==
-		(IMP)dockableTabDraggingSessionWillBegin;
+		(IMP)tabDraggingSessionWillBegin;
 }
 
-static bool native_tab_drag_webkit_custom_data_policy_probe(void) {
-	NSData *dockableData = [[NSString stringWithFormat:
-		@"binary-prefix-%@-binary-suffix",
-		dockableTabDragPasteboardType] dataUsingEncoding:NSUTF8StringEncoding];
-	DockableTabDragSessionProbe *dockable = newSessionProbe(
-		@[webKitCustomPasteboardDataType, @"Apple WebKit dummy pasteboard type"],
-		dockableData
-	);
-	DockableTabDragSessionProbe *unrelated = newSessionProbe(
-		@[webKitCustomPasteboardDataType, @"Apple WebKit dummy pasteboard type"],
-		[@"unrelated-custom-data" dataUsingEncoding:NSUTF8StringEncoding]
-	);
-	BOOL passed = callbackSuppressesSession(dockable) &&
-		!callbackSuppressesSession(unrelated);
-	[dockable release];
-	[unrelated release];
-	return passed;
-}
 */
 import "C"
+
+import "unsafe"
 
 func configureNativeTabDragAnimation() {
 	C.configure_native_tab_drag_animation()
 }
 
-func nativeTabDragSnapBackPolicyProbe() bool {
-	return bool(C.native_tab_drag_snap_back_policy_probe())
+func nativeTabDragSnapBackPolicyProbe(mimeType string, webKitCustomData bool) bool {
+	marker := C.CString(mimeType)
+	defer C.free(unsafe.Pointer(marker))
+	return bool(C.native_tab_drag_snap_back_policy_probe(marker, C.bool(webKitCustomData)))
 }
 
 func nativeTabDragSnapBackPolicyInstalled() bool {
 	return bool(C.native_tab_drag_snap_back_policy_installed())
-}
-
-func nativeTabDragWebKitCustomDataPolicyProbe() bool {
-	return bool(C.native_tab_drag_webkit_custom_data_policy_probe())
 }

@@ -2,6 +2,7 @@ package appwindow
 
 import (
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 
@@ -11,13 +12,14 @@ import (
 )
 
 type recordingLifecycleBackend struct {
-	releasedPanelReferences []string
-	directory               *panelwindow.WorkspaceDirectory
-	windowClusters          map[string][]string
-	releasedWindow          string
-	preparedWindow          string
-	allowQuit               bool
-	readyWindows            []string
+	commitClusterTransferError error
+	releasedPanelReferences    []string
+	directory                  *panelwindow.WorkspaceDirectory
+	windowClusters             map[string][]string
+	releasedWindow             string
+	preparedWindow             string
+	allowQuit                  bool
+	readyWindows               []string
 }
 
 func (b *recordingLifecycleBackend) PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory {
@@ -265,7 +267,7 @@ func TestRegistryUsesTearOffCursorPositionOnItsTargetScreen(t *testing.T) {
 	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	registry.panelOpenTimeout = 0
-	registry.panelScreenWorkAreas = func() []application.Rect {
+	registry.screenWorkAreas = func() []application.Rect {
 		return []application.Rect{
 			{X: 0, Y: 0, Width: 1920, Height: 1040},
 			{X: 1920, Y: 0, Width: 1200, Height: 760},
@@ -1297,7 +1299,16 @@ func (b *recordingLifecycleBackend) StageClusterViewTransfer(source, target, clu
 	return false, nil
 }
 func (b *recordingLifecycleBackend) CommitClusterViewTransfer(source, target, clusterID string, groups []panelwindow.WorkspaceGroup) error {
-	return b.PanelWorkspaceDirectory().TransferClusterView(source, target, clusterID, groups)
+	if b.commitClusterTransferError != nil {
+		return b.commitClusterTransferError
+	}
+	if err := b.PanelWorkspaceDirectory().TransferClusterView(source, target, clusterID, groups); err != nil {
+		return err
+	}
+	if b.windowClusters != nil {
+		b.windowClusters[source] = slices.DeleteFunc(slices.Clone(b.windowClusters[source]), func(id string) bool { return id == clusterID })
+	}
+	return nil
 }
 func (b *recordingLifecycleBackend) CancelClusterViewTransfer(target, clusterID string) error {
 	if b.windowClusters == nil {

@@ -6,11 +6,12 @@ import (
 )
 
 type ClusterTabTransferRequest struct {
-	TransferID       string `json:"transferId"`
-	SourceWindowName string `json:"sourceWindowName"`
-	TargetWindowName string `json:"targetWindowName"`
-	ClusterID        string `json:"clusterId"`
-	TargetIndex      int    `json:"targetIndex"`
+	TransferID       string       `json:"transferId"`
+	SourceWindowName string       `json:"sourceWindowName"`
+	TargetWindowName string       `json:"targetWindowName"`
+	ClusterID        string       `json:"clusterId"`
+	TargetIndex      int          `json:"targetIndex"`
+	DropPosition     *WindowPoint `json:"dropPosition,omitempty"`
 }
 
 type ClusterViewSnapshot struct {

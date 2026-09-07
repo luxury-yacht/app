@@ -14,6 +14,7 @@ import { getGroupForPanel } from '@/ui/dockable/tabGroupState';
 import type { GroupKey } from '@/ui/dockable/tabGroupTypes';
 import { reportOperationalError } from '@/utils/errorHandler';
 import { ClusterTabTransferCoordinator } from './ClusterTabTransferCoordinator';
+import { canMoveClusterToNewWindow } from './clusterTabTransferPolicy';
 import {
   acceptPanelTabTransfer,
   acknowledgePanelWindowDock,
@@ -127,7 +128,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
   const { openPanels, pendingNativeOpenPanelIds, dockPanelWindow, removeOwnedPanel } =
     useObjectPanelState();
   const activeTabs = useObjectPanelActiveTabs();
-  const { selectedClusterId } = useKubeconfig();
+  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
   const guards = usePanelLifecycleGuardRegistry();
   const [pendingDockRequest, setPendingDockRequest] =
     useState<panelwindow.WindowDockRequestedEvent | null>(null);
@@ -352,9 +353,16 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     <DockablePanelProvider
       onGroupMoveRequest={handleGroupMove}
       tabDragIdentity={tabDragIdentity}
-      onClusterTabTearOff={(payload) => {
+      onClusterTabTearOff={(payload, cursor) => {
+        if (
+          payload.sourceWindowName !== windowName ||
+          !canMoveClusterToNewWindow(payload.clusterId, selectedClusterIds)
+        ) {
+          return;
+        }
         void requestClusterTabTransfer(windowName, {
           transferId: newIdentity('cluster-transfer'),
+          dropPosition: { x: Math.round(cursor.x), y: Math.round(cursor.y) },
           sourceWindowName: windowName,
           targetWindowName: '',
           clusterId: payload.clusterId,

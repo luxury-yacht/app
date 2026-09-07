@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { readPanelWorkspace } from '@/core/app-state-access';
 import type { panelwindow } from '@/core/backend-api/models';
 import { getWindowIdentity } from '@/core/desktop-runtime';
+import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@/modules/object-panel/hooks/useObjectPanel';
 import ContextMenu, { type ContextMenuItem } from '@/shared/components/ContextMenu';
 import { reportOperationalError } from '@/utils/errorHandler';
+import { canMoveClusterToNewWindow } from './clusterTabTransferPolicy';
 import {
   onPanelWorkspaceChanged,
   requestClusterTabTransfer,
@@ -39,6 +41,7 @@ export function ClusterPanelsMenu({
   onClose: () => void;
 }>) {
   const windowName = getWindowIdentity();
+  const { selectedClusterIds } = useKubeconfig();
   const { openWithObject } = useObjectPanel();
   const [state, setState] = useState<MenuState>({ phase: 'loading' });
   const report = (error: unknown) =>
@@ -85,6 +88,7 @@ export function ClusterPanelsMenu({
     { label: clusterName, header: true },
     {
       label: 'Move cluster to new window',
+      disabled: !canMoveClusterToNewWindow(clusterId, selectedClusterIds),
       onClick: () => {
         void requestClusterTabTransfer(windowName, {
           transferId: globalThis.crypto.randomUUID(),

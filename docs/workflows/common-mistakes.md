@@ -40,6 +40,24 @@ Prevention:
   must retain expiry guidance. A missing cache reported by a running helper must
   not produce installation advice. Test these decisions, not sentence spelling.
 
+## Applying shared tab behavior to only one tab kind
+
+A shared drag coordinator does not guarantee that the native drag policy handles
+all of its tab kinds. Platform hooks must recognize the markers emitted by every
+supported source.
+
+Prevention:
+
+- Exercise cluster and panel tab markers through the native drag callback, both
+  as direct pasteboard types and inside WebKit custom data.
+- Assert the native animation flag and retain negative cases for unrelated
+  drags. Frontend dragend tests alone cannot prove AppKit animation behavior.
+- Carry drop coordinates through the request boundary and assert the resulting
+  native window options for each tab kind, including negative monitor positions,
+  screen origin, and work-area edges. Menu actions have no drop point.
+- Put gesture-specific guards on transfer requests, not shared window factories.
+  A panel-only cluster must still be able to open an app window for docking.
+
 ## Adding cognitive complexity without measuring it
 
 Recovery guards and channel-close handling can become deeply nested inside

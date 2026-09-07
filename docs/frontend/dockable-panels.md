@@ -78,9 +78,9 @@ maximize and restore.
   only tab out of a native source leaves that window unchanged because replacing
   it with an equivalent one-tab native window has no effect. This differs from
   the Float button, which always transfers the complete current group. On macOS,
-  the native drag session recognizes the dockable-tab MIME marker and suppresses
-  AppKit's failed-drop return animation because an accepted tear-off is
-  intentionally represented as `dropEffect: none` by the source webview.
+  the shared native drag policy recognizes both dockable-tab and cluster-tab MIME
+  markers and suppresses AppKit's failed-drop return animation because an accepted
+  tear-off is intentionally represented as `dropEffect: none` by the source webview.
 - Linux drag-out to a new window is deferred for this release. Use Float to
   transfer the entire current panel group into a native window. Tab reordering
   and moves between existing compatible panels remain in the release scope.
