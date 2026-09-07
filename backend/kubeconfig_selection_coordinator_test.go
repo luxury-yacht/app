@@ -107,6 +107,8 @@ func TestHandleClusterAuthStateChangeUsesSelectionMutationBoundary(t *testing.T)
 	}
 
 	require.Eventually(t, func() bool {
-		return app.Workspace.selectionGeneration.Load() >= before+1
+		diagnostics, err := app.Workspace.GetSelectionDiagnostics()
+		return err == nil && diagnostics.LastReason == "cluster-auth-teardown:cluster-a"
 	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, before, app.Workspace.selectionGeneration.Load(), "auth teardown must preserve connection generations")
 }

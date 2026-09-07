@@ -102,6 +102,9 @@ func (a *WorkspaceCoordinator) setSelectedKubeconfigs(mutation *selectionMutatio
 		return err
 	}
 
+	a.beginDeferredSelectionGeneration(mutation)
+	intent.generation = mutation.generation
+
 	if intent.clearSelection {
 		return a.clearKubeconfigSelection()
 	}

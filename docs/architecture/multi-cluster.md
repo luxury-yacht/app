@@ -123,15 +123,19 @@ cannot prevent the frontend from hydrating tabs and lifecycle state.
 Visibility-only `ApplyClusterWorkspace` commands bypass that selection boundary
 and do not advance or cancel its generation; commands that change a peer's tab
 set remain ordered so one window cannot supersede another window's mutation and
-capture their applied snapshot before releasing the boundary. Do not add a
+capture their applied snapshot before releasing the boundary. Ordered mutations
+replace the connection generation only when the process-wide cluster selection
+actually changes. Retaining or releasing panels, moving a cluster view, and
+opening or closing duplicate views must preserve an unchanged selection's
+in-flight clients and authentication results. Do not add a
 workspace-visible state writer without advancing the revision in the same locked
 commit.
 
 Startup calls `PreferencesService.EnsureLoadedForStartup` before entering the
 selection mutation, then restores the immutable selected-kubeconfig snapshot
 inside that boundary. Client preflight then reuses the restored selection
-generation's cancellation context outside the mutation lock. A later tab
-mutation can therefore acquire the lock, cancel stale startup connection work,
+generation's cancellation context outside the mutation lock. A later mutation
+that changes the process selection can acquire the lock, cancel stale startup connection work,
 and reconcile its newer selection without waiting for an unreachable API
 server. Successful startup preflight re-enters the selection boundary before it
 publishes refresh and catalog state, preventing stale startup work from racing a

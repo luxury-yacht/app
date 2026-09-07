@@ -7,7 +7,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	appconfig "github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/internal/credentialerrors"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	informerpkg "github.com/luxury-yacht/app/backend/refresh/informer"
@@ -516,7 +515,7 @@ func (a *ClusterRuntimeManager) clusterAuthFailedOnPreflight(
 	}
 
 	a.logger.Warn(fmt.Sprintf("Pre-flight check failed for cluster %s: %v", meta.Name, err), logsources.Auth, meta.ID, meta.Name)
-	diagnostic := credentialerrors.Classify(err, credentialerrors.Context{ExecCommand: execDisplayCommand(config)})
+	diagnostic := classifyClusterCredentialError(err, config)
 	if !diagnostic.IsAuth() {
 		return false
 	}
@@ -582,8 +581,8 @@ func (a *ClusterRuntimeManager) buildRestConfigForSelection(selection kubeconfig
 		return nil, fmt.Errorf("failed to build config from %s: %w", selection.Path, err)
 	}
 
-	if config != nil && config.ExecProvider != nil {
-		wrapExecProviderForWindows(config)
+	if err := a.execDiagnostics.prepare(meta.ID, config); err != nil {
+		a.logger.Warn(fmt.Sprintf("Credential diagnostic capture unavailable: %v", err), logsources.Auth, meta.ID, meta.Name)
 	}
 
 	qps, burst := a.kubernetesClientRateLimits()

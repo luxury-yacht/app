@@ -18,6 +18,9 @@ type selectionMutation struct {
 	startedAt  time.Time
 	done       <-chan struct{}
 	phases     selectionMutationPhases
+	// Ownership-only changes keep the current clients alive. Allocate a new
+	// connection generation only if this mutation changes process selections.
+	generationPending bool
 }
 
 func (m *selectionMutation) context() context.Context {
@@ -43,7 +46,8 @@ func (a *WorkspaceCoordinator) runSelectionMutation(reason string, fn func(*sele
 
 // runOrderedSelectionMutation preserves every queued mutation. Peer windows
 // own independent tab sets, so a later command from one peer must not supersede
-// an earlier command from another peer.
+// an earlier command from another peer. Ownership bookkeeping does not cancel
+// connections; setSelectedKubeconfigs starts a generation when clients change.
 func (a *WorkspaceCoordinator) runOrderedSelectionMutation(reason string, fn func(*selectionMutation) error) error {
 	return a.runSelectionMutationWithQueuePolicy(reason, false, fn)
 }
@@ -91,20 +95,10 @@ func (a *WorkspaceCoordinator) runSelectionMutationWithQueuePolicy(
 		return nil
 	}
 	if !supersedeQueued {
-		generation = a.selectionGeneration.Add(1)
-		a.cancelActiveSelectionGeneration()
+		generation = a.selectionGeneration.Load()
 	}
 
-	var mutation selectionMutation
-	a.withKubeconfigStateTransition(func() {
-		generationCtx := a.activateSelectionGeneration()
-		mutation = selectionMutation{
-			generation: generation,
-			reason:     reason,
-			startedAt:  time.Now(),
-			done:       generationCtx.Done(),
-		}
-	})
+	mutation := a.newSelectionMutation(reason, generation, supersedeQueued)
 
 	a.logger.Debug(
 		fmt.Sprintf("Selection mutation start (reason=%s generation=%d)", mutation.reason, mutation.generation),
@@ -129,6 +123,15 @@ func (a *WorkspaceCoordinator) runSelectionMutationWithQueuePolicy(
 		sample.errorText = err.Error()
 	}
 	a.selectionDiagnosticsFinalize(sample)
+	a.logSelectionMutationCompletion(mutation, sample)
+
+	if canceled {
+		return nil
+	}
+	return err
+}
+
+func (a *WorkspaceCoordinator) logSelectionMutationCompletion(mutation selectionMutation, sample selectionMutationSample) {
 	if a.logger != nil {
 		status := "ok"
 		if sample.superseded {
@@ -141,7 +144,7 @@ func (a *WorkspaceCoordinator) runSelectionMutationWithQueuePolicy(
 		a.logger.Debug(
 			fmt.Sprintf(
 				"Selection mutation complete (reason=%s generation=%d status=%s queueMs=%d totalMs=%d intentMs=%d clientSyncMs=%d refreshMs=%d catalogMs=%d)",
-				reason,
+				mutation.reason,
 				mutation.generation,
 				status,
 				sample.queueMs,
@@ -155,20 +158,41 @@ func (a *WorkspaceCoordinator) runSelectionMutationWithQueuePolicy(
 		)
 	}
 
-	if canceled {
-		return nil
-	}
-	return err
 }
 
-// runSelectionMutationAsync executes a coordinated mutation asynchronously.
-// Errors are logged since callers are typically event/recovery callbacks.
+func (a *WorkspaceCoordinator) newSelectionMutation(reason string, generation uint64, startGeneration bool) selectionMutation {
+	mutation := selectionMutation{
+		generation: generation, reason: reason, startedAt: time.Now(),
+		done: a.CtxOrBackground().Done(), generationPending: !startGeneration,
+	}
+	if startGeneration {
+		a.withKubeconfigStateTransition(func() {
+			mutation.done = a.activateSelectionGeneration().Done()
+		})
+	}
+	return mutation
+}
+
+func (a *WorkspaceCoordinator) beginDeferredSelectionGeneration(mutation *selectionMutation) {
+	if !mutation.generationPending {
+		return
+	}
+	a.withKubeconfigStateTransition(func() {
+		mutation.generation = a.selectionGeneration.Add(1)
+		mutation.done = a.activateSelectionGeneration().Done()
+		mutation.generationPending = false
+	})
+}
+
+// runSelectionMutationAsync queues runtime work without cancelling cluster
+// connections. Auth and namespace callbacks do not change process selections.
+// Errors are logged since callers are event/recovery callbacks.
 func (a *WorkspaceCoordinator) runSelectionMutationAsync(reason string, fn func(*selectionMutation) error) {
 	if a == nil {
 		return
 	}
 	go func() {
-		if err := a.runSelectionMutation(reason, fn); err != nil {
+		if err := a.runOrderedSelectionMutation(reason, fn); err != nil {
 			a.logger.Warn(
 				fmt.Sprintf("Selection mutation failed (reason=%s): %v", reason, err),
 				"KubeconfigManager",

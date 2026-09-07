@@ -9,17 +9,25 @@ import (
 )
 
 // clusterOperationCoordinator enforces one in-flight operation per cluster ID.
-// Starting a new operation for the same cluster cancels the previous operation context.
+// Foreground operations cancel older work; queued callbacks preserve their producer.
 type clusterOperationCoordinator struct {
 	mu    sync.Mutex
 	slots map[string]*clusterOperationSlot
 }
 
 type clusterOperationSlot struct {
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	token  uint64
+	mu      sync.Mutex
+	cancels map[uint64]context.CancelFunc
+	token   uint64
 }
+
+type clusterOperationAdmission uint8
+
+const (
+	clusterOperationSupersede clusterOperationAdmission = iota
+	clusterOperationSkipBusy
+	clusterOperationQueue
+)
 
 func newClusterOperationCoordinator() *clusterOperationCoordinator {
 	return &clusterOperationCoordinator{
@@ -29,15 +37,15 @@ func newClusterOperationCoordinator() *clusterOperationCoordinator {
 
 // run gives foreground operations priority over older work for the same cluster.
 func (c *clusterOperationCoordinator) run(parent context.Context, clusterID string, fn func(context.Context) error) error {
-	return c.runWithAdmission(parent, clusterID, fn, true)
+	return c.runWithAdmission(parent, clusterID, fn, clusterOperationSupersede)
 }
 
 // runWhenIdle skips a busy cluster. The periodic caller retains retry ownership.
 func (c *clusterOperationCoordinator) runWhenIdle(parent context.Context, clusterID string, fn func(context.Context) error) error {
-	return c.runWithAdmission(parent, clusterID, fn, false)
+	return c.runWithAdmission(parent, clusterID, fn, clusterOperationSkipBusy)
 }
 
-func (c *clusterOperationCoordinator) runWithAdmission(parent context.Context, clusterID string, fn func(context.Context) error, supersede bool) error {
+func (c *clusterOperationCoordinator) runWithAdmission(parent context.Context, clusterID string, fn func(context.Context) error, admission clusterOperationAdmission) error {
 	if fn == nil {
 		return nil
 	}
@@ -48,7 +56,7 @@ func (c *clusterOperationCoordinator) runWithAdmission(parent context.Context, c
 		parent = context.Background()
 	}
 
-	slot, token, opCtx, cancel := c.begin(parent, clusterID, supersede)
+	slot, token, opCtx, cancel := c.begin(parent, clusterID, admission)
 	if slot == nil {
 		return nil
 	}
@@ -66,28 +74,30 @@ func (c *clusterOperationCoordinator) runWithAdmission(parent context.Context, c
 func (c *clusterOperationCoordinator) begin(
 	parent context.Context,
 	clusterID string,
-	supersede bool,
+	admission clusterOperationAdmission,
 ) (*clusterOperationSlot, uint64, context.Context, context.CancelFunc) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	slot := c.slots[clusterID]
 	if slot == nil {
-		slot = &clusterOperationSlot{}
+		slot = &clusterOperationSlot{cancels: make(map[uint64]context.CancelFunc)}
 		c.slots[clusterID] = slot
 	}
 
-	if slot.cancel != nil {
-		if !supersede {
-			return nil, 0, nil, nil
+	if len(slot.cancels) > 0 && admission == clusterOperationSkipBusy {
+		return nil, 0, nil, nil
+	}
+	if admission == clusterOperationSupersede {
+		for _, cancel := range slot.cancels {
+			cancel()
 		}
-		slot.cancel()
 	}
 
 	slot.token++
 	token := slot.token
 	opCtx, cancel := context.WithCancel(parent)
-	slot.cancel = cancel
+	slot.cancels[token] = cancel
 	return slot, token, opCtx, cancel
 }
 
@@ -105,21 +115,24 @@ func (c *clusterOperationCoordinator) end(
 	if c.slots[clusterID] != slot {
 		return
 	}
-	if slot.token != token {
-		return
-	}
-	slot.cancel = nil
+	delete(slot.cancels, token)
 }
 
 func (m *ClusterRuntimeManager) runClusterOperation(ctx context.Context, clusterID string, fn func(context.Context) error) error {
-	return m.runClusterOperationWithAdmission(ctx, clusterID, fn, true)
+	return m.runClusterOperationWithAdmission(ctx, clusterID, fn, clusterOperationSupersede)
 }
 
 func (m *ClusterRuntimeManager) runBackgroundClusterOperation(ctx context.Context, clusterID string, fn func(context.Context) error) error {
-	return m.runClusterOperationWithAdmission(ctx, clusterID, fn, false)
+	return m.runClusterOperationWithAdmission(ctx, clusterID, fn, clusterOperationSkipBusy)
 }
 
-func (m *ClusterRuntimeManager) runClusterOperationWithAdmission(ctx context.Context, clusterID string, fn func(context.Context) error, supersede bool) error {
+// Auth callbacks originate inside client construction. Queue their dependent
+// work until that client is installed instead of cancelling its producer.
+func (m *ClusterRuntimeManager) runQueuedClusterOperation(ctx context.Context, clusterID string, fn func(context.Context) error) error {
+	return m.runClusterOperationWithAdmission(ctx, clusterID, fn, clusterOperationQueue)
+}
+
+func (m *ClusterRuntimeManager) runClusterOperationWithAdmission(ctx context.Context, clusterID string, fn func(context.Context) error, admission clusterOperationAdmission) error {
 	if fn == nil {
 		return nil
 	}
@@ -136,12 +149,7 @@ func (m *ClusterRuntimeManager) runClusterOperationWithAdmission(ctx context.Con
 		}
 		return err
 	}
-	var err error
-	if supersede {
-		err = m.clusterOps.run(opCtx, clusterID, fn)
-	} else {
-		err = m.clusterOps.runWhenIdle(opCtx, clusterID, fn)
-	}
+	err := m.clusterOps.runWithAdmission(opCtx, clusterID, fn, admission)
 	if errors.Is(err, context.Canceled) {
 		return nil
 	}

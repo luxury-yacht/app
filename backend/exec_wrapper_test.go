@@ -79,18 +79,6 @@ func TestIsExecWrapperConfigured(t *testing.T) {
 	}
 }
 
-func TestSameExecutablePath(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("path comparisons are platform specific")
-	}
-
-	left := filepath.Join(string(filepath.Separator), "tmp", "tool")
-	right := filepath.Join(string(filepath.Separator), "tmp", ".", "tool")
-	if !sameExecutablePath(left, right) {
-		t.Fatalf("expected paths to be equivalent")
-	}
-}
-
 func TestExecDisplayCommand(t *testing.T) {
 	t.Run("nil config", func(t *testing.T) {
 		if got := execDisplayCommand(nil); got != "" {
@@ -134,9 +122,9 @@ func TestExecDisplayCommand(t *testing.T) {
 // that helper — the exact diagnostic a Windows preflight hands the overlay.
 //
 // This runs on any OS because it constructs the wrapped config directly (the same
-// shape wrapExecProviderForWindows produces); it does not depend on runtime.GOOS.
+// shape execDiagnosticStore.prepare produces); it does not depend on runtime.GOOS.
 func TestExecDisplayCommandWindowsDiagnosticEndToEnd(t *testing.T) {
-	// A config as wrapExecProviderForWindows would leave it: Command is the app
+	// A config as execDiagnosticStore.prepare would leave it: Command is the app
 	// executable; the real helper is the first wrapper arg.
 	cfg := &rest.Config{ExecProvider: &api.ExecConfig{
 		Command: filepath.Join("C:\\", "Program Files", "LuxuryYacht", "app.exe"),
@@ -155,23 +143,4 @@ func TestExecDisplayCommandWindowsDiagnosticEndToEnd(t *testing.T) {
 
 	require.True(t, diag.IsAuth(), "a wrapped Windows exec failure must be auth-class")
 	require.Equal(t, "gke-gcloud-auth-plugin", diag.ExecCommand, "the overlay must name the real helper")
-}
-
-func TestWrapExecProviderForWindowsNoop(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("test covers non-windows no-op behavior")
-	}
-
-	cfg := &rest.Config{
-		ExecProvider: &api.ExecConfig{
-			Command: "kubectl",
-			Args:    []string{"version"},
-		},
-	}
-
-	wrapExecProviderForWindows(cfg)
-
-	if cfg.ExecProvider.Command != "kubectl" || len(cfg.ExecProvider.Args) != 1 {
-		t.Fatalf("expected exec config to remain unchanged on non-windows")
-	}
 }

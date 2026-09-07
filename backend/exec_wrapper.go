@@ -2,10 +2,9 @@ package backend
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
 
 	"k8s.io/client-go/rest"
@@ -40,13 +39,18 @@ func parseExecWrapperArgs(args []string) (string, []string, bool) {
 
 // runExecWrapper executes the helper command while preserving stdio.
 func runExecWrapper(command string, args []string) int {
+	diagnosticPath := os.Getenv(execDiagnosticFileEnv)
+	_ = os.Unsetenv(execDiagnosticFileEnv)
+	var stderr diagnosticStderr
 	cmd := newExecWrapperCommand(command, args)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 	applyHiddenWindowAttr(cmd)
 
-	if err := cmd.Run(); err != nil {
+	err := cmd.Run()
+	stderr.publish(diagnosticPath, err)
+	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
 		}
@@ -62,8 +66,8 @@ func newExecWrapperCommand(command string, args []string) *exec.Cmd {
 }
 
 // execDisplayCommand returns the kubeconfig exec credential command suitable for
-// display, or "" when the config declares no exec provider. On Windows the exec
-// provider is rewritten to run through this binary (see wrapExecProviderForWindows);
+// display, or "" when the config declares no exec provider. The exec
+// provider is rewritten to run through this binary to capture scoped diagnostics;
 // in that case the original helper command is recovered from the wrapper args so
 // diagnostics show the real credential helper, not the app executable.
 func execDisplayCommand(config *rest.Config) string {
@@ -77,44 +81,7 @@ func execDisplayCommand(config *rest.Config) string {
 	return strings.TrimSpace(config.ExecProvider.Command)
 }
 
-// wrapExecProviderForWindows routes exec helpers through this binary on Windows.
-func wrapExecProviderForWindows(config *rest.Config) {
-	if runtime.GOOS != "windows" || config == nil || config.ExecProvider == nil {
-		return
-	}
-
-	originalCommand := strings.TrimSpace(config.ExecProvider.Command)
-	if originalCommand == "" {
-		return
-	}
-	if isExecWrapperConfigured(config.ExecProvider.Args) {
-		return
-	}
-
-	exePath, err := os.Executable()
-	if err != nil || exePath == "" {
-		return
-	}
-	if sameExecutablePath(exePath, originalCommand) {
-		return
-	}
-
-	originalArgs := append([]string{}, config.ExecProvider.Args...)
-	config.ExecProvider.Command = exePath
-	config.ExecProvider.Args = append([]string{execWrapperFlag, originalCommand}, originalArgs...)
-}
-
 // isExecWrapperConfigured reports whether the wrapper args are already present.
 func isExecWrapperConfigured(args []string) bool {
 	return len(args) > 0 && args[0] == execWrapperFlag
-}
-
-// sameExecutablePath compares executable paths with Windows casing rules.
-func sameExecutablePath(left, right string) bool {
-	left = filepath.Clean(left)
-	right = filepath.Clean(right)
-	if runtime.GOOS == "windows" {
-		return strings.EqualFold(left, right)
-	}
-	return left == right
 }

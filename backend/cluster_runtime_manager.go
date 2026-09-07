@@ -28,6 +28,7 @@ type ClusterRuntimeManager struct {
 	clusterOps       *clusterOperationCoordinator
 	clusterLifecycle *clusterLifecycle
 	kubeAPIMetrics   *kubernetesAPIMetricsRegistry
+	execDiagnostics  execDiagnosticStore
 	rateLimitMu      sync.RWMutex
 	kubernetesQPS    int
 	kubernetesBurst  int
@@ -144,4 +145,5 @@ func (m *ClusterRuntimeManager) stopAuthRecovery() {
 			item.authManager.Shutdown()
 		}
 	}
+	m.execDiagnostics.close()
 }

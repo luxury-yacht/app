@@ -1,0 +1,5 @@
+{
+  // This only exists to point editors at the config in `frontend/biome.jsonc`.
+  "$schema": "./frontend/node_modules/@biomejs/biome/configuration_schema.json",
+  "root": true
+}

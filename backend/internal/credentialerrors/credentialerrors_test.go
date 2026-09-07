@@ -41,6 +41,7 @@ func TestClassify(t *testing.T) {
 
 		// Expired credentials.
 		{"token has expired", errors.New("token has expired"), ClassAuth, KindExpired},
+		{"expired SSO inside exec failure", errors.New("getting credentials: exec: executable aws failed with exit code 255: Error loading SSO Token: Token has expired and refresh failed"), ClassAuth, KindExpired},
 		{"token is expired", errors.New("the token is expired"), ClassAuth, KindExpired},
 		{"sso session expired", errors.New("sso session has expired"), ClassAuth, KindExpired},
 		{"refresh token invalid", errors.New("refresh token is invalid"), ClassAuth, KindExpired},

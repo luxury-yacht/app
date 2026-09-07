@@ -34,7 +34,7 @@ export const AuthFailureOverlayContent: React.FC<AuthFailureOverlayContentProps>
   onRetry,
 }) => {
   const clusterName = authState.clusterName || clusterId;
-  const { secondsUntilRetry, execCommand, diagnosticSummary, reason } = authState;
+  const { secondsUntilRetry, execCommand, diagnosticKind, diagnosticSummary, reason } = authState;
 
   // The recovery loop never stops, so the message is the same throughout:
   // the cluster reconnects on its own once the problem is resolved, and the
@@ -57,20 +57,21 @@ export const AuthFailureOverlayContent: React.FC<AuthFailureOverlayContentProps>
       <div className="auth-failure-icon">⚠️</div>
       <h2 className="auth-failure-title">Authentication Failure</h2>
       <p className="auth-failure-cluster">Cluster: {clusterName}</p>
-      {execCommand ? (
+      {execCommand && diagnosticKind === 'missing-helper' ? (
         // The kubeconfig declares an exec credential plugin the app could not
         // run. Point at the kubeconfig contract, not at any specific provider.
         <p className="auth-failure-message">
           This kubeconfig asks Kubernetes to run{' '}
-          <code className="auth-failure-command">{execCommand}</code>for credentials. Install that
+          <code className="auth-failure-command">{execCommand}</code> for credentials. Install that
           command, add it to your PATH, or update the kubeconfig, then retry.
         </p>
       ) : (
         <>
           {!!detail && <p className="auth-failure-reason">{detail}</p>}
           <p className="auth-failure-message">
-            The app will attempt to reconnect automatically, but you may need to refresh your
-            credentials.
+            {diagnosticKind === 'expired-credentials'
+              ? 'Refresh your credentials, then retry. The app will also reconnect automatically.'
+              : 'The app will attempt to reconnect automatically, but you may need to refresh your credentials.'}
           </p>
         </>
       )}

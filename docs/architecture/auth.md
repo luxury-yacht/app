@@ -93,6 +93,32 @@ Recovery probes always build a fresh client from kubeconfig — they must never
 run through the cluster's wrapped transport, which blocks requests while auth
 is not valid.
 
+### Startup and credential-helper diagnostics
+
+Auth and namespace callbacks queue at both the workspace and per-cluster
+operation boundaries. They must not cancel client construction that produced
+the callback. Foreground selection changes retain cancellation ownership;
+ownership-only panel and duplicate-view changes do not replace the connection
+generation. Regression tests restore saved clusters while ownership commands
+and auth callbacks arrive, and exercise real helper processes through startup,
+failure projection, and credential refresh.
+
+The exec wrapper preserves credential stdout and forwards stderr while retaining
+a bounded stderr tail. It writes only a recognized diagnostic kind to a private
+temporary file scoped to the cluster. Client-go discards stderr from its returned
+exec errors; preflight reads this scoped result to preserve expiry information.
+File identity stays stable for the process so client-go's authenticator cache
+does not grow on each probe. Auth shutdown removes the diagnostic directory;
+late helpers cannot recreate it. Diagnostic storage failure preserves ordinary
+authentication, with a local warning and the original client-go diagnostic.
+
+Restricted exec plugin policies remain under client-go's original command check
+and are not rewritten for diagnostic capture. Their errors retain the available
+client-go detail. Process-global stderr must never supply a cluster's diagnosis.
+Installation guidance requires `missing-helper`; a configured exec command or
+a helper exit code alone does not prove the executable is missing. Expiry
+diagnostics retain refresh guidance even when the kubeconfig uses an exec helper.
+
 ### Rebuild wiring invariant
 
 `rebuildClusterSubsystem` must wire rebuilt client transports to the cluster's

@@ -50,7 +50,11 @@ describe('AuthFailureOverlayContent', () => {
   };
 
   it('renders kubeconfig-centered copy naming the exec command', async () => {
-    await renderContent({ ...baseState, execCommand: 'gke-gcloud-auth-plugin' });
+    await renderContent({
+      ...baseState,
+      execCommand: 'gke-gcloud-auth-plugin',
+      diagnosticKind: 'missing-helper',
+    });
 
     expect(container.textContent).toContain('This kubeconfig asks Kubernetes to run');
     const code = container.querySelector('code');
@@ -63,10 +67,26 @@ describe('AuthFailureOverlayContent', () => {
       reason:
         'getting credentials: exec: executable aws failed: SSO token at https://secret.example expired',
       diagnosticSummary: 'The cluster credentials have expired.',
+      diagnosticKind: 'expired-credentials',
+      execCommand: 'aws',
     });
 
     expect(container.textContent).toContain('The cluster credentials have expired.');
     expect(container.textContent).not.toContain('secret.example');
+    expect(container.textContent).toMatch(/refresh.*credentials/i);
+    expect(container.textContent).not.toContain('Install that command');
+  });
+
+  it('does not diagnose a missing command when the helper ran and failed', async () => {
+    await renderContent({
+      ...baseState,
+      execCommand: 'aws',
+      diagnosticKind: 'helper-failed',
+      diagnosticSummary: "The kubeconfig's credential helper failed to run.",
+    });
+
+    expect(container.textContent).toContain("The kubeconfig's credential helper failed to run.");
+    expect(container.textContent).not.toContain('Install that command');
   });
 
   it('falls back to generic copy when there is no exec command', async () => {

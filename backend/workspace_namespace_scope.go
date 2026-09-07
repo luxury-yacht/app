@@ -96,7 +96,7 @@ func (a *WorkspaceCoordinator) requestClusterScopeRebuild(clusterID string) {
 		return
 	}
 	a.runSelectionMutationAsync(fmt.Sprintf("cluster-scope-rebuild:%s", clusterID), func(_ *selectionMutation) error {
-		return a.clusterRuntime.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
+		return a.clusterRuntime.runQueuedClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
 			// From here on this rebuild may already be reading the previous
 			// scope, so a new edit must queue a fresh rebuild.
 			a.markScopeRebuildStarted(clusterID)

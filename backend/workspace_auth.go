@@ -14,7 +14,10 @@ func (a *WorkspaceCoordinator) dispatchClusterAuthMutation(intent ClusterRuntime
 		if !a.clusterRuntimeIntentIsCurrent(intent) {
 			return nil
 		}
-		return a.clusterRuntime.runClusterOperation(context.Background(), command.clusterID, func(opCtx context.Context) error {
+		return a.clusterRuntime.runQueuedClusterOperation(context.Background(), command.clusterID, func(opCtx context.Context) error {
+			if !a.clusterRuntimeIntentIsCurrent(intent) {
+				return nil
+			}
 			return a.executeClusterAuthMutation(opCtx, command)
 		})
 	})

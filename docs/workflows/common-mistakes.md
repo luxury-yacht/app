@@ -21,6 +21,25 @@ Prevention:
   Test source-app closure, duplicate app views, cancelled queued transfers,
   native-creation failure, and all-renderer quit preflight.
 
+## Testing lifecycle pieces without their real interleavings
+
+A passing ownership test and a passing auth test do not prove that ownership
+changes preserve an in-flight startup auth result. Cancellation at either the
+selection queue or the per-cluster operation queue can discard that result.
+
+Prevention:
+
+- Block startup client construction, deliver panel/peer ownership changes and
+  auth callbacks, then release the builder and assert the published auth state.
+- Cover both unchanged process selection and actual cluster removal. The first
+  must preserve work; the second must still cancel stale work.
+- Exercise a real credential subprocess and the real auth consumer, including
+  a healthy sibling and recovery after credentials change. String classifiers
+  alone cannot prove that provider stderr survives the execution boundary.
+- Test realistic payload combinations: expired credentials with an exec command
+  must retain expiry guidance. A missing cache reported by a running helper must
+  not produce installation advice. Test these decisions, not sentence spelling.
+
 ## Adding cognitive complexity without measuring it
 
 Recovery guards and channel-close handling can become deeply nested inside

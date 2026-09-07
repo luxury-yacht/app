@@ -43,6 +43,7 @@ type workspaceClusterRuntime interface {
 	replayClusterLifecycle(string)
 	resourceDependenciesForSelection(kubeconfigSelection, *clusterClients, string) common.Dependencies
 	runClusterOperation(context.Context, string, func(context.Context) error) error
+	runQueuedClusterOperation(context.Context, string, func(context.Context) error) error
 	selectionsForClusterIDs([]string) []kubeconfigSelection
 	setClusterLifecycleState(string, ClusterLifecycleState)
 	snapshotClusterIDs() []string

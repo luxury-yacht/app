@@ -1,9 +1,8 @@
 {
-  // Biome's recommended preset is the portable baseline. The explicit rule groups below make the
-  // project stricter where additional rules describe this React application.
-  // Keep the schema version aligned with the installed @biomejs/biome version so editors validate
-  // exactly the options accepted by CI.
-  "$schema": "https://biomejs.dev/schemas/2.5.12/schema.json",
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  // This extends the root so editors opened at the repository root apply these settings.
+  "root": false,
+  "extends": "//",
   // Resolve ignore rules from the repository-level Git configuration, not only the frontend folder.
   "vcs": {
     "enabled": true,

@@ -296,7 +296,8 @@ func TestHandleClusterAuthStateChange_QueuesRecoveringMutationOutsideManagerLock
 	app.Workspace.selectionMutationMu.Unlock()
 	selectionLocked = false
 	require.Eventually(t, func() bool {
-		return app.Workspace.selectionGeneration.Load() > 0
+		diagnostics, err := app.Workspace.GetSelectionDiagnostics()
+		return err == nil && diagnostics.LastReason == "cluster-auth-teardown:cluster-background"
 	}, time.Second, 10*time.Millisecond)
 	require.True(t, app.Workspace.waitForSelectionMutationIdle(time.Second))
 }

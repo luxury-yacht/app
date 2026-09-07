@@ -67,12 +67,29 @@ type Diagnostic struct {
 // IsAuth reports whether the diagnostic is an auth-class failure.
 func (d Diagnostic) IsAuth() bool { return d.Class == ClassAuth }
 
+// ForKind restores only a recognized, sanitized diagnostic from a helper
+// result. Unknown values carry no classification or user-visible text.
+func ForKind(kind Kind, ctx Context) Diagnostic {
+	d := Diagnostic{ExecCommand: strings.TrimSpace(ctx.ExecCommand)}
+	switch kind {
+	case KindMissingHelper:
+		d.Class, d.Kind, d.Summary = ClassAuth, kind, summaryMissingHelper
+	case KindHelperFailed:
+		d.Class, d.Kind, d.Summary = ClassAuth, kind, summaryHelperFailed
+	case KindExpired:
+		d.Class, d.Kind, d.Summary = ClassAuth, kind, summaryExpired
+	case KindRejected:
+		d.Class, d.Kind, d.Summary = ClassAuth, kind, summaryRejected
+	}
+	return d
+}
+
 // Provider-neutral, sanitized summaries. These never echo raw provider stderr;
 // any provider-specific detail belongs on a dedicated diagnostics surface.
 const (
 	summaryMissingHelper = "The kubeconfig's credential helper could not be found."
 	summaryHelperFailed  = "The kubeconfig's credential helper failed to run."
-	summaryExpired       = "The cluster credentials have expired."
+	summaryExpired       = "The authentication token or SSO session has expired."
 	summaryRejected      = "The cluster rejected the credentials."
 	summaryConnectivity  = "The cluster could not be reached."
 )
@@ -107,20 +124,19 @@ func classify(err error, ctx Context, rejects func(string) bool) Diagnostic {
 	// Structured HTTP 401/403 prove the cluster rejected the credentials. This
 	// runs before string matching so it is robust to message wording.
 	if apierrors.IsUnauthorized(err) || apierrors.IsForbidden(err) {
-		d.Class, d.Kind, d.Summary = ClassAuth, KindRejected, summaryRejected
-		return d
+		return ForKind(KindRejected, ctx)
 	}
 
 	msg := strings.ToLower(err.Error())
 	switch {
 	case isMissingHelper(msg):
-		d.Class, d.Kind, d.Summary = ClassAuth, KindMissingHelper, summaryMissingHelper
-	case isHelperFailed(msg):
-		d.Class, d.Kind, d.Summary = ClassAuth, KindHelperFailed, summaryHelperFailed
+		return ForKind(KindMissingHelper, ctx)
 	case isExpired(msg):
-		d.Class, d.Kind, d.Summary = ClassAuth, KindExpired, summaryExpired
+		return ForKind(KindExpired, ctx)
+	case isHelperFailed(msg):
+		return ForKind(KindHelperFailed, ctx)
 	case rejects(msg):
-		d.Class, d.Kind, d.Summary = ClassAuth, KindRejected, summaryRejected
+		return ForKind(KindRejected, ctx)
 	case isConnectivity(err, msg):
 		d.Class, d.Kind, d.Summary = ClassConnectivity, KindConnectivity, summaryConnectivity
 	}
