@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
     AcknowledgePanelWindowClose: vi.fn(),
     AcknowledgeWorkspaceWindowClose: vi.fn(),
     AcknowledgeApplicationQuitPreflight: vi.fn(),
+    CloseClusterView: vi.fn(),
+    AcknowledgeClusterPanelClose: vi.fn(),
     UpdatePanelWindowSnapshot: vi.fn(),
     RequestPanelTabClose: vi.fn(),
     RequestPanelTabTransfer: vi.fn(),
@@ -36,6 +38,7 @@ vi.mock('@/core/desktop-runtime', () => ({
 import {
   acceptPanelTabTransfer,
   acknowledgeApplicationQuitPreflight,
+  acknowledgeClusterPanelClose,
   acknowledgePanelWindowClose,
   acknowledgePanelWindowDock,
   acknowledgePanelWindowReady,
@@ -43,10 +46,13 @@ import {
   acknowledgeWorkspaceWindowClose,
   beginPanelWindowDock,
   beginPanelWindowOpen,
+  closeClusterView,
   failPanelTabTransfer,
   failPanelWindowTransfer,
   focusPanelWindow,
   onApplicationQuitPreflightRequested,
+  onClusterPanelCloseRequested,
+  onClusterPanelCloseSettled,
   onPanelTabCloseAuthorized,
   onPanelTabTransferCommitted,
   onPanelTabTransferFailed,
@@ -107,6 +113,7 @@ describe('native panel-window transport', () => {
     for (const command of Object.values(mocks.backend)) {
       command.mockResolvedValue(undefined);
     }
+    mocks.backend.CloseClusterView.mockResolvedValue(false);
   });
 
   it('uses a workspace descriptor in a browser and validates native descriptors', async () => {
@@ -148,6 +155,14 @@ describe('native panel-window transport', () => {
   });
 
   it('delegates every command with complete owner, cluster, and object identity', async () => {
+    expect(await closeClusterView('workspace-2', 'cluster-1')).toBe(false);
+    await acknowledgeClusterPanelClose('panel-1', 'close-1', false);
+    expect(mocks.backend.CloseClusterView).toHaveBeenCalledWith('workspace-2', 'cluster-1');
+    expect(mocks.backend.AcknowledgeClusterPanelClose).toHaveBeenCalledWith(
+      'panel-1',
+      'close-1',
+      false
+    );
     await openPanelWorkspaceObject('workspace-2', tabTransfer.tab);
     await publishDockedPanels('workspace-2', []);
     await acknowledgePanelWorkspaceReady('workspace-2');
@@ -216,6 +231,8 @@ describe('native panel-window transport', () => {
   it('subscribes every role event through the desktop runtime', () => {
     const handler = vi.fn();
     const subscriptions = [
+      [onClusterPanelCloseRequested, 'cluster-panel-close:requested'],
+      [onClusterPanelCloseSettled, 'cluster-panel-close:settled'],
       [onPanelWindowOpened, 'panel-window:opened'],
       [onPanelWindowDockRequested, 'panel-window:dock-requested'],
       [onPanelWindowFocusRequested, 'panel-window:focus-requested'],

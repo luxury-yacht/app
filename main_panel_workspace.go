@@ -1,6 +1,9 @@
 package main
 
-import "github.com/luxury-yacht/app/internal/panelwindow"
+import (
+	"context"
+	"github.com/luxury-yacht/app/internal/panelwindow"
+)
 
 func (bridge *windowRegistryBridge) AcknowledgePanelWorkspaceReady(windowName string) error {
 	registry, err := bridge.registryOrError()
@@ -64,4 +67,20 @@ func (bridge *windowRegistryBridge) FailClusterTabTransfer(windowName, transferI
 		return err
 	}
 	return registry.FailClusterTabTransfer(windowName, transferID)
+}
+
+func (bridge *windowRegistryBridge) CloseClusterView(ctx context.Context, windowName, clusterID string) (bool, error) {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return false, err
+	}
+	return registry.CloseClusterView(ctx, windowName, clusterID)
+}
+
+func (bridge *windowRegistryBridge) AcknowledgeClusterPanelClose(windowName, transactionID string, allowed bool) error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
+	}
+	return registry.AcknowledgeClusterPanelClose(windowName, transactionID, allowed)
 }

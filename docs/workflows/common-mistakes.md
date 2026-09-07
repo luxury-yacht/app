@@ -17,6 +17,13 @@ Prevention:
   target copies provisional until reconstruction is acknowledged.
 - Seed a new app view before renderer startup, and delay queued work until
   cluster hydration and coordinator subscriptions are ready.
+- Test explicit cluster-tab close separately from app-window close and tab
+  movement. Closing the final cluster tab preflights and closes its shared panel
+  windows; closing a renderer or moving its tab preserves them. Include a
+  duplicate cluster view and a denied native-panel guard in the regression.
+  Record a closing view's removal before checking whether a subsequent close
+  owns the final view; separate preflight and selection calls can otherwise
+  leave shared panels orphaned.
 - Retain cluster runtime for shared panels, including panel-only renderers.
   Test source-app closure, duplicate app views, cancelled queued transfers,
   native-creation failure, and all-renderer quit preflight.

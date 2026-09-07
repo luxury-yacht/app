@@ -46,6 +46,10 @@ export function AcknowledgeApplicationQuitPreflight(ownerWindowName: string, tra
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgeApplicationQuitPreflight", ownerWindowName, transactionID, allowed);
 }
 
+export function AcknowledgeClusterPanelClose(windowName: string, transactionID: string, allowed: boolean): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgeClusterPanelClose", windowName, transactionID, allowed);
+}
+
 export function AcknowledgeClusterTabTransfer(windowName: string, transferID: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgeClusterTabTransfer", windowName, transferID);
 }
@@ -120,6 +124,10 @@ export function ClearAppState(): $CancellablePromise<void> {
 
 export function ClearGridTablePersistence(): $CancellablePromise<number> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ClearGridTablePersistence");
+}
+
+export function CloseClusterView(windowName: string, clusterID: string): $CancellablePromise<boolean> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.CloseClusterView", windowName, clusterID);
 }
 
 export function CloseShellSession(sessionID: string): $CancellablePromise<void> {

@@ -51,6 +51,16 @@ func TestSharedPanelWorkspaceBoundaryAuthenticatesAndPreservesEveryCommand(t *te
 		call func(*DesktopService, context.Context, string) error
 		want []any
 	}{
+		{"CloseClusterView", func(service *DesktopService, ctx context.Context, caller string) error {
+			allowed, err := service.CloseClusterView(ctx, caller, "production")
+			if err == nil {
+				require.True(t, allowed)
+			}
+			return err
+		}, []any{"workspace-1", "production"}},
+		{"AcknowledgeClusterPanelClose", func(service *DesktopService, ctx context.Context, caller string) error {
+			return service.AcknowledgeClusterPanelClose(ctx, caller, "close-1", false)
+		}, []any{"workspace-1", "close-1", false}},
 		{"AcknowledgePanelWorkspaceReady", func(service *DesktopService, ctx context.Context, caller string) error {
 			return service.AcknowledgePanelWorkspaceReady(ctx, caller)
 		}, []any{"workspace-1"}},
@@ -102,4 +112,11 @@ func TestSharedPanelWorkspaceBoundaryAuthenticatesAndPreservesEveryCommand(t *te
 			require.ErrorContains(t, test.call(service, ctx, "workspace-1"), "registry is not available")
 		})
 	}
+}
+
+func (r *sharedWorkspaceRecorder) CloseClusterView(ctx context.Context, windowName, clusterID string) (bool, error) {
+	return true, r.record(windowName, clusterID)
+}
+func (r *sharedWorkspaceRecorder) AcknowledgeClusterPanelClose(windowName, transactionID string, allowed bool) error {
+	return r.record(windowName, transactionID, allowed)
 }

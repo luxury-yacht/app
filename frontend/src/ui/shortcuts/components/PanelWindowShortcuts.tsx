@@ -14,10 +14,13 @@ import type { PanelWindowDescriptor } from '@/core/panel-windows';
 import {
   acceptPanelTabTransfer,
   acknowledgeApplicationQuitPreflight,
+  acknowledgeClusterPanelClose,
   acknowledgePanelWindowClose,
   beginPanelWindowOpen,
   failPanelTabTransfer,
   onApplicationQuitPreflightRequested,
+  onClusterPanelCloseRequested,
+  onClusterPanelCloseSettled,
   onPanelTabCloseAuthorized,
   onPanelTabTransferCommitted,
   onPanelTabTransferFailed,
@@ -113,6 +116,60 @@ export function PanelWindowShortcuts({
       }),
     [descriptor.windowName, guards, openPanels, ready, focusLifecycleBlocker]
   );
+
+  const prepareClusterClose = useCallback(
+    async (transactionId: string) => {
+      const panelIds = Array.from(openPanels.keys());
+      const blocker = guards.firstBlocker(panelIds);
+      if (blocker) {
+        focusLifecycleBlocker(blocker);
+      }
+      if (!ready || blocker || guards.isFrozen()) {
+        return false;
+      }
+      guards.freeze(transactionId, panelIds, 'Closing cluster…');
+      try {
+        await nativePanelPublication.flush();
+        return true;
+      } catch (error) {
+        reportOperationalError(error, {
+          source: 'PanelWindowShortcuts',
+          action: 'cluster-close-preflight',
+          clusterId: descriptor.clusterId,
+        });
+        return false;
+      }
+    },
+    [descriptor.clusterId, guards, openPanels, ready, focusLifecycleBlocker]
+  );
+
+  useEffect(() => {
+    const stopRequest = onClusterPanelCloseRequested((event) => {
+      if (event.windowName !== descriptor.windowName || event.clusterId !== descriptor.clusterId) {
+        return;
+      }
+      void prepareClusterClose(event.transactionId)
+        .then((approved) =>
+          acknowledgeClusterPanelClose(descriptor.windowName, event.transactionId, approved)
+        )
+        .catch((error) =>
+          reportOperationalError(error, {
+            source: 'PanelWindowShortcuts',
+            action: 'acknowledge-cluster-close',
+            clusterId: descriptor.clusterId,
+          })
+        );
+    });
+    const stopSettled = onClusterPanelCloseSettled((event) => {
+      if (event.windowName === descriptor.windowName && event.clusterId === descriptor.clusterId) {
+        guards.releaseTransfer(event.transactionId);
+      }
+    });
+    return () => {
+      stopRequest();
+      stopSettled();
+    };
+  }, [descriptor.windowName, descriptor.clusterId, guards, prepareClusterClose]);
 
   const getPanelSnapshot = useCallback(
     (panelId: string) => {

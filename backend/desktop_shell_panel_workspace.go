@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"github.com/luxury-yacht/app/internal/panelwindow"
 )
@@ -59,4 +60,18 @@ func (s *DesktopShell) FailClusterTabTransfer(windowName, transferID string) err
 		return fmt.Errorf("panel workspace registry is not available")
 	}
 	return s.panelWorkspace.FailClusterTabTransfer(windowName, transferID)
+}
+
+func (s *DesktopShell) CloseClusterView(ctx context.Context, windowName, clusterID string) (bool, error) {
+	if s.panelWorkspace == nil {
+		return false, fmt.Errorf("panel workspace registry is not available")
+	}
+	return s.panelWorkspace.CloseClusterView(ctx, windowName, clusterID)
+}
+
+func (s *DesktopShell) AcknowledgeClusterPanelClose(windowName, transactionID string, allowed bool) error {
+	if s.panelWorkspace == nil {
+		return fmt.Errorf("panel workspace registry is not available")
+	}
+	return s.panelWorkspace.AcknowledgeClusterPanelClose(windowName, transactionID, allowed)
 }

@@ -18,6 +18,8 @@ declare module "@wailsio/runtime" {
             "app-logs:added": backend$0.AppLogsAddedEvent;
             "app-update": backend$0.UpdateInfo | null;
             "backend-error": backend$0.BackendErrorEvent;
+            "cluster-panel-close:requested": panelwindow$0.ClusterPanelCloseEvent;
+            "cluster-panel-close:settled": panelwindow$0.ClusterPanelCloseEvent;
             "cluster-tab-transfer:committed": panelwindow$0.ClusterTabTransferEvent;
             "cluster-tab-transfer:failed": panelwindow$0.ClusterTabTransferEvent;
             "cluster-tab-transfer:insert": panelwindow$0.ClusterTabTransferEvent;

@@ -132,8 +132,14 @@ app-view reconciliation and retained-panel restoration.
   tab until its native window close commits.
 - Panel-window close: guard the group, close the native window, then remove its
   shared entries and release its runtime reference.
-- Cluster-tab or app-window close: guard and flush local docked panels, retain
-  their shared identities, and release that app view. Floating panels remain open.
+- Cluster-tab close: guard and flush local docked panels. If another app window
+  still displays the cluster, release only this view and retain its shared
+  panels. For the final app view, preflight every native panel window belonging
+  to that cluster, close them only after all approve, discard the shared panel
+  collection, then remove the cluster tab. Denial, timeout, or a pending transfer
+  preserves the tab. Approved renderers stay frozen until the transaction settles.
+- App-window close: guard and flush local docked panels, retain their shared
+  identities, and release that app view. Floating panels remain open.
 - Application quit: preflight every ready app and panel renderer. Close none
   until every participant approves. Denial or timeout preserves all renderers.
 

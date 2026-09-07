@@ -1323,3 +1323,10 @@ func (b *recordingLifecycleBackend) CancelClusterViewTransfer(target, clusterID 
 	b.windowClusters[target] = remaining
 	return nil
 }
+
+func (b *recordingLifecycleBackend) CloseClusterView(windowID, clusterID string) error {
+	if b.windowClusters != nil {
+		b.windowClusters[windowID] = slices.DeleteFunc(slices.Clone(b.windowClusters[windowID]), func(value string) bool { return value == clusterID })
+	}
+	return nil
+}

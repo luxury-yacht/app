@@ -60,3 +60,17 @@ func (s *DesktopService) FailClusterTabTransfer(ctx context.Context, windowName,
 	}
 	return s.panelWindows.FailClusterTabTransfer(windowName, transferID)
 }
+
+func (s *DesktopService) CloseClusterView(ctx context.Context, windowName, clusterID string) (bool, error) {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return false, err
+	}
+	return s.panelWindows.CloseClusterView(ctx, windowName, clusterID)
+}
+
+func (s *DesktopService) AcknowledgeClusterPanelClose(ctx context.Context, windowName, transactionID string, allowed bool) error {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return err
+	}
+	return s.panelWindows.AcknowledgeClusterPanelClose(windowName, transactionID, allowed)
+}

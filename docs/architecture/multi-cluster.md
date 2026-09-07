@@ -108,9 +108,14 @@ selection, auth, lifecycle, and visible-cluster reads.
 The backend retains one cluster-tab set per app window plus cluster-scoped
 panel references. Their deterministic union owns process-wide selected
 kubeconfigs, clients, refresh subsystems, catalogs, and runtime operations.
-Closing a tab releases only that app view. Docked panels become retained shared
-panels, and floating panels remain open. Teardown requires that neither app views
-nor panel references retain the cluster. Cluster-tab movement stages the target
+Closing a tab releases only that app view while another app window displays the
+cluster. Explicitly closing its final app tab first guards and closes its native
+panel windows and discards its shared panels. Closing an app window instead
+retains docked panels and leaves floating panels open. Teardown requires that
+neither app views nor panel references retain the cluster. The native close
+command records a view's removal before another close decides whether it is the
+final view; renderer selection updates then reconcile that authoritative result.
+Cluster-tab movement stages the target
 before removing the source, preserving the process selection throughout.
 A panel-only renderer projects its fixed cluster without creating an app-view
 tab set. See [application lifecycle](application-lifecycle.md#cluster-owned-panel-workspaces).

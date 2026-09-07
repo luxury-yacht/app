@@ -13,6 +13,7 @@ import (
 )
 
 type lifecycleBackend interface {
+	CloseClusterView(string, string) error
 	WindowRuntimeReady(windowName string, restoreGeometry bool) bool
 	ReleaseWorkspaceWindow(windowID string)
 	PrepareQuitFromWindow(windowName string) bool
@@ -25,6 +26,9 @@ type lifecycleBackend interface {
 
 // Registry owns the application's peer workspace windows and their lifecycle.
 type Registry struct {
+	clusterCloseMu         sync.Mutex
+	nextClusterClose       uint64
+	clusterPanelCloses     map[string]*clusterPanelClose
 	clusterTransfers       map[string]*clusterViewTransfer
 	usedClusterTransferIDs map[string]struct{}
 	application            *application.App

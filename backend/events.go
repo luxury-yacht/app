@@ -135,6 +135,8 @@ func init() {
 	application.RegisterEvent[panelwindow.TabTransferInsertRequestedEvent](panelwindow.TabTransferInsertRequestedEventName)
 	application.RegisterEvent[panelwindow.TabTransferCommittedEvent](panelwindow.TabTransferCommittedEventName)
 	application.RegisterEvent[panelwindow.TabTransferFailedEvent](panelwindow.TabTransferFailedEventName)
+	application.RegisterEvent[panelwindow.ClusterPanelCloseEvent](panelwindow.ClusterPanelCloseRequestedEventName)
+	application.RegisterEvent[panelwindow.ClusterPanelCloseEvent](panelwindow.ClusterPanelCloseSettledEventName)
 	application.RegisterEvent[panelwindow.ApplicationQuitPreflightRequestedEvent](panelwindow.ApplicationQuitPreflightRequestedEventName)
 
 	application.RegisterEvent[[]ShellSessionInfo](shellListEventName)

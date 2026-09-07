@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/stretchr/testify/require"
@@ -48,6 +49,16 @@ func TestSharedWorkspaceBridgePreservesIdentityAndReportsUnboundRegistry(t *test
 		call func(*windowRegistryBridge) error
 		want []any
 	}{
+		{"CloseClusterView", func(bridge *windowRegistryBridge) error {
+			allowed, err := bridge.CloseClusterView(context.Background(), "workspace-1", "production")
+			if err == nil {
+				require.True(t, allowed)
+			}
+			return err
+		}, []any{"workspace-1", "production"}},
+		{"AcknowledgeClusterPanelClose", func(bridge *windowRegistryBridge) error {
+			return bridge.AcknowledgeClusterPanelClose("workspace-1", "close-1", false)
+		}, []any{"workspace-1", "close-1", false}},
 		{"AcknowledgePanelWorkspaceReady", func(bridge *windowRegistryBridge) error { return bridge.AcknowledgePanelWorkspaceReady("workspace-1") }, []any{"workspace-1"}},
 		{"GetPanelWorkspace", func(bridge *windowRegistryBridge) error {
 			result, err := bridge.GetPanelWorkspace("workspace-1", "production")
@@ -90,4 +101,11 @@ func TestSharedWorkspaceBridgePreservesIdentityAndReportsUnboundRegistry(t *test
 			require.ErrorIs(t, test.call(bridge), recorder.err)
 		})
 	}
+}
+
+func (r *sharedWorkspaceBridgeRecorder) CloseClusterView(ctx context.Context, windowName, clusterID string) (bool, error) {
+	return true, r.record(windowName, clusterID)
+}
+func (r *sharedWorkspaceBridgeRecorder) AcknowledgeClusterPanelClose(windowName, transactionID string, allowed bool) error {
+	return r.record(windowName, transactionID, allowed)
 }

@@ -11,6 +11,7 @@ export {
 
 export type {
     ApplicationQuitPreflightRequestedEvent,
+    ClusterPanelCloseEvent,
     ClusterTabTransferEvent,
     ClusterTabTransferRequest,
     ClusterViewSnapshot,

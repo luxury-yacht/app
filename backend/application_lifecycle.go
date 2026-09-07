@@ -97,6 +97,7 @@ type refreshSubsystemTeardowner interface {
 }
 
 type lifecycleWorkspace interface {
+	CloseClusterView(string, string) error
 	panelwindow.ClusterViewTransferLifecycle
 	ReleaseWorkspaceWindow(string)
 	WindowClusterIDs(string) []string
@@ -477,4 +478,8 @@ func (a *ApplicationLifecycle) CommitClusterViewTransfer(source, target, cluster
 }
 func (a *ApplicationLifecycle) CancelClusterViewTransfer(target, clusterID string) error {
 	return a.workspace.CancelClusterViewTransfer(target, clusterID)
+}
+
+func (a *ApplicationLifecycle) CloseClusterView(windowID, clusterID string) error {
+	return a.workspace.CloseClusterView(windowID, clusterID)
 }

@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
     clusterId: string;
     getTabSnapshot: (panelId: string) => unknown;
   },
+  closeClusterPanels: vi.fn(async (_window: string, _cluster: string) => true),
   clusterPreflight: null as null | ((clusterId: string) => Promise<boolean>),
   beginOpen: vi.fn(async (owner: string, snapshot: unknown) => ({
     owner,
@@ -104,6 +105,7 @@ vi.mock('@/core/panel-windows', async (importOriginal) => {
     beginPanelWindowOpen: mocks.beginOpen,
     acknowledgePanelWindowDock: mocks.acknowledgeDock,
     acknowledgeWorkspaceWindowClose: mocks.acknowledgeWorkspaceClose,
+    closeClusterView: mocks.closeClusterPanels,
     authorizePanelObjectOpen: mocks.authorizeObjectOpen,
     authorizePanelTabClose: mocks.authorizeTabClose,
     requestPanelTabTransfer: mocks.requestTabTransfer,
@@ -1125,6 +1127,31 @@ describe('WorkspacePanelCoordinator', () => {
       width: 720,
       height: 560,
     });
+  });
+
+  it('waits for the cluster panel windows before removing the cluster tab', async () => {
+    let finish!: (allowed: boolean) => void;
+    mocks.closeClusterPanels.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+    );
+    let settled = false;
+    const preflight = mocks.clusterPreflight;
+    if (!preflight) {
+      throw new Error('Cluster close preflight was not registered');
+    }
+    const result = preflight('cluster-1').then((allowed) => {
+      settled = true;
+      return allowed;
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mocks.closeClusterPanels).toHaveBeenCalledWith('workspace-1', 'cluster-1');
+    expect(settled).toBe(false);
+    finish(false);
+    expect(await result).toBe(false);
   });
 
   it('keeps this cluster view mounted when its local YAML is unsaved', async () => {

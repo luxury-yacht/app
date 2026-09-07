@@ -46,6 +46,7 @@ type PanelOpenResult struct {
 }
 
 type SharedWorkspaceCommands interface {
+	ClusterPanelCloseCommands
 	ClusterTabTransferCommands
 	GetPanelWorkspace(string, string) (WorkspaceSnapshot, error)
 	OpenPanelWorkspaceObject(string, TabSnapshot) (PanelOpenResult, error)
@@ -392,5 +393,19 @@ func (d *WorkspaceDirectory) replacePublishedWindowLocked(windowName string, nex
 	for key, panel := range next {
 		d.panels[key] = panel
 		delete(d.unpublished, key)
+	}
+}
+
+// RemoveCluster discards the shared panel collection after all renderers have
+// approved an explicit close of the cluster's final app tab.
+func (d *WorkspaceDirectory) RemoveCluster(clusterID string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for key := range d.panels {
+		if key.clusterID == clusterID {
+			delete(d.panels, key)
+			delete(d.unpublished, key)
+			d.revision++
+		}
 	}
 }

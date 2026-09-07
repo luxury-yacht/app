@@ -2,6 +2,7 @@ import {
   AcceptClusterTabTransfer,
   AcceptPanelTabTransfer,
   AcknowledgeApplicationQuitPreflight,
+  AcknowledgeClusterPanelClose,
   AcknowledgeClusterTabTransfer,
   AcknowledgePanelWindowClose,
   AcknowledgePanelWindowDock,
@@ -10,6 +11,7 @@ import {
   AcknowledgeWorkspaceWindowClose,
   BeginPanelWindowDock,
   BeginPanelWindowOpen,
+  CloseClusterView,
   FailClusterTabTransfer,
   FailPanelTabTransfer,
   FailPanelWindowTransfer,
@@ -219,3 +221,17 @@ export const onClusterTabTransferFailed = (
 export const onPanelWindowTransferFailed = (
   handler: (event: panelwindow.WindowTransferFailedEvent) => void
 ) => onEvent('panel-window:transfer-failed', handler);
+
+export const closeClusterView = (windowName: string, clusterId: string): Promise<boolean> =>
+  CloseClusterView(windowName, clusterId);
+export const acknowledgeClusterPanelClose = (
+  windowName: string,
+  transactionId: string,
+  allowed: boolean
+): Promise<void> => AcknowledgeClusterPanelClose(windowName, transactionId, allowed);
+export const onClusterPanelCloseRequested = (
+  handler: (event: panelwindow.ClusterPanelCloseEvent) => void
+) => onEvent('cluster-panel-close:requested', handler);
+export const onClusterPanelCloseSettled = (
+  handler: (event: panelwindow.ClusterPanelCloseEvent) => void
+) => onEvent('cluster-panel-close:settled', handler);

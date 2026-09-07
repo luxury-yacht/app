@@ -7,6 +7,7 @@ import { reportOperationalError } from '@/utils/errorHandler';
 import {
   acknowledgeApplicationQuitPreflight,
   acknowledgeWorkspaceWindowClose,
+  closeClusterView,
   onApplicationQuitPreflightRequested,
   onWorkspaceCloseRequested,
 } from './index';
@@ -43,9 +44,24 @@ export function WorkspacePanelLifecycle() {
     [panelIdsForCluster, getOwnedPanel, guards, focusPanel, windowName, flush]
   );
 
+  const closeCluster = useCallback(
+    async (clusterId: string) => {
+      if (!(await preflight([clusterId]))) {
+        return false;
+      }
+      const transactionId = `cluster-close-${globalThis.crypto.randomUUID()}`;
+      guards.freeze(transactionId, panelIdsForCluster(clusterId), 'Closing cluster…');
+      try {
+        return await closeClusterView(windowName, clusterId);
+      } finally {
+        guards.releaseTransfer(transactionId);
+      }
+    },
+    [preflight, guards, panelIdsForCluster, windowName]
+  );
   useEffect(
-    () => registerClusterClosePreflight((clusterId) => preflight([clusterId])),
-    [registerClusterClosePreflight, preflight]
+    () => registerClusterClosePreflight(closeCluster),
+    [registerClusterClosePreflight, closeCluster]
   );
   useEffect(
     () =>

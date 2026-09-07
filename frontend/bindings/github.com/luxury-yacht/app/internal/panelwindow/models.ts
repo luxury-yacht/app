@@ -6,6 +6,12 @@ export interface ApplicationQuitPreflightRequestedEvent {
     "windowName": string;
 }
 
+export interface ClusterPanelCloseEvent {
+    "transactionId": string;
+    "windowName": string;
+    "clusterId": string;
+}
+
 export interface ClusterTabTransferEvent {
     "request": ClusterTabTransferRequest;
     "snapshot": ClusterViewSnapshot;

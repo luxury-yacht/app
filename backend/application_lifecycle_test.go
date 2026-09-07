@@ -42,6 +42,8 @@ type blockingStartupWorkspace struct {
 	release chan struct{}
 }
 
+func (w *blockingStartupWorkspace) CloseClusterView(string, string) error { return nil }
+
 func (w *blockingStartupWorkspace) WindowClusterIDs(string) []string { return nil }
 func (w *blockingStartupWorkspace) PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory {
 	return panelwindow.NewWorkspaceDirectory()

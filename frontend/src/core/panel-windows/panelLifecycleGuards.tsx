@@ -22,7 +22,7 @@ export interface PanelLifecycleBlocker {
 type PanelGuard = () => PanelLifecycleBlocker | null;
 
 export class PanelLifecycleGuardRegistry {
-  readonly #transfers = new Map<string, readonly string[]>();
+  readonly #transfers = new Map<string, { panelIds: readonly string[]; status: string }>();
   readonly #listeners = new Set<() => void>();
   subscribe = (listener: () => void) => {
     this.#listeners.add(listener);
@@ -31,8 +31,9 @@ export class PanelLifecycleGuardRegistry {
     };
   };
   isFrozen = () => this.#transfers.size > 0;
-  freeze(transferId: string, panelIds: readonly string[]): void {
-    this.#transfers.set(transferId, [...panelIds]);
+  frozenStatus = () => this.#transfers.values().next().value?.status ?? '';
+  freeze(transferId: string, panelIds: readonly string[], status = 'Moving panels…'): void {
+    this.#transfers.set(transferId, { panelIds: [...panelIds], status });
     for (const listener of this.#listeners) {
       listener();
     }
@@ -61,7 +62,7 @@ export class PanelLifecycleGuardRegistry {
 
   firstBlocker(panelIds: readonly string[]): PanelLifecycleBlocker | null {
     for (const panelId of panelIds) {
-      if (Array.from(this.#transfers.values()).some((ids) => ids.includes(panelId))) {
+      if (Array.from(this.#transfers.values()).some((entry) => entry.panelIds.includes(panelId))) {
         return {
           panelId,
           reason: 'transfer-in-flight',
@@ -100,7 +101,8 @@ export const PanelLifecycleGuardProvider: React.FC<{ children: React.ReactNode }
 }) => {
   const registry = useMemo(() => new PanelLifecycleGuardRegistry(), []);
   const surface = useRef<HTMLDivElement>(null);
-  const frozen = useSyncExternalStore(registry.subscribe, registry.isFrozen, () => false);
+  const status = useSyncExternalStore(registry.subscribe, registry.frozenStatus, () => '');
+  const frozen = Boolean(status);
   useLayoutEffect(() => {
     const update = () => {
       if (surface.current) {
@@ -133,7 +135,7 @@ export const PanelLifecycleGuardProvider: React.FC<{ children: React.ReactNode }
       </div>
       {frozen && (
         <div className="panel-transfer-status" role="status">
-          Moving panels…
+          {status}
         </div>
       )}
     </PanelLifecycleGuardContext.Provider>
