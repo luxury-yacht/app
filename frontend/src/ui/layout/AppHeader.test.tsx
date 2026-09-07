@@ -93,6 +93,18 @@ describe('AppHeader', () => {
   };
 
   it.each([false, true])(
+    'identifies the panel cluster in the visible header (mac=%s)',
+    async (isMac) => {
+      platformMock.isMacPlatform.mockReturnValue(isMac);
+      await act(async () => root.render(<AppHeader mode="panel" clusterName="Production" />));
+      expect(container.querySelector('header')?.textContent).toContain('Production');
+      expect(container.querySelector('.app-header-cluster-name')?.getAttribute('title')).toBe(
+        'Production'
+      );
+    }
+  );
+
+  it.each([false, true])(
     'returns from the sidebar to the final header control (mac=%s)',
     (isMac) => {
       platformMock.isMacPlatform.mockReturnValue(isMac);

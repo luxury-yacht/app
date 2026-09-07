@@ -128,6 +128,7 @@ interface DockablePanelContextValue {
   detachPanelGroup: (clusterId: string, panelIds: readonly string[]) => void;
   // Remove closed native-panel layout and group state from its owning cluster.
   discardPanelLayouts: (clusterId: string, panelIds: readonly string[]) => void;
+  getClusterTabGroups: (clusterId: string) => TabGroupState;
   requestGroupMove?: (groupKey: GroupKey, targetPosition: DockPosition) => boolean;
   nativeWindowMode: boolean;
 }
@@ -269,7 +270,6 @@ interface DockablePanelProviderProps {
   nativeWindowMode?: boolean;
   tabDragIdentity?: {
     windowName: string;
-    ownerWindowName: string;
     clusterId: string;
     nativeGroupId?: string;
     getTabSnapshot: (
@@ -280,6 +280,10 @@ interface DockablePanelProviderProps {
     payload: Extract<TabDragPayload, { kind: 'dockable-tab' }>,
     targetGroupId: string,
     insertIndex: number
+  ) => void;
+  onClusterTabTearOff?: (
+    payload: Extract<TabDragPayload, { kind: 'cluster-tab' }>,
+    cursor: { x: number; y: number }
   ) => void;
   onTabTearOff?: (
     payload: Extract<TabDragPayload, { kind: 'dockable-tab' }>,
@@ -297,6 +301,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   tabDragIdentity,
   onExternalTabDrop,
   onTabTearOff,
+  onClusterTabTearOff,
   canStartTabDrag,
 }) => {
   const lifecycleGuards = useOptionalPanelLifecycleGuardRegistry();
@@ -376,6 +381,10 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
     [activeStore]
   );
   const getTabGroupsSnapshot = useCallback(() => activeStore.getTabGroups(), [activeStore]);
+  const getClusterTabGroups = useCallback(
+    (clusterId: string) => getOrCreateStoreForCluster(clusterId).getTabGroups(),
+    [getOrCreateStoreForCluster]
+  );
   const tabGroups = useSyncExternalStore(subscribeTabGroups, getTabGroupsSnapshot);
 
   // Panel registrations are stored in a ref for callback access and mirrored
@@ -756,7 +765,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       sourceGroupId,
       sourceWindowName: tabDragIdentity?.windowName,
       sourceWindowGroupId: tabDragIdentity?.nativeGroupId ?? sourceGroupId,
-      ownerWindowName: tabDragIdentity?.ownerWindowName,
       clusterId: tabDragIdentity?.clusterId,
       tab: tabDragIdentity?.getTabSnapshot(panelId),
     }),
@@ -777,12 +785,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
         movePanel(payload.panelId, payload.sourceGroupId, targetGroupId, insertIndex);
         return;
       }
-      if (
-        !onExternalTabDrop ||
-        payload.ownerWindowName !== tabDragIdentity.ownerWindowName ||
-        payload.clusterId !== tabDragIdentity.clusterId ||
-        !payload.tab
-      ) {
+      if (!onExternalTabDrop || payload.clusterId !== tabDragIdentity.clusterId || !payload.tab) {
         return;
       }
       onExternalTabDrop(payload, targetGroupId, insertIndex);
@@ -799,9 +802,11 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
     (payload: TabDragPayload, cursor: { x: number; y: number }) => {
       if (payload.kind === 'dockable-tab') {
         onTabTearOff?.(payload, cursor);
+      } else {
+        onClusterTabTearOff?.(payload, cursor);
       }
     },
-    [onTabTearOff]
+    [onTabTearOff, onClusterTabTearOff]
   );
 
   // -----------------------------------------------------------------------
@@ -961,6 +966,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       dockPanelGroup,
       detachPanelGroup,
       discardPanelLayouts,
+      getClusterTabGroups,
       requestGroupMove,
       nativeWindowMode,
     }),
@@ -993,6 +999,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       dockPanelGroup,
       detachPanelGroup,
       discardPanelLayouts,
+      getClusterTabGroups,
       requestGroupMove,
       nativeWindowMode,
     ]

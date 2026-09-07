@@ -1,6 +1,7 @@
 package appwindow
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 	"sync"
@@ -15,50 +16,54 @@ type lifecycleBackend interface {
 	WindowRuntimeReady(windowName string, restoreGeometry bool) bool
 	ReleaseWorkspaceWindow(windowID string)
 	PrepareQuitFromWindow(windowName string) bool
+	WindowClusterIDs(string) []string
+	panelwindow.ClusterViewTransferLifecycle
+	PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory
+	RetainPanelCluster(string, string) error
+	ReleasePanelCluster(string) error
 }
 
 // Registry owns the application's peer workspace windows and their lifecycle.
 type Registry struct {
-	application          *application.App
-	backend              lifecycleBackend
-	lifecycle            *lifecycle
-	panels               *panelIndex
-	newWindow            func(application.WebviewWindowOptions) *application.WebviewWindow
-	configurePanelWindow func(*application.WebviewWindow)
-	showWindow           func(string) bool
-	closeWindow          func(string) bool
-	focusWindow          func(string) bool
-	emitWindowEvent      func(string, string, any) bool
-	windowGeometry       func(string) (geometry, bool)
-	panelScreenWorkAreas func() []application.Rect
-	closeMu              sync.Mutex
-	authorizedClose      map[string]struct{}
-	workspaceReady       map[string]struct{}
-	panelOpenTimeout     time.Duration
-	quitMu               sync.Mutex
-	nextQuit             uint64
-	pendingQuit          *applicationQuitPreflight
-	quitApproved         bool
-	quitApprovalTimeout  *time.Timer
-	quitPreflightTimeout time.Duration
-	guardMu              sync.Mutex
-	pendingGuards        map[string]panelGuardRequest
-	panelTransferMu      sync.Mutex
-	tabTransferMu        sync.Mutex
-	pendingTabTransfers  map[string]*panelTabTransfer
-	usedTabTransferIDs   map[string]struct{}
-	tabTransferTimeout   time.Duration
+	clusterTransfers       map[string]*clusterViewTransfer
+	usedClusterTransferIDs map[string]struct{}
+	application            *application.App
+	backend                lifecycleBackend
+	lifecycle              *lifecycle
+	panels                 *panelIndex
+	workspace              *panelwindow.WorkspaceDirectory
+	workspaceMu            sync.Mutex
+	newWindow              func(application.WebviewWindowOptions) *application.WebviewWindow
+	configurePanelWindow   func(*application.WebviewWindow)
+	showWindow             func(string) bool
+	closeWindow            func(string) bool
+	focusWindow            func(string) bool
+	emitWindowEvent        func(string, string, any) bool
+	windowGeometry         func(string) (geometry, bool)
+	panelScreenWorkAreas   func() []application.Rect
+	closeMu                sync.Mutex
+	authorizedClose        map[string]struct{}
+	workspaceReady         map[string]struct{}
+	panelWorkspaceReady    map[string]struct{}
+	queuedWorkspaceEvents  map[string][]workspaceWindowEvent
+	panelOpenTimeout       time.Duration
+	quitMu                 sync.Mutex
+	nextQuit               uint64
+	pendingQuit            *applicationQuitPreflight
+	quitApproved           bool
+	quitApprovalTimeout    *time.Timer
+	quitPreflightTimeout   time.Duration
+	panelTransferMu        sync.Mutex
+	tabTransferMu          sync.Mutex
+	pendingTabTransfers    map[string]*panelTabTransfer
+	usedTabTransferIDs     map[string]struct{}
+	tabTransferTimeout     time.Duration
 }
 
 type applicationQuitPreflight struct {
 	transactionID string
 	waiting       map[string]struct{}
 	timeout       *time.Timer
-}
-
-type panelGuardRequest struct {
-	ownerWindowName string
-	panelWindowName string
 }
 
 func (r *Registry) setQuitApprovedLocked(approved bool) {
@@ -188,15 +193,18 @@ func NewRegistry(
 		backend:              backend,
 		lifecycle:            newLifecycle(),
 		panels:               newPanelIndex(),
+		workspace:            panelwindow.NewWorkspaceDirectory(),
 		authorizedClose:      make(map[string]struct{}),
 		workspaceReady:       make(map[string]struct{}),
 		panelOpenTimeout:     15 * time.Second,
 		quitPreflightTimeout: 20 * time.Second,
-		pendingGuards:        make(map[string]panelGuardRequest),
 		pendingTabTransfers:  make(map[string]*panelTabTransfer),
 		usedTabTransferIDs:   make(map[string]struct{}),
 		tabTransferTimeout:   15 * time.Second,
 		configurePanelWindow: configureNativePanelWindow,
+	}
+	if backend != nil {
+		registry.workspace = backend.PanelWorkspaceDirectory()
 	}
 	bindApplicationWindowOperations(registry, app)
 	registry.panelScreenWorkAreas = func() []application.Rect {
@@ -220,42 +228,36 @@ func NewRegistry(
 func (r *Registry) BeginPanelWindowOpen(
 	snapshot PanelGroupSnapshot,
 ) (PanelWindowDescriptor, error) {
-	if r == nil || r.lifecycle == nil || !r.lifecycle.Contains(snapshot.OwnerWindowName) {
+	if r == nil || !r.windowHasCluster(snapshot.SourceWindowName, snapshot.ClusterID) {
 		return PanelWindowDescriptor{}, fmt.Errorf(
-			"owner workspace %q is not live",
-			snapshot.OwnerWindowName,
+			"source window %q is not live",
+			snapshot.SourceWindowName,
 		)
+	}
+	r.panelTransferMu.Lock()
+	defer r.panelTransferMu.Unlock()
+	r.workspaceMu.Lock()
+	defer r.workspaceMu.Unlock()
+	if err := r.validateGroupSource(snapshot.SourceWindowName, snapshot); err != nil {
+		return PanelWindowDescriptor{}, err
+	}
+	if err := r.retainPanelWorkspace(snapshot.ClusterID); err != nil {
+		return PanelWindowDescriptor{}, err
 	}
 	descriptor, err := r.beginPanelWindowOpenTransfer(snapshot)
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
-	options := panelWindowOptions(descriptor.WindowName, snapshot.InitialBounds)
-	if snapshot.InitialBounds != nil {
-		positioned := false
-		if snapshot.UseInitialPosition {
-			positioned = r.positionPanelWindowAtTransferredBounds(
-				&options,
-				*snapshot.InitialBounds,
-				snapshot.InitialPositionAnchor,
-			)
-		} else if r.windowGeometry != nil {
-			if ownerGeometry, ok := r.windowGeometry(snapshot.OwnerWindowName); ok {
-				positioned = positionPanelWindowOptions(&options, ownerGeometry)
-			}
-		}
-		if !positioned {
-			options.InitialPosition = application.WindowCentered
-		}
+	if err := r.backend.RetainPanelCluster(descriptor.WindowName, snapshot.ClusterID); err != nil {
+		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
+		return PanelWindowDescriptor{}, err
 	}
+	options := r.transferredPanelWindowOptions(descriptor.WindowName, snapshot)
 	window := r.newWindow(options)
 	if window == nil {
 		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
 		r.failPanelTabTransfer(snapshot.TransferID, "new panel target could not be created")
-		return PanelWindowDescriptor{}, fmt.Errorf(
-			"create native panel window %q",
-			descriptor.WindowName,
-		)
+		return PanelWindowDescriptor{}, errors.Join(fmt.Errorf("create native panel window %q", descriptor.WindowName), r.releaseNativePanelReference(descriptor.WindowName))
 	}
 	if r.configurePanelWindow != nil {
 		r.configurePanelWindow(window)
@@ -415,6 +417,8 @@ func (r *Registry) forgetWorkspaceReady(name string) {
 	r.closeMu.Lock()
 	defer r.closeMu.Unlock()
 	delete(r.workspaceReady, name)
+	delete(r.panelWorkspaceReady, name)
+	delete(r.queuedWorkspaceEvents, name)
 }
 
 func (r *Registry) handlePanelClosingEvent(event *application.WindowEvent, name string) {
@@ -466,128 +470,125 @@ func (r *Registry) WindowDescriptor(name string) (NativeWindowDescriptor, error)
 	return NativeWindowDescriptor{}, fmt.Errorf("native window %q is not registered", name)
 }
 
-// PanelNamesOwnedByWorkspace lists the current process-local native children
 // of one workspace.
-func (r *Registry) PanelNamesOwnedByWorkspace(ownerWindowName string) []string {
-	if r == nil || r.panels == nil {
-		return nil
-	}
-	return r.panels.NamesOwnedBy(ownerWindowName, "")
-}
 
 // AcknowledgePanelWindowReady commits an opening transfer and reveals the
 // hidden native target. A stale acknowledgement leaves the source transfer pending.
-func (r *Registry) AcknowledgePanelWindowReady(
-	name, transferID string,
-) (PanelWindowDescriptor, error) {
+func (r *Registry) AcknowledgePanelWindowReady(name, transferID string) (PanelWindowDescriptor, error) {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
+	r.workspaceMu.Lock()
+	defer r.workspaceMu.Unlock()
 	descriptor, err := r.panels.AcknowledgeOpen(name, transferID)
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
-	if r.showWindow(name) {
-		if r.emitWindowEvent(descriptor.OwnerWindowName, panelwindow.WindowOpenedEventName, panelwindow.WindowOpenedEvent{
-			WindowName: descriptor.WindowName,
-			TransferID: descriptor.Snapshot.TransferID,
-			ClusterID:  descriptor.ClusterID,
-			GroupID:    descriptor.GroupID,
-			Snapshot:   descriptor.Snapshot,
-		}) {
-			r.completePanelTabTransferForOpenedWindow(descriptor)
-			return descriptor, nil
-		}
-		r.authorizeClose(name)
-		if !r.closeWindow(name) {
-			r.consumeAuthorizedClose(name)
-		}
-		r.panels.Remove(name)
-		r.failPanelTabTransfer(descriptor.Snapshot.TransferID, "new panel target could not reach its owner")
-		r.emitPanelClosed(descriptor)
-		return PanelWindowDescriptor{}, fmt.Errorf(
-			"owner workspace %q is not available for panel open",
-			descriptor.OwnerWindowName,
-		)
+	snapshot := descriptor.Snapshot
+	previous := r.workspace.Snapshot(snapshot.ClusterID).Panels
+	group := panelwindow.WorkspaceGroup{ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}
+	if err := r.workspace.TransferGroup(snapshot.SourceWindowName, name, panelwindow.PanelLocationWindow, group); err != nil {
+		return PanelWindowDescriptor{}, errors.Join(err, r.abortReadyPanelWindow(descriptor))
 	}
-	r.panels.Remove(name)
-	r.failPanelTabTransfer(descriptor.Snapshot.TransferID, "new panel target disappeared before ready")
-	r.emitPanelClosed(descriptor)
-	return PanelWindowDescriptor{}, fmt.Errorf("panel window %q disappeared before ready", name)
+	if !r.showWindow(name) {
+		r.restoreFailedPanelOpen(name, previous)
+		return PanelWindowDescriptor{}, errors.Join(fmt.Errorf("panel window %q disappeared before ready", name), r.abortReadyPanelWindow(descriptor))
+	}
+	r.emitWindowEvent(snapshot.SourceWindowName, panelwindow.WindowOpenedEventName, panelwindow.WindowOpenedEvent{
+		WindowName: name, TransferID: snapshot.TransferID, ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Snapshot: snapshot,
+	})
+	r.completePanelTabTransferForOpenedWindow(descriptor)
+	r.emitWorkspaceChanged(snapshot.ClusterID)
+	return descriptor, nil
 }
 
 func (r *Registry) emitPanelClosed(descriptor PanelWindowDescriptor) {
-	r.emitWindowEvent(descriptor.OwnerWindowName, panelwindow.WindowClosedEventName, panelwindow.WindowClosedEvent{
-		WindowName: descriptor.WindowName,
-		ClusterID:  descriptor.ClusterID,
-		GroupID:    descriptor.GroupID,
-	})
+	targets := append(r.lifecycle.Names(), descriptor.Snapshot.SourceWindowName)
+	sent := make(map[string]struct{})
+	for _, target := range targets {
+		if _, exists := sent[target]; exists {
+			continue
+		}
+		sent[target] = struct{}{}
+		r.emitWindowEvent(target, panelwindow.WindowClosedEventName, panelwindow.WindowClosedEvent{WindowName: descriptor.WindowName, ClusterID: descriptor.ClusterID, GroupID: descriptor.GroupID})
+	}
 }
 
 // BeginPanelWindowDock records a target handoff while the native source stays
-// live, then routes the complete snapshot to its immutable owner workspace.
-func (r *Registry) BeginPanelWindowDock(
-	windowName string,
-	targetPosition string,
-	snapshot PanelGroupSnapshot,
-) error {
+// live, then routes the complete snapshot to an app window displaying the same cluster.
+func (r *Registry) BeginPanelWindowDock(windowName, targetPosition string, snapshot PanelGroupSnapshot) error {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
 	if targetPosition != "right" && targetPosition != "bottom" {
 		return fmt.Errorf("unsupported panel dock position %q", targetPosition)
 	}
-	if err := r.panels.BeginDock(windowName, snapshot); err != nil {
+	if snapshot.SourceWindowName != windowName {
+		return fmt.Errorf("panel dock source does not match caller")
+	}
+	if err := r.validateGroupSource(windowName, snapshot); err != nil {
 		return err
 	}
-	descriptor, err := r.panels.Descriptor(windowName)
+	target, err := r.appWindowForCluster(snapshot.ClusterID, windowName)
 	if err != nil {
-		_ = r.panels.FailTransfer(windowName, snapshot.TransferID)
 		return err
 	}
-	if !r.emitWindowEvent(descriptor.OwnerWindowName, panelwindow.WindowDockRequestedEventName, panelwindow.WindowDockRequestedEvent{
-		WindowName:     windowName,
-		TransferID:     snapshot.TransferID,
-		TargetPosition: targetPosition,
-		Snapshot:       snapshot,
-	}) {
+	if err := r.panels.BeginDock(windowName, snapshot, target, targetPosition); err != nil {
+		return err
+	}
+	time.AfterFunc(15*time.Second, func() {
+		current, err := r.panels.Descriptor(windowName)
+		if err == nil && current.State == PanelWindowStateDocking && current.Snapshot.TransferID == snapshot.TransferID {
+			_ = r.FailPanelWindowTransfer(windowName, windowName, snapshot.TransferID)
+		}
+	})
+	if !r.queueWorkspaceEvent(target, panelwindow.WindowDockRequestedEventName, panelwindow.WindowDockRequestedEvent{WindowName: windowName, TransferID: snapshot.TransferID, TargetPosition: targetPosition, Snapshot: snapshot}) {
 		_ = r.panels.FailTransfer(windowName, snapshot.TransferID)
-		return fmt.Errorf("owner workspace %q is not available", descriptor.OwnerWindowName)
+		descriptor, _ := r.panels.Descriptor(windowName)
+		r.emitDockFailure(descriptor)
+		return fmt.Errorf("app window %q is not available", target)
 	}
 	return nil
 }
 
-// AcknowledgePanelWindowDock commits the owner's reconstructed docked target,
+// AcknowledgePanelWindowDock commits the destination's reconstructed docked group,
 // removes the native role, and closes the now-redundant source window.
-func (r *Registry) AcknowledgePanelWindowDock(
-	ownerWindowName, windowName, transferID string,
-) error {
+func (r *Registry) AcknowledgePanelWindowDock(targetWindow, windowName, transferID string) error {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
+	r.workspaceMu.Lock()
+	defer r.workspaceMu.Unlock()
 	descriptor, err := r.panels.Descriptor(windowName)
 	if err != nil {
 		return err
 	}
-	if descriptor.OwnerWindowName != ownerWindowName {
-		return fmt.Errorf(
-			"panel window %q is owned by %q, not %q",
-			windowName,
-			descriptor.OwnerWindowName,
-			ownerWindowName,
-		)
-	}
-	if err := r.panels.ValidateDock(windowName, transferID); err != nil {
+	position, err := r.panels.DockTarget(windowName, transferID, targetWindow)
+	if err != nil {
 		return err
 	}
-	r.failPanelTabTransfersForWindow(windowName, "panel window moved as a whole group")
+	if !r.windowHasCluster(targetWindow, descriptor.ClusterID) {
+		return fmt.Errorf("dock target no longer displays the cluster")
+	}
+	previous := r.workspace.Snapshot(descriptor.ClusterID).Panels
+	group := panelwindow.WorkspaceGroup{ClusterID: descriptor.ClusterID, GroupID: position, Tabs: descriptor.Snapshot.Tabs, ActivePanelID: descriptor.Snapshot.ActivePanelID}
+	if err := r.workspace.TransferGroup(windowName, targetWindow, panelwindow.PanelLocationDocked, group); err != nil {
+		return err
+	}
 	r.authorizeClose(windowName)
 	if !r.closeWindow(windowName) {
 		r.consumeAuthorizedClose(windowName)
+		r.restoreFailedPanelOpen(targetWindow, previous)
 		_ = r.panels.FailTransfer(windowName, transferID)
+		r.emitDockFailure(descriptor)
 		return fmt.Errorf("panel window %q is not available for dock commit", windowName)
 	}
+	r.failPanelTabTransfersForWindow(windowName, "panel window moved as a whole group")
 	if err := r.panels.AcknowledgeDock(windowName, transferID); err != nil {
-		r.consumeAuthorizedClose(windowName)
 		return err
 	}
+	r.backend.ReleaseWorkspaceWindow(windowName)
+	if err := r.backend.ReleasePanelCluster(windowName); err != nil {
+		return err
+	}
+	r.emitWorkspaceChanged(descriptor.ClusterID)
 	return nil
 }
 
@@ -598,7 +599,7 @@ func (r *Registry) FailPanelWindowTransfer(callerWindowName, windowName, transfe
 	if err != nil {
 		return err
 	}
-	if callerWindowName != windowName && callerWindowName != descriptor.OwnerWindowName {
+	if !r.panels.IsTransferParticipant(windowName, callerWindowName) {
 		return fmt.Errorf("window %q cannot fail panel transfer for %q", callerWindowName, windowName)
 	}
 	wasOpening := descriptor.State == PanelWindowStateOpening
@@ -606,34 +607,38 @@ func (r *Registry) FailPanelWindowTransfer(callerWindowName, windowName, transfe
 		return err
 	}
 	if !wasOpening {
+		r.emitDockFailure(descriptor)
 		return nil
 	}
 	r.failPanelTabTransfer(transferID, "new panel target failed before readiness")
 	r.authorizeClose(windowName)
+	var closeErr error
 	if !r.closeWindow(windowName) {
 		r.consumeAuthorizedClose(windowName)
-		r.emitPanelClosed(descriptor)
-		return fmt.Errorf("panel window %q is not available", windowName)
+		closeErr = fmt.Errorf("panel window %q is not available", windowName)
 	}
+	releaseErr := r.releaseNativePanelReference(windowName)
 	r.emitPanelClosed(descriptor)
-	return nil
+	return errors.Join(closeErr, releaseErr)
 }
 
-func (r *Registry) FocusPanelWindow(ownerWindowName, windowName string, panelID string) error {
+func (r *Registry) FocusPanelWindow(callerWindow, windowName, panelID string) error {
 	descriptor, err := r.panels.Descriptor(windowName)
 	if err != nil {
 		return err
 	}
-	if descriptor.OwnerWindowName != ownerWindowName {
-		return fmt.Errorf("panel window %q is not owned by %q", windowName, ownerWindowName)
+	if !r.windowHasCluster(callerWindow, descriptor.ClusterID) {
+		return fmt.Errorf("caller does not display the panel cluster")
 	}
-	if !r.emitWindowEvent(windowName, panelwindow.WindowFocusRequestedEventName, panelwindow.WindowFocusRequestedEvent{PanelID: panelID}) || !r.focusWindow(windowName) {
-		return fmt.Errorf("panel window %q is not available", windowName)
+	for _, tab := range descriptor.Snapshot.Tabs {
+		if tab.PanelID == panelID {
+			return r.focusWorkspacePanel(panelwindow.WorkspacePanel{Tab: tab, Location: panelwindow.PanelLocation{Kind: panelwindow.PanelLocationWindow, WindowName: windowName}})
+		}
 	}
-	return nil
+	return fmt.Errorf("panel %q is not in window %q", panelID, windowName)
 }
 
-func (r *Registry) RoutePanelWindowCommand(windowName string, command panelwindow.OwnerCommand) error {
+func (r *Registry) RoutePanelWindowCommand(windowName string, command panelwindow.WorkspaceCommand) error {
 	if !command.Valid() {
 		return fmt.Errorf("panel command %q cannot be routed", command)
 	}
@@ -641,92 +646,37 @@ func (r *Registry) RoutePanelWindowCommand(windowName string, command panelwindo
 	if err != nil {
 		return err
 	}
-	if !r.focusWindow(descriptor.OwnerWindowName) {
-		return fmt.Errorf("owner workspace %q is not available", descriptor.OwnerWindowName)
-	}
-	if !r.emitWindowEvent(descriptor.OwnerWindowName, string(command), nil) {
-		return fmt.Errorf("owner workspace %q is not available", descriptor.OwnerWindowName)
-	}
-	return nil
-}
-
-func (r *Registry) RequestPanelObjectOpen(
-	windowName string,
-	ref PanelObjectReference,
-	activeView string,
-) error {
-	if err := panelwindow.ValidateObjectReference(ref); err != nil {
-		return err
-	}
-	if activeView == "" {
-		return fmt.Errorf("panel object open requires an active view")
-	}
-	descriptor, err := r.panels.Descriptor(windowName)
+	target, err := r.appWindowForCluster(descriptor.ClusterID, windowName)
 	if err != nil {
 		return err
 	}
-	if !r.emitWindowEvent(
-		descriptor.OwnerWindowName,
-		panelwindow.ObjectOpenRequestedEventName,
-		panelwindow.ObjectOpenRequestEvent{
-			SourceWindowName: windowName,
-			OwnerWindowName:  descriptor.OwnerWindowName,
-			ClusterID:        descriptor.ClusterID,
-			GroupID:          descriptor.GroupID,
-			ObjectRef:        ref,
-			ActiveView:       activeView,
-		},
-	) {
-		return fmt.Errorf("owner workspace %q is not available", descriptor.OwnerWindowName)
+	if !r.queueWorkspaceEvent(target, string(command), nil) {
+		return fmt.Errorf("app window %q is not available", target)
 	}
-	return nil
-}
-
-func (r *Registry) AuthorizePanelObjectOpen(
-	ownerWindowName string,
-	windowName string,
-	panelID string,
-	ref PanelObjectReference,
-	activeView string,
-) error {
-	if err := panelwindow.ValidateObjectReference(ref); err != nil {
-		return err
-	}
-	descriptor, err := r.panels.Descriptor(windowName)
-	if err != nil {
-		return err
-	}
-	if descriptor.OwnerWindowName != ownerWindowName || descriptor.ClusterID != ref.ClusterID {
-		return fmt.Errorf("panel object authorization does not match owner and cluster")
-	}
-	if !r.emitWindowEvent(
-		windowName,
-		panelwindow.ObjectOpenAuthorizedEventName,
-		panelwindow.ObjectOpenAuthorizedEvent{
-			PanelID: panelID, ObjectRef: ref, ActiveView: activeView,
-		},
-	) {
-		return fmt.Errorf("panel window %q is not available", windowName)
+	if !r.focusWindow(target) {
+		return fmt.Errorf("app window %q is not available", target)
 	}
 	return nil
 }
 
 func (r *Registry) UpdatePanelWindowSnapshot(windowName string, snapshot PanelGroupSnapshot) error {
+	r.panelTransferMu.Lock()
+	defer r.panelTransferMu.Unlock()
+	r.workspaceMu.Lock()
+	defer r.workspaceMu.Unlock()
+	if snapshot.SourceWindowName != windowName {
+		return fmt.Errorf("panel snapshot source does not match its renderer")
+	}
+	if err := r.panels.ValidateSnapshot(windowName, snapshot); err != nil {
+		return err
+	}
+	if err := r.publishPanelGroups(windowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{{ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}}); err != nil {
+		return err
+	}
 	if err := r.panels.UpdateSnapshot(windowName, snapshot); err != nil {
 		return err
 	}
-	descriptor, err := r.panels.Descriptor(windowName)
-	if err != nil {
-		return err
-	}
-	if !r.emitWindowEvent(
-		descriptor.OwnerWindowName,
-		panelwindow.SnapshotUpdatedEventName,
-		panelwindow.SnapshotUpdatedEvent{WindowName: windowName, Snapshot: descriptor.Snapshot},
-	) {
-		return fmt.Errorf("owner workspace %q is not available", descriptor.OwnerWindowName)
-	}
-	r.completePanelTabTransferForSnapshot(windowName, descriptor.Snapshot)
+	r.emitWorkspaceChanged(snapshot.ClusterID)
 	return nil
 }
 
@@ -735,48 +685,16 @@ func (r *Registry) RequestPanelTabClose(windowName, panelID string) error {
 	if err != nil {
 		return err
 	}
-	found := false
 	for _, tab := range descriptor.Snapshot.Tabs {
-		if tab.PanelID == panelID {
-			found = true
-			break
+		if tab.PanelID != panelID {
+			continue
 		}
-	}
-	if !found {
-		return fmt.Errorf("panel %q is not owned by window %q", panelID, windowName)
-	}
-	if !r.emitWindowEvent(
-		descriptor.OwnerWindowName,
-		panelwindow.TabCloseRequestedEventName,
-		panelwindow.TabCloseRequestedEvent{
-			SourceWindowName: windowName,
-			OwnerWindowName:  descriptor.OwnerWindowName,
-			ClusterID:        descriptor.ClusterID,
-			GroupID:          descriptor.GroupID,
-			PanelID:          panelID,
-		},
-	) {
-		return fmt.Errorf("owner workspace %q is not available", descriptor.OwnerWindowName)
-	}
-	return nil
-}
-
-func (r *Registry) AuthorizePanelTabClose(ownerWindowName, windowName, panelID string) error {
-	descriptor, err := r.panels.Descriptor(windowName)
-	if err != nil {
-		return err
-	}
-	if descriptor.OwnerWindowName != ownerWindowName {
-		return fmt.Errorf("panel window %q is not owned by %q", windowName, ownerWindowName)
-	}
-	if !r.emitWindowEvent(
-		windowName,
-		panelwindow.TabCloseAuthorizedEventName,
-		panelwindow.TabCloseAuthorizedEvent{PanelID: panelID},
-	) {
+		if r.emitWindowEvent(windowName, panelwindow.TabCloseAuthorizedEventName, panelwindow.TabCloseAuthorizedEvent{PanelID: panelID}) {
+			return nil
+		}
 		return fmt.Errorf("panel window %q is not available", windowName)
 	}
-	return nil
+	return fmt.Errorf("panel %q is not in window %q", panelID, windowName)
 }
 
 // RequestPanelWindowClose validates the owner relationship and asks the child
@@ -786,7 +704,7 @@ func (r *Registry) RequestPanelWindowClose(callerWindowName, windowName, reason 
 	if err != nil {
 		return err
 	}
-	if callerWindowName != windowName && callerWindowName != descriptor.OwnerWindowName {
+	if !r.windowHasCluster(callerWindowName, descriptor.ClusterID) {
 		return fmt.Errorf("window %q cannot close panel window %q", callerWindowName, windowName)
 	}
 	if !r.emitWindowEvent(windowName, panelwindow.WindowCloseRequestedEventName, panelwindow.WindowCloseRequestedEvent{
@@ -798,78 +716,11 @@ func (r *Registry) RequestPanelWindowClose(callerWindowName, windowName, reason 
 	return nil
 }
 
-func (r *Registry) RequestPanelWindowGuard(
-	ownerWindowName, windowName, requestID, reason string,
-) error {
-	if requestID == "" || reason == "" {
-		return fmt.Errorf("panel guard request requires request and reason")
-	}
-	descriptor, err := r.panels.Descriptor(windowName)
-	if err != nil {
-		return err
-	}
-	if descriptor.OwnerWindowName != ownerWindowName {
-		return fmt.Errorf("panel window %q is not owned by %q", windowName, ownerWindowName)
-	}
-	r.guardMu.Lock()
-	if _, exists := r.pendingGuards[requestID]; exists {
-		r.guardMu.Unlock()
-		return fmt.Errorf("panel guard request %q already exists", requestID)
-	}
-	r.pendingGuards[requestID] = panelGuardRequest{
-		ownerWindowName: ownerWindowName,
-		panelWindowName: windowName,
-	}
-	r.guardMu.Unlock()
-	if r.emitWindowEvent(windowName, panelwindow.WindowGuardRequestedEventName, panelwindow.WindowGuardRequestedEvent{
-		RequestID:  requestID,
-		WindowName: windowName,
-		Reason:     reason,
-	}) {
-		return nil
-	}
-	r.guardMu.Lock()
-	delete(r.pendingGuards, requestID)
-	r.guardMu.Unlock()
-	return fmt.Errorf("panel window %q is not available", windowName)
-}
-
-func (r *Registry) AcknowledgePanelWindowGuard(
-	windowName string,
-	requestID string,
-	allowed bool,
-) error {
-	r.guardMu.Lock()
-	request, exists := r.pendingGuards[requestID]
-	if !exists || request.panelWindowName != windowName {
-		r.guardMu.Unlock()
-		return fmt.Errorf("stale panel guard request %q", requestID)
-	}
-	delete(r.pendingGuards, requestID)
-	r.guardMu.Unlock()
-	if !r.emitWindowEvent(request.ownerWindowName, panelwindow.WindowGuardResultEventName, panelwindow.WindowGuardResultEvent{
-		RequestID:  requestID,
-		WindowName: windowName,
-		Allowed:    allowed,
-	}) {
-		return fmt.Errorf("owner workspace %q is not available", request.ownerWindowName)
-	}
-	return nil
-}
-
-func (r *Registry) forgetPanelGuardsForOwner(ownerWindowName string) {
-	r.guardMu.Lock()
-	defer r.guardMu.Unlock()
-	for requestID, request := range r.pendingGuards {
-		if request.ownerWindowName == ownerWindowName {
-			delete(r.pendingGuards, requestID)
-		}
-	}
-}
-
 // AcknowledgePanelWindowClose is called only after the child has passed every
 // tab guard and the owner has removed the corresponding directory entries.
 func (r *Registry) AcknowledgePanelWindowClose(windowName string) error {
+	r.panelTransferMu.Lock()
+	defer r.panelTransferMu.Unlock()
 	descriptor, err := r.panels.Descriptor(windowName)
 	if err != nil {
 		return err
@@ -880,25 +731,36 @@ func (r *Registry) AcknowledgePanelWindowClose(windowName string) error {
 		return fmt.Errorf("panel window %q is not available", windowName)
 	}
 	r.failPanelTabTransfersForWindow(windowName, "panel window closed during tab transfer")
+	r.workspaceMu.Lock()
 	r.panels.Remove(windowName)
+	r.workspace.RemoveWindow(windowName)
+	r.releaseUnusedPanelWorkspace(descriptor.ClusterID)
+	r.workspaceMu.Unlock()
+	if r.backend != nil {
+		r.backend.ReleaseWorkspaceWindow(windowName)
+		if err := r.backend.ReleasePanelCluster(windowName); err != nil {
+			return err
+		}
+	}
 	r.emitPanelClosed(descriptor)
+	r.emitWorkspaceChanged(descriptor.ClusterID)
 	return nil
 }
 
-func (r *Registry) AcknowledgeWorkspaceWindowClose(ownerWindowName string) error {
-	if names := r.PanelNamesOwnedByWorkspace(ownerWindowName); len(names) > 0 {
-		return fmt.Errorf("owner workspace %q still has live panel windows", ownerWindowName)
+func (r *Registry) AcknowledgeWorkspaceWindowClose(windowName string) error {
+	if !r.lifecycle.Contains(windowName) {
+		return fmt.Errorf("app window %q is not live", windowName)
 	}
-	r.authorizeClose(ownerWindowName)
-	if r.closeWindow(ownerWindowName) {
+	r.authorizeClose(windowName)
+	if r.closeWindow(windowName) {
 		return nil
 	}
-	r.consumeAuthorizedClose(ownerWindowName)
-	return fmt.Errorf("owner workspace %q is not available", ownerWindowName)
+	r.consumeAuthorizedClose(windowName)
+	return fmt.Errorf("app window %q is not available", windowName)
 }
 
 func (r *Registry) AcknowledgeApplicationQuitPreflight(
-	ownerWindowName string,
+	callerWindowName string,
 	transactionID string,
 	allowed bool,
 ) error {
@@ -908,9 +770,9 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 		r.quitMu.Unlock()
 		return fmt.Errorf("stale application quit transaction %q", transactionID)
 	}
-	if _, waiting := pending.waiting[ownerWindowName]; !waiting {
+	if _, waiting := pending.waiting[callerWindowName]; !waiting {
 		r.quitMu.Unlock()
-		return fmt.Errorf("workspace %q is not awaiting application quit preflight", ownerWindowName)
+		return fmt.Errorf("workspace %q is not awaiting application quit preflight", callerWindowName)
 	}
 	if !allowed {
 		if pending.timeout != nil {
@@ -919,10 +781,9 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 		r.pendingQuit = nil
 		r.setQuitApprovedLocked(false)
 		r.quitMu.Unlock()
-		r.forgetPanelGuardsForOwner(ownerWindowName)
 		return nil
 	}
-	delete(pending.waiting, ownerWindowName)
+	delete(pending.waiting, callerWindowName)
 	if len(pending.waiting) > 0 {
 		r.quitMu.Unlock()
 		return nil
@@ -934,40 +795,47 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 	r.setQuitApprovedLocked(true)
 	r.quitMu.Unlock()
 
-	for _, workspaceName := range r.lifecycle.Names() {
-		if !r.emitWindowEvent(workspaceName, panelwindow.OwnerCloseRequestedEventName, panelwindow.OwnerCloseRequestedEvent{
-			OwnerWindowName: workspaceName,
-			PanelWindows:    r.PanelNamesOwnedByWorkspace(workspaceName),
-		}) {
-			r.quitMu.Lock()
-			r.setQuitApprovedLocked(false)
-			r.quitMu.Unlock()
-			return fmt.Errorf("workspace %q is not available for application quit", workspaceName)
+	return r.closeApprovedApplicationWindows()
+}
+
+func (r *Registry) closeApprovedApplicationWindows() error {
+	for _, panelName := range r.panels.Names("") {
+		if err := r.AcknowledgePanelWindowClose(panelName); err != nil {
+			return err
 		}
 	}
+	for _, workspaceName := range r.lifecycle.Names() {
+		if err := r.AcknowledgeWorkspaceWindowClose(workspaceName); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 func (r *Registry) handleClosing(event *application.WindowEvent, name string) {
-	if !r.consumeAuthorizedClose(name) {
-		if r.isWorkspaceReady(name) {
-			panelNames := r.PanelNamesOwnedByWorkspace(name)
-			if event != nil {
-				event.Cancel()
-			}
-			r.emitWindowEvent(name, panelwindow.OwnerCloseRequestedEventName, panelwindow.OwnerCloseRequestedEvent{
-				OwnerWindowName: name,
-				PanelWindows:    panelNames,
-			})
-			return
+	if !r.consumeAuthorizedClose(name) && r.isWorkspaceReady(name) {
+		if event != nil {
+			event.Cancel()
 		}
+		r.emitWindowEvent(name, panelwindow.WorkspaceCloseRequestedEventName, panelwindow.WorkspaceCloseRequestedEvent{WindowName: name})
+		return
+	}
+	if err := r.failClusterTransfersForWindow(name); err != nil {
+		r.reportPanelLifecycleError(err, "cancel cluster transfer before close")
+		if event != nil {
+			event.Cancel()
+		}
+		return
 	}
 	remaining, tracked := r.lifecycle.BeginClose(name)
 	if !tracked {
 		return
 	}
 	r.forgetWorkspaceReady(name)
-	if remaining > 0 {
+	r.workspace.RetainWindow(name)
+	r.failPanelTabTransfersForWindow(name, "app window closed during tab transfer")
+	if remaining > 0 || len(r.panels.Names("")) > 0 {
 		r.backend.ReleaseWorkspaceWindow(name)
 		return
 	}
@@ -978,7 +846,9 @@ func (r *Registry) handleClosing(event *application.WindowEvent, name string) {
 	r.setQuitApprovedLocked(false)
 	r.quitMu.Unlock()
 	r.lifecycle.CancelClose(name)
-	event.Cancel()
+	if event != nil {
+		event.Cancel()
+	}
 }
 
 func cascadedCoordinate(position, size, limit int) int {
@@ -1018,13 +888,18 @@ func (r *Registry) FocusMostRecent() {
 }
 
 func (r *Registry) readyWorkspaceNames() []string {
-	readyWorkspaces := make([]string, 0, r.lifecycle.Count())
-	for _, workspaceName := range r.lifecycle.Names() {
-		if r.isWorkspaceReady(workspaceName) {
-			readyWorkspaces = append(readyWorkspaces, workspaceName)
+	ready := make([]string, 0)
+	for _, name := range r.lifecycle.Names() {
+		if r.isWorkspaceReady(name) {
+			ready = append(ready, name)
 		}
 	}
-	return readyWorkspaces
+	for _, name := range r.panels.Names("") {
+		if r.panels.State(name) == PanelWindowStateLive {
+			ready = append(ready, name)
+		}
+	}
+	return ready
 }
 
 func (r *Registry) expireApplicationQuitPreflight(pending *applicationQuitPreflight) {
@@ -1073,9 +948,8 @@ func (r *Registry) emitApplicationQuitPreflight(
 ) {
 	for _, workspaceName := range readyWorkspaces {
 		if !r.emitWindowEvent(workspaceName, panelwindow.ApplicationQuitPreflightRequestedEventName, panelwindow.ApplicationQuitPreflightRequestedEvent{
-			TransactionID:   pending.transactionID,
-			OwnerWindowName: workspaceName,
-			PanelWindows:    r.PanelNamesOwnedByWorkspace(workspaceName),
+			TransactionID: pending.transactionID,
+			WindowName:    workspaceName,
 		}) {
 			r.cancelApplicationQuitPreflight(pending)
 			return
@@ -1084,7 +958,7 @@ func (r *Registry) emitApplicationQuitPreflight(
 }
 
 func (r *Registry) finishApprovedApplicationQuitLocked() bool {
-	if r.lifecycle.Count() > 0 {
+	if r.lifecycle.Count() > 0 || len(r.panels.Names("")) > 0 {
 		r.quitMu.Unlock()
 		return false
 	}
@@ -1248,4 +1122,36 @@ func sharedMacWindowChrome() application.MacWindow {
 			HideToolbarSeparator: true,
 		},
 	}
+}
+
+func (r *Registry) emitDockFailure(descriptor PanelWindowDescriptor) {
+	event := panelwindow.WindowTransferFailedEvent{WindowName: descriptor.WindowName, TransferID: descriptor.Snapshot.TransferID, ClusterID: descriptor.ClusterID}
+	targets := append(r.lifecycle.Names(), descriptor.WindowName)
+	for _, target := range targets {
+		if r.windowHasCluster(target, descriptor.ClusterID) {
+			r.emitWindowEvent(target, panelwindow.WindowTransferFailedEventName, event)
+		}
+	}
+}
+
+func (r *Registry) transferredPanelWindowOptions(windowName string, snapshot PanelGroupSnapshot) application.WebviewWindowOptions {
+	options := panelWindowOptions(windowName, snapshot.InitialBounds)
+	if snapshot.InitialBounds != nil {
+		positioned := false
+		if snapshot.UseInitialPosition {
+			positioned = r.positionPanelWindowAtTransferredBounds(
+				&options,
+				*snapshot.InitialBounds,
+				snapshot.InitialPositionAnchor,
+			)
+		} else if r.windowGeometry != nil {
+			if ownerGeometry, ok := r.windowGeometry(snapshot.SourceWindowName); ok {
+				positioned = positionPanelWindowOptions(&options, ownerGeometry)
+			}
+		}
+		if !positioned {
+			options.InitialPosition = application.WindowCentered
+		}
+	}
+	return options
 }

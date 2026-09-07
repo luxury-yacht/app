@@ -8,6 +8,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/internal/panelwindow"
 )
 
 type workspaceClusterRuntime interface {
@@ -111,6 +112,9 @@ type WorkspaceCoordinator struct {
 	selectionMutationMu   sync.Mutex
 	workspaceSelectionsMu sync.RWMutex
 	workspaceSelections   map[string][]string
+	panelSelections       map[string]string
+	panelWorkspaceOnce    sync.Once
+	panelWorkspace        *panelwindow.WorkspaceDirectory
 
 	selectionMutationDrainMu   sync.Mutex
 	selectionMutationDrainCond *sync.Cond

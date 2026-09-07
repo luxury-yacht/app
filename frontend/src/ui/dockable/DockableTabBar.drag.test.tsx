@@ -137,96 +137,97 @@ describe('DockableTabBar drag-and-drop (provider mode)', () => {
 
   it.each([
     ['compatible panel', 'workspace-A', 'cluster-A', true],
-    ['unrelated workspace', 'workspace-B', 'cluster-A', false],
+    ['another app window', 'workspace-B', 'cluster-A', true],
     ['different cluster', 'workspace-A', 'cluster-B', false],
-    ['case-distinct owner', 'workspace-a', 'cluster-A', false],
-  ])('only offers a cross-window drop for a %s', async (_case, owner, cluster, accepted) => {
-    const tab = {
-      kind: 'object',
-      panelId: 'panel-a',
-      activeView: 'details',
-      objectRef: {
-        clusterId: 'cluster-A',
-        group: '',
-        version: 'v1',
-        kind: 'Pod',
-        namespace: 'default',
-        name: 'pod-a',
-      },
-    };
-    const identity = {
-      windowName: 'panel-source',
-      ownerWindowName: 'workspace-A',
-      clusterId: 'cluster-A',
-      getTabSnapshot: () => tab,
-    };
-    const source = await renderWithProvider(
-      <DockableTabBar
-        tabs={[{ panelId: 'panel-a', title: 'Pod A' }]}
-        activeTab="panel-a"
-        onTabClick={() => undefined}
-        groupKey="right"
-      />,
-      { tabDragIdentity: identity }
-    );
-    const onExternalTabDrop = vi.fn();
-    const target = await renderWithProvider(
-      <DockableTabBar tabs={[]} activeTab={null} onTabClick={() => undefined} groupKey="right" />,
-      {
-        tabDragIdentity: {
-          ...identity,
-          windowName: 'panel-target',
-          ownerWindowName: String(owner),
-          clusterId: String(cluster),
+    ['another app identity', 'workspace-a', 'cluster-A', true],
+  ])(
+    'only offers a cross-window drop for a %s',
+    async (_case, sourceWindowName, cluster, accepted) => {
+      const tab = {
+        kind: 'object',
+        panelId: 'panel-a',
+        activeView: 'details',
+        objectRef: {
+          clusterId: 'cluster-A',
+          group: '',
+          version: 'v1',
+          kind: 'Pod',
+          namespace: 'default',
+          name: 'pod-a',
         },
-        onExternalTabDrop,
-      }
-    );
-    try {
-      const transfer = createDataTransfer();
-      const sourceTab = requireValue(source.host.querySelector('[role="tab"]'), 'source tab');
-      const targetBar = requireValue(
-        target.host.querySelector('.dockable-tab-bar-shell'),
-        'target bar'
-      );
-      await act(async () => {
-        dispatchDragEvent(sourceTab, 'dragstart', 20, 10, transfer);
-      });
-      // Native dragover exposes lower-cased MIME types, but cannot read their values.
-      const protectedTransfer = {
-        types: transfer.types.map((type) => type.toLowerCase()),
-        getData: vi.fn(() => ''),
-        dropEffect: 'none',
       };
-      let over: Event | undefined;
-      await act(async () => {
-        dispatchDragEvent(
-          targetBar,
-          'dragenter',
-          20,
-          10,
-          protectedTransfer as unknown as DataTransfer
+      const identity = {
+        windowName: String(sourceWindowName),
+        clusterId: 'cluster-A',
+        getTabSnapshot: () => tab,
+      };
+      const source = await renderWithProvider(
+        <DockableTabBar
+          tabs={[{ panelId: 'panel-a', title: 'Pod A' }]}
+          activeTab="panel-a"
+          onTabClick={() => undefined}
+          groupKey="right"
+        />,
+        { tabDragIdentity: identity }
+      );
+      const onExternalTabDrop = vi.fn();
+      const target = await renderWithProvider(
+        <DockableTabBar tabs={[]} activeTab={null} onTabClick={() => undefined} groupKey="right" />,
+        {
+          tabDragIdentity: {
+            ...identity,
+            windowName: 'panel-target',
+            clusterId: String(cluster),
+          },
+          onExternalTabDrop,
+        }
+      );
+      try {
+        const transfer = createDataTransfer();
+        const sourceTab = requireValue(source.host.querySelector('[role="tab"]'), 'source tab');
+        const targetBar = requireValue(
+          target.host.querySelector('.dockable-tab-bar-shell'),
+          'target bar'
         );
-        over = dispatchDragEvent(
-          targetBar,
-          'dragover',
-          20,
-          10,
-          protectedTransfer as unknown as DataTransfer
-        );
-      });
-      expect(over?.defaultPrevented).toBe(accepted);
-      expect(protectedTransfer.dropEffect).toBe(accepted ? 'move' : 'none');
-      expect(protectedTransfer.getData).not.toHaveBeenCalled();
-      await act(async () => {
-        dispatchDragEvent(targetBar, 'drop', 20, 10, transfer);
-      });
-      expect(onExternalTabDrop).toHaveBeenCalledTimes(accepted ? 1 : 0);
-    } finally {
-      await source.unmount();
-      await target.unmount();
+        await act(async () => {
+          dispatchDragEvent(sourceTab, 'dragstart', 20, 10, transfer);
+        });
+        // Native dragover exposes lower-cased MIME types, but cannot read their values.
+        const protectedTransfer = {
+          types: transfer.types.map((type) => type.toLowerCase()),
+          getData: vi.fn(() => ''),
+          dropEffect: 'none',
+        };
+        let over: Event | undefined;
+        await act(async () => {
+          dispatchDragEvent(
+            targetBar,
+            'dragenter',
+            20,
+            10,
+            protectedTransfer as unknown as DataTransfer
+          );
+          over = dispatchDragEvent(
+            targetBar,
+            'dragover',
+            20,
+            10,
+            protectedTransfer as unknown as DataTransfer
+          );
+        });
+        expect(over?.defaultPrevented).toBe(accepted);
+        expect(protectedTransfer.dropEffect).toBe(accepted ? 'move' : 'none');
+        expect(protectedTransfer.getData).not.toHaveBeenCalled();
+        await act(async () => {
+          dispatchDragEvent(targetBar, 'drop', 20, 10, transfer);
+        });
+        expect(onExternalTabDrop).toHaveBeenCalledTimes(accepted ? 1 : 0);
+      } finally {
+        await source.unmount();
+        await target.unmount();
+      }
     }
-  });
+  );
 
   it('updates the drag preview label when a tab begins dragging', async () => {
     const ctxRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {

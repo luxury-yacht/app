@@ -16,7 +16,7 @@ func (caller panelCommandCaller) Name() string { return string(caller) }
 
 func TestPanelWindowCommandsFailWhenTheNativeRegistryIsUnavailable(t *testing.T) {
 	shell := NewDesktopShell(nil, nil, nil, nil)
-	snapshot := panelwindow.GroupSnapshot{OwnerWindowName: "workspace-1"}
+	snapshot := panelwindow.GroupSnapshot{SourceWindowName: "workspace-1"}
 
 	_, err := shell.GetNativeWindowDescriptor("workspace-1")
 	require.ErrorContains(t, err, "panel-window registry is not available")
@@ -31,13 +31,11 @@ func TestPanelWindowCommandsFailWhenTheNativeRegistryIsUnavailable(t *testing.T)
 	require.ErrorContains(t, shell.RequestPanelWindowClose("workspace-1", "panel-1", "cluster-close"), "panel-window registry is not available")
 	require.ErrorContains(t, shell.AcknowledgePanelWindowClose("panel-1"), "panel-window registry is not available")
 	require.ErrorContains(t, shell.AcknowledgeWorkspaceWindowClose("workspace-1"), "panel-window registry is not available")
-	require.ErrorContains(t, shell.RequestPanelWindowGuard("workspace-1", "panel-1", "guard-1", "application-quit"), "panel-window registry is not available")
-	require.ErrorContains(t, shell.AcknowledgePanelWindowGuard("panel-1", "guard-1", true), "panel-window registry is not available")
 	require.ErrorContains(t, shell.AcknowledgeApplicationQuitPreflight("workspace-1", "quit-1", true), "panel-window registry is not available")
 }
 
 func TestPanelWindowCommandsDelegateBeforeWorkspaceRuntimeReadiness(t *testing.T) {
-	snapshot := panelwindow.GroupSnapshot{OwnerWindowName: "workspace-1"}
+	snapshot := panelwindow.GroupSnapshot{SourceWindowName: "workspace-1"}
 	wantNative := panelwindow.NativeDescriptor{
 		SchemaVersion: panelwindow.NativeDescriptorSchemaVersion,
 		Role:          panelwindow.NativeRoleWorkspace,
@@ -80,7 +78,7 @@ func TestDesktopServiceUsesTheWailsSenderForRoleAwareMenuCommands(t *testing.T) 
 	events := []string{}
 	ownerRoutes := []struct {
 		windowName string
-		command    panelwindow.OwnerCommand
+		command    panelwindow.WorkspaceCommand
 	}{}
 	shell := NewDesktopShell(
 		nil,
@@ -101,19 +99,18 @@ func TestDesktopServiceUsesTheWailsSenderForRoleAwareMenuCommands(t *testing.T) 
 						SchemaVersion: panelwindow.NativeDescriptorSchemaVersion,
 						Role:          panelwindow.NativeRolePanel,
 						Panel: &panelwindow.WindowDescriptor{
-							WindowName:      name,
-							OwnerWindowName: "workspace-1",
-							State:           panelwindow.WindowStateLive,
+							WindowName: name,
+							State:      panelwindow.WindowStateLive,
 						},
 					}, nil
 				default:
 					return panelwindow.NativeDescriptor{}, fmt.Errorf("native window %q is not registered", name)
 				}
 			},
-			RoutePanelCommand: func(windowName string, command panelwindow.OwnerCommand) error {
+			RoutePanelCommand: func(windowName string, command panelwindow.WorkspaceCommand) error {
 				ownerRoutes = append(ownerRoutes, struct {
 					windowName string
-					command    panelwindow.OwnerCommand
+					command    panelwindow.WorkspaceCommand
 				}{windowName: windowName, command: command})
 				return nil
 			},
@@ -158,13 +155,13 @@ func TestDesktopServiceUsesTheWailsSenderForRoleAwareMenuCommands(t *testing.T) 
 	}
 	wantOwnerRoutes := make([]struct {
 		windowName string
-		command    panelwindow.OwnerCommand
+		command    panelwindow.WorkspaceCommand
 	}, 0, len(ownerCommands))
 	for _, test := range ownerCommands {
 		wantOwnerRoutes = append(wantOwnerRoutes, struct {
 			windowName string
-			command    panelwindow.OwnerCommand
-		}{windowName: "panel-1", command: panelwindow.OwnerCommand(test.event)})
+			command    panelwindow.WorkspaceCommand
+		}{windowName: "panel-1", command: panelwindow.WorkspaceCommand(test.event)})
 	}
 	require.Equal(t, wantOwnerRoutes, ownerRoutes)
 	require.NoError(
@@ -193,9 +190,8 @@ func TestApplicationMenuAllowsPanelCommandsDuringDocking(t *testing.T) {
 					SchemaVersion: panelwindow.NativeDescriptorSchemaVersion,
 					Role:          panelwindow.NativeRolePanel,
 					Panel: &panelwindow.WindowDescriptor{
-						WindowName:      name,
-						OwnerWindowName: "workspace-1",
-						State:           panelwindow.WindowStateDocking,
+						WindowName: name,
+						State:      panelwindow.WindowStateDocking,
 					},
 				}, nil
 			},
@@ -251,36 +247,24 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 			mark()
 			return window, nil
 		},
-		BeginPanelWindowDock:      func(string, string, panelwindow.GroupSnapshot) error { mark(); return nil },
-		AcknowledgePanelDock:      func(string, string, string) error { mark(); return nil },
-		FailPanelTransfer:         func(string, string, string) error { mark(); return nil },
-		FocusPanelWindow:          func(string, string, string) error { mark(); return nil },
-		RequestPanelClose:         func(string, string, string) error { mark(); return nil },
-		AcknowledgePanelClose:     func(string) error { mark(); return nil },
-		AcknowledgeWorkspaceClose: func(string) error { mark(); return nil },
-		RoutePanelCommand:         func(string, panelwindow.OwnerCommand) error { mark(); return nil },
-		RequestPanelObjectOpen: func(string, panelwindow.ObjectReference, string) error {
-			mark()
-			return nil
-		},
-		AuthorizePanelObjectOpen: func(string, string, string, panelwindow.ObjectReference, string) error {
-			mark()
-			return nil
-		},
+		BeginPanelWindowDock:       func(string, string, panelwindow.GroupSnapshot) error { mark(); return nil },
+		AcknowledgePanelDock:       func(string, string, string) error { mark(); return nil },
+		FailPanelTransfer:          func(string, string, string) error { mark(); return nil },
+		FocusPanelWindow:           func(string, string, string) error { mark(); return nil },
+		RequestPanelClose:          func(string, string, string) error { mark(); return nil },
+		AcknowledgePanelClose:      func(string) error { mark(); return nil },
+		AcknowledgeWorkspaceClose:  func(string) error { mark(); return nil },
+		RoutePanelCommand:          func(string, panelwindow.WorkspaceCommand) error { mark(); return nil },
 		UpdatePanelSnapshot:        func(string, panelwindow.GroupSnapshot) error { mark(); return nil },
 		RequestPanelTabClose:       func(string, string) error { mark(); return nil },
-		AuthorizePanelTabClose:     func(string, string, string) error { mark(); return nil },
 		RequestPanelTabTransfer:    func(string, panelwindow.TabTransferRequest) error { mark(); return nil },
 		AcceptPanelTabTransfer:     func(string, string) error { mark(); return nil },
 		FailPanelTabTransfer:       func(string, string) error { mark(); return nil },
-		RequestPanelGuard:          func(string, string, string, string) error { mark(); return nil },
-		AcknowledgePanelGuard:      func(string, string, bool) error { mark(); return nil },
 		AcknowledgeApplicationQuit: func(string, string, bool) error { mark(); return nil },
 	})
 	service := NewDesktopService(DesktopServiceDependencies{PanelWindows: shell})
 	ctx := context.Background()
-	snapshot := panelwindow.GroupSnapshot{OwnerWindowName: "workspace-1"}
-	ref := panelwindow.ObjectReference{ClusterID: "cluster-1"}
+	snapshot := panelwindow.GroupSnapshot{SourceWindowName: "workspace-1"}
 
 	gotNative, err := service.GetNativeWindowDescriptor(ctx, "workspace-1")
 	require.NoError(t, err)
@@ -298,18 +282,13 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 	require.NoError(t, service.RequestPanelWindowClose(ctx, "workspace-1", "panel-1", "owner-close"))
 	require.NoError(t, service.AcknowledgePanelWindowClose(ctx, "panel-1"))
 	require.NoError(t, service.AcknowledgeWorkspaceWindowClose(ctx, "workspace-1"))
-	require.NoError(t, service.RequestPanelObjectOpen(ctx, "panel-1", ref, "details"))
-	require.NoError(t, service.AuthorizePanelObjectOpen(ctx, "workspace-1", "panel-1", "panel-a", ref, "details"))
 	require.NoError(t, service.UpdatePanelWindowSnapshot(ctx, "panel-1", snapshot))
 	require.NoError(t, service.RequestPanelTabClose(ctx, "panel-1", "panel-a"))
-	require.NoError(t, service.AuthorizePanelTabClose(ctx, "workspace-1", "panel-1", "panel-a"))
 	require.NoError(t, service.RequestPanelTabTransfer(ctx, "workspace-1", panelwindow.TabTransferRequest{}))
 	require.NoError(t, service.AcceptPanelTabTransfer(ctx, "workspace-1", "tab-transfer-1"))
 	require.NoError(t, service.FailPanelTabTransfer(ctx, "panel-1", "tab-transfer-1"))
-	require.NoError(t, service.RequestPanelWindowGuard(ctx, "workspace-1", "panel-1", "guard-1", "quit"))
-	require.NoError(t, service.AcknowledgePanelWindowGuard(ctx, "panel-1", "guard-1", true))
 	require.NoError(t, service.AcknowledgeApplicationQuitPreflight(ctx, "workspace-1", "quit-1", true))
-	require.Equal(t, 21, called)
+	require.Equal(t, 16, called)
 }
 
 func TestDesktopServiceRejectsPanelCommandsWhoseClaimedCallerDoesNotMatchTheWailsSender(t *testing.T) {

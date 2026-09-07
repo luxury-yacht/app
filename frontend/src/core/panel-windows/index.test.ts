@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   onEvent: vi.fn(() => vi.fn()),
   backend: {
     GetNativeWindowDescriptor: vi.fn(),
+    OpenPanelWorkspaceObject: vi.fn(),
+    PublishDockedPanels: vi.fn(),
+    AcknowledgePanelWorkspaceReady: vi.fn(),
     BeginPanelWindowOpen: vi.fn(),
     AcknowledgePanelWindowReady: vi.fn(),
     BeginPanelWindowDock: vi.fn(),
@@ -15,14 +18,9 @@ const mocks = vi.hoisted(() => ({
     RequestPanelWindowClose: vi.fn(),
     AcknowledgePanelWindowClose: vi.fn(),
     AcknowledgeWorkspaceWindowClose: vi.fn(),
-    RequestPanelWindowGuard: vi.fn(),
-    AcknowledgePanelWindowGuard: vi.fn(),
     AcknowledgeApplicationQuitPreflight: vi.fn(),
-    RequestPanelObjectOpen: vi.fn(),
-    AuthorizePanelObjectOpen: vi.fn(),
     UpdatePanelWindowSnapshot: vi.fn(),
     RequestPanelTabClose: vi.fn(),
-    AuthorizePanelTabClose: vi.fn(),
     RequestPanelTabTransfer: vi.fn(),
     AcceptPanelTabTransfer: vi.fn(),
     FailPanelTabTransfer: vi.fn(),
@@ -40,22 +38,16 @@ import {
   acknowledgeApplicationQuitPreflight,
   acknowledgePanelWindowClose,
   acknowledgePanelWindowDock,
-  acknowledgePanelWindowGuard,
   acknowledgePanelWindowReady,
+  acknowledgePanelWorkspaceReady,
   acknowledgeWorkspaceWindowClose,
-  authorizePanelObjectOpen,
-  authorizePanelTabClose,
   beginPanelWindowDock,
   beginPanelWindowOpen,
   failPanelTabTransfer,
   failPanelWindowTransfer,
   focusPanelWindow,
   onApplicationQuitPreflightRequested,
-  onOwnerCloseRequested,
-  onPanelObjectOpenAuthorized,
-  onPanelObjectOpenRequested,
   onPanelTabCloseAuthorized,
-  onPanelTabCloseRequested,
   onPanelTabTransferCommitted,
   onPanelTabTransferFailed,
   onPanelTabTransferInsertRequested,
@@ -64,15 +56,13 @@ import {
   onPanelWindowCloseRequested,
   onPanelWindowDockRequested,
   onPanelWindowFocusRequested,
-  onPanelWindowGuardRequested,
-  onPanelWindowGuardResult,
   onPanelWindowOpened,
-  onPanelWindowSnapshotUpdated,
-  requestPanelObjectOpen,
+  onWorkspaceCloseRequested,
+  openPanelWorkspaceObject,
+  publishDockedPanels,
   requestPanelTabClose,
   requestPanelTabTransfer,
   requestPanelWindowClose,
-  requestPanelWindowGuard,
   resolveNativeWindowDescriptor,
   updatePanelWindowSnapshot,
 } from './index';
@@ -80,7 +70,7 @@ import {
 const snapshot = {
   schemaVersion: 1,
   transferId: 'transfer-1',
-  ownerWindowName: 'workspace-1',
+  sourceWindowName: 'workspace-1',
   clusterId: 'cluster-1',
   groupId: 'group-1',
   tabs: [],
@@ -100,7 +90,6 @@ const tabTransfer = {
   transferId: 'tab-transfer-1',
   sourceWindowName: 'panel-1',
   targetWindowName: 'workspace-1',
-  ownerWindowName: 'workspace-1',
   clusterId: 'cluster-1',
   sourceGroupId: 'group-1',
   targetGroupId: 'right',
@@ -159,6 +148,9 @@ describe('native panel-window transport', () => {
   });
 
   it('delegates every command with complete owner, cluster, and object identity', async () => {
+    await openPanelWorkspaceObject('workspace-2', tabTransfer.tab);
+    await publishDockedPanels('workspace-2', []);
+    await acknowledgePanelWorkspaceReady('workspace-2');
     await beginPanelWindowOpen('workspace-1', snapshot);
     await acknowledgePanelWindowReady('panel-1', 'transfer-1');
     await beginPanelWindowDock('panel-1', 'right', snapshot);
@@ -168,18 +160,19 @@ describe('native panel-window transport', () => {
     await requestPanelWindowClose('workspace-1', 'panel-1', 'owner-close');
     await acknowledgePanelWindowClose('panel-1');
     await acknowledgeWorkspaceWindowClose('workspace-1');
-    await requestPanelWindowGuard('workspace-1', 'panel-1', 'guard-1', 'application-quit');
-    await acknowledgePanelWindowGuard('panel-1', 'guard-1', true);
     await acknowledgeApplicationQuitPreflight('workspace-1', 'quit-1', true);
-    await requestPanelObjectOpen('panel-1', objectRef, 'details');
-    await authorizePanelObjectOpen('workspace-1', 'panel-1', 'panel-a', objectRef, 'details');
     await updatePanelWindowSnapshot('panel-1', snapshot);
     await requestPanelTabClose('panel-1', 'panel-a');
-    await authorizePanelTabClose('workspace-1', 'panel-1', 'panel-a');
     await requestPanelTabTransfer('workspace-1', tabTransfer);
     await acceptPanelTabTransfer('workspace-1', 'tab-transfer-1');
     await failPanelTabTransfer('panel-1', 'tab-transfer-1');
 
+    expect(mocks.backend.OpenPanelWorkspaceObject).toHaveBeenCalledWith(
+      'workspace-2',
+      tabTransfer.tab
+    );
+    expect(mocks.backend.PublishDockedPanels).toHaveBeenCalledWith('workspace-2', []);
+    expect(mocks.backend.AcknowledgePanelWorkspaceReady).toHaveBeenCalledWith('workspace-2');
     expect(mocks.backend.BeginPanelWindowOpen).toHaveBeenCalledWith('workspace-1', snapshot);
     expect(mocks.backend.AcknowledgePanelWindowReady).toHaveBeenCalledWith('panel-1', 'transfer-1');
     expect(mocks.backend.BeginPanelWindowDock).toHaveBeenCalledWith('panel-1', 'right', snapshot);
@@ -205,41 +198,13 @@ describe('native panel-window transport', () => {
     );
     expect(mocks.backend.AcknowledgePanelWindowClose).toHaveBeenCalledWith('panel-1');
     expect(mocks.backend.AcknowledgeWorkspaceWindowClose).toHaveBeenCalledWith('workspace-1');
-    expect(mocks.backend.RequestPanelWindowGuard).toHaveBeenCalledWith(
-      'workspace-1',
-      'panel-1',
-      'guard-1',
-      'application-quit'
-    );
-    expect(mocks.backend.AcknowledgePanelWindowGuard).toHaveBeenCalledWith(
-      'panel-1',
-      'guard-1',
-      true
-    );
     expect(mocks.backend.AcknowledgeApplicationQuitPreflight).toHaveBeenCalledWith(
       'workspace-1',
       'quit-1',
       true
     );
-    expect(mocks.backend.RequestPanelObjectOpen).toHaveBeenCalledWith(
-      'panel-1',
-      objectRef,
-      'details'
-    );
-    expect(mocks.backend.AuthorizePanelObjectOpen).toHaveBeenCalledWith(
-      'workspace-1',
-      'panel-1',
-      'panel-a',
-      objectRef,
-      'details'
-    );
     expect(mocks.backend.UpdatePanelWindowSnapshot).toHaveBeenCalledWith('panel-1', snapshot);
     expect(mocks.backend.RequestPanelTabClose).toHaveBeenCalledWith('panel-1', 'panel-a');
-    expect(mocks.backend.AuthorizePanelTabClose).toHaveBeenCalledWith(
-      'workspace-1',
-      'panel-1',
-      'panel-a'
-    );
     expect(mocks.backend.RequestPanelTabTransfer).toHaveBeenCalledWith('workspace-1', tabTransfer);
     expect(mocks.backend.AcceptPanelTabTransfer).toHaveBeenCalledWith(
       'workspace-1',
@@ -256,19 +221,13 @@ describe('native panel-window transport', () => {
       [onPanelWindowFocusRequested, 'panel-window:focus-requested'],
       [onPanelWindowCloseRequested, 'panel-window:close-requested'],
       [onPanelWindowClosed, 'panel-window:closed'],
-      [onOwnerCloseRequested, 'panel-window:owner-close-requested'],
-      [onPanelObjectOpenRequested, 'panel-window:object-open-requested'],
-      [onPanelObjectOpenAuthorized, 'panel-window:object-open-authorized'],
-      [onPanelWindowSnapshotUpdated, 'panel-window:snapshot-updated'],
-      [onPanelTabCloseRequested, 'panel-window:tab-close-requested'],
+      [onWorkspaceCloseRequested, 'workspace-window:close-requested'],
       [onPanelTabCloseAuthorized, 'panel-window:tab-close-authorized'],
       [onPanelTabTransferRequested, 'panel-window:tab-transfer-requested'],
       [onPanelTabTransferInsertRequested, 'panel-window:tab-transfer-insert-requested'],
       [onPanelTabTransferCommitted, 'panel-window:tab-transfer-committed'],
       [onPanelTabTransferFailed, 'panel-window:tab-transfer-failed'],
       [onApplicationQuitPreflightRequested, 'panel-window:application-quit-preflight-requested'],
-      [onPanelWindowGuardRequested, 'panel-window:guard-requested'],
-      [onPanelWindowGuardResult, 'panel-window:guard-result'],
     ] as const;
 
     for (const [subscribe] of subscriptions) {

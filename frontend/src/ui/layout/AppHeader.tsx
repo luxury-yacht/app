@@ -28,6 +28,7 @@ import './windowResizeCursor.css';
 
 interface AppHeaderProps {
   mode?: 'workspace' | 'panel';
+  clusterName?: string;
 }
 
 interface AppHeaderClassOptions {
@@ -76,7 +77,7 @@ const runWindowOperation = (action: string, operation: () => Promise<void>) => {
   );
 };
 
-const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
+const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace', clusterName }) => {
   const isMac = isMacPlatform();
   const isLinux = !isMac && !isWindowsPlatform();
   const usesCustomFrame = usesCustomWindowFrame();
@@ -148,7 +149,13 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace' }) => {
           }
         }}
         onDoubleClick={() => void toggleWindowMaximize()}
-      />
+      >
+        {mode === 'panel' && clusterName ? (
+          <span className="app-header-cluster-name" title={clusterName}>
+            {clusterName}
+          </span>
+        ) : null}
+      </button>
       {mode === 'workspace' ? (
         <div className="app-header-controls">
           <UpdateStatus />

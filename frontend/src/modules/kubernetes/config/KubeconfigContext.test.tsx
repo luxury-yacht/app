@@ -155,6 +155,30 @@ describe('KubeconfigContext', () => {
     document.body.innerHTML = '';
   });
 
+  it('preserves the active local cluster when refreshing the shared workspace after a transfer', async () => {
+    const configs: types.KubeconfigInfo[] = ['alpha', 'beta'].map((name) => ({
+      name,
+      path: `/kube/${name}`,
+      context: 'dev',
+      isDefault: false,
+      isCurrentContext: false,
+      invalid: false,
+      invalidReason: '',
+    }));
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(configs));
+    getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:dev']);
+    const { getContext, unmount } = await renderProvider();
+    await act(async () => {
+      getContext().setActiveKubeconfig('/kube/beta:dev');
+      await flushPromises();
+    });
+    await act(async () => {
+      await getContext().loadKubeconfigs(true);
+    });
+    expect(getContext().selectedKubeconfig).toBe('/kube/beta:dev');
+    unmount();
+  });
+
   it('reports the initial cluster selection as loading before hydration settles', async () => {
     let resolveKubeconfigs: (result: ReturnType<typeof kubeconfigDiscoveryResult>) => void = () =>
       undefined;

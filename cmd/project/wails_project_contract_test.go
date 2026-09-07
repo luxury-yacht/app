@@ -351,7 +351,7 @@ func TestApplicationRuntimeComposesLeafOwners(t *testing.T) {
 	require.Contains(t, compactMainSource, "AcknowledgePanelReady: bridge.acknowledgePanelReady,")
 	require.Contains(t, compactMainSource, "UpdatePanelSnapshot: bridge.updatePanelSnapshot,")
 	require.Contains(t, compactMainSource, "RequestPanelTabClose: bridge.requestPanelTabClose,")
-	require.Contains(t, compactMainSource, "AuthorizePanelTabClose: bridge.authorizePanelTabClose,")
+	require.Contains(t, compactMainSource, "PanelWorkspace: bridge,")
 	require.Contains(t, mainSource, "desktopShell := backendRuntime.DesktopShell")
 	require.Contains(t, mainSource, "Preferences:    backendRuntime.Preferences,")
 	require.Contains(t, mainSource, "Updates:        backendRuntime.Updates,")

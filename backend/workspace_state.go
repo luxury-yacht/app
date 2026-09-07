@@ -72,6 +72,9 @@ func (a *WorkspaceCoordinator) ensureWorkspaceSelections(windowID string) {
 // process selection as its initial tab set. The caller must hold
 // workspaceSelectionsMu.
 func (a *WorkspaceCoordinator) ensureWorkspaceSelectionsLocked(windowID string) {
+	if a != nil && a.panelSelections[windowID] != "" {
+		return
+	}
 	if a == nil || windowID == "" {
 		return
 	}
@@ -91,6 +94,9 @@ func (a *WorkspaceCoordinator) ensureWorkspaceSelectionsLocked(windowID string) 
 func (a *WorkspaceCoordinator) selectedKubeconfigsForWorkspaceLocked(windowID string) []string {
 	if windowID == "" {
 		return a.GetSelectedKubeconfigs()
+	}
+	if selection := a.panelSelections[windowID]; selection != "" {
+		return []string{selection}
 	}
 	return append([]string(nil), a.workspaceSelections[windowID]...)
 }
@@ -115,6 +121,11 @@ func (a *WorkspaceCoordinator) retainWorkspaceSelections(remaining []string) {
 	allowed := make(map[string]struct{}, len(remaining))
 	for _, selection := range remaining {
 		allowed[selection] = struct{}{}
+	}
+	for reference, selection := range a.panelSelections {
+		if _, keep := allowed[selection]; !keep {
+			delete(a.panelSelections, reference)
+		}
 	}
 	for windowID, selections := range a.workspaceSelections {
 		kept := make([]string, 0, len(selections))
@@ -142,6 +153,9 @@ func (a *WorkspaceCoordinator) replaceWorkspaceSelections(selections []string) {
 // must hold workspaceSelectionsMu.
 func (a *WorkspaceCoordinator) aggregateWorkspaceSelectionsLocked() []string {
 	wanted := make(map[string]struct{})
+	for _, selection := range a.panelSelections {
+		wanted[selection] = struct{}{}
+	}
 	for _, selections := range a.workspaceSelections {
 		for _, selection := range selections {
 			wanted[selection] = struct{}{}
@@ -150,18 +164,9 @@ func (a *WorkspaceCoordinator) aggregateWorkspaceSelectionsLocked() []string {
 
 	union := make([]string, 0, len(wanted))
 	seen := make(map[string]struct{}, len(wanted))
-	appendSelection := func(selection string) {
-		if _, keep := wanted[selection]; !keep {
-			return
-		}
-		if _, exists := seen[selection]; exists {
-			return
-		}
-		seen[selection] = struct{}{}
-		union = append(union, selection)
-	}
+
 	for _, selection := range a.GetSelectedKubeconfigs() {
-		appendSelection(selection)
+		appendWorkspaceSelection(&union, wanted, seen, selection)
 	}
 
 	windowIDs := make([]string, 0, len(a.workspaceSelections))
@@ -171,7 +176,7 @@ func (a *WorkspaceCoordinator) aggregateWorkspaceSelectionsLocked() []string {
 	sort.Strings(windowIDs)
 	for _, windowID := range windowIDs {
 		for _, selection := range a.workspaceSelections[windowID] {
-			appendSelection(selection)
+			appendWorkspaceSelection(&union, wanted, seen, selection)
 		}
 	}
 	return union
@@ -191,6 +196,7 @@ func (a *WorkspaceCoordinator) applyWorkspaceSelections(
 		normalized = normalizedSelections
 	}
 	a.workspaceSelectionsMu.Lock()
+	a.retainRemovedClusterViewsLocked(windowID, normalized)
 	a.setWorkspaceSelectionsLocked(windowID, normalized)
 	union := a.aggregateWorkspaceSelectionsLocked()
 	a.workspaceSelectionsMu.Unlock()
@@ -216,6 +222,7 @@ func (a *WorkspaceCoordinator) ReleaseWorkspaceWindow(windowID string) {
 			return nil
 		}
 		delete(a.workspaceSelections, windowID)
+		a.PanelWorkspaceDirectory().RetainWindow(windowID)
 		a.clusterWorkspace.markClusterWorkspaceChanged()
 		union := a.aggregateWorkspaceSelectionsLocked()
 		a.workspaceSelectionsMu.Unlock()
@@ -325,4 +332,15 @@ func (a *WorkspaceCoordinator) latestClusterWorkspaceState(windowID string) Clus
 		return a.GetClusterWorkspaceStateForWindow(windowID)
 	}
 	return a.GetClusterWorkspaceState()
+}
+
+func appendWorkspaceSelection(union *[]string, wanted, seen map[string]struct{}, selection string) {
+	if _, keep := wanted[selection]; !keep {
+		return
+	}
+	if _, exists := seen[selection]; exists {
+		return
+	}
+	seen[selection] = struct{}{}
+	*union = append(*union, selection)
 }

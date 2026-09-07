@@ -36,32 +36,21 @@ func snapshotContainsPanelTab(snapshot PanelGroupSnapshot, tab panelwindow.TabSn
 }
 
 func (r *Registry) validatePanelTabTransferSource(request panelwindow.TabTransferRequest) error {
-	if request.SourceWindowName == request.OwnerWindowName {
-		if r.lifecycle == nil || !r.lifecycle.Contains(request.OwnerWindowName) {
-			return fmt.Errorf("source workspace %q is not live", request.OwnerWindowName)
+	if !r.windowHasCluster(request.SourceWindowName, request.ClusterID) {
+		return fmt.Errorf("source window does not display the transfer cluster")
+	}
+	for _, panel := range r.workspace.Snapshot(request.ClusterID).Panels {
+		if panel.Tab == request.Tab && panel.Location.WindowName == request.SourceWindowName && panel.Location.GroupID == request.SourceGroupID {
+			return nil
 		}
-		return nil
 	}
-	descriptor, err := r.panels.Descriptor(request.SourceWindowName)
-	if err != nil {
-		return err
-	}
-	if descriptor.State != PanelWindowStateLive ||
-		descriptor.OwnerWindowName != request.OwnerWindowName ||
-		descriptor.ClusterID != request.ClusterID ||
-		descriptor.GroupID != request.SourceGroupID {
-		return fmt.Errorf("panel tab transfer source does not match owner and cluster identity")
-	}
-	if !snapshotContainsPanelTab(descriptor.Snapshot, request.Tab) {
-		return fmt.Errorf("panel tab %q is not owned by source window %q", request.Tab.PanelID, request.SourceWindowName)
-	}
-	return nil
+	return fmt.Errorf("panel transfer source is stale or does not contain the requested tab")
 }
 
 func (r *Registry) validatePanelTabTransferTarget(request panelwindow.TabTransferRequest) error {
 	switch request.TargetKind {
 	case panelwindow.TabTransferTargetWorkspace:
-		if r.lifecycle == nil || !r.lifecycle.Contains(request.TargetWindowName) {
+		if r.lifecycle == nil || !r.lifecycle.Contains(request.TargetWindowName) || !r.windowHasCluster(request.TargetWindowName, request.ClusterID) {
 			return fmt.Errorf("target workspace %q is not live", request.TargetWindowName)
 		}
 	case panelwindow.TabTransferTargetPanelWindow:
@@ -70,7 +59,6 @@ func (r *Registry) validatePanelTabTransferTarget(request panelwindow.TabTransfe
 			return err
 		}
 		if descriptor.State != PanelWindowStateLive ||
-			descriptor.OwnerWindowName != request.OwnerWindowName ||
 			descriptor.ClusterID != request.ClusterID ||
 			descriptor.GroupID != request.TargetGroupID {
 			return fmt.Errorf("panel tab transfer target does not match owner and cluster identity")
@@ -136,8 +124,7 @@ func (r *Registry) RequestPanelTabTransfer(
 		return fmt.Errorf("panel tab transfer %q already exists", request.TransferID)
 	}
 	for _, pending := range r.pendingTabTransfers {
-		if pending.request.OwnerWindowName == request.OwnerWindowName &&
-			pending.request.ClusterID == request.ClusterID &&
+		if pending.request.ClusterID == request.ClusterID &&
 			pending.request.SourceWindowName == request.SourceWindowName &&
 			pending.request.Tab.PanelID == request.Tab.PanelID {
 			r.tabTransferMu.Unlock()
@@ -154,17 +141,17 @@ func (r *Registry) RequestPanelTabTransfer(
 	r.tabTransferMu.Unlock()
 
 	if r.emitWindowEvent(
-		request.OwnerWindowName,
+		request.SourceWindowName,
 		panelwindow.TabTransferRequestedEventName,
 		panelwindow.TabTransferRequestedEvent{Request: request},
 	) {
 		return nil
 	}
 	r.removePanelTabTransfer(request.TransferID)
-	return fmt.Errorf("owner workspace %q is not available", request.OwnerWindowName)
+	return fmt.Errorf("source app window %q is not available", request.SourceWindowName)
 }
 
-func (r *Registry) AcceptPanelTabTransfer(ownerWindowName, transferID string) error {
+func (r *Registry) AcceptPanelTabTransfer(callerWindowName, transferID string) error {
 	r.tabTransferMu.Lock()
 	transfer, exists := r.pendingTabTransfers[transferID]
 	if !exists || transfer.stage != panelTabTransferRequested {
@@ -172,16 +159,12 @@ func (r *Registry) AcceptPanelTabTransfer(ownerWindowName, transferID string) er
 		return fmt.Errorf("stale panel tab transfer %q", transferID)
 	}
 	request := transfer.request
-	if request.OwnerWindowName != ownerWindowName {
+	if request.SourceWindowName != callerWindowName {
 		r.tabTransferMu.Unlock()
-		return fmt.Errorf("panel tab transfer %q is not owned by %q", transferID, ownerWindowName)
+		return fmt.Errorf("panel tab transfer %q is not owned by %q", transferID, callerWindowName)
 	}
 	switch request.TargetKind {
-	case panelwindow.TabTransferTargetWorkspace:
-		r.tabTransferMu.Unlock()
-		r.commitPanelTabTransfer(transferID)
-		return nil
-	case panelwindow.TabTransferTargetPanelWindow:
+	case panelwindow.TabTransferTargetWorkspace, panelwindow.TabTransferTargetPanelWindow:
 		transfer.stage = panelTabTransferInserting
 		r.resetPanelTabTransferTimeoutLocked(transfer)
 	case panelwindow.TabTransferTargetNewWindow:
@@ -212,8 +195,7 @@ func (r *Registry) FailPanelTabTransfer(callerWindowName, transferID string) err
 		return fmt.Errorf("stale panel tab transfer %q", transferID)
 	}
 	request := transfer.request
-	allowed := callerWindowName == request.OwnerWindowName ||
-		callerWindowName == request.SourceWindowName ||
+	allowed := callerWindowName == request.SourceWindowName ||
 		callerWindowName == request.TargetWindowName
 	r.tabTransferMu.Unlock()
 	if !allowed {
@@ -238,17 +220,49 @@ func (r *Registry) removePanelTabTransfer(transferID string) *panelTabTransfer {
 }
 
 func (r *Registry) commitPanelTabTransfer(transferID string) {
-	transfer := r.removePanelTabTransfer(transferID)
+	r.tabTransferMu.Lock()
+	transfer := r.pendingTabTransfers[transferID]
 	if transfer == nil {
+		r.tabTransferMu.Unlock()
 		return
 	}
-	event := panelwindow.TabTransferCommittedEvent{Request: transfer.request}
-	r.emitPanelTabTransferEvent(
-		transfer.request,
-		panelwindow.TabTransferCommittedEventName,
-		event,
-		false,
-	)
+	request := transfer.request
+	targetName := request.TargetWindowName
+	if transfer.stage == panelTabTransferOpening {
+		targetName = transfer.targetWindowName
+	}
+	if err := r.moveTransferredPanel(request, targetName); err != nil {
+		r.tabTransferMu.Unlock()
+		r.failPanelTabTransfer(transferID, err.Error())
+		return
+	}
+	delete(r.pendingTabTransfers, transferID)
+	if transfer.timeout != nil {
+		transfer.timeout.Stop()
+	}
+	r.tabTransferMu.Unlock()
+	r.emitPanelTabTransferEvent(request, panelwindow.TabTransferCommittedEventName, panelwindow.TabTransferCommittedEvent{Request: request}, true)
+}
+
+func (r *Registry) moveTransferredPanel(request panelwindow.TabTransferRequest, targetWindowName string) error {
+	kind := panelwindow.PanelLocationWindow
+	if request.TargetKind == panelwindow.TabTransferTargetWorkspace {
+		kind = panelwindow.PanelLocationDocked
+	}
+	target := panelwindow.PanelLocation{Kind: kind, WindowName: targetWindowName, GroupID: request.TargetGroupID, Index: request.TargetIndex, Active: true}
+	for _, panel := range r.workspace.Snapshot(request.ClusterID).Panels {
+		if panel.Tab.PanelID != request.Tab.PanelID {
+			continue
+		}
+		if panel.Tab == request.Tab && panel.Location.WindowName == targetWindowName && panel.Location.GroupID == request.TargetGroupID {
+			return nil
+		}
+		if panel.Location.WindowName != request.SourceWindowName || panel.Location.GroupID != request.SourceGroupID {
+			break
+		}
+		return r.workspace.Move(request.Tab, panel.Location, target)
+	}
+	return fmt.Errorf("panel transfer source is stale")
 }
 
 func (r *Registry) failPanelTabTransfer(transferID, reason string) {
@@ -285,7 +299,7 @@ func (r *Registry) beginPanelWindowOpenTransfer(
 		request := transfer.request
 		if transfer.stage != panelTabTransferOpening ||
 			request.TargetKind != panelwindow.TabTransferTargetNewWindow ||
-			request.OwnerWindowName != snapshot.OwnerWindowName ||
+			request.SourceWindowName != snapshot.SourceWindowName ||
 			request.ClusterID != snapshot.ClusterID ||
 			request.TargetGroupID != snapshot.GroupID ||
 			len(snapshot.Tabs) != 1 ||
@@ -328,6 +342,7 @@ func (r *Registry) abortOpeningPanelTabTarget(transfer *panelTabTransfer) {
 	if r.closeWindow == nil || !r.closeWindow(descriptor.WindowName) {
 		r.consumeAuthorizedClose(descriptor.WindowName)
 	}
+	r.reportPanelLifecycleError(r.releaseNativePanelReference(descriptor.WindowName), "release failed native transfer target")
 	r.emitPanelClosed(descriptor)
 }
 
@@ -337,8 +352,7 @@ func (r *Registry) failPanelTabTransfersForWindow(windowName, reason string) {
 	for transferID, transfer := range r.pendingTabTransfers {
 		request := transfer.request
 		if request.SourceWindowName == windowName ||
-			request.TargetWindowName == windowName ||
-			request.OwnerWindowName == windowName {
+			request.TargetWindowName == windowName {
 			transferIDs = append(transferIDs, transferID)
 		}
 	}
@@ -354,7 +368,7 @@ func (r *Registry) emitPanelTabTransferEvent(
 	payload any,
 	includeTarget bool,
 ) {
-	targets := []string{request.SourceWindowName, request.OwnerWindowName}
+	targets := []string{request.SourceWindowName}
 	if includeTarget && request.TargetWindowName != "" {
 		targets = append(targets, request.TargetWindowName)
 	}
@@ -368,31 +382,12 @@ func (r *Registry) emitPanelTabTransferEvent(
 	}
 }
 
-func (r *Registry) completePanelTabTransferForSnapshot(
-	windowName string,
-	snapshot PanelGroupSnapshot,
-) {
-	r.tabTransferMu.Lock()
-	transferIDs := make([]string, 0)
-	for candidateID, transfer := range r.pendingTabTransfers {
-		if transfer.stage == panelTabTransferInserting &&
-			transfer.request.TargetWindowName == windowName &&
-			snapshotContainsPanelTab(snapshot, transfer.request.Tab) {
-			transferIDs = append(transferIDs, candidateID)
-		}
-	}
-	r.tabTransferMu.Unlock()
-	for _, transferID := range transferIDs {
-		r.commitPanelTabTransfer(transferID)
-	}
-}
-
 func (r *Registry) completePanelTabTransferForOpenedWindow(descriptor PanelWindowDescriptor) {
 	r.tabTransferMu.Lock()
 	transfer := r.pendingTabTransfers[descriptor.Snapshot.TransferID]
 	canCommit := transfer != nil &&
 		transfer.stage == panelTabTransferOpening &&
-		transfer.request.OwnerWindowName == descriptor.OwnerWindowName &&
+		transfer.request.SourceWindowName == descriptor.Snapshot.SourceWindowName &&
 		transfer.request.ClusterID == descriptor.ClusterID &&
 		transfer.request.TargetGroupID == descriptor.GroupID &&
 		snapshotContainsPanelTab(descriptor.Snapshot, transfer.request.Tab)

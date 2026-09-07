@@ -1,8 +1,17 @@
+import './panelLifecycleGuards.css';
 import type React from 'react';
-import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import { errorHandler } from '@/utils/errorHandler';
 
-export type PanelBlockReason = 'unsaved-yaml' | 'mutation-in-flight';
+export type PanelBlockReason = 'unsaved-yaml' | 'mutation-in-flight' | 'transfer-in-flight';
 
 export interface PanelLifecycleBlocker {
   panelId?: string;
@@ -13,6 +22,29 @@ export interface PanelLifecycleBlocker {
 type PanelGuard = () => PanelLifecycleBlocker | null;
 
 export class PanelLifecycleGuardRegistry {
+  readonly #transfers = new Map<string, readonly string[]>();
+  readonly #listeners = new Set<() => void>();
+  subscribe = (listener: () => void) => {
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+    };
+  };
+  isFrozen = () => this.#transfers.size > 0;
+  freeze(transferId: string, panelIds: readonly string[]): void {
+    this.#transfers.set(transferId, [...panelIds]);
+    for (const listener of this.#listeners) {
+      listener();
+    }
+  }
+  releaseTransfer(transferId: string): void {
+    if (!this.#transfers.delete(transferId)) {
+      return;
+    }
+    for (const listener of this.#listeners) {
+      listener();
+    }
+  }
   readonly #guards = new Map<string, Set<PanelGuard>>();
 
   register(panelId: string, guard: PanelGuard): () => void {
@@ -29,6 +61,14 @@ export class PanelLifecycleGuardRegistry {
 
   firstBlocker(panelIds: readonly string[]): PanelLifecycleBlocker | null {
     for (const panelId of panelIds) {
+      if (Array.from(this.#transfers.values()).some((ids) => ids.includes(panelId))) {
+        return {
+          panelId,
+          reason: 'transfer-in-flight',
+          focus: () =>
+            errorHandler.warn('Wait for the panel move to finish.', { title: 'Moving panels' }),
+        };
+      }
       for (const guard of this.#guards.get(panelId) ?? []) {
         const blocker = guard();
         if (blocker) {
@@ -59,9 +99,43 @@ export const PanelLifecycleGuardProvider: React.FC<{ children: React.ReactNode }
   children,
 }) => {
   const registry = useMemo(() => new PanelLifecycleGuardRegistry(), []);
+  const surface = useRef<HTMLDivElement>(null);
+  const frozen = useSyncExternalStore(registry.subscribe, registry.isFrozen, () => false);
+  useLayoutEffect(() => {
+    const update = () => {
+      if (surface.current) {
+        surface.current.inert = registry.isFrozen();
+      }
+    };
+    const cancel = registry.subscribe(update);
+    const blockInput = (event: Event) => {
+      if (!registry.isFrozen()) {
+        return;
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const events = ['keydown', 'beforeinput', 'pointerdown', 'click', 'contextmenu'];
+    for (const name of events) {
+      window.addEventListener(name, blockInput, true);
+    }
+    return () => {
+      cancel();
+      for (const name of events) {
+        window.removeEventListener(name, blockInput, true);
+      }
+    };
+  }, [registry]);
   return (
     <PanelLifecycleGuardContext.Provider value={registry}>
-      {children}
+      <div ref={surface} className="panel-lifecycle-surface" inert={frozen}>
+        {children}
+      </div>
+      {frozen && (
+        <div className="panel-transfer-status" role="status">
+          Moving panels…
+        </div>
+      )}
     </PanelLifecycleGuardContext.Provider>
   );
 };

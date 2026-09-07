@@ -1,0 +1,14 @@
+.panel-lifecycle-surface {
+  display: contents;
+}
+.panel-transfer-status {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--font-size-normal);
+  cursor: progress;
+}

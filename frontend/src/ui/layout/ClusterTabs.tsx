@@ -1,3 +1,7 @@
+import { getWindowIdentity } from '@/core/desktop-runtime';
+import { requestClusterTabTransfer } from '@/core/panel-windows';
+import { ClusterPanelsMenu } from '@/core/panel-windows/ClusterPanelsMenu';
+import { reportOperationalError } from '@/utils/errorHandler';
 /**
  * frontend/src/ui/layout/ClusterTabs.tsx
  *
@@ -45,6 +49,7 @@ interface ClusterTabsProps {
 }
 
 const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
+  const windowName = getWindowIdentity();
   const { viewType, navigateToGlobal, activateClusterWorkspace } = useViewState();
   const {
     selectedKubeconfigs,
@@ -54,6 +59,11 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
     getClusterMeta,
     closeKubeconfig,
   } = useKubeconfig();
+  const [panelMenu, setPanelMenu] = useState<{
+    clusterId: string;
+    clusterName: string;
+    position: { x: number; y: number };
+  } | null>(null);
   const [tabOrder, setTabOrder] = useState<string[]>(() => getClusterTabOrder());
   const [tabOrderHydrated, setTabOrderHydrated] = useState(false);
   const tabsRef = useRef<HTMLDivElement | null>(null);
@@ -172,6 +182,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
 
   const { ref: dropRef, dropInsertIndex } = useTabDropTarget({
     accepts: ['cluster-tab'],
+    allowExternal: true,
     onDrop: (payload, _event, insertIndex) => {
       // Reorder directly against insertIndex. DO NOT reuse the legacy
       // moveTab helper — it splices at the target's ORIGINAL index in the
@@ -182,7 +193,23 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       // is insertIndex - 1. When source is at or after the insert index, no
       // shift is needed.
       const clusterInsertIndex = toClusterInsertIndex(insertIndex, orderedTabs.length > 1);
-      const sourceIdx = mergedOrder.indexOf(payload.clusterId);
+      if (payload.sourceWindowName !== windowName) {
+        void requestClusterTabTransfer(windowName, {
+          transferId: globalThis.crypto.randomUUID(),
+          sourceWindowName: payload.sourceWindowName,
+          targetWindowName: windowName,
+          clusterId: payload.clusterId,
+          targetIndex: clusterInsertIndex,
+        }).catch((error) =>
+          reportOperationalError(error, {
+            source: 'ClusterTabs',
+            action: 'move-cluster-tab',
+            clusterId: payload.clusterId,
+          })
+        );
+        return;
+      }
+      const sourceIdx = mergedOrder.indexOf(payload.selection);
       if (sourceIdx < 0) {
         return;
       }
@@ -193,7 +220,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       }
       const nextOrder = [...mergedOrder];
       nextOrder.splice(sourceIdx, 1);
-      nextOrder.splice(adjustedInsert, 0, payload.clusterId);
+      nextOrder.splice(adjustedInsert, 0, payload.selection);
       if (!ordersMatch(nextOrder, mergedOrder)) {
         setClusterTabOrder(nextOrder);
       }
@@ -296,8 +323,21 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       closeClusterSelection(tab.selection);
     },
     extraProps: {
-      title: tab.label, // tooltip for full text when truncated
-      ...makeDragSource({ kind: 'cluster-tab', clusterId: tab.id }),
+      title: tab.label,
+      onContextMenu: (event: React.MouseEvent) => {
+        event.preventDefault();
+        setPanelMenu({
+          clusterId: getClusterMeta(tab.selection).id,
+          clusterName: tab.label,
+          position: { x: event.clientX, y: event.clientY },
+        });
+      },
+      ...makeDragSource({
+        kind: 'cluster-tab',
+        clusterId: getClusterMeta(tab.selection).id,
+        selection: tab.selection,
+        sourceWindowName: windowName,
+      }),
     } as HTMLAttributes<HTMLElement>,
   }));
   const tabDescriptors: TabDescriptor[] =
@@ -307,6 +347,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
 
   return (
     <div ref={assignRootRef} className="cluster-tabs-wrapper">
+      {panelMenu ? <ClusterPanelsMenu {...panelMenu} onClose={() => setPanelMenu(null)} /> : null}
       {orderedTabs.length > 0 && (
         <Tabs
           aria-label="Cluster Tabs"

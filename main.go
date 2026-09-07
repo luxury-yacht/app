@@ -72,6 +72,7 @@ type compositionOptions struct {
 }
 
 type nativeWindowRegistry interface {
+	panelwindow.SharedWorkspaceCommands
 	PrepareApplicationQuit() bool
 	FocusMostRecent()
 	Create(bool) *application.WebviewWindow
@@ -85,17 +86,12 @@ type nativeWindowRegistry interface {
 	RequestPanelWindowClose(string, string, string) error
 	AcknowledgePanelWindowClose(string) error
 	AcknowledgeWorkspaceWindowClose(string) error
-	RoutePanelWindowCommand(string, panelwindow.OwnerCommand) error
-	RequestPanelObjectOpen(string, panelwindow.ObjectReference, string) error
-	AuthorizePanelObjectOpen(string, string, string, panelwindow.ObjectReference, string) error
+	RoutePanelWindowCommand(string, panelwindow.WorkspaceCommand) error
 	UpdatePanelWindowSnapshot(string, panelwindow.GroupSnapshot) error
 	RequestPanelTabClose(string, string) error
-	AuthorizePanelTabClose(string, string, string) error
 	RequestPanelTabTransfer(string, panelwindow.TabTransferRequest) error
 	AcceptPanelTabTransfer(string, string) error
 	FailPanelTabTransfer(string, string) error
-	RequestPanelWindowGuard(string, string, string, string) error
-	AcknowledgePanelWindowGuard(string, string, bool) error
 	AcknowledgeApplicationQuitPreflight(string, string, bool) error
 }
 
@@ -185,13 +181,13 @@ func (bridge *windowRegistryBridge) beginPanelWindowDock(
 }
 
 func (bridge *windowRegistryBridge) acknowledgePanelDock(
-	ownerWindowName, windowName, transferID string,
+	callerWindowName, windowName, transferID string,
 ) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
-	return registry.AcknowledgePanelWindowDock(ownerWindowName, windowName, transferID)
+	return registry.AcknowledgePanelWindowDock(callerWindowName, windowName, transferID)
 }
 
 func (bridge *windowRegistryBridge) failPanelTransfer(
@@ -205,13 +201,13 @@ func (bridge *windowRegistryBridge) failPanelTransfer(
 }
 
 func (bridge *windowRegistryBridge) focusPanelWindow(
-	ownerWindowName, windowName, panelID string,
+	callerWindowName, windowName, panelID string,
 ) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
-	return registry.FocusPanelWindow(ownerWindowName, windowName, panelID)
+	return registry.FocusPanelWindow(callerWindowName, windowName, panelID)
 }
 
 func (bridge *windowRegistryBridge) requestPanelClose(
@@ -232,50 +228,20 @@ func (bridge *windowRegistryBridge) acknowledgePanelClose(windowName string) err
 	return registry.AcknowledgePanelWindowClose(windowName)
 }
 
-func (bridge *windowRegistryBridge) acknowledgeWorkspaceClose(ownerWindowName string) error {
+func (bridge *windowRegistryBridge) acknowledgeWorkspaceClose(callerWindowName string) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
-	return registry.AcknowledgeWorkspaceWindowClose(ownerWindowName)
+	return registry.AcknowledgeWorkspaceWindowClose(callerWindowName)
 }
 
-func (bridge *windowRegistryBridge) routePanelCommand(windowName string, command panelwindow.OwnerCommand) error {
+func (bridge *windowRegistryBridge) routePanelCommand(windowName string, command panelwindow.WorkspaceCommand) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
 	return registry.RoutePanelWindowCommand(windowName, command)
-}
-
-func (bridge *windowRegistryBridge) requestPanelObjectOpen(
-	windowName string,
-	ref panelwindow.ObjectReference,
-	activeView string,
-) error {
-	registry, err := bridge.registryOrError()
-	if err != nil {
-		return err
-	}
-	return registry.RequestPanelObjectOpen(windowName, ref, activeView)
-}
-
-func (bridge *windowRegistryBridge) authorizePanelObjectOpen(
-	ownerWindowName, windowName, panelID string,
-	ref panelwindow.ObjectReference,
-	activeView string,
-) error {
-	registry, err := bridge.registryOrError()
-	if err != nil {
-		return err
-	}
-	return registry.AuthorizePanelObjectOpen(
-		ownerWindowName,
-		windowName,
-		panelID,
-		ref,
-		activeView,
-	)
 }
 
 func (bridge *windowRegistryBridge) updatePanelSnapshot(
@@ -297,16 +263,6 @@ func (bridge *windowRegistryBridge) requestPanelTabClose(windowName, panelID str
 	return registry.RequestPanelTabClose(windowName, panelID)
 }
 
-func (bridge *windowRegistryBridge) authorizePanelTabClose(
-	ownerWindowName, windowName, panelID string,
-) error {
-	registry, err := bridge.registryOrError()
-	if err != nil {
-		return err
-	}
-	return registry.AuthorizePanelTabClose(ownerWindowName, windowName, panelID)
-}
-
 func (bridge *windowRegistryBridge) requestPanelTabTransfer(
 	callerWindowName string,
 	request panelwindow.TabTransferRequest,
@@ -319,13 +275,13 @@ func (bridge *windowRegistryBridge) requestPanelTabTransfer(
 }
 
 func (bridge *windowRegistryBridge) acceptPanelTabTransfer(
-	ownerWindowName, transferID string,
+	callerWindowName, transferID string,
 ) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
-	return registry.AcceptPanelTabTransfer(ownerWindowName, transferID)
+	return registry.AcceptPanelTabTransfer(callerWindowName, transferID)
 }
 
 func (bridge *windowRegistryBridge) failPanelTabTransfer(
@@ -338,36 +294,15 @@ func (bridge *windowRegistryBridge) failPanelTabTransfer(
 	return registry.FailPanelTabTransfer(callerWindowName, transferID)
 }
 
-func (bridge *windowRegistryBridge) requestPanelGuard(
-	ownerWindowName, windowName, requestID, reason string,
-) error {
-	registry, err := bridge.registryOrError()
-	if err != nil {
-		return err
-	}
-	return registry.RequestPanelWindowGuard(ownerWindowName, windowName, requestID, reason)
-}
-
-func (bridge *windowRegistryBridge) acknowledgePanelGuard(
-	windowName, requestID string,
-	allowed bool,
-) error {
-	registry, err := bridge.registryOrError()
-	if err != nil {
-		return err
-	}
-	return registry.AcknowledgePanelWindowGuard(windowName, requestID, allowed)
-}
-
 func (bridge *windowRegistryBridge) acknowledgeApplicationQuit(
-	ownerWindowName, transactionID string,
+	callerWindowName, transactionID string,
 	allowed bool,
 ) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
-	return registry.AcknowledgeApplicationQuitPreflight(ownerWindowName, transactionID, allowed)
+	return registry.AcknowledgeApplicationQuitPreflight(callerWindowName, transactionID, allowed)
 }
 
 func (bridge *windowRegistryBridge) runtimeOptions(
@@ -375,6 +310,7 @@ func (bridge *windowRegistryBridge) runtimeOptions(
 	updates backend.ApplicationUpdateOptions,
 ) backend.ApplicationRuntimeOptions {
 	return backend.ApplicationRuntimeOptions{
+		PanelWorkspace:             bridge,
 		Reporter:                   reporter,
 		ApplicationUpdates:         updates,
 		CreateWorkspaceWindow:      bridge.createWorkspaceWindow,
@@ -390,16 +326,11 @@ func (bridge *windowRegistryBridge) runtimeOptions(
 		AcknowledgePanelClose:      bridge.acknowledgePanelClose,
 		AcknowledgeWorkspaceClose:  bridge.acknowledgeWorkspaceClose,
 		RoutePanelCommand:          bridge.routePanelCommand,
-		RequestPanelObjectOpen:     bridge.requestPanelObjectOpen,
-		AuthorizePanelObjectOpen:   bridge.authorizePanelObjectOpen,
 		UpdatePanelSnapshot:        bridge.updatePanelSnapshot,
 		RequestPanelTabClose:       bridge.requestPanelTabClose,
-		AuthorizePanelTabClose:     bridge.authorizePanelTabClose,
 		RequestPanelTabTransfer:    bridge.requestPanelTabTransfer,
 		AcceptPanelTabTransfer:     bridge.acceptPanelTabTransfer,
 		FailPanelTabTransfer:       bridge.failPanelTabTransfer,
-		RequestPanelGuard:          bridge.requestPanelGuard,
-		AcknowledgePanelGuard:      bridge.acknowledgePanelGuard,
 		AcknowledgeApplicationQuit: bridge.acknowledgeApplicationQuit,
 	}
 }

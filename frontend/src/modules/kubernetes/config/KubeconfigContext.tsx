@@ -47,6 +47,10 @@ const resolveKubeconfigDiscoveryState = (
   return kubeconfigs.length > 0 ? 'available' : 'no_kubeconfigs';
 };
 
+function retainedActiveSelection(selections: string[], current: string): string {
+  return selections.includes(current) ? current : selections[0] || '';
+}
+
 interface KubeconfigContextType {
   kubeconfigs: types.KubeconfigInfo[];
   kubeconfigDiscoveryState: KubeconfigDiscoveryState;
@@ -62,7 +66,7 @@ interface KubeconfigContextType {
   closeKubeconfig: (selectionOrClusterId: string) => Promise<void>;
   setActiveKubeconfig: (config: string) => void;
   getClusterMeta: (config: string) => { id: string; name: string };
-  loadKubeconfigs: () => Promise<void>;
+  loadKubeconfigs: (refreshWorkspace?: boolean) => Promise<void>;
   registerClusterClosePreflight: (preflight: (clusterId: string) => Promise<boolean>) => () => void;
 }
 
@@ -447,15 +451,19 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         const normalizedSelection = normalizeSelections(
           currentSelection?.selectedKubeconfigs || []
         );
-        const initialMeta = resolveClusterMeta(normalizedSelection[0] || '', configs);
+        const activeSelection = retainedActiveSelection(
+          normalizedSelection,
+          selectedKubeconfigRef.current
+        );
+        const initialMeta = resolveClusterMeta(activeSelection, configs);
         selectedKubeconfigsRef.current = normalizedSelection;
-        selectedKubeconfigRef.current = normalizedSelection[0] || '';
+        selectedKubeconfigRef.current = activeSelection;
         committedSelectionsRef.current = normalizedSelection;
-        committedActiveRef.current = normalizedSelection[0] || '';
+        committedActiveRef.current = activeSelection;
         setSelectedKubeconfigsState(normalizedSelection);
-        setSelectedKubeconfigState(normalizedSelection[0] || '');
+        setSelectedKubeconfigState(activeSelection);
         setCommittedSelectedKubeconfigs(normalizedSelection);
-        setCommittedSelectedKubeconfig(normalizedSelection[0] || '');
+        setCommittedSelectedKubeconfig(activeSelection);
         if (initialMeta.id) {
           activateVisibleCluster(initialMeta.id, true);
         }

@@ -16,9 +16,11 @@ import { assertObjectRefHasRequiredIdentity } from '@shared/utils/objectIdentity
 import { useDockablePanelContext } from '@ui/dockable';
 import { getGroupForPanel } from '@ui/dockable/tabGroupState';
 import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
+import type { panelwindow } from '@/core/backend-api/models';
 import { getWindowIdentity } from '@/core/desktop-runtime';
-import { focusPanelWindow, requestPanelObjectOpen } from '@/core/panel-windows';
+import { openPanelWorkspaceObject } from '@/core/panel-windows';
 import { usePanelWindowRole } from '@/core/panel-windows/PanelWindowRoleContext';
+import { objectPanelTabSnapshot } from '@/core/panel-windows/tabTransfer';
 import { getDefaultObjectPanelPosition } from '@/core/settings/appPreferences';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { reportOperationalError } from '@/utils/errorHandler';
@@ -147,81 +149,30 @@ export function useObjectPanel() {
     pendingFloatPanelIdRef.current = null;
   }, [requestGroupMove, tabGroups]);
 
-  const openWithObject = useCallback(
-    (obj: KubernetesObjectReference, options?: OpenWithObjectOptions) => {
-      const enriched = hydrateClusterMeta(obj);
-      // Runtime defense for incomplete object refs. Catches programmatic ref
-      // constructions that the openWithObjectAudit literal walker can't see.
-      assertObjectRefHasRequiredIdentity(enriched);
-      if (panelWindowRole) {
-        void requestPanelObjectOpen(
-          panelWindowRole.windowName,
-          {
-            clusterId: enriched.clusterId ?? '',
-            group: enriched.group ?? '',
-            version: enriched.version ?? '',
-            kind: enriched.kind ?? '',
-            namespace: enriched.namespace ?? '',
-            name: enriched.name ?? '',
-          },
-          options?.initialTab ?? 'details'
-        ).catch((error) =>
-          reportOperationalError(error, {
-            source: 'useObjectPanel',
-            action: 'request-panel-object-open',
-            clusterId: enriched.clusterId,
-          })
-        );
-        return;
-      }
-      const panelId = objectPanelId(enriched);
-      const ownedPanel = getOwnedPanel(enriched.clusterId, panelId);
-
-      const nativeLocation = ownedPanel?.nativeLocation;
-      if (nativeLocation) {
-        if (options?.initialTab) {
-          setObjectPanelActiveTab(enriched.clusterId, panelId, options.initialTab);
-        }
-        void focusPanelWindow(getWindowIdentity(), nativeLocation.windowName, panelId).catch(
-          (error) =>
-            reportOperationalError(error, {
-              source: 'useObjectPanel',
-              action: 'focus-native-panel',
-              clusterId: enriched.clusterId,
-            })
-        );
-        return;
-      }
-
-      if (enriched.clusterId !== selectedClusterId) {
+  const activateObjectCluster = useCallback(
+    (clusterId: string): boolean => {
+      if (clusterId !== selectedClusterId) {
         const targetSelection = selectedKubeconfigs.find(
-          (selection) => getClusterMeta(selection).id === enriched.clusterId
+          (selection) => getClusterMeta(selection).id === clusterId
         );
         if (!targetSelection) {
-          reportOperationalError(
-            new Error(`Object panel cluster is not open: ${enriched.clusterId}`),
-            {
-              source: 'useObjectPanel',
-              action: 'activate-object-panel-cluster',
-              clusterId: enriched.clusterId,
-            }
-          );
-          return;
+          reportOperationalError(new Error(`Object panel cluster is not open: ${clusterId}`), {
+            source: 'useObjectPanel',
+            action: 'activate-object-panel-cluster',
+            clusterId,
+          });
+          return false;
         }
         setActiveKubeconfig(targetSelection);
       }
 
-      const shouldAutoFloat = ownedPanel === null && getDefaultObjectPanelPosition() === 'floating';
-      onRowClick(enriched, { pendingNativeOpen: shouldAutoFloat });
-      // Set the requested initial tab in the same React batch as the open so
-      // the panel mounts on that tab instead of flashing Details first.
-      if (options?.initialTab) {
-        setObjectPanelActiveTab(enriched.clusterId, panelId, options.initialTab);
-      }
-      if (shouldAutoFloat) {
-        pendingFloatPanelIdRef.current = panelId;
-      }
+      return true;
+    },
+    [selectedClusterId, selectedKubeconfigs, getClusterMeta, setActiveKubeconfig]
+  );
 
+  const focusOpenedPanel = useCallback(
+    (panelId: string) => {
       // If the panel already exists in the dockable system, activate its tab
       // and bring the panel to the front. Newly-created panels join the
       // dockable group after their component mounts, so focus them from the
@@ -234,19 +185,81 @@ export function useObjectPanel() {
         pendingFocusPanelIdRef.current = panelId;
       }
     },
-    [
-      onRowClick,
-      hydrateClusterMeta,
-      tabGroups,
-      focusPanel,
-      setObjectPanelActiveTab,
-      getOwnedPanel,
-      panelWindowRole,
-      selectedClusterId,
-      selectedKubeconfigs,
-      getClusterMeta,
-      setActiveKubeconfig,
-    ]
+    [tabGroups, focusPanel]
+  );
+
+  const updateExistingPanelView = useCallback(
+    (clusterId: string, panelId: string, initialTab?: ViewType) => {
+      if (initialTab) {
+        setObjectPanelActiveTab(clusterId, panelId, initialTab);
+      }
+    },
+    [setObjectPanelActiveTab]
+  );
+
+  const mountSharedPanel = useCallback(
+    (
+      tab: panelwindow.TabSnapshot,
+      enriched: KubernetesObjectReference,
+      shouldAutoFloat: boolean,
+      requestedView?: ViewType
+    ) => {
+      const panelId = objectPanelId(enriched);
+      if (!activateObjectCluster(tab.objectRef.clusterId)) {
+        return;
+      }
+      onRowClick({ ...enriched, ...tab.objectRef }, { pendingNativeOpen: shouldAutoFloat });
+      // Set the requested initial tab in the same React batch as the open so
+      // the panel mounts on that tab instead of flashing Details first.
+      setObjectPanelActiveTab(
+        tab.objectRef.clusterId,
+        panelId,
+        (requestedView ?? tab.activeView) as ViewType
+      );
+      if (shouldAutoFloat) {
+        pendingFloatPanelIdRef.current = panelId;
+      }
+
+      focusOpenedPanel(panelId);
+    },
+    [activateObjectCluster, onRowClick, setObjectPanelActiveTab, focusOpenedPanel]
+  );
+
+  const openWithObject = useCallback(
+    (obj: KubernetesObjectReference, options?: OpenWithObjectOptions) => {
+      const enriched = hydrateClusterMeta(obj);
+      // Runtime defense for incomplete object refs. Catches programmatic ref
+      // constructions that the openWithObjectAudit literal walker can't see.
+      assertObjectRefHasRequiredIdentity(enriched);
+      const panelId = objectPanelId(enriched);
+      const ownedPanel = getOwnedPanel(enriched.clusterId, panelId);
+      const requestedView = options?.initialTab;
+      const shouldAutoFloat =
+        !panelWindowRole && ownedPanel === null && getDefaultObjectPanelPosition() === 'floating';
+
+      void openPanelWorkspaceObject(
+        getWindowIdentity(),
+        objectPanelTabSnapshot(panelId, enriched, options?.initialTab ?? 'details')
+      )
+        .then((result) => {
+          if (!result.render) {
+            if (ownedPanel) {
+              updateExistingPanelView(enriched.clusterId, panelId, requestedView);
+            }
+            return;
+          }
+
+          mountSharedPanel(result.panel.tab, enriched, shouldAutoFloat, requestedView);
+        })
+        .catch((error) =>
+          reportOperationalError(error, {
+            source: 'useObjectPanel',
+            action: 'open-shared-cluster-panel',
+            clusterId: enriched.clusterId,
+          })
+        );
+    },
+    [hydrateClusterMeta, getOwnedPanel, panelWindowRole, updateExistingPanelView, mountSharedPanel]
   );
 
   const close = useCallback(() => {

@@ -260,32 +260,32 @@ func TestApplicationMenuCommandsShareOneTypedRoleAwareDispatcher(t *testing.T) {
 func TestNativeApplicationMenuRoutesDialogsFromTheFocusedPanelToItsOwner(t *testing.T) {
 	for _, test := range []struct {
 		command      ApplicationMenuCommand
-		ownerCommand panelwindow.OwnerCommand
+		ownerCommand panelwindow.WorkspaceCommand
 	}{
-		{ApplicationMenuCommandSettings, panelwindow.OwnerCommandOpenSettings},
-		{ApplicationMenuCommandAbout, panelwindow.OwnerCommandOpenAbout},
-		{ApplicationMenuCommandCheckForUpdates, panelwindow.OwnerCommandOpenAbout},
+		{ApplicationMenuCommandSettings, panelwindow.WorkspaceCommandOpenSettings},
+		{ApplicationMenuCommandAbout, panelwindow.WorkspaceCommandOpenAbout},
+		{ApplicationMenuCommandCheckForUpdates, panelwindow.WorkspaceCommandOpenAbout},
 	} {
 		t.Run(string(test.command), func(t *testing.T) {
 			wailsApp := application.New(application.Options{})
 			panel := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{Name: "panel-native-menu"})
-			routed := []panelwindow.OwnerCommand{}
-			checked := make(chan []panelwindow.OwnerCommand, 1)
+			routed := []panelwindow.WorkspaceCommand{}
+			checked := make(chan []panelwindow.WorkspaceCommand, 1)
 			shell := NewDesktopShell(wailsApp, func() bool { return true }, nil, NewLogger(10), DesktopShellBindings{
 				NativeWindowDescriptor: func(name string) (panelwindow.NativeDescriptor, error) {
 					require.Equal(t, panel.Name(), name)
 					return panelwindow.NativeDescriptor{
 						Role:  panelwindow.NativeRolePanel,
-						Panel: &panelwindow.WindowDescriptor{WindowName: name, OwnerWindowName: "workspace-1", State: panelwindow.WindowStateLive},
+						Panel: &panelwindow.WindowDescriptor{WindowName: name, State: panelwindow.WindowStateLive},
 					}, nil
 				},
-				RoutePanelCommand: func(name string, command panelwindow.OwnerCommand) error {
+				RoutePanelCommand: func(name string, command panelwindow.WorkspaceCommand) error {
 					require.Equal(t, panel.Name(), name)
 					routed = append(routed, command)
 					return nil
 				},
 				UpdateCheck: func() error {
-					checked <- append([]panelwindow.OwnerCommand(nil), routed...)
+					checked <- append([]panelwindow.WorkspaceCommand(nil), routed...)
 					return nil
 				},
 			})
@@ -293,7 +293,7 @@ func TestNativeApplicationMenuRoutesDialogsFromTheFocusedPanelToItsOwner(t *test
 
 			applicationMenuCallback(shell, test.command)()
 
-			require.Equal(t, []panelwindow.OwnerCommand{test.ownerCommand}, routed)
+			require.Equal(t, []panelwindow.WorkspaceCommand{test.ownerCommand}, routed)
 			if test.command == ApplicationMenuCommandCheckForUpdates {
 				select {
 				case commands := <-checked:
@@ -445,9 +445,8 @@ func TestApplicationMenuWindowCommandsCanTargetALivePanelWindow(t *testing.T) {
 					SchemaVersion: panelwindow.NativeDescriptorSchemaVersion,
 					Role:          panelwindow.NativeRolePanel,
 					Panel: &panelwindow.WindowDescriptor{
-						WindowName:      name,
-						OwnerWindowName: "workspace-1",
-						State:           panelwindow.WindowStateLive,
+						WindowName: name,
+						State:      panelwindow.WindowStateLive,
 					},
 				}, nil
 			},

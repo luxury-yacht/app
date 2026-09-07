@@ -63,8 +63,10 @@ import {
 
 export interface UseTabDropTargetOptions<K extends TabDragPayload['kind']> {
   accepts: K[];
-  /** Allows cross-document drops only from this owner and cluster. */
+  /** Restricts cross-document panel drops to the same cluster. */
   scope?: TabDragScope;
+  /** Cluster strips can accept cluster tabs from any app window. */
+  allowExternal?: boolean;
   /**
    * Fires when a drag of an accepted kind is dropped on the target. The
    * third argument is the computed insert index in `[0, tabCount]` — use
@@ -109,7 +111,14 @@ function readPayloadFromDataTransfer(event: DragEvent): TabDragPayload | null {
     return null;
   }
   try {
-    return JSON.parse(raw) as TabDragPayload;
+    const payload = JSON.parse(raw) as TabDragPayload;
+    if (
+      payload?.kind === 'cluster-tab' &&
+      (!payload.clusterId || !payload.selection || !payload.sourceWindowName)
+    ) {
+      return null;
+    }
+    return payload;
   } catch {
     return null;
   }
@@ -118,7 +127,7 @@ function readPayloadFromDataTransfer(event: DragEvent): TabDragPayload | null {
 export function useTabDropTarget<K extends TabDragPayload['kind']>(
   opts: UseTabDropTargetOptions<K>
 ): UseTabDropTargetResult {
-  const { accepts, scope, onDrop, onDragEnter, onDragLeave } = opts;
+  const { accepts, scope, allowExternal = false, onDrop, onDragEnter, onDragLeave } = opts;
   const { getCurrentDrag, registerTarget, unregisterTarget } = useContext(TabDragContext);
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropInsertIndex, setDropInsertIndex] = useState<number | null>(null);
@@ -127,11 +136,13 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
 
   const acceptsRef = useRef(accepts);
   const scopeRef = useRef(scope);
+  const allowExternalRef = useRef(allowExternal);
   const onDropRef = useRef(onDrop);
   const onDragEnterRef = useRef(onDragEnter);
   const onDragLeaveRef = useRef(onDragLeave);
   acceptsRef.current = accepts;
   scopeRef.current = scope;
+  allowExternalRef.current = allowExternal;
   onDropRef.current = onDrop;
   onDragEnterRef.current = onDragEnter;
   onDragLeaveRef.current = onDragLeave;
@@ -150,9 +161,9 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
       if (drag) {
         return !targetScope || tabDragMatchesScope(drag, targetScope);
       }
-      return (
-        !!targetScope && hasDragDataType(event.dataTransfer, tabDragScopeDataType(targetScope))
-      );
+      return targetScope
+        ? hasDragDataType(event.dataTransfer, tabDragScopeDataType(targetScope))
+        : allowExternalRef.current;
     },
     [getCurrentDrag]
   );
@@ -228,7 +239,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
       if (
         !payload ||
         !acceptsRef.current.includes(payload.kind as K) ||
-        (!scopeRef.current && !localDrag) ||
+        (!scopeRef.current && !localDrag && !allowExternalRef.current) ||
         (scopeRef.current && !tabDragMatchesScope(payload, scopeRef.current))
       ) {
         rejectDrag(event);

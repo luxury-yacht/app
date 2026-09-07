@@ -7,7 +7,6 @@ import { RefreshManagerProvider } from '@core/refresh';
 import { FixedClusterProvider } from '@modules/kubernetes/config/KubeconfigContext';
 import { NamespaceProvider } from '@modules/namespace/contexts/NamespaceContext';
 import ObjectPanel from '@modules/object-panel/components/ObjectPanel/ObjectPanel';
-import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import {
   ObjectPanelStateProvider,
   useObjectPanelActiveTabs,
@@ -27,7 +26,7 @@ import {
   acknowledgePanelWindowReady,
   beginPanelWindowDock,
   failPanelWindowTransfer,
-  onPanelObjectOpenAuthorized,
+  onPanelWindowTransferFailed,
   type PanelWindowDescriptor,
   requestPanelTabClose,
   requestPanelTabTransfer,
@@ -38,6 +37,7 @@ import {
   usePanelLifecycleGuardRegistry,
 } from '@/core/panel-windows/panelLifecycleGuards';
 import { resolvePanelWindowClusterName } from '@/core/panel-windows/panelWindowClusterName';
+import { nativePanelPublication } from '@/core/panel-windows/publicationQueue';
 import {
   type DockableTabDragPayload,
   objectPanelTabSnapshot,
@@ -63,11 +63,23 @@ const initialGroups = (snapshot: panelwindow.GroupSnapshot): TabGroupState => ({
 const createTransferId = (): string =>
   globalThis.crypto?.randomUUID?.() ?? `panel-transfer-${Date.now()}`;
 
-function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDescriptor }>) {
-  const { openPanels, onRowClick, setObjectPanelActiveTab } = useObjectPanelState();
+function PanelWindowSurface({
+  descriptor,
+  clusterName,
+}: Readonly<{ descriptor: PanelWindowDescriptor; clusterName: string }>) {
+  const { openPanels } = useObjectPanelState();
   const activeTabs = useObjectPanelActiveTabs();
   const guards = usePanelLifecycleGuardRegistry();
   const [ready, setReady] = useState(false);
+  useEffect(
+    () =>
+      onPanelWindowTransferFailed((event) => {
+        if (event.windowName === descriptor.windowName) {
+          guards.releaseTransfer(event.transferId);
+        }
+      }),
+    [descriptor.windowName, guards]
+  );
   const initialTabGroups = useMemo(() => initialGroups(descriptor.snapshot), [descriptor.snapshot]);
 
   const requestTabClose = useCallback(
@@ -112,22 +124,6 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
     void acknowledgeReady();
   }, [descriptor]);
 
-  useEffect(
-    () =>
-      onPanelObjectOpenAuthorized((event) => {
-        const panelId = onRowClick({ ...event.objectRef });
-        if (panelId !== event.panelId) {
-          reportOperationalError(new Error('Owner authorized an inconsistent panel identity'), {
-            source: 'PanelWindowApp',
-            action: 'authorize-object-identity',
-          });
-          return;
-        }
-        setObjectPanelActiveTab(descriptor.clusterId, panelId, event.activeView as ViewType);
-      }),
-    [descriptor.clusterId, onRowClick, setObjectPanelActiveTab]
-  );
-
   const handleGroupMove = useCallback(
     (
       group: { tabs: string[]; activeTab: string | null },
@@ -141,7 +137,7 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
           const snapshot: panelwindow.GroupSnapshot = {
             schemaVersion: 1,
             transferId: createTransferId(),
-            ownerWindowName: descriptor.ownerWindowName,
+            sourceWindowName: descriptor.windowName,
             clusterId: descriptor.clusterId,
             groupId: descriptor.groupId,
             tabs: group.tabs.flatMap((panelId) => {
@@ -166,10 +162,14 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
             }),
             activePanelId: group.activeTab ?? group.tabs[0] ?? '',
           };
-          void beginPanelWindowDock(descriptor.windowName, targetPosition, snapshot).catch(
-            (error) =>
-              reportOperationalError(error, { source: 'PanelWindowApp', action: 'dock-group' })
-          );
+          guards.freeze(snapshot.transferId, group.tabs);
+          void nativePanelPublication
+            .flush()
+            .then(() => beginPanelWindowDock(descriptor.windowName, targetPosition, snapshot))
+            .catch((error) => {
+              guards.releaseTransfer(snapshot.transferId);
+              reportOperationalError(error, { source: 'PanelWindowApp', action: 'dock-group' });
+            });
         }
       }
     },
@@ -189,7 +189,6 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
   const tabDragIdentity = useMemo(
     () => ({
       windowName: descriptor.windowName,
-      ownerWindowName: descriptor.ownerWindowName,
       clusterId: descriptor.clusterId,
       nativeGroupId: descriptor.groupId,
       getTabSnapshot,
@@ -269,7 +268,7 @@ function PanelWindowSurface({ descriptor }: Readonly<{ descriptor: PanelWindowDe
     >
       <PanelWindowShortcuts descriptor={descriptor} ready={ready} />
       <TextContextMenu />
-      <AppHeader mode="panel" />
+      <AppHeader mode="panel" clusterName={clusterName} />
       <ErrorNotificationSystem />
       <div className="panel-window-content content">
         {Array.from(openPanels.entries()).map(([panelId, objectRef]) => (
@@ -320,7 +319,10 @@ export default function PanelWindowApp({
                           <ClusterLifecycleProvider>
                             <NamespaceProvider>
                               <PanelLifecycleGuardProvider>
-                                <PanelWindowSurface descriptor={descriptor} />
+                                <PanelWindowSurface
+                                  descriptor={descriptor}
+                                  clusterName={clusterName}
+                                />
                               </PanelLifecycleGuardProvider>
                             </NamespaceProvider>
                           </ClusterLifecycleProvider>

@@ -13,10 +13,10 @@ maximize and restore.
   `version`, `kind`, `namespace`, and `name`.
 - Opening an object goes through the object-panel and native-panel boundaries;
   feature code must not splice panel location state directly.
-- One owner workspace may contain an object only once across its docked and
-  native groups. Another workspace may open the same object independently.
-- One native window represents one tab group with an immutable owner,
-  `clusterId`, and `groupId`. Tabs from different clusters never share a group.
+- A shared cluster workspace contains each object once across docked, native,
+  and retained placements; every app view accesses that same collection.
+- One native window represents one tab group with immutable
+  `clusterId` and `groupId`. Tabs from different clusters never share a group.
 - Docked and native renderers share the group chrome and object content
   contract. Native snapshots contain serializable identity and view state, not
   React nodes, refs, fetched data, credentials, drafts, or terminal buffers.
@@ -29,7 +29,7 @@ maximize and restore.
   remains the drag/maximize surface, while the inner
   `DockablePanelHeader` remains tab and panel controls only. Workspace status,
   favorites, and command-palette controls do not render in the panel window.
-- The owner directory is authoritative for panel location. A child renderer is
+- The shared directory is authoritative for panel location. A panel renderer is
   a projection and acknowledges changes through its owner.
 - Transient unmounts such as workspace cluster switches preserve panel refresh
   state. Actual tab close evicts the current renderer's caches; a committed
@@ -87,88 +87,68 @@ maximize and restore.
 
 ## Acknowledged Handoffs
 
-Float, dock-back, and cross-window tab moves are transactions. Before a group
-move, the source checks every tab guard and creates a complete group snapshot.
-An explicit Float source stays visible until the target has reconstructed the
-group and acknowledged readiness. A new default-Floating panel keeps its source
-registration and group mounted but suppresses its workspace surface during
-that same interval. The owner then commits each location exactly once and
-unmounts the source. A failed, stale, or timed-out explicit Float leaves its
-source unchanged; a failed default-Floating open reveals the new panel by
-docking its source on the right. Opening has one terminal owner outcome: if
-readiness succeeds but the opened event cannot reach the owner, the registry
-closes and removes the native target and reports the failed transfer. A native
-target that has already disappeared still produces the same owner-side closed
-outcome.
+Float, dock-back, panel-tab moves, and cluster-tab moves are acknowledged
+transactions. Check source guards and flush its latest snapshot before transfer.
+The source stays mounted while the target reconstructs the panels. The shared
+backend directory commits physical placement only after destination readiness.
+Opening an already-open object focuses the existing placement. Every app window
+displaying the cluster can access the shared panel collection from its cluster
+tab’s context menu.
 
-A tab drag carries the source window, immutable owner, cluster, source group,
-complete object identity, and active object sub-tab. The registry reserves the
-source tab for one transfer and asks the owner to validate its authoritative
-directory entry. The source remains mounted while the destination reconstructs
-the tab. An existing native destination publishes a snapshot containing the
-exact tab before commit; a new native destination acknowledges window
-readiness; a workspace destination waits until its docked tab is mounted. Only
-then does the source remove the tab. Failure or timeout removes a provisional
-destination and leaves or restores the source. Removing the final tab closes
-the now-empty native source.
+A tab drag carries the actual source window/group, cluster, complete object
+identity, and active sub-tab. Cross-cluster targets must be rejected. Existing
+targets publish the exact tab before commit; newly created native targets
+acknowledge readiness. Provisional target groups must not claim source panels
+prematurely. Failures and timeouts remove provisional target copies. A source
+native window closes when its final tab commits elsewhere.
 
-Dock-back moves the entire native group to right or bottom while preserving tab
-order, active tab, and active object sub-tabs. Dragging one child tab moves only
-that tab; the Float and dock-back buttons remain group-wide actions.
+Dock-back moves the entire same-cluster group into right or bottom, preserving
+order and active views. Appending to an occupied group preserves existing tabs.
+Cluster-tab movement carries docked groups and local navigation, while floating
+panel windows keep their positions and cluster identity.
 
-## Refresh and Runtime State
+## Refresh and runtime state
 
-A panel child uses a fixed-cluster provider from its immutable descriptor; it
-does not register a workspace or cluster-tab owner. Switching the owner's
-active cluster does not retarget or hide the child. Visible child content owns
-its normal panel-scoped refresh demand. Hiding or minimizing releases visible
-demand while retaining cached data; restoring paints retained data and
-reacquires the scopes.
+A panel window uses a fixed-cluster provider. Its visible content owns scoped
+refresh demand; hiding or minimizing releases visible demand while retaining
+cached data. The shared panel collection and live native window retain cluster
+runtime independently of any app window’s cluster tabs.
 
-Object and view identity transfer. Read-only detail, YAML, events, map, and log
-data are reconstructed from the shared refresh system. Shells reconnect by
-backend session identity. Unsaved YAML drafts, YAML saves, and in-flight
-mutations do not transfer and block moves and closes until resolved. Native
-and workspace windows show a warning explaining the blocker and how to resolve
-it when the blocked panel receives focus. Native
-geometry is not persisted for relaunch. Once a native destination commits, the
-workspace releases its panel-scoped refresh, log-viewer, and dock-layout caches;
-dock-back reconstructs those caches from the transferred identity and view.
+Object and view identity transfer. Shared refresh data rebuilds detail, YAML,
+events, map, and logs. Shells reconnect by backend session identity. Unsaved YAML,
+saves, and mutations block renderer disposal. Native geometry is process-local.
+The visible header identifies the cluster, with full identity available in its
+tooltip when the text is truncated.
 
-The child is the sole producer of live group snapshots. It serializes snapshot
-writes so an older tab or view state cannot arrive after a newer state. The
-owner commits object additions, non-final tab removals, and active-view changes
-from those acknowledged snapshots rather than mutating its directory before
-the child applies an authorization.
+Each renderer serializes its snapshots and flushes before moving or closing.
+A transfer freezes user interaction until commit or rollback. Native panels do
+not publish through an originating app window. Shared directory revisions drive
+app-view reconciliation and retained-panel restoration.
 
-## Close Ordering
+## Close ordering
 
-- Active-tab close: guard the tab and ask the owner to authorize it without
-  changing the directory. For a non-final tab, the child releases its local
-  state and publishes the resulting snapshot; the owner commits that snapshot.
-  For the final tab, the child preserves local state until native close commits,
-  and the owner removes it from the closed event.
-- Native-window titlebar close: guard the whole group, preserve child and owner state
-  until the native close commits, then remove the group from the closed event.
-- Cluster-tab or owner close: guard matching docked panels and children, close
-  children, then release the existing workspace/cluster ownership.
-- Application quit: all ready workspaces preflight first; no owner closes until
-  every owner approves.
-All asynchronous handoff and close timeouts fail closed and preserve the source
-state.
+- Panel-tab close: guard locally, obtain registry authorization, remove a
+  non-final tab locally and publish the remaining snapshot. Preserve a final
+  tab until its native window close commits.
+- Panel-window close: guard the group, close the native window, then remove its
+  shared entries and release its runtime reference.
+- Cluster-tab or app-window close: guard and flush local docked panels, retain
+  their shared identities, and release that app view. Floating panels remain open.
+- Application quit: preflight every ready app and panel renderer. Close none
+  until every participant approves. Denial or timeout preserves all renderers.
 
 ## Change Checklist
 
 1. Trace complete object identity from the initiating link/action through the
-   owner directory and snapshot.
+   shared directory and snapshot.
 2. Prove the source remains live until target acknowledgement and remains
    unchanged on failure or timeout.
 3. Verify dock-right, dock-bottom, native float, dock-back, group order, active
    tabs, uniqueness, and focus.
-4. Verify cluster switching does not rewrite child identity or workspace
-   ownership, and child visibility controls only its scoped demand.
+4. Verify cluster switching does not rewrite cluster identity or app-view
+   membership, and panel visibility controls only its scoped demand.
 5. Exercise clean, unsaved-YAML, saving, and mutation-in-flight guards across
-   move, tab close, titlebar close, cluster close, owner close, and quit.
+   move, tab close, titlebar close, cluster close, app-window close, and quit.
 6. Add reducer/protocol tests and visible component tests. Run typecheck and the
    targeted dockable, object-panel, shortcut, and appwindow suites.
 7. On macOS and Windows, exercise single-tab drag-out from a workspace and a

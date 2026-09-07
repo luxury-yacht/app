@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"reflect"
 	"sort"
 	"testing"
 
@@ -29,12 +30,20 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 		"UpdateCommands":         {field: "updates", count: 6},
 		"AppLogCommands":         {field: "logs", count: 5},
 		"DesktopShellCommands":   {field: "desktopShell", count: 5},
-		"PanelWindowCommands":    {field: "panelWindows", count: 21},
+		"PanelWindowCommands":    {field: "panelWindows", count: 24},
 	}
 
 	parsed, err := parser.ParseFile(token.NewFileSet(), "desktop_service.go", nil, 0)
 	require.NoError(t, err)
 	interfaces := desktopCommandInterfaces(parsed, expectedOwners)
+	panelContract := reflect.TypeFor[PanelWindowCommands]()
+	interfaces["PanelWindowCommands"] = nil
+	for i := 0; i < panelContract.NumMethod(); i++ {
+		interfaces["PanelWindowCommands"] = append(interfaces["PanelWindowCommands"], panelContract.Method(i).Name)
+	}
+	shared, err := parser.ParseFile(token.NewFileSet(), "desktop_service_panel_workspace.go", nil, 0)
+	require.NoError(t, err)
+	parsed.Decls = append(parsed.Decls, shared.Decls...)
 	delegations := desktopCommandDelegations(t, parsed)
 
 	seen := make(map[string]string, len(delegations))
@@ -50,8 +59,8 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 			require.Equal(t, owner.field+"."+method, delegations[method], method)
 		}
 	}
-	require.Len(t, seen, 109)
-	require.Len(t, delegations, 109)
+	require.Len(t, seen, 112)
+	require.Len(t, delegations, 112)
 }
 
 func desktopCommandInterfaces(

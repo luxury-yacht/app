@@ -55,7 +55,7 @@ type WindowPoint struct {
 type GroupSnapshot struct {
 	SchemaVersion         int           `json:"schemaVersion"`
 	TransferID            string        `json:"transferId"`
-	OwnerWindowName       string        `json:"ownerWindowName"`
+	SourceWindowName      string        `json:"sourceWindowName"`
 	ClusterID             string        `json:"clusterId"`
 	GroupID               string        `json:"groupId"`
 	Tabs                  []TabSnapshot `json:"tabs"`
@@ -70,10 +70,10 @@ func validateGroupSnapshotHeader(snapshot GroupSnapshot) error {
 		return fmt.Errorf("unsupported panel group schema version %d", snapshot.SchemaVersion)
 	}
 	if strings.TrimSpace(snapshot.TransferID) == "" ||
-		strings.TrimSpace(snapshot.OwnerWindowName) == "" ||
+		strings.TrimSpace(snapshot.SourceWindowName) == "" ||
 		strings.TrimSpace(snapshot.ClusterID) == "" ||
 		strings.TrimSpace(snapshot.GroupID) == "" {
-		return fmt.Errorf("panel group requires transfer, owner, cluster, and group identity")
+		return fmt.Errorf("panel group requires transfer, source, cluster, and group identity")
 	}
 	if len(snapshot.Tabs) == 0 {
 		return fmt.Errorf("panel group requires at least one tab")
@@ -153,12 +153,11 @@ const (
 )
 
 type WindowDescriptor struct {
-	WindowName      string        `json:"windowName"`
-	OwnerWindowName string        `json:"ownerWindowName"`
-	ClusterID       string        `json:"clusterId"`
-	GroupID         string        `json:"groupId"`
-	State           WindowState   `json:"state"`
-	Snapshot        GroupSnapshot `json:"snapshot"`
+	WindowName string        `json:"windowName"`
+	ClusterID  string        `json:"clusterId"`
+	GroupID    string        `json:"groupId"`
+	State      WindowState   `json:"state"`
+	Snapshot   GroupSnapshot `json:"snapshot"`
 }
 
 const NativeDescriptorSchemaVersion = 1
@@ -187,15 +186,9 @@ const (
 	WindowFocusRequestedEventName              = "panel-window:focus-requested"
 	WindowCloseRequestedEventName              = "panel-window:close-requested"
 	WindowClosedEventName                      = "panel-window:closed"
-	OwnerCloseRequestedEventName               = "panel-window:owner-close-requested"
-	ObjectOpenRequestedEventName               = "panel-window:object-open-requested"
-	ObjectOpenAuthorizedEventName              = "panel-window:object-open-authorized"
-	SnapshotUpdatedEventName                   = "panel-window:snapshot-updated"
-	TabCloseRequestedEventName                 = "panel-window:tab-close-requested"
+	WorkspaceCloseRequestedEventName           = "workspace-window:close-requested"
 	TabCloseAuthorizedEventName                = "panel-window:tab-close-authorized"
 	ApplicationQuitPreflightRequestedEventName = "panel-window:application-quit-preflight-requested"
-	WindowGuardRequestedEventName              = "panel-window:guard-requested"
-	WindowGuardResultEventName                 = "panel-window:guard-result"
 )
 
 type WindowOpenedEvent struct {
@@ -228,37 +221,8 @@ type WindowClosedEvent struct {
 	GroupID    string `json:"groupId"`
 }
 
-type OwnerCloseRequestedEvent struct {
-	OwnerWindowName string   `json:"ownerWindowName"`
-	PanelWindows    []string `json:"panelWindows"`
-}
-
-type ObjectOpenRequestEvent struct {
-	SourceWindowName string          `json:"sourceWindowName"`
-	OwnerWindowName  string          `json:"ownerWindowName"`
-	ClusterID        string          `json:"clusterId"`
-	GroupID          string          `json:"groupId"`
-	ObjectRef        ObjectReference `json:"objectRef"`
-	ActiveView       string          `json:"activeView"`
-}
-
-type ObjectOpenAuthorizedEvent struct {
-	PanelID    string          `json:"panelId"`
-	ObjectRef  ObjectReference `json:"objectRef"`
-	ActiveView string          `json:"activeView"`
-}
-
-type SnapshotUpdatedEvent struct {
-	WindowName string        `json:"windowName"`
-	Snapshot   GroupSnapshot `json:"snapshot"`
-}
-
-type TabCloseRequestedEvent struct {
-	SourceWindowName string `json:"sourceWindowName"`
-	OwnerWindowName  string `json:"ownerWindowName"`
-	ClusterID        string `json:"clusterId"`
-	GroupID          string `json:"groupId"`
-	PanelID          string `json:"panelId"`
+type WorkspaceCloseRequestedEvent struct {
+	WindowName string `json:"windowName"`
 }
 
 type TabCloseAuthorizedEvent struct {
@@ -266,19 +230,14 @@ type TabCloseAuthorizedEvent struct {
 }
 
 type ApplicationQuitPreflightRequestedEvent struct {
-	TransactionID   string   `json:"transactionId"`
-	OwnerWindowName string   `json:"ownerWindowName"`
-	PanelWindows    []string `json:"panelWindows"`
+	TransactionID string `json:"transactionId"`
+	WindowName    string `json:"windowName"`
 }
 
-type WindowGuardRequestedEvent struct {
-	RequestID  string `json:"requestId"`
-	WindowName string `json:"windowName"`
-	Reason     string `json:"reason"`
-}
+const WindowTransferFailedEventName = "panel-window:transfer-failed"
 
-type WindowGuardResultEvent struct {
-	RequestID  string `json:"requestId"`
+type WindowTransferFailedEvent struct {
 	WindowName string `json:"windowName"`
-	Allowed    bool   `json:"allowed"`
+	TransferID string `json:"transferId"`
+	ClusterID  string `json:"clusterId"`
 }

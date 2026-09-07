@@ -8,7 +8,7 @@ import {
 } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import { logAppLogsInfo } from '@/core/logging/appLogsClient';
-import { getWorkspaceProjectionIdentity } from '@/core/window-identity';
+import { getWindowIdentity } from '@/core/window-identity';
 import { reportOperationalError } from '@/utils/errorHandler';
 
 export type ClusterHealthStatus = 'healthy' | 'degraded' | 'unknown';
@@ -706,7 +706,7 @@ export class ClusterWorkspaceStore {
 
 const readClusterWorkspaceState = async (): Promise<ClusterWorkspaceWireState> =>
   (await GetClusterWorkspaceStateForWindow(
-    getWorkspaceProjectionIdentity()
+    getWindowIdentity()
   )) as unknown as ClusterWorkspaceWireState;
 
 export const clusterWorkspaceStore = new ClusterWorkspaceStore({

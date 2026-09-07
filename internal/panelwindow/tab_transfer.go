@@ -17,7 +17,6 @@ type TabTransferRequest struct {
 	TransferID       string            `json:"transferId"`
 	SourceWindowName string            `json:"sourceWindowName"`
 	TargetWindowName string            `json:"targetWindowName"`
-	OwnerWindowName  string            `json:"ownerWindowName"`
 	ClusterID        string            `json:"clusterId"`
 	SourceGroupID    string            `json:"sourceGroupId"`
 	TargetGroupID    string            `json:"targetGroupId"`
@@ -31,11 +30,10 @@ type TabTransferRequest struct {
 func ValidateTabTransferRequest(request TabTransferRequest) error {
 	if strings.TrimSpace(request.TransferID) == "" ||
 		strings.TrimSpace(request.SourceWindowName) == "" ||
-		strings.TrimSpace(request.OwnerWindowName) == "" ||
 		strings.TrimSpace(request.ClusterID) == "" ||
 		strings.TrimSpace(request.SourceGroupID) == "" ||
 		strings.TrimSpace(request.TargetGroupID) == "" {
-		return fmt.Errorf("panel tab transfer requires transfer, source, owner, cluster, and group identity")
+		return fmt.Errorf("panel tab transfer requires transfer, source, cluster, and group identity")
 	}
 	if request.TargetIndex < 0 {
 		return fmt.Errorf("panel tab transfer target index cannot be negative")
@@ -43,11 +41,15 @@ func ValidateTabTransferRequest(request TabTransferRequest) error {
 	if err := validateGroupTab(0, request.Tab, request.ClusterID, make(map[string]struct{}, 1)); err != nil {
 		return err
 	}
+	return validateTabTransferTarget(request)
+}
+
+func validateTabTransferTarget(request TabTransferRequest) error {
 	switch request.TargetKind {
 	case TabTransferTargetWorkspace:
-		if request.TargetWindowName != request.OwnerWindowName ||
+		if strings.TrimSpace(request.TargetWindowName) == "" ||
 			(request.TargetGroupID != "right" && request.TargetGroupID != "bottom") {
-			return fmt.Errorf("workspace panel tab transfer requires an owner dock target")
+			return fmt.Errorf("workspace panel tab transfer requires an app window dock target")
 		}
 	case TabTransferTargetPanelWindow:
 		if strings.TrimSpace(request.TargetWindowName) == "" {

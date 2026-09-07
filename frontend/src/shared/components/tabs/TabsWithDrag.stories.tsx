@@ -68,10 +68,46 @@ function ClusterOnlyStrip() {
 
   // Slot-bound hooks: each slot reads the CURRENT tab at that index so the
   // payload stays in sync after reorders. Empty slots pass null.
-  const drag0 = useTabDragSource(tabs[0] ? { kind: 'cluster-tab', clusterId: tabs[0].id } : null);
-  const drag1 = useTabDragSource(tabs[1] ? { kind: 'cluster-tab', clusterId: tabs[1].id } : null);
-  const drag2 = useTabDragSource(tabs[2] ? { kind: 'cluster-tab', clusterId: tabs[2].id } : null);
-  const drag3 = useTabDragSource(tabs[3] ? { kind: 'cluster-tab', clusterId: tabs[3].id } : null);
+  const drag0 = useTabDragSource(
+    tabs[0]
+      ? {
+          kind: 'cluster-tab',
+          clusterId: tabs[0].id,
+          selection: tabs[0].id,
+          sourceWindowName: 'workspace-1',
+        }
+      : null
+  );
+  const drag1 = useTabDragSource(
+    tabs[1]
+      ? {
+          kind: 'cluster-tab',
+          clusterId: tabs[1].id,
+          selection: tabs[1].id,
+          sourceWindowName: 'workspace-1',
+        }
+      : null
+  );
+  const drag2 = useTabDragSource(
+    tabs[2]
+      ? {
+          kind: 'cluster-tab',
+          clusterId: tabs[2].id,
+          selection: tabs[2].id,
+          sourceWindowName: 'workspace-1',
+        }
+      : null
+  );
+  const drag3 = useTabDragSource(
+    tabs[3]
+      ? {
+          kind: 'cluster-tab',
+          clusterId: tabs[3].id,
+          selection: tabs[3].id,
+          sourceWindowName: 'workspace-1',
+        }
+      : null
+  );
   const dragProps = [drag0, drag1, drag2, drag3];
 
   const {

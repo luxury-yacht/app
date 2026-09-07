@@ -8,12 +8,10 @@ import (
 	"github.com/luxury-yacht/app/internal/panelwindow"
 )
 
-// PanelWindowSpec identifies a native panel window within its immutable owner
-// workspace and cluster.
+// PanelWindowSpec identifies a native panel window within its cluster.
 type panelWindowSpec struct {
-	OwnerWindowName string
-	ClusterID       string
-	GroupID         string
+	ClusterID string
+	GroupID   string
 }
 
 const (
@@ -27,26 +25,28 @@ type PanelWindowState = panelwindow.WindowState
 type PanelWindowDescriptor = panelwindow.WindowDescriptor
 
 type panelTransferRecord struct {
-	state      PanelWindowState
-	transferID string
-	snapshot   PanelGroupSnapshot
+	state        PanelWindowState
+	transferID   string
+	snapshot     PanelGroupSnapshot
+	dockTarget   string
+	dockPosition string
 }
 
 type panelIndex struct {
-	mu          sync.Mutex
-	next        uint64
-	panels      map[string]panelWindowSpec
-	ownerGroups map[string]map[string]string
-	transfers   map[string]panelTransferRecord
-	usedIDs     map[string]struct{}
+	mu            sync.Mutex
+	next          uint64
+	panels        map[string]panelWindowSpec
+	clusterGroups map[string]map[string]string
+	transfers     map[string]panelTransferRecord
+	usedIDs       map[string]struct{}
 }
 
 func newPanelIndex() *panelIndex {
 	return &panelIndex{
-		panels:      make(map[string]panelWindowSpec),
-		ownerGroups: make(map[string]map[string]string),
-		transfers:   make(map[string]panelTransferRecord),
-		usedIDs:     make(map[string]struct{}),
+		panels:        make(map[string]panelWindowSpec),
+		clusterGroups: make(map[string]map[string]string),
+		transfers:     make(map[string]panelTransferRecord),
+		usedIDs:       make(map[string]struct{}),
 	}
 }
 
@@ -55,9 +55,8 @@ func (p *panelIndex) BeginOpen(snapshot PanelGroupSnapshot) (PanelWindowDescript
 		return PanelWindowDescriptor{}, err
 	}
 	spec := panelWindowSpec{
-		OwnerWindowName: snapshot.OwnerWindowName,
-		ClusterID:       snapshot.ClusterID,
-		GroupID:         snapshot.GroupID,
+		ClusterID: snapshot.ClusterID,
+		GroupID:   snapshot.GroupID,
 	}
 
 	p.mu.Lock()
@@ -92,7 +91,7 @@ func (p *panelIndex) AcknowledgeOpen(
 	return p.descriptorLocked(windowName), nil
 }
 
-func (p *panelIndex) BeginDock(windowName string, snapshot PanelGroupSnapshot) error {
+func (p *panelIndex) BeginDock(windowName string, snapshot PanelGroupSnapshot, targetWindow, targetPosition string) error {
 	if err := ValidatePanelGroupSnapshot(snapshot); err != nil {
 		return err
 	}
@@ -107,19 +106,44 @@ func (p *panelIndex) BeginDock(windowName string, snapshot PanelGroupSnapshot) e
 	if record.state != PanelWindowStateLive {
 		return fmt.Errorf("panel window %q cannot dock from state %q", windowName, record.state)
 	}
-	if snapshot.OwnerWindowName != spec.OwnerWindowName ||
-		snapshot.ClusterID != spec.ClusterID ||
+	if snapshot.ClusterID != spec.ClusterID ||
 		snapshot.GroupID != spec.GroupID {
-		return fmt.Errorf("panel window %q cannot change owner, cluster, or group", windowName)
+		return fmt.Errorf("panel window %q cannot change cluster or group", windowName)
 	}
 	if _, used := p.usedIDs[snapshot.TransferID]; used {
 		return fmt.Errorf("panel transfer %q already exists", snapshot.TransferID)
 	}
 	p.usedIDs[snapshot.TransferID] = struct{}{}
 	p.transfers[windowName] = panelTransferRecord{
-		state:      PanelWindowStateDocking,
-		transferID: snapshot.TransferID,
-		snapshot:   clonePanelGroupSnapshot(snapshot),
+		state:        PanelWindowStateDocking,
+		dockTarget:   targetWindow,
+		dockPosition: targetPosition,
+		transferID:   snapshot.TransferID,
+		snapshot:     clonePanelGroupSnapshot(snapshot),
+	}
+	return nil
+}
+
+func (p *panelIndex) ValidateSnapshot(windowName string, snapshot PanelGroupSnapshot) error {
+	if err := ValidatePanelGroupSnapshot(snapshot); err != nil {
+		return err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.validateSnapshotLocked(windowName, snapshot)
+}
+
+func (p *panelIndex) validateSnapshotLocked(windowName string, snapshot PanelGroupSnapshot) error {
+	spec, exists := p.panels[windowName]
+	if !exists {
+		return fmt.Errorf("panel window %q is not live", windowName)
+	}
+	record := p.transfers[windowName]
+	if record.state != PanelWindowStateLive {
+		return fmt.Errorf("panel window %q cannot update snapshot from state %q", windowName, record.state)
+	}
+	if snapshot.ClusterID != spec.ClusterID || snapshot.GroupID != spec.GroupID {
+		return fmt.Errorf("panel window %q cannot change cluster or group", windowName)
 	}
 	return nil
 }
@@ -130,18 +154,10 @@ func (p *panelIndex) UpdateSnapshot(windowName string, snapshot PanelGroupSnapsh
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	spec, exists := p.panels[windowName]
-	if !exists {
-		return fmt.Errorf("panel window %q is not live", windowName)
+	if err := p.validateSnapshotLocked(windowName, snapshot); err != nil {
+		return err
 	}
 	record := p.transfers[windowName]
-	if record.state != PanelWindowStateLive {
-		return fmt.Errorf("panel window %q cannot update snapshot from state %q", windowName, record.state)
-	}
-	if snapshot.OwnerWindowName != spec.OwnerWindowName ||
-		snapshot.ClusterID != spec.ClusterID || snapshot.GroupID != spec.GroupID {
-		return fmt.Errorf("panel window %q cannot change owner, cluster, or group", windowName)
-	}
 	record.snapshot = clonePanelGroupSnapshot(snapshot)
 	p.transfers[windowName] = record
 	return nil
@@ -223,30 +239,16 @@ func (p *panelIndex) Remove(windowName string) bool {
 	return true
 }
 
-func (p *panelIndex) NamesOwnedBy(ownerWindowName, clusterID string) []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	groups := p.ownerGroups[ownerWindowName]
-	names := make([]string, 0, len(groups))
-	for _, name := range groups {
-		if clusterID == "" || p.panels[name].ClusterID == clusterID {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	return names
-}
-
 func (p *panelIndex) addLocked(spec panelWindowSpec) (string, error) {
-	groups := p.ownerGroups[spec.OwnerWindowName]
+	groups := p.clusterGroups[spec.ClusterID]
 	if groups == nil {
 		groups = make(map[string]string)
-		p.ownerGroups[spec.OwnerWindowName] = groups
+		p.clusterGroups[spec.ClusterID] = groups
 	}
 	if existing := groups[spec.GroupID]; existing != "" {
 		return "", fmt.Errorf(
-			"owner workspace %q already owns panel group %q in window %q",
-			spec.OwnerWindowName,
+			"cluster %q already owns panel group %q in window %q",
+			spec.ClusterID,
 			spec.GroupID,
 			existing,
 		)
@@ -290,12 +292,11 @@ func (p *panelIndex) descriptorLocked(windowName string) PanelWindowDescriptor {
 	spec := p.panels[windowName]
 	record := p.transfers[windowName]
 	return PanelWindowDescriptor{
-		WindowName:      windowName,
-		OwnerWindowName: spec.OwnerWindowName,
-		ClusterID:       spec.ClusterID,
-		GroupID:         spec.GroupID,
-		State:           record.state,
-		Snapshot:        clonePanelGroupSnapshot(record.snapshot),
+		WindowName: windowName,
+		ClusterID:  spec.ClusterID,
+		GroupID:    spec.GroupID,
+		State:      record.state,
+		Snapshot:   clonePanelGroupSnapshot(record.snapshot),
 	}
 }
 
@@ -306,10 +307,10 @@ func (p *panelIndex) removeLocked(windowName string) {
 	}
 	delete(p.panels, windowName)
 	delete(p.transfers, windowName)
-	groups := p.ownerGroups[spec.OwnerWindowName]
+	groups := p.clusterGroups[spec.ClusterID]
 	delete(groups, spec.GroupID)
 	if len(groups) == 0 {
-		delete(p.ownerGroups, spec.OwnerWindowName)
+		delete(p.clusterGroups, spec.ClusterID)
 	}
 }
 
@@ -325,4 +326,37 @@ func clonePanelGroupSnapshot(snapshot PanelGroupSnapshot) PanelGroupSnapshot {
 		result.InitialPositionAnchor = &anchor
 	}
 	return result
+}
+
+func (p *panelIndex) Names(clusterID string) []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	names := make([]string, 0, len(p.panels))
+	for name, spec := range p.panels {
+		if clusterID == "" || spec.ClusterID == clusterID {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func (p *panelIndex) DockTarget(windowName, transferID, caller string) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	record, err := p.pendingLocked(windowName, transferID, PanelWindowStateDocking)
+	if err != nil {
+		return "", err
+	}
+	if record.dockTarget != caller {
+		return "", fmt.Errorf("panel dock target does not match caller")
+	}
+	return record.dockPosition, nil
+}
+
+func (p *panelIndex) IsTransferParticipant(windowName, caller string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	record, exists := p.transfers[windowName]
+	return exists && (caller == windowName || (record.state == PanelWindowStateOpening && caller == record.snapshot.SourceWindowName) || (record.state == PanelWindowStateDocking && caller == record.dockTarget))
 }

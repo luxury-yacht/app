@@ -20,6 +20,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logclassify"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/system"
+	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -96,7 +97,12 @@ type refreshSubsystemTeardowner interface {
 }
 
 type lifecycleWorkspace interface {
+	panelwindow.ClusterViewTransferLifecycle
 	ReleaseWorkspaceWindow(string)
+	WindowClusterIDs(string) []string
+	PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory
+	RetainPanelCluster(string, string) error
+	ReleasePanelCluster(string) error
 	connectSelectedClustersAtStartup(context.Context) error
 	consumeClusterRuntimeIntent(ClusterRuntimeIntent)
 	initializeSelectedClustersAtStartup() (int, context.Context, error)
@@ -429,6 +435,22 @@ func (a *ApplicationLifecycle) ReleaseWorkspaceWindow(windowID string) {
 	}
 }
 
+func (a *ApplicationLifecycle) WindowClusterIDs(windowID string) []string {
+	return a.workspace.WindowClusterIDs(windowID)
+}
+
+func (a *ApplicationLifecycle) PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory {
+	return a.workspace.PanelWorkspaceDirectory()
+}
+
+func (a *ApplicationLifecycle) RetainPanelCluster(referenceID, clusterID string) error {
+	return a.workspace.RetainPanelCluster(referenceID, clusterID)
+}
+
+func (a *ApplicationLifecycle) ReleasePanelCluster(referenceID string) error {
+	return a.workspace.ReleasePanelCluster(referenceID)
+}
+
 // containsAuthPattern checks if a lowercased message contains auth-related patterns.
 // Used to suppress auth error logging even if state hasn't transitioned yet.
 func containsAuthPattern(lower string) bool {
@@ -445,4 +467,14 @@ func containsAuthPattern(lower string) bool {
 		}
 	}
 	return false
+}
+
+func (a *ApplicationLifecycle) StageClusterViewTransfer(source, target, clusterID string) (bool, error) {
+	return a.workspace.StageClusterViewTransfer(source, target, clusterID)
+}
+func (a *ApplicationLifecycle) CommitClusterViewTransfer(source, target, clusterID string, groups []panelwindow.WorkspaceGroup) error {
+	return a.workspace.CommitClusterViewTransfer(source, target, clusterID, groups)
+}
+func (a *ApplicationLifecycle) CancelClusterViewTransfer(target, clusterID string) error {
+	return a.workspace.CancelClusterViewTransfer(target, clusterID)
 }

@@ -113,8 +113,8 @@ same typed `ApplicationMenuCommand` dispatcher. Wails injects the calling window
 into the desktop-service context; application-menu service calls without a sender
 are rejected. Only native menu callbacks may resolve the current window. The
 shell resolves and validates that sender's window identity through the native
-window registry, keeps window-local commands in the sender, and routes workspace-owned commands from a panel to its immutable
-owner. The panel renderer keeps its Windows/Linux application-menu accelerators
+window registry, keeps window-local commands in the sender, and routes workspace commands from a panel to an app window displaying the same
+cluster, creating an app view when necessary. The panel renderer keeps its Windows/Linux application-menu accelerators
 disabled until the panel's native ready acknowledgement.
 
 The pinned beta.17 runtime supplies edge and corner hit testing and native
@@ -176,62 +176,67 @@ callback, or frontend owner and must not gain a second event subscription.
 | Ordinary focus changes | Peer `events.Common.WindowFocus` listener | No | Updates only the registry's most-recent ordering | Focus does not trigger refresh or cluster selection. It chooses the peer used by subsequent-launch focus and explicit application-quit geometry persistence. |
 | System appearance changes | Browser `matchMedia('(prefers-color-scheme: dark)')`; persisted preference changes use the frontend settings event bus | No | The React subscription exists only after the runtime mounts; system changes apply only while the preference is `system` | Process preference, not cluster data. The React effect removes the media-query and settings-event subscriptions on unmount. Proof: `frontend/src/core/contexts/AppearanceModeContext.tsx`. |
 | Dynamic native-menu labels | `backend.DesktopShell.UpdateMenu`; no Wails application event | No | Runs only after runtime-ready state changes such as sidebar or panel visibility | Rebuilds the persistent menu and resets the macOS application menu. Windows and Linux use neutral labels in the app-rendered menu and do not install the native menu on frameless windows. Proof: `backend/desktop_shell_ui.go`, `frontend/src/ui/layout/AppMenuBar.tsx`, and `backend/desktop_shell_ui_test.go`. |
-| Workspace-window close | Every workspace's `events.Common.WindowClosing` cancellable hook starts an asynchronous owner preflight | Yes | The owner guards docked panels and every owned child before the registry authorizes a second close. Children close before foreground demand and cluster-tab ownership are released. Shared cluster teardown occurs only when no remaining workspace owns the selection. | The owner relationship is immutable. A denial or timeout leaves owner and children live. The last workspace keeps its tab union for next-start persistence. Proof: `internal/appwindow/registry.go`, `internal/appwindow/panel.go`, `frontend/src/core/panel-windows/WorkspacePanelCoordinator.tsx`, and `internal/appwindow/lifecycle_test.go`. |
-| Panel-window close | A panel's cancellable native close hook routes a guard request to its child renderer and immutable owner | Yes | The child guards every tab and preserves its state until a registry-authorized second close succeeds. The owner removes the group only from the closed event. Failed opening transfers publish the same terminal owner outcome even when the native target has already disappeared. | Panel close never releases a workspace or cluster-tab owner. A denial, failed native close, or timeout leaves the panel and owner directory unchanged. Proof: `internal/appwindow/registry.go`, `internal/appwindow/panel.go`, `internal/appwindow/panel_transfer.go`, and `frontend/src/ui/shortcuts/components/PanelWindowShortcuts.tsx`. |
-| Application quit | `application.Options.ShouldQuit` asks every ready workspace to acknowledge one two-phase preflight | Yes | No workspace closes until all ready workspaces have guarded their docked and child panels. Only unanimous approval authorizes normal owner close transactions and the existing once-only persistence flush. | A denial, stale response, or timeout cancels the transaction without partially closing another owner. The most recently focused live workspace supplies geometry. Proof: `main.go`, `internal/appwindow/registry.go`, `frontend/src/core/panel-windows/WorkspacePanelCoordinator.tsx`, and `backend/application_lifecycle.go`. |
+| App-window close | `events.Common.WindowClosing` starts a renderer preflight | Yes | Guard and flush this app window’s docked panels, retain their shared entries, then release its cluster views and foreground demand. Floating panels remain live. | A denied preflight leaves the window open. Runtime selection includes both app views and shared panel references. See the cluster workspace contract below. |
+| Panel-window close | A cancellable native hook routes a guard request to that panel renderer | Yes | Guard the group, then close through the registry and remove its shared entries. Release the native reference and any unused shared-panel reference. | Failure leaves the native source available. See `PanelWindowShortcuts`, `Registry`, and the shared panel workspace contract below. |
+| Application quit | `application.Options.ShouldQuit` asks every ready app and panel renderer to acknowledge one preflight | Yes | No renderer closes before every participant approves. Approved closes precede the existing once-only persistence flush. | A denial or timeout cancels the preflight. The most recently focused live app window supplies geometry. See `WorkspacePanelLifecycle`, `PanelWindowShortcuts`, and `Registry`. |
 | Service cancellation and shutdown | Wails cancels the service context, then calls `backend.DesktopService.ServiceShutdown`, which delegates to the lifecycle owner | No | Occurs after quit is accepted and after pre-quit persistence | Process-scoped teardown stops auth recovery, runtime operations, kubeconfig watching, and refresh before clearing the application context. Proof: `backend/desktop_service.go`, `backend/application_lifecycle.go`, and the pinned framework's `pkg/application/application.go`. |
 | Initial hidden-window workaround | `windowOptionsForPlatform`; no event | No | macOS/Windows peers start hidden until runtime ready; Linux retains its existing visible-start contract | Applies equally to every `workspace-N` peer. Option mapping proof: `internal/appwindow/registry.go` and `internal/appwindow/registry_test.go`. |
-| Platform window chrome and menus | `windowOptionsForPlatform`, `panelWindowOptionsForPlatform`, renderer application-menu command owners, and `backend.DesktopShell.ExecuteApplicationMenuCommand` | No | The native menu is created before windows for macOS. Windows/Linux windows are frameless and render controls in `AppHeader`; workspace windows additionally render `AppMenuBar`. The panel renderer keeps its Windows/Linux application-menu accelerators disabled until the panel's native ready acknowledgement. | macOS owns the application menu and native traffic lights. Windows/Linux install no native window menu. Renderer-owned UI commands execute locally, panel-to-owner commands carry authenticated Wails sender identity through the typed owner-command boundary, and process/native-window commands use the backend dispatcher. Proof: `internal/appwindow/registry.go`, `internal/panelwindow/owner_command.go`, `backend/application_menu_commands.go`, `frontend/src/ui/layout/workspaceApplicationMenuCommands.ts`, `frontend/src/ui/shortcuts/components/panelApplicationMenuCommands.ts`, and their focused tests. |
+| Platform window chrome and menus | `windowOptionsForPlatform`, `panelWindowOptionsForPlatform`, renderer application-menu command owners, and `backend.DesktopShell.ExecuteApplicationMenuCommand` | No | The native menu is created before windows for macOS. Windows/Linux windows are frameless and render controls in `AppHeader`; workspace windows additionally render `AppMenuBar`. The panel renderer keeps its Windows/Linux application-menu accelerators disabled until the panel's native ready acknowledgement. | macOS owns the application menu and native traffic lights. Windows/Linux install no native window menu. Renderer-owned UI commands execute locally, panel-to-workspace commands carry authenticated Wails sender identity through the typed workspace-command boundary, and process/native-window commands use the backend dispatcher. Proof: `internal/appwindow/registry.go`, `internal/panelwindow/workspace_command.go`, `backend/application_menu_commands.go`, `frontend/src/ui/layout/workspaceApplicationMenuCommands.ts`, `frontend/src/ui/shortcuts/components/panelApplicationMenuCommands.ts`, and their focused tests. |
 | Window-local zoom accelerators | Native macOS menu accelerators and frontend Windows/Linux shortcuts both reach the renderer-local zoom owner | No | The frontend zoom context remains the action owner in each renderer | Windows/Linux dispatch directly to the focused renderer. Native macOS menu callbacks target the authenticated calling workspace or panel and emit the matching zoom event. Proof: `backend/menu.go`, `backend/application_menu_commands.go`, `frontend/src/ui/shortcuts/components/PanelWindowShortcuts.tsx`, and `frontend/src/core/contexts/ZoomContext.tsx`. |
 
-## Native panel-window ownership and transfers
+## Cluster-owned panel workspaces
 
-A native panel window represents one object-panel tab group. Its registry role
-contains an immutable `ownerWindowName`, `clusterId`, and `groupId`. The owner is
-an application lifecycle relationship rather than an OS-modal parent: the child
-can focus, resize, minimize, and restore independently, but closing the owner or
-the owning cluster tab closes the child after the shared guards allow it.
-Switching the owner's active cluster has no lifecycle effect on the child.
+One cluster workspace owns its panel tabs and native panel windows. Each app
+window hosts cluster tabs that reference these shared workspaces. The same
+cluster may appear in several app windows. Navigation, namespace selection, and
+table filters remain local to each app view.
 
-Panel descriptors and snapshots are process-local and versioned. Every object
-tab carries complete identity: `clusterId`, `group`, `version`, `kind`,
-`namespace`, and `name`. The registry validates that every tab's cluster equals
-the immutable group cluster. It routes snapshots and acknowledgements but never
-owns object data, React state, drafts, or mutation state.
+A native panel window contains one same-cluster object-panel group. Its immutable
+identity is `clusterId` and `groupId`; `sourceWindowName` identifies the sender
+of a particular transfer. It is not a permanent parent relationship. Every panel
+header must display its cluster name, falling back to cluster ID. Duplicate
+names must include cluster ID so the label stays unambiguous.
 
-Each default-Floating open receives an isolated one-tab source group. The child
-is the single live-snapshot producer and serializes its writes. The owner commits
-child tab additions, non-final removals, and active-view changes only from those
-snapshots; a final-tab or whole-window close commits from the registry's closed
-event.
+`internal/panelwindow.WorkspaceDirectory` is the authority for the shared panel
+collection and each tab’s physical placement: docked in an app window, rendered
+in a panel window, or retained without a renderer. Each tab carries complete
+object identity (`clusterId`, `group`, `version`, `kind`, `namespace`, `name`)
+and its active view. The directory contains no object data, React state, drafts,
+or mutation state. Opening an existing object focuses its existing placement.
+The cluster tab’s context menu exposes shared panels and moves them into the
+current app window.
 
-Float and dock-back are acknowledged transfers. The source remains mounted
-until the target has reconstructed the full group and acknowledged readiness.
-Only then does the owner commit the new location and unmount the source. Failed,
-stale, or timed-out transfers fail closed and keep the source live. Native panel
-geometry is used only for initial placement and is not persisted or restored
-after relaunch.
+Float, dock-back, individual panel-tab moves, and cluster-tab moves must preserve
+the source until the destination acknowledges reconstruction. Source guards and
+publication flush precede transfer acceptance. A destination is provisional
+until the registry commits; provisional publication cannot steal source tabs.
+Frozen renderers block user interaction throughout the transaction. Failure and
+timeout remove provisional target content and preserve source placement.
 
-Dragging a tab between workspace and panel windows, between panel windows, or
-out of a workspace or multi-tab panel window to a new panel window is a separate
-one-tab transaction. Dragging the only tab out of a native panel window does not
-start a transaction and leaves the existing window unchanged. For accepted
-transfers, the registry validates immutable owner and cluster identity, reserves
-one source tab per pending transfer, and commits only after the destination
-publishes the exact tab or acknowledges native-window readiness. The source
-removes only that tab after commit and closes only when it becomes empty. Failure
-and timeout events roll back provisional target state while retaining the source.
-A tear-off uses the configured floating dimensions and selects/constrains against
-the monitor containing the drag pointer. Drag-out to create a new window is in
-scope on macOS and Windows; Linux drag-out is deferred for this release. Linux
-users can use Float to transfer the entire panel group into a native window.
+Moving a cluster tab carries its docked panel groups and local view state.
+An existing destination cluster tab is reused: its navigation wins, and incoming
+panels append to its groups. A new app window is seeded with the transferred
+cluster before its renderer starts. Floating panel windows retain their positions
+and cluster identity. Closing the source app window does not close them.
 
-Native close hooks are synchronous while YAML and mutation guards cross
-webviews. The first close is therefore cancelled and converted into an
-asynchronous transaction. Guarded state includes unsaved YAML, a YAML save, and
-other in-flight mutations. The same protocol protects float, dock, tab close,
-panel titlebar close, cluster-tab close, owner close, and application quit.
-Timeouts fail closed.
+Native renderers serialize live snapshots. App renderers serialize their docked
+groups. A successful publication and an individual tab-transfer commit share one
+directory mutation. Whole-group and cluster-view transfers validate their complete
+source sets before changing locations. Readiness events for newly created app
+windows wait for cluster hydration and coordinator subscriptions.
+
+Closing an app view retains its docked panel identities for reopening; it releases
+only that view’s runtime demand. Shared panel and native-window references retain
+cluster runtime selection even when no app window displays the cluster. A panel
+renderer projects only its own cluster and must never acquire unrelated app tabs.
+Closing a native panel disposes its own local state and directory entries.
+Explicit quit preflights all renderers before closing any of them.
+
+Regression coverage belongs in `internal/panelwindow/workspace_test.go`,
+`internal/appwindow/workspace_test.go`, `cluster_tab_transfer_test.go`,
+`backend/workspace_cluster_transfer_test.go`, `workspace_panel_lifetime_test.go`,
+and the frontend panel-window coordinator suites. The authenticated desktop
+boundary is covered by `backend/desktop_service_panel_workspace_test.go`.
 
 ## Window identity and restoration
 
@@ -246,7 +251,7 @@ workspace commands include that identity. Backend foreground demand is a map
 from window name to cluster ID, while cluster-tab ownership is a map from
 window name to that peer's complete selected kubeconfig set. Consequently,
 clusters displayed in different peers all remain Foreground, and a shared
-cluster remains connected until its final tab owner closes it. Process events
+cluster remains connected while any app view or panel reference retains it. Process events
 remain broadcasts; window-targeted menu events include Wails sender identity
 and other peers filter them at the desktop-runtime boundary.
 
@@ -278,15 +283,13 @@ not maintain an application-owned launch queue.
 
 ## Shutdown
 
-Every workspace close first completes its asynchronous panel preflight and
-closes its owned children. The authorized workspace close then releases its
-window-scoped foreground demand and tab ownership, reconciling the shared
-cluster runtime against the remaining workspaces' union. Panel roles never
-enter that accounting. The zero-workspace transition and application
-`ShouldQuit` share the once-only quit flush, preserve the last workspace's
-selection for restart, persist geometry from a named live/closing workspace,
-and then allow Wails to cancel the application context and call
-`ServiceShutdown`.
+Every app-window close preflights and flushes its local docked panels. Closing
+retains those panels and releases only the app view’s foreground demand and
+cluster tabs. Floating panels remain independent. Runtime selection is the union
+of app views and panel references. Only the final native-window close or an
+approved application quit proceeds through the once-only persistence flush and
+`ServiceShutdown`. The final app view’s selection remains available for restart
+when that close also ends the process.
 
 The request/response refresh surface is published atomically through
 `DesktopService.ServeHTTP` at the same-origin Wails service route `/api/v2`.

@@ -40,6 +40,7 @@ vi.mock('./gridTablePersistence', () => {
     prunePersistedState: vi.fn((state: unknown) => state ?? null),
     buildPersistedStateForSave: vi.fn(() => null),
     savePersistedState: vi.fn(),
+    registerPendingGridTableSave: vi.fn(() => () => undefined),
     clearPersistedState: vi.fn(),
   };
 });

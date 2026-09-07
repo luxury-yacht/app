@@ -11,10 +11,32 @@ import (
 )
 
 type recordingLifecycleBackend struct {
-	releasedWindow string
-	preparedWindow string
-	allowQuit      bool
-	readyWindows   []string
+	releasedPanelReferences []string
+	directory               *panelwindow.WorkspaceDirectory
+	windowClusters          map[string][]string
+	releasedWindow          string
+	preparedWindow          string
+	allowQuit               bool
+	readyWindows            []string
+}
+
+func (b *recordingLifecycleBackend) PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory {
+	if b.directory == nil {
+		b.directory = panelwindow.NewWorkspaceDirectory()
+	}
+	return b.directory
+}
+func (b *recordingLifecycleBackend) RetainPanelCluster(string, string) error { return nil }
+func (b *recordingLifecycleBackend) ReleasePanelCluster(reference string) error {
+	b.releasedPanelReferences = append(b.releasedPanelReferences, reference)
+	return nil
+}
+
+func (b *recordingLifecycleBackend) WindowClusterIDs(windowName string) []string {
+	if b.windowClusters == nil {
+		return []string{"cluster-1"}
+	}
+	return b.windowClusters[windowName]
 }
 
 func (b *recordingLifecycleBackend) WindowRuntimeReady(windowName string, _ bool) bool {
@@ -180,7 +202,7 @@ func TestPanelOptionsUseTransferredInitialBoundsOnce(t *testing.T) {
 
 func TestRegistryCentersPanelWindowBoundsOnTheOwnerNativeFrame(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	registry.panelOpenTimeout = 0
 	registry.windowGeometry = func(name string) (geometry, bool) {
@@ -201,10 +223,10 @@ func TestRegistryCentersPanelWindowBoundsOnTheOwnerNativeFrame(t *testing.T) {
 		return application.NewWindow(options)
 	}
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
+	snapshot.SourceWindowName = owner.Name()
 	snapshot.InitialBounds = &panelwindow.WindowBounds{X: 2900, Y: 700, Width: 720, Height: 560}
 
-	_, err := registry.BeginPanelWindowOpen(snapshot)
+	_, err := beginTestPanelWindow(t, registry, snapshot)
 
 	require.NoError(t, err)
 	require.Equal(t, 2140, createdOptions.X)
@@ -215,7 +237,7 @@ func TestRegistryCentersPanelWindowBoundsOnTheOwnerNativeFrame(t *testing.T) {
 
 func TestRegistryCentersPanelWindowWhenOwnerNativeGeometryIsUnavailable(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	registry.panelOpenTimeout = 0
 	registry.windowGeometry = func(string) (geometry, bool) {
@@ -227,10 +249,10 @@ func TestRegistryCentersPanelWindowWhenOwnerNativeGeometryIsUnavailable(t *testi
 		return application.NewWindow(options)
 	}
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
+	snapshot.SourceWindowName = owner.Name()
 	snapshot.InitialBounds = &panelwindow.WindowBounds{X: 2900, Y: 700, Width: 720, Height: 560}
 
-	_, err := registry.BeginPanelWindowOpen(snapshot)
+	_, err := beginTestPanelWindow(t, registry, snapshot)
 
 	require.NoError(t, err)
 	require.Equal(t, application.WindowCentered, createdOptions.InitialPosition)
@@ -240,7 +262,7 @@ func TestRegistryCentersPanelWindowWhenOwnerNativeGeometryIsUnavailable(t *testi
 
 func TestRegistryUsesTearOffCursorPositionOnItsTargetScreen(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	registry.panelOpenTimeout = 0
 	registry.panelScreenWorkAreas = func() []application.Rect {
@@ -255,12 +277,12 @@ func TestRegistryUsesTearOffCursorPositionOnItsTargetScreen(t *testing.T) {
 		return application.NewWindow(options)
 	}
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
+	snapshot.SourceWindowName = owner.Name()
 	snapshot.UseInitialPosition = true
 	snapshot.InitialBounds = &panelwindow.WindowBounds{X: 1805, Y: 76, Width: 600, Height: 800}
 	snapshot.InitialPositionAnchor = &panelwindow.WindowPoint{X: 1925, Y: 100}
 
-	_, err := registry.BeginPanelWindowOpen(snapshot)
+	_, err := beginTestPanelWindow(t, registry, snapshot)
 
 	require.NoError(t, err)
 	require.Equal(t, application.WindowXY, createdOptions.InitialPosition)
@@ -289,7 +311,7 @@ func TestReadyWorkspaceCloseAlwaysRunsFrontendPreflight(t *testing.T) {
 	registry.markWorkspaceReady(workspaceName)
 	registry.handleClosing(nil, workspaceName)
 
-	require.Equal(t, panelwindow.OwnerCloseRequestedEventName, eventName)
+	require.Equal(t, panelwindow.WorkspaceCloseRequestedEventName, eventName)
 	require.Equal(t, 1, lifecycle.Count())
 	require.Empty(t, backend.releasedWindow)
 	require.Empty(t, backend.preparedWindow)
@@ -383,7 +405,7 @@ func TestPeerOptionsInheritSizeWithoutPositionWhenTheSourceScreenIsUnavailable(t
 
 func TestRegistryCreatesAndCountsPeersThroughTheWailsWindowManager(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 
 	require.Zero(t, registry.Count())
 	first := registry.Create(true)
@@ -396,12 +418,12 @@ func TestRegistryCreatesAndCountsPeersThroughTheWailsWindowManager(t *testing.T)
 
 func TestRegistryCreatesPanelOutsideWorkspaceLifecycleAccounting(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
+	snapshot.SourceWindowName = owner.Name()
 
-	panel, err := registry.BeginPanelWindowOpen(snapshot)
+	panel, err := beginTestPanelWindow(t, registry, snapshot)
 
 	require.NoError(t, err)
 	require.Equal(t, "panel-1", panel.WindowName)
@@ -410,10 +432,10 @@ func TestRegistryCreatesPanelOutsideWorkspaceLifecycleAccounting(t *testing.T) {
 
 func TestRegistryBeginsHiddenPanelTransferWithPlatformWindowOptions(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
+	snapshot.SourceWindowName = owner.Name()
 	var createdOptions application.WebviewWindowOptions
 	var configuredWindow *application.WebviewWindow
 	registry.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
@@ -424,7 +446,7 @@ func TestRegistryBeginsHiddenPanelTransferWithPlatformWindowOptions(t *testing.T
 		configuredWindow = window
 	}
 
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 
 	require.NoError(t, err)
 	require.Equal(t, "panel-1", descriptor.WindowName)
@@ -448,23 +470,23 @@ func TestRegistryBeginsHiddenPanelTransferWithPlatformWindowOptions(t *testing.T
 
 func TestRegistryRejectsPanelWithUnknownOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = "workspace-missing"
+	snapshot.SourceWindowName = "workspace-missing"
 
-	panel, err := registry.BeginPanelWindowOpen(snapshot)
+	panel, err := beginTestPanelWindow(t, registry, snapshot)
 
-	require.ErrorContains(t, err, "owner workspace")
+	require.ErrorContains(t, err, "source window")
 	require.Empty(t, panel)
 	require.Zero(t, registry.Count())
 }
 
 func TestRegistryRejectsIncompletePanelIdentity(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	valid := validPanelGroupSnapshot()
-	valid.OwnerWindowName = owner.Name()
+	valid.SourceWindowName = owner.Name()
 
 	for _, test := range []struct {
 		name   string
@@ -486,7 +508,7 @@ func TestRegistryRejectsIncompletePanelIdentity(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			snapshot := valid
 			test.mutate(&snapshot)
-			panel, err := registry.BeginPanelWindowOpen(snapshot)
+			panel, err := beginTestPanelWindow(t, registry, snapshot)
 
 			require.Error(t, err)
 			require.Empty(t, panel)
@@ -496,17 +518,17 @@ func TestRegistryRejectsIncompletePanelIdentity(t *testing.T) {
 
 func TestRegistryRejectsDuplicatePanelGroupWithinOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	first, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	first, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	require.NotEmpty(t, first)
 
 	duplicateSnapshot := snapshot
 	duplicateSnapshot.TransferID = "transfer-2"
-	duplicate, err := registry.BeginPanelWindowOpen(duplicateSnapshot)
+	duplicate, err := beginTestPanelWindow(t, registry, duplicateSnapshot)
 
 	require.ErrorContains(t, err, "already owns panel group")
 	require.Empty(t, duplicate)
@@ -515,11 +537,11 @@ func TestRegistryRejectsDuplicatePanelGroupWithinOwner(t *testing.T) {
 
 func TestAuthorizedPanelClosingHookLeavesCommitToTheRequestTransaction(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 
 	registry.authorizeClose(descriptor.WindowName)
@@ -531,11 +553,11 @@ func TestAuthorizedPanelClosingHookLeavesCommitToTheRequestTransaction(t *testin
 }
 
 func TestPanelClosingHookCancelsAndRoutesAnUnauthorizedNativeClose(t *testing.T) {
-	registry := NewRegistry(application.New(application.Options{}), nil)
+	registry := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	var routed panelwindow.WindowCloseRequestedEvent
 	registry.emitWindowEvent = func(target, eventName string, payload any) bool {
@@ -555,11 +577,11 @@ func TestPanelClosingHookCancelsAndRoutesAnUnauthorizedNativeClose(t *testing.T)
 
 func TestRegistryRoutesPanelMenuCommandsAndFocusesTheOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	var focused string
 	registry.focusWindow = func(windowName string) bool {
@@ -573,10 +595,10 @@ func TestRegistryRoutesPanelMenuCommandsAndFocusesTheOwner(t *testing.T) {
 		return true
 	}
 
-	require.NoError(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.OwnerCommandOpenSettings))
+	require.NoError(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.WorkspaceCommandOpenSettings))
 	require.NoError(
 		t,
-		registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.OwnerCommandTogglePanelDebug),
+		registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.WorkspaceCommandTogglePanelDebug),
 	)
 	require.Equal(t, owner.Name(), focused)
 	require.Equal(t, []string{"open-settings", "debug:toggle-panel-overlay"}, routedEvents)
@@ -584,11 +606,11 @@ func TestRegistryRoutesPanelMenuCommandsAndFocusesTheOwner(t *testing.T) {
 
 func TestRegistryShowsPanelOnlyAfterMatchingReadyAcknowledgement(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	var shown []string
 	registry.showWindow = func(name string) bool {
@@ -614,11 +636,11 @@ func TestRegistryShowsPanelOnlyAfterMatchingReadyAcknowledgement(t *testing.T) {
 
 func TestRegistryReportsPanelClosedWhenReadyWindowDisappearsBeforeShow(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	registry.showWindow = func(string) bool { return false }
 
@@ -642,45 +664,28 @@ func TestRegistryReportsPanelClosedWhenReadyWindowDisappearsBeforeShow(t *testin
 	require.Error(t, descriptorErr)
 }
 
-func TestRegistryClosesReadyPanelWhenOpenedEventCannotReachOwner(t *testing.T) {
-	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
-	owner := registry.Create(true)
+func TestRegistryKeepsReadyPanelWhenSourceAppCannotReceiveOpenedEvent(t *testing.T) {
+	registry := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{})
+	source := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = source.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	registry.showWindow = func(string) bool { return true }
-	var closedNative string
-	registry.closeWindow = func(name string) bool {
-		closedNative = name
-		return true
-	}
-	var closed panelwindow.WindowClosedEvent
-	registry.emitWindowEvent = func(target, eventName string, payload any) bool {
-		require.Equal(t, owner.Name(), target)
-		if eventName == panelwindow.WindowOpenedEventName {
-			return false
-		}
-		require.Equal(t, panelwindow.WindowClosedEventName, eventName)
-		closed = payload.(panelwindow.WindowClosedEvent)
-		return true
-	}
-
+	registry.closeWindow = func(string) bool { t.Fatal("committed panel must survive an unavailable source"); return false }
+	registry.emitWindowEvent = func(string, string, any) bool { return false }
 	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
-
-	require.ErrorContains(t, err, "owner workspace")
-	require.Equal(t, descriptor.WindowName, closedNative)
-	require.Equal(t, descriptor.WindowName, closed.WindowName)
-	require.Equal(t, PanelWindowStateMissing, registry.panels.State(descriptor.WindowName))
+	require.NoError(t, err)
+	require.Equal(t, PanelWindowStateLive, registry.panels.State(descriptor.WindowName))
+	require.Equal(t, descriptor.WindowName, registry.workspace.Snapshot(snapshot.ClusterID).Panels[0].Location.WindowName)
 }
 
-func TestRegistryRoutesAcknowledgedOpenAndDockToTheImmutableOwner(t *testing.T) {
+func TestRegistryRoutesOpenToSourceAndDockToAnAppDisplayingTheCluster(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
+	snapshot.SourceWindowName = owner.Name()
 	var events []struct {
 		windowName string
 		eventName  string
@@ -688,6 +693,9 @@ func TestRegistryRoutesAcknowledgedOpenAndDockToTheImmutableOwner(t *testing.T) 
 	}
 	var closed []string
 	registry.emitWindowEvent = func(windowName, eventName string, payload any) bool {
+		if eventName == panelwindow.WorkspaceChangedEventName {
+			return true
+		}
 		events = append(events, struct {
 			windowName string
 			eventName  string
@@ -699,7 +707,7 @@ func TestRegistryRoutesAcknowledgedOpenAndDockToTheImmutableOwner(t *testing.T) 
 		closed = append(closed, windowName)
 		return true
 	}
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	registry.showWindow = func(string) bool { return true }
 
@@ -710,6 +718,7 @@ func TestRegistryRoutesAcknowledgedOpenAndDockToTheImmutableOwner(t *testing.T) 
 	require.Equal(t, PanelWindowOpenedEventName, events[0].eventName)
 
 	dockSnapshot := snapshot
+	dockSnapshot.SourceWindowName = descriptor.WindowName
 	dockSnapshot.TransferID = "transfer-dock"
 	require.NoError(t, registry.BeginPanelWindowDock(descriptor.WindowName, "right", dockSnapshot))
 	require.Len(t, events, 2)
@@ -726,11 +735,11 @@ func TestRegistryRoutesAcknowledgedOpenAndDockToTheImmutableOwner(t *testing.T) 
 
 func TestRegistryFailedDockCloseLeavesNativeSourceLive(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	registry.showWindow = func(string) bool { return true }
 	registry.emitWindowEvent = func(string, string, any) bool { return true }
@@ -738,6 +747,7 @@ func TestRegistryFailedDockCloseLeavesNativeSourceLive(t *testing.T) {
 	require.NoError(t, err)
 
 	dockSnapshot := snapshot
+	dockSnapshot.SourceWindowName = descriptor.WindowName
 	dockSnapshot.TransferID = "transfer-dock-failure"
 	require.NoError(t, registry.BeginPanelWindowDock(descriptor.WindowName, "bottom", dockSnapshot))
 	registry.closeWindow = func(string) bool { return false }
@@ -751,12 +761,12 @@ func TestRegistryFailedDockCloseLeavesNativeSourceLive(t *testing.T) {
 
 func TestRegistryOpenTimeoutClosesIncompleteChildAndPreservesOwner(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	registry.panelOpenTimeout = 0
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	var closed string
 	registry.closeWindow = func(windowName string) bool {
@@ -771,97 +781,13 @@ func TestRegistryOpenTimeoutClosesIncompleteChildAndPreservesOwner(t *testing.T)
 	require.Equal(t, 1, registry.Count())
 }
 
-func TestRegistryRoutesChildObjectOpenThroughItsOwner(t *testing.T) {
-	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
-	owner := registry.Create(true)
-	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
-	require.NoError(t, err)
-	registry.showWindow = func(string) bool { return true }
-	registry.emitWindowEvent = func(windowName, eventName string, payload any) bool {
-		require.Equal(t, owner.Name(), windowName)
-		if eventName == PanelWindowObjectOpenRequestedEventName {
-			request := payload.(PanelWindowObjectOpenRequestEvent)
-			require.Equal(t, descriptor.WindowName, request.SourceWindowName)
-		}
-		return true
-	}
-	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
-	require.NoError(t, err)
-
-	ref := snapshot.Tabs[0].ObjectRef
-	ref.Name = "worker"
-	require.NoError(t, registry.RequestPanelObjectOpen(descriptor.WindowName, ref, "details"))
-}
-
-func TestRegistryRoutesSnapshotAndTabCloseThroughOwner(t *testing.T) {
-	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
-	owner := registry.Create(true)
-	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
-	require.NoError(t, err)
-	registry.showWindow = func(string) bool { return true }
-	registry.emitWindowEvent = func(string, string, any) bool { return true }
-	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
-	require.NoError(t, err)
-
-	var routed []string
-	registry.emitWindowEvent = func(target, eventName string, _ any) bool {
-		routed = append(routed, target+":"+eventName)
-		return true
-	}
-	updated := snapshot
-	updated.Tabs = append([]PanelTabSnapshot(nil), snapshot.Tabs...)
-	updated.Tabs[0].ActiveView = "events"
-	require.NoError(t, registry.UpdatePanelWindowSnapshot(descriptor.WindowName, updated))
-	require.NoError(t, registry.RequestPanelTabClose(descriptor.WindowName, updated.Tabs[0].PanelID))
-	require.NoError(t, registry.AuthorizePanelTabClose(
-		owner.Name(), descriptor.WindowName, updated.Tabs[0].PanelID,
-	))
-	require.Equal(t, []string{
-		owner.Name() + ":" + panelwindow.SnapshotUpdatedEventName,
-		owner.Name() + ":" + panelwindow.TabCloseRequestedEventName,
-		descriptor.WindowName + ":" + panelwindow.TabCloseAuthorizedEventName,
-	}, routed)
-}
-
-func TestRegistryRoutesQuitGuardChecksBetweenOwnerAndPanel(t *testing.T) {
-	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
-	owner := registry.Create(true)
-	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
-	require.NoError(t, err)
-	var routed []string
-	registry.emitWindowEvent = func(target, eventName string, _ any) bool {
-		routed = append(routed, target+":"+eventName)
-		return true
-	}
-
-	require.NoError(t, registry.RequestPanelWindowGuard(
-		owner.Name(), descriptor.WindowName, "guard-1", "application-quit",
-	))
-	require.NoError(t, registry.AcknowledgePanelWindowGuard(
-		descriptor.WindowName, "guard-1", true,
-	))
-	require.Equal(t, []string{
-		descriptor.WindowName + ":" + panelwindow.WindowGuardRequestedEventName,
-		owner.Name() + ":" + panelwindow.WindowGuardResultEventName,
-	}, routed)
-}
-
 func TestRegistryFocusesAuthorizesAndClosesAnOwnedPanelWindow(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 
 	var routed []string
@@ -881,11 +807,7 @@ func TestRegistryFocusesAuthorizesAndClosesAnOwnedPanelWindow(t *testing.T) {
 	}
 
 	panelID := snapshot.Tabs[0].PanelID
-	ref := snapshot.Tabs[0].ObjectRef
 	require.NoError(t, registry.FocusPanelWindow(owner.Name(), descriptor.WindowName, panelID))
-	require.NoError(t, registry.AuthorizePanelObjectOpen(
-		owner.Name(), descriptor.WindowName, panelID, ref, "details",
-	))
 	require.NoError(t, registry.RequestPanelWindowClose(
 		descriptor.WindowName, descriptor.WindowName, "user-close",
 	))
@@ -895,9 +817,9 @@ func TestRegistryFocusesAuthorizesAndClosesAnOwnedPanelWindow(t *testing.T) {
 	require.Equal(t, []string{descriptor.WindowName}, closed)
 	require.Equal(t, []string{
 		descriptor.WindowName + ":" + panelwindow.WindowFocusRequestedEventName,
-		descriptor.WindowName + ":" + panelwindow.ObjectOpenAuthorizedEventName,
 		descriptor.WindowName + ":" + panelwindow.WindowCloseRequestedEventName,
 		owner.Name() + ":" + panelwindow.WindowClosedEventName,
+		owner.Name() + ":" + panelwindow.WorkspaceChangedEventName,
 	}, routed)
 	_, err = registry.PanelDescriptor(descriptor.WindowName)
 	require.ErrorContains(t, err, "not live")
@@ -905,17 +827,18 @@ func TestRegistryFocusesAuthorizesAndClosesAnOwnedPanelWindow(t *testing.T) {
 
 func TestRegistryValidatesDockAcknowledgementBeforeClosingThePanelWindow(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	registry.emitWindowEvent = func(string, string, any) bool { return true }
 	registry.showWindow = func(string) bool { return true }
 	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
 	dock := snapshot
+	dock.SourceWindowName = descriptor.WindowName
 	dock.TransferID = "dock-transfer-1"
 	require.NoError(t, registry.BeginPanelWindowDock(descriptor.WindowName, "right", dock))
 	var closed []string
@@ -932,17 +855,18 @@ func TestRegistryValidatesDockAcknowledgementBeforeClosingThePanelWindow(t *test
 }
 
 func TestRegistrySerializesDockCommitAgainstTransferFailure(t *testing.T) {
-	registry := NewRegistry(application.New(application.Options{}), nil)
+	registry := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	registry.emitWindowEvent = func(string, string, any) bool { return true }
 	registry.showWindow = func(string) bool { return true }
 	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
 	dockSnapshot := snapshot
+	dockSnapshot.SourceWindowName = descriptor.WindowName
 	dockSnapshot.TransferID = "dock-transfer-serialized"
 	require.NoError(t, registry.BeginPanelWindowDock(descriptor.WindowName, "right", dockSnapshot))
 	closeStarted := make(chan struct{})
@@ -978,11 +902,11 @@ func TestRegistrySerializesDockCommitAgainstTransferFailure(t *testing.T) {
 }
 
 func TestRegistryReportsAnOpeningTransferFailureToItsOwner(t *testing.T) {
-	registry := NewRegistry(application.New(application.Options{}), nil)
+	registry := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	registry.closeWindow = func(string) bool { return true }
 	var closed panelwindow.WindowClosedEvent
@@ -1001,11 +925,11 @@ func TestRegistryReportsAnOpeningTransferFailureToItsOwner(t *testing.T) {
 }
 
 func TestRegistryReportsAnOpeningTransferFailureWhenNativeWindowAlreadyDisappeared(t *testing.T) {
-	registry := NewRegistry(application.New(application.Options{}), nil)
+	registry := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	registry.closeWindow = func(string) bool { return false }
 	var closed panelwindow.WindowClosedEvent
@@ -1029,7 +953,7 @@ func TestRegistryReportsAnOpeningTransferFailureWhenNativeWindowAlreadyDisappear
 
 func TestRegistryTreatsAnUncancelledWindowEventAsDelivered(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 
 	require.True(t, registry.emitWindowEvent(
@@ -1039,63 +963,38 @@ func TestRegistryTreatsAnUncancelledWindowEventAsDelivered(t *testing.T) {
 	))
 }
 
-func TestRegistryBlocksOwnerCloseUntilPanelChildrenAcknowledge(t *testing.T) {
-	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
-	owner := registry.Create(true)
-	createPanel := func(clusterID, groupID, transferID string) string {
-		snapshot := validPanelGroupSnapshot()
-		snapshot.OwnerWindowName = owner.Name()
-		snapshot.ClusterID = clusterID
-		snapshot.GroupID = groupID
-		snapshot.TransferID = transferID
-		snapshot.Tabs[0].ObjectRef.ClusterID = clusterID
-		descriptor, err := registry.BeginPanelWindowOpen(snapshot)
-		require.NoError(t, err)
-		return descriptor.WindowName
-	}
-	clusterPanel := createPanel("cluster-1", "group-1", "transfer-1")
-	otherPanel := createPanel("cluster-2", "group-2", "transfer-2")
-
-	var requested []string
+func TestRegistryAllowsAppCloseWhileClusterPanelWindowsRemainLive(t *testing.T) {
+	registry := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{})
+	source := registry.Create(true)
+	snapshot := validPanelGroupSnapshot()
+	snapshot.SourceWindowName = source.Name()
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
+	require.NoError(t, err)
+	registry.showWindow = func(string) bool { return true }
+	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
+	require.NoError(t, err)
 	var closed []string
-	registry.emitWindowEvent = func(target, eventName string, _ any) bool {
-		if eventName == panelwindow.WindowCloseRequestedEventName {
-			requested = append(requested, target)
-		}
-		return true
-	}
-	registry.closeWindow = func(windowName string) bool {
-		closed = append(closed, windowName)
-		return true
-	}
-
-	require.NoError(t, registry.RequestPanelWindowClose(owner.Name(), clusterPanel, "cluster-close"))
-	require.Equal(t, []string{clusterPanel}, requested)
-	require.ErrorContains(t, registry.AcknowledgeWorkspaceWindowClose(owner.Name()), "still has live")
-
-	require.NoError(t, registry.RequestPanelWindowClose(owner.Name(), otherPanel, "cluster-close"))
-	require.NoError(t, registry.AcknowledgePanelWindowClose(clusterPanel))
-	require.NoError(t, registry.AcknowledgePanelWindowClose(otherPanel))
-	require.NoError(t, registry.AcknowledgeWorkspaceWindowClose(owner.Name()))
-	require.Equal(t, []string{clusterPanel, otherPanel, owner.Name()}, closed)
+	registry.closeWindow = func(name string) bool { closed = append(closed, name); return true }
+	require.NoError(t, registry.AcknowledgeWorkspaceWindowClose(source.Name()))
+	require.Equal(t, []string{source.Name()}, closed)
+	require.Equal(t, PanelWindowStateLive, registry.panels.State(descriptor.WindowName))
 }
 
 func TestRegistryRejectsPanelCommandsAcrossOwnerAndTransportBoundaries(t *testing.T) {
 	setup := func(t *testing.T) (*Registry, string, PanelWindowDescriptor, PanelGroupSnapshot) {
 		t.Helper()
-		registry := NewRegistry(application.New(application.Options{}), nil)
+		registry := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{})
 		owner := registry.Create(true)
 		snapshot := validPanelGroupSnapshot()
-		snapshot.OwnerWindowName = owner.Name()
-		descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+		snapshot.SourceWindowName = owner.Name()
+		descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 		require.NoError(t, err)
 		return registry, owner.Name(), descriptor, snapshot
 	}
 
 	t.Run("focus validates owner and both native operations", func(t *testing.T) {
 		registry, owner, descriptor, snapshot := setup(t)
-		require.ErrorContains(t, registry.FocusPanelWindow("workspace-other", descriptor.WindowName, snapshot.ActivePanelID), "not owned")
+		require.ErrorContains(t, registry.FocusPanelWindow("workspace-other", descriptor.WindowName, snapshot.ActivePanelID), "does not display")
 		registry.emitWindowEvent = func(string, string, any) bool { return false }
 		require.ErrorContains(t, registry.FocusPanelWindow(owner, descriptor.WindowName, snapshot.ActivePanelID), "not available")
 		registry.emitWindowEvent = func(string, string, any) bool { return true }
@@ -1105,45 +1004,28 @@ func TestRegistryRejectsPanelCommandsAcrossOwnerAndTransportBoundaries(t *testin
 
 	t.Run("menu routing permits only owner commands and requires owner delivery", func(t *testing.T) {
 		registry, _, descriptor, _ := setup(t)
-		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.OwnerCommand("delete-object")), "cannot be routed")
+		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.WorkspaceCommand("delete-object")), "cannot be routed")
 		registry.focusWindow = func(string) bool { return false }
-		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.OwnerCommandOpenSettings), "not available")
+		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.WorkspaceCommandOpenSettings), "not available")
 		registry.focusWindow = func(string) bool { return true }
 		registry.emitWindowEvent = func(string, string, any) bool { return false }
-		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.OwnerCommandOpenSettings), "not available")
-	})
-
-	t.Run("object open validates identity view owner cluster and delivery", func(t *testing.T) {
-		registry, owner, descriptor, snapshot := setup(t)
-		ref := snapshot.Tabs[0].ObjectRef
-		invalid := ref
-		invalid.Name = ""
-		require.Error(t, registry.RequestPanelObjectOpen(descriptor.WindowName, invalid, "details"))
-		require.ErrorContains(t, registry.RequestPanelObjectOpen(descriptor.WindowName, ref, ""), "active view")
-		registry.emitWindowEvent = func(string, string, any) bool { return false }
-		require.ErrorContains(t, registry.RequestPanelObjectOpen(descriptor.WindowName, ref, "details"), "not available")
-		require.Error(t, registry.AuthorizePanelObjectOpen(owner, descriptor.WindowName, "panel-a", invalid, "details"))
-		wrongCluster := ref
-		wrongCluster.ClusterID = "cluster-other"
-		require.ErrorContains(t, registry.AuthorizePanelObjectOpen(owner, descriptor.WindowName, "panel-a", wrongCluster, "details"), "does not match")
-		require.ErrorContains(t, registry.AuthorizePanelObjectOpen(owner, descriptor.WindowName, "panel-a", ref, "details"), "not available")
+		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.WorkspaceCommandOpenSettings), "not available")
 	})
 
 	t.Run("snapshot and tab commands fail closed on invalid state or delivery", func(t *testing.T) {
-		registry, owner, descriptor, snapshot := setup(t)
+		registry, _, descriptor, snapshot := setup(t)
 		invalid := snapshot
 		invalid.TransferID = ""
 		require.Error(t, registry.UpdatePanelWindowSnapshot(descriptor.WindowName, invalid))
-		require.ErrorContains(t, registry.RequestPanelTabClose(descriptor.WindowName, "panel-missing"), "not owned")
+		require.ErrorContains(t, registry.RequestPanelTabClose(descriptor.WindowName, "panel-missing"), "not in window")
 		registry.showWindow = func(string) bool { return true }
 		registry.emitWindowEvent = func(string, string, any) bool { return true }
 		_, err := registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
 		require.NoError(t, err)
 		registry.emitWindowEvent = func(string, string, any) bool { return false }
-		require.ErrorContains(t, registry.UpdatePanelWindowSnapshot(descriptor.WindowName, snapshot), "not available")
+		snapshot.SourceWindowName = descriptor.WindowName
+		require.NoError(t, registry.UpdatePanelWindowSnapshot(descriptor.WindowName, snapshot))
 		require.ErrorContains(t, registry.RequestPanelTabClose(descriptor.WindowName, snapshot.ActivePanelID), "not available")
-		require.ErrorContains(t, registry.AuthorizePanelTabClose("workspace-other", descriptor.WindowName, snapshot.ActivePanelID), "not owned")
-		require.ErrorContains(t, registry.AuthorizePanelTabClose(owner, descriptor.WindowName, snapshot.ActivePanelID), "not available")
 	})
 
 	t.Run("close requests require ownership and acknowledgements require a native target", func(t *testing.T) {
@@ -1156,29 +1038,17 @@ func TestRegistryRejectsPanelCommandsAcrossOwnerAndTransportBoundaries(t *testin
 	})
 
 	t.Run("workspace close preserves live ownership", func(t *testing.T) {
-		empty := NewRegistry(application.New(application.Options{}), nil)
+		empty := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{})
 		emptyOwner := empty.Create(true).Name()
 		empty.closeWindow = func(string) bool { return false }
 		require.ErrorContains(t, empty.AcknowledgeWorkspaceWindowClose(emptyOwner), "not available")
 	})
 
-	t.Run("guard transactions reject malformed duplicate stale and unavailable routes", func(t *testing.T) {
-		registry, owner, descriptor, _ := setup(t)
-		require.ErrorContains(t, registry.RequestPanelWindowGuard(owner, descriptor.WindowName, "", "quit"), "requires request")
-		require.ErrorContains(t, registry.RequestPanelWindowGuard("workspace-other", descriptor.WindowName, "guard-1", "quit"), "not owned")
-		registry.emitWindowEvent = func(string, string, any) bool { return true }
-		require.NoError(t, registry.RequestPanelWindowGuard(owner, descriptor.WindowName, "guard-1", "quit"))
-		require.ErrorContains(t, registry.RequestPanelWindowGuard(owner, descriptor.WindowName, "guard-1", "quit"), "already exists")
-		require.ErrorContains(t, registry.AcknowledgePanelWindowGuard("panel-other", "guard-1", true), "stale")
-		registry.emitWindowEvent = func(string, string, any) bool { return false }
-		require.ErrorContains(t, registry.AcknowledgePanelWindowGuard(descriptor.WindowName, "guard-1", true), "not available")
-		require.ErrorContains(t, registry.RequestPanelWindowGuard(owner, descriptor.WindowName, "guard-2", "quit"), "not available")
-	})
 }
 
 func TestRegistryResolvesWorkspaceAndPanelRolesFromWindowName(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 	owner := registry.Create(true)
 
 	workspace, err := registry.WindowDescriptor(owner.Name())
@@ -1188,8 +1058,8 @@ func TestRegistryResolvesWorkspaceAndPanelRolesFromWindowName(t *testing.T) {
 	require.Nil(t, workspace.Panel)
 
 	snapshot := validPanelGroupSnapshot()
-	snapshot.OwnerWindowName = owner.Name()
-	created, err := registry.BeginPanelWindowOpen(snapshot)
+	snapshot.SourceWindowName = owner.Name()
+	created, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 	panel, err := registry.WindowDescriptor(created.WindowName)
 	require.NoError(t, err)
@@ -1201,38 +1071,24 @@ func TestRegistryResolvesWorkspaceAndPanelRolesFromWindowName(t *testing.T) {
 	require.ErrorContains(t, err, "not registered")
 }
 
-func TestRegistryIndexesPanelWindowsByOwnerAndCluster(t *testing.T) {
-	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
-	ownerA := registry.Create(true)
-	ownerB := registry.Create(false)
-
-	create := func(owner, cluster, group, transfer string) string {
+func TestRegistryIndexesPanelWindowsByClusterAcrossAppViews(t *testing.T) {
+	backend := &recordingLifecycleBackend{windowClusters: map[string][]string{"workspace-1": {"cluster-1", "cluster-2"}, "workspace-2": {"cluster-1"}}}
+	registry := NewRegistry(application.New(application.Options{}), backend)
+	first, second := registry.Create(true), registry.Create(false)
+	create := func(source, cluster, group string) string {
 		snapshot := validPanelGroupSnapshot()
-		snapshot.OwnerWindowName = owner
-		snapshot.ClusterID = cluster
-		snapshot.GroupID = group
-		snapshot.TransferID = transfer
-		snapshot.Tabs[0].ObjectRef.ClusterID = cluster
-		descriptor, err := registry.BeginPanelWindowOpen(snapshot)
+		snapshot.SourceWindowName, snapshot.ClusterID, snapshot.GroupID, snapshot.TransferID = source, cluster, group, "transfer-"+group
+		snapshot.Tabs[0].ObjectRef.ClusterID, snapshot.Tabs[0].ObjectRef.Name = cluster, group
+		snapshot.Tabs[0].PanelID, snapshot.ActivePanelID = group, group
+		descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 		require.NoError(t, err)
 		return descriptor.WindowName
 	}
-	panelA1 := create(ownerA.Name(), "cluster-1", "group-1", "transfer-1")
-	panelA2 := create(ownerA.Name(), "cluster-1", "group-2", "transfer-2")
-	panelA3 := create(ownerA.Name(), "cluster-2", "group-3", "transfer-3")
-	panelB1 := create(ownerB.Name(), "cluster-1", "group-1", "transfer-4")
-
-	require.ElementsMatch(
-		t,
-		[]string{panelA1, panelA2, panelA3},
-		registry.PanelNamesOwnedByWorkspace(ownerA.Name()),
-	)
-	require.Equal(
-		t,
-		[]string{panelB1},
-		registry.PanelNamesOwnedByWorkspace(ownerB.Name()),
-	)
+	a := create(first.Name(), "cluster-1", "a")
+	b := create(second.Name(), "cluster-1", "b")
+	c := create(first.Name(), "cluster-2", "c")
+	require.ElementsMatch(t, []string{a, b}, registry.panels.Names("cluster-1"))
+	require.Equal(t, []string{c}, registry.panels.Names("cluster-2"))
 }
 
 func TestPrepareApplicationQuitAllowsAnUnconfiguredRegistry(t *testing.T) {
@@ -1254,7 +1110,7 @@ func TestPrepareApplicationQuitPreflightsEveryReadyWorkspaceBeforeClosingAny(t *
 	registry.emitWindowEvent = func(target, eventName string, payload any) bool {
 		require.Equal(t, panelwindow.ApplicationQuitPreflightRequestedEventName, eventName)
 		request := payload.(panelwindow.ApplicationQuitPreflightRequestedEvent)
-		require.Equal(t, target, request.OwnerWindowName)
+		require.Equal(t, target, request.WindowName)
 		requests = append(requests, request)
 		return true
 	}
@@ -1279,11 +1135,12 @@ func TestApplicationQuitPreflightCommitsOnlyAfterEveryWorkspaceAllows(t *testing
 		switch eventName {
 		case panelwindow.ApplicationQuitPreflightRequestedEventName:
 			transactionID = payload.(panelwindow.ApplicationQuitPreflightRequestedEvent).TransactionID
-		case panelwindow.OwnerCloseRequestedEventName:
+		case panelwindow.WorkspaceCloseRequestedEventName:
 			closeRequests = append(closeRequests, target)
 		}
 		return true
 	}
+	registry.closeWindow = func(name string) bool { closeRequests = append(closeRequests, name); return true }
 	require.False(t, registry.PrepareApplicationQuit())
 
 	require.NoError(t, registry.AcknowledgeApplicationQuitPreflight(first.Name(), transactionID, true))
@@ -1306,7 +1163,7 @@ func TestApplicationQuitPreflightCancellationLeavesEveryWorkspaceOpen(t *testing
 		if eventName == panelwindow.ApplicationQuitPreflightRequestedEventName {
 			transactionID = payload.(panelwindow.ApplicationQuitPreflightRequestedEvent).TransactionID
 		}
-		if eventName == panelwindow.OwnerCloseRequestedEventName {
+		if eventName == panelwindow.WorkspaceCloseRequestedEventName {
 			closeRequests = append(closeRequests, target)
 		}
 		return true
@@ -1372,7 +1229,7 @@ func TestRegistryUsesItsLifecycleConsumerWithoutConcreteBackendOwnership(t *test
 	first := lifecycle.Add()
 	second := lifecycle.Add()
 	backend := &recordingLifecycleBackend{allowQuit: true}
-	registry := &Registry{backend: backend, lifecycle: lifecycle}
+	registry := &Registry{backend: backend, lifecycle: lifecycle, panels: newPanelIndex(), workspace: panelwindow.NewWorkspaceDirectory()}
 
 	registry.handleClosing(nil, first)
 	require.Equal(t, first, backend.releasedWindow)
@@ -1384,7 +1241,7 @@ func TestRegistryUsesItsLifecycleConsumerWithoutConcreteBackendOwnership(t *test
 
 func TestFocusMostRecentIgnoresAnEmptyRegistry(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, nil)
+	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{})
 
 	registry.FocusMostRecent()
 }
@@ -1410,4 +1267,48 @@ func TestCascadedCoordinateKeepsWindowsInsideTheWorkArea(t *testing.T) {
 			require.Equal(t, test.want, cascadedCoordinate(test.position, test.size, test.limit))
 		})
 	}
+}
+
+// Native lifecycle fixtures start with panels already mounted in their source
+// renderer. Invalid snapshots and unknown sources still reach the real boundary.
+func beginTestPanelWindow(t *testing.T, registry *Registry, snapshot PanelGroupSnapshot) (PanelWindowDescriptor, error) {
+	t.Helper()
+	if panelwindow.ValidateGroupSnapshot(snapshot) == nil && registry.windowHasCluster(snapshot.SourceWindowName, snapshot.ClusterID) {
+		for _, tab := range snapshot.Tabs {
+			_, _, err := registry.workspace.Open(tab, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: snapshot.SourceWindowName, GroupID: "right"})
+			require.NoError(t, err)
+		}
+		require.NoError(t, registry.AcknowledgePanelWorkspaceReady(snapshot.SourceWindowName))
+	}
+	return registry.BeginPanelWindowOpen(snapshot)
+}
+
+func (b *recordingLifecycleBackend) StageClusterViewTransfer(source, target, clusterID string) (bool, error) {
+	if b.windowClusters == nil {
+		return true, nil
+	}
+	existing := b.windowClusters[target]
+	for _, id := range existing {
+		if id == clusterID {
+			return true, nil
+		}
+	}
+	b.windowClusters[target] = append(existing, clusterID)
+	return false, nil
+}
+func (b *recordingLifecycleBackend) CommitClusterViewTransfer(source, target, clusterID string, groups []panelwindow.WorkspaceGroup) error {
+	return b.PanelWorkspaceDirectory().TransferClusterView(source, target, clusterID, groups)
+}
+func (b *recordingLifecycleBackend) CancelClusterViewTransfer(target, clusterID string) error {
+	if b.windowClusters == nil {
+		return nil
+	}
+	var remaining []string
+	for _, id := range b.windowClusters[target] {
+		if id != clusterID {
+			remaining = append(remaining, id)
+		}
+	}
+	b.windowClusters[target] = remaining
+	return nil
 }

@@ -72,7 +72,11 @@ vi.mock('@ui/errors', () => ({
   PanelErrorBoundary: PassThrough,
 }));
 vi.mock('@ui/layout/AppHeader', () => ({
-  default: ({ mode }: { mode: string }) => <div data-testid="app-header" data-mode={mode} />,
+  default: ({ mode, clusterName }: { mode: string; clusterName?: string }) => (
+    <div data-testid="app-header" data-mode={mode}>
+      {clusterName}
+    </div>
+  ),
 }));
 vi.mock('@ui/shortcuts', () => ({ KeyboardProvider: PassThrough }));
 vi.mock('@ui/shortcuts/components/TextContextMenu', () => ({ default: () => null }));
@@ -83,6 +87,7 @@ vi.mock('@/core/panel-windows/panelWindowClusterName', () => ({
   resolvePanelWindowClusterName: () => 'Cluster A',
 }));
 vi.mock('@/core/panel-windows', () => ({
+  onPanelWindowTransferFailed: () => () => undefined,
   acknowledgePanelWindowReady: (...args: unknown[]) =>
     (mocks.acknowledgeReady as (...values: unknown[]) => Promise<void>)(...args),
   beginPanelWindowDock: (...args: unknown[]) =>
@@ -103,7 +108,12 @@ vi.mock('@/core/panel-windows/PanelWindowRoleContext', () => ({
 }));
 vi.mock('@/core/panel-windows/panelLifecycleGuards', () => ({
   PanelLifecycleGuardProvider: PassThrough,
-  usePanelLifecycleGuardRegistry: () => ({ firstBlocker: mocks.firstBlocker }),
+  usePanelLifecycleGuardRegistry: () => ({
+    freeze: vi.fn(),
+    releaseTransfer: vi.fn(),
+    isFrozen: () => false,
+    firstBlocker: mocks.firstBlocker,
+  }),
 }));
 vi.mock('@/ui/shortcuts/components/PanelWindowShortcuts', () => ({
   PanelWindowShortcuts: (props: Record<string, unknown>) => {
@@ -121,14 +131,14 @@ import PanelWindowApp from './PanelWindowApp';
 
 const descriptor = {
   windowName: 'panel-1',
-  ownerWindowName: 'workspace-1',
+  sourceWindowName: 'workspace-1',
   clusterId: 'cluster-a',
   groupId: 'group-1',
   state: 'opening',
   snapshot: {
     schemaVersion: 1,
     transferId: 'transfer-panel-window-test',
-    ownerWindowName: 'workspace-1',
+    sourceWindowName: 'workspace-1',
     clusterId: 'cluster-a',
     groupId: 'group-1',
     tabs: [
@@ -240,6 +250,13 @@ describe('PanelWindowApp', () => {
     expect(container.textContent).toContain('Save or discard your YAML changes');
   });
 
+  it('labels the panel window with its fixed cluster name', async () => {
+    await act(async () =>
+      root.render(<PanelWindowApp descriptor={descriptorWithTransfer('cluster-header')} />)
+    );
+    expect(container.querySelector('[data-testid="app-header"]')?.textContent).toBe('Cluster A');
+  });
+
   it('reports and rolls back a failed ready acknowledgement', async () => {
     const readyError = new Error('window disappeared');
     mocks.acknowledgeReady.mockRejectedValueOnce(readyError);
@@ -278,13 +295,13 @@ describe('PanelWindowApp', () => {
     });
   });
 
-  it('routes tab close, authorized object opens, blockers, and dock-back through the protocol', async () => {
+  it('routes tab close, blockers, and dock-back through the cluster protocol', async () => {
     const routedDescriptor = descriptorWithTransfer('transfer-protocol-routes');
     await act(async () => {
       root.render(<PanelWindowApp descriptor={routedDescriptor} />);
       await Promise.resolve();
     });
-    if (!mocks.dockProviderProps || !mocks.authorizedHandler) {
+    if (!mocks.dockProviderProps) {
       throw new Error('expected panel-window protocol handlers');
     }
     const dockProviderProps = mocks.dockProviderProps as {
@@ -302,9 +319,6 @@ describe('PanelWindowApp', () => {
     if (!objectRef) {
       throw new Error('expected descriptor object reference');
     }
-    act(() => mocks.authorizedHandler?.({ panelId: 'panel-pod', objectRef, activeView: 'yaml' }));
-    expect(mocks.onRowClick).toHaveBeenCalledWith(objectRef);
-    expect(mocks.setObjectPanelActiveTab).toHaveBeenCalledWith('cluster-a', 'panel-pod', 'yaml');
 
     dockProviderProps.onGroupMoveRequest(
       { tabs: ['panel-pod'], activeTab: 'panel-pod' },
@@ -317,12 +331,17 @@ describe('PanelWindowApp', () => {
     dockProviderProps.onGroupMoveRequest({ tabs: ['panel-pod'], activeTab: 'panel-pod' }, 'bottom');
     expect(focus).toHaveBeenCalledOnce();
 
-    dockProviderProps.onGroupMoveRequest({ tabs: ['panel-pod'], activeTab: 'panel-pod' }, 'bottom');
+    await act(async () =>
+      dockProviderProps.onGroupMoveRequest(
+        { tabs: ['panel-pod'], activeTab: 'panel-pod' },
+        'bottom'
+      )
+    );
     expect(mocks.beginDock).toHaveBeenCalledWith(
       'panel-1',
       'bottom',
       expect.objectContaining({
-        ownerWindowName: 'workspace-1',
+        sourceWindowName: 'panel-1',
         clusterId: 'cluster-a',
         groupId: 'group-1',
         activePanelId: 'panel-pod',
@@ -354,7 +373,6 @@ describe('PanelWindowApp', () => {
       sourceGroupId: 'right',
       sourceWindowGroupId: 'group-2',
       sourceWindowName: 'panel-2',
-      ownerWindowName: 'workspace-1',
       clusterId: 'cluster-a',
       tab,
     };
@@ -408,7 +426,6 @@ describe('PanelWindowApp', () => {
           sourceGroupId: 'right',
           sourceWindowGroupId: 'group-1',
           sourceWindowName: 'panel-1',
-          ownerWindowName: 'workspace-1',
           clusterId: 'cluster-a',
           tab,
         },

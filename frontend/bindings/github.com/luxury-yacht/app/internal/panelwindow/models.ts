@@ -3,14 +3,33 @@
 
 export interface ApplicationQuitPreflightRequestedEvent {
     "transactionId": string;
-    "ownerWindowName": string;
-    "panelWindows": string[] | null;
+    "windowName": string;
+}
+
+export interface ClusterTabTransferEvent {
+    "request": ClusterTabTransferRequest;
+    "snapshot": ClusterViewSnapshot;
+    "targetAlreadyOpen": boolean;
+}
+
+export interface ClusterTabTransferRequest {
+    "transferId": string;
+    "sourceWindowName": string;
+    "targetWindowName": string;
+    "clusterId": string;
+    "targetIndex": number;
+}
+
+export interface ClusterViewSnapshot {
+    "schemaVersion": number;
+    "viewState": string;
+    "groups": WorkspaceGroup[] | null;
 }
 
 export interface GroupSnapshot {
     "schemaVersion": number;
     "transferId": string;
-    "ownerWindowName": string;
+    "sourceWindowName": string;
     "clusterId": string;
     "groupId": string;
     "tabs": TabSnapshot[] | null;
@@ -37,21 +56,6 @@ export enum NativeRole {
     NativeRolePanel = "panel",
 };
 
-export interface ObjectOpenAuthorizedEvent {
-    "panelId": string;
-    "objectRef": ObjectReference;
-    "activeView": string;
-}
-
-export interface ObjectOpenRequestEvent {
-    "sourceWindowName": string;
-    "ownerWindowName": string;
-    "clusterId": string;
-    "groupId": string;
-    "objectRef": ObjectReference;
-    "activeView": string;
-}
-
 /**
  * ObjectReference is the complete object identity allowed across a native
  * panel-window boundary. Group and namespace are present but may be empty for
@@ -66,25 +70,34 @@ export interface ObjectReference {
     "name": string;
 }
 
-export interface OwnerCloseRequestedEvent {
-    "ownerWindowName": string;
-    "panelWindows": string[] | null;
+/**
+ * Location is presentation state. The object's cluster identity owns the panel.
+ */
+export interface PanelLocation {
+    "kind": PanelLocationKind;
+    "windowName": string;
+    "groupId": string;
+    "index": number;
+    "active": boolean;
 }
 
-export interface SnapshotUpdatedEvent {
-    "windowName": string;
-    "snapshot": GroupSnapshot;
+export enum PanelLocationKind {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    PanelLocationDocked = "docked",
+    PanelLocationWindow = "panel-window",
+    PanelLocationRetained = "retained",
+};
+
+export interface PanelOpenResult {
+    "panel": WorkspacePanel;
+    "render": boolean;
 }
 
 export interface TabCloseAuthorizedEvent {
-    "panelId": string;
-}
-
-export interface TabCloseRequestedEvent {
-    "sourceWindowName": string;
-    "ownerWindowName": string;
-    "clusterId": string;
-    "groupId": string;
     "panelId": string;
 }
 
@@ -121,7 +134,6 @@ export interface TabTransferRequest {
     "transferId": string;
     "sourceWindowName": string;
     "targetWindowName": string;
-    "ownerWindowName": string;
     "clusterId": string;
     "sourceGroupId": string;
     "targetGroupId": string;
@@ -167,7 +179,6 @@ export interface WindowClosedEvent {
 
 export interface WindowDescriptor {
     "windowName": string;
-    "ownerWindowName": string;
     "clusterId": string;
     "groupId": string;
     "state": WindowState;
@@ -183,18 +194,6 @@ export interface WindowDockRequestedEvent {
 
 export interface WindowFocusRequestedEvent {
     "panelId": string;
-}
-
-export interface WindowGuardRequestedEvent {
-    "requestId": string;
-    "windowName": string;
-    "reason": string;
-}
-
-export interface WindowGuardResultEvent {
-    "requestId": string;
-    "windowName": string;
-    "allowed": boolean;
 }
 
 export interface WindowOpenedEvent {
@@ -222,6 +221,42 @@ export enum WindowState {
     WindowStateDocking = "docking",
 };
 
+export interface WindowTransferFailedEvent {
+    "windowName": string;
+    "transferId": string;
+    "clusterId": string;
+}
+
+export interface WorkspaceChangedEvent {
+    "clusterId": string;
+}
+
+export interface WorkspaceCloseRequestedEvent {
+    "windowName": string;
+}
+
 export interface WorkspaceDescriptor {
     "windowName": string;
+}
+
+export interface WorkspaceFocusRequestedEvent {
+    "clusterId": string;
+    "panelId": string;
+}
+
+export interface WorkspaceGroup {
+    "clusterId": string;
+    "groupId": string;
+    "tabs": TabSnapshot[] | null;
+    "activePanelId": string;
+}
+
+export interface WorkspacePanel {
+    "tab": TabSnapshot;
+    "location": PanelLocation;
+}
+
+export interface WorkspaceSnapshot {
+    "revision": number;
+    "panels": WorkspacePanel[] | null;
 }

@@ -4,6 +4,23 @@ Read this before editing. When user feedback identifies a recurring mistake,
 record the pattern and a concrete prevention check here. Keep entries focused
 on reusable rules; omit transient logs, credentials, and session history.
 
+## Confusing renderer placement with cluster ownership
+
+A native window is a place to render content. Shared cluster panels and their
+runtime lifetime must not depend on the app window that first opened them.
+
+Prevention:
+
+- Carry cluster and complete object identity independently of window identity.
+- Validate the complete source set before changing any shared placement.
+- Commit destination publication and transfer ownership together; keep staged
+  target copies provisional until reconstruction is acknowledged.
+- Seed a new app view before renderer startup, and delay queued work until
+  cluster hydration and coordinator subscriptions are ready.
+- Retain cluster runtime for shared panels, including panel-only renderers.
+  Test source-app closure, duplicate app views, cancelled queued transfers,
+  native-creation failure, and all-renderer quit preflight.
+
 ## Adding cognitive complexity without measuring it
 
 Recovery guards and channel-close handling can become deeply nested inside

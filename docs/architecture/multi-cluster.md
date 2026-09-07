@@ -105,13 +105,15 @@ cluster activation and returns the resulting authoritative per-window
 snapshot. Selection UI must use that response instead of chaining separate
 selection, auth, lifecycle, and visible-cluster reads.
 
-The backend retains one tab set per peer window. Their deterministic union owns
-the process-wide selected kubeconfigs, persisted selection, clients, refresh
-subsystems, catalogs, and runtime operations. Closing a tab removes only that
-window's ownership; teardown occurs only after no peer window owns the
-selection. Closing a non-last window releases all of that peer's tab ownership.
-The last window skips ownership release because its accepted close proceeds to
-process shutdown and its tabs remain the next-start persisted selection.
+The backend retains one cluster-tab set per app window plus cluster-scoped
+panel references. Their deterministic union owns process-wide selected
+kubeconfigs, clients, refresh subsystems, catalogs, and runtime operations.
+Closing a tab releases only that app view. Docked panels become retained shared
+panels, and floating panels remain open. Teardown requires that neither app views
+nor panel references retain the cluster. Cluster-tab movement stages the target
+before removing the source, preserving the process selection throughout.
+A panel-only renderer projects its fixed cluster without creating an app-view
+tab set. See [application lifecycle](application-lifecycle.md#cluster-owned-panel-workspaces).
 
 The backend snapshot is revision-consistent: every owning state writer advances
 the workspace revision while holding its own lock, and the aggregate retries if

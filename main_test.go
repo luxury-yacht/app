@@ -61,6 +61,7 @@ type mainRecordingReporter struct {
 }
 
 type recordingNativeWindowRegistry struct {
+	panelwindow.SharedWorkspaceCommands
 	calls []string
 }
 
@@ -143,28 +144,8 @@ func (registry *recordingNativeWindowRegistry) AcknowledgeWorkspaceWindowClose(s
 	return nil
 }
 
-func (registry *recordingNativeWindowRegistry) RoutePanelWindowCommand(string, panelwindow.OwnerCommand) error {
+func (registry *recordingNativeWindowRegistry) RoutePanelWindowCommand(string, panelwindow.WorkspaceCommand) error {
 	registry.record("route-command")
-	return nil
-}
-
-func (registry *recordingNativeWindowRegistry) RequestPanelObjectOpen(
-	string,
-	panelwindow.ObjectReference,
-	string,
-) error {
-	registry.record("request-object-open")
-	return nil
-}
-
-func (registry *recordingNativeWindowRegistry) AuthorizePanelObjectOpen(
-	string,
-	string,
-	string,
-	panelwindow.ObjectReference,
-	string,
-) error {
-	registry.record("authorize-object-open")
 	return nil
 }
 
@@ -178,11 +159,6 @@ func (registry *recordingNativeWindowRegistry) UpdatePanelWindowSnapshot(
 
 func (registry *recordingNativeWindowRegistry) RequestPanelTabClose(string, string) error {
 	registry.record("request-tab-close")
-	return nil
-}
-
-func (registry *recordingNativeWindowRegistry) AuthorizePanelTabClose(string, string, string) error {
-	registry.record("authorize-tab-close")
 	return nil
 }
 
@@ -201,25 +177,6 @@ func (registry *recordingNativeWindowRegistry) AcceptPanelTabTransfer(string, st
 
 func (registry *recordingNativeWindowRegistry) FailPanelTabTransfer(string, string) error {
 	registry.record("fail-tab-transfer")
-	return nil
-}
-
-func (registry *recordingNativeWindowRegistry) RequestPanelWindowGuard(
-	string,
-	string,
-	string,
-	string,
-) error {
-	registry.record("request-guard")
-	return nil
-}
-
-func (registry *recordingNativeWindowRegistry) AcknowledgePanelWindowGuard(
-	string,
-	string,
-	bool,
-) error {
-	registry.record("acknowledge-guard")
 	return nil
 }
 
@@ -306,31 +263,15 @@ func TestWindowRegistryBridgePreservesUnboundStartupSemantics(t *testing.T) {
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.RoutePanelCommand("panel-1", "command")
 	require.ErrorContains(t, err, "native window registry is not available")
-	err = options.RequestPanelObjectOpen("panel-1", panelwindow.ObjectReference{}, "details")
-	require.ErrorContains(t, err, "native window registry is not available")
-	err = options.AuthorizePanelObjectOpen(
-		"workspace-1",
-		"panel-1",
-		"tab-1",
-		panelwindow.ObjectReference{},
-		"details",
-	)
-	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.UpdatePanelSnapshot("panel-1", panelwindow.GroupSnapshot{})
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.RequestPanelTabClose("panel-1", "tab-1")
-	require.ErrorContains(t, err, "native window registry is not available")
-	err = options.AuthorizePanelTabClose("workspace-1", "panel-1", "tab-1")
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.RequestPanelTabTransfer("panel-1", panelwindow.TabTransferRequest{})
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.AcceptPanelTabTransfer("workspace-1", "tab-transfer-1")
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.FailPanelTabTransfer("panel-1", "tab-transfer-1")
-	require.ErrorContains(t, err, "native window registry is not available")
-	err = options.RequestPanelGuard("workspace-1", "panel-1", "guard-1", "close")
-	require.ErrorContains(t, err, "native window registry is not available")
-	err = options.AcknowledgePanelGuard("panel-1", "guard-1", true)
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.AcknowledgeApplicationQuit("workspace-1", "quit-1", true)
 	require.ErrorContains(t, err, "native window registry is not available")
@@ -342,7 +283,6 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 	bridge.bind(registry)
 	options := bridge.runtimeOptions(&mainRecordingReporter{}, backend.ApplicationUpdateOptions{})
 	snapshot := panelwindow.GroupSnapshot{}
-	objectRef := panelwindow.ObjectReference{}
 
 	require.False(t, bridge.prepareApplicationQuit())
 	bridge.onSecondInstanceLaunch(application.SecondInstanceData{})
@@ -362,22 +302,11 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 	require.NoError(t, options.AcknowledgePanelClose("panel-1"))
 	require.NoError(t, options.AcknowledgeWorkspaceClose("workspace-1"))
 	require.NoError(t, options.RoutePanelCommand("panel-1", "command"))
-	require.NoError(t, options.RequestPanelObjectOpen("panel-1", objectRef, "details"))
-	require.NoError(t, options.AuthorizePanelObjectOpen(
-		"workspace-1",
-		"panel-1",
-		"tab-1",
-		objectRef,
-		"details",
-	))
 	require.NoError(t, options.UpdatePanelSnapshot("panel-1", snapshot))
 	require.NoError(t, options.RequestPanelTabClose("panel-1", "tab-1"))
-	require.NoError(t, options.AuthorizePanelTabClose("workspace-1", "panel-1", "tab-1"))
 	require.NoError(t, options.RequestPanelTabTransfer("panel-1", panelwindow.TabTransferRequest{}))
 	require.NoError(t, options.AcceptPanelTabTransfer("workspace-1", "tab-transfer-1"))
 	require.NoError(t, options.FailPanelTabTransfer("panel-1", "tab-transfer-1"))
-	require.NoError(t, options.RequestPanelGuard("workspace-1", "panel-1", "guard-1", "close"))
-	require.NoError(t, options.AcknowledgePanelGuard("panel-1", "guard-1", true))
 	require.NoError(t, options.AcknowledgeApplicationQuit("workspace-1", "quit-1", true))
 
 	require.Equal(t, []string{
@@ -396,16 +325,11 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 		"acknowledge-close",
 		"acknowledge-workspace-close",
 		"route-command",
-		"request-object-open",
-		"authorize-object-open",
 		"update-snapshot",
 		"request-tab-close",
-		"authorize-tab-close",
 		"request-tab-transfer",
 		"accept-tab-transfer",
 		"fail-tab-transfer",
-		"request-guard",
-		"acknowledge-guard",
 		"acknowledge-quit",
 	}, registry.calls)
 }

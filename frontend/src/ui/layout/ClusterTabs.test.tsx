@@ -1,3 +1,5 @@
+vi.mock('@/core/panel-windows/ClusterPanelsMenu', () => ({ ClusterPanelsMenu: () => null }));
+
 /**
  * frontend/src/ui/layout/ClusterTabs.test.tsx
  *
@@ -15,6 +17,13 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installWindowProperty } from '@/test-utils/windowProperty';
+
+const clusterTransferBridge = vi.hoisted(() => ({
+  request: vi.fn(async (..._args: unknown[]) => undefined),
+}));
+vi.mock('@/core/panel-windows', () => ({
+  requestClusterTabTransfer: clusterTransferBridge.request,
+}));
 
 const persistenceBridge = vi.hoisted(() => ({
   get: vi.fn<() => Promise<string[]>>().mockResolvedValue([]),
@@ -42,6 +51,7 @@ vi.mock('@core/backend-api', () => ({
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => true,
+  getWindowIdentity: () => 'app-a',
 }));
 
 type MockState = {
@@ -517,4 +527,54 @@ describe('ClusterTabs', () => {
     // "prod" is unique, so it shows just the context name.
     expect(labels).toEqual(['Global', 'alpha:dev', 'beta:dev', 'prod']);
   });
+});
+
+it('requests a cluster view transfer when a tab is dropped from another app window', async () => {
+  const request = vi.fn(async () => undefined);
+  clusterTransferBridge.request.mockImplementation(request);
+  mockState.kubeconfigsLoading = false;
+  mockState.selectedKubeconfigs = ['production'];
+  mockState.selectedKubeconfig = 'production';
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = ReactDOM.createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <TabDragProvider>
+          <ClusterTabs />
+        </TabDragProvider>
+      )
+    );
+    const target = container.querySelector('.cluster-tabs-wrapper');
+    if (!target) {
+      throw new Error('Expected cluster tabs');
+    }
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', {
+      value: {
+        getData: () =>
+          JSON.stringify({
+            kind: 'cluster-tab',
+            clusterId: 'production',
+            selection: 'production',
+            sourceWindowName: 'app-b',
+          }),
+        types: ['application/x-luxury-yacht-tab', 'application/x-luxury-yacht-tab-cluster-tab'],
+        dropEffect: 'move',
+      },
+    });
+    await act(async () => target.dispatchEvent(drop));
+    expect(request).toHaveBeenCalledWith(
+      'app-a',
+      expect.objectContaining({
+        sourceWindowName: 'app-b',
+        targetWindowName: 'app-a',
+        clusterId: 'production',
+      })
+    );
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
 });

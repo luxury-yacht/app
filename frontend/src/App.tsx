@@ -31,7 +31,10 @@ import { isClusterOperationalState } from '@/core/contexts/clusterLifecycleState
 import { requestContextRefresh } from '@/core/data-access';
 import { openDevTools } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
-import { PanelLifecycleGuardProvider } from '@/core/panel-windows/panelLifecycleGuards';
+import {
+  PanelLifecycleGuardProvider,
+  usePanelLifecycleGuardRegistry,
+} from '@/core/panel-windows/panelLifecycleGuards';
 import { WorkspacePanelCoordinator } from '@/core/panel-windows/WorkspacePanelCoordinator';
 import {
   applyTheme,
@@ -120,8 +123,12 @@ function AppContent() {
     viewState.setIsSettingsOpen(!viewState.isSettingsOpen);
   }, [viewState]);
 
+  const panelGuards = usePanelLifecycleGuardRegistry();
   const executeApplicationMenuCommand = useCallback(
     (menuCommand: backend.ApplicationMenuCommand) => {
+      if (panelGuards.isFrozen()) {
+        return;
+      }
       const actions: WorkspaceApplicationMenuActions = {
         close: () => eventBus.emit('application-menu:close'),
         openCluster: () => eventBus.emit('command-palette:open-kubeconfigs'),
@@ -161,6 +168,7 @@ function AppContent() {
       viewState,
       zoomIn,
       zoomOut,
+      panelGuards.isFrozen,
     ]
   );
 

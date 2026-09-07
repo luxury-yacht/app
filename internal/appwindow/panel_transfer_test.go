@@ -17,7 +17,7 @@ func TestValidatePanelGroupSnapshotRequiresCompleteConsistentIdentity(t *testing
 	}{
 		{name: "schema", mutate: func(snapshot *PanelGroupSnapshot) { snapshot.SchemaVersion = 0 }},
 		{name: "transfer", mutate: func(snapshot *PanelGroupSnapshot) { snapshot.TransferID = "" }},
-		{name: "owner", mutate: func(snapshot *PanelGroupSnapshot) { snapshot.OwnerWindowName = "" }},
+		{name: "owner", mutate: func(snapshot *PanelGroupSnapshot) { snapshot.SourceWindowName = "" }},
 		{name: "cluster", mutate: func(snapshot *PanelGroupSnapshot) { snapshot.ClusterID = "" }},
 		{name: "group", mutate: func(snapshot *PanelGroupSnapshot) { snapshot.GroupID = "" }},
 		{name: "tabs", mutate: func(snapshot *PanelGroupSnapshot) { snapshot.Tabs = nil }},
@@ -54,11 +54,11 @@ func TestValidatePanelGroupSnapshotRequiresCompleteConsistentIdentity(t *testing
 
 func validPanelGroupSnapshot() PanelGroupSnapshot {
 	return PanelGroupSnapshot{
-		SchemaVersion:   PanelGroupSchemaVersion,
-		TransferID:      "transfer-1",
-		OwnerWindowName: "workspace-1",
-		ClusterID:       "cluster-1",
-		GroupID:         "floating-1",
+		SchemaVersion:    PanelGroupSchemaVersion,
+		TransferID:       "transfer-1",
+		SourceWindowName: "workspace-1",
+		ClusterID:        "cluster-1",
+		GroupID:          "floating-1",
 		Tabs: []PanelTabSnapshot{
 			{
 				Kind:       PanelTabKindObject,
@@ -93,7 +93,7 @@ func TestPanelTransferStateAllowsAcknowledgedOpenAndDock(t *testing.T) {
 
 	dockSnapshot := snapshot
 	dockSnapshot.TransferID = "transfer-2"
-	require.NoError(t, panels.BeginDock(descriptor.WindowName, dockSnapshot))
+	require.NoError(t, panels.BeginDock(descriptor.WindowName, dockSnapshot, "workspace-1", "right"))
 	require.Equal(t, PanelWindowStateDocking, panels.State(descriptor.WindowName))
 
 	require.NoError(t, panels.AcknowledgeDock(descriptor.WindowName, dockSnapshot.TransferID))
@@ -121,7 +121,7 @@ func TestPanelTransferStateRejectsStaleAcknowledgementsAndRollsBack(t *testing.T
 
 	dockSnapshot := retrySnapshot
 	dockSnapshot.TransferID = "transfer-3"
-	require.NoError(t, panels.BeginDock(descriptor.WindowName, dockSnapshot))
+	require.NoError(t, panels.BeginDock(descriptor.WindowName, dockSnapshot, "workspace-1", "right"))
 	require.ErrorContains(
 		t,
 		panels.AcknowledgeDock(descriptor.WindowName, "stale-dock"),
@@ -181,7 +181,7 @@ func TestPanelTransferStateRejectsIdentityChangesAndInvalidTransitions(t *testin
 	dockSnapshot.TransferID = "transfer-2"
 	require.ErrorContains(
 		t,
-		panels.BeginDock(descriptor.WindowName, dockSnapshot),
+		panels.BeginDock(descriptor.WindowName, dockSnapshot, "workspace-1", "right"),
 		"cannot dock from state",
 	)
 	_, err = panels.AcknowledgeOpen(descriptor.WindowName, snapshot.TransferID)
@@ -193,7 +193,6 @@ func TestPanelTransferStateRejectsIdentityChangesAndInvalidTransitions(t *testin
 		name   string
 		mutate func(*PanelGroupSnapshot)
 	}{
-		{name: "owner", mutate: func(next *PanelGroupSnapshot) { next.OwnerWindowName = "workspace-2" }},
 		{
 			name: "cluster",
 			mutate: func(next *PanelGroupSnapshot) {
@@ -210,8 +209,8 @@ func TestPanelTransferStateRejectsIdentityChangesAndInvalidTransitions(t *testin
 
 			require.ErrorContains(
 				t,
-				panels.BeginDock(descriptor.WindowName, next),
-				"cannot change owner, cluster, or group",
+				panels.BeginDock(descriptor.WindowName, next, "workspace-1", "right"),
+				"cannot change cluster or group",
 			)
 		})
 	}
@@ -220,7 +219,7 @@ func TestPanelTransferStateRejectsIdentityChangesAndInvalidTransitions(t *testin
 	reused.TransferID = snapshot.TransferID
 	require.ErrorContains(
 		t,
-		panels.BeginDock(descriptor.WindowName, reused),
+		panels.BeginDock(descriptor.WindowName, reused, "workspace-1", "right"),
 		"already exists",
 	)
 }

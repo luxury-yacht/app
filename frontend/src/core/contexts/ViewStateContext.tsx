@@ -74,6 +74,7 @@ interface NavigationStateContextType {
 
   // Per-cluster view state lookup for background refresh
   getClusterNavigationState: (clusterId: string) => NavigationTabState;
+  restoreClusterNavigationState: (clusterId: string, state: NavigationTabState) => void;
 }
 
 const NavigationStateContext = createContext<NavigationStateContextType | undefined>(undefined);
@@ -173,6 +174,13 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
   const getClusterNavigationState = useCallback((clusterId: string): NavigationTabState => {
     return navigationStateByClusterRef.current[clusterId] ?? DEFAULT_NAVIGATION_STATE;
   }, []);
+
+  const restoreClusterNavigationState = useCallback(
+    (clusterId: string, state: NavigationTabState) => {
+      setNavigationStateByCluster((previous) => ({ ...previous, [clusterId]: { ...state } }));
+    },
+    []
+  );
 
   // Get sidebar state for navigation actions
   const { setSidebarSelection } = useSidebarState();
@@ -394,6 +402,7 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
       onNamespaceSelect,
       onClusterObjectsClick,
       getClusterNavigationState,
+      restoreClusterNavigationState,
     }),
     [
       viewType,
@@ -413,6 +422,7 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
       onNamespaceSelect,
       onClusterObjectsClick,
       getClusterNavigationState,
+      restoreClusterNavigationState,
     ]
   );
 

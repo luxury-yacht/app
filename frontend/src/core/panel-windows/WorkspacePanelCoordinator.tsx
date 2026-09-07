@@ -1,48 +1,39 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { panelwindow } from '@/core/backend-api/models';
-import { focusWindow, getWindowIdentity } from '@/core/desktop-runtime';
+import { getWindowIdentity } from '@/core/desktop-runtime';
 import { getObjectPanelLayoutDefaults } from '@/core/settings/appPreferences';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
-import type { ViewType } from '@/modules/object-panel/components/ObjectPanel/types';
 import {
   useObjectPanelActiveTabs,
   useObjectPanelState,
 } from '@/modules/object-panel/contexts/ObjectPanelStateContext';
-import { buildObjectPanelRef, objectPanelId } from '@/modules/object-panel/objectPanelRef';
 import type { DockPosition } from '@/ui/dockable';
 import { DockablePanelProvider, useDockablePanelContext } from '@/ui/dockable';
 import { getGroupForPanel } from '@/ui/dockable/tabGroupState';
 import type { GroupKey } from '@/ui/dockable/tabGroupTypes';
 import { reportOperationalError } from '@/utils/errorHandler';
+import { ClusterTabTransferCoordinator } from './ClusterTabTransferCoordinator';
 import {
   acceptPanelTabTransfer,
-  acknowledgeApplicationQuitPreflight,
   acknowledgePanelWindowDock,
-  acknowledgeWorkspaceWindowClose,
-  authorizePanelObjectOpen,
-  authorizePanelTabClose,
   beginPanelWindowOpen,
   failPanelTabTransfer,
   failPanelWindowTransfer,
-  focusPanelWindow,
-  onApplicationQuitPreflightRequested,
-  onOwnerCloseRequested,
-  onPanelObjectOpenRequested,
-  onPanelTabCloseRequested,
   onPanelTabTransferCommitted,
   onPanelTabTransferFailed,
+  onPanelTabTransferInsertRequested,
   onPanelTabTransferRequested,
   onPanelWindowClosed,
   onPanelWindowDockRequested,
-  onPanelWindowGuardResult,
   onPanelWindowOpened,
-  onPanelWindowSnapshotUpdated,
+  onPanelWindowTransferFailed,
+  onPanelWorkspaceFocusRequested,
+  requestClusterTabTransfer,
   requestPanelTabTransfer,
-  requestPanelWindowClose,
-  requestPanelWindowGuard,
 } from './index';
 import { usePanelLifecycleGuardRegistry } from './panelLifecycleGuards';
+import { workspacePanelPublication } from './publicationQueue';
 import {
   type DockableTabDragPayload,
   objectPanelTabSnapshot,
@@ -99,12 +90,12 @@ const isAuthoritativeTransferSource = (
   request: panelwindow.TabTransferRequest,
   owned: OwnedPanel | null,
   sourceGroup: GroupKey | null,
-  ownerWindowName: string
+  windowName: string
 ): boolean => {
   if (!owned || !sameTransferredTab(owned, request.tab)) {
     return false;
   }
-  if (request.sourceWindowName === ownerWindowName) {
+  if (request.sourceWindowName === windowName) {
     return !owned.nativeLocation && sourceGroup === request.sourceGroupId;
   }
   return (
@@ -129,99 +120,34 @@ const tornOffTabSnapshot = (request: panelwindow.TabTransferRequest): panelwindo
   return snapshot;
 };
 
+import { WorkspacePanelLifecycle } from './WorkspacePanelLifecycle';
+import { usePanelWorkspaceSync, WorkspacePanelSync } from './WorkspacePanelSync';
 export function WorkspacePanelCoordinator({ children }: Readonly<{ children: React.ReactNode }>) {
-  const ownerWindowName = getWindowIdentity();
-  const {
-    openPanels,
-    nativeLocations,
-    pendingNativeOpenPanelIds,
-    commitPanelWindow,
-    dockPanelWindow,
-    getOwnedPanel,
-    panelIdsForCluster,
-    nativeWindowNamesForCluster,
-    syncPanelWindowSnapshot,
-  } = useObjectPanelState();
+  const windowName = getWindowIdentity();
+  const { openPanels, pendingNativeOpenPanelIds, dockPanelWindow, removeOwnedPanel } =
+    useObjectPanelState();
   const activeTabs = useObjectPanelActiveTabs();
-  const { registerClusterClosePreflight, selectedClusterId } = useKubeconfig();
+  const { selectedClusterId } = useKubeconfig();
   const guards = usePanelLifecycleGuardRegistry();
-  const [pendingOwnerCloseWindows, setPendingOwnerCloseWindows] = useState<Set<string> | null>(
-    null
-  );
-  const pendingOwnerCloseTimeoutRef = useRef<number | null>(null);
-  const pendingOwnerCloseWindowNamesRef = useRef(new Set<string>());
   const [pendingDockRequest, setPendingDockRequest] =
     useState<panelwindow.WindowDockRequestedEvent | null>(null);
-  const pendingClusterClosesRef = useRef(
-    new Map<
-      string,
-      {
-        remaining: Set<string>;
-        promise: Promise<boolean>;
-        resolve: (allowed: boolean) => void;
-        timeout: number;
-        guardRequests: Map<string, string>;
-      }
-    >()
-  );
-  const pendingOwnerCloseGuardRequestsRef = useRef(new Map<string, string>());
-  const pendingApplicationQuitRef = useRef<{
-    transactionId: string;
-    remaining: Set<string>;
-    timeout: number;
-  } | null>(null);
   const pendingFloatGroupsRef = useRef(new Set<GroupKey>());
   const pendingFloatGroupIdsRef = useRef(
     new Map<
       string,
-      {
-        sourceGroup: GroupKey;
-        snapshot: panelwindow.GroupSnapshot;
-        autoFloat: boolean;
-      }
+      { sourceGroup: GroupKey; snapshot: panelwindow.GroupSnapshot; autoFloat: boolean }
     >()
   );
   const [pendingAutoFloatRollbacks, setPendingAutoFloatRollbacks] = useState<
     panelwindow.GroupSnapshot[]
   >([]);
-
   const queueAutoFloatRollback = useCallback(
     (snapshot: panelwindow.GroupSnapshot) => {
       dockPanelWindow(snapshot, 'right');
-      setPendingAutoFloatRollbacks((previous) =>
-        previous.some((candidate) => candidate.transferId === snapshot.transferId)
-          ? previous
-          : [...previous, snapshot]
-      );
+      setPendingAutoFloatRollbacks((current) => [...current, snapshot]);
     },
     [dockPanelWindow]
   );
-
-  const settleApplicationQuit = useCallback(
-    (transactionId: string, allowed: boolean, error?: unknown) => {
-      const pending = pendingApplicationQuitRef.current;
-      if (pending?.transactionId !== transactionId) {
-        return;
-      }
-      window.clearTimeout(pending.timeout);
-      pendingApplicationQuitRef.current = null;
-      void acknowledgeApplicationQuitPreflight(ownerWindowName, transactionId, allowed).catch(
-        (acknowledgeError) =>
-          reportOperationalError(acknowledgeError, {
-            source: 'WorkspacePanelCoordinator',
-            action: 'acknowledge-application-quit',
-          })
-      );
-      if (error) {
-        reportOperationalError(error, {
-          source: 'WorkspacePanelCoordinator',
-          action: 'application-quit-preflight',
-        });
-      }
-    },
-    [ownerWindowName]
-  );
-
   const handleGroupMove = useCallback(
     (
       group: { groupKey: GroupKey; tabs: string[]; activeTab: string | null },
@@ -246,7 +172,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       const snapshot: panelwindow.GroupSnapshot = {
         schemaVersion: 1,
         transferId: newIdentity('panel-transfer'),
-        ownerWindowName,
+        sourceWindowName: windowName,
         clusterId: firstRef.clusterId,
         groupId,
         tabs: group.tabs.flatMap((panelId) => {
@@ -268,28 +194,26 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         snapshot,
         autoFloat,
       });
-      void beginPanelWindowOpen(ownerWindowName, snapshot).catch((error) => {
-        const pending = pendingFloatGroupIdsRef.current.get(groupId);
-        pendingFloatGroupsRef.current.delete(pending?.sourceGroup ?? group.groupKey);
-        pendingFloatGroupIdsRef.current.delete(groupId);
-        if (pending?.autoFloat) {
-          queueAutoFloatRollback(pending.snapshot);
-        }
-        reportOperationalError(error, {
-          source: 'WorkspacePanelCoordinator',
-          action: 'float-group',
+      guards.freeze(snapshot.transferId, group.tabs);
+      void workspacePanelPublication
+        .flush()
+        .then(() => beginPanelWindowOpen(windowName, snapshot))
+        .catch((error) => {
+          guards.releaseTransfer(snapshot.transferId);
+          const pending = pendingFloatGroupIdsRef.current.get(groupId);
+          pendingFloatGroupsRef.current.delete(pending?.sourceGroup ?? group.groupKey);
+          pendingFloatGroupIdsRef.current.delete(groupId);
+          if (pending?.autoFloat) {
+            queueAutoFloatRollback(pending.snapshot);
+          }
+          reportOperationalError(error, {
+            source: 'WorkspacePanelCoordinator',
+            action: 'float-group',
+          });
         });
-      });
       return true;
     },
-    [
-      activeTabs,
-      guards,
-      openPanels,
-      ownerWindowName,
-      pendingNativeOpenPanelIds,
-      queueAutoFloatRollback,
-    ]
+    [activeTabs, guards, openPanels, windowName, pendingNativeOpenPanelIds, queueAutoFloatRollback]
   );
 
   const getTabSnapshot = useCallback(
@@ -304,12 +228,11 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
 
   const tabDragIdentity = useMemo(
     () => ({
-      windowName: ownerWindowName,
-      ownerWindowName,
+      windowName,
       clusterId: selectedClusterId,
       getTabSnapshot,
     }),
-    [getTabSnapshot, ownerWindowName, selectedClusterId]
+    [getTabSnapshot, windowName, selectedClusterId]
   );
 
   const canStartTabDrag = useCallback(
@@ -328,7 +251,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       }
       const request = tabTransferRequestFromDragPayload(payload, {
         transferId: newIdentity('panel-tab-transfer'),
-        targetWindowName: ownerWindowName,
+        targetWindowName: windowName,
         targetGroupId,
         targetIndex: insertIndex,
         targetKind: 'workspace' as panelwindow.TabTransferTarget,
@@ -336,7 +259,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       if (!request) {
         return;
       }
-      void requestPanelTabTransfer(ownerWindowName, request).catch((error) =>
+      void requestPanelTabTransfer(windowName, request).catch((error) =>
         reportOperationalError(error, {
           source: 'WorkspacePanelCoordinator',
           action: 'request-tab-drop',
@@ -344,7 +267,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         })
       );
     },
-    [ownerWindowName]
+    [windowName]
   );
 
   const handleTabTearOff = useCallback(
@@ -357,10 +280,10 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         targetKind: 'new-window' as panelwindow.TabTransferTarget,
         cursor,
       });
-      if (request?.sourceWindowName !== ownerWindowName) {
+      if (request?.sourceWindowName !== windowName) {
         return;
       }
-      void requestPanelTabTransfer(ownerWindowName, request).catch((error) =>
+      void requestPanelTabTransfer(windowName, request).catch((error) =>
         reportOperationalError(error, {
           source: 'WorkspacePanelCoordinator',
           action: 'tear-off-tab',
@@ -368,7 +291,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         })
       );
     },
-    [ownerWindowName]
+    [windowName]
   );
 
   const handlePanelWindowOpened = useCallback(
@@ -378,494 +301,97 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         pendingFloatGroupsRef.current.delete(pending.sourceGroup);
         pendingFloatGroupIdsRef.current.delete(event.groupId);
       }
-      commitPanelWindow(event.snapshot, event.windowName);
+      for (const tab of event.snapshot.tabs ?? []) {
+        removeOwnedPanel(event.clusterId, tab.panelId);
+      }
+      guards.releaseTransfer(event.snapshot.transferId);
     },
-    [commitPanelWindow]
+    [removeOwnedPanel, guards.releaseTransfer]
   );
-
-  useEffect(
-    () =>
-      onPanelWindowSnapshotUpdated(({ windowName, snapshot }) => {
-        if (snapshot.ownerWindowName !== ownerWindowName) {
-          return;
-        }
-        syncPanelWindowSnapshot(snapshot, windowName);
-      }),
-    [ownerWindowName, syncPanelWindowSnapshot]
+  const handlePanelWindowClosed = useCallback(
+    (_windowName: string, groupId?: string) => {
+      const pending = groupId ? pendingFloatGroupIdsRef.current.get(groupId) : undefined;
+      if (!pending || !groupId) {
+        return;
+      }
+      guards.releaseTransfer(pending.snapshot.transferId);
+      pendingFloatGroupsRef.current.delete(pending.sourceGroup);
+      pendingFloatGroupIdsRef.current.delete(groupId);
+      if (pending.autoFloat) {
+        queueAutoFloatRollback(pending.snapshot);
+      }
+    },
+    [queueAutoFloatRollback, guards.releaseTransfer]
   );
-
-  useEffect(
-    () =>
-      onPanelTabCloseRequested((event) => {
-        if (event.ownerWindowName !== ownerWindowName) {
-          return;
-        }
-        if (!getOwnedPanel(event.clusterId, event.panelId)) {
-          return;
-        }
-        void authorizePanelTabClose(ownerWindowName, event.sourceWindowName, event.panelId).catch(
-          (error) => {
-            reportOperationalError(error, {
-              source: 'WorkspacePanelCoordinator',
-              action: 'authorize-panel-tab-close',
-              clusterId: event.clusterId,
-            });
-          }
-        );
-      }),
-    [getOwnedPanel, ownerWindowName]
-  );
-
-  const handlePanelWindowDockRequested = useCallback(
-    (event: panelwindow.WindowDockRequestedEvent, targetPosition: 'right' | 'bottom') => {
-      dockPanelWindow(event.snapshot, targetPosition);
-      setPendingDockRequest(event);
+  const handleDockRequest = useCallback(
+    (request: panelwindow.WindowDockRequestedEvent, edge: 'right' | 'bottom') => {
+      dockPanelWindow(request.snapshot, edge);
+      setPendingDockRequest(request);
     },
     [dockPanelWindow]
   );
-
-  const handlePanelWindowClosed = useCallback(
-    (windowName: string, groupId?: string) => {
-      if (groupId) {
-        const pending = pendingFloatGroupIdsRef.current.get(groupId);
-        if (pending) {
-          pendingFloatGroupsRef.current.delete(pending.sourceGroup);
-          pendingFloatGroupIdsRef.current.delete(groupId);
-          if (pending.autoFloat) {
-            queueAutoFloatRollback(pending.snapshot);
-          }
-        }
-      }
-      setPendingOwnerCloseWindows((previous) => {
-        if (!previous?.has(windowName)) {
-          return previous;
-        }
-        const next = new Set(previous);
-        next.delete(windowName);
-        pendingOwnerCloseWindowNamesRef.current.delete(windowName);
-        return next;
-      });
-      for (const [clusterId, pending] of pendingClusterClosesRef.current) {
-        pending.remaining.delete(windowName);
-        if (pending.remaining.size > 0) {
-          continue;
-        }
-        window.clearTimeout(pending.timeout);
-        pendingClusterClosesRef.current.delete(clusterId);
-        pending.resolve(true);
-      }
-    },
-    [queueAutoFloatRollback]
-  );
-
-  const handleAutoFloatRollbackSettled = useCallback((transferId: string) => {
-    setPendingAutoFloatRollbacks((previous) =>
-      previous.filter((snapshot) => snapshot.transferId !== transferId)
-    );
-  }, []);
-
-  const settleClusterClose = useCallback(
-    (clusterId: string, allowed: boolean, error?: unknown, action = 'cluster-close') => {
-      const pending = pendingClusterClosesRef.current.get(clusterId);
-      if (!pending) {
-        return;
-      }
-      window.clearTimeout(pending.timeout);
-      pendingClusterClosesRef.current.delete(clusterId);
-      pending.resolve(allowed);
-      if (error) {
-        reportOperationalError(error, {
-          source: 'WorkspacePanelCoordinator',
-          action,
-          clusterId,
-        });
-      }
-    },
-    []
-  );
-
-  const cancelOwnerClose = useCallback((error?: unknown, focusWindowName?: string) => {
-    if (pendingOwnerCloseTimeoutRef.current !== null) {
-      window.clearTimeout(pendingOwnerCloseTimeoutRef.current);
-      pendingOwnerCloseTimeoutRef.current = null;
-    }
-    pendingOwnerCloseGuardRequestsRef.current.clear();
-    pendingOwnerCloseWindowNamesRef.current.clear();
-    setPendingOwnerCloseWindows(null);
-    if (focusWindowName) {
-      void focusWindow(focusWindowName).catch((focusError) =>
-        reportOperationalError(focusError, {
-          source: 'WorkspacePanelCoordinator',
-          action: 'focus-close-blocker',
-        })
-      );
-    }
-    if (error) {
-      reportOperationalError(error, {
-        source: 'WorkspacePanelCoordinator',
-        action: 'request-owner-close',
-      });
-    }
-  }, []);
-
-  const handleApplicationQuitGuardResult = useCallback(
-    (event: panelwindow.WindowGuardResultEvent): boolean => {
-      const pending = pendingApplicationQuitRef.current;
-      if (
-        !pending ||
-        event.requestId !== `${pending.transactionId}:${event.windowName}` ||
-        !pending.remaining.has(event.windowName)
-      ) {
-        return false;
-      }
-      if (!event.allowed) {
-        settleApplicationQuit(pending.transactionId, false);
-        return true;
-      }
-      pending.remaining.delete(event.windowName);
-      if (pending.remaining.size === 0) {
-        settleApplicationQuit(pending.transactionId, true);
-      }
-      return true;
-    },
-    [settleApplicationQuit]
-  );
-
-  const handleClusterCloseGuardResult = useCallback(
-    (event: panelwindow.WindowGuardResultEvent): boolean => {
-      for (const [clusterId, clusterClose] of pendingClusterClosesRef.current) {
-        if (clusterClose.guardRequests.get(event.requestId) !== event.windowName) {
-          continue;
-        }
-        clusterClose.guardRequests.delete(event.requestId);
-        if (!event.allowed) {
-          void focusWindow(event.windowName).catch((error) =>
-            reportOperationalError(error, {
-              source: 'WorkspacePanelCoordinator',
-              action: 'focus-close-blocker',
-              clusterId,
-            })
-          );
-          settleClusterClose(clusterId, false);
-          return true;
-        }
-        if (clusterClose.guardRequests.size === 0) {
-          for (const windowName of clusterClose.remaining) {
-            void requestPanelWindowClose(ownerWindowName, windowName, 'cluster-close').catch(
-              (error) => settleClusterClose(clusterId, false, error, 'request-cluster-close')
-            );
-          }
-        }
-        return true;
-      }
-      return false;
-    },
-    [ownerWindowName, settleClusterClose]
-  );
-
-  const handleOwnerCloseGuardResult = useCallback(
-    (event: panelwindow.WindowGuardResultEvent) => {
-      if (pendingOwnerCloseGuardRequestsRef.current.get(event.requestId) !== event.windowName) {
-        return;
-      }
-      pendingOwnerCloseGuardRequestsRef.current.delete(event.requestId);
-      if (!event.allowed) {
-        cancelOwnerClose(undefined, event.windowName);
-        return;
-      }
-      if (pendingOwnerCloseGuardRequestsRef.current.size === 0) {
-        for (const windowName of pendingOwnerCloseWindowNamesRef.current) {
-          void requestPanelWindowClose(ownerWindowName, windowName, 'owner-close').catch((error) =>
-            cancelOwnerClose(error)
-          );
-        }
-      }
-    },
-    [cancelOwnerClose, ownerWindowName]
-  );
-
-  useEffect(
-    () =>
-      registerClusterClosePreflight(async (clusterId) => {
-        const existing = pendingClusterClosesRef.current.get(clusterId);
-        if (existing) {
-          return existing.promise;
-        }
-        const panelIds = panelIdsForCluster(clusterId);
-        const dockedPanelIds = panelIds.filter(
-          (panelId) => !getOwnedPanel(clusterId, panelId)?.nativeLocation
-        );
-        const blocker = guards.firstBlocker(dockedPanelIds);
-        if (blocker) {
-          blocker.focus();
-          return false;
-        }
-        const remaining = new Set(nativeWindowNamesForCluster(clusterId));
-        if (remaining.size === 0) {
-          return true;
-        }
-        let resolveClose!: (allowed: boolean) => void;
-        const promise = new Promise<boolean>((resolve) => {
-          resolveClose = resolve;
-        });
-        const timeout = window.setTimeout(() => {
-          pendingClusterClosesRef.current.delete(clusterId);
-          resolveClose(false);
-          reportOperationalError(new Error(`Panel close timed out for cluster ${clusterId}`), {
-            source: 'WorkspacePanelCoordinator',
-            action: 'cluster-close-timeout',
-            clusterId,
-          });
-        }, 15_000);
-        pendingClusterClosesRef.current.set(clusterId, {
-          remaining,
-          promise,
-          resolve: resolveClose,
-          timeout,
-          guardRequests: new Map(),
-        });
-        const pending = pendingClusterClosesRef.current.get(clusterId);
-        if (!pending) {
-          return promise;
-        }
-        for (const windowName of remaining) {
-          const requestId = newIdentity('cluster-close-guard');
-          pending.guardRequests.set(requestId, windowName);
-          void requestPanelWindowGuard(
-            ownerWindowName,
-            windowName,
-            requestId,
-            'cluster-close'
-          ).catch((error) => settleClusterClose(clusterId, false, error, 'request-cluster-guard'));
-        }
-        return promise;
-      }),
-    [
-      getOwnedPanel,
-      guards,
-      nativeWindowNamesForCluster,
-      ownerWindowName,
-      panelIdsForCluster,
-      registerClusterClosePreflight,
-      settleClusterClose,
-    ]
-  );
-
-  useEffect(
-    () => () => {
-      for (const pending of pendingClusterClosesRef.current.values()) {
-        window.clearTimeout(pending.timeout);
-        pending.resolve(false);
-      }
-      pendingClusterClosesRef.current.clear();
-      pendingOwnerCloseGuardRequestsRef.current.clear();
-      if (pendingApplicationQuitRef.current) {
-        window.clearTimeout(pendingApplicationQuitRef.current.timeout);
-        pendingApplicationQuitRef.current = null;
-      }
-    },
-    []
-  );
-
-  useEffect(
-    () =>
-      onApplicationQuitPreflightRequested((event) => {
-        if (event.ownerWindowName !== ownerWindowName) {
-          return;
-        }
-        const dockedPanelIds = Array.from(openPanels.keys()).filter(
-          (panelId) => !nativeLocations.has(panelId)
-        );
-        const blocker = guards.firstBlocker(dockedPanelIds);
-        if (blocker) {
-          blocker.focus();
-          void acknowledgeApplicationQuitPreflight(
-            ownerWindowName,
-            event.transactionId,
-            false
-          ).catch((error) =>
-            reportOperationalError(error, {
-              source: 'WorkspacePanelCoordinator',
-              action: 'reject-application-quit',
-            })
-          );
-          return;
-        }
-        const remaining = new Set(event.panelWindows ?? []);
-        if (remaining.size === 0) {
-          void acknowledgeApplicationQuitPreflight(
-            ownerWindowName,
-            event.transactionId,
-            true
-          ).catch((error) =>
-            reportOperationalError(error, {
-              source: 'WorkspacePanelCoordinator',
-              action: 'allow-application-quit',
-            })
-          );
-          return;
-        }
-        if (pendingApplicationQuitRef.current) {
-          window.clearTimeout(pendingApplicationQuitRef.current.timeout);
-        }
-        const timeout = window.setTimeout(() => {
-          settleApplicationQuit(
-            event.transactionId,
-            false,
-            new Error(`Application quit guard timed out for ${ownerWindowName}`)
-          );
-        }, 15_000);
-        pendingApplicationQuitRef.current = {
-          transactionId: event.transactionId,
-          remaining,
-          timeout,
-        };
-        for (const windowName of remaining) {
-          const requestId = `${event.transactionId}:${windowName}`;
-          void requestPanelWindowGuard(
-            ownerWindowName,
-            windowName,
-            requestId,
-            'application-quit'
-          ).catch((error) => settleApplicationQuit(event.transactionId, false, error));
-        }
-      }),
-    [guards, nativeLocations, openPanels, ownerWindowName, settleApplicationQuit]
-  );
-
-  useEffect(
-    () =>
-      onPanelWindowGuardResult((event) => {
-        if (handleApplicationQuitGuardResult(event)) {
-          return;
-        }
-        if (handleClusterCloseGuardResult(event)) {
-          return;
-        }
-        handleOwnerCloseGuardResult(event);
-      }),
-    [handleApplicationQuitGuardResult, handleClusterCloseGuardResult, handleOwnerCloseGuardResult]
-  );
-
-  useEffect(
-    () =>
-      onOwnerCloseRequested(({ ownerWindowName: requestedOwner, panelWindows }) => {
-        if (requestedOwner !== ownerWindowName) {
-          return;
-        }
-        const dockedPanelIds = Array.from(openPanels.keys()).filter(
-          (panelId) => !nativeLocations.has(panelId)
-        );
-        const blocker = guards.firstBlocker(dockedPanelIds);
-        if (blocker) {
-          blocker.focus();
-          return;
-        }
-        const requestedPanelWindows = panelWindows ?? [];
-        if (pendingOwnerCloseTimeoutRef.current !== null) {
-          window.clearTimeout(pendingOwnerCloseTimeoutRef.current);
-          pendingOwnerCloseTimeoutRef.current = null;
-        }
-        pendingOwnerCloseGuardRequestsRef.current.clear();
-        pendingOwnerCloseWindowNamesRef.current = new Set(requestedPanelWindows);
-        setPendingOwnerCloseWindows(new Set(requestedPanelWindows));
-        if (requestedPanelWindows.length > 0) {
-          pendingOwnerCloseTimeoutRef.current = window.setTimeout(() => {
-            pendingOwnerCloseTimeoutRef.current = null;
-            pendingOwnerCloseGuardRequestsRef.current.clear();
-            pendingOwnerCloseWindowNamesRef.current.clear();
-            setPendingOwnerCloseWindows(null);
-            reportOperationalError(
-              new Error(`Panel close timed out for owner ${ownerWindowName}`),
-              {
-                source: 'WorkspacePanelCoordinator',
-                action: 'owner-close-timeout',
-              }
-            );
-          }, 15_000);
-        }
-        for (const windowName of requestedPanelWindows) {
-          const requestId = newIdentity('owner-close-guard');
-          pendingOwnerCloseGuardRequestsRef.current.set(requestId, windowName);
-          void requestPanelWindowGuard(ownerWindowName, windowName, requestId, 'owner-close').catch(
-            (error) => cancelOwnerClose(error)
-          );
-        }
-      }),
-    [cancelOwnerClose, guards, nativeLocations, openPanels, ownerWindowName]
-  );
-
-  useEffect(() => {
-    if (!pendingOwnerCloseWindows || pendingOwnerCloseWindows.size > 0) {
-      return;
-    }
-    if (pendingOwnerCloseTimeoutRef.current !== null) {
-      window.clearTimeout(pendingOwnerCloseTimeoutRef.current);
-      pendingOwnerCloseTimeoutRef.current = null;
-    }
-    setPendingOwnerCloseWindows(null);
-    pendingOwnerCloseGuardRequestsRef.current.clear();
-    pendingOwnerCloseWindowNamesRef.current.clear();
-    void acknowledgeWorkspaceWindowClose(ownerWindowName).catch((error) =>
-      reportOperationalError(error, {
-        source: 'WorkspacePanelCoordinator',
-        action: 'acknowledge-owner-close',
-      })
-    );
-  }, [ownerWindowName, pendingOwnerCloseWindows]);
-
-  useEffect(
-    () => () => {
-      if (pendingOwnerCloseTimeoutRef.current !== null) {
-        window.clearTimeout(pendingOwnerCloseTimeoutRef.current);
-        pendingOwnerCloseTimeoutRef.current = null;
-      }
-      pendingOwnerCloseGuardRequestsRef.current.clear();
-      pendingOwnerCloseWindowNamesRef.current.clear();
-    },
-    []
-  );
-
   const handleDockRequestSettled = useCallback(
     (request: panelwindow.WindowDockRequestedEvent, committed: boolean) => {
       if (!committed) {
-        commitPanelWindow(request.snapshot, request.windowName);
+        for (const tab of request.snapshot.tabs ?? []) {
+          removeOwnedPanel(request.snapshot.clusterId, tab.panelId);
+        }
       }
       setPendingDockRequest((current) =>
-        current?.windowName === request.windowName && current.transferId === request.transferId
-          ? null
-          : current
+        current?.transferId === request.transferId ? null : current
       );
     },
-    [commitPanelWindow]
+    [removeOwnedPanel]
   );
-
+  const handleAutoFloatRollbackSettled = useCallback((transferId: string) => {
+    setPendingAutoFloatRollbacks((current) =>
+      current.filter((snapshot) => snapshot.transferId !== transferId)
+    );
+  }, []);
   return (
     <DockablePanelProvider
       onGroupMoveRequest={handleGroupMove}
       tabDragIdentity={tabDragIdentity}
+      onClusterTabTearOff={(payload) => {
+        void requestClusterTabTransfer(windowName, {
+          transferId: newIdentity('cluster-transfer'),
+          sourceWindowName: windowName,
+          targetWindowName: '',
+          clusterId: payload.clusterId,
+          targetIndex: 0,
+        }).catch((error) =>
+          reportOperationalError(error, {
+            source: 'WorkspacePanelCoordinator',
+            action: 'tear-off-cluster',
+            clusterId: payload.clusterId,
+          })
+        );
+      }}
       onExternalTabDrop={handleExternalTabDrop}
       onTabTearOff={handleTabTearOff}
       canStartTabDrag={canStartTabDrag}
     >
-      <WorkspaceObjectRouteCoordinator
-        ownerWindowName={ownerWindowName}
-        pendingDockRequest={pendingDockRequest}
-        pendingAutoFloatRollbacks={pendingAutoFloatRollbacks}
-        onWindowOpened={handlePanelWindowOpened}
-        onDockRequest={handlePanelWindowDockRequested}
-        onDockRequestSettled={handleDockRequestSettled}
-        onOwnedPanelWindowClosed={handlePanelWindowClosed}
-        onAutoFloatRollbackSettled={handleAutoFloatRollbackSettled}
-      >
-        {children}
-      </WorkspaceObjectRouteCoordinator>
+      <WorkspacePanelSync>
+        <WorkspacePanelLifecycle />
+        <ClusterTabTransferCoordinator />
+        <WorkspaceObjectRouteCoordinator
+          windowName={windowName}
+          pendingDockRequest={pendingDockRequest}
+          pendingAutoFloatRollbacks={pendingAutoFloatRollbacks}
+          onWindowOpened={handlePanelWindowOpened}
+          onDockRequest={handleDockRequest}
+          onDockRequestSettled={handleDockRequestSettled}
+          onOwnedPanelWindowClosed={handlePanelWindowClosed}
+          onAutoFloatRollbackSettled={handleAutoFloatRollbackSettled}
+        >
+          {children}
+        </WorkspaceObjectRouteCoordinator>
+      </WorkspacePanelSync>
     </DockablePanelProvider>
   );
 }
-
 function WorkspaceObjectRouteCoordinator({
-  ownerWindowName,
+  windowName,
   pendingDockRequest,
   pendingAutoFloatRollbacks,
   onWindowOpened,
@@ -875,7 +401,7 @@ function WorkspaceObjectRouteCoordinator({
   onAutoFloatRollbackSettled,
   children,
 }: Readonly<{
-  ownerWindowName: string;
+  windowName: string;
   pendingDockRequest: panelwindow.WindowDockRequestedEvent | null;
   pendingAutoFloatRollbacks: panelwindow.GroupSnapshot[];
   onWindowOpened: (event: panelwindow.WindowOpenedEvent) => void;
@@ -888,14 +414,7 @@ function WorkspaceObjectRouteCoordinator({
   onAutoFloatRollbackSettled: (transferId: string) => void;
   children: React.ReactNode;
 }>) {
-  const {
-    commitPanelWindow,
-    dockPanelWindow,
-    getOwnedPanel,
-    upsertOwnedPanel,
-    removePanelWindow,
-    panelIdsForPanelWindow,
-  } = useObjectPanelState();
+  const { dockPanelWindow, getOwnedPanel, removeOwnedPanel } = useObjectPanelState();
   const {
     selectedClusterIds,
     selectedKubeconfigs,
@@ -906,17 +425,34 @@ function WorkspaceObjectRouteCoordinator({
   const { tabGroups, focusPanel, dockPanelGroup, detachPanelGroup, discardPanelLayouts } =
     useDockablePanelContext();
   const guards = usePanelLifecycleGuardRegistry();
-  const [pendingTabDockRequests, setPendingTabDockRequests] = useState(
-    new Map<string, panelwindow.TabTransferRequest>()
-  );
-  const acceptingTabDockRef = useRef(new Set<string>());
+  const pendingTargets = useRef(new Map<string, panelwindow.TabTransferRequest>());
   const pendingDockedFocusRef = useRef<string | null>(null);
-  const pendingObjectClaimsRef = useRef(new Set<string>());
-  const dockAttemptRef = useRef<{
-    key: string;
-    timeout: number;
-    acknowledging: boolean;
-  } | null>(null);
+  const sync = usePanelWorkspaceSync();
+  const flushPublication = sync.flush;
+  const dockAttemptRef = useRef<{ key: string; timeout: number; acknowledging: boolean } | null>(
+    null
+  );
+  const activateCluster = useCallback(
+    (clusterId: string) => {
+      const selection = selectedKubeconfigs.find(
+        (candidate) => getClusterMeta(candidate).id === clusterId
+      );
+      if (selection) {
+        setActiveKubeconfig(selection);
+      }
+    },
+    [selectedKubeconfigs, getClusterMeta, setActiveKubeconfig]
+  );
+  const removeLocalTabs = useCallback(
+    (clusterId: string, ids: string[]) => {
+      detachPanelGroup(clusterId, ids);
+      discardPanelLayouts(clusterId, ids);
+      for (const id of ids) {
+        removeOwnedPanel(clusterId, id);
+      }
+    },
+    [detachPanelGroup, discardPanelLayouts, removeOwnedPanel]
+  );
 
   useEffect(() => {
     for (const snapshot of pendingAutoFloatRollbacks) {
@@ -928,234 +464,146 @@ function WorkspaceObjectRouteCoordinator({
       );
       onAutoFloatRollbackSettled(snapshot.transferId);
     }
-  }, [dockPanelGroup, onAutoFloatRollbackSettled, pendingAutoFloatRollbacks]);
-
-  const restoreNativeTabSource = useCallback(
-    (request: panelwindow.TabTransferRequest) => {
-      if (request.sourceWindowName === request.ownerWindowName) {
-        return;
-      }
-      commitPanelWindow(
-        {
-          ...singleTabGroupSnapshot(request),
-          groupId: request.sourceGroupId,
-        },
-        request.sourceWindowName
-      );
-    },
-    [commitPanelWindow]
-  );
-
-  const rollbackWorkspaceTabTarget = useCallback(
-    (request: panelwindow.TabTransferRequest) => {
-      detachPanelGroup(request.clusterId, [request.tab.panelId]);
-      discardPanelLayouts(request.clusterId, [request.tab.panelId]);
-      restoreNativeTabSource(request);
-      acceptingTabDockRef.current.delete(request.transferId);
-      setPendingTabDockRequests((current) => {
-        if (!current.has(request.transferId)) {
-          return current;
-        }
-        const next = new Map(current);
-        next.delete(request.transferId);
-        return next;
-      });
-    },
-    [detachPanelGroup, discardPanelLayouts, restoreNativeTabSource]
-  );
+  }, [pendingAutoFloatRollbacks, dockPanelGroup, onAutoFloatRollbackSettled]);
 
   useEffect(
     () =>
       onPanelTabTransferRequested(({ request }) => {
-        if (request.ownerWindowName !== ownerWindowName) {
+        if (request.sourceWindowName !== windowName) {
           return;
         }
         const owned = getOwnedPanel(request.clusterId, request.tab.panelId);
         const sourceGroup = getGroupForPanel(tabGroups, request.tab.panelId);
-        const validSource = isAuthoritativeTransferSource(
-          request,
-          owned,
-          sourceGroup,
-          ownerWindowName
-        );
-        if (!validSource) {
-          void failPanelTabTransfer(ownerWindowName, request.transferId);
+        const blocker = guards.firstBlocker([request.tab.panelId]);
+        if (!isAuthoritativeTransferSource(request, owned, sourceGroup, windowName) || blocker) {
+          blocker?.focus();
+          void failPanelTabTransfer(windowName, request.transferId);
           return;
         }
-        if (request.sourceWindowName === ownerWindowName) {
-          const blocker = guards.firstBlocker([request.tab.panelId]);
-          if (blocker) {
-            blocker.focus();
-            void failPanelTabTransfer(ownerWindowName, request.transferId);
-            return;
-          }
-        }
-
-        if (request.targetKind === 'workspace') {
-          if (request.targetGroupId !== 'right' && request.targetGroupId !== 'bottom') {
-            void failPanelTabTransfer(ownerWindowName, request.transferId);
-            return;
-          }
-          const snapshot = singleTabGroupSnapshot(request);
-          dockPanelWindow(snapshot, request.targetGroupId);
-          dockPanelGroup(
-            request.clusterId,
-            [request.tab.panelId],
-            request.tab.panelId,
-            request.targetGroupId,
-            request.targetIndex
-          );
-          setPendingTabDockRequests((current) => {
-            const next = new Map(current);
-            next.set(request.transferId, request);
-            return next;
-          });
-          return;
-        }
-
-        if (request.targetKind === 'panel-window') {
-          void acceptPanelTabTransfer(ownerWindowName, request.transferId).catch((error) => {
-            void failPanelTabTransfer(ownerWindowName, request.transferId);
+        guards.freeze(request.transferId, [request.tab.panelId]);
+        void flushPublication()
+          .then(() => acceptPanelTabTransfer(windowName, request.transferId))
+          .then(() => {
+            if (request.targetKind === 'new-window') {
+              return beginPanelWindowOpen(windowName, tornOffTabSnapshot(request));
+            }
+          })
+          .catch((error) => {
+            void failPanelTabTransfer(windowName, request.transferId);
             reportOperationalError(error, {
               source: 'WorkspacePanelCoordinator',
-              action: 'accept-native-tab-target',
+              action: 'accept-tab-transfer',
               clusterId: request.clusterId,
             });
           });
-          return;
-        }
-
-        if (request.targetKind === 'new-window') {
-          const snapshot = tornOffTabSnapshot(request);
-          void acceptPanelTabTransfer(ownerWindowName, request.transferId)
-            .then(() => beginPanelWindowOpen(ownerWindowName, snapshot))
-            .catch((error) => {
-              void failPanelTabTransfer(ownerWindowName, request.transferId);
-              reportOperationalError(error, {
-                source: 'WorkspacePanelCoordinator',
-                action: 'open-torn-off-tab',
-                clusterId: request.clusterId,
-              });
-            });
-        }
       }),
-    [dockPanelGroup, dockPanelWindow, getOwnedPanel, guards, ownerWindowName, tabGroups]
+    [windowName, getOwnedPanel, tabGroups, guards, flushPublication]
   );
 
-  useEffect(() => {
-    const request = Array.from(pendingTabDockRequests.values()).find(
-      (candidate) => !acceptingTabDockRef.current.has(candidate.transferId)
-    );
-    if (!request) {
-      return;
-    }
-    if (selectedClusterId !== request.clusterId) {
-      const selection = selectedKubeconfigs.find(
-        (candidate) => getClusterMeta(candidate).id === request.clusterId
-      );
-      if (selection) {
-        setActiveKubeconfig(selection);
-      }
-      return;
-    }
-    const target = request.targetGroupId === 'right' ? tabGroups.right : tabGroups.bottom;
-    if (!target.tabs.includes(request.tab.panelId)) {
-      return;
-    }
-    acceptingTabDockRef.current.add(request.transferId);
-    void acceptPanelTabTransfer(ownerWindowName, request.transferId)
-      .then(() => {
-        acceptingTabDockRef.current.delete(request.transferId);
-        setPendingTabDockRequests((current) => {
-          const next = new Map(current);
-          next.delete(request.transferId);
-          return next;
-        });
-      })
-      .catch((error) => {
-        rollbackWorkspaceTabTarget(request);
-        void failPanelTabTransfer(ownerWindowName, request.transferId);
-        reportOperationalError(error, {
-          source: 'WorkspacePanelCoordinator',
-          action: 'commit-workspace-tab-target',
-          clusterId: request.clusterId,
-        });
-      });
-  }, [
-    getClusterMeta,
-    ownerWindowName,
-    pendingTabDockRequests,
-    rollbackWorkspaceTabTarget,
-    selectedClusterId,
-    selectedKubeconfigs,
-    setActiveKubeconfig,
-    tabGroups,
-  ]);
+  useEffect(
+    () =>
+      onPanelTabTransferInsertRequested(({ request }) => {
+        if (request.targetWindowName !== windowName) {
+          return;
+        }
+        if (
+          !selectedClusterIds.includes(request.clusterId) ||
+          (request.targetGroupId !== 'right' && request.targetGroupId !== 'bottom') ||
+          getOwnedPanel(request.clusterId, request.tab.panelId)
+        ) {
+          void failPanelTabTransfer(windowName, request.transferId);
+          return;
+        }
+        guards.freeze(request.transferId, [request.tab.panelId]);
+        sync.stage(request.transferId, [
+          {
+            clusterId: request.clusterId,
+            groupId: request.targetGroupId,
+            tabs: [request.tab],
+            activePanelId: request.tab.panelId,
+          },
+        ]);
+        pendingTargets.current.set(request.transferId, request);
+        activateCluster(request.clusterId);
+        dockPanelWindow(singleTabGroupSnapshot(request), request.targetGroupId);
+        dockPanelGroup(
+          request.clusterId,
+          [request.tab.panelId],
+          request.tab.panelId,
+          request.targetGroupId,
+          request.targetIndex
+        );
+      }),
+    [
+      windowName,
+      selectedClusterIds,
+      getOwnedPanel,
+      activateCluster,
+      dockPanelWindow,
+      dockPanelGroup,
+      guards.freeze,
+      sync.stage,
+    ]
+  );
 
   useEffect(
     () =>
       onPanelTabTransferCommitted(({ request }) => {
-        if (request.ownerWindowName !== ownerWindowName) {
-          return;
+        guards.releaseTransfer(request.transferId);
+        sync.settle(request.transferId);
+        pendingTargets.current.delete(request.transferId);
+        if (request.sourceWindowName === windowName) {
+          removeLocalTabs(request.clusterId, [request.tab.panelId]);
         }
-        if (request.sourceWindowName === ownerWindowName) {
-          detachPanelGroup(request.clusterId, [request.tab.panelId]);
-          discardPanelLayouts(request.clusterId, [request.tab.panelId]);
-        }
-        acceptingTabDockRef.current.delete(request.transferId);
-        setPendingTabDockRequests((current) => {
-          if (!current.has(request.transferId)) {
-            return current;
-          }
-          const next = new Map(current);
-          next.delete(request.transferId);
-          return next;
-        });
       }),
-    [detachPanelGroup, discardPanelLayouts, ownerWindowName]
+    [windowName, removeLocalTabs, guards.releaseTransfer, sync.settle]
   );
-
   useEffect(
     () =>
       onPanelTabTransferFailed(({ request }) => {
-        if (request.ownerWindowName !== ownerWindowName) {
+        guards.releaseTransfer(request.transferId);
+        sync.settle(request.transferId);
+        if (!pendingTargets.current.delete(request.transferId)) {
           return;
         }
-        if (request.targetKind === 'workspace') {
-          rollbackWorkspaceTabTarget(request);
-        }
+        removeLocalTabs(request.clusterId, [request.tab.panelId]);
       }),
-    [ownerWindowName, rollbackWorkspaceTabTarget]
+    [removeLocalTabs, sync.settle, guards.releaseTransfer]
   );
-
   useEffect(
     () =>
       onPanelWindowOpened((event) => {
-        if (event.snapshot.ownerWindowName !== ownerWindowName) {
+        if (event.snapshot.sourceWindowName !== windowName) {
           return;
         }
-        detachPanelGroup(
-          event.snapshot.clusterId,
-          (event.snapshot.tabs ?? []).map((tab) => tab.panelId)
-        );
-        discardPanelLayouts(
-          event.snapshot.clusterId,
-          (event.snapshot.tabs ?? []).map((tab) => tab.panelId)
-        );
+        const ids = (event.snapshot.tabs ?? []).map((tab) => tab.panelId);
+        detachPanelGroup(event.snapshot.clusterId, ids);
+        discardPanelLayouts(event.snapshot.clusterId, ids);
         onWindowOpened(event);
       }),
-    [detachPanelGroup, discardPanelLayouts, onWindowOpened, ownerWindowName]
+    [windowName, detachPanelGroup, discardPanelLayouts, onWindowOpened]
   );
-
   useEffect(
     () =>
       onPanelWindowDockRequested((event) => {
         if (
-          event.snapshot.ownerWindowName !== ownerWindowName ||
+          !selectedClusterIds.includes(event.snapshot.clusterId) ||
           (event.targetPosition !== 'right' && event.targetPosition !== 'bottom')
         ) {
           return;
         }
+        guards.freeze(
+          event.transferId,
+          (event.snapshot.tabs ?? []).map((tab) => tab.panelId)
+        );
+        sync.stage(event.transferId, [
+          {
+            clusterId: event.snapshot.clusterId,
+            groupId: event.targetPosition,
+            tabs: event.snapshot.tabs,
+            activePanelId: event.snapshot.activePanelId,
+          },
+        ]);
         dockPanelGroup(
           event.snapshot.clusterId,
           (event.snapshot.tabs ?? []).map((tab) => tab.panelId),
@@ -1164,20 +612,15 @@ function WorkspaceObjectRouteCoordinator({
         );
         onDockRequest(event, event.targetPosition);
       }),
-    [dockPanelGroup, onDockRequest, ownerWindowName]
+    [selectedClusterIds, dockPanelGroup, onDockRequest, sync.stage, guards.freeze]
   );
-
   useEffect(
     () =>
-      onPanelWindowClosed(({ windowName, clusterId, groupId }) => {
-        const panelIds = panelIdsForPanelWindow(clusterId, windowName);
-        discardPanelLayouts(clusterId, panelIds);
-        removePanelWindow(clusterId, windowName);
-        onOwnedPanelWindowClosed(windowName, groupId);
-      }),
-    [discardPanelLayouts, onOwnedPanelWindowClosed, panelIdsForPanelWindow, removePanelWindow]
+      onPanelWindowClosed(({ windowName: closedWindowName, groupId }) =>
+        onOwnedPanelWindowClosed(closedWindowName, groupId)
+      ),
+    [onOwnedPanelWindowClosed]
   );
-
   const settleDockAttempt = useCallback(
     (request: panelwindow.WindowDockRequestedEvent, committed: boolean, error?: unknown) => {
       const key = `${request.windowName}\0${request.transferId}`;
@@ -1191,6 +634,8 @@ function WorkspaceObjectRouteCoordinator({
         detachPanelGroup(request.snapshot.clusterId, panelIds);
         discardPanelLayouts(request.snapshot.clusterId, panelIds);
       }
+      guards.releaseTransfer(request.transferId);
+      sync.settle(request.transferId);
       onDockRequestSettled(request, committed);
       if (error) {
         reportOperationalError(error, {
@@ -1200,7 +645,54 @@ function WorkspaceObjectRouteCoordinator({
         });
       }
     },
-    [detachPanelGroup, discardPanelLayouts, onDockRequestSettled]
+    [
+      detachPanelGroup,
+      discardPanelLayouts,
+      onDockRequestSettled,
+      sync.settle,
+      guards.releaseTransfer,
+    ]
+  );
+
+  useEffect(
+    () =>
+      onPanelWindowTransferFailed((event) => {
+        if (!pendingDockRequest || event.transferId !== pendingDockRequest.transferId) {
+          return;
+        }
+        settleDockAttempt(pendingDockRequest, false);
+      }),
+    [pendingDockRequest, settleDockAttempt]
+  );
+
+  const beginDockAttempt = useCallback(
+    (request: panelwindow.WindowDockRequestedEvent, key: string) => {
+      if (dockAttemptRef.current?.key !== key) {
+        if (dockAttemptRef.current) {
+          window.clearTimeout(dockAttemptRef.current.timeout);
+        }
+        const timeout = window.setTimeout(() => {
+          if (dockAttemptRef.current?.key !== key || dockAttemptRef.current.acknowledging) {
+            return;
+          }
+          void failPanelWindowTransfer(windowName, request.windowName, request.transferId).catch(
+            (error) =>
+              reportOperationalError(error, {
+                source: 'WorkspacePanelCoordinator',
+                action: 'fail-dock-timeout',
+                clusterId: request.snapshot.clusterId,
+              })
+          );
+          settleDockAttempt(
+            request,
+            false,
+            new Error(`Panel dock timed out for ${request.windowName}`)
+          );
+        }, 15_000);
+        dockAttemptRef.current = { key, timeout, acknowledging: false };
+      }
+    },
+    [windowName, settleDockAttempt]
   );
 
   useEffect(() => {
@@ -1208,40 +700,9 @@ function WorkspaceObjectRouteCoordinator({
       return;
     }
     const key = `${pendingDockRequest.windowName}\0${pendingDockRequest.transferId}`;
-    if (dockAttemptRef.current?.key !== key) {
-      if (dockAttemptRef.current) {
-        window.clearTimeout(dockAttemptRef.current.timeout);
-      }
-      const timeout = window.setTimeout(() => {
-        if (dockAttemptRef.current?.key !== key || dockAttemptRef.current.acknowledging) {
-          return;
-        }
-        void failPanelWindowTransfer(
-          ownerWindowName,
-          pendingDockRequest.windowName,
-          pendingDockRequest.transferId
-        ).catch((error) =>
-          reportOperationalError(error, {
-            source: 'WorkspacePanelCoordinator',
-            action: 'fail-dock-timeout',
-            clusterId: pendingDockRequest.snapshot.clusterId,
-          })
-        );
-        settleDockAttempt(
-          pendingDockRequest,
-          false,
-          new Error(`Panel dock timed out for ${pendingDockRequest.windowName}`)
-        );
-      }, 15_000);
-      dockAttemptRef.current = { key, timeout, acknowledging: false };
-    }
+    beginDockAttempt(pendingDockRequest, key);
     if (selectedClusterId !== pendingDockRequest.snapshot.clusterId) {
-      const selection = selectedKubeconfigs.find(
-        (candidate) => getClusterMeta(candidate).id === pendingDockRequest.snapshot.clusterId
-      );
-      if (selection) {
-        setActiveKubeconfig(selection);
-      }
+      activateCluster(pendingDockRequest.snapshot.clusterId);
       return;
     }
     const mountedPanelIds = new Set([...tabGroups.right.tabs, ...tabGroups.bottom.tabs]);
@@ -1255,29 +716,32 @@ function WorkspaceObjectRouteCoordinator({
       return;
     }
     attempt.acknowledging = true;
-    void acknowledgePanelWindowDock(
-      ownerWindowName,
-      pendingDockRequest.windowName,
-      pendingDockRequest.transferId
-    )
+    void flushPublication()
+      .then(() =>
+        acknowledgePanelWindowDock(
+          windowName,
+          pendingDockRequest.windowName,
+          pendingDockRequest.transferId
+        )
+      )
       .then(() => settleDockAttempt(pendingDockRequest, true))
       .catch((error) => {
         void failPanelWindowTransfer(
-          ownerWindowName,
+          windowName,
           pendingDockRequest.windowName,
           pendingDockRequest.transferId
         );
         settleDockAttempt(pendingDockRequest, false, error);
       });
   }, [
-    getClusterMeta,
-    ownerWindowName,
+    beginDockAttempt,
+    windowName,
     pendingDockRequest,
     selectedClusterId,
-    selectedKubeconfigs,
-    setActiveKubeconfig,
     settleDockAttempt,
+    flushPublication,
     tabGroups,
+    activateCluster,
   ]);
 
   useEffect(
@@ -1290,124 +754,24 @@ function WorkspaceObjectRouteCoordinator({
     []
   );
 
-  useEffect(() => {
-    for (const claim of pendingObjectClaimsRef.current) {
-      const separator = claim.indexOf('\0');
-      const clusterId = claim.slice(0, separator);
-      const panelId = claim.slice(separator + 1);
-      if (getOwnedPanel(clusterId, panelId)) {
-        pendingObjectClaimsRef.current.delete(claim);
-      }
-    }
-  });
-
-  useEffect(() => {
-    const panelId = pendingDockedFocusRef.current;
-    if (!panelId) {
-      return;
-    }
-    const mounted =
-      tabGroups.right.tabs.includes(panelId) || tabGroups.bottom.tabs.includes(panelId);
-    if (!mounted) {
-      return;
-    }
-    pendingDockedFocusRef.current = null;
-    focusPanel(panelId);
-    void focusWindow(ownerWindowName);
-  }, [focusPanel, ownerWindowName, tabGroups]);
-
   useEffect(
     () =>
-      onPanelObjectOpenRequested((event) => {
-        if (event.ownerWindowName !== ownerWindowName) {
-          return;
+      onPanelWorkspaceFocusRequested(({ clusterId, panelId }) => {
+        activateCluster(clusterId);
+        pendingDockedFocusRef.current = panelId;
+        if (getGroupForPanel(tabGroups, panelId)) {
+          pendingDockedFocusRef.current = null;
+          focusPanel(panelId);
         }
-        const objectRef = buildObjectPanelRef({ ...event.objectRef });
-        const panelId = objectPanelId(objectRef);
-        const claimKey = `${objectRef.clusterId}\0${panelId}`;
-        const existing = getOwnedPanel(objectRef.clusterId, panelId);
-        if (existing?.nativeLocation) {
-          void focusPanelWindow(ownerWindowName, existing.nativeLocation.windowName, panelId).catch(
-            (error) =>
-              reportOperationalError(error, {
-                source: 'WorkspacePanelCoordinator',
-                action: 'focus-existing-native-object',
-                clusterId: objectRef.clusterId,
-              })
-          );
-          return;
-        }
-
-        const activateOwnerCluster = () => {
-          const selection = selectedKubeconfigs.find(
-            (candidate) => getClusterMeta(candidate).id === objectRef.clusterId
-          );
-          if (selection) {
-            setActiveKubeconfig(selection);
-          }
-          pendingDockedFocusRef.current = panelId;
-        };
-
-        if (existing) {
-          activateOwnerCluster();
-          return;
-        }
-
-        if (pendingObjectClaimsRef.current.has(claimKey)) {
-          return;
-        }
-        pendingObjectClaimsRef.current.add(claimKey);
-
-        if (objectRef.clusterId !== event.objectRef.clusterId) {
-          pendingObjectClaimsRef.current.delete(claimKey);
-          return;
-        }
-        if (objectRef.clusterId === event.clusterId) {
-          void authorizePanelObjectOpen(
-            ownerWindowName,
-            event.sourceWindowName,
-            panelId,
-            event.objectRef,
-            event.activeView
-          ).catch((error) => {
-            pendingObjectClaimsRef.current.delete(claimKey);
-            reportOperationalError(error, {
-              source: 'WorkspacePanelCoordinator',
-              action: 'authorize-panel-object-open',
-              clusterId: objectRef.clusterId,
-            });
-          });
-          return;
-        }
-
-        if (!selectedClusterIds.includes(objectRef.clusterId)) {
-          pendingObjectClaimsRef.current.delete(claimKey);
-          reportOperationalError(
-            new Error(`Open cluster ${objectRef.clusterId} before opening this object`),
-            {
-              source: 'WorkspacePanelCoordinator',
-              action: 'reject-cross-cluster-panel-object',
-              clusterId: objectRef.clusterId,
-            }
-          );
-          return;
-        }
-        upsertOwnedPanel(objectRef, event.activeView as ViewType, {
-          kind: 'docked',
-          edge: 'right',
-        });
-        activateOwnerCluster();
       }),
-    [
-      getClusterMeta,
-      getOwnedPanel,
-      ownerWindowName,
-      selectedClusterIds,
-      selectedKubeconfigs,
-      setActiveKubeconfig,
-      upsertOwnedPanel,
-    ]
+    [activateCluster, focusPanel, tabGroups]
   );
-
+  useEffect(() => {
+    const panelId = pendingDockedFocusRef.current;
+    if (panelId && getGroupForPanel(tabGroups, panelId)) {
+      pendingDockedFocusRef.current = null;
+      focusPanel(panelId);
+    }
+  }, [tabGroups, focusPanel]);
   return children;
 }

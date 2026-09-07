@@ -6,6 +6,7 @@ import {
   GetAppSettingsSchema,
   GetKubeconfigSearchPaths,
   GetKubeconfigs,
+  GetPanelWorkspace,
   GetShellSessionBacklog,
   GetThemes,
   GetZoomLevel,
@@ -15,6 +16,8 @@ import {
 } from '@/core/backend-api';
 
 export const readKubeconfigs = () => GetKubeconfigs();
+export const readPanelWorkspace = (windowName: string, clusterId: string) =>
+  GetPanelWorkspace(windowName, clusterId);
 export const readAppSettings = () => GetAppSettings();
 export const readAppSettingsSchema = () => GetAppSettingsSchema();
 export const readThemes = async () => (await GetThemes()) ?? [];

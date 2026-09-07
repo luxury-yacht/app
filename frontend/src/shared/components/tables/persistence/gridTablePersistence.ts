@@ -165,6 +165,17 @@ export const computeClusterHash = async (clusterIdentity: string): Promise<strin
 type GridTablePersistenceMap = Record<string, GridTablePersistedState>;
 
 let persistenceCache: GridTablePersistenceMap = {};
+const pendingTableSaves = new Map<string, () => void>();
+
+export function registerPendingGridTableSave(key: string, save: () => void): () => void {
+  pendingTableSaves.set(key, save);
+  return () => {
+    if (pendingTableSaves.get(key) === save) {
+      pendingTableSaves.delete(key);
+    }
+  };
+}
+
 let hydrated = false;
 let hydrationPromise: Promise<void> | null = null;
 
@@ -626,4 +637,40 @@ export const buildPersistedStateForSave = <T>(
     filters: pruneFilters(context.filters, context.filterOptions),
     pageSize: prunePageSize(context.pageSize, context.pageSizeOptions),
   });
+};
+
+export const captureClusterTableState = async (
+  clusterId: string
+): Promise<GridTablePersistenceMap> => {
+  await hydrateGridTablePersistence();
+  const prefix = `${STORAGE_PREFIX}:v${STORAGE_KEY_VERSION}:${await computeClusterHash(clusterId)}:`;
+  for (const [key, save] of pendingTableSaves) {
+    if (key.startsWith(prefix)) {
+      save();
+    }
+  }
+  return structuredClone(
+    Object.fromEntries(Object.entries(persistenceCache).filter(([key]) => key.startsWith(prefix)))
+  );
+};
+
+// A moved view restores only its renderer's cache. Persistence remains owned by
+// the ordinary table save path, and other open app views keep their own filters.
+export const restoreClusterTableState = async (
+  clusterId: string,
+  entries: Record<string, unknown>
+): Promise<void> => {
+  const prefix = `${STORAGE_PREFIX}:v${STORAGE_KEY_VERSION}:${await computeClusterHash(clusterId)}:`;
+  if (Object.keys(entries).some((key) => !key.startsWith(prefix))) {
+    throw new Error('Table state belongs to another cluster');
+  }
+  const normalized = normalizePersistenceMap(entries);
+  if (Object.keys(normalized).length !== Object.keys(entries).length) {
+    throw new Error('Invalid transferred table state');
+  }
+  await hydrateGridTablePersistence();
+  const remaining = Object.fromEntries(
+    Object.entries(persistenceCache).filter(([key]) => !key.startsWith(prefix))
+  );
+  persistenceCache = { ...remaining, ...structuredClone(normalized) };
 };

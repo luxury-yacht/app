@@ -11,7 +11,6 @@ func validTabTransferRequest() TabTransferRequest {
 		TransferID:       "tab-transfer-1",
 		SourceWindowName: "panel-1",
 		TargetWindowName: "panel-2",
-		OwnerWindowName:  "workspace-1",
 		ClusterID:        "cluster-1",
 		SourceGroupID:    "group-1",
 		TargetGroupID:    "group-2",
@@ -38,7 +37,7 @@ func TestValidateTabTransferRequestAcceptsEveryTargetKind(t *testing.T) {
 
 	workspaceTarget := validTabTransferRequest()
 	workspaceTarget.TargetKind = TabTransferTargetWorkspace
-	workspaceTarget.TargetWindowName = workspaceTarget.OwnerWindowName
+	workspaceTarget.TargetWindowName = "workspace-2"
 	workspaceTarget.TargetGroupID = "bottom"
 	require.NoError(t, ValidateTabTransferRequest(workspaceTarget))
 

@@ -17,7 +17,6 @@ const { order, bootstrap } = vi.hoisted(() => ({
       panel: undefined as
         | {
             windowName: string;
-            ownerWindowName: string;
             clusterId: string;
             groupId: string;
             state: string;
@@ -26,10 +25,6 @@ const { order, bootstrap } = vi.hoisted(() => ({
         | undefined,
     },
   },
-}));
-
-const identityMocks = vi.hoisted(() => ({
-  setWorkspaceProjectionIdentity: vi.fn(),
 }));
 
 const desktopRuntimeMocks = vi.hoisted(() => ({
@@ -77,10 +72,6 @@ vi.mock('@/core/panel-windows', () => ({
 vi.mock('@/core/desktop-runtime', () => ({
   initializeWindowIdentity: vi.fn(async () => 'main'),
   onBroadcastEvent: (...args: unknown[]) => desktopRuntimeMocks.onBroadcastEvent(...args),
-}));
-
-vi.mock('@/core/window-identity', () => ({
-  setWorkspaceProjectionIdentity: identityMocks.setWorkspaceProjectionIdentity,
 }));
 
 vi.mock('@shared/scrollbars/scrollbarActivity', () => ({
@@ -138,21 +129,19 @@ describe('application bootstrap', () => {
     expect(order).toEqual(['error-reporting-configured', 'workspace-module-evaluated']);
   });
 
-  it('loads the panel root under its owner workspace projection and initializes auto-refresh', async () => {
+  it('loads the panel root with its own cluster projection and initializes auto-refresh', async () => {
     bootstrap.descriptor = {
       schemaVersion: 1,
       role: 'panel',
       workspace: undefined,
       panel: {
         windowName: 'panel-1',
-        ownerWindowName: 'main',
         clusterId: 'cluster-1',
         groupId: 'group-1',
         state: 'opening',
         snapshot: {
           schemaVersion: 1,
           transferId: 'transfer-1',
-          ownerWindowName: 'main',
           clusterId: 'cluster-1',
           groupId: 'group-1',
           activePanelId: 'panel-a',
@@ -168,7 +157,6 @@ describe('application bootstrap', () => {
     });
 
     expect(order).toEqual(['error-reporting-configured', 'panel-module-evaluated']);
-    expect(identityMocks.setWorkspaceProjectionIdentity).toHaveBeenCalledWith('main');
     expect(initializeAutoRefresh).toHaveBeenCalledOnce();
     expect(desktopRuntimeMocks.onBroadcastEvent).toHaveBeenCalledWith(
       'settings:preferences-changed',
@@ -184,14 +172,12 @@ describe('application bootstrap', () => {
       workspace: undefined,
       panel: {
         windowName: 'panel-1',
-        ownerWindowName: 'main',
         clusterId: 'cluster-1',
         groupId: 'group-1',
         state: 'opening',
         snapshot: {
           schemaVersion: 1,
           transferId: 'transfer-1',
-          ownerWindowName: 'main',
           clusterId: 'cluster-1',
           groupId: 'group-1',
           activePanelId: 'panel-a',

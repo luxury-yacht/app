@@ -86,14 +86,86 @@ function ClusterTabsPreviewStrip() {
   const [tabs, setTabs] = useState<ClusterTabMeta[]>(INITIAL_TABS);
   const [activeId, setActiveId] = useState<string | null>('cluster-prod-east');
 
-  const drag0 = useTabDragSource(tabs[0] ? { kind: 'cluster-tab', clusterId: tabs[0].id } : null);
-  const drag1 = useTabDragSource(tabs[1] ? { kind: 'cluster-tab', clusterId: tabs[1].id } : null);
-  const drag2 = useTabDragSource(tabs[2] ? { kind: 'cluster-tab', clusterId: tabs[2].id } : null);
-  const drag3 = useTabDragSource(tabs[3] ? { kind: 'cluster-tab', clusterId: tabs[3].id } : null);
-  const drag4 = useTabDragSource(tabs[4] ? { kind: 'cluster-tab', clusterId: tabs[4].id } : null);
-  const drag5 = useTabDragSource(tabs[5] ? { kind: 'cluster-tab', clusterId: tabs[5].id } : null);
-  const drag6 = useTabDragSource(tabs[6] ? { kind: 'cluster-tab', clusterId: tabs[6].id } : null);
-  const drag7 = useTabDragSource(tabs[7] ? { kind: 'cluster-tab', clusterId: tabs[7].id } : null);
+  const drag0 = useTabDragSource(
+    tabs[0]
+      ? {
+          kind: 'cluster-tab',
+          clusterId: tabs[0].id,
+          selection: tabs[0].id,
+          sourceWindowName: 'workspace-1',
+        }
+      : null
+  );
+  const drag1 = useTabDragSource(
+    tabs[1]
+      ? {
+          kind: 'cluster-tab',
+          clusterId: tabs[1].id,
+          selection: tabs[1].id,
+          sourceWindowName: 'workspace-1',
+        }
+      : null
+  );
+  const drag2 = useTabDragSource(
+    tabs[2]
+      ? {
+          kind: 'cluster-tab',
+          clusterId: tabs[2].id,
+          selection: tabs[2].id,
+          sourceWindowName: 'workspace-1',
+        }
+      : null
+  );
+  const drag3 = useTabDragSource(
+    tabs[3]
+      ? {
+          kind: 'cluster-tab',
+          clusterId: tabs[3].id,
+          selection: tabs[3].id,
+          sourceWindowName: 'workspace-1',
+        }
+      : null
+  );
+  const drag4 = useTabDragSource(
+    tabs[4]
+      ? {
+          kind: 'cluster-tab',
+          clusterId: tabs[4].id,
+          selection: tabs[4].id,
+          sourceWindowName: 'workspace-1',
+        }
+      : null
+  );
+  const drag5 = useTabDragSource(
+    tabs[5]
+      ? {
+          kind: 'cluster-tab',
+          clusterId: tabs[5].id,
+          selection: tabs[5].id,
+          sourceWindowName: 'workspace-1',
+        }
+      : null
+  );
+  const drag6 = useTabDragSource(
+    tabs[6]
+      ? {
+          kind: 'cluster-tab',
+          clusterId: tabs[6].id,
+          selection: tabs[6].id,
+          sourceWindowName: 'workspace-1',
+        }
+      : null
+  );
+  const drag7 = useTabDragSource(
+    tabs[7]
+      ? {
+          kind: 'cluster-tab',
+          clusterId: tabs[7].id,
+          selection: tabs[7].id,
+          sourceWindowName: 'workspace-1',
+        }
+      : null
+  );
   const dragProps = [drag0, drag1, drag2, drag3, drag4, drag5, drag6, drag7];
 
   const { ref: dropRef, dropInsertIndex } = useTabDropTarget({

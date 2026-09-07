@@ -22,6 +22,7 @@ interface SidebarStateContextType {
   sidebarWidth: number;
   isResizing: boolean;
   sidebarSelection: SidebarSelectionType;
+  getClusterSidebarSelection: (clusterId: string) => SidebarSelectionType;
 
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
@@ -125,12 +126,18 @@ export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ chil
     [clusterKey]
   );
 
+  const getClusterSidebarSelection = useCallback(
+    (clusterId: string) => sidebarSelections[clusterId] ?? DEFAULT_SIDEBAR_SELECTION,
+    [sidebarSelections]
+  );
+
   const value = useMemo(
     () => ({
       isSidebarVisible,
       sidebarWidth,
       isResizing,
       sidebarSelection,
+      getClusterSidebarSelection,
       toggleSidebar,
       setSidebarWidth,
       setIsResizing,
@@ -142,6 +149,7 @@ export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ chil
       sidebarWidth,
       isResizing,
       sidebarSelection,
+      getClusterSidebarSelection,
       toggleSidebar,
       setSidebarSelection,
       setSidebarSelectionForCluster,

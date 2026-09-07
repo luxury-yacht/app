@@ -129,3 +129,19 @@ describe('PanelLifecycleGuardRegistry', () => {
     ).rejects.toThrow('Panel lifecycle guards require PanelLifecycleGuardProvider');
   });
 });
+
+it('locks a clean renderer during handoff and releases only the matching transfer', () => {
+  const registry = new PanelLifecycleGuardRegistry();
+  const changed = vi.fn();
+  registry.subscribe(changed);
+  registry.freeze('move-a', ['panel-a']);
+  registry.freeze('move-b', ['panel-b']);
+  expect(registry.isFrozen()).toBe(true);
+  expect(registry.firstBlocker(['panel-a'])?.reason).toBe('transfer-in-flight');
+  registry.releaseTransfer('move-a');
+  expect(registry.firstBlocker(['panel-a'])).toBeNull();
+  expect(registry.isFrozen()).toBe(true);
+  registry.releaseTransfer('move-b');
+  expect(registry.isFrozen()).toBe(false);
+  expect(changed).toHaveBeenCalledTimes(4);
+});

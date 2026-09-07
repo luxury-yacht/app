@@ -3,6 +3,7 @@
 
 export {
     NativeRole,
+    PanelLocationKind,
     TabKind,
     TabTransferTarget,
     WindowState
@@ -10,15 +11,15 @@ export {
 
 export type {
     ApplicationQuitPreflightRequestedEvent,
+    ClusterTabTransferEvent,
+    ClusterTabTransferRequest,
+    ClusterViewSnapshot,
     GroupSnapshot,
     NativeDescriptor,
-    ObjectOpenAuthorizedEvent,
-    ObjectOpenRequestEvent,
     ObjectReference,
-    OwnerCloseRequestedEvent,
-    SnapshotUpdatedEvent,
+    PanelLocation,
+    PanelOpenResult,
     TabCloseAuthorizedEvent,
-    TabCloseRequestedEvent,
     TabSnapshot,
     TabTransferCommittedEvent,
     TabTransferFailedEvent,
@@ -31,9 +32,14 @@ export type {
     WindowDescriptor,
     WindowDockRequestedEvent,
     WindowFocusRequestedEvent,
-    WindowGuardRequestedEvent,
-    WindowGuardResultEvent,
     WindowOpenedEvent,
     WindowPoint,
-    WorkspaceDescriptor
+    WindowTransferFailedEvent,
+    WorkspaceChangedEvent,
+    WorkspaceCloseRequestedEvent,
+    WorkspaceDescriptor,
+    WorkspaceFocusRequestedEvent,
+    WorkspaceGroup,
+    WorkspacePanel,
+    WorkspaceSnapshot
 } from "./models.js";

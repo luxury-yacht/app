@@ -27,5 +27,9 @@ export const Default: Story = {};
 
 /** Native panel header — shared drag surface without workspace controls. */
 export const PanelWindow: Story = {
-  args: { mode: 'panel' },
+  args: { mode: 'panel', clusterName: 'Production' },
+};
+
+export const PanelWindowLongClusterName: Story = {
+  args: { mode: 'panel', clusterName: 'Production · customer-platform-us-east-1:production' },
 };

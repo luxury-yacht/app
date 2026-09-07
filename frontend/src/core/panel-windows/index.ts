@@ -1,24 +1,26 @@
 import {
+  AcceptClusterTabTransfer,
   AcceptPanelTabTransfer,
   AcknowledgeApplicationQuitPreflight,
+  AcknowledgeClusterTabTransfer,
   AcknowledgePanelWindowClose,
   AcknowledgePanelWindowDock,
-  AcknowledgePanelWindowGuard,
   AcknowledgePanelWindowReady,
+  AcknowledgePanelWorkspaceReady,
   AcknowledgeWorkspaceWindowClose,
-  AuthorizePanelObjectOpen,
-  AuthorizePanelTabClose,
   BeginPanelWindowDock,
   BeginPanelWindowOpen,
+  FailClusterTabTransfer,
   FailPanelTabTransfer,
   FailPanelWindowTransfer,
   FocusPanelWindow,
   GetNativeWindowDescriptor,
-  RequestPanelObjectOpen,
+  OpenPanelWorkspaceObject,
+  PublishDockedPanels,
+  RequestClusterTabTransfer,
   RequestPanelTabClose,
   RequestPanelTabTransfer,
   RequestPanelWindowClose,
-  RequestPanelWindowGuard,
   UpdatePanelWindowSnapshot,
 } from '@/core/backend-api';
 import type { panelwindow } from '@/core/backend-api/models';
@@ -26,6 +28,20 @@ import { desktopRuntimeAvailable, onEvent } from '@/core/desktop-runtime';
 
 export type NativeWindowDescriptor = panelwindow.NativeDescriptor;
 export type PanelWindowDescriptor = panelwindow.WindowDescriptor;
+
+export const openPanelWorkspaceObject = (windowName: string, tab: panelwindow.TabSnapshot) =>
+  OpenPanelWorkspaceObject(windowName, tab);
+
+export const publishDockedPanels = (windowName: string, groups: panelwindow.WorkspaceGroup[]) =>
+  PublishDockedPanels(windowName, groups);
+
+export const onPanelWorkspaceChanged = (
+  handler: (event: panelwindow.WorkspaceChangedEvent) => void
+) => onEvent('panel-workspace:changed', handler);
+
+export const onPanelWorkspaceFocusRequested = (
+  handler: (event: panelwindow.WorkspaceFocusRequestedEvent) => void
+) => onEvent('panel-workspace:focus-requested', handler);
 
 const workspaceDescriptor = (windowName: string): NativeWindowDescriptor => ({
   schemaVersion: 1,
@@ -53,9 +69,9 @@ export const resolveNativeWindowDescriptor = async (
 };
 
 export const beginPanelWindowOpen = (
-  ownerWindowName: string,
+  callerWindowName: string,
   snapshot: panelwindow.GroupSnapshot
-): Promise<PanelWindowDescriptor> => BeginPanelWindowOpen(ownerWindowName, snapshot);
+): Promise<PanelWindowDescriptor> => BeginPanelWindowOpen(callerWindowName, snapshot);
 
 export const acknowledgePanelWindowReady = (
   windowName: string,
@@ -69,10 +85,10 @@ export const beginPanelWindowDock = (
 ): Promise<void> => BeginPanelWindowDock(windowName, targetPosition, snapshot);
 
 export const acknowledgePanelWindowDock = (
-  ownerWindowName: string,
+  callerWindowName: string,
   windowName: string,
   transferId: string
-): Promise<void> => AcknowledgePanelWindowDock(ownerWindowName, windowName, transferId);
+): Promise<void> => AcknowledgePanelWindowDock(callerWindowName, windowName, transferId);
 
 export const failPanelWindowTransfer = (
   callerWindowName: string,
@@ -81,10 +97,10 @@ export const failPanelWindowTransfer = (
 ): Promise<void> => FailPanelWindowTransfer(callerWindowName, windowName, transferId);
 
 export const focusPanelWindow = (
-  ownerWindowName: string,
+  callerWindowName: string,
   windowName: string,
   panelId: string
-): Promise<void> => FocusPanelWindow(ownerWindowName, windowName, panelId);
+): Promise<void> => FocusPanelWindow(callerWindowName, windowName, panelId);
 
 export const requestPanelWindowClose = (
   callerWindowName: string,
@@ -95,42 +111,14 @@ export const requestPanelWindowClose = (
 export const acknowledgePanelWindowClose = (windowName: string): Promise<void> =>
   AcknowledgePanelWindowClose(windowName);
 
-export const acknowledgeWorkspaceWindowClose = (ownerWindowName: string): Promise<void> =>
-  AcknowledgeWorkspaceWindowClose(ownerWindowName);
-
-export const requestPanelWindowGuard = (
-  ownerWindowName: string,
-  windowName: string,
-  requestId: string,
-  reason: string
-): Promise<void> => RequestPanelWindowGuard(ownerWindowName, windowName, requestId, reason);
-
-export const acknowledgePanelWindowGuard = (
-  windowName: string,
-  requestId: string,
-  allowed: boolean
-): Promise<void> => AcknowledgePanelWindowGuard(windowName, requestId, allowed);
+export const acknowledgeWorkspaceWindowClose = (callerWindowName: string): Promise<void> =>
+  AcknowledgeWorkspaceWindowClose(callerWindowName);
 
 export const acknowledgeApplicationQuitPreflight = (
-  ownerWindowName: string,
+  callerWindowName: string,
   transactionId: string,
   allowed: boolean
-): Promise<void> => AcknowledgeApplicationQuitPreflight(ownerWindowName, transactionId, allowed);
-
-export const requestPanelObjectOpen = (
-  windowName: string,
-  objectRef: panelwindow.ObjectReference,
-  activeView: string
-): Promise<void> => RequestPanelObjectOpen(windowName, objectRef, activeView);
-
-export const authorizePanelObjectOpen = (
-  ownerWindowName: string,
-  windowName: string,
-  panelId: string,
-  objectRef: panelwindow.ObjectReference,
-  activeView: string
-): Promise<void> =>
-  AuthorizePanelObjectOpen(ownerWindowName, windowName, panelId, objectRef, activeView);
+): Promise<void> => AcknowledgeApplicationQuitPreflight(callerWindowName, transactionId, allowed);
 
 export const updatePanelWindowSnapshot = (
   windowName: string,
@@ -140,21 +128,15 @@ export const updatePanelWindowSnapshot = (
 export const requestPanelTabClose = (windowName: string, panelId: string): Promise<void> =>
   RequestPanelTabClose(windowName, panelId);
 
-export const authorizePanelTabClose = (
-  ownerWindowName: string,
-  windowName: string,
-  panelId: string
-): Promise<void> => AuthorizePanelTabClose(ownerWindowName, windowName, panelId);
-
 export const requestPanelTabTransfer = (
   callerWindowName: string,
   request: panelwindow.TabTransferRequest
 ): Promise<void> => RequestPanelTabTransfer(callerWindowName, request);
 
 export const acceptPanelTabTransfer = (
-  ownerWindowName: string,
+  callerWindowName: string,
   transferId: string
-): Promise<void> => AcceptPanelTabTransfer(ownerWindowName, transferId);
+): Promise<void> => AcceptPanelTabTransfer(callerWindowName, transferId);
 
 export const failPanelTabTransfer = (callerWindowName: string, transferId: string): Promise<void> =>
   FailPanelTabTransfer(callerWindowName, transferId);
@@ -177,25 +159,9 @@ export const onPanelWindowCloseRequested = (
 export const onPanelWindowClosed = (handler: (event: panelwindow.WindowClosedEvent) => void) =>
   onEvent('panel-window:closed', handler);
 
-export const onOwnerCloseRequested = (
-  handler: (event: panelwindow.OwnerCloseRequestedEvent) => void
-) => onEvent('panel-window:owner-close-requested', handler);
-
-export const onPanelObjectOpenRequested = (
-  handler: (event: panelwindow.ObjectOpenRequestEvent) => void
-) => onEvent('panel-window:object-open-requested', handler);
-
-export const onPanelObjectOpenAuthorized = (
-  handler: (event: panelwindow.ObjectOpenAuthorizedEvent) => void
-) => onEvent('panel-window:object-open-authorized', handler);
-
-export const onPanelWindowSnapshotUpdated = (
-  handler: (event: panelwindow.SnapshotUpdatedEvent) => void
-) => onEvent('panel-window:snapshot-updated', handler);
-
-export const onPanelTabCloseRequested = (
-  handler: (event: panelwindow.TabCloseRequestedEvent) => void
-) => onEvent('panel-window:tab-close-requested', handler);
+export const onWorkspaceCloseRequested = (
+  handler: (event: panelwindow.WorkspaceCloseRequestedEvent) => void
+) => onEvent('workspace-window:close-requested', handler);
 
 export const onPanelTabCloseAuthorized = (
   handler: (event: panelwindow.TabCloseAuthorizedEvent) => void
@@ -221,10 +187,35 @@ export const onApplicationQuitPreflightRequested = (
   handler: (event: panelwindow.ApplicationQuitPreflightRequestedEvent) => void
 ) => onEvent('panel-window:application-quit-preflight-requested', handler);
 
-export const onPanelWindowGuardRequested = (
-  handler: (event: panelwindow.WindowGuardRequestedEvent) => void
-) => onEvent('panel-window:guard-requested', handler);
+export const acknowledgePanelWorkspaceReady = (windowName: string) =>
+  AcknowledgePanelWorkspaceReady(windowName);
 
-export const onPanelWindowGuardResult = (
-  handler: (event: panelwindow.WindowGuardResultEvent) => void
-) => onEvent('panel-window:guard-result', handler);
+export const requestClusterTabTransfer = (
+  windowName: string,
+  request: panelwindow.ClusterTabTransferRequest
+) => RequestClusterTabTransfer(windowName, request);
+export const acceptClusterTabTransfer = (
+  windowName: string,
+  transferId: string,
+  snapshot: panelwindow.ClusterViewSnapshot
+) => AcceptClusterTabTransfer(windowName, transferId, snapshot);
+export const acknowledgeClusterTabTransfer = (windowName: string, transferId: string) =>
+  AcknowledgeClusterTabTransfer(windowName, transferId);
+export const failClusterTabTransfer = (windowName: string, transferId: string) =>
+  FailClusterTabTransfer(windowName, transferId);
+export const onClusterTabTransferRequested = (
+  handler: (event: panelwindow.ClusterTabTransferEvent) => void
+) => onEvent('cluster-tab-transfer:requested', handler);
+export const onClusterTabTransferInsert = (
+  handler: (event: panelwindow.ClusterTabTransferEvent) => void
+) => onEvent('cluster-tab-transfer:insert', handler);
+export const onClusterTabTransferCommitted = (
+  handler: (event: panelwindow.ClusterTabTransferEvent) => void
+) => onEvent('cluster-tab-transfer:committed', handler);
+export const onClusterTabTransferFailed = (
+  handler: (event: panelwindow.ClusterTabTransferEvent) => void
+) => onEvent('cluster-tab-transfer:failed', handler);
+
+export const onPanelWindowTransferFailed = (
+  handler: (event: panelwindow.WindowTransferFailedEvent) => void
+) => onEvent('panel-window:transfer-failed', handler);

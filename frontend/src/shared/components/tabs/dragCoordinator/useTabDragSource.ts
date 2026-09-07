@@ -76,10 +76,9 @@ function createTabDragSourceProps(
       }
       event.dataTransfer.setData(TAB_DRAG_DATA_TYPE, JSON.stringify(payload));
       event.dataTransfer.setData(tabDragKindDataType(payload.kind), '1');
-      if (payload.kind === 'dockable-tab' && payload.ownerWindowName && payload.clusterId) {
+      if (payload.kind === 'dockable-tab' && payload.clusterId) {
         event.dataTransfer.setData(
           tabDragScopeDataType({
-            ownerWindowName: payload.ownerWindowName,
             clusterId: payload.clusterId,
           }),
           '1'

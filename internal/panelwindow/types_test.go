@@ -8,11 +8,11 @@ import (
 
 func TestValidateGroupSnapshotEnforcesBoundaryIdentity(t *testing.T) {
 	valid := GroupSnapshot{
-		SchemaVersion:   GroupSchemaVersion,
-		TransferID:      "transfer-1",
-		OwnerWindowName: "workspace-1",
-		ClusterID:       "cluster-1",
-		GroupID:         "group-1",
+		SchemaVersion:    GroupSchemaVersion,
+		TransferID:       "transfer-1",
+		SourceWindowName: "workspace-1",
+		ClusterID:        "cluster-1",
+		GroupID:          "group-1",
 		Tabs: []TabSnapshot{{
 			Kind: TabKindObject, PanelID: "panel-1", ActiveView: "details",
 			ObjectRef: ObjectReference{
@@ -44,11 +44,11 @@ func TestValidateObjectReferenceAcceptsCoreAndClusterScopedObjects(t *testing.T)
 
 func TestValidateGroupSnapshotRejectsEveryInvalidBoundaryShape(t *testing.T) {
 	valid := GroupSnapshot{
-		SchemaVersion:   GroupSchemaVersion,
-		TransferID:      "transfer-1",
-		OwnerWindowName: "workspace-1",
-		ClusterID:       "cluster-1",
-		GroupID:         "group-1",
+		SchemaVersion:    GroupSchemaVersion,
+		TransferID:       "transfer-1",
+		SourceWindowName: "workspace-1",
+		ClusterID:        "cluster-1",
+		GroupID:          "group-1",
 		Tabs: []TabSnapshot{{
 			Kind: TabKindObject, PanelID: "panel-1", ActiveView: "details",
 			ObjectRef: ObjectReference{
@@ -61,7 +61,7 @@ func TestValidateGroupSnapshotRejectsEveryInvalidBoundaryShape(t *testing.T) {
 	tests := map[string]func(*GroupSnapshot){
 		"schema":        func(g *GroupSnapshot) { g.SchemaVersion = 99 },
 		"transfer":      func(g *GroupSnapshot) { g.TransferID = " " },
-		"owner":         func(g *GroupSnapshot) { g.OwnerWindowName = "" },
+		"owner":         func(g *GroupSnapshot) { g.SourceWindowName = "" },
 		"cluster":       func(g *GroupSnapshot) { g.ClusterID = "" },
 		"group":         func(g *GroupSnapshot) { g.GroupID = "" },
 		"empty tabs":    func(g *GroupSnapshot) { g.Tabs = nil },

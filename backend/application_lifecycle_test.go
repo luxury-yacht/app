@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -36,9 +37,17 @@ func (c failingStartupStateCleaner) CleanupStaleWrites() error {
 }
 
 type blockingStartupWorkspace struct {
+	panelwindow.ClusterViewTransferLifecycle
 	started chan struct{}
 	release chan struct{}
 }
+
+func (w *blockingStartupWorkspace) WindowClusterIDs(string) []string { return nil }
+func (w *blockingStartupWorkspace) PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory {
+	return panelwindow.NewWorkspaceDirectory()
+}
+func (w *blockingStartupWorkspace) RetainPanelCluster(string, string) error { return nil }
+func (w *blockingStartupWorkspace) ReleasePanelCluster(string) error        { return nil }
 
 func (*blockingStartupWorkspace) ReleaseWorkspaceWindow(string) {}
 

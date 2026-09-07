@@ -44,6 +44,16 @@
   app-region: drag;
 }
 
+.app-header-cluster-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text);
+  font-size: var(--font-size-normal);
+  text-align: center;
+}
+
 .app-header-drag-control:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;

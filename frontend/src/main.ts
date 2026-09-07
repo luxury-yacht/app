@@ -16,7 +16,6 @@ import {
   configureErrorReportingFromPreferences,
   createReactRootErrorHandlers,
 } from '@/core/telemetry/sentry';
-import { setWorkspaceProjectionIdentity } from '@/core/window-identity';
 import { reportOperationalError } from '@/utils/errorHandler';
 
 const sentryRuntimeConfig = {
@@ -45,7 +44,6 @@ if (appElement) {
       const windowName = await initializeWindowIdentity();
       const descriptor = await resolveNativeWindowDescriptor(windowName);
       if (descriptor.role === 'panel' && descriptor.panel) {
-        setWorkspaceProjectionIdentity(descriptor.panel.ownerWindowName);
         if (descriptor.panel.state === 'opening') {
           openingPanel = {
             windowName: descriptor.panel.windowName,
@@ -86,20 +84,7 @@ if (appElement) {
       );
       root.render(React.createElement(React.StrictMode, null, rootElement));
     } catch (error) {
-      if (openingPanel) {
-        try {
-          await failPanelWindowTransfer(
-            openingPanel.windowName,
-            openingPanel.windowName,
-            openingPanel.transferId
-          );
-        } catch (transferError) {
-          reportOperationalError(transferError, {
-            source: 'ApplicationBootstrap',
-            action: 'fail-panel-transfer',
-          });
-        }
-      }
+      await abortOpeningPanel(openingPanel);
       const message = document.createElement('p');
       message.textContent = openingPanel
         ? 'Could not open this panel.'
@@ -114,4 +99,23 @@ if (appElement) {
   };
 
   void bootstrap();
+}
+
+async function abortOpeningPanel(
+  openingPanel: { windowName: string; transferId: string } | undefined
+): Promise<void> {
+  if (openingPanel) {
+    try {
+      await failPanelWindowTransfer(
+        openingPanel.windowName,
+        openingPanel.windowName,
+        openingPanel.transferId
+      );
+    } catch (transferError) {
+      reportOperationalError(transferError, {
+        source: 'ApplicationBootstrap',
+        action: 'fail-panel-transfer',
+      });
+    }
+  }
 }

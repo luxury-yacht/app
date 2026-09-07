@@ -27,10 +27,10 @@ func (s *DesktopShell) BeginPanelWindowOpen(
 	if s == nil || s.beginPanelWindowOpen == nil {
 		return panelwindow.WindowDescriptor{}, fmt.Errorf("panel-window registry is not available")
 	}
-	if windowName != snapshot.OwnerWindowName {
+	if windowName != snapshot.SourceWindowName {
 		return panelwindow.WindowDescriptor{}, fmt.Errorf(
-			"panel owner %q does not match source window %q",
-			snapshot.OwnerWindowName,
+			"panel source %q does not match source window %q",
+			snapshot.SourceWindowName,
 			windowName,
 		)
 	}
@@ -53,11 +53,11 @@ func (s *DesktopShell) BeginPanelWindowDock(windowName, targetPosition string, s
 	return s.beginPanelWindowDock(windowName, targetPosition, snapshot)
 }
 
-func (s *DesktopShell) AcknowledgePanelWindowDock(ownerWindowName, windowName, transferID string) error {
+func (s *DesktopShell) AcknowledgePanelWindowDock(callerWindowName, windowName, transferID string) error {
 	if s == nil || s.acknowledgePanelDock == nil {
 		return fmt.Errorf("panel-window registry is not available")
 	}
-	return s.acknowledgePanelDock(ownerWindowName, windowName, transferID)
+	return s.acknowledgePanelDock(callerWindowName, windowName, transferID)
 }
 
 func (s *DesktopShell) FailPanelWindowTransfer(callerWindowName, windowName, transferID string) error {
@@ -67,11 +67,11 @@ func (s *DesktopShell) FailPanelWindowTransfer(callerWindowName, windowName, tra
 	return s.failPanelTransfer(callerWindowName, windowName, transferID)
 }
 
-func (s *DesktopShell) FocusPanelWindow(ownerWindowName, windowName, panelID string) error {
+func (s *DesktopShell) FocusPanelWindow(callerWindowName, windowName, panelID string) error {
 	if s == nil || s.focusPanelWindow == nil {
 		return fmt.Errorf("panel-window registry is not available")
 	}
-	return s.focusPanelWindow(ownerWindowName, windowName, panelID)
+	return s.focusPanelWindow(callerWindowName, windowName, panelID)
 }
 
 func (s *DesktopShell) RequestPanelWindowClose(callerWindowName, windowName, reason string) error {
@@ -88,32 +88,18 @@ func (s *DesktopShell) AcknowledgePanelWindowClose(windowName string) error {
 	return s.acknowledgePanelClose(windowName)
 }
 
-func (s *DesktopShell) AcknowledgeWorkspaceWindowClose(ownerWindowName string) error {
+func (s *DesktopShell) AcknowledgeWorkspaceWindowClose(callerWindowName string) error {
 	if s == nil || s.acknowledgeWorkspaceClose == nil {
 		return fmt.Errorf("panel-window registry is not available")
 	}
-	return s.acknowledgeWorkspaceClose(ownerWindowName)
+	return s.acknowledgeWorkspaceClose(callerWindowName)
 }
 
-func (s *DesktopShell) RoutePanelWindowCommand(windowName string, command panelwindow.OwnerCommand) error {
+func (s *DesktopShell) RoutePanelWindowCommand(windowName string, command panelwindow.WorkspaceCommand) error {
 	if s == nil || s.routePanelCommand == nil {
 		return fmt.Errorf("panel-window registry is not available")
 	}
 	return s.routePanelCommand(windowName, command)
-}
-
-func (s *DesktopShell) RequestPanelObjectOpen(windowName string, ref panelwindow.ObjectReference, activeView string) error {
-	if s == nil || s.requestPanelObjectOpen == nil {
-		return fmt.Errorf("panel-window registry is not available")
-	}
-	return s.requestPanelObjectOpen(windowName, ref, activeView)
-}
-
-func (s *DesktopShell) AuthorizePanelObjectOpen(ownerWindowName, windowName, panelID string, ref panelwindow.ObjectReference, activeView string) error {
-	if s == nil || s.authorizePanelObjectOpen == nil {
-		return fmt.Errorf("panel-window registry is not available")
-	}
-	return s.authorizePanelObjectOpen(ownerWindowName, windowName, panelID, ref, activeView)
 }
 
 func (s *DesktopShell) UpdatePanelWindowSnapshot(windowName string, snapshot panelwindow.GroupSnapshot) error {
@@ -130,13 +116,6 @@ func (s *DesktopShell) RequestPanelTabClose(windowName, panelID string) error {
 	return s.requestPanelTabClose(windowName, panelID)
 }
 
-func (s *DesktopShell) AuthorizePanelTabClose(ownerWindowName, windowName, panelID string) error {
-	if s == nil || s.authorizePanelTabClose == nil {
-		return fmt.Errorf("panel-window registry is not available")
-	}
-	return s.authorizePanelTabClose(ownerWindowName, windowName, panelID)
-}
-
 func (s *DesktopShell) RequestPanelTabTransfer(
 	callerWindowName string,
 	request panelwindow.TabTransferRequest,
@@ -147,11 +126,11 @@ func (s *DesktopShell) RequestPanelTabTransfer(
 	return s.requestPanelTabTransfer(callerWindowName, request)
 }
 
-func (s *DesktopShell) AcceptPanelTabTransfer(ownerWindowName, transferID string) error {
+func (s *DesktopShell) AcceptPanelTabTransfer(callerWindowName, transferID string) error {
 	if s == nil || s.acceptPanelTabTransfer == nil {
 		return fmt.Errorf("panel-window registry is not available")
 	}
-	return s.acceptPanelTabTransfer(ownerWindowName, transferID)
+	return s.acceptPanelTabTransfer(callerWindowName, transferID)
 }
 
 func (s *DesktopShell) FailPanelTabTransfer(callerWindowName, transferID string) error {
@@ -161,31 +140,12 @@ func (s *DesktopShell) FailPanelTabTransfer(callerWindowName, transferID string)
 	return s.failPanelTabTransfer(callerWindowName, transferID)
 }
 
-func (s *DesktopShell) RequestPanelWindowGuard(
-	ownerWindowName, windowName, requestID, reason string,
-) error {
-	if s == nil || s.requestPanelGuard == nil {
-		return fmt.Errorf("panel-window registry is not available")
-	}
-	return s.requestPanelGuard(ownerWindowName, windowName, requestID, reason)
-}
-
-func (s *DesktopShell) AcknowledgePanelWindowGuard(
-	windowName, requestID string,
-	allowed bool,
-) error {
-	if s == nil || s.acknowledgePanelGuard == nil {
-		return fmt.Errorf("panel-window registry is not available")
-	}
-	return s.acknowledgePanelGuard(windowName, requestID, allowed)
-}
-
 func (s *DesktopShell) AcknowledgeApplicationQuitPreflight(
-	ownerWindowName, transactionID string,
+	callerWindowName, transactionID string,
 	allowed bool,
 ) error {
 	if s == nil || s.acknowledgeApplicationQuit == nil {
 		return fmt.Errorf("panel-window registry is not available")
 	}
-	return s.acknowledgeApplicationQuit(ownerWindowName, transactionID, allowed)
+	return s.acknowledgeApplicationQuit(callerWindowName, transactionID, allowed)
 }

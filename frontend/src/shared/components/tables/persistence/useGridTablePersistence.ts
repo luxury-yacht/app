@@ -23,6 +23,7 @@ import {
   hydrateGridTablePersistence,
   loadPersistedState,
   prunePersistedState,
+  registerPendingGridTableSave,
   savePersistedState,
 } from '@shared/components/tables/persistence/gridTablePersistence';
 import { subscribeGridTableResetAll } from '@shared/components/tables/persistence/gridTablePersistenceReset';
@@ -337,9 +338,11 @@ export function useGridTablePersistence<T>({
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
     }
+    const unregisterSave = registerPendingGridTableSave(storageKey, save);
     saveTimerRef.current = setTimeout(save, SAVE_DEBOUNCE_MS);
 
     return () => {
+      unregisterSave();
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;

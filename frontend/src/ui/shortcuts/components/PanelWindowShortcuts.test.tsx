@@ -18,9 +18,13 @@ const mocks = vi.hoisted(() => ({
   focusWindow: vi.fn(async () => undefined),
   commitTabClose: vi.fn(),
   reportError: vi.fn(),
+  frozen: false,
   blocker: null as null | { panelId?: string; reason: 'unsaved-yaml'; focus: () => void },
   tabs: ['panel-a', 'panel-b'] as string[],
   acknowledgeGuard: vi.fn(async () => undefined),
+  acknowledgeQuit: vi.fn(async () => undefined),
+  acceptTabTransfer: vi.fn(async () => undefined),
+  beginOpen: vi.fn(async () => undefined),
   failTabTransfer: vi.fn(async () => undefined),
   upsertOwnedPanel: vi.fn(() => 'panel-c'),
   movePanelBetweenGroups: vi.fn(),
@@ -60,6 +64,17 @@ vi.mock('@/core/panel-windows', () => ({
   },
   acknowledgePanelWindowGuard: mocks.acknowledgeGuard,
   failPanelTabTransfer: mocks.failTabTransfer,
+  acknowledgeApplicationQuitPreflight: mocks.acknowledgeQuit,
+  acceptPanelTabTransfer: mocks.acceptTabTransfer,
+  beginPanelWindowOpen: mocks.beginOpen,
+  onApplicationQuitPreflightRequested: (handler: (event: never) => void) => {
+    mocks.handlers.quit = handler;
+    return () => undefined;
+  },
+  onPanelTabTransferRequested: (handler: (event: never) => void) => {
+    mocks.handlers.transferSource = handler;
+    return () => undefined;
+  },
   onPanelTabTransferInsertRequested: (handler: (event: never) => void) => {
     mocks.handlers.tabTransferInsert = handler;
     return () => undefined;
@@ -76,6 +91,9 @@ vi.mock('@/core/panel-windows', () => ({
 
 vi.mock('@/core/panel-windows/panelLifecycleGuards', () => ({
   usePanelLifecycleGuardRegistry: () => ({
+    freeze: vi.fn(),
+    releaseTransfer: vi.fn(),
+    isFrozen: () => mocks.frozen,
     firstBlocker: () => mocks.blocker,
   }),
 }));
@@ -187,6 +205,7 @@ describe('PanelWindowShortcuts', () => {
     vi.clearAllMocks();
     mocks.handlers = {};
     mocks.blocker = null;
+    mocks.frozen = false;
     mocks.tabs = ['panel-a', 'panel-b'];
     mocks.applicationShortcutsProps = null;
     container = document.createElement('div');
@@ -214,6 +233,15 @@ describe('PanelWindowShortcuts', () => {
     await act(async () => mocks.handlers.authorized?.({ panelId: 'panel-a' } as never));
     expect(mocks.commitTabClose).toHaveBeenCalledWith('panel-a');
     expect(mocks.closePanel).not.toHaveBeenCalled();
+  });
+
+  it('answers application quit directly and preserves every panel when a local draft blocks', async () => {
+    mocks.blocker = { panelId: 'panel-a', reason: 'unsaved-yaml', focus: vi.fn() };
+    await act(async () => {
+      mocks.handlers.quit?.({ windowName: 'panel-1', transactionId: 'quit-1' } as never);
+    });
+    expect(mocks.acknowledgeQuit).toHaveBeenCalledWith('panel-1', 'quit-1', false);
+    expect(mocks.acknowledgeClose).not.toHaveBeenCalled();
   });
 
   it('executes panel-local accelerators locally and routes owner commands through the backend', async () => {
@@ -508,21 +536,27 @@ describe('PanelWindowShortcuts', () => {
     expect(mocks.requestTabClose).not.toHaveBeenCalled();
   });
 
-  it('reports whether the whole native group can participate in application quit', async () => {
+  it('blocks native close and quit while an incoming tab is provisional', async () => {
+    mocks.frozen = true;
     await act(async () => {
-      mocks.handlers.guard?.({ requestId: 'guard-1', windowName: 'panel-1' } as never);
-      await Promise.resolve();
+      mocks.handlers.quit?.({ transactionId: 'quit-moving', windowName: 'panel-1' } as never);
+      mocks.handlers.windowClose?.({} as never);
     });
-    expect(mocks.acknowledgeGuard).toHaveBeenCalledWith('panel-1', 'guard-1', true);
+    expect(mocks.acknowledgeQuit).toHaveBeenCalledWith('panel-1', 'quit-moving', false);
+    expect(mocks.acknowledgeClose).not.toHaveBeenCalled();
+  });
 
-    mocks.acknowledgeGuard.mockClear();
+  it('reports its local quit preflight directly to the registry', async () => {
+    await act(async () =>
+      mocks.handlers.quit?.({ transactionId: 'quit-clean', windowName: 'panel-1' } as never)
+    );
+    expect(mocks.acknowledgeQuit).toHaveBeenCalledWith('panel-1', 'quit-clean', true);
     const focus = vi.fn();
     mocks.blocker = { reason: 'unsaved-yaml', focus };
-    await act(async () => {
-      mocks.handlers.guard?.({ requestId: 'guard-2', windowName: 'panel-1' } as never);
-      await Promise.resolve();
-    });
+    await act(async () =>
+      mocks.handlers.quit?.({ transactionId: 'quit-dirty', windowName: 'panel-1' } as never)
+    );
     expect(focus).toHaveBeenCalledOnce();
-    expect(mocks.acknowledgeGuard).toHaveBeenCalledWith('panel-1', 'guard-2', false);
+    expect(mocks.acknowledgeQuit).toHaveBeenCalledWith('panel-1', 'quit-dirty', false);
   });
 });
