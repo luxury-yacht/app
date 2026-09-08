@@ -41,7 +41,7 @@ export class ClusterPanelActivity {
   async pause(clusterId: string): Promise<void> {
     this.#closing.set(clusterId, false);
     this.#publish();
-    await Promise.allSettled(this.#pending.get(clusterId) ?? []);
+    await Promise.allSettled(Array.from(this.#pending.get(clusterId) ?? []));
   }
 
   settle(clusterId: string, closed: boolean): void {
