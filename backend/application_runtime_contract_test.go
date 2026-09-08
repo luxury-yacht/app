@@ -223,8 +223,8 @@ func TestApplicationRuntimeHasNoPostConstructionBinding(t *testing.T) {
 	require.Empty(t, violations, "production owners must be complete when their constructors return")
 }
 
-func TestMainDoesNotConfigureOwnersAfterRuntimeConstruction(t *testing.T) {
-	source, err := os.ReadFile("../main.go")
+func TestBootstrapDoesNotConfigureOwnersAfterRuntimeConstruction(t *testing.T) {
+	source, err := os.ReadFile("../internal/bootstrap/composition.go")
 	require.NoError(t, err)
 
 	for _, forbidden := range []string{

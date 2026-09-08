@@ -22,6 +22,18 @@ Prevention:
   edits through both ordinary content and portals stay guarded until selection
   settles. Whole-window transfer and Quit guards are separate contracts.
 
+## Treating entry-point cleanup as file consolidation
+
+Keep the root Go package limited to `main.go` with embedded assets and the startup
+call. Move helpers and their tests to the package that owns their responsibility:
+window forwarding in `internal/appwindow`, reporting in `internal/sentry`, and
+process orchestration and Wails composition in `internal/bootstrap`.
+
+Do not replace extra root files by growing `main.go`, or move unrelated helpers
+into one catch-all package. Update source-based architecture checks to inspect
+the actual owners, and preserve checks for startup order, the single service
+registration, stream wiring, and construction-cycle handling after a move.
+
 ## Confusing renderer placement with cluster ownership
 
 A native window is a place to render content. Shared cluster panels and their

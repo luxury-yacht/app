@@ -14,7 +14,7 @@ import (
 )
 
 func TestGeneratedWailsServiceExportsMatchFrontendBoundary(t *testing.T) {
-	serviceType := registeredWailsServiceType(t, readTestFile(t, repositoryPath("main.go")))
+	serviceType := registeredWailsServiceType(t, readTestFile(t, repositoryPath("internal", "bootstrap", "composition.go")))
 	_, generatedSource := generatedWailsServiceModule(t, serviceType)
 	generated := exportedFunctions(generatedSource)
 	boundary := explicitBackendAPIExports(readTestFile(t, repositoryPath(
@@ -144,7 +144,7 @@ func generatedModelsDeclare(source, name string) bool {
 }
 
 func TestWailsBoundaryContractRejectsCompositionAndExportMutations(t *testing.T) {
-	mainSource := readTestFile(t, repositoryPath("main.go"))
+	mainSource := readTestFile(t, repositoryPath("internal", "bootstrap", "composition.go"))
 	serviceType, err := resolveRegisteredWailsServiceType(mainSource)
 	if err != nil {
 		t.Fatal(err)
@@ -227,9 +227,9 @@ func registeredWailsServiceType(t *testing.T, source string) string {
 }
 
 func resolveRegisteredWailsServiceType(source string) (string, error) {
-	parsed, err := parser.ParseFile(token.NewFileSet(), "main.go", source, 0)
+	parsed, err := parser.ParseFile(token.NewFileSet(), "composition.go", source, 0)
 	if err != nil {
-		return "", fmt.Errorf("parse main.go: %w", err)
+		return "", fmt.Errorf("parse composition.go: %w", err)
 	}
 
 	serviceVariables := make([]string, 0)
@@ -256,7 +256,7 @@ func resolveRegisteredWailsServiceType(source string) (string, error) {
 	})
 	if serviceRegistrationCount != 1 || len(serviceVariables) != 1 {
 		return "", fmt.Errorf(
-			"main.go must register exactly one named Wails service; found %d registrations and %d named services",
+			"application composition must register exactly one named Wails service; found %d registrations and %d named services",
 			serviceRegistrationCount,
 			len(serviceVariables),
 		)

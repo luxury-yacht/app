@@ -61,7 +61,7 @@ Applies to Go code under `backend/`.
 - Manual refresh entrypoint: `/api/v2/refresh/{domain}` in `backend/refresh/api/server.go`, backed by `ManualQueue` in `backend/refresh/types.go`.
 - Per-cluster stream endpoints are wired in `backend/refresh/system/streams.go`;
   `RefreshCoordinator` builds aggregate named-stream routing in
-  `backend/refresh_setup.go`, and `main.go` registers those streams before
+  `backend/refresh_setup.go`, and `internal/bootstrap` registers those streams before
   the sole Wails service.
 - Diagnostics/telemetry sources: refresh domain telemetry in
   `backend/refresh/telemetry/recorder.go`; `RefreshCoordinator` catalog

@@ -273,7 +273,7 @@ publication; do not rely on an in-band transition signed only by that key.
 
 ## Starting points and validation
 
-- Runtime composition: `main.go`, `backend/update_coordinator_config.go`
+- Runtime composition: `internal/bootstrap`, `backend/update_coordinator_config.go`
 - Coordinator and GitHub adapter: `backend/internal/appupdates`, `backend/update_provider.go`
 - Eligibility and durable state: `internal/updateidentity`, `internal/windowsinstall`,
   `internal/updatestate`, `internal/updatetemp`

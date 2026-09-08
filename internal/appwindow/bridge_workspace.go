@@ -1,11 +1,12 @@
-package main
+package appwindow
 
 import (
 	"context"
+
 	"github.com/luxury-yacht/app/internal/panelwindow"
 )
 
-func (bridge *windowRegistryBridge) OpenClusterWindow(windowName, clusterID string) error {
+func (bridge *Bridge) OpenClusterWindow(windowName, clusterID string) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
@@ -13,7 +14,7 @@ func (bridge *windowRegistryBridge) OpenClusterWindow(windowName, clusterID stri
 	return registry.OpenClusterWindow(windowName, clusterID)
 }
 
-func (bridge *windowRegistryBridge) AcknowledgePanelWorkspaceReady(windowName string) error {
+func (bridge *Bridge) AcknowledgePanelWorkspaceReady(windowName string) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
@@ -21,7 +22,7 @@ func (bridge *windowRegistryBridge) AcknowledgePanelWorkspaceReady(windowName st
 	return registry.AcknowledgePanelWorkspaceReady(windowName)
 }
 
-func (bridge *windowRegistryBridge) GetPanelWorkspace(windowName, clusterID string) (panelwindow.WorkspaceSnapshot, error) {
+func (bridge *Bridge) GetPanelWorkspace(windowName, clusterID string) (panelwindow.WorkspaceSnapshot, error) {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return panelwindow.WorkspaceSnapshot{}, err
@@ -29,7 +30,7 @@ func (bridge *windowRegistryBridge) GetPanelWorkspace(windowName, clusterID stri
 	return registry.GetPanelWorkspace(windowName, clusterID)
 }
 
-func (bridge *windowRegistryBridge) OpenPanelWorkspaceObject(windowName string, tab panelwindow.TabSnapshot) (panelwindow.PanelOpenResult, error) {
+func (bridge *Bridge) OpenPanelWorkspaceObject(windowName string, tab panelwindow.TabSnapshot) (panelwindow.PanelOpenResult, error) {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return panelwindow.PanelOpenResult{}, err
@@ -37,7 +38,7 @@ func (bridge *windowRegistryBridge) OpenPanelWorkspaceObject(windowName string, 
 	return registry.OpenPanelWorkspaceObject(windowName, tab)
 }
 
-func (bridge *windowRegistryBridge) PublishDockedPanels(windowName string, groups []panelwindow.WorkspaceGroup) error {
+func (bridge *Bridge) PublishDockedPanels(windowName string, groups []panelwindow.WorkspaceGroup) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
@@ -45,7 +46,7 @@ func (bridge *windowRegistryBridge) PublishDockedPanels(windowName string, group
 	return registry.PublishDockedPanels(windowName, groups)
 }
 
-func (bridge *windowRegistryBridge) RequestClusterTabTransfer(windowName string, request panelwindow.ClusterTabTransferRequest) error {
+func (bridge *Bridge) RequestClusterTabTransfer(windowName string, request panelwindow.ClusterTabTransferRequest) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
@@ -53,7 +54,7 @@ func (bridge *windowRegistryBridge) RequestClusterTabTransfer(windowName string,
 	return registry.RequestClusterTabTransfer(windowName, request)
 }
 
-func (bridge *windowRegistryBridge) AcceptClusterTabTransfer(windowName, transferID string, snapshot panelwindow.ClusterViewSnapshot) error {
+func (bridge *Bridge) AcceptClusterTabTransfer(windowName, transferID string, snapshot panelwindow.ClusterViewSnapshot) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
@@ -61,7 +62,7 @@ func (bridge *windowRegistryBridge) AcceptClusterTabTransfer(windowName, transfe
 	return registry.AcceptClusterTabTransfer(windowName, transferID, snapshot)
 }
 
-func (bridge *windowRegistryBridge) AcknowledgeClusterTabTransfer(windowName, transferID string) error {
+func (bridge *Bridge) AcknowledgeClusterTabTransfer(windowName, transferID string) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
@@ -69,7 +70,7 @@ func (bridge *windowRegistryBridge) AcknowledgeClusterTabTransfer(windowName, tr
 	return registry.AcknowledgeClusterTabTransfer(windowName, transferID)
 }
 
-func (bridge *windowRegistryBridge) FailClusterTabTransfer(windowName, transferID string) error {
+func (bridge *Bridge) FailClusterTabTransfer(windowName, transferID string) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
@@ -77,7 +78,7 @@ func (bridge *windowRegistryBridge) FailClusterTabTransfer(windowName, transferI
 	return registry.FailClusterTabTransfer(windowName, transferID)
 }
 
-func (bridge *windowRegistryBridge) CloseClusterView(ctx context.Context, windowName, clusterID string) (bool, error) {
+func (bridge *Bridge) CloseClusterView(ctx context.Context, windowName, clusterID string) (bool, error) {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return false, err
@@ -85,7 +86,7 @@ func (bridge *windowRegistryBridge) CloseClusterView(ctx context.Context, window
 	return registry.CloseClusterView(ctx, windowName, clusterID)
 }
 
-func (bridge *windowRegistryBridge) AcknowledgeClusterPanelClose(windowName, transactionID string, allowed bool) error {
+func (bridge *Bridge) AcknowledgeClusterPanelClose(windowName, transactionID string, allowed bool) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err

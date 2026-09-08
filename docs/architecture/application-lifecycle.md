@@ -6,7 +6,7 @@ registration, and process-level hooks.
 The Wails application is injected directly during
 `backend.NewApplicationRuntime` composition and retained by the concrete
 `backend.DesktopShell` owner. `ApplicationRuntime` is a reference-only
-composition result: it exposes component pointers for `main.go` wiring but owns
+composition result: it exposes component pointers for `internal/bootstrap` wiring but owns
 no mutable state or methods, and internal owners never retain it. Production
 registers only `backend.DesktopService` with Wails; that transport service
 delegates commands, lifecycle, and HTTP behavior through owner-shaped
@@ -14,6 +14,13 @@ interfaces and never retains the composition root.
 This preserves direct Wails native access without introducing a desktop adapter.
 Native window, menu, dialog, clipboard, event, and screen work goes through that
 concrete shell; there is no generic desktop adapter.
+
+`main.go` contains only the embedded asset filesystem and the call to
+`bootstrap.Run`. Startup orchestration and Wails composition live in
+`internal/bootstrap`; window forwarding belongs to `internal/appwindow`, and
+reporting setup belongs to `internal/sentry`. Tests live beside those owners.
+Only bootstrap imports both the backend composition and native window registry;
+the registry bridge must not depend on backend implementation types.
 
 ## Startup and readiness
 
@@ -61,7 +68,7 @@ For an installable portable Linux target, derive the root's base from the
 target's XDG data home rather than the system temporary directory; Wails'
 Unix helper completes the swap with a same-filesystem rename. Package-managed
 and unverified Linux targets continue to use the system temporary base.
-`main.go` passes that root through `ApplicationRuntimeOptions`, so the single
+`internal/bootstrap` passes that root through `ApplicationRuntimeOptions`, so the single
 process update coordinator is fully initialized when `NewApplicationRuntime`
 returns and before `application.Run`; only
 the first runtime-ready window starts reconciliation, the initial silent check,
@@ -152,7 +159,7 @@ released and both container-log policy limits and permission-fetch concurrency
 have been pushed. Error reporting enables only for a successfully loaded
 snapshot; startup-default provenance remains fail-closed.
 
-Named refresh streams are registered explicitly in `main.go` after backend,
+Named refresh streams are registered explicitly in `internal/bootstrap/composition.go` after backend,
 update, and service construction and before service registration/window
 creation. `backend.NewApplicationRuntime` does not mutate the Wails stream
 registry.
@@ -173,7 +180,7 @@ callback, or frontend owner and must not gain a second event subscription.
 | Process startup | `backend.DesktopService.ServiceStartup` delegates to the application-lifecycle collaborator | By returning an error | Runs synchronously before pending windows; UI operations and event emission remain gated | Process-scoped. Wails cancels the service context and shuts down already-started services if startup aborts. Repository contract: `backend/desktop_service.go`, `backend/application_lifecycle.go`; framework contract: `pkg/application/services.go`. |
 | Interactive startup | Each workspace's `events.Common.WindowRuntimeReady` listener calls `backend.ApplicationLifecycle.WindowRuntimeReady(name, restoreGeometry)`; a panel listener only marks its descriptor bootstrappable | No | The first workspace delivery enables desktop operations, discovers kubeconfigs, restores the durable tab selection, and starts cluster connection work in the background. A panel stays hidden until its reconstructed group acknowledges readiness. Cluster connectivity never holds the native callback. | Workspace names are monotonic `workspace-N`; panel names and roles are process-local. Proof: `internal/appwindow/registry.go`, `internal/appwindow/panel.go`, `backend/application_lifecycle.go`, `backend/application_lifecycle_test.go`, and `internal/appwindow/lifecycle_test.go`. |
 | Application updates | One `backend.UpdateCoordinator`, surfaced through the backend service and the process-wide `app-update` event | Checks/downloads are cancellable; restart becomes a quit handoff | First runtime-ready starts one scheduler. Automatic and manual checks never download; download and restart each require a separate user action. | State is process-scoped across all peers. Eligibility comes from the installed distribution; prepared and attempted helper state is durable. Proof: `backend/update_coordinator.go`, `backend/update_coordinator_config.go`, `backend/internal/appupdates/coordinator.go`, and `internal/updateidentity/eligibility.go`. |
-| Subsequent process launch and focus | `application.SingleInstanceOptions.OnSecondInstanceLaunch` | No | May arrive before the webview is ready; it does not start a second backend lifecycle | Shows, restores when minimized, and focuses the most recently focused live peer; ignores launch arguments and additional data. Proof: `main.go`, `internal/appwindow/registry.go`, and `cmd/project/wails_project_contract_test.go`. |
+| Subsequent process launch and focus | `application.SingleInstanceOptions.OnSecondInstanceLaunch` | No | May arrive before the webview is ready; it does not start a second backend lifecycle | Shows, restores when minimized, and focuses the most recently focused live peer; ignores launch arguments and additional data. Proof: `internal/bootstrap/composition.go`, `internal/appwindow/bridge.go`, `internal/appwindow/registry.go`, and `cmd/project/wails_project_contract_test.go`. |
 | Ordinary focus changes | Peer `events.Common.WindowFocus` listener | No | Updates only the registry's most-recent ordering | Focus does not trigger refresh or cluster selection. It chooses the peer used by subsequent-launch focus and explicit application-quit geometry persistence. |
 | System appearance changes | Browser `matchMedia('(prefers-color-scheme: dark)')`; persisted preference changes use the frontend settings event bus | No | The React subscription exists only after the runtime mounts; system changes apply only while the preference is `system` | Process preference, not cluster data. The React effect removes the media-query and settings-event subscriptions on unmount. Proof: `frontend/src/core/contexts/AppearanceModeContext.tsx`. |
 | Dynamic native-menu labels | `backend.DesktopShell.UpdateMenu`; no Wails application event | No | Runs only after runtime-ready state changes such as sidebar or panel visibility | Rebuilds the persistent menu and resets the macOS application menu. Windows and Linux use neutral labels in the app-rendered menu and do not install the native menu on frameless windows. Proof: `backend/desktop_shell_ui.go`, `frontend/src/ui/layout/AppMenuBar.tsx`, and `backend/desktop_shell_ui_test.go`. |
@@ -369,7 +376,10 @@ path and temp root. Resolving a missing artifact must not create directories.
 
 ## Starting points
 
-- Composition, service/stream registration, and process hooks: `main.go`
+- Asset embedding and process entry point: `main.go`
+- Composition, service/stream registration, and process setup: `internal/bootstrap`
+- Deferred native registry binding and window command forwarding: `internal/appwindow/bridge.go`
+- Startup reporting and panic capture: `internal/sentry/startup.go`
 - Wails command/lifecycle/HTTP boundary: `backend/desktop_service.go`
 - Peer creation and close accounting: `internal/appwindow/registry.go`, `internal/appwindow/lifecycle.go`
 - Native shell operations and process-wide ephemeral visibility:

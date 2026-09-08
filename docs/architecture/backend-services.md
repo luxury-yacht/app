@@ -7,7 +7,7 @@ behavior.
 
 ## Composition and transport
 
-`main.go` creates the Wails application, passes that concrete application to
+`internal/bootstrap` creates the Wails application, passes that concrete application to
 `backend.NewApplicationRuntime`, passing updater and peer-window dependencies
 through `ApplicationRuntimeOptions`, constructs `DesktopService` from the
 returned owners, and registers only that service with Wails. `ApplicationRuntime` is a
@@ -21,7 +21,7 @@ fields afterward, or call a post-construction `Configure`/`Bind` method.
 graphs instead of manufacturing substitute owners. Focused tests use the shared
 owner fixtures rather than weakening those production constructors.
 Update configuration and the peer-window creation callback are also supplied at
-construction; `main.go` must not configure either owner after the runtime has
+construction; `internal/bootstrap` must not configure either owner after the runtime has
 been returned.
 
 Five explicit bind-once ports resolve construction-order edges without making
@@ -48,7 +48,8 @@ not independently Wails-bound and do not need `//wails:ignore` directives.
 
 ```mermaid
 flowchart LR
-    Main["main.go composition"] --> Runtime["ApplicationRuntime references"]
+    Main["main.go assets and entry point"] --> Bootstrap["internal/bootstrap composition"]
+    Bootstrap --> Runtime["ApplicationRuntime references"]
     Runtime --> Transport["DesktopService transport"]
     Runtime --> Lifecycle["ApplicationLifecycle"]
     Runtime --> Owners["Focused owners"]

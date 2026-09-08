@@ -1,11 +1,12 @@
-package main
+package appwindow
 
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 type sharedWorkspaceBridgeRecorder struct {
@@ -49,28 +50,28 @@ func TestSharedWorkspaceBridgePreservesIdentityAndReportsUnboundRegistry(t *test
 	snapshot := panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}", Groups: groups}
 	cases := []struct {
 		name string
-		call func(*windowRegistryBridge) error
+		call func(*Bridge) error
 		want []any
 	}{
-		{"CloseClusterView", func(bridge *windowRegistryBridge) error {
+		{"CloseClusterView", func(bridge *Bridge) error {
 			allowed, err := bridge.CloseClusterView(context.Background(), "workspace-1", "production")
 			if err == nil {
 				require.True(t, allowed)
 			}
 			return err
 		}, []any{"workspace-1", "production"}},
-		{"AcknowledgeClusterPanelClose", func(bridge *windowRegistryBridge) error {
+		{"AcknowledgeClusterPanelClose", func(bridge *Bridge) error {
 			return bridge.AcknowledgeClusterPanelClose("workspace-1", "close-1", false)
 		}, []any{"workspace-1", "close-1", false}},
-		{"AcknowledgePanelWorkspaceReady", func(bridge *windowRegistryBridge) error { return bridge.AcknowledgePanelWorkspaceReady("workspace-1") }, []any{"workspace-1"}},
-		{"GetPanelWorkspace", func(bridge *windowRegistryBridge) error {
+		{"AcknowledgePanelWorkspaceReady", func(bridge *Bridge) error { return bridge.AcknowledgePanelWorkspaceReady("workspace-1") }, []any{"workspace-1"}},
+		{"GetPanelWorkspace", func(bridge *Bridge) error {
 			result, err := bridge.GetPanelWorkspace("workspace-1", "production")
 			if err == nil {
 				require.Equal(t, uint64(7), result.Revision)
 			}
 			return err
 		}, []any{"workspace-1", "production"}},
-		{"OpenPanelWorkspaceObject", func(bridge *windowRegistryBridge) error {
+		{"OpenPanelWorkspaceObject", func(bridge *Bridge) error {
 			result, err := bridge.OpenPanelWorkspaceObject("workspace-1", tab)
 			if err == nil {
 				require.Equal(t, tab, result.Panel.Tab)
@@ -78,29 +79,29 @@ func TestSharedWorkspaceBridgePreservesIdentityAndReportsUnboundRegistry(t *test
 			}
 			return err
 		}, []any{"workspace-1", tab}},
-		{"PublishDockedPanels", func(bridge *windowRegistryBridge) error { return bridge.PublishDockedPanels("workspace-1", groups) }, []any{"workspace-1", groups}},
-		{"OpenClusterWindow", func(bridge *windowRegistryBridge) error {
+		{"PublishDockedPanels", func(bridge *Bridge) error { return bridge.PublishDockedPanels("workspace-1", groups) }, []any{"workspace-1", groups}},
+		{"OpenClusterWindow", func(bridge *Bridge) error {
 			return bridge.OpenClusterWindow("workspace-1", "production")
 		}, []any{"workspace-1", "production"}},
-		{"RequestClusterTabTransfer", func(bridge *windowRegistryBridge) error {
+		{"RequestClusterTabTransfer", func(bridge *Bridge) error {
 			return bridge.RequestClusterTabTransfer("workspace-1", request)
 		}, []any{"workspace-1", request}},
-		{"AcceptClusterTabTransfer", func(bridge *windowRegistryBridge) error {
+		{"AcceptClusterTabTransfer", func(bridge *Bridge) error {
 			return bridge.AcceptClusterTabTransfer("workspace-1", "transfer-1", snapshot)
 		}, []any{"workspace-1", "transfer-1", snapshot}},
-		{"AcknowledgeClusterTabTransfer", func(bridge *windowRegistryBridge) error {
+		{"AcknowledgeClusterTabTransfer", func(bridge *Bridge) error {
 			return bridge.AcknowledgeClusterTabTransfer("workspace-1", "transfer-1")
 		}, []any{"workspace-1", "transfer-1"}},
-		{"FailClusterTabTransfer", func(bridge *windowRegistryBridge) error {
+		{"FailClusterTabTransfer", func(bridge *Bridge) error {
 			return bridge.FailClusterTabTransfer("workspace-1", "transfer-1")
 		}, []any{"workspace-1", "transfer-1"}},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			bridge := &windowRegistryBridge{}
+			bridge := &Bridge{}
 			require.ErrorContains(t, test.call(bridge), "registry is not available")
 			recorder := &sharedWorkspaceBridgeRecorder{}
-			bridge.bind(&recordingNativeWindowRegistry{SharedWorkspaceCommands: recorder})
+			bridge.Bind(&recordingNativeWindowRegistry{SharedWorkspaceCommands: recorder})
 			require.NoError(t, test.call(bridge))
 			require.Equal(t, test.want, recorder.args)
 			recorder.err = errors.New("shared directory failed")

@@ -101,7 +101,7 @@ data-collection defaults with an application-owned privacy boundary:
   infrastructure shared by the root Wails composition process and packages
   under `backend`. Go permits both callers to import a root-internal package
   while preventing modules outside Luxury Yacht from importing it; placing the
-  package under `backend/internal` would prevent root `main.go` from using it
+  package under `backend/internal` would prevent `internal/bootstrap` from using it
   for startup, Wails-run, and process-panic reporting. The package declaration
   intentionally remains `sentryreporting`: that name distinguishes the
   application-owned consent/privacy boundary from the upstream Sentry SDK and
@@ -110,7 +110,7 @@ data-collection defaults with an application-owned privacy boundary:
 - `backend.ErrorReportingService` owns the reporter, live enable/disable
   application, installation registration, and the mutex that serializes that
   registration with Factory Reset. The owner does not retain Preferences.
-  `main.go` invokes the package-level, non-Wails `InitializeErrorReporting`
+  `internal/bootstrap` invokes the package-level, non-Wails `InitializeErrorReporting`
   composition function with the immutable result of
   `PreferencesService.EnsureLoaded`; only `loaded` provenance may enable the
   reporter. The initializer is deliberately absent from `DesktopService` and
