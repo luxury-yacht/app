@@ -231,8 +231,6 @@ func (r *Registry) BeginPanelWindowOpen(
 			snapshot.SourceWindowName,
 		)
 	}
-	r.panelTransferMu.Lock()
-	defer r.panelTransferMu.Unlock()
 	reservation := r.workspace.ReserveCluster(snapshot.ClusterID)
 	defer r.releasePanelReservation(reservation, snapshot.ClusterID)
 	if err := r.validateGroupSource(snapshot.SourceWindowName, snapshot); err != nil {
@@ -241,7 +239,9 @@ func (r *Registry) BeginPanelWindowOpen(
 	if err := r.retainPanelWorkspace(snapshot.ClusterID); err != nil {
 		return PanelWindowDescriptor{}, err
 	}
+	r.panelTransferMu.Lock()
 	descriptor, err := r.beginPanelWindowOpenTransfer(snapshot)
+	r.panelTransferMu.Unlock()
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
@@ -249,20 +249,36 @@ func (r *Registry) BeginPanelWindowOpen(
 		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
 		return PanelWindowDescriptor{}, err
 	}
+	if err := r.createRetainedPanelWindow(descriptor, reservation); err != nil {
+		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
+		return PanelWindowDescriptor{}, errors.Join(err, r.releaseNativePanelReference(descriptor.WindowName))
+	}
+	return descriptor, nil
+}
+
+// Backend retention may wait behind a connection. Revalidate the handoff after
+// that wait, then serialize native creation with cancellation and readiness.
+func (r *Registry) createRetainedPanelWindow(descriptor PanelWindowDescriptor, reservation *panelwindow.WorkspaceReservation) error {
+	r.panelTransferMu.Lock()
+	defer r.panelTransferMu.Unlock()
+	snapshot := descriptor.Snapshot
+	pending, err := r.panels.Descriptor(descriptor.WindowName)
+	if err != nil || pending.State != PanelWindowStateOpening {
+		return fmt.Errorf("panel open is no longer pending")
+	}
 	r.workspaceMu.Lock()
 	valid := reservation.Live() && r.windowHasCluster(snapshot.SourceWindowName, snapshot.ClusterID)
 	sourceErr := r.validateGroupSource(snapshot.SourceWindowName, snapshot)
 	r.workspaceMu.Unlock()
 	if !valid || sourceErr != nil {
-		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
-		return PanelWindowDescriptor{}, errors.Join(fmt.Errorf("panel source changed during open"), sourceErr, r.releaseNativePanelReference(descriptor.WindowName))
+		return errors.Join(fmt.Errorf("panel source changed during open"), sourceErr)
 	}
 	options := r.transferredPanelWindowOptions(descriptor.WindowName, snapshot)
 	window := r.newWindow(options)
 	if window == nil {
 		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
 		r.failPanelTabTransfer(snapshot.TransferID, "new panel target could not be created")
-		return PanelWindowDescriptor{}, errors.Join(fmt.Errorf("create native panel window %q", descriptor.WindowName), r.releaseNativePanelReference(descriptor.WindowName))
+		return fmt.Errorf("create native panel window %q", descriptor.WindowName)
 	}
 	if r.configurePanelWindow != nil {
 		r.configurePanelWindow(window)
@@ -273,7 +289,7 @@ func (r *Registry) BeginPanelWindowOpen(
 			r.expirePanelOpen(descriptor.WindowName, snapshot.TransferID)
 		})
 	}
-	return descriptor, nil
+	return nil
 }
 
 func (r *Registry) positionWindowAtTransferredBounds(

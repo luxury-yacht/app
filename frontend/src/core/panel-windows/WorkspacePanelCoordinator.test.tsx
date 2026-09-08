@@ -557,6 +557,32 @@ describe('WorkspacePanelCoordinator', () => {
     });
   });
 
+  it('names this app window when its tab-move callback requests the other docked edge', async () => {
+    const tab = mocks.tabDragIdentity?.getTabSnapshot('panel-a');
+    await act(async () => {
+      mocks.tabMoveRequest?.(
+        {
+          kind: 'dockable-tab',
+          panelId: 'panel-a',
+          sourceGroupId: 'right',
+          sourceWindowName: 'workspace-1',
+          clusterId: 'cluster-1',
+          tab,
+        } as never,
+        'bottom'
+      );
+    });
+    expect(mocks.requestTabTransfer).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({
+        sourceWindowName: 'workspace-1',
+        targetWindowName: 'workspace-1',
+        targetKind: 'workspace',
+        targetGroupId: 'bottom',
+      })
+    );
+  });
+
   it('tears off only the dragged tab and keeps its docked source until native readiness', async () => {
     mocks.getOwnedPanel.mockReturnValue({
       objectRef,

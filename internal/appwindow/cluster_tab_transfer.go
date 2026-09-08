@@ -17,6 +17,8 @@ type clusterViewTransfer struct {
 }
 
 func (r *Registry) RequestClusterTabTransfer(caller string, request panelwindow.ClusterTabTransferRequest) error {
+	r.clusterTransferMu.Lock()
+	defer r.clusterTransferMu.Unlock()
 	r.workspaceMu.Lock()
 	defer r.workspaceMu.Unlock()
 	if err := r.validateClusterTabRequest(caller, request); err != nil {
@@ -205,6 +207,7 @@ func (r *Registry) stageClusterTransferTarget(transfer *clusterViewTransfer) (bo
 	if window == nil {
 		cleanup := r.backend.CancelClusterViewTransfer(target, request.ClusterID)
 		r.lifecycle.BeginClose(target)
+		r.backend.ReleaseWorkspaceWindow(target)
 		return false, errors.Join(fmt.Errorf("create cluster transfer destination"), cleanup)
 	}
 	request.TargetWindowName = target

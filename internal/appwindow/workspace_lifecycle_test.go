@@ -2,6 +2,7 @@ package appwindow
 
 import (
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/stretchr/testify/require"
@@ -187,4 +188,39 @@ func TestPanelOpenRevalidatesRemovalAfterBackendWait(t *testing.T) {
 	require.ErrorContains(t, err, "no longer displays")
 	require.Empty(t, registry.workspace.Snapshot(tab.ObjectRef.ClusterID).Panels)
 	require.False(t, registry.workspace.HasClusterReference(tab.ObjectRef.ClusterID))
+}
+
+func TestClusterTransferRequestsWaitForStagedMutation(t *testing.T) {
+	backend := &workspaceLockCheckingBackend{recordingLifecycleBackend: &recordingLifecycleBackend{windowClusters: map[string][]string{}}}
+	registry := NewRegistry(application.New(application.Options{}), backend)
+	registry.clusterTransferTimeout = 0
+	source, target := registry.Create(true).Name(), registry.Create(false).Name()
+	backend.windowClusters[source] = []string{"cluster-1", "cluster-2"}
+	registry.emitWindowEvent = func(string, string, any) bool { return true }
+	first := panelwindow.ClusterTabTransferRequest{TransferID: "staging", SourceWindowName: source, TargetWindowName: target, ClusterID: "cluster-1"}
+	require.NoError(t, registry.RequestClusterTabTransfer(source, first))
+	entered, release := make(chan struct{}), make(chan struct{})
+	backend.check = func() { close(entered); <-release }
+	staged := make(chan error, 1)
+	go func() {
+		staged <- registry.AcceptClusterTabTransfer(source, first.TransferID, panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}"})
+	}()
+	<-entered
+	requested := make(chan error, 1)
+	go func() {
+		requested <- registry.RequestClusterTabTransfer(source, panelwindow.ClusterTabTransferRequest{
+			TransferID: "next", SourceWindowName: source, TargetWindowName: target, ClusterID: "cluster-2",
+		})
+	}()
+	select {
+	case err := <-requested:
+		require.NoError(t, err)
+		t.Error("a new cluster request entered during a staged transfer mutation")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	require.NoError(t, <-staged)
+	if !t.Failed() {
+		require.NoError(t, <-requested)
+	}
 }

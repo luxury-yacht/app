@@ -507,6 +507,34 @@ func TestBeforeClosePersistsWindowSettings(t *testing.T) {
 	require.True(t, settings.Maximized)
 }
 
+func TestSavingLastAppGeometryPersistsWithoutConsumingQuit(t *testing.T) {
+	setTestConfigEnv(t)
+	app := NewApplicationRuntime(nil)
+	t.Cleanup(func() { require.NoError(t, app.Lifecycle.ServiceShutdown()) })
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	selection := []string{"/tmp/config:prod"}
+	require.NoError(t, app.Preferences.SaveSelectedKubeconfigs(selection))
+	geometry := WindowGeometry{X: -800, Y: 50, Width: 1400, Height: 900}
+	app.DesktopShell.windowGeometry = func() (WindowGeometry, error) { return geometry, nil }
+	app.Lifecycle.SaveWorkspaceWindowGeometry("workspace-1")
+
+	reloaded := NewApplicationRuntime(nil)
+	t.Cleanup(func() { require.NoError(t, reloaded.Lifecycle.ServiceShutdown()) })
+	_, err := reloaded.Preferences.EnsureLoadedForStartup()
+	require.NoError(t, err)
+	settings, err := reloaded.Preferences.LoadWindowSettings()
+	require.NoError(t, err)
+	require.Equal(t, &WindowSettings{X: -800, Y: 50, Width: 1400, Height: 900}, settings)
+	require.Equal(t, selection, reloaded.Preferences.SelectedKubeconfigs())
+
+	// Opening another app view and quitting later must still save that view.
+	geometry = WindowGeometry{X: 20, Y: 30, Width: 1000, Height: 700}
+	require.True(t, app.Lifecycle.PrepareQuitFromWindow("workspace-2"))
+	settings, err = app.Preferences.LoadWindowSettings()
+	require.NoError(t, err)
+	require.Equal(t, &WindowSettings{X: 20, Y: 30, Width: 1000, Height: 700}, settings)
+}
+
 func TestBeforeCloseWaitsForSelectionMutationBeforeSavingWindowSettings(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	app := NewApplicationRuntime(nil)

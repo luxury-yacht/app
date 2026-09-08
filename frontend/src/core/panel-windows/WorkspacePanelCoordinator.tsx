@@ -339,12 +339,13 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     <DockablePanelProvider
       onGroupMoveRequest={handleGroupMove}
       onTabMoveRequest={(payload, target) => {
-        void requestPanelTabMove(payload, target, workspacePanelPublication).catch((error) =>
-          reportOperationalError(error, {
-            source: 'WorkspacePanelCoordinator',
-            action: 'move-panel-tab',
-            clusterId: payload.clusterId,
-          })
+        void requestPanelTabMove(payload, target, workspacePanelPublication, windowName).catch(
+          (error) =>
+            reportOperationalError(error, {
+              source: 'WorkspacePanelCoordinator',
+              action: 'move-panel-tab',
+              clusterId: payload.clusterId,
+            })
         );
       }}
       tabDragIdentity={tabDragIdentity}

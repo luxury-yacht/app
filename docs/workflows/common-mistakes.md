@@ -203,6 +203,14 @@ and failure paths through the registry and frontend consumers, including:
   Keep the confirmed selection so other clusters can resume publication.
 - Closing the final app window while panels remain must preserve restart state.
   Test the later panel close and reload saved settings from disk.
+- Failed native creation must release its provisional backend window entry as
+  well as cancel its staged tab. Include that failure before the final app/panel
+  close sequence; an empty live window and a non-existent window are different.
+- Keep backend retention waits outside panel transfer locks, then revalidate
+  pending transfer and source ownership before creating the native window.
+- App tab-menu docking names its own destination; panel-window docking may
+  select another app view. Test the actual provider route as well as the request
+  builder so an unused callback is not mistaken for a user-visible regression.
 - Queued auth callbacks retain their turn to check current intent. Pair that test
   with actual selection removal rejecting a late startup client.
 - Retained-panel claims must accept subsequent notifications and mount successful

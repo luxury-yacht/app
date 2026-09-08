@@ -6,11 +6,12 @@ import { type DockableTabDragPayload, tabTransferRequestFromDragPayload } from '
 export async function requestPanelTabMove(
   payload: DockableTabDragPayload,
   target: DockPosition,
-  publication: { flush: () => Promise<void> }
+  publication: { flush: () => Promise<void> },
+  dockWindowName: string
 ): Promise<void> {
   const request = tabTransferRequestFromDragPayload(payload, {
     transferId: globalThis.crypto.randomUUID(),
-    targetWindowName: '',
+    targetWindowName: target === 'floating' ? '' : dockWindowName,
     targetGroupId: target === 'floating' ? globalThis.crypto.randomUUID() : target,
     targetIndex: 0,
     targetKind: (target === 'floating'

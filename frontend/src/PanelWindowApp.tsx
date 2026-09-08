@@ -261,7 +261,7 @@ function PanelWindowSurface({
       initialTabGroups={initialTabGroups}
       onGroupMoveRequest={handleGroupMove}
       onTabMoveRequest={(payload, target) => {
-        void requestPanelTabMove(payload, target, nativePanelPublication).catch((error) =>
+        void requestPanelTabMove(payload, target, nativePanelPublication, '').catch((error) =>
           reportOperationalError(error, {
             source: 'PanelWindowApp',
             action: 'move-panel-tab',

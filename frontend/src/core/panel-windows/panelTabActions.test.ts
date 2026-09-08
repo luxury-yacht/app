@@ -38,7 +38,7 @@ it.each(['right', 'bottom', 'floating'] as const)(
           release = resolve;
         }),
     };
-    const moving = requestPanelTabMove(payload, target, publication);
+    const moving = requestPanelTabMove(payload, target, publication, '');
     expect(request).not.toHaveBeenCalled();
     release();
     await moving;
@@ -64,11 +64,16 @@ it.each(['right', 'bottom', 'floating'] as const)(
 it('keeps a failed publication from starting a transfer', async () => {
   request.mockClear();
   await expect(
-    requestPanelTabMove(payload, 'floating', {
-      flush: async () => {
-        throw new Error('publication failed');
+    requestPanelTabMove(
+      payload,
+      'floating',
+      {
+        flush: async () => {
+          throw new Error('publication failed');
+        },
       },
-    })
+      ''
+    )
   ).rejects.toThrow('publication failed');
   expect(request).not.toHaveBeenCalled();
 });
@@ -77,8 +82,25 @@ it('rejects a tab without source identity before publishing', async () => {
   request.mockClear();
   const flush = vi.fn();
   await expect(
-    requestPanelTabMove({ ...payload, sourceWindowName: undefined }, 'floating', { flush })
+    requestPanelTabMove({ ...payload, sourceWindowName: undefined }, 'floating', { flush }, '')
   ).rejects.toThrow('complete source');
   expect(flush).not.toHaveBeenCalled();
   expect(request).not.toHaveBeenCalled();
 });
+
+it.each(['right', 'bottom', 'floating'] as const)(
+  'keeps app-window dock destinations explicit for %s',
+  async (target) => {
+    request.mockClear();
+    await requestPanelTabMove(
+      { ...payload, sourceWindowName: 'workspace-1', sourceWindowGroupId: 'right' },
+      target,
+      { flush: async () => undefined },
+      'workspace-1'
+    );
+    expect(request).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({ targetWindowName: target === 'floating' ? '' : 'workspace-1' })
+    );
+  }
+);
