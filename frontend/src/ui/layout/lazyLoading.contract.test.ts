@@ -66,6 +66,19 @@ describe('application code-splitting boundaries', () => {
     expect(source).toContain('requestIdleCallback');
   });
 
+  it('does not insert inline loading rows for panels and modals that own their placement', () => {
+    const source = readSource('src/ui/layout/AppLayout.tsx');
+    expect(source.includes('withLazyBoundary(loadObjectPanel, null)')).toBe(true);
+    for (const component of ['SettingsModal', 'AboutModal', 'ObjectDiffModal', 'AppLogsPanel']) {
+      const declaration = new RegExp(
+        `const ${component} = withLazyBoundary\\([^;]*,\\s*null\\s*\\)`
+      );
+      expect(declaration.test(source), `${component} must not insert inline loading content`).toBe(
+        true
+      );
+    }
+  });
+
   it('keeps React renderers out of client-side table measurement', () => {
     const source = readSource('src/shared/components/tables/hooks/useGridTableColumnMeasurer.ts');
 

@@ -93,21 +93,12 @@ const BrowseView = withLazyBoundary(
   () => import('@/modules/browse/components/BrowseView'),
   'Loading Browse...'
 );
-const ObjectPanel = withLazyBoundary(loadObjectPanel, 'Loading object details...');
-
-const SettingsModal = withLazyBoundary(
-  () => import('@ui/modals/SettingsModal'),
-  'Loading settings...'
-);
-const AboutModal = withLazyBoundary(() => import('@ui/modals/AboutModal'), 'Loading about...');
-const ObjectDiffModal = withLazyBoundary(
-  () => import('@ui/modals/ObjectDiffModal'),
-  'Loading diff viewer...'
-);
-const AppLogsPanel = withLazyBoundary(
-  () => import('@ui/panels/app-logs/AppLogsPanel'),
-  'Loading Application Logs Panel...'
-);
+// These surfaces render in portals; an inline fallback would add a row to the app grid.
+const ObjectPanel = withLazyBoundary(loadObjectPanel, null);
+const SettingsModal = withLazyBoundary(() => import('@ui/modals/SettingsModal'), null);
+const AboutModal = withLazyBoundary(() => import('@ui/modals/AboutModal'), null);
+const ObjectDiffModal = withLazyBoundary(() => import('@ui/modals/ObjectDiffModal'), null);
+const AppLogsPanel = withLazyBoundary(() => import('@ui/panels/app-logs/AppLogsPanel'), null);
 
 const WelcomeContent: React.FC = () => (
   <div className="welcome">

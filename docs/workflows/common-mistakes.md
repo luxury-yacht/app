@@ -115,6 +115,20 @@ Prevention:
 - Trigger a namespace readiness build on every committed generation. Prove Ready
   without a frontend request, including a settle ring preceding publication.
 
+## Rendering portal loading feedback in the page layout
+
+A lazy panel's inline fallback participates in its caller's layout even when the
+loaded panel renders through a portal. This can create a temporary app-grid row
+on the first open in a fresh window.
+
+Prevention:
+
+- Keep panel and modal lazy fallbacks out of ordinary layout. Use the shared
+  `withLazyBoundary` null-message option for surfaces that own portal placement.
+- Hold module resolution in a regression test; assert the pending component adds
+  no layout child, then resolve it and check the actual portal destination.
+- Check route spinners, import errors, and closure before module resolution.
+
 ## Mutating shared stores inside React state updaters
 
 React may replay updater callbacks during rendering. Cache eviction inside them

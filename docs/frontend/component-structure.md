@@ -42,6 +42,14 @@ or foreground serviceability in another map. The store owns Wails runtime
 subscriptions; feature code consumes its snapshot or a documented downstream
 wake-up event.
 
+## Lazy loading
+
+Lazy loading must preserve the placement of the loaded component. Routes may
+use the shared inline loading spinner. Panels and modals that render through a
+portal pass `null` as the `withLazyBoundary` loading message, so their pending
+module does not insert a temporary row into the app grid. Preserve import-error
+reporting and test both pending and resolved placement with a deferred module.
+
 ## Shared Transient Popups
 
 Shared dropdown menus render in a body-level portal so table, split-pane,

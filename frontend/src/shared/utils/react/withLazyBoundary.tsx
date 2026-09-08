@@ -47,36 +47,38 @@ class ErrorBoundary extends Component<
  * Higher-Order Component that wraps a component with error boundary and lazy loading
  *
  * @param importFn - Dynamic import function for the component
- * @param loadingMessage - Optional message to display while loading
+ * @param loadingMessage - Inline loading message; null for components that own portal placement
  * @returns A component wrapped with ErrorBoundary and Suspense
  *
  * @example
  * // Instead of:
- * const Settings = lazy(() => import('./components/Settings'));
+ * const Route = lazy(() => import('./components/Route'));
  * // In render:
  * <ErrorBoundary>
- *   <Suspense fallback={<LoadingSpinner message="Loading settings..." />}>
- *     <Settings {...props} />
+ *   <Suspense fallback={<LoadingSpinner message="Loading route..." />}>
+ *     <Route {...props} />
  *   </Suspense>
  * </ErrorBoundary>
  *
  * // Use:
- * const Settings = withLazyBoundary(
- *   () => import('./components/Settings'),
- *   'Loading settings...'
+ * const Route = withLazyBoundary(
+ *   () => import('./components/Route'),
+ *   'Loading route...'
  * );
  * // In render:
- * <Settings {...props} />
+ * <Route {...props} />
  */
 export function withLazyBoundary<P extends object>(
   importFn: () => Promise<{ default: ComponentType<P> }>,
-  loadingMessage?: string
+  loadingMessage?: string | null
 ) {
   const LazyComponent = lazy(importFn);
 
   const WrappedComponent = (props: P) => (
     <ErrorBoundary>
-      <React.Suspense fallback={<LoadingSpinner message={loadingMessage} />}>
+      <React.Suspense
+        fallback={loadingMessage === null ? null : <LoadingSpinner message={loadingMessage} />}
+      >
         <LazyComponent {...props} />
       </React.Suspense>
     </ErrorBoundary>
