@@ -168,8 +168,23 @@ reconstruction while its freeze is active.
    move, tab close, titlebar close, cluster close, app-window close, and quit.
 6. Add reducer/protocol tests and visible component tests. Run typecheck and the
    targeted dockable, object-panel, shortcut, and appwindow suites.
-7. On macOS and Windows, exercise single-tab drag-out from a workspace and a
-   multi-tab native window. On Linux, record drag-out as a deferred limitation;
-   still test tab reordering, moves between compatible existing panels, Float,
-   and dock-back. Check that an attempted drag-out or Escape preserves the source
-   tab and its contents.
+7. On macOS and Windows, exercise cluster and panel tab moves with both one and
+   multiple tabs, targeting new and existing windows. Verify object identity,
+   active view, drop placement, phantom animation, and empty-source closure.
+   Cancelled or failed transfers must preserve the source content. On Linux,
+   record drag-out as deferred; still test reordering, moves between existing
+   compatible panels, Float, and dock-back.
+8. Open the same cluster in two app windows and find/focus its shared panels
+   from either view. Closing one cluster tab retains the shared panels; closing
+   the final cluster tab closes its panels after all guards approve. Separately
+   close the last app window and dock a surviving floating panel back into a
+   newly created app view.
+9. Quit with different clusters in two app windows and with native panel windows
+   open. An unsaved draft must block quit and leave the other renderer usable.
+   After a clean quit, restart and confirm both cluster selections restore.
+
+Native validation must include an actual destination drop. Drag-over events or
+a visible insertion indicator alone do not establish transfer success. If
+automation delivers only hover, use a manual drop and inspect content retention
+and empty-source closure, following the
+[completion evidence gate](../workflows/completion.md).

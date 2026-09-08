@@ -226,16 +226,26 @@ directory mutation. Whole-group and cluster-view transfers validate their comple
 source sets before changing locations. Readiness events for newly created app
 windows wait for cluster hydration and coordinator subscriptions.
 
-Closing an app view retains its docked panel identities for reopening; it releases
+Registry/backend coordination must not call back across a held selection or
+registry mutex. Native close hooks can run synchronously; finish cluster-transfer
+mutation and release its lock before closing an empty source or a cancelled
+provisional target. `finishClusterTransferMutation` and
+`TestCancellingNewClusterTargetAllowsSynchronousCloseHooks` preserve this ordering.
+
+Closing an app window retains its docked panel identities for reopening; it releases
 only that view’s runtime demand. Shared panel and native-window references retain
 cluster runtime selection even when no app window displays the cluster. A panel
 renderer projects only its own cluster and must never acquire unrelated app tabs.
+Docking from a panel-only cluster can create a new app view for that cluster.
 Closing a native panel disposes its own local state and directory entries.
 Explicit quit preflights all renderers before closing any of them.
 
 Regression coverage belongs in `internal/panelwindow/workspace_test.go`,
-`internal/appwindow/workspace_test.go`, `cluster_tab_transfer_test.go`,
-`backend/workspace_cluster_transfer_test.go`, `workspace_panel_lifetime_test.go`,
+`internal/appwindow/workspace_test.go`,
+`internal/appwindow/cluster_tab_transfer_test.go`,
+`internal/appwindow/cluster_panel_close_test.go`,
+`internal/appwindow/application_quit_persistence_test.go`,
+`backend/workspace_cluster_transfer_test.go`, `backend/workspace_panel_lifetime_test.go`,
 and the frontend panel-window coordinator suites. The authenticated desktop
 boundary is covered by `backend/desktop_service_panel_workspace_test.go`.
 
