@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { readPanelWorkspace } from '@/core/app-state-access';
 import type { panelwindow } from '@/core/backend-api/models';
 import { getWindowIdentity } from '@/core/desktop-runtime';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
@@ -12,6 +11,8 @@ import {
   requestClusterTabTransfer,
   requestPanelTabTransfer,
 } from './index';
+import { PanelLifecycleClusterSurface } from './panelLifecycleGuards';
+import { usePanelWorkspaceSync } from './WorkspacePanelSync';
 
 type MenuState =
   | { phase: 'loading' }
@@ -41,6 +42,7 @@ export function ClusterPanelsMenu({
   onClose: () => void;
 }>) {
   const windowName = getWindowIdentity();
+  const { readCluster } = usePanelWorkspaceSync();
   const { selectedClusterIds } = useKubeconfig();
   const { openWithObject } = useObjectPanel();
   const [state, setState] = useState<MenuState>({ phase: 'loading' });
@@ -55,8 +57,8 @@ export function ClusterPanelsMenu({
     let revision = 0;
     const read = async () => {
       try {
-        const snapshot = await readPanelWorkspace(windowName, clusterId);
-        if (disposed || snapshot.revision < revision) {
+        const snapshot = await readCluster(clusterId);
+        if (!snapshot || disposed || snapshot.revision < revision) {
           return;
         }
         revision = snapshot.revision;
@@ -83,7 +85,7 @@ export function ClusterPanelsMenu({
       disposed = true;
       cancel();
     };
-  }, [windowName, clusterId]);
+  }, [readCluster, clusterId]);
   const items: ContextMenuItem[] = [
     { label: clusterName, header: true },
     {
@@ -104,11 +106,13 @@ export function ClusterPanelsMenu({
   const statusLabel = panelMenuStatusLabel(state);
   if (state.phase !== 'ready') {
     return (
-      <ContextMenu
-        items={[...items, { label: statusLabel, disabled: true }]}
-        position={position}
-        onClose={onClose}
-      />
+      <PanelLifecycleClusterSurface clusterId={clusterId}>
+        <ContextMenu
+          items={[...items, { label: statusLabel, disabled: true }]}
+          position={position}
+          onClose={onClose}
+        />
+      </PanelLifecycleClusterSurface>
     );
   }
   if (!state.panels.length) {
@@ -145,7 +149,11 @@ export function ClusterPanelsMenu({
       });
     }
   }
-  return <ContextMenu items={items} position={position} onClose={onClose} />;
+  return (
+    <PanelLifecycleClusterSurface clusterId={clusterId}>
+      <ContextMenu items={items} position={position} onClose={onClose} />
+    </PanelLifecycleClusterSurface>
+  );
 }
 
 function panelMenuStatusLabel(state: MenuState): string {

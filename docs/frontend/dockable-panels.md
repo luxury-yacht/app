@@ -126,7 +126,20 @@ A transfer freezes user interaction until commit or rollback. Native panels do
 not publish through an originating app window. Shared directory revisions drive
 app-view reconciliation and retained-panel restoration.
 
-Close preparation checks blockers and freezes input before awaiting publication.
+Close preparation checks blockers before awaiting publication. A cluster-tab
+close guards only that cluster's content, including menus rendered through
+portals; it does not display a full-window closing overlay. Other cluster tabs
+and global navigation remain usable. App-window close, Quit, and transfers retain
+their renderer-wide guards.
+
+Before the backend removes an app view's cluster membership, shared-panel
+synchronization pauses new directory reads and object opens for that cluster,
+drains admitted calls, and flushes queued publications. Docked publications replace
+the entire renderer snapshot, so new publications wait until accepted closures
+appear in the frontend selection. Rejected closes resume synchronization. The
+close preparation lease keeps input guarded through the selection transition;
+duplicate or stale close requests must not reach the backend again.
+
 Incoming transfers must reject a renderer frozen by another transaction, even
 when the transferred cluster has no panels. A transaction may finish its own
 reconstruction while its freeze is active.

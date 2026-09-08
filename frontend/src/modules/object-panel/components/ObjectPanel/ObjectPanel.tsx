@@ -21,6 +21,7 @@ import {
 import { DockablePanel, useDockablePanelContext } from '@ui/dockable';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { queryNamespacePermissions } from '@/core/capabilities';
+import { PanelLifecycleClusterSurface } from '@/core/panel-windows/panelLifecycleGuards';
 import './ObjectPanel.css';
 import {
   CLUSTER_SCOPE,
@@ -290,24 +291,22 @@ function ObjectPanel({
     });
   }, [applyRequestedTab, panelId]);
 
-  const detailTabProps: DetailsTabProps | null = objectData
-    ? {
-        objectData,
-        detailModel,
-        isActive: isOpen && visibleActiveTab === 'details',
-        detailsLoading,
-        detailsError,
-        deletion,
-        finalizerRemovalCapabilities: {
-          metadata: capabilityStates.removeFinalizer,
-          namespaceSpec: capabilityStates.removeNamespaceFinalizer,
-        },
-        resourceDeleted,
-        deletedResourceName,
-        onAfterDelete: handleAfterDelete,
-        onAfterAction: handleAfterAction,
-      }
-    : null;
+  const detailTabProps: DetailsTabProps = {
+    objectData,
+    detailModel,
+    isActive: isOpen && visibleActiveTab === 'details',
+    detailsLoading,
+    detailsError,
+    deletion,
+    finalizerRemovalCapabilities: {
+      metadata: capabilityStates.removeFinalizer,
+      namespaceSpec: capabilityStates.removeNamespaceFinalizer,
+    },
+    resourceDeleted,
+    deletedResourceName,
+    onAfterDelete: handleAfterDelete,
+    onAfterAction: handleAfterAction,
+  };
 
   const panelScopeRef = useRef<HTMLDivElement>(null);
 
@@ -346,42 +345,44 @@ function ObjectPanel({
             objectData (wrong GVK → wrong permission keys → gated actions
             silently disappear from grouped panels). */}
         <CurrentObjectPanelContext.Provider value={currentObjectPanelValue}>
-          {/* Kind badge + name toolbar */}
-          <div>
-            <ObjectPanelHeader
-              kind={objectData?.kind ?? null}
-              kindAlias={objectData?.kindAlias ?? null}
-              name={objectData?.name ?? null}
+          <PanelLifecycleClusterSurface clusterId={objectRef.clusterId}>
+            {/* Kind badge + name toolbar */}
+            <div>
+              <ObjectPanelHeader
+                kind={objectData?.kind ?? null}
+                kindAlias={objectData?.kindAlias ?? null}
+                name={objectData?.name ?? null}
+              />
+            </div>
+
+            <ObjectPanelTabs
+              tabs={availableTabs}
+              activeTab={visibleActiveTab}
+              onSelect={handleTabSelect}
             />
-          </div>
 
-          <ObjectPanelTabs
-            tabs={availableTabs}
-            activeTab={visibleActiveTab}
-            onSelect={handleTabSelect}
-          />
-
-          <ObjectPanelContent
-            activeTab={visibleActiveTab}
-            detailTabProps={detailTabProps}
-            isPanelOpen={isOpen && isActiveTab}
-            capabilities={capabilities}
-            capabilityReasons={capabilityReasons}
-            nodeLogsState={nodeLogsState}
-            nodeLogSources={nodeLogSources}
-            detailScope={detailScope}
-            eventsScope={eventsScope}
-            containerLogsScope={containerLogsScope}
-            mapScope={mapScope}
-            helmScope={helmScope}
-            objectData={objectData}
-            objectKind={objectKind}
-            resourceDeleted={resourceDeleted}
-            deletedResourceName={deletedResourceName}
-            onClosePanel={close}
-            onRefreshDetails={fetchResourceDetails}
-            panelId={panelId}
-          />
+            <ObjectPanelContent
+              activeTab={visibleActiveTab}
+              detailTabProps={detailTabProps}
+              isPanelOpen={isOpen && isActiveTab}
+              capabilities={capabilities}
+              capabilityReasons={capabilityReasons}
+              nodeLogsState={nodeLogsState}
+              nodeLogSources={nodeLogSources}
+              detailScope={detailScope}
+              eventsScope={eventsScope}
+              containerLogsScope={containerLogsScope}
+              mapScope={mapScope}
+              helmScope={helmScope}
+              objectData={objectData}
+              objectKind={objectKind}
+              resourceDeleted={resourceDeleted}
+              deletedResourceName={deletedResourceName}
+              onClosePanel={close}
+              onRefreshDetails={fetchResourceDetails}
+              panelId={panelId}
+            />
+          </PanelLifecycleClusterSurface>
         </CurrentObjectPanelContext.Provider>
       </DockablePanel>
     </CurrentObjectPanelContext.Provider>

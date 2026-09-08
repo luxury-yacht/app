@@ -11,7 +11,7 @@ import {
 } from './index';
 import { preparePanelClose, usePanelLifecycleGuardRegistry } from './panelLifecycleGuards';
 import { useApplicationQuitPreflight } from './useApplicationQuitPreflight';
-import { usePanelPublication } from './WorkspacePanelSync';
+import { usePanelWorkspaceSync } from './WorkspacePanelSync';
 
 export function WorkspacePanelLifecycle() {
   const windowName = getWindowIdentity();
@@ -19,9 +19,15 @@ export function WorkspacePanelLifecycle() {
   const { panelIdsForCluster, getOwnedPanel } = useObjectPanelState();
   const { focusPanel } = useDockablePanelContext();
   const guards = usePanelLifecycleGuardRegistry();
-  const flush = usePanelPublication();
+  const { flush, quiesceCluster } = usePanelWorkspaceSync();
   const preflight = useCallback(
-    (clusterIds: readonly string[], transactionId: string, status: string) => {
+    (
+      clusterIds: readonly string[],
+      transactionId: string,
+      status: string,
+      clusterId?: string,
+      prepare = flush
+    ) => {
       const panelIds = clusterIds.flatMap((id) =>
         panelIdsForCluster(id).filter((panelId) => !getOwnedPanel(id, panelId)?.nativeLocation)
       );
@@ -30,7 +36,8 @@ export function WorkspacePanelLifecycle() {
         transactionId,
         panelIds,
         status,
-        flush,
+        clusterId,
+        flush: prepare,
         focusBlocker: (blocker) => {
           if (blocker.panelId) {
             focusPanel(blocker.panelId);
@@ -51,16 +58,29 @@ export function WorkspacePanelLifecycle() {
   const closeCluster = useCallback(
     async (clusterId: string) => {
       const transactionId = `cluster-close-${globalThis.crypto.randomUUID()}`;
-      try {
-        if (!(await preflight([clusterId], transactionId, 'Closing cluster…'))) {
-          return false;
-        }
-        return await closeClusterView(windowName, clusterId);
-      } finally {
+      let resume: ((closed: boolean) => void) | undefined;
+      let closed = false;
+      const release = () => {
+        resume?.(closed);
         guards.releaseTransfer(transactionId);
+      };
+      try {
+        const prepare = async () => {
+          resume = await quiesceCluster(clusterId);
+        };
+        if (!(await preflight([clusterId], transactionId, '', clusterId, prepare))) {
+          return null;
+        }
+        closed = await closeClusterView(windowName, clusterId);
+        // Keep the cluster guarded until its frontend selection has settled.
+        return closed ? { release } : null;
+      } finally {
+        if (!closed) {
+          release();
+        }
       }
     },
-    [preflight, guards, windowName]
+    [preflight, guards, windowName, quiesceCluster]
   );
   useEffect(
     () => registerClusterClosePreflight(closeCluster),

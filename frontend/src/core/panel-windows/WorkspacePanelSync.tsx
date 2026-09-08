@@ -6,6 +6,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useSyncExternalStore,
 } from 'react';
 import { readPanelWorkspace } from '@/core/app-state-access';
 import type { panelwindow } from '@/core/backend-api/models';
@@ -19,6 +20,7 @@ import {
 import { useDockablePanelContext } from '@/ui/dockable';
 import type { TabGroupState } from '@/ui/dockable/tabGroupTypes';
 import { reportOperationalError } from '@/utils/errorHandler';
+import { ClusterPanelActivity } from './clusterPanelActivity';
 import {
   acknowledgePanelWorkspaceReady,
   onPanelWorkspaceChanged,
@@ -32,6 +34,11 @@ interface WorkspaceSync {
   stage: (id: string, groups: panelwindow.WorkspaceGroup[]) => void;
   settle: (id: string) => void;
   groupsForCluster: (clusterId: string) => panelwindow.WorkspaceGroup[];
+  readCluster: (clusterId: string) => Promise<panelwindow.WorkspaceSnapshot | null>;
+  quiesceCluster: (clusterId: string) => Promise<(closed: boolean) => void>;
+  openPanel: (
+    tab: panelwindow.TabSnapshot
+  ) => Promise<Awaited<ReturnType<typeof openPanelWorkspaceObject>> | null>;
 }
 const PublicationContext = createContext<WorkspaceSync | null>(null);
 export function usePanelWorkspaceSync(): WorkspaceSync {
@@ -41,7 +48,14 @@ export function usePanelWorkspaceSync(): WorkspaceSync {
   }
   return sync;
 }
-export const usePanelPublication = () => usePanelWorkspaceSync().flush;
+
+const openNativePanel = (tab: panelwindow.TabSnapshot) =>
+  openPanelWorkspaceObject(getWindowIdentity(), tab);
+
+// App views drain these opens before relinquishing cluster membership. Native
+// panel views have a fixed cluster and use their own close handshake.
+export const usePanelWorkspaceOpen = () =>
+  useContext(PublicationContext)?.openPanel ?? openNativePanel;
 
 function collectDockedPanelGroups(
   clusterIds: readonly string[],
@@ -78,6 +92,8 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
   const lastPublication = useRef('');
   const restoring = useRef(new Set<string>());
   const provisional = useRef(new Map<string, panelwindow.WorkspaceGroup[]>());
+  const activity = useMemo(() => new ClusterPanelActivity(), []);
+  const closingClusters = useSyncExternalStore(activity.subscribe, activity.getSnapshot);
   const groups = useMemo(
     () =>
       collectDockedPanelGroups(selectedClusterIds, local, (clusterId) =>
@@ -109,11 +125,45 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
       },
       groupsForCluster: (clusterId) =>
         current.current.groups.filter((group) => group.clusterId === clusterId),
+      readCluster: async (clusterId) =>
+        current.current.selectedClusterIds.includes(clusterId)
+          ? activity.run(clusterId, () => readPanelWorkspace(windowName, clusterId))
+          : null,
+      openPanel: async (tab) => {
+        if (!current.current.selectedClusterIds.includes(tab.objectRef.clusterId)) {
+          return null;
+        }
+        const result = await activity.run(tab.objectRef.clusterId, () =>
+          openPanelWorkspaceObject(windowName, tab)
+        );
+        return activity.isClosing(tab.objectRef.clusterId) ? null : result;
+      },
+      quiesceCluster: async (clusterId) => {
+        const settle = (closed: boolean) => {
+          lastPublication.current = '';
+          activity.settle(clusterId, closed);
+        };
+        try {
+          await Promise.all([activity.pause(clusterId), queue.current.flush()]);
+          return settle;
+        } catch (error) {
+          settle(false);
+          throw error;
+        }
+      },
     }),
-    []
+    [activity, windowName]
   );
 
   useEffect(() => {
+    activity.reconcile(selectedClusterIds);
+    // Publications replace every docked group in this renderer. Resume only
+    // when each accepted close is reflected in the rendered cluster selection.
+    if (
+      Array.from(closingClusters).some(([id, closed]) => !closed || selectedClusterIds.includes(id))
+    ) {
+      return;
+    }
     const serialized = JSON.stringify(groups);
     if (serialized === lastPublication.current) {
       return;
@@ -128,7 +178,7 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
         });
       }
     );
-  }, [groups, windowName]);
+  }, [groups, windowName, selectedClusterIds, closingClusters, activity]);
 
   const removeForeignPlacements = useCallback(
     (clusterId: string, panels: panelwindow.WorkspacePanel[]) => {
@@ -182,18 +232,28 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
 
   const claimRetainedPanel = useCallback(
     async (clusterId: string, panel: panelwindow.WorkspacePanel) => {
-      if (!current.current.selectedClusterIds.includes(clusterId)) {
+      if (
+        activity.isClosing(clusterId) ||
+        !current.current.selectedClusterIds.includes(clusterId)
+      ) {
         return null;
       }
-      const result = await openPanelWorkspaceObject(windowName, panel.tab);
+      const result = await sync.openPanel(panel.tab);
+      if (!result) {
+        return null;
+      }
       return result.render ? { ...result.panel, location: panel.location } : null;
     },
-    [windowName]
+    [sync, activity]
   );
 
   const restoreRetained = useCallback(
     async (clusterId: string, panels: panelwindow.WorkspacePanel[]) => {
-      if (restoring.current.has(clusterId) || isProvisional(clusterId)) {
+      if (
+        activity.isClosing(clusterId) ||
+        restoring.current.has(clusterId) ||
+        isProvisional(clusterId)
+      ) {
         return;
       }
       restoring.current.add(clusterId);
@@ -205,25 +265,43 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
           claimed.push(claimedPanel);
         }
       }
-      if (!current.current.selectedClusterIds.includes(clusterId)) {
+      if (
+        activity.isClosing(clusterId) ||
+        !current.current.selectedClusterIds.includes(clusterId)
+      ) {
         return;
       }
       mountRetained(clusterId, claimed);
     },
-    [isProvisional, mountRetained, claimRetainedPanel]
+    [isProvisional, mountRetained, claimRetainedPanel, activity]
   );
 
   useEffect(() => {
     let disposed = false;
     const revisions = new Map<string, number>();
-    const shouldApply = (clusterId: string, revision: number) =>
+    const isLive = (clusterId: string) =>
       !disposed &&
-      current.current.selectedClusterIds.includes(clusterId) &&
-      revision >= (revisions.get(clusterId) ?? 0);
+      !closingClusters.has(clusterId) &&
+      !activity.isClosing(clusterId) &&
+      current.current.selectedClusterIds.includes(clusterId);
+    const shouldApply = (clusterId: string, revision: number) =>
+      isLive(clusterId) && revision >= (revisions.get(clusterId) ?? 0);
+    const reportRefreshError = (clusterId: string, error: unknown) => {
+      if (isLive(clusterId)) {
+        reportOperationalError(error, {
+          source: 'WorkspacePanelSync',
+          action: 'refresh-shared-panels',
+          clusterId,
+        });
+      }
+    };
     const refresh = async (clusterId: string) => {
+      if (!isLive(clusterId)) {
+        return;
+      }
       try {
-        const snapshot = await readPanelWorkspace(windowName, clusterId);
-        if (!shouldApply(clusterId, snapshot.revision)) {
+        const snapshot = await sync.readCluster(clusterId);
+        if (!snapshot || !shouldApply(clusterId, snapshot.revision)) {
           return;
         }
         revisions.set(clusterId, snapshot.revision);
@@ -231,13 +309,7 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
         removeForeignPlacements(clusterId, panels);
         await restoreRetained(clusterId, panels);
       } catch (error) {
-        if (!disposed) {
-          reportOperationalError(error, {
-            source: 'WorkspacePanelSync',
-            action: 'refresh-shared-panels',
-            clusterId,
-          });
-        }
+        reportRefreshError(clusterId, error);
       }
     };
     const unsubscribe = onPanelWorkspaceChanged(({ clusterId }) => {
@@ -257,7 +329,14 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
       disposed = true;
       unsubscribe();
     };
-  }, [windowName, selectedClusterIds, removeForeignPlacements, restoreRetained]);
+  }, [
+    selectedClusterIds,
+    removeForeignPlacements,
+    restoreRetained,
+    sync,
+    activity,
+    closingClusters,
+  ]);
 
   useEffect(() => {
     if (kubeconfigsLoading) {

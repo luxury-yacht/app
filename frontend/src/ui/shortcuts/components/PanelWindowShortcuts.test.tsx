@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   acknowledgeQuit: vi.fn(async () => undefined),
   acknowledgeClusterClose: vi.fn(async () => undefined),
   freeze: vi.fn(),
+  freezeCluster: vi.fn(),
   releaseTransfer: vi.fn(),
   acceptTabTransfer: vi.fn(async () => undefined),
   beginOpen: vi.fn(async () => undefined),
@@ -110,8 +111,10 @@ vi.mock('@/core/panel-windows/panelLifecycleGuards', async (importOriginal) => (
   ...(await importOriginal<Record<string, unknown>>()),
   usePanelLifecycleGuardRegistry: () => ({
     freeze: mocks.freeze,
+    freezeCluster: mocks.freezeCluster,
     releaseTransfer: mocks.releaseTransfer,
     isFrozen: () => mocks.frozen,
+    isClusterFrozen: () => mocks.frozen,
     firstBlocker: () => mocks.blocker,
   }),
 }));
@@ -342,11 +345,10 @@ describe('PanelWindowShortcuts', () => {
     };
     await act(async () => mocks.handlers.clusterClose?.(event as never));
     expect(mocks.acknowledgeClusterClose).toHaveBeenCalledWith('panel-1', 'cluster-close-1', true);
-    expect(mocks.freeze).toHaveBeenCalledWith(
-      'cluster-close-1',
-      ['panel-a', 'panel-b'],
-      'Closing cluster…'
-    );
+    expect(mocks.freezeCluster).toHaveBeenCalledWith('cluster-close-1', 'cluster-1', [
+      'panel-a',
+      'panel-b',
+    ]);
     expect(mocks.acknowledgeClose).not.toHaveBeenCalled();
     await act(async () => mocks.handlers.clusterCloseSettled?.(event as never));
     expect(mocks.releaseTransfer).toHaveBeenCalledWith('cluster-close-1');

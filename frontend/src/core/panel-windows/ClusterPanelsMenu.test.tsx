@@ -14,7 +14,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterIds: mocks.clusters }),
 }));
-vi.mock('@/core/app-state-access', () => ({ readPanelWorkspace: mocks.read }));
+vi.mock('./WorkspacePanelSync', () => ({
+  usePanelWorkspaceSync: () => ({ readCluster: mocks.read }),
+}));
 vi.mock('@/core/desktop-runtime', () => ({ getWindowIdentity: () => 'workspace-2' }));
 vi.mock('@/modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({ openWithObject: mocks.open }),

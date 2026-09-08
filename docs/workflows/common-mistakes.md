@@ -17,6 +17,10 @@ Prevention:
   missing runtime verification with a test count or a code-path description.
 - Audit guards across asynchronous waits: passing a guard before publication
   does not authorize disposal after the renderer accepts new edits.
+- Scope routine cluster-close guards to the affected cluster. Assert that no
+  full-window overlay appears and sibling navigation remains usable, while
+  edits through both ordinary content and portals stay guarded until selection
+  settles. Whole-window transfer and Quit guards are separate contracts.
 
 ## Confusing renderer placement with cluster ownership
 
@@ -72,6 +76,11 @@ Prevention:
 - Distinguish an expired credential from an invalidation that removes its saved
   token. Capture the provider's actual failure shape and exercise it through the
   subprocess, startup projection, and UI guidance before claiming recovery works.
+- For cluster closure, interleave real panel synchronization with backend
+  membership removal: drain admitted directory reads and opens, pause full-window
+  publications, and reject stale callbacks until selection commits. Include a
+  canceled close and repeated close gestures. Testing only the close binding
+  misses calls issued by subscriptions and menus after membership is revoked.
 
 ## Publishing lifecycle readiness before its service exists
 

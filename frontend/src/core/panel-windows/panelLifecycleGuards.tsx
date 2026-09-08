@@ -22,7 +22,10 @@ export interface PanelLifecycleBlocker {
 type PanelGuard = () => PanelLifecycleBlocker | null;
 
 export class PanelLifecycleGuardRegistry {
-  readonly #transfers = new Map<string, { panelIds: readonly string[]; status: string }>();
+  readonly #transfers = new Map<
+    string,
+    { panelIds: readonly string[]; status: string; clusterId: string | null }
+  >();
   readonly #listeners = new Set<() => void>();
   subscribe = (listener: () => void) => {
     this.#listeners.add(listener);
@@ -32,9 +35,27 @@ export class PanelLifecycleGuardRegistry {
   };
   isFrozen = (exceptTransactionId?: string) =>
     Array.from(this.#transfers.keys()).some((id) => id !== exceptTransactionId);
-  frozenStatus = () => this.#transfers.values().next().value?.status ?? '';
+  isWindowFrozen = () =>
+    Array.from(this.#transfers.values()).some((entry) => entry.clusterId === null);
+  isClusterFrozen = (clusterId: string) =>
+    Array.from(this.#transfers.values()).some(
+      (entry) => entry.clusterId === null || entry.clusterId === clusterId
+    );
+  frozenStatus = () =>
+    Array.from(this.#transfers.values()).find((entry) => entry.clusterId === null)?.status ?? '';
   freeze(transferId: string, panelIds: readonly string[], status = 'Moving panels…'): void {
-    this.#transfers.set(transferId, { panelIds: [...panelIds], status });
+    this.#freeze(transferId, panelIds, status, null);
+  }
+  freezeCluster(transferId: string, clusterId: string, panelIds: readonly string[]): void {
+    this.#freeze(transferId, panelIds, '', clusterId);
+  }
+  #freeze(
+    transferId: string,
+    panelIds: readonly string[],
+    status: string,
+    clusterId: string | null
+  ): void {
+    this.#transfers.set(transferId, { panelIds: [...panelIds], status, clusterId });
     for (const listener of this.#listeners) {
       listener();
     }
@@ -104,6 +125,7 @@ export async function preparePanelClose({
   status,
   flush,
   focusBlocker,
+  clusterId,
 }: {
   guards: PanelLifecycleGuardRegistry;
   transactionId: string;
@@ -111,8 +133,9 @@ export async function preparePanelClose({
   status: string;
   flush: () => Promise<void>;
   focusBlocker: (blocker: PanelLifecycleBlocker) => void;
+  clusterId?: string;
 }): Promise<boolean> {
-  if (guards.isFrozen()) {
+  if (clusterId ? guards.isClusterFrozen(clusterId) : guards.isFrozen()) {
     return false;
   }
   const blocker = guards.firstBlocker(panelIds);
@@ -120,7 +143,11 @@ export async function preparePanelClose({
     focusBlocker(blocker);
     return false;
   }
-  guards.freeze(transactionId, panelIds, status);
+  if (clusterId) {
+    guards.freezeCluster(transactionId, clusterId, panelIds);
+  } else {
+    guards.freeze(transactionId, panelIds, status);
+  }
   try {
     await flush();
     return true;
@@ -142,12 +169,17 @@ export const PanelLifecycleGuardProvider: React.FC<{ children: React.ReactNode }
   useLayoutEffect(() => {
     const update = () => {
       if (surface.current) {
-        surface.current.inert = registry.isFrozen();
+        surface.current.inert = registry.isWindowFrozen();
       }
     };
     const cancel = registry.subscribe(update);
     const blockInput = (event: Event) => {
-      if (!registry.isFrozen()) {
+      const clusterId =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>('[data-panel-lifecycle-cluster]')?.dataset
+              .panelLifecycleCluster
+          : undefined;
+      if (!(clusterId ? registry.isClusterFrozen(clusterId) : registry.isWindowFrozen())) {
         return;
       }
       event.preventDefault();
@@ -173,6 +205,50 @@ export const PanelLifecycleGuardProvider: React.FC<{ children: React.ReactNode }
     </PanelLifecycleGuardContext.Provider>
   );
 };
+
+export function PanelLifecycleClusterSurface({
+  clusterId,
+  children,
+}: Readonly<{ clusterId: string; children: React.ReactNode }>) {
+  const registry = useContext(PanelLifecycleGuardContext);
+  const surface = useRef<HTMLDivElement>(null);
+  const subscribe = registry?.subscribe ?? (() => () => undefined);
+  const frozen = useSyncExternalStore(
+    subscribe,
+    () => registry?.isClusterFrozen(clusterId) ?? false,
+    () => false
+  );
+  useLayoutEffect(() => {
+    const update = () => {
+      if (surface.current) {
+        surface.current.inert = registry?.isClusterFrozen(clusterId) ?? false;
+      }
+    };
+    update();
+    return registry?.subscribe(update);
+  }, [registry, clusterId]);
+  const blockInput = (event: React.SyntheticEvent) => {
+    if (registry?.isClusterFrozen(clusterId)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  };
+  return (
+    <div
+      ref={surface}
+      className="panel-lifecycle-surface"
+      data-panel-lifecycle-cluster={clusterId}
+      inert={frozen}
+      onClickCapture={blockInput}
+      onPointerDownCapture={blockInput}
+      onKeyDownCapture={blockInput}
+      onBeforeInputCapture={blockInput}
+      onContextMenuCapture={blockInput}
+    >
+      {children}
+    </div>
+  );
+}
 
 export const usePanelLifecycleGuardRegistry = (): PanelLifecycleGuardRegistry => {
   const registry = useContext(PanelLifecycleGuardContext);

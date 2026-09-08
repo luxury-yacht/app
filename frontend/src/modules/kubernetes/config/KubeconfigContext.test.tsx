@@ -139,6 +139,90 @@ const renderProvider = async () => {
 };
 
 describe('KubeconfigContext', () => {
+  it('deduplicates a pending close by cluster identity and ignores stale close targets', async () => {
+    getKubeconfigsMock.mockResolvedValue(
+      kubeconfigDiscoveryResult([
+        {
+          name: 'alpha',
+          path: '/kube/alpha',
+          context: 'dev',
+          isDefault: false,
+          isCurrentContext: false,
+          invalid: false,
+          invalidReason: '',
+        },
+      ])
+    );
+    getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev']);
+    const { getContext, unmount } = await renderProvider();
+    const deny: (() => void)[] = [];
+    const preflight = vi.fn(
+      () =>
+        new Promise<null>((resolve) => {
+          deny.push(() => resolve(null));
+        })
+    );
+    const unregister = getContext().registerClusterClosePreflight(preflight);
+    let first: Promise<void>, second: Promise<void>;
+    act(() => {
+      first = getContext().closeKubeconfig('/kube/alpha:dev');
+      second = getContext().closeKubeconfig('alpha:dev');
+    });
+    const calls = preflight.mock.calls.length;
+    await act(async () => {
+      deny.forEach((resolve) => {
+        resolve();
+      });
+      await Promise.all([first, second]);
+    });
+    unregister();
+    const stale = vi.fn(async () => null);
+    getContext().registerClusterClosePreflight(stale);
+    await act(async () => getContext().closeKubeconfig('not-open'));
+    const staleCalls = stale.mock.calls.length;
+    unmount();
+    expect(calls).toBe(1);
+    expect(staleCalls).toBe(0);
+  });
+
+  it('retains an acquired close guard through the selection update', async () => {
+    getKubeconfigsMock.mockResolvedValue(
+      kubeconfigDiscoveryResult([
+        {
+          name: 'alpha',
+          path: '/kube/alpha',
+          context: 'dev',
+          isDefault: false,
+          isCurrentContext: false,
+          invalid: false,
+          invalidReason: '',
+        },
+      ])
+    );
+    getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev']);
+    const { getContext, unmount } = await renderProvider();
+    const release = vi.fn();
+    getContext().registerClusterClosePreflight(async () => ({ release }));
+    let complete: () => void = () => undefined;
+    setSelectedKubeconfigsMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          complete = resolve;
+        })
+    );
+    let closing: Promise<void>;
+    await act(async () => {
+      closing = getContext().closeKubeconfig('alpha:dev');
+    });
+    expect(release).not.toHaveBeenCalled();
+    await act(async () => {
+      complete();
+      await closing;
+    });
+    unmount();
+    expect(release).toHaveBeenCalledOnce();
+  });
+
   beforeEach(() => {
     mocks.refreshOrchestrator.updateContext.mockReset();
     getKubeconfigsMock.mockReset();

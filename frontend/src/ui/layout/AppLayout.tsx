@@ -56,6 +56,7 @@ import { AuthFailureOverlay } from '@ui/overlays/AuthFailureOverlay';
 import { setLastSettingsTab } from '@ui/settings/settingsTabPreference';
 import { eventBus } from '@/core/events';
 import { shouldShowActiveClusterAuthFailure } from '@/core/navigation/workspace';
+import { PanelLifecycleClusterSurface } from '@/core/panel-windows/panelLifecycleGuards';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
 import { getDefaultObjectPanelPosition } from '@/core/settings/appPreferences';
 import {
@@ -376,7 +377,13 @@ export const AppLayout: React.FC = () => {
 
         <div className="content">
           <div ref={contentBodyRef} className="content-body" data-app-region="content">
-            <div className="content-body__main">{routeContent}</div>
+            <div className="content-body__main">
+              <PanelLifecycleClusterSurface
+                clusterId={viewState.viewType === 'global' ? '' : kubeconfig.selectedClusterId}
+              >
+                {routeContent}
+              </PanelLifecycleClusterSurface>
+            </div>
           </div>
         </div>
         <ClusterSelectionOverlay

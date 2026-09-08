@@ -7,9 +7,12 @@ vi.mock('./ClusterTabTransferCoordinator', () => ({ ClusterTabTransferCoordinato
 
 vi.mock('./WorkspacePanelSync', () => ({
   WorkspacePanelSync: ({ children }: { children: React.ReactNode }) => children,
-  usePanelPublication: () => mocks.flushPublication,
   usePanelWorkspaceSync: () => ({
     flush: mocks.flushPublication,
+    quiesceCluster: async () => {
+      await mocks.flushPublication();
+      return vi.fn();
+    },
     stage: vi.fn(),
     settle: vi.fn(),
     groupsForCluster: () => [],
@@ -33,7 +36,7 @@ const mocks = vi.hoisted(() => ({
     getTabSnapshot: (panelId: string) => unknown;
   },
   closeClusterPanels: vi.fn(async (_window: string, _cluster: string) => true),
-  clusterPreflight: null as null | ((clusterId: string) => Promise<boolean>),
+  clusterPreflight: null as null | ((clusterId: string) => Promise<{ release: () => void } | null>),
   beginOpen: vi.fn(async (owner: string, snapshot: unknown) => ({
     owner,
     snapshot,
@@ -187,7 +190,7 @@ vi.mock('@/modules/object-panel/contexts/ObjectPanelStateContext', () => ({
 
 vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
-    registerClusterClosePreflight: (preflight: (clusterId: string) => Promise<boolean>) => {
+    registerClusterClosePreflight: (preflight: typeof mocks.clusterPreflight) => {
       mocks.clusterPreflight = preflight;
       return () => undefined;
     },
@@ -203,8 +206,10 @@ vi.mock('@/core/panel-windows/panelLifecycleGuards', async (importOriginal) => (
   ...(await importOriginal<Record<string, unknown>>()),
   usePanelLifecycleGuardRegistry: () => ({
     freeze: vi.fn(),
+    freezeCluster: vi.fn(),
     releaseTransfer: vi.fn(),
     isFrozen: () => mocks.frozen,
+    isClusterFrozen: () => mocks.frozen,
     firstBlocker: () => mocks.blocker,
   }),
 }));
@@ -1186,13 +1191,13 @@ describe('WorkspacePanelCoordinator', () => {
     expect(mocks.closeClusterPanels).toHaveBeenCalledWith('workspace-1', 'cluster-1');
     expect(settled).toBe(false);
     finish(false);
-    expect(await result).toBe(false);
+    expect(await result).toBeNull();
   });
 
   it('keeps this cluster view mounted when its local YAML is unsaved', async () => {
     const focus = vi.fn();
     mocks.blocker = { reason: 'unsaved-yaml', focus };
-    expect(await mocks.clusterPreflight?.('cluster-1')).toBe(false);
+    expect(await mocks.clusterPreflight?.('cluster-1')).toBeNull();
     expect(focus).toHaveBeenCalledOnce();
     expect(mocks.requestPanelClose).not.toHaveBeenCalled();
     expect(mocks.flushPublication).not.toHaveBeenCalled();

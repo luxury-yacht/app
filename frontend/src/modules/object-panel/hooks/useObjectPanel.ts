@@ -17,10 +17,9 @@ import { useDockablePanelContext } from '@ui/dockable';
 import { getGroupForPanel } from '@ui/dockable/tabGroupState';
 import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import type { panelwindow } from '@/core/backend-api/models';
-import { getWindowIdentity } from '@/core/desktop-runtime';
-import { openPanelWorkspaceObject } from '@/core/panel-windows';
 import { usePanelWindowRole } from '@/core/panel-windows/PanelWindowRoleContext';
 import { objectPanelTabSnapshot } from '@/core/panel-windows/tabTransfer';
+import { usePanelWorkspaceOpen } from '@/core/panel-windows/WorkspacePanelSync';
 import { getDefaultObjectPanelPosition } from '@/core/settings/appPreferences';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { reportOperationalError } from '@/utils/errorHandler';
@@ -88,6 +87,7 @@ let closeCallback: (() => void) | null = null;
  * - openPanels: all open panels from context
  */
 export function useObjectPanel() {
+  const openSharedPanel = usePanelWorkspaceOpen();
   const {
     showObjectPanel,
     openPanels,
@@ -237,11 +237,13 @@ export function useObjectPanel() {
       const shouldAutoFloat =
         !panelWindowRole && ownedPanel === null && getDefaultObjectPanelPosition() === 'floating';
 
-      void openPanelWorkspaceObject(
-        getWindowIdentity(),
+      void openSharedPanel(
         objectPanelTabSnapshot(panelId, enriched, options?.initialTab ?? 'details')
       )
         .then((result) => {
+          if (!result) {
+            return;
+          }
           if (!result.render) {
             if (ownedPanel) {
               updateExistingPanelView(enriched.clusterId, panelId, requestedView);
@@ -259,7 +261,14 @@ export function useObjectPanel() {
           })
         );
     },
-    [hydrateClusterMeta, getOwnedPanel, panelWindowRole, updateExistingPanelView, mountSharedPanel]
+    [
+      hydrateClusterMeta,
+      getOwnedPanel,
+      panelWindowRole,
+      updateExistingPanelView,
+      mountSharedPanel,
+      openSharedPanel,
+    ]
   );
 
   const close = useCallback(() => {

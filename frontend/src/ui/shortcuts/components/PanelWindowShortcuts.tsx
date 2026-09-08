@@ -85,13 +85,14 @@ export function PanelWindowShortcuts({
   );
 
   const prepareClose = useCallback(
-    async (transactionId: string, status: string) => {
+    async (transactionId: string, status: string, clusterId?: string) => {
       if (!ready) {
         return false;
       }
       return preparePanelClose({
         guards,
         transactionId,
+        clusterId,
         status,
         panelIds: Array.from(openPanels.keys()),
         flush: () => nativePanelPublication.flush(),
@@ -107,7 +108,7 @@ export function PanelWindowShortcuts({
       if (event.windowName !== descriptor.windowName || event.clusterId !== descriptor.clusterId) {
         return;
       }
-      void prepareClose(event.transactionId, 'Closing cluster…')
+      void prepareClose(event.transactionId, 'Closing cluster…', descriptor.clusterId)
         .catch((error) => {
           reportOperationalError(error, {
             source: 'PanelWindowShortcuts',

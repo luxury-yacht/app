@@ -1,14 +1,21 @@
 import { act, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { ClusterClosePreparation } from '@/modules/kubernetes/config/KubeconfigContext';
 import { requireValue } from '@/test-utils/requireValue';
-import { PanelLifecycleGuardProvider, usePanelLifecycleGuard } from './panelLifecycleGuards';
+import {
+  PanelLifecycleClusterSurface,
+  PanelLifecycleGuardProvider,
+  usePanelLifecycleGuard,
+} from './panelLifecycleGuards';
 import { WorkspacePanelLifecycle } from './WorkspacePanelLifecycle';
 
 const mocks = vi.hoisted(() => ({
   close: vi.fn(async () => false),
   flush: vi.fn<() => Promise<void>>(async () => undefined),
-  preflight: null as null | ((clusterId: string) => Promise<boolean>),
+  preflight: null as null | ((clusterId: string) => Promise<ClusterClosePreparation | null>),
+  resume: vi.fn(),
   focus: vi.fn(async () => undefined),
   windowClose: vi.fn(async () => undefined),
   quit: vi.fn(async () => undefined),
@@ -28,7 +35,15 @@ vi.mock('./index', () => {
     onApplicationQuitPreflightSettled: on('quitSettled'),
   };
 });
-vi.mock('./WorkspacePanelSync', () => ({ usePanelPublication: () => mocks.flush }));
+vi.mock('./WorkspacePanelSync', () => ({
+  usePanelWorkspaceSync: () => ({
+    flush: mocks.flush,
+    quiesceCluster: async () => {
+      await mocks.flush();
+      return mocks.resume;
+    },
+  }),
+}));
 vi.mock('@/core/desktop-runtime', () => ({
   getWindowIdentity: () => 'app-a',
   focusWindow: mocks.focus,
@@ -36,7 +51,9 @@ vi.mock('@/core/desktop-runtime', () => ({
 vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     selectedClusterIds: ['production'],
-    registerClusterClosePreflight: (preflight: (clusterId: string) => Promise<boolean>) => {
+    registerClusterClosePreflight: (
+      preflight: (clusterId: string) => Promise<ClusterClosePreparation | null>
+    ) => {
       mocks.preflight = preflight;
       return () => undefined;
     },
@@ -56,9 +73,21 @@ function EditablePanel() {
     edits ? { reason: 'unsaved-yaml', focus: () => undefined } : null
   );
   return (
-    <button type="button" onClick={() => setEdits((value) => value + 1)}>
-      {edits}
-    </button>
+    <PanelLifecycleClusterSurface clusterId="production">
+      <button type="button" onClick={() => setEdits((value) => value + 1)}>
+        {edits}
+      </button>
+      {createPortal(
+        <button
+          type="button"
+          data-testid="portal-edit"
+          onClick={() => setEdits((value) => value + 1)}
+        >
+          Edit in menu
+        </button>,
+        document.body
+      )}
+    </PanelLifecycleClusterSurface>
   );
 }
 
@@ -85,6 +114,33 @@ afterEach(async () => {
   container.remove();
 });
 
+it('closes a cluster without a full-window overlay or blocking unrelated input', async () => {
+  let publish: () => void = () => undefined;
+  mocks.flush.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        publish = resolve;
+      })
+  );
+  const unrelated = document.createElement('button');
+  unrelated.dataset.panelLifecycleCluster = 'staging';
+  const click = vi.fn();
+  unrelated.addEventListener('click', click);
+  container.append(unrelated);
+  let closing = Promise.resolve<ClusterClosePreparation | null>(null);
+  act(() => {
+    closing = requireValue(mocks.preflight, 'Close must be registered')('production');
+  });
+  unrelated.click();
+  const overlay = container.querySelector('.panel-transfer-status');
+  await act(async () => {
+    publish();
+    await closing;
+  });
+  expect(overlay).toBeNull();
+  expect(click).toHaveBeenCalledOnce();
+});
+
 it('blocks edits during publication and releases input when cluster close is denied', async () => {
   let publish: () => void = () => undefined;
   mocks.flush.mockImplementationOnce(
@@ -94,18 +150,42 @@ it('blocks edits during publication and releases input when cluster close is den
       })
   );
   const preflight = requireValue(mocks.preflight, 'Cluster preflight must be registered');
-  let closing = Promise.resolve(false);
+  let closing = Promise.resolve<ClusterClosePreparation | null>(null);
   act(() => {
     closing = preflight('production');
   });
   const edit = requireValue(container.querySelector('button'), 'Editable panel must be mounted');
   await act(async () => edit.click());
+  const portal = requireValue(
+    document.querySelector<HTMLButtonElement>('[data-testid="portal-edit"]'),
+    'Portal editor must exist'
+  );
+  await act(async () => portal.click());
   const editsDuringPublication = edit.textContent;
   await act(async () => {
     publish();
-    expect(await closing).toBe(false);
+    expect(await closing).toBeNull();
   });
   expect(editsDuringPublication).toBe('0');
+  await act(async () => edit.click());
+  expect(edit.textContent).toBe('1');
+});
+
+it('keeps the affected cluster guarded after native approval until the selection lease releases', async () => {
+  mocks.close.mockResolvedValueOnce(true);
+  let preparation: ClusterClosePreparation | null = null;
+  await act(async () => {
+    preparation = await requireValue(mocks.preflight, 'Close must be registered')('production');
+  });
+  const edit = requireValue(container.querySelector('button'), 'Editable panel must be mounted');
+  await act(async () => edit.click());
+  expect(edit.textContent).toBe('0');
+  expect(mocks.resume).not.toHaveBeenCalled();
+  expect(container.querySelector('.panel-transfer-status')).toBeNull();
+  await act(async () =>
+    requireValue(preparation, 'Approved close must return its lease').release()
+  );
+  expect(mocks.resume).toHaveBeenCalledWith(true);
   await act(async () => edit.click());
   expect(edit.textContent).toBe('1');
 });
@@ -161,7 +241,7 @@ it('keeps existing unsaved edits open without publishing or closing', async () =
   await act(async () => {
     expect(
       await requireValue(mocks.preflight, 'Cluster preflight must be registered')('production')
-    ).toBe(false);
+    ).toBeNull();
   });
   expect(mocks.flush).not.toHaveBeenCalled();
   expect(mocks.close).not.toHaveBeenCalled();
