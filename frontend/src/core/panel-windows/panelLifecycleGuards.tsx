@@ -7,6 +7,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
 } from 'react';
 import { errorHandler } from '@/utils/errorHandler';
@@ -159,6 +160,18 @@ export async function preparePanelClose({
 
 const PanelLifecycleGuardContext = createContext<PanelLifecycleGuardRegistry | null>(null);
 
+function PanelTransferStatus({ status }: Readonly<{ status: string }>) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    // Brief handoffs need no status. The provider guards input immediately,
+    // independently of this delayed indicator.
+    const timer = window.setTimeout(() => setVisible(true), 500);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return visible ? <output className="panel-transfer-status">{status}</output> : null;
+}
+
 export const PanelLifecycleGuardProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -201,7 +214,7 @@ export const PanelLifecycleGuardProvider: React.FC<{ children: React.ReactNode }
       <div ref={surface} className="panel-lifecycle-surface" inert={frozen}>
         {children}
       </div>
-      {frozen && <output className="panel-transfer-status">{status}</output>}
+      {frozen && <PanelTransferStatus status={status} />}
     </PanelLifecycleGuardContext.Provider>
   );
 };

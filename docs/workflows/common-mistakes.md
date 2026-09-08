@@ -21,6 +21,10 @@ Prevention:
   full-window overlay appears and sibling navigation remains usable, while
   edits through both ordinary content and portals stay guarded until selection
   settles. Whole-window transfer and Quit guards are separate contracts.
+- Keep lifecycle input guards independent of progress presentation. Routine
+  transfers must preserve the visible workspace; show a compact delayed status
+  for longer waits. Check quick completion, overlapping transfers, and timer
+  cleanup without weakening the publication or readiness guard.
 
 ## Treating entry-point cleanup as file consolidation
 

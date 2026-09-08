@@ -138,6 +138,11 @@ portals; it does not display a full-window closing overlay. Other cluster tabs
 and global navigation remain usable. App-window close, Quit, and transfers retain
 their renderer-wide guards.
 
+Window-wide guards preserve the visible content. Transfers, window close, and
+Quit show a compact corner status only after 500 ms; they never blank the window
+with a status overlay. Input freezes immediately, independently of the delayed
+indicator, and settlement removes the status and cancels any pending delay.
+
 Before the backend removes an app view's cluster membership, shared-panel
 synchronization pauses new directory reads and object opens for that cluster,
 drains admitted calls, and flushes queued publications. Docked publications replace

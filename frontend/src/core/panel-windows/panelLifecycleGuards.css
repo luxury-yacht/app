@@ -3,12 +3,15 @@
 }
 .panel-transfer-status {
   position: fixed;
-  inset: 0;
-  z-index: 10000;
-  display: grid;
-  place-items: center;
-  background: var(--color-bg);
-  color: var(--color-text);
+  right: var(--spacing-lg);
+  bottom: var(--spacing-lg);
+  z-index: var(--z-index-overlay);
+  max-width: calc(100% - 2 * var(--spacing-lg));
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-normal);
-  cursor: progress;
+  pointer-events: none;
 }
