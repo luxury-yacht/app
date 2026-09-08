@@ -51,6 +51,7 @@ import {
   failPanelWindowTransfer,
   focusPanelWindow,
   onApplicationQuitPreflightRequested,
+  onApplicationQuitPreflightSettled,
   onClusterPanelCloseRequested,
   onClusterPanelCloseSettled,
   onPanelTabCloseAuthorized,
@@ -245,6 +246,7 @@ describe('native panel-window transport', () => {
       [onPanelTabTransferCommitted, 'panel-window:tab-transfer-committed'],
       [onPanelTabTransferFailed, 'panel-window:tab-transfer-failed'],
       [onApplicationQuitPreflightRequested, 'panel-window:application-quit-preflight-requested'],
+      [onApplicationQuitPreflightSettled, 'panel-window:application-quit-preflight-settled'],
     ] as const;
 
     for (const [subscribe] of subscriptions) {

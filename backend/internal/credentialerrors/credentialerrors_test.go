@@ -46,6 +46,10 @@ func TestClassify(t *testing.T) {
 		{"sso session expired", errors.New("sso session has expired"), ClassAuth, KindExpired},
 		{"refresh token invalid", errors.New("refresh token is invalid"), ClassAuth, KindExpired},
 
+		// A removed SSO token requires new credentials, not a helper installation.
+		{"missing SSO token", errors.New("aws: [ERROR]: Error loading SSO Token: Token for fusionauth does not exist"), ClassAuth, Kind("missing-credentials")},
+		{"missing SSO token inside exec failure", errors.New("exec plugin failed: exit status 255: Error loading SSO Token: Token for fusionauth does not exist"), ClassAuth, Kind("missing-credentials")},
+
 		// Connectivity — says nothing about credential validity.
 		{"connection refused", errors.New("dial tcp 10.0.0.1:6443: connect: connection refused"), ClassConnectivity, KindConnectivity},
 		{"timeout", errors.New("context deadline exceeded"), ClassConnectivity, KindConnectivity},

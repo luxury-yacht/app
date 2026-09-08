@@ -483,7 +483,11 @@ function WorkspaceObjectRouteCoordinator({
         const owned = getOwnedPanel(request.clusterId, request.tab.panelId);
         const sourceGroup = getGroupForPanel(tabGroups, request.tab.panelId);
         const blocker = guards.firstBlocker([request.tab.panelId]);
-        if (!isAuthoritativeTransferSource(request, owned, sourceGroup, windowName) || blocker) {
+        if (
+          guards.isFrozen() ||
+          !isAuthoritativeTransferSource(request, owned, sourceGroup, windowName) ||
+          blocker
+        ) {
           blocker?.focus();
           void failPanelTabTransfer(windowName, request.transferId);
           return;
@@ -515,6 +519,7 @@ function WorkspaceObjectRouteCoordinator({
           return;
         }
         if (
+          guards.isFrozen(request.transferId) ||
           !selectedClusterIds.includes(request.clusterId) ||
           (request.targetGroupId !== 'right' && request.targetGroupId !== 'bottom') ||
           getOwnedPanel(request.clusterId, request.tab.panelId)
@@ -549,7 +554,7 @@ function WorkspaceObjectRouteCoordinator({
       activateCluster,
       dockPanelWindow,
       dockPanelGroup,
-      guards.freeze,
+      guards,
       sync.stage,
     ]
   );
@@ -594,6 +599,17 @@ function WorkspaceObjectRouteCoordinator({
   useEffect(
     () =>
       onPanelWindowDockRequested((event) => {
+        if (guards.isFrozen(event.transferId)) {
+          void failPanelWindowTransfer(windowName, event.windowName, event.transferId).catch(
+            (error) =>
+              reportOperationalError(error, {
+                source: 'WorkspacePanelCoordinator',
+                action: 'reject-dock-during-close',
+                clusterId: event.snapshot.clusterId,
+              })
+          );
+          return;
+        }
         if (
           !selectedClusterIds.includes(event.snapshot.clusterId) ||
           (event.targetPosition !== 'right' && event.targetPosition !== 'bottom')
@@ -620,7 +636,7 @@ function WorkspaceObjectRouteCoordinator({
         );
         onDockRequest(event, event.targetPosition);
       }),
-    [selectedClusterIds, dockPanelGroup, onDockRequest, sync.stage, guards.freeze]
+    [selectedClusterIds, dockPanelGroup, onDockRequest, sync.stage, guards, windowName]
   );
   useEffect(
     () =>

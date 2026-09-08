@@ -67,6 +67,12 @@ source contract is unclear.
 
 ## Validation
 
+- Apply the [completion evidence gate](docs/workflows/completion.md) to behavior
+  changes. Track requested outcomes and affected adjacent workflows with explicit
+  evidence; a required failed, blocked, or unrun check prevents a completion claim.
+- Automated checks and native interaction checks prove different things. Do not
+  substitute browser previews or mocked native calls for required native window
+  behavior. Preserve unfinished verification in the task's completion record.
 - In the Codex workspace sandbox, set
   `GOCACHE=/tmp/luxury-yacht-go-build` and
   `STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck`. Full backend, race, and

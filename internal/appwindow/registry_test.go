@@ -1126,13 +1126,16 @@ func TestPrepareApplicationQuitPreflightsEveryReadyWorkspaceBeforeClosingAny(t *
 
 func TestApplicationQuitPreflightCommitsOnlyAfterEveryWorkspaceAllows(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{allowQuit: true})
+	backend := &recordingLifecycleBackend{allowQuit: true}
+	registry := NewRegistry(wailsApp, backend)
 	first := registry.Create(true)
 	second := registry.Create(false)
 	registry.markWorkspaceReady(first.Name())
 	registry.markWorkspaceReady(second.Name())
 	var transactionID string
 	var closeRequests []string
+	quitRequests := 0
+	registry.requestApplicationQuit = func() { quitRequests++ }
 	registry.emitWindowEvent = func(target, eventName string, payload any) bool {
 		switch eventName {
 		case panelwindow.ApplicationQuitPreflightRequestedEventName:
@@ -1147,9 +1150,13 @@ func TestApplicationQuitPreflightCommitsOnlyAfterEveryWorkspaceAllows(t *testing
 
 	require.NoError(t, registry.AcknowledgeApplicationQuitPreflight(first.Name(), transactionID, true))
 	require.Empty(t, closeRequests)
+	require.Zero(t, quitRequests)
 	require.NoError(t, registry.AcknowledgeApplicationQuitPreflight(second.Name(), transactionID, true))
-	require.ElementsMatch(t, []string{first.Name(), second.Name()}, closeRequests)
-	require.False(t, registry.PrepareApplicationQuit())
+	require.Equal(t, 1, quitRequests)
+	require.Empty(t, closeRequests, "process quit must not remove individual cluster views")
+	require.Equal(t, 2, registry.Count())
+	require.True(t, registry.PrepareApplicationQuit())
+	require.Equal(t, second.Name(), backend.preparedWindow)
 }
 
 func TestApplicationQuitPreflightCancellationLeavesEveryWorkspaceOpen(t *testing.T) {

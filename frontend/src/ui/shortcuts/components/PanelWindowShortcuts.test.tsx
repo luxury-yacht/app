@@ -84,6 +84,10 @@ vi.mock('@/core/panel-windows', () => ({
     mocks.handlers.quit = handler;
     return () => undefined;
   },
+  onApplicationQuitPreflightSettled: (handler: (event: never) => void) => {
+    mocks.handlers.quitSettled = handler;
+    return () => undefined;
+  },
   onPanelTabTransferRequested: (handler: (event: never) => void) => {
     mocks.handlers.transferSource = handler;
     return () => undefined;
@@ -102,7 +106,8 @@ vi.mock('@/core/panel-windows', () => ({
   },
 }));
 
-vi.mock('@/core/panel-windows/panelLifecycleGuards', () => ({
+vi.mock('@/core/panel-windows/panelLifecycleGuards', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   usePanelLifecycleGuardRegistry: () => ({
     freeze: mocks.freeze,
     releaseTransfer: mocks.releaseTransfer,
@@ -246,6 +251,87 @@ describe('PanelWindowShortcuts', () => {
     await act(async () => mocks.handlers.authorized?.({ panelId: 'panel-a' } as never));
     expect(mocks.commitTabClose).toHaveBeenCalledWith('panel-a');
     expect(mocks.closePanel).not.toHaveBeenCalled();
+  });
+
+  const outgoingTabRequest = () => ({
+    transferId: 'outgoing-panel-tab',
+    sourceWindowName: 'panel-1',
+    targetWindowName: '',
+    sourceGroupId: 'group-1',
+    targetGroupId: 'group-new',
+    targetKind: 'new-window',
+    targetIndex: 0,
+    clusterId: 'cluster-1',
+    tab: {
+      kind: 'object',
+      panelId: 'panel-b',
+      activeView: 'details',
+      objectRef: {
+        clusterId: 'cluster-1',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'default',
+        name: 'api-1',
+      },
+    },
+  });
+
+  it('publishes a frozen native source before creating the target and retains it until commit', async () => {
+    const request = outgoingTabRequest();
+    let publish: () => void = () => {
+      throw new Error('Publication was not started');
+    };
+    const flush = vi.spyOn(nativePanelPublication, 'flush').mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          publish = resolve;
+        })
+    );
+    await act(async () => mocks.handlers.transferSource?.({ request } as never));
+    expect(mocks.freeze).toHaveBeenCalledWith(request.transferId, ['panel-b']);
+    expect(mocks.acceptTabTransfer).not.toHaveBeenCalled();
+    expect(mocks.beginOpen).not.toHaveBeenCalled();
+    await act(async () => publish());
+    expect(mocks.acceptTabTransfer).toHaveBeenCalledWith('panel-1', request.transferId);
+    expect(mocks.beginOpen).toHaveBeenCalledWith(
+      'panel-1',
+      expect.objectContaining({
+        clusterId: 'cluster-1',
+        tabs: [request.tab],
+      })
+    );
+    expect(mocks.commitTabClose).not.toHaveBeenCalled();
+    await act(async () => mocks.handlers.tabTransferCommitted?.({ request } as never));
+    expect(mocks.commitTabClose).toHaveBeenCalledWith('panel-b');
+    expect(mocks.releaseTransfer).toHaveBeenCalledWith(request.transferId);
+    flush.mockRestore();
+  });
+
+  it('keeps the native source tab when creation of its tear-off target fails', async () => {
+    const request = outgoingTabRequest();
+    mocks.beginOpen.mockRejectedValueOnce(new Error('native window creation failed'));
+    await act(async () => mocks.handlers.transferSource?.({ request } as never));
+    expect(mocks.failTabTransfer).toHaveBeenCalledWith('panel-1', request.transferId);
+    expect(mocks.reportError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        action: 'accept-tab-transfer',
+      })
+    );
+    await act(async () => mocks.handlers.tabTransferFailed?.({ request } as never));
+    expect(mocks.releaseTransfer).toHaveBeenCalledWith(request.transferId);
+    expect(mocks.commitTabClose).not.toHaveBeenCalled();
+    expect(mocks.acknowledgeClose).not.toHaveBeenCalled();
+  });
+
+  it('rejects outgoing native tabs while the renderer is closing', async () => {
+    const request = outgoingTabRequest();
+    mocks.frozen = true;
+    await act(async () => mocks.handlers.transferSource?.({ request } as never));
+    expect(mocks.failTabTransfer).toHaveBeenCalledWith('panel-1', request.transferId);
+    expect(mocks.acceptTabTransfer).not.toHaveBeenCalled();
+    expect(mocks.beginOpen).not.toHaveBeenCalled();
   });
 
   it('guards cluster closure and releases the freeze when another panel denies it', async () => {
@@ -562,6 +648,53 @@ describe('PanelWindowShortcuts', () => {
 
     expect(mocks.commitTabClose).not.toHaveBeenCalled();
     expect(mocks.closeAll).not.toHaveBeenCalled();
+  });
+
+  it('rejects incoming panel tabs while the native renderer is closing', async () => {
+    mocks.frozen = true;
+    const request = {
+      transferId: 'incoming-while-closing',
+      clusterId: 'cluster-1',
+      sourceWindowName: 'other',
+      targetWindowName: 'panel-1',
+      targetGroupId: 'group-1',
+      targetIndex: 0,
+      tab: {
+        kind: 'object',
+        panelId: 'panel-c',
+        activeView: 'details',
+        objectRef: {
+          clusterId: 'cluster-1',
+          group: '',
+          version: 'v1',
+          kind: 'Pod',
+          namespace: 'default',
+          name: 'incoming',
+        },
+      },
+    };
+    await act(async () => mocks.handlers.tabTransferInsert({ request } as never));
+    expect(mocks.failTabTransfer).toHaveBeenCalledWith('panel-1', request.transferId);
+    expect(mocks.upsertOwnedPanel).not.toHaveBeenCalled();
+  });
+
+  it('freezes the native window throughout close publication', async () => {
+    let publish: () => void = () => undefined;
+    vi.spyOn(nativePanelPublication, 'flush').mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          publish = resolve;
+        })
+    );
+    await act(async () => mocks.handlers.windowClose({} as never));
+    const freezesWhilePublishing = mocks.freeze.mock.calls.length;
+    expect(mocks.acknowledgeClose).not.toHaveBeenCalled();
+    await act(async () => {
+      publish();
+    });
+    expect(freezesWhilePublishing).toBe(1);
+    expect(mocks.acknowledgeClose).toHaveBeenCalledOnce();
+    expect(mocks.releaseTransfer).toHaveBeenCalledOnce();
   });
 
   it('preserves the native group when a whole-window close commit fails', async () => {

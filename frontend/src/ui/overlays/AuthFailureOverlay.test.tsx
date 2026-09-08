@@ -89,6 +89,20 @@ describe('AuthFailureOverlayContent', () => {
     expect(container.textContent).not.toContain('Install that command');
   });
 
+  it('directs credential refresh when the SSO token is missing', async () => {
+    await renderContent({
+      ...baseState,
+      execCommand: 'aws',
+      diagnosticKind: 'missing-credentials',
+      diagnosticSummary: 'The authentication token or SSO session is missing.',
+    });
+
+    expect(container.textContent).toMatch(/SSO session is missing/);
+    expect(container.textContent).toMatch(/refresh your credentials/i);
+    expect(container.textContent).not.toContain('may need');
+    expect(container.textContent).not.toContain('Install that command');
+  });
+
   it('falls back to generic copy when there is no exec command', async () => {
     await renderContent(baseState);
 

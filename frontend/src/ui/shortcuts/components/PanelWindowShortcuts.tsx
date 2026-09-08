@@ -13,12 +13,10 @@ import {
 import type { PanelWindowDescriptor } from '@/core/panel-windows';
 import {
   acceptPanelTabTransfer,
-  acknowledgeApplicationQuitPreflight,
   acknowledgeClusterPanelClose,
   acknowledgePanelWindowClose,
   beginPanelWindowOpen,
   failPanelTabTransfer,
-  onApplicationQuitPreflightRequested,
   onClusterPanelCloseRequested,
   onClusterPanelCloseSettled,
   onPanelTabCloseAuthorized,
@@ -32,13 +30,17 @@ import {
   updatePanelWindowSnapshot,
 } from '@/core/panel-windows';
 import type { PanelLifecycleBlocker } from '@/core/panel-windows/panelLifecycleGuards';
-import { usePanelLifecycleGuardRegistry } from '@/core/panel-windows/panelLifecycleGuards';
+import {
+  preparePanelClose,
+  usePanelLifecycleGuardRegistry,
+} from '@/core/panel-windows/panelLifecycleGuards';
 import { nativePanelPublication } from '@/core/panel-windows/publicationQueue';
 import {
   objectPanelTabSnapshot,
   samePanelTab,
   tornOffTabSnapshot,
 } from '@/core/panel-windows/tabTransfer';
+import { useApplicationQuitPreflight } from '@/core/panel-windows/useApplicationQuitPreflight';
 import type { ViewType } from '@/modules/object-panel/components/ObjectPanel/types';
 import {
   useObjectPanelActiveTabs,
@@ -82,73 +84,38 @@ export function PanelWindowShortcuts({
     [descriptor.windowName, focusPanel]
   );
 
-  useEffect(
-    () =>
-      onApplicationQuitPreflightRequested((event) => {
-        if (event.windowName !== descriptor.windowName) {
-          return;
-        }
-        const blocker = guards.firstBlocker(Array.from(openPanels.keys()));
-        if (blocker) {
-          focusLifecycleBlocker(blocker);
-        }
-        void nativePanelPublication
-          .flush()
-          .then(
-            () => ready && !blocker && !guards.isFrozen(),
-            (error: unknown) => {
-              reportOperationalError(error, {
-                source: 'PanelWindowShortcuts',
-                action: 'quit-preflight',
-              });
-              return false;
-            }
-          )
-          .then((allowed) =>
-            acknowledgeApplicationQuitPreflight(descriptor.windowName, event.transactionId, allowed)
-          )
-          .catch((error) =>
-            reportOperationalError(error, {
-              source: 'PanelWindowShortcuts',
-              action: 'acknowledge-quit',
-            })
-          );
-      }),
-    [descriptor.windowName, guards, openPanels, ready, focusLifecycleBlocker]
-  );
-
-  const prepareClusterClose = useCallback(
-    async (transactionId: string) => {
-      const panelIds = Array.from(openPanels.keys());
-      const blocker = guards.firstBlocker(panelIds);
-      if (blocker) {
-        focusLifecycleBlocker(blocker);
-      }
-      if (!ready || blocker || guards.isFrozen()) {
+  const prepareClose = useCallback(
+    async (transactionId: string, status: string) => {
+      if (!ready) {
         return false;
       }
-      guards.freeze(transactionId, panelIds, 'Closing cluster…');
-      try {
-        await nativePanelPublication.flush();
-        return true;
-      } catch (error) {
-        reportOperationalError(error, {
-          source: 'PanelWindowShortcuts',
-          action: 'cluster-close-preflight',
-          clusterId: descriptor.clusterId,
-        });
-        return false;
-      }
+      return preparePanelClose({
+        guards,
+        transactionId,
+        status,
+        panelIds: Array.from(openPanels.keys()),
+        flush: () => nativePanelPublication.flush(),
+        focusBlocker: focusLifecycleBlocker,
+      });
     },
-    [descriptor.clusterId, guards, openPanels, ready, focusLifecycleBlocker]
+    [guards, openPanels, ready, focusLifecycleBlocker]
   );
+  useApplicationQuitPreflight(descriptor.windowName, prepareClose);
 
   useEffect(() => {
     const stopRequest = onClusterPanelCloseRequested((event) => {
       if (event.windowName !== descriptor.windowName || event.clusterId !== descriptor.clusterId) {
         return;
       }
-      void prepareClusterClose(event.transactionId)
+      void prepareClose(event.transactionId, 'Closing cluster…')
+        .catch((error) => {
+          reportOperationalError(error, {
+            source: 'PanelWindowShortcuts',
+            action: 'cluster-close-preflight',
+            clusterId: descriptor.clusterId,
+          });
+          return false;
+        })
         .then((approved) =>
           acknowledgeClusterPanelClose(descriptor.windowName, event.transactionId, approved)
         )
@@ -169,7 +136,7 @@ export function PanelWindowShortcuts({
       stopRequest();
       stopSettled();
     };
-  }, [descriptor.windowName, descriptor.clusterId, guards, prepareClusterClose]);
+  }, [descriptor.windowName, descriptor.clusterId, guards, prepareClose]);
 
   const getPanelSnapshot = useCallback(
     (panelId: string) => {
@@ -190,6 +157,7 @@ export function PanelWindowShortcuts({
         const current = getPanelSnapshot(request.tab.panelId);
         const blocker = guards.firstBlocker([request.tab.panelId]);
         if (
+          guards.isFrozen() ||
           !ready ||
           request.clusterId !== descriptor.clusterId ||
           request.sourceGroupId !== descriptor.groupId ||
@@ -335,6 +303,7 @@ export function PanelWindowShortcuts({
     () =>
       onPanelTabTransferInsertRequested(({ request }) => {
         if (
+          guards.isFrozen(request.transferId) ||
           request.targetWindowName !== descriptor.windowName ||
           request.clusterId !== descriptor.clusterId ||
           request.targetGroupId !== descriptor.groupId ||
@@ -360,7 +329,7 @@ export function PanelWindowShortcuts({
         insertedTabTransfersRef.current.set(request.transferId, panelId);
         movePanelBetweenGroups(panelId, 'right', request.targetIndex);
       }),
-    [descriptor, movePanelBetweenGroups, openPanels, upsertOwnedPanel, guards.freeze]
+    [descriptor, movePanelBetweenGroups, openPanels, upsertOwnedPanel, guards]
   );
 
   useEffect(
@@ -454,27 +423,20 @@ export function PanelWindowShortcuts({
   useEffect(
     () =>
       onPanelWindowCloseRequested(() => {
-        if (guards.isFrozen()) {
-          return;
-        }
-        const group = getGroupTabs(tabGroups, 'right') ?? getGroupTabs(tabGroups, 'bottom');
-        const tabs = group?.tabs ?? descriptor.snapshot.tabs?.map((tab) => tab.panelId) ?? [];
-        const blocker = guards.firstBlocker(tabs);
-        if (blocker) {
-          focusLifecycleBlocker(blocker);
-          return;
-        }
-        void nativePanelPublication
-          .flush()
-          .then(() => acknowledgePanelWindowClose(descriptor.windowName))
+        const transactionId = `window-close-${globalThis.crypto.randomUUID()}`;
+        void prepareClose(transactionId, 'Closing window…')
+          .then((allowed) =>
+            allowed ? acknowledgePanelWindowClose(descriptor.windowName) : undefined
+          )
           .catch((error) =>
             reportOperationalError(error, {
               source: 'PanelWindowShortcuts',
               action: 'close-window',
             })
-          );
+          )
+          .finally(() => guards.releaseTransfer(transactionId));
       }),
-    [descriptor, focusLifecycleBlocker, guards, tabGroups]
+    [descriptor.windowName, guards, prepareClose]
   );
 
   useEffect(() => onPanelWindowFocusRequested(({ panelId }) => focusPanel(panelId)), [focusPanel]);

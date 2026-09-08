@@ -37,6 +37,8 @@ func TestCredentialDiagnosticHelper(t *testing.T) {
 		fmt.Fprintln(os.Stderr, "credential service is unavailable. secret-must-not-reach-ui")
 	case "missing-cache":
 		fmt.Fprintln(os.Stderr, "exec credential cache file not found")
+	case "missing-sso":
+		fmt.Fprintln(os.Stderr, "aws: [ERROR]: Error loading SSO Token: Token for fusionauth does not exist")
 	default:
 		fmt.Fprintln(os.Stdout, `{"apiVersion":"client.authentication.k8s.io/v1","kind":"ExecCredential","status":{"token":"fixture-token"}}`)
 		os.Exit(0)
@@ -45,6 +47,15 @@ func TestCredentialDiagnosticHelper(t *testing.T) {
 }
 
 func TestRestoredClustersPublishRealAuthFailureAndRecovery(t *testing.T) {
+	for _, mode := range []string{"expired", "missing-sso"} {
+		t.Run(mode, func(t *testing.T) {
+			testRestoredClustersPublishRealAuthFailureAndRecovery(t, mode)
+		})
+	}
+}
+
+func testRestoredClustersPublishRealAuthFailureAndRecovery(t *testing.T, failureMode string) {
+	t.Helper()
 	setTestConfigEnv(t)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer fixture-token" {
@@ -58,7 +69,7 @@ func TestRestoredClustersPublishRealAuthFailureAndRecovery(t *testing.T) {
 	app := newWorkspaceCoordinatorTestFixture(t)
 	defer app.ClusterRuntime.stopAuthRecovery()
 	statePath := filepath.Join(t.TempDir(), "credential-state")
-	require.NoError(t, os.WriteFile(statePath, []byte("expired"), 0o600))
+	require.NoError(t, os.WriteFile(statePath, []byte(failureMode), 0o600))
 	selections := make([]string, 0, 2)
 	ids := make(map[string]string)
 	for _, mode := range []string{"expired", "healthy"} {
@@ -98,7 +109,11 @@ func TestRestoredClustersPublishRealAuthFailureAndRecovery(t *testing.T) {
 		return state.Clusters[ids["expired"]].Auth.ErrorClass == "auth"
 	}, 3*time.Second, time.Millisecond)
 	state := app.Workspace.GetClusterWorkspaceState()
-	require.Equal(t, "expired-credentials", state.Clusters[ids["expired"]].Auth.DiagnosticKind)
+	want := "expired-credentials"
+	if failureMode == "missing-sso" {
+		want = "missing-credentials"
+	}
+	require.Equal(t, want, state.Clusters[ids["expired"]].Auth.DiagnosticKind)
 	require.Equal(t, "valid", state.Clusters[ids["healthy"]].Auth.State)
 	require.NotContains(t, state.Clusters[ids["expired"]].Auth.DiagnosticSummary, "secret-must-not-reach-ui")
 	// Recovery publishes the existing rebuild intent; refresh reconstruction has
@@ -127,7 +142,7 @@ func TestClusterPreflightPreservesExecDiagnostic(t *testing.T) {
 	t.Cleanup(server.Close)
 	app := newClusterRuntimeTestFixture(t)
 	t.Cleanup(app.ClusterRuntime.execDiagnostics.close)
-	for _, mode := range []string{"expired", "failed", "missing-cache", "healthy"} {
+	for _, mode := range []string{"expired", "missing-sso", "failed", "missing-cache", "healthy"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			path := writeExecDiagnosticKubeconfig(t, server.URL, mode)
@@ -146,6 +161,8 @@ func TestClusterPreflightPreservesExecDiagnostic(t *testing.T) {
 			want := "helper-failed"
 			if mode == "expired" {
 				want = "expired-credentials"
+			} else if mode == "missing-sso" {
+				want = "missing-credentials"
 			}
 			require.Equal(t, want, diagnostic.Kind)
 			require.NotContains(t, diagnostic.Summary, "secret-must-not-reach-ui")

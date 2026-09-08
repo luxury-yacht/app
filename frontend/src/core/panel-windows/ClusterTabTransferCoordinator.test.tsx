@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   freeze: vi.fn(),
   release: vi.fn(),
   blocker: null as null | { focus: () => void },
+  frozen: false,
   groups: [] as unknown[],
   load: vi.fn(async () => undefined),
   restoreNav: vi.fn(),
@@ -93,6 +94,7 @@ vi.mock('./WorkspacePanelSync', () => ({
 vi.mock('./panelLifecycleGuards', () => ({
   usePanelLifecycleGuardRegistry: () => ({
     firstBlocker: () => mocks.blocker,
+    isFrozen: () => mocks.frozen,
     freeze: mocks.freeze,
     releaseTransfer: mocks.release,
   }),
@@ -134,6 +136,7 @@ let container: HTMLDivElement;
 beforeEach(async () => {
   vi.clearAllMocks();
   mocks.blocker = null;
+  mocks.frozen = false;
   mocks.groups = [];
   container = document.createElement('div');
   root = ReactDOM.createRoot(container);
@@ -163,6 +166,25 @@ it('refuses a dirty source without staging the destination', async () => {
   expect(mocks.accept).not.toHaveBeenCalled();
   expect(mocks.freeze).not.toHaveBeenCalled();
 });
+it.each(['source', 'insert'])(
+  'rejects a %s transfer while the renderer is closing',
+  async (role) => {
+    mocks.frozen = true;
+    const event = {
+      request:
+        role === 'source'
+          ? request
+          : { ...request, sourceWindowName: 'app-b', targetWindowName: 'app-a' },
+      snapshot,
+      targetAlreadyOpen: true,
+    };
+    await act(async () => mocks.handlers[role](event as never));
+    expect(mocks.fail).toHaveBeenCalledWith('app-a', 'move-1');
+    expect(mocks.accept).not.toHaveBeenCalled();
+    expect(mocks.ack).not.toHaveBeenCalled();
+    expect(mocks.freeze).not.toHaveBeenCalled();
+  }
+);
 it('reuses existing destination navigation and acknowledges only after publication', async () => {
   await act(async () =>
     mocks.handlers.insert({

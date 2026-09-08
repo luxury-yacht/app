@@ -86,7 +86,7 @@ export function ClusterTabTransferCoordinator() {
         const groups = sync.groupsForCluster(request.clusterId);
         const ids = panelIds(groups);
         const blocker = guards.firstBlocker(ids);
-        if (!selectedClusterIds.includes(request.clusterId) || blocker) {
+        if (guards.isFrozen() || !selectedClusterIds.includes(request.clusterId) || blocker) {
           blocker?.focus();
           void fail(request.transferId);
           return;
@@ -126,6 +126,10 @@ export function ClusterTabTransferCoordinator() {
       onClusterTabTransferInsert((event) => {
         const { request, snapshot } = event;
         if (request.targetWindowName !== windowName || cancelled.current.has(request.transferId)) {
+          return;
+        }
+        if (guards.isFrozen(request.transferId)) {
+          void fail(request.transferId);
           return;
         }
         const groups = snapshot.groups ?? [];

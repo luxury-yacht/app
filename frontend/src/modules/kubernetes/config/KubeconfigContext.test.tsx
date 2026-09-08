@@ -31,7 +31,11 @@ const {
   setSelectedKubeconfigsMock: vi.fn(),
   setVisibleClusterMock: vi.fn(),
   errorHandlerHandleMock: vi.fn(),
-  workspaceState: { selections: [] as string[], visibleClusterId: '' },
+  workspaceState: {
+    selections: [] as string[],
+    visibleClusterId: '',
+    clusters: {} as Record<string, { clusterId: string; lifecycle: string }>,
+  },
   mocks: {
     refreshOrchestrator: {
       updateContext: vi.fn(),
@@ -47,7 +51,7 @@ vi.mock('@core/backend-api', () => ({
     return {
       selectedKubeconfigs: workspaceState.selections,
       visibleClusterId: workspaceState.visibleClusterId,
-      clusters: {},
+      clusters: workspaceState.clusters,
     };
   },
   ApplyClusterWorkspace: async (command: {
@@ -67,7 +71,7 @@ vi.mock('@core/backend-api', () => ({
       state: {
         selectedKubeconfigs: workspaceState.selections,
         visibleClusterId: workspaceState.visibleClusterId,
-        clusters: {},
+        clusters: workspaceState.clusters,
       },
       error: '',
     };
@@ -146,6 +150,7 @@ describe('KubeconfigContext', () => {
     errorHandlerHandleMock.mockReset();
     workspaceState.selections = [];
     workspaceState.visibleClusterId = '';
+    workspaceState.clusters = {};
     mocks.backgroundRefreshState.enabled = true;
     clusterReadiness.resetForTests();
     resetClusterTabOrderCacheForTesting();
@@ -446,6 +451,7 @@ describe('KubeconfigContext', () => {
         resolveActivation = resolve;
       })
     );
+    workspaceState.clusters['beta:prod'] = { clusterId: 'beta:prod', lifecycle: 'ready' };
     eventBus.emit('cluster:lifecycle', { clusterId: 'beta:prod', state: 'ready' });
     expect(clusterReadiness.isServiceable('beta:prod')).toBe(true);
 

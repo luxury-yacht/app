@@ -4,8 +4,7 @@
  * The refresh layer's view of cluster lifecycle readiness: dispatch is held
  * for clusters whose backend refresh subsystem is not serving yet
  * ('connecting'/'connected' precede service registration; 'loading' onward
- * serves). Unknown clusters allow dispatch — the orchestrator classifies the
- * backend's not-ready error for that race instead of guessing.
+ * serves). Unknown clusters wait for authoritative lifecycle state.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -22,8 +21,13 @@ describe('clusterReadiness', () => {
     clusterReadiness.resetForTests();
   });
 
-  it('treats unknown clusters as serviceable (backend answers the race)', () => {
+  it('holds unknown clusters until their first serving lifecycle state', () => {
+    const listener = vi.fn();
+    clusterReadiness.onBecameServiceable(listener);
+    expect(clusterReadiness.isServiceable('never-seen')).toBe(false);
+    lifecycle('never-seen', 'loading');
     expect(clusterReadiness.isServiceable('never-seen')).toBe(true);
+    expect(listener).toHaveBeenCalledExactlyOnceWith('never-seen');
     expect(clusterReadiness.isServiceable(null)).toBe(true);
     expect(clusterReadiness.isServiceable(undefined)).toBe(true);
   });

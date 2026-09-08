@@ -138,6 +138,7 @@ func init() {
 	application.RegisterEvent[panelwindow.ClusterPanelCloseEvent](panelwindow.ClusterPanelCloseRequestedEventName)
 	application.RegisterEvent[panelwindow.ClusterPanelCloseEvent](panelwindow.ClusterPanelCloseSettledEventName)
 	application.RegisterEvent[panelwindow.ApplicationQuitPreflightRequestedEvent](panelwindow.ApplicationQuitPreflightRequestedEventName)
+	application.RegisterEvent[panelwindow.ApplicationQuitPreflightRequestedEvent](panelwindow.ApplicationQuitPreflightSettledEventName)
 
 	application.RegisterEvent[[]ShellSessionInfo](shellListEventName)
 	application.RegisterEvent[ShellOutputEvent](shellOutputEventName)

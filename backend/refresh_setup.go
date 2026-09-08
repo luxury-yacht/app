@@ -59,7 +59,6 @@ func (a *RefreshCoordinator) setupRefreshSubsystemForSelections(selections []kub
 		return err
 	}
 	a.refreshAggregates.Store(aggregates)
-	a.sweepNamespacesReadiness(subsystems)
 	a.publishRefreshService(mux, subsystems)
 	commitRefreshGenerations(activations)
 
@@ -314,12 +313,6 @@ func (a *RefreshCoordinator) buildRefreshSubsystemForSelection(
 		return nil, err
 	}
 
-	// Transition to loading now that the subsystem is built and about to
-	// start serving data. This is the single place where loading is set,
-	// regardless of whether the cluster was opened at startup, via the
-	// kubeconfig selector, or after auth recovery.
-	a.transitionClusterToLoading(clusterMeta.ID)
-
 	// Watch informer updates to invalidate cached detail/YAML/helm responses.
 	a.resources.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
 
@@ -479,7 +472,7 @@ func (h *refreshAggregateHandlers) Update(clusterOrder []string, subsystems map[
 	return nil
 }
 
-// transitionClusterToLoading marks a freshly (re)built cluster as loading —
+// transitionClusterToLoading marks a freshly published cluster as loading —
 // EXCEPT when the cluster is already READY. The governor re-warms Cold
 // clusters through this same chokepoint on tab switches, and re-warm serving
 // is CONTINUOUS (the cooled mmap stores serve until the aggregate re-routes;
@@ -528,16 +521,12 @@ func (a *RefreshCoordinator) namespacesReadinessSelfBuild(clusterID string) {
 	a.clusterRuntime.buildNamespacesReadiness(aggregates.snapshot, clusterID)
 }
 
-// sweepNamespacesReadiness wires the readiness observer on every subsystem
-// (idempotent) and fires one self-build attempt per cluster. Called right
-// after a.refreshAggregates is (re)assigned: any settle ring that fired while
-// aggregates were still nil — or before an observer was attached — is healed
-// here instead of being lost (the notifier stops re-arming once settled).
-func (a *RefreshCoordinator) sweepNamespacesReadiness(subsystems map[string]*system.Subsystem) {
-	for clusterID, subsystem := range subsystems {
-		a.wireNamespacesReadinessObserver(clusterID, subsystem)
-		go a.namespacesReadinessSelfBuild(clusterID)
-	}
+// Publication, rather than construction, admits frontend refresh requests. Each
+// committed generation also heals any settle ring lost before its route existed,
+// including selector opens and recovery while another cluster is already serving.
+func (a *RefreshCoordinator) startPublishedClusterReadiness(clusterID string) {
+	a.transitionClusterToLoading(clusterID)
+	go a.namespacesReadinessSelfBuild(clusterID)
 }
 
 // buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.

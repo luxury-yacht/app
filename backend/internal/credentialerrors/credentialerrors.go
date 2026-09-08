@@ -40,6 +40,8 @@ const (
 	KindHelperFailed Kind = "helper-failed"
 	// KindExpired means the credentials (token/SSO session) have expired.
 	KindExpired Kind = "expired-credentials"
+	// KindMissingCredentials means the credential helper has no saved token.
+	KindMissingCredentials Kind = "missing-credentials"
 	// KindRejected means the cluster rejected the credentials (HTTP 401/403).
 	KindRejected Kind = "rejected"
 	// KindConnectivity means the cluster could not be reached.
@@ -78,6 +80,8 @@ func ForKind(kind Kind, ctx Context) Diagnostic {
 		d.Class, d.Kind, d.Summary = ClassAuth, kind, summaryHelperFailed
 	case KindExpired:
 		d.Class, d.Kind, d.Summary = ClassAuth, kind, summaryExpired
+	case KindMissingCredentials:
+		d.Class, d.Kind, d.Summary = ClassAuth, kind, summaryMissingCredentials
 	case KindRejected:
 		d.Class, d.Kind, d.Summary = ClassAuth, kind, summaryRejected
 	}
@@ -87,11 +91,12 @@ func ForKind(kind Kind, ctx Context) Diagnostic {
 // Provider-neutral, sanitized summaries. These never echo raw provider stderr;
 // any provider-specific detail belongs on a dedicated diagnostics surface.
 const (
-	summaryMissingHelper = "The kubeconfig's credential helper could not be found."
-	summaryHelperFailed  = "The kubeconfig's credential helper failed to run."
-	summaryExpired       = "The authentication token or SSO session has expired."
-	summaryRejected      = "The cluster rejected the credentials."
-	summaryConnectivity  = "The cluster could not be reached."
+	summaryMissingHelper      = "The kubeconfig's credential helper could not be found."
+	summaryHelperFailed       = "The kubeconfig's credential helper failed to run."
+	summaryExpired            = "The authentication token or SSO session has expired."
+	summaryMissingCredentials = "The authentication token or SSO session is missing."
+	summaryRejected           = "The cluster rejected the credentials."
+	summaryConnectivity       = "The cluster could not be reached."
 )
 
 // Classify maps an error (and optional context) to a typed Diagnostic.
@@ -133,6 +138,8 @@ func classify(err error, ctx Context, rejects func(string) bool) Diagnostic {
 		return ForKind(KindMissingHelper, ctx)
 	case isExpired(msg):
 		return ForKind(KindExpired, ctx)
+	case isMissingCredentials(msg):
+		return ForKind(KindMissingCredentials, ctx)
 	case isHelperFailed(msg):
 		return ForKind(KindHelperFailed, ctx)
 	case rejects(msg):
@@ -202,6 +209,12 @@ func isExpired(msg string) bool {
 		strings.Contains(msg, "token is expired") ||
 		strings.Contains(msg, "sso session") ||
 		strings.Contains(msg, "refresh token")
+}
+
+// AWS reports this after its cached SSO token has been removed or invalidated.
+func isMissingCredentials(msg string) bool {
+	return strings.Contains(msg, "error loading sso token:") &&
+		strings.Contains(msg, "does not exist")
 }
 
 // isRejected reports credentials the cluster refused (by string, e.g. an

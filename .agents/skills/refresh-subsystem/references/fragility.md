@@ -57,8 +57,9 @@ overview, and any new doorbell-backed snapshot domain:
 5. Namespace readiness is server-owned. Pre-ready doorbells invoke the
    subsystem readiness build from the per-cluster chokepoint; post-settle notify
    is one-shot, aggregate refresh is atomic, and permission-denied builds still
-   notify ready. `sweepNamespacesReadiness` in `backend/refresh_setup.go`
-   repairs rings missed before aggregate wiring exists.
+   notify ready. `startPublishedClusterReadiness` in `backend/refresh_setup.go`
+   advertises loading only after route publication and repairs rings missed
+   before aggregate wiring exists for every committed generation.
 6. Skip informer resync echoes through `namespaceUpdateIsEcho` in
    `backend/refresh/snapshot/namespaces.go`.
 7. Derive stream health from descriptor metadata rather than hardcoded domain

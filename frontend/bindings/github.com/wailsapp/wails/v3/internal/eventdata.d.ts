@@ -53,6 +53,7 @@ declare module "@wailsio/runtime" {
             "open-command-palette": void;
             "open-settings": void;
             "panel-window:application-quit-preflight-requested": panelwindow$0.ApplicationQuitPreflightRequestedEvent;
+            "panel-window:application-quit-preflight-settled": panelwindow$0.ApplicationQuitPreflightRequestedEvent;
             "panel-window:close-requested": panelwindow$0.WindowCloseRequestedEvent;
             "panel-window:closed": panelwindow$0.WindowClosedEvent;
             "panel-window:dock-requested": panelwindow$0.WindowDockRequestedEvent;

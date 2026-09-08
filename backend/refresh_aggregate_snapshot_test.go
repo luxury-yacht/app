@@ -387,9 +387,8 @@ func TestWireNamespacesReadinessObserverFlipsReadyForLateSubsystems(t *testing.T
 	require.Equal(t, 1, builds)
 }
 
-// The post-aggregate sweep heals rings dropped while aggregates were still
-// nil at initial startup: every loading cluster gets one self-build attempt.
-func TestNamespacesReadinessSweepHealsDroppedSettleRing(t *testing.T) {
+// Generation publication heals rings dropped before aggregate routing existed.
+func TestPublishedNamespacesReadinessHealsDroppedSettleRing(t *testing.T) {
 	emitter, _ := collectingEmitter()
 	lifecycle := newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
 	lifecycle.SetState("cluster-a", ClusterStateLoading)
@@ -420,12 +419,11 @@ func TestNamespacesReadinessSweepHealsDroppedSettleRing(t *testing.T) {
 		}
 	}
 
-	subsystem := &system.Subsystem{NamespacesDoorbell: &system.NamespacesDoorbellObserver{}}
-	refreshCoordinator.sweepNamespacesReadiness(map[string]*system.Subsystem{"cluster-a": subsystem})
+	refreshCoordinator.startPublishedClusterReadiness("cluster-a")
 
 	require.Eventually(t, func() bool {
 		return lifecycle.GetState("cluster-a") == ClusterStateReady
-	}, 3*time.Second, 20*time.Millisecond, "sweep must self-build for loading clusters")
+	}, 3*time.Second, 20*time.Millisecond, "publication must self-build for loading clusters")
 }
 
 // A READY cluster must stay ready through a subsystem rebuild. The governor

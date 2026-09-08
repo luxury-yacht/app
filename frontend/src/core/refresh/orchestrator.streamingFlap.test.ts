@@ -84,6 +84,7 @@ describe('streaming start under the mount-time lease flap', () => {
   let resolvers: StartResolver[];
 
   beforeEach(() => {
+    eventBus.emit('cluster:lifecycle', { clusterId: 'flap-cluster:flap-cluster', state: 'ready' });
     startCalls = [];
     stopCalls = [];
     resolvers = [];

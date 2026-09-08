@@ -106,6 +106,7 @@ func (activation *refreshGenerationActivation) commit() {
 	activation.managerCancel = nil
 	activation.permissionCancel = nil
 	activation.committed = true
+	activation.refresh.startPublishedClusterReadiness(activation.clusterID)
 }
 
 func (activation *refreshGenerationActivation) rollback() {

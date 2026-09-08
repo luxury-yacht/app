@@ -247,7 +247,6 @@ func (r clusterSubsystemRebuild) bootstrapRefreshRouting(subsystems map[string]*
 		return false
 	}
 	r.refresh.refreshAggregates.Store(aggregates)
-	r.refresh.sweepNamespacesReadiness(subsystems)
 	r.refresh.publishRefreshService(mux, subsystems)
 	r.refresh.logger.Info(fmt.Sprintf("Published refresh service after cluster %s recovery", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
 	return true

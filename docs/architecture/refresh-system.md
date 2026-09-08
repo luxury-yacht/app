@@ -79,6 +79,18 @@ unpublish the handler and stream generation, then stop their producers. Factory
 Reset uses the same owner-directed teardown before clearing refresh spill/cache
 state, so no request can resolve state while it is being deleted.
 
+The cluster `loading` lifecycle state admits frontend refresh requests. Emit it
+only when a generation commits after HTTP and aggregate route publication, never
+while constructing its subsystem. The same commit starts a server-owned namespace
+readiness build, healing doorbells that arrived before routing existed. Startup,
+selector opens, auth recovery, and governor rebuilds share this boundary; a Ready
+cluster remains Ready through a continuously served replacement.
+
+The frontend holds requests while cluster lifecycle is unknown or not serving.
+Workspace-state publication resumes deferred requests whether readiness arrived
+through a live event, initial hydration, or an authoritative command response.
+Foreground activation holds remain in force until their own completion.
+
 Preferences reaches Refresh only through two write-only sinks. The metrics
 interval is retained for future subsystem construction; a live update snapshots
 subsystem pointers under the registry read lock, releases it, and then retimes

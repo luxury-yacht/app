@@ -34,7 +34,9 @@ maximize and restore.
 - Transient unmounts such as workspace cluster switches preserve panel refresh
   state. Actual tab close evicts the current renderer's caches; a committed
   native handoff also evicts the source renderer's caches after the destination
-  has reconstructed them.
+  has reconstructed them. Eviction runs after React commits the removal, outside
+  state updater callbacks; replayed renders must not reset shared refresh stores
+  or notify their subscribers during rendering.
 - Menus and other transient surfaces render through their shared body-level
   portal. Do not weaken scrolling or overflow boundaries to expose them.
 
@@ -67,16 +69,15 @@ maximize and restore.
   rejected with an actionable error when that cluster is not open.
 - Dragging within a tab bar reorders one tab. Dragging between compatible tab
   bars moves that one tab, including workspace-to-native, native-to-workspace,
-  and native-to-native moves under the same owner and cluster. Cross-owner and
-  cross-cluster drops are rejected.
-- Rejected owner/cluster combinations show no insertion indicator. Panel drag
+  and native-to-native moves within the same cluster. Cross-cluster drops are rejected.
+- Rejected cluster combinations show no insertion indicator. Panel drag
   scope is available during protected dragover; drop-time and backend checks
   still authorize the actual transfer.
 - On macOS and Windows, dropping an unconsumed tab drag outside a workspace or a
-  multi-tab native source creates a new one-tab native window near the pointer, using the
-  configured floating size and the pointer's monitor work area. Dragging the
-  only tab out of a native source leaves that window unchanged because replacing
-  it with an equivalent one-tab native window has no effect. This differs from
+  native source creates a new one-tab native window near the pointer, using the
+  configured floating size and the pointer's monitor work area. Moving the last
+  tab closes the empty native source after destination acknowledgement. A failed
+  transfer retains the source window and its tab. This differs from
   the Float button, which always transfers the complete current group. On macOS,
   the shared native drag policy recognizes both dockable-tab and cluster-tab MIME
   markers and suppresses AppKit's failed-drop return animation because an accepted
@@ -125,6 +126,11 @@ A transfer freezes user interaction until commit or rollback. Native panels do
 not publish through an originating app window. Shared directory revisions drive
 app-view reconciliation and retained-panel restoration.
 
+Close preparation checks blockers and freezes input before awaiting publication.
+Incoming transfers must reject a renderer frozen by another transaction, even
+when the transferred cluster has no panels. A transaction may finish its own
+reconstruction while its freeze is active.
+
 ## Close ordering
 
 - Panel-tab close: guard locally, obtain registry authorization, remove a
@@ -141,7 +147,12 @@ app-view reconciliation and retained-panel restoration.
 - App-window close: guard and flush local docked panels, retain their shared
   identities, and release that app view. Floating panels remain open.
 - Application quit: preflight every ready app and panel renderer. Close none
-  until every participant approves. Denial or timeout preserves all renderers.
+  until every participant approves. Approved renderers remain frozen while their
+  peers decide and through successful process shutdown. After unanimous approval,
+  request application Quit so per-view close hooks do not remove saved clusters.
+  Settlement releases every original participant, including those that already
+  approved, on denial, timeout, delivery failure, or rejected quit handoff.
+  A renderer ignores a late request for a transaction it has already settled.
 
 ## Change Checklist
 

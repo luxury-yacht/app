@@ -5,13 +5,12 @@ import { useObjectPanelState } from '@/modules/object-panel/contexts/ObjectPanel
 import { useDockablePanelContext } from '@/ui/dockable';
 import { reportOperationalError } from '@/utils/errorHandler';
 import {
-  acknowledgeApplicationQuitPreflight,
   acknowledgeWorkspaceWindowClose,
   closeClusterView,
-  onApplicationQuitPreflightRequested,
   onWorkspaceCloseRequested,
 } from './index';
-import { usePanelLifecycleGuardRegistry } from './panelLifecycleGuards';
+import { preparePanelClose, usePanelLifecycleGuardRegistry } from './panelLifecycleGuards';
+import { useApplicationQuitPreflight } from './useApplicationQuitPreflight';
 import { usePanelPublication } from './WorkspacePanelSync';
 
 export function WorkspacePanelLifecycle() {
@@ -22,42 +21,46 @@ export function WorkspacePanelLifecycle() {
   const guards = usePanelLifecycleGuardRegistry();
   const flush = usePanelPublication();
   const preflight = useCallback(
-    async (clusterIds: readonly string[]) => {
-      if (guards.isFrozen()) {
-        return false;
-      }
+    (clusterIds: readonly string[], transactionId: string, status: string) => {
       const panelIds = clusterIds.flatMap((id) =>
         panelIdsForCluster(id).filter((panelId) => !getOwnedPanel(id, panelId)?.nativeLocation)
       );
-      const blocker = guards.firstBlocker(panelIds);
-      if (blocker) {
-        if (blocker.panelId) {
-          focusPanel(blocker.panelId);
-        }
-        blocker.focus();
-        await focusWindow(windowName);
-        return false;
-      }
-      await flush();
-      return true;
+      return preparePanelClose({
+        guards,
+        transactionId,
+        panelIds,
+        status,
+        flush,
+        focusBlocker: (blocker) => {
+          if (blocker.panelId) {
+            focusPanel(blocker.panelId);
+          }
+          blocker.focus();
+          void focusWindow(windowName).catch((error) =>
+            reportOperationalError(error, {
+              source: 'WorkspacePanelLifecycle',
+              action: 'focus-close-blocker',
+            })
+          );
+        },
+      });
     },
     [panelIdsForCluster, getOwnedPanel, guards, focusPanel, windowName, flush]
   );
 
   const closeCluster = useCallback(
     async (clusterId: string) => {
-      if (!(await preflight([clusterId]))) {
-        return false;
-      }
       const transactionId = `cluster-close-${globalThis.crypto.randomUUID()}`;
-      guards.freeze(transactionId, panelIdsForCluster(clusterId), 'Closing cluster…');
       try {
+        if (!(await preflight([clusterId], transactionId, 'Closing cluster…'))) {
+          return false;
+        }
         return await closeClusterView(windowName, clusterId);
       } finally {
         guards.releaseTransfer(transactionId);
       }
     },
-    [preflight, guards, panelIdsForCluster, windowName]
+    [preflight, guards, windowName]
   );
   useEffect(
     () => registerClusterClosePreflight(closeCluster),
@@ -69,42 +72,23 @@ export function WorkspacePanelLifecycle() {
         if (event.windowName !== windowName) {
           return;
         }
-        void preflight(selectedClusterIds)
+        const transactionId = `window-close-${globalThis.crypto.randomUUID()}`;
+        void preflight(selectedClusterIds, transactionId, 'Closing window…')
           .then((allowed) => (allowed ? acknowledgeWorkspaceWindowClose(windowName) : undefined))
           .catch((error) =>
             reportOperationalError(error, {
               source: 'WorkspacePanelLifecycle',
               action: 'close-app-view',
             })
-          );
-      }),
-    [windowName, selectedClusterIds, preflight]
-  );
-  useEffect(
-    () =>
-      onApplicationQuitPreflightRequested((event) => {
-        if (event.windowName !== windowName) {
-          return;
-        }
-        void preflight(selectedClusterIds)
-          .catch((error) => {
-            reportOperationalError(error, {
-              source: 'WorkspacePanelLifecycle',
-              action: 'quit-preflight',
-            });
-            return false;
-          })
-          .then((allowed) =>
-            acknowledgeApplicationQuitPreflight(windowName, event.transactionId, allowed)
           )
-          .catch((error) =>
-            reportOperationalError(error, {
-              source: 'WorkspacePanelLifecycle',
-              action: 'acknowledge-quit',
-            })
-          );
+          .finally(() => guards.releaseTransfer(transactionId));
       }),
-    [windowName, selectedClusterIds, preflight]
+    [windowName, selectedClusterIds, preflight, guards]
   );
+  const prepareQuit = useCallback(
+    (transactionId: string, status: string) => preflight(selectedClusterIds, transactionId, status),
+    [selectedClusterIds, preflight]
+  );
+  useApplicationQuitPreflight(windowName, prepareQuit);
   return null;
 }

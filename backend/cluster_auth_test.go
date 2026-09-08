@@ -239,7 +239,7 @@ func TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness(t *te
 		"auth recovery must start the rebuilt manager even when refresh setup never ran")
 	require.NotNil(t, app.Refresh.currentRefreshRuntimeContext())
 
-	app.Refresh.sweepNamespacesReadiness(map[string]*system.Subsystem{clusterID: subsystem})
+	app.Refresh.namespacesReadinessSelfBuild(clusterID)
 	require.Eventually(t, func() bool {
 		return app.ClusterRuntime.clusterLifecycle.GetState(clusterID) == ClusterStateReady
 	}, time.Second, 10*time.Millisecond,

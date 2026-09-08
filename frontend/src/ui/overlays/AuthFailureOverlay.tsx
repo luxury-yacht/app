@@ -69,7 +69,7 @@ export const AuthFailureOverlayContent: React.FC<AuthFailureOverlayContentProps>
         <>
           {!!detail && <p className="auth-failure-reason">{detail}</p>}
           <p className="auth-failure-message">
-            {diagnosticKind === 'expired-credentials'
+            {diagnosticKind === 'expired-credentials' || diagnosticKind === 'missing-credentials'
               ? 'Refresh your credentials, then retry. The app will also reconnect automatically.'
               : 'The app will attempt to reconnect automatically, but you may need to refresh your credentials.'}
           </p>

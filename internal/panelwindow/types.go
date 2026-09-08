@@ -189,6 +189,7 @@ const (
 	WorkspaceCloseRequestedEventName           = "workspace-window:close-requested"
 	TabCloseAuthorizedEventName                = "panel-window:tab-close-authorized"
 	ApplicationQuitPreflightRequestedEventName = "panel-window:application-quit-preflight-requested"
+	ApplicationQuitPreflightSettledEventName   = "panel-window:application-quit-preflight-settled"
 )
 
 type WindowOpenedEvent struct {

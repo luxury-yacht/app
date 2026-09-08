@@ -30,7 +30,8 @@ export class PanelLifecycleGuardRegistry {
       this.#listeners.delete(listener);
     };
   };
-  isFrozen = () => this.#transfers.size > 0;
+  isFrozen = (exceptTransactionId?: string) =>
+    Array.from(this.#transfers.keys()).some((id) => id !== exceptTransactionId);
   frozenStatus = () => this.#transfers.values().next().value?.status ?? '';
   freeze(transferId: string, panelIds: readonly string[], status = 'Moving panels…'): void {
     this.#transfers.set(transferId, { panelIds: [...panelIds], status });
@@ -91,6 +92,41 @@ export class PanelLifecycleGuardRegistry {
       }
     }
     return null;
+  }
+}
+
+// Keep the renderer inert from the guard decision through publication. The
+// caller releases the transaction only after disposal commits or is cancelled.
+export async function preparePanelClose({
+  guards,
+  transactionId,
+  panelIds,
+  status,
+  flush,
+  focusBlocker,
+}: {
+  guards: PanelLifecycleGuardRegistry;
+  transactionId: string;
+  panelIds: readonly string[];
+  status: string;
+  flush: () => Promise<void>;
+  focusBlocker: (blocker: PanelLifecycleBlocker) => void;
+}): Promise<boolean> {
+  if (guards.isFrozen()) {
+    return false;
+  }
+  const blocker = guards.firstBlocker(panelIds);
+  if (blocker) {
+    focusBlocker(blocker);
+    return false;
+  }
+  guards.freeze(transactionId, panelIds, status);
+  try {
+    await flush();
+    return true;
+  } catch (error) {
+    guards.releaseTransfer(transactionId);
+    throw error;
   }
 }
 

@@ -165,7 +165,7 @@ class RefreshOrchestrator {
     logInfo('[refresh] resource streaming enabled (mode=active, domains=all)');
   }
 
-  /** Every requested cluster's backend subsystem can serve (or is unknown). */
+  /** Every requested cluster has advertised a serving backend subsystem. */
   private isScopeClusterServiceable(scope: string): boolean {
     return parseClusterScopeList(scope).clusterIds.every((clusterId) =>
       Boolean(

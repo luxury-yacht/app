@@ -230,7 +230,7 @@ function PanelWindowSurface({
 
   const handleTabTearOff = useCallback(
     (payload: DockableTabDragPayload, cursor: { x: number; y: number }) => {
-      if (openPanels.size <= 1 || payload.sourceWindowName !== descriptor.windowName) {
+      if (payload.sourceWindowName !== descriptor.windowName) {
         return;
       }
       const request = tabTransferRequestFromDragPayload(payload, {
@@ -252,7 +252,7 @@ function PanelWindowSurface({
         })
       );
     },
-    [descriptor, openPanels.size]
+    [descriptor]
   );
 
   return (

@@ -189,6 +189,10 @@ export const onApplicationQuitPreflightRequested = (
   handler: (event: panelwindow.ApplicationQuitPreflightRequestedEvent) => void
 ) => onEvent('panel-window:application-quit-preflight-requested', handler);
 
+export const onApplicationQuitPreflightSettled = (
+  handler: (event: panelwindow.ApplicationQuitPreflightRequestedEvent) => void
+) => onEvent('panel-window:application-quit-preflight-settled', handler);
+
 export const acknowledgePanelWorkspaceReady = (windowName: string) =>
   AcknowledgePanelWorkspaceReady(windowName);
 

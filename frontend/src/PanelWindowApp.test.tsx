@@ -356,7 +356,7 @@ describe('PanelWindowApp', () => {
     );
   });
 
-  it('routes native-window drops but leaves a one-tab native source unchanged on tear-off', async () => {
+  it('routes native-window drops and tears the last native tab into a new window', async () => {
     await act(async () => {
       root.render(<PanelWindowApp descriptor={descriptorWithTransfer('transfer-tab-drag')} />);
       await Promise.resolve();
@@ -396,7 +396,17 @@ describe('PanelWindowApp', () => {
     };
     mocks.requestTabTransfer.mockClear();
     act(() => props.onTabTearOff(sourcePayload, { x: 2100, y: 400 }));
-    expect(mocks.requestTabTransfer).not.toHaveBeenCalled();
+    expect(mocks.requestTabTransfer).toHaveBeenCalledWith(
+      'panel-1',
+      expect.objectContaining({
+        sourceWindowName: 'panel-1',
+        targetWindowName: '',
+        targetKind: 'new-window',
+        cursorX: 2100,
+        cursorY: 400,
+        tab,
+      })
+    );
   });
 
   it('tears a tab out of a multi-tab native source into a new window', async () => {

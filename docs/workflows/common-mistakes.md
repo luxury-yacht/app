@@ -4,6 +4,20 @@ Read this before editing. When user feedback identifies a recurring mistake,
 record the pattern and a concrete prevention check here. Keep entries focused
 on reusable rules; omit transient logs, credentials, and session history.
 
+## Treating a passing automated gate as task completion
+
+The gate covers its configured checks. It does not establish that every requested
+workflow was exercised, especially native window interactions.
+
+Prevention:
+
+- Follow the [completion evidence gate](completion.md), keeping each requested
+  outcome and related lifecycle action tied to explicit evidence.
+- Leave required blocked or unrun checks visible and unfinished. Do not replace
+  missing runtime verification with a test count or a code-path description.
+- Audit guards across asynchronous waits: passing a guard before publication
+  does not authorize disposal after the renderer accepts new edits.
+
 ## Confusing renderer placement with cluster ownership
 
 A native window is a place to render content. Shared cluster panels and their
@@ -27,6 +41,15 @@ Prevention:
 - Retain cluster runtime for shared panels, including panel-only renderers.
   Test source-app closure, duplicate app views, cancelled queued transfers,
   native-creation failure, and all-renderer quit preflight.
+- Keep application Quit distinct from sequential view closure. View-close hooks
+  relinquish cluster ownership and persist the reduced selection. Test Quit with
+  different clusters in different windows through the real workspace and disk
+  persistence consumers, then reload preferences; mocked close callbacks alone
+  cannot establish restart behavior. Approved renderers remain frozen until
+  shutdown, while rejected handoffs release the entire original participant set.
+- Remove renderer readiness and retain its panel placement only after a native
+  close is accepted. After a rejected close, repeat the close and prove it still
+  reaches the renderer guards.
 
 ## Testing lifecycle pieces without their real interleavings
 
@@ -46,6 +69,51 @@ Prevention:
 - Test realistic payload combinations: expired credentials with an exec command
   must retain expiry guidance. A missing cache reported by a running helper must
   not produce installation advice. Test these decisions, not sentence spelling.
+- Distinguish an expired credential from an invalidation that removes its saved
+  token. Capture the provider's actual failure shape and exercise it through the
+  subprocess, startup projection, and UI guidance before claiming recovery works.
+
+## Publishing lifecycle readiness before its service exists
+
+Subsystem construction does not establish that aggregate HTTP or stream routing
+can serve the cluster. A `loading` event admits namespace requests, so emitting it
+during construction exposes an unpublished route.
+
+Prevention:
+
+- Publish routes before generation commit advertises `loading`; preserve Ready
+  during a continuously served replacement.
+- Test lifecycle events through the real HTTP consumer at startup, selector open,
+  and first/sibling auth recovery. Keep pre-publication requests blocked.
+- Resume unknown-cluster requests from both lifecycle events and authoritative
+  workspace snapshots; keep the readiness edge at their shared state publisher.
+- Trigger a namespace readiness build on every committed generation. Prove Ready
+  without a frontend request, including a settle ring preceding publication.
+
+## Mutating shared stores inside React state updaters
+
+React may replay updater callbacks during rendering. Cache eviction inside them
+can notify another component while rendering and repeat destructive side effects.
+
+Prevention:
+
+- Keep state updaters pure. Compare committed panel ownership in an effect and
+  evict only removed panels, retaining caches across cluster switches.
+- Exercise transfer, individual close, group close, and cluster removal under
+  StrictMode. Assert eviction follows committed removal and occurs once per scope.
+
+## Letting test processes inherit real application state directories
+
+Per-test overrides alone leave unguarded fixtures and late background work able to
+write the developer's settings after an override is restored.
+
+Prevention:
+
+- Isolate the backend test process's user config and cache roots before running
+  tests; per-test overrides restore to this disposable process root.
+- Prove isolation with a child process inheriting fixture user directories and
+  writing through the real app-state resolver. Those inherited directories must
+  remain untouched.
 
 ## Applying shared tab behavior to only one tab kind
 
@@ -64,6 +132,10 @@ Prevention:
   screen origin, and work-area edges. Menu actions have no drop point.
 - Put gesture-specific guards on transfer requests, not shared window factories.
   A panel-only cluster must still be able to open an app window for docking.
+- When tab-movement policy changes, check both cluster and panel sources with one
+  tab and multiple tabs, targeting both new and existing windows. Update tests
+  that encode superseded behavior; a green assertion of the old exception does
+  not prove the user's current contract.
 
 ## Adding cognitive complexity without measuring it
 

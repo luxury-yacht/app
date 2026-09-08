@@ -41,6 +41,7 @@ type Registry struct {
 	configurePanelWindow   func(*application.WebviewWindow)
 	showWindow             func(string) bool
 	closeWindow            func(string) bool
+	requestApplicationQuit func()
 	focusWindow            func(string) bool
 	emitWindowEvent        func(string, string, any) bool
 	windowGeometry         func(string) (geometry, bool)
@@ -54,8 +55,6 @@ type Registry struct {
 	quitMu                 sync.Mutex
 	nextQuit               uint64
 	pendingQuit            *applicationQuitPreflight
-	quitApproved           bool
-	quitApprovalTimeout    *time.Timer
 	quitPreflightTimeout   time.Duration
 	panelTransferMu        sync.Mutex
 	tabTransferMu          sync.Mutex
@@ -66,25 +65,9 @@ type Registry struct {
 
 type applicationQuitPreflight struct {
 	transactionID string
+	participants  []string
 	waiting       map[string]struct{}
 	timeout       *time.Timer
-}
-
-func (r *Registry) setQuitApprovedLocked(approved bool) {
-	if r.quitApprovalTimeout != nil {
-		r.quitApprovalTimeout.Stop()
-		r.quitApprovalTimeout = nil
-	}
-	r.quitApproved = approved
-	if !approved || r.quitPreflightTimeout <= 0 {
-		return
-	}
-	r.quitApprovalTimeout = time.AfterFunc(r.quitPreflightTimeout, func() {
-		r.quitMu.Lock()
-		defer r.quitMu.Unlock()
-		r.quitApproved = false
-		r.quitApprovalTimeout = nil
-	})
 }
 
 type geometry struct {
@@ -168,6 +151,7 @@ func applicationWindowGeometry(app *application.App, name string) (geometry, boo
 }
 
 func bindApplicationWindowOperations(registry *Registry, app *application.App) {
+	registry.requestApplicationQuit = app.Quit
 	registry.newWindow = app.Window.NewWithOptions
 	registry.showWindow = func(name string) bool {
 		return showApplicationWindow(app, name)
@@ -785,8 +769,8 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 			pending.timeout.Stop()
 		}
 		r.pendingQuit = nil
-		r.setQuitApprovedLocked(false)
 		r.quitMu.Unlock()
+		r.settleApplicationQuitPreflight(pending)
 		return nil
 	}
 	delete(pending.waiting, callerWindowName)
@@ -797,25 +781,26 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 	if pending.timeout != nil {
 		pending.timeout.Stop()
 	}
-	r.pendingQuit = nil
-	r.setQuitApprovedLocked(true)
+	// Replace the collection phase so an already-running collection timeout
+	// cannot cancel an approved handoff. Keep renderers frozen until shutdown.
+	approved := &applicationQuitPreflight{
+		transactionID: pending.transactionID,
+		participants:  pending.participants,
+	}
+	r.pendingQuit = approved
+	if r.quitPreflightTimeout > 0 {
+		approved.timeout = time.AfterFunc(r.quitPreflightTimeout, func() {
+			r.cancelApplicationQuitPreflight(approved)
+		})
+	}
 	r.quitMu.Unlock()
-
-	return r.closeApprovedApplicationWindows()
-}
-
-func (r *Registry) closeApprovedApplicationWindows() error {
-	for _, panelName := range r.panels.Names("") {
-		if err := r.AcknowledgePanelWindowClose(panelName); err != nil {
-			return err
-		}
+	if r.requestApplicationQuit == nil {
+		r.cancelApplicationQuitPreflight(approved)
+		return fmt.Errorf("application quit is unavailable")
 	}
-	for _, workspaceName := range r.lifecycle.Names() {
-		if err := r.AcknowledgeWorkspaceWindowClose(workspaceName); err != nil {
-			return err
-		}
-	}
-
+	// Closing individual views would remove their clusters from saved selection.
+	// Let Wails reenter ShouldQuit and tear down the process after persistence.
+	r.requestApplicationQuit()
 	return nil
 }
 
@@ -838,23 +823,29 @@ func (r *Registry) handleClosing(event *application.WindowEvent, name string) {
 	if !tracked {
 		return
 	}
-	r.forgetWorkspaceReady(name)
-	r.workspace.RetainWindow(name)
 	r.failPanelTabTransfersForWindow(name, "app window closed during tab transfer")
 	if remaining > 0 || len(r.panels.Names("")) > 0 {
+		r.retainClosedWorkspace(name)
 		r.backend.ReleaseWorkspaceWindow(name)
 		return
 	}
 	if r.backend.PrepareQuitFromWindow(name) {
+		r.retainClosedWorkspace(name)
 		return
 	}
 	r.quitMu.Lock()
-	r.setQuitApprovedLocked(false)
+	pending := r.pendingQuit
 	r.quitMu.Unlock()
+	r.cancelApplicationQuitPreflight(pending)
 	r.lifecycle.CancelClose(name)
 	if event != nil {
 		event.Cancel()
 	}
+}
+
+func (r *Registry) retainClosedWorkspace(name string) {
+	r.forgetWorkspaceReady(name)
+	r.workspace.RetainWindow(name)
 }
 
 func cascadedCoordinate(position, size, limit int) int {
@@ -909,23 +900,31 @@ func (r *Registry) readyWorkspaceNames() []string {
 }
 
 func (r *Registry) expireApplicationQuitPreflight(pending *applicationQuitPreflight) {
-	r.quitMu.Lock()
-	defer r.quitMu.Unlock()
-	if r.pendingQuit == pending {
-		r.pendingQuit = nil
-	}
+	r.cancelApplicationQuitPreflight(pending)
 }
 
 func (r *Registry) cancelApplicationQuitPreflight(pending *applicationQuitPreflight) {
 	r.quitMu.Lock()
-	defer r.quitMu.Unlock()
-	if r.pendingQuit != pending {
+	if pending == nil || r.pendingQuit != pending {
+		r.quitMu.Unlock()
 		return
 	}
 	if pending.timeout != nil {
 		pending.timeout.Stop()
 	}
 	r.pendingQuit = nil
+	r.quitMu.Unlock()
+	r.settleApplicationQuitPreflight(pending)
+}
+
+func (r *Registry) settleApplicationQuitPreflight(pending *applicationQuitPreflight) {
+	// Approved renderers have left waiting, but must also be released on denial,
+	// timeout, or rejected quit handoff. Event consumers may synchronously reenter.
+	for _, name := range pending.participants {
+		r.emitWindowEvent(name, panelwindow.ApplicationQuitPreflightSettledEventName, panelwindow.ApplicationQuitPreflightRequestedEvent{
+			TransactionID: pending.transactionID, WindowName: name,
+		})
+	}
 }
 
 func (r *Registry) beginApplicationQuitPreflightLocked(
@@ -934,6 +933,7 @@ func (r *Registry) beginApplicationQuitPreflightLocked(
 	r.nextQuit++
 	pending := &applicationQuitPreflight{
 		transactionID: fmt.Sprintf("application-quit-%d", r.nextQuit),
+		participants:  append([]string(nil), readyWorkspaces...),
 		waiting:       make(map[string]struct{}, len(readyWorkspaces)),
 	}
 	for _, workspaceName := range readyWorkspaces {
@@ -964,14 +964,23 @@ func (r *Registry) emitApplicationQuitPreflight(
 }
 
 func (r *Registry) finishApprovedApplicationQuitLocked() bool {
-	if r.lifecycle.Count() > 0 || len(r.panels.Names("")) > 0 {
-		r.quitMu.Unlock()
-		return false
+	pending := r.pendingQuit
+	if pending.timeout != nil {
+		pending.timeout.Stop()
 	}
-	r.setQuitApprovedLocked(false)
+	// A timer already waiting on quitMu must not release renderers during flush.
+	pending = &applicationQuitPreflight{
+		transactionID: pending.transactionID,
+		participants:  pending.participants,
+	}
+	r.pendingQuit = pending
 	mostRecent := r.lifecycle.MostRecent()
 	r.quitMu.Unlock()
-	return r.backend.PrepareQuitFromWindow(mostRecent)
+	if r.backend.PrepareQuitFromWindow(mostRecent) {
+		return true
+	}
+	r.cancelApplicationQuitPreflight(pending)
+	return false
 }
 
 // PrepareApplicationQuit performs the shared last-window quit preparation.
@@ -980,7 +989,7 @@ func (r *Registry) PrepareApplicationQuit() bool {
 		return true
 	}
 	r.quitMu.Lock()
-	if r.quitApproved {
+	if r.pendingQuit != nil && len(r.pendingQuit.waiting) == 0 {
 		return r.finishApprovedApplicationQuitLocked()
 	}
 	if r.pendingQuit != nil {

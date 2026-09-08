@@ -11,7 +11,7 @@ import {
   useObjectPanelState,
 } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import type React from 'react';
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { panelwindow } from '@/core/backend-api/models';
@@ -81,7 +81,7 @@ describe('ObjectPanelStateContext', () => {
     mockClusterIds = ['cluster-a', 'cluster-b'];
     stateRef.current = null;
     activeTabProbeRef.current = undefined;
-    resetScopedDomainMock.mockClear();
+    resetScopedDomainMock.mockReset();
     clearPanelStateMock.mockClear();
     handoffLayoutBeforeCloseMock.mockClear();
     clearLogViewerPrefsMock.mockClear();
@@ -615,4 +615,60 @@ describe('ObjectPanelStateContext', () => {
     expect(resetScopedDomainMock).not.toHaveBeenCalled();
     expect(clearLogViewerPrefsMock).not.toHaveBeenCalled();
   });
+
+  it.each(['transfer', 'close', 'close-all', 'cluster-close'] as const)(
+    'evicts %s scopes once after panel removal commits',
+    async (operation) => {
+      await act(async () => {
+        root.render(
+          <StrictMode>
+            <ObjectPanelStateProvider>
+              <Harness />
+            </ObjectPanelStateProvider>
+          </StrictMode>
+        );
+      });
+      let panelId = '';
+      act(() => {
+        panelId =
+          stateRef.current?.onRowClick({
+            clusterId: 'cluster-a',
+            group: '',
+            version: 'v1',
+            kind: 'Pod',
+            namespace: 'default',
+            name: 'api',
+          }) ?? '';
+      });
+      const panelStillMountedAtEviction: boolean[] = [];
+      resetScopedDomainMock.mockImplementation(() => {
+        panelStillMountedAtEviction.push(stateRef.current?.openPanels.has(panelId) ?? false);
+      });
+      act(() => {
+        if (operation === 'transfer') {
+          stateRef.current?.removeOwnedPanel('cluster-a', panelId);
+        } else if (operation === 'close') {
+          stateRef.current?.closePanel('cluster-a', panelId);
+        } else if (operation === 'close-all') {
+          stateRef.current?.onCloseObjectPanel();
+        } else {
+          mockClusterIds = ['cluster-b'];
+          root.render(
+            <StrictMode>
+              <ObjectPanelStateProvider>
+                <Harness />
+              </ObjectPanelStateProvider>
+            </StrictMode>
+          );
+        }
+      });
+      expect(panelStillMountedAtEviction.length).toBeGreaterThan(0);
+      expect(panelStillMountedAtEviction.every((mounted) => !mounted)).toBe(true);
+      const evictedScopes = resetScopedDomainMock.mock.calls.map(
+        ([domain, scope]) => `${domain}:${scope}`
+      );
+      expect(new Set(evictedScopes).size).toBe(evictedScopes.length);
+      expect(clearLogViewerPrefsMock).toHaveBeenCalledTimes(1);
+    }
+  );
 });

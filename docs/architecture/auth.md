@@ -118,6 +118,10 @@ client-go detail. Process-global stderr must never supply a cluster's diagnosis.
 Installation guidance requires `missing-helper`; a configured exec command or
 a helper exit code alone does not prove the executable is missing. Expiry
 diagnostics retain refresh guidance even when the kubeconfig uses an exec helper.
+An AWS SSO token reported as nonexistent is `missing-credentials`, with explicit
+credential-refresh guidance. It remains distinct from an expired token and from
+a missing executable. The real subprocess/startup tests cover both expired and
+removed SSO tokens, a healthy sibling, and recovery after credentials change.
 
 ### Rebuild wiring invariant
 

@@ -81,6 +81,7 @@ const mocks = vi.hoisted(() => ({
   nativeLocations: new Map<string, { windowName: string; groupId: string }>(),
   pendingNativeOpenPanelIds: new Set<string>(),
   blocker: null as null | { reason: 'unsaved-yaml'; focus: () => void },
+  frozen: false,
   reportError: vi.fn(),
 }));
 
@@ -126,6 +127,7 @@ vi.mock('@/core/panel-windows', async (importOriginal) => {
     onWorkspaceCloseRequested: event('ownerClose'),
     onPanelObjectOpenRequested: event('objectOpen'),
     onApplicationQuitPreflightRequested: event('applicationQuit'),
+    onApplicationQuitPreflightSettled: event('applicationQuitSettled'),
     onPanelWindowGuardResult: event('guardResult'),
     onPanelTabTransferRequested: event('tabTransferRequested'),
     onPanelTabTransferInsertRequested: event('tabTransferInsert'),
@@ -197,11 +199,12 @@ vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
   }),
 }));
 
-vi.mock('@/core/panel-windows/panelLifecycleGuards', () => ({
+vi.mock('@/core/panel-windows/panelLifecycleGuards', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   usePanelLifecycleGuardRegistry: () => ({
     freeze: vi.fn(),
     releaseTransfer: vi.fn(),
-    isFrozen: () => false,
+    isFrozen: () => mocks.frozen,
     firstBlocker: () => mocks.blocker,
   }),
 }));
@@ -252,6 +255,7 @@ describe('WorkspacePanelCoordinator', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mocks.blocker = null;
+    mocks.frozen = false;
     mocks.selectedClusterIds = ['cluster-1'];
     mocks.openPanels.clear();
     mocks.openPanels.set('panel-a', objectRef);
@@ -1127,6 +1131,37 @@ describe('WorkspacePanelCoordinator', () => {
       width: 720,
       height: 560,
     });
+  });
+
+  it('rejects incoming panel tabs while the app renderer is closing', async () => {
+    mocks.frozen = true;
+    const request = tabTransferRequest({
+      sourceWindowName: 'panel-1',
+      targetWindowName: 'workspace-1',
+      targetGroupId: 'right',
+      targetKind: 'workspace',
+    });
+    await act(async () => mocks.eventHandlers.tabTransferInsert({ request } as never));
+    expect(mocks.failTabTransfer).toHaveBeenCalledWith('workspace-1', request.transferId);
+    expect(mocks.dockPanelGroup).not.toHaveBeenCalled();
+  });
+
+  it('rejects incoming docked groups while the app renderer is closing', async () => {
+    mocks.frozen = true;
+    await act(async () =>
+      mocks.eventHandlers.dock({
+        windowName: 'panel-1',
+        transferId: 'incoming-dock',
+        targetPosition: 'right',
+        snapshot: {
+          clusterId: 'cluster-1',
+          tabs: [tabTransferRequest().tab],
+          activePanelId: 'panel-a',
+        },
+      } as never)
+    );
+    expect(mocks.failTransfer).toHaveBeenCalledWith('workspace-1', 'panel-1', 'incoming-dock');
+    expect(mocks.dockPanelGroup).not.toHaveBeenCalled();
   });
 
   it('waits for the cluster panel windows before removing the cluster tab', async () => {

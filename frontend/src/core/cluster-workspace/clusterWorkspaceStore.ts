@@ -532,17 +532,9 @@ export class ClusterWorkspaceStore {
     if (!clusterId) {
       return;
     }
-    const wasServiceable = this.isServiceable(clusterId);
     this.updateCluster(clusterId, 'lifecycle', (current) =>
       current.lifecycle === lifecycle ? current : { ...current, lifecycle }
     );
-    if (!wasServiceable && this.isServiceable(clusterId)) {
-      this.notifyListeners(
-        this.serviceableListeners,
-        (listener) => listener(clusterId),
-        'A serviceability listener failed'
-      );
-    }
   }
 
   private handleAuthFailed(payload: DesktopEventPayload<'cluster:auth:failed'>): void {
@@ -617,8 +609,22 @@ export class ClusterWorkspaceStore {
   }
 
   private publish(next: ClusterWorkspaceSnapshot): void {
+    // Readiness can arrive through an event, hydration, or a command response.
+    // Publish the state before resuming requests regardless of its input path.
+    const waitingClusters = [...next.clusters.keys()].filter(
+      (clusterId) => !this.isServiceable(clusterId)
+    );
     this.snapshot = next;
     this.notifyListeners(this.listeners, (listener) => listener(), 'A snapshot listener failed');
+    for (const clusterId of waitingClusters) {
+      if (this.isServiceable(clusterId)) {
+        this.notifyListeners(
+          this.serviceableListeners,
+          (listener) => listener(clusterId),
+          'A serviceability listener failed'
+        );
+      }
+    }
   }
 
   private notifyListeners<T>(
@@ -645,7 +651,7 @@ export class ClusterWorkspaceStore {
     }
     const lifecycle = this.getCluster(clusterId)?.lifecycle;
     if (!lifecycle) {
-      return !this.foregroundActivations.has(clusterId);
+      return false;
     }
     return serviceableStates.has(lifecycle) && !this.foregroundActivations.has(clusterId);
   }

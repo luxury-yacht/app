@@ -6,6 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clusterWorkspaceStore } from '@/core/cluster-workspace/clusterWorkspaceStore';
 import { requestRefreshDomainState } from '@/core/data-access/dataAccess';
 import { eventBus } from '@/core/events';
 import {
@@ -268,6 +269,11 @@ describe('refreshOrchestrator', () => {
     const { pendingRequests } = getRefreshState();
     if (pendingRequests !== 0) {
       markPendingRequest(-pendingRequests);
+    }
+    // Normal refresh scenarios start with published cluster services. Readiness
+    // transition cases reset this state and explicitly deliver their own edges.
+    for (const clusterId of ['cluster-a', 'cluster-b', 'test-cluster']) {
+      eventBus.emit('cluster:lifecycle', { clusterId, state: 'ready' });
     }
   });
 
@@ -1031,6 +1037,52 @@ describe('refreshOrchestrator', () => {
     clusterReadiness.resetForTests();
     resetAllScopedDomainStates('namespaces');
   });
+
+  it.each(['event', 'snapshot'] as const)(
+    'defers a newly selected cluster until serving readiness arrives by %s',
+    async (source) => {
+      clusterReadiness.resetForTests();
+      registerStreamingClusterConfigDomain();
+      const scope = buildClusterScope('cluster-new', '');
+      setRuntimeScopeEnabled('cluster-config', scope, true);
+      clientMocks.fetchSnapshotMock.mockResolvedValue({
+        snapshot: {
+          domain: 'cluster-config',
+          scope,
+          version: 1,
+          generatedAt: Date.now(),
+          sequence: 1,
+          payload: makeClusterConfigSnapshotPayload(),
+          stats: { itemCount: 0, buildDurationMs: 0 },
+        },
+        notModified: false,
+      });
+      await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, { isManual: false });
+      expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+      expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+
+      if (source === 'event') {
+        eventBus.emit('cluster:lifecycle', { clusterId: 'cluster-new', state: 'loading' });
+      } else {
+        clusterWorkspaceStore.applyWireState({
+          selectedKubeconfigs: [],
+          visibleClusterId: 'cluster-new',
+          clusters: {
+            'cluster-new': {
+              clusterId: 'cluster-new',
+              clusterName: 'New cluster',
+              lifecycle: 'loading',
+              auth: { state: 'valid' },
+              health: 'healthy',
+              scopeRevision: 0,
+            },
+          },
+        });
+      }
+      await vi.waitFor(() => expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledOnce());
+      expect(getScopedDomainState('cluster-config', scope).status).toBe('ready');
+    }
+  );
 
   it('classifies "no active clusters available" as warm-up instead of toasting', () => {
     clusterReadiness.resetForTests();
