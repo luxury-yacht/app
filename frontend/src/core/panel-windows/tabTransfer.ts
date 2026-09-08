@@ -90,8 +90,7 @@ export function samePanelTab(
   right: panelwindow.TabSnapshot
 ): boolean {
   if (
-    !left ||
-    left.kind !== right.kind ||
+    left?.kind !== right.kind ||
     left.panelId !== right.panelId ||
     left.activeView !== right.activeView
   ) {

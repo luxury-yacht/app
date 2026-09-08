@@ -57,7 +57,7 @@ export function ClusterTabTransferCoordinator() {
     useDockablePanelContext();
   const pending = useRef(new Map<string, PendingTarget>());
   const cancelled = useRef(new Set<string>());
-  const [revision, update] = useState(0);
+  const [revision, setRevision] = useState(0);
   const report = useCallback(
     (error: unknown, action: string) =>
       reportOperationalError(error, { source: 'ClusterTabTransferCoordinator', action }),
@@ -70,8 +70,8 @@ export function ClusterTabTransferCoordinator() {
       }
       try {
         await failClusterTabTransfer(windowName, id);
-      } catch (failure) {
-        report(failure, 'cancel-cluster-view-transfer');
+      } catch (error_) {
+        report(error_, 'cancel-cluster-view-transfer');
       }
     },
     [windowName, report]
@@ -157,7 +157,7 @@ export function ClusterTabTransferCoordinator() {
             mounted: false,
             acknowledging: false,
           });
-          update((value) => value + 1);
+          setRevision((value) => value + 1);
         };
         void prepare().catch((error) => fail(request.transferId, error));
       }),
@@ -207,7 +207,7 @@ export function ClusterTabTransferCoordinator() {
         dockPanelGroup(request.clusterId, panelIds([group]), group.activePanelId, edge);
       }
       target.mounted = true;
-      update((value) => value + 1);
+      setRevision((value) => value + 1);
     },
     [upsertOwnedPanel, dockPanelGroup, restoreTargetView]
   );
@@ -292,7 +292,7 @@ export function ClusterTabTransferCoordinator() {
       void loadKubeconfigs(true)
         .catch((error) => report(error, 'refresh-cluster-views'))
         .finally(() => guards.releaseTransfer(request.transferId));
-      update((value) => value + 1);
+      setRevision((value) => value + 1);
     },
     [windowName, sync, removeGroups, loadKubeconfigs, report, guards]
   );

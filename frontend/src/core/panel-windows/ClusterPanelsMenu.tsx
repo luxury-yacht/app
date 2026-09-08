@@ -117,11 +117,13 @@ export function ClusterPanelsMenu({
   for (const panel of state.panels) {
     const ref = panel.tab.objectRef;
     const objectName = ref.namespace ? `${ref.namespace}/${ref.name}` : ref.name;
-    items.push({ label: `${ref.kind} ${objectName}`, header: true });
-    items.push({
-      label: `Show · ${locationLabel(panel.location, windowName)}`,
-      onClick: () => openWithObject({ ...ref, group: ref.group, version: ref.version }),
-    });
+    items.push(
+      { label: `${ref.kind} ${objectName}`, header: true },
+      {
+        label: `Show · ${locationLabel(panel.location, windowName)}`,
+        onClick: () => openWithObject({ ...ref, group: ref.group, version: ref.version }),
+      }
+    );
     if (panel.location.windowName && panel.location.windowName !== windowName) {
       items.push({
         label: 'Move here',

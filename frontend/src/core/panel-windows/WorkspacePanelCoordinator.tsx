@@ -681,7 +681,7 @@ function WorkspaceObjectRouteCoordinator({
   useEffect(
     () =>
       onPanelWindowTransferFailed((event) => {
-        if (!pendingDockRequest || event.transferId !== pendingDockRequest.transferId) {
+        if (event.transferId !== pendingDockRequest?.transferId) {
           return;
         }
         settleDockAttempt(pendingDockRequest, false);

@@ -169,11 +169,7 @@ export const PanelLifecycleGuardProvider: React.FC<{ children: React.ReactNode }
       <div ref={surface} className="panel-lifecycle-surface" inert={frozen}>
         {children}
       </div>
-      {frozen && (
-        <div className="panel-transfer-status" role="status">
-          {status}
-        </div>
-      )}
+      {frozen && <output className="panel-transfer-status">{status}</output>}
     </PanelLifecycleGuardContext.Provider>
   );
 };

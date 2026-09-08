@@ -12,7 +12,9 @@ export interface ClusterViewState {
 const record = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
 const localView = (value: unknown) =>
-  typeof value === 'string' && value !== 'global' && VIEW_TYPES.some((view) => view === value);
+  typeof value === 'string' &&
+  value !== 'global' &&
+  (VIEW_TYPES as readonly string[]).includes(value);
 function validNavigation(value: unknown): value is NavigationTabState {
   if (!record(value) || !localView(value.viewType) || !localView(value.previousView)) {
     return false;

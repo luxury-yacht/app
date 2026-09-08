@@ -234,3 +234,37 @@ Native follow-up observations (2026-09-07, macOS / Wails development app):
 
 Keep this temporary record until native interaction validation is performed;
 the ownership contract already lives in the durable documents linked above.
+
+## PR #339 Sonar follow-up
+
+The all-rule PR audit reported eight findings at local revision
+`b45202b07ffbe9f014b13ad2055ec7373535ddd8` (`/tmp/pr339-sonar-before.log`).
+These edits preserve transfer ordering, rollback, cluster/object identity, and
+guard timing; no runtime protocol or dependency changes are intended.
+
+| Sonar key | Rule | Local correction |
+| --- | --- | --- |
+| `AaB_G072NkZFg8_cyI7B` | `godre:S8159` | Factor the cgo imports, keeping the native preamble attached to `C`. |
+| `AaB_G01nNkZFg8_cyI66` | `typescript:S7778` | Append each panel's header and Show action in one push. |
+| `AaB_G06PNkZFg8_cyI68` | `typescript:S6754` | Name the revision setter `setRevision`. |
+| `AaB_G06PNkZFg8_cyI69` | `typescript:S7718` | Use `error_` for the nested catch parameter. |
+| `AaB_G06tNkZFg8_cyI6_` | `typescript:S6582` | Use optional chaining for the pending dock transfer identity. |
+| `AaB_G06GNkZFg8_cyI67` | `typescript:S7765` | Use includes for navigation-view membership. |
+| `AaB_G068NkZFg8_cyI7A` | `typescript:S6819` | Use native output semantics for the transfer status, retaining its CSS class. |
+| `AaB_G06dNkZFg8_cyI6-` | `typescript:S6582` | Use optional chaining for the panel-tab kind guard. |
+
+- Passed: the same 112 focused frontend tests before and after the edits, plus
+  the native drag callback tests (`/tmp/pr339-focused-before.log`,
+  `/tmp/pr339-focused-after.log`, `/tmp/pr339-appwindow-coverage.log`).
+- Passed: full frontend coverage; each changed frontend file measures at least
+  80%, with 565/635 statements covered together (88.98%). Native Go drag wrappers
+  measure 100%; their package measures 84.9%
+  (`/tmp/pr339-frontend-coverage-report/coverage-summary.json`,
+  `/tmp/pr339-appwindow-coverage.out`).
+- Passed: local TypeScript complexity check at 12 and Go gocognit check;
+  no complexity suppressions or configuration changes
+  (`/tmp/pr339-complexity-12.log`, `/tmp/pr339-go-complexity.json`).
+- Pending: final prerelease gate and post-gate diff/configuration inspection.
+- Pending: explicitly authorized commit/push followed by Sonar analysis of
+  that revision and the all-rule PR audit. Local checks do not establish remote
+  closure.
