@@ -1,5 +1,3 @@
-vi.mock('@/core/panel-windows/ClusterPanelsMenu', () => ({ ClusterPanelsMenu: () => null }));
-
 /**
  * frontend/src/ui/layout/ClusterTabs.test.tsx
  *
@@ -17,6 +15,8 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installWindowProperty } from '@/test-utils/windowProperty';
+
+vi.mock('@/core/panel-windows/ClusterPanelsMenu', () => ({ ClusterPanelsMenu: () => null }));
 
 const clusterTransferBridge = vi.hoisted(() => ({
   request: vi.fn(async (..._args: unknown[]) => undefined),

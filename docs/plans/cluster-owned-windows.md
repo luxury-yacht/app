@@ -264,7 +264,10 @@ guard timing; no runtime protocol or dependency changes are intended.
 - Passed: local TypeScript complexity check at 12 and Go gocognit check;
   no complexity suppressions or configuration changes
   (`/tmp/pr339-complexity-12.log`, `/tmp/pr339-go-complexity.json`).
-- Pending: final prerelease gate and post-gate diff/configuration inspection.
-- Pending: explicitly authorized commit/push followed by Sonar analysis of
-  that revision and the all-rule PR audit. Local checks do not establish remote
-  closure.
+- Passed: final `qc:prerelease` exited 0, including backend race tests and all
+  4,793 frontend tests. Post-gate diff check passed and both Biome configuration
+  hashes match (`/tmp/pr339-prerelease.log`, `/tmp/pr339-biome-after-check.log`).
+- Passed: PR #339 contains revision `3fe1b905f43b2e130eb704ab2b2fd1b2a3cc3eb0`;
+  its SonarCloud Code Analysis completed successfully, and the all-rule PR audit
+  reports zero open/confirmed new-code issues (`/tmp/pr339-status.json`,
+  `/tmp/pr339-sonar-current.log`).

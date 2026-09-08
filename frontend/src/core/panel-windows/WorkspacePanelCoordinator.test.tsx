@@ -1,9 +1,9 @@
-vi.mock('./ClusterTabTransferCoordinator', () => ({ ClusterTabTransferCoordinator: () => null }));
-
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspacePanelCoordinator } from './WorkspacePanelCoordinator';
+
+vi.mock('./ClusterTabTransferCoordinator', () => ({ ClusterTabTransferCoordinator: () => null }));
 
 vi.mock('./WorkspacePanelSync', () => ({
   WorkspacePanelSync: ({ children }: { children: React.ReactNode }) => children,
