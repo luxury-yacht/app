@@ -34,6 +34,7 @@ import {
   requestPanelTabTransfer,
 } from './index';
 import { usePanelLifecycleGuardRegistry } from './panelLifecycleGuards';
+import { requestPanelTabMove } from './panelTabActions';
 import { workspacePanelPublication } from './publicationQueue';
 import {
   type DockableTabDragPayload,
@@ -352,6 +353,15 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
   return (
     <DockablePanelProvider
       onGroupMoveRequest={handleGroupMove}
+      onTabMoveRequest={(payload, target) => {
+        void requestPanelTabMove(payload, target, workspacePanelPublication).catch((error) =>
+          reportOperationalError(error, {
+            source: 'WorkspacePanelCoordinator',
+            action: 'move-panel-tab',
+            clusterId: payload.clusterId,
+          })
+        );
+      }}
       tabDragIdentity={tabDragIdentity}
       onClusterTabTearOff={(payload, cursor) => {
         if (

@@ -295,6 +295,45 @@ describe('PanelWindowApp', () => {
     });
   });
 
+  it('routes a native tab menu dock through single-tab transfer and reports a failed request', async () => {
+    await act(async () =>
+      root.render(<PanelWindowApp descriptor={descriptorWithTransfer('tab-menu')} />)
+    );
+    const props = mocks.dockProviderProps as {
+      onTabMoveRequest: (payload: unknown, target: 'right' | 'bottom') => void;
+      tabDragIdentity: { getTabSnapshot: (panelId: string) => unknown };
+    };
+    const tab = props.tabDragIdentity.getTabSnapshot('panel-pod');
+    const payload = {
+      kind: 'dockable-tab',
+      panelId: 'panel-pod',
+      sourceWindowName: 'panel-1',
+      sourceGroupId: 'right',
+      sourceWindowGroupId: 'group-1',
+      clusterId: 'cluster-a',
+      tab,
+    };
+    await act(async () => props.onTabMoveRequest(payload, 'right'));
+    expect(mocks.requestTabTransfer).toHaveBeenCalledWith(
+      'panel-1',
+      expect.objectContaining({
+        sourceGroupId: 'group-1',
+        targetWindowName: '',
+        targetGroupId: 'right',
+        targetKind: 'workspace',
+        tab,
+      })
+    );
+    expect(mocks.beginDock).not.toHaveBeenCalled();
+    const failure = new Error('target failed');
+    mocks.requestTabTransfer.mockRejectedValueOnce(failure);
+    await act(async () => props.onTabMoveRequest(payload, 'bottom'));
+    expect(mocks.reportOperationalError).toHaveBeenCalledWith(
+      failure,
+      expect.objectContaining({ action: 'move-panel-tab', clusterId: 'cluster-a' })
+    );
+  });
+
   it('routes tab close, blockers, and dock-back through the cluster protocol', async () => {
     const routedDescriptor = descriptorWithTransfer('transfer-protocol-routes');
     await act(async () => {
@@ -319,6 +358,7 @@ describe('PanelWindowApp', () => {
     if (!objectRef) {
       throw new Error('expected descriptor object reference');
     }
+    mocks.openPanels.set('panel-second', { ...objectRef, name: 'second' });
 
     dockProviderProps.onGroupMoveRequest(
       { tabs: ['panel-pod'], activeTab: 'panel-pod' },
@@ -333,7 +373,7 @@ describe('PanelWindowApp', () => {
 
     await act(async () =>
       dockProviderProps.onGroupMoveRequest(
-        { tabs: ['panel-pod'], activeTab: 'panel-pod' },
+        { tabs: ['panel-pod', 'panel-second'], activeTab: 'panel-pod' },
         'bottom'
       )
     );
@@ -350,6 +390,10 @@ describe('PanelWindowApp', () => {
             panelId: 'panel-pod',
             objectRef,
             activeView: 'events',
+          }),
+          expect.objectContaining({
+            panelId: 'panel-second',
+            objectRef: { ...objectRef, name: 'second' },
           }),
         ],
       })

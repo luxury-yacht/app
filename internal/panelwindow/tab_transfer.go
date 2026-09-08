@@ -47,8 +47,8 @@ func ValidateTabTransferRequest(request TabTransferRequest) error {
 func validateTabTransferTarget(request TabTransferRequest) error {
 	switch request.TargetKind {
 	case TabTransferTargetWorkspace:
-		if strings.TrimSpace(request.TargetWindowName) == "" ||
-			(request.TargetGroupID != "right" && request.TargetGroupID != "bottom") {
+		// An empty window requests source-authorized docking into a cluster app view.
+		if request.TargetGroupID != "right" && request.TargetGroupID != "bottom" {
 			return fmt.Errorf("workspace panel tab transfer requires an app window dock target")
 		}
 	case TabTransferTargetPanelWindow:

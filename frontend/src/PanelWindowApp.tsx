@@ -36,6 +36,7 @@ import {
   PanelLifecycleGuardProvider,
   usePanelLifecycleGuardRegistry,
 } from '@/core/panel-windows/panelLifecycleGuards';
+import { requestPanelTabMove } from '@/core/panel-windows/panelTabActions';
 import { resolvePanelWindowClusterName } from '@/core/panel-windows/panelWindowClusterName';
 import { nativePanelPublication } from '@/core/panel-windows/publicationQueue';
 import {
@@ -259,6 +260,15 @@ function PanelWindowSurface({
     <DockablePanelProvider
       initialTabGroups={initialTabGroups}
       onGroupMoveRequest={handleGroupMove}
+      onTabMoveRequest={(payload, target) => {
+        void requestPanelTabMove(payload, target, nativePanelPublication).catch((error) =>
+          reportOperationalError(error, {
+            source: 'PanelWindowApp',
+            action: 'move-panel-tab',
+            clusterId: descriptor.clusterId,
+          })
+        );
+      }}
       onTabCloseRequest={requestTabClose}
       nativeWindowMode={true}
       tabDragIdentity={tabDragIdentity}

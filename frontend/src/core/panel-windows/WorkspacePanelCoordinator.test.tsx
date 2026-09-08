@@ -24,6 +24,9 @@ const mocks = vi.hoisted(() => ({
   moveRequest: null as
     | null
     | ((group: never, position: 'right' | 'bottom' | 'floating') => boolean),
+  tabMoveRequest: null as
+    | null
+    | ((payload: never, position: 'right' | 'bottom' | 'floating') => void),
   externalTabDrop: null as null | ((payload: never, group: string, index: number) => void),
   tabTearOff: null as null | ((payload: never, cursor: { x: number; y: number }) => void),
   clusterTearOff: null as null | ((payload: never, cursor: { x: number; y: number }) => void),
@@ -222,6 +225,7 @@ vi.mock('@/ui/dockable', () => ({
   DockablePanelProvider: ({
     children,
     onGroupMoveRequest,
+    onTabMoveRequest,
     onExternalTabDrop,
     onTabTearOff,
     onClusterTabTearOff,
@@ -230,6 +234,7 @@ vi.mock('@/ui/dockable', () => ({
   }: {
     children: React.ReactNode;
     onGroupMoveRequest: typeof mocks.moveRequest;
+    onTabMoveRequest: typeof mocks.tabMoveRequest;
     onExternalTabDrop: typeof mocks.externalTabDrop;
     onTabTearOff: typeof mocks.tabTearOff;
     onClusterTabTearOff: typeof mocks.clusterTearOff;
@@ -237,6 +242,7 @@ vi.mock('@/ui/dockable', () => ({
     canStartTabDrag: typeof mocks.canStartTabDrag;
   }) => {
     mocks.moveRequest = onGroupMoveRequest;
+    mocks.tabMoveRequest = onTabMoveRequest;
     mocks.externalTabDrop = onExternalTabDrop;
     mocks.tabTearOff = onTabTearOff;
     mocks.clusterTearOff = onClusterTabTearOff;
@@ -1073,6 +1079,44 @@ describe('WorkspacePanelCoordinator', () => {
       releaseDock();
       await Promise.resolve();
     });
+  });
+
+  it('routes a tab menu float separately from a complete group float', async () => {
+    mocks.openPanels.set('panel-b', { ...objectRef, name: 'second' });
+    await act(async () => {
+      mocks.moveRequest?.(
+        { groupKey: 'right', tabs: ['panel-a', 'panel-b'], activeTab: 'panel-b' } as never,
+        'floating'
+      );
+    });
+    expect(mocks.beginOpen).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({
+        tabs: [
+          expect.objectContaining({ panelId: 'panel-a' }),
+          expect.objectContaining({ panelId: 'panel-b' }),
+        ],
+        activePanelId: 'panel-b',
+      })
+    );
+    const tab = mocks.tabDragIdentity?.getTabSnapshot('panel-a');
+    await act(async () => {
+      mocks.tabMoveRequest?.(
+        {
+          kind: 'dockable-tab',
+          panelId: 'panel-a',
+          sourceGroupId: 'right',
+          sourceWindowName: 'workspace-1',
+          clusterId: 'cluster-1',
+          tab,
+        } as never,
+        'floating'
+      );
+    });
+    expect(mocks.requestTabTransfer).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({ targetKind: 'new-window', tab })
+    );
   });
 
   it('handles non-floating, blocked, missing, and valid float requests at the owner boundary', async () => {

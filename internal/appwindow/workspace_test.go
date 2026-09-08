@@ -135,6 +135,7 @@ func TestPanelTabMovesBetweenTwoAppViewsAfterTargetPublication(t *testing.T) {
 	tab := validPanelGroupSnapshot().Tabs[0]
 	require.NoError(t, registry.PublishDockedPanels(source, []panelwindow.WorkspaceGroup{{ClusterID: "cluster-1", GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}}))
 	request := panelwindow.TabTransferRequest{TransferID: "cross-app", SourceWindowName: source, TargetWindowName: target, ClusterID: "cluster-1", SourceGroupID: "right", TargetGroupID: "bottom", TargetKind: panelwindow.TabTransferTargetWorkspace, Tab: tab}
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
 	require.NoError(t, registry.RequestPanelTabTransfer(target, request))
 	require.Contains(t, events, source+":"+panelwindow.TabTransferRequestedEventName)
 	require.Error(t, registry.AcceptPanelTabTransfer(target, request.TransferID), "only the actual source may approve disposal")

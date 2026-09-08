@@ -222,25 +222,6 @@ const resolvePanelMinimums = (position: DockPosition, constraints: PanelSizeCons
   return { width: constraints.right.minWidth, height: 0 };
 };
 
-const resolveDockFocusTarget = (
-  position: DockPosition,
-  activePanelId: string,
-  tabGroups: TabGroupState,
-  groupLeaders: Map<string, string>
-) => {
-  if (position === 'floating') {
-    return activePanelId;
-  }
-  const targetGroup = getGroupTabs(tabGroups, position);
-  if (!targetGroup || targetGroup.tabs.length === 0) {
-    return activePanelId;
-  }
-  const rememberedLeader = groupLeaders.get(position);
-  return rememberedLeader && targetGroup.tabs.includes(rememberedLeader)
-    ? rememberedLeader
-    : targetGroup.tabs[0];
-};
-
 const getPanelTabbables = (panelRoot: HTMLElement) =>
   panelRoot.classList.contains('object-panel-dockable')
     ? getOrderedObjectPanelTabbables(panelRoot)
@@ -489,7 +470,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     notifyContentChange,
     subscribeContentChange,
     groupLeaderByKeyRef,
-    movePanelBetweenGroupsAndFocus,
     lastFocusedGroupKey,
     setLastFocusedGroupKey,
     requestGroupMove,
@@ -819,27 +799,11 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
         return;
       }
 
-      if (groupKey && requestGroupMove?.(groupKey, position)) {
-        return;
+      if (groupKey) {
+        requestGroupMove?.(groupKey, position);
       }
-
-      const focusTargetPanelId = resolveDockFocusTarget(
-        position,
-        activePanelId,
-        tabGroups,
-        groupLeaderByKeyRef.current
-      );
-      movePanelBetweenGroupsAndFocus(activePanelId, position, undefined, focusTargetPanelId);
     },
-    [
-      activePanelId,
-      tabGroups,
-      groupLeaderByKeyRef,
-      movePanelBetweenGroupsAndFocus,
-      isMaximized,
-      groupKey,
-      requestGroupMove,
-    ]
+    [isMaximized, groupKey, requestGroupMove]
   );
 
   const handleEscapeCloseActiveTab = useCallback(() => {

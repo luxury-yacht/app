@@ -60,8 +60,14 @@ maximize and restore.
 - A new panel whose default is Floating creates a uniquely isolated, transient,
   hidden one-tab source group, then asks the native coordinator to transfer it.
   It never joins a focused floating group whose transfer is already pending.
-- An explicit Float action transfers the complete current docked group,
-  including every tab in that group.
+- Panel-header Dock, Float, Maximize/Restore, and Close controls apply to the
+  complete tab group. Moving between dock edges appends the whole source group
+  to an occupied destination, preserving source order and its active tab.
+- A panel tab's context menu applies only to that tab, including an inactive
+  tab. It offers the other dock edge and Float for docked tabs, both dock edges
+  for native tabs, and Close. Native tab docking resolves an app view of the
+  same cluster and waits for that renderer's readiness before insertion.
+  Cancelled transfers must not deliver a queued insertion after startup.
 - If an object is already docked, focus its owner and docked tab. If it is in a
   native group, focus that window and tab.
 - A same-cluster link opened in a child may join that child group after owner

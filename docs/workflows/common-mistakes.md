@@ -146,6 +146,14 @@ Prevention:
   that encode superseded behavior; a green assertion of the old exception does
   not prove the user's current contract.
 
+## Confusing group controls with individual tab actions
+
+Panel-header controls apply to the whole group; tab menus and tab drags apply
+to one tab. Do not let an unhandled group command fall through to a single-tab
+move. Test the actual buttons with multiple tabs and an occupied destination,
+then right-click an inactive tab and prove only that tab is affected. Include
+the native renderer's docked layout projection when testing menu destinations.
+
 ## Adding cognitive complexity without measuring it
 
 Recovery guards and channel-close handling can become deeply nested inside

@@ -23,8 +23,9 @@ import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import { type TabDescriptor, Tabs } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
 import type React from 'react';
-import type { HTMLAttributes } from 'react';
+import { type HTMLAttributes, useState } from 'react';
 import { useDockablePanelContext } from './DockablePanelProvider';
+import { DockableTabMenu } from './DockableTabMenu';
 
 /** Describes a single tab in the bar. */
 export interface TabInfo {
@@ -51,6 +52,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   onTabClick,
   groupKey,
 }) => {
+  const [menu, setMenu] = useState<{ panelId: string; x: number; y: number } | null>(null);
   // The provider owns local moves and routes cross-window drops through
   // the acknowledged native tab-transfer coordinator.
   const {
@@ -116,6 +118,11 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       extraProps: {
         'data-panel-id': tab.panelId,
         ...dragProps,
+        onContextMenu: (event: React.MouseEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setMenu({ panelId: tab.panelId, x: event.clientX, y: event.clientY });
+        },
       } as HTMLAttributes<HTMLElement>,
     };
   });
@@ -130,6 +137,14 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
         dropInsertIndex={dropInsertIndex}
         className="dockable-tab-bar"
       />
+      {menu && tabs.some((tab) => tab.panelId === menu.panelId) && (
+        <DockableTabMenu
+          panelId={menu.panelId}
+          groupKey={groupKey}
+          position={menu}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
   );
 };

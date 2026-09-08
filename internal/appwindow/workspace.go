@@ -55,6 +55,9 @@ func (r *Registry) AcknowledgePanelWorkspaceReady(windowName string) error {
 	delete(r.queuedWorkspaceEvents, windowName)
 	r.closeMu.Unlock()
 	for _, event := range queued {
+		if insertion, ok := event.payload.(panelwindow.TabTransferInsertRequestedEvent); ok && !r.panelTabInsertionPending(insertion.Request) {
+			continue
+		}
 		if !r.emitWindowEvent(windowName, event.name, event.payload) {
 			return fmt.Errorf("app window %q is not available", windowName)
 		}

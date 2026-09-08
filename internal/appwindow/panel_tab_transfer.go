@@ -104,13 +104,18 @@ func (r *Registry) RequestPanelTabTransfer(
 		return err
 	}
 	expectedCaller := request.TargetWindowName
-	if request.TargetKind == panelwindow.TabTransferTargetNewWindow {
+	if request.TargetWindowName == "" {
 		expectedCaller = request.SourceWindowName
 	}
 	if callerWindowName != expectedCaller {
 		return fmt.Errorf("window %q cannot request panel tab transfer %q", callerWindowName, request.TransferID)
 	}
 	if err := r.validatePanelTabTransferSource(request); err != nil {
+		return err
+	}
+	var err error
+	request, err = r.resolvePanelTabDockTarget(request)
+	if err != nil {
 		return err
 	}
 	if err := r.validatePanelTabTransferTarget(request); err != nil {
@@ -176,7 +181,11 @@ func (r *Registry) AcceptPanelTabTransfer(callerWindowName, transferID string) e
 	if request.TargetKind == panelwindow.TabTransferTargetNewWindow {
 		return nil
 	}
-	if r.emitWindowEvent(
+	deliver := r.emitWindowEvent
+	if request.TargetKind == panelwindow.TabTransferTargetWorkspace {
+		deliver = r.queueWorkspaceEvent
+	}
+	if deliver(
 		request.TargetWindowName,
 		panelwindow.TabTransferInsertRequestedEventName,
 		panelwindow.TabTransferInsertRequestedEvent{Request: request},
@@ -185,6 +194,31 @@ func (r *Registry) AcceptPanelTabTransfer(callerWindowName, transferID string) e
 	}
 	r.failPanelTabTransfer(transferID, "target panel window is not available")
 	return fmt.Errorf("target panel window %q is not available", request.TargetWindowName)
+}
+
+func (r *Registry) resolvePanelTabDockTarget(request panelwindow.TabTransferRequest) (panelwindow.TabTransferRequest, error) {
+	if request.TargetKind != panelwindow.TabTransferTargetWorkspace || request.TargetWindowName != "" {
+		return request, nil
+	}
+	target, err := r.appWindowForCluster(request.ClusterID, request.SourceWindowName)
+	if err != nil {
+		return request, err
+	}
+	request.TargetWindowName = target
+	request.TargetIndex = 0
+	for _, panel := range r.workspace.Snapshot(request.ClusterID).Panels {
+		if panel.Location.WindowName == target && panel.Location.GroupID == request.TargetGroupID {
+			request.TargetIndex++
+		}
+	}
+	return request, nil
+}
+
+func (r *Registry) panelTabInsertionPending(request panelwindow.TabTransferRequest) bool {
+	r.tabTransferMu.Lock()
+	defer r.tabTransferMu.Unlock()
+	transfer := r.pendingTabTransfers[request.TransferID]
+	return transfer != nil && transfer.stage == panelTabTransferInserting && transfer.request == request
 }
 
 func (r *Registry) FailPanelTabTransfer(callerWindowName, transferID string) error {
