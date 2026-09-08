@@ -82,6 +82,7 @@ export {
   LogAppLogsFromFrontendWithCluster,
   MatchThemeForCluster,
   MergeObjectYamlWithLatest,
+  OpenClusterWindow,
   OpenKubeconfigSearchPathDialog,
   OpenPanelWorkspaceObject,
   PublishDockedPanels,

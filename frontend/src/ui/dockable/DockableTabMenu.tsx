@@ -1,4 +1,10 @@
 import ContextMenu, { type ContextMenuItem } from '@/shared/components/ContextMenu';
+import {
+  DockBottomIcon,
+  DockRightIcon,
+  FloatPanelIcon,
+} from '@/shared/components/icons/DockableIcons';
+import { CloseIcon } from '@/shared/components/icons/SharedIcons';
 import { useDockablePanelContext } from './DockablePanelProvider';
 import type { DockPosition } from './useDockablePanelState';
 
@@ -15,18 +21,21 @@ export function DockableTabMenu({
 }>) {
   const { requestTabMove, closeTab, nativeWindowMode } = useDockablePanelContext();
   const items: ContextMenuItem[] = [];
-  const addMove = (label: string, target: DockPosition) => {
-    items.push({ label, onClick: () => requestTabMove(panelId, target) });
+  const addMove = (label: string, target: DockPosition, icon: ContextMenuItem['icon']) => {
+    items.push({ label, icon, onClick: () => requestTabMove(panelId, target) });
   };
   if (nativeWindowMode || groupKey !== 'right') {
-    addMove('Dock to right', 'right');
+    addMove('Dock to right', 'right', <DockRightIcon width={16} height={16} />);
   }
   if (nativeWindowMode || groupKey !== 'bottom') {
-    addMove('Dock to bottom', 'bottom');
+    addMove('Dock to bottom', 'bottom', <DockBottomIcon width={16} height={16} />);
   }
   if (!nativeWindowMode) {
-    addMove('Float', 'floating');
+    addMove('Float', 'floating', <FloatPanelIcon width={16} height={16} />);
   }
-  items.push({ divider: true }, { label: 'Close', onClick: () => closeTab(panelId) });
+  items.push(
+    { divider: true },
+    { label: 'Close', icon: <CloseIcon width={16} height={16} />, onClick: () => closeTab(panelId) }
+  );
   return <ContextMenu items={items} position={position} onClose={onClose} />;
 }

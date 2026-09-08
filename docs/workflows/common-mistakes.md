@@ -154,6 +154,12 @@ move. Test the actual buttons with multiple tabs and an occupied destination,
 then right-click an inactive tab and prove only that tab is affected. Include
 the native renderer's docked layout projection when testing menu destinations.
 
+For tab-menu styling, compare the cluster and object-panel menus together,
+including docked and native panel variants. Use the shared ContextMenu icon
+slot and separator styling consistently; checking one menu in isolation misses
+visible differences between equivalent controls. Keep each menu's existing
+action scope and availability while aligning its presentation.
+
 ## Adding cognitive complexity without measuring it
 
 Recovery guards and channel-close handling can become deeply nested inside

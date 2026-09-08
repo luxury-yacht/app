@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   runtimeAvailable: vi.fn(() => true),
   onEvent: vi.fn(() => vi.fn()),
   backend: {
+    OpenClusterWindow: vi.fn(),
     GetNativeWindowDescriptor: vi.fn(),
     OpenPanelWorkspaceObject: vi.fn(),
     PublishDockedPanels: vi.fn(),
@@ -62,6 +63,7 @@ import {
   onPanelWindowFocusRequested,
   onPanelWindowOpened,
   onWorkspaceCloseRequested,
+  openClusterWindow,
   openPanelWorkspaceObject,
   publishDockedPanels,
   requestPanelTabClose,
@@ -152,6 +154,8 @@ describe('native panel-window transport', () => {
   });
 
   it('delegates every command with complete owner, cluster, and object identity', async () => {
+    await openClusterWindow('workspace-2', 'cluster-1');
+    expect(mocks.backend.OpenClusterWindow).toHaveBeenCalledWith('workspace-2', 'cluster-1');
     expect(await closeClusterView('workspace-2', 'cluster-1')).toBe(false);
     await acknowledgeClusterPanelClose('panel-1', 'close-1', false);
     expect(mocks.backend.CloseClusterView).toHaveBeenCalledWith('workspace-2', 'cluster-1');

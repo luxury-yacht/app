@@ -5,6 +5,14 @@ import (
 	"github.com/luxury-yacht/app/internal/panelwindow"
 )
 
+func (bridge *windowRegistryBridge) OpenClusterWindow(windowName, clusterID string) error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
+	}
+	return registry.OpenClusterWindow(windowName, clusterID)
+}
+
 func (bridge *windowRegistryBridge) AcknowledgePanelWorkspaceReady(windowName string) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {

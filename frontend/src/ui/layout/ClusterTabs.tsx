@@ -61,7 +61,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
   } = useKubeconfig();
   const [panelMenu, setPanelMenu] = useState<{
     clusterId: string;
-    clusterName: string;
+    selection: string;
     position: { x: number; y: number };
   } | null>(null);
   const [tabOrder, setTabOrder] = useState<string[]>(() => getClusterTabOrder());
@@ -328,7 +328,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
         event.preventDefault();
         setPanelMenu({
           clusterId: getClusterMeta(tab.selection).id,
-          clusterName: tab.label,
+          selection: tab.selection,
           position: { x: event.clientX, y: event.clientY },
         });
       },
@@ -347,7 +347,14 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
 
   return (
     <div ref={assignRootRef} className="cluster-tabs-wrapper">
-      {panelMenu ? <ClusterPanelsMenu {...panelMenu} onClose={() => setPanelMenu(null)} /> : null}
+      {panelMenu ? (
+        <ClusterPanelsMenu
+          clusterId={panelMenu.clusterId}
+          position={panelMenu.position}
+          onClose={() => setPanelMenu(null)}
+          onCloseCluster={() => closeClusterSelection(panelMenu.selection)}
+        />
+      ) : null}
       {orderedTabs.length > 0 && (
         <Tabs
           aria-label="Cluster Tabs"

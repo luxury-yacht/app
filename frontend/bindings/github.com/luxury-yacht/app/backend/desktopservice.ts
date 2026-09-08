@@ -350,6 +350,10 @@ export function MergeObjectYamlWithLatest(clusterID: string, request: $models.Ob
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.MergeObjectYamlWithLatest", clusterID, request);
 }
 
+export function OpenClusterWindow(windowName: string, clusterID: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.OpenClusterWindow", windowName, clusterID);
+}
+
 export function OpenKubeconfigSearchPathDialog(): $CancellablePromise<string> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.OpenKubeconfigSearchPathDialog");
 }

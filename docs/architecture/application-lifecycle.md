@@ -205,8 +205,10 @@ in a panel window, or retained without a renderer. Each tab carries complete
 object identity (`clusterId`, `group`, `version`, `kind`, `namespace`, `name`)
 and its active view. The directory contains no object data, React state, drafts,
 or mutation state. Opening an existing object focuses its existing placement.
-The cluster tab’s context menu exposes shared panels and moves them into the
-current app window.
+The cluster tab’s context menu can open another app view, move the current view
+to a new window, or close the clicked view. Opening another view preserves the
+source and shared panel placements, using the same cluster selection admission
+and seeded window factory as a move without committing source removal.
 
 Float, dock-back, individual panel-tab moves, and cluster-tab moves must preserve
 the source until the destination acknowledges reconstruction. Source guards and

@@ -5,6 +5,13 @@ import (
 	"github.com/luxury-yacht/app/internal/panelwindow"
 )
 
+func (s *DesktopService) OpenClusterWindow(ctx context.Context, windowName, clusterID string) error {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return err
+	}
+	return s.panelWindows.OpenClusterWindow(windowName, clusterID)
+}
+
 func (s *DesktopService) AcknowledgePanelWorkspaceReady(ctx context.Context, windowName string) error {
 	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
 		return err

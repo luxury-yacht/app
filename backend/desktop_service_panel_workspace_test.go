@@ -27,6 +27,9 @@ func (r *sharedWorkspaceRecorder) OpenPanelWorkspaceObject(windowName string, ta
 func (r *sharedWorkspaceRecorder) PublishDockedPanels(windowName string, groups []panelwindow.WorkspaceGroup) error {
 	return r.record(windowName, groups)
 }
+func (r *sharedWorkspaceRecorder) OpenClusterWindow(windowName, clusterID string) error {
+	return r.record(windowName, clusterID)
+}
 func (r *sharedWorkspaceRecorder) RequestClusterTabTransfer(windowName string, request panelwindow.ClusterTabTransferRequest) error {
 	return r.record(windowName, request)
 }
@@ -82,6 +85,9 @@ func TestSharedPanelWorkspaceBoundaryAuthenticatesAndPreservesEveryCommand(t *te
 		{"PublishDockedPanels", func(service *DesktopService, ctx context.Context, caller string) error {
 			return service.PublishDockedPanels(ctx, caller, groups)
 		}, []any{"workspace-1", groups}},
+		{"OpenClusterWindow", func(service *DesktopService, ctx context.Context, caller string) error {
+			return service.OpenClusterWindow(ctx, caller, "production")
+		}, []any{"workspace-1", "production"}},
 		{"RequestClusterTabTransfer", func(service *DesktopService, ctx context.Context, caller string) error {
 			return service.RequestClusterTabTransfer(ctx, caller, request)
 		}, []any{"workspace-1", request}},

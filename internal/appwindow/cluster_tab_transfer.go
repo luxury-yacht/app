@@ -24,22 +24,10 @@ func (r *Registry) RequestClusterTabTransfer(caller string, request panelwindow.
 	if err := r.validateClusterTabRequest(caller, request); err != nil {
 		return err
 	}
-	if r.clusterTransfers == nil {
-		r.clusterTransfers = make(map[string]*clusterViewTransfer)
-		r.usedClusterTransferIDs = make(map[string]struct{})
+	transfer, err := r.reserveClusterTransferLocked(request)
+	if err != nil {
+		return err
 	}
-	if _, used := r.usedClusterTransferIDs[request.TransferID]; used {
-		return fmt.Errorf("cluster transfer ID was already used")
-	}
-	for _, pending := range r.clusterTransfers {
-		previous := pending.event.Request
-		if previous.ClusterID == request.ClusterID {
-			return fmt.Errorf("cluster already has a pending view transfer")
-		}
-	}
-	transfer := &clusterViewTransfer{event: panelwindow.ClusterTabTransferEvent{Request: request}}
-	r.clusterTransfers[request.TransferID] = transfer
-	r.usedClusterTransferIDs[request.TransferID] = struct{}{}
 	if r.clusterTransferTimeout > 0 {
 		transfer.timeout = time.AfterFunc(r.clusterTransferTimeout, func() { _ = r.FailClusterTabTransfer(request.SourceWindowName, request.TransferID) })
 	}
@@ -48,6 +36,26 @@ func (r *Registry) RequestClusterTabTransfer(caller string, request panelwindow.
 		return fmt.Errorf("cluster transfer source is not available")
 	}
 	return nil
+}
+
+func (r *Registry) reserveClusterTransferLocked(request panelwindow.ClusterTabTransferRequest) (*clusterViewTransfer, error) {
+	if r.clusterTransfers == nil {
+		r.clusterTransfers = make(map[string]*clusterViewTransfer)
+		r.usedClusterTransferIDs = make(map[string]struct{})
+	}
+	if _, used := r.usedClusterTransferIDs[request.TransferID]; used {
+		return nil, fmt.Errorf("cluster transfer ID was already used")
+	}
+	for _, pending := range r.clusterTransfers {
+		previous := pending.event.Request
+		if previous.ClusterID == request.ClusterID {
+			return nil, fmt.Errorf("cluster already has a pending view transfer")
+		}
+	}
+	transfer := &clusterViewTransfer{event: panelwindow.ClusterTabTransferEvent{Request: request}}
+	r.clusterTransfers[request.TransferID] = transfer
+	r.usedClusterTransferIDs[request.TransferID] = struct{}{}
+	return transfer, nil
 }
 
 func (r *Registry) validateClusterTabRequest(caller string, request panelwindow.ClusterTabTransferRequest) error {

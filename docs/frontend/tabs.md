@@ -106,9 +106,16 @@ verify manually in the app.
 ## Shared cluster tabs across app windows
 
 A cluster tab represents one app window’s view of a shared cluster workspace.
-The same cluster can appear in multiple app windows. Right-clicking a cluster tab
-lists its shared panels, their current locations, and Show/Move here actions.
-The menu also supports moving the cluster tab to a new app window.
+The same cluster can appear in multiple app windows. Its context menu contains
+three actions with the shared menu icon styling, no heading, and a separator
+before Close, matching object-panel tab menus:
+
+- **Open in new window** adds another app view of that cluster while keeping the
+  source tab and shared panel placements. The target is seeded before rendering.
+- **Move to new window** transfers the tab through the acknowledged lifecycle
+  below; the source remains until the destination has accepted the view.
+- **Close** uses the same cluster-close transition as the clicked tab’s close
+  button, including when the clicked tab is inactive.
 
 A cross-window cluster move carries the source view’s navigation, namespace,
 filters, and docked panels. Reuse an existing destination tab and preserve its

@@ -1,95 +1,44 @@
-import { useEffect, useState } from 'react';
-import type { panelwindow } from '@/core/backend-api/models';
 import { getWindowIdentity } from '@/core/desktop-runtime';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
-import { useObjectPanel } from '@/modules/object-panel/hooks/useObjectPanel';
 import ContextMenu, { type ContextMenuItem } from '@/shared/components/ContextMenu';
+import { FloatPanelIcon } from '@/shared/components/icons/DockableIcons';
+import { CloseIcon, OpenIcon } from '@/shared/components/icons/SharedIcons';
 import { reportOperationalError } from '@/utils/errorHandler';
 import { canMoveClusterToNewWindow } from './clusterTabTransferPolicy';
-import {
-  onPanelWorkspaceChanged,
-  requestClusterTabTransfer,
-  requestPanelTabTransfer,
-} from './index';
+import { openClusterWindow, requestClusterTabTransfer } from './index';
 import { PanelLifecycleClusterSurface } from './panelLifecycleGuards';
-import { usePanelWorkspaceSync } from './WorkspacePanelSync';
-
-type MenuState =
-  | { phase: 'loading' }
-  | { phase: 'error' }
-  | { phase: 'ready'; panels: panelwindow.WorkspacePanel[] };
-const locationLabel = (location: panelwindow.PanelLocation, windowName: string) => {
-  if (location.kind === 'retained') {
-    return 'saved panel';
-  }
-  if (location.windowName === windowName) {
-    return 'this window';
-  }
-  return location.windowName
-    .replace(/^workspace-/, 'app window ')
-    .replace(/^panel-/, 'panel window ');
-};
 
 export function ClusterPanelsMenu({
   clusterId,
-  clusterName,
   position,
   onClose,
+  onCloseCluster,
 }: Readonly<{
   clusterId: string;
-  clusterName: string;
   position: { x: number; y: number };
   onClose: () => void;
+  onCloseCluster: () => void;
 }>) {
   const windowName = getWindowIdentity();
-  const { readCluster } = usePanelWorkspaceSync();
   const { selectedClusterIds } = useKubeconfig();
-  const { openWithObject } = useObjectPanel();
-  const [state, setState] = useState<MenuState>({ phase: 'loading' });
-  const report = (error: unknown) =>
-    reportOperationalError(error, {
-      source: 'ClusterPanelsMenu',
-      action: 'access-cluster-panels',
-      clusterId,
-    });
-  useEffect(() => {
-    let disposed = false;
-    let revision = 0;
-    const read = async () => {
-      try {
-        const snapshot = await readCluster(clusterId);
-        if (!snapshot || disposed || snapshot.revision < revision) {
-          return;
-        }
-        revision = snapshot.revision;
-        setState({ phase: 'ready', panels: snapshot.panels ?? [] });
-      } catch (error) {
-        if (disposed) {
-          return;
-        }
-        setState({ phase: 'error' });
-        reportOperationalError(error, {
-          source: 'ClusterPanelsMenu',
-          action: 'read-cluster-panels',
-          clusterId,
-        });
-      }
-    };
-    const cancel = onPanelWorkspaceChanged((event) => {
-      if (event.clusterId === clusterId) {
-        void read();
-      }
-    });
-    void read();
-    return () => {
-      disposed = true;
-      cancel();
-    };
-  }, [readCluster, clusterId]);
   const items: ContextMenuItem[] = [
-    { label: clusterName, header: true },
     {
-      label: 'Move cluster to new window',
+      label: 'Open in new window',
+      icon: <FloatPanelIcon width={16} height={16} />,
+      disabled: !selectedClusterIds.includes(clusterId),
+      onClick: () => {
+        void openClusterWindow(windowName, clusterId).catch((error) =>
+          reportOperationalError(error, {
+            source: 'ClusterPanelsMenu',
+            action: 'open-cluster-window',
+            clusterId,
+          })
+        );
+      },
+    },
+    {
+      label: 'Move to new window',
+      icon: <OpenIcon width={16} height={16} />,
       disabled: !canMoveClusterToNewWindow(clusterId, selectedClusterIds),
       onClick: () => {
         void requestClusterTabTransfer(windowName, {
@@ -98,64 +47,21 @@ export function ClusterPanelsMenu({
           targetWindowName: '',
           clusterId,
           targetIndex: 0,
-        }).catch(report);
+        }).catch((error) =>
+          reportOperationalError(error, {
+            source: 'ClusterPanelsMenu',
+            action: 'move-cluster-window',
+            clusterId,
+          })
+        );
       },
     },
     { divider: true },
+    { label: 'Close', icon: <CloseIcon width={16} height={16} />, onClick: onCloseCluster },
   ];
-  const statusLabel = panelMenuStatusLabel(state);
-  if (state.phase !== 'ready') {
-    return (
-      <PanelLifecycleClusterSurface clusterId={clusterId}>
-        <ContextMenu
-          items={[...items, { label: statusLabel, disabled: true }]}
-          position={position}
-          onClose={onClose}
-        />
-      </PanelLifecycleClusterSurface>
-    );
-  }
-  if (!state.panels.length) {
-    items.push({ label: 'No open panels', disabled: true });
-  }
-  for (const panel of state.panels) {
-    const ref = panel.tab.objectRef;
-    const objectName = ref.namespace ? `${ref.namespace}/${ref.name}` : ref.name;
-    items.push(
-      { label: `${ref.kind} ${objectName}`, header: true },
-      {
-        label: `Show · ${locationLabel(panel.location, windowName)}`,
-        onClick: () => openWithObject({ ...ref, group: ref.group, version: ref.version }),
-      }
-    );
-    if (panel.location.windowName && panel.location.windowName !== windowName) {
-      items.push({
-        label: 'Move here',
-        onClick: () => {
-          void requestPanelTabTransfer(windowName, {
-            transferId: globalThis.crypto.randomUUID(),
-            sourceWindowName: panel.location.windowName,
-            targetWindowName: windowName,
-            clusterId,
-            sourceGroupId: panel.location.groupId,
-            targetGroupId: 'right',
-            targetIndex: 0,
-            targetKind: 'workspace' as panelwindow.TabTransferTarget,
-            cursorX: 0,
-            cursorY: 0,
-            tab: panel.tab,
-          }).catch(report);
-        },
-      });
-    }
-  }
   return (
     <PanelLifecycleClusterSurface clusterId={clusterId}>
       <ContextMenu items={items} position={position} onClose={onClose} />
     </PanelLifecycleClusterSurface>
   );
-}
-
-function panelMenuStatusLabel(state: MenuState): string {
-  return state.phase === 'loading' ? 'Loading panels…' : 'Unable to load panels';
 }

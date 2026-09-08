@@ -6,6 +6,13 @@ import (
 	"github.com/luxury-yacht/app/internal/panelwindow"
 )
 
+func (s *DesktopShell) OpenClusterWindow(windowName, clusterID string) error {
+	if s.panelWorkspace == nil {
+		return fmt.Errorf("panel workspace registry is not available")
+	}
+	return s.panelWorkspace.OpenClusterWindow(windowName, clusterID)
+}
+
 func (s *DesktopShell) AcknowledgePanelWorkspaceReady(windowName string) error {
 	if s.panelWorkspace == nil {
 		return fmt.Errorf("panel workspace registry is not available")

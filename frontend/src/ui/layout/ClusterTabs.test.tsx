@@ -16,13 +16,19 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installWindowProperty } from '@/test-utils/windowProperty';
 
-vi.mock('@/core/panel-windows/ClusterPanelsMenu', () => ({ ClusterPanelsMenu: () => null }));
+vi.mock('@/core/contexts/ZoomContext', () => ({ useZoom: () => ({ zoomLevel: 100 }) }));
+vi.mock('@/ui/shortcuts', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useKeyboardSurface: vi.fn(),
+}));
 
 const clusterTransferBridge = vi.hoisted(() => ({
   request: vi.fn(async (..._args: unknown[]) => undefined),
+  open: vi.fn(async (..._args: unknown[]) => undefined),
 }));
 vi.mock('@/core/panel-windows', () => ({
   requestClusterTabTransfer: clusterTransferBridge.request,
+  openClusterWindow: clusterTransferBridge.open,
 }));
 
 const persistenceBridge = vi.hoisted(() => ({
@@ -83,7 +89,12 @@ const viewState = {
 };
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => mockState,
+  useKubeconfig: () => ({
+    ...mockState,
+    selectedClusterIds: mockState.selectedKubeconfigs.map(
+      (selection) => mockState.getClusterMeta(selection).id
+    ),
+  }),
 }));
 
 vi.mock('@core/contexts/ViewStateContext', () => ({
@@ -147,6 +158,58 @@ describe('ClusterTabs', () => {
       (node as HTMLElement).textContent?.trim()
     );
     expect(labels).toEqual(['a']);
+  });
+
+  it('closes the right-clicked inactive cluster through the existing close action', async () => {
+    mockState.selectedKubeconfigs = ['/configs/kube:production', '/configs/kube:staging'];
+    mockState.selectedKubeconfig = '/configs/kube:production';
+    mockState.getClusterMeta = (selection) => ({
+      id: selection.replace('/configs/', ''),
+      name: selection.split(':')[1],
+    });
+    await renderTabs();
+    const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
+      (item) => item.querySelector('.tab-item__label')?.textContent === 'staging'
+    );
+    expect(tab).toBeDefined();
+    await act(async () =>
+      tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    );
+    const items = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+    expect(items.map((item) => item.textContent)).toEqual([
+      'Open in new window',
+      'Move to new window',
+      'Close',
+    ]);
+    await act(async () => items.find((item) => item.textContent === 'Close')?.click());
+    expect(mockState.closeKubeconfig).toHaveBeenCalledExactlyOnceWith('/configs/kube:staging');
+    expect(mockState.setActiveKubeconfig).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it('opens the right-clicked inactive cluster in a peer without changing local selection', async () => {
+    mockState.selectedKubeconfigs = ['/configs/kube:production', '/configs/kube:staging'];
+    mockState.selectedKubeconfig = '/configs/kube:production';
+    mockState.getClusterMeta = (selection) => ({
+      id: selection.replace('/configs/', ''),
+      name: selection.split(':')[1],
+    });
+    await renderTabs();
+    const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
+      (item) => item.querySelector('.tab-item__label')?.textContent === 'staging'
+    );
+    await act(async () =>
+      tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    );
+    const open = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+      (item) => item.textContent === 'Open in new window'
+    );
+    await act(async () => open?.click());
+    expect(clusterTransferBridge.open).toHaveBeenCalledExactlyOnceWith('app-a', 'kube:staging');
+    expect(clusterTransferBridge.request).not.toHaveBeenCalled();
+    expect(mockState.closeKubeconfig).not.toHaveBeenCalled();
+    expect(mockState.setActiveKubeconfig).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
   });
 
   it('renders a non-closeable Global tab only when multiple clusters are open', async () => {

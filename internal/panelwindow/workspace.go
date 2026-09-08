@@ -48,6 +48,7 @@ type PanelOpenResult struct {
 type SharedWorkspaceCommands interface {
 	ClusterPanelCloseCommands
 	ClusterTabTransferCommands
+	OpenClusterWindow(string, string) error
 	GetPanelWorkspace(string, string) (WorkspaceSnapshot, error)
 	OpenPanelWorkspaceObject(string, TabSnapshot) (PanelOpenResult, error)
 	PublishDockedPanels(string, []WorkspaceGroup) error

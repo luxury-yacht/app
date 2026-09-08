@@ -16,6 +16,7 @@ import {
   FailPanelTabTransfer,
   FailPanelWindowTransfer,
   GetNativeWindowDescriptor,
+  OpenClusterWindow,
   OpenPanelWorkspaceObject,
   PublishDockedPanels,
   RequestClusterTabTransfer,
@@ -186,6 +187,8 @@ export const requestClusterTabTransfer = (
   windowName: string,
   request: panelwindow.ClusterTabTransferRequest
 ) => RequestClusterTabTransfer(windowName, request);
+export const openClusterWindow = (windowName: string, clusterId: string): Promise<void> =>
+  OpenClusterWindow(windowName, clusterId);
 export const acceptClusterTabTransfer = (
   windowName: string,
   transferId: string,
