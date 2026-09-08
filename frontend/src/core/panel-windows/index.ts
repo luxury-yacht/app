@@ -15,14 +15,12 @@ import {
   FailClusterTabTransfer,
   FailPanelTabTransfer,
   FailPanelWindowTransfer,
-  FocusPanelWindow,
   GetNativeWindowDescriptor,
   OpenPanelWorkspaceObject,
   PublishDockedPanels,
   RequestClusterTabTransfer,
   RequestPanelTabClose,
   RequestPanelTabTransfer,
-  RequestPanelWindowClose,
   UpdatePanelWindowSnapshot,
 } from '@/core/backend-api';
 import type { panelwindow } from '@/core/backend-api/models';
@@ -97,18 +95,6 @@ export const failPanelWindowTransfer = (
   windowName: string,
   transferId: string
 ): Promise<void> => FailPanelWindowTransfer(callerWindowName, windowName, transferId);
-
-export const focusPanelWindow = (
-  callerWindowName: string,
-  windowName: string,
-  panelId: string
-): Promise<void> => FocusPanelWindow(callerWindowName, windowName, panelId);
-
-export const requestPanelWindowClose = (
-  callerWindowName: string,
-  windowName: string,
-  reason: string
-): Promise<void> => RequestPanelWindowClose(callerWindowName, windowName, reason);
 
 export const acknowledgePanelWindowClose = (windowName: string): Promise<void> =>
   AcknowledgePanelWindowClose(windowName);

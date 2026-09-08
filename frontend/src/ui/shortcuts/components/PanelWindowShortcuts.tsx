@@ -367,7 +367,6 @@ export function PanelWindowShortcuts({
         if (request.targetWindowName !== descriptor.windowName || !insertedPanelId) {
           return;
         }
-        guards.releaseTransfer(request.transferId);
         insertedTabTransfersRef.current.delete(request.transferId);
         commitTabClose(insertedPanelId);
       }),

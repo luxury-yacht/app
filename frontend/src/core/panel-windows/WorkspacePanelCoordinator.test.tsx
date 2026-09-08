@@ -58,8 +58,6 @@ const mocks = vi.hoisted(() => ({
   requestTabTransfer: vi.fn(async (_caller: string, _request: unknown) => undefined),
   acceptTabTransfer: vi.fn(async () => undefined),
   failTabTransfer: vi.fn(async () => undefined),
-  focusPanelWindow: vi.fn(async () => undefined),
-  requestPanelClose: vi.fn(async () => undefined),
   syncPanelWindowSnapshot: vi.fn(),
   panelIdsForPanelWindow: vi.fn(() => ['panel-a']),
   removeOwnedPanel: vi.fn(),
@@ -119,9 +117,7 @@ vi.mock('@/core/panel-windows', async (importOriginal) => {
     requestClusterTabTransfer: mocks.requestClusterTransfer,
     acceptPanelTabTransfer: mocks.acceptTabTransfer,
     failPanelTabTransfer: mocks.failTabTransfer,
-    focusPanelWindow: mocks.focusPanelWindow,
     failPanelWindowTransfer: mocks.failTransfer,
-    requestPanelWindowClose: mocks.requestPanelClose,
     requestPanelWindowGuard: mocks.requestGuard,
     acknowledgeApplicationQuitPreflight: mocks.acknowledgeQuit,
     onPanelWindowOpened: event('opened'),
@@ -398,7 +394,6 @@ describe('WorkspacePanelCoordinator', () => {
       } as never);
     });
     expect(mocks.requestGuard).not.toHaveBeenCalled();
-    expect(mocks.requestPanelClose).not.toHaveBeenCalled();
     expect(mocks.acknowledgeWorkspaceClose).toHaveBeenCalledWith('workspace-1');
   });
 
@@ -1243,7 +1238,6 @@ describe('WorkspacePanelCoordinator', () => {
     mocks.blocker = { reason: 'unsaved-yaml', focus };
     expect(await mocks.clusterPreflight?.('cluster-1')).toBeNull();
     expect(focus).toHaveBeenCalledOnce();
-    expect(mocks.requestPanelClose).not.toHaveBeenCalled();
     expect(mocks.flushPublication).not.toHaveBeenCalled();
   });
 

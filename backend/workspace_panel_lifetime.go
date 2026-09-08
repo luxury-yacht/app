@@ -77,8 +77,12 @@ func (a *WorkspaceCoordinator) selectionForOpenCluster(clusterID string) string 
 
 func (a *WorkspaceCoordinator) ReleasePanelCluster(referenceID string) error {
 	return a.runOrderedSelectionMutation("release-panel-cluster", func(mutation *selectionMutation) error {
+		if clusterID, shared := strings.CutPrefix(referenceID, "panel-workspace:"); shared && a.PanelWorkspaceDirectory().HasClusterReference(clusterID) {
+			return nil
+		}
 		a.workspaceSelectionsMu.Lock()
 		delete(a.panelSelections, referenceID)
+		mutation.preserveRestartSelection = len(a.workspaceSelections) == 0
 		union := a.aggregateWorkspaceSelectionsLocked()
 		a.workspaceSelectionsMu.Unlock()
 		if selectionSetsEqual(union, a.GetSelectedKubeconfigs()) {

@@ -10,6 +10,7 @@ func (a *WorkspaceCoordinator) removeClusterWorkspaceState(clusterID string) {
 	if a == nil {
 		return
 	}
+	a.PanelWorkspaceDirectory().RemoveCluster(clusterID)
 	a.clusterWorkspace.removeClusterWorkspaceRuntimeState(clusterID)
 	a.clusterRuntime.removeClusterLifecycleState(clusterID)
 }
@@ -222,6 +223,7 @@ func (a *WorkspaceCoordinator) ReleaseWorkspaceWindow(windowID string) {
 			return nil
 		}
 		delete(a.workspaceSelections, windowID)
+		mutation.preserveRestartSelection = len(a.workspaceSelections) == 0
 		a.PanelWorkspaceDirectory().RetainWindow(windowID)
 		a.clusterWorkspace.markClusterWorkspaceChanged()
 		union := a.aggregateWorkspaceSelectionsLocked()

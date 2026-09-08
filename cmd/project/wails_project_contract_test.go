@@ -412,7 +412,7 @@ func TestDirectWailsCompositionContractRejectsBoundaryRegressions(t *testing.T) 
 	}
 }
 
-func TestUpdaterTempRootIsConfiguredBeforeAnyProcessDispatch(t *testing.T) {
+func TestCredentialExecDispatchPrecedesAppTempRootConfiguration(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	require.NoError(t, validateCompositionOrdering(mainSource))
 }
@@ -420,8 +420,8 @@ func TestUpdaterTempRootIsConfiguredBeforeAnyProcessDispatch(t *testing.T) {
 func TestCompositionOrderingContractRejectsReorderedFixtures(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	for _, markers := range [][2]string{
-		{"updatetemp.ConfigureProcess()", "backend.MaybeRunExecWrapper()"},
-		{"backend.MaybeRunExecWrapper()", "reporter, reporterErr := newSentryReporter("},
+		{"backend.MaybeRunExecWrapper()", "updatetemp.ConfigureProcess()"},
+		{"updatetemp.ConfigureProcess()", "reporter, reporterErr := newSentryReporter("},
 		{"reporter, reporterErr := newSentryReporter(", "composition := newApplicationComposition("},
 		{"composition := newApplicationComposition(", "backend.InitializeErrorReporting(composition.preferences, composition.reporting)"},
 		{"backend.InitializeErrorReporting(composition.preferences, composition.reporting)", "composition.application.Run()"},
@@ -548,8 +548,8 @@ func isNamedPointer(expression ast.Expr, name string) bool {
 func validateCompositionOrdering(mainSource string) error {
 	for _, sequence := range [][]string{
 		{
-			"updatetemp.ConfigureProcess()",
 			"backend.MaybeRunExecWrapper()",
+			"updatetemp.ConfigureProcess()",
 			"reporter, reporterErr := newSentryReporter(",
 			"composition := newApplicationComposition(",
 			"backend.InitializeErrorReporting(composition.preferences, composition.reporting)",
@@ -957,7 +957,7 @@ func TestMainHasNoCustomApplicationUpdateProcessDispatcher(t *testing.T) {
 	require.NotContains(t, updateConfigSource, "windowsupdate")
 	require.NotContains(t, updateConfigSource, "machineScopeWindowsRestart")
 	require.Contains(t, mainSource, execWrapper)
-	require.Less(t, strings.Index(mainSource, tempSetup), strings.Index(mainSource, execWrapper))
+	require.Less(t, strings.Index(mainSource, execWrapper), strings.Index(mainSource, tempSetup))
 	require.Less(t, strings.Index(mainSource, execWrapper), strings.LastIndex(mainSource, composition))
 }
 

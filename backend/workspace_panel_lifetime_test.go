@@ -61,3 +61,23 @@ func TestPanelRendererProjectionDoesNotAcquireOtherClusterViews(t *testing.T) {
 	coordinator.workspaceSelectionsMu.RUnlock()
 	require.False(t, becameAppView)
 }
+
+func TestClosingLastAppAndPanelKeepsRestartSelections(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	selection := "/tmp/config:prod"
+	app.Workspace.kubeconfigsMu.Lock()
+	app.Workspace.setSelectedKubeconfigsLocked([]string{selection})
+	app.Workspace.kubeconfigsMu.Unlock()
+	require.NoError(t, app.Preferences.SaveSelectedKubeconfigs([]string{selection}))
+	app.Workspace.GetClusterWorkspaceStateForWindow("workspace-1")
+	require.NoError(t, app.Workspace.RetainPanelCluster("panel-1", "config:prod"))
+	app.Workspace.ReleaseWorkspaceWindow("workspace-1")
+	require.NoError(t, app.Workspace.ReleasePanelCluster("panel-1"))
+	require.Empty(t, app.Workspace.GetSelectedKubeconfigs(), "runtime resources must still be released")
+	require.Equal(t, []string{selection}, app.Preferences.SelectedKubeconfigs())
+	reloaded := newWorkspaceCoordinatorTestFixture(t)
+	_, err := reloaded.Preferences.EnsureLoadedForStartup()
+	require.NoError(t, err)
+	require.Equal(t, []string{selection}, reloaded.Preferences.SelectedKubeconfigs())
+}

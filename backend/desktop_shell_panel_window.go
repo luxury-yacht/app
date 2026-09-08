@@ -67,20 +67,6 @@ func (s *DesktopShell) FailPanelWindowTransfer(callerWindowName, windowName, tra
 	return s.failPanelTransfer(callerWindowName, windowName, transferID)
 }
 
-func (s *DesktopShell) FocusPanelWindow(callerWindowName, windowName, panelID string) error {
-	if s == nil || s.focusPanelWindow == nil {
-		return fmt.Errorf("panel-window registry is not available")
-	}
-	return s.focusPanelWindow(callerWindowName, windowName, panelID)
-}
-
-func (s *DesktopShell) RequestPanelWindowClose(callerWindowName, windowName, reason string) error {
-	if s == nil || s.requestPanelClose == nil {
-		return fmt.Errorf("panel-window registry is not available")
-	}
-	return s.requestPanelClose(callerWindowName, windowName, reason)
-}
-
 func (s *DesktopShell) AcknowledgePanelWindowClose(windowName string) error {
 	if s == nil || s.acknowledgePanelClose == nil {
 		return fmt.Errorf("panel-window registry is not available")

@@ -55,7 +55,7 @@ func (r *Registry) AcknowledgePanelWorkspaceReady(windowName string) error {
 	delete(r.queuedWorkspaceEvents, windowName)
 	r.closeMu.Unlock()
 	for _, event := range queued {
-		if insertion, ok := event.payload.(panelwindow.TabTransferInsertRequestedEvent); ok && !r.panelTabInsertionPending(insertion.Request) {
+		if !r.workspaceEventPending(windowName, event) {
 			continue
 		}
 		if !r.emitWindowEvent(windowName, event.name, event.payload) {
@@ -63,6 +63,19 @@ func (r *Registry) AcknowledgePanelWorkspaceReady(windowName string) error {
 		}
 	}
 	return nil
+}
+
+// Readiness cannot revive a transfer that failed while its renderer was loading.
+func (r *Registry) workspaceEventPending(windowName string, event workspaceWindowEvent) bool {
+	switch request := event.payload.(type) {
+	case panelwindow.TabTransferInsertRequestedEvent:
+		return r.panelTabInsertionPending(request.Request)
+	case panelwindow.WindowDockRequestedEvent:
+		position, err := r.panels.DockTarget(request.WindowName, request.TransferID, windowName)
+		return err == nil && position == request.TargetPosition
+	default:
+		return true
+	}
 }
 
 func (r *Registry) queueWorkspaceEvent(windowName, name string, payload any) bool {
@@ -129,22 +142,26 @@ func (r *Registry) GetPanelWorkspace(windowName, clusterID string) (panelwindow.
 }
 
 func (r *Registry) OpenPanelWorkspaceObject(windowName string, tab panelwindow.TabSnapshot) (panelwindow.PanelOpenResult, error) {
-	r.workspaceMu.Lock()
-	defer r.workspaceMu.Unlock()
 	if !r.windowHasCluster(windowName, tab.ObjectRef.ClusterID) {
 		return panelwindow.PanelOpenResult{}, fmt.Errorf("window %q does not display cluster %q", windowName, tab.ObjectRef.ClusterID)
 	}
+	reservation := r.workspace.ReserveCluster(tab.ObjectRef.ClusterID)
+	defer r.releasePanelReservation(reservation, tab.ObjectRef.ClusterID)
 	if err := r.retainPanelWorkspace(tab.ObjectRef.ClusterID); err != nil {
 		return panelwindow.PanelOpenResult{}, err
+	}
+	r.workspaceMu.Lock()
+	defer r.workspaceMu.Unlock()
+	if !reservation.Live() || !r.windowHasCluster(windowName, tab.ObjectRef.ClusterID) {
+		return panelwindow.PanelOpenResult{}, fmt.Errorf("panel source no longer displays the cluster")
 	}
 	location := panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: windowName, GroupID: "right", Active: true}
 	if descriptor, err := r.panels.Descriptor(windowName); err == nil {
 		location.Kind = panelwindow.PanelLocationWindow
 		location.GroupID = descriptor.GroupID
 	}
-	panel, render, err := r.workspace.Open(tab, location)
+	panel, render, err := r.workspace.Open(tab, location, reservation)
 	if err != nil {
-		r.releaseUnusedPanelWorkspace(tab.ObjectRef.ClusterID)
 		return panelwindow.PanelOpenResult{}, err
 	}
 	if !render {
@@ -154,6 +171,11 @@ func (r *Registry) OpenPanelWorkspaceObject(windowName string, tab panelwindow.T
 	}
 	r.emitWorkspaceChanged(tab.ObjectRef.ClusterID)
 	return panelwindow.PanelOpenResult{Panel: panel, Render: render}, nil
+}
+
+func (r *Registry) releasePanelReservation(reservation *panelwindow.WorkspaceReservation, clusterID string) {
+	reservation.Release()
+	r.releaseUnusedPanelWorkspace(clusterID)
 }
 
 func (r *Registry) focusWorkspacePanel(panel panelwindow.WorkspacePanel) error {
@@ -180,37 +202,66 @@ func (r *Registry) emitWorkspaceChanged(clusterID string) {
 }
 
 func (r *Registry) PublishDockedPanels(windowName string, groups []panelwindow.WorkspaceGroup) error {
-	r.workspaceMu.Lock()
-	defer r.workspaceMu.Unlock()
-	if r.lifecycle == nil || !r.lifecycle.Contains(windowName) {
-		return fmt.Errorf("app window %q is not live", windowName)
-	}
-	clusterIDs := r.backend.WindowClusterIDs(windowName)
-	if err := panelwindow.ValidateWorkspaceGroups(windowName, panelwindow.PanelLocationDocked, groups); err != nil {
+	clusterIDs, err := r.validateDockedPublication(windowName, groups)
+	if err != nil {
 		return err
 	}
-	for _, group := range groups {
-		if !slices.Contains(clusterIDs, group.ClusterID) {
-			return fmt.Errorf("window %q does not display cluster %q", windowName, group.ClusterID)
+	reservations := make([]*panelwindow.WorkspaceReservation, 0, len(groups))
+	defer func() {
+		for _, reservation := range reservations {
+			reservation.Release()
 		}
-	}
+		for _, clusterID := range clusterIDs {
+			r.releaseUnusedPanelWorkspace(clusterID)
+		}
+	}()
 	for _, group := range groups {
+		reservations = append(reservations, r.workspace.ReserveCluster(group.ClusterID))
 		if err := r.retainPanelWorkspace(group.ClusterID); err != nil {
 			return err
+		}
+	}
+	return r.commitDockedPublication(windowName, groups, clusterIDs, reservations)
+}
+
+func (r *Registry) commitDockedPublication(windowName string, groups []panelwindow.WorkspaceGroup, clusterIDs []string, reservations []*panelwindow.WorkspaceReservation) error {
+	r.workspaceMu.Lock()
+	defer r.workspaceMu.Unlock()
+	if _, err := r.validateDockedPublication(windowName, groups); err != nil {
+		return err
+	}
+	for _, reservation := range reservations {
+		if !reservation.Live() {
+			return fmt.Errorf("panel publication cluster was removed")
 		}
 	}
 	publishedGroups, err := r.excludeProvisionalDockTabs(windowName, groups)
 	if err != nil {
 		return err
 	}
-	if err := r.publishPanelGroups(windowName, panelwindow.PanelLocationDocked, publishedGroups); err != nil {
+	if err := r.publishPanelGroups(windowName, panelwindow.PanelLocationDocked, publishedGroups, reservations...); err != nil {
 		return err
 	}
 	for _, clusterID := range clusterIDs {
-		r.releaseUnusedPanelWorkspace(clusterID)
 		r.emitWorkspaceChanged(clusterID)
 	}
 	return nil
+}
+
+func (r *Registry) validateDockedPublication(windowName string, groups []panelwindow.WorkspaceGroup) ([]string, error) {
+	if r.lifecycle == nil || !r.lifecycle.Contains(windowName) {
+		return nil, fmt.Errorf("app window %q is not live", windowName)
+	}
+	if err := panelwindow.ValidateWorkspaceGroups(windowName, panelwindow.PanelLocationDocked, groups); err != nil {
+		return nil, err
+	}
+	clusterIDs := r.backend.WindowClusterIDs(windowName)
+	for _, group := range groups {
+		if !slices.Contains(clusterIDs, group.ClusterID) {
+			return nil, fmt.Errorf("window %q does not display cluster %q", windowName, group.ClusterID)
+		}
+	}
+	return clusterIDs, nil
 }
 
 type provisionalDockTab struct {
@@ -266,7 +317,7 @@ func (r *Registry) retainPanelWorkspace(clusterID string) error {
 }
 
 func (r *Registry) releaseUnusedPanelWorkspace(clusterID string) {
-	if r.backend == nil || len(r.workspace.Snapshot(clusterID).Panels) > 0 || len(r.panels.Names(clusterID)) > 0 {
+	if r.backend == nil || r.workspace.HasClusterReference(clusterID) || len(r.panels.Names(clusterID)) > 0 {
 		return
 	}
 	// Selection teardown is serialized by the workspace coordinator. This call

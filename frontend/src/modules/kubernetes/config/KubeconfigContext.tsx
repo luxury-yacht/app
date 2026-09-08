@@ -710,12 +710,22 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         if (!preparation) {
           return;
         }
+        const remaining = selectedKubeconfigsRef.current.filter(
+          (selection) =>
+            resolveClusterMeta(selection, kubeconfigsRef.current).id !== targetClusterId
+        );
+        clusterWorkspaceStore.confirmClosedSelection(targetSelection, targetClusterId);
+        applyCommittedSelection(
+          remaining,
+          resolveNextActiveSelection(
+            selectedKubeconfigsRef.current,
+            selectedKubeconfigRef.current,
+            remaining
+          )
+        );
         const requestId = ++latestSelectionRequestIdRef.current;
         await applySelectionTransition({
-          configs: selectedKubeconfigsRef.current.filter(
-            (selection) =>
-              resolveClusterMeta(selection, kubeconfigsRef.current).id !== targetClusterId
-          ),
+          configs: remaining,
           requestId,
           context: 'closeKubeconfig',
           errorMessage: 'Failed to close cluster',
@@ -725,7 +735,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         closingClusterIdsRef.current.delete(targetClusterId);
       }
     },
-    [applySelectionTransition, resolveClusterMeta]
+    [applySelectionTransition, applyCommittedSelection, resolveClusterMeta]
   );
 
   const registerClusterClosePreflight = useCallback((preflight: ClusterClosePreflight) => {

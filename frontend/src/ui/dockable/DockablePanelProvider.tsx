@@ -65,14 +65,6 @@ interface DockablePanelContextValue {
   commitTabClose: (panelId: string, activationPreference?: AdjacentTabActivationPreference) => void;
   reorderTabInGroup: (groupKey: GroupKey, panelId: string, newIndex: number) => void;
   movePanelBetweenGroups: (panelId: string, targetGroupKey: GroupKey, insertIndex?: number) => void;
-  // Move a panel and bring the target container/frontmost panel into focus.
-  movePanelBetweenGroupsAndFocus: (
-    panelId: string,
-    targetGroupKey: GroupKey,
-    insertIndex?: number,
-    focusTargetPanelId?: string
-  ) => void;
-
   // Drag preview ref: the permanently-mounted `.dockable-tab-drag-preview`
   // element. DockableTabBar's per-tab `getDragImage` callback writes the
   // dragged tab's label + kind class into the element's inner spans
@@ -713,23 +705,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   );
 
   // -----------------------------------------------------------------------
-  // movePanelBetweenGroupsAndFocus -- convenience command used by panel
-  // controls so move + focus updates stay centralized.
-  // -----------------------------------------------------------------------
-  const movePanelBetweenGroupsAndFocus = useCallback(
-    (
-      panelId: string,
-      targetGroupKey: GroupKey,
-      insertIndex?: number,
-      focusTargetPanelId?: string
-    ) => {
-      movePanelBetweenGroups(panelId, targetGroupKey, insertIndex);
-      focusPanelById(focusTargetPanelId ?? panelId);
-    },
-    [movePanelBetweenGroups]
-  );
-
-  // -----------------------------------------------------------------------
   // movePanel -- adapter called by DockableTabBar's useTabDropTarget onDrop.
   // Dispatches between the existing `reorderTabInGroup` (same group) and
   // `movePanelBetweenGroups` (cross group) functions. Applies shift
@@ -1003,7 +978,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       commitTabClose,
       reorderTabInGroup,
       movePanelBetweenGroups,
-      movePanelBetweenGroupsAndFocus,
       dragPreviewRef,
       movePanel,
       createDockableTabDragPayload,
@@ -1040,7 +1014,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       commitTabClose,
       reorderTabInGroup,
       movePanelBetweenGroups,
-      movePanelBetweenGroupsAndFocus,
       movePanel,
       createDockableTabDragPayload,
       dropDockableTab,

@@ -106,11 +106,11 @@ func (a *WorkspaceCoordinator) setSelectedKubeconfigs(mutation *selectionMutatio
 	intent.generation = mutation.generation
 
 	if intent.clearSelection {
-		return a.clearKubeconfigSelection()
+		return a.clearKubeconfigSelection(!mutation.preserveRestartSelection)
 	}
 
 	commitStart := time.Now()
-	a.commitSelectionChangeIntent(intent)
+	a.commitSelectionChangeIntent(intent, !mutation.preserveRestartSelection)
 	mutation.phases.commit = time.Since(commitStart)
 	return a.executeSelectionChangeWork(mutation.context(), intent, &mutation.phases)
 }
@@ -208,13 +208,15 @@ func (a *WorkspaceCoordinator) normalizeSelectionSet(selections []string) ([]kub
 }
 
 // commitSelectionChangeIntent applies validated selection state in-memory and to settings.
-func (a *WorkspaceCoordinator) commitSelectionChangeIntent(intent selectionChangeIntent) {
+func (a *WorkspaceCoordinator) commitSelectionChangeIntent(intent selectionChangeIntent, persist bool) {
 	a.kubeconfigsMu.Lock()
 	a.setSelectedKubeconfigsLocked(intent.normalizedSelectionText)
 	a.kubeconfigsMu.Unlock()
 
-	if err := a.preferences.SaveSelectedKubeconfigs(intent.normalizedSelectionText); err != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), logsources.KubeconfigManager)
+	if persist {
+		if err := a.preferences.SaveSelectedKubeconfigs(intent.normalizedSelectionText); err != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), logsources.KubeconfigManager)
+		}
 	}
 }
 
@@ -283,7 +285,7 @@ func (a *WorkspaceCoordinator) reconcileRefreshSubsystemSelections(selections []
 }
 
 // clearKubeconfigSelection clears the active selection and resets client state.
-func (a *WorkspaceCoordinator) clearKubeconfigSelection() error {
+func (a *WorkspaceCoordinator) clearKubeconfigSelection(persist bool) error {
 	a.logger.Info("Clearing kubeconfig selection", logsources.KubeconfigManager)
 	a.retainWorkspaceSelections(nil)
 	a.kubeconfigsMu.Lock()
@@ -303,8 +305,10 @@ func (a *WorkspaceCoordinator) clearKubeconfigSelection() error {
 	}
 	a.refresh.teardownRefreshSubsystem()
 
-	if err := a.preferences.SaveSelectedKubeconfigs(nil); err != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), logsources.KubeconfigManager)
+	if persist {
+		if err := a.preferences.SaveSelectedKubeconfigs(nil); err != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), logsources.KubeconfigManager)
+		}
 	}
 
 	return nil

@@ -82,8 +82,6 @@ type nativeWindowRegistry interface {
 	BeginPanelWindowDock(string, string, panelwindow.GroupSnapshot) error
 	AcknowledgePanelWindowDock(string, string, string) error
 	FailPanelWindowTransfer(string, string, string) error
-	FocusPanelWindow(string, string, string) error
-	RequestPanelWindowClose(string, string, string) error
 	AcknowledgePanelWindowClose(string) error
 	AcknowledgeWorkspaceWindowClose(string) error
 	RoutePanelWindowCommand(string, panelwindow.WorkspaceCommand) error
@@ -200,26 +198,6 @@ func (bridge *windowRegistryBridge) failPanelTransfer(
 	return registry.FailPanelWindowTransfer(callerWindowName, windowName, transferID)
 }
 
-func (bridge *windowRegistryBridge) focusPanelWindow(
-	callerWindowName, windowName, panelID string,
-) error {
-	registry, err := bridge.registryOrError()
-	if err != nil {
-		return err
-	}
-	return registry.FocusPanelWindow(callerWindowName, windowName, panelID)
-}
-
-func (bridge *windowRegistryBridge) requestPanelClose(
-	callerWindowName, windowName, reason string,
-) error {
-	registry, err := bridge.registryOrError()
-	if err != nil {
-		return err
-	}
-	return registry.RequestPanelWindowClose(callerWindowName, windowName, reason)
-}
-
 func (bridge *windowRegistryBridge) acknowledgePanelClose(windowName string) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
@@ -321,8 +299,6 @@ func (bridge *windowRegistryBridge) runtimeOptions(
 		BeginPanelWindowDock:       bridge.beginPanelWindowDock,
 		AcknowledgePanelDock:       bridge.acknowledgePanelDock,
 		FailPanelTransfer:          bridge.failPanelTransfer,
-		FocusPanelWindow:           bridge.focusPanelWindow,
-		RequestPanelClose:          bridge.requestPanelClose,
 		AcknowledgePanelClose:      bridge.acknowledgePanelClose,
 		AcknowledgeWorkspaceClose:  bridge.acknowledgeWorkspaceClose,
 		RoutePanelCommand:          bridge.routePanelCommand,
@@ -431,12 +407,11 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 }
 
 func main() {
+	backend.MaybeRunExecWrapper()
 	updateTempRoot, updateTempSetupError := updatetemp.ConfigureProcess()
 	if updateTempSetupError != nil {
 		println("Automatic update temp setup disabled:", updateTempSetupError.Error())
 	}
-	backend.MaybeRunExecWrapper()
-
 	reporter, reporterErr := newSentryReporter(
 		sentryreporting.BuildEnabled(),
 		backend.SentryDSN,

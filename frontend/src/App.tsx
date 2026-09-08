@@ -126,7 +126,7 @@ function AppContent() {
   const panelGuards = usePanelLifecycleGuardRegistry();
   const executeApplicationMenuCommand = useCallback(
     (menuCommand: backend.ApplicationMenuCommand) => {
-      if (panelGuards.isFrozen()) {
+      if (panelGuards.isWindowFrozen()) {
         return;
       }
       const actions: WorkspaceApplicationMenuActions = {
@@ -168,7 +168,7 @@ function AppContent() {
       viewState,
       zoomIn,
       zoomOut,
-      panelGuards.isFrozen,
+      panelGuards.isWindowFrozen,
     ]
   );
 

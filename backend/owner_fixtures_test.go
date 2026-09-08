@@ -267,7 +267,7 @@ func newSettingsEffectsTestFixture(t testing.TB, reporters ...sentryreporting.Re
 			return fixture.Workspace.runSelectionMutation(name, func(_ *selectionMutation) error { return action() })
 		},
 		ResetRuntime: func() error {
-			if err := fixture.Workspace.clearKubeconfigSelection(); err != nil {
+			if err := fixture.Workspace.clearKubeconfigSelection(true); err != nil {
 				return err
 			}
 			return fixture.Refresh.ResetRuntimeState()

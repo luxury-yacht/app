@@ -38,7 +38,9 @@ func (r *Registry) RequestClusterTabTransfer(caller string, request panelwindow.
 	transfer := &clusterViewTransfer{event: panelwindow.ClusterTabTransferEvent{Request: request}}
 	r.clusterTransfers[request.TransferID] = transfer
 	r.usedClusterTransferIDs[request.TransferID] = struct{}{}
-	transfer.timeout = time.AfterFunc(15*time.Second, func() { _ = r.FailClusterTabTransfer(request.SourceWindowName, request.TransferID) })
+	if r.clusterTransferTimeout > 0 {
+		transfer.timeout = time.AfterFunc(r.clusterTransferTimeout, func() { _ = r.FailClusterTabTransfer(request.SourceWindowName, request.TransferID) })
+	}
 	if !r.emitWindowEvent(request.SourceWindowName, panelwindow.ClusterTabTransferRequestedEventName, transfer.event) {
 		r.removeClusterTransferLocked(request.TransferID)
 		return fmt.Errorf("cluster transfer source is not available")
@@ -65,6 +67,7 @@ func (r *Registry) validateClusterTabRequest(caller string, request panelwindow.
 
 func (r *Registry) AcceptClusterTabTransfer(source, id string, snapshot panelwindow.ClusterViewSnapshot) error {
 	var closeWindows []string
+	r.clusterTransferMu.Lock()
 	r.workspaceMu.Lock()
 	defer r.finishClusterTransferMutation(&closeWindows, "")
 	transfer := r.clusterTransfers[id]
@@ -75,7 +78,7 @@ func (r *Registry) AcceptClusterTabTransfer(source, id string, snapshot panelwin
 	if err := panelwindow.ValidateClusterViewSnapshot(request.ClusterID, source, snapshot); err != nil {
 		return err
 	}
-	alreadyOpen, err := r.stageClusterTransferTarget(transfer)
+	alreadyOpen, err := r.stageClusterTransferTargetUnlocked(transfer)
 	if err != nil {
 		return err
 	}
@@ -94,6 +97,7 @@ func (r *Registry) AcceptClusterTabTransfer(source, id string, snapshot panelwin
 
 func (r *Registry) AcknowledgeClusterTabTransfer(target, id string) error {
 	var closeWindows []string
+	r.clusterTransferMu.Lock()
 	r.workspaceMu.Lock()
 	defer r.finishClusterTransferMutation(&closeWindows, "")
 	transfer := r.clusterTransfers[id]
@@ -102,7 +106,10 @@ func (r *Registry) AcknowledgeClusterTabTransfer(target, id string) error {
 	}
 	event := transfer.event
 	request := event.Request
-	if err := r.backend.CommitClusterViewTransfer(request.SourceWindowName, target, request.ClusterID, event.Snapshot.Groups); err != nil {
+	r.workspaceMu.Unlock()
+	err := r.backend.CommitClusterViewTransfer(request.SourceWindowName, target, request.ClusterID, event.Snapshot.Groups)
+	r.workspaceMu.Lock()
+	if err != nil {
 		return err
 	}
 	r.removeClusterTransferLocked(id)
@@ -114,6 +121,7 @@ func (r *Registry) AcknowledgeClusterTabTransfer(target, id string) error {
 
 func (r *Registry) FailClusterTabTransfer(caller, id string) error {
 	var closeWindows []string
+	r.clusterTransferMu.Lock()
 	r.workspaceMu.Lock()
 	defer r.finishClusterTransferMutation(&closeWindows, "")
 	transfer := r.clusterTransfers[id]
@@ -134,7 +142,10 @@ func (r *Registry) cancelClusterTransferLocked(id string, closeWindows *[]string
 	}
 	event := transfer.event
 	if transfer.mounting && !event.TargetAlreadyOpen {
-		if err := r.backend.CancelClusterViewTransfer(event.Request.TargetWindowName, event.Request.ClusterID); err != nil {
+		r.workspaceMu.Unlock()
+		err := r.backend.CancelClusterViewTransfer(event.Request.TargetWindowName, event.Request.ClusterID)
+		r.workspaceMu.Lock()
+		if err != nil {
 			return err
 		}
 	}
@@ -161,6 +172,18 @@ func (r *Registry) emitClusterTransfer(event panelwindow.ClusterTabTransferEvent
 	}
 }
 
+// clusterTransferMu keeps this transaction stable while workspaceMu is released.
+// Publish the staged copy only after taking the directory lock again, since panel
+// publications inspect the pending transfer under that lock.
+func (r *Registry) stageClusterTransferTargetUnlocked(transfer *clusterViewTransfer) (bool, error) {
+	staged := *transfer
+	r.workspaceMu.Unlock()
+	alreadyOpen, err := r.stageClusterTransferTarget(&staged)
+	r.workspaceMu.Lock()
+	*transfer = staged
+	return alreadyOpen, err
+}
+
 // Reserve the destination's cluster view before creating its renderer. Initial
 // hydration must never seed a transferred window from the whole process union.
 func (r *Registry) stageClusterTransferTarget(transfer *clusterViewTransfer) (bool, error) {
@@ -168,13 +191,17 @@ func (r *Registry) stageClusterTransferTarget(transfer *clusterViewTransfer) (bo
 	if request.TargetWindowName != "" {
 		return r.backend.StageClusterViewTransfer(request.SourceWindowName, request.TargetWindowName, request.ClusterID)
 	}
+	geometrySource := request.SourceWindowName
+	if !r.lifecycle.Contains(geometrySource) {
+		geometrySource = r.lifecycle.MostRecent()
+	}
 	target := r.lifecycle.Add()
 	alreadyOpen, err := r.backend.StageClusterViewTransfer(request.SourceWindowName, target, request.ClusterID)
 	if err != nil {
 		r.lifecycle.BeginClose(target)
 		return false, err
 	}
-	window := r.newWindow(r.clusterTransferWindowOptions(target, *request))
+	window := r.newWindow(r.clusterTransferWindowOptions(target, geometrySource, *request))
 	if window == nil {
 		cleanup := r.backend.CancelClusterViewTransfer(target, request.ClusterID)
 		r.lifecycle.BeginClose(target)
@@ -186,8 +213,8 @@ func (r *Registry) stageClusterTransferTarget(transfer *clusterViewTransfer) (bo
 	return alreadyOpen, nil
 }
 
-func (r *Registry) clusterTransferWindowOptions(windowName string, request panelwindow.ClusterTabTransferRequest) application.WebviewWindowOptions {
-	options := r.optionsForPeer(windowName, request.SourceWindowName, false)
+func (r *Registry) clusterTransferWindowOptions(windowName, geometrySource string, request panelwindow.ClusterTabTransferRequest) application.WebviewWindowOptions {
+	options := r.optionsForPeer(windowName, geometrySource, false)
 	if request.DropPosition == nil {
 		return options
 	}
@@ -225,6 +252,7 @@ func (r *Registry) closeEmptyClusterTransferWindow(windowName string) {
 
 func (r *Registry) failClusterTransfersForWindow(windowName string) error {
 	var closeWindows []string
+	r.clusterTransferMu.Lock()
 	r.workspaceMu.Lock()
 	defer r.finishClusterTransferMutation(&closeWindows, windowName)
 	for id, transfer := range r.clusterTransfers {
@@ -243,6 +271,7 @@ func (r *Registry) failClusterTransfersForWindow(windowName string) error {
 // transfer mutex before closing an empty source or a cancelled provisional target.
 func (r *Registry) finishClusterTransferMutation(closeWindows *[]string, closingWindow string) {
 	r.workspaceMu.Unlock()
+	r.clusterTransferMu.Unlock()
 	for _, windowName := range *closeWindows {
 		if windowName != closingWindow {
 			r.closeEmptyClusterTransferWindow(windowName)

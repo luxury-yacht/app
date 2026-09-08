@@ -14,8 +14,6 @@ const mocks = vi.hoisted(() => ({
     BeginPanelWindowDock: vi.fn(),
     AcknowledgePanelWindowDock: vi.fn(),
     FailPanelWindowTransfer: vi.fn(),
-    FocusPanelWindow: vi.fn(),
-    RequestPanelWindowClose: vi.fn(),
     AcknowledgePanelWindowClose: vi.fn(),
     AcknowledgeWorkspaceWindowClose: vi.fn(),
     AcknowledgeApplicationQuitPreflight: vi.fn(),
@@ -49,7 +47,6 @@ import {
   closeClusterView,
   failPanelTabTransfer,
   failPanelWindowTransfer,
-  focusPanelWindow,
   onApplicationQuitPreflightRequested,
   onApplicationQuitPreflightSettled,
   onClusterPanelCloseRequested,
@@ -69,7 +66,6 @@ import {
   publishDockedPanels,
   requestPanelTabClose,
   requestPanelTabTransfer,
-  requestPanelWindowClose,
   resolveNativeWindowDescriptor,
   updatePanelWindowSnapshot,
 } from './index';
@@ -172,8 +168,6 @@ describe('native panel-window transport', () => {
     await beginPanelWindowDock('panel-1', 'right', snapshot);
     await acknowledgePanelWindowDock('workspace-1', 'panel-1', 'transfer-1');
     await failPanelWindowTransfer('workspace-1', 'panel-1', 'transfer-1');
-    await focusPanelWindow('workspace-1', 'panel-1', 'panel-a');
-    await requestPanelWindowClose('workspace-1', 'panel-1', 'owner-close');
     await acknowledgePanelWindowClose('panel-1');
     await acknowledgeWorkspaceWindowClose('workspace-1');
     await acknowledgeApplicationQuitPreflight('workspace-1', 'quit-1', true);
@@ -201,16 +195,6 @@ describe('native panel-window transport', () => {
       'workspace-1',
       'panel-1',
       'transfer-1'
-    );
-    expect(mocks.backend.FocusPanelWindow).toHaveBeenCalledWith(
-      'workspace-1',
-      'panel-1',
-      'panel-a'
-    );
-    expect(mocks.backend.RequestPanelWindowClose).toHaveBeenCalledWith(
-      'workspace-1',
-      'panel-1',
-      'owner-close'
     );
     expect(mocks.backend.AcknowledgePanelWindowClose).toHaveBeenCalledWith('panel-1');
     expect(mocks.backend.AcknowledgeWorkspaceWindowClose).toHaveBeenCalledWith('workspace-1');

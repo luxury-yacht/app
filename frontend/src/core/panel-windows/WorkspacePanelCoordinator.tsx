@@ -41,6 +41,7 @@ import {
   objectPanelTabSnapshot,
   singleTabGroupSnapshot,
   tabTransferRequestFromDragPayload,
+  tornOffTabSnapshot,
 } from './tabTransfer';
 
 const newIdentity = (prefix: string): string =>
@@ -104,22 +105,6 @@ const isAuthoritativeTransferSource = (
     owned.nativeLocation?.windowName === request.sourceWindowName &&
     owned.nativeLocation.groupId === request.sourceGroupId
   );
-};
-
-const tornOffTabSnapshot = (request: panelwindow.TabTransferRequest): panelwindow.GroupSnapshot => {
-  const snapshot = singleTabGroupSnapshot(request);
-  const bounds = initialWindowBounds([request.tab.panelId]);
-  if (bounds && (request.cursorX !== 0 || request.cursorY !== 0)) {
-    bounds.x = request.cursorX - 120;
-    bounds.y = request.cursorY - 24;
-    snapshot.initialPositionAnchor = {
-      x: request.cursorX,
-      y: request.cursorY,
-    };
-    snapshot.useInitialPosition = true;
-  }
-  snapshot.initialBounds = bounds;
-  return snapshot;
 };
 
 import { WorkspacePanelLifecycle } from './WorkspacePanelLifecycle';
@@ -507,7 +492,10 @@ function WorkspaceObjectRouteCoordinator({
           .then(() => acceptPanelTabTransfer(windowName, request.transferId))
           .then(() => {
             if (request.targetKind === 'new-window') {
-              return beginPanelWindowOpen(windowName, tornOffTabSnapshot(request));
+              return beginPanelWindowOpen(
+                windowName,
+                tornOffTabSnapshot(request, initialWindowBounds([request.tab.panelId]))
+              );
             }
           })
           .catch((error) => {

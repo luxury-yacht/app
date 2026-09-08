@@ -90,7 +90,6 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
   const { upsertOwnedPanel, removeOwnedPanel } = useObjectPanelState();
   const queue = useRef(workspacePanelPublication);
   const lastPublication = useRef('');
-  const restoring = useRef(new Set<string>());
   const provisional = useRef(new Map<string, panelwindow.WorkspaceGroup[]>());
   const activity = useMemo(() => new ClusterPanelActivity(), []);
   const closingClusters = useSyncExternalStore(activity.subscribe, activity.getSnapshot);
@@ -249,29 +248,25 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
 
   const restoreRetained = useCallback(
     async (clusterId: string, panels: panelwindow.WorkspacePanel[]) => {
-      if (
-        activity.isClosing(clusterId) ||
-        restoring.current.has(clusterId) ||
-        isProvisional(clusterId)
-      ) {
+      if (activity.isClosing(clusterId) || isProvisional(clusterId)) {
         return;
       }
-      restoring.current.add(clusterId);
-      const retained = retainedPanelOrder(panels);
       const claimed: panelwindow.WorkspacePanel[] = [];
-      for (const panel of retained) {
-        const claimedPanel = await claimRetainedPanel(clusterId, panel);
-        if (claimedPanel) {
-          claimed.push(claimedPanel);
+      try {
+        for (const panel of retainedPanelOrder(panels)) {
+          const claimedPanel = await claimRetainedPanel(clusterId, panel);
+          if (claimedPanel) {
+            claimed.push(claimedPanel);
+          }
+        }
+      } finally {
+        if (
+          !activity.isClosing(clusterId) &&
+          current.current.selectedClusterIds.includes(clusterId)
+        ) {
+          mountRetained(clusterId, claimed);
         }
       }
-      if (
-        activity.isClosing(clusterId) ||
-        !current.current.selectedClusterIds.includes(clusterId)
-      ) {
-        return;
-      }
-      mountRetained(clusterId, claimed);
     },
     [isProvisional, mountRetained, claimRetainedPanel, activity]
   );
@@ -279,6 +274,8 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
   useEffect(() => {
     let disposed = false;
     const revisions = new Map<string, number>();
+    const refreshing = new Set<string>();
+    const pending = new Set<string>();
     const isLive = (clusterId: string) =>
       !disposed &&
       !closingClusters.has(clusterId) &&
@@ -295,10 +292,7 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
         });
       }
     };
-    const refresh = async (clusterId: string) => {
-      if (!isLive(clusterId)) {
-        return;
-      }
+    const refreshSnapshot = async (clusterId: string) => {
       try {
         const snapshot = await sync.readCluster(clusterId);
         if (!snapshot || !shouldApply(clusterId, snapshot.revision)) {
@@ -312,16 +306,31 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
         reportRefreshError(clusterId, error);
       }
     };
+    // Coalesce notifications received during a claim into a fresh read after it.
+    // This keeps claims ordered without losing the next retained placement.
+    const refresh = async (clusterId: string) => {
+      if (!isLive(clusterId)) {
+        return;
+      }
+      if (refreshing.has(clusterId)) {
+        pending.add(clusterId);
+        return;
+      }
+      refreshing.add(clusterId);
+      try {
+        do {
+          pending.delete(clusterId);
+          await refreshSnapshot(clusterId);
+        } while (pending.has(clusterId) && isLive(clusterId));
+      } finally {
+        refreshing.delete(clusterId);
+      }
+    };
     const unsubscribe = onPanelWorkspaceChanged(({ clusterId }) => {
       if (current.current.selectedClusterIds.includes(clusterId)) {
         void refresh(clusterId);
       }
     });
-    for (const id of restoring.current) {
-      if (!selectedClusterIds.includes(id)) {
-        restoring.current.delete(id);
-      }
-    }
     for (const id of selectedClusterIds) {
       void refresh(id);
     }

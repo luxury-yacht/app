@@ -27,8 +27,6 @@ func TestPanelWindowCommandsFailWhenTheNativeRegistryIsUnavailable(t *testing.T)
 	require.ErrorContains(t, shell.BeginPanelWindowDock("panel-1", "right", snapshot), "panel-window registry is not available")
 	require.ErrorContains(t, shell.AcknowledgePanelWindowDock("workspace-1", "panel-1", "transfer-1"), "panel-window registry is not available")
 	require.ErrorContains(t, shell.FailPanelWindowTransfer("workspace-1", "panel-1", "transfer-1"), "panel-window registry is not available")
-	require.ErrorContains(t, shell.FocusPanelWindow("workspace-1", "panel-1", "panel-a"), "panel-window registry is not available")
-	require.ErrorContains(t, shell.RequestPanelWindowClose("workspace-1", "panel-1", "cluster-close"), "panel-window registry is not available")
 	require.ErrorContains(t, shell.AcknowledgePanelWindowClose("panel-1"), "panel-window registry is not available")
 	require.ErrorContains(t, shell.AcknowledgeWorkspaceWindowClose("workspace-1"), "panel-window registry is not available")
 	require.ErrorContains(t, shell.AcknowledgeApplicationQuitPreflight("workspace-1", "quit-1", true), "panel-window registry is not available")
@@ -250,8 +248,6 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 		BeginPanelWindowDock:       func(string, string, panelwindow.GroupSnapshot) error { mark(); return nil },
 		AcknowledgePanelDock:       func(string, string, string) error { mark(); return nil },
 		FailPanelTransfer:          func(string, string, string) error { mark(); return nil },
-		FocusPanelWindow:           func(string, string, string) error { mark(); return nil },
-		RequestPanelClose:          func(string, string, string) error { mark(); return nil },
 		AcknowledgePanelClose:      func(string) error { mark(); return nil },
 		AcknowledgeWorkspaceClose:  func(string) error { mark(); return nil },
 		RoutePanelCommand:          func(string, panelwindow.WorkspaceCommand) error { mark(); return nil },
@@ -278,8 +274,6 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 	require.NoError(t, service.BeginPanelWindowDock(ctx, "panel-1", "right", snapshot))
 	require.NoError(t, service.AcknowledgePanelWindowDock(ctx, "workspace-1", "panel-1", "transfer-1"))
 	require.NoError(t, service.FailPanelWindowTransfer(ctx, "workspace-1", "panel-1", "transfer-1"))
-	require.NoError(t, service.FocusPanelWindow(ctx, "workspace-1", "panel-1", "panel-a"))
-	require.NoError(t, service.RequestPanelWindowClose(ctx, "workspace-1", "panel-1", "owner-close"))
 	require.NoError(t, service.AcknowledgePanelWindowClose(ctx, "panel-1"))
 	require.NoError(t, service.AcknowledgeWorkspaceWindowClose(ctx, "workspace-1"))
 	require.NoError(t, service.UpdatePanelWindowSnapshot(ctx, "panel-1", snapshot))
@@ -288,13 +282,13 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 	require.NoError(t, service.AcceptPanelTabTransfer(ctx, "workspace-1", "tab-transfer-1"))
 	require.NoError(t, service.FailPanelTabTransfer(ctx, "panel-1", "tab-transfer-1"))
 	require.NoError(t, service.AcknowledgeApplicationQuitPreflight(ctx, "workspace-1", "quit-1", true))
-	require.Equal(t, 16, called)
+	require.Equal(t, 14, called)
 }
 
 func TestDesktopServiceRejectsPanelCommandsWhoseClaimedCallerDoesNotMatchTheWailsSender(t *testing.T) {
 	called := false
 	shell := NewDesktopShell(nil, nil, nil, nil, DesktopShellBindings{
-		RequestPanelClose: func(string, string, string) error {
+		RequestPanelTabClose: func(string, string) error {
 			called = true
 			return nil
 		},
@@ -302,7 +296,7 @@ func TestDesktopServiceRejectsPanelCommandsWhoseClaimedCallerDoesNotMatchTheWail
 	service := NewDesktopService(DesktopServiceDependencies{PanelWindows: shell})
 	ctx := context.WithValue(context.Background(), application.WindowKey, panelCommandCaller("panel-1"))
 
-	err := service.RequestPanelWindowClose(ctx, "workspace-1", "panel-1", "owner-close")
+	err := service.RequestPanelTabClose(ctx, "workspace-1", "panel-a")
 
 	require.ErrorContains(t, err, "does not match Wails sender")
 	require.False(t, called)

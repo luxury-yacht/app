@@ -334,6 +334,7 @@ describe('DockablePanel docked behaviour', () => {
   });
 
   it('offers context-aware actions on an inactive tab and docks only that tab', async () => {
+    const nativeMove = vi.fn();
     const unmount = await renderPanel(
       <>
         <DockablePanel panelId="panel-menu-a" title="A" defaultPosition="right" isOpen>
@@ -342,7 +343,8 @@ describe('DockablePanel docked behaviour', () => {
         <DockablePanel panelId="panel-menu-b" title="B" defaultPosition="right" isOpen>
           <div>B</div>
         </DockablePanel>
-      </>
+      </>,
+      { onTabMoveRequest: nativeMove }
     );
     await act(async () =>
       document.querySelector('[role="tab"][data-panel-id="panel-menu-a"]')?.dispatchEvent(
@@ -363,6 +365,7 @@ describe('DockablePanel docked behaviour', () => {
     expect(panelState('panel-menu-a').position).toBe('bottom');
     expect(panelState('panel-menu-b').position).toBe('right');
     expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(nativeMove).not.toHaveBeenCalled();
     await unmount();
   });
 

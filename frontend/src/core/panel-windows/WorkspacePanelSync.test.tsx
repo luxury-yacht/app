@@ -156,7 +156,9 @@ it.each([true, false])(
 );
 
 it('resumes synchronization after a failed publication prevents cluster closure', async () => {
-  mocks.publish.mockRejectedValueOnce(new Error('publication failed'));
+  mocks.publish
+    .mockRejectedValueOnce(new Error('publication failed'))
+    .mockRejectedValueOnce(new Error('publication failed'));
   await act(async () =>
     root.render(
       <WorkspacePanelSync key="failure">
@@ -347,4 +349,78 @@ it('does not announce the renderer until cluster hydration finishes', async () =
     )
   );
   expect(mocks.ready).toHaveBeenCalledWith('app-a');
+});
+
+it('recovers an unchanged docked snapshot when close preparation flushes again', async () => {
+  mocks.publish.mockRejectedValueOnce(new Error('temporary failure'));
+  await act(async () =>
+    root.render(
+      <WorkspacePanelSync key="retry">
+        <Probe />
+      </WorkspacePanelSync>
+    )
+  );
+  mocks.publish.mockClear();
+  await expect(sync.flush()).resolves.toBeUndefined();
+  expect(mocks.publish).toHaveBeenCalledWith('app-a', [
+    expect.objectContaining({ clusterId: 'production' }),
+  ]);
+});
+
+it('restores newly retained panels after an earlier empty read, and again after a claim failure', async () => {
+  const tab = mocks.local.production[0];
+  const retained = {
+    tab,
+    location: { kind: 'retained', windowName: '', groupId: 'bottom', index: 0, active: true },
+  };
+  mocks.read.mockResolvedValue({ revision: 2, panels: [retained] });
+  mocks.open.mockRejectedValueOnce(new Error('temporary claim failure'));
+  await act(async () => mocks.changed?.({ clusterId: 'production' }));
+  expect(mocks.open).toHaveBeenCalledOnce();
+  mocks.open.mockResolvedValue({ render: true, panel: retained });
+  await act(async () => mocks.changed?.({ clusterId: 'production' }));
+  expect(mocks.open).toHaveBeenCalledTimes(2);
+  expect(mocks.dock).toHaveBeenCalledWith('production', ['api'], 'api', 'bottom');
+});
+
+it('mounts an accepted retained panel even if the next claim fails', async () => {
+  const first = {
+    tab: mocks.local.production[0],
+    location: { kind: 'retained', groupId: 'bottom', index: 0 },
+  };
+  const second = {
+    ...first,
+    tab: { ...first.tab, panelId: 'second' },
+    location: { ...first.location, index: 1 },
+  };
+  mocks.read.mockResolvedValue({ revision: 2, panels: [first, second] });
+  mocks.open
+    .mockResolvedValueOnce({ render: true, panel: first })
+    .mockRejectedValueOnce(new Error('claim failed'));
+  await act(async () => mocks.changed?.({ clusterId: 'production' }));
+  expect(mocks.dock).toHaveBeenCalledWith('production', ['api'], 'api', 'bottom');
+});
+
+it('processes a retained-panel notification received while an earlier claim is pending', async () => {
+  const first = {
+    tab: mocks.local.production[0],
+    location: { kind: 'retained', groupId: 'bottom', index: 0 },
+  };
+  const second = { ...first, tab: { ...first.tab, panelId: 'second' } };
+  let finish: (value: unknown) => void = () => undefined;
+  mocks.read
+    .mockResolvedValueOnce({ revision: 2, panels: [first] })
+    .mockResolvedValue({ revision: 3, panels: [second] });
+  mocks.open
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    )
+    .mockResolvedValue({ render: true, panel: second });
+  await act(async () => mocks.changed?.({ clusterId: 'production' }));
+  await act(async () => mocks.changed?.({ clusterId: 'production' }));
+  await act(async () => finish({ render: true, panel: first }));
+  expect(mocks.dock).toHaveBeenCalledWith('production', ['second'], 'second', 'bottom');
 });

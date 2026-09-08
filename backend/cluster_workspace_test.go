@@ -390,7 +390,7 @@ func TestClearKubeconfigSelectionRemovesClusterWorkspaceState(t *testing.T) {
 	app.ClusterWorkspace.incrementClusterScopeRevision("cluster-a")
 	app.ClusterRuntime.clusterClients["cluster-a"] = &clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Production"}}
 
-	require.NoError(t, app.Workspace.clearKubeconfigSelection())
+	require.NoError(t, app.Workspace.clearKubeconfigSelection(true))
 
 	state := app.Workspace.GetClusterWorkspaceState()
 	require.NotContains(t, state.Clusters, "cluster-a")

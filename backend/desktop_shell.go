@@ -54,8 +54,6 @@ type DesktopShellBindings struct {
 	BeginPanelWindowDock       func(string, string, panelwindow.GroupSnapshot) error
 	AcknowledgePanelDock       func(string, string, string) error
 	FailPanelTransfer          func(string, string, string) error
-	FocusPanelWindow           func(string, string, string) error
-	RequestPanelClose          func(string, string, string) error
 	AcknowledgePanelClose      func(string) error
 	AcknowledgeWorkspaceClose  func(string) error
 	RoutePanelCommand          func(string, panelwindow.WorkspaceCommand) error
@@ -83,8 +81,6 @@ type DesktopShell struct {
 	beginPanelWindowDock       func(string, string, panelwindow.GroupSnapshot) error
 	acknowledgePanelDock       func(string, string, string) error
 	failPanelTransfer          func(string, string, string) error
-	focusPanelWindow           func(string, string, string) error
-	requestPanelClose          func(string, string, string) error
 	acknowledgePanelClose      func(string) error
 	acknowledgeWorkspaceClose  func(string) error
 	routePanelCommand          func(string, panelwindow.WorkspaceCommand) error
@@ -136,8 +132,6 @@ func NewDesktopShell(
 		shell.beginPanelWindowDock = bindings[0].BeginPanelWindowDock
 		shell.acknowledgePanelDock = bindings[0].AcknowledgePanelDock
 		shell.failPanelTransfer = bindings[0].FailPanelTransfer
-		shell.focusPanelWindow = bindings[0].FocusPanelWindow
-		shell.requestPanelClose = bindings[0].RequestPanelClose
 		shell.acknowledgePanelClose = bindings[0].AcknowledgePanelClose
 		shell.acknowledgeWorkspaceClose = bindings[0].AcknowledgeWorkspaceClose
 		shell.routePanelCommand = bindings[0].RoutePanelCommand

@@ -23,9 +23,6 @@ func (r *Registry) CloseClusterView(ctx context.Context, caller, clusterID strin
 	if err != nil {
 		return false, err
 	}
-	if pending == nil {
-		return true, nil
-	}
 	defer r.finishClusterPanelClose(pending)
 	allowed, err := r.awaitClusterPanelClose(ctx, pending)
 	if err != nil || !allowed {
@@ -73,13 +70,13 @@ func (r *Registry) beginClusterPanelClose(caller, clusterID string) (*clusterPan
 			return nil, fmt.Errorf("cluster close is already pending")
 		}
 	}
-	if r.hasOtherClusterAppView(caller, clusterID) {
-		return nil, r.backend.CloseClusterView(caller, clusterID)
-	}
 	r.nextClusterClose++
 	pending := &clusterPanelClose{
 		id: fmt.Sprintf("cluster-close-%d", r.nextClusterClose), caller: caller, clusterID: clusterID,
-		windows: r.panels.Names(clusterID), waiting: make(map[string]struct{}), answer: make(chan bool, 1),
+		waiting: make(map[string]struct{}), answer: make(chan bool, 1),
+	}
+	if !r.hasOtherClusterAppView(caller, clusterID) {
+		pending.windows = r.panels.Names(clusterID)
 	}
 	for _, name := range pending.windows {
 		pending.waiting[name] = struct{}{}
@@ -101,14 +98,18 @@ func (r *Registry) awaitClusterPanelClose(ctx context.Context, pending *clusterP
 	if len(pending.windows) == 0 {
 		return true, ctx.Err()
 	}
-	timeout := time.NewTimer(15 * time.Second)
-	defer timeout.Stop()
+	var timeout <-chan time.Time
+	if r.clusterCloseTimeout > 0 {
+		timer := time.NewTimer(r.clusterCloseTimeout)
+		defer timer.Stop()
+		timeout = timer.C
+	}
 	select {
 	case allowed := <-pending.answer:
 		return allowed, ctx.Err()
 	case <-ctx.Done():
 		return false, ctx.Err()
-	case <-timeout.C:
+	case <-timeout:
 		return false, fmt.Errorf("cluster panel close timed out")
 	}
 }
@@ -157,8 +158,8 @@ func (r *Registry) commitClusterPanelClose(pending *clusterPanelClose) (bool, er
 	}
 	r.workspaceMu.Lock()
 	r.workspace.RemoveCluster(pending.clusterID)
-	r.releaseUnusedPanelWorkspace(pending.clusterID)
 	r.workspaceMu.Unlock()
+	r.releaseUnusedPanelWorkspace(pending.clusterID)
 	r.emitWorkspaceChanged(pending.clusterID)
 	return true, r.backend.CloseClusterView(pending.caller, pending.clusterID)
 }

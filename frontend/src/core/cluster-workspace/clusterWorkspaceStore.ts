@@ -390,6 +390,18 @@ export class ClusterWorkspaceStore {
     this.mergeWireState(wire);
   }
 
+  // The native close command has already removed this view. A later selection
+  // RPC failure or an older hydration must not restore its former membership.
+  confirmClosedSelection(selection: string, clusterId: string): void {
+    this.authoritativeGeneration++;
+    this.publish({
+      ...this.snapshot,
+      selectedKubeconfigs: this.snapshot.selectedKubeconfigs.filter((value) => value !== selection),
+      visibleClusterId:
+        this.snapshot.visibleClusterId === clusterId ? '' : this.snapshot.visibleClusterId,
+    });
+  }
+
   hydrate(): Promise<ClusterWorkspaceWireState> {
     if (this.hydrationPromise) {
       return this.hydrationPromise;

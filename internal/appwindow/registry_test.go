@@ -18,6 +18,7 @@ type recordingLifecycleBackend struct {
 	windowClusters             map[string][]string
 	releasedWindow             string
 	preparedWindow             string
+	savedWindow                string
 	allowQuit                  bool
 	readyWindows               []string
 }
@@ -48,6 +49,10 @@ func (b *recordingLifecycleBackend) WindowRuntimeReady(windowName string, _ bool
 
 func (b *recordingLifecycleBackend) ReleaseWorkspaceWindow(windowID string) {
 	b.releasedWindow = windowID
+}
+
+func (b *recordingLifecycleBackend) SaveWorkspaceWindowGeometry(windowName string) {
+	b.savedWindow = windowName
 }
 
 func (b *recordingLifecycleBackend) PrepareQuitFromWindow(windowName string) bool {
@@ -792,6 +797,10 @@ func TestRegistryFocusesAuthorizesAndClosesAnOwnedPanelWindow(t *testing.T) {
 	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
 	require.NoError(t, err)
 
+	registry.showWindow = func(string) bool { return true }
+	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
+	require.NoError(t, err)
+
 	var routed []string
 	var focused []string
 	var closed []string
@@ -808,17 +817,17 @@ func TestRegistryFocusesAuthorizesAndClosesAnOwnedPanelWindow(t *testing.T) {
 		return true
 	}
 
-	panelID := snapshot.Tabs[0].PanelID
-	require.NoError(t, registry.FocusPanelWindow(owner.Name(), descriptor.WindowName, panelID))
-	require.NoError(t, registry.RequestPanelWindowClose(
-		descriptor.WindowName, descriptor.WindowName, "user-close",
-	))
+	_, err = registry.OpenPanelWorkspaceObject(owner.Name(), snapshot.Tabs[0])
+	require.NoError(t, err)
+	registry.handlePanelClosingEvent(nil, descriptor.WindowName)
 	require.NoError(t, registry.AcknowledgePanelWindowClose(descriptor.WindowName))
 
 	require.Equal(t, []string{descriptor.WindowName}, focused)
 	require.Equal(t, []string{descriptor.WindowName}, closed)
 	require.Equal(t, []string{
 		descriptor.WindowName + ":" + panelwindow.WindowFocusRequestedEventName,
+		owner.Name() + ":" + panelwindow.WorkspaceChangedEventName,
+		descriptor.WindowName + ":" + panelwindow.WorkspaceChangedEventName,
 		descriptor.WindowName + ":" + panelwindow.WindowCloseRequestedEventName,
 		owner.Name() + ":" + panelwindow.WindowClosedEventName,
 		owner.Name() + ":" + panelwindow.WorkspaceChangedEventName,
@@ -994,14 +1003,20 @@ func TestRegistryRejectsPanelCommandsAcrossOwnerAndTransportBoundaries(t *testin
 		return registry, owner.Name(), descriptor, snapshot
 	}
 
-	t.Run("focus validates owner and both native operations", func(t *testing.T) {
+	t.Run("shared object open validates cluster membership and native focus delivery", func(t *testing.T) {
 		registry, owner, descriptor, snapshot := setup(t)
-		require.ErrorContains(t, registry.FocusPanelWindow("workspace-other", descriptor.WindowName, snapshot.ActivePanelID), "does not display")
+		registry.showWindow = func(string) bool { return true }
+		_, err := registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
+		require.NoError(t, err)
+		_, err = registry.OpenPanelWorkspaceObject("workspace-other", snapshot.Tabs[0])
+		require.ErrorContains(t, err, "does not display")
 		registry.emitWindowEvent = func(string, string, any) bool { return false }
-		require.ErrorContains(t, registry.FocusPanelWindow(owner, descriptor.WindowName, snapshot.ActivePanelID), "not available")
+		_, err = registry.OpenPanelWorkspaceObject(owner, snapshot.Tabs[0])
+		require.ErrorContains(t, err, "not available")
 		registry.emitWindowEvent = func(string, string, any) bool { return true }
 		registry.focusWindow = func(string) bool { return false }
-		require.ErrorContains(t, registry.FocusPanelWindow(owner, descriptor.WindowName, snapshot.ActivePanelID), "not available")
+		_, err = registry.OpenPanelWorkspaceObject(owner, snapshot.Tabs[0])
+		require.ErrorContains(t, err, "not available")
 	})
 
 	t.Run("menu routing permits only owner commands and requires owner delivery", func(t *testing.T) {
@@ -1030,11 +1045,8 @@ func TestRegistryRejectsPanelCommandsAcrossOwnerAndTransportBoundaries(t *testin
 		require.ErrorContains(t, registry.RequestPanelTabClose(descriptor.WindowName, snapshot.ActivePanelID), "not available")
 	})
 
-	t.Run("close requests require ownership and acknowledgements require a native target", func(t *testing.T) {
-		registry, owner, descriptor, _ := setup(t)
-		require.ErrorContains(t, registry.RequestPanelWindowClose("workspace-other", descriptor.WindowName, "close"), "cannot close")
-		registry.emitWindowEvent = func(string, string, any) bool { return false }
-		require.ErrorContains(t, registry.RequestPanelWindowClose(owner, descriptor.WindowName, "close"), "not available")
+	t.Run("close acknowledgements require an available native target", func(t *testing.T) {
+		registry, _, descriptor, _ := setup(t)
 		registry.closeWindow = func(string) bool { return false }
 		require.ErrorContains(t, registry.AcknowledgePanelWindowClose(descriptor.WindowName), "not available")
 	})

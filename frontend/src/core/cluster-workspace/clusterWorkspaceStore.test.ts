@@ -445,3 +445,31 @@ describe('ClusterWorkspaceStore', () => {
     expect(store.isServiceable('cluster-a')).toBe(true);
   });
 });
+
+it('keeps a confirmed cluster-view close ahead of an older workspace read', async () => {
+  let finish!: (state: ClusterWorkspaceWireState) => void;
+  const stale = {
+    ...emptyState(),
+    selectedKubeconfigs: ['alpha:dev', 'beta:prod'],
+    visibleClusterId: 'alpha',
+  };
+  const store = new ClusterWorkspaceStore({
+    read: () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    onEvent: () => () => undefined,
+  });
+  const release = store.acquire();
+  try {
+    const loading = store.hydrate();
+    store.applyWireState(stale);
+    store.confirmClosedSelection('alpha:dev', 'alpha');
+    finish(stale);
+    await loading;
+    expect(store.getSnapshot().selectedKubeconfigs).toEqual(['beta:prod']);
+    expect(store.getSnapshot().visibleClusterId).toBe('');
+  } finally {
+    release();
+  }
+});

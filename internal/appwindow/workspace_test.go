@@ -90,6 +90,7 @@ func TestClosingLastAppViewRetainsPanelsAndLeavesPanelWindowsLive(t *testing.T) 
 	require.NoError(t, registry.AcknowledgeWorkspaceWindowClose(appName))
 	require.Equal(t, PanelWindowStateLive, registry.panels.State(native.WindowName))
 	require.Empty(t, backend.preparedWindow)
+	require.Equal(t, appName, backend.savedWindow)
 	require.Equal(t, appName, backend.releasedWindow)
 	require.Equal(t, panelwindow.PanelLocationRetained, registry.workspace.Snapshot("cluster-1").Panels[0].Location.Kind)
 }

@@ -124,16 +124,6 @@ func (registry *recordingNativeWindowRegistry) FailPanelWindowTransfer(string, s
 	return nil
 }
 
-func (registry *recordingNativeWindowRegistry) FocusPanelWindow(string, string, string) error {
-	registry.record("focus-panel")
-	return nil
-}
-
-func (registry *recordingNativeWindowRegistry) RequestPanelWindowClose(string, string, string) error {
-	registry.record("request-close")
-	return nil
-}
-
 func (registry *recordingNativeWindowRegistry) AcknowledgePanelWindowClose(string) error {
 	registry.record("acknowledge-close")
 	return nil
@@ -253,10 +243,6 @@ func TestWindowRegistryBridgePreservesUnboundStartupSemantics(t *testing.T) {
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.FailPanelTransfer("workspace-1", "panel-1", "transfer-1")
 	require.ErrorContains(t, err, "native window registry is not available")
-	err = options.FocusPanelWindow("workspace-1", "panel-1", "tab-1")
-	require.ErrorContains(t, err, "native window registry is not available")
-	err = options.RequestPanelClose("workspace-1", "panel-1", "close")
-	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.AcknowledgePanelClose("panel-1")
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.AcknowledgeWorkspaceClose("workspace-1")
@@ -297,8 +283,6 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 	require.NoError(t, options.BeginPanelWindowDock("panel-1", "right", snapshot))
 	require.NoError(t, options.AcknowledgePanelDock("workspace-1", "panel-1", "transfer-1"))
 	require.NoError(t, options.FailPanelTransfer("workspace-1", "panel-1", "transfer-1"))
-	require.NoError(t, options.FocusPanelWindow("workspace-1", "panel-1", "tab-1"))
-	require.NoError(t, options.RequestPanelClose("workspace-1", "panel-1", "close"))
 	require.NoError(t, options.AcknowledgePanelClose("panel-1"))
 	require.NoError(t, options.AcknowledgeWorkspaceClose("workspace-1"))
 	require.NoError(t, options.RoutePanelCommand("panel-1", "command"))
@@ -320,8 +304,6 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 		"begin-dock",
 		"acknowledge-dock",
 		"fail-transfer",
-		"focus-panel",
-		"request-close",
 		"acknowledge-close",
 		"acknowledge-workspace-close",
 		"route-command",

@@ -37,4 +37,25 @@ describe('PanelPublicationQueue', () => {
     queue.publish(async () => undefined);
     await expect(queue.flush()).resolves.toBeUndefined();
   });
+  it('retries the failed snapshot on flush without a layout change', async () => {
+    const queue = new PanelPublicationQueue();
+    const operation = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue(undefined);
+    const report = vi.fn();
+    queue.publish(operation, report);
+    await vi.waitFor(() => expect(report).toHaveBeenCalledOnce());
+    await expect(queue.flush()).resolves.toBeUndefined();
+    expect(operation).toHaveBeenCalledTimes(2);
+  });
+
+  it('never retries an obsolete failed snapshot after a newer successful publication', async () => {
+    const queue = new PanelPublicationQueue();
+    const obsolete = vi.fn().mockRejectedValue(new Error('offline'));
+    queue.publish(obsolete);
+    queue.publish(async () => undefined);
+    await queue.flush();
+    expect(obsolete).toHaveBeenCalledOnce();
+  });
 });

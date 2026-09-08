@@ -42,11 +42,12 @@ export const singleTabGroupSnapshot = (
 });
 
 export const tornOffTabSnapshot = (
-  request: panelwindow.TabTransferRequest
+  request: panelwindow.TabTransferRequest,
+  initialBounds?: panelwindow.WindowBounds
 ): panelwindow.GroupSnapshot => {
   const snapshot = singleTabGroupSnapshot(request);
   const { floatingWidth: width, floatingHeight: height } = getObjectPanelLayoutDefaults();
-  snapshot.initialBounds = { x: 0, y: 0, width, height };
+  snapshot.initialBounds = initialBounds ?? { x: 0, y: 0, width, height };
   if (request.cursorX !== 0 || request.cursorY !== 0) {
     snapshot.initialBounds.x = request.cursorX - 120;
     snapshot.initialBounds.y = request.cursorY - 24;

@@ -13,4 +13,4 @@
 - Failed data refreshes retry with backoff while retaining the last available data.
 - Resource streams reconnect after delivery overflow; oversized reconnect replays request a fresh snapshot to avoid repeated disconnects.
 - Replacing a cluster connection now stops the previous object catalog and releases its generation's resources.
-- Fix a regression for expired or missing SSO credentials. The app again show instructions to sign in instead of spinning forever or incorrectly asking you to install the AWS CLI.
+- Fix a regression for expired or missing SSO credentials. The app again shows instructions to sign in instead of spinning forever or incorrectly asking you to install the AWS CLI.

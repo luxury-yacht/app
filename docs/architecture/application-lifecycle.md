@@ -48,9 +48,10 @@ nonmatching files, and directories are left untouched. Cleanup failures are
 logged and do not prevent startup because these files are abandoned write
 artifacts rather than recovery state.
 
-Application-update staging requires a process-owned temp root. Configure that
-root before exec-wrapper dispatch, Wails composition, or any child process so
-Wails staging, helper logs, and inherited children resolve the same root.
+Credential-wrapper invocations dispatch before app setup and retain their inherited
+environment. Application-update staging requires a process-owned temp root; configure
+it before Wails composition or updater child processes so Wails staging, helper logs,
+and inherited children resolve the same root.
 On Windows, create the root and marker with an explicit account owner
 (`TOKEN_USER`) and a protected DACL granting inheritable full control only to
 that user. Reused paths must have that exact user owner; paths owned by any
@@ -211,7 +212,8 @@ Float, dock-back, individual panel-tab moves, and cluster-tab moves must preserv
 the source until the destination acknowledges reconstruction. Source guards and
 publication flush precede transfer acceptance. A destination is provisional
 until the registry commits; provisional publication cannot steal source tabs.
-Frozen renderers block user interaction throughout the transaction. Failure and
+Window freezes block their renderer; cluster-close freezes block only that cluster,
+leaving application menus and global navigation usable. Failure and
 timeout remove provisional target content and preserve source placement.
 
 Moving a cluster tab carries its docked panel groups and local view state.
@@ -226,8 +228,11 @@ directory mutation. Whole-group and cluster-view transfers validate their comple
 source sets before changing locations. Readiness events for newly created app
 windows wait for cluster hydration and coordinator subscriptions.
 
-Registry/backend coordination must not call back across a held selection or
-registry mutex. Native close hooks can run synchronously; finish cluster-transfer
+Registry/backend coordination must not enter the selection queue with the shared
+workspace mutex held. Panel opens and publications reserve cluster demand before
+waiting for the backend, then validate that admission again inside the directory
+commit. Cluster removal invalidates these reservations. Cluster transfers keep
+transaction serialization separate from the shared directory lock. Native close hooks can run synchronously; finish cluster-transfer
 mutation and release its lock before closing an empty source or a cancelled
 provisional target. `finishClusterTransferMutation` and
 `TestCancellingNewClusterTargetAllowsSynchronousCloseHooks` preserve this ordering.
@@ -236,7 +241,13 @@ Closing an app window retains its docked panel identities for reopening; it rele
 only that view’s runtime demand. Shared panel and native-window references retain
 cluster runtime selection even when no app window displays the cluster. A panel
 renderer projects only its own cluster and must never acquire unrelated app tabs.
-Docking from a panel-only cluster can create a new app view for that cluster.
+Docking from a panel-only cluster can create a new app view for that cluster,
+using the most recent app window's geometry (or app defaults when none remains).
+Backend removal uses the same directory disposal boundary and schedules native
+panel cleanup after the backend mutation, without synchronously reentering it.
+Retained-panel notifications are coalesced while claims run; successful claims
+mount even when a later claim fails. Close and transfer flushes retry the latest
+failed publication once, and still reject if that retry fails.
 Closing a native panel disposes its own local state and directory entries.
 Explicit quit preflights all renderers before closing any of them.
 
@@ -300,7 +311,10 @@ cluster tabs. Floating panels remain independent. Runtime selection is the union
 of app views and panel references. Only the final native-window close or an
 approved application quit proceeds through the once-only persistence flush and
 `ServiceShutdown`. The final app view’s selection remains available for restart
-when that close also ends the process. Explicit Quit retains the full process
+even when panel windows keep the process alive. Save the last app window's
+geometry before native destruction, and retain the saved selection as its runtime
+references drain. An explicit cluster-tab close still updates restart selection.
+Explicit Quit retains the full process
 selection from every app view for restart. It does not close views one at a time:
 those close hooks intentionally relinquish each view’s cluster selection.
 `application_quit_persistence_test.go` exercises the real workspace and persisted

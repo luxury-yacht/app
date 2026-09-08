@@ -223,6 +223,46 @@ describe('KubeconfigContext', () => {
     expect(release).toHaveBeenCalledOnce();
   });
 
+  it('keeps a backend-committed close removed when the follow-up selection call fails', async () => {
+    getKubeconfigsMock.mockResolvedValue(
+      kubeconfigDiscoveryResult([
+        {
+          name: 'alpha',
+          path: '/kube/alpha',
+          context: 'dev',
+          isDefault: false,
+          isCurrentContext: false,
+          invalid: false,
+          invalidReason: '',
+        },
+        {
+          name: 'beta',
+          path: '/kube/beta',
+          context: 'prod',
+          isDefault: false,
+          isCurrentContext: false,
+          invalid: false,
+          invalidReason: '',
+        },
+      ])
+    );
+    getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
+    const { getContext, unmount } = await renderProvider();
+    const release = vi.fn();
+    getContext().registerClusterClosePreflight(async () => ({ release }));
+    setSelectedKubeconfigsMock.mockRejectedValueOnce(new Error('follow-up RPC unavailable'));
+    await act(async () => {
+      await expect(getContext().closeKubeconfig('alpha:dev')).rejects.toThrow(
+        'follow-up RPC unavailable'
+      );
+    });
+    const selected = getContext().selectedClusterIds;
+    const configs = getContext().selectedKubeconfigs;
+    unmount();
+    expect(selected).toEqual(['beta:prod']);
+    expect(configs).toEqual(['/kube/beta:prod']);
+    expect(release).toHaveBeenCalledOnce();
+  });
   beforeEach(() => {
     mocks.refreshOrchestrator.updateContext.mockReset();
     getKubeconfigsMock.mockReset();

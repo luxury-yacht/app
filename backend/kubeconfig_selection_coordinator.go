@@ -21,6 +21,8 @@ type selectionMutation struct {
 	// Ownership-only changes keep the current clients alive. Allocate a new
 	// connection generation only if this mutation changes process selections.
 	generationPending bool
+	// Closing presentation windows releases runtime demand without erasing the next launch.
+	preserveRestartSelection bool
 }
 
 func (m *selectionMutation) context() context.Context {

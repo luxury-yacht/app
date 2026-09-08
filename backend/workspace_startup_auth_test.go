@@ -105,3 +105,35 @@ func TestStartupPanelBookkeepingPreservesAuthenticationResults(t *testing.T) {
 		})
 	}
 }
+
+func TestRemovingStartupSelectionCancelsBuildAndRejectsItsLateClient(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	selection := "/tmp/config:removed"
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{{Name: "config", Path: "/tmp/config", Context: "removed"}}
+	settings := defaultSettingsFile()
+	settings.Kubeconfig.Selected = []string{selection}
+	require.NoError(t, app.Preferences.saveSettingsFile(settings))
+	_, startupCtx, err := app.Workspace.initializeSelectedClustersAtStartup()
+	require.NoError(t, err)
+	app.Workspace.GetClusterWorkspaceStateForWindow("workspace-1")
+	started, resume := make(chan struct{}), make(chan struct{})
+	app.Workspace.kubeClientInitializer = func(ctx context.Context) error {
+		return app.Workspace.syncClusterClientPoolWithBuilder(ctx, []kubeconfigSelection{{Path: "/tmp/config", Context: "removed"}}, func(_ context.Context, selection kubeconfigSelection, meta ClusterMeta) (*clusterClients, error) {
+			close(started)
+			<-resume
+			return &clusterClients{meta: meta, kubeconfigPath: selection.Path, kubeconfigContext: selection.Context, client: createHealthyClient()}, nil
+		})
+	}
+	connected := make(chan error, 1)
+	go func() { connected <- app.Workspace.connectSelectedClustersAtStartup(startupCtx) }()
+	<-started
+	result := app.Workspace.ApplyClusterWorkspace(ClusterWorkspaceCommand{WindowID: "workspace-1", UpdateSelectedKubeconfigs: true, SelectedKubeconfigs: []string{}})
+	close(resume)
+	<-connected
+	require.Empty(t, result.Error)
+	require.ErrorIs(t, startupCtx.Err(), context.Canceled)
+	require.Empty(t, app.Workspace.GetSelectedKubeconfigs())
+	require.NotContains(t, app.Workspace.GetClusterWorkspaceState().Clusters, "config:removed")
+	require.Empty(t, app.ClusterRuntime.clusterClients)
+}

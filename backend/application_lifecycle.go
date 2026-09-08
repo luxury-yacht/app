@@ -393,14 +393,20 @@ func (a *ApplicationLifecycle) prepareQuitFromWindow(windowName string) bool {
 			a.logger.Warn("Timed out waiting for cluster selection persistence before close", logsources.App)
 		}
 		if windowName != "" {
-			if err := a.preferences.SaveWindowSettingsForWindow(windowName); err != nil {
-				a.logger.Warn(fmt.Sprintf("Failed to save window settings: %v", err), logsources.App)
-			} else {
-				a.logger.Debug("Window settings saved successfully", logsources.App)
-			}
+			a.SaveWorkspaceWindowGeometry(windowName)
 		}
 	})
 	return true
+}
+
+// SaveWorkspaceWindowGeometry captures the final app view even when panel
+// windows keep the process running. It does not consume the quit-once gate.
+func (a *ApplicationLifecycle) SaveWorkspaceWindowGeometry(windowName string) {
+	if err := a.preferences.SaveWindowSettingsForWindow(windowName); err != nil {
+		a.logger.Warn(fmt.Sprintf("Failed to save window settings: %v", err), logsources.App)
+	} else {
+		a.logger.Debug("Window settings saved successfully", logsources.App)
+	}
 }
 
 // ServiceShutdown tears down process resources after the application context is

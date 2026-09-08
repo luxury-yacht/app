@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -185,4 +186,48 @@ func TestBackgroundClusterOperationYieldsToForegroundWork(t *testing.T) {
 	ran = false
 	require.NoError(t, coord.runWhenIdle(context.Background(), "cluster-a", func(context.Context) error { ran = true; return nil }))
 	require.True(t, ran, "deferred background work must be admitted after foreground completion")
+}
+
+func TestQueuedClusterCallbackSurvivesForegroundSupersession(t *testing.T) {
+	coord := newClusterOperationCoordinator()
+	slot, first, _, cancelFirst := coord.begin(context.Background(), "cluster-a", clusterOperationSupersede)
+	defer coord.end("cluster-a", slot, first, cancelFirst)
+	_, queued, queuedCtx, cancelQueued := coord.begin(context.Background(), "cluster-a", clusterOperationQueue)
+	defer coord.end("cluster-a", slot, queued, cancelQueued)
+	_, foreground, _, cancelForeground := coord.begin(context.Background(), "cluster-a", clusterOperationSupersede)
+	defer coord.end("cluster-a", slot, foreground, cancelForeground)
+	require.NoError(t, queuedCtx.Err(), "admitted callback must retain its opportunity to check current intent and reconcile")
+}
+
+func TestQueuedClusterCallbackRunsAfterSupersessionAndHonorsParentCancellation(t *testing.T) {
+	for _, cancelParent := range []bool{false, true} {
+		t.Run(fmt.Sprint(cancelParent), func(t *testing.T) {
+			coord := newClusterOperationCoordinator()
+			parent, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			slot, producer, _, endProducer := coord.begin(t.Context(), "cluster-a", clusterOperationSupersede)
+			slot.mu.Lock()
+			ran := false
+			finished := make(chan error, 1)
+			go func() {
+				finished <- coord.runWithAdmission(parent, "cluster-a", func(context.Context) error { ran = true; return nil }, clusterOperationQueue)
+			}()
+			require.Eventually(t, func() bool { coord.mu.Lock(); defer coord.mu.Unlock(); return len(slot.cancels) == 2 }, time.Second, time.Millisecond)
+			_, next, _, endNext := coord.begin(t.Context(), "cluster-a", clusterOperationSupersede)
+			if cancelParent {
+				cancel()
+			}
+			slot.mu.Unlock()
+			err := <-finished
+			coord.end("cluster-a", slot, producer, endProducer)
+			coord.end("cluster-a", slot, next, endNext)
+			if cancelParent {
+				require.ErrorIs(t, err, context.Canceled)
+				require.False(t, ran)
+			} else {
+				require.NoError(t, err)
+				require.True(t, ran)
+			}
+		})
+	}
 }

@@ -74,10 +74,13 @@ type workspacePanelKey struct {
 // WorkspaceDirectory holds the application-wide panel collection independently
 // of the lifetime of any app-window renderer.
 type WorkspaceDirectory struct {
-	mu          sync.Mutex
-	revision    uint64
-	panels      map[workspacePanelKey]WorkspacePanel
-	unpublished map[workspacePanelKey]struct{}
+	mu               sync.Mutex
+	revision         uint64
+	panels           map[workspacePanelKey]WorkspacePanel
+	unpublished      map[workspacePanelKey]struct{}
+	onClusterRemoved func(string)
+	reservations     map[uint64]string
+	nextReservation  uint64
 }
 
 func NewWorkspaceDirectory() *WorkspaceDirectory {
@@ -112,7 +115,7 @@ func validatePanelLocation(location PanelLocation) error {
 
 // Open atomically claims an object or returns its existing placement so another
 // app window can focus it without creating a second panel.
-func (d *WorkspaceDirectory) Open(tab TabSnapshot, location PanelLocation) (WorkspacePanel, bool, error) {
+func (d *WorkspaceDirectory) Open(tab TabSnapshot, location PanelLocation, reservations ...*WorkspaceReservation) (WorkspacePanel, bool, error) {
 	if err := validateGroupTab(0, tab, tab.ObjectRef.ClusterID, make(map[string]struct{})); err != nil {
 		return WorkspacePanel{}, false, err
 	}
@@ -121,6 +124,9 @@ func (d *WorkspaceDirectory) Open(tab TabSnapshot, location PanelLocation) (Work
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if err := d.validateReservationsLocked(reservations); err != nil {
+		return WorkspacePanel{}, false, err
+	}
 	key := workspacePanelKey{tab.ObjectRef.ClusterID, tab.PanelID}
 	if current, exists := d.panels[key]; exists && current.Tab.ObjectRef != tab.ObjectRef {
 		return WorkspacePanel{}, false, fmt.Errorf("panel identity does not match its object")
@@ -132,9 +138,6 @@ func (d *WorkspaceDirectory) Open(tab TabSnapshot, location PanelLocation) (Work
 		}
 	}
 	if existing, ok := d.panels[key]; ok {
-		if existing.Tab.ObjectRef != tab.ObjectRef {
-			return WorkspacePanel{}, false, fmt.Errorf("panel identity does not match its object")
-		}
 		if existing.Location.Kind == PanelLocationRetained {
 			existing.Location = location
 			d.panels[key] = existing
@@ -167,19 +170,6 @@ func (d *WorkspaceDirectory) RetainWindowCluster(windowName, clusterID string) {
 		}
 		panel.Location.Kind = PanelLocationRetained
 		panel.Location.WindowName = ""
-		d.panels[key] = panel
-		d.revision++
-	}
-}
-
-func (d *WorkspaceDirectory) RetainPanelWindow(windowName string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	for key, panel := range d.panels {
-		if panel.Location.WindowName != windowName {
-			continue
-		}
-		panel.Location = PanelLocation{Kind: PanelLocationRetained, GroupID: "right", Index: panel.Location.Index, Active: panel.Location.Active}
 		d.panels[key] = panel
 		d.revision++
 	}
@@ -293,7 +283,7 @@ func (d *WorkspaceDirectory) PublishWindow(windowName string, kind PanelLocation
 
 // Snapshot publication and acknowledged tab placement share one commit. Invalid
 // target content cannot move a source tab before the publication is rejected.
-func (d *WorkspaceDirectory) PublishWindowWithTransfers(windowName string, kind PanelLocationKind, groups []WorkspaceGroup, transfers []PlacementTransfer) ([]string, error) {
+func (d *WorkspaceDirectory) PublishWindowWithTransfers(windowName string, kind PanelLocationKind, groups []WorkspaceGroup, transfers []PlacementTransfer, reservations ...*WorkspaceReservation) ([]string, error) {
 	if windowName == "" || (kind != PanelLocationDocked && kind != PanelLocationWindow) {
 		return nil, fmt.Errorf("panel publication requires a live renderer")
 	}
@@ -303,6 +293,9 @@ func (d *WorkspaceDirectory) PublishWindowWithTransfers(windowName string, kind 
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if err := d.validateReservationsLocked(reservations); err != nil {
+		return nil, err
+	}
 	approved := make(map[workspacePanelKey]PlacementTransfer)
 	for _, transfer := range transfers {
 		approved[workspacePanelKey{transfer.Tab.ObjectRef.ClusterID, transfer.Tab.PanelID}] = transfer
@@ -396,16 +389,32 @@ func (d *WorkspaceDirectory) replacePublishedWindowLocked(windowName string, nex
 	}
 }
 
-// RemoveCluster discards the shared panel collection after all renderers have
-// approved an explicit close of the cluster's final app tab.
-func (d *WorkspaceDirectory) RemoveCluster(clusterID string) {
+// SetClusterRemovalHandler installs the process registry's non-blocking removal
+// notification. The handler must enqueue native cleanup, not wait on selection.
+func (d *WorkspaceDirectory) SetClusterRemovalHandler(handler func(string)) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.onClusterRemoved = handler
+}
+
+// RemoveCluster discards panels for both explicit closure and runtime removal.
+func (d *WorkspaceDirectory) RemoveCluster(clusterID string) {
+	d.mu.Lock()
 	for key := range d.panels {
 		if key.clusterID == clusterID {
 			delete(d.panels, key)
 			delete(d.unpublished, key)
 			d.revision++
 		}
+	}
+	for id, reserved := range d.reservations {
+		if reserved == clusterID {
+			delete(d.reservations, id)
+		}
+	}
+	notify := d.onClusterRemoved
+	d.mu.Unlock()
+	if notify != nil {
+		notify(clusterID)
 	}
 }

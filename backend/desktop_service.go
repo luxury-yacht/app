@@ -159,8 +159,6 @@ type PanelWindowCommands interface {
 	BeginPanelWindowDock(string, string, panelwindow.GroupSnapshot) error
 	AcknowledgePanelWindowDock(string, string, string) error
 	FailPanelWindowTransfer(string, string, string) error
-	FocusPanelWindow(string, string, string) error
-	RequestPanelWindowClose(string, string, string) error
 	AcknowledgePanelWindowClose(string) error
 	AcknowledgeWorkspaceWindowClose(string) error
 	UpdatePanelWindowSnapshot(string, panelwindow.GroupSnapshot) error
@@ -677,11 +675,11 @@ func (s *DesktopService) BeginPanelWindowDock(ctx context.Context, windowName, t
 	return s.panelWindows.BeginPanelWindowDock(windowName, targetPosition, snapshot)
 }
 
-func (s *DesktopService) AcknowledgePanelWindowDock(ctx context.Context, ownerWindowName, windowName, transferID string) error {
-	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
+func (s *DesktopService) AcknowledgePanelWindowDock(ctx context.Context, callerWindowName, windowName, transferID string) error {
+	if err := validatePanelCommandCaller(ctx, callerWindowName); err != nil {
 		return err
 	}
-	return s.panelWindows.AcknowledgePanelWindowDock(ownerWindowName, windowName, transferID)
+	return s.panelWindows.AcknowledgePanelWindowDock(callerWindowName, windowName, transferID)
 }
 
 func (s *DesktopService) FailPanelWindowTransfer(ctx context.Context, callerWindowName, windowName, transferID string) error {
@@ -691,20 +689,6 @@ func (s *DesktopService) FailPanelWindowTransfer(ctx context.Context, callerWind
 	return s.panelWindows.FailPanelWindowTransfer(callerWindowName, windowName, transferID)
 }
 
-func (s *DesktopService) FocusPanelWindow(ctx context.Context, ownerWindowName, windowName, panelID string) error {
-	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
-		return err
-	}
-	return s.panelWindows.FocusPanelWindow(ownerWindowName, windowName, panelID)
-}
-
-func (s *DesktopService) RequestPanelWindowClose(ctx context.Context, callerWindowName, windowName, reason string) error {
-	if err := validatePanelCommandCaller(ctx, callerWindowName); err != nil {
-		return err
-	}
-	return s.panelWindows.RequestPanelWindowClose(callerWindowName, windowName, reason)
-}
-
 func (s *DesktopService) AcknowledgePanelWindowClose(ctx context.Context, windowName string) error {
 	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
 		return err
@@ -712,11 +696,11 @@ func (s *DesktopService) AcknowledgePanelWindowClose(ctx context.Context, window
 	return s.panelWindows.AcknowledgePanelWindowClose(windowName)
 }
 
-func (s *DesktopService) AcknowledgeWorkspaceWindowClose(ctx context.Context, ownerWindowName string) error {
-	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
+func (s *DesktopService) AcknowledgeWorkspaceWindowClose(ctx context.Context, callerWindowName string) error {
+	if err := validatePanelCommandCaller(ctx, callerWindowName); err != nil {
 		return err
 	}
-	return s.panelWindows.AcknowledgeWorkspaceWindowClose(ownerWindowName)
+	return s.panelWindows.AcknowledgeWorkspaceWindowClose(callerWindowName)
 }
 
 func (s *DesktopService) UpdatePanelWindowSnapshot(ctx context.Context, windowName string, snapshot panelwindow.GroupSnapshot) error {
@@ -746,12 +730,12 @@ func (s *DesktopService) RequestPanelTabTransfer(
 
 func (s *DesktopService) AcceptPanelTabTransfer(
 	ctx context.Context,
-	ownerWindowName, transferID string,
+	callerWindowName, transferID string,
 ) error {
-	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
+	if err := validatePanelCommandCaller(ctx, callerWindowName); err != nil {
 		return err
 	}
-	return s.panelWindows.AcceptPanelTabTransfer(ownerWindowName, transferID)
+	return s.panelWindows.AcceptPanelTabTransfer(callerWindowName, transferID)
 }
 
 func (s *DesktopService) FailPanelTabTransfer(
@@ -764,9 +748,9 @@ func (s *DesktopService) FailPanelTabTransfer(
 	return s.panelWindows.FailPanelTabTransfer(callerWindowName, transferID)
 }
 
-func (s *DesktopService) AcknowledgeApplicationQuitPreflight(ctx context.Context, ownerWindowName, transactionID string, allowed bool) error {
-	if err := validatePanelCommandCaller(ctx, ownerWindowName); err != nil {
+func (s *DesktopService) AcknowledgeApplicationQuitPreflight(ctx context.Context, callerWindowName, transactionID string, allowed bool) error {
+	if err := validatePanelCommandCaller(ctx, callerWindowName); err != nil {
 		return err
 	}
-	return s.panelWindows.AcknowledgeApplicationQuitPreflight(ownerWindowName, transactionID, allowed)
+	return s.panelWindows.AcknowledgeApplicationQuitPreflight(callerWindowName, transactionID, allowed)
 }

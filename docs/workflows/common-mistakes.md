@@ -188,3 +188,25 @@ Prevention:
   an entry point in `AGENTS.md`.
 - Check `git status --short` and `git check-ignore` when adding shared guidance
   to confirm it can be included in the repository's normal changes.
+
+
+## Losing recovery while splitting window ownership
+
+Panel ownership bookkeeping shares the cluster selection queue. Test its waiting
+and failure paths through the registry and frontend consumers, including:
+
+- A peer connection must not hold the shared panel lock through a backend wait.
+  Revalidate admission inside the placement commit, after a possible removal.
+- Publication failure must permit retry without a layout change; readiness must
+  discard events for transfers that already failed.
+- A committed backend close cannot be rolled back by failed frontend follow-up.
+  Keep the confirmed selection so other clusters can resume publication.
+- Closing the final app window while panels remain must preserve restart state.
+  Test the later panel close and reload saved settings from disk.
+- Queued auth callbacks retain their turn to check current intent. Pair that test
+  with actual selection removal rejecting a late startup client.
+- Retained-panel claims must accept subsequent notifications and mount successful
+  claims even if a later claim fails.
+
+Run source-inventory tests after binding generation finishes; concurrent generation
+creates and removes temporary trees while those tests enumerate frontend files.

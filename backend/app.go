@@ -55,8 +55,6 @@ type ApplicationRuntimeOptions struct {
 	BeginPanelWindowDock       func(string, string, panelwindow.GroupSnapshot) error
 	AcknowledgePanelDock       func(string, string, string) error
 	FailPanelTransfer          func(string, string, string) error
-	FocusPanelWindow           func(string, string, string) error
-	RequestPanelClose          func(string, string, string) error
 	AcknowledgePanelClose      func(string) error
 	AcknowledgeWorkspaceClose  func(string) error
 	RoutePanelCommand          func(string, panelwindow.WorkspaceCommand) error
@@ -111,8 +109,6 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 			BeginPanelWindowDock:       options.BeginPanelWindowDock,
 			AcknowledgePanelDock:       options.AcknowledgePanelDock,
 			FailPanelTransfer:          options.FailPanelTransfer,
-			FocusPanelWindow:           options.FocusPanelWindow,
-			RequestPanelClose:          options.RequestPanelClose,
 			AcknowledgePanelClose:      options.AcknowledgePanelClose,
 			AcknowledgeWorkspaceClose:  options.AcknowledgeWorkspaceClose,
 			RoutePanelCommand:          options.RoutePanelCommand,
@@ -213,7 +209,7 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 			return workspace.runSelectionMutation(name, func(_ *selectionMutation) error { return action() })
 		},
 		ResetRuntime: func() error {
-			if err := workspace.clearKubeconfigSelection(); err != nil {
+			if err := workspace.clearKubeconfigSelection(true); err != nil {
 				return err
 			}
 			return refresh.ResetRuntimeState()

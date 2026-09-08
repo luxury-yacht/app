@@ -17,8 +17,13 @@ type clusterOperationCoordinator struct {
 
 type clusterOperationSlot struct {
 	mu      sync.Mutex
-	cancels map[uint64]context.CancelFunc
+	cancels map[uint64]clusterOperationCancellation
 	token   uint64
+}
+
+type clusterOperationCancellation struct {
+	cancel    context.CancelFunc
+	admission clusterOperationAdmission
 }
 
 type clusterOperationAdmission uint8
@@ -81,7 +86,7 @@ func (c *clusterOperationCoordinator) begin(
 
 	slot := c.slots[clusterID]
 	if slot == nil {
-		slot = &clusterOperationSlot{cancels: make(map[uint64]context.CancelFunc)}
+		slot = &clusterOperationSlot{cancels: make(map[uint64]clusterOperationCancellation)}
 		c.slots[clusterID] = slot
 	}
 
@@ -89,15 +94,17 @@ func (c *clusterOperationCoordinator) begin(
 		return nil, 0, nil, nil
 	}
 	if admission == clusterOperationSupersede {
-		for _, cancel := range slot.cancels {
-			cancel()
+		for _, operation := range slot.cancels {
+			if operation.admission != clusterOperationQueue {
+				operation.cancel()
+			}
 		}
 	}
 
 	slot.token++
 	token := slot.token
 	opCtx, cancel := context.WithCancel(parent)
-	slot.cancels[token] = cancel
+	slot.cancels[token] = clusterOperationCancellation{cancel: cancel, admission: admission}
 	return slot, token, opCtx, cancel
 }
 
