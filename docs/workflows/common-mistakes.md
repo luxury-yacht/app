@@ -141,6 +141,27 @@ Prevention:
 - Exercise transfer, individual close, group close, and cluster removal under
   StrictMode. Assert eviction follows committed removal and occurs once per scope.
 
+## Publishing virtual row measurements during ref commits
+
+Measuring a newly visible row can change the virtual range and mount more rows.
+Synchronous React state updates from those refs can exceed the update-depth
+limit when wrapped rows are much taller than the estimate.
+
+Prevention:
+
+- Coalesce measurement notifications into an animation frame, and cancel pending
+  work on unmount. Preserve measurement setup across StrictMode effect replay.
+- Test scrolling into unmeasured, tall rows with actual measurement callbacks;
+  zero-height jsdom fixtures do not exercise this path.
+- Include padding in unmeasured-height baselines, and prove measurement assertions
+  fail when measurements are disabled. Exercise replay before viewport sizing so
+  an unrelated state update cannot conceal a lost measurement notification.
+- Measure convergence work separately from crash prevention. Keep a runaway
+  guard distinct from the frame budget, and measure browser settling time rather
+  than inferring it from a nominal display refresh rate.
+- Check resizing, filtering, tail-following, and observer cleanup with the shared
+  viewer consumers as well as the measurement hook.
+
 ## Letting test processes inherit real application state directories
 
 Per-test overrides alone leave unguarded fixtures and late background work able to

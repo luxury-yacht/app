@@ -21,6 +21,7 @@ const DEFAULT_VIRTUALIZATION_THRESHOLD = 120;
 const DEFAULT_VIRTUALIZATION_OVERSCAN = 10;
 const DEFAULT_ESTIMATE_ROW_HEIGHT = 26;
 const DEFAULT_VERTICAL_PADDING_PX = 16;
+const getLogRowKey = (row: RenderedLogRow): string => row.key;
 
 const RawLogViewer = ({
   rows,
@@ -36,7 +37,7 @@ const RawLogViewer = ({
     useVirtualizedLogRows({
       rows,
       scrollContainerRef,
-      keyExtractor: (row) => row.key,
+      keyExtractor: getLogRowKey,
       threshold: virtualizationThreshold,
       overscan: virtualizationOverscan,
       estimateRowHeight,

@@ -46,9 +46,18 @@ export function useVirtualizedLogRows<T>({
   const rowHeightCacheRef = useRef<Map<string, number>>(new Map());
   const rowObserversRef = useRef<Map<string, ResizeObserver>>(new Map());
   const [heightCacheVersion, setHeightCacheVersion] = useState(0);
+  const heightUpdateFrameRef = useRef<number | null>(null);
 
   const bumpHeightVersion = useCallback(() => {
-    setHeightCacheVersion((version) => version + 1);
+    if (heightUpdateFrameRef.current !== null) {
+      return;
+    }
+    // Measuring newly visible rows can expose more unmeasured rows. Publish
+    // once per frame so that chain cannot recurse through React ref commits.
+    heightUpdateFrameRef.current = requestAnimationFrame(() => {
+      heightUpdateFrameRef.current = null;
+      setHeightCacheVersion((version) => version + 1);
+    });
   }, []);
 
   const disconnectRowObserver = useCallback((rowKey: string) => {
@@ -162,11 +171,18 @@ export function useVirtualizedLogRows<T>({
 
   useEffect(() => {
     const observers = rowObserversRef.current;
+    const heights = rowHeightCacheRef.current;
     return () => {
+      if (heightUpdateFrameRef.current !== null) {
+        cancelAnimationFrame(heightUpdateFrameRef.current);
+        heightUpdateFrameRef.current = null;
+      }
       for (const observer of observers.values()) {
         observer.disconnect();
       }
       observers.clear();
+      // StrictMode setup must remeasure after its pending update was canceled.
+      heights.clear();
     };
   }, []);
 
