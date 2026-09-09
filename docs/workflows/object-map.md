@@ -35,6 +35,15 @@ rendering, and interaction state.
 - Refresh scopes: [../architecture/refresh-system.md](../architecture/refresh-system.md)
 - Live age rendering: [../frontend/live-age.md](../frontend/live-age.md)
 
+Declare map collectors and relationship builders in the owning kind's registry
+descriptor.
+For ingest-owned kinds, register node projectors before starting reflectors so
+the initial intake includes map data. Snapshot assembly seeds catalog records
+before merging projected nodes; preserve their presentation and relationship
+fields through that merge. Shared edge projections belong in
+`backend/kind/objectmapspec` to avoid imports between kind packages or back into
+the snapshot package.
+
 ## Relationship Rules
 
 - RBAC maps support Role, RoleBinding, ClusterRole, ClusterRoleBinding, and
@@ -88,3 +97,17 @@ When changing object-map behavior:
 
 Run focused object-map snapshot tests and targeted object-map Vitest tests. For
 visual renderer changes, verify in the app.
+
+RBAC regressions live in
+[`object_map_rbac_test.go`](../../backend/refresh/snapshot/object_map_rbac_test.go)
+and [`ingest_projectors_test.go`](../../backend/refresh/system/ingest_projectors_test.go).
+Cover namespace and object scopes, same-name objects in different namespaces,
+both RoleBinding role-reference kinds, cross-namespace ServiceAccount subjects,
+and permission denial with permitted resources still available. Exercise the
+namespace RBAC table's Open Map action and the object-panel Map tab as separate
+frontend consumers.
+
+When measuring per-kind projection coverage through snapshot or ingest tests,
+include those kind packages with `-coverpkg` so consumer execution contributes
+to their coverage. Keep mocked API/navigation evidence separate from native
+app checks.
