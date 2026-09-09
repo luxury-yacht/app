@@ -72,6 +72,8 @@ const MAP_SUPPORTED_KINDS = new Set([
   'node',
   'clusterrole',
   'clusterrolebinding',
+  'role',
+  'rolebinding',
   'deployment',
   'replicaset',
   'statefulset',

@@ -71,6 +71,8 @@ func newObjectMapTestBuilder(t *testing.T, client kubernetes.Interface) *objectM
 	shared.Networking().V1().IngressClasses().Informer()
 	shared.Rbac().V1().ClusterRoles().Informer()
 	shared.Rbac().V1().ClusterRoleBindings().Informer()
+	shared.Rbac().V1().Roles().Informer()
+	shared.Rbac().V1().RoleBindings().Informer()
 	shared.Autoscaling().V1().HorizontalPodAutoscalers().Informer()
 	shared.Autoscaling().V2().HorizontalPodAutoscalers().Informer()
 	stop := make(chan struct{})

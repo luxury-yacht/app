@@ -261,8 +261,8 @@ describe('NsViewRBAC', () => {
     });
   });
 
-  it('opens the Map for ServiceAccount rows', async () => {
-    const entry = baseRBAC({ ref: { kind: 'ServiceAccount', name: 'builder' } });
+  it.each(['ServiceAccount', 'Role', 'RoleBinding'])('opens the Map for %s rows', async (kind) => {
+    const entry = baseRBAC({ ref: { kind, name: 'builder' } });
     const props = await renderRBACView();
     const objectMapItem = props
       .getCustomContextMenuItems(entry, 'name')
@@ -275,11 +275,11 @@ describe('NsViewRBAC', () => {
 
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: 'ServiceAccount',
+        kind,
         name: 'builder',
         namespace: 'team-a',
         clusterId: 'alpha:ctx',
-        group: '',
+        group: kind === 'ServiceAccount' ? '' : 'rbac.authorization.k8s.io',
         version: 'v1',
       }),
       { initialTab: 'map' }

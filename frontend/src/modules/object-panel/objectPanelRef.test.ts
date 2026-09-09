@@ -379,6 +379,23 @@ describe('getObjectPanelScopes', () => {
     ).toBeNull();
   });
 
+  it.each(['Role', 'RoleBinding'])('builds a cluster-scoped map reference for %s', (kind) => {
+    const ref = {
+      clusterId: 'cluster-a',
+      group: 'rbac.authorization.k8s.io',
+      version: 'v1',
+      kind,
+      namespace: 'team-a',
+      name: 'reader',
+    };
+    expect(hasCompleteObjectMapReference(ref)).toBe(true);
+    expect(getObjectPanelScopes(ref).mapScope).toBe(
+      `cluster-a|team-a:rbac.authorization.k8s.io/v1:${kind}:reader`
+    );
+    expect(hasCompleteObjectMapReference({ ...ref, clusterId: undefined })).toBe(false);
+    expect(hasCompleteObjectMapReference({ ...ref, version: undefined })).toBe(false);
+  });
+
   it('supports policy resources as object-map seeds', () => {
     expect(isObjectMapSupportedKind('PodDisruptionBudget')).toBe(true);
     expect(

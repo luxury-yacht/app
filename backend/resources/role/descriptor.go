@@ -12,5 +12,6 @@ var Descriptor = kindspec.Descriptor{
 	DetailCacheable: true,
 	IngestOwned:     true,
 	Stream:          &StreamDescriptor,
+	Collector:       &ObjectMapNode,
 	Binding:         &DetailBinding,
 }

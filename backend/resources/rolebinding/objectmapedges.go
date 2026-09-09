@@ -1,4 +1,4 @@
-package clusterrolebinding
+package rolebinding
 
 import (
 	"github.com/luxury-yacht/app/backend/kind/objectmapspec"
@@ -6,9 +6,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ObjectMapEdges returns this binding's edges: it grants a role and binds subjects.
+// ObjectMapEdges links the binding to its role and subjects using canonical facts.
 func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
-	binding, ok := obj.(*rbacv1.ClusterRoleBinding)
+	binding, ok := obj.(*rbacv1.RoleBinding)
 	if !ok {
 		return nil
 	}

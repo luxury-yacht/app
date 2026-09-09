@@ -104,6 +104,13 @@ describe('useObjectPanelTabs', () => {
     expect(labels).toEqual(['Details', 'Map', 'Pods', 'Logs', 'Events', 'YAML']);
   });
 
+  it.each(['Role', 'RoleBinding'])('offers the Map tab for %s', async (kind) => {
+    const { availableTabs } = await renderHook({
+      objectData: { ...objectData, kind, group: 'rbac.authorization.k8s.io' },
+    });
+    expect(availableTabs.map((tab) => tab.label)).toContain('Map');
+  });
+
   it('omits the Shell tab when capability is disabled', async () => {
     const { availableTabs } = await renderHook({
       objectData: {

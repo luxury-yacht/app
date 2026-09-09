@@ -37,6 +37,12 @@ rendering, and interaction state.
 
 ## Relationship Rules
 
+- RBAC maps support Role, RoleBinding, ClusterRole, ClusterRoleBinding, and
+  ServiceAccount nodes. Both binding kinds use the same `grants`/`binds` edge
+  projection from canonical RBAC facts. RoleBindings resolve Roles in their own
+  namespace, ClusterRoles at cluster scope, and ServiceAccounts in the subject's
+  namespace (defaulting to the binding namespace when omitted). User and Group
+  subjects remain display-only facts, without fabricated object nodes.
 - Owners, selectors, Gateway API references, service endpoints, routes, PVC/PV,
   HPA targets, Helm-managed objects, and event involved objects should use
   shared resource identity where available.

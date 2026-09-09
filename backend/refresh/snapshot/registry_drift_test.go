@@ -71,7 +71,7 @@ func TestObjectMapCollectorKindsDoNotDrift(t *testing.T) {
 		"ClusterRole", "ClusterRoleBinding", "ConfigMap", "CronJob", "DaemonSet",
 		"Deployment", "EndpointSlice", "Ingress", "IngressClass", "Job",
 		"NetworkPolicy", "Node", "PersistentVolume", "PersistentVolumeClaim", "Pod",
-		"PodDisruptionBudget", "ReplicaSet", "Secret", "Service", "ServiceAccount",
+		"PodDisruptionBudget", "ReplicaSet", "Role", "RoleBinding", "Secret", "Service", "ServiceAccount",
 		"StatefulSet", "StorageClass",
 	}, registryKinds(func(d kindspec.Descriptor) bool { return d.Collector != nil }))
 }
@@ -92,7 +92,7 @@ func TestObjectMapEdgeKindsDoNotDrift(t *testing.T) {
 		"Deployment", "EndpointSlice", "GRPCRoute", "Gateway", "GatewayClass",
 		"HTTPRoute", "HorizontalPodAutoscaler", "Ingress", "Job", "ListenerSet",
 		"NetworkPolicy", "PersistentVolume", "PersistentVolumeClaim", "Pod",
-		"PodDisruptionBudget", "ReferenceGrant", "ReplicaSet", "Service",
+		"PodDisruptionBudget", "ReferenceGrant", "ReplicaSet", "RoleBinding", "Service",
 		"StatefulSet", "TLSRoute",
 	}, registryKinds(func(d kindspec.Descriptor) bool { return d.Edges != nil }))
 }
