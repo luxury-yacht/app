@@ -12,6 +12,7 @@ import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import React, { useEffect, useRef, useState } from 'react';
 import type { ShortcutGroup, ShortcutModifiers } from '@/types/shortcuts';
 import { useKeyboardContext } from '../context';
+import { KeyboardNavigationGuide } from './KeyboardNavigationGuide';
 import './ShortcutHelpModal.css';
 
 interface ShortcutHelpModalProps {
@@ -169,6 +170,7 @@ export function ShortcutHelpModal({ isOpen, onClose }: Readonly<ShortcutHelpModa
       />
 
       <div className="modal-content shortcut-help-modal-content">
+        <KeyboardNavigationGuide />
         {shortcuts.length === 0 ? (
           <p className="no-shortcuts">No shortcuts available in this context</p>
         ) : (

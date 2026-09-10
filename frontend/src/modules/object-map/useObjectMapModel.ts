@@ -264,6 +264,20 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
     nodeDragRef.current = null;
   }, []);
 
+  const moveNodeBy = useCallback(
+    (id: string, dx: number, dy: number) => {
+      const node = layout.nodes.find((item) => item.id === id);
+      if (!node) {
+        return;
+      }
+      setAutoFit(false);
+      setNodePositionOverrides((previous) =>
+        new Map(previous).set(id, { x: node.x + dx, y: node.y + dy })
+      );
+    },
+    [layout.nodes]
+  );
+
   const clearHoverEdge = useCallback(() => {
     setHoverEdge(null);
   }, []);
@@ -290,6 +304,7 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
     moveNodeDrag,
     endNodeDrag,
     resetLayout,
+    moveNodeBy,
     clearSelection,
     hasNodePositionOverrides: nodePositionOverrides.size > 0,
   };

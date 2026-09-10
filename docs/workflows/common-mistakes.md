@@ -28,8 +28,19 @@ focused control. When removing a local focus walker, restore its consumers
 to the shared tab-stop contract. Clarify the failing keys before attributing
 a report to the list's arrow-navigation design.
 
+Exercise popovers through the real region provider and portal: an isolated
+React key handler can pass while the app's earlier keyboard owner takes the key.
+Browsers reject focus on `visibility: hidden` elements; jsdom does not model
+that restriction. Reveal a positioned menu before focusing it and verify the
+first arrow/activation in a rendered browser. For programmatically focused
+read-only bodies, test the actual preceding/following control by name, rather
+than asserting the same last-element fallback used by the implementation.
+
 Prevention:
 
+- Focus restoration tests for popups must use the app's `StrictMode` wrapper.
+  Capture the invoking element before menu focus, and preserve it across effect
+  replay; otherwise the menu can remember itself and leave focus on the body.
 - Follow the [completion evidence gate](completion.md), keeping each requested
   outcome and related lifecycle action tied to explicit evidence.
 - Leave required blocked or unrun checks visible and unfinished. Do not replace

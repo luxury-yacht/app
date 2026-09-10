@@ -9,6 +9,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
+import { hasCompleteObjectMapReference } from '@modules/object-panel/objectPanelRef';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
@@ -35,12 +36,12 @@ import {
 } from '@shared/components/icons/ObjectMapIcons';
 import { CloseIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import Tooltip from '@shared/components/Tooltip';
-
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useShortNames } from '@/hooks/useShortNames';
 import { compareUtf16Strings } from '@/shared/utils/sort';
+import { ObjectMapObjectControls } from './ObjectMapObjectControls';
 import {
   createObjectMapDebugId,
   publishObjectMapDebugSnapshot,
@@ -49,6 +50,7 @@ import {
 } from './objectMapDebugStore';
 import type { EdgeKindMeta } from './objectMapEdgeStyle';
 import { OBJECT_MAP_EDGE_FAMILY_LABELS, objectMapEdgeClass } from './objectMapEdgeStyle';
+import { objectMapNodeMenuItems } from './objectMapNodeMenuItems';
 import { normalizeObjectMapPayload } from './objectMapPayload';
 import type {
   ObjectMapContextMenuRequest,
@@ -541,6 +543,17 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const visibleState = visibleStateResult.state;
 
   useEffect(() => {
+    if (
+      contextMenu?.type === 'object' &&
+      !visibleState.visibleLayout.nodes.some(
+        (node) => objectMapReferenceKey(node.ref) === objectMapReferenceKey(contextMenu.request.ref)
+      )
+    ) {
+      setContextMenu(null);
+    }
+  }, [contextMenu, visibleState.visibleLayout.nodes]);
+
+  useEffect(() => {
     setEnabledEdgeTypes((previous) => {
       return pruneObjectMapEnabledEdgeTypes(previous, visibleState.visibleEdgeTypes);
     });
@@ -611,6 +624,17 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     model.focusNode(node.id);
     g6ViewportControls?.focusNode(node.id);
   }, [g6ViewportControls, model, searchIndex, visibleState.searchMatches]);
+
+  const selectVisibleNode = useCallback(
+    (id: string) => {
+      if (!visibleState.visibleLayout.nodes.some((node) => node.id === id)) {
+        return;
+      }
+      model.focusNode(id);
+      g6ViewportControls?.focusNode(id);
+    },
+    [g6ViewportControls, model, visibleState.visibleLayout.nodes]
+  );
 
   const handleKindsChange = useCallback(
     (value: string | string[]) => {
@@ -819,10 +843,39 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     if (!contextMenu) {
       return [];
     }
-    return contextMenu.type === 'object'
+    if (contextMenu.type === 'canvas') {
+      return canvasContextMenuItems;
+    }
+    const node = visibleState.visibleLayout.nodes.find(
+      (item) => objectMapReferenceKey(item.ref) === objectMapReferenceKey(contextMenu.request.ref)
+    );
+    if (!node) {
+      return [];
+    }
+    const resourceItems = hasCompleteObjectMapReference({ ...node.ref })
       ? objectActions.getMenuItems(contextMenuObject)
-      : canvasContextMenuItems;
-  }, [canvasContextMenuItems, contextMenu, contextMenuObject, objectActions]);
+      : [];
+    return [
+      ...resourceItems,
+      ...(resourceItems.length ? [{ divider: true }] : []),
+      ...objectMapNodeMenuItems({
+        layout: visibleState.visibleLayout,
+        node,
+        badge: model.badgeForNode(node.id),
+        onSelect: selectVisibleNode,
+        onToggleGroup: model.toggleGroup,
+        onMove: model.moveNodeBy,
+      }),
+    ];
+  }, [
+    canvasContextMenuItems,
+    contextMenu,
+    contextMenuObject,
+    model,
+    objectActions,
+    selectVisibleNode,
+    visibleState.visibleLayout,
+  ]);
   const contextMenuPosition = objectMapContextMenuPosition(contextMenu);
   const handleNodeContextMenu = useCallback((request: ObjectMapContextMenuRequest) => {
     setContextMenu({ type: 'object', request });
@@ -844,6 +897,12 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
 
   return (
     <div className="object-map" data-testid="object-map">
+      <ObjectMapObjectControls
+        nodes={visibleState.visibleLayout.nodes}
+        activeId={model.activeNodeId}
+        onSelect={selectVisibleNode}
+        onActions={handleNodeContextMenu}
+      />
       <div className="object-map__header">
         <ObjectMapToolbar
           elementIdPrefix={elementIdPrefix}

@@ -19,6 +19,7 @@ import { TooltipInfoIcon } from '@shared/components/icons/SharedIcons';
 import type React from 'react';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTooltipKeyboard } from './useTooltipKeyboard';
 import './Tooltip.css';
 
 export interface TooltipProps {
@@ -55,12 +56,42 @@ export interface TooltipProps {
    *  Enables interacting with buttons/links inside the tooltip.
    *  Adds pointer-events and a grace period when crossing the gap. */
   interactive?: boolean;
+  /** Give a non-focusable trigger a keyboard button and accessible name. */
+  triggerLabel?: string;
 }
 
 /** Minimum viewport space (px) before the tooltip flips to the other side */
 const FLIP_THRESHOLD = 200;
 const PAGE_TOOLTIP_Z_INDEX = 'calc(var(--z-index-panel, 500) - 1)';
 const DEFAULT_TOOLTIP_Z_INDEX = 'var(--z-index-tooltip, 2000)';
+
+const tooltipTriggerAttributes = (
+  label: string | undefined,
+  id: string,
+  visible: boolean,
+  interactive: boolean,
+  disabled: boolean
+): React.HTMLAttributes<HTMLElement> => ({
+  'aria-describedby': !interactive && visible ? id : undefined,
+  'aria-controls': interactive && visible ? id : undefined,
+  'aria-expanded': interactive ? visible && !disabled : undefined,
+  role: label ? 'button' : undefined,
+  tabIndex: label ? 0 : undefined,
+  'aria-disabled': label && disabled ? true : undefined,
+  'aria-label': label,
+  'aria-haspopup': interactive && label ? 'dialog' : undefined,
+});
+
+const tooltipClassNames = (interactive: boolean, variant: string, className?: string) =>
+  [
+    'tooltip',
+    'tooltip--portal',
+    interactive ? 'tooltip--interactive' : '',
+    variant !== 'default' ? variant : '',
+    className ?? '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
 const parseZIndex = (element: HTMLElement | null): number | null => {
   if (!element || typeof window === 'undefined') {
@@ -86,6 +117,7 @@ const Tooltip: React.FC<TooltipProps> = ({
   closeSignal,
   inline = true,
   interactive = false,
+  triggerLabel,
 }) => {
   const [visible, setVisible] = useState(false);
   const tooltipId = `tooltip-${useId().replace(/:/g, '')}`;
@@ -169,6 +201,16 @@ const Tooltip: React.FC<TooltipProps> = ({
     }
   }, []);
 
+  const { close, onKeyDown, keyboardOpen } = useTooltipKeyboard({
+    triggerRef,
+    tooltipRef,
+    visible,
+    disabled,
+    keyboardEnabled: interactive || Boolean(triggerLabel),
+    setVisible,
+    clearTimers,
+  });
+
   useEffect(() => {
     return () => {
       clearTimers();
@@ -179,9 +221,8 @@ const Tooltip: React.FC<TooltipProps> = ({
     if (closeSignal === undefined) {
       return;
     }
-    clearTimers();
-    setVisible(false);
-  }, [clearTimers, closeSignal]);
+    close();
+  }, [close, closeSignal]);
 
   // ------------------------------------------------------------------
   // Outside-click handler for click-trigger mode
@@ -254,10 +295,7 @@ const Tooltip: React.FC<TooltipProps> = ({
       return;
     }
 
-    const hide = () => {
-      clearTimers();
-      setVisible(false);
-    };
+    const hide = close;
     const handlePointerDown = (event: MouseEvent | TouchEvent) => {
       if (interactive && isWithinInteractiveRegion(event.target)) {
         return;
@@ -296,11 +334,14 @@ const Tooltip: React.FC<TooltipProps> = ({
       window.removeEventListener('resize', hide);
       window.removeEventListener('blur', hide);
     };
-  }, [clearTimers, interactive, isWithinInteractiveRegion, trigger, visible]);
+  }, [close, interactive, isWithinInteractiveRegion, trigger, visible]);
 
   /** Schedule a hide after the grace period (interactive mode)
    *  or hide immediately (non-interactive). */
   const scheduleHide = useCallback(() => {
+    if (keyboardOpen.current) {
+      return;
+    }
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -310,7 +351,7 @@ const Tooltip: React.FC<TooltipProps> = ({
     } else {
       setVisible(false);
     }
-  }, [interactive]);
+  }, [interactive, keyboardOpen]);
 
   const handleMouseEnter = useCallback(() => {
     if (disabled || trigger !== 'hover') {
@@ -369,15 +410,7 @@ const Tooltip: React.FC<TooltipProps> = ({
   // ------------------------------------------------------------------
   // Build tooltip class list
   // ------------------------------------------------------------------
-  const tooltipClasses = [
-    'tooltip',
-    'tooltip--portal',
-    interactive ? 'tooltip--interactive' : '',
-    variant !== 'default' ? variant : '',
-    className ?? '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const tooltipClasses = tooltipClassNames(interactive, variant, className);
 
   const inlineStyle: React.CSSProperties = { ...style };
   inlineStyle.zIndex = zIndex ?? resolveTooltipZIndex();
@@ -400,6 +433,7 @@ const Tooltip: React.FC<TooltipProps> = ({
   const tooltipInteractionProps: React.HTMLAttributes<HTMLDivElement> = interactive
     ? {
         role: 'dialog',
+        onKeyDown,
         'aria-label': 'Additional information',
         onMouseEnter: handleTooltipMouseEnter,
         onMouseLeave: handleTooltipMouseLeave,
@@ -411,12 +445,11 @@ const Tooltip: React.FC<TooltipProps> = ({
       <TriggerTag
         ref={triggerRef}
         className={triggerClass}
-        aria-describedby={!interactive && visible ? tooltipId : undefined}
-        aria-controls={interactive && visible ? tooltipId : undefined}
-        aria-expanded={interactive ? visible : undefined}
+        {...tooltipTriggerAttributes(triggerLabel, tooltipId, visible, interactive, disabled)}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
+        onKeyDown={onKeyDown}
       >
         {children ?? <TooltipInfoIcon />}
       </TriggerTag>
@@ -431,6 +464,7 @@ const Tooltip: React.FC<TooltipProps> = ({
             className={tooltipClasses}
             style={inlineStyle}
             data-placement={showArrow ? resolvedPlacement : undefined}
+            data-focus-portal-owner={tooltipId}
             {...tooltipInteractionProps}
           >
             {content}

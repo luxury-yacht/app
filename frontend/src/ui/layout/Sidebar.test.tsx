@@ -22,6 +22,15 @@ import { requireValue } from '@/test-utils/requireValue';
 import Sidebar from './Sidebar';
 
 const sidebarStyles = readFileSync(resolve(process.cwd(), 'src/ui/layout/Sidebar.css'), 'utf8');
+const manualScope = vi.hoisted(() => ({
+  names: [] as string[],
+  save: vi.fn(async (_clusterId: string, names: string[]) => names),
+}));
+vi.mock('./namespaceScope', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./namespaceScope')>()),
+  loadNamespaceScope: async () => manualScope.names,
+  saveNamespaceScope: (...args: [string, string[]]) => manualScope.save(...args),
+}));
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(() => () => undefined),
@@ -533,6 +542,7 @@ describe('Sidebar', () => {
   });
 
   beforeEach(() => {
+    manualScope.names = [];
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -547,6 +557,28 @@ describe('Sidebar', () => {
       },
     };
     resetAppPreferencesCacheForTesting();
+  });
+
+  it('returns focus to namespace selection before removing a manually added scope entry', async () => {
+    manualScope.names = ['default'];
+    renderSidebar({ regionNavigation: true });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const remove = requireValue(
+      container?.querySelector<HTMLButtonElement>('.namespace-scope-remove'),
+      'remove namespace'
+    );
+    const select = requireValue(
+      container?.querySelector<HTMLElement>('.namespaces-section h3 .sidebar-header-action'),
+      'namespace selector'
+    );
+    await act(async () => {
+      remove.focus();
+      remove.click();
+    });
+    expect(manualScope.save).toHaveBeenLastCalledWith('cluster-a', []);
+    expect(document.activeElement).toBe(select);
   });
 
   afterEach(() => {

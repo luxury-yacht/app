@@ -148,6 +148,44 @@ describe('ClusterTabs', () => {
     expect(toClusterInsertIndex(2, false)).toBe(2);
   });
 
+  it('dismisses actions when their cluster closes and does not revive them on reopen', async () => {
+    mockState.selectedKubeconfigs = ['a', 'b'];
+    mockState.selectedKubeconfig = 'a';
+    await renderTabs({ onOpenCluster: vi.fn() });
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Actions for b"]')?.click()
+    );
+    expect(document.querySelector('[role="menu"]')).toBeTruthy();
+    mockState.selectedKubeconfigs = ['a'];
+    await renderTabs({ onOpenCluster: vi.fn() });
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    mockState.selectedKubeconfigs = ['a', 'b'];
+    await renderTabs({ onOpenCluster: vi.fn() });
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it('opens an inactive tab menu from its button and reorders the intended cluster', async () => {
+    mockState.selectedKubeconfigs = ['a', 'b', 'c'];
+    mockState.selectedKubeconfig = 'a';
+    await renderTabs();
+    const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
+      (el) => el.querySelector('.tab-item__label')?.textContent === 'b'
+    );
+    const menu = tab?.querySelector<HTMLButtonElement>('.tab-item__menu');
+    expect(menu).toBeTruthy();
+    await act(async () => menu?.click());
+    const move = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+      (el) => el.textContent === 'Move tab right'
+    );
+    expect(move).toBeTruthy();
+    await act(async () => move?.click());
+    expect(
+      Array.from(container.querySelectorAll('.tab-item__label')).map((el) => el.textContent)
+    ).toEqual(['Global', 'a', 'c', 'b']);
+    expect(persistenceBridge.set).toHaveBeenLastCalledWith(['a', 'c', 'b']);
+    expect(mockState.setActiveKubeconfig).not.toHaveBeenCalled();
+  });
+
   it('renders the tab strip with a single cluster open', async () => {
     mockState.selectedKubeconfigs = ['a'];
     mockState.selectedKubeconfig = 'a';
@@ -177,6 +215,8 @@ describe('ClusterTabs', () => {
     );
     const items = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
     expect(items.map((item) => item.textContent)).toEqual([
+      'Move tab left',
+      'Move tab right',
       'Open in new window',
       'Move to new window',
       'Close',

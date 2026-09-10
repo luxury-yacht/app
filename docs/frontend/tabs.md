@@ -30,6 +30,13 @@ also use the shared drag coordinator.
 - Use stable tab ids and clear labels.
 - Use close callbacks only when the consumer owns close lifecycle.
 - Keep keyboard navigation on the WAI-ARIA manual activation pattern.
+- Arrows move the roving focus stop without activating a tab. Tab then reaches
+  that tab's action menu and Close button. Focus reveals both controls.
+- ClusterTabs and DockableTabBar provide `onOpenMenu`; their menus offer Move
+  tab left/right through the existing order owner, with end positions disabled.
+  Ordering a tab does not activate it. The synthetic Global tab is not reordered.
+- If a focused tab control disappears, focus an available remaining tab. Close
+  a menu whose owning tab disappears instead of reviving it on reopen.
 - Use shared overflow behavior instead of custom scroll controls.
 - Do not override reserved ARIA, focus, or keyboard props through escape-hatch
   props.

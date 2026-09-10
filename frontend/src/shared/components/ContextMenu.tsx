@@ -32,13 +32,66 @@ interface ContextMenuProps {
   onClose: () => void;
 }
 
+const ContextMenuOption = ({
+  item,
+  index,
+  menuId,
+  isFocused,
+  activateItem,
+  onFocus,
+}: {
+  item: ContextMenuItem;
+  index: number;
+  menuId: string;
+  isFocused: boolean;
+  activateItem: (item: ContextMenuItem) => void;
+  onFocus: () => void;
+}) => {
+  const tooltip = item.tooltip ?? item.disabledReason;
+
+  return (
+    <button
+      type="button"
+      id={`context-menu-${menuId}-item-${index}`}
+      className={`context-menu-item ${item.disabled ? 'disabled' : ''} ${
+        item.danger ? 'danger' : ''
+      } ${isFocused ? 'is-focused' : ''}`}
+      role="menuitem"
+      aria-disabled={item.disabled ? 'true' : 'false'}
+      disabled={item.disabled}
+      tabIndex={-1}
+      data-context-action-id={item.actionId}
+      data-context-index={index}
+      onClick={() => {
+        if (!item.disabled && item.onClick) {
+          activateItem(item);
+        }
+      }}
+      onMouseEnter={() => {
+        if (!item.disabled) {
+          onFocus();
+        }
+      }}
+      title={tooltip}
+    >
+      {!!item.icon && <span className="context-menu-icon">{item.icon}</span>}
+      <span className="context-menu-label">{item.label}</span>
+      {!!(item.disabled && item.disabledReason) && (
+        <span className="context-menu-reason">{item.disabledReason}</span>
+      )}
+    </button>
+  );
+};
+
 const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) => {
   const menuRef = useRef<HTMLDivElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-  useLayoutEffect(() => {
-    previousFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  }, []);
+  // Capture before focusing the menu. Effect replay must not replace the
+  // invoker with this menu itself.
+  const [previousFocus] = useState<HTMLElement | null>(() =>
+    typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+  );
   const { zoomLevel } = useZoom();
   const [isPositioned, setIsPositioned] = useState(false);
   const menuId = useId().replace(/:/g, '');
@@ -67,6 +120,16 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
     setFocusedIndex(selectableIndexes[nextPosition]);
   };
 
+  const activateItem = (item: ContextMenuItem) => {
+    // Restore before the action so a newly opened dialog inherits a usable
+    // invoker, and an action that deliberately moves focus keeps that focus.
+    if (previousFocus?.isConnected) {
+      previousFocus.focus();
+    }
+    item.onClick?.();
+    onClose();
+  };
+
   const activateFocusedItem = () => {
     if (focusedIndex === null || focusedIndex === undefined || focusedIndex < 0) {
       return;
@@ -75,14 +138,13 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
     if (!item || item.disabled || item.divider) {
       return;
     }
-    item.onClick?.();
-    onClose();
+    activateItem(item);
   };
 
   const dismissFromKeyboard = () => {
     onClose();
-    if (previousFocusRef.current?.isConnected) {
-      previousFocusRef.current.focus();
+    if (previousFocus?.isConnected) {
+      previousFocus.focus();
     }
     return true;
   };
@@ -163,9 +225,11 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
       menuRef.current.style.top = `${cssY}px`;
 
       // Show the menu now that it's positioned
+      menuRef.current.style.visibility = 'visible';
       setIsPositioned(true);
 
-      // Focus the menu to ensure keyboard events work
+      // Browsers reject focus while visibility is hidden; reveal it before
+      // the state update commits so the first key reaches this menu.
       menuRef.current.focus();
     }
   }, [position, zoomLevel]);
@@ -216,42 +280,16 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
           );
         }
 
-        const tooltip = item.tooltip ?? item.disabledReason;
-        const isFocused = index === focusedIndex;
-
         return (
-          <button
-            type="button"
+          <ContextMenuOption
             key={key}
-            id={`context-menu-${menuId}-item-${index}`}
-            className={`context-menu-item ${item.disabled ? 'disabled' : ''} ${
-              item.danger ? 'danger' : ''
-            } ${isFocused ? 'is-focused' : ''}`}
-            role="menuitem"
-            aria-disabled={item.disabled ? 'true' : 'false'}
-            disabled={item.disabled}
-            tabIndex={-1}
-            data-context-action-id={item.actionId}
-            data-context-index={index}
-            onClick={() => {
-              if (!item.disabled && item.onClick) {
-                item.onClick();
-                onClose();
-              }
-            }}
-            onMouseEnter={() => {
-              if (!item.disabled) {
-                setFocusedIndex(index);
-              }
-            }}
-            title={tooltip}
-          >
-            {!!item.icon && <span className="context-menu-icon">{item.icon}</span>}
-            <span className="context-menu-label">{item.label}</span>
-            {!!(item.disabled && item.disabledReason) && (
-              <span className="context-menu-reason">{item.disabledReason}</span>
-            )}
-          </button>
+            item={item}
+            index={index}
+            menuId={menuId}
+            isFocused={index === focusedIndex}
+            activateItem={activateItem}
+            onFocus={() => setFocusedIndex(index)}
+          />
         );
       })}
     </div>,

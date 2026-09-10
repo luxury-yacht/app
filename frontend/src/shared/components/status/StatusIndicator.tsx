@@ -97,6 +97,7 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
       zIndex="var(--z-index-tooltip, 3200)"
       closeSignal={closeSignal}
       interactive
+      triggerLabel={ariaLabel}
     >
       <div className="status-indicator" aria-label={ariaLabel} role="status">
         <div className="status-indicator-dot" data-status={status} />

@@ -11,16 +11,15 @@ import type {
 import { useGridTableHoverSync } from '@shared/components/tables/hooks/useGridTableHoverSync';
 import type React from 'react';
 import type { ReactNode, RefObject } from 'react';
-import { useCallback, useLayoutEffect } from 'react';
+import { useCallback } from 'react';
+import {
+  GRIDTABLE_INTERACTIVE_STOP_SELECTOR,
+  useGridTableRowControls,
+} from './useGridTableRowControls';
 
 const GRIDTABLE_SHORTCUT_OPT_OUT_SELECTOR = '[data-gridtable-shortcut-optout="true"]';
 const GRIDTABLE_ROWCLICK_SUPPRESS_SELECTOR = '[data-gridtable-rowclick="suppress"]';
 const GRIDTABLE_ROWCLICK_ALLOW_SELECTOR = '[data-gridtable-rowclick="allow"]';
-const GRIDTABLE_INTERACTIVE_STOP_SELECTOR =
-  'button, a[href], input, textarea, select, summary, [role="button"], [role="menuitem"], [data-gridtable-interactive="true"]';
-const GRIDTABLE_ROW_TABSTOP_SELECTOR = GRIDTABLE_INTERACTIVE_STOP_SELECTOR.split(',')
-  .map((selector) => `.gridtable-row ${selector.trim()}`)
-  .join(', ');
 
 interface UseGridTableInteractionWiringOptions<T> {
   tableData: T[];
@@ -159,18 +158,7 @@ export function useGridTableInteractionWiring<T>({
     shouldIgnoreRowClick,
   });
 
-  useLayoutEffect(() => {
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      return;
-    }
-
-    wrapper.querySelectorAll<HTMLElement>(GRIDTABLE_ROW_TABSTOP_SELECTOR).forEach((element) => {
-      if (element.tabIndex !== -1) {
-        element.tabIndex = -1;
-      }
-    });
-  });
+  useGridTableRowControls(wrapperRef, gridRef, focusedRowKey);
 
   useGridTableExternalFocus<T>({
     tableData,
@@ -201,7 +189,12 @@ export function useGridTableInteractionWiring<T>({
 
   const handleRowMouseEnterWithReset = useCallback(
     (element: HTMLDivElement) => {
-      if (isWrapperFocused && !shortcutsActive && !contextMenuActiveRef.current) {
+      if (
+        isWrapperFocused &&
+        !shortcutsActive &&
+        !contextMenuActiveRef.current &&
+        !document.activeElement?.closest('.gridtable-row')
+      ) {
         setFocusedRowKey(null);
       }
       handleRowMouseEnter(element);

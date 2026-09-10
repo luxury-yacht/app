@@ -388,7 +388,9 @@ body.sidebar-resizing::after {
   cursor: pointer;
 }
 
-.sidebar-item-row:hover .namespace-scope-remove {
+.sidebar-item-row:hover .namespace-scope-remove,
+.sidebar-item-row:focus-within .namespace-scope-remove,
+.sidebar-item.scope-inaccessible + .namespace-scope-remove {
   display: inline-flex;
 }
 

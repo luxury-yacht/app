@@ -89,6 +89,51 @@ afterEach(() => {
 });
 
 describe('Tooltip', () => {
+  it('leaves Tab on an ordinary hover tooltip child to the surrounding navigation owner', async () => {
+    vi.useFakeTimers();
+    const { container, cleanup } = await renderTooltip({
+      content: 'A hint',
+      children: <button type="button">Action</button>,
+    });
+    const trigger = container.querySelector<HTMLElement>('.tooltip-trigger');
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(250);
+    });
+    const child = container.querySelector('button');
+    await act(async () => child?.focus());
+    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    await act(async () => child?.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
+    cleanup();
+    vi.useRealTimers();
+  });
+  it('restores focus when an open keyboard tooltip becomes unavailable', async () => {
+    const props = {
+      content: <button type="button">Action</button>,
+      triggerLabel: 'Status',
+      interactive: true,
+    };
+    const { container, root, cleanup } = await renderTooltip(props);
+    const trigger = container.querySelector<HTMLElement>('[role="button"]');
+    await act(async () => {
+      trigger?.focus();
+      trigger?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      );
+    });
+    await act(async () =>
+      trigger?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      )
+    );
+    expect(document.activeElement?.textContent).toBe('Action');
+    await act(async () => root.render(<Tooltip {...props} disabled />));
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger?.getAttribute('aria-expanded')).toBe('false');
+    cleanup();
+  });
   // -----------------------------------------------------------------------
   // Default icon
   // -----------------------------------------------------------------------

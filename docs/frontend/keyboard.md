@@ -93,14 +93,31 @@ Surface kinds include:
 - Context-menu Tab/Shift+Tab and Escape return focus to the invoking control;
   Favorites reveals actions on focus within its row and returns to its trigger
   on Escape.
+- Menus become visible before taking focus. Restore the invoker before running
+  an action, so a newly opened dialog inherits that focus and intentional action
+  focus changes survive menu dismissal. Capture the invoker before menu focus
+  and preserve it across StrictMode effect replay.
+- Status popovers register both their trigger and portal as keyboard surfaces.
+  Enter/Space opens details; Tab/Shift+Tab visits actions; Escape restores the
+  trigger. Modified Tab remains owned by region navigation.
 - DockablePanel owns local Tab order, including App Logs and Diagnostics.
   Consumers retain one roving tab stop and do not install competing walkers.
+  Include the focused tab's action buttons in that order. From a pointer-focused
+  read-only body, resume at the nearest preceding/following control in DOM order.
 - Comboboxes keep DOM focus on the trigger or search field and expose the
   highlighted option through `aria-activedescendant`; popup options are not
   additional tab stops.
 - Virtualized tables keep DOM focus on their native table element while shared
   state marks the active row, allowing native table semantics and row recycling
   without moving focus to an element that can unmount.
+  Tab may enter links/buttons in the current keyed row; other rows' controls
+  remain outside Tab order. Escape or removal of the focused control restores
+  the table. Embedded controls retain their own Enter/Space actions.
+- Manually added namespace removal is visible on row focus. Removing an entry
+  restores the stable namespace selector; the inline Add editor restores its
+  button on commit or cancellation.
+- Keyboard shortcut help includes a navigation guide for tables, tab actions,
+  status popovers, object maps, the sidebar and editor escape routes.
 - Adjustable separators support the appropriate arrow keys and Home/End while
   publishing their current, minimum, and maximum values.
 - Panels and table regions own focused keyboard behavior without blocking the

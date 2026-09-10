@@ -7,7 +7,6 @@
 
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import { act, type ComponentProps, type ReactNode } from 'react';
@@ -767,11 +766,11 @@ describe('AppLogsPanel', () => {
     );
     await act(async () => logs.focus());
     const panel = requireValue(logs.closest<HTMLElement>('.dockable-panel'), 'real dockable panel');
-    const controls = getTabbableElements(panel);
     // The read-only body uses programmatic focus, as in the other log viewers.
-    const previous = controls[controls.length - 1];
-    expect(previous).toBeTruthy();
-    expect(previous).not.toBe(panel.querySelector('.app-logs-text-filter'));
+    const previous = requireValue(
+      panel.querySelector('[aria-label="Resize Cluster column"]'),
+      'preceding column resizer'
+    );
     await act(async () => {
       logs.dispatchEvent(
         new KeyboardEvent('keydown', {

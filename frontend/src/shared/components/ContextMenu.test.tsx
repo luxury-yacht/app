@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { KeyboardProvider } from '@ui/shortcuts';
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ContextMenu from './ContextMenu';
@@ -56,16 +56,18 @@ describe('ContextMenu', () => {
 
     await act(async () => {
       root.render(
-        <ZoomProvider>
-          <KeyboardProvider>
-            <ContextMenu
-              items={items}
-              position={{ x: 100, y: 120 }}
-              onClose={onClose}
-              {...overrides}
-            />
-          </KeyboardProvider>
-        </ZoomProvider>
+        <StrictMode>
+          <ZoomProvider>
+            <KeyboardProvider>
+              <ContextMenu
+                items={items}
+                position={{ x: 100, y: 120 }}
+                onClose={onClose}
+                {...overrides}
+              />
+            </KeyboardProvider>
+          </ZoomProvider>
+        </StrictMode>
       );
       await Promise.resolve();
     });
@@ -96,6 +98,24 @@ describe('ContextMenu', () => {
     }
   );
 
+  it('reveals the positioned menu before focusing it, as required by browsers', async () => {
+    const focus = HTMLElement.prototype.focus;
+    const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus').mockImplementation(function (
+      this: HTMLElement,
+      options
+    ) {
+      if (getComputedStyle(this).visibility !== 'hidden') {
+        focus.call(this, options);
+      }
+    });
+    try {
+      const { menu } = await renderMenu();
+      expect(document.activeElement).toBe(menu);
+    } finally {
+      focusSpy.mockRestore();
+    }
+  });
+
   it('invokes item handler and closes when a menu item is clicked', async () => {
     const onClose = vi.fn();
     const onClick = vi.fn();
@@ -108,6 +128,27 @@ describe('ContextMenu', () => {
 
     expect(onClick).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores the invoker before an action runs so the action can move focus', async () => {
+    const trigger = document.createElement('button');
+    const destination = document.createElement('input');
+    document.body.append(trigger, destination);
+    trigger.focus();
+    const action = vi.fn(() => {
+      expect(document.activeElement).toBe(trigger);
+      destination.focus();
+    });
+    const { menu } = await renderMenu({ items: [{ label: 'Open', onClick: action }] });
+    await act(async () =>
+      menu.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      )
+    );
+    expect(action).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(destination);
+    trigger.remove();
+    destination.remove();
   });
 
   it('renders separators without a native horizontal-rule border', async () => {

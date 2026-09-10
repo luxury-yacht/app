@@ -2,6 +2,8 @@
  * frontend/src/shared/components/tabs/Tabs.test.tsx
  */
 
+import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
+import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -48,6 +50,57 @@ describe('Tabs', () => {
     container.remove();
   });
 
+  it('tabs into the focused inactive tab actions without activating it', async () => {
+    const onActivate = vi.fn();
+    const onOpenMenu = vi.fn();
+    await act(async () =>
+      root.render(
+        <KeyboardProvider>
+          <AppRegionNavigation />
+          <header data-app-region="header">
+            <Tabs
+              tabs={[
+                { id: 'a', label: 'Alpha', onOpenMenu, onClose: vi.fn() },
+                { id: 'b', label: 'Beta', onOpenMenu, onClose: vi.fn() },
+              ]}
+              activeId="a"
+              onActivate={onActivate}
+              aria-label="Tabs"
+            />
+          </header>
+        </KeyboardProvider>
+      )
+    );
+    const tabs = container.querySelectorAll<HTMLElement>('[role="tab"]');
+    await act(async () => tabs[0].focus());
+    await act(async () =>
+      tabs[0].dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })
+      )
+    );
+    await act(async () =>
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      )
+    );
+    expect(document.activeElement).toBe(tabs[1].querySelector('.tab-item__menu'));
+    await act(async () => (document.activeElement as HTMLElement).click());
+    expect(onOpenMenu).toHaveBeenCalledOnce();
+    expect(onActivate).not.toHaveBeenCalled();
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+    await act(async () =>
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      )
+    );
+    expect(document.activeElement).toBe(tabs[1]);
+  });
+
   it.each(['Enter', ' '])('leaves %s on a nested close control to its own action', (key) => {
     const onActivate = vi.fn();
     const onClose = vi.fn();
@@ -71,6 +124,29 @@ describe('Tabs', () => {
     expect(onActivate).not.toHaveBeenCalled();
     act(() => close?.click());
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('returns focus to a remaining tab when a focused close button disappears', () => {
+    const render = (showBeta: boolean) =>
+      root.render(
+        <Tabs
+          tabs={[
+            { id: 'a', label: 'Alpha' },
+            ...(showBeta ? [{ id: 'b', label: 'Beta', onClose: () => render(false) }] : []),
+          ]}
+          activeId="a"
+          onActivate={vi.fn()}
+          aria-label="Tabs"
+        />
+      );
+    act(() => render(true));
+    const close = requireValue(
+      container.querySelector<HTMLButtonElement>('.tab-item__close'),
+      'expected close button'
+    );
+    act(() => close.focus());
+    act(() => close.click());
+    expect(document.activeElement).toBe(container.querySelector('[role="tab"]'));
   });
 
   it('renders an empty tablist with the required aria-label', () => {

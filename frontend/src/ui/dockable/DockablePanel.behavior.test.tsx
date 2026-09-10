@@ -357,7 +357,13 @@ describe('DockablePanel docked behaviour', () => {
       )
     );
     const items = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
-    expect(items.map((item) => item.textContent)).toEqual(['Dock to bottom', 'Float', 'Close']);
+    expect(items.map((item) => item.textContent)).toEqual([
+      'Move tab left',
+      'Move tab right',
+      'Dock to bottom',
+      'Float',
+      'Close',
+    ]);
     expect(document.querySelector('[aria-selected="true"]')?.getAttribute('data-panel-id')).toBe(
       'panel-menu-b'
     );
@@ -470,7 +476,7 @@ describe('DockablePanel docked behaviour', () => {
     await openMenu();
     expect(
       Array.from(document.querySelectorAll('[role="menuitem"]')).map((item) => item.textContent)
-    ).toEqual(['Dock to right', 'Float', 'Close']);
+    ).toEqual(['Move tab left', 'Move tab right', 'Dock to right', 'Float', 'Close']);
     await act(async () =>
       Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
         .find((item) => item.textContent === 'Float')
@@ -525,6 +531,8 @@ describe('DockablePanel docked behaviour', () => {
       );
       const items = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
       expect(items.map((item) => item.textContent)).toEqual([
+        'Move tab left',
+        'Move tab right',
         'Dock to right',
         'Dock to bottom',
         'Close',

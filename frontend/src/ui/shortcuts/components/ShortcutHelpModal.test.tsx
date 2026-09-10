@@ -87,6 +87,18 @@ describe('ShortcutHelpModal', () => {
     );
   });
 
+  it('explains row controls, tab actions, map selection and status popovers', async () => {
+    getAvailableShortcutsMock.mockReturnValue([]);
+    await renderModal({ isOpen: true, onClose: vi.fn() });
+    const guide = document.querySelector('[aria-label="Keyboard navigation guide"]');
+    expect(guide).not.toBeNull();
+    expect(guide?.textContent).toContain('current row');
+    expect(guide?.textContent).toContain('Tab actions');
+    expect(guide?.textContent).toContain('Choose object');
+    expect(guide?.textContent).toContain('status');
+    expect(guide?.textContent).toContain('Ctrl+Shift+Tab');
+  });
+
   it('handles closing animation and re-enables shortcuts', async () => {
     vi.useFakeTimers();
     getAvailableShortcutsMock.mockReturnValue([]);

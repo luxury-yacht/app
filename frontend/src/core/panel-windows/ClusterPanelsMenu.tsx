@@ -13,15 +13,19 @@ export function ClusterPanelsMenu({
   position,
   onClose,
   onCloseCluster,
+  orderActions = [],
 }: Readonly<{
   clusterId: string;
   position: { x: number; y: number };
   onClose: () => void;
   onCloseCluster: () => void;
+  orderActions?: ContextMenuItem[];
 }>) {
   const windowName = getWindowIdentity();
   const { selectedClusterIds } = useKubeconfig();
   const items: ContextMenuItem[] = [
+    ...orderActions,
+    ...(orderActions.length ? [{ divider: true }] : []),
     {
       label: 'Open in new window',
       icon: <FloatPanelIcon width={16} height={16} />,

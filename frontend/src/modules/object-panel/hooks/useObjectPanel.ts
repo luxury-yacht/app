@@ -110,7 +110,6 @@ export function useObjectPanel() {
     creationTimestamp,
     lastModified,
   } = useCurrentObjectPanel();
-  const pendingFocusPanelIdRef = useRef<string | null>(null);
   const pendingFloatPanelIdRef = useRef<string | null>(null);
 
   // Keep the close callback updated for closeObjectPanelGlobal (test-only).
@@ -124,18 +123,6 @@ export function useObjectPanel() {
       closeCallback = null;
     };
   }, []);
-
-  useEffect(() => {
-    const pendingPanelId = pendingFocusPanelIdRef.current;
-    if (!pendingPanelId) {
-      return;
-    }
-    if (!getGroupForPanel(tabGroups, pendingPanelId)) {
-      return;
-    }
-    pendingFocusPanelIdRef.current = null;
-    focusPanel(pendingPanelId);
-  }, [tabGroups, focusPanel]);
 
   useEffect(() => {
     const panelId = pendingFloatPanelIdRef.current;
@@ -171,23 +158,6 @@ export function useObjectPanel() {
     [selectedClusterId, selectedKubeconfigs, getClusterMeta, setActiveKubeconfig]
   );
 
-  const focusOpenedPanel = useCallback(
-    (panelId: string) => {
-      // If the panel already exists in the dockable system, activate its tab
-      // and bring the panel to the front. Newly-created panels join the
-      // dockable group after their component mounts, so focus them from the
-      // tabGroups effect above once the tab actually exists.
-      const groupKey = getGroupForPanel(tabGroups, panelId);
-      if (groupKey) {
-        pendingFocusPanelIdRef.current = null;
-        focusPanel(panelId);
-      } else {
-        pendingFocusPanelIdRef.current = panelId;
-      }
-    },
-    [tabGroups, focusPanel]
-  );
-
   const updateExistingPanelView = useCallback(
     (clusterId: string, panelId: string, initialTab?: ViewType) => {
       if (initialTab) {
@@ -220,9 +190,9 @@ export function useObjectPanel() {
         pendingFloatPanelIdRef.current = panelId;
       }
 
-      focusOpenedPanel(panelId);
+      focusPanel(panelId, tab.objectRef.clusterId);
     },
-    [activateObjectCluster, onRowClick, setObjectPanelActiveTab, focusOpenedPanel]
+    [activateObjectCluster, onRowClick, setObjectPanelActiveTab, focusPanel]
   );
 
   const openWithObject = useCallback(

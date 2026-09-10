@@ -107,3 +107,20 @@
     gap: 0.5rem;
   }
 }
+.keyboard-navigation-guide {
+  margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-md);
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+.keyboard-navigation-guide p,
+.keyboard-navigation-guide dd {
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+.keyboard-navigation-guide dt {
+  font-weight: 600;
+  margin-top: var(--spacing-sm);
+}
+.keyboard-navigation-guide dd {
+  margin-left: 0;
+}

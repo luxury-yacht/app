@@ -33,6 +33,88 @@ describe('GridTable keyboard integration', () => {
     container.remove();
   });
 
+  it('tabs through only the current row controls and returns to row navigation', async () => {
+    const onRowClick = vi.fn();
+    const action = vi.fn();
+    const data = [...rows, { id: 'cluster-a|two', name: 'Two' }];
+    await act(async () =>
+      root.render(
+        <KeyboardProvider>
+          <ZoomProvider>
+            <AppRegionNavigation />
+            <main data-app-region="content">
+              <GridTable
+                data={data}
+                keyExtractor={(item) => item.id}
+                onRowClick={onRowClick}
+                virtualization={{ enabled: false }}
+                columns={[
+                  ...columns,
+                  {
+                    key: 'actions',
+                    header: 'Actions',
+                    render: (row) => (
+                      <>
+                        <button type="button" onClick={action}>
+                          {row.name} action
+                        </button>
+                        <button type="button" disabled>
+                          Unavailable
+                        </button>
+                        <a href="#details">{row.name} details</a>
+                      </>
+                    ),
+                  },
+                ]}
+              />
+              <button type="button">After table</button>
+            </main>
+          </ZoomProvider>
+        </KeyboardProvider>
+      )
+    );
+    const table = requireValue(
+      container.querySelector<HTMLElement>('table[tabindex="0"]'),
+      'table'
+    );
+    const press = async (key: string, shiftKey = false) => {
+      await act(async () =>
+        document.activeElement?.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key,
+            shiftKey,
+            bubbles: true,
+            cancelable: true,
+          })
+        )
+      );
+    };
+    await act(async () => table.focus());
+    await press('Tab');
+    expect(document.activeElement?.textContent).toBe('One action');
+    await act(async () => (document.activeElement as HTMLElement).click());
+    expect(action).toHaveBeenCalledOnce();
+    expect(onRowClick).not.toHaveBeenCalled();
+    await press('Tab');
+    expect(document.activeElement?.textContent).toBe('One details');
+    await press('Tab');
+    expect(document.activeElement?.textContent).toBe('After table');
+    await press('Tab', true);
+    expect(document.activeElement?.textContent).toBe('One details');
+    await press('Escape');
+    expect(document.activeElement).toBe(table);
+    await press('ArrowDown');
+    await press('Tab');
+    expect(document.activeElement?.textContent).toBe('Two action');
+    await press('Tab', true);
+    expect(document.activeElement).toBe(table);
+    await press('Enter');
+    expect(onRowClick).toHaveBeenCalledWith({ id: 'cluster-a|two', name: 'Two' });
+    expect(getTabbableElements(container).some((el) => el.textContent === 'One action')).toBe(
+      false
+    );
+  });
+
   it.each(['Enter', ' '])(
     'does not activate a table row when %s belongs to its child button',
     async (key) => {
@@ -74,6 +156,43 @@ describe('GridTable keyboard integration', () => {
       expect(onRowClick).not.toHaveBeenCalled();
     }
   );
+
+  it('recovers table focus when the current row control disappears', async () => {
+    const render = async (data: typeof rows) =>
+      act(async () =>
+        root.render(
+          <KeyboardProvider>
+            <ZoomProvider>
+              <GridTable
+                data={data}
+                keyExtractor={(item) => item.id}
+                virtualization={{ enabled: false }}
+                columns={[
+                  {
+                    key: 'action',
+                    header: 'Action',
+                    render: () => <button type="button">Open</button>,
+                  },
+                ]}
+              />
+            </ZoomProvider>
+          </KeyboardProvider>
+        )
+      );
+    await render(rows);
+    const table = requireValue(
+      container.querySelector<HTMLElement>('table[tabindex="0"]'),
+      'table'
+    );
+    const button = requireValue(
+      container.querySelector<HTMLElement>('.gridtable-row button'),
+      'action'
+    );
+    await act(async () => button.focus());
+    await render([]);
+    expect(document.activeElement).toBe(table);
+    expect(getTabbableElements(container)).not.toContain(button);
+  });
 
   it.each([false, true])(
     'retains row activation and hover ownership (empty: %s)',

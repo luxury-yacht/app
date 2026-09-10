@@ -20,6 +20,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { CloseIcon, PlusIcon } from '@shared/components/icons/SharedIcons';
 import { type TabDescriptor, Tabs } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
+import { tabReorderMenuItems } from '@shared/components/tabs/tabReorderMenuItems';
 import React, {
   type HTMLAttributes,
   useCallback,
@@ -124,6 +125,12 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
     // Prefer persisted drag order, then append any newly opened tabs by selection order.
     return mergeClusterTabOrder(selectionOrderIds, tabOrder);
   }, [selectionOrderIds, tabOrder]);
+
+  useEffect(() => {
+    if (panelMenu && !mergedOrder.includes(panelMenu.selection)) {
+      setPanelMenu(null);
+    }
+  }, [mergedOrder, panelMenu]);
 
   useEffect(() => {
     if (kubeconfigsLoading || !tabOrderHydrated) {
@@ -322,6 +329,12 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
     onClose: () => {
       closeClusterSelection(tab.selection);
     },
+    onOpenMenu: (position) =>
+      setPanelMenu({
+        clusterId: getClusterMeta(tab.selection).id,
+        selection: tab.selection,
+        position,
+      }),
     extraProps: {
       title: tab.label,
       onContextMenu: (event: React.MouseEvent) => {
@@ -353,6 +366,11 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
           position={panelMenu.position}
           onClose={() => setPanelMenu(null)}
           onCloseCluster={() => closeClusterSelection(panelMenu.selection)}
+          orderActions={tabReorderMenuItems(mergedOrder, panelMenu.selection, (index) => {
+            const next = mergedOrder.filter((id) => id !== panelMenu.selection);
+            next.splice(index, 0, panelMenu.selection);
+            setClusterTabOrder(next);
+          })}
         />
       ) : null}
       {orderedTabs.length > 0 && (

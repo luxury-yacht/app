@@ -430,7 +430,6 @@ function WorkspaceObjectRouteCoordinator({
     useDockablePanelContext();
   const guards = usePanelLifecycleGuardRegistry();
   const pendingTargets = useRef(new Map<string, panelwindow.TabTransferRequest>());
-  const pendingDockedFocusRef = useRef<string | null>(null);
   const sync = usePanelWorkspaceSync();
   const flushPublication = sync.flush;
   const dockAttemptRef = useRef<{ key: string; timeout: number; acknowledging: boolean } | null>(
@@ -781,20 +780,9 @@ function WorkspaceObjectRouteCoordinator({
     () =>
       onPanelWorkspaceFocusRequested(({ clusterId, panelId }) => {
         activateCluster(clusterId);
-        pendingDockedFocusRef.current = panelId;
-        if (getGroupForPanel(tabGroups, panelId)) {
-          pendingDockedFocusRef.current = null;
-          focusPanel(panelId);
-        }
+        focusPanel(panelId, clusterId);
       }),
-    [activateCluster, focusPanel, tabGroups]
+    [activateCluster, focusPanel]
   );
-  useEffect(() => {
-    const panelId = pendingDockedFocusRef.current;
-    if (panelId && getGroupForPanel(tabGroups, panelId)) {
-      pendingDockedFocusRef.current = null;
-      focusPanel(panelId);
-    }
-  }, [tabGroups, focusPanel]);
   return children;
 }

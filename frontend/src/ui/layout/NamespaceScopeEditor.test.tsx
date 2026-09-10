@@ -74,6 +74,35 @@ describe('useNamespaceScope telemetry', () => {
     container.remove();
   });
 
+  it('exposes Add namespace in Tab order, restores it after Escape, and lets Tab reach the owner', async () => {
+    const onKeyDown = vi.fn();
+    container.addEventListener('keydown', onKeyDown);
+    await act(async () =>
+      root.render(
+        <div>
+          <Probe clusterId="cluster-a" />
+        </div>
+      )
+    );
+    const button = container.querySelector<HTMLButtonElement>('.namespace-scope-add');
+    expect(button?.tabIndex).toBe(0);
+    await act(async () => button?.click());
+    const input = container.querySelector<HTMLInputElement>('input');
+    expect(document.activeElement).toBe(input);
+    await act(async () =>
+      input?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      )
+    );
+    expect(onKeyDown).toHaveBeenCalledOnce();
+    await act(async () =>
+      input?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      )
+    );
+    expect(document.activeElement).toBe(container.querySelector('.namespace-scope-add'));
+  });
+
   it('reports a persistence failure displayed by the namespace editor', async () => {
     const error = new Error('settings database is read-only');
     namespaceScopeMocks.saveNamespaceScope.mockRejectedValue(error);
@@ -104,6 +133,36 @@ describe('useNamespaceScope telemetry', () => {
       },
     });
   });
+
+  it.each(['production', ''])(
+    'restores Add namespace after submitting %j from the keyboard',
+    async (name) => {
+      namespaceScopeMocks.saveNamespaceScope.mockImplementation(async (_clusterId, names) => names);
+      await act(async () => root.render(<Probe clusterId="cluster-a" />));
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('.namespace-scope-add')?.click()
+      );
+      const input = container.querySelector<HTMLInputElement>('input');
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+          input,
+          name
+        );
+        input?.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await act(async () =>
+        input?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+        )
+      );
+      expect(document.activeElement).toBe(container.querySelector('.namespace-scope-add'));
+      if (name) {
+        expect(namespaceScopeMocks.saveNamespaceScope).toHaveBeenCalledWith('cluster-a', [name]);
+      } else {
+        expect(namespaceScopeMocks.saveNamespaceScope).not.toHaveBeenCalled();
+      }
+    }
+  );
 
   it('reports an edit that cannot be attributed to a cluster', async () => {
     await act(async () => {
