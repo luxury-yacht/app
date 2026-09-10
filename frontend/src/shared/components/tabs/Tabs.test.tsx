@@ -48,6 +48,31 @@ describe('Tabs', () => {
     container.remove();
   });
 
+  it.each(['Enter', ' '])('leaves %s on a nested close control to its own action', (key) => {
+    const onActivate = vi.fn();
+    const onClose = vi.fn();
+    act(() =>
+      root.render(
+        <Tabs
+          tabs={[{ id: 'a', label: 'Alpha', onClose }]}
+          activeId="a"
+          onActivate={onActivate}
+          aria-label="Tabs"
+        />
+      )
+    );
+    const close = container.querySelector<HTMLButtonElement>('.tab-item__close');
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    act(() => {
+      close?.focus();
+      close?.dispatchEvent(event);
+    });
+    expect(event.defaultPrevented).toBe(false);
+    expect(onActivate).not.toHaveBeenCalled();
+    act(() => close?.click());
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it('renders an empty tablist with the required aria-label', () => {
     act(() => {
       root.render(

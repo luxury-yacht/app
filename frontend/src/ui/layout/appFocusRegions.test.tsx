@@ -127,6 +127,22 @@ describe('app region navigation through KeyboardProvider', () => {
     container.remove();
   });
 
+  it('switches regions from a portaled control using its invoking region', async () => {
+    await render();
+    element('last').setAttribute('aria-controls', 'region-popup');
+    const portal = document.createElement('div');
+    portal.dataset.focusPortalOwner = 'region-popup';
+    const action = document.createElement('button');
+    portal.append(action);
+    document.body.append(portal);
+    act(() => action.focus());
+    await tab({ ctrlKey: true });
+    expect(document.activeElement).toBe(element('panel-tab'));
+    portal.remove();
+    await tab({ ctrlKey: true, shiftKey: true });
+    expect(document.activeElement).toBe(element('last'));
+  });
+
   it('cycles all regions in both directions without changing selections, including with no panels', async () => {
     await render();
     focus('header-first');

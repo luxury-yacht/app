@@ -94,7 +94,11 @@ export function useGridTableInteractionWiring<T>({
     if (!(target instanceof HTMLElement)) {
       return false;
     }
-    return Boolean(target.closest(GRIDTABLE_SHORTCUT_OPT_OUT_SELECTOR));
+    return Boolean(
+      target.closest(
+        `${GRIDTABLE_SHORTCUT_OPT_OUT_SELECTOR}, ${GRIDTABLE_INTERACTIVE_STOP_SELECTOR}`
+      )
+    );
   }, []);
 
   const shouldIgnoreRowClick = useCallback((event: React.MouseEvent) => {

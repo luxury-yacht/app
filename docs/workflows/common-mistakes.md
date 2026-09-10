@@ -22,7 +22,10 @@ For keyboard workflows, verify focus position, visible indication, and the
 resulting action separately. Reproduce mouse click → Tab/Shift+Tab → Enter/Space
 through the real component and keyboard owners. A list's key handler must not
 intercept activation of sibling controls. Check focus styling after pointer use,
-when `:focus-visible` may not match. Clarify the failing keys before attributing
+when `:focus-visible` may not match. Audit every region and portaled surface
+that shares the contract; include actions that disable or unmount their own
+focused control. When removing a local focus walker, restore its consumers
+to the shared tab-stop contract. Clarify the failing keys before attributing
 a report to the list's arrow-navigation design.
 
 Prevention:

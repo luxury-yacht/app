@@ -77,6 +77,25 @@ describe('ContextMenu', () => {
     return { menu, items, onClose };
   };
 
+  it.each([{ key: 'Tab' }, { key: 'Tab', shiftKey: true }, { key: 'Escape' }])(
+    'returns focus to the invoking control on %o',
+    async (init) => {
+      const trigger = document.createElement('button');
+      document.body.append(trigger);
+      trigger.focus();
+      const { menu, onClose } = await renderMenu();
+      expect(document.activeElement).toBe(menu);
+      const event = new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true });
+      await act(async () => {
+        menu.dispatchEvent(event);
+      });
+      expect(event.defaultPrevented).toBe(true);
+      expect(onClose).toHaveBeenCalledOnce();
+      expect(document.activeElement).toBe(trigger);
+      trigger.remove();
+    }
+  );
+
   it('invokes item handler and closes when a menu item is clicked', async () => {
     const onClose = vi.fn();
     const onClick = vi.fn();

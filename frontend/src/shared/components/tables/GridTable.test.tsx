@@ -35,7 +35,7 @@ import { KeyboardProvider } from '@ui/shortcuts';
 // import React, { act } from 'react';
 import { act, useState } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -74,6 +74,12 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
       hasActiveBlockingSurface: () => false,
     }),
   };
+});
+
+beforeAll(() => {
+  // Clicking an option action now focuses its row before the action runs.
+  // jsdom has no layout/scroll implementation; the browser supplies this API.
+  Element.prototype.scrollIntoView ??= vi.fn();
 });
 
 interface SimpleRow {

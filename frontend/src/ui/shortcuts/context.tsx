@@ -17,6 +17,7 @@ import type {
 } from '@/types/shortcuts';
 import { isMacPlatform } from '@/utils/platform';
 import { focusRegisteredSearchShortcutTarget } from './searchShortcutRegistry';
+import { useKeyboardFocusIndicator } from './useKeyboardFocusIndicator';
 import { getShortcutKey, isInputElement, modifiersMatch, resolveEventElement } from './utils';
 
 interface KeyboardProviderValue {
@@ -440,6 +441,7 @@ export function KeyboardProvider({ children, disabled = false }: Readonly<Keyboa
 }
 
 const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disabled = false }) => {
+  useKeyboardFocusIndicator();
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(new Map());
   const [isEnabled, setIsEnabled] = useState(!disabled);
   const shortcutIdCounter = useRef(0);

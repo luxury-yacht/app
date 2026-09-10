@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAriaAnnouncements } from './hooks/useAriaAnnouncements';
 import { useDropdownState } from './hooks/useDropdownState';
@@ -22,6 +22,7 @@ import {
   DropdownSelectAllIcon,
   DropdownSelectNoneIcon,
 } from '@shared/components/icons/DropdownIcons';
+import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { getAppZoomFactor } from '@shared/utils/appZoom';
 import { useKeyboardSurface } from '@ui/shortcuts';
 
@@ -530,7 +531,7 @@ type OnlyActionConfig = {
 
 type KeyboardNavigationResult = 'handled' | 'handled-no-prevent' | 'ignored';
 
-interface ActionRowTabContext {
+interface DropdownTabContext {
   isOpen: boolean;
   hasOptionActions: boolean;
   trigger: HTMLButtonElement | null;
@@ -538,39 +539,30 @@ interface ActionRowTabContext {
   closeDropdown: () => void;
 }
 
-const handleActionRowTab = (
+const handleDropdownTab = (
   event: KeyboardEvent,
-  { isOpen, hasOptionActions, trigger, menu, closeDropdown }: ActionRowTabContext
+  { isOpen, hasOptionActions, trigger, menu, closeDropdown }: DropdownTabContext
 ): boolean | null => {
-  if (event.key !== 'Tab' || !isOpen || !hasOptionActions) {
+  if (event.key !== 'Tab' || !isOpen) {
     return null;
   }
 
   const activeElement = document.activeElement;
+  const focusableElements = getTabbableElements(menu);
   if (!event.shiftKey && activeElement === trigger) {
-    const firstAction = menu?.querySelector<HTMLElement>(
-      '.dropdown-option-actions button:not([disabled])'
-    );
+    const firstAction = hasOptionActions
+      ? menu?.querySelector<HTMLElement>('.dropdown-option-actions button:not([disabled])')
+      : focusableElements[0];
     if (firstAction) {
       firstAction.focus();
       return true;
     }
   }
-  if (!activeElement || !menu?.contains(activeElement)) {
-    return null;
-  }
-
-  const focusableElements = Array.from(
-    menu.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    )
-  );
   const activeIndex = focusableElements.indexOf(activeElement as HTMLElement);
-  const leavingDialog = event.shiftKey
-    ? activeIndex === 0
-    : activeIndex === focusableElements.length - 1;
-  if (!leavingDialog) {
-    return false;
+  const nextIndex = activeIndex + (event.shiftKey ? -1 : 1);
+  if (activeIndex >= 0 && nextIndex >= 0 && nextIndex < focusableElements.length) {
+    focusableElements[nextIndex].focus();
+    return true;
   }
 
   closeDropdown();
@@ -1015,6 +1007,11 @@ const DropdownHiddenInput = ({ name, value }: Pick<DropdownProps, 'name' | 'valu
   return <input type="hidden" name={name} value={Array.isArray(value) ? value.join(',') : value} />;
 };
 
+const resolveBulkActions = (
+  actions: DropdownProps['additionalBulkActions'],
+  closeDropdown: () => void
+) => (typeof actions === 'function' ? actions({ closeDropdown }) : actions);
+
 const Dropdown = <TMetadata,>({
   options,
   value,
@@ -1202,6 +1199,18 @@ const Dropdown = <TMetadata,>({
     [selectableFilteredValues, selectedValueSet]
   );
 
+  const applyBulkSelection = useCallback(
+    (nextValues: string[]) => {
+      // All/None disable themselves after activation. Move focus before the
+      // update so WebKit cannot drop it to the document body.
+      if (menuRef.current?.contains(document.activeElement)) {
+        (searchInputRef.current ?? triggerRef.current)?.focus();
+      }
+      onChange(nextValues);
+    },
+    [menuRef, onChange, triggerRef]
+  );
+
   const handleSelectAll = useMemo(
     () => () => {
       if (!multiple) {
@@ -1209,9 +1218,9 @@ const Dropdown = <TMetadata,>({
       }
       const currentValues = Array.isArray(value) ? value : [];
       const nextValues = Array.from(new Set([...currentValues, ...selectableFilteredValues]));
-      onChange(nextValues);
+      applyBulkSelection(nextValues);
     },
-    [multiple, onChange, selectableFilteredValues, value]
+    [applyBulkSelection, multiple, selectableFilteredValues, value]
   );
 
   const handleSelectNone = useMemo(
@@ -1221,9 +1230,9 @@ const Dropdown = <TMetadata,>({
       }
       const currentValues = Array.isArray(value) ? value : [];
       const visibleValues = new Set(selectableFilteredValues);
-      onChange(currentValues.filter((optionValue) => !visibleValues.has(optionValue)));
+      applyBulkSelection(currentValues.filter((optionValue) => !visibleValues.has(optionValue)));
     },
-    [multiple, onChange, selectableFilteredValues, value]
+    [applyBulkSelection, multiple, selectableFilteredValues, value]
   );
 
   // Scroll highlighted option into view
@@ -1310,7 +1319,7 @@ const Dropdown = <TMetadata,>({
       return false;
     }
 
-    const tabResult = handleActionRowTab(event, {
+    const tabResult = handleDropdownTab(event, {
       isOpen,
       hasOptionActions: Boolean(renderOptionActions),
       trigger: triggerRef.current,
@@ -1319,6 +1328,15 @@ const Dropdown = <TMetadata,>({
     });
     if (tabResult !== null) {
       return tabResult;
+    }
+
+    // List navigation belongs to the combobox, not the popup's action buttons.
+    if (
+      event.key !== 'Escape' &&
+      event.target !== triggerRef.current &&
+      event.target !== searchInputRef.current
+    ) {
+      return false;
     }
 
     // The "only" affordance is revealed by hover, so the keyboard needs its own
@@ -1361,10 +1379,7 @@ const Dropdown = <TMetadata,>({
     setHighlightedIndex(-1);
   };
 
-  const resolvedAdditionalBulkActions =
-    typeof additionalBulkActions === 'function'
-      ? additionalBulkActions({ closeDropdown })
-      : additionalBulkActions;
+  const resolvedAdditionalBulkActions = resolveBulkActions(additionalBulkActions, closeDropdown);
 
   const showBulkActionLabels = !searchable;
   const triggerContent = (

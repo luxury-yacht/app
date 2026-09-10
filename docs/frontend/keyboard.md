@@ -31,6 +31,10 @@ add global document/window listeners for ordinary app behavior.
 - Returning to a region restores its last available control. Hidden, disabled,
   inert, and disconnected targets are discarded. An empty content region can
   receive focus itself. Focusing a panel raises it without selecting another tab.
+- KeyboardProvider normalizes clicked button/tab focus before activation, so
+  native WebKit pointer behavior cannot leave the next key in the old region.
+  Its shared focus observer runs before local capture handlers and clears
+  keyboard indication on pointer use and provider cleanup.
 - Both local Tab navigation and region switching show an explicit focus ring,
   including immediately after a mouse click. The ring follows the final focused
   item when a composite root redirects focus.
@@ -79,7 +83,18 @@ Surface kinds include:
 
 - Modals trap focus and own `Escape` unless explicitly delegated.
 - Command palette owns its local navigation while open.
-- Dropdowns and menus own arrows, `Enter`, `Space`, and `Escape` while active.
+- Dropdowns and menus own their list keys while the list/combobox owns focus.
+  Child action buttons retain their own Enter/Space behavior. The same guard
+  applies to table rows and tab strips.
+- Dropdown Tab visits search, bulk and option-action controls, returning to the
+  trigger at the popup boundary. Closing or disabling the focused action must
+  restore a usable focus target before it disappears. Control+Tab resolves the
+  originating region through shared portal ownership.
+- Context-menu Tab/Shift+Tab and Escape return focus to the invoking control;
+  Favorites reveals actions on focus within its row and returns to its trigger
+  on Escape.
+- DockablePanel owns local Tab order, including App Logs and Diagnostics.
+  Consumers retain one roving tab stop and do not install competing walkers.
 - Comboboxes keep DOM focus on the trigger or search field and expose the
   highlighted option through `aria-activedescendant`; popup options are not
   additional tab stops.

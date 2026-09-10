@@ -33,6 +33,120 @@ describe('GridTable keyboard integration', () => {
     container.remove();
   });
 
+  it.each(['Enter', ' '])(
+    'does not activate a table row when %s belongs to its child button',
+    async (key) => {
+      const onRowClick = vi.fn();
+      await act(async () =>
+        root.render(
+          <KeyboardProvider>
+            <ZoomProvider>
+              <GridTable
+                data={rows}
+                columns={[
+                  {
+                    key: 'action',
+                    header: 'Action',
+                    render: () => (
+                      <button type="button" aria-label="Row action">
+                        Action
+                      </button>
+                    ),
+                  },
+                ]}
+                keyExtractor={(item) => item.id}
+                onRowClick={onRowClick}
+              />
+            </ZoomProvider>
+          </KeyboardProvider>
+        )
+      );
+      const button = requireValue(
+        container.querySelector<HTMLElement>('[aria-label="Row action"]'),
+        'row action'
+      );
+      await act(async () => button.focus());
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      await act(async () => {
+        button.dispatchEvent(event);
+      });
+      expect(event.defaultPrevented).toBe(false);
+      expect(onRowClick).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([false, true])(
+    'retains row activation and hover ownership (empty: %s)',
+    async (empty) => {
+      const onRowClick = vi.fn();
+      await act(async () =>
+        root.render(
+          <KeyboardProvider>
+            <ZoomProvider>
+              <GridTable
+                data={empty ? [] : rows}
+                columns={[
+                  ...columns,
+                  {
+                    key: 'action',
+                    header: 'Action',
+                    render: () => (
+                      <button type="button" aria-label="Row action">
+                        Action
+                      </button>
+                    ),
+                  },
+                ]}
+                keyExtractor={(item) => item.id}
+                onRowClick={onRowClick}
+                virtualization={{ enabled: false }}
+              />
+            </ZoomProvider>
+          </KeyboardProvider>
+        )
+      );
+      const table = requireValue(
+        container.querySelector<HTMLElement>('table[tabindex="0"]'),
+        'table'
+      );
+      await act(async () => {
+        table.focus();
+      });
+      await act(async () => {
+        table.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+        );
+      });
+      expect(onRowClick).toHaveBeenCalledTimes(empty ? 0 : 1);
+      if (empty) {
+        return;
+      }
+      const button = requireValue(
+        container.querySelector<HTMLElement>('[aria-label="Row action"]'),
+        'row action'
+      );
+      const row = requireValue(container.querySelector<HTMLElement>('.gridtable-row'), 'row');
+      await act(async () => button.focus());
+      await act(async () => {
+        row.dispatchEvent(
+          new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body })
+        );
+      });
+      expect(row.classList.contains('gridtable-row--focused')).toBe(false);
+      await act(async () => {
+        row.dispatchEvent(
+          new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })
+        );
+      });
+      await act(async () => {
+        button.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+        );
+      });
+      expect(onRowClick).toHaveBeenCalledTimes(1);
+    }
+  );
+
   it.each([false, true])(
     'visits the header between filters and body through app navigation (empty: %s)',
     async (empty) => {
@@ -45,7 +159,7 @@ describe('GridTable keyboard integration', () => {
                 <GridTable
                   data={empty ? [] : rows}
                   columns={columns.map((column) => ({ ...column, sortable: true }))}
-                  keyExtractor={(row) => row.id}
+                  keyExtractor={(item) => item.id}
                   filters={{ enabled: true }}
                   onSort={vi.fn()}
                 />
@@ -97,7 +211,7 @@ describe('GridTable keyboard integration', () => {
             <GridTable
               data={rows}
               columns={columns}
-              keyExtractor={(row) => row.id}
+              keyExtractor={(item) => item.id}
               enableContextMenu
               getCustomContextMenuItems={() => [{ label: 'Inspect row', onClick: vi.fn() }]}
               onPageNext={nextPage}

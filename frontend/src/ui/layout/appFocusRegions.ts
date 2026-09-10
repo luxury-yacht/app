@@ -1,11 +1,11 @@
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
+import { getFocusPortalOwner } from '@shared/utils/focusOwnership';
 import { focusPanelById } from '@ui/dockable/useDockablePanelState';
 import { useShortcuts } from '@ui/shortcuts';
 import { hasNativeTabHandling } from '@ui/shortcuts/utils';
 import { useEffect, useRef } from 'react';
 
 const REGION_SELECTOR = '[data-app-region], .dockable-panel';
-const PROGRAMMATIC_FOCUS_CLASS = 'keyboard-programmatic-focus';
 
 interface AppRegion {
   roots: HTMLElement[];
@@ -45,8 +45,10 @@ const getRegions = (): AppRegion[] => {
   return regions;
 };
 
-const contains = (region: AppRegion, element: Element | null) =>
-  region.roots.some((root) => element?.closest(REGION_SELECTOR) === root);
+const contains = (region: AppRegion, element: Element | null) => {
+  const target = getFocusPortalOwner(element) ?? element;
+  return region.roots.some((root) => target?.closest(REGION_SELECTOR) === root);
+};
 
 const getRegionControls = (region: AppRegion) =>
   region.roots
@@ -66,15 +68,6 @@ const getEntryTarget = (region: AppRegion): HTMLElement => {
   return getRegionControls(region)[0] ?? root;
 };
 
-const focusControl = (target: HTMLElement) => {
-  target.focus();
-  // Composite roots can redirect focus to their selected item synchronously.
-  const focused = document.activeElement;
-  if (focused instanceof HTMLElement && target.contains(focused)) {
-    focused.classList.add(PROGRAMMATIC_FOCUS_CLASS);
-  }
-};
-
 const focusRegion = (region: AppRegion, saved: HTMLElement | undefined) => {
   const root = region.roots[0];
   if (root.dataset.activePanelId) {
@@ -82,7 +75,7 @@ const focusRegion = (region: AppRegion, saved: HTMLElement | undefined) => {
   }
   const target =
     saved && contains(region, saved) && isAvailable(saved) ? saved : getEntryTarget(region);
-  focusControl(target);
+  target.focus();
   return region.roots.some((element) => element.contains(document.activeElement));
 };
 
@@ -92,7 +85,7 @@ const focusAfterCompositeControl = (controls: HTMLElement[], backwards: boolean)
   if (index < 0) {
     return false;
   }
-  focusControl(controls[(index + (backwards ? -1 : 1) + controls.length) % controls.length]);
+  controls[(index + (backwards ? -1 : 1) + controls.length) % controls.length].focus();
   return true;
 };
 
@@ -110,36 +103,30 @@ const navigateLocally = (event: KeyboardEvent | undefined): boolean => {
     return true;
   }
   if (index >= 0) {
-    focusControl(controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length]);
+    controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length].focus();
     return true;
   }
   const target = (event.shiftKey ? controls[controls.length - 1] : controls[0]) ?? region.roots[0];
-  focusControl(target);
+  target.focus();
   return true;
 };
 
 export function useAppRegionNavigation() {
   const savedFocus = useRef(new WeakMap<HTMLElement, HTMLElement>());
   useEffect(() => {
-    let indicatedElement: HTMLElement | null = null;
     const rememberFocus = () => {
       const target = document.activeElement;
       if (!(target instanceof HTMLElement)) {
         return;
       }
-      if (indicatedElement !== target) {
-        indicatedElement?.classList.remove(PROGRAMMATIC_FOCUS_CLASS);
-      }
-      indicatedElement = target;
       const region = getRegions().find((candidate) => contains(candidate, target));
       if (region) {
-        savedFocus.current.set(region.roots[0], target);
+        savedFocus.current.set(region.roots[0], getFocusPortalOwner(target) ?? target);
       }
     };
     document.addEventListener('focusin', rememberFocus);
     return () => {
       document.removeEventListener('focusin', rememberFocus);
-      indicatedElement?.classList.remove(PROGRAMMATIC_FOCUS_CLASS);
     };
   }, []);
 

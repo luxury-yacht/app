@@ -469,6 +469,7 @@ describe('DockablePanel', () => {
     });
 
     expect(document.activeElement).toBe(firstTabbable);
+    expect(firstTabbable?.classList.contains('keyboard-programmatic-focus')).toBe(true);
 
     await act(async () => {
       firstTabbable?.dispatchEvent(

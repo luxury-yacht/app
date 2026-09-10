@@ -93,6 +93,7 @@ describe('useModalFocusTrap', () => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
     });
     expect(document.activeElement).toBe(controls[1]);
+    expect(controls[1].classList.contains('keyboard-programmatic-focus')).toBe(true);
 
     act(() => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));

@@ -1,3 +1,4 @@
+import { getFocusPortalOwner } from '@shared/utils/focusOwnership';
 import type { KeyboardSurfaceKeyResult } from '@ui/shortcuts/context';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import type { RefObject } from 'react';
@@ -25,21 +26,8 @@ const MANAGED_ARIA_HIDDEN_ATTR = 'data-modal-managed-aria-hidden';
 const openModalStack: OpenModalEntry[] = [];
 
 const isOwnedFocusPortalTarget = (root: HTMLElement, target: EventTarget | null) => {
-  if (!(target instanceof Element)) {
-    return false;
-  }
-
-  const portal = target.closest<HTMLElement>('[data-focus-portal-owner]');
-  const ownerId = portal?.dataset.focusPortalOwner;
-  if (!ownerId) {
-    return false;
-  }
-
-  const possibleOwners = [
-    root,
-    ...Array.from(root.querySelectorAll<HTMLElement>('[aria-controls]')),
-  ];
-  return possibleOwners.some((owner) => owner.getAttribute('aria-controls') === ownerId);
+  const owner = getFocusPortalOwner(target);
+  return owner !== null && root.contains(owner);
 };
 
 const getTrackedBodyChildren = () =>

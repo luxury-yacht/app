@@ -427,6 +427,9 @@ export function Tabs({
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>, currentIndex: number) => {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
     switch (event.key) {
       case 'ArrowRight':
         event.preventDefault();

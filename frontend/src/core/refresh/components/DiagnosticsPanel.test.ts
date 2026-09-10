@@ -2161,36 +2161,20 @@ describe('DiagnosticsPanel component', () => {
     await rendered.unmount();
   });
 
-  test('each tab carries data-diagnostics-focusable="true" for the focus walker', async () => {
-    // The focus walker at DiagnosticsPanel.tsx:~2067 queries
-    // '[data-diagnostics-focusable="true"]' to drive Escape/Arrow navigation.
-    // If extraProps stops being forwarded through the shared Tabs component,
-    // the attribute silently disappears and keyboard nav breaks. This test
-    // guards that regression.
+  test('exposes the active diagnostics tab in the shared panel Tab order', async () => {
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    await flushAsync();
-
-    const focusableEls = rendered.container.querySelectorAll('[data-diagnostics-focusable="true"]');
-    // Expect exactly six focusable tab elements (one per tab descriptor).
-    expect(focusableEls.length).toBe(6);
-    expect(Array.from(focusableEls).map((el) => el.textContent)).toEqual([
-      'K8s API',
-      'Cluster Data',
-      'Connections',
-      'Tables',
-      'Cap Checks',
-      'Permissions',
-    ]);
-    // Each should also carry role="tab" — confirming they are the tab divs.
-    for (const el of Array.from(focusableEls)) {
-      expect(el.getAttribute('role')).toBe('tab');
-    }
-
+    const tabs = Array.from(
+      rendered.container.querySelectorAll<HTMLElement>(
+        '[aria-label="Diagnostics Panel Tabs"] [role="tab"]'
+      )
+    );
+    expect(tabs.filter((tab) => tab.tabIndex === 0)).toHaveLength(1);
+    expect(tabs.find((tab) => tab.tabIndex === 0)?.getAttribute('aria-selected')).toBe('true');
     await rendered.unmount();
   });
 
-  test('tabs into the first diagnostics tab when the panel is open', async () => {
+  test('does not steal Tab from a control outside the diagnostics panel', async () => {
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(
       DiagnosticsPanel,
@@ -2215,11 +2199,7 @@ describe('DiagnosticsPanel component', () => {
       await Promise.resolve();
     });
 
-    const focusableEls = rendered.container.querySelectorAll<HTMLElement>(
-      '[data-diagnostics-focusable="true"]'
-    );
-    expect(focusableEls.length).toBeGreaterThan(0);
-    expect(document.activeElement).toBe(focusableEls[0]);
+    expect(document.activeElement).toBe(outsideButton);
 
     outsideButton.remove();
     await rendered.unmount();

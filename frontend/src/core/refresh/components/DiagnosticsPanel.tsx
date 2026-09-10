@@ -6,14 +6,8 @@
  * into the developer-facing runtime inspection surface.
  */
 
-import React, {
-  type HTMLAttributes,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import type React from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './DiagnosticsPanel.css';
 import {
   resetGridTablePerformanceDiagnostics,
@@ -21,8 +15,7 @@ import {
 } from '@shared/components/tables/performance/gridTablePerformanceStore';
 import { type TabDescriptor, Tabs } from '@shared/components/tabs';
 import { DockablePanel } from '@ui/dockable';
-import { useKeyboardSurface, useShortcut } from '@ui/shortcuts';
-import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import { useShortcut } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
 import { useCapabilityDiagnostics, useUserPermissions } from '@/core/capabilities';
 import { useViewState } from '@/core/contexts/ViewStateContext';
@@ -137,29 +130,18 @@ type DiagnosticsTabId =
   | 'effective-permissions'
   | 'connections';
 
-// Applied to every diagnostics tab via extraProps. The panel's custom focus
-// walker (querySelectorAll below) locates tabs through this marker — if it
-// ever stops being forwarded, keyboard navigation silently breaks.
-// The cast is needed because TypeScript's HTMLAttributes type doesn't include
-// an index signature for data-* attributes.
-const DIAGNOSTICS_FOCUSABLE_PROPS = {
-  'data-diagnostics-focusable': 'true',
-} as HTMLAttributes<HTMLElement>;
-
 const DIAGNOSTICS_TAB_DESCRIPTORS: TabDescriptor[] = [
-  { id: 'k8s-api', label: 'K8s API', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
-  { id: 'cluster-data', label: 'Cluster Data', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
-  { id: 'connections', label: 'Connections', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
-  { id: 'table-performance', label: 'Tables', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
+  { id: 'k8s-api', label: 'K8s API' },
+  { id: 'cluster-data', label: 'Cluster Data' },
+  { id: 'connections', label: 'Connections' },
+  { id: 'table-performance', label: 'Tables' },
   {
     id: 'capability-checks',
     label: 'Cap Checks',
-    extraProps: DIAGNOSTICS_FOCUSABLE_PROPS,
   },
   {
     id: 'effective-permissions',
     label: 'Permissions',
-    extraProps: DIAGNOSTICS_FOCUSABLE_PROPS,
   },
 ];
 
@@ -1347,39 +1329,6 @@ const splitCapabilityRows = (
   return { currentCapabilityRows, previousCapabilityRows };
 };
 
-interface DiagnosticsFocusNavigation {
-  panel: HTMLDivElement | null;
-  focusables: () => HTMLElement[];
-  findActiveIndex: () => number;
-  focusFirst: () => boolean;
-  focusLast: () => boolean;
-  focusAt: (index: number) => boolean;
-}
-
-const handleDiagnosticsTabKey = (
-  event: KeyboardEvent,
-  navigation: DiagnosticsFocusNavigation
-): boolean => {
-  if (event.key !== 'Tab') {
-    return false;
-  }
-  const target = event.target as HTMLElement | null;
-  if (target?.closest('.diagnostics-content')) {
-    return false;
-  }
-  const items = navigation.focusables();
-  if (items.length === 0) {
-    return false;
-  }
-  const direction = event.shiftKey ? -1 : 1;
-  const current = target && navigation.panel?.contains(target) ? navigation.findActiveIndex() : -1;
-  if (current === -1) {
-    return direction > 0 ? navigation.focusFirst() : navigation.focusLast();
-  }
-  const next = current + direction;
-  return next >= 0 && next < items.length ? navigation.focusAt(next) : false;
-};
-
 export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isOpen }) => {
   const [activeTab, setActiveTab] = useState<DiagnosticsTabId>('k8s-api');
   const gridTablePerformanceRows = useGridTablePerformanceDiagnostics();
@@ -2110,58 +2059,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     />
   );
 
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  const focusables = useCallback(() => {
-    if (!panelRef.current) {
-      return [];
-    }
-    return Array.from(
-      panelRef.current.querySelectorAll<HTMLElement>('[data-diagnostics-focusable="true"]')
-    );
-  }, []);
-
-  const focusAt = useCallback(
-    (index: number) => {
-      const items = focusables();
-      if (index < 0 || index >= items.length) {
-        return false;
-      }
-      items[index].focus();
-      return true;
-    },
-    [focusables]
-  );
-
-  const focusFirst = useCallback(() => focusAt(0), [focusAt]);
-  const focusLast = useCallback(() => {
-    const items = focusables();
-    return focusAt(items.length - 1);
-  }, [focusAt, focusables]);
-
-  const findActiveIndex = useCallback(() => {
-    const items = focusables();
-    const active = document.activeElement as HTMLElement | null;
-    return items.findIndex((el) => el === active || el.contains(active));
-  }, [focusables]);
-
-  useKeyboardSurface({
-    kind: 'panel',
-    rootRef: panelRef,
-    active: isOpen,
-    captureWhenActive: true,
-    priority: KeyboardScopePriority.DIAGNOSTICS_PANEL,
-    onKeyDown: (event) =>
-      handleDiagnosticsTabKey(event, {
-        panel: panelRef.current,
-        focusables,
-        findActiveIndex,
-        focusFirst,
-        focusLast,
-        focusAt,
-      }),
-  });
-
   const contentByTab: Record<DiagnosticsTabId, React.ReactNode> = {
     'cluster-data': clusterDataContent,
     'k8s-api': kubernetesAPIContent,
@@ -2173,7 +2070,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
   return (
     <DockablePanel
-      panelRef={panelRef}
       panelId="diagnostics"
       title="Diagnostics"
       isOpen={isOpen}
@@ -2190,7 +2086,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         activeId={activeTab}
         onActivate={(id) => setActiveTab(id as DiagnosticsTabId)}
         textTransform="uppercase"
-        disableRovingTabIndex
       />
       <div className="diagnostics-scroll-area">{contentByTab[activeTab]}</div>
     </DockablePanel>

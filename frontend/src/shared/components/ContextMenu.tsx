@@ -34,6 +34,11 @@ interface ContextMenuProps {
 
 const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) => {
   const menuRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }, []);
   const { zoomLevel } = useZoom();
   const [isPositioned, setIsPositioned] = useState(false);
   const menuId = useId().replace(/:/g, '');
@@ -74,17 +79,25 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
     onClose();
   };
 
+  const dismissFromKeyboard = () => {
+    onClose();
+    if (previousFocusRef.current?.isConnected) {
+      previousFocusRef.current.focus();
+    }
+    return true;
+  };
+
   useKeyboardSurface({
     kind: 'menu',
     rootRef: menuRef,
     active: true,
     priority: 925,
     suppressShortcuts: true,
-    onEscape: () => {
-      onClose();
-      return true;
-    },
+    onEscape: dismissFromKeyboard,
     onKeyDown: (event) => {
+      if (event.key === 'Tab') {
+        return dismissFromKeyboard();
+      }
       if (event.key === 'ArrowDown') {
         moveFocus(1);
         return true;

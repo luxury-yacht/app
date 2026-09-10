@@ -622,6 +622,139 @@ describe('Dropdown', () => {
     expect(secondRow?.classList.contains('highlighted')).toBe(false);
   });
 
+  it.each(['Enter', ' '])('leaves %s on an option action to the focused button', async (key) => {
+    const onChange = vi.fn();
+    const onAction = vi.fn();
+    await mount(
+      <Dropdown
+        options={OPTIONS}
+        value={[]}
+        multiple
+        onChange={onChange}
+        renderOptionActions={(option) => (
+          <button type="button" data-testid={`action-${option.value}`} onClick={onAction}>
+            Reorder
+          </button>
+        )}
+      />
+    );
+    const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
+    click(trigger);
+    act(() => trigger?.focus());
+    await pressKey(trigger, 'Tab');
+    const action = document.body.querySelector<HTMLElement>('[data-testid="action-alpha"]');
+    expect(document.activeElement).toBe(action);
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    await act(async () => {
+      action?.dispatchEvent(event);
+    });
+    expect(event.defaultPrevented).toBe(false);
+    expect(onChange).not.toHaveBeenCalled();
+    click(action);
+    expect(onAction).toHaveBeenCalledOnce();
+  });
+
+  it.each(['Enter', ' '])(
+    'tabs to bulk actions and leaves %s to the focused button',
+    async (key) => {
+      const onChange = vi.fn();
+      await mount(
+        <Dropdown
+          options={OPTIONS}
+          value={['alpha']}
+          multiple
+          showBulkActions
+          onChange={onChange}
+        />
+      );
+      const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
+      click(trigger);
+      act(() => trigger?.focus());
+      await pressKey(trigger, 'Tab');
+      const action = document.body.querySelector<HTMLElement>('.dropdown-bulk-action');
+      expect(document.activeElement).toBe(action);
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      await act(async () => {
+        action?.dispatchEvent(event);
+      });
+      expect(event.defaultPrevented).toBe(false);
+      expect(onChange).not.toHaveBeenCalled();
+      click(action);
+      expect(onChange).toHaveBeenCalledWith(['alpha', 'beta', 'gamma']);
+    }
+  );
+
+  it('restores a usable focus target when a bulk action disables itself', async () => {
+    function Controlled() {
+      const [value, setValue] = useState<string[]>([]);
+      return (
+        <Dropdown
+          options={OPTIONS}
+          value={value}
+          multiple
+          showBulkActions
+          onChange={(next) => setValue(next as string[])}
+        />
+      );
+    }
+    await mount(<Controlled />);
+    const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
+    click(trigger);
+    await pressKey(trigger, 'Tab');
+    const all = document.body.querySelector<HTMLElement>('[aria-label="Select all"]');
+    click(all);
+    expect(document.activeElement).toBe(trigger);
+    expect(all?.hasAttribute('disabled')).toBe(true);
+    await pressKey(trigger, 'Tab');
+    const none = document.body.querySelector<HTMLElement>('[aria-label="Select none"]');
+    expect(document.activeElement).toBe(none);
+    click(none);
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('restores the trigger when a searchable selection closes its portal', async () => {
+    await mount(<Dropdown options={OPTIONS} value="" onChange={vi.fn()} searchable />);
+    const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
+    click(trigger);
+    const search = document.body.querySelector<HTMLElement>('.search-input');
+    await pressKey(search, 'ArrowDown');
+    await pressKey(search, 'Enter');
+    expect(document.body.querySelector('.dropdown-menu')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('moves through action portal controls in both directions', async () => {
+    await mount(
+      <Dropdown
+        options={OPTIONS}
+        value={[]}
+        multiple
+        onChange={vi.fn()}
+        renderOptionActions={(option) => (
+          <>
+            <button type="button" data-testid={`up-${option.value}`}>
+              Up
+            </button>
+            <button type="button" data-testid={`down-${option.value}`}>
+              Down
+            </button>
+          </>
+        )}
+      />
+    );
+    const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
+    click(trigger);
+    act(() => trigger?.focus());
+    await pressKey(trigger, 'Tab');
+    const first = document.body.querySelector<HTMLElement>('[data-testid="up-alpha"]');
+    const second = document.body.querySelector<HTMLElement>('[data-testid="down-alpha"]');
+    expect(document.activeElement).toBe(first);
+    await pressKey(first, 'Tab');
+    expect(document.activeElement).toBe(second);
+    await pressKey(second, 'Tab', { shiftKey: true });
+    expect(document.activeElement).toBe(first);
+  });
+
   it('returns focus to the trigger when Tab leaves an action-row dialog', async () => {
     await mount(
       <Dropdown
@@ -725,7 +858,7 @@ describe('Dropdown', () => {
     expect(dropdown?.classList.contains('search-focused')).toBe(false);
   });
 
-  it('closes on Tab without preventing the browser focus move', async () => {
+  it('returns Tab from the final popup control to the trigger', async () => {
     await mount(
       <Dropdown options={OPTIONS} value="" onChange={vi.fn()} searchable placeholder="Searchable" />
     );
@@ -743,7 +876,8 @@ describe('Dropdown', () => {
     });
 
     expect(document.body.querySelector('.dropdown-menu')).toBeNull();
-    expect(event.defaultPrevented).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(container.querySelector('.dropdown-trigger'));
   });
 
   it('invokes onOpen and onClose callbacks', async () => {

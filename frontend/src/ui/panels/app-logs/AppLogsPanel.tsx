@@ -29,8 +29,8 @@ import { AriaGridColumnHeader, AriaGridRow } from '@shared/components/tables/Ari
 import { acquireColumnResizeCursor } from '@shared/utils/columnResizeCursor';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { DockablePanel } from '@ui/dockable';
-import { useKeyboardSurface, useShortcut } from '@ui/shortcuts';
-import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
+import { useShortcut } from '@ui/shortcuts';
+import { KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { errorHandler } from '@utils/errorHandler';
 import {
   type CSSProperties,
@@ -173,7 +173,6 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
   const [columnWidths, setColumnWidths] = useState(DEFAULT_LOG_COLUMN_WIDTHS);
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const textFilterInputRef = useRef<HTMLInputElement>(null);
-  const panelScopeRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
   const prevScrollHeightRef = useRef(0);
   const prevScrollTopRef = useRef(0);
@@ -812,37 +811,6 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
     logs.length,
   ]);
 
-  const focusFirstControl = useCallback(() => {
-    if (textFilterInputRef.current) {
-      textFilterInputRef.current.focus();
-      return true;
-    }
-    if (logsContainerRef.current) {
-      logsContainerRef.current.focus();
-      return true;
-    }
-    return false;
-  }, []);
-
-  useKeyboardSurface({
-    kind: 'panel',
-    rootRef: panelScopeRef,
-    active: isOpen,
-    captureWhenActive: false,
-    priority: KeyboardScopePriority.APP_LOGS_PANEL,
-    onKeyDown: (event) => {
-      if (event.key !== 'Tab') {
-        return false;
-      }
-
-      const target = event.target as HTMLElement | null;
-      if (!event.shiftKey || !target || !logsContainerRef.current?.contains(target)) {
-        return false;
-      }
-      return focusFirstControl();
-    },
-  });
-
   let renderedLogs: ReactNode;
   if (isLoading) {
     renderedLogs = <LoadingSpinner message="Loading logs..." />;
@@ -866,7 +834,6 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
 
   return (
     <DockablePanel
-      panelRef={panelScopeRef}
       panelId="app-logs"
       title="Application Logs"
       isOpen={isOpen}
