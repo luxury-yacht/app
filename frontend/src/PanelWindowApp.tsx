@@ -17,6 +17,7 @@ import { DockablePanelProvider } from '@ui/dockable';
 import type { TabGroupState } from '@ui/dockable/tabGroupTypes';
 import { AppErrorBoundary, PanelErrorBoundary } from '@ui/errors';
 import AppHeader from '@ui/layout/AppHeader';
+import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
 import { KeyboardProvider } from '@ui/shortcuts';
 import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -277,6 +278,7 @@ function PanelWindowSurface({
       canStartTabDrag={canStartTabDrag}
     >
       <PanelWindowShortcuts descriptor={descriptor} ready={ready} />
+      <AppRegionNavigation />
       <TextContextMenu />
       <AppHeader mode="panel" clusterName={clusterName} />
       <ErrorNotificationSystem />

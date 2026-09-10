@@ -824,43 +824,22 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
     return false;
   }, []);
 
-  const focusLastControl = useCallback(() => {
-    if (logsContainerRef.current) {
-      logsContainerRef.current.focus();
-      return true;
-    }
-    if (textFilterInputRef.current) {
-      textFilterInputRef.current.focus();
-      return true;
-    }
-    return false;
-  }, []);
-
   useKeyboardSurface({
     kind: 'panel',
     rootRef: panelScopeRef,
     active: isOpen,
-    captureWhenActive: true,
+    captureWhenActive: false,
     priority: KeyboardScopePriority.APP_LOGS_PANEL,
     onKeyDown: (event) => {
       if (event.key !== 'Tab') {
         return false;
       }
 
-      const direction = event.shiftKey ? 'backward' : 'forward';
       const target = event.target as HTMLElement | null;
-
-      if (target && panelScopeRef.current?.contains(target)) {
-        if (logsContainerRef.current?.contains(target)) {
-          return direction === 'forward' ? false : focusFirstControl();
-        }
+      if (!event.shiftKey || !target || !logsContainerRef.current?.contains(target)) {
         return false;
       }
-
-      if (direction === 'forward') {
-        return focusFirstControl();
-      }
-      return focusLastControl();
+      return focusFirstControl();
     },
   });
 

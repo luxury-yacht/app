@@ -346,7 +346,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       : clusterTabDescriptors;
 
   return (
-    <div ref={assignRootRef} className="cluster-tabs-wrapper">
+    <div ref={assignRootRef} className="cluster-tabs-wrapper" data-app-region="header">
       {panelMenu ? (
         <ClusterPanelsMenu
           clusterId={panelMenu.clusterId}

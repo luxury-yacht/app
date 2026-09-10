@@ -1068,7 +1068,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(onFilterChange).toHaveBeenCalledTimes(1);
   });
 
-  it('tabs from the last filter control into the table body', async () => {
+  it('leaves filter-boundary Tab to visit the separate table header', async () => {
     let currentFilters: GridTableFilterState = {
       search: 'Row 1',
       kinds: { mode: 'all' },
@@ -1122,10 +1122,10 @@ describe('GridTable interactions (non-virtualized)', () => {
       );
     });
 
-    expect(document.activeElement).toBe(grid);
+    expect(document.activeElement).toBe(columnsTrigger);
   });
 
-  it('shift-tabs from the table body back to the last filter control', async () => {
+  it('leaves body-boundary Shift+Tab to visit the separate table header', async () => {
     let currentFilters: GridTableFilterState = {
       search: 'Row 1',
       kinds: { mode: 'all' },
@@ -1180,7 +1180,7 @@ describe('GridTable interactions (non-virtualized)', () => {
       );
     });
 
-    expect(document.activeElement).toBe(columnsTrigger);
+    expect(document.activeElement).toBe(grid);
   });
 
   it('removes row-internal controls from the tab order so the grid stays the only body tab stop', async () => {

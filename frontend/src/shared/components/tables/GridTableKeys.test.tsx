@@ -198,11 +198,7 @@ describe('GridTableKeys filter target selectors', () => {
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
-        focusRef,
-        tableDataLength: 1,
-        focusedRowKey: 'row-1',
         suppressFocusedRowHighlight: vi.fn(),
-        jumpToIndex: () => true,
       });
 
       return (
@@ -319,11 +315,7 @@ describe('GridTableKeys filter target selectors', () => {
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
-        focusRef,
-        tableDataLength: 1,
-        focusedRowKey: 'row-1',
         suppressFocusedRowHighlight: vi.fn(),
-        jumpToIndex: () => true,
       });
 
       return (
@@ -461,11 +453,7 @@ describe('GridTableKeys filter target selectors', () => {
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
-        focusRef,
-        tableDataLength: 1,
-        focusedRowKey: 'row-1',
         suppressFocusedRowHighlight: vi.fn(),
-        jumpToIndex: () => true,
       });
 
       return (
@@ -513,11 +501,7 @@ describe('GridTableKeys filter target selectors', () => {
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
-        focusRef,
-        tableDataLength: 1,
-        focusedRowKey: 'row-1',
         suppressFocusedRowHighlight,
-        jumpToIndex: () => true,
       });
 
       return (

@@ -16,11 +16,7 @@ interface GridTableKeyboardOptions {
   filtersContainerRef: RefObject<HTMLDivElement | null>;
   filterFocusIndexRef: RefObject<number | null>;
   wrapperRef: RefObject<HTMLDivElement | null>;
-  focusRef: RefObject<HTMLTableElement | null>;
-  tableDataLength: number;
-  focusedRowKey: string | null;
   suppressFocusedRowHighlight: () => void;
-  jumpToIndex: (index: number) => boolean;
 }
 
 export const useGridTableKeyboardScopes = ({
@@ -28,11 +24,7 @@ export const useGridTableKeyboardScopes = ({
   filtersContainerRef,
   filterFocusIndexRef,
   wrapperRef,
-  focusRef,
-  tableDataLength,
-  focusedRowKey,
   suppressFocusedRowHighlight,
-  jumpToIndex,
 }: GridTableKeyboardOptions) => {
   const getFilterTargets = useCallback((): HTMLElement[] => {
     if (!filteringEnabled || !filtersContainerRef.current) {
@@ -61,60 +53,20 @@ export const useGridTableKeyboardScopes = ({
       if (targets.length === 0) {
         return 'bubble';
       }
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      const activeIndex = target ? targets.indexOf(target) : -1;
+      const activeIndex = targets.indexOf(event.target as HTMLElement);
       if (activeIndex === -1) {
         return 'handled';
       }
-      if (direction === 'forward') {
-        if (activeIndex >= targets.length - 1) {
-          filterFocusIndexRef.current = null;
-          return 'bubble';
-        }
-        event.preventDefault();
-        focusFilterAtIndex(activeIndex + 1);
-        return 'handled';
-      }
-      if (activeIndex <= 0) {
+      const nextIndex = activeIndex + (direction === 'forward' ? 1 : -1);
+      if (nextIndex < 0 || nextIndex >= targets.length) {
         filterFocusIndexRef.current = null;
         return 'bubble';
       }
       event.preventDefault();
-      focusFilterAtIndex(activeIndex - 1);
+      focusFilterAtIndex(nextIndex);
       return 'handled';
     },
     [focusFilterAtIndex, filterFocusIndexRef, getFilterTargets]
-  );
-
-  const tableTabNavigationHandler = useCallback(
-    ({ direction, event }: { direction: 'forward' | 'backward'; event: KeyboardEvent }) => {
-      const filterTargets = getFilterTargets();
-      if (direction === 'backward' && filterTargets.length > 0) {
-        suppressFocusedRowHighlight();
-        event.preventDefault();
-        focusFilterAtIndex(filterTargets.length - 1);
-        return 'handled';
-      }
-      suppressFocusedRowHighlight();
-      filterFocusIndexRef.current = null;
-      return 'bubble';
-    },
-    [focusFilterAtIndex, filterFocusIndexRef, getFilterTargets, suppressFocusedRowHighlight]
-  );
-
-  const tableTabEnterHandler = useCallback(
-    ({ direction }: { direction: 'forward' | 'backward' }) => {
-      filterFocusIndexRef.current = null;
-      const element = focusRef.current;
-      if (element) {
-        element.focus();
-      }
-      if (focusedRowKey === null && tableDataLength > 0) {
-        const targetIndex = direction === 'backward' ? tableDataLength - 1 : 0;
-        jumpToIndex(targetIndex);
-      }
-    },
-    [filterFocusIndexRef, focusRef, focusedRowKey, jumpToIndex, tableDataLength]
   );
 
   const handleTableKeyDown = useCallback(
@@ -122,14 +74,13 @@ export const useGridTableKeyboardScopes = ({
       if (event.key !== 'Tab') {
         return false;
       }
-      const direction = event.shiftKey ? 'backward' : 'forward';
-      const result = tableTabNavigationHandler({ direction, event });
-      if (result === 'handled') {
-        return true;
-      }
+      suppressFocusedRowHighlight();
+      filterFocusIndexRef.current = null;
+      // The header is a separate sibling between filters and body. Let the
+      // browser (or containing modal/panel) visit its controls in DOM order.
       return false;
     },
-    [tableTabNavigationHandler]
+    [filterFocusIndexRef, suppressFocusedRowHighlight]
   );
 
   const handleFilterKeyDown = useCallback(
@@ -142,14 +93,9 @@ export const useGridTableKeyboardScopes = ({
       if (result === 'handled') {
         return true;
       }
-      if (result === 'bubble' && direction === 'forward') {
-        tableTabEnterHandler({ direction });
-        event.preventDefault();
-        return true;
-      }
       return false;
     },
-    [filterTabNavigationHandler, tableTabEnterHandler]
+    [filterTabNavigationHandler]
   );
 
   useKeyboardSurface({

@@ -17,6 +17,7 @@ import {
   pasteIntoContentEditable,
   useKeyboardContext,
 } from './context';
+import { useShortcut } from './hooks';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn<(event: string, handler: (...args: unknown[]) => void) => () => void>(
@@ -291,6 +292,52 @@ describe('keyboard handling edge cases', () => {
     container.remove();
     vi.restoreAllMocks();
   });
+
+  it.each(['input', 'textarea'])(
+    'leaves shifted punctuation in a %s while help still works outside it',
+    async (tag) => {
+      const openHelp = vi.fn();
+      const Harness = () => {
+        useShortcut({ key: '?', modifiers: { shift: true }, handler: openHelp });
+        return <button type="button">Outside editor</button>;
+      };
+      await act(async () =>
+        root.render(
+          <KeyboardProvider>
+            <Harness />
+          </KeyboardProvider>
+        )
+      );
+      const input = document.createElement(tag);
+      container.appendChild(input);
+      input.focus();
+      const typing = new KeyboardEvent('keydown', {
+        key: '?',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        input.dispatchEvent(typing);
+      });
+      expect(typing.defaultPrevented).toBe(false);
+      expect(openHelp).not.toHaveBeenCalled();
+
+      const help = new KeyboardEvent('keydown', {
+        key: '?',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      const button = container.querySelector('button');
+      button?.focus();
+      act(() => {
+        button?.dispatchEvent(help);
+      });
+      expect(help.defaultPrevented).toBe(true);
+      expect(openHelp).toHaveBeenCalledTimes(1);
+    }
+  );
 
   it('allows extended modifier shortcuts in inputs while protecting native copy/paste', async () => {
     const plainCopyHandler = vi.fn();

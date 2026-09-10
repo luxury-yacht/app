@@ -35,14 +35,10 @@ import { withLazyBoundary } from '@shared/utils/react/withLazyBoundary';
 import { CommandPalette } from '@ui/command-palette/CommandPalette';
 import { useCommandPaletteCommands } from '@ui/command-palette/CommandPaletteCommands';
 import { getAllPanelStates, useDockablePanelContext } from '@ui/dockable';
-import { usePanelSurfaceCycling } from '@ui/dockable/usePanelSurfaceCycling';
 import { PanelErrorBoundary, RouteErrorBoundary } from '@ui/errors';
 // Content Components
 import AppHeader from '@ui/layout/AppHeader';
-import {
-  useContentRegionShiftTabHandoff,
-  useTopLevelAppRegionTracking,
-} from '@ui/layout/appFocusRegions';
+import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
 import { ClusterSelectionOverlay } from '@ui/layout/ClusterSelectionOverlay';
 import ClusterTabs from '@ui/layout/ClusterTabs';
 import { getClusterSelectionPhase } from '@ui/layout/clusterSelectionPhase';
@@ -214,6 +210,7 @@ const SidebarResizer = ({ viewState }: { viewState: ViewStateValue }) => {
   return (
     <hr
       className="sidebar-resizer"
+      data-app-region="sidebar"
       aria-label="Resize sidebar"
       aria-orientation="vertical"
       aria-valuemin={SIDEBAR_MIN_WIDTH}
@@ -274,11 +271,9 @@ export const AppLayout: React.FC = () => {
   const namespace = useNamespace();
   const viewState = useViewState();
   const kubeconfig = useKubeconfig();
-  const { tabGroups, focusPanel, setLastFocusedGroupKey } = useDockablePanelContext();
   const { openPanels, nativeLocations, dockedEdges, pendingNativeOpenPanelIds, closePanel } =
     useObjectPanelState();
   const commands = useCommandPaletteCommands();
-  const contentBodyRef = useRef<HTMLDivElement | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [isFocusOverlayVisible, setIsFocusOverlayVisible] = useState(false);
   const [isErrorOverlayVisible, setIsErrorOverlayVisible] = useState(false);
@@ -310,13 +305,6 @@ export const AppLayout: React.FC = () => {
     onToggleErrorDebug: () => setIsErrorOverlayVisible((prev) => !prev),
     onToggleMapDebug: () => setIsMapDebugOverlayVisible((prev) => !prev),
     onToggleIconDebug: () => setIsIconDebugOverlayVisible((prev) => !prev),
-  });
-  useContentRegionShiftTabHandoff(contentBodyRef, hasActiveClusters);
-  useTopLevelAppRegionTracking(hasActiveClusters);
-  usePanelSurfaceCycling({
-    tabGroups,
-    focusPanel,
-    setLastFocusedGroupKey,
   });
 
   useEffect(() => {
@@ -359,6 +347,7 @@ export const AppLayout: React.FC = () => {
 
   return (
     <div className="app-container">
+      <AppRegionNavigation />
       <AppHeader />
       <ClusterTabs onOpenCluster={handleOpenCluster} />
 
@@ -367,7 +356,7 @@ export const AppLayout: React.FC = () => {
         <SidebarResizer viewState={viewState} />
 
         <div className="content">
-          <div ref={contentBodyRef} className="content-body" data-app-region="content">
+          <div className="content-body" data-app-region="content" tabIndex={-1}>
             <div className="content-body__main">
               <PanelLifecycleClusterSurface
                 clusterId={viewState.viewType === 'global' ? '' : kubeconfig.selectedClusterId}

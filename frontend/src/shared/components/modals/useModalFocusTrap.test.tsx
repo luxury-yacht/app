@@ -107,6 +107,31 @@ describe('useModalFocusTrap', () => {
     expect(document.activeElement).toBe(controls[1]);
   });
 
+  it('does not reinterpret region commands as local Tab movement', async () => {
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <TestModal />
+        </KeyboardProvider>
+      );
+    });
+    const initial = document.activeElement;
+    for (const shiftKey of [false, true]) {
+      const event = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        ctrlKey: true,
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        initial?.dispatchEvent(event);
+      });
+      expect(event.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(initial);
+    }
+  });
+
   it('redirects escaped focus back inside and restores prior focus on close', async () => {
     outsideButton.focus();
 

@@ -193,9 +193,10 @@ export function useShortcuts(
     const registeredIds = currentShortcuts.map((shortcut, index) => {
       const merged = {
         description: '',
-        enabled: true,
         ...latestCommonOptionsRef.current,
         ...shortcut,
+        // A shortcut's availability cannot reactivate an inactive focus scope.
+        enabled: latestCommonOptionsRef.current?.enabled !== false && shortcut.enabled !== false,
       } as UseShortcutOptions;
 
       const normalizedModifiers = normalizeModifiers(merged.modifiers);

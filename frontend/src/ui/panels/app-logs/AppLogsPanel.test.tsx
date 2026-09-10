@@ -751,7 +751,7 @@ describe('AppLogsPanel', () => {
     };
 
     expect(surfaceConfig.active).toBe(true);
-    expect(surfaceConfig.captureWhenActive).toBe(true);
+    expect(surfaceConfig.captureWhenActive).toBe(false);
 
     const logsContainer = container.querySelector<HTMLDivElement>('.app-logs-container');
     const textFilterInput = container.querySelector<HTMLInputElement>('.app-logs-text-filter');

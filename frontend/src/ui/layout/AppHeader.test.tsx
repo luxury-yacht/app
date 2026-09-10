@@ -4,7 +4,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppHeader from './AppHeader';
-import { focusPreviousRegionBeforeSidebar } from './appFocusRegions';
+import { useAppRegionNavigation } from './appFocusRegions';
 
 const runtimeMock = vi.hoisted(() => ({
   closeWindow: vi.fn(),
@@ -82,11 +82,16 @@ describe('AppHeader', () => {
     delete document.body.dataset.windowResizeCursor;
   });
 
+  const HeaderNavigation = () => {
+    useAppRegionNavigation();
+    return <AppHeader />;
+  };
+
   const renderHeader = () => {
     root.render(
       <ModalStateProvider>
         <KeyboardProvider>
-          <AppHeader />
+          <HeaderNavigation />
         </KeyboardProvider>
       </ModalStateProvider>
     );
@@ -104,18 +109,26 @@ describe('AppHeader', () => {
     }
   );
 
-  it.each([false, true])(
-    'returns from the sidebar to the final header control (mac=%s)',
-    (isMac) => {
-      platformMock.isMacPlatform.mockReturnValue(isMac);
-      act(() => renderHeader());
-      expect(focusPreviousRegionBeforeSidebar()).toBe(true);
-      expect(document.activeElement?.getAttribute('aria-label')).toBe(
-        isMac ? 'Command Palette' : 'Close window'
+  it.each([false, true])('wraps Shift+Tab to the final header control (mac=%s)', (isMac) => {
+    platformMock.isMacPlatform.mockReturnValue(isMac);
+    act(() => renderHeader());
+    const first = container.querySelector<HTMLElement>('header button');
+    act(() => {
+      first?.focus();
+      first?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
       );
-      expect(container.querySelectorAll('[data-app-header-last-focusable="true"]')).toHaveLength(1);
-    }
-  );
+    });
+    expect(document.activeElement?.getAttribute('aria-label')).toBe(
+      isMac ? 'Command Palette' : 'Close window'
+    );
+    expect(container.querySelectorAll('[data-app-header-last-focusable="true"]')).toHaveLength(1);
+  });
 
   it.each([
     ['Minimise window', 'minimiseWindow', 'minimise-window'],

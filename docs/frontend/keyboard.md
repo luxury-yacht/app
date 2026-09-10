@@ -16,9 +16,38 @@ add global document/window listeners for ordinary app behavior.
 - `Tab` is local navigation inside the active surface; cross-surface movement
   uses app-level shortcuts.
 
+## Region navigation
+
+- `Tab` and `Shift+Tab` explicitly focus the next/previous control inside the
+  current app region and wrap at its boundaries. This keeps the order consistent
+  when native webview preferences would skip buttons. Sidebar entries remain an
+  arrow-navigated group.
+- `Ctrl+Tab` and `Ctrl+Shift+Tab` move forward/backward through the header
+  (including cluster tabs), visible sidebar (including its resize handle), main
+  content, visible dockable panels, then visible error notifications. Control is
+  literal on macOS too; Command is not substituted.
+- Returning to a region restores its last available control. Hidden, disabled,
+  inert, and disconnected targets are discarded. An empty content region can
+  receive focus itself. Focusing a panel raises it without selecting another tab.
+- Surfaces marked `data-tab-native="true"`, such as shell terminals, retain
+  ordinary Tab for native behavior; Control+Tab leaves their region. Blocking
+  dialogs and the command palette keep region commands inside the blocking
+  surface. Alt/Command+Tab are not claimed.
+- A focused tab strip uses Left/Right to move its cursor and Enter to select.
+  Region navigation does not change cluster, object, or view selection.
+- The same navigation registrations are mounted in workspace and native panel
+  windows and appear in keyboard shortcut help.
+
+Implementation: `ui/layout/appFocusRegions.ts`, `ui/layout/AppRegionNavigation.tsx`,
+`ui/layout/AppLayout.tsx`, `PanelWindowApp.tsx`, and `ui/shortcuts/context.tsx`.
+Regression coverage: `appFocusRegions.test.tsx`, `DockablePanel.test.tsx`,
+`GridTable.keyboard.test.tsx`, `CommandPalette.keyboard.test.tsx`, and
+`useModalFocusTrap.test.tsx` beside their owners.
+
 ## Surface Model
 
-The active surface gets first chance to handle a key. If no surface handles it,
+Except for the region commands above, the active surface gets first chance to
+handle a key. If no surface handles it,
 registered global shortcuts may run. If nothing handles it, native browser
 behavior should remain intact.
 

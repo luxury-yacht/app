@@ -127,6 +127,28 @@ const unregisterOpenModal = (id: symbol) => {
 
 const isTopmostModal = (id: symbol) => openModalStack[openModalStack.length - 1]?.id === id;
 
+const isLocalTabEvent = (event: KeyboardEvent) =>
+  event.key === 'Tab' && !event.defaultPrevented && !event.altKey && !event.metaKey;
+
+const claimModalTab = (event: KeyboardEvent) => {
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+};
+
+const focusNextModalControl = (root: HTMLElement, items: HTMLElement[], backwards: boolean) => {
+  if (items.length === 0) {
+    root.focus();
+    return;
+  }
+  const active = document.activeElement;
+  const index = items.findIndex((item) => item === active || item.contains(active));
+  const fallbackIndex = backwards ? items.length - 1 : 0;
+  const nextIndex =
+    index < 0 ? fallbackIndex : (index + (backwards ? -1 : 1) + items.length) % items.length;
+  items[nextIndex].focus();
+};
+
 export const useModalFocusTrap = ({
   ref,
   focusableSelector,
@@ -217,43 +239,21 @@ export const useModalFocusTrap = ({
     const modalId = modalIdRef.current;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isTopmostModal(modalId) || event.key !== 'Tab') {
+      if (!isTopmostModal(modalId) || !isLocalTabEvent(event)) {
         return;
       }
 
+      if (event.ctrlKey) {
+        claimModalTab(event);
+        return;
+      }
       const activeRoot = ref.current;
-      if (!activeRoot) {
+      if (!activeRoot || isOwnedFocusPortalTarget(activeRoot, document.activeElement)) {
         return;
       }
 
-      if (isOwnedFocusPortalTarget(activeRoot, document.activeElement)) {
-        return;
-      }
-
-      const items = getFocusableItems();
-      if (items.length === 0) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation?.();
-        activeRoot.focus();
-        return;
-      }
-
-      const active = document.activeElement as HTMLElement | null;
-      const currentIndex = items.findIndex((item) => item === active || item.contains(active));
-      const fallbackIndex = event.shiftKey ? items.length - 1 : 0;
-      let nextIndex: number;
-
-      if (currentIndex === -1) {
-        nextIndex = fallbackIndex;
-      } else {
-        nextIndex = (currentIndex + (event.shiftKey ? -1 : 1) + items.length) % items.length;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation?.();
-      items[nextIndex]?.focus();
+      claimModalTab(event);
+      focusNextModalControl(activeRoot, getFocusableItems(), event.shiftKey);
     };
 
     const handleFocusIn = (event: FocusEvent) => {

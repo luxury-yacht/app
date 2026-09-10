@@ -10,14 +10,15 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ListboxOptionButton } from '@shared/components/aria/ListboxOptionButton';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useKeyboardContext, useShortcut, useShortcuts } from '@ui/shortcuts';
 import { KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
-import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import type React from 'react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useEventBus } from '@/core/events';
 import { fetchSnapshot } from '@/core/refresh/client';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -906,11 +907,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     return true;
   }, [isOpen, selectMode, close, updateSelection]);
 
-  useKeyboardSurface({
-    kind: 'palette',
-    rootRef: containerRef,
-    active: isOpen,
-    blocking: true,
+  useModalFocusTrap({
+    ref: containerRef,
+    disabled: !isOpen,
     suppressShortcuts: true,
     onKeyDown: (event) => {
       if (event.metaKey || event.ctrlKey || event.altKey) {
@@ -1157,7 +1156,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     return null;
   }
 
-  return (
+  return createPortal(
     <ErrorBoundary
       scope="command-palette"
       fallback={(_, reset) => (
@@ -1184,6 +1183,10 @@ export const CommandPalette = memo(function CommandPaletteComponent({
           .filter(Boolean)
           .join(' ')}
         ref={containerRef}
+        role="dialog"
+        aria-label="Command Palette"
+        aria-modal="true"
+        tabIndex={-1}
       >
         <div className="command-palette-header">
           <input
@@ -1243,6 +1246,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
           </span>
         </div>
       </div>
-    </ErrorBoundary>
+    </ErrorBoundary>,
+    document.body
   );
 });

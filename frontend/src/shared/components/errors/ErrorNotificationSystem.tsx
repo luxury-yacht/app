@@ -25,6 +25,15 @@ interface ErrorNotificationItemProps {
   stackSize: number;
 }
 
+const getAutoDismissClass = (error: ErrorNotification) => {
+  if (!error.autoDismiss) {
+    return '';
+  }
+  return error.autoDismissTimeout && error.autoDismissTimeout >= 10000
+    ? 'error-notification--auto-dismiss-long'
+    : 'error-notification--auto-dismiss-short';
+};
+
 const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
   error,
   onDismiss,
@@ -64,28 +73,15 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
   }, [error]);
 
   const isTop = stackPosition === 0;
-  let autoDismissClass: string;
-
-  if (error.autoDismiss) {
-    if (error.autoDismissTimeout && error.autoDismissTimeout >= 10000) {
-      autoDismissClass = 'error-notification--auto-dismiss-long';
-    } else {
-      autoDismissClass = 'error-notification--auto-dismiss-short';
-    }
-  } else {
-    autoDismissClass = '';
-  }
+  const autoDismissClass = getAutoDismissClass(error);
 
   const stackStyle = {
     '--notification-stack-index': `${stackPosition}`,
     '--notification-stack-count': `${stackSize}`,
   } as React.CSSProperties;
-  let copyButtonTitle = 'Copy error';
-  if (copyFeedback === 'copied') {
-    copyButtonTitle = 'Copied';
-  } else if (copyFeedback === 'error') {
-    copyButtonTitle = 'Copy failed';
-  }
+  const copyButtonTitle = { idle: 'Copy error', copied: 'Copied', error: 'Copy failed' }[
+    copyFeedback
+  ];
 
   return (
     <div
@@ -93,6 +89,7 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
         isTop ? 'error-notification--active' : 'error-notification--stacked'
       } ${autoDismissClass}`}
       data-stack-size={stackSize}
+      inert={!isTop}
       style={stackStyle}
     >
       <div className="error-notification-header">
@@ -183,7 +180,7 @@ export const ErrorNotificationSystem: React.FC = () => {
   }
 
   return (
-    <div className="error-notification-container">
+    <div className="error-notification-container" data-app-region="notifications">
       <div className="error-notification-list">
         {errors.map((error, index) => (
           <ErrorNotificationItem

@@ -7,6 +7,7 @@
 
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
+import { useAppRegionNavigation } from '@ui/layout/appFocusRegions';
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -88,6 +89,67 @@ describe('DockablePanel', () => {
     document.querySelectorAll('.dockable-panel-layer').forEach((node) => {
       node.remove();
     });
+  });
+
+  it('cycles into a real panel with suppressed controls and restores focus without switching its tab', async () => {
+    const Navigation = () => {
+      useAppRegionNavigation();
+      return (
+        <header data-app-region="header">
+          <button type="button" data-testid="region-start">
+            Start
+          </button>
+        </header>
+      );
+    };
+    const { unmount } = await renderPanel(
+      <>
+        <Navigation />
+        <DockablePanel panelId="region-panel" title="Panel" defaultPosition="right" isOpen>
+          <button type="button" data-testid="region-action">
+            Action
+          </button>
+        </DockablePanel>
+      </>
+    );
+    const start = requireValue(
+      document.querySelector<HTMLElement>('[data-testid="region-start"]'),
+      'header control'
+    );
+    const action = requireValue(
+      document.querySelector<HTMLElement>('[data-testid="region-action"]'),
+      'panel control'
+    );
+    const cycle = async (target: HTMLElement, shiftKey = false) => {
+      await act(async () => {
+        target.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: 'Tab',
+            ctrlKey: true,
+            shiftKey,
+            bubbles: true,
+            cancelable: true,
+          })
+        );
+      });
+    };
+    await act(async () => {
+      start.focus();
+    });
+    expect(action.tabIndex).toBe(-1);
+    await cycle(start);
+    expect(document.activeElement?.closest('.dockable-panel')).toBe(
+      action.closest('.dockable-panel')
+    );
+    expect(action.tabIndex).toBe(0);
+    await act(async () => {
+      action.focus();
+    });
+    await cycle(action);
+    expect(document.activeElement).toBe(start);
+    await cycle(start, true);
+    expect(document.activeElement).toBe(action);
+    unmount();
   });
 
   it('invokes onClose and removes the panel when the close control is clicked', async () => {

@@ -4,6 +4,15 @@ Read this before editing. When user feedback identifies a recurring mistake,
 record the pattern and a concrete prevention check here. Keep entries focused
 on reusable rules; omit transient logs, credentials, and session history.
 
+## Treating an unresolved design choice as selected
+
+When work is limited to investigation or implementation has been paused, keep
+design discussion within that boundary. Distinguish agreement on behavior from
+agreement on specific keys, and distinguish a selected option from its alternatives.
+Before editing behavior, check the current authorization and the exact selected
+scope. Record accepted choices in the existing plan without implementing choices
+that remain open.
+
 ## Treating a passing automated gate as task completion
 
 The gate covers its configured checks. It does not establish that every requested

@@ -7,7 +7,7 @@
 
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
-import { hasNativeTabHandling, isInputElement, resolveEventElement } from '@ui/shortcuts/utils';
+import { isInputElement, resolveEventElement } from '@ui/shortcuts/utils';
 import { type RefObject, useCallback, useEffect, useState } from 'react';
 import {
   type ClusterViewType,
@@ -17,7 +17,6 @@ import {
   parseGlobalViewType,
   parseNamespaceViewType,
 } from '@/types/navigation/views';
-import { focusPreviousRegionBeforeSidebar } from './appFocusRegions';
 
 export type SidebarCursorTarget =
   | { kind: 'overview' }
@@ -124,43 +123,6 @@ interface SidebarKeyboardApi {
   describeTarget: (element: HTMLElement | null) => SidebarCursorTarget | null;
   isKeyboardNavActive: boolean;
 }
-
-interface SidebarTabContext {
-  sidebar: HTMLElement | null;
-  focusPreviousRegion: () => boolean;
-  getDisplaySelectionTarget: () => SidebarCursorTarget | null;
-  setKeyboardNavActive: (active: boolean) => void;
-  setCursorPreview: (target: SidebarCursorTarget | null) => void;
-  focusSelectedSidebarItem: () => void;
-}
-
-const isFocusInsideSidebar = (sidebar: HTMLElement | null, eventTarget: HTMLElement | null) =>
-  Boolean(
-    sidebar &&
-      ((eventTarget && sidebar.contains(eventTarget)) ||
-        (document.activeElement instanceof HTMLElement && sidebar.contains(document.activeElement)))
-  );
-
-const handleSidebarTab = (event: KeyboardEvent, context: SidebarTabContext): boolean => {
-  if (event.metaKey || event.ctrlKey || event.altKey) {
-    return false;
-  }
-  const targetElement = resolveEventElement(event.target);
-  if (hasNativeTabHandling(targetElement) || isInputElement(targetElement)) {
-    return false;
-  }
-  if (isFocusInsideSidebar(context.sidebar, targetElement)) {
-    return event.shiftKey ? context.focusPreviousRegion() : false;
-  }
-  if (event.shiftKey || !targetElement?.closest('[data-app-header-last-focusable="true"]')) {
-    return false;
-  }
-  const target = context.getDisplaySelectionTarget();
-  context.setKeyboardNavActive(true);
-  context.setCursorPreview(target);
-  context.focusSelectedSidebarItem();
-  return true;
-};
 
 interface SidebarNavigationContext {
   sidebar: HTMLElement | null;
@@ -330,7 +292,6 @@ export const useSidebarKeyboardControls = ({
   getCurrentSelectionTarget,
 }: SidebarKeyboardParams): SidebarKeyboardApi => {
   const [isKeyboardNavActive, setIsKeyboardNavActive] = useState(false);
-  const focusPreviousRegion = useCallback(() => focusPreviousRegionBeforeSidebar(), []);
 
   const getFocusableItems = useCallback((): HTMLElement[] => {
     if (!sidebarRef.current) {
@@ -448,14 +409,7 @@ export const useSidebarKeyboardControls = ({
     priority: KeyboardScopePriority.SIDEBAR,
     onKeyDown: (event) => {
       if (event.key === 'Tab') {
-        return handleSidebarTab(event, {
-          sidebar: sidebarRef.current,
-          focusPreviousRegion,
-          getDisplaySelectionTarget,
-          setKeyboardNavActive: setIsKeyboardNavActive,
-          setCursorPreview,
-          focusSelectedSidebarItem,
-        });
+        return false;
       }
       const context: SidebarNavigationContext = {
         sidebar: sidebarRef.current,

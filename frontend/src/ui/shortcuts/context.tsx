@@ -320,7 +320,8 @@ const shouldDeferToNativeEditing = (event: KeyboardEvent): boolean => {
   if (isUnmodifiedStandardEditKey(event)) {
     return true;
   }
-  return isInputElement(event.target) && !hasAnyShortcutModifier(event);
+  const isTypedCharacter = event.key.length === 1 && !event.ctrlKey && !event.metaKey;
+  return isInputElement(event.target) && (isTypedCharacter || !hasAnyShortcutModifier(event));
 };
 
 const findHighestPriorityShortcut = (
@@ -373,6 +374,33 @@ const routeTargetSurfaceKey = (
     return false;
   }
   return dispatchSurfaceHandler(event, targetSurface?.onKeyDown);
+};
+
+// Control+Tab belongs to app regions even inside editors. Plain Tab first
+// belongs to local surfaces, then falls back to the containing app region.
+const routeTabKey = (
+  event: KeyboardEvent,
+  context: KeyboardEventRoutingContext,
+  blocked: boolean
+) => {
+  if (event.key !== 'Tab' || event.defaultPrevented || event.altKey || event.metaKey) {
+    return;
+  }
+  if (event.ctrlKey) {
+    if (blocked) {
+      claimKeyboardEvent(event, true);
+      return;
+    }
+  } else if (dispatchKeyThroughSurfaces(event, context.getSurfaceCandidates(event.target))) {
+    return;
+  }
+  if (blocked) {
+    return;
+  }
+  const shortcut = findHighestPriorityShortcut(event, context.shortcuts);
+  if (shortcut) {
+    dispatchShortcut(event, shortcut);
+  }
 };
 
 const routeKeyboardEvent = (event: KeyboardEvent, context: KeyboardEventRoutingContext) => {
@@ -632,9 +660,11 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     }
 
     const handleCapturedTabKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Tab') {
-        dispatchKeyThroughSurfaces(event, getSurfaceCandidates(event.target));
-      }
+      routeTabKey(
+        event,
+        { getTargetSurface, getSurfaceCandidates, shortcuts },
+        hasActiveBlockingSurface()
+      );
     };
 
     const handleKeyDown = (event: KeyboardEvent) =>
@@ -646,7 +676,14 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       document.removeEventListener('keydown', handleCapturedTabKeyDown, true);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [disabled, getSurfaceCandidates, getTargetSurface, isEnabled, shortcuts]);
+  }, [
+    disabled,
+    getSurfaceCandidates,
+    getTargetSurface,
+    hasActiveBlockingSurface,
+    isEnabled,
+    shortcuts,
+  ]);
 
   // Handle menu events from Wails
   useEffect(() => {
