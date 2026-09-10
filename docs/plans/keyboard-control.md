@@ -82,6 +82,28 @@ was stopped with an interrupt and exited 0. This is a cleanup limitation, not
 evidence that docking or the main window failed. Native keyboard evidence above
 is macOS-only.
 
+## Sidebar control handoff follow-up
+
+The user clarified that arrow navigation within the list is correct; Tab must
+reach and operate the other sidebar controls after a click. Native reproduction:
+click Nodes → Tab focuses Hide Sidebar → Tab focuses Select namespace, without a
+visible focus ring. Enter then returned focus to Nodes instead of opening the
+namespace palette (CUA native focus overlay, 2026-09-10).
+
+| Acceptance criterion | Status | Evidence |
+| --- | --- | --- |
+| Tab and Shift+Tab visibly traverse sidebar controls after a click | passed | Real Sidebar, KeyboardProvider, and AppRegionNavigation regression; five new cases failed before the fix (`/tmp/luxury-yacht-sidebar-red.log`). Browser CSS check failed with `focusVisible: false, outline: none`, then passed with `outline: solid, width: 2px`. Native screenshot showed the namespace button's blue outline after Tab |
+| Enter/Space activate the focused sidebar control instead of a list item | passed | Native Enter and Space on Select namespace opened its palette; Escape restored the button; Shift+Tab then Enter on Hide Sidebar collapsed it. Sidebar restored with Cmd+B. Four regression cases prove those buttons' Enter/Space events remain unclaimed by list navigation |
+| List arrows, region switching, focus restoration, and modal containment remain available | passed | Native click Nodes → Up focused Events → Tab focused Hide Sidebar; Control+Tab entered content and Control+Shift+Tab restored Hide Sidebar. Control+Tab stayed inside the namespace palette; Escape restored its invoking button. Focused related suites: 6 files / 95 tests (`/tmp/luxury-yacht-sidebar-coverage.log`). Debug overlay closed and sidebar visibility restored afterward |
+| Coverage and changed-function complexity | passed | `mise exec -- wails3 task test:frontend-coverage`: exit 0, 518 files / 4,885 tests, 86.84% statements; SidebarKeys 92.01%, appFocusRegions 95.09% (`/tmp/luxury-yacht-sidebar-full-coverage.log`). Local Biome max-12 complexity check passed for both changed production modules |
+| Final prerelease gate and latest diff review | passed | `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease`: exit 0, including 518 frontend files / 4,885 tests (`/tmp/luxury-yacht-sidebar-prerelease.log`). Final production diff inspected; `git diff --check` exit 0 |
+
+The fix restricts list navigation to list entries (or the list's entry root), so
+ordinary sidebar buttons retain native activation. Both local and cross-region
+navigation use the same focus-indicator helper, following synchronous composite
+focus redirects. The indicator selector matches the specificity of the
+mouse-focus reset so a preceding pointer interaction cannot hide the ring.
+
 ## Remaining audit backlog
 
 These items remain outside this navigation implementation. They are not claims

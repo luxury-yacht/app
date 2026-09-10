@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -170,9 +171,11 @@ describe('Sidebar', () => {
   const renderSidebar = ({
     namespaces,
     viewState,
+    regionNavigation = false,
   }: {
     namespaces?: NamespaceEntry[];
     viewState?: Partial<ReturnType<typeof createViewState>>;
+    regionNavigation?: boolean;
   } = {}) => {
     if (namespaces) {
       namespaceState.namespaces = namespaces;
@@ -183,6 +186,7 @@ describe('Sidebar', () => {
     act(() => {
       requireValue(root, 'expected test value in Sidebar.test.tsx').render(
         <KeyboardProvider>
+          {regionNavigation ? <AppRegionNavigation /> : null}
           <Sidebar />
         </KeyboardProvider>
       );
@@ -212,6 +216,69 @@ describe('Sidebar', () => {
 
     act(() => resources?.click());
     expect(resources?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  const pressKey = (key: string, shiftKey = false) => {
+    const event = new KeyboardEvent('keydown', { key, shiftKey, bubbles: true, cancelable: true });
+    act(() => document.activeElement?.dispatchEvent(event));
+    return event;
+  };
+
+  const clickNodes = () => {
+    const nodes = requireValue(
+      container?.querySelector<HTMLButtonElement>('[data-sidebar-target-view="nodes"]'),
+      'expected Nodes item'
+    );
+    act(() => {
+      nodes.focus();
+      nodes.click();
+    });
+    viewStateMock.setActiveClusterView.mockClear();
+    return nodes;
+  };
+
+  it('visibly tabs from a clicked list item through the other sidebar controls and back', () => {
+    renderSidebar({ regionNavigation: true });
+    clickNodes();
+    const hide = requireValue(
+      container?.querySelector('.sidebar-toggle'),
+      'expected sidebar toggle'
+    );
+    const selectNamespace = requireValue(
+      container?.querySelector('.sidebar-header-action'),
+      'expected namespace selector'
+    );
+
+    pressKey('Tab');
+    expect(document.activeElement).toBe(hide);
+    expect(hide.classList.contains('keyboard-programmatic-focus')).toBe(true);
+    pressKey('Tab');
+    expect(document.activeElement).toBe(selectNamespace);
+    expect(selectNamespace.classList.contains('keyboard-programmatic-focus')).toBe(true);
+    expect(hide.classList.contains('keyboard-programmatic-focus')).toBe(false);
+    pressKey('Tab', true);
+    expect(document.activeElement).toBe(hide);
+    pressKey('Tab', true);
+    expect(document.activeElement?.getAttribute('data-sidebar-focusable')).toBe('true');
+    expect(document.activeElement?.classList.contains('keyboard-programmatic-focus')).toBe(true);
+    expect(viewStateMock.setActiveClusterView).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Hide Sidebar', 1, 'Enter'],
+    ['Hide Sidebar', 1, ' '],
+    ['Select namespace', 2, 'Enter'],
+    ['Select namespace', 2, ' '],
+  ])('leaves %s activation with %s tabs and %s to the focused button', (_, tabCount, key) => {
+    renderSidebar({ regionNavigation: true });
+    clickNodes();
+    for (let i = 0; i < Number(tabCount); i++) {
+      pressKey('Tab');
+    }
+    const control = document.activeElement;
+    expect(pressKey(String(key)).defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(control);
+    expect(viewStateMock.setActiveClusterView).not.toHaveBeenCalled();
   });
 
   it('shows active-cluster Attention severity counts beside the label', () => {

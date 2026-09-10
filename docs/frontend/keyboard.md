@@ -21,7 +21,9 @@ add global document/window listeners for ordinary app behavior.
 - `Tab` and `Shift+Tab` explicitly focus the next/previous control inside the
   current app region and wrap at its boundaries. This keeps the order consistent
   when native webview preferences would skip buttons. Sidebar entries remain an
-  arrow-navigated group.
+  arrow-navigated group. Tab leaves that group for the sidebar's other controls;
+  Enter and Space on those controls use the focused button's own action. List
+  navigation keys are handled only while focus belongs to the list.
 - `Ctrl+Tab` and `Ctrl+Shift+Tab` move forward/backward through the header
   (including cluster tabs), visible sidebar (including its resize handle), main
   content, visible dockable panels, then visible error notifications. Control is
@@ -29,6 +31,9 @@ add global document/window listeners for ordinary app behavior.
 - Returning to a region restores its last available control. Hidden, disabled,
   inert, and disconnected targets are discarded. An empty content region can
   receive focus itself. Focusing a panel raises it without selecting another tab.
+- Both local Tab navigation and region switching show an explicit focus ring,
+  including immediately after a mouse click. The ring follows the final focused
+  item when a composite root redirects focus.
 - Surfaces marked `data-tab-native="true"`, such as shell terminals, retain
   ordinary Tab for native behavior; Control+Tab leaves their region. Blocking
   dialogs and the command palette keep region commands inside the blocking

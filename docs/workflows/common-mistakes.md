@@ -18,6 +18,13 @@ that remain open.
 The gate covers its configured checks. It does not establish that every requested
 workflow was exercised, especially native window interactions.
 
+For keyboard workflows, verify focus position, visible indication, and the
+resulting action separately. Reproduce mouse click → Tab/Shift+Tab → Enter/Space
+through the real component and keyboard owners. A list's key handler must not
+intercept activation of sibling controls. Check focus styling after pointer use,
+when `:focus-visible` may not match. Clarify the failing keys before attributing
+a report to the list's arrow-navigation design.
+
 Prevention:
 
 - Follow the [completion evidence gate](completion.md), keeping each requested

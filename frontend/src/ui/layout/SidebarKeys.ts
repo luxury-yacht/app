@@ -171,7 +171,11 @@ const prepareSidebarNavigation = (
     return null;
   }
   const items = context.getFocusableItems();
-  if (items.length === 0) {
+  if (
+    items.length === 0 ||
+    (document.activeElement !== context.sidebar &&
+      !items.includes(document.activeElement as HTMLElement))
+  ) {
     return null;
   }
   const selectionIndex = context.getSelectionIndex();

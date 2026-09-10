@@ -66,6 +66,15 @@ const getEntryTarget = (region: AppRegion): HTMLElement => {
   return getRegionControls(region)[0] ?? root;
 };
 
+const focusControl = (target: HTMLElement) => {
+  target.focus();
+  // Composite roots can redirect focus to their selected item synchronously.
+  const focused = document.activeElement;
+  if (focused instanceof HTMLElement && target.contains(focused)) {
+    focused.classList.add(PROGRAMMATIC_FOCUS_CLASS);
+  }
+};
+
 const focusRegion = (region: AppRegion, saved: HTMLElement | undefined) => {
   const root = region.roots[0];
   if (root.dataset.activePanelId) {
@@ -73,8 +82,7 @@ const focusRegion = (region: AppRegion, saved: HTMLElement | undefined) => {
   }
   const target =
     saved && contains(region, saved) && isAvailable(saved) ? saved : getEntryTarget(region);
-  target.classList.add(PROGRAMMATIC_FOCUS_CLASS);
-  target.focus();
+  focusControl(target);
   return region.roots.some((element) => element.contains(document.activeElement));
 };
 
@@ -84,7 +92,7 @@ const focusAfterCompositeControl = (controls: HTMLElement[], backwards: boolean)
   if (index < 0) {
     return false;
   }
-  controls[(index + (backwards ? -1 : 1) + controls.length) % controls.length].focus();
+  focusControl(controls[(index + (backwards ? -1 : 1) + controls.length) % controls.length]);
   return true;
 };
 
@@ -102,11 +110,11 @@ const navigateLocally = (event: KeyboardEvent | undefined): boolean => {
     return true;
   }
   if (index >= 0) {
-    controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length].focus();
+    focusControl(controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length]);
     return true;
   }
   const target = (event.shiftKey ? controls[controls.length - 1] : controls[0]) ?? region.roots[0];
-  target.focus();
+  focusControl(target);
   return true;
 };
 
