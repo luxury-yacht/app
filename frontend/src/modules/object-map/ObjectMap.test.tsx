@@ -616,14 +616,24 @@ afterEach(() => {
 });
 
 describe('ObjectMap', () => {
+  it('renders the existing toolbar without an extra object chooser or actions row', async () => {
+    const { container, cleanup } = await renderObjectMap();
+    expect(container.querySelector('.object-map__header')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Search map objects"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Filter map kinds"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Choose map object"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Selected object actions"]')).toBeNull();
+    expect(container.querySelector('.object-map__object-controls')).toBeNull();
+    cleanup();
+  });
+
   it('discards a selected-object menu when its object disappears instead of reviving it', async () => {
     const { container, rerender, cleanup } = await renderObjectMap();
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]')?.click()
-    );
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Selected object actions"]')?.click()
-    );
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]')
+        ?.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+    });
     expect(container.querySelector('[data-testid="mock-context-menu"]')).not.toBeNull();
     await rerender({ ...payload, nodes: [], edges: [] });
     await rerender(payload);
@@ -631,7 +641,7 @@ describe('ObjectMap', () => {
     cleanup();
   });
 
-  it('keeps partial-identity map nodes inspectable without offering resource actions', async () => {
+  it('does not offer an object menu for partial-identity map nodes', async () => {
     const node = {
       ...requireValue(payload.nodes?.[0], 'expected deployment node'),
       ref: { ...payload.seed, version: '' },
@@ -639,90 +649,73 @@ describe('ObjectMap', () => {
     const { container, cleanup } = await renderObjectMap({
       testPayload: { ...payload, seed: node.ref, nodes: [node], edges: [] },
     });
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]')?.click()
-    );
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Selected object actions"]')?.click()
-    );
-    expect(container.querySelector('[data-testid="mock-context-menu"]')).not.toBeNull();
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]')
+        ?.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+    });
+    expect(container.querySelector('[data-testid="mock-context-menu"]')).toBeNull();
     expect(container.querySelector('[data-context-action-id]')).toBeNull();
     cleanup();
   });
-  it('selects map objects with the keyboard and exposes their actions and connections', async () => {
+  it('keeps resource actions without movement or connection entries in the map context menu', async () => {
     const onOpenPanel = vi.fn();
     const { container, cleanup } = await renderObjectMap({ onOpenPanel });
-    const chooser = container.querySelector<HTMLElement>('[aria-label="Choose map object"]');
-    expect(chooser).not.toBeNull();
-    const press = async (key: string) =>
-      act(async () =>
-        document.activeElement?.dispatchEvent(
-          new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
-        )
-      );
-    await act(async () => chooser?.focus());
-    await press('Enter');
-    await press('End');
-    await press('Enter');
+    const pod = requireValue(
+      container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-abc"]'),
+      'expected pod node'
+    );
+    await act(async () => pod.click());
     expect(
       container.querySelector<HTMLElement>('[data-testid="mock-node-pod"]')?.dataset.active
     ).toBe('true');
-    expect(document.activeElement).toBe(chooser);
-    const actions = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Selected object actions"]'
+    await act(async () => {
+      pod.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+    });
+    const menu = requireValue(
+      container.querySelector('[data-testid="mock-context-menu"]'),
+      'expected object context menu'
     );
-    await act(async () => actions?.click());
-    const menuAction = (label: string) =>
-      Array.from(
-        container.querySelectorAll<HTMLButtonElement>('[data-testid="mock-context-menu"] button')
-      ).find((el) => el.textContent === label);
+    for (const direction of ['left', 'right', 'up', 'down']) {
+      expect(menu.textContent).not.toContain(`Move object ${direction}`);
+    }
+    expect(menu.textContent).not.toContain('Deployment web');
+    expect(menu.textContent).not.toContain('owns');
     const open = container.querySelector<HTMLButtonElement>(
       `[data-context-action-id="${OBJECT_ACTION_IDS.viewDetails}"]`
     );
     expect(open).toBeTruthy();
     await act(async () => open?.click());
     expect(onOpenPanel).toHaveBeenCalledWith(expect.objectContaining(payload.nodes?.[1].ref ?? {}));
-    const beforeX = Number(
-      container.querySelector<HTMLElement>('[data-testid="mock-node-pod"]')?.dataset.x
-    );
-    await act(async () => menuAction('Move object right')?.click());
-    expect(
-      Number(container.querySelector<HTMLElement>('[data-testid="mock-node-pod"]')?.dataset.x)
-    ).toBe(beforeX + 24);
-    const connection = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('[data-testid="mock-context-menu"] button')
-    ).find((el) => el.textContent?.includes('Deployment web') && el.textContent?.includes('owns'));
-    expect(connection).toBeTruthy();
-    await act(async () => connection?.click());
-    expect(
-      container.querySelector<HTMLElement>('[data-testid="mock-node-deploy"]')?.dataset.active
-    ).toBe('true');
     cleanup();
   });
 
-  it('expands and collapses older ReplicaSets through the selected object actions', async () => {
+  it('keeps ReplicaSet expansion on the existing badge without extra context-menu entries', async () => {
     const { container, cleanup } = await renderObjectMap({ testPayload: collapsePayload });
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="ReplicaSet: web-new"]')?.click()
-    );
     const openActions = async () =>
-      act(async () =>
+      act(async () => {
         container
-          .querySelector<HTMLButtonElement>('[aria-label="Selected object actions"]')
-          ?.click()
-      );
-    const activate = async (label: string) => {
-      const action = Array.from(
-        container.querySelectorAll<HTMLButtonElement>('[data-testid="mock-context-menu"] button')
-      ).find((el) => el.textContent === label);
-      expect(action).toBeTruthy();
-      await act(async () => action?.click());
-    };
+          .querySelector<HTMLButtonElement>('[aria-label="ReplicaSet: web-new"]')
+          ?.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      });
     await openActions();
-    await activate('Expand older ReplicaSets');
+    const menu = requireValue(
+      container.querySelector('[data-testid="mock-context-menu"]'),
+      'expected ReplicaSet context menu'
+    );
+    expect(menu.textContent).toContain(objectActionLabel(OBJECT_ACTION_IDS.viewMap));
+    expect(menu.textContent).not.toContain('Expand older ReplicaSets');
+    const badge = requireValue(
+      container.querySelector<HTMLButtonElement>('[aria-label="Show 1 hidden ReplicaSet"]'),
+      'expected existing ReplicaSet badge'
+    );
+    await act(async () => badge.click());
     expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeTruthy();
     await openActions();
-    await activate('Collapse older ReplicaSets');
+    expect(container.querySelector('[data-testid="mock-context-menu"]')?.textContent).not.toContain(
+      'Collapse older ReplicaSets'
+    );
+    await act(async () => badge.click());
     expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeNull();
     cleanup();
   });
@@ -1173,14 +1166,6 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[data-testid="mock-node-pod"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
     expect(kindTrigger?.textContent).toContain('Kinds (1)');
-
-    await act(async () => kindTrigger?.click());
-    const chooser = container.querySelector<HTMLButtonElement>('[aria-label="Choose map object"]');
-    await act(async () => chooser?.click());
-    const visibleOptions = Array.from(document.querySelectorAll('.dropdown-option')).map(
-      (option) => option.textContent
-    );
-    expect(visibleOptions).toEqual(['Pod web-abc (default)']);
 
     cleanup();
   });
@@ -1711,8 +1696,6 @@ describe('ObjectMap', () => {
     expect(
       empty.container.querySelector('[data-testid="object-map-empty"]')?.textContent
     ).toContain('No related objects found.');
-    expect(empty.container.querySelector('[aria-label="Choose map object"]')).toBeNull();
-    expect(empty.container.querySelector('[aria-label="Selected object actions"]')).toBeNull();
     empty.cleanup();
 
     const warned = await renderObjectMap({

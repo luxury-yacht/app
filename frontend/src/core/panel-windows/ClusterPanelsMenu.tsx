@@ -24,8 +24,6 @@ export function ClusterPanelsMenu({
   const windowName = getWindowIdentity();
   const { selectedClusterIds } = useKubeconfig();
   const items: ContextMenuItem[] = [
-    ...orderActions,
-    ...(orderActions.length ? [{ divider: true }] : []),
     {
       label: 'Open in new window',
       icon: <FloatPanelIcon width={16} height={16} />,
@@ -62,6 +60,7 @@ export function ClusterPanelsMenu({
     },
     { divider: true },
     { label: 'Close', icon: <CloseIcon width={16} height={16} />, onClick: onCloseCluster },
+    ...(orderActions.length ? [{ divider: true }, ...orderActions] : []),
   ];
   return (
     <PanelLifecycleClusterSurface clusterId={clusterId}>

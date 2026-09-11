@@ -64,23 +64,6 @@
   background-color: var(--color-bg-secondary);
 }
 
-.object-map__object-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) 0.75rem 0;
-  background: var(--color-bg-secondary);
-}
-
-.object-map__object-controls .dropdown {
-  min-width: 0;
-  max-width: 320px;
-  flex: 1;
-}
-.object-map__object-actions {
-  white-space: nowrap;
-}
-
 .object-map__toolbar {
   display: flex;
   align-items: center;

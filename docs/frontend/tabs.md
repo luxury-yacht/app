@@ -46,7 +46,8 @@ also use the shared drag coordinator.
   scroll and drag boundary. Consumers locating tabs from the labelled tablist
   must first find its closest `.tab-strip`, then query its tab descendants.
 - ClusterTabs and DockableTabBar retain their right-click context menus, which
-  offer Move tab left/right through the existing order owner, with end positions disabled.
+  offer usable Move tab left/right commands with directional icons at the bottom.
+  Unavailable directions and empty reorder sections are omitted.
   Ordering a tab does not activate it. The synthetic Global tab is not reordered.
 - If a focused tab control disappears, focus an available remaining tab. Close
   a menu whose owning tab disappears instead of reviving it on reopen.

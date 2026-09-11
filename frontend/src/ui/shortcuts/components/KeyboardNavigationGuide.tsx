@@ -25,9 +25,8 @@ export function KeyboardNavigationGuide() {
         </dd>
         <dt>Object map</dt>
         <dd>
-          Open Choose object, search or use arrows, then Enter to select and center an object. Tab
-          reaches Object actions for resource actions, connected objects, ReplicaSet groups and
-          layout movement.
+          Tab reaches the map search field and toolbar controls. Type in the search field and press
+          Enter to center a matching object; press Enter again to cycle through matches.
         </dd>
         <dt>Sidebar</dt>
         <dd>

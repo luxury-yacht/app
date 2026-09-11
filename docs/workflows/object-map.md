@@ -63,19 +63,14 @@ the snapshot package.
   contract. Updating the displayed age must not rewrite backend graph identity,
   relationship data, or layout inputs.
 
-## Keyboard Access
+## Map Interactions
 
-- **Choose object** searches the currently visible layout. Arrows and Enter
-  select an object and center it; hidden kinds and collapsed older ReplicaSets
-  do not appear as options.
-- Tab reaches **Object actions**, which uses the same resource-action controller
-  and complete object reference as the canvas menu. Partial references retain
-  local map actions without offering Kubernetes resource actions.
-- The menu also exposes connected objects with relationship labels, older
-  ReplicaSet expansion/collapse on the current ReplicaSet, and four layout moves.
-  Layout moves share the model's position overrides and Reset layout behavior.
-- A removed/filtered object closes its menu. An empty map has no object actions;
-  a filter yielding no visible objects disables the chooser and selected actions.
+- Tab reaches the existing search field and toolbar controls. Enter in the search
+  field centers a matching visible object; repeated presses cycle through matches.
+- Right-clicking an object opens its canvas menu, which uses the shared
+  resource-action controller and complete object reference. Partial references
+  do not offer object actions.
+- A removed/filtered object closes its menu. An empty map has no object actions.
 
 ## Table Navigation
 

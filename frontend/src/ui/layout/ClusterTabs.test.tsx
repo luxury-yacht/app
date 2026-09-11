@@ -190,6 +190,36 @@ describe('ClusterTabs', () => {
     expect(mockState.setActiveKubeconfig).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { ids: ['a'], target: 'a', moves: [] },
+    { ids: ['a', 'b', 'c'], target: 'a', moves: ['Move tab right'] },
+    { ids: ['a', 'b', 'c'], target: 'b', moves: ['Move tab left', 'Move tab right'] },
+    { ids: ['a', 'b', 'c'], target: 'c', moves: ['Move tab left'] },
+  ])(
+    'shows only usable move commands with icons at the bottom for $target in $ids',
+    async ({ ids, target, moves }) => {
+      mockState.selectedKubeconfigs = ids;
+      mockState.selectedKubeconfig = 'a';
+      await renderTabs();
+      const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
+        (item) => item.querySelector('.tab-item__label')?.textContent === target
+      );
+      expect(tab).toBeDefined();
+      await act(async () =>
+        tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+      );
+      const items = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+      expect
+        .soft(items.map((item) => item.textContent))
+        .toEqual(['Open in new window', 'Move to new window', 'Close', ...moves]);
+      for (const moveItem of items.filter((item) => item.textContent?.startsWith('Move tab '))) {
+        expect.soft(moveItem.querySelector('.context-menu-icon svg')).not.toBeNull();
+        expect.soft(moveItem.getAttribute('aria-disabled')).toBe('false');
+      }
+      expect(document.querySelectorAll('.context-menu-divider')).toHaveLength(moves.length ? 2 : 1);
+    }
+  );
+
   it('renders the tab strip with a single cluster open', async () => {
     mockState.selectedKubeconfigs = ['a'];
     mockState.selectedKubeconfig = 'a';
@@ -219,11 +249,10 @@ describe('ClusterTabs', () => {
     );
     const items = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
     expect(items.map((item) => item.textContent)).toEqual([
-      'Move tab left',
-      'Move tab right',
       'Open in new window',
       'Move to new window',
       'Close',
+      'Move tab left',
     ]);
     await act(async () => items.find((item) => item.textContent === 'Close')?.click());
     expect(mockState.closeKubeconfig).toHaveBeenCalledExactlyOnceWith('/configs/kube:staging');

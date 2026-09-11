@@ -41,7 +41,6 @@ import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useShortNames } from '@/hooks/useShortNames';
 import { compareUtf16Strings } from '@/shared/utils/sort';
-import { ObjectMapObjectControls } from './ObjectMapObjectControls';
 import {
   createObjectMapDebugId,
   publishObjectMapDebugSnapshot,
@@ -50,7 +49,6 @@ import {
 } from './objectMapDebugStore';
 import type { EdgeKindMeta } from './objectMapEdgeStyle';
 import { OBJECT_MAP_EDGE_FAMILY_LABELS, objectMapEdgeClass } from './objectMapEdgeStyle';
-import { objectMapNodeMenuItems } from './objectMapNodeMenuItems';
 import { normalizeObjectMapPayload } from './objectMapPayload';
 import type {
   ObjectMapContextMenuRequest,
@@ -625,17 +623,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     g6ViewportControls?.focusNode(node.id);
   }, [g6ViewportControls, model, searchIndex, visibleState.searchMatches]);
 
-  const selectVisibleNode = useCallback(
-    (id: string) => {
-      if (!visibleState.visibleLayout.nodes.some((node) => node.id === id)) {
-        return;
-      }
-      model.focusNode(id);
-      g6ViewportControls?.focusNode(id);
-    },
-    [g6ViewportControls, model, visibleState.visibleLayout.nodes]
-  );
-
   const handleKindsChange = useCallback(
     (value: string | string[]) => {
       setSelectedKinds(
@@ -852,28 +839,14 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     if (!node) {
       return [];
     }
-    const resourceItems = hasCompleteObjectMapReference({ ...node.ref })
+    return hasCompleteObjectMapReference({ ...node.ref })
       ? objectActions.getMenuItems(contextMenuObject)
       : [];
-    return [
-      ...resourceItems,
-      ...(resourceItems.length ? [{ divider: true }] : []),
-      ...objectMapNodeMenuItems({
-        layout: visibleState.visibleLayout,
-        node,
-        badge: model.badgeForNode(node.id),
-        onSelect: selectVisibleNode,
-        onToggleGroup: model.toggleGroup,
-        onMove: model.moveNodeBy,
-      }),
-    ];
   }, [
     canvasContextMenuItems,
     contextMenu,
     contextMenuObject,
-    model,
     objectActions,
-    selectVisibleNode,
     visibleState.visibleLayout,
   ]);
   const contextMenuPosition = objectMapContextMenuPosition(contextMenu);
@@ -897,12 +870,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
 
   return (
     <div className="object-map" data-testid="object-map">
-      <ObjectMapObjectControls
-        nodes={visibleState.visibleLayout.nodes}
-        activeId={model.activeNodeId}
-        onSelect={selectVisibleNode}
-        onActions={handleNodeContextMenu}
-      />
       <div className="object-map__header">
         <ObjectMapToolbar
           elementIdPrefix={elementIdPrefix}
