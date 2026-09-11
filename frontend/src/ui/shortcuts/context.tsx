@@ -17,6 +17,7 @@ import type {
 } from '@/types/shortcuts';
 import { isMacPlatform } from '@/utils/platform';
 import { focusRegisteredSearchShortcutTarget } from './searchShortcutRegistry';
+import { buildShortcutHelpGroups } from './shortcutHelp';
 import { useKeyboardFocusIndicator } from './useKeyboardFocusIndicator';
 import { getShortcutKey, isInputElement, modifiersMatch, resolveEventElement } from './utils';
 
@@ -486,7 +487,8 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       modifiers: isMacPlatform() ? { meta: true } : { ctrl: true },
       handler: () => Boolean(focusRegisteredSearchShortcutTarget()),
       description: 'Focus active search',
-      category: 'Global',
+      category: 'Search',
+      helpOrder: 20,
       priority: 1000,
     });
     return () => unregisterShortcut(id);
@@ -737,32 +739,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
   }, [applyNativeCutFallback, applyNativePasteFallback, dispatchNativeAction]);
 
   // Get available shortcuts for current context
-  const getAvailableShortcuts = useCallback((): ShortcutGroup[] => {
-    const groups = new Map<
-      string,
-      Array<{ key: string; modifiers?: ShortcutModifiers; description: string }>
-    >();
-
-    for (const shortcutList of shortcuts.values()) {
-      for (const shortcut of shortcutList) {
-        if (shortcut.enabled !== false || shortcut.discoverable) {
-          const category = shortcut.category || 'General';
-          const existing = groups.get(category) || [];
-          existing.push({
-            key: shortcut.key,
-            modifiers: shortcut.modifiers,
-            description: shortcut.description,
-          });
-          groups.set(category, existing);
-        }
-      }
-    }
-
-    return Array.from(groups.entries()).map(([category, categoryShortcuts]) => ({
-      category,
-      shortcuts: categoryShortcuts.sort((a, b) => a.key.localeCompare(b.key)),
-    }));
-  }, [shortcuts]);
+  const getAvailableShortcuts = useCallback(() => buildShortcutHelpGroups(shortcuts), [shortcuts]);
 
   // Check if a shortcut is available
   const isShortcutAvailable = useCallback(

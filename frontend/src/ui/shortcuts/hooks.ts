@@ -32,6 +32,7 @@ interface UseShortcutOptions {
   modifiers?: ShortcutModifiers;
   description?: string;
   category?: string;
+  helpOrder?: number;
   enabled?: boolean;
   discoverable?: boolean;
   priority?: number;
@@ -74,6 +75,7 @@ export function useShortcut(options: UseShortcutOptions) {
     modifiers,
     description = '',
     category,
+    helpOrder,
     enabled = true,
     discoverable,
     priority,
@@ -110,6 +112,7 @@ export function useShortcut(options: UseShortcutOptions) {
       handler: (event) => handlerRef.current(event),
       description,
       category,
+      helpOrder,
       enabled,
       discoverable,
       scope,
@@ -128,6 +131,7 @@ export function useShortcut(options: UseShortcutOptions) {
     key,
     description,
     category,
+    helpOrder,
     enabled,
     discoverable,
     applicationMenuCommand,
@@ -208,6 +212,7 @@ export function useShortcuts(
         handler: (event) => handlerRefs.current[index]?.(event),
         description: merged.description || '',
         category: merged.category,
+        helpOrder: merged.helpOrder,
         enabled: merged.enabled ?? true,
         discoverable: merged.discoverable,
         scope: merged.scope,

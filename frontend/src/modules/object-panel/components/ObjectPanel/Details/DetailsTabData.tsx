@@ -82,7 +82,8 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
       return false;
     },
     description: 'Toggle encode/decode (when viewing secret data)',
-    category: 'Object Panel',
+    category: 'Resource Data',
+    helpOrder: 30,
     enabled: hasData, // Only active when data is available
     priority: isSecret ? 20 : 0,
   });

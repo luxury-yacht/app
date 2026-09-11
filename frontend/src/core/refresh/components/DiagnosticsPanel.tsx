@@ -1978,7 +1978,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       return true;
     },
     description: 'Close diagnostics panel',
-    category: 'Diagnostics',
+    category: 'Windows & Panels',
+    helpOrder: 43,
     enabled: isOpen,
     priority: isOpen ? 35 : 0,
   });

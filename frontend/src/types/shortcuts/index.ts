@@ -23,6 +23,7 @@ export interface ShortcutDefinition {
   handler: (event?: KeyboardEvent) => undefined | boolean; // Return false to prevent default
   description: string;
   category?: string; // For grouping in help menu
+  helpOrder?: number; // Display order within the category, independent of dispatch priority
   enabled?: boolean; // Can be dynamically disabled
   discoverable?: boolean; // Include in shortcut help even when native chrome owns dispatch
   scope?: ShortcutScope; // Application-menu accelerators may pass through transient surfaces

@@ -120,19 +120,27 @@ export function useAppRegionNavigation() {
         modifiers: { ctrl: true },
         handler: () => cycle(1),
         description: 'Focus next region',
+        helpOrder: 20,
       },
       {
         key: 'Tab',
         modifiers: { ctrl: true, shift: true },
         handler: () => cycle(-1),
         description: 'Focus previous region',
+        helpOrder: 21,
       },
-      { key: 'Tab', handler: navigateLocally, description: 'Next control in region' },
+      {
+        key: 'Tab',
+        handler: navigateLocally,
+        description: 'Next control in region',
+        helpOrder: 10,
+      },
       {
         key: 'Tab',
         modifiers: { shift: true },
         handler: navigateLocally,
         description: 'Previous control in region',
+        helpOrder: 11,
       },
     ],
     { category: 'Navigation', priority: 200 }

@@ -176,7 +176,8 @@ export function GlobalShortcuts({
     modifiers: { shift: true },
     handler: toggleHelp,
     description: 'Show keyboard shortcuts help',
-    category: 'Global',
+    category: 'Settings & Tools',
+    helpOrder: 20,
   });
 
   useShortcut({
@@ -184,7 +185,8 @@ export function GlobalShortcuts({
     modifiers: macPlatform ? { meta: true } : { ctrl: true },
     handler: handleRefresh,
     description: 'Refresh current view',
-    category: 'Navigation',
+    category: 'Resource Data',
+    helpOrder: 10,
     enabled: !!onRefresh,
   });
 
@@ -213,6 +215,7 @@ export function GlobalShortcuts({
     },
     description: 'Switch to previous cluster tab',
     category: 'Navigation',
+    helpOrder: 40,
     enabled: selectedKubeconfigs.length > 1,
   });
 
@@ -225,6 +228,7 @@ export function GlobalShortcuts({
     },
     description: 'Switch to next cluster tab',
     category: 'Navigation',
+    helpOrder: 41,
     enabled: selectedKubeconfigs.length > 1,
   });
 
@@ -232,7 +236,8 @@ export function GlobalShortcuts({
     key: KeyCodes.ESCAPE,
     handler: handleEscape,
     description: 'Close overlay/panel',
-    category: 'Global',
+    category: 'Windows & Panels',
+    helpOrder: 40,
     priority: 10,
   });
 

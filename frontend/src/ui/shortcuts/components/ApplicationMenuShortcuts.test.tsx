@@ -160,20 +160,27 @@ describe('ApplicationMenuShortcuts', () => {
       await Promise.resolve();
     });
 
-    const application = getAvailable().find(({ category }) => category === 'Application');
-    expect(application?.shortcuts).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ key: 'b', modifiers: expect.objectContaining({ meta: true }) }),
-        expect.objectContaining({
-          key: 'l',
-          modifiers: expect.objectContaining({ ctrl: true, shift: true }),
-        }),
-        expect.objectContaining({ key: '=', modifiers: expect.objectContaining({ meta: true }) }),
-        expect.objectContaining({
-          key: 'p',
-          modifiers: expect.objectContaining({ meta: true, shift: true }),
-        }),
-      ])
+    const groups = getAvailable();
+    expect(
+      groups.map(({ category, shortcuts }) => [category, shortcuts.map(({ key }) => key)])
+    ).toEqual([
+      ['Search', ['p', 'f']],
+      ['Windows & Panels', ['n', 'o', 'w', 'm', 'b', 'q']],
+      ['Zoom', ['=', '-', '0']],
+      ['Resource Data', ['d']],
+      ['Settings & Tools', [',', 'l', 'd', 'F12']],
+    ]);
+    expect(groups[0].shortcuts[0].modifiers).toEqual(
+      expect.objectContaining({ meta: true, shift: true })
     );
+    expect(groups[4].shortcuts[1].modifiers).toEqual(
+      expect.objectContaining({ ctrl: true, shift: true })
+    );
+    const zoom = groups.find(({ category }) => category === 'Zoom');
+    for (const key of ['=', '-', '0']) {
+      expect(zoom?.shortcuts).toContainEqual(
+        expect.objectContaining({ key, modifiers: expect.objectContaining({ meta: true }) })
+      );
+    }
   });
 });

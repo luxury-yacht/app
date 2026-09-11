@@ -17,7 +17,7 @@ import {
   pasteIntoContentEditable,
   useKeyboardContext,
 } from './context';
-import { useShortcut } from './hooks';
+import { useShortcut, useShortcuts } from './hooks';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn<(event: string, handler: (...args: unknown[]) => void) => () => void>(
@@ -102,7 +102,7 @@ describe('KeyboardProvider', () => {
     expect(apiRef.current?.getAvailableShortcuts()).toEqual(
       expect.arrayContaining([
         {
-          category: 'Global',
+          category: 'Search',
           shortcuts: [expect.objectContaining({ description: 'Focus active search' })],
         },
         {
@@ -111,6 +111,89 @@ describe('KeyboardProvider', () => {
         },
       ])
     );
+  });
+
+  it('orders help by task and action without changing dispatch priority or availability', async () => {
+    const apiRef: { current: KeyboardContextApi | null } = { current: null };
+    const lowerPriority = vi.fn();
+    const higherPriority = vi.fn();
+    const categories = [
+      'Navigation',
+      'Search',
+      'Windows & Panels',
+      'Zoom',
+      'Resource Data',
+      'Tables',
+      'YAML',
+      'Logs',
+      'Settings & Tools',
+    ];
+    const Harness = () => {
+      apiRef.current = useKeyboardContext();
+      useShortcuts(
+        [...categories].reverse().map((category, index) => ({
+          key: String(index),
+          category,
+          description: `${category} action`,
+          handler: vi.fn(),
+        }))
+      );
+      useShortcut({
+        key: 'k',
+        description: 'Earlier in help',
+        category: 'Navigation',
+        helpOrder: 10,
+        priority: 1,
+        handler: lowerPriority,
+      });
+      useShortcut({
+        key: 'k',
+        description: 'Later in help',
+        category: 'Navigation',
+        helpOrder: 20,
+        priority: 100,
+        handler: higherPriority,
+      });
+      useShortcut({
+        key: 'a',
+        description: 'Native zoom',
+        category: 'Zoom',
+        helpOrder: 10,
+        enabled: false,
+        discoverable: true,
+        handler: vi.fn(),
+      });
+      useShortcut({
+        key: 'x',
+        description: 'Unavailable action',
+        category: 'Inactive',
+        enabled: false,
+        handler: vi.fn(),
+      });
+      return null;
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <Harness />
+        </KeyboardProvider>
+      );
+    });
+
+    const groups = apiRef.current?.getAvailableShortcuts();
+    expect(groups?.map(({ category }) => category)).toEqual(categories);
+    expect(groups?.[0].shortcuts.map(({ description }) => description)).toEqual([
+      'Earlier in help',
+      'Later in help',
+      'Navigation action',
+    ]);
+    expect(groups?.[3].shortcuts[0].description).toBe('Native zoom');
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', bubbles: true }));
+    });
+    expect(higherPriority).toHaveBeenCalledOnce();
+    expect(lowerPriority).not.toHaveBeenCalled();
   });
 
   it('executes the highest priority shortcut for matching key events', async () => {

@@ -107,41 +107,49 @@ export function useGridTableShortcuts({
         key: 'ArrowDown',
         handler: () => moveSelectionByDelta(1),
         description: 'Select next row',
+        helpOrder: 10,
       },
       {
         key: 'ArrowUp',
         handler: () => moveSelectionByDelta(-1),
         description: 'Select previous row',
+        helpOrder: 11,
       },
       {
         key: 'PageDown',
         handler: () => moveSelectionByDelta(getPageSizeRef.current),
         description: 'Page down',
+        helpOrder: 30,
       },
       {
         key: 'PageUp',
         handler: () => moveSelectionByDelta(-getPageSizeRef.current),
         description: 'Page up',
+        helpOrder: 31,
       },
       {
         key: 'Home',
         handler: () => jumpToIndex(0),
         description: 'Jump to first row',
+        helpOrder: 20,
       },
       {
         key: 'End',
         handler: () => jumpToIndex(tableDataLength - 1),
         description: 'Jump to last row',
+        helpOrder: 21,
       },
       {
         key: 'Enter',
         handler: onOpenFocusedRow,
         description: 'Open focused row',
+        helpOrder: 50,
       },
       {
         key: ' ',
         handler: onSelectFocusedRow ?? onOpenFocusedRow,
         description: onSelectFocusedRow ? 'Select focused row' : 'Open focused row',
+        helpOrder: 51,
       },
       {
         key: 'F10',
@@ -151,6 +159,7 @@ export function useGridTableShortcuts({
           onOpenContextMenu();
         },
         description: 'Open row context menu',
+        helpOrder: 60,
         enabled: enableContextMenu,
       },
       {
@@ -164,6 +173,7 @@ export function useGridTableShortcuts({
           return true;
         },
         description: 'Previous page',
+        helpOrder: 40,
         enabled: Boolean(onPagePrevious),
       },
       {
@@ -177,13 +187,14 @@ export function useGridTableShortcuts({
           return true;
         },
         description: 'Next page',
+        helpOrder: 41,
         enabled: Boolean(onPageNext),
       },
     ],
     {
       enabled: shortcutsActive,
       priority: 400,
-      category: 'Grid Table',
+      category: 'Tables',
     }
   );
 }

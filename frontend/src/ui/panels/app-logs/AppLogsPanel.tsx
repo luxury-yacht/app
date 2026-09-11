@@ -617,7 +617,8 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
       return false;
     },
     description: 'Close Application Logs Panel',
-    category: 'Application Logs Panel',
+    category: 'Windows & Panels',
+    helpOrder: 42,
     enabled: isOpen,
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ESCAPE : 0,
   });
@@ -704,8 +705,9 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
       }
       return false;
     },
-    description: 'Toggle auto-scroll',
-    category: 'Application Logs Panel',
+    description: 'Toggle application log auto-scroll',
+    category: 'Logs',
+    helpOrder: 11,
     enabled: isOpen,
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
@@ -720,8 +722,9 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
       }
       return false;
     },
-    description: 'Clear logs',
-    category: 'Application Logs Panel',
+    description: 'Clear application logs',
+    category: 'Logs',
+    helpOrder: 71,
     enabled: isOpen,
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });

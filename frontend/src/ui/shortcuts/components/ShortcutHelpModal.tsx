@@ -12,7 +12,6 @@ import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import React, { useEffect, useRef, useState } from 'react';
 import type { ShortcutGroup, ShortcutModifiers } from '@/types/shortcuts';
 import { useKeyboardContext } from '../context';
-import { KeyboardNavigationGuide } from './KeyboardNavigationGuide';
 import './ShortcutHelpModal.css';
 
 interface ShortcutHelpModalProps {
@@ -44,12 +43,15 @@ const ARROW_DIRECTIONS: Partial<
 };
 
 const buildModifierKeycaps = (shortcut: ShortcutItem, isMac: boolean) =>
-  MODIFIER_KEYCAPS.filter(({ modifier }) => shortcut.modifiers?.[modifier]).map(
-    ({ modifier, macLabel, defaultLabel }) => {
-      const label = isMac ? macLabel : defaultLabel;
-      return <kbd key={modifier}>{label}</kbd>;
-    }
-  );
+  MODIFIER_KEYCAPS.filter(
+    ({ modifier }) =>
+      shortcut.modifiers?.[modifier] &&
+      // The question-mark character already represents the shifted key.
+      (modifier !== 'shift' || shortcut.key !== '?')
+  ).map(({ modifier, macLabel, defaultLabel }) => {
+    const label = isMac ? macLabel : defaultLabel;
+    return <kbd key={modifier}>{label}</kbd>;
+  });
 
 const ShortcutKeyContent = ({ shortcutKey }: { shortcutKey: string }) => {
   const arrowDirection = ARROW_DIRECTIONS[shortcutKey];
@@ -170,7 +172,6 @@ export function ShortcutHelpModal({ isOpen, onClose }: Readonly<ShortcutHelpModa
       />
 
       <div className="modal-content shortcut-help-modal-content">
-        <KeyboardNavigationGuide />
         {shortcuts.length === 0 ? (
           <p className="no-shortcuts">No shortcuts available in this context</p>
         ) : (

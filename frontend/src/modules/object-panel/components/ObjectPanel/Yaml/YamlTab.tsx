@@ -781,7 +781,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
       return true;
     }, [isActive, isEditing]),
     description: 'Toggle managedFields',
-    category: 'YAML Tab',
+    category: 'YAML',
+    helpOrder: 30,
     enabled: true,
     priority: 20,
   });
@@ -791,7 +792,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
     modifiers: { meta: true },
     handler: () => runYamlEditShortcut(isEditing, isSaving, handleSaveClick),
     description: 'Save YAML changes',
-    category: 'YAML Tab',
+    category: 'YAML',
+    helpOrder: 10,
     enabled: canUseYamlEditShortcut(isEditing, isSaving),
     priority: 30,
   });
@@ -801,7 +803,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
     modifiers: { ctrl: true },
     handler: () => runYamlEditShortcut(isEditing, isSaving, handleSaveClick),
     description: 'Save YAML changes',
-    category: 'YAML Tab',
+    category: 'YAML',
+    helpOrder: 11,
     enabled: canUseYamlEditShortcut(isEditing, isSaving),
     priority: 30,
   });
@@ -810,7 +813,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
     key: 'Escape',
     handler: () => runYamlEditShortcut(isEditing, isSaving, handleCancelClick),
     description: 'Cancel YAML edit',
-    category: 'YAML Tab',
+    category: 'YAML',
+    helpOrder: 20,
     enabled: canUseYamlEditShortcut(isEditing, isSaving),
     priority: 30,
   });

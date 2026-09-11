@@ -56,20 +56,28 @@ describe('ShortcutHelpModal', () => {
     });
   };
 
-  it('renders shortcut groups when open', async () => {
+  it('preserves the provided section and action order when open', async () => {
     getAvailableShortcutsMock.mockReturnValue([
       {
-        category: 'Global',
+        category: 'Navigation',
         shortcuts: [
           {
-            key: '/',
-            description: 'Open help',
-            modifiers: { meta: true },
+            key: 'Tab',
+            description: 'Next control in region',
           },
           {
-            key: 'ArrowUp',
-            description: 'Move up',
+            key: 'Tab',
+            description: 'Previous control in region',
+            modifiers: { shift: true },
           },
+        ],
+      },
+      {
+        category: 'Zoom',
+        shortcuts: [
+          { key: '=', description: 'Zoom In', modifiers: { meta: true } },
+          { key: '-', description: 'Zoom Out', modifiers: { meta: true } },
+          { key: '0', description: 'Reset Zoom', modifiers: { meta: true } },
         ],
       },
     ]);
@@ -77,8 +85,15 @@ describe('ShortcutHelpModal', () => {
     await renderModal({ isOpen: true, onClose: vi.fn() });
 
     const groups = document.querySelectorAll('.shortcut-group');
-    expect(groups).toHaveLength(1);
+    expect(Array.from(groups, (group) => group.querySelector('h3')?.textContent)).toEqual([
+      'Navigation',
+      'Zoom',
+    ]);
     expect(groups[0].querySelectorAll('.shortcut-item')).toHaveLength(2);
+    expect(
+      Array.from(groups[1].querySelectorAll('.shortcut-description'), (row) => row.textContent)
+    ).toEqual(['Zoom In', 'Zoom Out', 'Reset Zoom']);
+    expect(document.querySelector('[aria-label="Keyboard navigation guide"]')).toBeNull();
     expect(document.querySelector('.shortcut-help-modal')?.getAttribute('role')).toBe('dialog');
     expect(useModalFocusTrapMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -87,16 +102,24 @@ describe('ShortcutHelpModal', () => {
     );
   });
 
-  it('explains row controls, tab actions, map search and status popovers', async () => {
-    getAvailableShortcutsMock.mockReturnValue([]);
+  it('uses the same question-mark notation in the shortcut row and footer', async () => {
+    getAvailableShortcutsMock.mockReturnValue([
+      {
+        category: 'Settings & Tools',
+        shortcuts: [
+          { key: '?', modifiers: { shift: true }, description: 'Show keyboard shortcuts help' },
+          { key: 'p', modifiers: { shift: true }, description: 'An explicit Shift shortcut' },
+        ],
+      },
+    ]);
+
     await renderModal({ isOpen: true, onClose: vi.fn() });
-    const guide = document.querySelector('[aria-label="Keyboard navigation guide"]');
-    expect(guide).not.toBeNull();
-    expect(guide?.textContent).toContain('current row');
-    expect(guide?.textContent).toContain('Tab reaches Close.');
-    expect(guide?.textContent).toContain('map search field');
-    expect(guide?.textContent).toContain('status');
-    expect(guide?.textContent).toContain('Ctrl+Shift+Tab');
+
+    const keycaps = document.querySelectorAll('.shortcut-item .keycap');
+    const footerKey = document.querySelector('.shortcut-help-modal-footer kbd')?.textContent;
+    expect(footerKey).toBe('?');
+    expect(keycaps[0].textContent).toBe(footerKey);
+    expect(keycaps[1].querySelectorAll('kbd')).toHaveLength(2);
   });
 
   it('handles closing animation and re-enables shortcuts', async () => {
