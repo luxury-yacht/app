@@ -1,4 +1,5 @@
 import { ModalStateProvider } from '@core/contexts/ModalStateContext';
+import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -112,7 +113,7 @@ describe('AppHeader', () => {
   it.each([false, true])('wraps Shift+Tab to the final header control (mac=%s)', (isMac) => {
     platformMock.isMacPlatform.mockReturnValue(isMac);
     act(() => renderHeader());
-    const first = container.querySelector<HTMLElement>('header button');
+    const first = getTabbableElements(container)[0];
     act(() => {
       first?.focus();
       first?.dispatchEvent(
@@ -146,37 +147,56 @@ describe('AppHeader', () => {
     expect(reportOperationalError).toHaveBeenCalledWith(error, { source: 'AppHeader', action });
   });
 
-  it('renders header controls in the expected tab order', () => {
-    act(() => {
-      renderHeader();
-    });
+  it.each([false, true])(
+    'skips the drag area in both directions through the header (mac=%s)',
+    (isMac) => {
+      platformMock.isMacPlatform.mockReturnValue(isMac);
+      act(() => {
+        renderHeader();
+      });
 
-    const focusables = Array.from(
-      container.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )
-    );
+      const focusables = getTabbableElements(container);
+      expect(
+        focusables.map((element) => element.getAttribute('aria-label') || element.textContent)
+      ).toEqual(
+        isMac
+          ? ['Favorites', 'Command Palette']
+          : [
+              'File menu',
+              'Edit menu',
+              'View menu',
+              'Window menu',
+              ...(import.meta.env.DEV ? ['Debug menu'] : []),
+              'Help menu',
+              'Favorites',
+              'Command Palette',
+              'Minimise window',
+              'Maximise window',
+              'Close window',
+            ]
+      );
 
-    expect(
-      focusables.map((element) => element.getAttribute('aria-label') || element.textContent)
-    ).toEqual([
-      'File menu',
-      'Edit menu',
-      'View menu',
-      'Window menu',
-      ...(import.meta.env.DEV ? ['Debug menu'] : []),
-      'Help menu',
-      'Toggle window maximize',
-      'Favorites',
-      'Command Palette',
-      'Minimise window',
-      'Maximise window',
-      'Close window',
-    ]);
-
-    expect(container.querySelector('.app-header--custom-frame')).not.toBeNull();
-    expect(container.querySelector('[role="menubar"]')).not.toBeNull();
-  });
+      act(() => focusables[0].focus());
+      for (const shiftKey of [false, true]) {
+        const destinations = shiftKey
+          ? [...focusables.slice(1).reverse(), focusables[0]]
+          : [...focusables.slice(1), focusables[0]];
+        for (const destination of destinations) {
+          act(() => {
+            document.activeElement?.dispatchEvent(
+              new KeyboardEvent('keydown', {
+                key: 'Tab',
+                shiftKey,
+                bubbles: true,
+                cancelable: true,
+              })
+            );
+          });
+          expect(document.activeElement).toBe(destination);
+        }
+      }
+    }
+  );
 
   it('keeps the native menu and traffic-light frame for a mac workspace', () => {
     platformMock.isMacPlatform.mockReturnValue(true);
@@ -365,7 +385,7 @@ describe('AppHeader', () => {
     expect(runtimeMock.toggleMaximise).not.toHaveBeenCalled();
   });
 
-  it('exposes the titlebar maximize gesture as a native keyboard control', () => {
+  it('preserves programmatic activation of the titlebar maximize gesture', () => {
     act(() => {
       renderHeader();
     });

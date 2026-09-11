@@ -43,6 +43,7 @@
 }
 
 .command-palette-input {
+  --shadow-focus-halo: none;
   width: 100%;
   padding: 0.5rem 1rem;
   font-size: 0.85rem;

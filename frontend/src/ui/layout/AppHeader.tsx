@@ -141,6 +141,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace', clusterName }
       <button
         type="button"
         className="app-header-drag-control"
+        tabIndex={-1}
         aria-label="Toggle window maximize"
         title="Double-click to maximize or restore the window"
         onClick={(event) => {

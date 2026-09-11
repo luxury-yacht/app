@@ -2,13 +2,15 @@
 
 package appwindow
 
-/*
-// Use Wails' own bridge so the private_mac_apis build opt-in remains authoritative.
-void wailsPrivateEnableWebInspector(void *window);
-*/
-import "C"
+import (
+	/*
+		// Use Wails' own bridge so the private_mac_apis build opt-in remains authoritative.
+		void wailsPrivateEnableWebInspector(void *window);
+	*/
+	"C"
 
-import "github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/application"
+)
 
 const nativeInspectorEnabled = true
 
