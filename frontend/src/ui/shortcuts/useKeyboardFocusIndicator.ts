@@ -30,6 +30,12 @@ export function useKeyboardFocusIndicator() {
       keyboardNavigation = false;
       clearIndicator();
     };
+    const handleBeforeInput = (event: Event) => {
+      if (event.target === indicated) {
+        // Editing dismisses the cue; the next keyboard focus move restores it.
+        clearIndicator();
+      }
+    };
     const handleClick = (event: MouseEvent) => {
       if (!(event.target instanceof Element)) {
         return;
@@ -45,11 +51,13 @@ export function useKeyboardFocusIndicator() {
     };
     window.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('pointerdown', handlePointerDown, true);
+    window.addEventListener('beforeinput', handleBeforeInput, true);
     window.addEventListener('click', handleClick, true);
     window.addEventListener('focusin', indicateFocus, true);
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('beforeinput', handleBeforeInput, true);
       window.removeEventListener('click', handleClick, true);
       window.removeEventListener('focusin', indicateFocus, true);
       clearIndicator();

@@ -370,6 +370,9 @@ const DropdownBulkActions = ({
   const iconSize = showLabels
     ? DROPDOWN_BULK_ACTION_ICON_SIZE
     : DROPDOWN_BULK_ACTION_ICON_SIZE_ICON_ONLY;
+  const actionClassName = `dropdown-bulk-action icon-bar-button${
+    showLabels ? ' dropdown-bulk-action--labeled' : ''
+  }`;
   return (
     <div
       className={`dropdown-bulk-actions icon-bar${
@@ -380,14 +383,14 @@ const DropdownBulkActions = ({
         <>
           <button
             type="button"
-            className={`dropdown-bulk-action icon-bar-button${
-              showLabels ? ' dropdown-bulk-action--labeled' : ''
-            }`}
+            className={actionClassName}
             onClick={(event) => {
               event.stopPropagation();
-              onSelectAll();
+              if (selectedCount !== selectableCount) {
+                onSelectAll();
+              }
             }}
-            disabled={selectedCount === selectableCount}
+            aria-disabled={selectedCount === selectableCount}
             title="Select all"
             aria-label="Select all"
           >
@@ -396,14 +399,14 @@ const DropdownBulkActions = ({
           </button>
           <button
             type="button"
-            className={`dropdown-bulk-action icon-bar-button${
-              showLabels ? ' dropdown-bulk-action--labeled' : ''
-            }`}
+            className={actionClassName}
             onClick={(event) => {
               event.stopPropagation();
-              onSelectNone();
+              if (selectedCount > 0) {
+                onSelectNone();
+              }
             }}
-            disabled={selectedCount === 0}
+            aria-disabled={selectedCount === 0}
             title="Select none"
             aria-label="Select none"
           >
@@ -422,6 +425,7 @@ const DropdownBulkActions = ({
 
 interface DropdownMenuControlsProps {
   searchable: boolean;
+  hasOptionActions: boolean;
   searchInputRef: React.RefObject<HTMLInputElement | null>;
   searchPlaceholder: string;
   searchValue: string;
@@ -440,6 +444,7 @@ interface DropdownMenuControlsProps {
 
 const DropdownMenuControls = ({
   searchable,
+  hasOptionActions,
   searchInputRef,
   searchPlaceholder,
   searchValue,
@@ -477,8 +482,9 @@ const DropdownMenuControls = ({
             aria-label={searchPlaceholder}
             aria-autocomplete="list"
             aria-expanded="true"
+            aria-haspopup={hasOptionActions ? 'dialog' : 'listbox'}
             aria-controls={menuId}
-            aria-activedescendant={activeOptionId}
+            aria-activedescendant={hasOptionActions ? undefined : activeOptionId}
           />
         </div>
       ) : null}
@@ -529,44 +535,77 @@ type OnlyActionConfig = {
   selectOnly: (value: string) => void;
 };
 
+const hasDropdownRowActions = <TMetadata,>(
+  renderOptionActions: DropdownProps<TMetadata>['renderOptionActions'],
+  onlyAction: OnlyActionConfig | null
+): boolean => Boolean(renderOptionActions || onlyAction);
+
 type KeyboardNavigationResult = 'handled' | 'handled-no-prevent' | 'ignored';
+
+const getFocusedDropdownListControl = (menu: HTMLElement | null): HTMLElement | null => {
+  const active = document.activeElement;
+  return active instanceof HTMLElement &&
+    active.matches('.dropdown-option, .dropdown-only-action') &&
+    menu?.contains(active)
+    ? active
+    : null;
+};
+
+const ownsDropdownListKey = (
+  event: KeyboardEvent,
+  trigger: HTMLElement | null,
+  search: HTMLElement | null,
+  menu: HTMLElement | null
+): boolean => {
+  if (event.key === 'Escape' || event.target === trigger || event.target === search) {
+    return true;
+  }
+  const focusedControl = getFocusedDropdownListControl(menu);
+  if (!focusedControl || event.target !== focusedControl) {
+    return false;
+  }
+  // Only shares list movement while retaining its native Enter/Space action.
+  return (
+    !focusedControl.classList.contains('dropdown-only-action') ||
+    ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)
+  );
+};
 
 interface DropdownTabContext {
   isOpen: boolean;
-  hasOptionActions: boolean;
   trigger: HTMLButtonElement | null;
   menu: HTMLElement | null;
-  closeDropdown: () => void;
 }
+
+const getDropdownTabStops = (menu: HTMLElement | null): HTMLElement[] => {
+  const elements = getTabbableElements(menu);
+  const isOptionAction = (element: HTMLElement) =>
+    Boolean(element.closest('.dropdown-option-actions'));
+  // Keep the list's single entry before its row actions even when the active
+  // option is below the first row.
+  return [
+    ...elements.filter((element) => !isOptionAction(element)),
+    ...elements.filter(isOptionAction),
+  ];
+};
 
 const handleDropdownTab = (
   event: KeyboardEvent,
-  { isOpen, hasOptionActions, trigger, menu, closeDropdown }: DropdownTabContext
+  { isOpen, trigger, menu }: DropdownTabContext
 ): boolean | null => {
   if (event.key !== 'Tab' || !isOpen) {
     return null;
   }
 
   const activeElement = document.activeElement;
-  const focusableElements = getTabbableElements(menu);
-  if (!event.shiftKey && activeElement === trigger) {
-    const firstAction = hasOptionActions
-      ? menu?.querySelector<HTMLElement>('.dropdown-option-actions button:not([disabled])')
-      : focusableElements[0];
-    if (firstAction) {
-      firstAction.focus();
-      return true;
-    }
-  }
+  const focusableElements = getDropdownTabStops(menu);
   const activeIndex = focusableElements.indexOf(activeElement as HTMLElement);
   const nextIndex = activeIndex + (event.shiftKey ? -1 : 1);
-  if (activeIndex >= 0 && nextIndex >= 0 && nextIndex < focusableElements.length) {
-    focusableElements[nextIndex].focus();
-    return true;
-  }
-
-  closeDropdown();
-  trigger?.focus();
+  const nextElement = activeIndex >= 0 ? focusableElements[nextIndex] : null;
+  const wrapElement = event.shiftKey
+    ? focusableElements[focusableElements.length - 1]
+    : focusableElements[0];
+  (nextElement ?? wrapElement ?? trigger)?.focus();
   return true;
 };
 
@@ -608,40 +647,34 @@ const resolveKeyboardNavigationResult = (
 const isTypingInSearch = (searchable: boolean): boolean =>
   searchable && document.activeElement?.classList.contains('search-input') === true;
 
-const ONLY_ACTION_ATTRIBUTE = 'data-dropdown-only';
-
-const renderOnlyAction = (option: DropdownOption<unknown>, onlyAction: OnlyActionConfig | null) => {
+const DropdownOnlyAction = ({
+  option,
+  onlyAction,
+  tabIndex,
+}: {
+  option: DropdownOption<unknown>;
+  onlyAction: OnlyActionConfig | null;
+  tabIndex: number;
+}) => {
   if (!onlyAction || option.disabled || option.group === 'header') {
     return null;
   }
   const inert = onlyAction.isOnlySelection(option.value);
   return (
-    <span
+    <button
+      type="button"
       className="dropdown-only-action"
-      data-dropdown-only="true"
-      data-disabled={inert ? 'true' : undefined}
-      aria-hidden="true"
+      aria-label={`Select only ${option.label}`}
+      aria-disabled={inert}
+      tabIndex={tabIndex}
+      onClick={(event) => {
+        event.stopPropagation();
+        onlyAction.selectOnly(option.value);
+      }}
     >
       only
-    </span>
+    </button>
   );
-};
-
-/** Routes a click on the option button to isolate-or-toggle. */
-const buildOptionClickHandler = (
-  option: DropdownOption<unknown>,
-  selectOption: (value: string) => void,
-  onlyAction: OnlyActionConfig | null
-) => {
-  return (event: React.MouseEvent<HTMLButtonElement>) => {
-    if (onlyAction && event.target instanceof Element) {
-      if (event.target.closest(`[${ONLY_ACTION_ATTRIBUTE}]`)) {
-        onlyAction.selectOnly(option.value);
-        return;
-      }
-    }
-    selectOption(option.value);
-  };
 };
 
 interface DropdownOptionRowProps<TMetadata> {
@@ -650,6 +683,7 @@ interface DropdownOptionRowProps<TMetadata> {
   controlId: string;
   multiple: boolean;
   highlightedIndex: number;
+  tabIndex: number;
   optionIsSelected: boolean;
   renderOption: DropdownProps<TMetadata>['renderOption'];
   renderOptionActions: DropdownProps<TMetadata>['renderOptionActions'];
@@ -678,6 +712,7 @@ const DropdownOptionRow = <TMetadata,>({
   controlId,
   multiple,
   highlightedIndex,
+  tabIndex,
   optionIsSelected,
   renderOption,
   renderOptionActions,
@@ -699,22 +734,15 @@ const DropdownOptionRow = <TMetadata,>({
     .filter(Boolean)
     .join(' ');
   const optionContent = (
-    <>
-      <DropdownOptionContent
-        option={option}
-        optionIsSelected={optionIsSelected}
-        multiple={multiple}
-        renderOption={renderOption}
-      />
-      {renderOnlyAction(option as DropdownOption<unknown>, onlyAction)}
-    </>
+    <DropdownOptionContent
+      option={option}
+      optionIsSelected={optionIsSelected}
+      multiple={multiple}
+      renderOption={renderOption}
+    />
   );
-  const handleOptionClick = buildOptionClickHandler(
-    option as DropdownOption<unknown>,
-    selectOption,
-    onlyAction
-  );
-  if (!renderOptionActions) {
+  const handleOptionClick = () => selectOption(option.value);
+  if (!hasDropdownRowActions(renderOptionActions, onlyAction)) {
     const optionAriaSelected = multiple
       ? optionIsSelected
       : optionIsHighlighted || (highlightedIndex < 0 && optionIsSelected);
@@ -725,6 +753,7 @@ const DropdownOptionRow = <TMetadata,>({
         className={optionClassName}
         onClick={handleOptionClick}
         selected={optionAriaSelected}
+        tabIndex={tabIndex}
         aria-disabled={option.disabled}
         disabled={option.disabled}
       >
@@ -745,12 +774,15 @@ const DropdownOptionRow = <TMetadata,>({
         className={optionClassName}
         onClick={handleOptionClick}
         aria-pressed={optionIsSelected}
-        tabIndex={-1}
+        tabIndex={tabIndex}
         disabled={option.disabled}
       >
         {optionContent}
       </button>
-      <div className="dropdown-option-actions">{renderOptionActions(option)}</div>
+      <DropdownOnlyAction option={option} onlyAction={onlyAction} tabIndex={tabIndex} />
+      {renderOptionActions ? (
+        <div className="dropdown-option-actions">{renderOptionActions(option)}</div>
+      ) : null}
     </div>
   );
 };
@@ -760,6 +792,7 @@ interface DropdownOptionListProps<TMetadata> {
   controlId: string;
   multiple: boolean;
   highlightedIndex: number;
+  searchable: boolean;
   renderOption: DropdownProps<TMetadata>['renderOption'];
   renderOptionActions: DropdownProps<TMetadata>['renderOptionActions'];
   getOptionRowProps: DropdownProps<TMetadata>['getOptionRowProps'];
@@ -768,11 +801,28 @@ interface DropdownOptionListProps<TMetadata> {
   onlyAction: OnlyActionConfig | null;
 }
 
+const getListTabStopIndex = <TMetadata,>(
+  options: DropdownOption<TMetadata>[],
+  highlightedIndex: number,
+  hasListTabStop: boolean
+): number => {
+  if (!hasListTabStop) {
+    return -1;
+  }
+  const isSelectable = (option: DropdownOption<TMetadata>) =>
+    !option.disabled && option.group !== 'header';
+  const highlighted = options[highlightedIndex];
+  return highlighted && isSelectable(highlighted)
+    ? highlightedIndex
+    : options.findIndex(isSelectable);
+};
+
 const DropdownOptionList = <TMetadata,>({
   options,
   controlId,
   multiple,
   highlightedIndex,
+  searchable,
   renderOption,
   renderOptionActions,
   getOptionRowProps,
@@ -783,6 +833,11 @@ const DropdownOptionList = <TMetadata,>({
   if (options.length === 0) {
     return <div className="no-options">No options available</div>;
   }
+  const tabStopIndex = getListTabStopIndex(
+    options,
+    highlightedIndex,
+    searchable || Boolean(onlyAction)
+  );
   return options.map((option, index) => (
     <DropdownOptionRow
       key={option.value}
@@ -791,6 +846,7 @@ const DropdownOptionList = <TMetadata,>({
       controlId={controlId}
       multiple={multiple}
       highlightedIndex={highlightedIndex}
+      tabIndex={index === tabStopIndex ? 0 : -1}
       optionIsSelected={isSelected(option.value)}
       renderOption={renderOption}
       renderOptionActions={renderOptionActions}
@@ -879,6 +935,13 @@ const DropdownMenuPortal = <TMetadata,>({
     }
 
     const highlightOptionFromTarget = (event: Event) => {
+      if (
+        event.type === 'mouseover' &&
+        menu.contains(document.activeElement) &&
+        document.activeElement?.closest('.dropdown-option-row, .dropdown-option')
+      ) {
+        return;
+      }
       const target = event.target;
       if (!(target instanceof Element)) {
         return;
@@ -904,10 +967,12 @@ const DropdownMenuPortal = <TMetadata,>({
     return null;
   }
 
+  const hasOptionActions = hasDropdownRowActions(renderOptionActions, onlyAction);
   const menuContent = (
     <>
       <DropdownMenuControls
         searchable={searchable}
+        hasOptionActions={hasOptionActions}
         searchInputRef={searchInputRef}
         searchPlaceholder={searchPlaceholder}
         searchValue={searchValue}
@@ -928,6 +993,7 @@ const DropdownMenuPortal = <TMetadata,>({
         controlId={controlId}
         multiple={multiple}
         highlightedIndex={highlightedIndex}
+        searchable={searchable}
         renderOption={renderOption}
         renderOptionActions={renderOptionActions}
         getOptionRowProps={getOptionRowProps}
@@ -943,7 +1009,7 @@ const DropdownMenuPortal = <TMetadata,>({
   };
 
   return createPortal(
-    renderOptionActions ? (
+    hasOptionActions ? (
       <dialog
         ref={setMenuElement}
         open
@@ -1143,14 +1209,17 @@ const Dropdown = <TMetadata,>({
   }, [isOpen, searchable]);
 
   const focusListOwner = useCallback(() => {
+    if (searchable && getFocusedDropdownListControl(menuRef.current)) {
+      return;
+    }
     (searchInputRef.current ?? triggerRef.current)?.focus({ preventScroll: true });
-  }, [triggerRef]);
+  }, [menuRef, searchable, triggerRef]);
 
   const selectMenuOption = useCallback(
     (optionValue: string) => {
       if (multiple) {
-        // Options use virtual focus; keep subsequent typing and list keys on
-        // the combobox after the pointer temporarily focuses an option button.
+        // Preserve list focus when entered directly; otherwise keep virtual
+        // navigation on the search field or trigger.
         focusListOwner();
       }
       selectOption(optionValue);
@@ -1168,13 +1237,30 @@ const Dropdown = <TMetadata,>({
     return {
       isOnlySelection,
       selectOnly: (optionValue: string) => {
-        focusListOwner();
         if (!isOnlySelection(optionValue)) {
           onChange([optionValue]);
         }
       },
     };
-  }, [enableOnlyAction, focusListOwner, multiple, onChange, value]);
+  }, [enableOnlyAction, multiple, onChange, value]);
+
+  const hasOptionActions = hasDropdownRowActions(renderOptionActions, onlyAction);
+
+  useLayoutEffect(() => {
+    const focusedControl = getFocusedDropdownListControl(menuRef.current);
+    if (!focusedControl) {
+      return;
+    }
+    const option = menuRef.current?.querySelector<HTMLElement>(
+      `.dropdown-option[data-dropdown-option-index="${highlightedIndex}"]`
+    );
+    const target = focusedControl.classList.contains('dropdown-only-action')
+      ? option?.closest('.dropdown-option-row')?.querySelector<HTMLElement>('.dropdown-only-action')
+      : option;
+    // Wait for the highlighted row to render so its Only button is visible
+    // before moving focus to it.
+    target?.focus({ preventScroll: true });
+  }, [highlightedIndex, menuRef]);
 
   const { handleKeyAction } = useKeyboardNavigation({
     options: filteredOptions,
@@ -1224,18 +1310,6 @@ const Dropdown = <TMetadata,>({
     [selectableFilteredValues, selectedValueSet]
   );
 
-  const applyBulkSelection = useCallback(
-    (nextValues: string[]) => {
-      // All/None disable themselves after activation. Move focus before the
-      // update so WebKit cannot drop it to the document body.
-      if (menuRef.current?.contains(document.activeElement)) {
-        (searchInputRef.current ?? triggerRef.current)?.focus();
-      }
-      onChange(nextValues);
-    },
-    [menuRef, onChange, triggerRef]
-  );
-
   const handleSelectAll = useMemo(
     () => () => {
       if (!multiple) {
@@ -1243,9 +1317,9 @@ const Dropdown = <TMetadata,>({
       }
       const currentValues = Array.isArray(value) ? value : [];
       const nextValues = Array.from(new Set([...currentValues, ...selectableFilteredValues]));
-      applyBulkSelection(nextValues);
+      onChange(nextValues);
     },
-    [applyBulkSelection, multiple, selectableFilteredValues, value]
+    [multiple, onChange, selectableFilteredValues, value]
   );
 
   const handleSelectNone = useMemo(
@@ -1255,9 +1329,9 @@ const Dropdown = <TMetadata,>({
       }
       const currentValues = Array.isArray(value) ? value : [];
       const visibleValues = new Set(selectableFilteredValues);
-      applyBulkSelection(currentValues.filter((optionValue) => !visibleValues.has(optionValue)));
+      onChange(currentValues.filter((optionValue) => !visibleValues.has(optionValue)));
     },
-    [applyBulkSelection, multiple, selectableFilteredValues, value]
+    [multiple, onChange, selectableFilteredValues, value]
   );
 
   // Scroll highlighted option into view
@@ -1346,26 +1420,18 @@ const Dropdown = <TMetadata,>({
 
     const tabResult = handleDropdownTab(event, {
       isOpen,
-      hasOptionActions: Boolean(renderOptionActions),
       trigger: triggerRef.current,
       menu: menuRef.current,
-      closeDropdown,
     });
     if (tabResult !== null) {
       return tabResult;
     }
 
-    // List navigation belongs to the combobox, not the popup's action buttons.
-    if (
-      event.key !== 'Escape' &&
-      event.target !== triggerRef.current &&
-      event.target !== searchInputRef.current
-    ) {
+    if (!ownsDropdownListKey(event, triggerRef.current, searchInputRef.current, menuRef.current)) {
       return false;
     }
 
-    // The "only" affordance is revealed by hover, so the keyboard needs its own
-    // way in rather than a tab stop on something that is usually invisible.
+    // Retain the direct shortcut alongside the row's tabbable Only button.
     if (handleOnlySelectionShortcut(event, onlyAction, highlightedIndex, filteredOptions)) {
       return true;
     }
@@ -1373,7 +1439,7 @@ const Dropdown = <TMetadata,>({
     return resolveKeyboardNavigationResult(
       event,
       handleKeyAction(event.key),
-      Boolean(renderOptionActions),
+      hasOptionActions,
       triggerRef.current
     );
   };
@@ -1431,7 +1497,7 @@ const Dropdown = <TMetadata,>({
       <DropdownTrigger
         triggerRef={triggerRef}
         searchable={searchable}
-        hasOptionActions={Boolean(renderOptionActions)}
+        hasOptionActions={hasOptionActions}
         isOpen={isOpen}
         menuId={menuId}
         activeOptionId={activeOptionId}
