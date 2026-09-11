@@ -4,6 +4,15 @@ Read this before editing. When user feedback identifies a recurring mistake,
 record the pattern and a concrete prevention check here. Keep entries focused
 on reusable rules; omit transient logs, credentials, and session history.
 
+## Missing native behavior changes in dependency upgrades
+
+A framework upgrade can retain a method while making its default implementation
+a no-op. Check migration notes and build-tag requirements, then exercise the
+native feature through its user entry point. For Inspector support, verify both
+right-click Inspect Element and the existing Inspector command in a dev build;
+Safari inspection alone does not prove either path. Keep native readiness hooks
+in the shared window registry and verify the release build remains excluded.
+
 ## Treating an unresolved design choice as selected
 
 When work is limited to investigation or implementation has been paused, keep

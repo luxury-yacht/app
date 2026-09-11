@@ -35,9 +35,16 @@ add global document/window listeners for ordinary app behavior.
   native WebKit pointer behavior cannot leave the next key in the old region.
   Its shared focus observer runs before local capture handlers and clears
   keyboard indication on pointer use and provider cleanup.
-- Both local Tab navigation and region switching show an explicit focus ring,
-  including immediately after a mouse click. The ring follows the final focused
-  item when a composite root redirects focus.
+- Both local Tab navigation and region switching show a soft focus halo,
+  including immediately after a mouse click. It follows the final focused
+  item when a composite root redirects focus, without adding a background fill.
+  `styles/utilities/focus.css` owns the treatment for native `:focus-visible`
+  and `.keyboard-programmatic-focus:focus`, with specificity above component
+  focus styles so lazy imports cannot replace it. Both appearance modes define
+  `--shadow-focus-halo`; geometry lives in `styles/tokens/elevation.css`.
+  Sidebar arrow previews use the same token. Forced-color mode uses a system
+  outline because shadows are suppressed there. Existing selection and hover
+  styling remain independent of this focus cue.
 - Surfaces marked `data-tab-native="true"`, such as shell terminals, retain
   ordinary Tab for native behavior; Control+Tab leaves their region. Blocking
   dialogs and the command palette keep region commands inside the blocking

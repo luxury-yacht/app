@@ -180,3 +180,60 @@ The existing development server on port 9245 was reused. No server or dependency
 was added. The browser fixture and routes were removed, and the native app was
 returned to Overview with the temporary object panel closed. Artifacts for this
 correction use `/tmp/luxury-yacht-tab-structure-` names.
+
+## Approved soft halo focus treatment
+
+The user selected Option 2 from the interactive comparison: a soft halo around
+the focused control, without adding a background fill. The shared focus utility
+owns the treatment for native keyboard focus and the existing programmatic
+focus marker. Theme tokens own its color and shadow; component selection,
+hover, layout and keyboard dispatch remain outside this styling change.
+Sidebar arrow navigation has an additional `keyboard-preview` marker that must
+use the same shadow.
+
+| Criterion | Status | Evidence |
+| --- | --- | --- |
+| Shared halo wins over component focus rules, including late-loaded styles | passed | Four failing-first cases in `cssCascadeContracts.test.ts` cover component cascade ordering, sidebar arrow preview, forced colors and the port input group's focus-within shadow. Expanding the cascade case also reproduced the YAML search override before removing it. The focused CSS, focus-indicator, SidebarKeys and Tabs run passed 4 files / 102 tests. CSS fixtures load real styles with fixed shadow values because jsdom does not resolve all theme variables |
+| Both themes match the selected treatment without changing control geometry or adding a fill | passed in browser | Standalone Playwright rendered production CSS with actual Tabs, Dropdown and keyboard providers, plus representative control markup. All 16 probes (8 controls in each theme) showed the 10px halo, no outline, and unchanged width/height. The unselected sidebar row remained transparent. Screenshots were inspected in both themes. YAML search and the port input/group were included; this fixture does not establish native rendering |
+| Focus remains visible with forced colors | passed in browser | Emulating forced colors initially removed both the shadow and focus indication. After the fallback, the focused port input had a system-colored 2px solid outline, -2px offset and no shadow. jsdom separately checks the actual media block, applied explicitly because it cannot activate this OS mode |
+| Mouse → Tab, reverse Tab and region navigation retain focus behavior | passed in browser | Actual Tabs: click Details → Tab reached Close; reverse Tab returned to Details; ArrowRight focused inactive YAML without changing the selected Details tab. Control+Tab reached sidebar Overview, Tab reached Browse, and Control+Tab reached Columns. The actual Dropdown opened, Tab reached search and Escape restored Columns. Local data/no-op callbacks replace native and resource actions; sidebar markup represents the region rather than mounting the full Sidebar |
+| Native keyboard and rendering verification | blocked | CUA reported that the Mac was locked and automatic unlock failed. The user was asked to unlock it; no native interaction passed in this follow-up. Browser results above and the existing navigation tests do not substitute for this check |
+| Coverage | passed | `mise exec -- wails3 task test:frontend-coverage` exited 0: 519 files / 4,955 tests; 87.14% statement coverage. CSS is not statement-instrumented, so the cascade regressions and rendered checks establish the changed styling. The unchanged focus-indicator owner measures 97.22% statements. Generated coverage was moved outside the frontend before the gate. A subsequent test-only compatibility edit replaces `replaceAll` with regex replacement; the final focused run again passed 102 tests with the same production CSS |
+| Changed-function cognitive complexity | not applicable | The production diff contains CSS only; no production TypeScript or Go function changed |
+| Remote Sonar and CI | passed at cdfcd63d | The live PR #344 audit reports zero open/confirmed new-code issues; `gh pr view 344 --json headRefOid,statusCheckRollup` reports Sonar and all listed CodeQL checks successful at cdfcd63d. These remote results do not cover this uncommitted styling change |
+| Development-process cleanup | passed | The temporary browser fixture was removed, its route cleared and the browser returned to about:blank. The task-started Wails process was interrupted. An elevated `lsof -nP -iTCP:9245 -sTCP:LISTEN` and `ps` of all six task-started development PIDs returned no output, exit 1: no listener or surviving task development process |
+| Separate frontend and dependency checks | passed | `qc:lint-fix` passed without edits. Final `qc:lint` and `qc:typecheck` passed after replacing unsupported test-fixture `replaceAll` calls; Knip and Trivy exited 0. Trivy reported zero HIGH/CRITICAL findings for npm and Go dependencies |
+| Final prerelease | failed | Both invocations of `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease`, including the final worktree after the test compatibility edit, exited 1 at `TestCanonicalToolVersionsMatchCompatibilityMetadata`: frontend Node engine `>=26.8.1`, expected `>=26.8.2` from mise.toml. `git show HEAD:frontend/package.json` and `git show HEAD:mise.toml` confirm this mismatch already exists at cdfcd63d; neither file is part of this styling diff. Go vet/staticcheck and binding validation passed before that failure. The separately executed frontend/dependency checks are recorded above; they do not make the full gate pass |
+| Post-gate inspection | passed | Final status and diff inspection found the intended 11 modified files: seven production CSS files, one test file and three documentation files. No temporary fixture, dependency or production TypeScript/Go edit remained. `git diff --check` passed, and an elevated final port-9245 listener check again returned no output, exit 1 |
+
+Local diagnostics for this follow-up use `/tmp/luxury-yacht-focus-halo-` names.
+The implementation remains uncommitted. Native verification remains unfinished
+until the Mac is available, and the full prerelease gate remains failed on the
+pre-existing version mismatch. The browser fixtures used no Kubernetes mutations.
+
+## Approved macOS development Inspector restoration
+
+The user reported the newly missing native Inspect Element command and approved
+restoring it. The investigation reproduced a native menu containing only Reload.
+Commit cdfcd63d upgraded Wails from beta.17 to beta.20; beta.19 moved direct
+Inspector opening behind `private_mac_apis` and changed modern macOS enablement
+to Safari inspection. The existing dev build had no private-API tag.
+
+The macOS dev build now supplies that opt-in. The shared registry factory owns
+the ready hook for all three creation paths (workspace, transferred cluster and
+native panel). Its platform adapter calls Wails' existing developer-extras bridge
+on the main thread, after the webview exists; production and other platforms
+exclude the setup. No resource identity, backend readiness or publication
+ordering changes are required. Durable ownership is documented in
+`docs/architecture/application-lifecycle.md`.
+
+| Criterion | Status | Evidence |
+| --- | --- | --- |
+| Dev builds opt in; release builds remain excluded and explicit extra tags survive | passed | `TestDarwinBuildEnablesPrivateInspectorOnlyInDevelopment` evaluates the real build-flags template for both modes, with and without a custom tag. Both dev cases failed before the change and all four passed afterward. The rebuilt native binary reports `-tags=private_mac_apis` through `go version -m` |
+| Shared ready-hook ownership | passed | The initial platform-local hook failed `TestWailsTransportEventsAndPeerHooksHaveOneCompositionOwner`; keeping registration in registry.go made that existing contract and the new build test pass. Native setup remains a consumer of readiness, not its producer |
+| Native Inspect Element opens the Inspector | passed before final hook relocation | CUA right-click on the Overview heading exposed Reload and Inspect Element; clicking Inspect Element opened Web Inspector — localhost, with Elements, Console and Sources. The Inspector was closed afterward. Repeat on final source remains pending |
+| Native peer/panel and direct command checks | pending | A temporary peer window was opened; subsequent app changes interrupted the menu check. Recheck after the final rebuild |
+| Coverage and complexity | pending | The first window suite passed; coverage measured 88.5% for appwindow but the full suite failed on the initial hook placement and the pre-existing Node-engine mismatch. Final coverage is running. Pinned gocognit v1.2.1 scores the changed factory and native adapter at 2 each, and the excluded-platform adapter at 0 |
+| Prerelease and cleanup | pending | Run the final gate and inspect the resulting worktree. This follow-up reused the user's existing Wails/Vite processes; no additional development server was started |
+
+Diagnostics for this follow-up use `/tmp/luxury-yacht-inspector-` names.

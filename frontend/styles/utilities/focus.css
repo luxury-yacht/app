@@ -1,134 +1,39 @@
 /* ==========================================================================
    Focus State Utilities
    ==========================================================================
-   Consistent focus-visible styling across all interactive elements.
-   Uses accent color for brand consistency and proper accessibility.
+   Shared keyboard focus presentation for native and programmatic navigation.
    ========================================================================== */
-
-/* ==========================================================================
-   Base Focus Ring
-   ========================================================================== */
-
-/* Default focus-visible style for all interactive elements */
-:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
 
 /* Remove default outline for mouse users */
 :focus:not(:focus-visible) {
   outline: none;
 }
 
-/* ==========================================================================
-   Focus Ring Variants
-   ========================================================================== */
-
-/* Explicit focus ring for programmatic Tab and Control+Tab navigation, including
-   when the preceding interaction was a mouse click. */
-.keyboard-programmatic-focus:focus {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-.sidebar-item.keyboard-programmatic-focus,
-[role="tab"].keyboard-programmatic-focus {
+/* App scope gives the shared treatment precedence over component focus rules,
+   including styles loaded later by lazy views. The programmatic marker covers
+   Tab and Control+Tab immediately after pointer use in native WebKit. */
+:root body :is(:focus-visible, .keyboard-programmatic-focus:focus) {
   outline: none;
-  box-shadow: inset 0 0 0 2px var(--color-accent);
-}
-
-.sidebar-item.keyboard-programmatic-focus {
-  border-left-color: var(--color-accent);
-}
-
-.dropdown-trigger.keyboard-programmatic-focus,
-button.keyboard-programmatic-focus,
-[role="button"].keyboard-programmatic-focus {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-/* Inset focus ring for contained elements (sidebar items, list items) */
-.focus-ring-inset:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--color-accent);
-}
-
-/* Tight focus ring with no offset (for compact elements) */
-.focus-ring-tight:focus-visible {
   outline-offset: 0;
+  box-shadow: var(--shadow-focus-halo);
 }
 
-/* Subtle focus ring (for less prominent elements) */
-.focus-ring-subtle:focus-visible {
-  outline: 1px solid var(--color-accent);
-  outline-offset: 1px;
-}
-
-/* ==========================================================================
-   Interactive Element Focus States
-   ========================================================================== */
-
-/* Buttons - already have focus-visible in buttons.css but ensure consistency */
-button:focus-visible,
-[role="button"]:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-/* Links */
 a:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: var(--border-radius-xs);
 }
 
-/* Form inputs */
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: var(--dropdown-trigger-focus-shadow);
-}
-
-/* Checkboxes and radios */
-input[type="checkbox"]:focus-visible,
-input[type="radio"]:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-/* ==========================================================================
-   Component-Specific Focus Overrides
-   ========================================================================== */
-
-/* Table rows - inset focus for better visual containment */
-.gridtable-row:focus-visible,
-tr:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--color-accent);
-}
-
-/* Sidebar items - inset focus with accent border */
-.sidebar-item:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--color-accent);
-  border-left-color: var(--color-accent);
-}
-
-/* Tab items */
 [role="tab"]:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--color-accent);
-  border-radius: var(--border-radius-sm, 4px);
+  border-radius: var(--border-radius-sm);
 }
 
-/* Card-like elements */
-.card:focus-visible,
-[role="listitem"]:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
+/* Forced colors remove shadows, so retain the system's visible focus cue. */
+@media (forced-colors: active) {
+  :root body :is(:focus-visible, .keyboard-programmatic-focus:focus),
+  .sidebar-item.keyboard-preview {
+    outline: var(--focus-system-outline-width) solid Highlight;
+    outline-offset: calc(-1 * var(--focus-system-outline-width));
+    box-shadow: none;
+  }
 }
 
 /* ==========================================================================

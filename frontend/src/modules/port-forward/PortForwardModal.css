@@ -185,7 +185,7 @@
 
 .port-forward-input-group:focus-within {
   border-color: var(--color-accent);
-  box-shadow: var(--dropdown-trigger-focus-shadow);
+  box-shadow: var(--shadow-focus-halo);
 }
 
 .port-forward-input {

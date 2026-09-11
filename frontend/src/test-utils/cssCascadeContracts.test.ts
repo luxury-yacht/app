@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 const readProjectFile = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
@@ -21,6 +22,112 @@ afterEach(() => {
 });
 
 describe('strict CSS cascade contracts', () => {
+  it('uses the shared soft halo after component styles load without changing control layout or fill', () => {
+    const halo =
+      'rgba(50, 108, 229, 0.38) 0px 0px 10px 1px, rgba(50, 108, 229, 0.14) 0px 0px 5px 0px inset';
+    const sources = [
+      'styles/utilities/focus.css',
+      'styles/components/buttons.css',
+      'styles/components/tabs.css',
+      'src/ui/layout/Sidebar.css',
+      'src/ui/layout/AppHeader.css',
+      'src/ui/dockable/DockablePanel.css',
+      'src/shared/components/ToggleSwitch.css',
+      'src/shared/components/modals/ScaleModal.css',
+      'src/shared/components/tables/TablePaginationControls.css',
+      'styles/components/search-input.css',
+      'styles/components/inputs.css',
+      'src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.css',
+      'src/ui/status/SessionsStatus.css',
+    ];
+    const style = installStyles(
+      ...sources.map((path) =>
+        readProjectFile(path)
+          .replace(/var\(--shadow-focus-halo\)/g, halo)
+          .replace(/var\(--color-accent\)/g, 'rgb(50, 108, 229)')
+      )
+    );
+    style.dataset.cssContract = 'focus-halo';
+    document.body.innerHTML = `
+      <button class="button">Button</button>
+      <div class="app-header"><button class="settings-button">Settings</button></div>
+      <button class="sidebar-item">Browse</button>
+      <button role="tab" class="tab-item">YAML</button>
+      <button class="tab-item__close">Close tab</button>
+      <button class="dockable-panel__control-btn">Dock</button>
+      <button class="toggle-switch">Toggle</button>
+      <div class="scale-modal-footer"><button class="button">Scale</button></div>
+      <button class="table-pagination-button">Next</button>
+      <div class="search-input-wrapper"><input class="search-input-field" /></div>
+      <div class="yaml-search-controls"><div class="find-controls"><input class="find-input" /></div></div>
+      <div class="sessions-status-message"><button class="as-shell-session-jump">Session</button></div>
+    `;
+    for (const control of document.querySelectorAll<HTMLElement>('button, input')) {
+      const width = getComputedStyle(control).width;
+      control.classList.add('keyboard-programmatic-focus');
+      control.focus();
+      const computed = getComputedStyle(control);
+      expect(computed.outlineStyle, control.outerHTML).toMatch(/^(none|)$/);
+      expect(computed.boxShadow, control.outerHTML).toBe(halo);
+      expect(computed.width, control.outerHTML).toBe(width);
+    }
+    const sidebar = requireValue(document.querySelector<HTMLElement>('.sidebar-item'), 'sidebar');
+    sidebar.focus();
+    const focusedFill = getComputedStyle(sidebar).backgroundColor;
+    sidebar.blur();
+    sidebar.classList.remove('keyboard-programmatic-focus');
+    expect(getComputedStyle(sidebar).backgroundColor).toBe(focusedFill);
+  });
+
+  it('uses a soft halo for sidebar arrow preview without drawing a solid inset ring', () => {
+    const halo = 'rgba(50, 108, 229, 0.38) 0px 0px 10px 1px';
+    const style = installStyles(
+      readProjectFile('src/ui/layout/Sidebar.css').replace(/var\(--shadow-focus-halo\)/g, halo)
+    );
+    style.dataset.cssContract = 'sidebar-focus-halo';
+    document.body.innerHTML = '<button class="sidebar-item keyboard-preview">Browse</button>';
+    const button = requireValue(document.querySelector('button'), 'sidebar preview');
+    expect(getComputedStyle(button).boxShadow).toBe(halo);
+  });
+
+  it('retains a visible focus indicator when forced colors suppress box shadows', () => {
+    const source = installStyles(readProjectFile('styles/utilities/focus.css'));
+    source.dataset.cssContract = 'forced-color-source';
+    // jsdom does not select forced-color media rules. Apply that media block
+    // explicitly; rendered browser checks verify the OS-mode behavior separately.
+    const sheet = requireValue(source.sheet, 'focus stylesheet');
+    const forcedRules = Array.from(sheet.cssRules).flatMap((rule) => {
+      if (rule instanceof CSSMediaRule && rule.conditionText === '(forced-colors: active)') {
+        return Array.from(rule.cssRules).map((child) => child.cssText);
+      }
+      return [];
+    });
+    const forced = installStyles(
+      ...forcedRules.map((rule) => rule.replace(/var\(--focus-system-outline-width\)/g, '2px'))
+    );
+    forced.dataset.cssContract = 'forced-color-focus';
+    document.body.innerHTML = '<button class="keyboard-programmatic-focus">Apply</button>';
+    const button = requireValue(document.querySelector('button'), 'focused button');
+    button.focus();
+    expect(getComputedStyle(button).outline).toContain('solid');
+  });
+
+  it('uses the shared halo around a focused port input group', () => {
+    const halo = 'rgba(50, 108, 229, 0.38) 0px 0px 10px 1px';
+    const style = installStyles(
+      readProjectFile('src/modules/port-forward/PortForwardModal.css').replace(
+        /var\(--shadow-focus-halo\)/g,
+        halo
+      )
+    );
+    style.dataset.cssContract = 'port-input-focus';
+    document.body.innerHTML =
+      '<div class="port-forward-input-group"><input class="port-forward-input" /></div>';
+    requireValue(document.querySelector('input'), 'port input').focus();
+    const group = requireValue(document.querySelector('.port-forward-input-group'), 'port group');
+    expect(getComputedStyle(group).boxShadow).toBe(halo);
+  });
+
   it('keeps the shared hidden utility authoritative without important', () => {
     const style = installStyles(readProjectFile('styles/utilities/display.css'));
     style.dataset.cssContract = 'hidden';

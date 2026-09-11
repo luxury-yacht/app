@@ -374,6 +374,20 @@ Updater staging, attempt, cleanup, protected, and helper-log paths are dynamic:
 only `UpdateCoordinator` resolves and validates them under the configured state
 path and temp root. Resolving a missing artifact must not create directories.
 
+## Development Inspector on macOS
+
+macOS `DEV=true` builds opt in to Wails' `private_mac_apis` so the existing
+Inspector command can open Web Inspector. Release builds do not add that tag
+implicitly. Wails' public Safari-inspection setting alone does not restore the
+native Inspect Element context-menu item on modern macOS.
+
+The shared window factory in `internal/appwindow/registry.go` registers the
+development-only Inspector setup for workspace, transferred-cluster and panel
+windows. After `WindowRuntimeReady`, it invokes Wails' developer-extras bridge
+on the native main thread. It obtains the native handle inside that dispatch
+and skips a destroyed window. The setup does not participate in backend
+readiness or change window publication ordering.
+
 ## Starting points
 
 - Asset embedding and process entry point: `main.go`

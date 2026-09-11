@@ -16,6 +16,10 @@
   --color-accent: var(--color-accent-dark-500);
   --color-accent-hover: var(--color-accent-dark-400);
   --color-accent-bg: rgba(245, 158, 11, 0.15);
+  --shadow-focus-halo:
+    0 0 var(--focus-halo-blur) var(--focus-halo-spread)
+    color-mix(in srgb, var(--color-accent) 38%, transparent),
+    inset 0 0 var(--focus-halo-inset-blur) color-mix(in srgb, var(--color-accent) 14%, transparent);
   --color-primary: var(--color-base-200);
   --color-primary-hover: var(--color-base-100);
 

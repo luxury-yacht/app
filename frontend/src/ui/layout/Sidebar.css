@@ -242,7 +242,7 @@
 }
 
 .sidebar-item.keyboard-preview {
-  box-shadow: inset 0 0 0 2px var(--color-accent, #4c83ff);
+  box-shadow: var(--shadow-focus-halo);
 }
 
 /* Non-clickable header items like "Resources" */
