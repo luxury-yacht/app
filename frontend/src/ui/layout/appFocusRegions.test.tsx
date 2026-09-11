@@ -125,6 +125,113 @@ describe('app region navigation through KeyboardProvider', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const outline = () => document.querySelector<HTMLElement>('.keyboard-region-outline');
+  const flushOutline = () => act(() => vi.advanceTimersByTime(20));
+  const prepareOutline = () => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement
+    ) {
+      const region = this.getAttribute('data-app-region');
+      if (region === 'header') {
+        return new DOMRect(0, this.tagName === 'HEADER' ? 0 : 30, 800, 30);
+      }
+      if (region === 'sidebar') {
+        return new DOMRect(0, 60, 200, 500);
+      }
+      return new DOMRect(200, 60, 600, 500);
+    });
+  };
+
+  it('briefly outlines the whole region on keyboard entry without replaying for local Tab', async () => {
+    prepareOutline();
+    await render();
+    focus('header-first');
+    expect(outline()).toBeNull();
+    await tab();
+    flushOutline();
+    const cue = outline();
+    expect(cue).not.toBeNull();
+    expect(cue?.getAttribute('aria-hidden')).toBe('true');
+    expect(cue?.tabIndex).toBe(-1);
+    expect(cue?.style.getPropertyValue('--region-outline-width')).toBe('800px');
+    expect(cue?.style.getPropertyValue('--region-outline-height')).toBe('60px');
+    expect(document.activeElement).toBe(element('header-last'));
+    cue?.dispatchEvent(new Event('animationend'));
+    expect(outline()).toBeNull();
+    await tab();
+    flushOutline();
+    expect(outline()).toBeNull();
+    element('cluster').dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    await tab();
+    flushOutline();
+    expect(outline()).not.toBeNull();
+  });
+
+  it('outlines only the destination when changing regions, including rapid reverse navigation', async () => {
+    prepareOutline();
+    await render();
+    focus('header-first');
+    await tab({ ctrlKey: true });
+    flushOutline();
+    expect(outline()?.style.getPropertyValue('--region-outline-width')).toBe('200px');
+    expect(outline()?.style.getPropertyValue('--region-outline-top')).toBe('60px');
+    await tab({ ctrlKey: true });
+    await tab({ ctrlKey: true, shiftKey: true });
+    await tab({ ctrlKey: true, shiftKey: true });
+    flushOutline();
+    expect(document.querySelectorAll('.keyboard-region-outline')).toHaveLength(1);
+    expect(outline()?.style.getPropertyValue('--region-outline-height')).toBe('60px');
+    expect(document.activeElement).toBe(element('header-first'));
+  });
+
+  it('keeps popup navigation in its owner region and dismisses the cue when typing', async () => {
+    prepareOutline();
+    await render();
+    focus('search');
+    await tab({ shiftKey: true });
+    flushOutline();
+    const cue = outline();
+    expect(cue).not.toBeNull();
+    element('last').setAttribute('aria-controls', 'outline-popup');
+    const popup = document.createElement('div');
+    popup.dataset.focusPortalOwner = 'outline-popup';
+    const input = document.createElement('input');
+    popup.append(input);
+    container.append(popup);
+    act(() => input.focus());
+    flushOutline();
+    expect(outline()).toBe(cue);
+    input.dispatchEvent(new Event('beforeinput', { bubbles: true }));
+    expect(outline()).toBeNull();
+    expect(input.classList.contains('keyboard-programmatic-focus')).toBe(false);
+  });
+
+  it('does not outline an underlying region when a modal blocks navigation', async () => {
+    prepareOutline();
+    await render({ blocking: true });
+    focus('modal');
+    await tab({ ctrlKey: true });
+    flushOutline();
+    expect(outline()).toBeNull();
+  });
+
+  it.each(['pointer', 'unmount'])('cancels pending region indication on %s', async (reason) => {
+    prepareOutline();
+    await render();
+    focus('header-first');
+    await tab();
+    if (reason === 'pointer') {
+      element('header-last').dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    } else {
+      act(() => root.render(null));
+    }
+    flushOutline();
+    expect(outline()).toBeNull();
   });
 
   it('switches regions from a portaled control using its invoking region', async () => {

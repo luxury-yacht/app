@@ -2,59 +2,19 @@ import { getTabbableElements } from '@shared/components/modals/getTabbableElemen
 import { getFocusPortalOwner } from '@shared/utils/focusOwnership';
 import { focusPanelById } from '@ui/dockable/useDockablePanelState';
 import { useShortcuts } from '@ui/shortcuts';
+import {
+  type AppRegion,
+  getFocusRegions,
+  isFocusTargetAvailable,
+  regionContains,
+} from '@ui/shortcuts/focusRegions';
 import { hasNativeTabHandling } from '@ui/shortcuts/utils';
 import { useEffect, useRef } from 'react';
-
-const REGION_SELECTOR = '[data-app-region], .dockable-panel';
-
-interface AppRegion {
-  roots: HTMLElement[];
-}
-
-const isAvailable = (element: HTMLElement): boolean => {
-  if (
-    !element.isConnected ||
-    element.matches(':disabled') ||
-    element.closest('[hidden], [inert], [aria-hidden="true"], .sidebar.collapsed')
-  ) {
-    return false;
-  }
-  for (let ancestor: HTMLElement | null = element; ancestor; ancestor = ancestor.parentElement) {
-    const style = window.getComputedStyle(ancestor);
-    if (style.display === 'none' || style.visibility === 'hidden') {
-      return false;
-    }
-  }
-  return true;
-};
-
-const getRegions = (): AppRegion[] => {
-  const regions: AppRegion[] = [];
-  for (const name of ['header', 'sidebar', 'content']) {
-    const roots = Array.from(
-      document.querySelectorAll<HTMLElement>(`[data-app-region="${name}"]`)
-    ).filter(isAvailable);
-    if (roots.length) {
-      regions.push({ roots });
-    }
-  }
-  const additionalRoots = ['.dockable-panel', '[data-app-region="notifications"]'].flatMap(
-    (selector) => Array.from(document.querySelectorAll<HTMLElement>(selector))
-  );
-  regions.push(...additionalRoots.filter(isAvailable).map((root) => ({ roots: [root] })));
-  return regions;
-};
-
-const contains = (region: AppRegion, element: Element | null) => {
-  const target = getFocusPortalOwner(element) ?? element;
-  const owner = target?.closest<HTMLElement>(REGION_SELECTOR);
-  return owner !== undefined && owner !== null && region.roots.includes(owner);
-};
 
 const getRegionControls = (region: AppRegion) =>
   region.roots
     .flatMap((root) => [...(root.tabIndex >= 0 ? [root] : []), ...getTabbableElements(root)])
-    .filter((element) => contains(region, element) && isAvailable(element));
+    .filter((element) => regionContains(region, element) && isFocusTargetAvailable(element));
 
 const getEntryTarget = (region: AppRegion): HTMLElement => {
   const root = region.roots[0];
@@ -63,7 +23,7 @@ const getEntryTarget = (region: AppRegion): HTMLElement => {
   const preferred = root.querySelector<HTMLElement>(
     '.dockable-panel__header [role="tab"][aria-selected="true"], .sidebar-item.active'
   );
-  if (preferred && isAvailable(preferred)) {
+  if (preferred && isFocusTargetAvailable(preferred)) {
     return preferred;
   }
   return getRegionControls(region)[0] ?? root;
@@ -75,7 +35,12 @@ const focusRegion = (region: AppRegion, saved: HTMLElement | undefined) => {
     focusPanelById(root.dataset.activePanelId);
   }
   const target =
-    saved && contains(region, saved) && isAvailable(saved) ? saved : getEntryTarget(region);
+    saved &&
+    regionContains(region, saved) &&
+    isFocusTargetAvailable(saved) &&
+    (root.dataset.appRegion !== 'sidebar' || saved.dataset.sidebarFocusable === 'true')
+      ? saved
+      : getEntryTarget(region);
   target.focus();
   return region.roots.some((element) => element.contains(document.activeElement));
 };
@@ -94,7 +59,9 @@ const navigateLocally = (event: KeyboardEvent | undefined): boolean => {
   if (!event || hasNativeTabHandling(event.target)) {
     return false;
   }
-  const region = getRegions().find((candidate) => contains(candidate, document.activeElement));
+  const region = getFocusRegions().find((candidate) =>
+    regionContains(candidate, document.activeElement)
+  );
   if (!region) {
     return false;
   }
@@ -120,7 +87,7 @@ export function useAppRegionNavigation() {
       if (!(target instanceof HTMLElement)) {
         return;
       }
-      const region = getRegions().find((candidate) => contains(candidate, target));
+      const region = getFocusRegions().find((candidate) => regionContains(candidate, target));
       if (region) {
         savedFocus.current.set(region.roots[0], getFocusPortalOwner(target) ?? target);
       }
@@ -132,11 +99,13 @@ export function useAppRegionNavigation() {
   }, []);
 
   const cycle = (direction: number) => {
-    const regions = getRegions();
+    const regions = getFocusRegions();
     if (!regions.length) {
       return false;
     }
-    const current = regions.findIndex((candidate) => contains(candidate, document.activeElement));
+    const current = regions.findIndex((candidate) =>
+      regionContains(candidate, document.activeElement)
+    );
     const entryIndex = direction > 0 ? 0 : regions.length - 1;
     const index =
       current < 0 ? entryIndex : (current + direction + regions.length) % regions.length;

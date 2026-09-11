@@ -42,8 +42,36 @@ a:focus-visible {
   border-radius: var(--border-radius-sm);
 }
 
+/* A transient frame identifies the entire keyboard region without changing
+   its layout, clipping descendants, or intercepting pointer input. */
+.keyboard-region-outline {
+  position: fixed;
+  left: calc(var(--region-outline-left) / var(--app-zoom-factor, 1));
+  top: calc(var(--region-outline-top) / var(--app-zoom-factor, 1));
+  width: calc(var(--region-outline-width) / var(--app-zoom-factor, 1));
+  height: calc(var(--region-outline-height) / var(--app-zoom-factor, 1));
+  outline: calc(2 * var(--border-width)) solid var(--color-accent);
+  outline-offset: calc(-2 * var(--border-width));
+  pointer-events: none;
+  z-index: var(--z-index-topmost);
+  animation: keyboard-region-fade calc(2 * var(--duration-slow)) var(--ease-out) forwards;
+}
+
+@keyframes keyboard-region-fade {
+  0%,
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* Retain the system's visible focus cue in forced-color mode. */
 @media (forced-colors: active) {
+  .keyboard-region-outline {
+    outline-color: Highlight;
+  }
   :root body :is(:focus-visible, .keyboard-programmatic-focus:focus),
   :root body :is(:focus-visible, .keyboard-programmatic-focus:focus):hover,
   :root body .sidebar-item.keyboard-preview,
@@ -79,6 +107,9 @@ a:focus-visible {
    ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
+  .keyboard-region-outline {
+    animation-timing-function: step-end;
+  }
   :focus-visible {
     transition: none;
   }

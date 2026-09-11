@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createRegionFocusIndicator } from './regionFocusIndicator';
 
 const FOCUS_CLASS = 'keyboard-programmatic-focus';
 
@@ -6,6 +7,7 @@ const FOCUS_CLASS = 'keyboard-programmatic-focus';
 // must show focus even after pointer use suppresses :focus-visible in WebKit.
 export function useKeyboardFocusIndicator() {
   useEffect(() => {
+    const regionIndicator = createRegionFocusIndicator();
     let keyboardNavigation = false;
     let indicated: HTMLElement | null = null;
     const clearIndicator = () => {
@@ -18,6 +20,7 @@ export function useKeyboardFocusIndicator() {
       if (keyboardNavigation && active instanceof HTMLElement) {
         indicated = active;
         active.classList.add(FOCUS_CLASS);
+        regionIndicator.update();
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -29,11 +32,13 @@ export function useKeyboardFocusIndicator() {
     const handlePointerDown = () => {
       keyboardNavigation = false;
       clearIndicator();
+      regionIndicator.clear();
     };
     const handleBeforeInput = (event: Event) => {
       if (event.target === indicated) {
         // Editing dismisses the cue; the next keyboard focus move restores it.
         clearIndicator();
+        regionIndicator.dismiss();
       }
     };
     const handleClick = (event: MouseEvent) => {
@@ -61,6 +66,7 @@ export function useKeyboardFocusIndicator() {
       window.removeEventListener('click', handleClick, true);
       window.removeEventListener('focusin', indicateFocus, true);
       clearIndicator();
+      regionIndicator.clear();
     };
   }, []);
 }

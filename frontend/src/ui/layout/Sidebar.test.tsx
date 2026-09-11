@@ -273,6 +273,56 @@ describe('Sidebar', () => {
     expect(viewStateMock.setActiveClusterView).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])(
+    'lands in the list when entering the sidebar, including after auxiliary controls (reverse=%s)',
+    (backwards) => {
+      renderSidebar({ regionNavigation: true });
+      const host = requireValue(container, 'expected Sidebar test container');
+      const outsideRegion = document.createElement(backwards ? 'main' : 'header');
+      outsideRegion.dataset.appRegion = backwards ? 'content' : 'header';
+      const outsideControl = document.createElement('button');
+      outsideRegion.append(outsideControl);
+      host.append(outsideRegion);
+      const overview = requireValue(
+        host.querySelector<HTMLElement>('[data-sidebar-target-kind="overview"]'),
+        'expected Overview item'
+      );
+      const enterSidebar = (expected = overview) => {
+        act(() => outsideControl.focus());
+        act(() => {
+          outsideControl.dispatchEvent(
+            new KeyboardEvent('keydown', {
+              key: 'Tab',
+              ctrlKey: true,
+              shiftKey: backwards,
+              bubbles: true,
+              cancelable: true,
+            })
+          );
+        });
+        expect(document.activeElement).toBe(expected);
+      };
+
+      enterSidebar();
+      for (const selector of ['.sidebar-toggle', '.sidebar-header-action']) {
+        const control = requireValue(host.querySelector<HTMLElement>(selector), selector);
+        act(() => control.focus());
+        enterSidebar();
+      }
+      pressKey('ArrowDown');
+      expect(document.activeElement?.getAttribute('data-sidebar-target-view')).toBe('attention');
+      enterSidebar(
+        requireValue(
+          host.querySelector<HTMLElement>('[data-sidebar-target-view="attention"]'),
+          'expected Attention item'
+        )
+      );
+      expect(viewStateMock.setActiveClusterView).not.toHaveBeenCalled();
+      pressKey('Tab');
+      expect(document.activeElement).toBe(host.querySelector('.sidebar-toggle'));
+    }
+  );
+
   it.each([
     ['Hide Sidebar', 1, 'Enter'],
     ['Hide Sidebar', 1, ' '],
