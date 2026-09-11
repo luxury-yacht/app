@@ -41,6 +41,11 @@ Prevention:
 - Focus restoration tests for popups must use the app's `StrictMode` wrapper.
   Capture the invoking element before menu focus, and preserve it across effect
   replay; otherwise the menu can remember itself and leave focus on the body.
+- Pointer-normalized focus is not keyboard entry. Test hover → action click →
+  pointer leave through the real provider, and option click → typing/list keys
+  through the actual combobox. Keep virtual-focus owners on their search field
+  or trigger, and use `preventScroll` for pointer focus normalization. Exercise
+  long portaled menus at non-default zoom so their last item remains reachable.
 - Follow the [completion evidence gate](completion.md), keeping each requested
   outcome and related lifecycle action tied to explicit evidence.
 - Leave required blocked or unrun checks visible and unfinished. Do not replace

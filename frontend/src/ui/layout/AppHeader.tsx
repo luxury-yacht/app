@@ -171,7 +171,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace', clusterName }
             onClick={() => eventBus.emit('command-palette:open')}
             title={`Command Palette (${isMac ? '⇧⌘P' : 'Ctrl+Shift+P'})`}
             aria-label="Command Palette"
-            data-app-header-last-focusable={usesCustomFrame ? undefined : 'true'}
           >
             <SearchIcon width={14} height={14} />
           </button>
@@ -216,7 +215,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({ mode = 'workspace', clusterName }
             className="app-header-window-control app-header-window-control--close"
             aria-label="Close window"
             title="Close"
-            data-app-header-last-focusable="true"
             onClick={() => runWindowOperation('close-window', closeWindow)}
           >
             <svg

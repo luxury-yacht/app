@@ -106,7 +106,6 @@ export function useTooltipKeyboard({
       const target = event.target as Node;
       if (tooltipRef.current?.contains(target)) {
         focusedControl.current = event.target as HTMLElement;
-        keyboardOpen.current = true;
         clearTimers();
       } else if (!triggerRef.current?.contains(target)) {
         close();

@@ -1287,6 +1287,60 @@ describe('Dropdown', () => {
     expect(updatedMenu?.scrollTop).toBe(180);
   });
 
+  it.each([false, true])(
+    'returns option-click focus to the list owner for keyboard use (searchable: %s)',
+    async (searchable) => {
+      const onChange = vi.fn();
+      await mount(
+        <Dropdown
+          options={OPTIONS}
+          value={[]}
+          onChange={onChange}
+          multiple
+          searchable={searchable}
+        />
+      );
+      const trigger = container.querySelector('.dropdown-trigger');
+      click(trigger);
+      const owner = requireValue(
+        searchable ? document.querySelector('.search-input') : trigger,
+        'list owner'
+      );
+      const option = document.querySelector('.dropdown-option');
+      click(option);
+      expect(onChange).toHaveBeenCalledWith(['alpha']);
+      expect(document.activeElement).toBe(owner);
+      await pressKey(document.activeElement, 'End');
+      await pressKey(document.activeElement, 'ArrowUp');
+      expect(document.querySelector('.dropdown-option.highlighted')?.textContent).toContain('Beta');
+      await pressKey(document.activeElement, 'Enter');
+      expect(onChange).toHaveBeenLastCalledWith(['beta']);
+      await pressKey(document.activeElement, 'Home');
+      await pressKey(document.activeElement, ' ');
+      if (searchable) {
+        await setTextInputValue(owner as HTMLInputElement, 'Gamma');
+        expect(document.querySelectorAll('.dropdown-option')).toHaveLength(1);
+        expect(document.querySelector('.dropdown-option')?.textContent).toContain('Gamma');
+      } else {
+        expect(onChange).toHaveBeenLastCalledWith(['alpha']);
+      }
+    }
+  );
+
+  it.each([{ value: [] }, { value: ['alpha'] }])(
+    'restores search focus after Only with selection $value',
+    async ({ value }) => {
+      await mount(
+        <Dropdown options={OPTIONS} value={value} onChange={vi.fn()} multiple searchable />
+      );
+      click(container.querySelector('.dropdown-trigger'));
+      click(document.querySelector('.dropdown-only-action'));
+      expect(document.activeElement).toBe(
+        requireValue(document.querySelector('.search-input'), 'search input')
+      );
+    }
+  );
+
   it('adjusts menu position when space below trigger is limited', async () => {
     const originalInnerHeight = window.innerHeight;
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });

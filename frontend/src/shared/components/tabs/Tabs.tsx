@@ -161,7 +161,11 @@ function warnReservedKeys(tabId: string, extraProps: HTMLAttributes<HTMLElement>
   }
 }
 
-const TabControls = ({ tab, tabIndex }: { tab: TabDescriptor; tabIndex: number }) => (
+const TabControls = ({
+  tab,
+  tabIndex,
+  onFocus,
+}: Readonly<{ tab: TabDescriptor; tabIndex: number; onFocus: () => void }>) => (
   <>
     {!!tab.onOpenMenu && (
       <button
@@ -172,6 +176,7 @@ const TabControls = ({ tab, tabIndex }: { tab: TabDescriptor; tabIndex: number }
         aria-haspopup="menu"
         tabIndex={tabIndex}
         disabled={tab.disabled}
+        onFocus={onFocus}
         onClick={(event) => {
           event.stopPropagation();
           const rect = event.currentTarget.getBoundingClientRect();
@@ -188,6 +193,7 @@ const TabControls = ({ tab, tabIndex }: { tab: TabDescriptor; tabIndex: number }
         aria-label={tab.closeAriaLabel ?? 'Close'}
         tabIndex={tabIndex}
         disabled={tab.disabled}
+        onFocus={onFocus}
         onClick={(event) => {
           event.stopPropagation();
           tab.onClose?.();
@@ -232,34 +238,39 @@ const TabStripItem = ({
       {dropInsertIndex === index && (
         <div className="tab-strip__drop-indicator" data-testid="tab-strip-drop-indicator" />
       )}
-      {/* A div owns the tab role so the nested close affordance can remain a button. */}
-      <div
-        ref={(element) => {
-          if (element) {
-            tabRefs.set(tab.id, element);
-          } else {
-            tabRefs.delete(tab.id);
-          }
-        }}
-        {...tab.extraProps}
-        role="tab"
-        aria-selected={isActive}
-        aria-controls={tab.ariaControls}
-        aria-disabled={tab.disabled || undefined}
-        aria-label={tab.ariaLabel}
-        tabIndex={disableRovingTabIndex || !isFocusStop ? -1 : 0}
-        className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}${tab.onOpenMenu ? ' tab-item--with-menu' : ''}`}
-        onFocus={() => onFocusTab(tab.id)}
-        onClick={() => {
-          if (!tab.disabled) {
-            onActivate(tab.id);
-          }
-        }}
-        onKeyDown={(event) => onKeyDown(event, index)}
-      >
-        {tab.leading}
-        <span className="tab-item__label">{tab.label}</span>
-        <TabControls tab={tab} tabIndex={controlTabIndex} />
+      <div className="tab-item-shell">
+        <div
+          ref={(element) => {
+            if (element) {
+              tabRefs.set(tab.id, element);
+            } else {
+              tabRefs.delete(tab.id);
+            }
+          }}
+          {...tab.extraProps}
+          role="tab"
+          aria-selected={isActive}
+          aria-controls={tab.ariaControls}
+          aria-disabled={tab.disabled || undefined}
+          aria-label={tab.ariaLabel}
+          tabIndex={disableRovingTabIndex || !isFocusStop ? -1 : 0}
+          className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}${tab.onOpenMenu ? ' tab-item--with-menu' : ''}`}
+          onFocus={() => onFocusTab(tab.id)}
+          onClick={() => {
+            if (!tab.disabled) {
+              onActivate(tab.id);
+            }
+          }}
+          onKeyDown={(event) => onKeyDown(event, index)}
+        >
+          {tab.leading}
+          <span className="tab-item__label">{tab.label}</span>
+        </div>
+        {/* Tab descendants are presentational in accessibility APIs. Keep its
+          action buttons as siblings while retaining the same visual overlay. */}
+        <div className="tab-item-controls">
+          <TabControls tab={tab} tabIndex={controlTabIndex} onFocus={() => onFocusTab(tab.id)} />
+        </div>
       </div>
     </>
   );

@@ -127,7 +127,6 @@ describe('AppHeader', () => {
     expect(document.activeElement?.getAttribute('aria-label')).toBe(
       isMac ? 'Command Palette' : 'Close window'
     );
-    expect(container.querySelectorAll('[data-app-header-last-focusable="true"]')).toHaveLength(1);
   });
 
   it.each([

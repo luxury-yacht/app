@@ -109,6 +109,14 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
     setFocusedIndex(firstSelectableIndex);
   }, [firstSelectableIndex]);
 
+  useEffect(() => {
+    if (isPositioned) {
+      menuRef.current
+        ?.querySelector<HTMLElement>(`[data-context-index="${focusedIndex}"]`)
+        ?.scrollIntoView?.({ block: 'nearest' });
+    }
+  }, [focusedIndex, isPositioned]);
+
   const moveFocus = (direction: 1 | -1) => {
     if (selectableIndexes.length === 0) {
       return;

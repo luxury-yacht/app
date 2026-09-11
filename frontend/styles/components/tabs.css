@@ -30,6 +30,18 @@
 }
 
 /* Individual tab item */
+.tab-item-shell {
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.tab-item-controls {
+  position: relative;
+  flex: 0 0 0;
+  align-self: stretch;
+}
+
 .tab-item {
   display: flex;
   align-items: center;
@@ -57,7 +69,7 @@
 }
 
 /* Hover state */
-.tab-item:hover {
+:where(.tab-item-shell):hover > .tab-item {
   color: var(--color-text);
   background-color: var(--color-bg-tertiary);
 }
@@ -71,13 +83,13 @@
   cursor: not-allowed;
 }
 
-.tab-item[aria-disabled="true"]:hover {
+:where(.tab-item-shell):hover > .tab-item[aria-disabled="true"] {
   color: var(--color-text-secondary);
   background-color: transparent;
 }
 
 /* Separator between tabs (hidden adjacent to active or hovered tabs) */
-.tab-item:not(:last-child)::after {
+.tab-item-shell:not(:last-child) > .tab-item::after {
   content: "";
   position: absolute;
   right: 0;
@@ -91,9 +103,9 @@
 
 /* Hide separator next to active or hovered tab */
 .tab-item--active::after,
-.tab-item:hover::after,
-.tab-item:has(+ .tab-item--active)::after,
-.tab-item:has(+ .tab-item:hover)::after {
+.tab-item-shell:hover > .tab-item::after,
+.tab-item-shell:has(+ .tab-item-shell > .tab-item--active) > .tab-item::after,
+.tab-item-shell:has(+ .tab-item-shell:hover) > .tab-item::after {
   opacity: 0;
 }
 
@@ -138,10 +150,10 @@
   line-height: 1;
 }
 
-.tab-item:hover .tab-item__close,
-.tab-item:focus-within .tab-item__close,
-.tab-item:hover .tab-item__menu,
-.tab-item:focus-within .tab-item__menu {
+.tab-item-shell:hover .tab-item__close,
+.tab-item-shell:focus-within .tab-item__close,
+.tab-item-shell:hover .tab-item__menu,
+.tab-item-shell:focus-within .tab-item__menu {
   opacity: 1;
   pointer-events: auto;
 }
@@ -197,6 +209,12 @@
 }
 
 .tab-strip--sizing-equal .tab-item {
+  flex: 1 1 0;
+  min-width: var(--tab-item-min-width, 80px);
+  max-width: var(--tab-item-max-width, 240px);
+}
+
+.tab-strip--sizing-equal > .tab-item-shell {
   flex: 1 1 0;
   min-width: var(--tab-item-min-width, 80px);
   max-width: var(--tab-item-max-width, 240px);

@@ -106,7 +106,12 @@ Surface kinds include:
   read-only body, resume at the nearest preceding/following control in DOM order.
 - Comboboxes keep DOM focus on the trigger or search field and expose the
   highlighted option through `aria-activedescendant`; popup options are not
-  additional tab stops.
+  additional tab stops. Option clicks, including the Only action, restore that
+  focus owner before updating selection so typing and list keys keep working.
+- Pointer focus inside a hover popover does not pin it open. Only keyboard
+  entry does; pointer dismissal restores the trigger before removing a focused
+  action. Long context menus scroll within the zoom-adjusted viewport and keep
+  their highlighted item in view.
 - Virtualized tables keep DOM focus on their native table element while shared
   state marks the active row, allowing native table semantics and row recycling
   without moving focus to an element that can unmount.

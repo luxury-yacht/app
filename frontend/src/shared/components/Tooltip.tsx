@@ -347,11 +347,11 @@ const Tooltip: React.FC<TooltipProps> = ({
       timerRef.current = null;
     }
     if (interactive) {
-      hideTimerRef.current = setTimeout(() => setVisible(false), INTERACTIVE_GRACE);
+      hideTimerRef.current = setTimeout(close, INTERACTIVE_GRACE);
     } else {
-      setVisible(false);
+      close();
     }
-  }, [interactive, keyboardOpen]);
+  }, [close, interactive, keyboardOpen]);
 
   const handleMouseEnter = useCallback(() => {
     if (disabled || trigger !== 'hover') {

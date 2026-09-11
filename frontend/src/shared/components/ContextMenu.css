@@ -10,6 +10,9 @@
   box-shadow: var(--context-menu-shadow);
   padding: 0;
   min-width: 180px;
+  max-height: calc((100dvh - 20px) / var(--app-zoom-factor, 1));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   z-index: var(--z-index-context-menu);
   font-size: var(--font-size-normal);
   outline: none;

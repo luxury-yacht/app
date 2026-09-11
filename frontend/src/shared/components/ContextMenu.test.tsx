@@ -254,6 +254,27 @@ describe('ContextMenu', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the highlighted item visible while navigating a long menu', async () => {
+    const scrollIntoView = vi.fn();
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    try {
+      const { menu } = await renderMenu({
+        items: Array.from({ length: 80 }, (_, i) => ({ label: `Connection ${i}` })),
+      });
+      scrollIntoView.mockClear();
+      await act(async () => {
+        menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      });
+      const last = menu.querySelector('[data-context-index="79"]');
+      expect(menu.getAttribute('aria-activedescendant')).toBe(last?.id);
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+      expect(scrollIntoView.mock.contexts[scrollIntoView.mock.contexts.length - 1]).toBe(last);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
+
   it('stops propagation on navigation keys to prevent parent handlers from firing', async () => {
     // This test verifies that ArrowDown, ArrowUp, Enter, and Space events
     // call stopPropagation() to prevent bubbling to parent elements

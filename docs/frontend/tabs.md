@@ -32,6 +32,10 @@ also use the shared drag coordinator.
 - Keep keyboard navigation on the WAI-ARIA manual activation pattern.
 - Arrows move the roving focus stop without activating a tab. Tab then reaches
   that tab's action menu and Close button. Focus reveals both controls.
+- Tab action buttons are siblings of the element with `role="tab"`, inside a
+  shared visual shell. This keeps their names and roles separate in accessibility
+  trees. Consumers that enumerate tab controls use the shell as their boundary;
+  the tab element retains its drag markers, geometry and roving focus.
 - ClusterTabs and DockableTabBar provide `onOpenMenu`; their menus offer Move
   tab left/right through the existing order owner, with end positions disabled.
   Ordering a tab does not activate it. The synthetic Global tab is not reordered.

@@ -83,7 +83,7 @@ describe('Tabs', () => {
         new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
       )
     );
-    expect(document.activeElement).toBe(tabs[1].querySelector('.tab-item__menu'));
+    expect(document.activeElement).toBe(tabs[1].parentElement?.querySelector('.tab-item__menu'));
     await act(async () => (document.activeElement as HTMLElement).click());
     expect(onOpenMenu).toHaveBeenCalledOnce();
     expect(onActivate).not.toHaveBeenCalled();
@@ -627,9 +627,27 @@ describe('Tabs', () => {
 
     const tabs = container.querySelectorAll<HTMLButtonElement>('[role="tab"]');
     expect(tabs[0].classList.contains('tab-item--closeable')).toBe(true);
-    expect(tabs[0].querySelector('.tab-item__close')).toBeTruthy();
+    expect(tabs[0].parentElement?.querySelector('.tab-item__close')).toBeTruthy();
     expect(tabs[1].classList.contains('tab-item--closeable')).toBe(false);
-    expect(tabs[1].querySelector('.tab-item__close')).toBeNull();
+    expect(tabs[1].parentElement?.querySelector('.tab-item__close')).toBeNull();
+  });
+
+  it('exposes tab actions outside the tab role and keeps the tab name separate', () => {
+    act(() =>
+      root.render(
+        <Tabs
+          tabs={[{ id: 'a', label: 'Alpha', onClose: vi.fn(), onOpenMenu: vi.fn() }]}
+          activeId="a"
+          onActivate={vi.fn()}
+          aria-label="Test Tabs"
+        />
+      )
+    );
+    const tab = requireValue(container.querySelector('[role="tab"]'), 'tab');
+    expect(tab.textContent).toBe('Alpha');
+    expect(container.querySelector('.tab-item__menu')?.closest('[role="tab"]')).toBeNull();
+    expect(container.querySelector('.tab-item__close')?.closest('[role="tab"]')).toBeNull();
+    expect(container.querySelectorAll('button')).toHaveLength(2);
   });
 
   it('invokes onClose when the close button is clicked, without invoking onActivate', () => {

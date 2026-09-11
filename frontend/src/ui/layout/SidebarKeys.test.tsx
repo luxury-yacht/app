@@ -392,7 +392,6 @@ describe('useSidebarKeyboardControls', () => {
       selectionTarget: { kind: 'overview' },
     });
     const headerButton = document.createElement('button');
-    headerButton.setAttribute('data-app-header-last-focusable', 'true');
     document.body.appendChild(headerButton);
     headerButton.focus();
 
@@ -412,7 +411,6 @@ describe('useSidebarKeyboardControls', () => {
     const headerButton = document.createElement('button');
     headerButton.type = 'button';
     headerButton.textContent = 'Settings';
-    headerButton.setAttribute('data-app-header-last-focusable', 'true');
     document.body.appendChild(headerButton);
     headerButton.focus();
 
@@ -429,7 +427,6 @@ describe('useSidebarKeyboardControls', () => {
       selectionTarget: { kind: 'overview' },
     });
     const headerButton = document.createElement('button');
-    headerButton.setAttribute('data-app-header-last-focusable', 'true');
     document.body.appendChild(headerButton);
     const overview = container.querySelector(
       '[data-sidebar-target-kind="overview"]'
@@ -449,7 +446,6 @@ describe('useSidebarKeyboardControls', () => {
       selectionTarget: { kind: 'overview' },
     });
     const headerButton = document.createElement('button');
-    headerButton.setAttribute('data-app-header-last-focusable', 'true');
     document.body.appendChild(headerButton);
     const clusterTabsWrapper = document.createElement('div');
     clusterTabsWrapper.className = 'cluster-tabs-wrapper';

@@ -3,6 +3,7 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOMClient from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import StatusIndicator from './StatusIndicator';
 
 vi.mock('@core/contexts/ZoomContext', () => ({
@@ -72,6 +73,20 @@ describe('StatusIndicator', () => {
     cleanup();
   });
 
+  it('keeps live status semantics outside the interactive trigger', async () => {
+    const { container, cleanup } = await renderStatusIndicator();
+    try {
+      const status = requireValue(container.querySelector('[role="status"]'), 'live status');
+      expect(status.closest('[role="button"]')).toBeNull();
+      expect(status.textContent).toBe('Connectivity status');
+      expect(container.querySelector('.tooltip-trigger')?.getAttribute('aria-label')).toBe(
+        'Connectivity status'
+      );
+    } finally {
+      cleanup();
+    }
+  });
+
   it('opens from the keyboard, visits actions, and restores its trigger on Escape', async () => {
     const action = vi.fn();
     const { container, cleanup } = await renderStatusIndicator({
@@ -117,6 +132,44 @@ describe('StatusIndicator', () => {
     expect(document.activeElement).toBe(trigger);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     cleanup();
+  });
+
+  it('dismisses a hover popover after clicking an action and leaving it', async () => {
+    const action = vi.fn();
+    const { container, cleanup } = await renderStatusIndicator({
+      actions: [{ label: 'Refresh', onClick: action }],
+    });
+    try {
+      const trigger = requireValue(
+        container.querySelector<HTMLElement>('.tooltip-trigger'),
+        'status trigger'
+      );
+      await act(async () => {
+        trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+        vi.advanceTimersByTime(150);
+      });
+      const popover = requireValue(
+        document.querySelector<HTMLElement>('.status-popover'),
+        'status popover'
+      );
+      const button = requireValue(popover.querySelector('button'), 'status action');
+      await act(async () => {
+        button.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+        button.click();
+      });
+      expect(action).toHaveBeenCalledOnce();
+      expect(document.activeElement).toBe(button);
+      await act(async () => {
+        popover.dispatchEvent(
+          new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })
+        );
+        vi.advanceTimersByTime(500);
+      });
+      expect(document.querySelector('.status-popover')).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    } finally {
+      cleanup();
+    }
   });
 
   it('lets Control+Tab leave a portaled action and restores its header trigger on return', async () => {

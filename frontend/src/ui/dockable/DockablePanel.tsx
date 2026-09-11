@@ -140,7 +140,7 @@ function getOrderedObjectPanelTabbables(panelRoot: HTMLElement): HTMLElement[] {
     )
   ).filter(isKeyboardVisibleElement);
   for (const tab of groupedPanelTabs) {
-    addAll([tab, ...getTabbableElements(tab)]);
+    addAll([tab, ...getTabbableElements(tab.closest('.tab-item-shell'))]);
   }
 
   const activeObjectPanelBody =

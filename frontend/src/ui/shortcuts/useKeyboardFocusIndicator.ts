@@ -40,7 +40,7 @@ export function useKeyboardFocusIndicator() {
       if (control && !control.matches(':disabled') && !control.closest('[inert]')) {
         // WebKit does not consistently focus buttons on click. Establish the
         // invoking control before its action opens a popup or changes regions.
-        control.focus();
+        control.focus({ preventScroll: true });
       }
     };
     window.addEventListener('keydown', handleKeyDown, true);

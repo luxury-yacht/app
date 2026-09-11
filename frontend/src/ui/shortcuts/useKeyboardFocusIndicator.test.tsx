@@ -77,10 +77,12 @@ describe('keyboard focus indication through local owners', () => {
     await render(true);
     act(() => element('first').focus());
     const actionFocus = vi.fn();
+    const focus = vi.spyOn(element('second'), 'focus');
     element('second').addEventListener('click', () => actionFocus(document.activeElement));
     element('second').dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
     act(() => element('second').click());
     expect(actionFocus).toHaveBeenCalledWith(element('second'));
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
     expect(element('second').classList.contains(marker)).toBe(false);
   });
 

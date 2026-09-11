@@ -583,9 +583,7 @@ const handleOnlySelectionShortcut = <TMetadata,>(
   if (!highlighted || highlighted.disabled || highlighted.group === 'header') {
     return false;
   }
-  if (!onlyAction.isOnlySelection(highlighted.value)) {
-    onlyAction.selectOnly(highlighted.value);
-  }
+  onlyAction.selectOnly(highlighted.value);
   return true;
 };
 
@@ -638,9 +636,7 @@ const buildOptionClickHandler = (
   return (event: React.MouseEvent<HTMLButtonElement>) => {
     if (onlyAction && event.target instanceof Element) {
       if (event.target.closest(`[${ONLY_ACTION_ATTRIBUTE}]`)) {
-        if (!onlyAction.isOnlySelection(option.value)) {
-          onlyAction.selectOnly(option.value);
-        }
+        onlyAction.selectOnly(option.value);
         return;
       }
     }
@@ -1139,17 +1135,39 @@ const Dropdown = <TMetadata,>({
     }
   }, [isOpen, searchable]);
 
+  const focusListOwner = useCallback(() => {
+    (searchInputRef.current ?? triggerRef.current)?.focus({ preventScroll: true });
+  }, [triggerRef]);
+
+  const selectMenuOption = useCallback(
+    (optionValue: string) => {
+      if (multiple) {
+        // Options use virtual focus; keep subsequent typing and list keys on
+        // the combobox after the pointer temporarily focuses an option button.
+        focusListOwner();
+      }
+      selectOption(optionValue);
+    },
+    [focusListOwner, multiple, selectOption]
+  );
+
   // Isolating one value only means something when several can be selected.
   const onlyAction = useMemo<OnlyActionConfig | null>(() => {
     if (!multiple || !enableOnlyAction) {
       return null;
     }
+    const isOnlySelection = (optionValue: string) =>
+      Array.isArray(value) && value.length === 1 && value[0] === optionValue;
     return {
-      isOnlySelection: (optionValue: string) =>
-        Array.isArray(value) && value.length === 1 && value[0] === optionValue,
-      selectOnly: (optionValue: string) => onChange([optionValue]),
+      isOnlySelection,
+      selectOnly: (optionValue: string) => {
+        focusListOwner();
+        if (!isOnlySelection(optionValue)) {
+          onChange([optionValue]);
+        }
+      },
     };
-  }, [enableOnlyAction, multiple, onChange, value]);
+  }, [enableOnlyAction, focusListOwner, multiple, onChange, value]);
 
   const { handleKeyAction } = useKeyboardNavigation({
     options: filteredOptions,
@@ -1452,7 +1470,7 @@ const Dropdown = <TMetadata,>({
         renderOptionActions={renderOptionActions}
         getOptionRowProps={getOptionRowProps}
         isSelected={isSelected}
-        selectOption={selectOption}
+        selectOption={selectMenuOption}
         onlyAction={onlyAction}
         setHighlightedIndex={setHighlightedIndex}
         onSearchChange={handleSearchInputChange}

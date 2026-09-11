@@ -171,7 +171,7 @@ describe('ClusterTabs', () => {
     const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
       (el) => el.querySelector('.tab-item__label')?.textContent === 'b'
     );
-    const menu = tab?.querySelector<HTMLButtonElement>('.tab-item__menu');
+    const menu = tab?.parentElement?.querySelector<HTMLButtonElement>('.tab-item__menu');
     expect(menu).toBeTruthy();
     await act(async () => menu?.click());
     const move = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
@@ -261,7 +261,7 @@ describe('ClusterTabs', () => {
       (tab) => tab.querySelector('.tab-item__label')?.textContent === 'Global'
     );
     expect(globalTab).toBeTruthy();
-    expect(globalTab?.querySelector('.tab-item__close')).toBeNull();
+    expect(globalTab?.parentElement?.querySelector('.tab-item__close')).toBeNull();
 
     mockState.selectedKubeconfigs = ['a'];
     await renderTabs({ onOpenCluster: vi.fn() });
@@ -557,7 +557,7 @@ describe('ClusterTabs', () => {
     const targetTab = tabs.find(
       (tab) => tab.querySelector('.tab-item__label')?.textContent === 'b'
     );
-    const closeButton = targetTab?.querySelector('.tab-item__close') as HTMLElement;
+    const closeButton = targetTab?.parentElement?.querySelector('.tab-item__close') as HTMLElement;
 
     expect(closeButton).toBeTruthy();
     await act(async () => {
@@ -584,7 +584,7 @@ describe('ClusterTabs', () => {
       const tab = tabs.find(
         (node) => node.querySelector('.tab-item__label')?.textContent === label
       );
-      return tab?.querySelector('.tab-item__close') as HTMLElement | null;
+      return tab?.parentElement?.querySelector('.tab-item__close') as HTMLElement | null;
     };
 
     const closeB = closeButtonFor('b');

@@ -14,9 +14,7 @@ export const KeyboardScopePriority = {
   SIDEBAR: 120,
   GRIDTABLE_FILTERS: 100,
   GRIDTABLE_BODY: 90,
-  APP_LOGS_PANEL: 60,
   OBJECT_PANEL: 55,
-  DIAGNOSTICS_PANEL: 40,
 } as const;
 
 // Individual keyboard shortcuts can also have priority levels to resolve conflicts.
