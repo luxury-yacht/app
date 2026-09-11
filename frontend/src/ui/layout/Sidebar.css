@@ -230,7 +230,7 @@
   border-left-color: var(--color-accent);
 }
 
-.sidebar.keyboard-mode .sidebar-item:not(.active):hover {
+.sidebar.keyboard-mode .sidebar-item:not(.active, .keyboard-preview, :focus):hover {
   background-color: transparent;
   color: inherit;
 }
@@ -241,8 +241,10 @@
   border-left-color: var(--color-accent);
 }
 
-.sidebar-item.keyboard-preview {
-  box-shadow: var(--shadow-focus-halo);
+:root body .sidebar-item.keyboard-preview,
+:root body .sidebar-item.keyboard-preview:hover {
+  background-color: var(--color-accent-bg);
+  color: var(--color-text);
 }
 
 /* Non-clickable header items like "Resources" */

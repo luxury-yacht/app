@@ -10,10 +10,7 @@
   /* Borders */
   --border-width: 1px;
 
-  /* Soft keyboard focus halo geometry. */
-  --focus-halo-blur: 10px;
-  --focus-halo-spread: 1px;
-  --focus-halo-inset-blur: 5px;
+  /* System focus indicator in forced-color mode. */
   --focus-system-outline-width: 2px;
 
   /* Motion */

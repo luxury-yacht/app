@@ -12,10 +12,13 @@
 /* App scope gives the shared treatment precedence over component focus rules,
    including styles loaded later by lazy views. The programmatic marker covers
    Tab and Control+Tab immediately after pointer use in native WebKit. */
-:root body :is(:focus-visible, .keyboard-programmatic-focus:focus) {
+:root body :is(:focus-visible, .keyboard-programmatic-focus:focus),
+:root body :is(:focus-visible, .keyboard-programmatic-focus:focus):hover {
   outline: none;
   outline-offset: 0;
-  box-shadow: var(--shadow-focus-halo);
+  box-shadow: none;
+  background-color: var(--focus-background, var(--color-accent-bg));
+  color: var(--color-text);
 }
 
 a:focus-visible {
@@ -26,10 +29,12 @@ a:focus-visible {
   border-radius: var(--border-radius-sm);
 }
 
-/* Forced colors remove shadows, so retain the system's visible focus cue. */
+/* Retain the system's visible focus cue in forced-color mode. */
 @media (forced-colors: active) {
   :root body :is(:focus-visible, .keyboard-programmatic-focus:focus),
-  .sidebar-item.keyboard-preview {
+  :root body :is(:focus-visible, .keyboard-programmatic-focus:focus):hover,
+  :root body .sidebar-item.keyboard-preview,
+  :root body .sidebar-item.keyboard-preview:hover {
     outline: var(--focus-system-outline-width) solid Highlight;
     outline-offset: calc(-1 * var(--focus-system-outline-width));
     box-shadow: none;

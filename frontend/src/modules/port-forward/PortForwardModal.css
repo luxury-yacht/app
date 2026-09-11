@@ -185,7 +185,6 @@
 
 .port-forward-input-group:focus-within {
   border-color: var(--color-accent);
-  box-shadow: var(--shadow-focus-halo);
 }
 
 .port-forward-input {
