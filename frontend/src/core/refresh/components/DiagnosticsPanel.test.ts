@@ -2164,11 +2164,10 @@ describe('DiagnosticsPanel component', () => {
   test('exposes the active diagnostics tab in the shared panel Tab order', async () => {
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
-    const tabs = Array.from(
-      rendered.container.querySelectorAll<HTMLElement>(
-        '[aria-label="Diagnostics Panel Tabs"] [role="tab"]'
-      )
-    );
+    const tabStrip = rendered.container
+      .querySelector('[aria-label="Diagnostics Panel Tabs"]')
+      ?.closest('.tab-strip');
+    const tabs = Array.from(tabStrip?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []);
     expect(tabs.filter((tab) => tab.tabIndex === 0)).toHaveLength(1);
     expect(tabs.find((tab) => tab.tabIndex === 0)?.getAttribute('aria-selected')).toBe('true');
     await rendered.unmount();

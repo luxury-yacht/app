@@ -149,10 +149,11 @@ function getOrderedObjectPanelTabbables(panelRoot: HTMLElement): HTMLElement[] {
     ).find(isKeyboardVisibleElement) ?? null;
 
   if (activeObjectPanelBody) {
+    const objectTabStrip = activeObjectPanelBody
+      .querySelector('[aria-label="Object Panel Tabs"]')
+      ?.closest('.tab-strip');
     const objectTabs = Array.from(
-      activeObjectPanelBody.querySelectorAll<HTMLElement>(
-        '[aria-label="Object Panel Tabs"] [role="tab"]'
-      )
+      objectTabStrip?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []
     ).filter(isKeyboardVisibleElement);
     addAll(objectTabs);
 

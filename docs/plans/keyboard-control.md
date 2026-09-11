@@ -1,7 +1,7 @@
 # Keyboard control: completion and review record
 
 The historical Actions-button and 2.4rem-padding evidence below is superseded by
-the explicitly approved removal recorded at the end of this document.
+the explicitly approved removal recorded below.
 
 The accepted interaction model is Tab/Shift+Tab within a region and physical
 Control+Tab/Control+Shift+Tab between regions, including on macOS. Region movement
@@ -131,3 +131,52 @@ started for this verification. The browser fixture and routes were cleared.
 
 Windows/Linux Control+Tab delivery, spoken screen-reader output and the broader
 tablist-structure issue remain outside this removal's verification.
+
+## Approved tab accessibility grouping correction
+
+The user subsequently approved correcting tab grouping while preserving the
+visible layout, existing controls and keyboard behavior. Starting head is
+`6c0fdb28`; the worktree was clean. No dependency addition is part of this work.
+
+The shared Tabs renderer is the producer. ClusterTabs, DockableTabBar,
+ObjectPanelTabs and Diagnostics consume it. The existing visual strip remains
+the scroll/drag geometry owner; an explicit accessibility owner groups only the
+tab selectors, keeping per-tab Close controls in their existing DOM focus order.
+Ownership IDs must be unique per mounted strip, stable on reorder, and removed
+with their tab. DockablePanel's object-tab discovery must follow the visual
+strip rather than assume DOM ancestry under the accessibility owner. No backend,
+provider ordering or cluster/object identity contract changes are planned.
+
+| Criterion | Status | Evidence |
+| --- | --- | --- |
+| Tab ownership excludes buttons and remains correct across reorder/removal and multiple strips | passed | Two new shared regressions failed before the fix and passed afterward. They resolve every ownership ID to the tab selectors, exclude Close and both overflow buttons, and verify unique IDs across strips plus stable IDs across reorder/removal. The focused Tabs, ClusterTabs, DockablePanel, DockableTabBar and ObjectPanelTabs run passed 5 files / 98 tests |
+| Existing focus order, close, selection, context menus and drag/scroll geometry | passed | The real ObjectPanelTabs fixture first reproduced DockablePanel skipping Details after the structure change; the consumer query fix restored the order. The 98-test run includes selection, close, context-menu ordering and consumer drag regressions with native/data boundaries mocked. Actual Tabs and production CSS produced byte-identical before/after screenshots (`cmp` exit 0), including 32px height, 240px long-label width and 19.2px Close padding. Browser click → Tab reached Close; arrows focused an inactive tab without selecting it; closing it restored focus and removed its ownership ID. At 300px width, overflow scrolling advanced scrollLeft and the accessible group still excluded scroll buttons. Native cluster Tab → Close and reverse Tab passed, as did object tab → Close → Details and reverse Tab. Native cross-window dragging was not repeated; its source geometry and descendant queries were retained |
+| Accessible grouping in the native app | passed | Standalone Playwright's accessibility snapshot groups only the three tab selectors, with Close and overflow controls outside. The actual macOS Wails accessibility tree likewise places only tabs inside Cluster Tabs, Object Tabs and Object Panel Tabs, with Close as a separate sibling control |
+| Spoken screen-reader interaction | blocked | VoiceOver's `content of last phrase` AppleScript read exited 1 with AppleEvent timeout (-1712). No spoken announcement is claimed. The task-started VoiceOver process was stopped and a subsequent elevated `pgrep` returned exit 1 with no matching process. Native accessibility-tree inspection is separate evidence above; spoken VoiceOver/NVDA output remains unverified |
+| Changed-function complexity and typecheck | passed | Typecheck exited 0. Local Biome max 12 found no changed/new function above the limit. The two-module scan exits 1 only for unchanged DockablePanel.handleClose at 14; its body is outside the production diff. No threshold or suppression changed |
+| Remote Sonar and CI | passed at 6c0fdb28 | The live PR #344 audit reports zero open/confirmed new-code issues. GitHub reports Sonar and CodeQL success at 6c0fdb28. These remote results do not cover the local grouping correction |
+| Coverage | passed | `mise exec -- wails3 task test:frontend-coverage` exited 0 on the final source: 519 files / 4,951 tests, 87.14% overall statements. Tabs: 89.37%; DockablePanel: 92.24%. The generated report was moved outside the frontend before lint |
+| Final prerelease and post-gate inspection | passed | `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease` exited 0, including Go vet/staticcheck/race, bindings, frontend lint/typecheck, 519 files / 4,951 tests, Knip and Trivy. The final Biome run applied no fixes. Post-gate diff/status inspection found the nine intended modified files, with no temporary fixture, screenshot or dependency edit; `git diff --check` passed |
+
+The first full coverage run exposed a stale Diagnostics test selector that
+assumed the labelled tablist was the visual ancestor. Its query now follows the
+same visual-strip boundary. Diagnostics production code uses the shared Tabs
+focus behavior and did not require a change.
+
+The first prerelease gate stopped at lint: the visual wrapper's old focus
+listener no longer had an interactive role, and a test's `forEach` callback
+returned a value. Focus tracking now runs on the existing tab, Close and scroll
+controls. The expanded focused run passed 6 files / 123 tests after that
+refactor, and the changed-file Biome check passed. Native cluster Tab → Close,
+reverse Tab → tab, and Control+Tab → sidebar Overview were repeated afterward.
+
+During a hot update the native window showed an Application Error with
+`usePanelWorkspaceSync` / `WorkspacePanelLifecycle` in its stack. Reload restored
+the app; the final native focus checks used that reloaded window. The workspace
+sync/provider code was not edited. This development observation is not evidence
+about a release build.
+
+The existing development server on port 9245 was reused. No server or dependency
+was added. The browser fixture and routes were removed, and the native app was
+returned to Overview with the temporary object panel closed. Artifacts for this
+correction use `/tmp/luxury-yacht-tab-structure-` names.

@@ -6,6 +6,7 @@
  */
 
 import { ZoomProvider } from '@core/contexts/ZoomContext';
+import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/ObjectPanelTabs';
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { useAppRegionNavigation } from '@ui/layout/appFocusRegions';
 import { KeyboardProvider } from '@ui/shortcuts/context';
@@ -738,14 +739,14 @@ describe('DockablePanel', () => {
         <div className="object-panel-header">
           <span>{title} header</span>
         </div>
-        <div role="tablist" aria-label="Object Panel Tabs">
-          <div role="tab" tabIndex={-1}>
-            {tabPrefix} Details
-          </div>
-          <div role="tab" tabIndex={-1}>
-            {tabPrefix} Logs
-          </div>
-        </div>
+        <ObjectPanelTabs
+          tabs={[
+            { id: 'details', label: `${tabPrefix} Details` },
+            { id: 'logs', label: `${tabPrefix} Logs` },
+          ]}
+          activeTab="details"
+          onSelect={() => undefined}
+        />
         <div className="object-panel-content">
           <button type="button">{contentLabel}</button>
         </div>

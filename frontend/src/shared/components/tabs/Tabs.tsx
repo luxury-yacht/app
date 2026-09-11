@@ -13,9 +13,11 @@ import { TabOverflowIcon } from '@shared/components/icons/SharedIcons';
 import {
   type CSSProperties,
   type HTMLAttributes,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -164,7 +166,11 @@ const TabControls = ({
   tab,
   tabIndex,
   onFocus,
-}: Readonly<{ tab: TabDescriptor; tabIndex: number; onFocus: () => void }>) => (
+}: Readonly<{
+  tab: TabDescriptor;
+  tabIndex: number;
+  onFocus: (event: ReactFocusEvent<HTMLButtonElement>) => void;
+}>) => (
   <>
     {!!tab.onClose && (
       <button
@@ -187,6 +193,7 @@ const TabControls = ({
 
 const TabStripItem = ({
   tab,
+  domId,
   index,
   activeId,
   focusStopId,
@@ -196,18 +203,19 @@ const TabStripItem = ({
   tabRefs,
   onActivate,
   onKeyDown,
-}: {
+}: Readonly<{
   tab: TabDescriptor;
+  domId: string;
   index: number;
   activeId: string | null;
   focusStopId: string | undefined;
-  onFocusTab: (id: string) => void;
+  onFocusTab: (id: string, event: ReactFocusEvent<HTMLElement>) => void;
   disableRovingTabIndex: boolean;
   dropInsertIndex: number | null;
   tabRefs: Map<string, HTMLElement>;
   onActivate: (id: string) => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLElement>, index: number) => void;
-}) => {
+}>) => {
   const isActive = tab.id === activeId;
   const isCloseable = Boolean(tab.onClose);
   const isFocusStop = tab.id === focusStopId && !tab.disabled;
@@ -228,6 +236,7 @@ const TabStripItem = ({
             }
           }}
           {...tab.extraProps}
+          id={domId}
           role="tab"
           aria-selected={isActive}
           aria-controls={tab.ariaControls}
@@ -235,7 +244,7 @@ const TabStripItem = ({
           aria-label={tab.ariaLabel}
           tabIndex={disableRovingTabIndex || !isFocusStop ? -1 : 0}
           className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}`}
-          onFocus={() => onFocusTab(tab.id)}
+          onFocus={(event) => onFocusTab(tab.id, event)}
           onClick={() => {
             if (!tab.disabled) {
               onActivate(tab.id);
@@ -249,7 +258,11 @@ const TabStripItem = ({
         {/* Tab descendants are presentational in accessibility APIs. Keep its
           action buttons as siblings while retaining the same visual overlay. */}
         <div className="tab-item-controls">
-          <TabControls tab={tab} tabIndex={controlTabIndex} onFocus={() => onFocusTab(tab.id)} />
+          <TabControls
+            tab={tab}
+            tabIndex={controlTabIndex}
+            onFocus={(event) => onFocusTab(tab.id, event)}
+          />
         </div>
       </div>
     </>
@@ -304,6 +317,8 @@ export function Tabs({
   dropInsertIndex = null,
   disableRovingTabIndex = false,
 }: Readonly<TabsProps>) {
+  const stripId = useId();
+  const getTabDOMId = (tabId: string) => `${stripId}-tab-${encodeURIComponent(tabId)}`;
   // Mode-specific default for minTabWidth: 'fit' should size to content
   // (no floor) so short labels like "YAML" don't get bloated; 'equal' needs
   // a floor so tabs sharing a strip don't collapse below readable width.
@@ -313,6 +328,9 @@ export function Tabs({
   const tabRefs = useRef<Map<string, HTMLElement>>(new Map());
   const scrollRef = useRef<HTMLDivElement>(null);
   const focusedElement = useRef<HTMLElement | null>(null);
+  const rememberFocus = (event: ReactFocusEvent<HTMLElement>) => {
+    focusedElement.current = event.target;
+  };
   const [focusedTab, setFocusedTab] = useState<{ id: string; activeId: string | null } | null>(
     null
   );
@@ -617,17 +635,15 @@ export function Tabs({
   });
 
   return (
-    <div
-      role="tablist"
-      onFocus={(event) => {
-        focusedElement.current = event.target as HTMLElement;
-      }}
-      aria-label={ariaLabel}
-      ref={scrollRef}
-      className={rootClassName}
-      style={style}
-      id={id}
-    >
+    <div ref={scrollRef} className={rootClassName} style={style} id={id}>
+      {/* The visual strip interleaves tabs and Close buttons. Own only the
+        selectors so accessibility grouping does not change that focus/layout order. */}
+      <div
+        role="tablist"
+        aria-label={ariaLabel}
+        aria-owns={tabs.map((tab) => getTabDOMId(tab.id)).join(' ') || undefined}
+        className="tab-strip__tablist"
+      />
       {!!showIndicators && (
         <button
           type="button"
@@ -635,6 +651,7 @@ export function Tabs({
           aria-label="Scroll tabs left"
           tabIndex={-1}
           disabled={atStart}
+          onFocus={rememberFocus}
           onClick={() => scrollToNextTab(-1)}
         >
           <TabOverflowIcon direction="left" />
@@ -644,10 +661,14 @@ export function Tabs({
         <TabStripItem
           key={tab.id}
           tab={tab}
+          domId={getTabDOMId(tab.id)}
           index={index}
           activeId={activeId}
           focusStopId={focusStopId}
-          onFocusTab={(tabId) => setFocusedTab({ id: tabId, activeId })}
+          onFocusTab={(tabId, event) => {
+            rememberFocus(event);
+            setFocusedTab({ id: tabId, activeId });
+          }}
           disableRovingTabIndex={disableRovingTabIndex}
           dropInsertIndex={dropInsertIndex}
           tabRefs={tabRefs.current}
@@ -665,6 +686,7 @@ export function Tabs({
           aria-label="Scroll tabs right"
           tabIndex={-1}
           disabled={atEnd}
+          onFocus={rememberFocus}
           onClick={() => scrollToNextTab(1)}
         >
           <TabOverflowIcon direction="right" />

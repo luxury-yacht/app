@@ -29,6 +29,14 @@
   display: none;
 }
 
+/* Accessible owner of the tab selectors; the visual strip keeps sizing,
+   scrolling and the interleaved tab/Close focus order. */
+.tab-strip__tablist {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 /* Individual tab item */
 .tab-item-shell {
   display: flex;

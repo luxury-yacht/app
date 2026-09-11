@@ -12,4 +12,6 @@
 
 ### Fixed
 
+- Tab accessibility groups now contain only tabs; existing Close and scroll
+  buttons are exposed separately.
 - Container logs crashing due to miscalculated virtualized window size

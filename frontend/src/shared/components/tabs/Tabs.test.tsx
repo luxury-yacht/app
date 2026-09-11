@@ -50,6 +50,77 @@ describe('Tabs', () => {
     container.remove();
   });
 
+  it('owns only tab selectors while close and scroll controls stay outside the tablist', () => {
+    const observers: Array<() => void> = [];
+    const restore = installResizeObserver(observers);
+    try {
+      act(() =>
+        root.render(
+          <Tabs
+            tabs={[
+              { id: 'a', label: 'Alpha', onClose: vi.fn() },
+              { id: 'b', label: 'Beta' },
+            ]}
+            activeId="a"
+            onActivate={vi.fn()}
+            aria-label="Test Tabs"
+          />
+        )
+      );
+      const strip = requireValue(container.querySelector<HTMLElement>('.tab-strip'), 'strip');
+      Object.defineProperty(strip, 'clientWidth', { configurable: true, value: 100 });
+      Object.defineProperty(strip, 'scrollWidth', { configurable: true, value: 400 });
+      act(() => {
+        observers.forEach((measure) => {
+          measure();
+        });
+      });
+      const tablist = requireValue(container.querySelector('[role="tablist"]'), 'tablist');
+      expect(strip.querySelectorAll('button')).toHaveLength(3);
+      expect(tablist.querySelectorAll('button')).toHaveLength(0);
+      const ownedTabs = (tablist.getAttribute('aria-owns') ?? '')
+        .split(' ')
+        .map((id) => document.getElementById(id));
+      expect(ownedTabs).toEqual(Array.from(strip.querySelectorAll('[role="tab"]')));
+      expect(ownedTabs.map((tab) => tab?.textContent)).toEqual(['Alpha', 'Beta']);
+    } finally {
+      restore();
+    }
+  });
+
+  it('keeps ownership unique between strips and current after reordering and removing tabs', () => {
+    const render = (ids: string[]) =>
+      root.render(
+        <>
+          <Tabs
+            tabs={ids.map((id) => ({ id, label: id, onClose: vi.fn() }))}
+            activeId="a"
+            onActivate={vi.fn()}
+            aria-label="First"
+          />
+          <Tabs
+            tabs={[{ id: 'a', label: 'Other Alpha' }]}
+            activeId="a"
+            onActivate={vi.fn()}
+            aria-label="Second"
+          />
+        </>
+      );
+    act(() => render(['a', 'b with spaces']));
+    const getOwned = (label: string) =>
+      (container.querySelector(`[aria-label="${label}"]`)?.getAttribute('aria-owns') ?? '')
+        .split(' ')
+        .filter(Boolean);
+    const original = getOwned('First');
+    expect(original).toHaveLength(2);
+    expect(new Set([...original, ...getOwned('Second')]).size).toBe(3);
+    act(() => render(['b with spaces', 'a']));
+    expect(getOwned('First')).toEqual([...original].reverse());
+    act(() => render(['a']));
+    expect(getOwned('First')).toEqual([original[0]]);
+    expect(document.getElementById(original[1])).toBeNull();
+  });
+
   it('tabs directly to the focused inactive tab close button without activating it', async () => {
     const onActivate = vi.fn();
     await act(async () =>
@@ -470,7 +541,7 @@ describe('Tabs', () => {
       );
     });
 
-    const tablist = container.querySelector('[role="tablist"]');
+    const tablist = container.querySelector('.tab-strip');
     expect(tablist?.classList.contains('tab-strip--uppercase')).toBe(true);
   });
 
@@ -486,7 +557,7 @@ describe('Tabs', () => {
       );
     });
 
-    const tablist = container.querySelector('[role="tablist"]');
+    const tablist = container.querySelector('.tab-strip');
     expect(tablist?.classList.contains('tab-strip--uppercase')).toBe(false);
   });
 
@@ -505,7 +576,7 @@ describe('Tabs', () => {
       );
     });
 
-    const tablist = container.querySelector('[role="tablist"]');
+    const tablist = container.querySelector('.tab-strip');
     expect(tablist?.classList.contains('tab-strip')).toBe(true);
     expect(tablist?.classList.contains('custom-class')).toBe(true);
     expect(tablist?.id).toBe(tabListId);
@@ -523,7 +594,7 @@ describe('Tabs', () => {
       );
     });
 
-    const tablist = container.querySelector('[role="tablist"]');
+    const tablist = container.querySelector('.tab-strip');
     expect(tablist?.classList.contains('tab-strip--sizing-fit')).toBe(true);
     expect(tablist?.classList.contains('tab-strip--sizing-equal')).toBe(false);
   });
@@ -541,7 +612,7 @@ describe('Tabs', () => {
       );
     });
 
-    const tablist = container.querySelector('[role="tablist"]');
+    const tablist = container.querySelector('.tab-strip');
     expect(tablist?.classList.contains('tab-strip--sizing-equal')).toBe(true);
     expect(tablist?.classList.contains('tab-strip--sizing-fit')).toBe(false);
   });
@@ -560,7 +631,7 @@ describe('Tabs', () => {
       );
     });
 
-    const tablist = container.querySelector<HTMLDivElement>('[role="tablist"]');
+    const tablist = container.querySelector<HTMLDivElement>('.tab-strip');
     expect(tablist?.style.getPropertyValue('--tab-item-min-width')).toBe('100px');
     expect(tablist?.style.getPropertyValue('--tab-item-max-width')).toBe('300px');
   });
@@ -577,7 +648,7 @@ describe('Tabs', () => {
       );
     });
 
-    const tablist = container.querySelector<HTMLDivElement>('[role="tablist"]');
+    const tablist = container.querySelector<HTMLDivElement>('.tab-strip');
     // 'fit' mode (the default) sizes tabs to content with no floor — so
     // short labels like "YAML" don't get bloated. Closeable tabs in fit
     // mode get an 80px floor via the .tab-strip--sizing-fit
@@ -599,7 +670,7 @@ describe('Tabs', () => {
       );
     });
 
-    const tablist = container.querySelector<HTMLDivElement>('[role="tablist"]');
+    const tablist = container.querySelector<HTMLDivElement>('.tab-strip');
     // 'equal' mode shares the strip width across tabs, so a floor is
     // necessary to keep tabs from collapsing below readable width.
     expect(tablist?.style.getPropertyValue('--tab-item-min-width')).toBe('80px');
@@ -925,7 +996,7 @@ describe('Tabs', () => {
     try {
       await act(async () => render([{ id: 'a', label: 'Alpha' }]));
       const tablist = requireValue(
-        container.querySelector<HTMLElement>('[role="tablist"]'),
+        container.querySelector<HTMLElement>('.tab-strip'),
         'expected scrollable tab list'
       );
       Object.defineProperty(tablist, 'clientWidth', { configurable: true, value: 100 });
@@ -1059,9 +1130,9 @@ describe('Tabs', () => {
       );
     });
 
-    // Force scrollWidth > clientWidth on the scroll container (the tablist
+    // Force scrollWidth > clientWidth on the visual scroll container (the strip
     // itself — .tab-strip is the scrolling element, matching live Dockable).
-    const scrollContainer = container.querySelector<HTMLDivElement>('[role="tablist"]');
+    const scrollContainer = container.querySelector<HTMLDivElement>('.tab-strip');
     Object.defineProperty(scrollContainer, 'scrollWidth', { value: 1000, configurable: true });
     Object.defineProperty(scrollContainer, 'clientWidth', { value: 200, configurable: true });
 
@@ -1117,7 +1188,7 @@ describe('Tabs', () => {
     });
 
     const scrollContainer = requireValue(
-      container.querySelector<HTMLDivElement>('[role="tablist"]'),
+      container.querySelector<HTMLDivElement>('.tab-strip'),
       'expected test value in Tabs.test.tsx'
     );
     Object.defineProperty(scrollContainer, 'scrollWidth', { value: 1000, configurable: true });
@@ -1282,7 +1353,7 @@ describe('Tabs', () => {
     });
 
     const scrollContainer = requireValue(
-      container.querySelector<HTMLDivElement>('[role="tablist"]'),
+      container.querySelector<HTMLDivElement>('.tab-strip'),
       'expected test value in Tabs.test.tsx'
     );
     Object.defineProperty(scrollContainer, 'scrollWidth', { value: 500, configurable: true });

@@ -36,6 +36,15 @@ also use the shared drag coordinator.
   shared visual shell. This keeps their names and roles separate in accessibility
   trees. Consumers that enumerate tab controls use the shell as their boundary;
   the tab element retains its drag markers, geometry and roving focus.
+- The labelled `role="tablist"` element owns only tab selectors through
+  `aria-owns`. Close and overflow buttons remain outside that accessible group.
+  Tabs assigns unique DOM IDs per mounted strip and preserves them on reorder;
+  the ownership list follows the current tab order and excludes removed tabs.
+  This uses [ARIA ownership](https://www.w3.org/TR/wai-aria-1.2/#aria-owns)
+  because the visual DOM interleaves tabs with their Close buttons to preserve
+  layout and keyboard focus order. The `.tab-strip` element remains the visual,
+  scroll and drag boundary. Consumers locating tabs from the labelled tablist
+  must first find its closest `.tab-strip`, then query its tab descendants.
 - ClusterTabs and DockableTabBar retain their right-click context menus, which
   offer Move tab left/right through the existing order owner, with end positions disabled.
   Ordering a tab does not activate it. The synthetic Global tab is not reordered.
