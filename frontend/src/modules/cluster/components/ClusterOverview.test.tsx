@@ -6,12 +6,16 @@
  */
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
+import { KeyboardProvider } from '@ui/shortcuts';
 import { act, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import type { ClusterOverviewPayload, ClusterOverviewSnapshotPayload } from '@/core/refresh/types';
+import { requireValue } from '@/test-utils/requireValue';
 import ClusterOverview from './ClusterOverview';
 
 const {
@@ -66,7 +70,7 @@ const {
     browserOpenURLMock: vi.fn(),
     openWithObjectMock: vi.fn(),
     setObjectPanelActiveTabMock: vi.fn(),
-    canResolveEventObjectReferenceMock: vi.fn(() => false),
+    canResolveEventObjectReferenceMock: vi.fn<(input: { object?: string }) => boolean>(() => false),
     resolveEventObjectReferenceMock: vi.fn(),
     requestGridTableFiltersMock: vi.fn(),
   };
@@ -191,6 +195,7 @@ vi.mock('@core/backend-api', () => ({
 }));
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
+  onEvent: () => () => undefined,
   __esModule: true,
   openURL: (...args: unknown[]) => browserOpenURLMock(...args),
 }));
@@ -950,6 +955,106 @@ describe('ClusterOverview', () => {
     );
   });
 
+  it('uses one warning-events Tab stop and arrows to focus every row', async () => {
+    setWarningEvents(['first', 'unavailable', 'last']);
+    canResolveEventObjectReferenceMock.mockImplementation(
+      (input) => input.object !== 'Pod/unavailable'
+    );
+    const { container, cleanup } = renderClusterOverview(true);
+    cleanupRoot = cleanup;
+    const card = requireValue(container.querySelector<HTMLElement>('.recent-events'), 'events');
+    const rows = Array.from(card.querySelectorAll<HTMLElement>('.recent-events__row'));
+    const after = requireValue(
+      container.querySelector<HTMLButtonElement>('[data-testid="after-overview"]'),
+      'after'
+    );
+
+    expect(getTabbableElements(container).filter((element) => card.contains(element))).toHaveLength(
+      1
+    );
+    await act(async () => after.focus());
+    await pressOverviewKey('Tab', { shiftKey: true });
+    expect(document.activeElement).toBe(rows[0]);
+    expect(rows[0].classList.contains('keyboard-programmatic-focus')).toBe(true);
+    await pressOverviewKey('ArrowUp');
+    expect(document.activeElement).toBe(rows[0]);
+    await pressOverviewKey('ArrowDown');
+    expect(document.activeElement).toBe(rows[1]);
+    await pressOverviewKey('Enter');
+    await act(async () => rows[1].click());
+    expect(resolveEventObjectReferenceMock).not.toHaveBeenCalled();
+    await pressOverviewKey('ArrowDown');
+    expect(document.activeElement).toBe(rows[2]);
+    expect((await pressOverviewKey('ArrowUp', { ctrlKey: true })).defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(rows[2]);
+    await pressOverviewKey('ArrowDown');
+    expect(document.activeElement).toBe(rows[2]);
+    await pressOverviewKey('Home');
+    expect(document.activeElement).toBe(rows[0]);
+    await pressOverviewKey('End');
+    expect(document.activeElement).toBe(rows[2]);
+    await pressOverviewKey('Tab');
+    expect(document.activeElement).toBe(after);
+    await pressOverviewKey('Tab', { shiftKey: true });
+    expect(document.activeElement).toBe(rows[2]);
+
+    await act(async () => rows[1].focus());
+    await pressOverviewKey('Tab', { shiftKey: true });
+    expect(card.contains(document.activeElement)).toBe(false);
+    expect(document.activeElement?.textContent?.trim()).toBe('Legend');
+    await pressOverviewKey('Tab');
+    expect(document.activeElement).toBe(rows[1]);
+  });
+
+  it('leaves warning-event activation native and exits the list after a pointer click', async () => {
+    setWarningEvents(['first', 'last']);
+    canResolveEventObjectReferenceMock.mockReturnValue(true);
+    const { container, rerender, cleanup } = renderClusterOverview(true);
+    cleanupRoot = cleanup;
+    const rows = container.querySelectorAll<HTMLButtonElement>('.recent-events__row');
+    await act(async () => rows[1].click());
+    expect(document.activeElement).toBe(rows[1]);
+    expect(resolveEventObjectReferenceMock).toHaveBeenCalledWith(
+      expect.objectContaining({ clusterId: 'cluster-1', object: 'Pod/last' })
+    );
+    for (const key of ['Enter', ' ']) {
+      expect((await pressOverviewKey(key)).defaultPrevented).toBe(false);
+    }
+    await pressOverviewKey('Tab');
+    expect(document.activeElement?.textContent).toBe('After overview');
+    const outsideArrow = await pressOverviewKey('ArrowDown');
+    expect(outsideArrow.defaultPrevented).toBe(false);
+    expect(document.activeElement?.textContent).toBe('After overview');
+    setWarningEvents(['first']);
+    rerender();
+    expect(document.activeElement?.textContent).toBe('After overview');
+  });
+
+  it('keeps warning-event focus through refresh and recovers when its row disappears', async () => {
+    setWarningEvents(['first', 'last']);
+    canResolveEventObjectReferenceMock.mockReturnValue(true);
+    const { container, rerender, cleanup } = renderClusterOverview(true);
+    cleanupRoot = cleanup;
+    const row = requireValue(
+      container.querySelector<HTMLButtonElement>('.recent-events__row'),
+      'row'
+    );
+    await act(async () => row.focus());
+    setWarningEvents(['new', 'first', 'last']);
+    rerender();
+    expect(document.activeElement).toBe(row);
+    setWarningEvents(['new', 'last']);
+    rerender();
+    expect(document.activeElement).toBe(container.querySelector('.recent-events__row'));
+    setWarningEvents([]);
+    rerender();
+    expect(document.activeElement).toBe(container.querySelector('.recent-events'));
+    expect(
+      getTabbableElements(requireValue(container.querySelector('.recent-events'), 'events'))
+    ).toHaveLength(0);
+    expect((await pressOverviewKey('ArrowDown')).defaultPrevented).toBe(false);
+  });
+
   it('renders the nodes card as permission-gated when nodes are unavailable', async () => {
     const { container, rerender, cleanup } = renderClusterOverview();
     cleanupRoot = cleanup;
@@ -1247,20 +1352,64 @@ const EMPTY_OVERVIEW_DATA: ClusterOverviewPayload = {
   recentEvents: [],
 };
 
-function renderClusterOverview() {
+function setWarningEvents(ids: string[]) {
+  domainStateRef.current = createDomainState('ready', {
+    overview: {
+      ...EMPTY_OVERVIEW_DATA,
+      recentEvents: ids.map((id) => ({
+        clusterId: 'cluster-1',
+        clusterName: 'cluster-1',
+        eventUid: id,
+        reason: 'Failed',
+        message: `Warning ${id}`,
+        timestamp: Date.now(),
+        objectKind: 'Pod',
+        objectName: id,
+        objectNamespace: 'default',
+        objectApiVersion: 'v1',
+        objectUid: `pod-${id}`,
+      })),
+    },
+  });
+}
+
+async function pressOverviewKey(key: string, modifiers: KeyboardEventInit = {}) {
+  const event = new KeyboardEvent('keydown', {
+    key,
+    bubbles: true,
+    cancelable: true,
+    ...modifiers,
+  });
+  await act(async () => document.activeElement?.dispatchEvent(event));
+  return event;
+}
+
+function renderClusterOverview(keyboard = false) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
 
-  act(() => {
-    root.render(<ClusterOverview clusterContext="Default" />);
-  });
-
   const rerender = () => {
     act(() => {
-      root.render(<ClusterOverview clusterContext="Default" />);
+      const overview = <ClusterOverview clusterContext="Default" />;
+      root.render(
+        keyboard ? (
+          <KeyboardProvider>
+            <AppRegionNavigation />
+            <main data-app-region="content">
+              {overview}
+              <button type="button" data-testid="after-overview">
+                After overview
+              </button>
+            </main>
+          </KeyboardProvider>
+        ) : (
+          overview
+        )
+      );
     });
   };
+  rerender();
 
   const cleanup = () => {
     act(() => root.unmount());

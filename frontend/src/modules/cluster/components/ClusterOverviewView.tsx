@@ -9,7 +9,8 @@ import {
 import Tooltip from '@shared/components/Tooltip';
 import type { ResourceCalculations } from '@shared/utils/resourceCalculations';
 import { formatMemoryValue } from '@shared/utils/resourceCalculations';
-import React from 'react';
+import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
+import React, { useEffect, useRef, useState } from 'react';
 import type { ClusterOverviewPayload, RecentEventEntry } from '@/core/refresh/types';
 import { clusterOverviewCpuValue, clusterOverviewMemoryValue } from '@/core/resource-metrics';
 import type { MetricsBannerInfo } from '@/shared/utils/metricsAvailability';
@@ -741,10 +742,16 @@ const RecentEventRow = ({
   event,
   clickable,
   onOpen,
+  tabIndex,
+  onFocus,
+  onBlur,
 }: {
   event: RecentEventEntry;
   clickable: boolean;
   onOpen: () => void;
+  tabIndex: number;
+  onFocus: React.FocusEventHandler<HTMLButtonElement>;
+  onBlur: React.FocusEventHandler<HTMLButtonElement>;
 }) => {
   const rowClass = `recent-events__row${clickable ? ' recent-events__row--clickable' : ''}`;
   const objectNamespaceSuffix = event.objectNamespace ? ` · ${event.objectNamespace}` : '';
@@ -758,18 +765,24 @@ const RecentEventRow = ({
 
   return (
     <li>
-      {clickable ? (
-        <button
-          type="button"
-          className={rowClass}
-          onClick={onOpen}
-          title={`${event.objectKind}/${event.objectName}${objectNamespaceSuffix}`}
-        >
-          {content}
-        </button>
-      ) : (
-        <div className={rowClass}>{content}</div>
-      )}
+      <button
+        type="button"
+        tabIndex={tabIndex}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        aria-disabled={!clickable || undefined}
+        className={rowClass}
+        onClick={() => {
+          if (clickable) {
+            onOpen();
+          }
+        }}
+        title={
+          clickable ? `${event.objectKind}/${event.objectName}${objectNamespaceSuffix}` : undefined
+        }
+      >
+        {content}
+      </button>
     </li>
   );
 };
@@ -780,32 +793,99 @@ const RecentEventsCard = ({
 }: {
   showSkeleton: boolean;
   presentation: RecentEventsPresentation;
-}) => (
-  <div className="overview-section recent-events">
-    <div className="section-header">
-      <h2>Latest Warning Events</h2>
-      <span className="section-header__count">
-        {presentation.events.length} {presentation.events.length === 1 ? 'event' : 'events'}
-      </span>
-    </div>
-    {presentation.events.length === 0 ? (
-      <div className="recent-events__empty">
-        {showSkeleton ? '' : 'No warning events in the last 24 hours.'}
+}) => {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const lastFocusedRow = useRef<HTMLElement | null>(null);
+  const focusWithin = useRef(false);
+  const [focusedEventUid, setFocusedEventUid] = useState<string | null>(null);
+  const focusedIndex = Math.max(
+    0,
+    presentation.events.findIndex((event) => event.eventUid === focusedEventUid)
+  );
+
+  useKeyboardSurface({
+    kind: 'region',
+    rootRef,
+    onKeyDown: (event) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return false;
+      }
+      const rows = Array.from(
+        rootRef.current?.querySelectorAll<HTMLElement>('.recent-events__row') ?? []
+      );
+      if (!rows.length) {
+        return false;
+      }
+      const current = rows.indexOf(document.activeElement as HTMLElement);
+      let next: number;
+      switch (event.key) {
+        case 'ArrowDown':
+          next = Math.min(current + 1, rows.length - 1);
+          break;
+        case 'ArrowUp':
+          next = Math.max(current - 1, 0);
+          break;
+        case 'Home':
+          next = 0;
+          break;
+        case 'End':
+          next = rows.length - 1;
+          break;
+        default:
+          return false;
+      }
+      rows[next].focus();
+      return true;
+    },
+  });
+
+  useEffect(() => {
+    // A refreshed list can remove its focused row without dispatching blur.
+    if (focusWithin.current && lastFocusedRow.current?.isConnected === false) {
+      const target =
+        rootRef.current?.querySelector<HTMLElement>('.recent-events__row[tabindex="0"]') ??
+        rootRef.current;
+      target?.focus({ preventScroll: true });
+      lastFocusedRow.current = target;
+    }
+  });
+
+  return (
+    <div ref={rootRef} className="overview-section recent-events" tabIndex={-1}>
+      <div className="section-header">
+        <h2>Latest Warning Events</h2>
+        <span className="section-header__count">
+          {presentation.events.length} {presentation.events.length === 1 ? 'event' : 'events'}
+        </span>
       </div>
-    ) : (
-      <ul className="recent-events__list">
-        {presentation.events.map((event) => (
-          <RecentEventRow
-            key={event.eventUid}
-            event={event}
-            clickable={presentation.canOpen(event)}
-            onOpen={() => presentation.onOpen(event)}
-          />
-        ))}
-      </ul>
-    )}
-  </div>
-);
+      {presentation.events.length === 0 ? (
+        <div className="recent-events__empty">
+          {showSkeleton ? '' : 'No warning events in the last 24 hours.'}
+        </div>
+      ) : (
+        <ul className="recent-events__list" aria-label="Latest Warning Events">
+          {presentation.events.map((event, index) => (
+            <RecentEventRow
+              key={event.eventUid}
+              event={event}
+              clickable={presentation.canOpen(event)}
+              tabIndex={index === focusedIndex ? 0 : -1}
+              onFocus={(focusEvent) => {
+                focusWithin.current = true;
+                lastFocusedRow.current = focusEvent.currentTarget;
+                setFocusedEventUid(event.eventUid);
+              }}
+              onBlur={(focusEvent) => {
+                focusWithin.current = rootRef.current?.contains(focusEvent.relatedTarget) ?? false;
+              }}
+              onOpen={() => presentation.onOpen(event)}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
 
 const ClusterOverviewHeader = ({
   contextLabel,
@@ -896,12 +976,12 @@ export const ClusterOverviewView: React.FC<ClusterOverviewViewProps> = ({
         presentation={resources}
       />
       <NodesSummaryCard overview={overview} showSkeleton={showSkeleton} presentation={nodes} />
+      <RecentEventsCard showSkeleton={showSkeleton} presentation={recentEvents} />
       <WorkloadsSummaryCard
         overview={overview}
         showSkeleton={showSkeleton}
         presentation={workloads}
       />
-      <RecentEventsCard showSkeleton={showSkeleton} presentation={recentEvents} />
     </div>
   </div>
 );
