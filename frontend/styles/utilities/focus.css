@@ -23,10 +23,7 @@
    when the shared keyboard-navigation observer marks their focus. */
 :root
   body
-  :is(
-    :focus-visible:not(input, textarea, [contenteditable]),
-    .keyboard-programmatic-focus:focus
-  ),
+  :is(:focus-visible:not(input, textarea, [contenteditable]), .keyboard-programmatic-focus:focus),
 :root
   body
   :is(

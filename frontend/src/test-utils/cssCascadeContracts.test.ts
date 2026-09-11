@@ -5,6 +5,35 @@ import { requireValue } from '@/test-utils/requireValue';
 
 const readProjectFile = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
+const focusFill = 'rgba(50, 108, 229, 0.1)';
+// jsdom can let a background shorthand overwrite a more-specific color, and
+// returns different colors on repeated computed-style reads. Expand parseable
+// shorthands into equivalent longhands in these focus fixtures.
+const expandBackgroundShorthands = (source: string) =>
+  source.replace(/\bbackground:\s*([^;{}]+);/g, (declaration, value: string) => {
+    const style = document.createElement('div').style;
+    style.background = value;
+    if (!style.backgroundColor) {
+      return declaration;
+    }
+    return ['color', 'image', 'position', 'size', 'repeat', 'origin', 'clip', 'attachment']
+      .map((name) => `background-${name}: ${style.getPropertyValue(`background-${name}`)};`)
+      .join('\n');
+  });
+
+// Resolve the theme colors explicitly because jsdom does not resolve these
+// custom properties when computing the cascade.
+const resolveFocusColors = (source: string) =>
+  expandBackgroundShorthands(
+    source
+      .replace(/var\(--focus-background, var\(--color-accent-bg\)\)/g, focusFill)
+      .replace(/var\(--color-accent-bg\)/g, focusFill)
+      .replace(/var\(--color-accent\)/g, 'rgb(50, 108, 229)')
+      .replace(/var\(--color-bg\)/g, 'rgb(255, 255, 255)')
+      .replace(/var\(--color-bg-secondary\)/g, 'rgb(240, 240, 240)')
+      .replace(/var\(--color-bg-tertiary\)/g, 'rgb(230, 230, 230)')
+  );
+
 const installStyles = (...sources: string[]) => {
   const style = document.createElement('style');
   style.textContent = sources.join('\n');
@@ -22,9 +51,7 @@ afterEach(() => {
 });
 
 describe('strict CSS cascade contracts', () => {
-  it('uses the shared soft halo after component styles load without changing control layout or fill', () => {
-    const halo =
-      'rgba(50, 108, 229, 0.38) 0px 0px 10px 1px, rgba(50, 108, 229, 0.14) 0px 0px 5px 0px inset';
+  it('uses the shared background cue after component styles load without changing control layout', () => {
     const sources = [
       'styles/utilities/focus.css',
       'styles/components/buttons.css',
@@ -41,13 +68,9 @@ describe('strict CSS cascade contracts', () => {
       'src/ui/status/SessionsStatus.css',
     ];
     const style = installStyles(
-      ...sources.map((path) =>
-        readProjectFile(path)
-          .replace(/var\(--shadow-focus-halo\)/g, halo)
-          .replace(/var\(--color-accent\)/g, 'rgb(50, 108, 229)')
-      )
+      ...sources.map((path) => resolveFocusColors(readProjectFile(path)))
     );
-    style.dataset.cssContract = 'focus-halo';
+    style.dataset.cssContract = 'focus-background';
     document.body.innerHTML = `
       <button class="button">Button</button>
       <div class="app-header"><button class="settings-button">Settings</button></div>
@@ -64,30 +87,29 @@ describe('strict CSS cascade contracts', () => {
     `;
     for (const control of document.querySelectorAll<HTMLElement>('button, input')) {
       const width = getComputedStyle(control).width;
+      const idleFill = getComputedStyle(control).backgroundColor;
       control.classList.add('keyboard-programmatic-focus');
       control.focus();
       const computed = getComputedStyle(control);
       expect(computed.outlineStyle, control.outerHTML).toMatch(/^(none|)$/);
-      expect(computed.boxShadow, control.outerHTML).toBe(halo);
+      expect(computed.boxShadow, control.outerHTML).toBe('none');
+      expect(computed.backgroundColor, control.outerHTML).toBe(focusFill);
       expect(computed.width, control.outerHTML).toBe(width);
+      control.blur();
+      control.classList.remove('keyboard-programmatic-focus');
+      expect(getComputedStyle(control).backgroundColor, control.outerHTML).toBe(idleFill);
     }
-    const sidebar = requireValue(document.querySelector<HTMLElement>('.sidebar-item'), 'sidebar');
-    sidebar.focus();
-    const focusedFill = getComputedStyle(sidebar).backgroundColor;
-    sidebar.blur();
-    sidebar.classList.remove('keyboard-programmatic-focus');
-    expect(getComputedStyle(sidebar).backgroundColor).toBe(focusedFill);
   });
 
-  it('uses a soft halo for sidebar arrow preview without drawing a solid inset ring', () => {
-    const halo = 'rgba(50, 108, 229, 0.38) 0px 0px 10px 1px';
-    const style = installStyles(
-      readProjectFile('src/ui/layout/Sidebar.css').replace(/var\(--shadow-focus-halo\)/g, halo)
-    );
-    style.dataset.cssContract = 'sidebar-focus-halo';
+  it('uses the shared background cue for sidebar arrow preview without a halo', () => {
+    const style = installStyles(resolveFocusColors(readProjectFile('src/ui/layout/Sidebar.css')));
+    style.dataset.cssContract = 'sidebar-focus-background';
     document.body.innerHTML = '<button class="sidebar-item keyboard-preview">Browse</button>';
     const button = requireValue(document.querySelector('button'), 'sidebar preview');
-    expect(getComputedStyle(button).boxShadow).toBe(halo);
+    expect(getComputedStyle(button).boxShadow).toMatch(/^(none|)$/);
+    expect(getComputedStyle(button).backgroundColor).toBe(focusFill);
+    button.classList.remove('keyboard-preview');
+    expect(getComputedStyle(button).backgroundColor).not.toBe(focusFill);
   });
 
   it('retains a visible focus indicator when forced colors suppress box shadows', () => {
@@ -112,20 +134,20 @@ describe('strict CSS cascade contracts', () => {
     expect(getComputedStyle(button).outline).toContain('solid');
   });
 
-  it('uses the shared halo around a focused port input group', () => {
-    const halo = 'rgba(50, 108, 229, 0.38) 0px 0px 10px 1px';
+  it('highlights the focused port input without adding a halo to its group', () => {
     const style = installStyles(
-      readProjectFile('src/modules/port-forward/PortForwardModal.css').replace(
-        /var\(--shadow-focus-halo\)/g,
-        halo
-      )
+      resolveFocusColors(readProjectFile('styles/utilities/focus.css')),
+      resolveFocusColors(readProjectFile('src/modules/port-forward/PortForwardModal.css'))
     );
     style.dataset.cssContract = 'port-input-focus';
     document.body.innerHTML =
-      '<div class="port-forward-input-group"><input class="port-forward-input" /></div>';
-    requireValue(document.querySelector('input'), 'port input').focus();
+      '<div class="port-forward-input-group"><input class="port-forward-input keyboard-programmatic-focus" /></div>';
+    const input = requireValue(document.querySelector('input'), 'port input');
+    input.focus();
     const group = requireValue(document.querySelector('.port-forward-input-group'), 'port group');
-    expect(getComputedStyle(group).boxShadow).toBe(halo);
+    expect(getComputedStyle(input).backgroundColor).toBe(focusFill);
+    expect(getComputedStyle(group).boxShadow).toMatch(/^(none|)$/);
+    expect(getComputedStyle(group).borderTopColor).toBe('rgb(50, 108, 229)');
   });
 
   it('keeps the shared hidden utility authoritative without important', () => {
