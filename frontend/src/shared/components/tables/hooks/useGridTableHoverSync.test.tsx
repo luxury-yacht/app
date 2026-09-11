@@ -42,9 +42,11 @@ const renderHook = <T,>(hook: () => T) => {
 describe('useGridTableHoverSync', () => {
   let wrapper: HTMLDivElement;
   let headerInner: HTMLDivElement;
+  let headerContainer: HTMLDivElement;
 
   afterEach(() => {
     document.body.classList.remove('gridtable-disable-hover');
+    headerContainer.remove();
   });
 
   const setupWrapper = () => {
@@ -53,10 +55,13 @@ describe('useGridTableHoverSync', () => {
     wrapper.style.width = '200px';
     wrapper.style.height = '200px';
     Object.defineProperty(wrapper, 'scrollTop', { value: 0, writable: true });
-    Object.defineProperty(wrapper, 'scrollLeft', { value: 0, writable: true });
+    Object.defineProperty(wrapper, 'scrollLeft', { value: 0, writable: true, configurable: true });
     document.body.appendChild(wrapper);
 
     headerInner = document.createElement('div');
+    headerContainer = document.createElement('div');
+    headerContainer.appendChild(headerInner);
+    document.body.appendChild(headerContainer);
     return {
       wrapperRef: { current: wrapper },
       headerRef: { current: headerInner },
@@ -208,12 +213,86 @@ describe('useGridTableHoverSync', () => {
         'expected test value in useGridTableHoverSync.test.tsx'
       ).scheduleHeaderSync();
     });
-    expect(headerInner.style.transform).toBe('translateX(-20px)');
+    expect(headerContainer.scrollLeft).toBe(20);
+    expect(headerInner.style.transform).toBe('');
 
     cancelSpy.mockRestore();
     rafSpy.mockRestore();
     unmount();
     document.body.removeChild(wrapper);
+  });
+
+  it('keeps rows aligned when focus scrolls the header forwards and backwards', () => {
+    const { wrapperRef, headerRef } = setupWrapper();
+    const { unmount } = renderHook(() =>
+      useGridTableHoverSync({ wrapperRef, headerInnerRef: headerRef, hideHeader: false })
+    );
+    wrapper.scrollTop = 40;
+
+    for (const offset of [220, 60, 0]) {
+      act(() => {
+        // jsdom does not scroll focused controls into view; replay the native scroll event.
+        headerContainer.scrollLeft = offset;
+        headerContainer.dispatchEvent(new Event('scroll'));
+      });
+      expect(wrapper.scrollLeft).toBe(offset);
+      expect(wrapper.scrollTop).toBe(40);
+    }
+
+    unmount();
+    headerContainer.scrollLeft = 100;
+    headerContainer.dispatchEvent(new Event('scroll'));
+    expect(wrapper.scrollLeft).toBe(0);
+    wrapper.remove();
+  });
+
+  it('does not let a delayed header scroll event undo newer body scrolling', () => {
+    const { wrapperRef, headerRef } = setupWrapper();
+    const frameCallbacks: FrameRequestCallback[] = [];
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    });
+    const { result, unmount } = renderHook(() =>
+      useGridTableHoverSync({ wrapperRef, headerInnerRef: headerRef, hideHeader: false })
+    );
+
+    act(() => {
+      wrapper.scrollLeft = 100;
+      requireValue(result.current, 'header sync').scheduleHeaderSync();
+      frameCallbacks[0](0);
+      wrapper.scrollLeft = 200;
+      headerContainer.dispatchEvent(new Event('scroll'));
+    });
+    expect(wrapper.scrollLeft).toBe(200);
+
+    rafSpy.mockRestore();
+    unmount();
+    wrapper.remove();
+  });
+
+  it('clamps header scrolling to the body extent, excluding decorative header overflow', () => {
+    const { wrapperRef, headerRef } = setupWrapper();
+    let bodyOffset = 0;
+    Object.defineProperty(wrapper, 'scrollLeft', {
+      get: () => bodyOffset,
+      set: (value: number) => {
+        bodyOffset = Math.max(0, Math.min(400, value));
+      },
+    });
+    const { unmount } = renderHook(() =>
+      useGridTableHoverSync({ wrapperRef, headerInnerRef: headerRef, hideHeader: false })
+    );
+
+    act(() => {
+      headerContainer.scrollLeft = 650;
+      headerContainer.dispatchEvent(new Event('scroll'));
+    });
+    expect(wrapper.scrollLeft).toBe(400);
+    expect(headerContainer.scrollLeft).toBe(400);
+
+    unmount();
+    wrapper.remove();
   });
 
   it('clears detached hover with force: true even while hover is suppressed', () => {
@@ -315,7 +394,8 @@ describe('useGridTableHoverSync', () => {
         'expected test value in useGridTableHoverSync.test.tsx'
       ).scheduleHeaderSync();
     });
-    expect(headerInner.style.transform).toBe('translateX(0px)');
+    expect(headerContainer.scrollLeft).toBe(0);
+    expect(headerInner.style.transform).toBe('');
     window.requestAnimationFrame = originalRAF;
 
     unmount();
