@@ -47,7 +47,8 @@ const getRegions = (): AppRegion[] => {
 
 const contains = (region: AppRegion, element: Element | null) => {
   const target = getFocusPortalOwner(element) ?? element;
-  return region.roots.some((root) => target?.closest(REGION_SELECTOR) === root);
+  const owner = target?.closest<HTMLElement>(REGION_SELECTOR);
+  return owner !== undefined && owner !== null && region.roots.includes(owner);
 };
 
 const getRegionControls = (region: AppRegion) =>
@@ -136,12 +137,9 @@ export function useAppRegionNavigation() {
       return false;
     }
     const current = regions.findIndex((candidate) => contains(candidate, document.activeElement));
+    const entryIndex = direction > 0 ? 0 : regions.length - 1;
     const index =
-      current < 0
-        ? direction > 0
-          ? 0
-          : regions.length - 1
-        : (current + direction + regions.length) % regions.length;
+      current < 0 ? entryIndex : (current + direction + regions.length) % regions.length;
     const region = regions[index];
     return focusRegion(region, savedFocus.current.get(region.roots[0]));
   };

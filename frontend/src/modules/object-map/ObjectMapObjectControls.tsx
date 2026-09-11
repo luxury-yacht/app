@@ -2,20 +2,22 @@ import type { ObjectMapReference } from '@core/refresh/types';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { PositionedNode } from './objectMapLayout';
 
-export const objectMapNodeLabel = (node: PositionedNode): string =>
-  `${node.ref.kind} ${node.ref.name}${node.ref.namespace ? ` (${node.ref.namespace})` : ''}`;
+export const objectMapNodeLabel = (node: PositionedNode): string => {
+  const namespaceSuffix = node.ref.namespace ? ` (${node.ref.namespace})` : '';
+  return `${node.ref.kind} ${node.ref.name}${namespaceSuffix}`;
+};
 
 export function ObjectMapObjectControls({
   nodes,
   activeId,
   onSelect,
   onActions,
-}: {
+}: Readonly<{
   nodes: PositionedNode[];
   activeId: string | null;
   onSelect: (id: string) => void;
   onActions: (request: { ref: ObjectMapReference; position: { x: number; y: number } }) => void;
-}) {
+}>) {
   const selected = nodes.find((node) => node.id === activeId);
   return (
     <div className="object-map__object-controls">

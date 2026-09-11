@@ -132,8 +132,8 @@ const focusNextModalControl = (root: HTMLElement, items: HTMLElement[], backward
   const active = document.activeElement;
   const index = items.findIndex((item) => item === active || item.contains(active));
   const fallbackIndex = backwards ? items.length - 1 : 0;
-  const nextIndex =
-    index < 0 ? fallbackIndex : (index + (backwards ? -1 : 1) + items.length) % items.length;
+  const direction = backwards ? -1 : 1;
+  const nextIndex = index < 0 ? fallbackIndex : (index + direction + items.length) % items.length;
   items[nextIndex].focus();
 };
 

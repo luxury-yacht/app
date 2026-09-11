@@ -47,7 +47,9 @@ export function useTooltipKeyboard({
     clearTimers();
     const controls = getTabbableElements(tooltipRef.current);
     const index = controls.indexOf(document.activeElement as HTMLElement);
-    const next = atTrigger ? (backwards ? controls.length - 1 : 0) : index + (backwards ? -1 : 1);
+    const entryIndex = backwards ? controls.length - 1 : 0;
+    const direction = backwards ? -1 : 1;
+    const next = atTrigger ? entryIndex : index + direction;
     if (controls[next]) {
       controls[next].focus();
     } else {

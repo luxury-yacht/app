@@ -70,15 +70,13 @@ export const useGridTableKeyboardScopes = ({
   );
 
   const handleTableKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') {
-        return false;
+    (event: KeyboardEvent): undefined => {
+      if (event.key === 'Tab') {
+        suppressFocusedRowHighlight();
+        filterFocusIndexRef.current = null;
       }
-      suppressFocusedRowHighlight();
-      filterFocusIndexRef.current = null;
-      // The header is a separate sibling between filters and body. Let the
-      // browser (or containing modal/panel) visit its controls in DOM order.
-      return false;
+      // The header is a separate sibling between filters and body. Leave the
+      // event unclaimed so the containing region can visit controls in DOM order.
     },
     [filterFocusIndexRef, suppressFocusedRowHighlight]
   );

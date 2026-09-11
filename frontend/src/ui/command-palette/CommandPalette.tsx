@@ -471,7 +471,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   const catalogAbortRef = useRef<AbortController | null>(null);
   const catalogDebounceRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDialogElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const selectedIndexRef = useRef(0);
@@ -1174,7 +1174,8 @@ export const CommandPalette = memo(function CommandPaletteComponent({
         </div>
       )}
     >
-      <div
+      <dialog
+        open
         className={[
           'command-palette',
           hideCursor ? 'hide-cursor' : null,
@@ -1183,7 +1184,6 @@ export const CommandPalette = memo(function CommandPaletteComponent({
           .filter(Boolean)
           .join(' ')}
         ref={containerRef}
-        role="dialog"
         aria-label="Command Palette"
         aria-modal="true"
         tabIndex={-1}
@@ -1245,7 +1245,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
             <kbd>Esc</kbd> Close
           </span>
         </div>
-      </div>
+      </dialog>
     </ErrorBoundary>,
     document.body
   );

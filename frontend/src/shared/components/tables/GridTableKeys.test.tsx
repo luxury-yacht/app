@@ -483,7 +483,7 @@ describe('GridTableKeys filter target selectors', () => {
     const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
     const result = tableSurface?.onKeyDown?.(event);
 
-    expect(result).toBe(false);
+    expect(result).toBeFalsy();
     expect(preventDefaultSpy).not.toHaveBeenCalled();
   });
 

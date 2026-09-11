@@ -150,6 +150,11 @@ describe('CommandPalette keyboard integration', () => {
       document.querySelector<HTMLInputElement>('.command-palette-input'),
       'palette input'
     );
+    const dialog = requireValue(input.closest('.command-palette'), 'palette dialog');
+    expect(dialog).toBeInstanceOf(HTMLDialogElement);
+    expect(dialog.hasAttribute('open')).toBe(true);
+    expect(dialog.hasAttribute('role')).toBe(false);
+    expect(container.hasAttribute('inert')).toBe(true);
     for (const shiftKey of [false, true]) {
       const event = new KeyboardEvent('keydown', {
         key: 'Tab',

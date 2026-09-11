@@ -263,3 +263,65 @@ HTML/CSS/JavaScript was included in its scan (2,979 errors,
 `/tmp/luxury-yacht-keyboard-final-prerelease.log`). The report was moved outside
 the source tree; lint configuration and thresholds were not relaxed. The final
 coverage report was likewise moved before the successful final gate above.
+
+## PR #344 Sonar follow-up
+
+On 2026-09-10, the all-rule PR audit reported nine open/confirmed new-code
+findings on PR #344 at head `c3c85b75cc962a314e2f7ad9c0083eec672cfbde`.
+Inventory: `/tmp/luxury-yacht-pr344-sonar-before.log`; raw API response:
+`/tmp/luxury-yacht-pr344-sonar-issues.json`. The following changes address the
+reported patterns locally; SonarCloud closure requires analysis of a pushed
+revision and is still pending. No commit or push was requested or performed.
+
+Paths in this table are under `frontend/src`.
+
+| Sonar key | Rule | Owner and local change |
+| --- | --- | --- |
+| AaCNdqwihFcD1QLE5fqE | S4624 | `modules/object-map/ObjectMapObjectControls.tsx`: compute the namespace suffix before formatting the node label |
+| AaCNdqwihFcD1QLE5fqF | S6759 | `modules/object-map/ObjectMapObjectControls.tsx`: declare component props read-only |
+| AaCNdq3ihFcD1QLE5fqG | S3358 | `shared/components/useTooltipKeyboard.ts`: separate trigger entry index from subsequent movement |
+| AaCNdq3ihFcD1QLE5fqH | S3358 | `shared/components/useTooltipKeyboard.ts`: compute movement direction before the conditional index |
+| AaCNHJPPdjo_Aah_1NNu | S7765 | `ui/layout/appFocusRegions.ts`: resolve the portal/element owner once and use `includes` for root membership |
+| AaCNHJN3djo_Aah_1NNt | S3358 | `shared/components/modals/useModalFocusTrap.ts`: compute direction before choosing the next control |
+| AaCNHJRCdjo_Aah_1NNw | S6819 | `ui/command-palette/CommandPalette.tsx`: render an open native `dialog` element; CSS resets its default padding and inherits the existing text color |
+| AaCNHJPPdjo_Aah_1NNv | S3358 | `ui/layout/appFocusRegions.ts`: compute the initial region index separately from cycling |
+| AaCNHJJhdjo_Aah_1NNs | S3516 | `shared/components/tables/GridTableKeys.ts`: perform Tab bookkeeping without repeatedly returning a constant |
+
+### Contract trace
+
+`KeyboardSurfaceKeyResult` explicitly accepts `undefined`
+(`ui/shortcuts/context.tsx:55`), and the dispatcher claims events only for `true`
+or `handled-no-prevent` (`context.tsx:260`). The table callback therefore leaves
+Tab for its containing region while retaining highlight/filter bookkeeping.
+Its regression asserts that the event remains unclaimed, rather than requiring
+one particular unclaimed sentinel.
+
+The palette remains a body portal owned by `useModalFocusTrap`; it does not
+introduce a second modal stack or call `showModal`. The shared trap registers
+the visible root, makes the background inert, confines focus and restores the
+invoker on cleanup (`shared/components/modals/useModalFocusTrap.ts:138`).
+The new dialog element retains the existing palette dismissal and command
+callbacks. Region, tooltip and modal index calculations retain their entry,
+direction and wrap rules. Object-map labels and props retain the existing
+node IDs, complete references and action callbacks. No provider ordering or
+backend boundary changes are introduced by this diff.
+
+### Acceptance evidence
+
+| Criterion | Status | Evidence |
+| --- | --- | --- |
+| Palette uses native dialog semantics while retaining background isolation and focus ownership | passed | New real-component assertion failed with a `div` in `/tmp/luxury-yacht-pr344-palette-red.log`. It passes with `HTMLDialogElement`, `open`, no redundant role, inert background, forward/reverse Tab containment and Escape restoration in `/tmp/luxury-yacht-pr344-focused-green.log` |
+| Shared table, region, tooltip, modal and object-map contracts survive the refactors | passed | Before refactoring, 6 files / 81 characterization tests passed (`/tmp/luxury-yacht-pr344-characterization.log`). After changes, 7 files / 91 focused tests passed (`/tmp/luxury-yacht-pr344-focused-green.log`) |
+| Rendered palette layout and lifecycle | passed | Standalone Playwright against the emitted dev-server URL rendered the actual palette, keyboard provider and production CSS. It observed an open DIALOG, zero padding, inherited body text color, focused combobox and inert background. Tab/Shift+Tab and Control+Tab/Control+Shift+Tab remained inside; empty search rendered; Escape restored the trigger; Enter executed the selected local callback and closed the palette; an outside click dismissed it |
+| Native palette delivery, navigation and focus restoration | passed | macOS Wails development app AX, screenshots and focus overlay: pointer opening showed populated commands; all four Tab combinations stayed on the combobox; empty search rendered; Escape restored Command Palette. Command+Shift+P reopened it; selecting Cluster - Nodes with Enter navigated and restored header focus. Control+Tab then focused sidebar Nodes and reverse restored Command Palette. Cleanup returned to Overview with palette closed and focus overlay off |
+| Full frontend tests and directly affected statement coverage | passed | `mise exec -- wails3 task test:frontend-coverage`: exit 0, 519 files / 4,940 tests; 87.14% statements. Affected modules: ObjectMapObjectControls 92.30%, useTooltipKeyboard 98.36%, useModalFocusTrap 94.40%, GridTableKeys 87.80%, CommandPalette 86.40%, appFocusRegions 94.62%. Log: `/tmp/luxury-yacht-pr344-coverage.log`; report moved outside the source tree to `/tmp/luxury-yacht-pr344-coverage-report` |
+| Local cognitive complexity | passed | All six changed production modules passed the max-12 Biome check without suppressions or baseline exceptions (`/tmp/luxury-yacht-pr344-complexity.log`). This is a local signal, not SonarCloud closure |
+| Final prerelease and post-gate worktree review | passed | `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease`: exit 0, including Go vet/staticcheck/race, frontend lint/typecheck, 519 files / 4,940 tests, knip and the vulnerability scan (`/tmp/luxury-yacht-pr344-prerelease.log`). Lint applied no fixes. Post-gate production diff/status inspected; `git diff --check` exit 0. Subsequent edits only finalize this record |
+| SonarCloud analysis of the remediation | pending | The current PR analysis still describes the committed head above. An explicitly authorized push and subsequent all-rule PR audit are required to confirm closure |
+
+The rendered fixture used actual components and CSS, with kubeconfig/object-panel
+provider boundaries mocked and two local commands; it does not prove backend
+execution. Focused component tests likewise mock data providers and object-map
+renderer/menu presentation. The separate native checks used the real app and
+connected cluster for read-only navigation. No Kubernetes mutation was performed.
+The temporary browser fixture was removed before the final validation suites.
