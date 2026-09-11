@@ -15,9 +15,8 @@ export function KeyboardNavigationGuide() {
         </dd>
         <dt>Tabs</dt>
         <dd>
-          Left/Right moves focus between tabs; Enter or Space selects one. Tab reaches Tab actions
-          and Close. Open Tab actions to reorder, move or close that tab. Delete or Backspace also
-          closes a focused tab.
+          Left/Right moves focus between tabs; Enter or Space selects one. Tab reaches Close. Delete
+          or Backspace also closes a focused tab.
         </dd>
         <dt>Status and popups</dt>
         <dd>

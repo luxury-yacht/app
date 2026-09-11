@@ -329,12 +329,6 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
     onClose: () => {
       closeClusterSelection(tab.selection);
     },
-    onOpenMenu: (position) =>
-      setPanelMenu({
-        clusterId: getClusterMeta(tab.selection).id,
-        selection: tab.selection,
-        position,
-      }),
     extraProps: {
       title: tab.label,
       onContextMenu: (event: React.MouseEvent) => {

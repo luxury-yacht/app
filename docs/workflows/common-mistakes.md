@@ -13,6 +13,10 @@ Before editing behavior, check the current authorization and the exact selected
 scope. Record accepted choices in the existing plan without implementing choices
 that remain open.
 
+Keyboard access does not authorize adding visible controls or changing spacing
+and layout. Before editing, distinguish the requested interaction from a proposed
+UI change; preserve the existing appearance unless that change was requested.
+
 ## Treating a passing automated gate as task completion
 
 The gate covers its configured checks. It does not establish that every requested

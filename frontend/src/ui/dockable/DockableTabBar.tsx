@@ -115,7 +115,6 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       closeIcon: <CloseIcon width={10} height={10} />,
       closeAriaLabel: `Close ${tab.title}`,
       onClose: () => closeTab(tab.panelId),
-      onOpenMenu: ({ x, y }) => setMenu({ panelId: tab.panelId, x, y }),
       extraProps: {
         'data-panel-id': tab.panelId,
         ...dragProps,

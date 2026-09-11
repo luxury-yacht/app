@@ -50,9 +50,8 @@ describe('Tabs', () => {
     container.remove();
   });
 
-  it('tabs into the focused inactive tab actions without activating it', async () => {
+  it('tabs directly to the focused inactive tab close button without activating it', async () => {
     const onActivate = vi.fn();
-    const onOpenMenu = vi.fn();
     await act(async () =>
       root.render(
         <KeyboardProvider>
@@ -60,8 +59,8 @@ describe('Tabs', () => {
           <header data-app-region="header">
             <Tabs
               tabs={[
-                { id: 'a', label: 'Alpha', onOpenMenu, onClose: vi.fn() },
-                { id: 'b', label: 'Beta', onOpenMenu, onClose: vi.fn() },
+                { id: 'a', label: 'Alpha', onClose: vi.fn() },
+                { id: 'b', label: 'Beta', onClose: vi.fn() },
               ]}
               activeId="a"
               onActivate={onActivate}
@@ -83,9 +82,7 @@ describe('Tabs', () => {
         new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
       )
     );
-    expect(document.activeElement).toBe(tabs[1].parentElement?.querySelector('.tab-item__menu'));
-    await act(async () => (document.activeElement as HTMLElement).click());
-    expect(onOpenMenu).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(tabs[1].parentElement?.querySelector('.tab-item__close'));
     expect(onActivate).not.toHaveBeenCalled();
     expect(tabs[0].getAttribute('aria-selected')).toBe('true');
     await act(async () =>
@@ -632,11 +629,11 @@ describe('Tabs', () => {
     expect(tabs[1].parentElement?.querySelector('.tab-item__close')).toBeNull();
   });
 
-  it('exposes tab actions outside the tab role and keeps the tab name separate', () => {
+  it('renders only the existing close control and keeps the tab name separate', () => {
     act(() =>
       root.render(
         <Tabs
-          tabs={[{ id: 'a', label: 'Alpha', onClose: vi.fn(), onOpenMenu: vi.fn() }]}
+          tabs={[{ id: 'a', label: 'Alpha', onClose: vi.fn() }]}
           activeId="a"
           onActivate={vi.fn()}
           aria-label="Test Tabs"
@@ -645,9 +642,10 @@ describe('Tabs', () => {
     );
     const tab = requireValue(container.querySelector('[role="tab"]'), 'tab');
     expect(tab.textContent).toBe('Alpha');
-    expect(container.querySelector('.tab-item__menu')?.closest('[role="tab"]')).toBeNull();
+    expect(container.querySelector('.tab-item__menu')).toBeNull();
+    expect(tab.classList.contains('tab-item--with-menu')).toBe(false);
     expect(container.querySelector('.tab-item__close')?.closest('[role="tab"]')).toBeNull();
-    expect(container.querySelectorAll('button')).toHaveLength(2);
+    expect(container.querySelectorAll('button')).toHaveLength(1);
   });
 
   it('invokes onClose when the close button is clicked, without invoking onActivate', () => {

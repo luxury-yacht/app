@@ -1,7 +1,7 @@
 ### Added
 
 - Roles and Rolebindings are now visible in Object Maps
-- Keyboard access to table row actions, tab menus and reordering, status
+- Keyboard access to table row actions, tab Close controls, status
   popovers, and object-map actions, with guidance in Keyboard Shortcuts help.
 
 ### Changed

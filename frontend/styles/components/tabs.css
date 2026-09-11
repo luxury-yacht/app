@@ -110,8 +110,7 @@
 }
 
 /* Close button — small badge in the upper-right corner, visible on hover */
-.tab-item__close,
-.tab-item__menu {
+.tab-item__close {
   position: absolute;
   right: 1px;
   top: 50%;
@@ -145,15 +144,8 @@
   z-index: 1;
 }
 
-.tab-item__menu {
-  right: 18px;
-  line-height: 1;
-}
-
 .tab-item-shell:hover .tab-item__close,
-.tab-item-shell:focus-within .tab-item__close,
-.tab-item-shell:hover .tab-item__menu,
-.tab-item-shell:focus-within .tab-item__menu {
+.tab-item-shell:focus-within .tab-item__close {
   opacity: 1;
   pointer-events: auto;
 }
@@ -174,20 +166,11 @@
   outline-offset: 1px;
 }
 
-.tab-item__menu:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
-
 /* Closeable tab modifier — constrains width and enables truncation */
 .tab-item--closeable {
   min-width: 80px;
   max-width: 200px;
   padding-right: 1.2rem;
-}
-
-.tab-item--with-menu {
-  padding-right: 2.4rem;
 }
 
 /* Shared view content wrapper -- standard layout for all gridtable views.

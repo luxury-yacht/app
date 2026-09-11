@@ -121,7 +121,7 @@ Surface kinds include:
 - Manually added namespace removal is visible on row focus. Removing an entry
   restores the stable namespace selector; the inline Add editor restores its
   button on commit or cancellation.
-- Keyboard shortcut help includes a navigation guide for tables, tab actions,
+- Keyboard shortcut help includes a navigation guide for tables, tab selection and closing,
   status popovers, object maps, the sidebar and editor escape routes.
 - Adjustable separators support the appropriate arrow keys and Home/End while
   publishing their current, minimum, and maximum values.

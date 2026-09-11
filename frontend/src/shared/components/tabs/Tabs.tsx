@@ -26,7 +26,6 @@ export interface TabDescriptor {
   label: ReactNode;
   leading?: ReactNode;
   onClose?: () => void;
-  onOpenMenu?: (position: { x: number; y: number }) => void;
   /**
    * Optional custom content for the close button. Default is a plain
    * `×` text character. Pass a ReactNode (e.g. an SVG icon component)
@@ -167,25 +166,6 @@ const TabControls = ({
   onFocus,
 }: Readonly<{ tab: TabDescriptor; tabIndex: number; onFocus: () => void }>) => (
   <>
-    {!!tab.onOpenMenu && (
-      <button
-        type="button"
-        className="tab-item__menu"
-        title="Tab actions"
-        aria-label={`Actions for ${tab.ariaLabel ?? (typeof tab.label === 'string' ? tab.label : 'tab')}`}
-        aria-haspopup="menu"
-        tabIndex={tabIndex}
-        disabled={tab.disabled}
-        onFocus={onFocus}
-        onClick={(event) => {
-          event.stopPropagation();
-          const rect = event.currentTarget.getBoundingClientRect();
-          tab.onOpenMenu?.({ x: rect.left, y: rect.bottom });
-        }}
-      >
-        …
-      </button>
-    )}
     {!!tab.onClose && (
       <button
         type="button"
@@ -254,7 +234,7 @@ const TabStripItem = ({
           aria-disabled={tab.disabled || undefined}
           aria-label={tab.ariaLabel}
           tabIndex={disableRovingTabIndex || !isFocusStop ? -1 : 0}
-          className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}${tab.onOpenMenu ? ' tab-item--with-menu' : ''}`}
+          className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}`}
           onFocus={() => onFocusTab(tab.id)}
           onClick={() => {
             if (!tab.disabled) {

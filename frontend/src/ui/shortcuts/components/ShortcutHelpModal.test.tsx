@@ -93,7 +93,7 @@ describe('ShortcutHelpModal', () => {
     const guide = document.querySelector('[aria-label="Keyboard navigation guide"]');
     expect(guide).not.toBeNull();
     expect(guide?.textContent).toContain('current row');
-    expect(guide?.textContent).toContain('Tab actions');
+    expect(guide?.textContent).toContain('Tab reaches Close.');
     expect(guide?.textContent).toContain('Choose object');
     expect(guide?.textContent).toContain('status');
     expect(guide?.textContent).toContain('Ctrl+Shift+Tab');

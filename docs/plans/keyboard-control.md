@@ -1,5 +1,8 @@
 # Keyboard control: completion and review record
 
+The historical Actions-button and 2.4rem-padding evidence below is superseded by
+the explicitly approved removal recorded at the end of this document.
+
 The accepted interaction model is Tab/Shift+Tab within a region and physical
 Control+Tab/Control+Shift+Tab between regions, including on macOS. Region movement
 does not select another cluster, object or view. The earlier F2/F6 proposal was
@@ -103,3 +106,28 @@ Re-review evidence is retained under `/tmp/luxury-yacht-rereview-`: `red.log`,
 `green.log`, `coverage.log`, `coverage-report`, `complexity.log`, `counts.json`,
 `axe.json`, `sonar.log`, `pr.json`, and `prerelease.log`. The temporary rendered
 fixture was removed from the frontend, and no project dependency was added.
+
+## Approved removal of per-tab Actions buttons
+
+The user approved removing the three-dot buttons and their added spacing,
+restoring the previous tab appearance. This change removes the shared button,
+its consumer callbacks and its 2.4rem padding modifier. It retains the existing
+Close control and 1.2rem close padding, right-click menus, and region navigation.
+No replacement shortcut, visible control, dependency or larger tablist repair is
+part of this approval.
+
+| Criterion | Status | Evidence |
+| --- | --- | --- |
+| No extra tab button; Tab reaches Close directly | passed | Two new failing-first shared Tabs cases reproduced the extra button and intermediate Tab stop before removal. The focused Tabs, ClusterTabs, DockablePanel, DockableTabBar and ShortcutHelpModal run passed 5 files / 99 tests afterward, including right-click menu reordering and object-panel focus order. These tests mock backend and native boundaries |
+| Rendered spacing and native focus | passed | Standalone Playwright rendered actual Tabs with production CSS and local descriptors: Close padding is 19.2px (1.2rem), tab height 32px, long-label maximum 240px, and no menu button. Tab reached the arrow-focused inactive tab's Close; reverse Tab returned to that tab without selecting it. Native macOS checks of the existing cluster tab and open gp2 object tab both went directly from tab to Close; screenshots showed the removed buttons and spacing |
+| Coverage | passed | `mise exec -- wails3 task test:frontend-coverage` exited 0: 519 files / 4,949 tests, 87.14% overall statements. Tabs 89.05%, ClusterTabs 90.79%, DockableTabBar 92.30%, KeyboardNavigationGuide 100%. Generated coverage and the browser screenshot were moved to `/tmp/luxury-yacht-tab-rollback-` paths; the temporary fixture was removed |
+| Changed-function complexity and typecheck | passed | Typecheck exited 0. Biome at max 12 found no changed/new function above the limit. Its four-file scan exits 1 for the existing `DockableTabBar.getDragImage` score of 13; the diff in that file removes only `onOpenMenu`, leaving that callback unchanged. No suppression or threshold changed |
+| Current remote analysis | passed at 6831d5e3 | The existing PR audit returned zero open/confirmed new-code issues. GitHub reports Sonar and CodeQL success at 6831d5e3. This does not cover the uncommitted removal |
+| Final prerelease and post-gate inspection | passed | `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease` exited 0, including Go vet/staticcheck/race, bindings, frontend lint/typecheck, 519 files / 4,949 tests, Knip and Trivy. The formatter only rewrapped the changed help paragraph. Post-gate source diff/status inspection found the 14 intended modified files and no temporary fixture or screenshot; `git diff --check` passed |
+
+The native app and Vite listener on port 9245 were already running when this
+removal's verification began. No development server or native app process was
+started for this verification. The browser fixture and routes were cleared.
+
+Windows/Linux Control+Tab delivery, spoken screen-reader output and the broader
+tablist-structure issue remain outside this removal's verification.

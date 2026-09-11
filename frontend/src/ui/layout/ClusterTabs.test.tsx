@@ -152,8 +152,11 @@ describe('ClusterTabs', () => {
     mockState.selectedKubeconfigs = ['a', 'b'];
     mockState.selectedKubeconfig = 'a';
     await renderTabs({ onOpenCluster: vi.fn() });
+    const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
+      (el) => el.querySelector('.tab-item__label')?.textContent === 'b'
+    );
     await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Actions for b"]')?.click()
+      tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
     );
     expect(document.querySelector('[role="menu"]')).toBeTruthy();
     mockState.selectedKubeconfigs = ['a'];
@@ -164,16 +167,17 @@ describe('ClusterTabs', () => {
     expect(document.querySelector('[role="menu"]')).toBeNull();
   });
 
-  it('opens an inactive tab menu from its button and reorders the intended cluster', async () => {
+  it('opens an inactive tab context menu and reorders the intended cluster', async () => {
     mockState.selectedKubeconfigs = ['a', 'b', 'c'];
     mockState.selectedKubeconfig = 'a';
     await renderTabs();
     const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
       (el) => el.querySelector('.tab-item__label')?.textContent === 'b'
     );
-    const menu = tab?.parentElement?.querySelector<HTMLButtonElement>('.tab-item__menu');
-    expect(menu).toBeTruthy();
-    await act(async () => menu?.click());
+    expect(tab).toBeTruthy();
+    await act(async () =>
+      tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    );
     const move = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
       (el) => el.textContent === 'Move tab right'
     );

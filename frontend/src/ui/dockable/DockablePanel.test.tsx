@@ -219,16 +219,10 @@ describe('DockablePanel', () => {
         );
       await act(async () => tab.focus());
       await press('Tab');
-      const menuButton = requireValue(
-        tab.parentElement?.querySelector<HTMLElement>('.tab-item__menu'),
-        'tab actions'
-      );
-      expect(document.activeElement).toBe(menuButton);
-      await press('Tab');
       expect(document.activeElement).toBe(tab.parentElement?.querySelector('.tab-item__close'));
       await act(async () => {
-        menuButton.focus();
-        menuButton.click();
+        tab.focus();
+        tab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       });
       const move = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
         (el) => el.textContent === 'Move tab left'
@@ -239,7 +233,7 @@ describe('DockablePanel', () => {
         document.querySelectorAll<HTMLElement>('.dockable-tab-bar [role="tab"]')
       ).map((el) => el.dataset.panelId);
       expect(ids).toEqual(['keyboard-b', 'keyboard-a']);
-      expect(document.activeElement).toBe(menuButton);
+      expect(document.activeElement).toBe(tab);
       unmount();
     }
   );
@@ -801,14 +795,6 @@ describe('DockablePanel', () => {
       await Promise.resolve();
     });
 
-    expect(document.activeElement).toBe(
-      secondGroupedTab?.parentElement?.querySelector('.tab-item__menu')
-    );
-    await act(async () =>
-      document.activeElement?.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
-      )
-    );
     expect(document.activeElement).toBe(
       secondGroupedTab?.parentElement?.querySelector('.tab-item__close')
     );
