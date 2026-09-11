@@ -12,7 +12,9 @@ This record was condensed on 2026-09-10 after independently checking the PR #344
 review against head `1528b95ffd96c99a46927b527f2781876514af04`. The worktree was
 clean at the start. It retains acceptance evidence and outstanding platform
 limits rather than duplicating the durable contracts or relying on temporary
-logs as the only explanation. No commit or push was performed in this follow-up.
+logs as the only explanation. That follow-up was subsequently committed and
+pushed as `6848f5aa66a4c0b6fabef3ca1c72ade854753f47`, the head checked in the
+re-review below.
 
 ## Reviewer assertions and disposition
 
@@ -34,7 +36,7 @@ Source paths below are under `frontend/src` unless otherwise noted.
 | Click focus can scroll a partly hidden control | Confirmed that the observer used bare `focus()`; an actual native scroll jump was not independently reproduced. Pointer normalization now requests `preventScroll`, with a provider regression proving that option is passed while focus still precedes activation |
 | Nested tab buttons/status semantics can be hidden from accessibility tools | The structure was confirmed. Tab actions now sit beside the tab-role element within the same visual shell; status announcements sit outside their trigger button. Failing structural regressions cover both. Native macOS AX now lists Actions and Close separately, and browser accessibility snapshots give the tab only its label. Spoken screen-reader output remains untested |
 | Windows/Linux Control+Tab delivery is unverified | Still unverified: this host provides macOS native validation. A search of the backend menu sources found no Tab accelerator, which does not prove OS/webview delivery on other platforms |
-| The local complexity check has eight findings outside changed code | Eight findings were reproduced across 44 extant changed TypeScript modules, rather than the stated 43. Parsing the reported functions and comparing their body text to origin/main confirmed that all eight bodies are unchanged. The follow-up's modified/new functions pass max 12; three unchanged findings remain in its touched files |
+| The local complexity check has eight findings outside changed code | Eight findings were reproduced. Parsing the reported functions and comparing their body text to origin/main confirmed that all eight bodies were unchanged. Our scan checked 44 modules; the review reported 43 without its exact selection command, so that difference alone does not establish a reviewer error. The follow-up's modified/new functions passed max 12; three unchanged findings remained in its touched files |
 | The branch replaces duplicate navigation owners and preserves identity | Source review confirms removal of the Diagnostics, App Logs, sidebar and panel-cycle handlers in favor of the shared model. ObjectMap still gates resource actions with `hasCompleteObjectMapReference`; `useObjectPanel` passes clusterId with focus requests. The branch contains frontend/documentation changes only. Tests provide separate evidence for behavior; these source observations do not alone establish every runtime path |
 | The reviewer's gate passed and its worktree stayed clean | Its historical invocation cannot be independently reconstructed from the pasted report. This follow-up reruns the required gate and records its own result below. Initial worktree cleanliness was independently observed |
 
@@ -56,7 +58,7 @@ provider, lifecycle ordering, resource mutation or backend boundary was added.
 | Full frontend coverage and affected modules | passed | `mise exec -- wails3 task test:frontend-coverage`: exit 0; 519 files / 4,948 tests; 87.14% statements. Affected modules: ContextMenu 90.38%, Tooltip 90.64%, Dropdown 94.60%, StatusIndicator 90.90%, Tabs 89.21%, useTooltipKeyboard 98.33%, DockablePanel 92.21%, AppHeader 98.21%, priorities 100%, useKeyboardFocusIndicator 97.22%. Generated reports were moved outside the frontend before lint |
 | Changed-function cognitive complexity | passed | Local Biome limit 12 check of all ten touched production modules found no changed/new function above 12. Existing DropdownBulkActions 13, DropdownOptionRow 14 and DockablePanel handleClose 14 are unchanged from both reviewed HEAD and origin/main; thresholds and suppressions were not changed |
 | Final prerelease and post-gate inspection | passed | `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease`: exit 0, including Go vet/staticcheck/race, binding validation, frontend lint/typecheck, 519 files / 4,948 tests, Knip and Trivy. Biome reported no fixes applied. Post-gate status and production diff inspection found only the intended 26 modified files; `git diff --check` passed |
-| Sonar/CI for reviewed head | passed | Live `mise exec -- npm run sonar:audit --prefix frontend -- --pull-request 344` returned zero issues; `gh pr view 344 --json headRefOid,statusCheckRollup` matched 1528b95f and successful Sonar/CodeQL results. These do not cover the uncommitted review follow-up |
+| Sonar/CI for reviewed head | passed at 1528b95f | Live `mise exec -- npm run sonar:audit --prefix frontend -- --pull-request 344` returned zero issues; `gh pr view 344 --json headRefOid,statusCheckRollup` matched 1528b95f and successful Sonar/CodeQL results. The later 6848f5aa audit is recorded below; this historical result does not establish its Sonar state |
 | Cross-platform and spoken screen-reader validation | pending | Windows/Linux native shortcut delivery and VoiceOver/NVDA spoken output were not exercised. macOS AX exposure and keyboard delivery are the evidence above; neither substitutes for those checks |
 
 The test fixtures mock data/backend boundaries; native checks used connected,
@@ -74,3 +76,30 @@ Local diagnostic artifacts for this run use `/tmp/luxury-yacht-review-` names:
 `complexity-body-check.log`, `head-complexity.log`, `sonar.log`, `pr.json`,
 `native-dev.log`, `prerelease.log`, and `tabs.png`. The summaries and test names above remain
 readable without those machine-local files.
+
+## Re-review at 6848f5aa
+
+The working tree was clean at the start of this re-review. Assertions below
+were checked independently against the current source, tests and remote checks.
+
+| Assertion or acceptance criterion | Result and evidence |
+| --- | --- |
+| Columns option toggles become unwanted Tab stops | Confirmed by two failing Dropdown regressions, with and without search. The action-row toggle now has `tabIndex={-1}`. Tab and reverse Tab move between row actions, while arrows and Enter keep selection on the list's focus owner. Space toggles from the non-searchable trigger; inside search it remains text input. The tests passed after the fix |
+| Columns consumers | `GridTableFiltersBar.tsx` and `FavSaveModal.tsx` both pass the shared `useGridTableColumnOptionRows` renderer. Native Nodes currently exposes one Reorder handle per column, with Up/Down keyboard instructions, rather than two separate buttons. The regression also covers custom rows with two trailing actions |
+| Stale separator selector | Confirmed and updated to `.tab-item-shell:not(:last-child) > .tab-item::after`. It still only overrides height, top and colour; shared CSS owns separator content and visibility |
+| Earlier six fixes and tab-wrapper consumers | Source checks retain keyboard-only popover persistence, shared focus-restoring dismissal, option/Only focus recovery, zoom-aware context-menu scrolling, release notes and removed obsolete navigation markers. Cluster tab widths still sum tab rectangles, drop targets query descendants, panel focus order deduplicates elements, and globally loaded `.sr-only` remains absolutely positioned. These are source checks, not new proof of native cross-window dragging |
+| Complexity count | The old claim that the reviewer's count was wrong has been removed. Selecting `git diff --name-only --diff-filter=ACMR origin/main...REV`, retaining `.ts`/`.tsx` and excluding `.test.`, `.spec.` and `.stories.`, yields 44 files at 1528b95f and 46 at 6848f5aa with base 2fa14618. That reproduces our inventory, not the reviewer's unstated selection command. Exact inventories are in `/tmp/luxury-yacht-rereview-counts.json` |
+| Changed-function complexity | Passed max 12 for the changed status component, option-row renderer and extracted group-header renderer. The group-header extraction keeps the touched row renderer within the limit. The unchanged DropdownBulkActions function still reports 13; no threshold or suppression changed |
+| Native dropdown behavior | macOS Wails Nodes → Columns → Tab focused Reorder Kind, then Reorder Name, then Reorder Version; reverse Tab returned to Reorder Name. Escape restored Columns. Return → Down → Return hid Kind while retaining trigger focus; Return restored Kind and Escape closed the menu. Native Space was not exercised because the automation rejected the attempted key names; the regression covers that key. Overview was restored afterward |
+| Rendered dropdown behavior | Actual Dropdown, KeyboardProvider and production CSS in standalone Playwright, with only ZoomContext mocked: Tab visited Alpha Up/Down, Beta Up/Down, Gamma Up; reverse Tab returned to Beta Down. Searching Beta, ArrowDown and Enter selected Beta while focus remained in search. The rendered option had tabIndex -1 |
+| Tablist accessibility risk | Confirmed, not merely hypothetical. axe-core 4.13.0 on the actual rendered Tabs component fails `aria-required-children` because tab actions are button children of the tablist. `aria-required-parent` and `nested-interactive` pass. The [axe rule](https://github.com/dequelabs/axe-core/blob/v4.13.0/lib/checks/aria/aria-required-children-evaluate.js) and [W3C ACT rule](https://www.w3.org/WAI/standards-guidelines/act/rules/bc4a75/proposed/) support the finding. The larger shared layout/focus-order repair is awaiting the user's scope decision; it is not waived by macOS AX exposure |
+| Sonar and CI | The live audit at 6848f5aa returned one new issue: `typescript:S6819`, key `AaCOG92h-z6kAq375rY3`, on StatusIndicator's explicit status span. Changed it to native `<output className="sr-only">`, retaining the announcement outside the named trigger and updating its structural test. GitHub now reports every listed CodeQL and Sonar check successful, but the live Sonar issue contradicts the review's zero-issue statement. Remote closure requires analysis of a later pushed revision |
+| Focused validation | Dropdown and StatusIndicator: 2 files / 55 tests passed after the changes, including the new failing-first Tab-order cases. Existing tests cover hover dismissal and keyboard entry/recovery |
+| Coverage | Passed: 519 files / 4,949 tests, 87.14% overall statements. Dropdown 94.62%, StatusIndicator 90.90%. The coverage report was moved outside the frontend tree before the gate. The subsequent read-only props annotation changes TypeScript typing only |
+| Final prerelease | Passed on the final source: `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease` exited 0, including Go vet/staticcheck/race, binding validation, frontend lint/typecheck, 519 files / 4,949 tests, Knip and Trivy. Biome applied no fixes. Post-gate status and source diff inspection found the seven intended modified files, and `git diff --check` passed |
+| Other validation limits | Windows/Linux native Control+Tab and spoken VoiceOver/NVDA output remain untested. Prior macOS and browser checks are historical evidence above; the reviewer's own prerelease invocation cannot be reconstructed from its prose |
+
+Re-review evidence is retained under `/tmp/luxury-yacht-rereview-`: `red.log`,
+`green.log`, `coverage.log`, `coverage-report`, `complexity.log`, `counts.json`,
+`axe.json`, `sonar.log`, `pr.json`, and `prerelease.log`. The temporary rendered
+fixture was removed from the frontend, and no project dependency was added.

@@ -89,9 +89,7 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
 
   return (
     <>
-      <span className="sr-only" role="status">
-        {ariaLabel}
-      </span>
+      <output className="sr-only">{ariaLabel}</output>
       <Tooltip
         content={tooltipContent}
         placement="bottom"

@@ -658,6 +658,20 @@ interface DropdownOptionRowProps<TMetadata> {
   onlyAction: OnlyActionConfig | null;
 }
 
+const DropdownGroupHeader = <TMetadata,>({
+  option,
+  renderOption,
+}: Readonly<Pick<DropdownOptionRowProps<TMetadata>, 'option' | 'renderOption'>>) => {
+  if (option.label.trim().length === 0) {
+    return <hr className="dropdown-separator" />;
+  }
+  return (
+    <div className="dropdown-group-header">
+      {renderOption ? renderOption(option, false) : option.label}
+    </div>
+  );
+};
+
 const DropdownOptionRow = <TMetadata,>({
   option,
   index,
@@ -671,16 +685,8 @@ const DropdownOptionRow = <TMetadata,>({
   selectOption,
   onlyAction,
 }: DropdownOptionRowProps<TMetadata>) => {
-  const isGroupHeader = option.group === 'header';
-  if (isGroupHeader && option.label.trim().length === 0) {
-    return <hr className="dropdown-separator" />;
-  }
-  if (isGroupHeader) {
-    return (
-      <div className="dropdown-group-header">
-        {renderOption ? renderOption(option, false) : option.label}
-      </div>
-    );
+  if (option.group === 'header') {
+    return <DropdownGroupHeader option={option} renderOption={renderOption} />;
   }
 
   const optionIsHighlighted = index === highlightedIndex;
@@ -739,6 +745,7 @@ const DropdownOptionRow = <TMetadata,>({
         className={optionClassName}
         onClick={handleOptionClick}
         aria-pressed={optionIsSelected}
+        tabIndex={-1}
         disabled={option.disabled}
       >
         {optionContent}

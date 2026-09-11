@@ -76,7 +76,7 @@
 
 /* Quieter dividers — fainter and shorter. Adjusts colour/size, NOT opacity, so
    the base rules that hide the divider next to the active/hovered tab still work. */
-.cluster-tabs .tab-item:not(:last-child)::after {
+.cluster-tabs .tab-item-shell:not(:last-child) > .tab-item::after {
   height: 50%;
   top: 30%;
   background-color: var(--color-border);

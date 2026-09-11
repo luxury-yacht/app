@@ -46,6 +46,12 @@ Prevention:
   through the actual combobox. Keep virtual-focus owners on their search field
   or trigger, and use `preventScroll` for pointer focus normalization. Exercise
   long portaled menus at non-default zoom so their last item remains reachable.
+- Exercise Tab across row boundaries in every dropdown variant, including rows
+  with trailing actions. A virtual-focus option must stay outside the Tab order
+  even when its action controls are separate Tab stops.
+- Check the semantics of the whole composite after moving nested controls.
+  Exposing a button outside a tab does not prove that its tablist allows that
+  button as a child; combine rendered accessibility rules with native checks.
 - Follow the [completion evidence gate](completion.md), keeping each requested
   outcome and related lifecycle action tied to explicit evidence.
 - Leave required blocked or unrun checks visible and unfinished. Do not replace

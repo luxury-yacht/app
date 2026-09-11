@@ -76,7 +76,7 @@ describe('StatusIndicator', () => {
   it('keeps live status semantics outside the interactive trigger', async () => {
     const { container, cleanup } = await renderStatusIndicator();
     try {
-      const status = requireValue(container.querySelector('[role="status"]'), 'live status');
+      const status = requireValue(container.querySelector('output'), 'live status');
       expect(status.closest('[role="button"]')).toBeNull();
       expect(status.textContent).toBe('Connectivity status');
       expect(container.querySelector('.tooltip-trigger')?.getAttribute('aria-label')).toBe(

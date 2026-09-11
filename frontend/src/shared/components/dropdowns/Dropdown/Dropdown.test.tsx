@@ -723,37 +723,58 @@ describe('Dropdown', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it('moves through action portal controls in both directions', async () => {
-    await mount(
-      <Dropdown
-        options={OPTIONS}
-        value={[]}
-        multiple
-        onChange={vi.fn()}
-        renderOptionActions={(option) => (
-          <>
-            <button type="button" data-testid={`up-${option.value}`}>
-              Up
-            </button>
-            <button type="button" data-testid={`down-${option.value}`}>
-              Down
-            </button>
-          </>
-        )}
-      />
-    );
-    const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
-    click(trigger);
-    act(() => trigger?.focus());
-    await pressKey(trigger, 'Tab');
-    const first = document.body.querySelector<HTMLElement>('[data-testid="up-alpha"]');
-    const second = document.body.querySelector<HTMLElement>('[data-testid="down-alpha"]');
-    expect(document.activeElement).toBe(first);
-    await pressKey(first, 'Tab');
-    expect(document.activeElement).toBe(second);
-    await pressKey(second, 'Tab', { shiftKey: true });
-    expect(document.activeElement).toBe(first);
-  });
+  it.each([false, true])(
+    'skips option toggles between row actions (searchable=%s)',
+    async (searchable) => {
+      const onChange = vi.fn();
+      await mount(
+        <Dropdown
+          options={OPTIONS}
+          value={[]}
+          multiple
+          searchable={searchable}
+          onChange={onChange}
+          renderOptionActions={(option) => (
+            <>
+              <button type="button" data-testid={`up-${option.value}`}>
+                Up
+              </button>
+              <button type="button" data-testid={`down-${option.value}`}>
+                Down
+              </button>
+            </>
+          )}
+        />
+      );
+      const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
+      click(trigger);
+      const listOwner = searchable
+        ? document.body.querySelector<HTMLElement>('.search-input')
+        : trigger;
+      act(() => listOwner?.focus());
+      await pressKey(listOwner, 'ArrowDown');
+      await pressKey(listOwner, searchable ? 'Enter' : ' ');
+      expect(onChange).toHaveBeenLastCalledWith(['alpha']);
+      expect(document.activeElement).toBe(listOwner);
+      await pressKey(listOwner, 'ArrowDown');
+      await pressKey(listOwner, 'Enter');
+      expect(onChange).toHaveBeenLastCalledWith(['beta']);
+      expect(document.activeElement).toBe(listOwner);
+      await pressKey(listOwner, 'Tab');
+      const first = document.body.querySelector<HTMLElement>('[data-testid="up-alpha"]');
+      const second = document.body.querySelector<HTMLElement>('[data-testid="down-alpha"]');
+      const nextRow = document.body.querySelector<HTMLElement>('[data-testid="up-beta"]');
+      expect(document.activeElement).toBe(first);
+      await pressKey(first, 'Tab');
+      expect(document.activeElement).toBe(second);
+      await pressKey(second, 'Tab');
+      expect(document.activeElement).toBe(nextRow);
+      await pressKey(nextRow, 'Tab', { shiftKey: true });
+      expect(document.activeElement).toBe(second);
+      await pressKey(second, 'Tab', { shiftKey: true });
+      expect(document.activeElement).toBe(first);
+    }
+  );
 
   it('returns focus to the trigger when Tab leaves an action-row dialog', async () => {
     await mount(
