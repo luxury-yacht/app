@@ -1,8 +1,41 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 const readProjectFile = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
+
+const focusFill = 'rgba(50, 108, 229, 0.1)';
+// jsdom can let a background shorthand overwrite a more-specific color, and
+// returns different colors on repeated computed-style reads. Expand parseable
+// shorthands into equivalent longhands in these focus fixtures.
+const expandBackgroundShorthands = (source: string) =>
+  source.replace(/\bbackground:\s*([^;{}]+);/g, (declaration, value: string) => {
+    const style = document.createElement('div').style;
+    style.background = value;
+    if (!style.backgroundColor) {
+      return declaration;
+    }
+    return ['color', 'image', 'position', 'size', 'repeat', 'origin', 'clip', 'attachment']
+      .map((name) => `background-${name}: ${style.getPropertyValue(`background-${name}`)};`)
+      .join('\n');
+  });
+
+// Resolve the theme colors explicitly because jsdom does not resolve these
+// custom properties when computing the cascade.
+const resolveFocusColors = (source: string) =>
+  expandBackgroundShorthands(
+    source
+      .replace(/var\(--focus-background, var\(--color-accent-bg\)\)/g, focusFill)
+      .replace(/var\(--color-accent-bg\)/g, focusFill)
+      .replace(/var\(--color-accent\)/g, 'rgb(50, 108, 229)')
+      .replace(/var\(--color-bg\)/g, 'rgb(255, 255, 255)')
+      .replace(/var\(--color-bg-secondary\)/g, 'rgb(240, 240, 240)')
+      .replace(/var\(--color-bg-tertiary\)/g, 'rgb(230, 230, 230)')
+      .replace(/var\(--color-bg-tertiary, rgba\(255, 255, 255, 0\.05\)\)/g, 'rgb(230, 230, 230)')
+      .replace(/var\(--dropdown-menu-bg\)/g, 'rgb(255, 255, 255)')
+      .replace(/var\(--color-text\)/g, 'rgb(20, 20, 20)')
+  );
 
 const installStyles = (...sources: string[]) => {
   const style = document.createElement('style');
@@ -21,6 +54,334 @@ afterEach(() => {
 });
 
 describe('strict CSS cascade contracts', () => {
+  it.each([false, true])(
+    'preserves table and content backgrounds on focus return with focus styles loaded last=%s',
+    (focusLast) => {
+      const paths = [
+        'styles/utilities/focus.css',
+        'src/App.css',
+        'styles/components/gridtables.css',
+      ];
+      if (focusLast) {
+        paths.push(requireValue(paths.shift(), 'focus stylesheet'));
+      }
+      const style = installStyles(
+        ...paths.map((path) =>
+          resolveFocusColors(readProjectFile(path))
+            .replace(/@import[^;]+;/g, '')
+            .replace(/:hover/g, '.css-contract-hover')
+        )
+      );
+      style.dataset.cssContract = 'table-focus-return';
+      document.body.innerHTML = `
+        <div class="app">
+          <div id="content" class="content-body" data-app-region="content" tabindex="-1">
+            <div class="content-body__main"><div class="view-content"><div class="gridtable-container">
+              <div class="gridtable-filter-container"><input id="filter" aria-label="Filter" /></div>
+              <div class="gridtable-header-container"><button id="sort">Sort by Name</button></div>
+              <div id="viewport" class="gridtable-wrapper">
+                <table id="table" class="gridtable gridtable--body" tabindex="0" aria-label="Data table">
+                  <tbody><tr id="row" class="gridtable-row gridtable-row--focused"><td>Object</td></tr></tbody>
+                </table>
+              </div>
+            </div></div></div>
+          </div>
+        </div>
+        <button id="close">Close keyboard shortcuts</button>
+      `;
+      const close = requireValue(document.getElementById('close'), 'close control');
+      const row = requireValue(document.getElementById('row'), 'focused row');
+      const surfaces = ['content', 'viewport', 'table'].map((id) =>
+        requireValue(document.getElementById(id), id)
+      );
+      for (const id of ['content', 'table']) {
+        close.focus();
+        const target = requireValue(document.getElementById(id), id);
+        target.classList.add('keyboard-programmatic-focus');
+        target.focus();
+        expect(document.activeElement).toBe(target);
+        for (const hovered of [false, true]) {
+          target.classList.toggle('css-contract-hover', hovered);
+          for (const surface of surfaces) {
+            expect(getComputedStyle(surface).backgroundColor, surface.id).toBe('rgba(0, 0, 0, 0)');
+          }
+          expect(getComputedStyle(row).backgroundColor).toBe('rgb(240, 240, 240)');
+          expect(getComputedStyle(row).borderLeftColor).toBe('rgb(50, 108, 229)');
+        }
+      }
+      for (const id of ['filter', 'sort']) {
+        const control = requireValue(document.getElementById(id), id);
+        control.classList.add('keyboard-programmatic-focus');
+        control.focus();
+        expect(getComputedStyle(control).backgroundColor, id).toBe(focusFill);
+      }
+    }
+  );
+
+  it.each([false, true])(
+    'preserves log backgrounds with focus styles loaded last=%s',
+    (focusLast) => {
+      const paths = [
+        'styles/utilities/focus.css',
+        'src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.css',
+        'src/ui/panels/app-logs/AppLogsPanel.css',
+      ];
+      if (focusLast) {
+        paths.push(requireValue(paths.shift(), 'focus stylesheet'));
+      }
+      const style = installStyles(
+        ...paths.map((path) =>
+          resolveFocusColors(readProjectFile(path))
+            .replace(/var\(--log-surface-bg\)/g, 'rgb(30, 30, 30)')
+            .replace(/:hover/g, '.css-contract-hover')
+        )
+      );
+      style.dataset.cssContract = 'log-output-focus';
+      document.body.innerHTML = `
+      <button id="toolbar">Copy logs</button>
+      <section id="container-logs" class="logs-viewer-content" tabindex="0">
+        <div class="parsed-logs-table">
+          <button id="header-control">Resize column</button>
+          <table id="parsed-logs" class="gridtable gridtable--body" tabindex="0"><tbody><tr><td>Log</td></tr></tbody></table>
+        </div>
+      </section>
+      <section id="node-logs" class="logs-viewer-content" tabindex="0">Node log</section>
+      <section id="app-logs" class="app-logs-container" tabindex="0">Application log</section>
+    `;
+      for (const id of ['container-logs', 'node-logs', 'parsed-logs', 'app-logs']) {
+        const viewport = requireValue(document.getElementById(id), id);
+        const idleFill = getComputedStyle(viewport).backgroundColor;
+        viewport.focus();
+        expect(getComputedStyle(viewport).backgroundColor, id).toBe(idleFill);
+        viewport.classList.add('keyboard-programmatic-focus');
+        expect(getComputedStyle(viewport).backgroundColor, id).toBe(idleFill);
+        viewport.classList.add('css-contract-hover');
+        expect(getComputedStyle(viewport).backgroundColor, id).toBe(idleFill);
+        viewport.blur();
+      }
+      for (const id of ['toolbar', 'header-control']) {
+        const control = requireValue(document.getElementById(id), id);
+        control.classList.add('keyboard-programmatic-focus');
+        control.focus();
+        expect(getComputedStyle(control).backgroundColor, id).toBe(focusFill);
+      }
+    }
+  );
+
+  it.each([false, true])('preserves the YAML editor background when editable=%s', (editable) => {
+    const style = installStyles(
+      ...[
+        'src/shared/components/yaml/YamlEditor.css',
+        'styles/overrides/codemirror.css',
+        'styles/utilities/focus.css',
+      ].map((path) =>
+        resolveFocusColors(readProjectFile(path)).replace(/:hover/g, '.css-contract-hover')
+      )
+    );
+    style.dataset.cssContract = 'yaml-editor-focus';
+    document.body.innerHTML = `
+      <div class="yaml-editor">
+        <div class="yaml-editor-header">
+          <input class="find-input" aria-label="Find in YAML" />
+          <button class="button">Copy YAML</button>
+        </div>
+        <div class="codemirror-shell yaml-editor-shell" tabindex="-1">
+          <div class="cm-editor" tabindex="-1">
+            <div class="cm-scroller">
+              <div class="cm-content" contenteditable="${editable}" tabindex="0">
+                <div class="cm-line">kind: Pod</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    for (const element of document.querySelectorAll<HTMLElement>(
+      '.yaml-editor-shell [tabindex], .yaml-editor-shell'
+    )) {
+      const idleFill = getComputedStyle(element).backgroundColor;
+      element.focus();
+      expect(getComputedStyle(element).backgroundColor, element.className).toBe(idleFill);
+      element.classList.add('keyboard-programmatic-focus');
+      expect(getComputedStyle(element).backgroundColor, element.className).toBe(idleFill);
+      element.classList.add('css-contract-hover');
+      expect(getComputedStyle(element).backgroundColor, element.className).toBe(idleFill);
+      element.blur();
+    }
+    for (const control of document.querySelectorAll<HTMLElement>(
+      '.yaml-editor-header input, .yaml-editor-header button'
+    )) {
+      control.classList.add('keyboard-programmatic-focus');
+      control.focus();
+      expect(getComputedStyle(control).backgroundColor, control.outerHTML).toBe(focusFill);
+    }
+  });
+
+  it.each([false, true])(
+    'preserves menu colors with shared focus styles loaded last=%s',
+    (focusLast) => {
+      const sources = [
+        'styles/utilities/focus.css',
+        'styles/components/dropdowns.css',
+        'src/shared/components/ContextMenu.css',
+      ];
+      if (focusLast) {
+        sources.reverse();
+      }
+      const style = installStyles(
+        ...sources.map((path) =>
+          resolveFocusColors(readProjectFile(path)).replace(/:hover/g, '.css-contract-hover')
+        )
+      );
+      style.dataset.cssContract = 'menu-focus-colors';
+      document.body.innerHTML = `
+      <button id="trigger" class="dropdown-trigger">Open</button>
+      <div id="dropdown" class="dropdown-menu" role="listbox" tabindex="-1">
+        <button id="highlighted" class="dropdown-option highlighted" role="option">Highlighted</button>
+        <button id="selected" class="dropdown-option selected" role="option">Selected</button>
+        <button id="selected-highlighted" class="dropdown-option selected highlighted" role="option">Both</button>
+        <input id="search" class="search-input" />
+        <button id="only" class="dropdown-only-action">only</button>
+      </div>
+      <dialog open class="dropdown-menu dropdown-filter-menu">
+        <div class="dropdown-option-row highlighted">
+          <button id="filter-selected" class="dropdown-option selected highlighted">Selected filter</button>
+        </div>
+      </dialog>
+      <div id="context" class="context-menu" role="menu" tabindex="-1">
+        <button id="context-item" class="context-menu-item is-focused" role="menuitem">Open</button>
+        <button id="danger-item" class="context-menu-item danger is-focused" role="menuitem">Delete</button>
+      </div>
+    `;
+      const cases = [
+        ['trigger', focusFill],
+        ['dropdown', 'rgb(255, 255, 255)'],
+        ['highlighted', 'rgb(230, 230, 230)'],
+        ['selected', 'rgb(230, 230, 230)'],
+        ['selected-highlighted', 'rgb(230, 230, 230)'],
+        ['search', focusFill],
+        ['only', focusFill],
+        ['context', 'rgb(255, 255, 255)'],
+        ['context-item', 'rgb(240, 240, 240)'],
+        ['danger-item', 'rgba(239, 68, 68, 0.1)'],
+      ];
+      for (const [id, color] of cases) {
+        const element = requireValue(document.getElementById(id), id);
+        element.classList.add('keyboard-programmatic-focus');
+        element.focus();
+        expect(getComputedStyle(element).backgroundColor, id).toBe(color);
+        element.classList.add('css-contract-hover');
+        expect(getComputedStyle(element).backgroundColor, `${id} hovered`).toBe(color);
+        element.blur();
+      }
+      const filter = requireValue(document.getElementById('filter-selected'), 'filter option');
+      filter.classList.add('keyboard-programmatic-focus');
+      filter.focus();
+      expect(getComputedStyle(filter).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+      filter.classList.add('css-contract-hover');
+      expect(getComputedStyle(filter).backgroundColor).toBe('rgb(230, 230, 230)');
+    }
+  );
+
+  it('uses the shared background cue after component styles load without changing control layout', () => {
+    const sources = [
+      'styles/utilities/focus.css',
+      'styles/components/buttons.css',
+      'styles/components/tabs.css',
+      'src/ui/layout/Sidebar.css',
+      'src/ui/layout/AppHeader.css',
+      'src/ui/dockable/DockablePanel.css',
+      'src/shared/components/ToggleSwitch.css',
+      'src/shared/components/modals/ScaleModal.css',
+      'src/shared/components/tables/TablePaginationControls.css',
+      'styles/components/search-input.css',
+      'styles/components/inputs.css',
+      'src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.css',
+      'src/ui/status/SessionsStatus.css',
+    ];
+    const style = installStyles(
+      ...sources.map((path) => resolveFocusColors(readProjectFile(path)))
+    );
+    style.dataset.cssContract = 'focus-background';
+    document.body.innerHTML = `
+      <button class="button">Button</button>
+      <div class="app-header"><button class="settings-button">Settings</button></div>
+      <button class="sidebar-item">Browse</button>
+      <button role="tab" class="tab-item">YAML</button>
+      <button class="tab-item__close">Close tab</button>
+      <button class="dockable-panel__control-btn">Dock</button>
+      <button class="toggle-switch">Toggle</button>
+      <div class="scale-modal-footer"><button class="button">Scale</button></div>
+      <button class="table-pagination-button">Next</button>
+      <div class="search-input-wrapper"><input class="search-input-field" /></div>
+      <div class="yaml-search-controls"><div class="find-controls"><input class="find-input" /></div></div>
+      <div class="sessions-status-message"><button class="as-shell-session-jump">Session</button></div>
+    `;
+    for (const control of document.querySelectorAll<HTMLElement>('button, input')) {
+      const width = getComputedStyle(control).width;
+      const idleFill = getComputedStyle(control).backgroundColor;
+      control.classList.add('keyboard-programmatic-focus');
+      control.focus();
+      const computed = getComputedStyle(control);
+      expect(computed.outlineStyle, control.outerHTML).toMatch(/^(none|)$/);
+      expect(computed.boxShadow, control.outerHTML).toBe('none');
+      expect(computed.backgroundColor, control.outerHTML).toBe(focusFill);
+      expect(computed.width, control.outerHTML).toBe(width);
+      control.blur();
+      control.classList.remove('keyboard-programmatic-focus');
+      expect(getComputedStyle(control).backgroundColor, control.outerHTML).toBe(idleFill);
+    }
+  });
+
+  it('uses the shared background cue for sidebar arrow preview without a halo', () => {
+    const style = installStyles(resolveFocusColors(readProjectFile('src/ui/layout/Sidebar.css')));
+    style.dataset.cssContract = 'sidebar-focus-background';
+    document.body.innerHTML = '<button class="sidebar-item keyboard-preview">Browse</button>';
+    const button = requireValue(document.querySelector('button'), 'sidebar preview');
+    expect(getComputedStyle(button).boxShadow).toMatch(/^(none|)$/);
+    expect(getComputedStyle(button).backgroundColor).toBe(focusFill);
+    button.classList.remove('keyboard-preview');
+    expect(getComputedStyle(button).backgroundColor).not.toBe(focusFill);
+  });
+
+  it('retains a visible focus indicator when forced colors suppress box shadows', () => {
+    const source = installStyles(readProjectFile('styles/utilities/focus.css'));
+    source.dataset.cssContract = 'forced-color-source';
+    // jsdom does not select forced-color media rules. Apply that media block
+    // explicitly; rendered browser checks verify the OS-mode behavior separately.
+    const sheet = requireValue(source.sheet, 'focus stylesheet');
+    const forcedRules = Array.from(sheet.cssRules).flatMap((rule) => {
+      if (rule instanceof CSSMediaRule && rule.conditionText === '(forced-colors: active)') {
+        return Array.from(rule.cssRules).map((child) => child.cssText);
+      }
+      return [];
+    });
+    const forced = installStyles(
+      ...forcedRules.map((rule) => rule.replace(/var\(--focus-system-outline-width\)/g, '2px'))
+    );
+    forced.dataset.cssContract = 'forced-color-focus';
+    document.body.innerHTML = '<button class="keyboard-programmatic-focus">Apply</button>';
+    const button = requireValue(document.querySelector('button'), 'focused button');
+    button.focus();
+    expect(getComputedStyle(button).outline).toContain('solid');
+  });
+
+  it('highlights the focused port input without adding a halo to its group', () => {
+    const style = installStyles(
+      resolveFocusColors(readProjectFile('styles/utilities/focus.css')),
+      resolveFocusColors(readProjectFile('src/modules/port-forward/PortForwardModal.css'))
+    );
+    style.dataset.cssContract = 'port-input-focus';
+    document.body.innerHTML =
+      '<div class="port-forward-input-group"><input class="port-forward-input keyboard-programmatic-focus" /></div>';
+    const input = requireValue(document.querySelector('input'), 'port input');
+    input.focus();
+    const group = requireValue(document.querySelector('.port-forward-input-group'), 'port group');
+    expect(getComputedStyle(input).backgroundColor).toBe(focusFill);
+    expect(getComputedStyle(group).boxShadow).toMatch(/^(none|)$/);
+    expect(getComputedStyle(group).borderTopColor).toBe('rgb(50, 108, 229)');
+  });
+
   it('keeps the shared hidden utility authoritative without important', () => {
     const style = installStyles(readProjectFile('styles/utilities/display.css'));
     style.dataset.cssContract = 'hidden';

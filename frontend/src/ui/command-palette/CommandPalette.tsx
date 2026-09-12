@@ -10,14 +10,15 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ListboxOptionButton } from '@shared/components/aria/ListboxOptionButton';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useKeyboardContext, useShortcut, useShortcuts } from '@ui/shortcuts';
 import { KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
-import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import type React from 'react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useEventBus } from '@/core/events';
 import { fetchSnapshot } from '@/core/refresh/client';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -470,7 +471,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   const catalogAbortRef = useRef<AbortController | null>(null);
   const catalogDebounceRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDialogElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const selectedIndexRef = useRef(0);
@@ -906,11 +907,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     return true;
   }, [isOpen, selectMode, close, updateSelection]);
 
-  useKeyboardSurface({
-    kind: 'palette',
-    rootRef: containerRef,
-    active: isOpen,
-    blocking: true,
+  useModalFocusTrap({
+    ref: containerRef,
+    disabled: !isOpen,
     suppressShortcuts: true,
     onKeyDown: (event) => {
       if (event.metaKey || event.ctrlKey || event.altKey) {
@@ -946,54 +945,63 @@ export const CommandPalette = memo(function CommandPaletteComponent({
         key: 'ArrowDown',
         handler: selectNext,
         description: 'Highlight next result',
+        helpOrder: 30,
         enabled: isOpen,
       },
       {
         key: 'ArrowUp',
         handler: selectPrevious,
         description: 'Highlight previous result',
+        helpOrder: 31,
         enabled: isOpen,
       },
       {
         key: 'PageDown',
         handler: pageDown,
         description: 'Page down',
+        helpOrder: 50,
         enabled: isOpen,
       },
       {
         key: 'PageUp',
         handler: pageUp,
         description: 'Page up',
+        helpOrder: 51,
         enabled: isOpen,
       },
       {
         key: 'Home',
         handler: goHome,
         description: 'Jump to first result',
+        helpOrder: 40,
         enabled: isOpen,
       },
       {
         key: 'End',
         handler: goEnd,
         description: 'Jump to last result',
+        helpOrder: 41,
         enabled: isOpen,
       },
       {
         key: 'Enter',
         handler: activateSelection,
         description: 'Execute selection',
+        helpOrder: 60,
         enabled: isOpen,
       },
       {
         key: 'Escape',
         handler: handleEscapeShortcut,
         description: 'Close command palette',
+        category: 'Windows & Panels',
+        helpOrder: 41,
         enabled: isOpen,
       },
     ],
     {
       priority: KeyboardShortcutPriority.COMMAND_PALETTE,
-      category: 'Command Palette',
+      category: 'Search',
     }
   );
 
@@ -1060,7 +1068,8 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     modifiers: macPlatform ? { meta: true, shift: true } : { ctrl: true, shift: true },
     handler: openInNamespaceMode,
     description: 'Select namespace',
-    category: 'Global',
+    category: 'Navigation',
+    helpOrder: 30,
     enabled: true,
     priority: 100,
   });
@@ -1157,7 +1166,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     return null;
   }
 
-  return (
+  return createPortal(
     <ErrorBoundary
       scope="command-palette"
       fallback={(_, reset) => (
@@ -1175,7 +1184,8 @@ export const CommandPalette = memo(function CommandPaletteComponent({
         </div>
       )}
     >
-      <div
+      <dialog
+        open
         className={[
           'command-palette',
           hideCursor ? 'hide-cursor' : null,
@@ -1184,6 +1194,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
           .filter(Boolean)
           .join(' ')}
         ref={containerRef}
+        aria-label="Command Palette"
+        aria-modal="true"
+        tabIndex={-1}
       >
         <div className="command-palette-header">
           <input
@@ -1242,7 +1255,8 @@ export const CommandPalette = memo(function CommandPaletteComponent({
             <kbd>Esc</kbd> Close
           </span>
         </div>
-      </div>
-    </ErrorBoundary>
+      </dialog>
+    </ErrorBoundary>,
+    document.body
   );
 });

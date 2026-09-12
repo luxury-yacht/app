@@ -157,7 +157,15 @@ func applicationWindowGeometry(app *application.App, name string) (geometry, boo
 
 func bindApplicationWindowOperations(registry *Registry, app *application.App) {
 	registry.requestApplicationQuit = app.Quit
-	registry.newWindow = app.Window.NewWithOptions
+	registry.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
+		window := app.Window.NewWithOptions(options)
+		if nativeInspectorEnabled {
+			window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
+				configureNativeInspector(window)
+			})
+		}
+		return window
+	}
 	registry.showWindow = func(name string) bool {
 		return showApplicationWindow(app, name)
 	}

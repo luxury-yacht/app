@@ -13,6 +13,7 @@ import {
   WrapTextIcon,
 } from '@shared/components/icons/LogIcons';
 import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
+import ScrollableRegion from '@shared/components/ScrollableRegion';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
   startTransition,
@@ -533,7 +534,7 @@ type NodeLogContentProps = {
   isParsedView: boolean;
   canParseLogs: boolean;
   renderedDisplayRows: RenderedLogRow[];
-  logsContentRef: React.RefObject<HTMLDivElement | null>;
+  logsContentRef: React.RefObject<HTMLElement | null>;
   wrapText: boolean;
   renderMessageContent: (message: string, keyPrefix: string) => React.ReactNode;
   parsedLogs: ParsedLogEntry[];
@@ -779,7 +780,7 @@ const NodeLogsTab = ({
   const [displayMode, setDisplayMode] = useState<LogDisplayMode>('raw');
   const [parsedLogs, setParsedLogs] = useState<ParsedLogEntry[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set<string>());
-  const logsContentRef = useRef<HTMLDivElement>(null);
+  const logsContentRef = useRef<HTMLElement>(null);
   const terminalTheme = useTerminalTheme(logsContentRef);
   const deferredTextFilter = useDeferredValue(textFilter);
   const sourceOptions = useMemo<DropdownOption[]>(
@@ -1162,7 +1163,12 @@ const NodeLogsTab = ({
           </div>
         )}
 
-        <div ref={logsContentRef} className="logs-viewer-content selectable" tabIndex={-1}>
+        <ScrollableRegion
+          ref={logsContentRef}
+          className="logs-viewer-content selectable"
+          aria-label="Log output"
+          tabIndex={isParsedView ? -1 : 0}
+        >
           <NodeLogContent
             error={error}
             hasSelectedSource={Boolean(selectedSource)}
@@ -1182,7 +1188,7 @@ const NodeLogsTab = ({
             expandedRows={expandedRows}
             onToggleParsedRow={handleToggleParsedRow}
           />
-        </div>
+        </ScrollableRegion>
       </div>
     </div>
   );

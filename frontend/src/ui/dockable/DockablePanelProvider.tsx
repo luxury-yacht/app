@@ -104,7 +104,7 @@ interface DockablePanelContextValue {
   getLastFocusedPosition: () => DockPosition;
 
   // Focus a panel by ID -- activates its tab and brings the panel to front.
-  focusPanel: (panelId: string) => void;
+  focusPanel: (panelId: string, clusterId?: string) => void;
 
   // Fan out applyObjectPanelLayoutDefaults to every cluster's store.
   applyLayoutDefaultsAcrossClusters: () => void;
@@ -510,27 +510,49 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
     return keyToPosition(getPreferredOpenGroupKey('right'));
   }, [tabGroups, getPreferredOpenGroupKey]);
 
-  // Focus a panel by ID: activate its tab in the group and bring it to front.
+  // Keep the request here: opening a related object can unmount its launcher
+  // before the new panel registers. Explicit cluster identity also survives
+  // the render between activating another cluster and mounting its panels.
+  const [pendingFocus, setPendingFocus] = useState<{
+    panelId: string;
+    clusterId: string;
+  } | null>(null);
+  const previousFocusClusterRef = useRef(selectedClusterId);
+  useLayoutEffect(() => {
+    if (previousFocusClusterRef.current !== selectedClusterId) {
+      setPendingFocus((request) => (request?.clusterId === selectedClusterId ? request : null));
+      previousFocusClusterRef.current = selectedClusterId;
+    }
+  }, [selectedClusterId]);
+
   const focusPanel = useCallback(
-    (panelId: string) => {
-      const focusedGroupKey = getGroupForPanel(activeStore.getTabGroups(), panelId);
-      if (focusedGroupKey) {
-        setLastFocusedGroupKey(focusedGroupKey);
-      }
-      activeStore.setTabGroups((prev) => {
-        const groupKey = getGroupForPanel(prev, panelId);
-        if (!groupKey) {
-          return prev;
-        }
-        return setActiveTab(prev, panelId, groupKey);
-      });
-      focusPanelById(panelId);
-      window.setTimeout(() => {
-        focusDockableTab(panelId);
-      }, 0);
+    (panelId: string, clusterId = selectedClusterId) => {
+      setPendingFocus({ panelId, clusterId });
     },
-    [activeStore, setLastFocusedGroupKey]
+    [selectedClusterId]
   );
+
+  useEffect(() => {
+    if (!pendingFocus || pendingFocus.clusterId !== selectedClusterId) {
+      return;
+    }
+    const { panelId } = pendingFocus;
+    const groupKey = getGroupForPanel(tabGroups, panelId);
+    if (!groupKey) {
+      return;
+    }
+    setLastFocusedGroupKey(groupKey);
+    if (getGroupTabs(tabGroups, groupKey)?.activeTab !== panelId) {
+      activeStore.setTabGroups((prev) => setActiveTab(prev, panelId, groupKey));
+      return;
+    }
+    focusPanelById(panelId);
+    const timer = window.setTimeout(() => {
+      focusDockableTab(panelId);
+      setPendingFocus(null);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [pendingFocus, selectedClusterId, tabGroups, activeStore, setLastFocusedGroupKey]);
 
   // -----------------------------------------------------------------------
   // registerPanel stores panel metadata only.

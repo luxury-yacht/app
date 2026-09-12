@@ -188,7 +188,6 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
   position: relative;
   width: fit-content;
   min-width: 100%;
-  will-change: transform;
 }
 
 .gridtable--header > thead {

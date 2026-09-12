@@ -90,6 +90,11 @@ workflow and that exception is documented.
   Namespace rather than forcing the action into the post-search action cluster.
   A table without a Kind filter may use this as its leftmost filter-bar control;
   the Workloads/Pods composite uses it for the expanded Pods collapse control.
+- The current keyed row's embedded links/buttons join Tab order. Shared
+  `useGridTableRowControls` updates committed rows and restores table focus
+  when a focused control disappears or becomes unavailable. Other rows stay
+  outside the sequential order. Escape returns from a child to row navigation;
+  its Enter/Space activation remains independent of row activation.
 - Row focus and row selection are separate contracts. `Enter` runs
   `onRowClick`; when `onRowSelectionToggle` is supplied, `Space` runs that
   selection action instead. Pointer-only selection uses `onRowPointerClick`,

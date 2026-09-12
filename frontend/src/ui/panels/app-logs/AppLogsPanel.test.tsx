@@ -5,8 +5,11 @@
  * Covers key behaviors and edge cases for AppLogsPanel.
  */
 
+import { ZoomProvider } from '@core/contexts/ZoomContext';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { act, type ReactNode, type Ref } from 'react';
+import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
+import { KeyboardProvider } from '@ui/shortcuts/context';
+import { act, type ComponentProps, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,17 +24,12 @@ interface CapturedDropdownProps {
   showBulkActions?: boolean;
 }
 
-interface DockablePanelMockProps {
-  children: ReactNode;
-  panelRef?: Ref<HTMLDivElement>;
-}
-
 const getAppLogsMock = vi.hoisted(() => vi.fn());
 const getAppLogsSinceMock = vi.hoisted(() => vi.fn());
 const clearAppLogsMock = vi.hoisted(() => vi.fn());
 const setAppLogsPanelVisibleMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const useShortcutMock = vi.hoisted(() => vi.fn());
-const useKeyboardSurfaceMock = vi.hoisted(() => vi.fn());
+const realNavigation = vi.hoisted(() => ({ enabled: false }));
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 const dropdownInstances = vi.hoisted(() => [] as CapturedDropdownProps[]);
 const runtimeEventHandlers = vi.hoisted(() => new Map<string, (...args: unknown[]) => void>());
@@ -39,17 +37,24 @@ const runtimeDisposerMock = vi.hoisted(() => vi.fn());
 const clipboardWriteTextMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const nativeClipboardWriteTextMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
-// AppLogsPanel no longer calls useDockablePanelState — its open/close
-// state is now driven by props from AppLayout (which reads from
-// ModalStateContext). DockablePanel itself is mocked here as a
-// transparent container so the tests can inspect the rendered children
-// directly without exercising the dockable layout system.
-vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({ children, panelRef }: DockablePanelMockProps) => (
-    <div data-testid="dockable-panel" ref={panelRef}>
-      <div data-testid="body">{children}</div>
-    </div>
-  ),
+// Data-oriented tests use a transparent panel; the keyboard regression uses
+// the actual dockable owner and providers.
+vi.mock('@ui/dockable', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@ui/dockable')>();
+  return {
+    ...actual,
+    DockablePanel: (props: ComponentProps<typeof actual.DockablePanel>) =>
+      realNavigation.enabled ? (
+        <actual.DockablePanel {...props} />
+      ) : (
+        <div data-testid="dockable-panel" ref={props.panelRef}>
+          <div data-testid="body">{props.children}</div>
+        </div>
+      ),
+  };
+});
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({ selectedClusterId: 'cluster-a', selectedClusterIds: ['cluster-a'] }),
 }));
 
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
@@ -63,13 +68,15 @@ vi.mock('@shared/components/LoadingSpinner', () => ({
   default: ({ message }: { message: string }) => <div data-testid="loading-spinner">{message}</div>,
 }));
 
-vi.mock('@ui/shortcuts', () => ({
+vi.mock('@ui/shortcuts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@ui/shortcuts')>()),
   useShortcut: useShortcutMock,
   useSearchShortcutTarget: () => undefined,
-  useKeyboardSurface: (...args: unknown[]) => useKeyboardSurfaceMock(...(args as [unknown])),
 }));
 
 vi.mock('@core/backend-api', () => ({
+  GetZoomLevel: vi.fn().mockResolvedValue(100),
+  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
   GetAppLogs: (...args: unknown[]) => getAppLogsMock(...args),
   GetAppLogsSince: (...args: unknown[]) => getAppLogsSinceMock(...args),
   ClearAppLogs: (...args: unknown[]) => clearAppLogsMock(...args),
@@ -93,12 +100,26 @@ import AppLogsPanel from './AppLogsPanel';
 
 const renderPanel = async (initialIsOpen = true) => {
   const container = document.createElement('div');
+  if (realNavigation.enabled) {
+    container.className = 'content';
+  }
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
   const onCloseMock = vi.fn();
 
   await act(async () => {
-    root.render(<AppLogsPanel isOpen={initialIsOpen} onClose={onCloseMock} />);
+    const panel = <AppLogsPanel isOpen={initialIsOpen} onClose={onCloseMock} />;
+    root.render(
+      realNavigation.enabled ? (
+        <KeyboardProvider>
+          <ZoomProvider>
+            <DockablePanelProvider>{panel}</DockablePanelProvider>
+          </ZoomProvider>
+        </KeyboardProvider>
+      ) : (
+        panel
+      )
+    );
     await Promise.resolve();
   });
 
@@ -140,7 +161,7 @@ let restoreClipboard: (() => void) | undefined;
 
 beforeEach(() => {
   useShortcutMock.mockClear();
-  useKeyboardSurfaceMock.mockClear();
+  realNavigation.enabled = false;
   getAppLogsMock.mockReset();
   getAppLogsSinceMock.mockReset();
   clearAppLogsMock.mockReset();
@@ -731,47 +752,46 @@ describe('AppLogsPanel', () => {
     cleanup();
   });
 
-  it('routes reverse tab from the log body back to the filter controls', async () => {
+  it('tabs into and back out of the log body', async () => {
+    realNavigation.enabled = true;
     vi.useFakeTimers();
     getAppLogsMock.mockResolvedValue([
       { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
     ]);
-
-    const { container, cleanup } = await renderPanel();
-
+    const { cleanup } = await renderPanel();
     await flushInitialLoad();
-
-    const surfaceCall =
-      useKeyboardSurfaceMock.mock.calls[useKeyboardSurfaceMock.mock.calls.length - 1];
-    expect(surfaceCall).toBeTruthy();
-    const surfaceConfig = surfaceCall?.[0] as {
-      captureWhenActive?: boolean;
-      active?: boolean;
-      onKeyDown?: (event: KeyboardEvent) => boolean | undefined;
-    };
-
-    expect(surfaceConfig.active).toBe(true);
-    expect(surfaceConfig.captureWhenActive).toBe(true);
-
-    const logsContainer = container.querySelector<HTMLDivElement>('.app-logs-container');
-    const textFilterInput = container.querySelector<HTMLInputElement>('.app-logs-text-filter');
-    expect(logsContainer).not.toBeNull();
-    expect(textFilterInput).not.toBeNull();
-
-    act(() => {
-      requireValue(logsContainer, 'expected test value in AppLogsPanel.test.tsx').focus();
+    const logs = requireValue(
+      document.querySelector<HTMLElement>('.app-logs-container'),
+      'log body'
+    );
+    const panel = requireValue(logs.closest<HTMLElement>('.dockable-panel'), 'real dockable panel');
+    const previous = requireValue(
+      panel.querySelector<HTMLElement>('[aria-label="Resize Cluster column"]'),
+      'preceding column resizer'
+    );
+    await act(async () => previous.focus());
+    expect(logs.tabIndex).toBe(0);
+    await act(async () =>
+      previous.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          cancelable: true,
+        })
+      )
+    );
+    expect(document.activeElement).toBe(logs);
+    await act(async () => {
+      logs.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
     });
-    expect(document.activeElement).toBe(logsContainer);
-
-    const handled = surfaceConfig.onKeyDown?.({
-      key: 'Tab',
-      shiftKey: true,
-      target: logsContainer,
-    } as KeyboardEvent);
-
-    expect(handled).toBe(true);
-    expect(document.activeElement).toBe(textFilterInput);
-
+    expect(document.activeElement).toBe(previous);
     cleanup();
   });
 

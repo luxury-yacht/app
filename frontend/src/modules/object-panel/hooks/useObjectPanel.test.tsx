@@ -166,6 +166,7 @@ describe('useObjectPanel', () => {
       expect.objectContaining({ objectRef: pod })
     );
     expect(hookResult.openPanels.size).toBe(0);
+    expect(mockFocusPanel).not.toHaveBeenCalled();
   });
 
   it('opens the panel with object details', async () => {
@@ -275,7 +276,7 @@ describe('useObjectPanel', () => {
       hookResult.openWithObject(pod);
     });
 
-    expect(mockFocusPanel).toHaveBeenCalledWith(panelId);
+    expect(mockFocusPanel).toHaveBeenCalledWith(panelId, 'test-cluster');
   });
 
   it('activates the owning cluster before opening a cross-cluster object panel', async () => {
@@ -299,6 +300,7 @@ describe('useObjectPanel', () => {
     kubeconfigMocks.selectedClusterName = 'other';
     renderHookComponent();
 
+    expect(mockFocusPanel).toHaveBeenCalledWith(objectPanelId(namespace), 'other-cluster');
     expect(Array.from(hookResult.openPanels.values())).toEqual([
       expect.objectContaining(namespace),
     ]);
@@ -325,7 +327,7 @@ describe('useObjectPanel', () => {
     expect(hookResult.openPanels.size).toBe(0);
   });
 
-  it('focuses a newly opened panel after it joins a dockable tab group', async () => {
+  it('hands new-panel focus to the persistent dockable owner before group registration', async () => {
     const pod = {
       kind: 'Pod',
       group: '',
@@ -346,7 +348,7 @@ describe('useObjectPanel', () => {
       await Promise.resolve();
     });
 
-    expect(mockFocusPanel).not.toHaveBeenCalled();
+    expect(mockFocusPanel).toHaveBeenCalledWith(panelId, 'test-cluster');
 
     mockTabGroups = {
       right: { tabs: [panelId], activeTab: panelId },
@@ -359,7 +361,7 @@ describe('useObjectPanel', () => {
       await Promise.resolve();
     });
 
-    expect(mockFocusPanel).toHaveBeenCalledWith(panelId);
+    expect(mockFocusPanel).toHaveBeenCalledWith(panelId, 'test-cluster');
   });
 
   it('floats only the new panel group when floating is the default', async () => {

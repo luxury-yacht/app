@@ -139,7 +139,9 @@ function getOrderedObjectPanelTabbables(panelRoot: HTMLElement): HTMLElement[] {
       '.dockable-panel__header .dockable-tab-bar-shell [role="tab"]'
     )
   ).filter(isKeyboardVisibleElement);
-  addAll(groupedPanelTabs);
+  for (const tab of groupedPanelTabs) {
+    addAll([tab, ...getTabbableElements(tab.closest('.tab-item-shell'))]);
+  }
 
   const activeObjectPanelBody =
     Array.from(
@@ -147,10 +149,11 @@ function getOrderedObjectPanelTabbables(panelRoot: HTMLElement): HTMLElement[] {
     ).find(isKeyboardVisibleElement) ?? null;
 
   if (activeObjectPanelBody) {
+    const objectTabStrip = activeObjectPanelBody
+      .querySelector('[aria-label="Object Panel Tabs"]')
+      ?.closest('.tab-strip');
     const objectTabs = Array.from(
-      activeObjectPanelBody.querySelectorAll<HTMLElement>(
-        '[aria-label="Object Panel Tabs"] [role="tab"]'
-      )
+      objectTabStrip?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []
     ).filter(isKeyboardVisibleElement);
     addAll(objectTabs);
 
@@ -227,6 +230,14 @@ const getPanelTabbables = (panelRoot: HTMLElement) =>
     ? getOrderedObjectPanelTabbables(panelRoot)
     : getTabbableElements(panelRoot);
 
+const controlBesideTarget = (controls: HTMLElement[], target: HTMLElement, backwards: boolean) => {
+  const ordered = backwards ? [...controls].reverse() : controls;
+  const position = backwards ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING;
+  return (
+    ordered.find((control) => target.compareDocumentPosition(control) & position) ?? ordered[0]
+  );
+};
+
 const resolveNextPanelTabTarget = (
   tabbables: HTMLElement[],
   target: HTMLElement,
@@ -235,9 +246,11 @@ const resolveNextPanelTabTarget = (
   if (tabbables.length === 0) {
     return null;
   }
-  const currentIndex = tabbables.findIndex((item) => item === target || item.contains(target));
+  const exactIndex = tabbables.indexOf(target);
+  const currentIndex =
+    exactIndex >= 0 ? exactIndex : tabbables.findIndex((item) => item.contains(target));
   if (currentIndex === -1) {
-    return moveBackward ? tabbables[tabbables.length - 1] : tabbables[0];
+    return controlBesideTarget(tabbables, target, moveBackward);
   }
   const delta = moveBackward ? -1 : 1;
   return tabbables[(currentIndex + delta + tabbables.length) % tabbables.length];

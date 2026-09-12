@@ -6,14 +6,16 @@
  */
 
 import { ZoomProvider } from '@core/contexts/ZoomContext';
+import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/ObjectPanelTabs';
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
+import { useAppRegionNavigation } from '@ui/layout/appFocusRegions';
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 import DockablePanel from './DockablePanel';
-import { DockablePanelProvider } from './DockablePanelProvider';
+import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 
 vi.mock('@core/backend-api', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),
@@ -88,6 +90,214 @@ describe('DockablePanel', () => {
     document.querySelectorAll('.dockable-panel-layer').forEach((node) => {
       node.remove();
     });
+  });
+
+  it('keeps a new-panel focus request when its initiating content unmounts before registration', async () => {
+    const Launcher = ({ onOpen }: { onOpen: () => void }) => {
+      const { focusPanel } = useDockablePanelContext();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            focusPanel('new-from-menu');
+            onOpen();
+          }}
+        >
+          Open related object
+        </button>
+      );
+    };
+    const Flow = () => {
+      const [opening, setOpening] = React.useState(false);
+      const [opened, setOpened] = React.useState(false);
+      React.useEffect(() => {
+        if (opening) {
+          const timer = setTimeout(() => setOpened(true), 30);
+          return () => clearTimeout(timer);
+        }
+      }, [opening]);
+      if (opening && !opened) {
+        return <span>Opening related object</span>;
+      }
+      return opened ? (
+        <DockablePanel panelId="new-from-menu" title="Related" defaultPosition="right" isOpen>
+          <button type="button">Related action</button>
+        </DockablePanel>
+      ) : (
+        <Launcher onOpen={() => setOpening(true)} />
+      );
+    };
+    const { container, unmount } = await renderPanel(<Flow />);
+    await act(async () => container.querySelector('button')?.click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(document.activeElement).toBe(
+      document.querySelector('[role="tab"][data-panel-id="new-from-menu"]')
+    );
+    unmount();
+  });
+
+  it.each([false, true])(
+    'resumes control order around a pointer-focused body (reverse: %s)',
+    async (shiftKey) => {
+      const { unmount } = await renderPanel(
+        <DockablePanel panelId="body-order" title="Body" defaultPosition="bottom" isOpen>
+          <button type="button" data-testid="before-body">
+            Before body
+          </button>
+          <div tabIndex={-1} data-testid="read-only-body">
+            Read-only content
+          </div>
+          <button type="button" data-testid="after-body">
+            After body
+          </button>
+        </DockablePanel>
+      );
+      const body = requireValue(
+        document.querySelector<HTMLElement>('[data-testid="read-only-body"]'),
+        'read-only body'
+      );
+      await act(async () => body.focus());
+      await act(async () =>
+        body.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true })
+        )
+      );
+      expect(document.activeElement).toBe(
+        document.querySelector(`[data-testid="${shiftKey ? 'before-body' : 'after-body'}"]`)
+      );
+      unmount();
+    }
+  );
+
+  it.each([false, true])(
+    'visits tab actions and reorders through the actual panel owner (object panel: %s)',
+    async (objectPanel) => {
+      const content = (
+        <div className="object-panel-body">
+          <div className="object-panel-content">
+            <button type="button">Details action</button>
+          </div>
+        </div>
+      );
+      const { unmount } = await renderPanel(
+        <>
+          <DockablePanel
+            panelId="keyboard-a"
+            title="Alpha"
+            defaultPosition="right"
+            isOpen
+            className={objectPanel ? 'object-panel-dockable' : undefined}
+          >
+            {content}
+          </DockablePanel>
+          <DockablePanel
+            panelId="keyboard-b"
+            title="Beta"
+            defaultPosition="right"
+            isOpen
+            className={objectPanel ? 'object-panel-dockable' : undefined}
+          >
+            {content}
+          </DockablePanel>
+        </>
+      );
+      const tab = requireValue(
+        document.querySelector<HTMLElement>(
+          '.dockable-tab-bar [role="tab"][data-panel-id="keyboard-b"]'
+        ),
+        'Beta tab'
+      );
+      const press = async (key: string) =>
+        act(async () =>
+          document.activeElement?.dispatchEvent(
+            new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+          )
+        );
+      await act(async () => tab.focus());
+      await press('Tab');
+      expect(document.activeElement).toBe(tab.parentElement?.querySelector('.tab-item__close'));
+      await act(async () => {
+        tab.focus();
+        tab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      });
+      const move = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+        (el) => el.textContent === 'Move tab left'
+      );
+      expect(move).toBeTruthy();
+      await act(async () => move?.click());
+      const ids = Array.from(
+        document.querySelectorAll<HTMLElement>('.dockable-tab-bar [role="tab"]')
+      ).map((el) => el.dataset.panelId);
+      expect(ids).toEqual(['keyboard-b', 'keyboard-a']);
+      expect(document.activeElement).toBe(tab);
+      unmount();
+    }
+  );
+
+  it('cycles into a real panel with suppressed controls and restores focus without switching its tab', async () => {
+    const Navigation = () => {
+      useAppRegionNavigation();
+      return (
+        <header data-app-region="header">
+          <button type="button" data-testid="region-start">
+            Start
+          </button>
+        </header>
+      );
+    };
+    const { unmount } = await renderPanel(
+      <>
+        <Navigation />
+        <DockablePanel panelId="region-panel" title="Panel" defaultPosition="right" isOpen>
+          <button type="button" data-testid="region-action">
+            Action
+          </button>
+        </DockablePanel>
+      </>
+    );
+    const start = requireValue(
+      document.querySelector<HTMLElement>('[data-testid="region-start"]'),
+      'header control'
+    );
+    const action = requireValue(
+      document.querySelector<HTMLElement>('[data-testid="region-action"]'),
+      'panel control'
+    );
+    const cycle = async (target: HTMLElement, shiftKey = false) => {
+      await act(async () => {
+        target.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: 'Tab',
+            ctrlKey: true,
+            shiftKey,
+            bubbles: true,
+            cancelable: true,
+          })
+        );
+      });
+    };
+    await act(async () => {
+      start.focus();
+    });
+    expect(action.tabIndex).toBe(-1);
+    await cycle(start);
+    expect(document.activeElement?.closest('.dockable-panel')).toBe(
+      action.closest('.dockable-panel')
+    );
+    expect(action.tabIndex).toBe(0);
+    await act(async () => {
+      action.focus();
+    });
+    await cycle(action);
+    expect(document.activeElement).toBe(start);
+    await cycle(start, true);
+    expect(document.activeElement).toBe(action);
+    unmount();
   });
 
   it('invokes onClose and removes the panel when the close control is clicked', async () => {
@@ -407,6 +617,7 @@ describe('DockablePanel', () => {
     });
 
     expect(document.activeElement).toBe(firstTabbable);
+    expect(firstTabbable?.classList.contains('keyboard-programmatic-focus')).toBe(true);
 
     await act(async () => {
       firstTabbable?.dispatchEvent(
@@ -528,14 +739,14 @@ describe('DockablePanel', () => {
         <div className="object-panel-header">
           <span>{title} header</span>
         </div>
-        <div role="tablist" aria-label="Object Panel Tabs">
-          <div role="tab" tabIndex={-1}>
-            {tabPrefix} Details
-          </div>
-          <div role="tab" tabIndex={-1}>
-            {tabPrefix} Logs
-          </div>
-        </div>
+        <ObjectPanelTabs
+          tabs={[
+            { id: 'details', label: `${tabPrefix} Details` },
+            { id: 'logs', label: `${tabPrefix} Logs` },
+          ]}
+          activeTab="details"
+          onSelect={() => undefined}
+        />
         <div className="object-panel-content">
           <button type="button">{contentLabel}</button>
         </div>
@@ -585,6 +796,14 @@ describe('DockablePanel', () => {
       await Promise.resolve();
     });
 
+    expect(document.activeElement).toBe(
+      secondGroupedTab?.parentElement?.querySelector('.tab-item__close')
+    );
+    await act(async () =>
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      )
+    );
     expect(document.activeElement?.textContent).toContain('B Details');
 
     await act(async () => {

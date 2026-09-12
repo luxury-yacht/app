@@ -24,13 +24,14 @@ import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { AutoScrollIcon, CopyIcon } from '@shared/components/icons/LogIcons';
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import ScrollableRegion from '@shared/components/ScrollableRegion';
 import { AriaGridColumnHeader, AriaGridRow } from '@shared/components/tables/AriaGridPrimitives';
 
 import { acquireColumnResizeCursor } from '@shared/utils/columnResizeCursor';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { DockablePanel } from '@ui/dockable';
-import { useKeyboardSurface, useShortcut } from '@ui/shortcuts';
-import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
+import { useShortcut } from '@ui/shortcuts';
+import { KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { errorHandler } from '@utils/errorHandler';
 import {
   type CSSProperties,
@@ -171,9 +172,8 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
     useState<MultiSelectFilterSelection>(ALL_MULTISELECT_FILTER);
   const [textFilter, setTextFilter] = useState<string>('');
   const [columnWidths, setColumnWidths] = useState(DEFAULT_LOG_COLUMN_WIDTHS);
-  const logsContainerRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLElement>(null);
   const textFilterInputRef = useRef<HTMLInputElement>(null);
-  const panelScopeRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
   const prevScrollHeightRef = useRef(0);
   const prevScrollTopRef = useRef(0);
@@ -618,7 +618,8 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
       return false;
     },
     description: 'Close Application Logs Panel',
-    category: 'Application Logs Panel',
+    category: 'Windows & Panels',
+    helpOrder: 42,
     enabled: isOpen,
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ESCAPE : 0,
   });
@@ -705,8 +706,9 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
       }
       return false;
     },
-    description: 'Toggle auto-scroll',
-    category: 'Application Logs Panel',
+    description: 'Toggle application log auto-scroll',
+    category: 'Logs',
+    helpOrder: 11,
     enabled: isOpen,
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
@@ -721,8 +723,9 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
       }
       return false;
     },
-    description: 'Clear logs',
-    category: 'Application Logs Panel',
+    description: 'Clear application logs',
+    category: 'Logs',
+    helpOrder: 71,
     enabled: isOpen,
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
@@ -812,58 +815,6 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
     logs.length,
   ]);
 
-  const focusFirstControl = useCallback(() => {
-    if (textFilterInputRef.current) {
-      textFilterInputRef.current.focus();
-      return true;
-    }
-    if (logsContainerRef.current) {
-      logsContainerRef.current.focus();
-      return true;
-    }
-    return false;
-  }, []);
-
-  const focusLastControl = useCallback(() => {
-    if (logsContainerRef.current) {
-      logsContainerRef.current.focus();
-      return true;
-    }
-    if (textFilterInputRef.current) {
-      textFilterInputRef.current.focus();
-      return true;
-    }
-    return false;
-  }, []);
-
-  useKeyboardSurface({
-    kind: 'panel',
-    rootRef: panelScopeRef,
-    active: isOpen,
-    captureWhenActive: true,
-    priority: KeyboardScopePriority.APP_LOGS_PANEL,
-    onKeyDown: (event) => {
-      if (event.key !== 'Tab') {
-        return false;
-      }
-
-      const direction = event.shiftKey ? 'backward' : 'forward';
-      const target = event.target as HTMLElement | null;
-
-      if (target && panelScopeRef.current?.contains(target)) {
-        if (logsContainerRef.current?.contains(target)) {
-          return direction === 'forward' ? false : focusFirstControl();
-        }
-        return false;
-      }
-
-      if (direction === 'forward') {
-        return focusFirstControl();
-      }
-      return focusLastControl();
-    },
-  });
-
   let renderedLogs: ReactNode;
   if (isLoading) {
     renderedLogs = <LoadingSpinner message="Loading logs..." />;
@@ -887,7 +838,6 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
 
   return (
     <DockablePanel
-      panelRef={panelScopeRef}
       panelId="app-logs"
       title="Application Logs"
       isOpen={isOpen}
@@ -986,15 +936,15 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
         </thead>
       </table>
 
-      <div
+      <ScrollableRegion
         ref={logsContainerRef}
         className="app-logs-container selectable"
         onScroll={handleLogsScroll}
         style={columnWidthStyle}
-        tabIndex={-1}
+        aria-label="Log output"
       >
         {renderedLogs}
-      </div>
+      </ScrollableRegion>
     </DockablePanel>
   );
 }

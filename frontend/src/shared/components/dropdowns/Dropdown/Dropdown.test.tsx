@@ -87,11 +87,24 @@ describe('Dropdown', () => {
     if (!element) {
       throw new Error('Element not found');
     }
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
     await act(async () => {
-      element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }));
+      element.dispatchEvent(event);
       await Promise.resolve();
     });
+    return event;
   };
+
+  const optionIn = (label: string) =>
+    requireValue(
+      Array.from(document.body.querySelectorAll<HTMLElement>('.dropdown-option')).find(
+        (option) => option.textContent?.trim() === label
+      ),
+      `expected option ${label}`
+    );
+
+  const onlyIn = (label: string) =>
+    document.body.querySelector<HTMLButtonElement>(`button[aria-label="Select only ${label}"]`);
 
   const setTextInputValue = async (input: HTMLInputElement | null, value: string) => {
     if (!input) {
@@ -557,7 +570,7 @@ describe('Dropdown', () => {
     expect(handleChange).toHaveBeenCalledWith('beta');
   });
 
-  it('uses action-row semantics and exposes the first trailing action from the trigger', async () => {
+  it('tabs through the list and Only before trailing actions, retaining keyboard row focus on hover', async () => {
     await mount(
       <Dropdown
         options={OPTIONS.map((option) =>
@@ -592,6 +605,10 @@ describe('Dropdown', () => {
       await Promise.resolve();
     });
     await pressKey(trigger, 'Tab');
+    expect(document.activeElement).toBe(optionIn('Alpha'));
+    await pressKey(document.activeElement, 'Tab');
+    expect(document.activeElement).toBe(onlyIn('Alpha'));
+    await pressKey(document.activeElement, 'Tab');
     expect(document.activeElement).toBe(
       document.body.querySelector('[data-testid="action-alpha"]')
     );
@@ -608,6 +625,16 @@ describe('Dropdown', () => {
     });
 
     const secondRow = secondAction?.closest('.dropdown-option-row');
+    expect(firstRow?.classList.contains('highlighted')).toBe(true);
+    expect(secondRow?.classList.contains('highlighted')).toBe(false);
+    expect(document.activeElement).toBe(
+      document.body.querySelector('[data-testid="action-alpha"]')
+    );
+
+    await act(async () => {
+      (trigger as HTMLElement).focus();
+      secondAction?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    });
     expect(secondRow?.classList.contains('highlighted')).toBe(true);
     expect(firstRow?.classList.contains('highlighted')).toBe(false);
 
@@ -622,51 +649,230 @@ describe('Dropdown', () => {
     expect(secondRow?.classList.contains('highlighted')).toBe(false);
   });
 
-  it('returns focus to the trigger when Tab leaves an action-row dialog', async () => {
+  it.each(['Enter', ' '])('leaves %s on an option action to the focused button', async (key) => {
+    const onChange = vi.fn();
+    const onAction = vi.fn();
     await mount(
       <Dropdown
         options={OPTIONS}
         value={[]}
         multiple
-        onChange={vi.fn()}
+        onChange={onChange}
         renderOptionActions={(option) => (
-          <button type="button" data-testid={`action-${option.value}`}>
+          <button type="button" data-testid={`action-${option.value}`} onClick={onAction}>
             Reorder
           </button>
         )}
       />
     );
-
     const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
     click(trigger);
-    const focusableSelector =
-      'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
-    const forwardFocusables = Array.from(
-      document.body.querySelectorAll<HTMLElement>(`dialog ${focusableSelector}`)
-    );
-    const lastFocusable = forwardFocusables[forwardFocusables.length - 1] ?? null;
+    act(() => trigger?.focus());
+    await pressKey(trigger, 'Tab');
+    expect(document.activeElement).toBe(optionIn('Alpha'));
+    await pressKey(document.activeElement, 'Tab');
+    expect(document.activeElement).toBe(onlyIn('Alpha'));
+    await pressKey(document.activeElement, 'Tab');
+    const action = document.body.querySelector<HTMLElement>('[data-testid="action-alpha"]');
+    expect(document.activeElement).toBe(action);
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
     await act(async () => {
-      lastFocusable?.focus();
-      await Promise.resolve();
+      action?.dispatchEvent(event);
     });
+    expect(event.defaultPrevented).toBe(false);
+    expect(onChange).not.toHaveBeenCalled();
+    click(action);
+    expect(onAction).toHaveBeenCalledOnce();
+  });
 
-    await pressKey(lastFocusable, 'Tab');
+  it.each(['Enter', ' '])(
+    'tabs to bulk actions and leaves %s to the focused button',
+    async (key) => {
+      const onChange = vi.fn();
+      await mount(
+        <Dropdown
+          options={OPTIONS}
+          value={['alpha']}
+          multiple
+          showBulkActions
+          onChange={onChange}
+        />
+      );
+      const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
+      click(trigger);
+      act(() => trigger?.focus());
+      await pressKey(trigger, 'Tab');
+      const action = document.body.querySelector<HTMLElement>('.dropdown-bulk-action');
+      expect(document.activeElement).toBe(action);
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      await act(async () => {
+        action?.dispatchEvent(event);
+      });
+      expect(event.defaultPrevented).toBe(false);
+      expect(onChange).not.toHaveBeenCalled();
+      click(action);
+      expect(onChange).toHaveBeenCalledWith(['alpha', 'beta', 'gamma']);
+    }
+  );
 
-    expect(document.body.querySelector('dialog')).toBeNull();
-    expect(document.activeElement).toBe(trigger);
-
+  it('retains focus and Tab access when bulk actions become unavailable', async () => {
+    const onChange = vi.fn();
+    function Controlled() {
+      const [value, setValue] = useState<string[]>([]);
+      return (
+        <Dropdown
+          options={OPTIONS}
+          value={value}
+          multiple
+          showBulkActions
+          onChange={(next) => {
+            onChange(next);
+            setValue(next as string[]);
+          }}
+        />
+      );
+    }
+    await mount(<Controlled />);
+    const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
     click(trigger);
-    const firstFocusable = document.body.querySelector<HTMLElement>(`dialog ${focusableSelector}`);
-    await act(async () => {
-      firstFocusable?.focus();
-      await Promise.resolve();
-    });
+    await pressKey(trigger, 'Tab');
+    const all = document.body.querySelector<HTMLElement>('[aria-label="Select all"]');
+    click(all);
+    expect(document.activeElement).toBe(all);
+    expect(all?.getAttribute('aria-disabled')).toBe('true');
+    expect(all?.hasAttribute('disabled')).toBe(false);
+    expect(onChange).toHaveBeenLastCalledWith(['alpha', 'beta', 'gamma']);
+    click(all);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    await pressKey(all, 'Tab');
+    const none = document.body.querySelector<HTMLElement>('[aria-label="Select none"]');
+    expect(document.activeElement).toBe(none);
+    click(none);
+    expect(document.activeElement).toBe(none);
+    expect(none?.getAttribute('aria-disabled')).toBe('true');
+    expect(onChange).toHaveBeenLastCalledWith([]);
+    click(none);
+    expect(onChange).toHaveBeenCalledTimes(2);
+    await pressKey(none, 'Tab', { shiftKey: true });
+    expect(document.activeElement).toBe(all);
+  });
 
-    await pressKey(firstFocusable, 'Tab', { shiftKey: true });
-
-    expect(document.body.querySelector('dialog')).toBeNull();
+  it('restores the trigger when a searchable selection closes its portal', async () => {
+    await mount(<Dropdown options={OPTIONS} value="" onChange={vi.fn()} searchable />);
+    const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
+    click(trigger);
+    const search = document.body.querySelector<HTMLElement>('.search-input');
+    await pressKey(search, 'ArrowDown');
+    await pressKey(search, 'Enter');
+    expect(document.body.querySelector('.dropdown-menu')).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
+
+  it.each([false, true])(
+    'uses one list entry and its Only action before the row actions (searchable=%s)',
+    async (searchable) => {
+      const onChange = vi.fn();
+      await mount(
+        <Dropdown
+          options={OPTIONS}
+          value={[]}
+          multiple
+          searchable={searchable}
+          onChange={onChange}
+          renderOptionActions={(option) => (
+            <>
+              <button type="button" data-testid={`up-${option.value}`}>
+                Up
+              </button>
+              <button type="button" data-testid={`down-${option.value}`}>
+                Down
+              </button>
+            </>
+          )}
+        />
+      );
+      const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
+      click(trigger);
+      const listOwner = searchable
+        ? document.body.querySelector<HTMLElement>('.search-input')
+        : trigger;
+      act(() => listOwner?.focus());
+      await pressKey(listOwner, 'ArrowDown');
+      await pressKey(listOwner, searchable ? 'Enter' : ' ');
+      expect(onChange).toHaveBeenLastCalledWith(['alpha']);
+      expect(document.activeElement).toBe(listOwner);
+      await pressKey(listOwner, 'ArrowDown');
+      await pressKey(listOwner, 'Enter');
+      expect(onChange).toHaveBeenLastCalledWith(['beta']);
+      expect(document.activeElement).toBe(listOwner);
+      await pressKey(listOwner, 'Tab');
+      expect(document.activeElement).toBe(optionIn('Beta'));
+      expect(document.querySelectorAll('.dropdown-option[tabindex="0"]')).toHaveLength(1);
+      await pressKey(document.activeElement, 'Tab');
+      expect(document.activeElement).toBe(onlyIn('Beta'));
+      expect(document.querySelectorAll('.dropdown-only-action[tabindex="0"]')).toHaveLength(1);
+      await pressKey(document.activeElement, 'Tab');
+      const first = document.body.querySelector<HTMLElement>('[data-testid="up-alpha"]');
+      const second = document.body.querySelector<HTMLElement>('[data-testid="down-alpha"]');
+      const nextRow = document.body.querySelector<HTMLElement>('[data-testid="up-beta"]');
+      expect(document.activeElement).toBe(first);
+      await pressKey(first, 'Tab');
+      expect(document.activeElement).toBe(second);
+      await pressKey(second, 'Tab');
+      expect(document.activeElement).toBe(nextRow);
+      await pressKey(nextRow, 'Tab', { shiftKey: true });
+      expect(document.activeElement).toBe(second);
+      await pressKey(second, 'Tab', { shiftKey: true });
+      expect(document.activeElement).toBe(first);
+    }
+  );
+
+  it.each([false, true])(
+    'wraps Tab inside an action-row dialog (searchable=%s)',
+    async (searchable) => {
+      await mount(
+        <Dropdown
+          options={OPTIONS}
+          value={[]}
+          multiple
+          searchable={searchable}
+          onChange={vi.fn()}
+          renderOptionActions={(option) => (
+            <button type="button" data-testid={`action-${option.value}`}>
+              Reorder
+            </button>
+          )}
+        />
+      );
+
+      const trigger = container.querySelector<HTMLElement>('.dropdown-trigger');
+      click(trigger);
+      const dialog = requireValue(
+        document.querySelector('dialog.dropdown-menu'),
+        'dropdown dialog'
+      );
+      const lastAction = document.querySelector<HTMLElement>('[data-testid="action-gamma"]');
+      await act(async () => {
+        lastAction?.focus();
+        await Promise.resolve();
+      });
+
+      const forward = await pressKey(lastAction, 'Tab');
+      const firstControl = searchable ? document.querySelector('.search-input') : optionIn('Gamma');
+      expect(forward.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(firstControl);
+      expect(document.body.querySelector('dialog')).toBe(dialog);
+
+      const backward = await pressKey(firstControl, 'Tab', { shiftKey: true });
+      expect(backward.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(lastAction);
+      expect(document.body.querySelector('dialog')).toBe(dialog);
+
+      await pressKey(lastAction, 'Escape');
+      expect(document.body.querySelector('dialog')).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    }
+  );
 
   it('supports keyboard navigation while the search input has focus', async () => {
     await mount(
@@ -725,7 +931,7 @@ describe('Dropdown', () => {
     expect(dropdown?.classList.contains('search-focused')).toBe(false);
   });
 
-  it('closes on Tab without preventing the browser focus move', async () => {
+  it('cycles Tab between search and a single list entry without closing the popup', async () => {
     await mount(
       <Dropdown options={OPTIONS} value="" onChange={vi.fn()} searchable placeholder="Searchable" />
     );
@@ -736,14 +942,19 @@ describe('Dropdown', () => {
     expect(searchInput).not.toBeNull();
     searchInput?.focus();
 
-    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
-    await act(async () => {
-      searchInput?.dispatchEvent(event);
-      await Promise.resolve();
-    });
+    const menu = requireValue(document.querySelector('.dropdown-menu'), 'dropdown menu');
+    const forward = await pressKey(searchInput, 'Tab');
+    expect(forward.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(optionIn('Alpha'));
+    await pressKey(document.activeElement, 'Tab');
+    expect(document.activeElement).toBe(searchInput);
 
-    expect(document.body.querySelector('.dropdown-menu')).toBeNull();
-    expect(event.defaultPrevented).toBe(false);
+    const backward = await pressKey(searchInput, 'Tab', { shiftKey: true });
+    expect(backward.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(optionIn('Alpha'));
+    await pressKey(document.activeElement, 'Tab', { shiftKey: true });
+    expect(document.activeElement).toBe(searchInput);
+    expect(document.querySelector('.dropdown-menu')).toBe(menu);
   });
 
   it('invokes onOpen and onClose callbacks', async () => {
@@ -965,11 +1176,6 @@ describe('Dropdown', () => {
   });
 
   describe('only action', () => {
-    const onlyIn = (label: string) =>
-      Array.from(document.body.querySelectorAll<HTMLElement>('.dropdown-option'))
-        .find((option) => option.textContent?.startsWith(label))
-        ?.querySelector<HTMLElement>('.dropdown-only-action') ?? null;
-
     it('collapses the selection to the hovered option', async () => {
       const onChange = vi.fn();
       await mount(
@@ -1010,7 +1216,7 @@ describe('Dropdown', () => {
 
       click(container.querySelector('.dropdown-trigger'));
       const only = requireValue(onlyIn('Beta'), 'expected an only action');
-      expect(only.dataset.disabled).toBe('true');
+      expect(only.getAttribute('aria-disabled')).toBe('true');
 
       click(only);
       expect(onChange).not.toHaveBeenCalled();
@@ -1073,6 +1279,67 @@ describe('Dropdown', () => {
 
       expect(onChange).toHaveBeenCalledWith(['alpha']);
     });
+
+    it.each(['Enter', ' '])(
+      'navigates between Only buttons and leaves %s to activation',
+      async (key) => {
+        const onChange = vi.fn();
+        await mount(
+          <Dropdown
+            options={[
+              OPTIONS[0],
+              { value: 'heading', label: 'Unavailable', group: 'header' },
+              { ...OPTIONS[1], disabled: true },
+              OPTIONS[2],
+            ]}
+            value={['alpha', 'beta', 'gamma']}
+            onChange={onChange}
+            multiple
+            searchable
+            showBulkActions
+          />
+        );
+        const trigger = container.querySelector('.dropdown-trigger');
+        click(trigger);
+        const search = document.querySelector('.search-input');
+        expect(document.activeElement).toBe(search);
+        await pressKey(search, 'Tab');
+        expect(document.activeElement?.getAttribute('aria-label')).toBe('Select all');
+        await pressKey(document.activeElement, 'Tab');
+        expect(document.activeElement?.getAttribute('aria-label')).toBe('Select none');
+        await pressKey(document.activeElement, 'Tab');
+        expect(document.activeElement).toBe(optionIn('Alpha'));
+        await pressKey(document.activeElement, 'Tab');
+        expect(document.activeElement).toBe(onlyIn('Alpha'));
+        expect(onlyIn('Alpha')?.closest('.dropdown-option')).toBeNull();
+
+        for (const [navigationKey, label] of [
+          ['ArrowDown', 'Gamma'],
+          ['ArrowUp', 'Alpha'],
+          ['End', 'Gamma'],
+          ['Home', 'Alpha'],
+          ['ArrowUp', 'Gamma'],
+        ]) {
+          const event = await pressKey(document.activeElement, navigationKey);
+          expect(event.defaultPrevented).toBe(true);
+          expect(document.activeElement).toBe(onlyIn(label));
+          expect(optionIn(label).classList.contains('highlighted')).toBe(true);
+        }
+        expect(onChange).not.toHaveBeenCalled();
+        const only = requireValue(onlyIn('Gamma'), 'Only Gamma');
+        const activation = await pressKey(only, key);
+        expect(activation.defaultPrevented).toBe(false);
+        expect(onChange).not.toHaveBeenCalled();
+        // jsdom does not perform the browser's default keyboard button click.
+        click(only);
+        expect(onChange).toHaveBeenCalledExactlyOnceWith(['gamma']);
+        expect(document.activeElement).toBe(only);
+        await pressKey(only, 'Tab');
+        expect(document.activeElement).toBe(search);
+        await pressKey(search, 'Tab', { shiftKey: true });
+        expect(document.activeElement).toBe(only);
+      }
+    );
   });
 
   it('renders labeled bulk-action icons at the compact size', async () => {
@@ -1152,6 +1419,80 @@ describe('Dropdown', () => {
     expect(updatedMenu).not.toBeNull();
     expect(updatedMenu?.scrollTop).toBe(180);
   });
+
+  it.each([false, true])(
+    'keeps keyboard navigation usable after an option click (searchable: %s)',
+    async (searchable) => {
+      const onChange = vi.fn();
+      await mount(
+        <Dropdown
+          options={OPTIONS}
+          value={[]}
+          onChange={onChange}
+          multiple
+          searchable={searchable}
+        />
+      );
+      const trigger = container.querySelector('.dropdown-trigger');
+      click(trigger);
+      const option = optionIn('Alpha');
+      click(option);
+      expect(onChange).toHaveBeenCalledWith(['alpha']);
+      expect(document.activeElement).toBe(searchable ? option : trigger);
+      await pressKey(document.activeElement, 'End');
+      await pressKey(document.activeElement, 'ArrowUp');
+      expect(document.querySelector('.dropdown-option.highlighted')?.textContent).toContain('Beta');
+      await pressKey(document.activeElement, 'Enter');
+      expect(onChange).toHaveBeenLastCalledWith(['beta']);
+      await pressKey(document.activeElement, 'Home');
+      await pressKey(document.activeElement, ' ');
+      expect(onChange).toHaveBeenLastCalledWith(['alpha']);
+      if (searchable) {
+        await pressKey(document.activeElement, 'Tab', { shiftKey: true });
+        const search = requireValue(
+          document.querySelector<HTMLInputElement>('.search-input'),
+          'search'
+        );
+        expect(document.activeElement).toBe(search);
+        await setTextInputValue(search, 'Gamma');
+        expect(document.querySelectorAll('.dropdown-option')).toHaveLength(1);
+        expect(document.querySelector('.dropdown-option')?.textContent).toContain('Gamma');
+      }
+    }
+  );
+
+  it.each([{ value: [] }, { value: ['alpha'] }])(
+    'keeps Only focused after isolating selection $value',
+    async ({ value }) => {
+      const onChange = vi.fn();
+      const Controlled = () => {
+        const [selection, setSelection] = useState(value);
+        return (
+          <Dropdown
+            options={OPTIONS}
+            value={selection}
+            onChange={(next) => {
+              onChange(next);
+              setSelection(next as string[]);
+            }}
+            multiple
+            searchable
+          />
+        );
+      };
+      await mount(<Controlled />);
+      click(container.querySelector('.dropdown-trigger'));
+      const only = requireValue(onlyIn('Alpha'), 'Only Alpha');
+      click(only);
+      expect(document.activeElement).toBe(only);
+      expect(only.getAttribute('aria-disabled')).toBe('true');
+      expect(onChange).toHaveBeenCalledTimes(value.length === 0 ? 1 : 0);
+      await pressKey(only, 'Tab', { shiftKey: true });
+      expect(document.activeElement).toBe(optionIn('Alpha'));
+      await pressKey(document.activeElement, 'Tab');
+      expect(document.activeElement).toBe(only);
+    }
+  );
 
   it('adjusts menu position when space below trigger is limited', async () => {
     const originalInnerHeight = window.innerHeight;

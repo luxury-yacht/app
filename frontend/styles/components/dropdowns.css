@@ -349,27 +349,41 @@
    places it immediately left of the drag grip, which stays anchored. */
 .dropdown-only-action {
   flex: 0 0 auto;
+  align-self: center;
   /* A real margin, not `margin-left: auto`: the menu is `width: max-content`, so
      it sizes exactly to its content and auto has no slack to distribute — the
      pill ends up flush against the label. `.dropdown-filter-option` is `flex: 1`
      and does the pushing wherever there IS room. */
   margin-left: 10px;
+  margin-right: 10px;
   padding: 2px 6px;
   border: 1px solid var(--color-border);
   border-radius: 3px;
   background-color: var(--color-bg);
   color: var(--color-text-secondary);
+  font-family: inherit;
   font-size: var(--font-size-sm, 0.6875rem);
   line-height: 1.1;
   white-space: nowrap;
+  cursor: pointer;
   visibility: hidden;
 }
 
-.dropdown-option:hover .dropdown-only-action,
-.dropdown-option.highlighted .dropdown-only-action,
+.dropdown-filter-menu .dropdown-only-action {
+  margin-right: 12px;
+}
+
 .dropdown-option-row:hover .dropdown-only-action,
-.dropdown-option-row.highlighted .dropdown-only-action {
+.dropdown-option-row.highlighted .dropdown-only-action,
+.dropdown-option-row:focus-within .dropdown-only-action {
   visibility: visible;
+}
+
+/* The sibling action retains the spacing it had inside a filter option. */
+.dropdown-menu.dropdown-filter-menu
+  .dropdown-option-row:has(> .dropdown-only-action)
+  .dropdown-option {
+  padding-right: 0;
 }
 
 .dropdown-only-action:hover {
@@ -377,7 +391,7 @@
   color: var(--color-accent);
 }
 
-.dropdown-only-action[data-disabled="true"] {
+.dropdown-only-action[aria-disabled="true"] {
   opacity: 0.35;
   cursor: default;
 }
@@ -562,11 +576,14 @@
   line-height: 1;
 }
 
-.dropdown-bulk-action:disabled {
+.dropdown-bulk-action.icon-bar-button[aria-disabled="true"] {
+  color: var(--color-text-secondary);
   opacity: 0.3;
+  cursor: not-allowed;
+  background: transparent;
 }
 
-.dropdown-bulk-action.icon-bar-button.dropdown-bulk-action--labeled:disabled {
+.dropdown-bulk-action.icon-bar-button.dropdown-bulk-action--labeled[aria-disabled="true"] {
   opacity: 0.4;
 }
 

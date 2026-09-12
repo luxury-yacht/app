@@ -1,3 +1,4 @@
+import { tabReorderMenuItems } from '@shared/components/tabs/tabReorderMenuItems';
 import ContextMenu, { type ContextMenuItem } from '@/shared/components/ContextMenu';
 import {
   DockBottomIcon,
@@ -6,6 +7,7 @@ import {
 } from '@/shared/components/icons/DockableIcons';
 import { CloseIcon } from '@/shared/components/icons/SharedIcons';
 import { useDockablePanelContext } from './DockablePanelProvider';
+import { getGroupTabs } from './tabGroupState';
 import type { DockPosition } from './useDockablePanelState';
 
 export function DockableTabMenu({
@@ -19,7 +21,12 @@ export function DockableTabMenu({
   position: { x: number; y: number };
   onClose: () => void;
 }>) {
-  const { requestTabMove, closeTab, nativeWindowMode } = useDockablePanelContext();
+  const { requestTabMove, closeTab, nativeWindowMode, tabGroups, reorderTabInGroup } =
+    useDockablePanelContext();
+  const ids = getGroupTabs(tabGroups, groupKey)?.tabs ?? [];
+  const orderActions = tabReorderMenuItems(ids, panelId, (index) =>
+    reorderTabInGroup(groupKey, panelId, index)
+  );
   const items: ContextMenuItem[] = [];
   const addMove = (label: string, target: DockPosition, icon: ContextMenuItem['icon']) => {
     items.push({ label, icon, onClick: () => requestTabMove(panelId, target) });
@@ -35,7 +42,12 @@ export function DockableTabMenu({
   }
   items.push(
     { divider: true },
-    { label: 'Close', icon: <CloseIcon width={16} height={16} />, onClick: () => closeTab(panelId) }
+    {
+      label: 'Close',
+      icon: <CloseIcon width={16} height={16} />,
+      onClick: () => closeTab(panelId),
+    },
+    ...(orderActions.length ? [{ divider: true }, ...orderActions] : [])
   );
   return <ContextMenu items={items} position={position} onClose={onClose} />;
 }

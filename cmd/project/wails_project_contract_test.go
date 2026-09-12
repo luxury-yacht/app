@@ -407,7 +407,7 @@ func TestDirectWailsCompositionContractRejectsBoundaryRegressions(t *testing.T) 
 			main: mainSource, window: windowSource, runtime: runtimeSource, menu: menuSource, desktopExists: true,
 		},
 		"missing runtime-ready hook": {
-			main: mainSource, window: strings.Replace(windowSource, "events.Common.WindowRuntimeReady", "events.Common.WindowOpened", 1), runtime: runtimeSource, menu: menuSource,
+			main: mainSource, window: strings.ReplaceAll(windowSource, "events.Common.WindowRuntimeReady", "events.Common.WindowOpened"), runtime: runtimeSource, menu: menuSource,
 		},
 		"missing closing hook": {
 			main: mainSource, window: strings.ReplaceAll(windowSource, "events.Common.WindowClosing", "events.Common.WindowClosed"), runtime: runtimeSource, menu: menuSource,

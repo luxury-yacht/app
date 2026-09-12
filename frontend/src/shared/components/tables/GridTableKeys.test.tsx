@@ -198,11 +198,7 @@ describe('GridTableKeys filter target selectors', () => {
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
-        focusRef,
-        tableDataLength: 1,
-        focusedRowKey: 'row-1',
         suppressFocusedRowHighlight: vi.fn(),
-        jumpToIndex: () => true,
       });
 
       return (
@@ -319,11 +315,7 @@ describe('GridTableKeys filter target selectors', () => {
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
-        focusRef,
-        tableDataLength: 1,
-        focusedRowKey: 'row-1',
         suppressFocusedRowHighlight: vi.fn(),
-        jumpToIndex: () => true,
       });
 
       return (
@@ -461,11 +453,7 @@ describe('GridTableKeys filter target selectors', () => {
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
-        focusRef,
-        tableDataLength: 1,
-        focusedRowKey: 'row-1',
         suppressFocusedRowHighlight: vi.fn(),
-        jumpToIndex: () => true,
       });
 
       return (
@@ -495,7 +483,7 @@ describe('GridTableKeys filter target selectors', () => {
     const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
     const result = tableSurface?.onKeyDown?.(event);
 
-    expect(result).toBe(false);
+    expect(result).toBeFalsy();
     expect(preventDefaultSpy).not.toHaveBeenCalled();
   });
 
@@ -513,11 +501,7 @@ describe('GridTableKeys filter target selectors', () => {
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
-        focusRef,
-        tableDataLength: 1,
-        focusedRowKey: 'row-1',
         suppressFocusedRowHighlight,
-        jumpToIndex: () => true,
       });
 
       return (

@@ -155,6 +155,10 @@ const SidebarNamespaceRemove = ({
       disabled={namespaceScope.saving}
       onClick={(event) => {
         event.stopPropagation();
+        event.currentTarget
+          .closest('.namespaces-section')
+          ?.querySelector<HTMLElement>('h3 .sidebar-header-action')
+          ?.focus();
         namespaceScope.removeNamespace(namespace.name);
       }}
     >

@@ -43,12 +43,15 @@ const ARROW_DIRECTIONS: Partial<
 };
 
 const buildModifierKeycaps = (shortcut: ShortcutItem, isMac: boolean) =>
-  MODIFIER_KEYCAPS.filter(({ modifier }) => shortcut.modifiers?.[modifier]).map(
-    ({ modifier, macLabel, defaultLabel }) => {
-      const label = isMac ? macLabel : defaultLabel;
-      return <kbd key={modifier}>{label}</kbd>;
-    }
-  );
+  MODIFIER_KEYCAPS.filter(
+    ({ modifier }) =>
+      shortcut.modifiers?.[modifier] &&
+      // The question-mark character already represents the shifted key.
+      (modifier !== 'shift' || shortcut.key !== '?')
+  ).map(({ modifier, macLabel, defaultLabel }) => {
+    const label = isMac ? macLabel : defaultLabel;
+    return <kbd key={modifier}>{label}</kbd>;
+  });
 
 const ShortcutKeyContent = ({ shortcutKey }: { shortcutKey: string }) => {
   const arrowDirection = ARROW_DIRECTIONS[shortcutKey];

@@ -230,7 +230,7 @@
   border-left-color: var(--color-accent);
 }
 
-.sidebar.keyboard-mode .sidebar-item:not(.active):hover {
+.sidebar.keyboard-mode .sidebar-item:not(.active, .keyboard-preview, :focus):hover {
   background-color: transparent;
   color: inherit;
 }
@@ -241,8 +241,10 @@
   border-left-color: var(--color-accent);
 }
 
-.sidebar-item.keyboard-preview {
-  box-shadow: inset 0 0 0 2px var(--color-accent, #4c83ff);
+:root body .sidebar-item.keyboard-preview,
+:root body .sidebar-item.keyboard-preview:hover {
+  background-color: var(--color-accent-bg);
+  color: var(--color-text);
 }
 
 /* Non-clickable header items like "Resources" */
@@ -388,7 +390,9 @@ body.sidebar-resizing::after {
   cursor: pointer;
 }
 
-.sidebar-item-row:hover .namespace-scope-remove {
+.sidebar-item-row:hover .namespace-scope-remove,
+.sidebar-item-row:focus-within .namespace-scope-remove,
+.sidebar-item.scope-inaccessible + .namespace-scope-remove {
   display: inline-flex;
 }
 

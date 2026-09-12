@@ -9,6 +9,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
+import { hasCompleteObjectMapReference } from '@modules/object-panel/objectPanelRef';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
@@ -35,7 +36,6 @@ import {
 } from '@shared/components/icons/ObjectMapIcons';
 import { CloseIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import Tooltip from '@shared/components/Tooltip';
-
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
@@ -541,6 +541,17 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const visibleState = visibleStateResult.state;
 
   useEffect(() => {
+    if (
+      contextMenu?.type === 'object' &&
+      !visibleState.visibleLayout.nodes.some(
+        (node) => objectMapReferenceKey(node.ref) === objectMapReferenceKey(contextMenu.request.ref)
+      )
+    ) {
+      setContextMenu(null);
+    }
+  }, [contextMenu, visibleState.visibleLayout.nodes]);
+
+  useEffect(() => {
     setEnabledEdgeTypes((previous) => {
       return pruneObjectMapEnabledEdgeTypes(previous, visibleState.visibleEdgeTypes);
     });
@@ -819,10 +830,25 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     if (!contextMenu) {
       return [];
     }
-    return contextMenu.type === 'object'
+    if (contextMenu.type === 'canvas') {
+      return canvasContextMenuItems;
+    }
+    const node = visibleState.visibleLayout.nodes.find(
+      (item) => objectMapReferenceKey(item.ref) === objectMapReferenceKey(contextMenu.request.ref)
+    );
+    if (!node) {
+      return [];
+    }
+    return hasCompleteObjectMapReference({ ...node.ref })
       ? objectActions.getMenuItems(contextMenuObject)
-      : canvasContextMenuItems;
-  }, [canvasContextMenuItems, contextMenu, contextMenuObject, objectActions]);
+      : [];
+  }, [
+    canvasContextMenuItems,
+    contextMenu,
+    contextMenuObject,
+    objectActions,
+    visibleState.visibleLayout,
+  ]);
   const contextMenuPosition = objectMapContextMenuPosition(contextMenu);
   const handleNodeContextMenu = useCallback((request: ObjectMapContextMenuRequest) => {
     setContextMenu({ type: 'object', request });

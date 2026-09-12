@@ -1,274 +1,148 @@
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
-import { useKeyboardSurface } from '@ui/shortcuts';
+import { getFocusPortalOwner } from '@shared/utils/focusOwnership';
+import { focusPanelById } from '@ui/dockable/useDockablePanelState';
+import { useShortcuts } from '@ui/shortcuts';
+import {
+  type AppRegion,
+  getFocusRegions,
+  isFocusTargetAvailable,
+  regionContains,
+} from '@ui/shortcuts/focusRegions';
 import { hasNativeTabHandling } from '@ui/shortcuts/utils';
-import { type RefObject, useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
-export type TopLevelAppRegion = 'header' | 'sidebar' | 'content';
+const getRegionControls = (region: AppRegion) =>
+  region.roots
+    .flatMap((root) => [...(root.tabIndex >= 0 ? [root] : []), ...getTabbableElements(root)])
+    .filter((element) => regionContains(region, element) && isFocusTargetAvailable(element));
 
-const PROGRAMMATIC_FOCUS_CLASS = 'keyboard-programmatic-focus';
-
-const TOP_LEVEL_REGION_SELECTOR: Record<TopLevelAppRegion, string> = {
-  header: '[data-app-region="header"]',
-  sidebar: '[data-app-region="sidebar"]',
-  content: '[data-app-region="content"]',
-};
-
-const lastFocusedElementByRegion = new Map<TopLevelAppRegion, HTMLElement>();
-let lastFocusedTopLevelRegion: TopLevelAppRegion | null = null;
-let lastProgrammaticFocusElement: HTMLElement | null = null;
-
-const clearProgrammaticFocusIndicator = (except?: HTMLElement | null) => {
-  if (
-    lastProgrammaticFocusElement &&
-    lastProgrammaticFocusElement !== except &&
-    lastProgrammaticFocusElement.isConnected
-  ) {
-    lastProgrammaticFocusElement.classList.remove(PROGRAMMATIC_FOCUS_CLASS);
-  }
-
-  if (!except || lastProgrammaticFocusElement !== except) {
-    lastProgrammaticFocusElement = except ?? null;
-  }
-};
-
-export const focusElementWithProgrammaticIndicator = (element: HTMLElement | null) => {
-  if (!element) {
-    return false;
-  }
-
-  clearProgrammaticFocusIndicator(element);
-  element.classList.add(PROGRAMMATIC_FOCUS_CLASS);
-  element.focus();
-  return document.activeElement === element;
-};
-
-const getLastHeaderControl = () =>
-  document.querySelector<HTMLElement>('[data-app-header-last-focusable="true"]');
-
-const getHeaderRoot = () => document.querySelector<HTMLElement>(TOP_LEVEL_REGION_SELECTOR.header);
-
-const getActiveClusterTab = () =>
-  document.querySelector<HTMLElement>('.cluster-tabs-wrapper [role="tab"][tabindex="0"]');
-
-const getVisibleSidebar = () => document.querySelector<HTMLElement>('.sidebar:not(.collapsed)');
-
-const getSelectedSidebarItem = () =>
-  document.querySelector<HTMLElement>('.sidebar:not(.collapsed) .sidebar-item.active');
-
-const getFirstSidebarItem = () =>
-  document.querySelector<HTMLElement>('.sidebar:not(.collapsed) [data-sidebar-focusable="true"]');
-
-const getContentRoot = () => document.querySelector<HTMLElement>(TOP_LEVEL_REGION_SELECTOR.content);
-
-const getRegionFromElement = (element: Element | null): TopLevelAppRegion | null => {
-  if (!(element instanceof HTMLElement)) {
-    return null;
-  }
-
-  for (const [region, selector] of Object.entries(TOP_LEVEL_REGION_SELECTOR) as Array<
-    [TopLevelAppRegion, string]
-  >) {
-    if (element.closest(selector)) {
-      return region;
-    }
-  }
-
-  return null;
-};
-
-const focusSavedRegionElement = (region: TopLevelAppRegion) => {
-  const root = document.querySelector<HTMLElement>(TOP_LEVEL_REGION_SELECTOR[region]);
-  const element = lastFocusedElementByRegion.get(region);
-  if (!root || !element?.isConnected || !root.contains(element)) {
-    return false;
-  }
-
-  return focusElementWithProgrammaticIndicator(element);
-};
-
-const focusHeaderRegion = () => {
-  if (focusSavedRegionElement('header')) {
-    return true;
-  }
-
-  const headerRoot = getHeaderRoot();
-  if (!headerRoot) {
-    return false;
-  }
-
-  const firstHeaderTarget = getTabbableElements(headerRoot)[0] ?? getLastHeaderControl();
-  if (!firstHeaderTarget) {
-    return false;
-  }
-
-  return focusElementWithProgrammaticIndicator(firstHeaderTarget);
-};
-
-export const focusPreviousRegionBeforeSidebar = () => {
-  const activeClusterTab = getActiveClusterTab();
-  if (activeClusterTab) {
-    return focusElementWithProgrammaticIndicator(activeClusterTab);
-  }
-
-  const lastHeaderControl = getLastHeaderControl();
-  if (lastHeaderControl) {
-    return focusElementWithProgrammaticIndicator(lastHeaderControl);
-  }
-
-  return false;
-};
-
-const focusTopLevelAppRegion = (region: TopLevelAppRegion) => {
-  if (region === 'header') {
-    return focusHeaderRegion();
-  }
-
-  if (region === 'sidebar') {
-    if (focusSavedRegionElement('sidebar')) {
-      return true;
-    }
-
-    const selectedSidebarItem = getSelectedSidebarItem();
-    if (selectedSidebarItem) {
-      return focusElementWithProgrammaticIndicator(selectedSidebarItem);
-    }
-
-    const firstSidebarItem = getFirstSidebarItem();
-    if (firstSidebarItem) {
-      return focusElementWithProgrammaticIndicator(firstSidebarItem);
-    }
-
-    const visibleSidebar = getVisibleSidebar();
-    if (visibleSidebar) {
-      return focusElementWithProgrammaticIndicator(visibleSidebar);
-    }
-
-    return false;
-  }
-
-  if (focusSavedRegionElement('content')) {
-    return true;
-  }
-
-  const contentRoot = getContentRoot();
-  if (!contentRoot) {
-    return false;
-  }
-
-  const firstContentTarget = getTabbableElements(contentRoot)[0];
-  if (!firstContentTarget) {
-    return false;
-  }
-
-  return focusElementWithProgrammaticIndicator(firstContentTarget);
-};
-
-export const focusLastFocusedTopLevelAppRegion = () => {
-  if (lastFocusedTopLevelRegion) {
-    return focusTopLevelAppRegion(lastFocusedTopLevelRegion);
-  }
-
-  return (
-    focusTopLevelAppRegion('content') || focusTopLevelAppRegion('sidebar') || focusHeaderRegion()
+const getEntryTarget = (region: AppRegion): HTMLElement => {
+  const root = region.roots[0];
+  // Inactive panels suppress tab stops. Their selected tab remains an entry
+  // target; focusing the panel restores its normal tab stops.
+  const preferred = root.querySelector<HTMLElement>(
+    '.dockable-panel__header [role="tab"][aria-selected="true"], .sidebar-item.active'
   );
+  if (preferred && isFocusTargetAvailable(preferred)) {
+    return preferred;
+  }
+  return getRegionControls(region)[0] ?? root;
 };
 
-export const useTopLevelAppRegionTracking = (active = true) => {
-  useEffect(() => {
-    if (!active || typeof document === 'undefined') {
-      return;
-    }
+const focusRegion = (region: AppRegion, saved: HTMLElement | undefined) => {
+  const root = region.roots[0];
+  if (root.dataset.activePanelId) {
+    focusPanelById(root.dataset.activePanelId);
+  }
+  const target =
+    saved &&
+    regionContains(region, saved) &&
+    isFocusTargetAvailable(saved) &&
+    (root.dataset.appRegion !== 'sidebar' || saved.dataset.sidebarFocusable === 'true')
+      ? saved
+      : getEntryTarget(region);
+  target.focus();
+  return region.roots.some((element) => element.contains(document.activeElement));
+};
 
-    const handleFocusIn = (event: FocusEvent) => {
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      const region = getRegionFromElement(target);
-      if (!target || !region) {
-        clearProgrammaticFocusIndicator(target);
+// Sidebar arrow navigation focuses descendants of its single tab stop.
+const focusAfterCompositeControl = (controls: HTMLElement[], backwards: boolean) => {
+  const index = controls.findIndex((control) => control.contains(document.activeElement));
+  if (index < 0) {
+    return false;
+  }
+  controls[(index + (backwards ? -1 : 1) + controls.length) % controls.length].focus();
+  return true;
+};
+
+const navigateLocally = (event: KeyboardEvent | undefined): boolean => {
+  if (!event || hasNativeTabHandling(event.target)) {
+    return false;
+  }
+  const region = getFocusRegions().find((candidate) =>
+    regionContains(candidate, document.activeElement)
+  );
+  if (!region) {
+    return false;
+  }
+  const controls = getRegionControls(region);
+  const index = controls.indexOf(document.activeElement as HTMLElement);
+  if (index === -1 && focusAfterCompositeControl(controls, event.shiftKey)) {
+    return true;
+  }
+  if (index >= 0) {
+    controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length].focus();
+    return true;
+  }
+  const target = (event.shiftKey ? controls[controls.length - 1] : controls[0]) ?? region.roots[0];
+  target.focus();
+  return true;
+};
+
+export function useAppRegionNavigation() {
+  const savedFocus = useRef(new WeakMap<HTMLElement, HTMLElement>());
+  useEffect(() => {
+    const rememberFocus = () => {
+      const target = document.activeElement;
+      if (!(target instanceof HTMLElement)) {
         return;
       }
-
-      clearProgrammaticFocusIndicator(target);
-      lastFocusedTopLevelRegion = region;
-      lastFocusedElementByRegion.set(region, target);
+      const region = getFocusRegions().find((candidate) => regionContains(candidate, target));
+      if (region) {
+        savedFocus.current.set(region.roots[0], getFocusPortalOwner(target) ?? target);
+      }
     };
-
-    document.addEventListener('focusin', handleFocusIn);
+    document.addEventListener('focusin', rememberFocus);
     return () => {
-      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener('focusin', rememberFocus);
     };
-  }, [active]);
-};
+  }, []);
 
-const focusPreviousRegionBeforeContent = () => {
-  const selectedSidebarItem = getSelectedSidebarItem();
-  if (selectedSidebarItem) {
-    selectedSidebarItem.focus();
-    return true;
-  }
+  const cycle = (direction: number) => {
+    const regions = getFocusRegions();
+    if (!regions.length) {
+      return false;
+    }
+    const current = regions.findIndex((candidate) =>
+      regionContains(candidate, document.activeElement)
+    );
+    const entryIndex = direction > 0 ? 0 : regions.length - 1;
+    const index =
+      current < 0 ? entryIndex : (current + direction + regions.length) % regions.length;
+    const region = regions[index];
+    return focusRegion(region, savedFocus.current.get(region.roots[0]));
+  };
 
-  const firstSidebarItem = getFirstSidebarItem();
-  if (firstSidebarItem) {
-    firstSidebarItem.focus();
-    return true;
-  }
-
-  const visibleSidebar = getVisibleSidebar();
-  if (visibleSidebar) {
-    // Fallback only when the sidebar has no registered focusable items yet.
-    visibleSidebar.focus();
-    return true;
-  }
-
-  return focusPreviousRegionBeforeSidebar();
-};
-
-export const useContentRegionShiftTabHandoff = (
-  contentRef: RefObject<HTMLElement | null>,
-  active = true
-) => {
-  useKeyboardSurface({
-    kind: 'region',
-    rootRef: contentRef,
-    active,
-    priority: 30,
-    captureWhenActive: true,
-    onKeyDown: (event) => {
-      if (
-        event.key !== 'Tab' ||
-        !event.shiftKey ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey
-      ) {
-        return false;
-      }
-
-      if (hasNativeTabHandling(event.target)) {
-        return false;
-      }
-
-      const contentRoot = contentRef.current;
-      if (!contentRoot) {
-        return false;
-      }
-
-      const tabbables = getTabbableElements(contentRoot);
-      if (tabbables.length === 0) {
-        return false;
-      }
-
-      const activeElement = document.activeElement as HTMLElement | null;
-      if (activeElement !== tabbables[0]) {
-        return false;
-      }
-
-      return focusPreviousRegionBeforeContent();
-    },
-  });
-};
-
-export const __resetTopLevelAppRegionTrackingForTests = () => {
-  lastFocusedElementByRegion.clear();
-  lastFocusedTopLevelRegion = null;
-  clearProgrammaticFocusIndicator(null);
-};
+  useShortcuts(
+    [
+      {
+        key: 'Tab',
+        modifiers: { ctrl: true },
+        handler: () => cycle(1),
+        description: 'Focus next region',
+        helpOrder: 20,
+      },
+      {
+        key: 'Tab',
+        modifiers: { ctrl: true, shift: true },
+        handler: () => cycle(-1),
+        description: 'Focus previous region',
+        helpOrder: 21,
+      },
+      {
+        key: 'Tab',
+        handler: navigateLocally,
+        description: 'Next control in region',
+        helpOrder: 10,
+      },
+      {
+        key: 'Tab',
+        modifiers: { shift: true },
+        handler: navigateLocally,
+        description: 'Previous control in region',
+        helpOrder: 11,
+      },
+    ],
+    { category: 'Navigation', priority: 200 }
+  );
+}

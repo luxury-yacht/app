@@ -127,6 +127,55 @@ describe('CommandPalette keyboard integration', () => {
     vi.useRealTimers();
   });
 
+  it('contains Tab in the palette and restores the invoking control on Escape', async () => {
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <button type="button" data-testid="palette-invoker">
+            Open
+          </button>
+          <CommandPalette commands={[]} />
+        </KeyboardProvider>
+      );
+    });
+    const invoker = requireValue(
+      document.querySelector<HTMLElement>('[data-testid="palette-invoker"]'),
+      'invoker'
+    );
+    invoker.focus();
+    await act(async () => {
+      eventBus.emit('command-palette:open');
+    });
+    const input = requireValue(
+      document.querySelector<HTMLInputElement>('.command-palette-input'),
+      'palette input'
+    );
+    const dialog = requireValue(input.closest('.command-palette'), 'palette dialog');
+    expect(dialog).toBeInstanceOf(HTMLDialogElement);
+    expect(dialog.hasAttribute('open')).toBe(true);
+    expect(dialog.hasAttribute('role')).toBe(false);
+    expect(container.hasAttribute('inert')).toBe(true);
+    for (const shiftKey of [false, true]) {
+      const event = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => {
+        input.dispatchEvent(event);
+      });
+      expect(event.defaultPrevented).toBe(true);
+      expect(document.activeElement?.closest('.command-palette')).not.toBeNull();
+    }
+    await act(async () => {
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+    });
+    expect(document.activeElement).toBe(invoker);
+  });
+
   it('keeps an open palette intact when its application accelerator is pressed again', async () => {
     const execute = (menuCommand: backend.ApplicationMenuCommand) => {
       if (menuCommand === backend.ApplicationMenuCommand.ApplicationMenuCommandCommandPalette) {

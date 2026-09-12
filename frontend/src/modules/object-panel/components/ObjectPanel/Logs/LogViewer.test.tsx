@@ -5,6 +5,7 @@
  * parsing, container selection, lifecycle cleanup, and persisted viewer prefs.
  */
 
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import { act } from 'react';
@@ -33,6 +34,7 @@ import {
   resetLogViewerPrefsCacheForTesting,
   setLogViewerPrefs,
 } from './logViewerPrefsCache';
+import type { ParsedLogEntry } from './logViewerReducer';
 
 const flushAsync = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 type ViMock = ReturnType<typeof vi.fn>;
@@ -221,15 +223,34 @@ const setMultiSelectValues = async (select: HTMLSelectElement, values: string[])
   });
 };
 
+const tableMockState = vi.hoisted(() => ({ renderRows: false }));
+
 vi.mock('@shared/components/tables/GridTable', () => ({
   __esModule: true,
   default: ({
     children,
     tableClassName,
+    data,
+    columns,
   }: {
     children?: React.ReactNode;
     tableClassName?: string;
-  }) => <div data-testid={tableClassName}>{children}</div>,
+    data: ParsedLogEntry[];
+    columns: GridColumnDefinition<ParsedLogEntry>[];
+  }) => (
+    <div data-testid={tableClassName}>
+      {children}
+      {tableMockState.renderRows
+        ? data.map((row) => (
+            <div key={row.timestamp}>
+              {columns.map((column) => (
+                <span key={column.key}>{column.render(row)}</span>
+              ))}
+            </div>
+          ))
+        : null}
+    </div>
+  ),
   GRIDTABLE_VIRTUALIZATION_DEFAULT: {},
 }));
 
@@ -286,6 +307,7 @@ describe('LogViewer active pod synchronisation', () => {
   let writeTextMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    tableMockState.renderRows = false;
     vi.clearAllMocks();
     shortcutMocks.useShortcut.mockClear();
     shortcutMocks.useKeyboardSurface.mockClear();
@@ -1729,6 +1751,10 @@ describe('LogViewer active pod synchronisation', () => {
         'button[aria-label="Show only logs from pod web-1"]'
       )
     );
+
+    expect(container.querySelector<HTMLElement>('.logs-viewer-content')?.tabIndex).toBe(0);
+    expect(podButton.tabIndex).toBe(-1);
+    expect(podButton.dataset.focusTrapIgnore).toBe('true');
     expect(container.querySelector('.log-viewer-line span[style*="color"]')).toBeTruthy();
 
     await act(async () => {
@@ -2161,6 +2187,9 @@ describe('LogViewer active pod synchronisation', () => {
       )
     );
 
+    expect(containerButton.tabIndex).toBe(-1);
+    expect(containerButton.dataset.focusTrapIgnore).toBe('true');
+
     await act(async () => {
       containerButton.click();
       await Promise.resolve();
@@ -2211,6 +2240,9 @@ describe('LogViewer active pod synchronisation', () => {
       )
     );
 
+    expect(containerButton.tabIndex).toBe(-1);
+    expect(containerButton.dataset.focusTrapIgnore).toBe('true');
+
     await act(async () => {
       containerButton.click();
       await Promise.resolve();
@@ -2222,6 +2254,58 @@ describe('LogViewer active pod synchronisation', () => {
     });
     expect(container.textContent).toContain('sidecar log line');
     expect(container.textContent).not.toContain('main log line');
+  });
+
+  it('excludes parsed metadata from Tab while retaining its filter actions', async () => {
+    tableMockState.renderRows = true;
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: '{"message":"first"}',
+        timestamp: '2024-05-01T10:00:00Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-2',
+        container: 'app',
+        line: '{"message":"second"}',
+        timestamp: '2024-05-01T10:00:01Z',
+        isInit: false,
+      },
+    ]);
+    const panelId = 'obj:test:deployment:team-a:api';
+    await renderViewer({ panelId });
+    await act(async () => {
+      getLatestShortcut('p')?.handler();
+    });
+    expect(container.querySelector<HTMLElement>('.logs-viewer-content')?.tabIndex).toBe(-1);
+    const pod = requireValue(
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show only logs from pod web-1"]'
+      ),
+      'parsed pod'
+    );
+    const containerLink = requireValue(
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show only logs from container app"]'
+      ),
+      'parsed container'
+    );
+    for (const link of [pod, containerLink]) {
+      expect(link.tabIndex).toBe(-1);
+      expect(link.dataset.focusTrapIgnore).toBe('true');
+    }
+    await act(async () => pod.click());
+    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
+      mode: 'some',
+      values: ['pod:web-1'],
+    });
+    await act(async () => containerLink.click());
+    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
+      mode: 'some',
+      values: ['pod:web-1', 'container:app'],
+    });
   });
 
   it('labels all-containers mode to indicate debug containers are included', async () => {

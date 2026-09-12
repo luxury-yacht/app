@@ -1,3 +1,4 @@
+import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -79,15 +80,18 @@ describe('NodeLogsTab', () => {
     await act(async () => {
       root.render(
         <KeyboardProvider>
-          <NodeLogsTab
-            panelId="panel-1"
-            nodeName="node-a"
-            clusterId="alpha:ctx"
-            isActive
-            availability={{ allowed: true, pending: false }}
-            sources={sources}
-            {...props}
-          />
+          <AppRegionNavigation />
+          <main data-app-region="content">
+            <NodeLogsTab
+              panelId="panel-1"
+              nodeName="node-a"
+              clusterId="alpha:ctx"
+              isActive
+              availability={{ allowed: true, pending: false }}
+              sources={sources}
+              {...props}
+            />
+          </main>
         </KeyboardProvider>
       );
       await Promise.resolve();
@@ -155,6 +159,54 @@ describe('NodeLogsTab', () => {
     expect(
       container.querySelector('.logs-viewer-selector-dropdown .dropdown-value')?.textContent
     ).toBe('Select log source');
+  });
+
+  it('tabs into raw output and leaves its scrolling keys available', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: 'first\nsecond',
+    });
+    await renderTab();
+    await selectSource('kubelet');
+    const output = requireValue(
+      container.querySelector<HTMLElement>('.logs-viewer-content'),
+      'node log output'
+    );
+    const controls = Array.from(container.querySelectorAll<HTMLButtonElement>('.icon-bar button'));
+    const previous = requireValue(controls[controls.length - 1], 'last log toolbar control');
+    await act(async () => previous.focus());
+    await act(async () =>
+      previous.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      )
+    );
+    expect(document.activeElement).toBe(output);
+    for (const key of [
+      'ArrowUp',
+      'ArrowDown',
+      'ArrowLeft',
+      'ArrowRight',
+      'PageUp',
+      'PageDown',
+      'Home',
+      'End',
+    ]) {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      await act(async () => output.dispatchEvent(event));
+      expect(event.defaultPrevented, key).toBe(false);
+    }
+    await act(async () =>
+      output.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      )
+    );
+    expect(document.activeElement).toBe(previous);
   });
 
   it('refetches when the selected source changes', async () => {

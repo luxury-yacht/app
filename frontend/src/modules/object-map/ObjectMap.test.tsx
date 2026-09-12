@@ -7,6 +7,7 @@
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
+import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOMClient from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -15,6 +16,7 @@ import ObjectMap from './ObjectMap';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
 
 const useShortNamesMock = vi.hoisted(() => vi.fn(() => false));
+Element.prototype.scrollIntoView ??= vi.fn();
 
 vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => useShortNamesMock(),
@@ -549,12 +551,14 @@ const renderObjectMap = async ({
 
   await act(async () => {
     root.render(
-      <ObjectMap
-        payload={testPayload}
-        onOpenPanel={onOpenPanel}
-        onNavigateView={onNavigateView}
-        onOpenObjectMap={onOpenObjectMap}
-      />
+      <KeyboardProvider>
+        <ObjectMap
+          payload={testPayload}
+          onOpenPanel={onOpenPanel}
+          onNavigateView={onNavigateView}
+          onOpenObjectMap={onOpenObjectMap}
+        />
+      </KeyboardProvider>
     );
     await Promise.resolve();
   });
@@ -573,6 +577,19 @@ const renderObjectMap = async ({
 
   return {
     container,
+    rerender: async (nextPayload: ObjectMapSnapshotPayload) =>
+      act(async () =>
+        root.render(
+          <KeyboardProvider>
+            <ObjectMap
+              payload={nextPayload}
+              onOpenPanel={onOpenPanel}
+              onNavigateView={onNavigateView}
+              onOpenObjectMap={onOpenObjectMap}
+            />
+          </KeyboardProvider>
+        )
+      ),
     cleanup: () => {
       act(() => root.unmount());
       container.remove();
@@ -599,6 +616,110 @@ afterEach(() => {
 });
 
 describe('ObjectMap', () => {
+  it('renders the existing toolbar without an extra object chooser or actions row', async () => {
+    const { container, cleanup } = await renderObjectMap();
+    expect(container.querySelector('.object-map__header')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Search map objects"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Filter map kinds"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Choose map object"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Selected object actions"]')).toBeNull();
+    expect(container.querySelector('.object-map__object-controls')).toBeNull();
+    cleanup();
+  });
+
+  it('discards a selected-object menu when its object disappears instead of reviving it', async () => {
+    const { container, rerender, cleanup } = await renderObjectMap();
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]')
+        ?.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+    });
+    expect(container.querySelector('[data-testid="mock-context-menu"]')).not.toBeNull();
+    await rerender({ ...payload, nodes: [], edges: [] });
+    await rerender(payload);
+    expect(container.querySelector('[data-testid="mock-context-menu"]')).toBeNull();
+    cleanup();
+  });
+
+  it('does not offer an object menu for partial-identity map nodes', async () => {
+    const node = {
+      ...requireValue(payload.nodes?.[0], 'expected deployment node'),
+      ref: { ...payload.seed, version: '' },
+    };
+    const { container, cleanup } = await renderObjectMap({
+      testPayload: { ...payload, seed: node.ref, nodes: [node], edges: [] },
+    });
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]')
+        ?.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+    });
+    expect(container.querySelector('[data-testid="mock-context-menu"]')).toBeNull();
+    expect(container.querySelector('[data-context-action-id]')).toBeNull();
+    cleanup();
+  });
+  it('keeps resource actions without movement or connection entries in the map context menu', async () => {
+    const onOpenPanel = vi.fn();
+    const { container, cleanup } = await renderObjectMap({ onOpenPanel });
+    const pod = requireValue(
+      container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-abc"]'),
+      'expected pod node'
+    );
+    await act(async () => pod.click());
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="mock-node-pod"]')?.dataset.active
+    ).toBe('true');
+    await act(async () => {
+      pod.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+    });
+    const menu = requireValue(
+      container.querySelector('[data-testid="mock-context-menu"]'),
+      'expected object context menu'
+    );
+    for (const direction of ['left', 'right', 'up', 'down']) {
+      expect(menu.textContent).not.toContain(`Move object ${direction}`);
+    }
+    expect(menu.textContent).not.toContain('Deployment web');
+    expect(menu.textContent).not.toContain('owns');
+    const open = container.querySelector<HTMLButtonElement>(
+      `[data-context-action-id="${OBJECT_ACTION_IDS.viewDetails}"]`
+    );
+    expect(open).toBeTruthy();
+    await act(async () => open?.click());
+    expect(onOpenPanel).toHaveBeenCalledWith(expect.objectContaining(payload.nodes?.[1].ref ?? {}));
+    cleanup();
+  });
+
+  it('keeps ReplicaSet expansion on the existing badge without extra context-menu entries', async () => {
+    const { container, cleanup } = await renderObjectMap({ testPayload: collapsePayload });
+    const openActions = async () =>
+      act(async () => {
+        container
+          .querySelector<HTMLButtonElement>('[aria-label="ReplicaSet: web-new"]')
+          ?.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      });
+    await openActions();
+    const menu = requireValue(
+      container.querySelector('[data-testid="mock-context-menu"]'),
+      'expected ReplicaSet context menu'
+    );
+    expect(menu.textContent).toContain(objectActionLabel(OBJECT_ACTION_IDS.viewMap));
+    expect(menu.textContent).not.toContain('Expand older ReplicaSets');
+    const badge = requireValue(
+      container.querySelector<HTMLButtonElement>('[aria-label="Show 1 hidden ReplicaSet"]'),
+      'expected existing ReplicaSet badge'
+    );
+    await act(async () => badge.click());
+    expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeTruthy();
+    await openActions();
+    expect(container.querySelector('[data-testid="mock-context-menu"]')?.textContent).not.toContain(
+      'Collapse older ReplicaSets'
+    );
+    await act(async () => badge.click());
+    expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeNull();
+    cleanup();
+  });
+
   it('selects a node, highlights connected paths, and clears selection', async () => {
     const { container, cleanup } = await renderObjectMap();
     const deploy = container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]');

@@ -64,6 +64,8 @@ export interface GridColumnDefinition<T> extends GridColumnAlignmentOptions {
   /** Groups equivalent rendered values so auto-width measures each distinct sample once. */
   measurementSampleKey?: (item: T) => string;
   disableShortcuts?: boolean | ((item: T) => boolean);
+  /** Cell controls repeat row activation and need no Tab stop when the row has an action. */
+  rowAction?: boolean;
 }
 
 export interface GridTableVirtualizationOptions {

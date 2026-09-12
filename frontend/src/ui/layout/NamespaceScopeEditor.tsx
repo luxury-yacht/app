@@ -3,8 +3,8 @@
  *
  * The sidebar's inline "accessible namespaces" editor
  * (docs/architecture/namespace-scope.md): the namespaces section itself is the
- * editor — an add-namespace affordance plus per-row hover delete (the row
- * buttons live in Sidebar.tsx). No modal, no settings surface; the editing
+ * editor — an add-namespace affordance plus per-row remove controls on hover
+ * or focus (the row buttons live in Sidebar.tsx). No modal, no settings surface; the editing
  * affordances are also the only "scope active" signal the design needs.
  */
 
@@ -142,6 +142,7 @@ export function NamespaceScopeAddRow({ state }: Readonly<NamespaceScopeAddRowPro
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const returnFocus = useRef(false);
 
   useEffect(() => {
     if (editing) {
@@ -152,10 +153,12 @@ export function NamespaceScopeAddRow({ state }: Readonly<NamespaceScopeAddRowPro
   const commit = () => {
     const name = value.trim();
     if (name === '') {
+      returnFocus.current = true;
       setEditing(false);
       return;
     }
     if (state.addNamespace(name)) {
+      returnFocus.current = true;
       setValue('');
       setEditing(false);
     }
@@ -170,6 +173,7 @@ export function NamespaceScopeAddRow({ state }: Readonly<NamespaceScopeAddRowPro
           type="text"
           value={value}
           placeholder="namespace name"
+          aria-label="Namespace name"
           spellCheck={false}
           disabled={state.saving}
           onChange={(event) => {
@@ -181,12 +185,16 @@ export function NamespaceScopeAddRow({ state }: Readonly<NamespaceScopeAddRowPro
             // propagation so sidebar/global shortcuts never see them, and
             // prevent the default on the keys we consume — an unconsumed
             // Enter reaching the native layer beeps on macOS.
+            if (event.key === 'Tab') {
+              return;
+            }
             event.stopPropagation();
             if (event.key === 'Enter') {
               event.preventDefault();
               commit();
             } else if (event.key === 'Escape') {
               event.preventDefault();
+              returnFocus.current = true;
               setValue('');
               setEditing(false);
               state.clearError();
@@ -203,7 +211,12 @@ export function NamespaceScopeAddRow({ state }: Readonly<NamespaceScopeAddRowPro
         <button
           type="button"
           className="sidebar-item namespace-scope-add"
-          tabIndex={-1}
+          ref={(element) => {
+            if (element && returnFocus.current) {
+              returnFocus.current = false;
+              element.focus();
+            }
+          }}
           onClick={() => setEditing(true)}
         >
           <PlusIcon width={14} height={14} />

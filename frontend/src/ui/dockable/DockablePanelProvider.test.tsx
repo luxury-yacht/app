@@ -1106,6 +1106,87 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
     vi.clearAllMocks();
   });
 
+  it.each(['target cluster', 'stale cluster', 'newest request'])(
+    'keeps deferred focus scoped to the %s',
+    async (scenario) => {
+      let captured: DockablePanelContextValue | null = null;
+      const Probe = () => {
+        captured = useDockablePanelContext();
+        return (
+          <>
+            <button type="button" data-testid="outside">
+              Outside
+            </button>
+            <button type="button" role="tab" data-panel-id="deferred">
+              Deferred
+            </button>
+            <button type="button" role="tab" data-panel-id="newer">
+              Newer
+            </button>
+          </>
+        );
+      };
+      const draw = () =>
+        root.render(
+          <DockablePanelProvider>
+            <Probe />
+          </DockablePanelProvider>
+        );
+      await act(async () => draw());
+      const outside = requireValue(
+        container.querySelector<HTMLButtonElement>('[data-testid="outside"]'),
+        'outside'
+      );
+      outside.focus();
+      await act(async () =>
+        requireDockableContext(captured).focusPanel(
+          'deferred',
+          scenario === 'target cluster' ? 'cluster-b' : 'cluster-a'
+        )
+      );
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(document.activeElement).toBe(outside);
+
+      if (scenario === 'newest request') {
+        await act(async () => {
+          const context = requireDockableContext(captured);
+          context.focusPanel('newer');
+          context.syncPanelGroup('newer', 'right');
+        });
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+        expect(document.activeElement).toBe(container.querySelector('[data-panel-id="newer"]'));
+      } else {
+        setMockedKubeconfig({
+          selectedClusterId: 'cluster-b',
+          selectedClusterIds: ['cluster-a', 'cluster-b'],
+        });
+        await act(async () => draw());
+        if (scenario === 'stale cluster') {
+          setMockedKubeconfig({
+            selectedClusterId: 'cluster-a',
+            selectedClusterIds: ['cluster-a', 'cluster-b'],
+          });
+          await act(async () => draw());
+        }
+      }
+      await act(async () => requireDockableContext(captured).syncPanelGroup('deferred', 'right'));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      const expected =
+        scenario === 'target cluster'
+          ? container.querySelector('[data-panel-id="deferred"]')
+          : scenario === 'newest request'
+            ? container.querySelector('[data-panel-id="newer"]')
+            : outside;
+      expect(document.activeElement).toBe(expected);
+    }
+  );
+
   // === Task 7 ===
   it('preserves tabGroups across cluster switch round-trip', () => {
     let capturedCtx: ReturnType<typeof useDockablePanelContext> | null = null;

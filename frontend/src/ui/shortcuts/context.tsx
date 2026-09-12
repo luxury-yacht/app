@@ -17,6 +17,8 @@ import type {
 } from '@/types/shortcuts';
 import { isMacPlatform } from '@/utils/platform';
 import { focusRegisteredSearchShortcutTarget } from './searchShortcutRegistry';
+import { buildShortcutHelpGroups } from './shortcutHelp';
+import { useKeyboardFocusIndicator } from './useKeyboardFocusIndicator';
 import { getShortcutKey, isInputElement, modifiersMatch, resolveEventElement } from './utils';
 
 interface KeyboardProviderValue {
@@ -298,11 +300,9 @@ const dispatchEscapeThroughSurfaces = (
     if (dispatchSurfaceHandler(event, surface.onKeyDown)) {
       return true;
     }
-    if (surface.suppressShortcuts) {
-      return true;
-    }
   }
-  return false;
+  // Shortcut suppression must not prevent an enclosing modal from owning Escape.
+  return surfaces.some((surface) => surface.suppressShortcuts);
 };
 
 const STANDARD_EDIT_KEYS = new Set(['a', 'c', 'v', 'x']);
@@ -320,7 +320,8 @@ const shouldDeferToNativeEditing = (event: KeyboardEvent): boolean => {
   if (isUnmodifiedStandardEditKey(event)) {
     return true;
   }
-  return isInputElement(event.target) && !hasAnyShortcutModifier(event);
+  const isTypedCharacter = event.key.length === 1 && !event.ctrlKey && !event.metaKey;
+  return isInputElement(event.target) && (isTypedCharacter || !hasAnyShortcutModifier(event));
 };
 
 const findHighestPriorityShortcut = (
@@ -375,6 +376,33 @@ const routeTargetSurfaceKey = (
   return dispatchSurfaceHandler(event, targetSurface?.onKeyDown);
 };
 
+// Control+Tab belongs to app regions even inside editors. Plain Tab first
+// belongs to local surfaces, then falls back to the containing app region.
+const routeTabKey = (
+  event: KeyboardEvent,
+  context: KeyboardEventRoutingContext,
+  blocked: boolean
+) => {
+  if (event.key !== 'Tab' || event.defaultPrevented || event.altKey || event.metaKey) {
+    return;
+  }
+  if (event.ctrlKey) {
+    if (blocked) {
+      claimKeyboardEvent(event, true);
+      return;
+    }
+  } else if (dispatchKeyThroughSurfaces(event, context.getSurfaceCandidates(event.target))) {
+    return;
+  }
+  if (blocked) {
+    return;
+  }
+  const shortcut = findHighestPriorityShortcut(event, context.shortcuts);
+  if (shortcut) {
+    dispatchShortcut(event, shortcut);
+  }
+};
+
 const routeKeyboardEvent = (event: KeyboardEvent, context: KeyboardEventRoutingContext) => {
   if (event.key === 'Tab') {
     return;
@@ -412,6 +440,7 @@ export function KeyboardProvider({ children, disabled = false }: Readonly<Keyboa
 }
 
 const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disabled = false }) => {
+  useKeyboardFocusIndicator();
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(new Map());
   const [isEnabled, setIsEnabled] = useState(!disabled);
   const shortcutIdCounter = useRef(0);
@@ -456,7 +485,8 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       modifiers: isMacPlatform() ? { meta: true } : { ctrl: true },
       handler: () => Boolean(focusRegisteredSearchShortcutTarget()),
       description: 'Focus active search',
-      category: 'Global',
+      category: 'Search',
+      helpOrder: 20,
       priority: 1000,
     });
     return () => unregisterShortcut(id);
@@ -632,9 +662,11 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     }
 
     const handleCapturedTabKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Tab') {
-        dispatchKeyThroughSurfaces(event, getSurfaceCandidates(event.target));
-      }
+      routeTabKey(
+        event,
+        { getTargetSurface, getSurfaceCandidates, shortcuts },
+        hasActiveBlockingSurface()
+      );
     };
 
     const handleKeyDown = (event: KeyboardEvent) =>
@@ -646,7 +678,14 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       document.removeEventListener('keydown', handleCapturedTabKeyDown, true);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [disabled, getSurfaceCandidates, getTargetSurface, isEnabled, shortcuts]);
+  }, [
+    disabled,
+    getSurfaceCandidates,
+    getTargetSurface,
+    hasActiveBlockingSurface,
+    isEnabled,
+    shortcuts,
+  ]);
 
   // Handle menu events from Wails
   useEffect(() => {
@@ -698,32 +737,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
   }, [applyNativeCutFallback, applyNativePasteFallback, dispatchNativeAction]);
 
   // Get available shortcuts for current context
-  const getAvailableShortcuts = useCallback((): ShortcutGroup[] => {
-    const groups = new Map<
-      string,
-      Array<{ key: string; modifiers?: ShortcutModifiers; description: string }>
-    >();
-
-    for (const shortcutList of shortcuts.values()) {
-      for (const shortcut of shortcutList) {
-        if (shortcut.enabled !== false || shortcut.discoverable) {
-          const category = shortcut.category || 'General';
-          const existing = groups.get(category) || [];
-          existing.push({
-            key: shortcut.key,
-            modifiers: shortcut.modifiers,
-            description: shortcut.description,
-          });
-          groups.set(category, existing);
-        }
-      }
-    }
-
-    return Array.from(groups.entries()).map(([category, categoryShortcuts]) => ({
-      category,
-      shortcuts: categoryShortcuts.sort((a, b) => a.key.localeCompare(b.key)),
-    }));
-  }, [shortcuts]);
+  const getAvailableShortcuts = useCallback(() => buildShortcutHelpGroups(shortcuts), [shortcuts]);
 
   // Check if a shortcut is available
   const isShortcutAvailable = useCallback(

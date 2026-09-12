@@ -253,11 +253,11 @@ describe('CommandPalette component behaviour', () => {
   const openPalette = () => emitWailsEvent('open-command-palette');
 
   const queryItems = () =>
-    Array.from(container.querySelectorAll<HTMLDivElement>('.command-palette-item'));
+    Array.from(document.querySelectorAll<HTMLDivElement>('.command-palette-item'));
 
   const queryInput = () =>
     requireValue(
-      container.querySelector<HTMLInputElement>('.command-palette-input'),
+      document.querySelector<HTMLInputElement>('.command-palette-input'),
       'expected the command-palette input'
     );
 
@@ -302,21 +302,21 @@ describe('CommandPalette component behaviour', () => {
 
   it('opens when the native View menu emits open-command-palette', async () => {
     await renderPalette([]);
-    expect(container.querySelector('.command-palette')).toBeNull();
+    expect(document.querySelector('.command-palette')).toBeNull();
 
     await emitWailsEvent('open-command-palette');
 
-    expect(container.querySelector('.command-palette')).toBeTruthy();
+    expect(document.querySelector('.command-palette')).toBeTruthy();
   });
 
   it('ignores open-command-palette while it is already open', async () => {
     await renderPalette([]);
     await emitWailsEvent('open-command-palette');
-    expect(container.querySelector('.command-palette')).toBeTruthy();
+    expect(document.querySelector('.command-palette')).toBeTruthy();
 
     // A second emit must not throw or re-open; the guarded open path no-ops.
     await emitWailsEvent('open-command-palette');
-    expect(container.querySelectorAll('.command-palette').length).toBe(1);
+    expect(document.querySelectorAll('.command-palette').length).toBe(1);
   });
 
   it('opens in kubeconfig mode when command-palette:open-kubeconfigs fires', async () => {
@@ -325,14 +325,14 @@ describe('CommandPalette component behaviour', () => {
       { id: 'view-x', label: 'Toggle X', category: 'View', action: vi.fn() },
     ];
     await renderPalette(commands);
-    expect(container.querySelector('.command-palette')).toBeNull();
+    expect(document.querySelector('.command-palette')).toBeNull();
 
     await act(async () => {
       eventBus.emit('command-palette:open-kubeconfigs');
       await Promise.resolve();
     });
 
-    expect(container.querySelector('.command-palette')).not.toBeNull();
+    expect(document.querySelector('.command-palette')).not.toBeNull();
     const labels = queryItems().map((el) => el.textContent ?? '');
     expect(labels.some((label) => label.includes('cluster-a'))).toBe(true);
     expect(labels.some((label) => label.includes('Toggle X'))).toBe(false);
@@ -344,14 +344,14 @@ describe('CommandPalette component behaviour', () => {
       { id: 'view-x', label: 'Toggle X', category: 'View', action: vi.fn() },
     ];
     await renderPalette(commands);
-    expect(container.querySelector('.command-palette')).toBeNull();
+    expect(document.querySelector('.command-palette')).toBeNull();
 
     await act(async () => {
       eventBus.emit('command-palette:open-namespaces');
       await Promise.resolve();
     });
 
-    expect(container.querySelector('.command-palette')).not.toBeNull();
+    expect(document.querySelector('.command-palette')).not.toBeNull();
     const input = queryInput();
     expect(input.placeholder).toBe('Select a namespace...');
     const labels = queryItems().map((el) => el.textContent ?? '');
@@ -365,7 +365,7 @@ describe('CommandPalette component behaviour', () => {
       { id: 'view-x', label: 'Toggle X', category: 'View', action: vi.fn() },
     ];
     await renderPalette(commands);
-    expect(container.querySelector('.command-palette')).toBeNull();
+    expect(document.querySelector('.command-palette')).toBeNull();
 
     const shortcut = findGlobalShortcut(defaultGlobalModifiers);
     expect(shortcut).toBeTruthy();
@@ -374,7 +374,7 @@ describe('CommandPalette component behaviour', () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector('.command-palette')).not.toBeNull();
+    expect(document.querySelector('.command-palette')).not.toBeNull();
     const input = queryInput();
     expect(input.placeholder).toBe('Select a namespace...');
     const labels = queryItems().map((el) => el.textContent ?? '');
@@ -384,7 +384,7 @@ describe('CommandPalette component behaviour', () => {
     // Opened straight into the mode, so the first Escape closes the palette
     // instead of backing out to the general palette.
     await triggerShortcut('Escape');
-    expect(container.querySelector('.command-palette')).toBeNull();
+    expect(document.querySelector('.command-palette')).toBeNull();
   });
 
   it('leaves namespace mode fully when kubeconfig mode opens over it', async () => {
@@ -415,7 +415,7 @@ describe('CommandPalette component behaviour', () => {
 
     expect(input.placeholder).toBe('Select a kubeconfig...');
     const headers = Array.from(
-      container.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
+      document.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
     ).map((el) => el.textContent);
     expect(headers).toEqual(['Kubeconfigs']);
   });
@@ -443,7 +443,7 @@ describe('CommandPalette component behaviour', () => {
 
     expect(input.placeholder).toBe('Select a namespace...');
     const headers = Array.from(
-      container.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
+      document.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
     ).map((el) => el.textContent);
     expect(headers).toEqual(['Namespaces']);
   });
@@ -454,14 +454,14 @@ describe('CommandPalette component behaviour', () => {
       { id: 'kc', label: 'cluster-x', category: 'Kubeconfigs', action: vi.fn() },
     ];
     await renderPalette(commands);
-    expect(container.querySelector('.command-palette')).toBeNull();
+    expect(document.querySelector('.command-palette')).toBeNull();
 
     await act(async () => {
       eventBus.emit('command-palette:open');
       await Promise.resolve();
     });
 
-    expect(container.querySelector('.command-palette')).not.toBeNull();
+    expect(document.querySelector('.command-palette')).not.toBeNull();
     // Normal mode shows all categories (not filtered to Kubeconfigs).
     const labels = queryItems().map((el) => el.textContent ?? '');
     expect(labels.some((label) => label.includes('Alpha'))).toBe(true);
@@ -489,11 +489,11 @@ describe('CommandPalette component behaviour', () => {
     await renderPalette(commands);
     await openPalette();
 
-    expect(container.querySelector('.command-palette')).not.toBeNull();
+    expect(document.querySelector('.command-palette')).not.toBeNull();
     expect(queryItems()).toHaveLength(2);
     expect(queryItems()[0].classList.contains('selected')).toBe(true);
 
-    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
+    const input = document.querySelector<HTMLInputElement>('.command-palette-input');
     expect(input).not.toBeNull();
 
     await triggerShortcut('ArrowDown');
@@ -501,7 +501,7 @@ describe('CommandPalette component behaviour', () => {
 
     await triggerShortcut('Enter');
 
-    expect(container.querySelector('.command-palette')).toBeNull();
+    expect(document.querySelector('.command-palette')).toBeNull();
 
     await vi.advanceTimersByTimeAsync(150);
     expect(secondAction).toHaveBeenCalledTimes(1);
@@ -519,7 +519,7 @@ describe('CommandPalette component behaviour', () => {
 
     const input = queryInput();
     const listbox = requireValue(
-      container.querySelector<HTMLElement>('[role="listbox"]'),
+      document.querySelector<HTMLElement>('[role="listbox"]'),
       'expected command-palette listbox'
     );
     const options = Array.from(listbox.querySelectorAll<HTMLElement>('[role="option"]'));
@@ -551,7 +551,7 @@ describe('CommandPalette component behaviour', () => {
     await openPalette();
 
     const items = queryItems();
-    const palette = container.querySelector('.command-palette');
+    const palette = document.querySelector('.command-palette');
     expect(items).toHaveLength(3);
     expect(palette?.classList.contains('mouse-selection-armed')).toBe(false);
     expect(items[0].classList.contains('selected')).toBe(true);
@@ -607,19 +607,19 @@ describe('CommandPalette component behaviour', () => {
 
     expect(input.placeholder).toBe('Select a namespace...');
     const headers = Array.from(
-      container.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
+      document.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
     ).map((el) => el.textContent);
     expect(headers).toEqual(['Namespaces']);
 
     const labels = Array.from(
-      container.querySelectorAll<HTMLDivElement>('.command-palette-item-label')
+      document.querySelectorAll<HTMLDivElement>('.command-palette-item-label')
     ).map((el) => el.textContent);
     expect(labels).toEqual([namespaceCommand.label]);
 
     await triggerShortcut('Escape');
 
     expect(input.placeholder).toBe('Type a command or search...');
-    expect(container.querySelector('.command-palette')).not.toBeNull();
+    expect(document.querySelector('.command-palette')).not.toBeNull();
   });
 
   it('closes when Escape is pressed outside selection modes', async () => {
@@ -637,7 +637,7 @@ describe('CommandPalette component behaviour', () => {
 
     await triggerShortcut('Escape');
 
-    expect(container.querySelector('.command-palette')).toBeNull();
+    expect(document.querySelector('.command-palette')).toBeNull();
   });
 
   it('enters kubeconfig selection mode when prompted', async () => {
@@ -667,17 +667,17 @@ describe('CommandPalette component behaviour', () => {
 
     expect(input.placeholder).toBe('Select a kubeconfig...');
     const headers = Array.from(
-      container.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
+      document.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
     ).map((el) => el.textContent);
     expect(headers).toEqual(['Kubeconfigs']);
 
     const labels = Array.from(
-      container.querySelectorAll<HTMLDivElement>('.command-palette-item-label')
+      document.querySelectorAll<HTMLDivElement>('.command-palette-item-label')
     ).map((el) => el.textContent);
     expect(labels).toEqual([kubeconfigCommand.label]);
 
     await triggerShortcut('Escape');
-    expect(container.querySelector('.command-palette')).not.toBeNull();
+    expect(document.querySelector('.command-palette')).not.toBeNull();
   });
 
   it('debounces catalog searches and renders truncated results', async () => {
@@ -730,14 +730,14 @@ describe('CommandPalette component behaviour', () => {
     });
 
     const header = Array.from(
-      container.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
+      document.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
     ).find((el) => el.textContent?.includes('Catalog Results'));
     expect(header?.textContent).toContain('Catalog Results (1 / 4)');
 
-    const note = container.querySelector<HTMLDivElement>('.command-palette-note');
+    const note = document.querySelector<HTMLDivElement>('.command-palette-note');
     expect(note?.textContent).toContain('Showing first 1 of 4 results');
 
-    const catalogLabel = container.querySelector<HTMLDivElement>(
+    const catalogLabel = document.querySelector<HTMLDivElement>(
       '.command-palette-item-label.catalog'
     );
     expect(catalogLabel?.textContent).toContain('metrics/metrics-pod');
@@ -746,7 +746,7 @@ describe('CommandPalette component behaviour', () => {
       catalogLabel?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(container.querySelector('.command-palette')).toBeNull();
+    expect(document.querySelector('.command-palette')).toBeNull();
 
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 150));
@@ -768,7 +768,7 @@ describe('CommandPalette component behaviour', () => {
     await renderPalette([]);
     await openPalette();
 
-    const emptyState = container.querySelector<HTMLDivElement>('.command-palette-empty');
+    const emptyState = document.querySelector<HTMLDivElement>('.command-palette-empty');
     expect(emptyState?.textContent).toBe('No commands available');
   });
 
@@ -778,7 +778,7 @@ describe('CommandPalette component behaviour', () => {
     ]);
     await openPalette();
 
-    const paletteBefore = container.querySelector('.command-palette');
+    const paletteBefore = document.querySelector('.command-palette');
     expect(paletteBefore).not.toBeNull();
 
     await act(async () => {
@@ -786,15 +786,15 @@ describe('CommandPalette component behaviour', () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector('.command-palette')).toBeNull();
+    expect(document.querySelector('.command-palette')).toBeNull();
 
     await openPalette();
 
-    expect(container.querySelector('.command-palette')).not.toBeNull();
+    expect(document.querySelector('.command-palette')).not.toBeNull();
 
     await openPalette();
 
-    expect(container.querySelector('.command-palette')).not.toBeNull();
+    expect(document.querySelector('.command-palette')).not.toBeNull();
   });
 
   it('supports page navigation shortcuts and hides cursor until mouse movement', async () => {
@@ -808,7 +808,7 @@ describe('CommandPalette component behaviour', () => {
     await renderPalette(commands);
     await openPalette();
 
-    const results = container.querySelector('.command-palette-results') as HTMLElement;
+    const results = document.querySelector('.command-palette-results') as HTMLElement;
     const originalClientHeight = Object.getOwnPropertyDescriptor(results, 'clientHeight');
     Object.defineProperty(results, 'clientHeight', {
       configurable: true,
@@ -832,7 +832,7 @@ describe('CommandPalette component behaviour', () => {
     });
 
     expect(results.clientHeight).toBe(120);
-    const firstItem = container.querySelector('.command-palette-item') as HTMLElement;
+    const firstItem = document.querySelector('.command-palette-item') as HTMLElement;
     expect(firstItem.offsetHeight).toBe(30);
 
     await triggerShortcut('PageDown');
@@ -840,7 +840,7 @@ describe('CommandPalette component behaviour', () => {
       item.classList.contains('selected')
     );
     expect(afterPageDownIndex).toBeGreaterThan(0);
-    expect(container.querySelector('.command-palette')?.classList.contains('hide-cursor')).toBe(
+    expect(document.querySelector('.command-palette')?.classList.contains('hide-cursor')).toBe(
       true
     );
 
@@ -856,12 +856,12 @@ describe('CommandPalette component behaviour', () => {
     await triggerShortcut('Home');
     expect(queryItems().findIndex((item) => item.classList.contains('selected'))).toBe(0);
 
-    const paletteContainer = container.querySelector('.command-palette') as HTMLElement;
+    const paletteContainer = document.querySelector('.command-palette') as HTMLElement;
     await act(async () => {
       paletteContainer.dispatchEvent(new Event('pointermove', { bubbles: true }));
       await Promise.resolve();
     });
-    expect(container.querySelector('.command-palette')?.classList.contains('hide-cursor')).toBe(
+    expect(document.querySelector('.command-palette')?.classList.contains('hide-cursor')).toBe(
       false
     );
 
@@ -915,8 +915,8 @@ describe('CommandPalette component behaviour', () => {
       'Original Error:',
       expect.objectContaining({ message: 'network down' })
     );
-    expect(container.querySelector('.command-palette-loading')).toBeNull();
-    expect(container.querySelector('.command-palette-note')).toBeNull();
+    expect(document.querySelector('.command-palette-loading')).toBeNull();
+    expect(document.querySelector('.command-palette-note')).toBeNull();
 
     errorSpy.mockRestore();
   });
@@ -929,7 +929,7 @@ describe('CommandPalette component behaviour', () => {
     await renderPalette(commands);
     await openPalette();
 
-    const input = container.querySelector('.command-palette-input') as HTMLInputElement;
+    const input = document.querySelector('.command-palette-input') as HTMLInputElement;
     expect(input).not.toBeNull();
     expect(document.activeElement).toBe(input);
   });

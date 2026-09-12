@@ -387,20 +387,17 @@ describe('useSidebarKeyboardControls', () => {
     cleanup();
   });
 
-  it('tabs from the last header control into the current sidebar selection', async () => {
-    const { container, cleanup } = renderHarness({
+  it('leaves header Tab navigation to the owning region', async () => {
+    const { cleanup } = renderHarness({
       selectionTarget: { kind: 'overview' },
     });
     const headerButton = document.createElement('button');
-    headerButton.setAttribute('data-app-header-last-focusable', 'true');
     document.body.appendChild(headerButton);
     headerButton.focus();
 
     await dispatchTab(headerButton);
 
-    expect(document.activeElement).toBe(
-      container.querySelector('[data-sidebar-target-kind="overview"]')
-    );
+    expect(document.activeElement).toBe(headerButton);
 
     headerButton.remove();
     cleanup();
@@ -414,7 +411,6 @@ describe('useSidebarKeyboardControls', () => {
     const headerButton = document.createElement('button');
     headerButton.type = 'button';
     headerButton.textContent = 'Settings';
-    headerButton.setAttribute('data-app-header-last-focusable', 'true');
     document.body.appendChild(headerButton);
     headerButton.focus();
 
@@ -426,12 +422,11 @@ describe('useSidebarKeyboardControls', () => {
     cleanup();
   });
 
-  it('shift-tabs from the sidebar back to the last header control', async () => {
+  it('leaves sidebar Shift+Tab navigation to the owning region', async () => {
     const { container, cleanup } = renderHarness({
       selectionTarget: { kind: 'overview' },
     });
     const headerButton = document.createElement('button');
-    headerButton.setAttribute('data-app-header-last-focusable', 'true');
     document.body.appendChild(headerButton);
     const overview = container.querySelector(
       '[data-sidebar-target-kind="overview"]'
@@ -440,20 +435,17 @@ describe('useSidebarKeyboardControls', () => {
 
     await dispatchTab(overview, true);
 
-    expect((document.activeElement as HTMLElement | null)?.dataset.appHeaderLastFocusable).toBe(
-      'true'
-    );
+    expect(document.activeElement).toBe(overview);
 
     headerButton.remove();
     cleanup();
   });
 
-  it('shift-tabs from the sidebar back to the active cluster tab before the header', async () => {
+  it('does not jump from the sidebar to a cluster tab on plain Shift+Tab', async () => {
     const { container, cleanup } = renderHarness({
       selectionTarget: { kind: 'overview' },
     });
     const headerButton = document.createElement('button');
-    headerButton.setAttribute('data-app-header-last-focusable', 'true');
     document.body.appendChild(headerButton);
     const clusterTabsWrapper = document.createElement('div');
     clusterTabsWrapper.className = 'cluster-tabs-wrapper';
@@ -469,7 +461,7 @@ describe('useSidebarKeyboardControls', () => {
 
     await dispatchTab(overview, true);
 
-    expect(document.activeElement).toBe(activeClusterTab);
+    expect(document.activeElement).toBe(overview);
 
     clusterTabsWrapper.remove();
     headerButton.remove();

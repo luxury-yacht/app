@@ -13,11 +13,13 @@ export function ClusterPanelsMenu({
   position,
   onClose,
   onCloseCluster,
+  orderActions = [],
 }: Readonly<{
   clusterId: string;
   position: { x: number; y: number };
   onClose: () => void;
   onCloseCluster: () => void;
+  orderActions?: ContextMenuItem[];
 }>) {
   const windowName = getWindowIdentity();
   const { selectedClusterIds } = useKubeconfig();
@@ -58,6 +60,7 @@ export function ClusterPanelsMenu({
     },
     { divider: true },
     { label: 'Close', icon: <CloseIcon width={16} height={16} />, onClick: onCloseCluster },
+    ...(orderActions.length ? [{ divider: true }, ...orderActions] : []),
   ];
   return (
     <PanelLifecycleClusterSurface clusterId={clusterId}>

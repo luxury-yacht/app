@@ -88,20 +88,24 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   );
 
   return (
-    <Tooltip
-      content={tooltipContent}
-      placement="bottom"
-      showArrow={false}
-      hoverDelay={150}
-      className={tooltipClassName ? `status-popover ${tooltipClassName}` : 'status-popover'}
-      zIndex="var(--z-index-tooltip, 3200)"
-      closeSignal={closeSignal}
-      interactive
-    >
-      <div className="status-indicator" aria-label={ariaLabel} role="status">
-        <div className="status-indicator-dot" data-status={status} />
-      </div>
-    </Tooltip>
+    <>
+      <output className="sr-only">{ariaLabel}</output>
+      <Tooltip
+        content={tooltipContent}
+        placement="bottom"
+        showArrow={false}
+        hoverDelay={150}
+        className={tooltipClassName ? `status-popover ${tooltipClassName}` : 'status-popover'}
+        zIndex="var(--z-index-tooltip, 3200)"
+        closeSignal={closeSignal}
+        interactive
+        triggerLabel={ariaLabel}
+      >
+        <div className="status-indicator" aria-hidden="true">
+          <div className="status-indicator-dot" data-status={status} />
+        </div>
+      </Tooltip>
+    </>
   );
 };
 

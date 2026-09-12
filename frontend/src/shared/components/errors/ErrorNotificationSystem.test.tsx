@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ErrorNotification } from '@contexts/ErrorContext';
+import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { ErrorCategory, ErrorSeverity, errorHandler } from '@utils/errorHandler';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -72,6 +73,21 @@ describe('ErrorNotificationSystem copy button', () => {
     container.remove();
     vi.restoreAllMocks();
     errorsRef.current = [];
+  });
+
+  it('offers only the visible notification controls to keyboard navigation', async () => {
+    errorsRef.current = [makeError({ id: 'older' }), makeError({ id: 'newer' })];
+    await act(async () => {
+      root.render(<ErrorNotificationSystem />);
+    });
+    const region = container.querySelector<HTMLElement>('[data-app-region="notifications"]');
+    expect(region).not.toBeNull();
+    expect(
+      getTabbableElements(region).some((control) => control.closest('.error-notification--stacked'))
+    ).toBe(false);
+    expect(
+      getTabbableElements(region).some((control) => control.closest('.error-notification--active'))
+    ).toBe(true);
   });
 
   it('copies the formatted error text to the clipboard', async () => {

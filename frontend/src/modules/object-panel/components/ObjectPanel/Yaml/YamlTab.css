@@ -54,9 +54,7 @@
 }
 
 .yaml-search-controls .find-controls .find-input:focus {
-  outline: none;
   border-color: var(--color-accent);
-  box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
 .yaml-search-controls .find-controls .find-input::placeholder {

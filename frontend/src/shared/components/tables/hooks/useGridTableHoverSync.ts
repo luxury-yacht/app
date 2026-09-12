@@ -54,6 +54,7 @@ export function useGridTableHoverSync({
 
   const hoverRowRef = useRef<HTMLDivElement | null>(null);
   const headerSyncFrameRef = useRef<number | null>(null);
+  const syncedHeaderOffsetRef = useRef(0);
 
   const isHoverSuppressed = useCallback(() => {
     if (typeof document === 'undefined') {
@@ -158,12 +159,33 @@ export function useGridTableHoverSync({
       return;
     }
     const wrapper = wrapperRef.current;
-    const headerInner = headerInnerRef.current;
-    if (!wrapper || !headerInner) {
+    const header = headerInnerRef.current?.parentElement;
+    if (!wrapper || !header) {
       return;
     }
-    const offset = wrapper.scrollLeft;
-    headerInner.style.transform = offset ? `translateX(${-offset}px)` : 'translateX(0px)';
+    header.scrollLeft = wrapper.scrollLeft;
+    syncedHeaderOffsetRef.current = header.scrollLeft;
+  }, [hideHeader, headerInnerRef, wrapperRef]);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    const header = headerInnerRef.current?.parentElement;
+    if (hideHeader || !wrapper || !header) {
+      return;
+    }
+    const handleHeaderScroll = () => {
+      // Ignore the delayed event from our own sync if the body has moved again.
+      if (header.scrollLeft === syncedHeaderOffsetRef.current) {
+        return;
+      }
+      // Focus can scroll the header independently. Clamp to the rows' extent,
+      // excluding decorative header overflow, and move both surfaces together.
+      wrapper.scrollLeft = header.scrollLeft;
+      header.scrollLeft = wrapper.scrollLeft;
+      syncedHeaderOffsetRef.current = header.scrollLeft;
+    };
+    header.addEventListener('scroll', handleHeaderScroll, { passive: true });
+    return () => header.removeEventListener('scroll', handleHeaderScroll);
   }, [hideHeader, headerInnerRef, wrapperRef]);
 
   const flushHeaderSync = useCallback(() => {

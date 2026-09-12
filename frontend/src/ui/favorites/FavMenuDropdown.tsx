@@ -44,6 +44,7 @@ function TypeIcon({ clusterSelection }: Readonly<{ clusterSelection: string }>) 
 const FavMenuDropdown: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const { favorites, deleteFavorite, reorderFavorites, setPendingFavorite } = useFavorites();
   const kubeconfigCtx = useKubeconfig();
@@ -87,6 +88,7 @@ const FavMenuDropdown: React.FC = () => {
     active: isOpen,
     onEscape: () => {
       closeDropdown();
+      triggerRef.current?.focus();
       return true;
     },
   });
@@ -170,6 +172,7 @@ const FavMenuDropdown: React.FC = () => {
       <button
         type="button"
         className="settings-button"
+        ref={triggerRef}
         onClick={toggleOpen}
         onKeyDown={handleTriggerKeyDown}
         title="Favorites"

@@ -23,7 +23,7 @@ interface UseLogKeyboardShortcutsParams {
   handleTogglePreviousContainerLogs: () => void;
   handleCopyContainerLogs: () => void;
   filterInputRef: RefObject<HTMLInputElement | null>;
-  logsContentRef: RefObject<HTMLDivElement | null>;
+  logsContentRef: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -57,7 +57,8 @@ export function useLogKeyboardShortcuts({
       return true;
     }, [isActive, dispatch]),
     description: 'Toggle auto-refresh',
-    category: 'Logs Tab',
+    category: 'Logs',
+    helpOrder: 10,
     enabled: isActive,
     priority: 20,
   });
@@ -76,7 +77,8 @@ export function useLogKeyboardShortcuts({
       return true;
     }, [isActive, showTimestamps, dispatch]),
     description: 'Toggle API timestamps',
-    category: 'Logs Tab',
+    category: 'Logs',
+    helpOrder: 30,
     enabled: isActive,
     priority: 20,
   });
@@ -92,7 +94,8 @@ export function useLogKeyboardShortcuts({
       return true;
     }, [handleTogglePreviousContainerLogs, isActive, supportsPreviousContainerLogs]),
     description: 'Toggle previous logs',
-    category: 'Logs Tab',
+    category: 'Logs',
+    helpOrder: 40,
     enabled: isActive && supportsPreviousContainerLogs,
     priority: 20,
   });
@@ -107,7 +110,8 @@ export function useLogKeyboardShortcuts({
       return true;
     }, [isActive, dispatch]),
     description: 'Toggle match highlighting',
-    category: 'Logs Tab',
+    category: 'Logs',
+    helpOrder: 50,
     enabled: isActive,
     priority: 20,
   });
@@ -122,7 +126,8 @@ export function useLogKeyboardShortcuts({
       return true;
     }, [isActive, dispatch]),
     description: 'Toggle inverse filtering',
-    category: 'Logs Tab',
+    category: 'Logs',
+    helpOrder: 51,
     enabled: isActive,
     priority: 20,
   });
@@ -137,7 +142,8 @@ export function useLogKeyboardShortcuts({
       return true;
     }, [isActive, dispatch]),
     description: 'Toggle regex filtering',
-    category: 'Logs Tab',
+    category: 'Logs',
+    helpOrder: 52,
     enabled: isActive,
     priority: 20,
   });
@@ -152,7 +158,8 @@ export function useLogKeyboardShortcuts({
       return true;
     }, [dispatch, isActive, regexMatches]),
     description: 'Toggle case-sensitive matching',
-    category: 'Logs Tab',
+    category: 'Logs',
+    helpOrder: 53,
     enabled: isActive && !regexMatches,
     priority: 20,
   });
@@ -168,7 +175,8 @@ export function useLogKeyboardShortcuts({
       return true;
     }, [isActive, canParseContainerLogs, dispatch]),
     description: 'Toggle Parse/Raw mode',
-    category: 'Logs Tab',
+    category: 'Logs',
+    helpOrder: 60,
     enabled: isActive && canParseContainerLogs,
     priority: 20,
   });
@@ -183,7 +191,8 @@ export function useLogKeyboardShortcuts({
       return true;
     }, [dispatch, hasAnsiLogEntries, isActive, isParsedView]),
     description: 'Toggle ANSI colors',
-    category: 'Logs Tab',
+    category: 'Logs',
+    helpOrder: 62,
     enabled: isActive && !isParsedView && hasAnsiLogEntries,
     priority: 20,
   });
@@ -198,8 +207,9 @@ export function useLogKeyboardShortcuts({
       handleCopyContainerLogs();
       return true;
     }, [handleCopyContainerLogs, hasCopyableContent, isActive]),
-    description: 'Copy logs to clipboard',
-    category: 'Logs Tab',
+    description: 'Copy container logs to clipboard',
+    category: 'Logs',
+    helpOrder: 70,
     enabled: isActive && hasCopyableContent,
     priority: 20,
   });
@@ -217,7 +227,8 @@ export function useLogKeyboardShortcuts({
       return true;
     }, [isActive, canParseContainerLogs, displayMode, dispatch]),
     description: 'Toggle pretty JSON',
-    category: 'Logs Tab',
+    category: 'Logs',
+    helpOrder: 61,
     enabled: isActive && canParseContainerLogs,
     priority: 20,
   });
@@ -233,7 +244,8 @@ export function useLogKeyboardShortcuts({
       return true;
     }, [isActive, isParsedView, dispatch]),
     description: 'Toggle text wrap',
-    category: 'Logs Tab',
+    category: 'Logs',
+    helpOrder: 63,
     enabled: isActive && !isParsedView,
     priority: 20,
   });
@@ -268,8 +280,9 @@ export function useLogKeyboardShortcuts({
       container.scrollTo({ top: 0, behavior: 'auto' });
       return true;
     }, [isActive, getScrollContainer]),
-    description: 'Scroll to top',
-    category: 'Logs Tab',
+    description: 'Scroll container logs to top',
+    category: 'Logs',
+    helpOrder: 20,
     enabled: isActive,
     priority: 500,
   });
@@ -289,8 +302,9 @@ export function useLogKeyboardShortcuts({
       container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
       return true;
     }, [isActive, getScrollContainer]),
-    description: 'Scroll to bottom',
-    category: 'Logs Tab',
+    description: 'Scroll container logs to bottom',
+    category: 'Logs',
+    helpOrder: 21,
     enabled: isActive,
     priority: 500,
   });

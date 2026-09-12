@@ -126,13 +126,14 @@ export const useObjectPanelTabs = ({
           return false;
         },
         description: `Switch to ${tab.label} tab`,
+        helpOrder: 50 + index,
         enabled: isOpen,
       })),
     [availableTabs, isOpen, setActiveTab]
   );
 
   useShortcuts(tabShortcuts, {
-    category: 'Object Panel',
+    category: 'Navigation',
     priority: isOpen ? 20 : 0,
   });
 

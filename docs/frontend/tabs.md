@@ -30,6 +30,27 @@ also use the shared drag coordinator.
 - Use stable tab ids and clear labels.
 - Use close callbacks only when the consumer owns close lifecycle.
 - Keep keyboard navigation on the WAI-ARIA manual activation pattern.
+- Arrows move the roving focus stop without activating a tab. Tab then reaches
+  that tab's existing Close button. Focus reveals the Close control.
+- The Close button is a sibling of the element with `role="tab"`, inside a
+  shared visual shell. This keeps their names and roles separate in accessibility
+  trees. Consumers that enumerate tab controls use the shell as their boundary;
+  the tab element retains its drag markers, geometry and roving focus.
+- The labelled `role="tablist"` element owns only tab selectors through
+  `aria-owns`. Close and overflow buttons remain outside that accessible group.
+  Tabs assigns unique DOM IDs per mounted strip and preserves them on reorder;
+  the ownership list follows the current tab order and excludes removed tabs.
+  This uses [ARIA ownership](https://www.w3.org/TR/wai-aria-1.2/#aria-owns)
+  because the visual DOM interleaves tabs with their Close buttons to preserve
+  layout and keyboard focus order. The `.tab-strip` element remains the visual,
+  scroll and drag boundary. Consumers locating tabs from the labelled tablist
+  must first find its closest `.tab-strip`, then query its tab descendants.
+- ClusterTabs and DockableTabBar retain their right-click context menus, which
+  offer usable Move tab left/right commands with directional icons at the bottom.
+  Unavailable directions and empty reorder sections are omitted.
+  Ordering a tab does not activate it. The synthetic Global tab is not reordered.
+- If a focused tab control disappears, focus an available remaining tab. Close
+  a menu whose owning tab disappears instead of reviving it on reopen.
 - Use shared overflow behavior instead of custom scroll controls.
 - Do not override reserved ARIA, focus, or keyboard props through escape-hatch
   props.

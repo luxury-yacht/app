@@ -10,6 +10,9 @@
   /* Borders */
   --border-width: 1px;
 
+  /* System focus indicator in forced-color mode. */
+  --focus-system-outline-width: 2px;
+
   /* Motion */
   --transition-fast: 0.2s ease;
   --transition-normal: 0.3s ease;

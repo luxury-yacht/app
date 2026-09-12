@@ -578,11 +578,7 @@ export function useGridTableController<T>({
     filtersContainerRef,
     filterFocusIndexRef,
     wrapperRef,
-    focusRef: gridRef,
-    tableDataLength: tableData.length,
-    focusedRowKey,
     suppressFocusedRowHighlight,
-    jumpToIndex,
   });
 
   const selectFocusedRow = useCallback(() => {

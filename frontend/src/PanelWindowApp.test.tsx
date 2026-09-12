@@ -115,6 +115,10 @@ vi.mock('@/core/panel-windows/panelLifecycleGuards', () => ({
     firstBlocker: mocks.firstBlocker,
   }),
 }));
+vi.mock('@ui/layout/AppRegionNavigation', () => ({
+  AppRegionNavigation: () => <div data-testid="app-region-navigation" />,
+}));
+
 vi.mock('@/ui/shortcuts/components/PanelWindowShortcuts', () => ({
   PanelWindowShortcuts: (props: Record<string, unknown>) => {
     mocks.shortcutsProps = props;

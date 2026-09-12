@@ -95,7 +95,9 @@ export function useGridTableFocusNavigation<T>({
       setIsFocusedRowHighlightSuppressed(false);
 
       if (shouldSuppress) {
-        setFocusedRowKey(null);
+        const row = (event.target as HTMLElement).closest<HTMLElement>('.gridtable-row');
+        setFocusedRowKey(row?.dataset.rowKey ?? null);
+        setIsFocusedRowHighlightSuppressed(true);
         return;
       }
 

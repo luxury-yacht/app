@@ -4,10 +4,10 @@ export type ListboxOptionButtonProps = ComponentPropsWithRef<'button'> & {
   selected: boolean;
 };
 
-const listboxOptionAttributes = (selected: boolean) => ({
+const listboxOptionAttributes = (selected: boolean, tabIndex: number) => ({
   'aria-selected': selected,
   role: 'option' as const,
-  tabIndex: -1,
+  tabIndex,
 });
 
 /**
@@ -17,8 +17,9 @@ const listboxOptionAttributes = (selected: boolean) => ({
 export const ListboxOptionButton = ({
   selected,
   type = 'button',
+  tabIndex = -1,
   ref,
   ...props
 }: ListboxOptionButtonProps) => (
-  <button ref={ref} type={type} {...props} {...listboxOptionAttributes(selected)} />
+  <button ref={ref} type={type} {...props} {...listboxOptionAttributes(selected, tabIndex)} />
 );

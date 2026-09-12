@@ -15,7 +15,7 @@
   --color-border: var(--color-base-200);
   --color-accent: var(--color-accent-light-600);
   --color-accent-hover: var(--color-accent-light-500);
-  --color-accent-bg: rgba(50, 108, 229, 0.1);
+  --color-accent-bg: rgba(50, 108, 229, 0.3);
   --color-primary: var(--color-accent-light-600);
   --color-primary-hover: var(--color-accent-light-500);
 

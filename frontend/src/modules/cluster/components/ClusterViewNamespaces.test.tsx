@@ -297,6 +297,12 @@ describe('ClusterViewNamespaces', () => {
       throw new Error('expected warning events cell element');
     }
     expect(warningCell.props.className).toBe('status-text warning');
+    const quotaCell = columns.find(({ key }) => key === 'quotaPressure')?.render?.(rows[0]);
+    if (!isValidElement<{ className?: string }>(quotaCell)) {
+      throw new Error('expected quota pressure cell element');
+    }
+    expect(renderedText(quotaCell)).toBe('92%');
+    expect(quotaCell.props.className).toBe('status-text warning');
 
     const zeroSignalRow = {
       ...rows[0],
@@ -357,6 +363,8 @@ describe('ClusterViewNamespaces', () => {
 
   it('opens the namespace Object Panel from Kind without activating row navigation', async () => {
     const { container, unmount } = await renderView();
+    const columns = mocks.tableProps?.columns as Array<{ key: string; rowAction?: boolean }>;
+    expect(columns.find((column) => column.key === 'kind')?.rowAction).toBe(false);
 
     await act(async () => {
       container.querySelector<HTMLButtonElement>('[data-testid="kind-payments"] button')?.click();

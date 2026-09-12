@@ -49,7 +49,7 @@ const ensureContentElement = () => {
 };
 
 const renderPanel = async (
-  element: React.ReactElement,
+  element: React.ReactNode,
   providerProps: Omit<React.ComponentProps<typeof DockablePanelProvider>, 'children'> = {}
 ) => {
   ensureContentElement();
@@ -333,6 +333,39 @@ describe('DockablePanel docked behaviour', () => {
     await unmount();
   });
 
+  it.each([
+    { ids: ['a'], target: 'a', moves: [] },
+    { ids: ['a', 'b', 'c'], target: 'a', moves: ['Move tab right'] },
+    { ids: ['a', 'b', 'c'], target: 'b', moves: ['Move tab left', 'Move tab right'] },
+    { ids: ['a', 'b', 'c'], target: 'c', moves: ['Move tab left'] },
+  ])(
+    'shows only usable move commands with icons at the bottom for $target in $ids',
+    async ({ ids, target, moves }) => {
+      const unmount = await renderPanel(
+        ids.map((id) => (
+          <DockablePanel key={id} panelId={id} title={id} defaultPosition="right" isOpen>
+            <div>{id}</div>
+          </DockablePanel>
+        ))
+      );
+      const tab = document.querySelector(`[role="tab"][data-panel-id="${target}"]`);
+      expect(tab).not.toBeNull();
+      await act(async () =>
+        tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+      );
+      const items = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+      expect
+        .soft(items.map((item) => item.textContent))
+        .toEqual(['Dock to bottom', 'Float', 'Close', ...moves]);
+      for (const moveItem of items.filter((item) => item.textContent?.startsWith('Move tab '))) {
+        expect.soft(moveItem.querySelector('.context-menu-icon svg')).not.toBeNull();
+        expect.soft(moveItem.getAttribute('aria-disabled')).toBe('false');
+      }
+      expect(document.querySelectorAll('.context-menu-divider')).toHaveLength(moves.length ? 2 : 1);
+      await unmount();
+    }
+  );
+
   it('offers context-aware actions on an inactive tab and docks only that tab', async () => {
     const nativeMove = vi.fn();
     const unmount = await renderPanel(
@@ -357,7 +390,12 @@ describe('DockablePanel docked behaviour', () => {
       )
     );
     const items = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
-    expect(items.map((item) => item.textContent)).toEqual(['Dock to bottom', 'Float', 'Close']);
+    expect(items.map((item) => item.textContent)).toEqual([
+      'Dock to bottom',
+      'Float',
+      'Close',
+      'Move tab right',
+    ]);
     expect(document.querySelector('[aria-selected="true"]')?.getAttribute('data-panel-id')).toBe(
       'panel-menu-b'
     );
@@ -470,7 +508,7 @@ describe('DockablePanel docked behaviour', () => {
     await openMenu();
     expect(
       Array.from(document.querySelectorAll('[role="menuitem"]')).map((item) => item.textContent)
-    ).toEqual(['Dock to right', 'Float', 'Close']);
+    ).toEqual(['Dock to right', 'Float', 'Close', 'Move tab right']);
     await act(async () =>
       Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
         .find((item) => item.textContent === 'Float')
@@ -528,6 +566,7 @@ describe('DockablePanel docked behaviour', () => {
         'Dock to right',
         'Dock to bottom',
         'Close',
+        'Move tab right',
       ]);
       await act(async () =>
         items.find((item) => item.textContent === `Dock to ${target}`)?.click()

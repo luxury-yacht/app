@@ -447,6 +447,53 @@ describe('FavMenuDropdown', () => {
   // 9. Escape closes the dropdown when it is open
   // -----------------------------------------------------------------------
 
+  it('keeps reorder buttons independent of their favorite row activation', async () => {
+    mockFavorites.push(makeFavorite({ id: 'first' }), makeFavorite({ id: 'second' }));
+    await renderWithKeyboard();
+    await clickButton();
+    const up = requireValue(
+      container.querySelectorAll<HTMLElement>('[title="Move up"]')[1],
+      'move up'
+    );
+    const down = requireValue(
+      container.querySelector<HTMLElement>('[title="Move down"]'),
+      'move down'
+    );
+    for (const [button, key] of [
+      [up, 'Enter'],
+      [down, ' '],
+    ] as const) {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      await act(async () => {
+        button.focus();
+        button.dispatchEvent(event);
+      });
+      expect(event.defaultPrevented).toBe(false);
+      await act(async () => button.click());
+    }
+    expect(mockReorderFavorites).toHaveBeenNthCalledWith(1, ['second', 'first']);
+    expect(mockReorderFavorites).toHaveBeenNthCalledWith(2, ['second', 'first']);
+    expect(mockSetPendingFavorite).not.toHaveBeenCalled();
+  });
+
+  it('returns focus from a favorite action to its trigger on Escape', async () => {
+    mockFavorites.push(makeFavorite());
+    await renderWithKeyboard();
+    await clickButton();
+    const action = requireValue(
+      container.querySelector<HTMLElement>('.fav-dropdown-action-btn'),
+      'favorite action'
+    );
+    await act(async () => {
+      action.focus();
+      action.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+    });
+    expect(container.querySelector('.fav-dropdown-panel')).toBeNull();
+    expect(document.activeElement).toBe(container.querySelector('[aria-label="Favorites"]'));
+  });
+
   it('closes the dropdown when Escape is pressed', async () => {
     await renderWithKeyboard();
 

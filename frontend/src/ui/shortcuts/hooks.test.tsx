@@ -20,6 +20,7 @@ type RegisterArgs = {
   handler: (event?: KeyboardEvent) => void;
   description: string;
   category?: string;
+  helpOrder?: number;
   enabled: boolean;
 };
 
@@ -86,6 +87,7 @@ describe('useShortcut hooks', () => {
       description: 'Trigger action',
       priority: 2,
       category: 'test',
+      helpOrder: 30,
     };
 
     const TestComponent: React.FC = () => {
@@ -100,6 +102,7 @@ describe('useShortcut hooks', () => {
     expect(registeredArgs.key).toBe('k');
     expect(registeredArgs.modifiers).toEqual({ ctrl: true, shift: false, alt: false, meta: false });
     expect(registeredArgs.priority).toBe(2);
+    expect(registeredArgs.helpOrder).toBe(30);
     expect(shortcutOptions.handler).toHaveBeenCalled();
 
     await act(async () => {
@@ -169,8 +172,14 @@ describe('useShortcut hooks', () => {
     const unregisterShortcut = vi.fn();
     const mockContext = buildKeyboardContext({ registerShortcut, unregisterShortcut });
 
-    const shortcutA = { key: 'j', handler: vi.fn(), description: 'Next item' };
-    const shortcutB = { key: 'k', handler: vi.fn(), description: 'Previous item', enabled: false };
+    const shortcutA = { key: 'j', handler: vi.fn(), description: 'Next item', helpOrder: 10 };
+    const shortcutB = {
+      key: 'k',
+      handler: vi.fn(),
+      description: 'Previous item',
+      helpOrder: 20,
+      enabled: false,
+    };
     const common = { category: 'navigation' };
 
     const TestComponent: React.FC<{ shortcuts: (typeof shortcutA)[] }> = ({ shortcuts }) => {
@@ -184,10 +193,12 @@ describe('useShortcut hooks', () => {
 
     const firstArgs = registerMock.mock.calls[0][0] as RegisterArgs;
     expect(firstArgs.priority).toBeUndefined();
+    expect(firstArgs.helpOrder).toBe(10);
     expect(firstArgs.enabled).toBe(true);
 
     const secondArgs = registerMock.mock.calls[1][0] as RegisterArgs;
     expect(secondArgs.enabled).toBe(false);
+    expect(secondArgs.helpOrder).toBe(20);
 
     // Trigger handler preservation
     registerMock.mock.calls[0][0].handler(createEvent());

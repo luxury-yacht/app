@@ -13,9 +13,12 @@ import { TabOverflowIcon } from '@shared/components/icons/SharedIcons';
 import {
   type CSSProperties,
   type HTMLAttributes,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useEffect,
+  useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
@@ -66,6 +69,7 @@ const RESERVED_TAB_KEYS = new Set([
   'id',
   'onClick',
   'onKeyDown',
+  'onFocus',
 ]);
 
 const clampScrollLeft = (value: number, maxScrollLeft: number): number =>
@@ -158,78 +162,108 @@ function warnReservedKeys(tabId: string, extraProps: HTMLAttributes<HTMLElement>
   }
 }
 
+const TabControls = ({
+  tab,
+  tabIndex,
+  onFocus,
+}: Readonly<{
+  tab: TabDescriptor;
+  tabIndex: number;
+  onFocus: (event: ReactFocusEvent<HTMLButtonElement>) => void;
+}>) => (
+  <>
+    {!!tab.onClose && (
+      <button
+        type="button"
+        className="tab-item__close"
+        aria-label={tab.closeAriaLabel ?? 'Close'}
+        tabIndex={tabIndex}
+        disabled={tab.disabled}
+        onFocus={onFocus}
+        onClick={(event) => {
+          event.stopPropagation();
+          tab.onClose?.();
+        }}
+      >
+        {tab.closeIcon ?? '×'}
+      </button>
+    )}
+  </>
+);
+
 const TabStripItem = ({
   tab,
+  domId,
   index,
   activeId,
-  hasActiveTab,
-  fallbackFocusIndex,
+  focusStopId,
+  onFocusTab,
   disableRovingTabIndex,
   dropInsertIndex,
   tabRefs,
   onActivate,
   onKeyDown,
-}: {
+}: Readonly<{
   tab: TabDescriptor;
+  domId: string;
   index: number;
   activeId: string | null;
-  hasActiveTab: boolean;
-  fallbackFocusIndex: number;
+  focusStopId: string | undefined;
+  onFocusTab: (id: string, event: ReactFocusEvent<HTMLElement>) => void;
   disableRovingTabIndex: boolean;
   dropInsertIndex: number | null;
   tabRefs: Map<string, HTMLElement>;
   onActivate: (id: string) => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLElement>, index: number) => void;
-}) => {
+}>) => {
   const isActive = tab.id === activeId;
   const isCloseable = Boolean(tab.onClose);
-  const isFocusStop = hasActiveTab ? isActive : index === fallbackFocusIndex;
+  const isFocusStop = tab.id === focusStopId && !tab.disabled;
+  const controlTabIndex = disableRovingTabIndex || !isFocusStop ? -1 : 0;
   warnReservedKeys(tab.id, tab.extraProps);
   return (
     <>
       {dropInsertIndex === index && (
         <div className="tab-strip__drop-indicator" data-testid="tab-strip-drop-indicator" />
       )}
-      {/* A div owns the tab role so the nested close affordance can remain a button. */}
-      <div
-        ref={(element) => {
-          if (element) {
-            tabRefs.set(tab.id, element);
-          } else {
-            tabRefs.delete(tab.id);
-          }
-        }}
-        {...tab.extraProps}
-        role="tab"
-        aria-selected={isActive}
-        aria-controls={tab.ariaControls}
-        aria-disabled={tab.disabled || undefined}
-        aria-label={tab.ariaLabel}
-        tabIndex={disableRovingTabIndex || !isFocusStop ? -1 : 0}
-        className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}`}
-        onClick={() => {
-          if (!tab.disabled) {
-            onActivate(tab.id);
-          }
-        }}
-        onKeyDown={(event) => onKeyDown(event, index)}
-      >
-        {tab.leading}
-        <span className="tab-item__label">{tab.label}</span>
-        {!!tab.onClose && (
-          <button
-            type="button"
-            className="tab-item__close"
-            aria-label={tab.closeAriaLabel ?? 'Close'}
-            tabIndex={-1}
-            onClick={(event) => {
-              event.stopPropagation();
-              tab.onClose?.();
-            }}
-          >
-            {tab.closeIcon ?? '×'}
-          </button>
-        )}
+      <div className="tab-item-shell">
+        <div
+          ref={(element) => {
+            if (element) {
+              tabRefs.set(tab.id, element);
+            } else {
+              tabRefs.delete(tab.id);
+            }
+          }}
+          {...tab.extraProps}
+          id={domId}
+          role="tab"
+          aria-selected={isActive}
+          aria-controls={tab.ariaControls}
+          aria-disabled={tab.disabled || undefined}
+          aria-label={tab.ariaLabel}
+          tabIndex={disableRovingTabIndex || !isFocusStop ? -1 : 0}
+          className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}`}
+          onFocus={(event) => onFocusTab(tab.id, event)}
+          onClick={() => {
+            if (!tab.disabled) {
+              onActivate(tab.id);
+            }
+          }}
+          onKeyDown={(event) => onKeyDown(event, index)}
+        >
+          {tab.leading}
+          <span className="tab-item__label">{tab.label}</span>
+        </div>
+        {/* Tab descendants are presentational in accessibility APIs. Keep its
+          action buttons as siblings while retaining the same visual overlay. */}
+        <div className="tab-item-controls">
+          <TabControls
+            tab={tab}
+            tabIndex={controlTabIndex}
+            onFocus={(event) => onFocusTab(tab.id, event)}
+          />
+        </div>
       </div>
     </>
   );
@@ -245,6 +279,8 @@ export interface TabsProps {
   minTabWidth?: number;
   maxTabWidth?: number;
   overflow?: 'scroll' | 'none';
+  /** Tab/Shift+Tab visits every enabled tab in sequential mode; arrows work in both modes. */
+  tabNavigation?: 'roving' | 'sequential';
   className?: string;
   id?: string;
   /**
@@ -278,11 +314,14 @@ export function Tabs({
   minTabWidth,
   maxTabWidth = 240,
   overflow = 'scroll',
+  tabNavigation = 'roving',
   className: classNameProp,
   id,
   dropInsertIndex = null,
   disableRovingTabIndex = false,
 }: Readonly<TabsProps>) {
+  const stripId = useId();
+  const getTabDOMId = (tabId: string) => `${stripId}-tab-${encodeURIComponent(tabId)}`;
   // Mode-specific default for minTabWidth: 'fit' should size to content
   // (no floor) so short labels like "YAML" don't get bloated; 'equal' needs
   // a floor so tabs sharing a strip don't collapse below readable width.
@@ -291,6 +330,13 @@ export function Tabs({
   const effectiveMinTabWidth = minTabWidth ?? (tabSizing === 'equal' ? 80 : 0);
   const tabRefs = useRef<Map<string, HTMLElement>>(new Map());
   const scrollRef = useRef<HTMLDivElement>(null);
+  const focusedElement = useRef<HTMLElement | null>(null);
+  const rememberFocus = (event: ReactFocusEvent<HTMLElement>) => {
+    focusedElement.current = event.target;
+  };
+  const [focusedTab, setFocusedTab] = useState<{ id: string; activeId: string | null } | null>(
+    null
+  );
   // Single boolean: once the strip overflows, BOTH indicators render. Not
   // tracked per-side. Keeping both mounted at the same time guarantees tab
   // positions are stable across clicks, which makes the scroll math
@@ -427,6 +473,9 @@ export function Tabs({
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>, currentIndex: number) => {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
     switch (event.key) {
       case 'ArrowRight':
         event.preventDefault();
@@ -572,18 +621,32 @@ export function Tabs({
   // tabIndex=0 to the first non-disabled tab so the strip remains
   // reachable via Tab key. Without this fallback the entire strip would
   // be a keyboard dead zone, violating the accessibility contract.
-  const hasActiveTab = activeId !== null && tabs.some((t) => t.id === activeId);
-  const fallbackFocusIndex = hasActiveTab ? -1 : tabs.findIndex((t) => !t.disabled);
+  const preferredFocusId = focusedTab?.activeId === activeId ? focusedTab.id : activeId;
+  const focusStopId =
+    tabs.find((tab) => tab.id === preferredFocusId && !tab.disabled)?.id ??
+    tabs.find((tab) => tab.id === activeId && !tab.disabled)?.id ??
+    tabs.find((tab) => !tab.disabled)?.id;
+
+  useLayoutEffect(() => {
+    if (focusedElement.current?.isConnected !== false || document.activeElement !== document.body) {
+      return;
+    }
+    focusedElement.current = null;
+    if (focusStopId) {
+      tabRefs.current.get(focusStopId)?.focus();
+    }
+  });
 
   return (
-    <div
-      role="tablist"
-      aria-label={ariaLabel}
-      ref={scrollRef}
-      className={rootClassName}
-      style={style}
-      id={id}
-    >
+    <div ref={scrollRef} className={rootClassName} style={style} id={id}>
+      {/* The visual strip interleaves tabs and Close buttons. Own only the
+        selectors so accessibility grouping does not change that focus/layout order. */}
+      <div
+        role="tablist"
+        aria-label={ariaLabel}
+        aria-owns={tabs.map((tab) => getTabDOMId(tab.id)).join(' ') || undefined}
+        className="tab-strip__tablist"
+      />
       {!!showIndicators && (
         <button
           type="button"
@@ -591,6 +654,7 @@ export function Tabs({
           aria-label="Scroll tabs left"
           tabIndex={-1}
           disabled={atStart}
+          onFocus={rememberFocus}
           onClick={() => scrollToNextTab(-1)}
         >
           <TabOverflowIcon direction="left" />
@@ -600,10 +664,14 @@ export function Tabs({
         <TabStripItem
           key={tab.id}
           tab={tab}
+          domId={getTabDOMId(tab.id)}
           index={index}
           activeId={activeId}
-          hasActiveTab={hasActiveTab}
-          fallbackFocusIndex={fallbackFocusIndex}
+          focusStopId={tabNavigation === 'sequential' ? tab.id : focusStopId}
+          onFocusTab={(tabId, event) => {
+            rememberFocus(event);
+            setFocusedTab({ id: tabId, activeId });
+          }}
           disableRovingTabIndex={disableRovingTabIndex}
           dropInsertIndex={dropInsertIndex}
           tabRefs={tabRefs.current}
@@ -621,6 +689,7 @@ export function Tabs({
           aria-label="Scroll tabs right"
           tabIndex={-1}
           disabled={atEnd}
+          onFocus={rememberFocus}
           onClick={() => scrollToNextTab(1)}
         >
           <TabOverflowIcon direction="right" />

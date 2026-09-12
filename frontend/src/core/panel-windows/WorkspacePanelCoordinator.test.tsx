@@ -294,6 +294,16 @@ describe('WorkspacePanelCoordinator', () => {
     vi.useRealTimers();
   });
 
+  it('hands cross-cluster focus to the dockable owner before the panel registers', async () => {
+    await act(async () => {
+      mocks.eventHandlers.workspaceFocus?.({
+        clusterId: 'cluster-1',
+        panelId: 'new-related-panel',
+      } as never);
+    });
+    expect(mocks.focusPanel).toHaveBeenCalledWith('new-related-panel', 'cluster-1');
+  });
+
   it.each([
     { name: 'last cluster tab', clusters: ['cluster-1'], source: 'workspace-1', allowed: true },
     { name: 'empty window', clusters: [], source: 'workspace-1', allowed: false },

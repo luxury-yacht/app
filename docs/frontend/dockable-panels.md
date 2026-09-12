@@ -212,3 +212,14 @@ a visible insertion indicator alone do not establish transfer success. If
 automation delivers only hover, use a manual drop and inspect content retention
 and empty-source closure, following the
 [completion evidence gate](../workflows/completion.md).
+
+### Programmatic keyboard focus
+
+`DockablePanelProvider.focusPanel(panelId, clusterId)` owns deferred focus for
+new and existing panels. Callers pass the owning cluster when activating another
+cluster. The provider waits for group membership and active-tab rendering before
+focusing the actual tab. This request survives an initiating object view
+unmounting, is replaced by a newer request, and is discarded when leaving its
+cluster. Pending DOM-focus callbacks are canceled on rerender or provider cleanup.
+`useObjectPanel` and workspace focus events delegate to this owner; they must not
+keep their own registration waits inside content that opening the panel replaces.

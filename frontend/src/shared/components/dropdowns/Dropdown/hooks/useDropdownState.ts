@@ -29,6 +29,9 @@ export function useDropdownState(
   }, [disabled]);
 
   const closeDropdown = useCallback(() => {
+    if (menuRef.current?.contains(document.activeElement)) {
+      triggerRef.current?.focus();
+    }
     setIsOpen(false);
     setHighlightedIndex(-1);
     setSearchQuery('');

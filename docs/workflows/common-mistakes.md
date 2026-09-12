@@ -4,13 +4,67 @@ Read this before editing. When user feedback identifies a recurring mistake,
 record the pattern and a concrete prevention check here. Keep entries focused
 on reusable rules; omit transient logs, credentials, and session history.
 
+## Missing native behavior changes in dependency upgrades
+
+A framework upgrade can retain a method while making its default implementation
+a no-op. Check migration notes and build-tag requirements, then exercise the
+native feature through its user entry point. For Inspector support, verify both
+right-click Inspect Element and the existing Inspector command in a dev build;
+Safari inspection alone does not prove either path. Keep native readiness hooks
+in the shared window registry and verify the release build remains excluded.
+
+## Treating an unresolved design choice as selected
+
+When work is limited to investigation or implementation has been paused, keep
+design discussion within that boundary. Distinguish agreement on behavior from
+agreement on specific keys, and distinguish a selected option from its alternatives.
+Before editing behavior, check the current authorization and the exact selected
+scope. Record accepted choices in the existing plan without implementing choices
+that remain open.
+
+Keyboard access does not authorize adding visible controls or changing spacing
+and layout. Before editing, distinguish the requested interaction from a proposed
+UI change; preserve the existing appearance unless that change was requested.
+
 ## Treating a passing automated gate as task completion
 
 The gate covers its configured checks. It does not establish that every requested
 workflow was exercised, especially native window interactions.
 
+For keyboard workflows, verify focus position, visible indication, and the
+resulting action separately. Reproduce mouse click → Tab/Shift+Tab → Enter/Space
+through the real component and keyboard owners. A list's key handler must not
+intercept activation of sibling controls. Check focus styling after pointer use,
+when `:focus-visible` may not match. Audit every region and portaled surface
+that shares the contract; include actions that disable or unmount their own
+focused control. When removing a local focus walker, restore its consumers
+to the shared tab-stop contract. Clarify the failing keys before attributing
+a report to the list's arrow-navigation design.
+
+Exercise popovers through the real region provider and portal: an isolated
+React key handler can pass while the app's earlier keyboard owner takes the key.
+Browsers reject focus on `visibility: hidden` elements; jsdom does not model
+that restriction. Reveal a positioned menu before focusing it and verify the
+first arrow/activation in a rendered browser. For programmatically focused
+read-only bodies, test the actual preceding/following control by name, rather
+than asserting the same last-element fallback used by the implementation.
+
 Prevention:
 
+- Focus restoration tests for popups must use the app's `StrictMode` wrapper.
+  Capture the invoking element before menu focus, and preserve it across effect
+  replay; otherwise the menu can remember itself and leave focus on the body.
+- Pointer-normalized focus is not keyboard entry. Test hover → action click →
+  pointer leave through the real provider, and option click → typing/list keys
+  through the actual combobox. Keep virtual-focus owners on their search field
+  or trigger, and use `preventScroll` for pointer focus normalization. Exercise
+  long portaled menus at non-default zoom so their last item remains reachable.
+- Exercise Tab across row boundaries in every dropdown variant, including rows
+  with trailing actions. A virtual-focus option must stay outside the Tab order
+  even when its action controls are separate Tab stops.
+- Check the semantics of the whole composite after moving nested controls.
+  Exposing a button outside a tab does not prove that its tablist allows that
+  button as a child; combine rendered accessibility rules with native checks.
 - Follow the [completion evidence gate](completion.md), keeping each requested
   outcome and related lifecycle action tied to explicit evidence.
 - Leave required blocked or unrun checks visible and unfinished. Do not replace

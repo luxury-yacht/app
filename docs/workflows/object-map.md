@@ -63,6 +63,15 @@ the snapshot package.
   contract. Updating the displayed age must not rewrite backend graph identity,
   relationship data, or layout inputs.
 
+## Map Interactions
+
+- Tab reaches the existing search field and toolbar controls. Enter in the search
+  field centers a matching visible object; repeated presses cycle through matches.
+- Right-clicking an object opens its canvas menu, which uses the shared
+  resource-action controller and complete object reference. Partial references
+  do not offer object actions.
+- A removed/filtered object closes its menu. An empty map has no object actions.
+
 ## Table Navigation
 
 - Resource-table **Open Map** actions open an object-scoped map from a validated

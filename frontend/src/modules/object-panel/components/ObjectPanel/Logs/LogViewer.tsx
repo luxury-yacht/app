@@ -32,6 +32,7 @@ import {
 } from '@shared/components/icons/LogIcons';
 import { CaseSensitiveIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import ScrollableRegion from '@shared/components/ScrollableRegion';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import {
@@ -823,6 +824,8 @@ const renderWorkloadRawLogRow = ({
         <button
           type="button"
           className="log-viewer-metadata-button pod-color-text"
+          tabIndex={-1}
+          data-focus-trap-ignore="true"
           style={{ '--pod-color': podColor } as React.CSSProperties}
           onClick={() => selectPod(pod)}
           title={`Show only logs from pod ${pod}`}
@@ -834,6 +837,8 @@ const renderWorkloadRawLogRow = ({
         <button
           type="button"
           className="log-viewer-metadata-button pod-color-text"
+          tabIndex={-1}
+          data-focus-trap-ignore="true"
           style={{ '--pod-color': podColor } as React.CSSProperties}
           onClick={() => selectContainerLabel(container, selectContainer)}
           title={`Show only logs from container ${container}`}
@@ -887,6 +892,8 @@ const renderPodRawLogRow = ({
           <button
             type="button"
             className="log-viewer-metadata-button"
+            tabIndex={-1}
+            data-focus-trap-ignore="true"
             onClick={() => selectContainerLabel(containerLabel, selectContainer)}
             title={`Show only logs from container ${containerLabel}`}
             aria-label={`Show only logs from container ${containerLabel}`}
@@ -949,7 +956,7 @@ const renderLogViewerContent = ({
   onToggleParsedRow: (rowKey: string) => void;
   displayLogs: string;
   renderedDisplayRows: RenderedLogRow[];
-  logsContentRef: React.RefObject<HTMLDivElement | null>;
+  logsContentRef: React.RefObject<HTMLElement | null>;
   wrapText: boolean;
   renderRawLogRow: (row: RenderedLogRow) => React.ReactNode;
   emptyStateMessage: string;
@@ -1309,8 +1316,9 @@ type LogViewerReadyViewProps = {
   activeFilterChips: ActiveFilterChip[];
   clearAllFilters: () => void;
   visibleLogWarnings: string[];
-  logsContentRef: React.RefObject<HTMLDivElement | null>;
+  logsContentRef: React.RefObject<HTMLElement | null>;
   renderedLogContent: React.ReactNode;
+  isParsedView: boolean;
   isTailFollowing: boolean;
   resumeScrolling: () => void;
   isSettingsOpen: boolean;
@@ -1324,6 +1332,7 @@ const LogViewerReadyView = ({
   visibleLogWarnings,
   logsContentRef,
   renderedLogContent,
+  isParsedView,
   isTailFollowing,
   resumeScrolling,
   isSettingsOpen,
@@ -1345,9 +1354,14 @@ const LogViewerReadyView = ({
           </div>
         )}
         <div className="logs-viewer-content-frame">
-          <div className="logs-viewer-content selectable" ref={logsContentRef} tabIndex={-1}>
+          <ScrollableRegion
+            className="logs-viewer-content selectable"
+            ref={logsContentRef}
+            aria-label="Log output"
+            tabIndex={isParsedView ? -1 : 0}
+          >
             {renderedLogContent}
-          </div>
+          </ScrollableRegion>
           {!isTailFollowing && (
             <button
               type="button"
@@ -1603,7 +1617,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const resolvedClusterId = clusterId?.trim() ?? '';
 
   // Refs
-  const logsContentRef = useRef<HTMLDivElement>(null);
+  const logsContentRef = useRef<HTMLElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
   const seqCounterRef = useRef(0);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2538,6 +2552,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
             <button
               type="button"
               className="log-viewer-metadata-button pod-color-text"
+              tabIndex={-1}
+              data-focus-trap-ignore="true"
               style={
                 {
                   '--pod-color': podColors[pod] || podColors.__fallback__,
@@ -2573,6 +2589,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           <button
             type="button"
             className="log-viewer-metadata-button pod-color-text"
+            tabIndex={-1}
+            data-focus-trap-ignore="true"
             style={
               {
                 '--pod-color': podColors[item.pod || ''] || podColors.__fallback__,
@@ -2794,6 +2812,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       visibleLogWarnings={visibleLogWarnings}
       logsContentRef={logsContentRef}
       renderedLogContent={renderedLogContent}
+      isParsedView={isParsedView}
       isTailFollowing={isTailFollowing}
       resumeScrolling={handleResumeScrolling}
       isSettingsOpen={isObjPanelLogsSettingsOpen}
