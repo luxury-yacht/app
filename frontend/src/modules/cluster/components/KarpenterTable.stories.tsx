@@ -2,7 +2,6 @@ import {
   type CustomResourceGridRow,
   useCustomResourceGridParts,
 } from '@modules/browse/components/CustomResourceGridView';
-import { withAutoWidthColumns } from '@shared/components/tables/columnFactories';
 import GridTable from '@shared/components/tables/GridTable';
 import type { Meta, StoryObj } from '@storybook/react';
 import { SidebarProvidersDecorator } from '../../../../.storybook/decorators/SidebarProvidersDecorator';
@@ -65,7 +64,7 @@ function KarpenterTablePreview({ data = rows }: Readonly<{ data?: CustomResource
   return (
     <GridTable
       data={data}
-      columns={withAutoWidthColumns(karpenterColumns(parts))}
+      columns={karpenterColumns(parts)}
       keyExtractor={parts.keyExtractor}
       tableClassName="cluster-custom-table"
     />

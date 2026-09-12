@@ -2,7 +2,11 @@ import type {
   CustomResourceGridRow,
   useCustomResourceGridParts,
 } from '@modules/browse/components/CustomResourceGridView';
-import { createTextColumn, withColumnSizing } from '@shared/components/tables/columnFactories';
+import {
+  createTextColumn,
+  withAutoWidthColumns,
+  withColumnSizing,
+} from '@shared/components/tables/columnFactories';
 import { createDetailSegmentsColumn } from '@shared/components/tables/detailSegmentsColumn';
 import { getResourceLimitUsagePercent } from '@shared/utils/resourceCalculations';
 
@@ -69,7 +73,7 @@ export function karpenterColumns(
       clusterName: parts.selectedClusterName,
     })
   );
-  return withColumnSizing(
+  const columns = withColumnSizing(
     [
       ...parts.baseColumns.filter((column) => column.key !== 'crd' && column.key !== 'age'),
       { key: 'usage', header: 'Usage', sortable: false, render: renderPoolUsage },
@@ -83,8 +87,8 @@ export function karpenterColumns(
       ...parts.baseColumns.filter((column) => column.key === 'age'),
     ],
     {
-      status: { minWidth: '6rem' },
       instanceType: { minWidth: '10rem' },
     }
   );
+  return withAutoWidthColumns(columns);
 }

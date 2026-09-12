@@ -19,6 +19,10 @@ For minor presentation fixes, use direct interaction checks instead of adding
 tests that assert CSS properties or markup. Reserve regression tests for
 meaningful application behavior.
 
+Keep table sizing in the production column builder. A story must not add
+auto-sizing or other layout transformations that the live view omits; compare
+the column-building path before treating a preview as evidence of app layout.
+
 ## Missing native behavior changes in dependency upgrades
 
 A framework upgrade can retain a method while making its default implementation
