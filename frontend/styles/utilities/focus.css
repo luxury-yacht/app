@@ -43,7 +43,9 @@
       [role="listbox"],
       [role="option"],
       .dropdown-option,
-      .dropdown-group-header
+      .dropdown-group-header,
+      .yaml-editor-shell,
+      .yaml-editor-shell *
     )
   ),
 :root
@@ -59,7 +61,9 @@
       [role="listbox"],
       [role="option"],
       .dropdown-option,
-      .dropdown-group-header
+      .dropdown-group-header,
+      .yaml-editor-shell,
+      .yaml-editor-shell *
     )
   ):hover {
   background-color: var(--focus-background, var(--color-accent-bg));

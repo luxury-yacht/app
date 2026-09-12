@@ -54,6 +54,55 @@ afterEach(() => {
 });
 
 describe('strict CSS cascade contracts', () => {
+  it.each([false, true])('preserves the YAML editor background when editable=%s', (editable) => {
+    const style = installStyles(
+      ...[
+        'src/shared/components/yaml/YamlEditor.css',
+        'styles/overrides/codemirror.css',
+        'styles/utilities/focus.css',
+      ].map((path) =>
+        resolveFocusColors(readProjectFile(path)).replace(/:hover/g, '.css-contract-hover')
+      )
+    );
+    style.dataset.cssContract = 'yaml-editor-focus';
+    document.body.innerHTML = `
+      <div class="yaml-editor">
+        <div class="yaml-editor-header">
+          <input class="find-input" aria-label="Find in YAML" />
+          <button class="button">Copy YAML</button>
+        </div>
+        <div class="codemirror-shell yaml-editor-shell" tabindex="-1">
+          <div class="cm-editor" tabindex="-1">
+            <div class="cm-scroller">
+              <div class="cm-content" contenteditable="${editable}" tabindex="0">
+                <div class="cm-line">kind: Pod</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    for (const element of document.querySelectorAll<HTMLElement>(
+      '.yaml-editor-shell [tabindex], .yaml-editor-shell'
+    )) {
+      const idleFill = getComputedStyle(element).backgroundColor;
+      element.focus();
+      expect(getComputedStyle(element).backgroundColor, element.className).toBe(idleFill);
+      element.classList.add('keyboard-programmatic-focus');
+      expect(getComputedStyle(element).backgroundColor, element.className).toBe(idleFill);
+      element.classList.add('css-contract-hover');
+      expect(getComputedStyle(element).backgroundColor, element.className).toBe(idleFill);
+      element.blur();
+    }
+    for (const control of document.querySelectorAll<HTMLElement>(
+      '.yaml-editor-header input, .yaml-editor-header button'
+    )) {
+      control.classList.add('keyboard-programmatic-focus');
+      control.focus();
+      expect(getComputedStyle(control).backgroundColor, control.outerHTML).toBe(focusFill);
+    }
+  });
+
   it.each([false, true])(
     'preserves menu colors with shared focus styles loaded last=%s',
     (focusLast) => {
