@@ -41,12 +41,6 @@
   overflow-wrap: anywhere;
 }
 
-.karpenter-capacity-values {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-xs) var(--spacing-lg);
-}
-
 .karpenter-overview-subtitle {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);

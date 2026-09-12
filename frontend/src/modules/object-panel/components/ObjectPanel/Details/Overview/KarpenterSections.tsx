@@ -1,4 +1,9 @@
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import {
+  formatCpuValue,
+  formatResourceValue,
+  parseResourceValue,
+} from '@shared/utils/resourceCalculations';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type { ReactNode } from 'react';
 import type { ConditionFacts, KarpenterFacts, KarpenterTaint } from '@/core/refresh/types';
@@ -69,14 +74,74 @@ export function KarpenterMap({
   );
 }
 
+const formatCapacityValue = (
+  resource: string,
+  value: string | undefined,
+  cpuUnit: 'cores' | 'millicores'
+): string => {
+  if (value === undefined || value === '') {
+    return '-';
+  }
+  if (resource === 'cpu') {
+    const millicores = parseResourceValue(value, 'cpu');
+    const formatted = formatResourceValue(value, millicores, 'cpu');
+    return cpuUnit === 'cores' && formatted !== '-' ? formatCpuValue(millicores) : formatted;
+  }
+  return resource === 'memory' || resource === 'ephemeral-storage'
+    ? formatResourceValue(value, parseResourceValue(value, 'memory'), 'memory')
+    : value;
+};
+
+const capacityResourceOrder = [
+  'cpu',
+  'memory',
+  'ephemeral-storage',
+  'nodes',
+  'pods',
+  'vpc.amazonaws.com/pod-eni',
+  'hugepages',
+];
+
+const capacityResourceLabels: Record<string, string> = {
+  'ephemeral-storage': 'storage',
+  'vpc.amazonaws.com/pod-eni': 'pod-eni',
+};
+
+const capacityResourceRank = (resource: string): number => {
+  const key = resource.startsWith('hugepages-') ? 'hugepages' : resource;
+  const index = capacityResourceOrder.indexOf(key);
+  return index < 0 ? capacityResourceOrder.length : index;
+};
+
+const formatCapacitySummary = (
+  resource: string,
+  facts: KarpenterFacts,
+  cpuUnit: 'cores' | 'millicores'
+): string => {
+  const total = formatCapacityValue(resource, facts.capacity?.[resource], cpuUnit);
+  const allocatable = facts.allocatable?.[resource];
+  if (allocatable !== undefined) {
+    return `${formatCapacityValue(resource, allocatable, cpuUnit)} of ${total}`;
+  }
+  const limit = facts.limits?.[resource];
+  return limit === undefined
+    ? total
+    : `${total} (limit ${formatCapacityValue(resource, limit, cpuUnit)})`;
+};
+
 export function KarpenterCapacity({ facts }: Readonly<{ facts: KarpenterFacts }>) {
+  const cpuUnit = [facts.capacity?.cpu, facts.allocatable?.cpu ?? facts.limits?.cpu].some(
+    (value) => parseResourceValue(value, 'cpu') % 1000 !== 0
+  )
+    ? 'millicores'
+    : 'cores';
   const resources = [
     ...new Set([
       ...Object.keys(facts.capacity ?? {}),
       ...Object.keys(facts.allocatable ?? {}),
       ...Object.keys(facts.limits ?? {}),
     ]),
-  ].sort();
+  ].sort((a, b) => capacityResourceRank(a) - capacityResourceRank(b) || a.localeCompare(b));
   if (!resources.length) {
     return null;
   }
@@ -84,25 +149,10 @@ export function KarpenterCapacity({ facts }: Readonly<{ facts: KarpenterFacts }>
     <KarpenterSection title="Capacity">
       {resources.map((resource) => (
         <div className="overview-row" key={resource}>
-          <span className="overview-row-label">{resource}</span>
-          <div className="overview-row-value karpenter-capacity-values">
-            {facts.capacity?.[resource] !== undefined && (
-              <span>
-                {facts.capacity[resource]} <span className="karpenter-fact-caption">capacity</span>
-              </span>
-            )}
-            {facts.allocatable?.[resource] !== undefined && (
-              <span>
-                {facts.allocatable[resource]}{' '}
-                <span className="karpenter-fact-caption">allocatable</span>
-              </span>
-            )}
-            {facts.limits?.[resource] !== undefined && (
-              <span>
-                {facts.limits[resource]} <span className="karpenter-fact-caption">limit</span>
-              </span>
-            )}
-          </div>
+          <span className="overview-row-label">{capacityResourceLabels[resource] ?? resource}</span>
+          <span className="overview-row-value">
+            {formatCapacitySummary(resource, facts, cpuUnit)}
+          </span>
         </div>
       ))}
     </KarpenterSection>

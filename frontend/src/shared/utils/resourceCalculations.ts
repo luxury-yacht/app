@@ -48,6 +48,8 @@ const parseCpuValue = (value: string): number => {
 
 // Parse Memory values to MB (Mi)
 const MEMORY_MIB_FACTORS = [
+  // Kubernetes can express allocatable storage in milli-bytes.
+  ['m', 1 / (1000 * 1024 * 1024)],
   ['Ki', 1 / 1024],
   ['Mi', 1],
   ['Gi', 1024],

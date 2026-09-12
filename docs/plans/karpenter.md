@@ -108,3 +108,48 @@ Focused validation: `npm run typecheck --prefix frontend` exited 0; the existing
 three touched frontend files, and the local max-12 complexity check passed.
 Commands ran through `mise exec --`. Visual confirmation remains with the user;
 the full prerelease gate was not rerun for this presentation correction.
+
+## Readable memory and ephemeral-storage capacity
+
+`KarpenterSections.tsx` routes memory capacity, allocatable memory and memory limits
+through the shared resource parser and display formatter. NodePool and NodeClaim
+both use this capacity component. Direct formatter checks convert `33554432Ki`,
+`34359738368` and `32768Mi` to `32.0Gi`, retain `1.5Ti`, and preserve zero.
+Typecheck, Biome check, the local max-12 complexity check, and the 28 existing tests
+in `KarpenterOverview.test.tsx` and `resourceCalculations.test.ts` passed through
+`mise exec --`. No tests were added. Visual confirmation remains with the user;
+the full prerelease gate was not rerun for this display-formatting correction.
+
+The same formatting also covers ephemeral-storage capacity, allocatable values
+and limits. The shared parser now recognizes milli-byte quantities so allocatable
+storage is not inflated by 1,000. Direct formatter checks produced `20.0Gi` for
+both `20971520Ki` and `21474836480`, and `1.0Gi` for `1073741824000m`. The existing
+28 tests, typecheck, Biome check and local max-12 complexity check passed again;
+no new tests were added. Native visual confirmation and the full prerelease gate
+remain unrun for this extension.
+
+Capacity rows now follow cpu, memory, storage, nodes, pods, pod-eni, then hugepages.
+The display aliases are `ephemeral-storage` → `storage` and
+`vpc.amazonaws.com/pod-eni` → `pod-eni`; hugepage size suffixes remain visible.
+Unlisted resources follow alphabetically. Typecheck, Biome check, local max-12
+complexity and the 7 existing overview tests passed for this ordering change;
+no tests were added. Visual confirmation remains with the user; the full gate
+was not rerun for this presentation change.
+
+CPU capacity and allocatable values share one unit choice: whole cores when both
+represent whole CPUs, otherwise millicores for both. Thus `4`/`4000m` displays as
+`4`/`4`, while `4`/`3920m` displays as `4000m`/`3920m`. This is implemented in
+`KarpenterCapacity` and `formatCapacityValue`. Typecheck, Biome check, local max-12 complexity and the 28 existing
+overview/resource-calculation tests passed. No tests were added; these existing
+tests do not directly assert the new paired-unit rule. Visual confirmation remains
+with the user, and the full gate was not rerun for this presentation change.
+
+The Capacity header remains unchanged. Each row now shows `n allocatable of n
+total` when allocatable is available, `n (limit n)` when only a configured limit
+is available, or just the total otherwise. Missing totals use `-`. The CPU pair
+uses matching units for either total/allocatable or total/limit. Values remain
+selectable through the shared `overview-row-value` style; the former legend/flex
+layout was removed. No separate Limits section is added. Typecheck, Biome check,
+local max-12 complexity and 28 existing tests passed during this change. No tests
+were added; visual confirmation remains with the user and the full gate was not
+rerun for this presentation change.
