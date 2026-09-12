@@ -388,6 +388,11 @@ on the native main thread. It obtains the native handle inside that dispatch
 and skips a destroyed window. The setup does not participate in backend
 readiness or change window publication ordering.
 
+Validate both the native Inspect Element menu item and the Inspector command
+in development workspace, transferred-cluster, and panel windows after the final
+rebuild. Confirm release builds exclude the opt-in. Browser previews and checks
+made before moving the ready hook do not establish the final native behavior.
+
 ## Starting points
 
 - Asset embedding and process entry point: `main.go`

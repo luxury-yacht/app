@@ -31,20 +31,23 @@ add global document/window listeners for ordinary app behavior.
 - Returning to a region restores its last available control. Hidden, disabled,
   inert, and disconnected targets are discarded. An empty content region can
   receive focus itself. Focusing a panel raises it without selecting another tab.
+  Sidebar entry restores a list item, or falls back to the active item; it does
+  not land on the collapse button or another sidebar utility control.
 - KeyboardProvider normalizes clicked button/tab focus before activation, so
   native WebKit pointer behavior cannot leave the next key in the old region.
   Its shared focus observer runs before local capture handlers and clears
   keyboard indication on pointer use and provider cleanup.
-- Both local Tab navigation and region switching show a soft focus halo,
-  including immediately after a mouse click. It follows the final focused
-  item when a composite root redirects focus, without adding a background fill.
-  `styles/utilities/focus.css` owns the treatment for native `:focus-visible`
-  and `.keyboard-programmatic-focus:focus`, with specificity above component
-  focus styles so lazy imports cannot replace it. Both appearance modes define
-  `--shadow-focus-halo`; geometry lives in `styles/tokens/elevation.css`.
-  Sidebar arrow previews use the same token. Forced-color mode uses a system
-  outline because shadows are suppressed there. Existing selection and hover
-  styling remain independent of this focus cue.
+- `frontend/styles/utilities/focus.css` owns the keyboard background highlight
+  for controls, including programmatic focus after pointer use. Editable fields
+  require the shared keyboard marker so clicking into an input does not tint it;
+  typing clears the marker until the next keyboard focus move. Keep dropdown
+  and context-menu backgrounds and option colors, YAML editors, and log output
+  outside this background treatment. Forced-color mode retains a system outline.
+- The first Tab navigation after pointer use and each region change briefly
+  outline the destination region, then fade the outline away. The shared
+  `regionFocusIndicator.ts` waits for the final focus destination, accounts for
+  app zoom, and removes pending frames and overlays on cleanup. Do not change
+  region layout or overflow to display this cue.
 - Surfaces marked `data-tab-native="true"`, such as shell terminals, retain
   ordinary Tab for native behavior; Control+Tab leaves their region. Blocking
   dialogs and the command palette keep region commands inside the blocking
@@ -93,10 +96,12 @@ Surface kinds include:
 - Dropdowns and menus own their list keys while the list/combobox owns focus.
   Child action buttons retain their own Enter/Space behavior. The same guard
   applies to table rows and tab strips.
-- Dropdown Tab visits search, bulk and option-action controls, returning to the
-  trigger at the popup boundary. Closing or disabling the focused action must
-  restore a usable focus target before it disappears. Control+Tab resolves the
-  originating region through shared portal ownership.
+- Searchable dropdowns give the search field, Select all, Select none, and the
+  item list separate Tab stops when present. The list uses roving focus, with
+  available row actions also reachable by Tab. Tab/Shift+Tab wraps inside the
+  open popup; Escape closes it and restores the trigger. Closing or disabling
+  the focused action must restore a usable focus target before it disappears.
+  Control+Tab resolves the originating region through shared portal ownership.
 - Context-menu Tab/Shift+Tab and Escape return focus to the invoking control;
   Favorites reveals actions on focus within its row and returns to its trigger
   on Escape.
@@ -111,10 +116,11 @@ Surface kinds include:
   Consumers retain one roving tab stop and do not install competing walkers.
   Include the focused tab's action buttons in that order. From a pointer-focused
   read-only body, resume at the nearest preceding/following control in DOM order.
-- Comboboxes keep DOM focus on the trigger or search field and expose the
-  highlighted option through `aria-activedescendant`; popup options are not
-  additional tab stops. Option clicks, including the Only action, restore that
-  focus owner before updating selection so typing and list keys keep working.
+- Dropdown arrows update the highlighted option from search, the active list
+  control, or its Only button. Only retains its own Enter/Space action. Listbox
+  variants expose virtual focus through `aria-activedescendant`; popups with
+  row action buttons use dialog semantics. Keep focus recovery in the shared
+  Dropdown so selection cannot strand subsequent typing or list navigation.
 - Pointer focus inside a hover popover does not pin it open. Only keyboard
   entry does; pointer dismissal restores the trigger before removing a focused
   action. Long context menus scroll within the zoom-adjusted viewport and keep
@@ -128,8 +134,9 @@ Surface kinds include:
 - Manually added namespace removal is visible on row focus. Removing an entry
   restores the stable namespace selector; the inline Add editor restores its
   button on commit or cancellation.
-- Keyboard shortcut help includes a navigation guide for tables, tab selection and closing,
-  status popovers, object maps, the sidebar and editor escape routes.
+- Keyboard shortcut help derives its categories and key labels from registered
+  shortcuts through `ui/shortcuts/shortcutHelp.ts`; keep descriptions and footer
+  key hints consistent with those registrations.
 - Adjustable separators support the appropriate arrow keys and Home/End while
   publishing their current, minimum, and maximum values.
 - Panels and table regions own focused keyboard behavior without blocking the
@@ -183,3 +190,8 @@ When changing keyboard behavior:
 
 Run targeted shortcut/surface tests and relevant component tests. For focus
 changes, also verify manually in the app.
+
+The keyboard investigation recorded macOS native and accessibility-tree checks,
+but did not establish Windows/Linux Control+Tab delivery or spoken VoiceOver/NVDA
+output. Those remain separate validation items; accessibility-tree exposure and
+automated key dispatch do not prove them.
