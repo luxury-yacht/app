@@ -200,7 +200,8 @@ function Sources({
   revisions,
   title = 'Sources',
 }: Readonly<{ spec: ArgoCDApplicationSpec; revisions?: string[]; title?: string }>) {
-  const sources = spec.sources?.length ? spec.sources : spec.source ? [spec.source] : [];
+  const singleSource = spec.source ? [spec.source] : [];
+  const sources = spec.sources?.length ? spec.sources : singleSource;
   if (!sources.length) {
     return revisions?.length ? (
       <ArgoCDSection title="Deployed Revisions">
@@ -376,10 +377,10 @@ function ResourcePolicy({
     return null;
   }
   const values = (resources?: ArgoCDResourceRestriction[]) =>
-    resources?.map(
-      (resource) =>
-        `${resource.group || 'core'}/${resource.kind}${resource.name ? ` (${resource.name})` : ''}`
-    );
+    resources?.map((resource) => {
+      const name = resource.name ? ` (${resource.name})` : '';
+      return `${resource.group || 'core'}/${resource.kind}${name}`;
+    });
   return (
     <Card title={title}>
       <ValueGroup label="Allowed" values={values(allowed)} />
