@@ -752,7 +752,7 @@ describe('AppLogsPanel', () => {
     cleanup();
   });
 
-  it('visits the preceding control when reverse-tabbing from the log body', async () => {
+  it('tabs into and back out of the log body', async () => {
     realNavigation.enabled = true;
     vi.useFakeTimers();
     getAppLogsMock.mockResolvedValue([
@@ -764,13 +764,23 @@ describe('AppLogsPanel', () => {
       document.querySelector<HTMLElement>('.app-logs-container'),
       'log body'
     );
-    await act(async () => logs.focus());
     const panel = requireValue(logs.closest<HTMLElement>('.dockable-panel'), 'real dockable panel');
-    // The read-only body uses programmatic focus, as in the other log viewers.
     const previous = requireValue(
-      panel.querySelector('[aria-label="Resize Cluster column"]'),
+      panel.querySelector<HTMLElement>('[aria-label="Resize Cluster column"]'),
       'preceding column resizer'
     );
+    await act(async () => previous.focus());
+    expect(logs.tabIndex).toBe(0);
+    await act(async () =>
+      previous.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          cancelable: true,
+        })
+      )
+    );
+    expect(document.activeElement).toBe(logs);
     await act(async () => {
       logs.dispatchEvent(
         new KeyboardEvent('keydown', {

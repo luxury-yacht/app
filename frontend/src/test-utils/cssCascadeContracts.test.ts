@@ -54,6 +54,56 @@ afterEach(() => {
 });
 
 describe('strict CSS cascade contracts', () => {
+  it.each([false, true])(
+    'preserves log backgrounds with focus styles loaded last=%s',
+    (focusLast) => {
+      const paths = [
+        'styles/utilities/focus.css',
+        'src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.css',
+        'src/ui/panels/app-logs/AppLogsPanel.css',
+      ];
+      if (focusLast) {
+        paths.push(requireValue(paths.shift(), 'focus stylesheet'));
+      }
+      const style = installStyles(
+        ...paths.map((path) =>
+          resolveFocusColors(readProjectFile(path))
+            .replace(/var\(--log-surface-bg\)/g, 'rgb(30, 30, 30)')
+            .replace(/:hover/g, '.css-contract-hover')
+        )
+      );
+      style.dataset.cssContract = 'log-output-focus';
+      document.body.innerHTML = `
+      <button id="toolbar">Copy logs</button>
+      <section id="container-logs" class="logs-viewer-content" tabindex="0">
+        <div class="parsed-logs-table">
+          <button id="header-control">Resize column</button>
+          <table id="parsed-logs" class="gridtable gridtable--body" tabindex="0"><tbody><tr><td>Log</td></tr></tbody></table>
+        </div>
+      </section>
+      <section id="node-logs" class="logs-viewer-content" tabindex="0">Node log</section>
+      <section id="app-logs" class="app-logs-container" tabindex="0">Application log</section>
+    `;
+      for (const id of ['container-logs', 'node-logs', 'parsed-logs', 'app-logs']) {
+        const viewport = requireValue(document.getElementById(id), id);
+        const idleFill = getComputedStyle(viewport).backgroundColor;
+        viewport.focus();
+        expect(getComputedStyle(viewport).backgroundColor, id).toBe(idleFill);
+        viewport.classList.add('keyboard-programmatic-focus');
+        expect(getComputedStyle(viewport).backgroundColor, id).toBe(idleFill);
+        viewport.classList.add('css-contract-hover');
+        expect(getComputedStyle(viewport).backgroundColor, id).toBe(idleFill);
+        viewport.blur();
+      }
+      for (const id of ['toolbar', 'header-control']) {
+        const control = requireValue(document.getElementById(id), id);
+        control.classList.add('keyboard-programmatic-focus');
+        control.focus();
+        expect(getComputedStyle(control).backgroundColor, id).toBe(focusFill);
+      }
+    }
+  );
+
   it.each([false, true])('preserves the YAML editor background when editable=%s', (editable) => {
     const style = installStyles(
       ...[

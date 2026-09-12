@@ -240,6 +240,84 @@ describe('GridTable keyboard integration', () => {
     );
   });
 
+  it.each([false, true])(
+    'keeps explicitly excluded metadata out of row Tab stops (virtualized: %s)',
+    async (virtualized) => {
+      const filterLogs = vi.fn();
+      await act(async () =>
+        root.render(
+          <KeyboardProvider>
+            <ZoomProvider>
+              <AppRegionNavigation />
+              <main data-app-region="content">
+                <GridTable
+                  data={[...rows, { id: 'cluster-a|two', name: 'Two' }]}
+                  columns={[
+                    ...columns,
+                    {
+                      key: 'metadata',
+                      header: 'Pod',
+                      render: (row) => (
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          data-focus-trap-ignore="true"
+                          onClick={() => filterLogs(row.name)}
+                        >
+                          {row.name} pod
+                        </button>
+                      ),
+                    },
+                  ]}
+                  keyExtractor={(row) => row.id}
+                  virtualization={{ enabled: virtualized, threshold: 1 }}
+                />
+                <button type="button">After logs</button>
+              </main>
+            </ZoomProvider>
+          </KeyboardProvider>
+        )
+      );
+      const table = requireValue(
+        container.querySelector<HTMLElement>('table[tabindex="0"]'),
+        'table'
+      );
+      const metadata = requireValue(
+        container.querySelector<HTMLButtonElement>('[data-focus-trap-ignore]'),
+        'metadata'
+      );
+      const press = async (key: string, shiftKey = false) =>
+        act(async () => {
+          document.activeElement?.dispatchEvent(
+            new KeyboardEvent('keydown', { key, shiftKey, bubbles: true, cancelable: true })
+          );
+        });
+      await act(async () => table.focus());
+      expect(metadata.tabIndex).toBe(-1);
+      await press('Tab');
+      expect(document.activeElement?.textContent).toBe('After logs');
+      await press('Tab', true);
+      expect(document.activeElement).toBe(table);
+      await press('ArrowDown');
+      for (const control of container.querySelectorAll<HTMLButtonElement>(
+        '[data-focus-trap-ignore]'
+      )) {
+        expect(control.tabIndex).toBe(-1);
+      }
+      await press('Tab');
+      expect(document.activeElement?.textContent).toBe('After logs');
+      await act(async () => metadata.click());
+      expect(filterLogs).toHaveBeenCalledWith('One');
+
+      await act(async () => table.focus());
+      await press('Home');
+      await act(async () => metadata.removeAttribute('data-focus-trap-ignore'));
+      expect(metadata.tabIndex).toBe(0);
+      await act(async () => metadata.setAttribute('data-focus-trap-ignore', 'true'));
+      expect(metadata.tabIndex).toBe(-1);
+    }
+  );
+
   it.each(['Enter', ' '])(
     'does not activate a table row when %s belongs to its child button',
     async (key) => {

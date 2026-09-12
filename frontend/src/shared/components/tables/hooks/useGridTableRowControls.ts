@@ -9,8 +9,12 @@ const updateRowTabStops = (wrapper: HTMLElement, rowKey: string | null, hasRowAc
     for (const control of row.querySelectorAll<HTMLElement>(GRIDTABLE_INTERACTIVE_STOP_SELECTOR)) {
       const repeatsRowAction =
         hasRowAction && Boolean(control.closest('[data-gridtable-row-action="true"]'));
+      const excludedFromTabOrder = control.closest('[data-focus-trap-ignore="true"]');
       control.tabIndex =
-        row.dataset.rowKey === rowKey && !control.matches(':disabled') && !repeatsRowAction
+        row.dataset.rowKey === rowKey &&
+        !control.matches(':disabled') &&
+        !repeatsRowAction &&
+        !excludedFromTabOrder
           ? 0
           : -1;
     }
@@ -67,7 +71,12 @@ export function useGridTableRowControls(
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['disabled', 'hidden', 'data-gridtable-row-action'],
+      attributeFilter: [
+        'disabled',
+        'hidden',
+        'data-gridtable-row-action',
+        'data-focus-trap-ignore',
+      ],
     });
     document.addEventListener('focusin', remember);
     wrapper.addEventListener('keydown', returnToTable);

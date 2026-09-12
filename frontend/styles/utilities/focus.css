@@ -45,7 +45,10 @@
       .dropdown-option,
       .dropdown-group-header,
       .yaml-editor-shell,
-      .yaml-editor-shell *
+      .yaml-editor-shell *,
+      .logs-viewer-content,
+      .logs-viewer-content .gridtable,
+      .app-logs-container
     )
   ),
 :root
@@ -63,7 +66,10 @@
       .dropdown-option,
       .dropdown-group-header,
       .yaml-editor-shell,
-      .yaml-editor-shell *
+      .yaml-editor-shell *,
+      .logs-viewer-content,
+      .logs-viewer-content .gridtable,
+      .app-logs-container
     )
   ):hover {
   background-color: var(--focus-background, var(--color-accent-bg));

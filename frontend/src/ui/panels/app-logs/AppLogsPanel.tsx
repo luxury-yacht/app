@@ -24,6 +24,7 @@ import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { AutoScrollIcon, CopyIcon } from '@shared/components/icons/LogIcons';
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import ScrollableRegion from '@shared/components/ScrollableRegion';
 import { AriaGridColumnHeader, AriaGridRow } from '@shared/components/tables/AriaGridPrimitives';
 
 import { acquireColumnResizeCursor } from '@shared/utils/columnResizeCursor';
@@ -171,7 +172,7 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
     useState<MultiSelectFilterSelection>(ALL_MULTISELECT_FILTER);
   const [textFilter, setTextFilter] = useState<string>('');
   const [columnWidths, setColumnWidths] = useState(DEFAULT_LOG_COLUMN_WIDTHS);
-  const logsContainerRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLElement>(null);
   const textFilterInputRef = useRef<HTMLInputElement>(null);
   const isPinnedToBottomRef = useRef(true);
   const prevScrollHeightRef = useRef(0);
@@ -935,15 +936,15 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
         </thead>
       </table>
 
-      <div
+      <ScrollableRegion
         ref={logsContainerRef}
         className="app-logs-container selectable"
         onScroll={handleLogsScroll}
         style={columnWidthStyle}
-        tabIndex={-1}
+        aria-label="Log output"
       >
         {renderedLogs}
-      </div>
+      </ScrollableRegion>
     </DockablePanel>
   );
 }

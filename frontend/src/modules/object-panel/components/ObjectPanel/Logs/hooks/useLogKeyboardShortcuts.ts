@@ -23,7 +23,7 @@ interface UseLogKeyboardShortcutsParams {
   handleTogglePreviousContainerLogs: () => void;
   handleCopyContainerLogs: () => void;
   filterInputRef: RefObject<HTMLInputElement | null>;
-  logsContentRef: RefObject<HTMLDivElement | null>;
+  logsContentRef: RefObject<HTMLElement | null>;
 }
 
 /**
