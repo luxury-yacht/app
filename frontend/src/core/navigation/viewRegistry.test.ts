@@ -41,6 +41,7 @@ describe('view registry', () => {
       { id: 'storage', label: 'Storage' },
       { id: 'crds', label: 'CRDs' },
       { id: 'custom', label: 'Custom' },
+      { id: 'karpenter', label: 'Karpenter' },
       { id: 'rbac', label: 'RBAC' },
     ]);
     expect(CLUSTER_VIEW_DESCRIPTORS.some((descriptor) => 'intent' in descriptor)).toBe(false);

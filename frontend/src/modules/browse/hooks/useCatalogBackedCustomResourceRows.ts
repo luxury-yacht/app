@@ -10,6 +10,7 @@ import {
 } from './useHydratedCustomCatalogRows';
 
 export interface UseCatalogBackedCustomResourceRowsOptions {
+  resourceFamily?: string;
   clusterId?: string | null;
   namespace?: string;
   allNamespaces?: boolean;
@@ -23,6 +24,7 @@ export function useCatalogBackedCustomResourceRows({
   namespace,
   allNamespaces = false,
   clusterScopedOnly = false,
+  resourceFamily,
   persistence,
   diagnosticLabel,
 }: UseCatalogBackedCustomResourceRowsOptions) {
@@ -44,6 +46,7 @@ export function useCatalogBackedCustomResourceRows({
     pinnedNamespaces,
     clusterScopedOnly,
     customOnly: true,
+    resourceFamily,
     filters: {
       search: persistence.filters.search ?? '',
       kinds: filterSelectionValues(persistence.filters.kinds),

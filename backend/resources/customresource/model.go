@@ -2,10 +2,8 @@
  * backend/resources/customresource/model.go
  *
  * CustomResource resource model: dynamic status extraction for any custom resource
- * instance (unstructured), feeding the snapshot streaming summary rows. There is no
- * typed detail panel for custom resources, so this package holds only the model +
- * facts (no DTO/detail/object-map). Shared model helpers are reused from
- * resourcemodel (exported network base).
+ * instance (unstructured), feeding snapshot streaming summary rows and discovered
+ * resource-family detail enrichments. Shared model helpers come from resourcemodel.
  */
 
 package customresource

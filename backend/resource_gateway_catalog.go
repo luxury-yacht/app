@@ -105,6 +105,12 @@ func (g *ResourceGateway) HydrateCatalogCustomRows(clusterID string, rows []snap
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	catalog := g.objectCatalogServiceForCluster(meta.ClusterID)
+	for i := range result {
+		if result[i].Karpenter != nil {
+			result[i].Karpenter.NodeClass = catalog.ResolveRelatedResourceLink(result[i].Karpenter.NodeClass)
+		}
+	}
 	return compactCatalogHydrationResults(result, included), nil
 }
 

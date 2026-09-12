@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
+	"github.com/luxury-yacht/app/backend/resourcekind"
 )
 
 // querypage sort-key names. They are lowercase to match the request's normalized
@@ -41,6 +42,7 @@ const (
 	catalogEngineFacetAPIGroup       = "apigroup"
 	catalogEngineFacetScopeNamespace = "scopenamespace"
 	catalogEngineFacetCustom         = "custom"
+	catalogEngineFacetFamily         = "family"
 )
 
 // catalogEngineNoMatchFacetValue is not a valid catalogEngineKindIdentity value:
@@ -90,6 +92,7 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 			catalogEngineSortCreationTimestamp: func(s Summary) string { return catalogEngineInvertTimestamp(s.CreationTimestamp) },
 		},
 		Facets: map[string]func(Summary) string{
+			catalogEngineFacetFamily: func(s Summary) string { return resourcekind.FamilyForResource(s.Ref.Group, s.Scope != ScopeCluster) },
 			// Canonical identity group\x00version\x00kind (lowercased kind, matching
 			// identityKey). Rows sharing this value match every kind filter identically,
 			// so a filter is honored by expanding it to the set of matching identities.
@@ -223,7 +226,8 @@ func catalogEngineSignature(opts QueryOptions, limit int) string {
 	groups := normalizeCatalogAPIGroups(opts.Groups)
 	resourceScopes := normalizeCatalogResourceScopes(opts.ResourceScopes)
 	return fmt.Sprintf(
-		"limit=%d|scope=%s|scopeNamespaces=%s|search=%s|kinds=%s|namespaces=%s|groups=%s|resourceScopes=%s|customOnly=%t|sort=%s",
+		"family=%s|limit=%d|scope=%s|scopeNamespaces=%s|search=%s|kinds=%s|namespaces=%s|groups=%s|resourceScopes=%s|customOnly=%t|sort=%s",
+		opts.ResourceFamily,
 		limit,
 		strings.ToLower(strings.TrimSpace(string(opts.Scope))),
 		strings.Join(normalizeQueryValues(opts.ScopeNamespaces), ","),
@@ -519,6 +523,9 @@ func (s *Service) catalogEngineFilters(rows []Summary, opts QueryOptions) map[st
 
 func catalogEngineStructuralFilters(opts QueryOptions) map[string][]string {
 	filters := make(map[string][]string)
+	if opts.ResourceFamily != "" {
+		filters[catalogEngineFacetFamily] = []string{opts.ResourceFamily}
+	}
 	if scope := strings.ToLower(strings.TrimSpace(string(opts.Scope))); scope != "" {
 		filters[catalogEngineFacetScope] = []string{scope}
 	}
@@ -580,7 +587,7 @@ func catalogEngineFacets(rows []Summary, opts QueryOptions, cachedKinds []KindIn
 	}
 
 	namespaces := cachedNamespaces
-	if len(cachedNamespaces) == 0 && len(matchNamespaces) > 0 {
+	if opts.ResourceFamily != "" || (len(cachedNamespaces) == 0 && len(matchNamespaces) > 0) {
 		namespaces = snapshotSortedKeys(matchNamespaces)
 	}
 
@@ -588,6 +595,7 @@ func catalogEngineFacets(rows []Summary, opts QueryOptions, cachedKinds []KindIn
 }
 
 type catalogEngineFacetFilters struct {
+	resourceFamily         string
 	kindMatcher            kindMatcher
 	namespaceMatcher       namespaceMatcher
 	searchMatcher          searchMatcher
@@ -600,7 +608,8 @@ type catalogEngineFacetFilters struct {
 
 func newCatalogEngineFacetFilters(opts QueryOptions) catalogEngineFacetFilters {
 	filters := catalogEngineFacetFilters{
-		kindMatcher: newKindMatcher(opts.Kinds), namespaceMatcher: newNamespaceMatcher(opts.Namespaces),
+		resourceFamily: opts.ResourceFamily,
+		kindMatcher:    newKindMatcher(opts.Kinds), namespaceMatcher: newNamespaceMatcher(opts.Namespaces),
 		searchMatcher: newSearchMatcher(opts.Search), customMatcher: newCustomOnlyMatcher(opts.CustomOnly),
 		hasNamespaceFilter: len(opts.Namespaces) > 0,
 		groups:             make(map[string]struct{}, len(opts.Groups)), resourceScopes: make(map[string]struct{}, len(opts.ResourceScopes)),
@@ -611,7 +620,7 @@ func newCatalogEngineFacetFilters(opts QueryOptions) catalogEngineFacetFilters {
 	for _, scope := range normalizeCatalogResourceScopes(opts.ResourceScopes) {
 		filters.resourceScopes[scope] = struct{}{}
 	}
-	filters.hasDependentKindFilter = filters.hasNamespaceFilter || len(filters.groups) > 0 || len(filters.resourceScopes) > 0
+	filters.hasDependentKindFilter = opts.ResourceFamily != "" || filters.hasNamespaceFilter || len(filters.groups) > 0 || len(filters.resourceScopes) > 0
 	return filters
 }
 
@@ -623,7 +632,7 @@ func collectCatalogEngineFacets(
 	dependentKinds := make(map[string]bool)
 	matchNamespaces := make(map[string]struct{})
 	for _, item := range rows {
-		if !filters.customMatcher(item) {
+		if !filters.customMatcher(item) || !catalogFamilyMatches(item, filters.resourceFamily) {
 			continue
 		}
 		if item.Ref.Kind != "" {
@@ -677,6 +686,7 @@ func catalogEngineSnapshotFacets(rows []Summary, opts QueryOptions, metadataExac
 }
 
 type catalogSnapshotFacetFilters struct {
+	resourceFamily         string
 	namespaceMatcher       namespaceMatcher
 	customMatcher          customOnlyMatcher
 	hasNamespaceFilter     bool
@@ -687,6 +697,7 @@ type catalogSnapshotFacetFilters struct {
 
 func newCatalogSnapshotFacetFilters(opts QueryOptions) catalogSnapshotFacetFilters {
 	filters := catalogSnapshotFacetFilters{
+		resourceFamily:   opts.ResourceFamily,
 		namespaceMatcher: newNamespaceMatcher(opts.Namespaces), customMatcher: newCustomOnlyMatcher(opts.CustomOnly),
 		hasNamespaceFilter: len(opts.Namespaces) > 0,
 		groups:             make(map[string]struct{}, len(opts.Groups)), resourceScopes: make(map[string]struct{}, len(opts.ResourceScopes)),
@@ -697,7 +708,7 @@ func newCatalogSnapshotFacetFilters(opts QueryOptions) catalogSnapshotFacetFilte
 	for _, scope := range normalizeCatalogResourceScopes(opts.ResourceScopes) {
 		filters.resourceScopes[scope] = struct{}{}
 	}
-	filters.hasDependentKindFilter = filters.hasNamespaceFilter || len(filters.groups) > 0 || len(filters.resourceScopes) > 0
+	filters.hasDependentKindFilter = opts.ResourceFamily != "" || filters.hasNamespaceFilter || len(filters.groups) > 0 || len(filters.resourceScopes) > 0
 	return filters
 }
 
@@ -709,7 +720,7 @@ func collectCatalogSnapshotFacets(
 	namespaces := make(map[string]struct{})
 	dependentKinds := make(map[string]bool)
 	for _, item := range rows {
-		if !filters.customMatcher(item) {
+		if !filters.customMatcher(item) || !catalogFamilyMatches(item, filters.resourceFamily) {
 			continue
 		}
 		if item.Ref.Kind != "" {
@@ -733,4 +744,8 @@ func (f catalogSnapshotFacetFilters) matchesDependentKind(item Summary) bool {
 		return false
 	}
 	return len(f.resourceScopes) == 0 || stringSetContains(f.resourceScopes, strings.ToLower(string(item.Scope)))
+}
+
+func catalogFamilyMatches(item Summary, family string) bool {
+	return family == "" || resourcekind.FamilyForResource(item.Ref.Group, item.Scope != ScopeCluster) == family
 }

@@ -48,6 +48,8 @@ const parseCpuValue = (value: string): number => {
 
 // Parse Memory values to MB (Mi)
 const MEMORY_MIB_FACTORS = [
+  // Kubernetes can express allocatable storage in milli-bytes.
+  ['m', 1 / (1000 * 1024 * 1024)],
   ['Ki', 1 / 1024],
   ['Mi', 1],
   ['Gi', 1024],
@@ -71,6 +73,24 @@ export const parseResourceValue = (value: string | undefined, type: ResourceType
     return 0;
   }
   return type === 'cpu' ? parseCpuValue(value) : parseMemoryValue(value);
+};
+
+// A missing usage or limit is unknown, while an explicit zero usage is valid.
+export const getResourceLimitUsagePercent = (
+  usage: string | undefined,
+  limit: string | undefined,
+  type: ResourceType
+): number | undefined => {
+  if (usage === undefined || isEmptyResourceValue(usage) || !isNumericResourceValue(usage)) {
+    return undefined;
+  }
+  const rawUsage = parseResourceValue(usage, type);
+  const rawLimit = parseResourceValue(limit, type);
+  if (rawLimit <= 0 || rawUsage < 0) {
+    return undefined;
+  }
+  const percentage = (rawUsage / rawLimit) * 100;
+  return Number.isFinite(percentage) ? percentage : undefined;
 };
 
 // Format CPU values for display

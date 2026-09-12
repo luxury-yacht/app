@@ -20,6 +20,30 @@ const row = (group: string): CatalogBackedCustomResourceRow => ({
 });
 
 describe('customCatalogRowAdapter', () => {
+  it('preserves named Karpenter fields and related source versions through hydration', () => {
+    const source = {
+      ref: { ...row('karpenter.sh').ref, kind: 'NodeClaim', resource: 'nodeclaims', namespace: '' },
+      karpenter: {
+        instanceType: 'm7g.large',
+        capacityType: 'spot',
+        capacity: { cpu: '1250m', memory: '768Gi' },
+        limits: { cpu: '2', memory: '1Ti' },
+        nodePool: {
+          ref: {
+            clusterId: 'cluster-b',
+            group: 'karpenter.sh',
+            version: 'v1beta1',
+            kind: 'NodePool',
+            name: 'pool',
+          },
+        },
+      },
+    };
+    expect(normalizeHydratedCustomRow(source).karpenter).toEqual(source.karpenter);
+    expect(
+      normalizeHydratedCustomRow({ ...source, karpenter: undefined }).karpenter
+    ).toBeUndefined();
+  });
   it('keeps colliding custom-resource kinds distinct by canonical GVK', () => {
     expect(customCatalogRowKey(row('rds.services.k8s.aws'))).not.toBe(
       customCatalogRowKey(row('documentdb.services.k8s.aws'))

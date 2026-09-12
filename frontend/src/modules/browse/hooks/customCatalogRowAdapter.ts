@@ -141,6 +141,10 @@ export const normalizeHydratedCustomRow = (row: unknown): CatalogBackedCustomRes
     ref,
     kindAlias: optionalString(record.kindAlias) ?? ref.kind,
     crdName: optionalString(record.crdName),
+    karpenter:
+      record.karpenter && typeof record.karpenter === 'object'
+        ? (record.karpenter as CatalogBackedCustomResourceRow['karpenter'])
+        : undefined,
     status: optionalString(record.status),
     statusState: optionalString(record.statusState),
     statusPresentation: optionalString(record.statusPresentation),

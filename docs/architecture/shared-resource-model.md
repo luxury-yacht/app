@@ -23,7 +23,7 @@ DTO fields; it does not reinterpret primary resource semantics.
   slot, label, value, optional `ResourceLink`, optional presentation token,
   optional `Search` expansion for collapsed list values) built by each kind's
   stream-summary builder from its typed facts — never a preformatted prose
-  string. Slots (`DetailSlotReference`/`DetailSlotAddress`/`DetailSlotCounts`)
+  string. Slots (`DetailSlotReference`/`DetailSlotAddress`/`DetailSlotCounts`/`DetailSlotConfiguration`)
   map to the aligned frontend Context/Network/Summary columns; each segment's
   label carries the resource-specific meaning within that stable column model.
   `DetailSegmentsSearchText` is the canonical search flatten (expanding

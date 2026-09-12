@@ -30,6 +30,7 @@ import {
 import { helmReleaseDescriptor } from './descriptors/helm';
 import { ingressDescriptor } from './descriptors/ingress';
 import { cronJobDescriptor, jobDescriptor } from './descriptors/job';
+import { getKarpenterOverviewDescriptor, karpenterDescriptor } from './descriptors/karpenter';
 import { networkPolicyDescriptor } from './descriptors/networkpolicy';
 import { nodeDescriptor } from './descriptors/node';
 import { podDescriptor } from './descriptors/pod';
@@ -119,13 +120,17 @@ for (const reg of registrations) {
 }
 
 export function getOverviewDescriptor(
-  kind: string | null | undefined
+  kind: string | null | undefined,
+  detail?: unknown
 ): OverviewDescriptor<never> | undefined {
   if (!kind) {
     return undefined;
   }
-  return byKind.get(kind.toLowerCase());
+  return getKarpenterOverviewDescriptor(kind, detail) ?? byKind.get(kind.toLowerCase());
 }
 
 /** Unique descriptors (one per registration) — for the drift-check to iterate. */
-export const registeredDescriptors = registrations.map((reg) => reg.descriptor);
+export const registeredDescriptors = [
+  ...registrations.map((reg) => reg.descriptor),
+  karpenterDescriptor as OverviewDescriptor<never>,
+];

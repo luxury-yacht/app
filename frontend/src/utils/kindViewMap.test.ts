@@ -70,6 +70,19 @@ describe('getViewForKind', () => {
     expect(result).toEqual({ viewType: expectedViewType, tab: expectedTab });
   });
 
+  it('routes discovered Karpenter groups without confusing colliding kinds', () => {
+    expect(getViewForKind('NodePool', 'karpenter.sh', '')).toEqual({
+      viewType: 'cluster',
+      tab: 'karpenter',
+    });
+    expect(getViewForKind('AKSNodeClass', 'karpenter.azure.com', '')).toEqual({
+      viewType: 'cluster',
+      tab: 'karpenter',
+    });
+    expect(getViewForKind('NodePool', 'unrelated.io', '')).toBeNull();
+    expect(getViewForKind('NodePool', 'karpenter.sh', 'default')).toBeNull();
+  });
+
   it('returns null for unknown kinds', () => {
     expect(getViewForKind('UnknownKind')).toBeNull();
     expect(getViewForKind('FooBar')).toBeNull();

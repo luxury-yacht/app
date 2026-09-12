@@ -40,13 +40,15 @@ const autoRefreshLoadingState = vi.hoisted(() => ({
   suppressPassiveLoading: false,
 }));
 
+const discoveredFamilies = vi.hoisted(() => ({ byCluster: {} as Record<string, string[]> }));
+
 const attentionState = vi.hoisted(() => ({
   byScope: {
     'cluster-a|': {
       severityCounts: { info: 2, warning: 3, error: 1 },
     },
   } as Record<string, { severityCounts: { info: number; warning: number; error: number } }>,
-  useRefreshDomainHandle: vi.fn(),
+  recordRefreshHandle: vi.fn(),
   useStreamSignalRefetch: vi.fn(),
 }));
 
@@ -72,8 +74,14 @@ vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
 }));
 
 vi.mock('@/core/data-access', () => ({
-  useRefreshDomainHandle: (options: { scope?: string }) => {
-    attentionState.useRefreshDomainHandle(options);
+  useRefreshDomainHandle: (options: { domain?: string; scope?: string }) => {
+    if (options.domain === 'catalog') {
+      const clusterId = options.scope?.split('|')[0] ?? '';
+      return {
+        data: { clusterId, resourceFamilies: discoveredFamilies.byCluster[clusterId] ?? [] },
+      };
+    }
+    attentionState.recordRefreshHandle(options);
     return { data: options.scope ? attentionState.byScope[options.scope] : null };
   },
 }));
@@ -340,6 +348,24 @@ describe('Sidebar', () => {
     expect(viewStateMock.setActiveClusterView).not.toHaveBeenCalled();
   });
 
+  it('shows Karpenter only for the selected cluster discovery, including empty installations', () => {
+    renderSidebar();
+    const button = () => container?.querySelector('[data-sidebar-target-view="karpenter"]');
+    expect(button()).toBeNull();
+    discoveredFamilies.byCluster['cluster-a'] = ['karpenter'];
+    renderSidebar();
+    expect(button()?.textContent).toBe('Karpenter');
+    act(() => (button() as HTMLButtonElement).click());
+    expect(viewStateMock.setActiveClusterView).toHaveBeenCalledWith('karpenter');
+    kubeconfigState.selectedClusterId = 'cluster-b';
+    renderSidebar();
+    expect(button()).toBeNull();
+    kubeconfigState.selectedClusterId = 'cluster-a';
+    discoveredFamilies.byCluster['cluster-a'] = [];
+    renderSidebar();
+    expect(button()).toBeNull();
+  });
+
   it('shows active-cluster Attention severity counts beside the label', () => {
     renderSidebar();
 
@@ -352,7 +378,7 @@ describe('Sidebar', () => {
     expect(attention?.querySelector('.sidebar-attention-badge--warning')?.textContent).toBe('3');
     expect(attention?.querySelector('.sidebar-attention-badge--error')?.textContent).toBe('1');
     expect(attention?.getAttribute('aria-label')).toBe('Attention: 2 info, 3 warnings, 1 error');
-    expect(attentionState.useRefreshDomainHandle).toHaveBeenCalledWith(
+    expect(attentionState.recordRefreshHandle).toHaveBeenCalledWith(
       expect.objectContaining({
         domain: 'cluster-attention',
         scope: 'cluster-a|',
@@ -375,7 +401,7 @@ describe('Sidebar', () => {
       '4'
     );
     expect(getAttention()?.querySelector('.sidebar-attention-badge--error')?.textContent).toBe('2');
-    expect(attentionState.useRefreshDomainHandle).toHaveBeenLastCalledWith(
+    expect(attentionState.recordRefreshHandle).toHaveBeenLastCalledWith(
       expect.objectContaining({ scope: 'cluster-b|' })
     );
   });
@@ -592,6 +618,7 @@ describe('Sidebar', () => {
   });
 
   beforeEach(() => {
+    discoveredFamilies.byCluster = {};
     manualScope.names = [];
     container = document.createElement('div');
     document.body.appendChild(container);

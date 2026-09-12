@@ -77,6 +77,8 @@ function ClusterResourcesViews({
         return <ClusterViewConfig error={configError} />;
       case 'crds':
         return <ClusterViewCRDs error={crdsError} />;
+      case 'karpenter':
+        return <ClusterViewCustom resourceFamily="karpenter" />;
       case 'custom':
         return (
           <ClusterViewCustom loading={customLoading} loaded={customLoaded} error={customError} />

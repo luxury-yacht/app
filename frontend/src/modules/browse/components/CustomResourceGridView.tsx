@@ -205,6 +205,9 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
 
   return {
     selectedClusterId,
+    selectedClusterName,
+    openReference: openWithObject,
+    navigateReference: navigateToView,
     useShortResourceNames,
     handleResourceClick,
     keyExtractor,

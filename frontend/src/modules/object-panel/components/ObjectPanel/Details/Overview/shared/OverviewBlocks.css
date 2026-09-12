@@ -150,6 +150,14 @@
   line-height: 1.5;
 }
 
+/* Reference values remain copyable outside an OverviewItem. Override the app's
+   descendant selection reset directly, including nested link text. */
+.overview-ref-list .overview-ref-item,
+.overview-ref-list .overview-ref-item * {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* ---------- Conditions ----------
    Layout-only: lays a row of StatusChip components on a single line that
    wraps when needed. The chip styling itself lives in StatusChip.css. */

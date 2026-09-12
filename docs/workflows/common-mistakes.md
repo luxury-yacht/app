@@ -4,6 +4,25 @@ Read this before editing. When user feedback identifies a recurring mistake,
 record the pattern and a concrete prevention check here. Keep entries focused
 on reusable rules; omit transient logs, credentials, and session history.
 
+## Packing resource data into generic columns
+
+A passing field-presence test does not prove a usable resource view. Give table
+columns specific names and one value per cell; keep long configuration lists in
+Details. Reuse the app's existing browsing and section patterns. Do not introduce
+resource tabs to repair overloaded columns without an established product pattern.
+Use realistic long lists, sparse objects and narrow panels when reviewing layout;
+check hierarchy and scanability separately from data coverage. Preview detail
+content under the real `.app` selection reset and verify selecting/copying values,
+including lists outside `OverviewItem`. A screenshot cannot establish that text
+is selectable; selection overrides must reach the text-bearing descendants.
+For minor presentation fixes, use direct interaction checks instead of adding
+tests that assert CSS properties or markup. Reserve regression tests for
+meaningful application behavior.
+
+Keep table sizing in the production column builder. A story must not add
+auto-sizing or other layout transformations that the live view omits; compare
+the column-building path before treating a preview as evidence of app layout.
+
 ## Missing native behavior changes in dependency upgrades
 
 A framework upgrade can retain a method while making its default implementation
@@ -345,3 +364,17 @@ and failure paths through the registry and frontend consumers, including:
 
 Run source-inventory tests after binding generation finishes; concurrent generation
 creates and removes temporary trees while those tests enumerate frontend files.
+
+## Resource-family integration
+
+- Keep an optional family filter in every catalog scope transformation, including
+  normalization, metadata queries, continuation signatures, pages, and exports.
+  A view-only filter does not constrain server counts or later pages.
+- Register new table view IDs with persistence cleanup. Keep the view configuration's
+  `viewId` explicit so the registry contract test can trace its consumer.
+- When a live dynamic detail read shares a cached header with snapshot versioning,
+  refresh the header from the same object. Test two changed resource versions
+  through the snapshot builder before relying on panel refresh behavior.
+- Exercise the actual casing sent by object-panel detail scopes. Preserve the
+  API object's canonical kind when projecting a dynamic resource; a normalized
+  request kind is a lookup key, not a replacement for returned identity.

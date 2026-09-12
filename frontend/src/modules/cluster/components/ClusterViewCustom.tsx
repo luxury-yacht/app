@@ -16,14 +16,29 @@ import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGri
 import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import React, { useMemo } from 'react';
+import { karpenterColumns } from './karpenterColumns';
 
 // The binding's header arrow and the catalog query must agree on the default
 // order. NsViewCustom gets this from useNamespaceGridTablePersistence's
 // defaultSort seed; this view seeds the same default onto its raw persistence.
 const CLUSTER_CUSTOM_DEFAULT_SORT = { key: 'name', direction: 'asc' } as const;
 
+const CUSTOM_VIEW = {
+  viewId: 'cluster-custom',
+  label: 'Cluster Custom',
+  spinner: 'Loading cluster custom resources...',
+  empty: 'No cluster-scoped custom objects found',
+};
+const KARPENTER_VIEW = {
+  viewId: 'cluster-karpenter',
+  label: 'Karpenter',
+  spinner: 'Loading Karpenter resources...',
+  empty: 'No Karpenter objects found',
+};
+
 // Define props for ClusterViewCustom component
 interface ClusterCustomViewProps {
+  resourceFamily?: 'karpenter';
   loading?: boolean;
   loaded?: boolean;
   error?: string | null;
@@ -34,12 +49,31 @@ interface ClusterCustomViewProps {
  * Displays various custom resources in the cluster
  */
 const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
-  ({ loading = false, loaded = false, error }) => {
+  ({ loading = false, loaded = false, error, resourceFamily }) => {
+    const config = resourceFamily ? KARPENTER_VIEW : CUSTOM_VIEW;
     const parts = useCustomResourceGridParts();
-    const { keyExtractor, baseColumns: columns, selectedClusterId } = parts;
+    const {
+      keyExtractor,
+      selectedClusterId,
+      baseColumns,
+      openReference,
+      navigateReference,
+      selectedClusterName,
+    } = parts;
+    const columns = useMemo(() => {
+      if (!resourceFamily) {
+        return baseColumns;
+      }
+      return karpenterColumns({
+        baseColumns,
+        openReference,
+        navigateReference,
+        selectedClusterName,
+      });
+    }, [resourceFamily, baseColumns, openReference, navigateReference, selectedClusterName]);
 
     const basePersistence = useGridTablePersistence<CustomResourceGridRow>({
-      viewId: 'cluster-custom',
+      viewId: config.viewId,
       clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
@@ -60,8 +94,9 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     const catalog = useCatalogBackedCustomResourceRows({
       clusterId: selectedClusterId,
       clusterScopedOnly: true,
+      resourceFamily,
       persistence,
-      diagnosticLabel: 'Cluster Custom',
+      diagnosticLabel: config.label,
     });
     const {
       filterOptions: catalogFilterOptions,
@@ -79,7 +114,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       keyExtractor,
       defaultSortKey: 'name',
       defaultSortDirection: 'asc',
-      diagnosticsLabel: 'Cluster Custom',
+      diagnosticsLabel: config.label,
       filterOptions: {
         searchBehavior: 'query',
         kinds: catalogFilterOptions.kinds,
@@ -99,14 +134,14 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         gridTableProps={gridTableProps}
         favModal={favModal}
         columns={columns}
-        idPrefix="cluster-custom"
+        idPrefix={config.viewId}
         cacheKeySuffix=""
-        exportFilename="cluster-custom-resources"
-        spinnerMessage="Loading cluster custom resources..."
-        diagnosticsLabel="Cluster Custom"
+        exportFilename={`${config.viewId}-resources`}
+        spinnerMessage={config.spinner}
+        diagnosticsLabel={config.label}
         tableClassName="cluster-custom-table"
         emptyError={error}
-        emptyText="No cluster-scoped custom objects found"
+        emptyText={config.empty}
         extraLoading={loading ?? false}
         extraLoaded={loaded}
       />

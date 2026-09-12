@@ -135,6 +135,7 @@ export const filterNamespaceScopedItems = (items: CatalogItem[]): CatalogItem[] 
  * Parameters for building a catalog scope query string.
  */
 export interface BuildCatalogScopeParams {
+  resourceFamily?: string;
   limit: number;
   resourceScope?: 'cluster' | 'namespace';
   scopeNamespaces?: string[];
@@ -157,6 +158,9 @@ export interface BuildCatalogScopeParams {
  */
 export const buildCatalogScope = (params: BuildCatalogScopeParams): string => {
   const query = new URLSearchParams();
+  if (params.resourceFamily) {
+    query.set('resourceFamily', params.resourceFamily);
+  }
   query.set('limit', String(params.limit));
   if (params.customOnly) {
     query.set('customOnly', 'true');
@@ -257,48 +261,9 @@ export const normalizeCatalogScope = (
 
   try {
     const params = new URLSearchParams(trimmed);
-    const limitRaw = params.get('limit');
-    const limit =
-      limitRaw && Number.isFinite(Number(limitRaw)) && Number(limitRaw) > 0
-        ? Number(limitRaw)
-        : fallbackLimit;
-    const search = params.get('search') ?? '';
-    const sort = params.get('sort') ?? undefined;
-    const sortDirection = params.get('sortDirection') ?? undefined;
-    const continueToken = params.get('continue');
-    // startRank must survive normalization or numbered jumps silently break
-    // (this function rebuilds the scope from the params it knows about).
-    const startRankRaw = params.get('startRank');
-    const startRank =
-      startRankRaw !== null && Number.isFinite(Number(startRankRaw))
-        ? Number(startRankRaw)
-        : undefined;
-    const customOnly = params.get('customOnly') === 'true';
-    const matchNone = params.get('matchNone') === 'true';
-    const resourceScope = params.get('resourceScope');
-    const kinds = params.getAll('kind');
-    const apiGroups = params.getAll('apiGroup');
-    // Use pinned namespaces if provided, otherwise use namespaces from the scope.
-    const namespaces = pinnedNamespaces.length > 0 ? pinnedNamespaces : params.getAll('namespace');
-    const scopeNamespaces =
-      pinnedNamespaces.length > 0 ? pinnedNamespaces : params.getAll('scopeNamespace');
-
-    const normalized = buildCatalogScope({
-      limit,
-      resourceScope:
-        resourceScope === 'cluster' || resourceScope === 'namespace' ? resourceScope : undefined,
-      scopeNamespaces,
-      search,
-      kinds,
-      namespaces,
-      apiGroups,
-      sort,
-      sortDirection,
-      continueToken,
-      startRank,
-      customOnly,
-      matchNone,
-    });
+    const normalized = buildCatalogScope(
+      catalogScopeParameters(params, pinnedNamespaces, fallbackLimit)
+    );
     if (prefix) {
       return `${prefix}|${normalized}`;
     }
@@ -309,4 +274,53 @@ export const normalizeCatalogScope = (
     }
     return buildClusterScope(clusterId ?? undefined, trimmed);
   }
+};
+
+const positiveLimit = (value: string | null, fallback: number): number =>
+  value && Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : fallback;
+
+const catalogScopeParameters = (
+  params: URLSearchParams,
+  pinnedNamespaces: string[],
+  fallbackLimit: number
+): BuildCatalogScopeParams => {
+  const limit = positiveLimit(params.get('limit'), fallbackLimit);
+  const search = params.get('search') ?? '';
+  const sort = params.get('sort') ?? undefined;
+  const sortDirection = params.get('sortDirection') ?? undefined;
+  const continueToken = params.get('continue');
+  // startRank must survive normalization or numbered jumps silently break
+  // (this function rebuilds the scope from the params it knows about).
+  const startRankRaw = params.get('startRank');
+  const startRank =
+    startRankRaw !== null && Number.isFinite(Number(startRankRaw))
+      ? Number(startRankRaw)
+      : undefined;
+  const customOnly = params.get('customOnly') === 'true';
+  const matchNone = params.get('matchNone') === 'true';
+  const resourceScope = params.get('resourceScope');
+  const kinds = params.getAll('kind');
+  const apiGroups = params.getAll('apiGroup');
+  // Use pinned namespaces if provided, otherwise use namespaces from the scope.
+  const namespaces = pinnedNamespaces.length > 0 ? pinnedNamespaces : params.getAll('namespace');
+  const scopeNamespaces =
+    pinnedNamespaces.length > 0 ? pinnedNamespaces : params.getAll('scopeNamespace');
+
+  return {
+    resourceFamily: params.get('resourceFamily') ?? undefined,
+    limit,
+    resourceScope:
+      resourceScope === 'cluster' || resourceScope === 'namespace' ? resourceScope : undefined,
+    scopeNamespaces,
+    search,
+    kinds,
+    namespaces,
+    apiGroups,
+    sort,
+    sortDirection,
+    continueToken,
+    startRank,
+    customOnly,
+    matchNone,
+  };
 };

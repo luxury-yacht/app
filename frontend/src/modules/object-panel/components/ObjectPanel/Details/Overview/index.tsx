@@ -130,7 +130,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
   const renderOverviewContent = () => {
     // Descriptor-migrated kinds render from the raw active DTO; the rest fall back to the legacy
     // per-kind component path.
-    const descriptor = getOverviewDescriptor(props.kind);
+    const descriptor = getOverviewDescriptor(props.kind, props.activeDetail);
     if (descriptor) {
       return (
         <OverviewRenderer<never>

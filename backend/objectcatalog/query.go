@@ -13,6 +13,8 @@ package objectcatalog
 import (
 	"sort"
 	"strings"
+
+	"github.com/luxury-yacht/app/backend/resourcekind"
 )
 
 type kindMatcher func(kind, group, version, resource string) bool
@@ -246,7 +248,7 @@ func newCustomOnlyMatcher(enabled bool) customOnlyMatcher {
 }
 
 func countMatchingDescriptorsWithOptions(descriptors []Descriptor, matcher kindMatcher, opts QueryOptions) int {
-	if matcher == nil && !opts.CustomOnly && len(opts.Groups) == 0 && len(opts.ResourceScopes) == 0 {
+	if matcher == nil && opts.ResourceFamily == "" && !opts.CustomOnly && len(opts.Groups) == 0 && len(opts.ResourceScopes) == 0 {
 		return len(descriptors)
 	}
 	descriptorMatcher := newDescriptorQueryMatcher(matcher, opts)
@@ -260,6 +262,7 @@ func countMatchingDescriptorsWithOptions(descriptors []Descriptor, matcher kindM
 }
 
 type descriptorQueryMatcher struct {
+	resourceFamily string
 	kindMatcher    kindMatcher
 	customOnly     bool
 	filterGroups   bool
@@ -270,7 +273,8 @@ type descriptorQueryMatcher struct {
 
 func newDescriptorQueryMatcher(matcher kindMatcher, opts QueryOptions) descriptorQueryMatcher {
 	result := descriptorQueryMatcher{
-		kindMatcher: matcher, customOnly: opts.CustomOnly,
+		resourceFamily: opts.ResourceFamily,
+		kindMatcher:    matcher, customOnly: opts.CustomOnly,
 		filterGroups: len(opts.Groups) > 0, filterScopes: len(opts.ResourceScopes) > 0,
 		groups: make(map[string]struct{}, len(opts.Groups)), resourceScopes: make(map[string]struct{}, len(opts.ResourceScopes)),
 	}
@@ -284,6 +288,9 @@ func newDescriptorQueryMatcher(matcher kindMatcher, opts QueryOptions) descripto
 }
 
 func (m descriptorQueryMatcher) matches(desc Descriptor) bool {
+	if m.resourceFamily != "" && resourcekind.FamilyForResource(desc.Group, desc.Namespaced) != m.resourceFamily {
+		return false
+	}
 	if m.customOnly && descriptorIsBuiltin(desc) {
 		return false
 	}

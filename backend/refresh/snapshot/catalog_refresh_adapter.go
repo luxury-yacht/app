@@ -78,6 +78,7 @@ func (a catalogRefreshAdapter) assemble(
 
 	payload, truncated := buildCatalogSnapshot(result, opts, health, cachesReady, forceFinal)
 	payload.ClusterMeta = a.clusterMeta
+	payload.ResourceFamilies = a.service.DiscoveredResourceFamilies()
 	payload.NamespaceGroups = buildCatalogNamespaceGroups(
 		a.service,
 		a.clusterMeta,
