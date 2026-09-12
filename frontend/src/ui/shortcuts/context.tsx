@@ -300,11 +300,9 @@ const dispatchEscapeThroughSurfaces = (
     if (dispatchSurfaceHandler(event, surface.onKeyDown)) {
       return true;
     }
-    if (surface.suppressShortcuts) {
-      return true;
-    }
   }
-  return false;
+  // Shortcut suppression must not prevent an enclosing modal from owning Escape.
+  return surfaces.some((surface) => surface.suppressShortcuts);
 };
 
 const STANDARD_EDIT_KEYS = new Set(['a', 'c', 'v', 'x']);

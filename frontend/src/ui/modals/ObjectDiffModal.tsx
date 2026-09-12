@@ -1107,7 +1107,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
 
   useModalFocusTrap({
     ref: modalRef,
-    focusableSelector: '.dropdown-trigger, button, input',
     disabled: !shouldRender,
     onEscape: () => {
       if (!isOpen) {

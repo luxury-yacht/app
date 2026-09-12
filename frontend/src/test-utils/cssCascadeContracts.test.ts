@@ -32,6 +32,9 @@ const resolveFocusColors = (source: string) =>
       .replace(/var\(--color-bg\)/g, 'rgb(255, 255, 255)')
       .replace(/var\(--color-bg-secondary\)/g, 'rgb(240, 240, 240)')
       .replace(/var\(--color-bg-tertiary\)/g, 'rgb(230, 230, 230)')
+      .replace(/var\(--color-bg-tertiary, rgba\(255, 255, 255, 0\.05\)\)/g, 'rgb(230, 230, 230)')
+      .replace(/var\(--dropdown-menu-bg\)/g, 'rgb(255, 255, 255)')
+      .replace(/var\(--color-text\)/g, 'rgb(20, 20, 20)')
   );
 
 const installStyles = (...sources: string[]) => {
@@ -51,6 +54,72 @@ afterEach(() => {
 });
 
 describe('strict CSS cascade contracts', () => {
+  it.each([false, true])(
+    'preserves menu colors with shared focus styles loaded last=%s',
+    (focusLast) => {
+      const sources = [
+        'styles/utilities/focus.css',
+        'styles/components/dropdowns.css',
+        'src/shared/components/ContextMenu.css',
+      ];
+      if (focusLast) {
+        sources.reverse();
+      }
+      const style = installStyles(
+        ...sources.map((path) =>
+          resolveFocusColors(readProjectFile(path)).replace(/:hover/g, '.css-contract-hover')
+        )
+      );
+      style.dataset.cssContract = 'menu-focus-colors';
+      document.body.innerHTML = `
+      <button id="trigger" class="dropdown-trigger">Open</button>
+      <div id="dropdown" class="dropdown-menu" role="listbox" tabindex="-1">
+        <button id="highlighted" class="dropdown-option highlighted" role="option">Highlighted</button>
+        <button id="selected" class="dropdown-option selected" role="option">Selected</button>
+        <button id="selected-highlighted" class="dropdown-option selected highlighted" role="option">Both</button>
+        <input id="search" class="search-input" />
+        <button id="only" class="dropdown-only-action">only</button>
+      </div>
+      <dialog open class="dropdown-menu dropdown-filter-menu">
+        <div class="dropdown-option-row highlighted">
+          <button id="filter-selected" class="dropdown-option selected highlighted">Selected filter</button>
+        </div>
+      </dialog>
+      <div id="context" class="context-menu" role="menu" tabindex="-1">
+        <button id="context-item" class="context-menu-item is-focused" role="menuitem">Open</button>
+        <button id="danger-item" class="context-menu-item danger is-focused" role="menuitem">Delete</button>
+      </div>
+    `;
+      const cases = [
+        ['trigger', focusFill],
+        ['dropdown', 'rgb(255, 255, 255)'],
+        ['highlighted', 'rgb(230, 230, 230)'],
+        ['selected', 'rgb(230, 230, 230)'],
+        ['selected-highlighted', 'rgb(230, 230, 230)'],
+        ['search', focusFill],
+        ['only', focusFill],
+        ['context', 'rgb(255, 255, 255)'],
+        ['context-item', 'rgb(240, 240, 240)'],
+        ['danger-item', 'rgba(239, 68, 68, 0.1)'],
+      ];
+      for (const [id, color] of cases) {
+        const element = requireValue(document.getElementById(id), id);
+        element.classList.add('keyboard-programmatic-focus');
+        element.focus();
+        expect(getComputedStyle(element).backgroundColor, id).toBe(color);
+        element.classList.add('css-contract-hover');
+        expect(getComputedStyle(element).backgroundColor, `${id} hovered`).toBe(color);
+        element.blur();
+      }
+      const filter = requireValue(document.getElementById('filter-selected'), 'filter option');
+      filter.classList.add('keyboard-programmatic-focus');
+      filter.focus();
+      expect(getComputedStyle(filter).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+      filter.classList.add('css-contract-hover');
+      expect(getComputedStyle(filter).backgroundColor).toBe('rgb(230, 230, 230)');
+    }
+  );
+
   it('uses the shared background cue after component styles load without changing control layout', () => {
     const sources = [
       'styles/utilities/focus.css',

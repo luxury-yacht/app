@@ -5,6 +5,7 @@
  * Covers basic modal behavior and shortcut handling.
  */
 
+import type { DropdownProps } from '@shared/components/dropdowns/Dropdown/types';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -37,6 +38,8 @@ const runtimeMocks = vi.hoisted(() => ({
 const appMocks = vi.hoisted(() => ({
   FindCatalogObjectMatch: vi.fn(),
 }));
+
+const dropdownMocks = vi.hoisted(() => ({ useReal: false }));
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
@@ -72,58 +75,57 @@ vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => false,
 }));
 
-vi.mock('@shared/components/dropdowns/Dropdown/Dropdown', () => ({
-  default: ({
-    id,
-    options,
-    value,
-    onChange,
-    searchable,
-    searchValue,
-    searchPlaceholder,
-    onSearchChange,
-    disabled,
-    ariaLabel,
-  }: {
-    id?: string;
-    options: Array<{ value: string; label: string; group?: string }>;
-    value: string | string[];
-    onChange: (value: string) => void;
-    searchable?: boolean;
-    searchValue?: string;
-    searchPlaceholder?: string;
-    onSearchChange?: (value: string) => void;
-    disabled?: boolean;
-    ariaLabel?: string;
-  }) => (
-    <div>
-      <select
-        id={id}
-        aria-label={ariaLabel}
-        disabled={disabled}
-        value={typeof value === 'string' ? value : ''}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">Select</option>
-        {options
-          .filter((option) => option.group !== 'header')
-          .map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-      </select>
-      {!!searchable && (
-        <input
-          aria-label={`${ariaLabel} search`}
-          placeholder={searchPlaceholder}
-          value={searchValue ?? ''}
-          onChange={(event) => onSearchChange?.(event.target.value)}
-        />
-      )}
-    </div>
-  ),
-}));
+vi.mock('@shared/components/dropdowns/Dropdown/Dropdown', async (importOriginal) => {
+  const { default: RealDropdown } =
+    await importOriginal<typeof import('@shared/components/dropdowns/Dropdown/Dropdown')>();
+  return {
+    default: (props: DropdownProps) => {
+      if (dropdownMocks.useReal) {
+        return <RealDropdown {...props} />;
+      }
+      const {
+        id,
+        options,
+        value,
+        onChange,
+        searchable,
+        searchValue,
+        searchPlaceholder,
+        onSearchChange,
+        disabled,
+        ariaLabel,
+      } = props;
+      return (
+        <div>
+          <select
+            id={id}
+            aria-label={ariaLabel}
+            disabled={disabled}
+            value={typeof value === 'string' ? value : ''}
+            onChange={(event) => onChange(event.target.value)}
+          >
+            <option value="">Select</option>
+            {options
+              .filter((option) => option.group !== 'header')
+              .map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+          </select>
+          {!!searchable && (
+            <input
+              aria-label={`${ariaLabel} search`}
+              placeholder={searchPlaceholder}
+              value={searchValue ?? ''}
+              onChange={(event) => onSearchChange?.(event.target.value)}
+            />
+          )}
+        </div>
+      );
+    },
+  };
+});
 
 const makeState = (overrides: Partial<Record<string, unknown>> = {}) => ({
   status: 'ready',
@@ -267,6 +269,11 @@ describe('ObjectDiffModal', () => {
   let root: ReactDOM.Root;
 
   beforeEach(async () => {
+    dropdownMocks.useReal = false;
+    // jsdom has no layout scrolling; keyboard ownership and focus remain real.
+    if (!Element.prototype.scrollIntoView) {
+      Element.prototype.scrollIntoView = vi.fn();
+    }
     runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
     appMocks.FindCatalogObjectMatch.mockReset();
     appMocks.FindCatalogObjectMatch.mockResolvedValue(null);
@@ -293,6 +300,74 @@ describe('ObjectDiffModal', () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it('tabs past disabled actions and operates real dropdowns inside the modal', async () => {
+    dropdownMocks.useReal = true;
+    const onClose = vi.fn();
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <ObjectDiffModal isOpen onClose={onClose} />
+        </KeyboardProvider>
+      );
+    });
+    const control = (label: string) =>
+      requireValue(
+        document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`),
+        label
+      );
+    const press = async (key: string, shiftKey = false) =>
+      act(async () => {
+        document.activeElement?.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key,
+            shiftKey,
+            bubbles: true,
+            cancelable: true,
+          })
+        );
+      });
+    const close = control('Close object diff');
+    await act(async () => close.focus());
+    expect(document.querySelector<HTMLButtonElement>('.object-diff-match')?.disabled).toBe(true);
+    await press('Tab');
+    expect(document.activeElement).toBe(control('Left cluster'));
+    await press('Tab', true);
+    expect(document.activeElement).toBe(close);
+    await press('Tab');
+    await press('ArrowDown');
+    expect(control('Left cluster').getAttribute('aria-expanded')).toBe('true');
+    await press('Enter');
+    expect(control('Left cluster').textContent).toContain('Cluster A');
+    await press('Tab');
+    expect(document.activeElement).toBe(control('Left namespace'));
+    await press('ArrowDown');
+    await press('End');
+    await press('Enter');
+    expect(control('Left namespace').textContent).toContain('apps');
+    await press('Tab');
+    expect(document.activeElement).toBe(control('Left kind'));
+    await press('ArrowDown');
+    await press('Enter');
+    expect(control('Left kind').textContent).toContain('Deployment');
+    await press('Tab');
+    expect(document.activeElement).toBe(control('Left object'));
+    await press('Enter');
+    expect(document.activeElement?.getAttribute('placeholder')).toBe('Search objects');
+    await press('ArrowDown');
+    await press('Enter');
+    expect(control('Left object').textContent).toContain('alpha');
+    await press('Tab');
+    expect(document.activeElement).toBe(control('Right cluster'));
+    await press('Tab', true);
+    expect(document.activeElement).toBe(control('Left object'));
+    await press('Enter');
+    await press('Escape');
+    expect(document.activeElement).toBe(control('Left object'));
+    expect(onClose).not.toHaveBeenCalled();
+    await press('Escape');
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it('ignores overlay and modal-content clicks', () => {

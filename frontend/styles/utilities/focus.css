@@ -12,23 +12,55 @@
 /* App scope gives the shared treatment precedence over component focus rules,
    including styles loaded later by lazy views. The programmatic marker covers
    Tab and Control+Tab immediately after pointer use in native WebKit. */
-:root body :is(:focus-visible, .keyboard-programmatic-focus:focus),
-:root body :is(:focus-visible, .keyboard-programmatic-focus:focus):hover {
+:root
+  body
+  :is(:focus-visible, .keyboard-programmatic-focus:focus):not(
+    :where(.dropdown-menu, [role="menu"])
+  ),
+:root
+  body
+  :is(:focus-visible, .keyboard-programmatic-focus:focus):not(
+    :where(.dropdown-menu, [role="menu"])
+  ):hover {
   outline: none;
   outline-offset: 0;
   box-shadow: none;
 }
 
 /* Editable fields can match :focus-visible after a click. Tint them only
-   when the shared keyboard-navigation observer marks their focus. */
-:root
-  body
-  :is(:focus-visible:not(input, textarea, [contenteditable]), .keyboard-programmatic-focus:focus),
+   when the shared keyboard-navigation observer marks their focus.
+   Menus and their options retain their own background and selection colors. */
 :root
   body
   :is(
     :focus-visible:not(input, textarea, [contenteditable]),
     .keyboard-programmatic-focus:focus
+  ):not(
+    :where(
+      .dropdown-menu,
+      [role="menu"],
+      [role="menu"] *,
+      [role="listbox"],
+      [role="option"],
+      .dropdown-option,
+      .dropdown-group-header
+    )
+  ),
+:root
+  body
+  :is(
+    :focus-visible:not(input, textarea, [contenteditable]),
+    .keyboard-programmatic-focus:focus
+  ):not(
+    :where(
+      .dropdown-menu,
+      [role="menu"],
+      [role="menu"] *,
+      [role="listbox"],
+      [role="option"],
+      .dropdown-option,
+      .dropdown-group-header
+    )
   ):hover {
   background-color: var(--focus-background, var(--color-accent-bg));
   color: var(--color-text);

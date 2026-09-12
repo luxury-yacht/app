@@ -22,7 +22,11 @@ vi.mock('@core/desktop-runtime', () => ({
 
 vi.mock('@ui/settings/sections/AppearanceSection', () => ({
   __esModule: true,
-  default: vi.fn(() => <div data-testid="section-appearance" />),
+  default: vi.fn(() => (
+    <div data-testid="section-appearance">
+      <input aria-label="Appearance setting" />
+    </div>
+  )),
 }));
 
 vi.mock('@ui/settings/sections/KubeconfigsSection', () => ({
@@ -107,6 +111,78 @@ describe('SettingsModal', () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it('keeps categories at one Tab stop and moves their focus with arrows', async () => {
+    const category = (label: string) =>
+      requireValue(
+        Array.from(document.querySelectorAll<HTMLButtonElement>('.settings-modal-tab')).find(
+          (button) => button.textContent === label
+        ),
+        `expected ${label} category`
+      );
+    const close = requireValue(
+      document.querySelector<HTMLButtonElement>('[aria-label="Close Settings"]'),
+      'close'
+    );
+    const setting = requireValue(
+      document.querySelector<HTMLInputElement>('[aria-label="Appearance setting"]'),
+      'setting'
+    );
+    const press = async (key: string, modifiers: KeyboardEventInit = {}) => {
+      const event = new KeyboardEvent('keydown', {
+        key,
+        bubbles: true,
+        cancelable: true,
+        ...modifiers,
+      });
+      await act(async () => {
+        document.activeElement?.dispatchEvent(event);
+      });
+      return event;
+    };
+    const expectFocusStop = (label: string) => {
+      const stops = Array.from(
+        document.querySelectorAll<HTMLButtonElement>('.settings-modal-tab')
+      ).filter((button) => button.tabIndex === 0);
+      expect(stops).toEqual([category(label)]);
+    };
+
+    expect(document.activeElement).toBe(close);
+    expectFocusStop('Appearance');
+    await press('Tab');
+    expect(document.activeElement).toBe(category('Appearance'));
+    await press('ArrowDown');
+    expect(document.activeElement).toBe(category('Kubeconfigs'));
+    expectFocusStop('Kubeconfigs');
+    expect(category('Appearance').getAttribute('aria-current')).toBe('page');
+    await press('Tab');
+    expect(document.activeElement).toBe(setting);
+    expect((await press('ArrowDown')).defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(setting);
+    await press('Tab', { shiftKey: true });
+    expect(document.activeElement).toBe(category('Kubeconfigs'));
+    await press('ArrowUp');
+    await press('ArrowUp');
+    expect(document.activeElement).toBe(category('Advanced'));
+    await press('ArrowDown');
+    expect(document.activeElement).toBe(category('Appearance'));
+    await press('End');
+    expect(document.activeElement).toBe(category('Advanced'));
+    await press('Home');
+    expect(document.activeElement).toBe(category('Appearance'));
+    expect((await press('ArrowDown', { altKey: true })).defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(category('Appearance'));
+    expect((await press('Enter')).defaultPrevented).toBe(false);
+    expect((await press(' ')).defaultPrevented).toBe(false);
+
+    await act(async () => category('Display').click());
+    expectFocusStop('Display');
+    expect(document.querySelector('[data-testid="section-display"]')).not.toBeNull();
+    await press('Tab', { shiftKey: true });
+    expect(document.activeElement).toBe(close);
+    await press('Tab');
+    expect(document.activeElement).toBe(category('Display'));
   });
 
   it('closes on Escape through the shared modal surface', () => {
@@ -242,6 +318,9 @@ describe('SettingsModal', () => {
       await Promise.resolve();
     });
     expect(document.querySelector('[data-testid="section-advanced"]')).toBeTruthy();
+    expect(document.querySelector('.settings-modal-tab[tabindex="0"]')?.textContent).toBe(
+      'Advanced'
+    );
   });
 
   it('persists the active tab across opens via localStorage', async () => {
@@ -273,5 +352,8 @@ describe('SettingsModal', () => {
       await Promise.resolve();
     });
     expect(document.querySelector('[data-testid="section-display"]')).toBeTruthy();
+    expect(document.querySelector('.settings-modal-tab[tabindex="0"]')?.textContent).toBe(
+      'Display'
+    );
   });
 });

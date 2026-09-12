@@ -491,73 +491,77 @@ describe('keyboard surfaces', () => {
     expect(regionHandler).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to the parent surface for Escape when the deepest surface does not handle it', async () => {
-    const editorHandler = vi.fn();
-    const panelHandler = vi.fn();
+  it.each([false, true])(
+    'falls back to the parent surface for Escape with child shortcut suppression=%s',
+    async (suppressShortcuts) => {
+      const editorHandler = vi.fn();
+      const panelHandler = vi.fn();
 
-    const Harness = () => {
-      const panelRef = useRef<HTMLDivElement>(null);
-      const editorRef = useRef<HTMLDivElement>(null);
+      const Harness = () => {
+        const panelRef = useRef<HTMLDivElement>(null);
+        const editorRef = useRef<HTMLDivElement>(null);
 
-      useKeyboardSurface({
-        kind: 'panel',
-        rootRef: panelRef,
-        active: true,
-        onEscape: () => {
-          panelHandler();
-          return true;
-        },
-      });
+        useKeyboardSurface({
+          kind: 'panel',
+          rootRef: panelRef,
+          active: true,
+          onEscape: () => {
+            panelHandler();
+            return true;
+          },
+        });
 
-      useKeyboardSurface({
-        kind: 'editor',
-        rootRef: editorRef,
-        active: true,
-        onEscape: () => {
-          editorHandler();
-          return false;
-        },
-      });
+        useKeyboardSurface({
+          kind: 'editor',
+          rootRef: editorRef,
+          active: true,
+          suppressShortcuts,
+          onEscape: () => {
+            editorHandler();
+            return false;
+          },
+        });
 
-      return (
-        <div ref={panelRef}>
-          <div ref={editorRef}>
-            <button type="button" data-testid="inside-editor">
-              Inside editor
-            </button>
+        return (
+          <div ref={panelRef}>
+            <div ref={editorRef}>
+              <button type="button" data-testid="inside-editor">
+                Inside editor
+              </button>
+            </div>
           </div>
-        </div>
-      );
-    };
+        );
+      };
 
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <Harness />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
+      await act(async () => {
+        root.render(
+          <KeyboardProvider>
+            <Harness />
+          </KeyboardProvider>
+        );
+        await Promise.resolve();
+      });
 
-    const insideEditor = document.querySelector(
-      '[data-testid="inside-editor"]'
-    ) as HTMLButtonElement | null;
-    expect(insideEditor).not.toBeNull();
-    insideEditor?.focus();
+      const insideEditor = document.querySelector(
+        '[data-testid="inside-editor"]'
+      ) as HTMLButtonElement | null;
+      expect(insideEditor).not.toBeNull();
+      insideEditor?.focus();
 
-    const event = new KeyboardEvent('keydown', {
-      key: 'Escape',
-      bubbles: true,
-      cancelable: true,
-    });
-    act(() => {
-      insideEditor?.dispatchEvent(event);
-    });
+      const event = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        insideEditor?.dispatchEvent(event);
+      });
 
-    expect(editorHandler).toHaveBeenCalledTimes(1);
-    expect(panelHandler).toHaveBeenCalledTimes(1);
-    expect(event.defaultPrevented).toBe(true);
-  });
+      expect(editorHandler).toHaveBeenCalledTimes(1);
+      expect(panelHandler).toHaveBeenCalledTimes(1);
+      expect(event.defaultPrevented).toBe(true);
+    }
+  );
 
   it('preserves registration order when inline surface callbacks change on rerender', async () => {
     const firstHandler = vi.fn();
@@ -789,67 +793,70 @@ describe('keyboard surfaces', () => {
     expect(panelNativeActionHandler).not.toHaveBeenCalled();
   });
 
-  it('suppresses the shortcut registry while a suppressing surface is active', async () => {
-    const shortcutHandler = vi.fn();
+  it.each(['b', 'Escape'])(
+    'suppresses the %s shortcut registry entry while a suppressing surface is active',
+    async (key) => {
+      const shortcutHandler = vi.fn();
 
-    const Harness = () => {
-      const surfaceRef = useRef<HTMLDivElement>(null);
+      const Harness = () => {
+        const surfaceRef = useRef<HTMLDivElement>(null);
 
-      useKeyboardSurface({
-        kind: 'modal',
-        rootRef: surfaceRef,
-        active: true,
-        blocking: true,
-        suppressShortcuts: true,
+        useKeyboardSurface({
+          kind: 'modal',
+          rootRef: surfaceRef,
+          active: true,
+          blocking: true,
+          suppressShortcuts: true,
+        });
+
+        useShortcut({
+          key,
+          modifiers: { meta: true },
+          handler: () => {
+            shortcutHandler();
+            return true;
+          },
+          description: 'Blocked global shortcut',
+        });
+
+        return (
+          <div ref={surfaceRef}>
+            <button type="button" data-testid="inside-surface">
+              Inside
+            </button>
+          </div>
+        );
+      };
+
+      await act(async () => {
+        root.render(
+          <KeyboardProvider>
+            <Harness />
+          </KeyboardProvider>
+        );
+        await Promise.resolve();
       });
 
-      useShortcut({
-        key: 'b',
-        modifiers: { meta: true },
-        handler: () => {
-          shortcutHandler();
-          return true;
-        },
-        description: 'Blocked global shortcut',
+      const insideButton = document.querySelector(
+        '[data-testid="inside-surface"]'
+      ) as HTMLButtonElement | null;
+      expect(insideButton).not.toBeNull();
+      insideButton?.focus();
+
+      act(() => {
+        insideButton?.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key,
+            metaKey: true,
+            bubbles: true,
+            cancelable: true,
+          })
+        );
       });
 
-      return (
-        <div ref={surfaceRef}>
-          <button type="button" data-testid="inside-surface">
-            Inside
-          </button>
-        </div>
-      );
-    };
-
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <Harness />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-
-    const insideButton = document.querySelector(
-      '[data-testid="inside-surface"]'
-    ) as HTMLButtonElement | null;
-    expect(insideButton).not.toBeNull();
-    insideButton?.focus();
-
-    act(() => {
-      insideButton?.dispatchEvent(
-        new KeyboardEvent('keydown', {
-          key: 'b',
-          metaKey: true,
-          bubbles: true,
-          cancelable: true,
-        })
-      );
-    });
-
-    expect(shortcutHandler).not.toHaveBeenCalled();
-  });
+      expect(shortcutHandler).not.toHaveBeenCalled();
+    }
+  );
 
   it('passes command identity to an opted-in surface before dispatching an application-menu accelerator', async () => {
     const shortcutHandler = vi.fn();
