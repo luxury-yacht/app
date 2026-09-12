@@ -205,6 +205,7 @@ export const withAutoWidthColumns = <T,>(
  * Creates a simple text column (optionally interactive)
  */
 export interface CreateTextColumnOptions<T> extends GridColumnAlignmentOptions, ColumnSizingHint {
+  rowAction?: boolean;
   className?: string;
   hideable?: boolean;
   resizable?: boolean;
@@ -281,6 +282,7 @@ export function createTextColumn<T>(
     sortable: options?.sortable ?? true,
     sortValue: options?.sortValue ?? accessor,
     disableShortcuts: options?.disableShortcuts,
+    rowAction: options?.rowAction,
     render: (item: T) => {
       const display = renderValue(item);
       const dynamicClass = options?.getClassName?.(item);
@@ -347,6 +349,7 @@ export function createResourceNameColumn<T>(
   const options = typeof accessorOrOptions === 'function' ? maybeOptions : accessorOrOptions;
   const requiredOptions = {
     ...options,
+    rowAction: options?.rowAction ?? true,
     hideable: false,
     width: options?.width ?? 250,
   };
@@ -404,6 +407,7 @@ export function withNamespaceColumn<T>(
 type KindColumnClickHandler<T> = (item: T) => void;
 
 export interface CreateKindColumnOptions<T> extends GridColumnAlignmentOptions {
+  rowAction?: boolean;
   key?: string;
   header?: string;
   getKind: (item: T) => string;
@@ -439,6 +443,7 @@ export const createKindColumn = <T,>(
     alignData,
     disableShortcuts,
     allowRowClick = true,
+    rowAction = true,
   } = options;
   const resolveDisplayText = (item: T) => {
     if (getDisplayText) {
@@ -460,6 +465,7 @@ export const createKindColumn = <T,>(
     alignHeader,
     alignData,
     disableShortcuts,
+    rowAction,
     measurementSampleKey: (item: T) => {
       const displayText = resolveDisplayText(item);
       const interactive = Boolean(

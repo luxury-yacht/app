@@ -170,6 +170,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
         onClick: openNamespaceObject,
         isInteractive: (row) => !row.scopeStatus,
         allowRowClick: false,
+        rowAction: false,
       }),
       cf.createTextColumn<NamespaceTableRow>('name', 'Namespace', (row) => row.ref.name, {
         hideable: false,

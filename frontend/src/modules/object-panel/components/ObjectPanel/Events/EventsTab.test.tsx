@@ -272,35 +272,58 @@ describe('EventsTab', () => {
     );
   });
 
-  it('falls back to opening the related object when workspace navigation is unavailable', async () => {
-    navigationMocks.available = false;
-    hoistedSnapshot.data = { events: [makeEvent()] };
-    act(() => {
-      root.render(
-        <EventsTab
-          objectData={parentObjectData}
-          panelId={PANEL_ID}
-          eventsScope="cluster-a:events"
-          isActive
-        />
-      );
-    });
+  it.each([true, false])(
+    'preserves Object Name Alt+click with workspace navigation available=%s',
+    async (available) => {
+      navigationMocks.available = available;
+      hoistedSnapshot.data = { events: [makeEvent()] };
+      act(() => {
+        root.render(
+          <EventsTab
+            objectData={parentObjectData}
+            panelId={PANEL_ID}
+            eventsScope="cluster-a:events"
+            isActive
+          />
+        );
+      });
 
-    const objectNameColumn = requireValue(
-      gridTableState.lastProps?.columns.find((column) => column.key === 'objectName'),
-      'expected object name column'
-    );
-    const row = requireValue(gridTableState.lastProps?.data[0], 'expected event row');
-    const objectNameCell = requireReactElement<{
-      onClick: (event: { altKey: boolean }) => void;
-    }>(objectNameColumn.render(row), 'expected interactive event object name');
-    await act(async () => {
-      objectNameCell.props.onClick({ altKey: true });
-      await Promise.resolve();
-    });
-    expect(navigationMocks.navigateToView).not.toHaveBeenCalled();
-    expect(mockOpenWithObject).toHaveBeenCalledOnce();
-  });
+      const objectNameColumn = requireValue(
+        gridTableState.lastProps?.columns.find((column) => column.key === 'objectName'),
+        'expected object name column'
+      );
+      const row = requireValue(gridTableState.lastProps?.data[0], 'expected event row');
+      expect(objectNameColumn.rowAction).toBe(true);
+      const objectNameCell = requireReactElement<{
+        onClick: (event: {
+          altKey: boolean;
+          preventDefault: () => void;
+          stopPropagation: () => void;
+        }) => void;
+      }>(objectNameColumn.render(row), 'expected interactive event object name');
+      await act(async () => {
+        objectNameCell.props.onClick({
+          altKey: true,
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+        });
+        await Promise.resolve();
+      });
+      const expectedAction = available ? navigationMocks.navigateToView : mockOpenWithObject;
+      const otherAction = available ? mockOpenWithObject : navigationMocks.navigateToView;
+      expect(otherAction).not.toHaveBeenCalled();
+      expect(expectedAction).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          clusterId: PARENT_CLUSTER_ID,
+          group: '',
+          version: 'v1',
+          kind: 'Pod',
+          namespace: 'default',
+          name: 'related-pod',
+        })
+      );
+    }
+  );
 
   it('defaults the visible Last Seen column to newest-event sorting', async () => {
     hoistedSnapshot.data = {

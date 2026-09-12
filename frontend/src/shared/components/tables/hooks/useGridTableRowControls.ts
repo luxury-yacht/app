@@ -4,10 +4,15 @@ import { useLayoutEffect, useRef } from 'react';
 export const GRIDTABLE_INTERACTIVE_STOP_SELECTOR =
   'button, a[href], input, textarea, select, summary, [role="button"], [role="menuitem"], [data-gridtable-interactive="true"]';
 
-const updateRowTabStops = (wrapper: HTMLElement, rowKey: string | null) => {
+const updateRowTabStops = (wrapper: HTMLElement, rowKey: string | null, hasRowAction: boolean) => {
   for (const row of wrapper.querySelectorAll<HTMLElement>('.gridtable-row')) {
     for (const control of row.querySelectorAll<HTMLElement>(GRIDTABLE_INTERACTIVE_STOP_SELECTOR)) {
-      control.tabIndex = row.dataset.rowKey === rowKey && !control.matches(':disabled') ? 0 : -1;
+      const repeatsRowAction =
+        hasRowAction && Boolean(control.closest('[data-gridtable-row-action="true"]'));
+      control.tabIndex =
+        row.dataset.rowKey === rowKey && !control.matches(':disabled') && !repeatsRowAction
+          ? 0
+          : -1;
     }
   }
 };
@@ -26,7 +31,8 @@ const recoverRowControlFocus = (child: HTMLElement | null, table: HTMLElement | 
 export function useGridTableRowControls(
   wrapperRef: RefObject<HTMLDivElement | null>,
   tableRef: RefObject<HTMLTableElement | null>,
-  rowKey: string | null
+  rowKey: string | null,
+  hasRowAction: boolean
 ) {
   const focusedChild = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
@@ -35,7 +41,7 @@ export function useGridTableRowControls(
       return;
     }
     const sync = () => {
-      updateRowTabStops(wrapper, rowKey);
+      updateRowTabStops(wrapper, rowKey, hasRowAction);
       recoverRowControlFocus(focusedChild.current, tableRef.current);
     };
     const remember = () => {
@@ -61,7 +67,7 @@ export function useGridTableRowControls(
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['disabled', 'hidden'],
+      attributeFilter: ['disabled', 'hidden', 'data-gridtable-row-action'],
     });
     document.addEventListener('focusin', remember);
     wrapper.addEventListener('keydown', returnToTable);
@@ -70,5 +76,5 @@ export function useGridTableRowControls(
       document.removeEventListener('focusin', remember);
       wrapper.removeEventListener('keydown', returnToTable);
     };
-  }, [rowKey, tableRef, wrapperRef]);
+  }, [hasRowAction, rowKey, tableRef, wrapperRef]);
 }

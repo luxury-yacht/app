@@ -159,6 +159,7 @@ export function useGridTableRowRenderer<T>({
                 onContextMenu={(e) => handleContextMenu(e, model.key, item, absoluteIndex)}
                 style={model.cellStyle}
                 data-gridtable-shortcut-optout={disableShortcuts ? 'true' : undefined}
+                data-gridtable-row-action={model.column.rowAction}
               >
                 <span className="grid-cell-content">{cell.content}</span>
               </AriaGridCell>

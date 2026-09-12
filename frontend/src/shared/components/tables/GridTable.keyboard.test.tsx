@@ -6,6 +6,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
+import { createKindColumn, createResourceNameColumn, createTextColumn } from './columnFactories';
 import GridTable from './GridTable';
 
 // Keep table rendering, focus state, shortcut registration, and dispatch real.
@@ -32,6 +33,130 @@ describe('GridTable keyboard integration', () => {
     act(() => root.unmount());
     container.remove();
   });
+
+  it.each([false, true])(
+    'skips duplicate object links but keeps independent row controls (virtualized: %s)',
+    async (virtualized) => {
+      const openObject = vi.fn();
+      const openRelated = vi.fn();
+      const data = [...rows, { id: 'cluster-a|two', name: 'Two' }];
+      const resourceColumns = [
+        createKindColumn<(typeof rows)[number]>({
+          key: 'resource-type',
+          getKind: () => 'Pod',
+          onClick: openObject,
+          // Event Kind badges suppress click bubbling even when they open the row's object.
+          allowRowClick: false,
+        }),
+        {
+          ...createResourceNameColumn<(typeof rows)[number]>({ onClick: openObject }),
+          key: 'resource-name',
+        },
+        createKindColumn<(typeof rows)[number]>({
+          key: 'related-kind',
+          getKind: () => 'Namespace',
+          onClick: openRelated,
+          allowRowClick: false,
+          rowAction: false,
+        }),
+        createTextColumn<(typeof rows)[number]>('owner', 'Owner', (row) => `${row.name} owner`, {
+          onClick: openRelated,
+          allowRowClick: false,
+        }),
+      ];
+      const render = async (hasRowAction: boolean, kindColumn = resourceColumns[0]) =>
+        act(async () => {
+          root.render(
+            <KeyboardProvider>
+              <ZoomProvider>
+                <AppRegionNavigation />
+                <main data-app-region="content">
+                  <GridTable
+                    data={data}
+                    columns={[kindColumn, ...resourceColumns.slice(1)]}
+                    keyExtractor={(item) => item.id}
+                    onRowClick={hasRowAction ? openObject : undefined}
+                    virtualization={{ enabled: virtualized, threshold: 1 }}
+                  />
+                  <button type="button">After table</button>
+                </main>
+              </ZoomProvider>
+            </KeyboardProvider>
+          );
+        });
+      const press = async (key: string, shiftKey = false) =>
+        act(async () => {
+          document.activeElement?.dispatchEvent(
+            new KeyboardEvent('keydown', { key, shiftKey, bubbles: true, cancelable: true })
+          );
+        });
+
+      await render(true);
+      const table = requireValue(
+        container.querySelector<HTMLElement>('table[tabindex="0"]'),
+        'table'
+      );
+      await act(async () => table.focus());
+      const firstRow = requireValue(container.querySelector<HTMLElement>('.gridtable-row'), 'row');
+      expect(firstRow.style.position).toBe(virtualized ? 'absolute' : '');
+      const kind = requireValue(
+        firstRow.querySelector<HTMLButtonElement>('[data-column="resource-type"] button'),
+        'Kind'
+      );
+      const name = requireValue(
+        firstRow.querySelector<HTMLButtonElement>('[data-column="resource-name"] button'),
+        'Name'
+      );
+      expect(kind.tabIndex).toBe(-1);
+      expect(name.tabIndex).toBe(-1);
+
+      await press('Tab');
+      expect(document.activeElement?.textContent).toBe('Namespace');
+      await press('Tab');
+      expect(document.activeElement?.textContent).toBe('One owner');
+      await press('Tab');
+      expect(document.activeElement?.textContent).toBe('After table');
+      await press('Tab', true);
+      expect(document.activeElement?.textContent).toBe('One owner');
+      await press('Tab', true);
+      expect(document.activeElement?.textContent).toBe('Namespace');
+      await press('Tab', true);
+      expect(document.activeElement).toBe(table);
+      await press('Enter');
+      expect(openObject).toHaveBeenLastCalledWith(data[0]);
+      await press('ArrowDown');
+      await press(' ');
+      expect(openObject).toHaveBeenLastCalledWith(data[1]);
+      expect(openObject).toHaveBeenCalledTimes(2);
+      await press('Tab');
+      await press('Tab');
+      expect(document.activeElement?.textContent).toBe('Two owner');
+
+      // Pointer access remains available on a link that no longer has its own Tab stop.
+      await act(async () => {
+        kind.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+        name.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+      });
+      expect(openObject).toHaveBeenCalledTimes(4);
+      expect(openObject).toHaveBeenLastCalledWith(data[0]);
+      expect(openRelated).not.toHaveBeenCalled();
+
+      await render(false);
+      expect(kind.tabIndex).toBe(0);
+      expect(name.tabIndex).toBe(0);
+      await act(async () => table.focus());
+      await press('Tab');
+      expect(document.activeElement).toBe(kind);
+      await press('Tab');
+      expect(document.activeElement).toBe(name);
+      await render(true);
+      expect(kind.tabIndex).toBe(-1);
+      expect(name.tabIndex).toBe(-1);
+      await render(true, { ...resourceColumns[0], rowAction: false });
+      expect(kind.tabIndex).toBe(0);
+      expect(name.tabIndex).toBe(-1);
+    }
+  );
 
   it('tabs through only the current row controls and returns to row navigation', async () => {
     const onRowClick = vi.fn();

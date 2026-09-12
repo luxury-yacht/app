@@ -158,7 +158,7 @@ export function useGridTableInteractionWiring<T>({
     shouldIgnoreRowClick,
   });
 
-  useGridTableRowControls(wrapperRef, gridRef, focusedRowKey);
+  useGridTableRowControls(wrapperRef, gridRef, focusedRowKey, Boolean(onRowClick));
 
   useGridTableExternalFocus<T>({
     tableData,

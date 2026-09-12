@@ -430,6 +430,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
             : undefined,
           getClassName: () => 'object-panel-link',
           isInteractive: canOpenRelatedObject,
+          rowAction: true,
         }
       ),
       createTextColumn<EventDisplay>('reason', EVENT_LABELS.reason, (item) => item.reason || '-'),
