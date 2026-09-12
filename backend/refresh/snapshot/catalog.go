@@ -13,6 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
+	"github.com/luxury-yacht/app/backend/resourcekind"
 )
 
 const (
@@ -37,6 +38,7 @@ type CatalogConfig struct {
 // contract fields directly alongside its own projection so the frontend
 // controller can treat it as a conformant provider.
 type CatalogSnapshot struct {
+	ResourceFamilies []string `json:"resourceFamilies,omitempty"`
 	ClusterMeta
 	Provider     ResourceQueryProvider     `json:"provider"`
 	Completeness ResourceQueryCompleteness `json:"completeness,omitempty"`
@@ -93,6 +95,7 @@ type catalogBuilder struct {
 }
 
 type browseQueryOptions struct {
+	ResourceFamily  string
 	Scope           objectcatalog.Scope
 	ScopeNamespaces []string
 	Kinds           []string
@@ -409,7 +412,12 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 			return browseQueryOptions{}, fmt.Errorf("invalid catalog resource scope filter %q", raw)
 		}
 	}
+	family := values.Get("resourceFamily")
+	if family != "" && family != resourcekind.KarpenterFamily {
+		return browseQueryOptions{}, fmt.Errorf("invalid catalog resource family %q", family)
+	}
 	opts := browseQueryOptions{
+		ResourceFamily:  family,
 		Scope:           resourceScope,
 		ScopeNamespaces: values["scopeNamespace"],
 		Kinds:           request.Kinds,
@@ -431,6 +439,7 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 
 func (o browseQueryOptions) toQueryOptions() objectcatalog.QueryOptions {
 	opts := objectcatalog.QueryOptions{
+		ResourceFamily:  o.ResourceFamily,
 		Scope:           o.Scope,
 		ScopeNamespaces: o.ScopeNamespaces,
 		Kinds:           o.Kinds,

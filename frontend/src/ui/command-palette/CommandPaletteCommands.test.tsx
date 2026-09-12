@@ -69,6 +69,15 @@ const { mocks } = vi.hoisted(() => ({
   },
 }));
 
+const familyState = vi.hoisted(() => ({ families: [] as string[] }));
+vi.mock('@/core/data-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/core/data-access')>()),
+  useRefreshDomainHandle: () => ({
+    data: { clusterId: mocks.kubeconfig.selectedClusterId, resourceFamilies: familyState.families },
+  }),
+}));
+vi.mock('@/core/refresh/hooks/useStreamSignalRefetch', () => ({ useStreamSignalRefetch: vi.fn() }));
+
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => mocks.kubeconfig,
 }));
@@ -174,9 +183,11 @@ const renderHook = () => {
 
 describe('CommandPaletteCommands', () => {
   beforeEach(() => {
+    familyState.families = [];
     mocks.kubeconfig.kubeconfigs = [];
     mocks.kubeconfig.selectedKubeconfigs = [];
     mocks.kubeconfig.selectedKubeconfig = '';
+    mocks.kubeconfig.selectedClusterId = '';
     mocks.kubeconfig.setActiveKubeconfig.mockReset();
     mocks.kubeconfig.setSelectedKubeconfigs.mockReset();
     mocks.kubeconfig.openKubeconfig.mockReset();
@@ -209,6 +220,20 @@ describe('CommandPaletteCommands', () => {
 
   afterEach(() => {
     document.body.innerHTML = '';
+  });
+
+  it('includes Karpenter navigation only when that cluster discovers its APIs', () => {
+    mocks.kubeconfig.selectedClusterId = 'a';
+    const first = renderHook();
+    expect(first.getCommands().some((entry) => entry.id === 'cluster-karpenter')).toBe(false);
+    first.unmount();
+    familyState.families = ['karpenter'];
+    const second = renderHook();
+    const command = second.getCommands().find((entry) => entry.id === 'cluster-karpenter');
+    expect(command).toBeDefined();
+    act(() => command?.action());
+    expect(mocks.viewState.setActiveClusterView).toHaveBeenCalledWith('karpenter');
+    second.unmount();
   });
 
   it('shows the direct-open shortcut on the select-namespace command', () => {

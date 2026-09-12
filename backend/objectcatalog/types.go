@@ -213,6 +213,7 @@ type Options struct {
 
 // QueryOptions controls catalog queries executed against the in-memory cache.
 type QueryOptions struct {
+	ResourceFamily  string   // structural discovered API family; retained across user filters
 	Scope           Scope    // structural resource scope for this view; empty includes both scopes
 	ScopeNamespaces []string // structural namespace boundary retained when user filters are cleared
 	Kinds           []string // resource kinds to filter

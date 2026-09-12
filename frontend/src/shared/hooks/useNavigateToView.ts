@@ -9,7 +9,10 @@
  */
 
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import { buildGridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
+import {
+  buildGridTableFocusRequest,
+  type GridTableFocusRequest,
+} from '@shared/components/tables/hooks/gridTableFocusRequest';
 import { setPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
 import { useCallback } from 'react';
 import { useOptionalSidebarState } from '@/core/contexts/SidebarStateContext';
@@ -31,25 +34,11 @@ export function useNavigateToView(): NavigateToViewResult {
 
   const navigateToView = useCallback(
     (objectRef: KubernetesObjectReference) => {
-      const kind = objectRef.kind ?? objectRef.metadata?.kind;
-      if (!kind || !viewState || !sidebarState) {
+      const target = navigationTarget(objectRef);
+      if (!target || !viewState || !sidebarState) {
         return;
       }
-
-      const destination = getViewForKind(kind);
-      if (!destination) {
-        return;
-      }
-
-      // Multi-cluster rule (AGENTS.md): carry clusterId through as
-      // `string | undefined` rather than a `''` fallback. Downstream
-      // helpers treat undefined as "no cluster context" explicitly;
-      // empty string would silently conflate "no cluster" with "cluster
-      // named ''" and break cluster-scoped navigation.
-      const clusterId = objectRef.clusterId ?? undefined;
-      const namespace = (objectRef.namespace ?? objectRef.metadata?.namespace ?? undefined) as
-        | string
-        | undefined;
+      const { destination, request } = target;
 
       // 1. Navigate to the target view type
       viewState.setViewType(destination.viewType);
@@ -58,15 +47,7 @@ export function useNavigateToView(): NavigateToViewResult {
       if (destination.viewType === 'namespace') {
         viewState.setActiveNamespaceTab(destination.tab as NamespaceViewType);
 
-        // 3. Select the namespace so the view loads the right data
-        if (namespace && isNamespaceScopedKind(kind)) {
-          setSelectedNamespace(namespace, clusterId);
-        }
-
-        // 4. Update sidebar to reflect the namespace selection
-        if (namespace) {
-          sidebarState.setSidebarSelection({ type: 'namespace', value: namespace });
-        }
+        selectNavigationNamespace(request, setSelectedNamespace, sidebarState.setSidebarSelection);
       } else if (destination.viewType === 'cluster') {
         viewState.setActiveClusterView(destination.tab as ClusterViewType);
 
@@ -74,25 +55,48 @@ export function useNavigateToView(): NavigateToViewResult {
         sidebarState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
       }
 
-      // 5. Emit focus request so the target GridTable highlights the row.
-      //    Use the same canonical identity backbone as object opening. Stamp the
-      //    destination viewId (`${viewType}-${tab}`, matching a table's viewId) so
-      //    only the destination table can turn an unmatched request into an
-      //    anchor jump — a same-cluster non-target table (e.g. an object-panel
-      //    pods list) must not consume it and fire a false not-found.
-      const focusRequest = buildGridTableFocusRequest(objectRef);
-      if (focusRequest) {
-        const request = {
-          ...focusRequest,
-          destinationViewId:
-            destination.destinationViewId ?? `${destination.viewType}-${destination.tab}`,
-        };
-        setPendingFocusRequest(request);
-        eventBus.emit('gridtable:focus-request', request);
-      }
+      setPendingFocusRequest(request);
+      eventBus.emit('gridtable:focus-request', request);
     },
     [viewState, sidebarState, setSelectedNamespace]
   );
 
   return { available: Boolean(viewState && sidebarState), navigateToView };
+}
+
+// Resolve identity before changing views, and direct focus only to the target
+// table so a second table in the same cluster cannot consume the request.
+function navigationTarget(objectRef: KubernetesObjectReference) {
+  const focus = buildGridTableFocusRequest(objectRef);
+  if (!focus?.version || focus.group === undefined) {
+    return null;
+  }
+  const destination = getViewForKind(focus.kind, objectRef.group, focus.namespace);
+  if (!destination) {
+    return null;
+  }
+  return {
+    destination,
+    request: {
+      ...focus,
+      destinationViewId:
+        destination.destinationViewId ?? `${destination.viewType}-${destination.tab}`,
+    },
+  };
+}
+
+function selectNavigationNamespace(
+  request: GridTableFocusRequest,
+  setNamespace: ReturnType<typeof useNamespace>['setSelectedNamespace'],
+  setSidebarSelection: NonNullable<
+    ReturnType<typeof useOptionalSidebarState>
+  >['setSidebarSelection']
+) {
+  if (!request.namespace) {
+    return;
+  }
+  if (isNamespaceScopedKind(request.kind)) {
+    setNamespace(request.namespace, request.clusterId);
+  }
+  setSidebarSelection({ type: 'namespace', value: request.namespace });
 }

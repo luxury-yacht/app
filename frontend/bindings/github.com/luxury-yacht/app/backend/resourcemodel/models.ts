@@ -13,6 +13,45 @@ export interface ConditionFacts {
     "lastTransitionTime"?: v1$0.Time;
 }
 
+/**
+ * DetailSegment is one labeled fragment of a table row's Details cells.
+ */
+export interface DetailSegment {
+    /**
+     * Slot names the semantic column this segment belongs to (DetailSlot*).
+     */
+    "slot"?: string;
+
+    /**
+     * Label names the segment (e.g. "Rules", "Ready"); empty when the slot's
+     * column header already carries the meaning.
+     */
+    "label"?: string;
+
+    /**
+     * Value is the segment's display text. Collapsed lists display
+     * "first +N" with the full list carried in Search.
+     */
+    "value": string;
+
+    /**
+     * Search, when set, is the full text behind a collapsed Value; search and
+     * tooltips use it so collapsing never hides matches.
+     */
+    "search"?: string;
+
+    /**
+     * Link, when set, marks the value as an openable cross-object reference.
+     */
+    "link"?: ResourceLink | null;
+
+    /**
+     * Presentation is an optional status-presentation token (e.g. "warning")
+     * the frontend maps to CSS at the edge; empty renders as plain text.
+     */
+    "presentation"?: string;
+}
+
 export interface DisplayRef {
     "clusterId": string;
     "group"?: string;

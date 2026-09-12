@@ -9,6 +9,7 @@ import { useAppearanceMode } from '@core/contexts/AppearanceModeContext';
 import { useFavorites } from '@core/contexts/FavoritesContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useZoom } from '@core/contexts/ZoomContext';
+import { useAvailableClusterViews } from '@core/navigation/useAvailableClusterViews';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -43,7 +44,6 @@ import { CheckForUpdates } from '@/core/backend-api';
 import { requestContextRefresh } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import {
-  CLUSTER_VIEW_DESCRIPTORS,
   GLOBAL_VIEW_DESCRIPTORS,
   NAMESPACE_VIEW_DESCRIPTORS,
 } from '@/core/navigation/viewRegistry';
@@ -115,8 +115,11 @@ const getClusterViewIcon = (viewId: ClusterViewType) =>
     <CategoryIcon width={16} height={16} />
   );
 
-const buildClusterViewCommands = (openClusterTab: (view: ClusterViewType) => void): Command[] =>
-  CLUSTER_VIEW_DESCRIPTORS.map((view) => ({
+const buildClusterViewCommands = (
+  openClusterTab: (view: ClusterViewType) => void,
+  views: ReturnType<typeof useAvailableClusterViews>
+): Command[] =>
+  views.map((view) => ({
     id: `cluster-${view.id}`,
     label: `Cluster - ${view.label}`,
     icon: getClusterViewIcon(view.id),
@@ -197,6 +200,7 @@ export function useCommandPaletteCommands() {
   const { mode } = useAppearanceMode();
   const { zoomIn, zoomOut, resetZoom, zoomLevel } = useZoom();
   const { enabled: autoRefreshEnabled, toggle: toggleAutoRefresh } = useAutoRefresh();
+  const availableClusterViews = useAvailableClusterViews(selectedClusterId);
   const useShortResourceNames = useShortNames();
   const dimInactiveNamespaces = useDimInactiveNamespaces();
   const exclusiveNamespaces = useExclusiveNamespaces();
@@ -581,12 +585,13 @@ export function useCommandPaletteCommands() {
         shortcut: selectNamespaceShortcut,
       },
       ...buildGlobalViewCommands(selectedKubeconfigs.length > 1, openGlobalView),
-      ...buildClusterViewCommands(openClusterTab),
+      ...buildClusterViewCommands(openClusterTab, availableClusterViews),
     ],
     [
       viewState,
       mode,
       openClusterTab,
+      availableClusterViews,
       openGlobalView,
       closeCurrentClusterTab,
       closeTabShortcut,

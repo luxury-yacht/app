@@ -7,6 +7,7 @@ import "github.com/luxury-yacht/app/backend/resourcemodel"
 // the legacy namespace/cluster custom snapshot rows without requiring the
 // production Custom tabs to subscribe to full CRD fanout domains.
 type CustomResourceSummary struct {
+	Details            []resourcemodel.DetailSegment  `json:"details,omitempty"`
 	Ref                resourcemodel.ResourceRef      `json:"ref"`
 	CRDName            string                         `json:"crdName,omitempty"`
 	Status             string                         `json:"status,omitempty"`
@@ -38,6 +39,7 @@ func CustomResourceSummaryFromNamespace(row NamespaceCustomSummary) CustomResour
 
 func CustomResourceSummaryFromCluster(row ClusterCustomSummary) CustomResourceSummary {
 	return CustomResourceSummary{
+		Details:            row.Details,
 		Ref:                row.Ref,
 		CRDName:            row.CRDName,
 		Status:             row.Status,

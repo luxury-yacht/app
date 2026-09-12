@@ -26,6 +26,10 @@ const generatedSources = generatedModelFiles(bindingDirectory).map((file) =>
   readFileSync(file, 'utf8')
 );
 
+generatedSources.push(
+  readFileSync(path.resolve(bindingDirectory, '../src/core/refresh/types.generated.ts'), 'utf8')
+);
+
 const generatedDtoFields = (interfaceName: string): string[] => {
   const declaration = `export interface ${interfaceName} {`;
   const matches = generatedSources.filter((source) => source.includes(declaration));
@@ -33,7 +37,7 @@ const generatedDtoFields = (interfaceName: string): string[] => {
     throw new Error(`Expected one generated ${interfaceName} interface, found ${matches.length}`);
   }
   const interfaceBody = matches[0]?.split(declaration, 2)[1]?.split(/^}/m, 1)[0] ?? '';
-  return Array.from(interfaceBody.matchAll(/^\s+"([^"]+)"\??:/gm), (match) => match[1] as string);
+  return Array.from(interfaceBody.matchAll(/^\s+"?(\w+)"?\??:/gm), (match) => match[1] as string);
 };
 
 describe('Overview descriptor drift-check', () => {

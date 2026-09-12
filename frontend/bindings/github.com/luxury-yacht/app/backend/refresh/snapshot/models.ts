@@ -33,6 +33,7 @@ export interface AttentionObjectFindingIgnore {
  * production Custom tabs to subscribe to full CRD fanout domains.
  */
 export interface CustomResourceSummary {
+    "details"?: resourcemodel$0.DetailSegment[] | null;
     "ref": resourcemodel$0.ResourceRef;
     "crdName"?: string;
     "status"?: string;

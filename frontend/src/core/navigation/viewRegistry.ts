@@ -114,6 +114,21 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
   },
   {
     scope: 'cluster',
+    id: 'karpenter',
+    label: 'Karpenter',
+    description: 'View Karpenter node pools, node claims, and provider node classes',
+    keywords: [
+      'karpenter',
+      'nodepools',
+      'nodeclaims',
+      'nodeclasses',
+      'provisioners',
+      'nodeoverlays',
+    ],
+    refresher: null,
+  },
+  {
+    scope: 'cluster',
     id: 'rbac',
     label: 'RBAC',
     description: 'View cluster RBAC resources',

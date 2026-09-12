@@ -313,6 +313,7 @@ type NamespaceCustomSummary struct {
 
 // ClusterCustomSummary is a CRD-backed cluster-scoped custom resource row.
 type ClusterCustomSummary struct {
+	Details            []resourcemodel.DetailSegment  `json:"details,omitempty"`
 	Ref                resourcemodel.ResourceRef      `json:"ref"`
 	CRDName            string                         `json:"crdName,omitempty"`
 	Status             string                         `json:"status,omitempty"`

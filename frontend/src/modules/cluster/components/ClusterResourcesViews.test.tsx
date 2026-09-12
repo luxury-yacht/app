@@ -8,7 +8,11 @@ vi.mock('@modules/cluster/components/ClusterViewAttention', () => ({
   default: () => <div data-testid="attention" />,
 }));
 vi.mock('@modules/cluster/components/ClusterViewCRDs', () => ({ default: () => null }));
-vi.mock('@modules/cluster/components/ClusterViewCustom', () => ({ default: () => null }));
+vi.mock('@modules/cluster/components/ClusterViewCustom', () => ({
+  default: ({ resourceFamily }: { resourceFamily?: string }) => (
+    <div data-testid={resourceFamily ?? 'custom'} />
+  ),
+}));
 vi.mock('@modules/cluster/components/ClusterViewEvents', () => ({ default: () => null }));
 vi.mock('@modules/cluster/components/ClusterViewNamespaces', () => ({
   default: () => <div data-testid="namespaces" />,
@@ -36,6 +40,13 @@ describe('ClusterResourcesViews', () => {
     act(() => root.render(<ClusterResourcesViews activeTab="namespaces" />));
 
     expect(container.querySelector('[data-testid="namespaces"]')).not.toBeNull();
+  });
+
+  it('routes Karpenter and generic custom resources to separate inventories', () => {
+    act(() => root.render(<ClusterResourcesViews activeTab="karpenter" />));
+    expect(container.querySelector('[data-testid="karpenter"]')).not.toBeNull();
+    act(() => root.render(<ClusterResourcesViews activeTab="custom" />));
+    expect(container.querySelector('[data-testid="custom"]')).not.toBeNull();
   });
 
   it('renders the cluster attention inventory', () => {

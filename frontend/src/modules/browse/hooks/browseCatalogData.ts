@@ -34,6 +34,7 @@ export interface BrowseFilterOptions {
 }
 
 export interface BrowseCatalogPlanInput {
+  resourceFamily?: string;
   clusterId: string | null | undefined;
   clusterScopedOnly: boolean;
   customOnly?: boolean;
@@ -45,6 +46,7 @@ export interface BrowseCatalogPlanInput {
 }
 
 export interface BrowseCatalogPlan {
+  resourceFamily?: string;
   resourceScope: 'cluster' | 'namespace';
   scopeNamespaces: string[];
   isNamespaceScoped: boolean;
@@ -75,10 +77,26 @@ export const emptyBrowseCatalogCollection = (): BrowseCatalogCollection => ({
   indexByUid: new Map(),
 });
 
+const catalogNamespaces = (
+  clusterScopedOnly: boolean,
+  pinned: string[],
+  selected: string[],
+  available: string[]
+) => {
+  if (clusterScopedOnly) {
+    return ['cluster'];
+  }
+  if (pinned.length > 0) {
+    return pinned;
+  }
+  return selected.length > 0 ? selected : available;
+};
+
 export const buildBrowseCatalogPlan = ({
   clusterId,
   clusterScopedOnly,
   customOnly = false,
+  resourceFamily,
   pinnedNamespaces,
   filters,
   sort,
@@ -87,21 +105,16 @@ export const buildBrowseCatalogPlan = ({
 }: BrowseCatalogPlanInput): BrowseCatalogPlan => {
   const isNamespaceScoped = pinnedNamespaces.length > 0;
   const resourceScope = clusterScopedOnly ? 'cluster' : 'namespace';
-  const scopeNamespaces = isNamespaceScoped ? pinnedNamespaces : [];
+  const scopeNamespaces = pinnedNamespaces;
   const sortScope = catalogSortScope(sort);
   const selectedNamespaces = filters.namespaces ?? [];
   const hasUserNamespaceScope = isNamespaceScoped || selectedNamespaces.length > 0;
-  let namespacesToQuery: string[];
-
-  if (clusterScopedOnly) {
-    namespacesToQuery = ['cluster'];
-  } else if (isNamespaceScoped) {
-    namespacesToQuery = pinnedNamespaces;
-  } else if (selectedNamespaces.length > 0) {
-    namespacesToQuery = selectedNamespaces;
-  } else {
-    namespacesToQuery = availableNamespaces;
-  }
+  const namespacesToQuery = catalogNamespaces(
+    clusterScopedOnly,
+    pinnedNamespaces,
+    selectedNamespaces,
+    availableNamespaces
+  );
 
   const baseScope = buildCatalogScope({
     limit: pageLimit,
@@ -114,21 +127,14 @@ export const buildBrowseCatalogPlan = ({
     sort: sortScope.sort,
     sortDirection: sortScope.sortDirection,
     customOnly,
+    resourceFamily,
     matchNone: filters.matchNone,
   });
   const catalogScope =
     normalizeCatalogScope(baseScope, pageLimit, pinnedNamespaces, clusterId) ??
     buildClusterScope(clusterId ?? undefined, baseScope);
 
-  let metadataNamespaces: string[];
-
-  if (clusterScopedOnly) {
-    metadataNamespaces = ['cluster'];
-  } else if (isNamespaceScoped) {
-    metadataNamespaces = pinnedNamespaces;
-  } else {
-    metadataNamespaces = [];
-  }
+  const metadataNamespaces = catalogNamespaces(clusterScopedOnly, pinnedNamespaces, [], []);
 
   const metadataBaseScope = buildCatalogScope({
     limit: 1,
@@ -139,6 +145,7 @@ export const buildBrowseCatalogPlan = ({
     apiGroups: filters.apiGroups ?? [],
     namespaces: metadataNamespaces,
     customOnly,
+    resourceFamily,
     matchNone: filters.matchNone,
   });
   const metadataScope =
@@ -146,6 +153,7 @@ export const buildBrowseCatalogPlan = ({
     buildClusterScope(clusterId ?? undefined, metadataBaseScope);
 
   return {
+    resourceFamily,
     resourceScope,
     scopeNamespaces,
     isNamespaceScoped,
@@ -158,6 +166,7 @@ export const buildBrowseCatalogPlan = ({
       clusterId: clusterId ?? '',
       clusterScopedOnly,
       customOnly,
+      resourceFamily,
       pinnedNamespaces: pinnedNamespaces.map((ns) => ns.trim()).sort(compareUtf16Strings),
     }),
   };
@@ -175,6 +184,7 @@ export const buildBrowseCatalogPageScope = (
   const pageScope = buildCatalogScope({
     limit: input.pageLimit,
     resourceScope: plan.resourceScope,
+    resourceFamily: plan.resourceFamily,
     scopeNamespaces: plan.scopeNamespaces,
     search: input.filters.search ?? '',
     kinds: input.filters.kinds ?? [],

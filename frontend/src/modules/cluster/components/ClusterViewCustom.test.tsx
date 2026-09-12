@@ -284,6 +284,23 @@ describe('ClusterViewCustom', () => {
     container.remove();
   });
 
+  it('scopes Karpenter queries and renders the resource-specific columns', async () => {
+    await act(async () => {
+      root.render(<ClusterViewCustom resourceFamily="karpenter" />);
+    });
+    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceFamily: 'karpenter',
+        clusterScopedOnly: true,
+        clusterId: 'cluster-a',
+      })
+    );
+    const columns = gridTablePropsRef.current.columns;
+    expect(columns.map((column) => column.header)).toEqual(
+      expect.arrayContaining(['Context', 'Capacity', 'Configuration'])
+    );
+  });
+
   it('renders the errored empty state for a catalog error (details report via toasts)', async () => {
     useBrowseCatalogMock.mockReturnValue({
       ...browseCatalogResult(),

@@ -184,6 +184,7 @@ const selectFilterOptionsPayload = (
  * Options for the useBrowseCatalog hook.
  */
 export interface UseBrowseCatalogOptions {
+  resourceFamily?: string;
   /** Enables catalog scope lifecycle and startup refresh once owning state is ready. */
   enabled?: boolean;
   /** Cluster ID to filter items by */
@@ -310,6 +311,7 @@ export function useBrowseCatalog({
   pinnedNamespaces,
   clusterScopedOnly = false,
   customOnly = false,
+  resourceFamily,
   filters,
   sort,
   pageLimit: pageLimitProp,
@@ -392,6 +394,7 @@ export function useBrowseCatalog({
         clusterId,
         clusterScopedOnly,
         customOnly,
+        resourceFamily,
         pinnedNamespaces,
         filters: queryFilters,
         sort,
@@ -404,6 +407,7 @@ export function useBrowseCatalog({
       clusterId,
       clusterScopedOnly,
       customOnly,
+      resourceFamily,
       queryFilters,
       sort,
       pinnedNamespaces,

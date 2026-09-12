@@ -13,6 +13,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/streammux"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/customresource"
+	"github.com/luxury-yacht/app/backend/resources/karpenter"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 )
 
@@ -61,6 +63,11 @@ func typeOf[T any]() reflect.Type {
 }
 
 var contractTypes = []typeSpec{
+	{name: "KarpenterFacts", typeOf: typeOf[karpenter.Facts]()},
+	{name: "KarpenterRequirement", typeOf: typeOf[karpenter.Requirement]()},
+	{name: "KarpenterTaint", typeOf: typeOf[karpenter.Taint]()},
+	{name: "KarpenterBudget", typeOf: typeOf[karpenter.Budget]()},
+	{name: "CustomResourceDetails", typeOf: typeOf[customresource.Details]()},
 	{name: "RefreshPermissionDeniedDetails", typeOf: typeOf[refresh.PermissionDeniedDetails]()},
 	{name: "RefreshPermissionDeniedStatus", typeOf: typeOf[refresh.PermissionDeniedStatus]()},
 	{name: "SnapshotStats", typeOf: typeOf[refresh.SnapshotStats]()},

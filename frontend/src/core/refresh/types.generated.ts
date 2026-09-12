@@ -142,6 +142,7 @@ export interface CatalogNamespaceGroup {
 }
 
 export interface CatalogSnapshotPayload {
+  resourceFamilies?: Array<string>;
   clusterId: string;
   clusterName: string;
   provider: ResourceQueryProvider;
@@ -289,6 +290,7 @@ export interface ClusterConfigSnapshotPayload {
 }
 
 export interface ClusterCustomEntry {
+  details?: Array<DetailSegment>;
   ref: CanonicalResourceRef;
   crdName?: string;
   status?: string;
@@ -581,7 +583,22 @@ export interface ContainerLogsWireEntry {
   isEphemeral?: boolean;
 }
 
+export interface CustomResourceDetails {
+  ref: ResourceRef;
+  resourceFamily: string;
+  kind: string;
+  name: string;
+  status: string;
+  statusState: string;
+  statusPresentation: string;
+  conditions?: Array<ConditionFacts>;
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
+  karpenter?: KarpenterFacts;
+}
+
 export interface CustomResourceSummary {
+  details?: Array<DetailSegment>;
   ref: CanonicalResourceRef;
   crdName?: string;
   status?: string;
@@ -623,6 +640,59 @@ export interface DrainNodeOptionsPayload {
   force: boolean;
   disableEviction: boolean;
   skipWaitForPodsToTerminate: boolean;
+}
+
+export interface KarpenterBudget {
+  nodes: string;
+  reasons?: Array<string>;
+  schedule?: string;
+  duration?: string;
+}
+
+export interface KarpenterFacts {
+  nodeClass?: ResourceLink;
+  nodePool?: ResourceLink;
+  node?: ResourceLink;
+  weight?: number;
+  replicas?: number;
+  limits?: Record<string, string>;
+  capacity?: Record<string, string>;
+  allocatable?: Record<string, string>;
+  consolidationPolicy?: string;
+  consolidateAfter?: string;
+  expireAfter?: string;
+  terminationGracePeriod?: string;
+  requirements?: Array<KarpenterRequirement>;
+  taints?: Array<KarpenterTaint>;
+  startupTaints?: Array<KarpenterTaint>;
+  budgets?: Array<KarpenterBudget>;
+  providerID?: string;
+  imageID?: string;
+  instanceType?: string;
+  capacityType?: string;
+  zone?: string;
+  architecture?: string;
+  role?: string;
+  instanceProfile?: string;
+  imageFamily?: string;
+  subnets?: Array<string>;
+  securityGroups?: Array<string>;
+  images?: Array<string>;
+  tags?: Record<string, string>;
+  priceAdjustment?: string;
+}
+
+export interface KarpenterRequirement {
+  key: string;
+  operator: string;
+  values?: Array<string>;
+  minValues?: number;
+}
+
+export interface KarpenterTaint {
+  key: string;
+  value?: string;
+  effect: string;
 }
 
 export interface KindInfo {

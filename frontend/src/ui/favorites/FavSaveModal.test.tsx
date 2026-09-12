@@ -984,6 +984,7 @@ describe('FavSaveModal', () => {
       'cluster:storage',
       'cluster:crds',
       'cluster:custom',
+      'cluster:karpenter',
       'cluster:rbac',
       'namespace:browse',
       'namespace:map',

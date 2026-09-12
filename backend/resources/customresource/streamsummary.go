@@ -12,6 +12,7 @@ package customresource
 import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/karpenter"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -61,6 +62,7 @@ func BuildClusterStreamSummary(meta streamrows.ClusterMeta, resource *unstructur
 	model := BuildResourceModel(meta.ClusterID, resource, descriptor, resourcemodel.ResourceScopeCluster, "")
 	facts := BuildFacts(meta.ClusterID, resource, gvr, descriptor.CRDName, resourcemodel.ResourceModelBuildOptions{})
 	return streamrows.ClusterCustomSummary{
+		Details:            karpenter.TableDetails(karpenter.BuildFacts(meta.ClusterID, resource)),
 		Ref:                model.Ref,
 		CRDName:            descriptor.CRDName,
 		Status:             model.Status.Label,

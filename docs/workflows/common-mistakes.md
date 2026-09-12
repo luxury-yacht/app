@@ -345,3 +345,17 @@ and failure paths through the registry and frontend consumers, including:
 
 Run source-inventory tests after binding generation finishes; concurrent generation
 creates and removes temporary trees while those tests enumerate frontend files.
+
+## Resource-family integration
+
+- Keep an optional family filter in every catalog scope transformation, including
+  normalization, metadata queries, continuation signatures, pages, and exports.
+  A view-only filter does not constrain server counts or later pages.
+- Register new table view IDs with persistence cleanup. Keep the view configuration's
+  `viewId` explicit so the registry contract test can trace its consumer.
+- When a live dynamic detail read shares a cached header with snapshot versioning,
+  refresh the header from the same object. Test two changed resource versions
+  through the snapshot builder before relying on panel refresh behavior.
+- Exercise the actual casing sent by object-panel detail scopes. Preserve the
+  API object's canonical kind when projecting a dynamic resource; a normalized
+  request kind is a lookup key, not a replacement for returned identity.

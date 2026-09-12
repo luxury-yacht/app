@@ -73,7 +73,14 @@ const CLUSTER_SCOPED_MAP: Record<string, ViewDestination> = {
  * Look up the view destination for a Kubernetes resource kind.
  * Case-insensitive. Returns null for unknown kinds.
  */
-export function getViewForKind(kind: string): ViewDestination | null {
+export function getViewForKind(
+  kind: string,
+  group?: string | null,
+  namespace?: string | null
+): ViewDestination | null {
+  if (group?.startsWith('karpenter.') && !namespace) {
+    return { viewType: 'cluster', tab: 'karpenter' };
+  }
   const normalized = kind.toLowerCase();
   return NAMESPACE_SCOPED_MAP[normalized] ?? CLUSTER_SCOPED_MAP[normalized] ?? null;
 }

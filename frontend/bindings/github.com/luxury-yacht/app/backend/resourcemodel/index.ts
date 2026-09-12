@@ -3,6 +3,7 @@
 
 export type {
     ConditionFacts,
+    DetailSegment,
     DisplayRef,
     ResourceLink,
     ResourceRef,

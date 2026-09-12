@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import './Sidebar.css';
 import { useViewState } from '@core/contexts/ViewStateContext';
+import { useAvailableClusterViews } from '@core/navigation/useAvailableClusterViews';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -808,9 +809,11 @@ function Sidebar() {
       getCurrentSelectionTarget,
     });
 
-  // Cluster view items (always visible)
+  // Cluster views include optional families discovered in the active cluster.
   const attentionView = CLUSTER_VIEW_DESCRIPTORS.find((view) => view.id === 'attention');
-  const resourceViews = CLUSTER_VIEW_DESCRIPTORS.filter((view) => view.id !== 'attention');
+  const resourceViews = useAvailableClusterViews(selectedClusterId).filter(
+    (view) => view.id !== 'attention'
+  );
 
   // Scroll selected namespace into view when it changes
   useEffect(() => {

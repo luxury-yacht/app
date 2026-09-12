@@ -105,3 +105,27 @@ When touching catalog behavior:
 
 Run focused catalog/objectcatalog tests and the frontend browse tests affected
 by the change. For non-documentation work, finish with `wails3 task qc:prerelease`.
+
+## Discovered resource families
+
+The catalog owns optional resource-family availability. `DiscoveredResourceFamilies`
+reads discovered API identities before LIST permissions and object collection;
+`CatalogSnapshot.resourceFamilies` carries that availability with the cluster ID.
+The shell subscribes to a small catalog scope before optional views open, and
+accepts availability only for the active cluster. Empty installations remain
+visible; successful rediscovery without the APIs removes the entry.
+
+Karpenter is the cluster-scoped `karpenter.*` API family, including core kinds,
+provider NodeClasses, and other discovered kinds. Its dedicated cluster view uses
+`resourceFamily=karpenter` as a structural catalog boundary. Totals, facets,
+continuation signatures, subsequent pages, and exports retain this boundary.
+Discovery remains authoritative for GVK/GVR and served versions; Karpenter CRDs
+are not added to the built-in identity registry.
+
+Custom-resource row hydration and rich Karpenter details share the typed projection
+in `backend/resources/karpenter`. The overview exposes source configuration,
+capacity, relationships, and conditions without inventing defaults. Related
+references without a source API version remain display-only. Enriched details
+use a live, cluster-scoped GET and refresh header metadata from that same object,
+so the snapshot's source version changes with its contents. Existing custom
+resource YAML, capabilities, edit, and delete paths retain discovered identity.

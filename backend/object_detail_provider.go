@@ -17,8 +17,10 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/cachekeys"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcecontract"
+	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/helm"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -137,6 +139,9 @@ func isHelmReleaseGVK(gvk schema.GroupVersionKind) bool {
 // FetchObjectDetails retrieves the details of a Kubernetes object.
 func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (interface{}, error) {
 	resolved := p.resolveDetailContext(ctx)
+	if resourcekind.FamilyForResource(gvk.Group, namespace != "") != "" && gvk.Version != "" {
+		return p.fetchDiscoveredResourceDetails(ctx, resolved, gvk, name)
+	}
 	if _, ok := objectDetailFetchers[strings.ToLower(strings.TrimSpace(gvk.Kind))]; !ok {
 		return nil, snapshot.ErrObjectDetailNotImplemented
 	}
@@ -152,15 +157,10 @@ func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schem
 	}
 
 	cacheKey := objectDetailCacheKeyForGVK(gvk, namespace, name)
-	if p != nil && p.gateway != nil {
-		if cached, ok := p.gateway.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
-			// Avoid serving cached details when permission checks deny access.
-			if p.gateway.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk, namespace, name) {
-				return cached, nil
-			}
-			p.gateway.responseCacheDelete(resolved.selectionKey, cacheKey)
-		}
+	if cached, ok := p.cachedObjectDetails(ctx, resolved, gvk, namespace, name, cacheKey); ok {
+		return cached, nil
 	}
+
 	detail, err := fetcher.withDeps(ctx, resolved.deps, namespace, name)
 	if err == nil && p != nil && p.gateway != nil {
 		p.gateway.responseCacheStore(resolved.selectionKey, cacheKey, detail)
@@ -196,6 +196,14 @@ func (p *objectDetailProvider) FetchObjectHeaderMetadata(ctx context.Context, gv
 	if err != nil {
 		return snapshot.ObjectHeaderMetadata{}, err
 	}
+	meta := objectHeaderMetadata(obj)
+	if p != nil && p.gateway != nil {
+		p.gateway.responseCacheStore(resolved.selectionKey, cacheKey, meta)
+	}
+	return meta, nil
+}
+
+func objectHeaderMetadata(obj *unstructured.Unstructured) snapshot.ObjectHeaderMetadata {
 	meta := snapshot.ObjectHeaderMetadata{
 		LastModified:    common.FormatLastModified(obj),
 		ResourceVersion: obj.GetResourceVersion(),
@@ -209,10 +217,7 @@ func (p *objectDetailProvider) FetchObjectHeaderMetadata(ctx context.Context, gv
 			Finalizers:        append([]string(nil), obj.GetFinalizers()...),
 		}
 	}
-	if p != nil && p.gateway != nil {
-		p.gateway.responseCacheStore(resolved.selectionKey, cacheKey, meta)
-	}
-	return meta, nil
+	return meta
 }
 
 // objectDetailCacheKey matches FetchNamespacedResource cache keys for detail payloads.
@@ -443,4 +448,17 @@ func (p *objectDetailProvider) cachedHelmReleaseRevision(
 	}
 	p.gateway.responseCacheDelete(resolved.selectionKey, detailsCacheKey)
 	return 0, false
+}
+
+func (p *objectDetailProvider) cachedObjectDetails(ctx context.Context, resolved resolvedObjectDetailContext, gvk schema.GroupVersionKind, namespace, name, cacheKey string) (interface{}, bool) {
+	if p != nil && p.gateway != nil {
+		if cached, ok := p.gateway.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
+			// Avoid serving cached details when permission checks deny access.
+			if p.gateway.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk, namespace, name) {
+				return cached, true
+			}
+			p.gateway.responseCacheDelete(resolved.selectionKey, cacheKey)
+		}
+	}
+	return nil, false
 }
