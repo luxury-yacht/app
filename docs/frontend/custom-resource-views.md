@@ -93,3 +93,17 @@ namespace. Project names remain plain text: Applications can live outside the
 Argo CD control-plane namespace, so their own namespace cannot identify the
 AppProject. Destination names and servers are Argo CD targets, not Luxury Yacht
 cluster IDs; do not turn them into local navigation by guessing a cluster.
+
+Catalog row hydration and live Details optionally resolve a destination server
+to the name registered in Argo CD. The request's cluster client lists only
+Secrets labelled `argocd.argoproj.io/secret-type=cluster` in
+`status.controllerNamespace`, falling back to the object's namespace when that
+field is absent. It never searches other namespaces or Luxury Yacht clusters.
+Successful and failed lookups are shared once per namespace within the request,
+with a two-second timeout; only decoded names and servers are retained.
+Explicit destination names, templates, and wildcard policies remain unchanged.
+A denied read, unknown server, or conflicting registrations preserves the URL.
+The implicit local destination uses `in-cluster` after a successful lookup unless
+a registration overrides its name. Raw destination fields remain intact;
+`resolvedName` is display enrichment. The existing snapshot payload checksum
+changes the Details validator when a registration is renamed or access changes.

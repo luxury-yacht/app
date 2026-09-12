@@ -28,9 +28,10 @@ type ApplicationSpec struct {
 	SyncPolicy  *SyncPolicy `json:"syncPolicy,omitempty"`
 }
 type Destination struct {
-	Name      string `json:"name,omitempty"`
-	Server    string `json:"server,omitempty"`
-	Namespace string `json:"namespace,omitempty"`
+	Name         string `json:"name,omitempty"`
+	Server       string `json:"server,omitempty"`
+	Namespace    string `json:"namespace,omitempty"`
+	ResolvedName string `json:"resolvedName,omitempty"`
 }
 type Source struct {
 	RepoURL        string `json:"repoURL,omitempty"`

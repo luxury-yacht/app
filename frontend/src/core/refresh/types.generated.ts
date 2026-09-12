@@ -138,6 +138,7 @@ export interface ArgoCDDestination {
   name?: string;
   server?: string;
   namespace?: string;
+  resolvedName?: string;
 }
 
 export interface ArgoCDFacts {

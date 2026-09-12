@@ -89,7 +89,7 @@ function Destination({ destination }: Readonly<{ destination: ArgoCDDestination 
   return (
     <Fields
       fields={[
-        ['Cluster', destination.name || destination.server],
+        ['Cluster', destination.name || destination.resolvedName || destination.server],
         ['Server', destination.name ? destination.server : undefined],
         ['Namespace', destination.namespace],
       ]}

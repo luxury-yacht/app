@@ -109,10 +109,7 @@ func argoCDTableSummary(facts *argocd.Facts, status resourcemodel.ResourceStatus
 		spec = facts.ApplicationSet.Template
 	}
 	summary.Project = spec.Project
-	summary.Destination = spec.Destination.Name
-	if summary.Destination == "" {
-		summary.Destination = spec.Destination.Server
-	}
+	summary.Destination = spec.Destination.DisplayName()
 	summary.DestinationNamespace = spec.Destination.Namespace
 	return summary
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/argocd"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -44,6 +45,7 @@ func (p *objectDetailProvider) fetchDiscoveredResourceDetails(ctx context.Contex
 	descriptor := customresource.NewDescriptor(gvr.Group, gvr.Version, gvr.Resource, gvk.Kind, gvr.Resource+"."+gvr.Group)
 	clusterID := snapshot.ClusterMetaFromContext(ctx).ClusterID
 	details := customresource.BuildDetails(clusterID, object, descriptor, scope)
+	argocd.NewDestinationResolver(clusterID, resolved.deps.DynamicClient).EnrichFacts(ctx, object, details.ArgoCD)
 	if details.Karpenter != nil {
 		details.Karpenter.NodeClass = p.gateway.objectCatalogServiceForCluster(clusterID).ResolveRelatedResourceLink(details.Karpenter.NodeClass)
 	}

@@ -45,7 +45,11 @@ describe('Argo CD overview', () => {
         application: {
           spec: {
             project: 'production',
-            destination: { name: 'remote-prod', namespace: 'store' },
+            destination: {
+              server: 'https://prod.example.com',
+              resolvedName: 'remote-prod',
+              namespace: 'store',
+            },
             sources: [
               {
                 repoURL: 'https://git.example.com/config',
