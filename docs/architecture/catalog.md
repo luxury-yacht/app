@@ -131,3 +131,16 @@ references without a source API version remain display-only. Enriched details
 use a live, cluster-scoped GET and refresh header metadata from that same object,
 so the snapshot's source version changes with its contents. Existing custom
 resource YAML, capabilities, edit, and delete paths retain discovered identity.
+
+Family availability and catalog filtering are reusable; family registration is
+not yet generic. Classification in `backend/resourcekind/family.go`, shell view
+availability, table selection, and rich-detail dispatch still explicitly handle
+Karpenter. The current `customresource.BuildDetails` also assumes cluster scope.
+When adding another family, preserve discovered scope through navigation, queries,
+details and permissions; do not carry that assumption into namespaced resources.
+Family projections may depend on shared resource semantics; they must not import
+catalog, refresh or gateway packages. Object-map support is a separate surface
+and does not follow automatically from a dedicated table or overview.
+
+Presentation decisions are documented in
+[custom-resource views](../frontend/custom-resource-views.md).
