@@ -8,7 +8,6 @@
 import { useTableSort } from '@hooks/useTableSort';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
-import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import { useResourceInventoryTable } from '@modules/resource-grid/useResourceInventoryTable';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
@@ -481,16 +480,6 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   const { sortedData, sortConfig, handleSort } = useTableSort(events, 'age', 'desc', {
     columns,
   });
-  const partialDataLabel = useMemo(
-    () =>
-      buildLocalPartialDataLabel({
-        stats: eventsSnapshot.stats,
-        fallback: 'Object Events are loaded as a recent local window.',
-        sourceLabel: 'Object Events',
-        sourceVerb: 'are',
-      }),
-    [eventsSnapshot.stats]
-  );
 
   // Object events are a bounded, always-partial (recent-window) Event-resource
   // table. Its display lifecycle runs through the shared controller so the
@@ -512,7 +501,6 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
       loaded: !eventsLoading,
       error: eventsError,
       mode: 'Local Partial',
-      partialLabel: partialDataLabel,
     })
   );
 
@@ -561,12 +549,10 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   return (
     <div className="object-panel-tab-content">
       <div className="events-display">
-        <div className="events-display__partial-state" role="status">
-          {eventsRender.partialLabel}
-        </div>
         <GridTable<EventDisplay>
           data={eventsRender.rows}
           columns={columns}
+          emptyMessage="No events"
           sortConfig={sortConfig}
           onSort={handleSort}
           onRowClick={(item) => {
