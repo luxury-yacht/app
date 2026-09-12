@@ -66,3 +66,30 @@ prove those interactions. Keep regression tests focused on application behavior,
 rather than adding assertions for individual labels or CSS properties. Follow the
 [completion evidence contract](../workflows/completion.md) and distinguish
 Storybook fixture previews from live-cluster and native Wails validation.
+
+## Argo CD
+
+Argo CD uses the namespaced `argoproj.io` Application, ApplicationSet, and
+AppProject CRDs. The namespace and All Namespaces views use one table and the
+existing Kind filter. Discovery gates the sidebar and command palette; empty
+installations remain available. Other Argo products sharing `argoproj.io` do
+not belong to this family.
+
+The table separates Sync, Health, Project, Destination, and Target Namespace.
+Health and sync are independent backend projections; a synced Application can
+be degraded. ApplicationSet health follows ErrorOccurred and ResourcesUpToDate
+conditions. AppProject policy has no inferred health. Production column builders
+own auto-sizing, and `namespace-argocd` has its own registered persistence key.
+
+Overviews show Application sources, destination, declared sync policy, deployed
+revisions and last operation; ApplicationSet generators, base application
+template and application-management policy; and AppProject repositories,
+destinations, resource permissions, roles and sync windows. Conditions use the
+shared StatusChip with backend presentation. Values remain selectable. Raw Helm
+values and project JWT token metadata stay out of these display projections.
+
+ApplicationSet owner references preserve their source GVK and the Application's
+namespace. Project names remain plain text: Applications can live outside the
+Argo CD control-plane namespace, so their own namespace cannot identify the
+AppProject. Destination names and servers are Argo CD targets, not Luxury Yacht
+cluster IDs; do not turn them into local navigation by guessing a cluster.

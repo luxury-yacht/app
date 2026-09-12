@@ -77,6 +77,7 @@ const NAMESPACE_FEATURE_MAP: Record<NamespaceViewType, readonly PermissionFeatur
   autoscaling: [PERMISSION_FEATURES.namespaceAutoscaling],
   quotas: [PERMISSION_FEATURES.namespaceQuotas],
   custom: [PERMISSION_FEATURES.namespaceCustom],
+  argocd: [PERMISSION_FEATURES.namespaceCustom],
   helm: [PERMISSION_FEATURES.namespaceHelm],
   events: [PERMISSION_FEATURES.namespaceEvents],
 };

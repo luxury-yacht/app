@@ -8,7 +8,10 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import './Sidebar.css';
 import { useViewState } from '@core/contexts/ViewStateContext';
-import { useAvailableClusterViews } from '@core/navigation/useAvailableClusterViews';
+import {
+  useAvailableClusterViews,
+  useAvailableNamespaceViews,
+} from '@core/navigation/useAvailableResourceViews';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -29,11 +32,7 @@ import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { useRefreshDomainHandle } from '@/core/data-access';
 import { eventBus } from '@/core/events';
-import {
-  CLUSTER_VIEW_DESCRIPTORS,
-  GLOBAL_VIEW_DESCRIPTORS,
-  NAMESPACE_VIEW_DESCRIPTORS,
-} from '@/core/navigation/viewRegistry';
+import { CLUSTER_VIEW_DESCRIPTORS, GLOBAL_VIEW_DESCRIPTORS } from '@/core/navigation/viewRegistry';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
@@ -100,6 +99,7 @@ type NamespaceScopeState = ReturnType<typeof useNamespaceScope>;
 type SidebarKeyboardControls = ReturnType<typeof useSidebarKeyboardControls>;
 
 interface SidebarNamespaceRowProps {
+  availableViews: ReturnType<typeof useAvailableNamespaceViews>;
   namespace: NamespaceRow;
   selectedClusterId?: string;
   selectedNamespaceKey: string | null;
@@ -115,10 +115,8 @@ interface SidebarNamespaceRowProps {
   onNamespaceViewSelect: (scope: string, view: NamespaceViewType, clusterId?: string) => void;
 }
 
-const getNamespaceViews = (scope: string) =>
-  scope === ALL_NAMESPACES_SCOPE
-    ? NAMESPACE_VIEW_DESCRIPTORS.filter((view) => view.supportsAllNamespaces)
-    : NAMESPACE_VIEW_DESCRIPTORS;
+const getNamespaceViews = (scope: string, views: ReturnType<typeof useAvailableNamespaceViews>) =>
+  scope === ALL_NAMESPACES_SCOPE ? views.filter((view) => view.supportsAllNamespaces) : views;
 
 const getNamespaceStatusTitle = (status: NamespaceRow['scopeStatus']) =>
   status === 'not-found'
@@ -169,6 +167,7 @@ const SidebarNamespaceRemove = ({
 };
 
 interface SidebarNamespaceViewsProps {
+  availableViews: ReturnType<typeof useAvailableNamespaceViews>;
   isExpanded: boolean;
   namespaceViewsId: string;
   namespaceKey: string;
@@ -182,6 +181,7 @@ interface SidebarNamespaceViewsProps {
 }
 
 const SidebarNamespaceViews = ({
+  availableViews,
   isExpanded,
   namespaceViewsId,
   namespaceKey,
@@ -217,7 +217,7 @@ const SidebarNamespaceViews = ({
   }
   return (
     <div ref={expandedViewsRef} className="sidebar-views" id={namespaceViewsId}>
-      {getNamespaceViews(scope).map((view) => (
+      {getNamespaceViews(scope, availableViews).map((view) => (
         <button
           type="button"
           key={view.id}
@@ -257,6 +257,7 @@ const SidebarNamespaceViews = ({
 };
 
 const SidebarNamespaceRow = ({
+  availableViews,
   namespace,
   selectedClusterId,
   selectedNamespaceKey,
@@ -326,6 +327,7 @@ const SidebarNamespaceRow = ({
         />
       </div>
       <SidebarNamespaceViews
+        availableViews={availableViews}
         isExpanded={isExpanded}
         namespaceViewsId={namespaceViewsId}
         namespaceKey={namespaceKey}
@@ -575,6 +577,7 @@ interface NamespaceSidebarSectionProps {
 type NamespaceSidebarContentProps = Omit<NamespaceSidebarSectionProps, 'hidden' | 'shortcut'>;
 
 const NamespaceSidebarContent = (props: NamespaceSidebarContentProps) => {
+  const availableViews = useAvailableNamespaceViews(props.selectedClusterId);
   if (props.permissionDenied) {
     return (
       <>
@@ -596,6 +599,7 @@ const NamespaceSidebarContent = (props: NamespaceSidebarContentProps) => {
     <div className="namespace-items">
       {props.namespaces.map((namespace) => (
         <SidebarNamespaceRow
+          availableViews={availableViews}
           key={toNamespaceKey(props.selectedClusterId, namespace.scope ?? namespace.name)}
           namespace={namespace}
           selectedClusterId={props.selectedClusterId}

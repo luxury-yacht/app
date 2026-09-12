@@ -21,7 +21,7 @@ func TestKarpenterDetailsAndTableProjectionParity(t *testing.T) {
 	require.NoError(t, unstructured.SetNestedMap(object.Object, map[string]any{"cpu": "2", "memory": "1Ti"}, "spec", "limits"))
 	descriptor := NewDescriptor("karpenter.sh", "v1", "nodepools", "NodePool", "nodepools.karpenter.sh")
 	row := BuildClusterStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, object, descriptor)
-	detail := BuildDetails("cluster-a", object, descriptor)
+	detail := BuildDetails("cluster-a", object, descriptor, resourcemodel.ResourceScopeCluster)
 	require.Equal(t, "karpenter", detail.ResourceFamily)
 	require.Equal(t, row.Status, detail.Status)
 	require.Equal(t, row.StatusPresentation, detail.StatusPresentation)

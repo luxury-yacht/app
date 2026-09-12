@@ -92,7 +92,9 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 			catalogEngineSortCreationTimestamp: func(s Summary) string { return catalogEngineInvertTimestamp(s.CreationTimestamp) },
 		},
 		Facets: map[string]func(Summary) string{
-			catalogEngineFacetFamily: func(s Summary) string { return resourcekind.FamilyForResource(s.Ref.Group, s.Scope != ScopeCluster) },
+			catalogEngineFacetFamily: func(s Summary) string {
+				return resourcekind.FamilyForResource(s.Ref.Group, s.Ref.Kind, s.Scope != ScopeCluster)
+			},
 			// Canonical identity group\x00version\x00kind (lowercased kind, matching
 			// identityKey). Rows sharing this value match every kind filter identically,
 			// so a filter is honored by expanding it to the set of matching identities.
@@ -747,5 +749,5 @@ func (f catalogSnapshotFacetFilters) matchesDependentKind(item Summary) bool {
 }
 
 func catalogFamilyMatches(item Summary, family string) bool {
-	return family == "" || resourcekind.FamilyForResource(item.Ref.Group, item.Scope != ScopeCluster) == family
+	return family == "" || resourcekind.FamilyForResource(item.Ref.Group, item.Ref.Kind, item.Scope != ScopeCluster) == family
 }

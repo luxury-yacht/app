@@ -996,6 +996,7 @@ describe('FavSaveModal', () => {
       'namespace:network',
       'namespace:storage',
       'namespace:custom',
+      'namespace:argocd',
       'namespace:quotas',
       'namespace:rbac',
     ]);

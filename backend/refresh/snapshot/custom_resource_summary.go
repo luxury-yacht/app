@@ -10,6 +10,7 @@ import (
 // the legacy namespace/cluster custom snapshot rows without requiring the
 // production Custom tabs to subscribe to full CRD fanout domains.
 type CustomResourceSummary struct {
+	ArgoCD             *streamrows.ArgoCDSummary      `json:"argoCD,omitempty"`
 	Karpenter          *streamrows.KarpenterSummary   `json:"karpenter,omitempty"`
 	Ref                resourcemodel.ResourceRef      `json:"ref"`
 	CRDName            string                         `json:"crdName,omitempty"`
@@ -26,6 +27,7 @@ type CustomResourceSummary struct {
 
 func CustomResourceSummaryFromNamespace(row NamespaceCustomSummary) CustomResourceSummary {
 	return CustomResourceSummary{
+		ArgoCD:             row.ArgoCD,
 		Ref:                row.Ref,
 		CRDName:            row.CRDName,
 		Status:             row.Status,

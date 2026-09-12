@@ -133,16 +133,30 @@ details. Resolution requires an unambiguous group/kind/scope match; unavailable
 or ambiguous discovery leaves the reference display-only. Explicit source
 versions are preserved. Resolution neither waits for object collection nor adds
 API requests. Enriched details
-use a live, cluster-scoped GET and refresh header metadata from that same object,
+use a live GET in the requested cluster and discovered Kubernetes scope, and
+refresh header metadata from that same object,
 so the snapshot's source version changes with its contents. Existing custom
 resource YAML, capabilities, edit, and delete paths retain discovered identity.
 
+Argo CD is the namespaced `argoproj.io` Application, ApplicationSet, and AppProject
+family. Its namespace and All Namespaces views retain `resourceFamily=argocd`
+alongside the namespace boundary across counts, facets, pages, and exports.
+Classification matches both group and kind because other Argo products share
+that API group. Namespace row hydration and rich details share
+`backend/resources/argocd`; compact `ArgoCDSummary` rows contain table fields,
+while source configuration and project policy remain detail-only. Application
+health and sync are separate signals, and ApplicationSet errors take precedence
+over ResourcesUpToDate when projecting health.
+
 Family availability and catalog filtering are reusable; family registration is
-not yet generic. Classification in `backend/resourcekind/family.go`, shell view
-availability, table selection, and rich-detail dispatch still explicitly handle
-Karpenter. The current `customresource.BuildDetails` also assumes cluster scope.
-When adding another family, preserve discovered scope through navigation, queries,
-details and permissions; do not carry that assumption into namespaced resources.
+explicit. Add classification in `backend/resourcekind/family.go`, discovered
+availability in `useAvailableResourceViews`, table selection/persistence, and
+rich-detail projection/descriptor for each family. `customresource.BuildDetails`
+accepts the resolved scope; its gateway rejects namespace/scope mismatches before
+GET and keys header metadata by namespace. Preserve discovered scope through
+navigation, queries, details and permissions. Related references need complete
+identity; Argo destination cluster names and project names do not establish a
+local cluster or control-plane namespace and must not be guessed into links.
 Family projections may depend on shared resource semantics; they must not import
 catalog, refresh or gateway packages. Object-map support is a separate surface
 and does not follow automatically from a dedicated table or overview.

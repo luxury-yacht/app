@@ -59,6 +59,7 @@ describe('view registry', () => {
       { id: 'network', label: 'Network' },
       { id: 'storage', label: 'Storage' },
       { id: 'custom', label: 'Custom' },
+      { id: 'argocd', label: 'Argo CD' },
       { id: 'quotas', label: 'Quotas' },
       { id: 'rbac', label: 'RBAC' },
     ]);

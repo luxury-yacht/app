@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { getViewForKind, isNamespaceScopedKind } from './kindViewMap';
+import { getViewForKind } from './kindViewMap';
 
 describe('getViewForKind', () => {
   // Namespace-scoped kinds
@@ -96,22 +96,14 @@ describe('getViewForKind', () => {
   });
 });
 
-describe('isNamespaceScopedKind', () => {
-  it('returns true for namespace-scoped kinds', () => {
-    expect(isNamespaceScopedKind('Pod')).toBe(true);
-    expect(isNamespaceScopedKind('Deployment')).toBe(true);
-    expect(isNamespaceScopedKind('ConfigMap')).toBe(true);
-    expect(isNamespaceScopedKind('Service')).toBe(true);
-  });
-
-  it('returns false for cluster-scoped kinds', () => {
-    expect(isNamespaceScopedKind('Node')).toBe(false);
-    expect(isNamespaceScopedKind('ClusterRole')).toBe(false);
-    expect(isNamespaceScopedKind('PersistentVolume')).toBe(false);
-    expect(isNamespaceScopedKind('Namespace')).toBe(false);
-  });
-
-  it('returns false for unknown kinds', () => {
-    expect(isNamespaceScopedKind('UnknownKind')).toBe(false);
-  });
+it('routes only namespaced Argo CD objects into the Argo CD view', () => {
+  for (const kind of ['Application', 'ApplicationSet', 'AppProject']) {
+    expect(getViewForKind(kind, 'argoproj.io', 'team-a')).toEqual({
+      viewType: 'namespace',
+      tab: 'argocd',
+    });
+    expect(getViewForKind(kind, 'other.io', 'team-a')).toBeNull();
+    expect(getViewForKind(kind, 'argoproj.io', '')).toBeNull();
+  }
+  expect(getViewForKind('Workflow', 'argoproj.io', 'team-a')).toBeNull();
 });

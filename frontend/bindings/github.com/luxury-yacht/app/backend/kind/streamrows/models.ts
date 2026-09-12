@@ -6,6 +6,19 @@
 import * as resourcemodel$0 from "../../resourcemodel/models.js";
 
 /**
+ * ArgoCDSummary holds the focused fields used by the Argo CD table.
+ */
+export interface ArgoCDSummary {
+    "health"?: string;
+    "healthPresentation"?: string;
+    "sync"?: string;
+    "syncPresentation"?: string;
+    "project"?: string;
+    "destination"?: string;
+    "destinationNamespace"?: string;
+}
+
+/**
  * KarpenterSummary contains only the facts shown in the Karpenter table.
  * Capacity and limits supply NodePool usage; scheduling and provider configuration
  * belong to the rich detail DTO.

@@ -139,8 +139,8 @@ func isHelmReleaseGVK(gvk schema.GroupVersionKind) bool {
 // FetchObjectDetails retrieves the details of a Kubernetes object.
 func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (interface{}, error) {
 	resolved := p.resolveDetailContext(ctx)
-	if resourcekind.FamilyForResource(gvk.Group, namespace != "") != "" && gvk.Version != "" {
-		return p.fetchDiscoveredResourceDetails(ctx, resolved, gvk, name)
+	if resourcekind.FamilyForResource(gvk.Group, gvk.Kind, namespace != "") != "" && gvk.Version != "" {
+		return p.fetchDiscoveredResourceDetails(ctx, resolved, gvk, namespace, name)
 	}
 	if _, ok := objectDetailFetchers[strings.ToLower(strings.TrimSpace(gvk.Kind))]; !ok {
 		return nil, snapshot.ErrObjectDetailNotImplemented

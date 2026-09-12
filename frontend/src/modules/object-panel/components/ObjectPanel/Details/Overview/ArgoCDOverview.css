@@ -1,0 +1,33 @@
+.argocd-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+.argocd-overview-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-md);
+  min-width: 0;
+}
+.argocd-overview-section > h3 {
+  margin: 0;
+  padding: 0;
+}
+.argocd-overview .overview-label {
+  flex: 0 0 8rem;
+  min-width: 0;
+}
+.argocd-overview .overview-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.app .argocd-overview .overview-value,
+.app .argocd-overview .overview-value *,
+.app .argocd-overview .overview-ref-item {
+  user-select: text;
+  -webkit-user-select: text;
+}

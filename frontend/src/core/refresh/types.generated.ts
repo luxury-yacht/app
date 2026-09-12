@@ -87,6 +87,141 @@ export const RESOURCE_STREAM_SIGNALS = ['changed', 'reset', 'error'] as const;
 
 export type ResourceStreamSignal = (typeof RESOURCE_STREAM_SIGNALS)[number];
 
+export interface ArgoCDApplicationFacts {
+  spec: ArgoCDApplicationSpec;
+  sync?: string;
+  syncPresentation?: string;
+  health?: string;
+  healthPresentation?: string;
+  healthMessage?: string;
+  revisions?: Array<string>;
+  operation?: ArgoCDOperation;
+  applicationSet?: ResourceLink;
+  resourceCount?: number;
+}
+
+export interface ArgoCDApplicationSetFacts {
+  templateName?: string;
+  template: ArgoCDApplicationSpec;
+  generators?: Array<ArgoCDGenerator>;
+  strategy?: string;
+  applicationsSync?: string;
+  preserveResourcesOnDeletion?: boolean;
+  goTemplate?: boolean;
+}
+
+export interface ArgoCDApplicationSpec {
+  project?: string;
+  destination: ArgoCDDestination;
+  source?: ArgoCDSource;
+  sources?: Array<ArgoCDSource>;
+  syncPolicy?: ArgoCDSyncPolicy;
+}
+
+export interface ArgoCDAutomatedSync {
+  enabled?: boolean;
+  prune: boolean;
+  selfHeal: boolean;
+  allowEmpty: boolean;
+}
+
+export interface ArgoCDCondition {
+  type: string;
+  status?: string;
+  presentation: string;
+  message?: string;
+  reason?: string;
+  lastTransitionTime?: string;
+}
+
+export interface ArgoCDDestination {
+  name?: string;
+  server?: string;
+  namespace?: string;
+}
+
+export interface ArgoCDFacts {
+  application?: ArgoCDApplicationFacts;
+  applicationSet?: ArgoCDApplicationSetFacts;
+  project?: ArgoCDProjectFacts;
+  conditions?: Array<ArgoCDCondition>;
+}
+
+export interface ArgoCDGenerator {
+  type: string;
+  repoURL?: string;
+  revision?: string;
+}
+
+export interface ArgoCDOperation {
+  phase?: string;
+  message?: string;
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+export interface ArgoCDProjectFacts {
+  description?: string;
+  sourceRepos?: Array<string>;
+  sourceNamespaces?: Array<string>;
+  destinations?: Array<ArgoCDDestination>;
+  clusterResourceWhitelist?: Array<ArgoCDResourceRestriction>;
+  clusterResourceBlacklist?: Array<ArgoCDResourceRestriction>;
+  namespaceResourceWhitelist?: Array<ArgoCDResourceRestriction>;
+  namespaceResourceBlacklist?: Array<ArgoCDResourceRestriction>;
+  roles?: Array<ArgoCDProjectRole>;
+  syncWindows?: Array<ArgoCDSyncWindow>;
+}
+
+export interface ArgoCDProjectRole {
+  name: string;
+  description?: string;
+  groups?: Array<string>;
+  policies?: Array<string>;
+}
+
+export interface ArgoCDResourceRestriction {
+  group: string;
+  kind: string;
+  name?: string;
+}
+
+export interface ArgoCDSource {
+  repoURL?: string;
+  path?: string;
+  chart?: string;
+  targetRevision?: string;
+  ref?: string;
+  name?: string;
+}
+
+export interface ArgoCDSummary {
+  health?: string;
+  healthPresentation?: string;
+  sync?: string;
+  syncPresentation?: string;
+  project?: string;
+  destination?: string;
+  destinationNamespace?: string;
+}
+
+export interface ArgoCDSyncPolicy {
+  automated?: ArgoCDAutomatedSync;
+  syncOptions?: Array<string>;
+}
+
+export interface ArgoCDSyncWindow {
+  kind: string;
+  schedule: string;
+  duration: string;
+  timeZone?: string;
+  applications?: Array<string>;
+  namespaces?: Array<string>;
+  clusters?: Array<string>;
+  manualSync: boolean;
+  andOperator: boolean;
+}
+
 export interface AttentionCause {
   type: string;
   label: string;
@@ -584,6 +719,7 @@ export interface ContainerLogsWireEntry {
 }
 
 export interface CustomResourceDetails {
+  argoCD?: ArgoCDFacts;
   ref: ResourceRef;
   resourceFamily: string;
   kind: string;
@@ -598,6 +734,7 @@ export interface CustomResourceDetails {
 }
 
 export interface CustomResourceSummary {
+  argoCD?: ArgoCDSummary;
   karpenter?: KarpenterSummary;
   ref: CanonicalResourceRef;
   crdName?: string;
@@ -790,6 +927,7 @@ export interface NamespaceCustomSnapshotPayload {
 }
 
 export interface NamespaceCustomSummary {
+  argoCD?: ArgoCDSummary;
   ref: CanonicalResourceRef;
   crdName?: string;
   status?: string;

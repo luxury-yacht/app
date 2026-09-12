@@ -288,7 +288,7 @@ func newDescriptorQueryMatcher(matcher kindMatcher, opts QueryOptions) descripto
 }
 
 func (m descriptorQueryMatcher) matches(desc Descriptor) bool {
-	if m.resourceFamily != "" && resourcekind.FamilyForResource(desc.Group, desc.Namespaced) != m.resourceFamily {
+	if m.resourceFamily != "" && resourcekind.FamilyForResource(desc.Group, desc.Kind, desc.Namespaced) != m.resourceFamily {
 		return false
 	}
 	if m.customOnly && descriptorIsBuiltin(desc) {

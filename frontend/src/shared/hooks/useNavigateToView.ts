@@ -20,7 +20,7 @@ import { useOptionalViewState } from '@/core/contexts/ViewStateContext';
 import { eventBus } from '@/core/events';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 import type { KubernetesObjectReference } from '@/types/view-state';
-import { getViewForKind, isNamespaceScopedKind } from '@/utils/kindViewMap';
+import { getViewForKind } from '@/utils/kindViewMap';
 
 export interface NavigateToViewResult {
   available: boolean;
@@ -95,8 +95,6 @@ function selectNavigationNamespace(
   if (!request.namespace) {
     return;
   }
-  if (isNamespaceScopedKind(request.kind)) {
-    setNamespace(request.namespace, request.clusterId);
-  }
+  setNamespace(request.namespace, request.clusterId);
   setSidebarSelection({ type: 'namespace', value: request.namespace });
 }

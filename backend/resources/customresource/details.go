@@ -3,12 +3,14 @@ package customresource
 import (
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/argocd"
 	"github.com/luxury-yacht/app/backend/resources/karpenter"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // Details enriches discovery-backed objects without declaring their GVK built-in.
 type Details struct {
+	ArgoCD             *argocd.Facts                  `json:"argoCD,omitempty"`
 	Ref                resourcemodel.ResourceRef      `json:"ref"`
 	ResourceFamily     string                         `json:"resourceFamily"`
 	Kind               string                         `json:"kind"`
@@ -22,14 +24,14 @@ type Details struct {
 	Karpenter          *karpenter.Facts               `json:"karpenter,omitempty"`
 }
 
-func BuildDetails(clusterID string, object *unstructured.Unstructured, descriptor Descriptor) *Details {
-	model := BuildResourceModel(clusterID, object, descriptor, resourcemodel.ResourceScopeCluster, "")
+func BuildDetails(clusterID string, object *unstructured.Unstructured, descriptor Descriptor, scope resourcemodel.ResourceScope) *Details {
+	model := BuildResourceModel(clusterID, object, descriptor, scope, "")
 	facts := BuildFacts(clusterID, object, descriptor.GVR, descriptor.CRDName, resourcemodel.ResourceModelBuildOptions{})
 	return &Details{
-		Ref: model.Ref, ResourceFamily: resourcekind.FamilyForResource(descriptor.GVR.Group, false),
+		Ref: model.Ref, ResourceFamily: resourcekind.FamilyForResource(descriptor.GVR.Group, model.Ref.Kind, scope == resourcemodel.ResourceScopeNamespaced),
 		Kind: model.Ref.Kind, Name: model.Ref.Name, Status: model.Status.Label,
 		StatusState: model.Status.State, StatusPresentation: model.Status.Presentation,
 		Conditions: facts.Conditions, Labels: model.Metadata.Labels, Annotations: model.Metadata.Annotations,
-		Karpenter: karpenter.BuildFacts(clusterID, object),
+		Karpenter: karpenter.BuildFacts(clusterID, object), ArgoCD: argocd.BuildFacts(clusterID, object),
 	}
 }
