@@ -54,7 +54,12 @@ function ClaimOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
           ['Architecture', facts.architecture],
         ]}
       />
-      <KarpenterCapacity facts={facts} />
+      <KarpenterCapacity
+        facts={facts}
+        tooltip={
+          'Some resource capacity may be reserved for the system. In this case, the value will read "n of n" to show how much of that resource is available for pods.'
+        }
+      />
       <KarpenterScheduling facts={facts} />
       <KarpenterLifecycle facts={facts} />
       {!!(facts.providerID || facts.imageID) && (

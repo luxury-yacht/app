@@ -140,7 +140,10 @@ const formatCapacitySummary = (
     : `${total} (limit ${formatCapacityValue(resource, limit, cpuUnit)})`;
 };
 
-export function KarpenterCapacity({ facts }: Readonly<{ facts: KarpenterFacts }>) {
+export function KarpenterCapacity({
+  facts,
+  tooltip,
+}: Readonly<{ facts: KarpenterFacts; tooltip?: string }>) {
   const cpuUnit = [facts.capacity?.cpu, facts.allocatable?.cpu ?? facts.limits?.cpu].some(
     (value) => parseResourceValue(value, 'cpu') % 1000 !== 0
   )
@@ -157,12 +160,7 @@ export function KarpenterCapacity({ facts }: Readonly<{ facts: KarpenterFacts }>
     return null;
   }
   return (
-    <KarpenterSection
-      title="Capacity"
-      tooltip={
-        'Some resource capacity may be reserved for the system. In this case, the value will read "n of n" to show how much of that resource is available for pods.'
-      }
-    >
+    <KarpenterSection title="Capacity" tooltip={tooltip}>
       {resources.map((resource) => (
         <div className="overview-row" key={resource}>
           <span className="overview-row-label">{capacityResourceLabels[resource] ?? resource}</span>
@@ -205,6 +203,9 @@ const requirementLabels: Record<string, string> = {
   'topology.kubernetes.io/region': 'Region',
   'node.kubernetes.io/instance-type': 'Instance Type',
   'karpenter.sh/capacity-type': 'Capacity Type',
+  'karpenter.sh/nodepool': 'NodePool',
+  'karpenter.sh/nodeclaim': 'NodeClaim',
+  'karpenter.sh/provisioner-name': 'Provisioner',
   'karpenter.k8s.aws/instance-category': 'Instance Category',
   'karpenter.k8s.aws/instance-family': 'Instance Family',
   'karpenter.k8s.aws/instance-generation': 'Instance Generation',
@@ -212,6 +213,38 @@ const requirementLabels: Record<string, string> = {
   'karpenter.k8s.aws/instance-cpu': 'Instance CPUs',
   'karpenter.k8s.aws/instance-memory': 'Instance Memory',
 };
+
+const requirementLabelWords: Record<string, string> = {
+  ami: 'AMI',
+  api: 'API',
+  aws: 'AWS',
+  cpu: 'CPU',
+  cpus: 'CPUs',
+  ebs: 'EBS',
+  eni: 'ENI',
+  gpu: 'GPU',
+  gpus: 'GPUs',
+  id: 'ID',
+  ids: 'IDs',
+  ip: 'IP',
+  nvme: 'NVMe',
+  os: 'OS',
+};
+
+const formatRequirementLabel = (key: string): string =>
+  (Object.hasOwn(requirementLabels, key) ? requirementLabels[key] : undefined) ??
+  (key
+    .slice(key.lastIndexOf('/') + 1)
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[-_.\s]+/)
+    .filter(Boolean)
+    .map((word) =>
+      Object.hasOwn(requirementLabelWords, word.toLowerCase())
+        ? requirementLabelWords[word.toLowerCase()]
+        : word[0].toUpperCase() + word.slice(1)
+    )
+    .join(' ') ||
+    key);
 
 const requirementOperators: Record<string, string> = {
   In: '',
@@ -223,7 +256,7 @@ const requirementOperators: Record<string, string> = {
 };
 
 function KarpenterRequirementRow({ requirement }: Readonly<{ requirement: KarpenterRequirement }>) {
-  const label = requirementLabels[requirement.key];
+  const label = formatRequirementLabel(requirement.key);
   const constraint = [
     requirementOperators[requirement.operator] ?? requirement.operator,
     requirement.values?.join(', '),
@@ -231,21 +264,15 @@ function KarpenterRequirementRow({ requirement }: Readonly<{ requirement: Karpen
     .filter(Boolean)
     .join(' ');
   return (
-    <div
-      className={`overview-row karpenter-requirement${label ? '' : ' karpenter-requirement--custom'}`}
-    >
+    <div className="overview-row karpenter-requirement">
       <span className="overview-row-label selectable">
-        {label ? (
-          <Tooltip
-            content={<span className="selectable">{requirement.key}</span>}
-            triggerLabel={`Kubernetes key for ${label}`}
-            interactive
-          >
-            {label}
-          </Tooltip>
-        ) : (
-          requirement.key
-        )}
+        <Tooltip
+          content={<span className="selectable">{requirement.key}</span>}
+          triggerLabel={`Kubernetes key for ${label}`}
+          interactive
+        >
+          {label}
+        </Tooltip>
       </span>
       <span className="overview-row-value selectable">
         {constraint || '-'}

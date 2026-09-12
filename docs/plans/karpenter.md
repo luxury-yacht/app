@@ -156,9 +156,10 @@ rerun for this presentation change.
 
 ## Scheduling layout revision
 
-Requirements use compact label/value rows. Common Kubernetes and AWS keys have
-readable labels, with complete keys in the shared, keyboard-accessible Tooltip;
-unrecognized keys stay fully visible. Membership values omit the redundant `In`
+Requirements use compact label/value rows. Known keys have explicit readable labels;
+other keys use their name portion with word separators expanded and acronyms
+preserved. Complete keys remain in the shared, keyboard-accessible Tooltip.
+Membership values omit the redundant `In`
 prefix; exclusions, comparisons and existence constraints retain distinct wording.
 Minimum-value constraints remain visible. Taints and startup taints use the Node
 panel's shared StatusChip pattern, preserving case and wrapping long keys.
@@ -177,4 +178,25 @@ Typecheck, Biome check, the local max-12 complexity check and all 7 existing
 Karpenter overview tests pass. No tests were added; the story uses fixture data
 and provider responses, not native Wails. The agent's Storybook server was stopped.
 Native visual acceptance remains with the user; the full prerelease gate was not
-rerun for this presentation revision.
+rerun for the initial Scheduling layout revision.
+
+The NodeClaim label follow-up adds NodePool/NodeClaim naming and readable fallback
+labels for provider and custom keys. The NodeClaim story now includes CPU
+manufacturer, EBS bandwidth, hypervisor, network bandwidth, zone ID and a custom
+workload tier. Playwright rendered those labels and confirmed the Zone ID tooltip
+contains `topology.k8s.aws/zone-id`; section client/scroll widths remained
+312/312, 372/372 and 552/552 at viewport widths 360/420/600. Requirements keeps its
+existing name. The Storybook server was stopped after these checks. Native visual
+acceptance remains with the user.
+
+For the label follow-up, `mise exec -- wails3 task qc:prerelease` passed, including
+5027 existing frontend tests across 525 files. The gate reported no Biome changes;
+the worktree inspection retained only the intended label, CSS, story and plan
+edits. The local max-12 complexity check also passed. No tests were added.
+`mise exec -- wails3 task test:frontend-coverage` passed all 5027 tests and measured
+96% statement coverage for `KarpenterSections.tsx`.
+
+The Capacity tooltip is supplied by the claim overview instead of the shared
+capacity component, so pool and overlay overviews omit it. Verification of this
+final presentation adjustment is pending; native visual acceptance stays with
+the user.

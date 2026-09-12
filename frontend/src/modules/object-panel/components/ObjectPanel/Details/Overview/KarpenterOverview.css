@@ -88,16 +88,6 @@
   font-size: var(--font-size-sm);
 }
 
-.karpenter-overview .karpenter-requirement--custom {
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
-.karpenter-overview .karpenter-requirement--custom > .overview-row-label {
-  flex: none;
-  font-family: var(--font-family-mono);
-}
-
 .karpenter-taint {
   max-width: 100%;
   font-family: var(--font-family-mono);
