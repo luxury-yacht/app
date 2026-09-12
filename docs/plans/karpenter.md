@@ -208,3 +208,21 @@ HTML/CSS entered the lint scope, so those reports were moved outside the fronten
 tree; `Object.hasOwn` was incompatible with the TypeScript target, so the label
 lookups now use Maps. The successful final gate log is
 `/tmp/karpenter-final-prerelease.log`.
+
+## PR 345 Sonar remediation
+
+The all-rule PR audit reported one open issue: `typescript:S4624`, key
+`AaCXUN1w136A9JFWhVFL`, at `KarpenterSections.tsx:190` (nested template literals;
+no complexity score). `KarpenterTaints` formats both taint and startup-taint chips
+for the shared Scheduling section. The optional value suffix is now computed
+before composing the label; the existing key/value/effect formatting is retained.
+
+The 7 existing overview tests passed before and after the refactor, including
+claim taints with and without values. Typecheck, Biome and the local max-12
+complexity check pass. Direct statement coverage is 96.05% for the touched file;
+tests mock metadata, links and tooltips, and do not establish native interaction.
+No tests were added. The full prerelease gate passed, including all 5027 frontend
+tests; its formatter made no frontend changes. Evidence is retained in
+`/tmp/karpenter-sonar-pr345-prerelease.log`. The final worktree passed
+`git diff --check`. Sonar closure requires analysis of a pushed revision; this
+task has not been authorized to commit or push.

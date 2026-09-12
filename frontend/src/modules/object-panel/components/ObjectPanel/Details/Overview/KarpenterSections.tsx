@@ -185,11 +185,14 @@ function KarpenterTaints({
       <div className="karpenter-overview-subtitle">{label}</div>
       <div className="overview-condition-list">
         {withStableListKeys(taints, (taint) => JSON.stringify(taint)).map(
-          ({ key, value: taint }) => (
-            <StatusChip key={key} variant="warning" className="karpenter-taint selectable">
-              {`${taint.key}${taint.value ? `=${taint.value}` : ''}:${taint.effect}`}
-            </StatusChip>
-          )
+          ({ key, value: taint }) => {
+            const valueSuffix = taint.value ? `=${taint.value}` : '';
+            return (
+              <StatusChip key={key} variant="warning" className="karpenter-taint selectable">
+                {`${taint.key}${valueSuffix}:${taint.effect}`}
+              </StatusChip>
+            );
+          }
         )}
       </div>
     </section>
