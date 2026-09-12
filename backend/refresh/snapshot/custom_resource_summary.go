@@ -1,13 +1,16 @@
 package snapshot
 
-import "github.com/luxury-yacht/app/backend/resourcemodel"
+import (
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+)
 
 // CustomResourceSummary is the page-hydration row shape used by catalog-backed
 // custom-resource tables. It preserves the rich status and metadata fields from
 // the legacy namespace/cluster custom snapshot rows without requiring the
 // production Custom tabs to subscribe to full CRD fanout domains.
 type CustomResourceSummary struct {
-	Details            []resourcemodel.DetailSegment  `json:"details,omitempty"`
+	Karpenter          *streamrows.KarpenterSummary   `json:"karpenter,omitempty"`
 	Ref                resourcemodel.ResourceRef      `json:"ref"`
 	CRDName            string                         `json:"crdName,omitempty"`
 	Status             string                         `json:"status,omitempty"`
@@ -39,7 +42,7 @@ func CustomResourceSummaryFromNamespace(row NamespaceCustomSummary) CustomResour
 
 func CustomResourceSummaryFromCluster(row ClusterCustomSummary) CustomResourceSummary {
 	return CustomResourceSummary{
-		Details:            row.Details,
+		Karpenter:          row.Karpenter,
 		Ref:                row.Ref,
 		CRDName:            row.CRDName,
 		Status:             row.Status,

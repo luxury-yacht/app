@@ -18,13 +18,12 @@ import (
 
 // Detail slots are the semantic columns a multi-kind table renders segments
 // into: the row's classifying reference (type/class/parent/owner), its network
-// address(es), counts/status chips, and resource-specific configuration. Kind builders assign the slot; the
+// address(es), counts/status chips. Kind builders assign the slot; the
 // frontend maps slots to columns.
 const (
-	DetailSlotReference     = "reference"
-	DetailSlotAddress       = "address"
-	DetailSlotCounts        = "counts"
-	DetailSlotConfiguration = "configuration"
+	DetailSlotReference = "reference"
+	DetailSlotAddress   = "address"
+	DetailSlotCounts    = "counts"
 )
 
 // DetailSegment is one labeled fragment of a table row's Details cells.

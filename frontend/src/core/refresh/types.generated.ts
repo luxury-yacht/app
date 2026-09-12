@@ -290,7 +290,7 @@ export interface ClusterConfigSnapshotPayload {
 }
 
 export interface ClusterCustomEntry {
-  details?: Array<DetailSegment>;
+  karpenter?: KarpenterSummary;
   ref: CanonicalResourceRef;
   crdName?: string;
   status?: string;
@@ -598,7 +598,7 @@ export interface CustomResourceDetails {
 }
 
 export interface CustomResourceSummary {
-  details?: Array<DetailSegment>;
+  karpenter?: KarpenterSummary;
   ref: CanonicalResourceRef;
   crdName?: string;
   status?: string;
@@ -687,6 +687,13 @@ export interface KarpenterRequirement {
   operator: string;
   values?: Array<string>;
   minValues?: number;
+}
+
+export interface KarpenterSummary {
+  nodePool?: ResourceLink;
+  nodeClass?: ResourceLink;
+  instanceType?: string;
+  capacityType?: string;
 }
 
 export interface KarpenterTaint {

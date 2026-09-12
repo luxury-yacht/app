@@ -1,7 +1,6 @@
 package karpenter
 
 import (
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"testing"
@@ -32,7 +31,6 @@ func TestKarpenterFactsPreserveSourceValuesAndReferenceVersions(t *testing.T) {
 	require.Equal(t, []Requirement{{Key: "kubernetes.io/arch", Operator: "In", Values: []string{"arm64"}}}, facts.Requirements)
 	require.Nil(t, facts.NodeClass.Ref, "v1 nodeClassRef has no version; do not guess it")
 	require.Equal(t, "default", facts.NodeClass.Display.Name)
-	require.NotEmpty(t, TableDetails(facts))
 	pool.SetAPIVersion("unrelated.io/v1")
 	require.Nil(t, BuildFacts("cluster-a", pool))
 }
@@ -81,7 +79,7 @@ func TestKarpenterProviderResolutionAndLabelOnlyRelationships(t *testing.T) {
 	require.Equal(t, "pool", facts.NodePool.Display.Name)
 	require.Nil(t, facts.NodeClass)
 	require.Nil(t, facts.Node)
-	require.NotContains(t, resourcemodel.DetailSegmentsText(TableDetails(facts)), "Weight")
+	require.Nil(t, facts.Weight)
 	overlay := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "karpenter.sh/v1alpha1", "kind": "NodeOverlay", "metadata": map[string]any{"name": "reserved"}, "spec": map[string]any{"priceAdjustment": "-10%", "capacity": map[string]any{"cpu": "8"}}}}
 	facts = BuildFacts("a", overlay)
 	require.Equal(t, "-10%", facts.PriceAdjustment)

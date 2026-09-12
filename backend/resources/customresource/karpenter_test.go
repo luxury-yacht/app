@@ -1,9 +1,10 @@
 package customresource
 
 import (
+	"encoding/json"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	"github.com/luxury-yacht/app/backend/resources/karpenter"
+
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"testing"
@@ -25,7 +26,43 @@ func TestKarpenterDetailsAndTableProjectionParity(t *testing.T) {
 	require.Equal(t, row.Ref, detail.Ref)
 	require.Equal(t, row.Conditions, detail.Conditions)
 	require.Equal(t, "infra", detail.Labels["team"])
-	require.Equal(t, karpenter.TableDetails(detail.Karpenter), row.Details)
+	require.Equal(t, karpenterTableSummary(detail.Karpenter), row.Karpenter)
 	require.Equal(t, "warning", row.StatusPresentation)
 	require.NoError(t, resourcemodel.ValidateResourceRef(detail.Ref))
+}
+
+func TestKarpenterTableExposesNamedFieldsWithoutConfigurationBlobs(t *testing.T) {
+	object := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "karpenter.sh/v1beta1", "kind": "NodeClaim",
+		"metadata": map[string]any{"name": "claim", "labels": map[string]any{"karpenter.sh/nodepool": "pool", "node.kubernetes.io/instance-type": "m7g.large", "karpenter.sh/capacity-type": "spot"}},
+		"spec":     map[string]any{"nodeClassRef": map[string]any{"apiVersion": "karpenter.k8s.aws/v1beta1", "kind": "EC2NodeClass", "name": "class"}},
+	}}
+	descriptor := NewDescriptor("karpenter.sh", "v1beta1", "nodeclaims", "NodeClaim", "nodeclaims.karpenter.sh")
+	row := BuildClusterStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, object, descriptor)
+	encoded, err := json.Marshal(row)
+	require.NoError(t, err)
+	var wire map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &wire))
+	require.NotContains(t, wire, "details")
+	summary, ok := wire["karpenter"].(map[string]any)
+	require.True(t, ok, "table summary must expose named Karpenter fields")
+	require.Equal(t, "m7g.large", summary["instanceType"])
+	require.Equal(t, "spot", summary["capacityType"])
+	require.Len(t, summary, 4)
+}
+
+func TestGenericClusterCustomRowsOmitKarpenterSummary(t *testing.T) {
+	descriptor := NewDescriptor("example.com", "v1", "widgets", "Widget", "widgets.example.com")
+	meta := streamrows.ClusterMeta{ClusterID: "cluster-a"}
+	object := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "example.com/v1", "kind": "Widget", "metadata": map[string]any{"name": "sample"},
+	}}
+	row := BuildClusterStreamSummary(meta, object, descriptor)
+	require.Nil(t, row.Karpenter)
+	require.Equal(t, "sample", row.Ref.Name)
+	require.Equal(t, "cluster-a", row.Ref.ClusterID)
+	empty := BuildClusterStreamSummary(meta, nil, descriptor)
+	require.Nil(t, empty.Karpenter)
+	require.Equal(t, "Widget", empty.Ref.Kind)
+	require.Equal(t, "cluster-a", empty.Ref.ClusterID)
 }

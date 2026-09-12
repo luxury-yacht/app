@@ -1,0 +1,77 @@
+/* Keep Karpenter in the shared Overview frame, with aligned summaries and
+   full-width sections for lists that would otherwise overwhelm a value row. */
+.karpenter-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.karpenter-overview .overview-label {
+  flex: 0 0 7rem;
+  min-width: 0;
+}
+
+.karpenter-overview .overview-value {
+  min-width: 0;
+}
+
+.karpenter-overview-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-md);
+  min-width: 0;
+}
+
+.karpenter-overview-section h3 {
+  margin: 0;
+  padding: 0;
+}
+
+.karpenter-overview .overview-row {
+  gap: var(--spacing-lg);
+}
+
+.karpenter-overview .overview-row-label {
+  flex: 0 0 7rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.karpenter-capacity-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs) var(--spacing-lg);
+}
+
+.karpenter-overview-subtitle {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.karpenter-fact-caption {
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+}
+
+.karpenter-budget + .karpenter-budget {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--spacing-sm);
+}
+
+/* Requirement keys are often longer than a panel's label column. Put each key
+   above its operator and values, following the existing stacked-list pattern. */
+.karpenter-overview .karpenter-requirement {
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding-bottom: var(--spacing-sm);
+}
+
+.karpenter-requirement .overview-row-label {
+  flex: none;
+}

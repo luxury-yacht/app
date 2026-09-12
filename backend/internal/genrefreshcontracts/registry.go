@@ -63,6 +63,7 @@ func typeOf[T any]() reflect.Type {
 }
 
 var contractTypes = []typeSpec{
+	{name: "KarpenterSummary", typeOf: typeOf[streamrows.KarpenterSummary]()},
 	{name: "KarpenterFacts", typeOf: typeOf[karpenter.Facts]()},
 	{name: "KarpenterRequirement", typeOf: typeOf[karpenter.Requirement]()},
 	{name: "KarpenterTaint", typeOf: typeOf[karpenter.Taint]()},

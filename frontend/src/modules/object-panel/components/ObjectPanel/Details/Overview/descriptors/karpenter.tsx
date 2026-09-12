@@ -1,11 +1,20 @@
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { resourceLinkToObjectReference } from '@shared/utils/resourceLinkIdentity';
-import { withStableListKeys } from '@shared/utils/stableListKeys';
-import type React from 'react';
 import type { CustomResourceDetails, KarpenterFacts, ResourceLink } from '@/core/refresh/types';
-import type { OverviewDescriptor, OverviewField } from '../schema';
+import {
+  KarpenterCapacity,
+  KarpenterConditions,
+  KarpenterDisruption,
+  KarpenterFields,
+  KarpenterLifecycle,
+  KarpenterMap,
+  KarpenterScheduling,
+  KarpenterSection,
+  KarpenterValues,
+} from '../KarpenterSections';
+import type { OverviewDescriptor } from '../schema';
 
-const renderLink = (link?: ResourceLink): React.ReactNode => {
+const renderLink = (link?: ResourceLink) => {
   if (!link) {
     return undefined;
   }
@@ -13,43 +22,113 @@ const renderLink = (link?: ResourceLink): React.ReactNode => {
   return ref ? <ObjectPanelLink objectRef={ref}>{ref.name}</ObjectPanelLink> : link.display?.name;
 };
 
-const mapText = (values?: Record<string, string>) =>
-  values && Object.keys(values).length
-    ? Object.entries(values)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, value]) => `${key}: ${value}`)
-        .join(', ')
-    : undefined;
+function PoolOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
+  return (
+    <>
+      <KarpenterFields
+        fields={[
+          ['NodeClass', renderLink(facts.nodeClass)],
+          ['Weight', facts.weight],
+          ['Replicas', facts.replicas],
+        ]}
+      />
+      <KarpenterCapacity facts={facts} />
+      <KarpenterScheduling facts={facts} />
+      <KarpenterDisruption facts={facts} />
+      <KarpenterLifecycle facts={facts} />
+    </>
+  );
+}
 
-const fact = (
-  label: string,
-  render: (facts: KarpenterFacts) => React.ReactNode,
-  fullWidth = false
-): OverviewField<CustomResourceDetails> => ({
-  label,
-  derivedFrom: ['karpenter'],
-  fullWidth,
-  render: (data) => (data.karpenter ? render(data.karpenter) : undefined),
-});
+function ClaimOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
+  return (
+    <>
+      <KarpenterFields
+        fields={[
+          ['NodePool', renderLink(facts.nodePool)],
+          ['Node', renderLink(facts.node)],
+          ['NodeClass', renderLink(facts.nodeClass)],
+          ['Instance Type', facts.instanceType],
+          ['Capacity Type', facts.capacityType],
+          ['Zone', facts.zone],
+          ['Architecture', facts.architecture],
+        ]}
+      />
+      <KarpenterCapacity facts={facts} />
+      <KarpenterScheduling facts={facts} />
+      <KarpenterLifecycle facts={facts} />
+      {!!(facts.providerID || facts.imageID) && (
+        <KarpenterSection title="Provider">
+          <KarpenterFields
+            fields={[
+              ['Provider ID', facts.providerID],
+              ['Image ID', facts.imageID],
+            ]}
+          />
+        </KarpenterSection>
+      )}
+    </>
+  );
+}
 
-const scalarFields = [
-  ['weight', 'Weight'],
-  ['replicas', 'Replicas'],
-  ['consolidationPolicy', 'Consolidation Policy'],
-  ['consolidateAfter', 'Consolidate After'],
-  ['expireAfter', 'Expire After'],
-  ['terminationGracePeriod', 'Termination Grace Period'],
-  ['instanceType', 'Instance Type'],
-  ['capacityType', 'Capacity Type'],
-  ['zone', 'Zone'],
-  ['architecture', 'Architecture'],
-  ['providerID', 'Provider ID'],
-  ['imageID', 'Image ID'],
-  ['role', 'Role'],
-  ['instanceProfile', 'Instance Profile'],
-  ['imageFamily', 'Image Family'],
-  ['priceAdjustment', 'Price Adjustment'],
-] as const;
+function ClassOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
+  return (
+    <>
+      <KarpenterFields
+        fields={[
+          ['Image Family', facts.imageFamily],
+          ['Role', facts.role],
+          ['Instance Profile', facts.instanceProfile],
+        ]}
+      />
+      {(!!facts.subnets?.length || !!facts.securityGroups?.length) && (
+        <KarpenterSection title="Networking">
+          <KarpenterValues label="Subnets" values={facts.subnets} />
+          <KarpenterValues label="Security Groups" values={facts.securityGroups} />
+        </KarpenterSection>
+      )}
+      {!!facts.images?.length && (
+        <KarpenterSection title="Images">
+          <div className="overview-ref-list">
+            {facts.images.map((image) => (
+              <span key={image} className="overview-ref-item">
+                {image}
+              </span>
+            ))}
+          </div>
+        </KarpenterSection>
+      )}
+      {!!Object.keys(facts.tags ?? {}).length && (
+        <KarpenterSection title="Tags">
+          <KarpenterMap label="Tags" values={facts.tags} />
+        </KarpenterSection>
+      )}
+    </>
+  );
+}
+
+function OverlayOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
+  return (
+    <>
+      <KarpenterFields
+        fields={[
+          ['Weight', facts.weight],
+          ['Price Adjustment', facts.priceAdjustment],
+        ]}
+      />
+      <KarpenterCapacity facts={facts} />
+      <KarpenterScheduling facts={facts} />
+    </>
+  );
+}
+
+const kindOverviews: Record<string, typeof PoolOverview> = {
+  nodepool: PoolOverview,
+  provisioner: PoolOverview,
+  nodeclaim: ClaimOverview,
+  machine: ClaimOverview,
+  nodeoverlay: OverlayOverview,
+};
 
 export const karpenterDescriptor: OverviewDescriptor<CustomResourceDetails> = {
   displayKind: 'Karpenter',
@@ -58,74 +137,21 @@ export const karpenterDescriptor: OverviewDescriptor<CustomResourceDetails> = {
   schema: {
     items: [
       { kind: 'status' },
-      fact('NodePool', (facts) => renderLink(facts.nodePool)),
-      fact('NodeClass', (facts) => renderLink(facts.nodeClass)),
-      fact('Node', (facts) => renderLink(facts.node)),
-      ...scalarFields.map(([key, label]) =>
-        fact(label, (facts) => (facts[key] === '' ? undefined : facts[key]))
-      ),
-      fact('Capacity', (facts) => mapText(facts.capacity), true),
-      fact('Allocatable', (facts) => mapText(facts.allocatable), true),
-      fact('Limits', (facts) => mapText(facts.limits), true),
-      fact(
-        'Requirements',
-        (facts) =>
-          facts.requirements
-            ?.map(
-              (r) =>
-                `${r.key} ${r.operator} ${r.values?.join(', ') ?? ''}${r.minValues === undefined ? '' : ` (min values: ${r.minValues})`}`
-            )
-            .join('; ') || undefined,
-        true
-      ),
-      fact(
-        'Taints',
-        (facts) =>
-          facts.taints
-            ?.map((t) => `${t.key}${t.value ? `=${t.value}` : ''}:${t.effect}`)
-            .join(', ') || undefined,
-        true
-      ),
-      fact(
-        'Startup Taints',
-        (facts) =>
-          facts.startupTaints
-            ?.map((t) => `${t.key}${t.value ? `=${t.value}` : ''}:${t.effect}`)
-            .join(', ') || undefined,
-        true
-      ),
-      fact(
-        'Disruption Budgets',
-        (facts) =>
-          facts.budgets
-            ?.map((b) =>
-              [b.nodes, b.reasons?.join(', '), b.schedule, b.duration].filter(Boolean).join(' · ')
-            )
-            .join('; ') || undefined,
-        true
-      ),
-      fact('Subnets', (facts) => facts.subnets?.join(', ') || undefined, true),
-      fact('Security Groups', (facts) => facts.securityGroups?.join(', ') || undefined, true),
-      fact('Images', (facts) => facts.images?.join(', ') || undefined, true),
-      fact('Tags', (facts) => mapText(facts.tags), true),
       {
-        field: 'conditions',
-        label: 'Conditions',
-        fullWidth: true,
-        render: (data) =>
-          data.conditions?.length ? (
-            <div className="overview-condition-list">
-              {withStableListKeys(data.conditions, (condition) => condition.type).map(
-                ({ key, value: condition }) => (
-                  <div key={key}>
-                    {[`${condition.type}: ${condition.status}`, condition.reason, condition.message]
-                      .filter(Boolean)
-                      .join(' — ')}
-                  </div>
-                )
-              )}
+        kind: 'widget',
+        consumes: ['karpenter', 'conditions'],
+        render: (data) => {
+          if (!data.karpenter) {
+            return null;
+          }
+          const KindOverview = kindOverviews[data.kind.toLowerCase()] ?? ClassOverview;
+          return (
+            <div className="karpenter-overview">
+              <KindOverview facts={data.karpenter} />
+              <KarpenterConditions conditions={data.conditions} />
             </div>
-          ) : undefined,
+          );
+        },
       },
     ],
   },

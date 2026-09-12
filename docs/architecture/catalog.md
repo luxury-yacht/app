@@ -123,7 +123,9 @@ Discovery remains authoritative for GVK/GVR and served versions; Karpenter CRDs
 are not added to the built-in identity registry.
 
 Custom-resource row hydration and rich Karpenter details share the typed projection
-in `backend/resources/karpenter`. The overview exposes source configuration,
+in `backend/resources/karpenter`. Cluster custom rows carry a compact
+`KarpenterSummary` with named relationship and instance fields; table cells and CSV
+exports each display one value. The single table retains its kind filter. The overview exposes source configuration,
 capacity, relationships, and conditions without inventing defaults. Related
 references without a source API version remain display-only. Enriched details
 use a live, cluster-scoped GET and refresh header metadata from that same object,

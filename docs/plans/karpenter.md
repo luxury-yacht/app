@@ -14,6 +14,37 @@ Resource references retain full identity; incomplete related references stay
 non-navigable. Projection packages do not import catalog, refresh, or the gateway.
 The producer/consumer contract is documented in `docs/architecture/catalog.md`.
 
+## Design revision after user review
+
+The user rejected packed Context/Capacity/Configuration cells and the flat Details
+layout. Keep the existing single table and kind filter; do not add resource tabs.
+Table cells will contain one named fact. Details will retain the shared Overview
+frame, with kind-specific summaries and labeled sections for repeated data.
+
+The backend fact projection produces a compact typed table summary; cluster row
+hydration, generated contracts, the catalog adapter, column factories and CSV export
+consume it. The rich detail DTO remains the source of overview sections. Catalog
+query ordering, permission readiness and complete references remain the existing
+boundaries. The projection imports only shared resource semantics, avoiding a
+catalog/refresh dependency cycle. Regressions cover summary/detail parity, fallback
+rows, export values, and empty/populated kind-specific overview sections.
+
+The user retains final native visual confirmation. The initial visual result was
+rejection of the design; the following evidence covers the revision.
+
+| Revision criterion | Status | Evidence |
+| --- | --- | --- |
+| Keep the single table and kind filter; replace packed cells with named fields | passed (automated and rendered) | `ClusterViewCustom.test.tsx`, `karpenterColumns.test.tsx`, and `customCatalogRowAdapter.test.ts` pass in `/tmp/karpenter-redesign-green.log` (84 focused tests). Columns are Kind, Name, Status, NodePool, NodeClass, Instance Type, Capacity Type, Age. The real GridTable/factories render fixture rows in `.playwright-mcp/karpenter-table-review.png`; minimum widths keep headings visible. Link click/alt-click tests preserve cluster/GVK; display-only references remain inert. |
+| Kind-specific summaries and readable repeated data | passed (automated and rendered) | `KarpenterOverview.test.tsx` covers grouped pool configuration, claim links/capacity, separate provider resolution, sparse objects, budgets and zero values. New tests first failed in `/tmp/karpenter-redesign-red.log`. Real descriptor/renderer stories inspected at 420–560 px: `.playwright-mcp/karpenter-claim-review.png`, `karpenter-class-review.png`, `karpenter-pool-dark-review.png`, and `karpenter-empty-review.png`. DOM checks found no horizontal overflow; the sparse overview has no empty sections. Dark-mode inspection applies the production theme tokens to the fixture preview. |
+| Compact wire summary and ordinary custom-resource behavior | passed (automated) | `/tmp/karpenter-redesign-backend-red.log` proves the old packed payload fails the new wire contract. Backend tests now check named fields, detail/status parity, non-Karpenter rows and nil objects. The hydration adapter preserves summary references and source versions. |
+| Adjacent YAML, catalog navigation, loading/error/empty behavior | passed (automated); native confirmation pending | Focused table tests retain query scoping, error/empty handling and navigation. The full frontend coverage rerun passes 5,027 tests across 525 files (`/tmp/karpenter-redesign-frontend-coverage-final.log`). The first full run timed out in a YAML test, followed by 31 failures in that file; all 34 YAML tests passed in isolation and the complete coverage rerun passed. No YAML code or timeout settings changed. |
+| Affected coverage ≥80% | passed | Frontend affected production files: 121/126 statements (96.03%), each over 90%; `/tmp/karpenter-redesign-affected-coverage.json`. Full backend coverage task passes (`/tmp/karpenter-redesign-backend-coverage.log`); supplementary generic-resource tests bring both changed custom-summary functions to 100% (`/tmp/karpenter-redesign-customresource.cover`); the changed snapshot conversion is 100% in `build/coverage/backend.coverage.out`. |
+| Complexity ≤12 | passed (local) | Biome max-12 check for all five changed frontend production files passes (`/tmp/karpenter-redesign-complexity.log`). Pinned gocognit reports 1 for both changed custom-summary functions and no finding for the straight-line snapshot conversion (`/tmp/karpenter-redesign-go-complexity.json`). `gh pr view --json number,url,headRefOid` reports no PR for `karpenter-support`; no pushed-revision Sonar result is available. |
+| Final prerelease gate and worktree inspection | passed | `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease` exits 0 (`/tmp/karpenter-redesign-prerelease-final.log`): format/bindings, vet/staticcheck, race suite, lint/typecheck, 5,027 frontend tests, knip and Trivy. Post-gate worktree inspected; `git diff --check` passes. The first attempt linted generated coverage HTML; moving that report to `/tmp/karpenter-redesign-frontend-coverage-report` resolved it without changing lint rules. |
+| Native visual acceptance | pending — user confirmation | Storybook uses real rendering with fixture data/provider responses. It does not prove live-cluster or native interactions. The preview logs the expected browser-only Wails warning and missing `/wails/custom.js`; no native pass is claimed. The agent-owned Storybook process was stopped after inspection. |
+
+The remaining table records the historical initial implementation.
+
 | Observable criterion | Status | Evidence |
 | --- | --- | --- |
 | Discovery present/absent, zero objects, removal, cluster switching | passed (automated) | `TestDiscoveredFamiliesDoNotDependOnObjectsOrListPermission`; `TestCatalogSnapshotPublishesDiscoveredKarpenterWithoutRows`; `Sidebar.test.tsx` discovery transition case. Catalog tests use discovery fixtures; Sidebar replaces refresh data with per-cluster fixtures. |
@@ -41,3 +72,39 @@ all affected production files. Existing individual shared-file gaps remain in
 `Overview/index` (75%), and the cluster dispatcher (41.17% in the full run, 52.94% in the
 subsequent targeted Karpenter/custom routing check). These are not claims of full
 branch coverage. Visual states remain pending user confirmation.
+
+## Text-selection regression from visual review
+
+The Subnets, Security Groups and Images lists inherited the `.app *` selection
+reset. `OverviewBlocks.css` now allows text selection on shared reference-list
+items and their descendants. The NodeClass story loads `App.css` and uses the
+`.app` wrapper to reproduce this context.
+
+Playwright reproduced `user-select: none` before the correction
+(`.playwright-mcp/karpenter-selection-red.md`). Afterward, mouse dragging selected
+the complete first identifier in each list, and `ControlOrMeta+C` followed by a
+clipboard read matched `subnet-0123456789abcdef0`, `sg-0123456789abcdef0` and
+`ami-0123456789abcdef0` exactly. This exercises the real components and CSS in
+Storybook; native Wails Copy behavior remains for the user's confirmation.
+
+Per the user's testing guidance, the added CSS-property assertion test was removed
+and the frontend coverage run was stopped (exit 130). Validation for this small
+styling correction uses the direct selection/copy checks above. The earlier
+prerelease result applies to the design revision; it was not rerun for this
+correction.
+
+## Conditions badge alignment
+
+`KarpenterSections.tsx:231` now renders every Karpenter kind's Conditions through
+the same `StatusChip` component and wrapping `overview-condition-list` layout used
+by the Node descriptor. True is healthy, False is unhealthy, and other states use
+warning; the message or reason appears on hover. The former condition-message CSS
+was removed. Existing overview tests use the same Tooltip stub as the Node tests;
+the assertion requiring hover-only content in static markup was removed. No new
+tests were added.
+
+Focused validation: `npm run typecheck --prefix frontend` exited 0; the existing
+`KarpenterOverview.test.tsx` suite passed all 7 tests; Biome check passed for the
+three touched frontend files, and the local max-12 complexity check passed.
+Commands ran through `mise exec --`. Visual confirmation remains with the user;
+the full prerelease gate was not rerun for this presentation correction.

@@ -4,6 +4,21 @@ Read this before editing. When user feedback identifies a recurring mistake,
 record the pattern and a concrete prevention check here. Keep entries focused
 on reusable rules; omit transient logs, credentials, and session history.
 
+## Packing resource data into generic columns
+
+A passing field-presence test does not prove a usable resource view. Give table
+columns specific names and one value per cell; keep long configuration lists in
+Details. Reuse the app's existing browsing and section patterns. Do not introduce
+resource tabs to repair overloaded columns without an established product pattern.
+Use realistic long lists, sparse objects and narrow panels when reviewing layout;
+check hierarchy and scanability separately from data coverage. Preview detail
+content under the real `.app` selection reset and verify selecting/copying values,
+including lists outside `OverviewItem`. A screenshot cannot establish that text
+is selectable; selection overrides must reach the text-bearing descendants.
+For minor presentation fixes, use direct interaction checks instead of adding
+tests that assert CSS properties or markup. Reserve regression tests for
+meaningful application behavior.
+
 ## Missing native behavior changes in dependency upgrades
 
 A framework upgrade can retain a method while making its default implementation

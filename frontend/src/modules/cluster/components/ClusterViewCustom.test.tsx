@@ -296,9 +296,16 @@ describe('ClusterViewCustom', () => {
       })
     );
     const columns = gridTablePropsRef.current.columns;
-    expect(columns.map((column) => column.header)).toEqual(
-      expect.arrayContaining(['Context', 'Capacity', 'Configuration'])
-    );
+    expect(columns.map((column) => column.header)).toEqual([
+      'Kind',
+      'Name',
+      'Status',
+      'NodePool',
+      'NodeClass',
+      'Instance Type',
+      'Capacity Type',
+      'Age',
+    ]);
   });
 
   it('renders the errored empty state for a catalog error (details report via toasts)', async () => {

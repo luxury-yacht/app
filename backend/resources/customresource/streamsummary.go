@@ -62,7 +62,7 @@ func BuildClusterStreamSummary(meta streamrows.ClusterMeta, resource *unstructur
 	model := BuildResourceModel(meta.ClusterID, resource, descriptor, resourcemodel.ResourceScopeCluster, "")
 	facts := BuildFacts(meta.ClusterID, resource, gvr, descriptor.CRDName, resourcemodel.ResourceModelBuildOptions{})
 	return streamrows.ClusterCustomSummary{
-		Details:            karpenter.TableDetails(karpenter.BuildFacts(meta.ClusterID, resource)),
+		Karpenter:          karpenterTableSummary(karpenter.BuildFacts(meta.ClusterID, resource)),
 		Ref:                model.Ref,
 		CRDName:            descriptor.CRDName,
 		Status:             model.Status.Label,
@@ -74,5 +74,15 @@ func BuildClusterStreamSummary(meta streamrows.ClusterMeta, resource *unstructur
 		Age:                streamrows.FormatAge(model.Metadata.CreationTimestamp.Time),
 		Labels:             model.Metadata.Labels,
 		Annotations:        model.Metadata.Annotations,
+	}
+}
+
+func karpenterTableSummary(facts *karpenter.Facts) *streamrows.KarpenterSummary {
+	if facts == nil {
+		return nil
+	}
+	return &streamrows.KarpenterSummary{
+		NodePool: facts.NodePool, NodeClass: facts.NodeClass,
+		InstanceType: facts.InstanceType, CapacityType: facts.CapacityType,
 	}
 }

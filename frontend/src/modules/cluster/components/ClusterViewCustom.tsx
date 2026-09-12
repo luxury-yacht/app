@@ -13,10 +13,10 @@ import {
 } from '@modules/browse/components/CustomResourceGridView';
 import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
-import { createDetailSegmentsColumn } from '@shared/components/tables/detailSegmentsColumn';
 import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import React, { useMemo } from 'react';
+import { karpenterColumns } from './karpenterColumns';
 
 // The binding's header arrow and the catalog query must agree on the default
 // order. NsViewCustom gets this from useNamespaceGridTablePersistence's
@@ -52,37 +52,25 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
   ({ loading = false, loaded = false, error, resourceFamily }) => {
     const config = resourceFamily ? KARPENTER_VIEW : CUSTOM_VIEW;
     const parts = useCustomResourceGridParts();
-    const { keyExtractor, selectedClusterId } = parts;
+    const {
+      keyExtractor,
+      selectedClusterId,
+      baseColumns,
+      openReference,
+      navigateReference,
+      selectedClusterName,
+    } = parts;
     const columns = useMemo(() => {
       if (!resourceFamily) {
-        return parts.baseColumns;
+        return baseColumns;
       }
-      const details = [
-        ['reference', 'Context'],
-        ['counts', 'Capacity'],
-        ['configuration', 'Configuration'],
-      ].map(([slot, header]) =>
-        createDetailSegmentsColumn<CustomResourceGridRow>({
-          key: slot,
-          header,
-          slot,
-          openReference: parts.openReference,
-          navigateReference: parts.navigateReference,
-          clusterName: parts.selectedClusterName,
-        })
-      );
-      return [
-        ...parts.baseColumns.filter((column) => column.key !== 'crd' && column.key !== 'age'),
-        ...details,
-        ...parts.baseColumns.filter((column) => column.key === 'age'),
-      ];
-    }, [
-      resourceFamily,
-      parts.baseColumns,
-      parts.openReference,
-      parts.navigateReference,
-      parts.selectedClusterName,
-    ]);
+      return karpenterColumns({
+        baseColumns,
+        openReference,
+        navigateReference,
+        selectedClusterName,
+      });
+    }, [resourceFamily, baseColumns, openReference, navigateReference, selectedClusterName]);
 
     const basePersistence = useGridTablePersistence<CustomResourceGridRow>({
       viewId: config.viewId,
