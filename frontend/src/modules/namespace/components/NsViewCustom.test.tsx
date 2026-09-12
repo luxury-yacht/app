@@ -12,6 +12,7 @@ import type { GridTableProps } from '@shared/components/tables/GridTable';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanonicalRowTestOverrides, CatalogItem } from '@/core/refresh/types';
 import { requireReactElement } from '@/test-utils/requireReactElement';
@@ -375,6 +376,27 @@ describe('NsViewCustom', () => {
       })
     );
   });
+
+  it.each(['team-a', ALL_NAMESPACES_SCOPE])(
+    'keeps Argo CD filtering and namespace scope for %s',
+    async (namespace) => {
+      await renderComponent({
+        namespace,
+        resourceFamily: 'argocd',
+        showNamespaceColumn: namespace === ALL_NAMESPACES_SCOPE,
+      });
+      expect(useBrowseCatalogMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clusterId: 'cluster-a',
+          resourceFamily: 'argocd',
+          customOnly: true,
+          pinnedNamespaces: namespace === ALL_NAMESPACES_SCOPE ? [] : ['team-a'],
+        })
+      );
+      expect(getLastGridProps()?.columns.map((column) => column.key)).toContain('sync');
+      expect(getLastGridProps()?.columns.map((column) => column.key)).not.toContain('crd');
+    }
+  );
 
   it('uses the catalog query current page on first render for a single namespace', async () => {
     const queryResource: CustomResourceData = {
@@ -995,6 +1017,38 @@ describe('NsViewCustom', () => {
       // Non-interactive accessor-undefined path returns the string '-'
       // directly (no wrapping span, no role="button", no onClick).
       expect(rendered).toBe('-');
+    });
+
+    it('renders hydrated Argo CD sync and health independently with the backend presentation', async () => {
+      const resource: CustomResourceData = {
+        ...baseResource,
+        ref: { ...baseResource.ref, group: 'argoproj.io', kind: 'Application' },
+        argoCD: {
+          sync: 'Synced',
+          syncPresentation: 'ready',
+          health: 'Degraded',
+          healthPresentation: 'error',
+          project: 'production',
+          destination: 'remote-prod',
+          destinationNamespace: 'store',
+        },
+      };
+      useHydratedCustomCatalogRowsMock.mockReturnValue([resource]);
+      await renderComponent({ resourceFamily: 'argocd' });
+      const props = requireValue(getLastGridProps(), 'Argo CD table props');
+      for (const [key, value, presentation] of [
+        ['sync', 'Synced', 'status-text ready'],
+        ['health', 'Degraded', 'status-text error'],
+        ['project', 'production', undefined],
+        ['destination', 'remote-prod', undefined],
+        ['destinationNamespace', 'store', undefined],
+      ] as const) {
+        const rendered = renderToStaticMarkup(<>{findColumn(props, key).render(props.data[0])}</>);
+        expect(rendered).toContain(value);
+        if (presentation) {
+          expect(rendered).toContain(presentation);
+        }
+      }
     });
 
     it('uses backend statusPresentation for custom-resource status styling', async () => {

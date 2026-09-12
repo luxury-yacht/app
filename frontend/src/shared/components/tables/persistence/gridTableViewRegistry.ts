@@ -29,6 +29,7 @@ const VIEW_IDS = new Set<string>([
   'namespace-quotas',
   'namespace-config',
   'namespace-custom',
+  'namespace-argocd',
   'namespace-rbac',
   'namespace-helm',
   'namespace-browse',

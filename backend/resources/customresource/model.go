@@ -15,6 +15,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/argocd"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -120,6 +121,9 @@ func statusPresentation(resource *unstructured.Unstructured, facts Facts) resour
 	}
 
 	state, label, presentation := primaryStatus(facts)
+	if argoState, argoLabel, argoPresentation, ok := argocd.PrimaryStatus(resource); ok {
+		state, label, presentation = argoState, argoLabel, argoPresentation
+	}
 	meta := metav1.ObjectMeta{}
 	if resource != nil {
 		meta = objectMetaFromUnstructured(resource)

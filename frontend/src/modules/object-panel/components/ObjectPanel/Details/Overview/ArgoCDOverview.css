@@ -1,0 +1,77 @@
+.argocd-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+.argocd-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+.argocd-fields:empty {
+  display: none;
+}
+.argocd-overview-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-md);
+  min-width: 0;
+}
+.argocd-overview-section > h3 {
+  margin: 0;
+  padding: 0;
+}
+.argocd-overview .overview-label {
+  flex: 0 0 8rem;
+  min-width: 0;
+}
+.argocd-overview .overview-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.argocd-overview .overview-card {
+  min-width: 0;
+  gap: var(--spacing-md);
+}
+.argocd-overview .overview-card-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.argocd-overview .overview-card .overview-label {
+  text-transform: none;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+}
+.argocd-overview .overview-card .overview-value {
+  font-size: var(--font-size-sm);
+}
+.argocd-overview-subtitle {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+.argocd-overview-message {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-normal);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.argocd-overview .overview-ref-item {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.app .argocd-overview .overview-value,
+.app .argocd-overview .overview-value *,
+.app .argocd-overview .overview-ref-item,
+.app .argocd-overview .overview-card-title,
+.app .argocd-overview .argocd-overview-message {
+  user-select: text;
+  -webkit-user-select: text;
+}

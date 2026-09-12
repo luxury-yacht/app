@@ -36,6 +36,7 @@ export interface AttentionObjectFindingIgnore {
  * production Custom tabs to subscribe to full CRD fanout domains.
  */
 export interface CustomResourceSummary {
+    "argoCD"?: streamrows$0.ArgoCDSummary | null;
     "karpenter"?: streamrows$0.KarpenterSummary | null;
     "ref": resourcemodel$0.ResourceRef;
     "crdName"?: string;

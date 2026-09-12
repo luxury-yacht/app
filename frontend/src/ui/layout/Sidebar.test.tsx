@@ -366,6 +366,33 @@ describe('Sidebar', () => {
     expect(button()).toBeNull();
   });
 
+  it('gates Argo CD namespace navigation on active-cluster discovery', () => {
+    renderSidebar();
+    act(() =>
+      container
+        ?.querySelector<HTMLButtonElement>(
+          '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="cluster-a|default"]'
+        )
+        ?.click()
+    );
+    const button = () =>
+      container?.querySelector<HTMLButtonElement>('[data-sidebar-target-view="argocd"]');
+    expect(button()).toBeNull();
+    discoveredFamilies.byCluster['cluster-a'] = ['argocd'];
+    renderSidebar();
+    expect(button()?.textContent).toBe('Argo CD');
+    act(() => button()?.click());
+    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenCalledWith('argocd');
+    expect(
+      container?.querySelector(
+        '[data-sidebar-target-kind="cluster-view"][data-sidebar-target-view="argocd"]'
+      )
+    ).toBeNull();
+    discoveredFamilies.byCluster['cluster-a'] = [];
+    renderSidebar();
+    expect(button()).toBeNull();
+  });
+
   it('shows active-cluster Attention severity counts beside the label', () => {
     renderSidebar();
 

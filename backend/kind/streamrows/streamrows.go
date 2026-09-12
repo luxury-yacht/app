@@ -298,6 +298,7 @@ type ClusterCRDEntry struct {
 
 // NamespaceCustomSummary is a CRD-backed namespaced custom resource row.
 type NamespaceCustomSummary struct {
+	ArgoCD             *ArgoCDSummary                 `json:"argoCD,omitempty"`
 	Ref                resourcemodel.ResourceRef      `json:"ref"`
 	CRDName            string                         `json:"crdName,omitempty"`
 	Status             string                         `json:"status,omitempty"`
@@ -309,6 +310,17 @@ type NamespaceCustomSummary struct {
 	Age                string                         `json:"age"`
 	Labels             map[string]string              `json:"labels,omitempty"`
 	Annotations        map[string]string              `json:"annotations,omitempty"`
+}
+
+// ArgoCDSummary holds the focused fields used by the Argo CD table.
+type ArgoCDSummary struct {
+	Health               string `json:"health,omitempty"`
+	HealthPresentation   string `json:"healthPresentation,omitempty"`
+	Sync                 string `json:"sync,omitempty"`
+	SyncPresentation     string `json:"syncPresentation,omitempty"`
+	Project              string `json:"project,omitempty"`
+	Destination          string `json:"destination,omitempty"`
+	DestinationNamespace string `json:"destinationNamespace,omitempty"`
 }
 
 // KarpenterSummary contains only the facts shown in the Karpenter table.

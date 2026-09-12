@@ -413,7 +413,7 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 		}
 	}
 	family := values.Get("resourceFamily")
-	if family != "" && family != resourcekind.KarpenterFamily {
+	if family != "" && !resourcekind.IsResourceFamily(family) {
 		return browseQueryOptions{}, fmt.Errorf("invalid catalog resource family %q", family)
 	}
 	opts := browseQueryOptions{

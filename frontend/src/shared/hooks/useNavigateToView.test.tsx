@@ -59,6 +59,27 @@ describe('resource view navigation', () => {
     );
     expect(mocks.setNamespace).not.toHaveBeenCalled();
   });
+  it('selects the Argo CD object namespace and focuses only its family table', () => {
+    navigate({
+      clusterId: 'b',
+      group: 'argoproj.io',
+      version: 'v1alpha1',
+      kind: 'Application',
+      namespace: 'team-b',
+      name: 'shop',
+    });
+    expect(mocks.view.setActiveNamespaceTab).toHaveBeenCalledWith('argocd');
+    expect(mocks.setNamespace).toHaveBeenCalledWith('team-b', 'b');
+    expect(mocks.emit).toHaveBeenCalledWith(
+      'gridtable:focus-request',
+      expect.objectContaining({
+        clusterId: 'b',
+        namespace: 'team-b',
+        destinationViewId: 'namespace-argocd',
+        rowKey: 'b|argoproj.io/v1alpha1/Application/team-b/shop',
+      })
+    );
+  });
   it('preserves namespace selection and focus for built-in resources', () => {
     navigate({
       clusterId: 'b',

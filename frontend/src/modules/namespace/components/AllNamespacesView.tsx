@@ -48,6 +48,14 @@ const AllNamespacesView: React.FC<AllNamespacesViewProps> = ({ activeTab }) => {
         return <NsViewRBAC namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'storage':
         return <NsViewStorage namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
+      case 'argocd':
+        return (
+          <NsViewCustom
+            namespace={ALL_NAMESPACES_SCOPE}
+            showNamespaceColumn
+            resourceFamily="argocd"
+          />
+        );
       case 'custom':
         return <NsViewCustom namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'browse':

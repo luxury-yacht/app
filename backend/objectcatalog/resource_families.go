@@ -16,7 +16,7 @@ func (s *Service) DiscoveredResourceFamilies() []string {
 	defer s.identity.mu.RUnlock()
 	families := make(map[string]struct{})
 	for _, desc := range s.identity.resources {
-		if family := resourcekind.FamilyForResource(desc.Group, desc.Namespaced); family != "" {
+		if family := resourcekind.FamilyForResource(desc.Group, desc.Kind, desc.Namespaced); family != "" {
 			families[family] = struct{}{}
 		}
 	}

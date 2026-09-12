@@ -65,7 +65,7 @@ type Facts struct {
 }
 
 func BuildFacts(clusterID string, object *unstructured.Unstructured) *Facts {
-	if object == nil || resourcekind.FamilyForResource(object.GroupVersionKind().Group, object.GetNamespace() != "") != resourcekind.KarpenterFamily {
+	if object == nil || resourcekind.FamilyForResource(object.GroupVersionKind().Group, object.GetKind(), object.GetNamespace() != "") != resourcekind.KarpenterFamily {
 		return nil
 	}
 	facts := &Facts{}

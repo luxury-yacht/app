@@ -1,11 +1,11 @@
 import { useRefreshDomainHandle } from '@core/data-access';
 import { buildClusterScope } from '@core/refresh/clusterScope';
 import { useStreamSignalRefetch } from '@core/refresh/hooks/useStreamSignalRefetch';
-import { CLUSTER_VIEW_DESCRIPTORS } from './viewRegistry';
+import { CLUSTER_VIEW_DESCRIPTORS, NAMESPACE_VIEW_DESCRIPTORS } from './viewRegistry';
 
 // Subscribe before any optional view is opened: availability describes discovered
 // APIs, including installations whose resource tables are empty or denied.
-export function useAvailableClusterViews(clusterId: string | null | undefined) {
+function useDiscoveredResourceFamilies(clusterId: string | null | undefined) {
   const scope = buildClusterScope(clusterId ?? undefined, 'limit=1');
   const enabled = Boolean(clusterId);
   const { data } = useRefreshDomainHandle({
@@ -15,8 +15,19 @@ export function useAvailableClusterViews(clusterId: string | null | undefined) {
     preserveState: true,
   });
   useStreamSignalRefetch('catalog', enabled ? [scope] : []);
-  const families = enabled && data?.clusterId === clusterId ? data?.resourceFamilies : undefined;
+  return enabled && data?.clusterId === clusterId ? data?.resourceFamilies : undefined;
+}
+
+export function useAvailableClusterViews(clusterId: string | null | undefined) {
+  const families = useDiscoveredResourceFamilies(clusterId);
   return CLUSTER_VIEW_DESCRIPTORS.filter(
     (view) => view.id !== 'karpenter' || families?.includes('karpenter')
+  );
+}
+
+export function useAvailableNamespaceViews(clusterId: string | null | undefined) {
+  const families = useDiscoveredResourceFamilies(clusterId);
+  return NAMESPACE_VIEW_DESCRIPTORS.filter(
+    (view) => view.id !== 'argocd' || families?.includes('argocd')
   );
 }

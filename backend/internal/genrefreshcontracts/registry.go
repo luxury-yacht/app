@@ -13,6 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/streammux"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/argocd"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	"github.com/luxury-yacht/app/backend/resources/karpenter"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -63,6 +64,22 @@ func typeOf[T any]() reflect.Type {
 }
 
 var contractTypes = []typeSpec{
+	{name: "ArgoCDFacts", typeOf: typeOf[argocd.Facts]()},
+	{name: "ArgoCDApplicationFacts", typeOf: typeOf[argocd.ApplicationFacts]()},
+	{name: "ArgoCDApplicationSpec", typeOf: typeOf[argocd.ApplicationSpec]()},
+	{name: "ArgoCDApplicationSetFacts", typeOf: typeOf[argocd.ApplicationSetFacts]()},
+	{name: "ArgoCDDestination", typeOf: typeOf[argocd.Destination]()},
+	{name: "ArgoCDSource", typeOf: typeOf[argocd.Source]()},
+	{name: "ArgoCDSyncPolicy", typeOf: typeOf[argocd.SyncPolicy]()},
+	{name: "ArgoCDAutomatedSync", typeOf: typeOf[argocd.AutomatedSync]()},
+	{name: "ArgoCDOperation", typeOf: typeOf[argocd.Operation]()},
+	{name: "ArgoCDGenerator", typeOf: typeOf[argocd.Generator]()},
+	{name: "ArgoCDProjectFacts", typeOf: typeOf[argocd.ProjectFacts]()},
+	{name: "ArgoCDResourceRestriction", typeOf: typeOf[argocd.ResourceRestriction]()},
+	{name: "ArgoCDProjectRole", typeOf: typeOf[argocd.ProjectRole]()},
+	{name: "ArgoCDSyncWindow", typeOf: typeOf[argocd.SyncWindow]()},
+	{name: "ArgoCDCondition", typeOf: typeOf[argocd.Condition]()},
+	{name: "ArgoCDSummary", typeOf: typeOf[streamrows.ArgoCDSummary]()},
 	{name: "KarpenterSummary", typeOf: typeOf[streamrows.KarpenterSummary]()},
 	{name: "KarpenterFacts", typeOf: typeOf[karpenter.Facts]()},
 	{name: "KarpenterRequirement", typeOf: typeOf[karpenter.Requirement]()},

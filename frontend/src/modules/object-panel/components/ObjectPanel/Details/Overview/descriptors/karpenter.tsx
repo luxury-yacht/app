@@ -138,7 +138,7 @@ const kindOverviews: Record<string, typeof PoolOverview> = {
 export const karpenterDescriptor: OverviewDescriptor<CustomResourceDetails> = {
   displayKind: 'Karpenter',
   dtoName: 'CustomResourceDetails',
-  coveredElsewhere: ['ref', 'resourceFamily'],
+  coveredElsewhere: ['ref', 'resourceFamily', 'argoCD'],
   schema: {
     items: [
       { kind: 'status' },

@@ -44,7 +44,10 @@ vi.mock('@modules/namespace/components/NsViewAutoscaling', () => ({
   default: autoscalingViewMock,
 }));
 vi.mock('@modules/namespace/components/NsViewQuotas', () => ({ default: quotasViewMock }));
-vi.mock('@modules/namespace/components/NsViewCustom', () => ({ default: customViewMock }));
+vi.mock('@modules/namespace/components/NsViewCustom', () => ({
+  default: customViewMock,
+  NsViewArgoCD: customViewMock,
+}));
 vi.mock('@modules/namespace/components/NsViewHelm', () => ({ default: helmViewMock }));
 vi.mock('@modules/namespace/components/NsViewEvents', () => ({ default: eventsViewMock }));
 vi.mock('@modules/browse/components/BrowseView', () => ({ default: browseViewMock }));
@@ -89,6 +92,7 @@ describe('NamespaceResourcesViews', () => {
   };
 
   const tabCases = [
+    { tab: 'argocd' as const, props: {}, mock: customViewMock, expected: { namespace: 'team-a' } },
     {
       tab: 'browse' as const,
       props: {},

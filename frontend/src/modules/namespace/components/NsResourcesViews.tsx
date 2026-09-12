@@ -12,7 +12,7 @@
 import BrowseView from '@modules/browse/components/BrowseView';
 import NsViewAutoscaling from '@modules/namespace/components/NsViewAutoscaling';
 import NsViewConfig from '@modules/namespace/components/NsViewConfig';
-import NsViewCustom from '@modules/namespace/components/NsViewCustom';
+import NsViewCustom, { NsViewArgoCD } from '@modules/namespace/components/NsViewCustom';
 import NsViewEvents from '@modules/namespace/components/NsViewEvents';
 import NsViewHelm from '@modules/namespace/components/NsViewHelm';
 import NsViewMap from '@modules/namespace/components/NsViewMap';
@@ -53,6 +53,7 @@ const NS_VIEWS: Partial<
   autoscaling: { name: 'Autoscaling', Component: NsViewAutoscaling },
   quotas: { name: 'Quotas', Component: NsViewQuotas },
   custom: { name: 'Custom Resources', Component: NsViewCustom },
+  argocd: { name: 'Argo CD', Component: NsViewArgoCD },
   helm: { name: 'Helm', Component: NsViewHelm },
   events: { name: 'Events', Component: NsViewEvents },
 };

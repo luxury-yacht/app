@@ -16,6 +16,10 @@ func TestCatalogResourceFamilyScope(t *testing.T) {
 	opts, err := parseBrowseScope("cluster-a|resourceFamily=karpenter&limit=25")
 	require.NoError(t, err)
 	require.Equal(t, "karpenter", opts.toQueryOptions().ResourceFamily)
+	argo, err := parseBrowseScope("cluster-a|resourceFamily=argocd&resourceScope=namespace&scopeNamespace=team-a")
+	require.NoError(t, err)
+	require.Equal(t, "argocd", argo.toQueryOptions().ResourceFamily)
+	require.Equal(t, []string{"team-a"}, argo.toQueryOptions().ScopeNamespaces)
 	_, err = parseBrowseScope("cluster-a|resourceFamily=unknown")
 	require.Error(t, err)
 }

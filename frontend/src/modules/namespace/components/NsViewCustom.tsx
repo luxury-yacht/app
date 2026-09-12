@@ -18,12 +18,29 @@ import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGri
 import * as cf from '@shared/components/tables/columnFactories';
 import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import React, { useMemo } from 'react';
+import { argoCDColumns } from './argoCDColumns';
+
+const CUSTOM_VIEW = {
+  viewId: 'namespace-custom',
+  label: 'Custom',
+  objectLabel: 'custom',
+  spinner: 'Loading custom resources...',
+  exportFilename: 'custom-resources',
+};
+const ARGOCD_VIEW = {
+  viewId: 'namespace-argocd',
+  label: 'Argo CD',
+  objectLabel: 'Argo CD',
+  spinner: 'Loading Argo CD resources...',
+  exportFilename: 'argocd-resources',
+};
 
 // Data interface for custom resources
 export type CustomResourceData = CustomResourceGridRow;
 
 interface CustomViewProps {
   namespace: string;
+  resourceFamily?: 'argocd';
   showNamespaceColumn?: boolean;
 }
 
@@ -31,29 +48,34 @@ interface CustomViewProps {
  * GridTable component for namespace custom resources (instances of CRDs)
  */
 const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
-  ({ namespace, showNamespaceColumn = false }) => {
+  ({ namespace, resourceFamily, showNamespaceColumn = false }) => {
     const parts = useCustomResourceGridParts({ kindFallback: 'Custom' });
     const { keyExtractor, selectedClusterId } = parts;
-    const namespaceColumnLink = useNamespaceColumnLink<CustomResourceData>('custom');
+    const namespaceColumnLink = useNamespaceColumnLink<CustomResourceData>(
+      resourceFamily ?? 'custom'
+    );
 
+    const config = resourceFamily ? ARGOCD_VIEW : CUSTOM_VIEW;
     const columns = useMemo(() => {
+      const baseColumns = resourceFamily
+        ? argoCDColumns({ baseColumns: parts.baseColumns })
+        : parts.baseColumns;
       if (!showNamespaceColumn) {
-        return parts.baseColumns;
+        return baseColumns;
       }
-      return cf.withNamespaceColumn(parts.baseColumns, {
+      return cf.withNamespaceColumn(baseColumns, {
         afterColumnKey: 'name',
         accessor: (resource) => resource.ref.namespace,
         sortValue: (resource) => (resource.ref.namespace || '').toLowerCase(),
         ...namespaceColumnLink,
       });
-    }, [namespaceColumnLink, parts.baseColumns, showNamespaceColumn]);
+    }, [namespaceColumnLink, parts.baseColumns, showNamespaceColumn, resourceFamily]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
-    const diagnosticsLabel =
-      namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Custom' : 'Namespace Custom';
+    const diagnosticsLabel = `${namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces' : 'Namespace'} ${config.label}`;
 
     const persistenceState = useNamespaceGridTablePersistence<CustomResourceData>({
-      viewId: 'namespace-custom',
+      viewId: config.viewId,
       namespace,
       columns,
       keyExtractor,
@@ -66,6 +88,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
 
     const catalog = useCatalogBackedCustomResourceRows({
       clusterId: selectedClusterId,
+      resourceFamily,
       namespace,
       allNamespaces: namespace === ALL_NAMESPACES_SCOPE,
       persistence,
@@ -103,7 +126,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       },
     });
 
-    const emptyText = `No custom objects found ${
+    const emptyText = `No ${config.objectLabel} objects found ${
       namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'
     }`;
 
@@ -114,10 +137,10 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         gridTableProps={gridTableProps}
         favModal={favModal}
         columns={columns}
-        idPrefix="namespace-custom"
+        idPrefix={config.viewId}
         cacheKeySuffix={namespace}
-        exportFilename="custom-resources"
-        spinnerMessage="Loading custom resources..."
+        exportFilename={config.exportFilename}
+        spinnerMessage={config.spinner}
         diagnosticsLabel={diagnosticsLabel}
         tableClassName="ns-custom-table"
         emptyText={emptyText}
@@ -127,5 +150,9 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
 );
 
 CustomViewGrid.displayName = 'NsViewCustom';
+
+export const NsViewArgoCD = ({ namespace }: { namespace: string }) => (
+  <CustomViewGrid namespace={namespace} resourceFamily="argocd" />
+);
 
 export default CustomViewGrid;

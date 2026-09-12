@@ -9,7 +9,10 @@ import { useAppearanceMode } from '@core/contexts/AppearanceModeContext';
 import { useFavorites } from '@core/contexts/FavoritesContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useZoom } from '@core/contexts/ZoomContext';
-import { useAvailableClusterViews } from '@core/navigation/useAvailableClusterViews';
+import {
+  useAvailableClusterViews,
+  useAvailableNamespaceViews,
+} from '@core/navigation/useAvailableResourceViews';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -43,10 +46,7 @@ import { type ReactNode, useCallback, useMemo } from 'react';
 import { CheckForUpdates } from '@/core/backend-api';
 import { requestContextRefresh } from '@/core/data-access';
 import { eventBus } from '@/core/events';
-import {
-  GLOBAL_VIEW_DESCRIPTORS,
-  NAMESPACE_VIEW_DESCRIPTORS,
-} from '@/core/navigation/viewRegistry';
+import { GLOBAL_VIEW_DESCRIPTORS } from '@/core/navigation/viewRegistry';
 import { useAutoRefresh } from '@/core/refresh';
 import {
   setDimInactiveNamespaces,
@@ -201,6 +201,7 @@ export function useCommandPaletteCommands() {
   const { zoomIn, zoomOut, resetZoom, zoomLevel } = useZoom();
   const { enabled: autoRefreshEnabled, toggle: toggleAutoRefresh } = useAutoRefresh();
   const availableClusterViews = useAvailableClusterViews(selectedClusterId);
+  const availableNamespaceViews = useAvailableNamespaceViews(selectedClusterId);
   const useShortResourceNames = useShortNames();
   const dimInactiveNamespaces = useDimInactiveNamespaces();
   const exclusiveNamespaces = useExclusiveNamespaces();
@@ -624,7 +625,7 @@ export function useCommandPaletteCommands() {
       return [];
     }
 
-    return NAMESPACE_VIEW_DESCRIPTORS.map((view) => ({
+    return availableNamespaceViews.map((view) => ({
       id: `namespace-${view.id}`,
       label: `Namespace - ${view.label}`,
       icon: <NamespaceIcon width={16} height={16} />,
@@ -633,7 +634,7 @@ export function useCommandPaletteCommands() {
       action: () => openNamespaceTab(view.id),
       keywords: [...view.keywords],
     }));
-  }, [viewState, openNamespaceTab]);
+  }, [viewState, openNamespaceTab, availableNamespaceViews]);
 
   // Add namespace-specific commands dynamically
   const namespaceCommands = useMemo(() => {

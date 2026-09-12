@@ -23,6 +23,13 @@ Keep table sizing in the production column builder. A story must not add
 auto-sizing or other layout transformations that the live view omits; compare
 the column-building path before treating a preview as evidence of app layout.
 
+Detail blocks must fit the parent panel's hierarchy. Avoid nesting peer-level
+section headers when reusing a block inside another section. Put status and
+conditions together near the top, title repeated entries, and label policy or
+configuration lists. Give long messages and technical strings the full available
+width, and preserve selection when values become card titles. Check the grouping
+of related values separately from whether every DTO field is present.
+
 ## Missing native behavior changes in dependency upgrades
 
 A framework upgrade can retain a method while making its default implementation

@@ -7,6 +7,7 @@
  * overviewRegistry/GenericOverview path.
  */
 
+import { argoCDDescriptor, getArgoCDOverviewDescriptor } from './descriptors/argocd';
 import {
   crdDescriptor,
   ingressClassDescriptor,
@@ -126,11 +127,16 @@ export function getOverviewDescriptor(
   if (!kind) {
     return undefined;
   }
-  return getKarpenterOverviewDescriptor(kind, detail) ?? byKind.get(kind.toLowerCase());
+  return (
+    getArgoCDOverviewDescriptor(kind, detail) ??
+    getKarpenterOverviewDescriptor(kind, detail) ??
+    byKind.get(kind.toLowerCase())
+  );
 }
 
 /** Unique descriptors (one per registration) — for the drift-check to iterate. */
 export const registeredDescriptors = [
   ...registrations.map((reg) => reg.descriptor),
   karpenterDescriptor as OverviewDescriptor<never>,
+  argoCDDescriptor as OverviewDescriptor<never>,
 ];

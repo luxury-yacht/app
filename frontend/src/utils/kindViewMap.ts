@@ -82,14 +82,12 @@ export function getViewForKind(
     return { viewType: 'cluster', tab: 'karpenter' };
   }
   const normalized = kind.toLowerCase();
+  if (
+    group === 'argoproj.io' &&
+    namespace &&
+    ['application', 'applicationset', 'appproject'].includes(normalized)
+  ) {
+    return { viewType: 'namespace', tab: 'argocd' };
+  }
   return NAMESPACE_SCOPED_MAP[normalized] ?? CLUSTER_SCOPED_MAP[normalized] ?? null;
-}
-
-/**
- * Returns true if the kind maps to a namespace-scoped view.
- * Useful for determining whether namespace selection is needed.
- */
-export function isNamespaceScopedKind(kind: string): boolean {
-  const normalized = kind.toLowerCase();
-  return normalized in NAMESPACE_SCOPED_MAP;
 }

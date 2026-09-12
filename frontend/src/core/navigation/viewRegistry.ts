@@ -239,6 +239,15 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
   },
   {
     scope: 'namespace',
+    id: 'argocd',
+    supportsAllNamespaces: true,
+    label: 'Argo CD',
+    description: 'View Argo CD applications, application sets, and projects',
+    keywords: ['argocd', 'argo cd', 'gitops', 'applications', 'applicationsets', 'appprojects'],
+    refresher: null,
+  },
+  {
+    scope: 'namespace',
     id: 'quotas',
     supportsAllNamespaces: true,
     label: 'Quotas',

@@ -12,6 +12,7 @@ package customresource
 import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/argocd"
 	"github.com/luxury-yacht/app/backend/resources/karpenter"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -32,6 +33,7 @@ func BuildNamespaceStreamSummary(meta streamrows.ClusterMeta, resource *unstruct
 	model := BuildResourceModel(meta.ClusterID, resource, descriptor, resourcemodel.ResourceScopeNamespaced, defaultNamespace)
 	facts := BuildFacts(meta.ClusterID, resource, gvr, descriptor.CRDName, resourcemodel.ResourceModelBuildOptions{})
 	return streamrows.NamespaceCustomSummary{
+		ArgoCD:             argoCDTableSummary(argocd.BuildFacts(meta.ClusterID, resource), model.Status),
 		Ref:                model.Ref,
 		CRDName:            descriptor.CRDName,
 		Status:             model.Status.Label,
@@ -86,4 +88,28 @@ func karpenterTableSummary(facts *karpenter.Facts) *streamrows.KarpenterSummary 
 		InstanceType: facts.InstanceType, CapacityType: facts.CapacityType,
 		Capacity: facts.Capacity, Limits: facts.Limits,
 	}
+}
+
+func argoCDTableSummary(facts *argocd.Facts, status resourcemodel.ResourceStatusPresentation) *streamrows.ArgoCDSummary {
+	if facts == nil {
+		return nil
+	}
+	summary := &streamrows.ArgoCDSummary{}
+	if facts.Application != nil || facts.ApplicationSet != nil || status.Presentation == "terminating" {
+		summary.Health = status.Label
+		summary.HealthPresentation = status.Presentation
+	}
+	var spec argocd.ApplicationSpec
+	if facts.Application != nil {
+		spec = facts.Application.Spec
+		summary.Sync = facts.Application.Sync
+		summary.SyncPresentation = facts.Application.SyncPresentation
+	}
+	if facts.ApplicationSet != nil {
+		spec = facts.ApplicationSet.Template
+	}
+	summary.Project = spec.Project
+	summary.Destination = spec.Destination.DisplayName()
+	summary.DestinationNamespace = spec.Destination.Namespace
+	return summary
 }

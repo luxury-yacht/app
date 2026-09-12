@@ -1,3 +1,3 @@
 ### Added
 
-- Karpenter CRDs are now first-class objects, with a dedicated view and detail panels. The Karpenter category is only visible in the sidebar when Karpenter CRDs are discovered.
+- Argo CD and Karpenter CRDs are now first-class objects, with a dedicated view and detail panels. Sidebar items for these CRD types are only visible when discovered.

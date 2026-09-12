@@ -20,6 +20,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/argocd"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -595,6 +596,7 @@ func catalogHydrationRequestForRow(clusterID string, row snapshot.ResourceQueryR
 }
 
 func hydrateCatalogRequests(ctx context.Context, client dynamic.Interface, meta snapshot.ClusterMeta, requests []catalogHydrationRequest) ([]snapshot.CustomResourceSummary, []bool) {
+	destinations := argocd.NewDestinationResolver(meta.ClusterID, client)
 	result := make([]snapshot.CustomResourceSummary, len(requests))
 	included := make([]bool, len(requests))
 	sem := make(chan struct{}, catalogCustomHydrationConcurrency)
@@ -611,7 +613,7 @@ func hydrateCatalogRequests(ctx context.Context, client dynamic.Interface, meta 
 			case <-ctx.Done():
 				return
 			}
-			summary, ok := hydrateCatalogCustomRow(ctx, client, meta, req.row, req.gvr, req.name)
+			summary, ok := hydrateCatalogCustomRow(ctx, client, meta, req.row, req.gvr, req.name, destinations)
 			if !ok {
 				return
 			}
@@ -640,6 +642,7 @@ func hydrateCatalogCustomRow(
 	row snapshot.ResourceQueryRow,
 	gvr schema.GroupVersionResource,
 	name string,
+	destinations *argocd.DestinationResolver,
 ) (snapshot.CustomResourceSummary, bool) {
 	resource := client.Resource(gvr)
 	var (
@@ -662,7 +665,7 @@ func hydrateCatalogCustomRow(
 		crdName = row.Resource + "." + row.Group
 	}
 	if row.Namespace != "" {
-		return snapshot.CustomResourceSummaryFromNamespace(customresource.BuildNamespaceStreamSummary(
+		summary := snapshot.CustomResourceSummaryFromNamespace(customresource.BuildNamespaceStreamSummary(
 			meta,
 			obj, customresource.NewDescriptor(
 
@@ -672,7 +675,11 @@ func hydrateCatalogCustomRow(
 				row.Kind,
 				crdName),
 
-			row.Namespace)), true
+			row.Namespace))
+		if summary.ArgoCD != nil {
+			summary.ArgoCD.Destination = destinations.TableDestination(ctx, obj)
+		}
+		return summary, true
 	}
 	return snapshot.CustomResourceSummaryFromCluster(customresource.BuildClusterStreamSummary(
 		meta,
