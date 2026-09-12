@@ -196,52 +196,55 @@ function KarpenterTaints({
   );
 }
 
-const requirementLabels: Record<string, string> = {
-  'kubernetes.io/arch': 'Architecture',
-  'kubernetes.io/os': 'Operating System',
-  'topology.kubernetes.io/zone': 'Zone',
-  'topology.kubernetes.io/region': 'Region',
-  'node.kubernetes.io/instance-type': 'Instance Type',
-  'karpenter.sh/capacity-type': 'Capacity Type',
-  'karpenter.sh/nodepool': 'NodePool',
-  'karpenter.sh/nodeclaim': 'NodeClaim',
-  'karpenter.sh/provisioner-name': 'Provisioner',
-  'karpenter.k8s.aws/instance-category': 'Instance Category',
-  'karpenter.k8s.aws/instance-family': 'Instance Family',
-  'karpenter.k8s.aws/instance-generation': 'Instance Generation',
-  'karpenter.k8s.aws/instance-size': 'Instance Size',
-  'karpenter.k8s.aws/instance-cpu': 'Instance CPUs',
-  'karpenter.k8s.aws/instance-memory': 'Instance Memory',
-};
+const requirementLabels = new Map(
+  Object.entries({
+    'kubernetes.io/arch': 'Architecture',
+    'kubernetes.io/os': 'Operating System',
+    'topology.kubernetes.io/zone': 'Zone',
+    'topology.kubernetes.io/region': 'Region',
+    'node.kubernetes.io/instance-type': 'Instance Type',
+    'karpenter.sh/capacity-type': 'Capacity Type',
+    'karpenter.sh/nodepool': 'NodePool',
+    'karpenter.sh/nodeclaim': 'NodeClaim',
+    'karpenter.sh/provisioner-name': 'Provisioner',
+    'karpenter.k8s.aws/instance-category': 'Instance Category',
+    'karpenter.k8s.aws/instance-family': 'Instance Family',
+    'karpenter.k8s.aws/instance-generation': 'Instance Generation',
+    'karpenter.k8s.aws/instance-size': 'Instance Size',
+    'karpenter.k8s.aws/instance-cpu': 'Instance CPUs',
+    'karpenter.k8s.aws/instance-memory': 'Instance Memory',
+  })
+);
 
-const requirementLabelWords: Record<string, string> = {
-  ami: 'AMI',
-  api: 'API',
-  aws: 'AWS',
-  cpu: 'CPU',
-  cpus: 'CPUs',
-  ebs: 'EBS',
-  eni: 'ENI',
-  gpu: 'GPU',
-  gpus: 'GPUs',
-  id: 'ID',
-  ids: 'IDs',
-  ip: 'IP',
-  nvme: 'NVMe',
-  os: 'OS',
-};
+const requirementLabelWords = new Map(
+  Object.entries({
+    ami: 'AMI',
+    api: 'API',
+    aws: 'AWS',
+    cpu: 'CPU',
+    cpus: 'CPUs',
+    ebs: 'EBS',
+    eni: 'ENI',
+    gpu: 'GPU',
+    gpus: 'GPUs',
+    id: 'ID',
+    ids: 'IDs',
+    ip: 'IP',
+    nvme: 'NVMe',
+    os: 'OS',
+  })
+);
 
 const formatRequirementLabel = (key: string): string =>
-  (Object.hasOwn(requirementLabels, key) ? requirementLabels[key] : undefined) ??
+  requirementLabels.get(key) ??
   (key
     .slice(key.lastIndexOf('/') + 1)
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .split(/[-_.\s]+/)
     .filter(Boolean)
-    .map((word) =>
-      Object.hasOwn(requirementLabelWords, word.toLowerCase())
-        ? requirementLabelWords[word.toLowerCase()]
-        : word[0].toUpperCase() + word.slice(1)
+    .map(
+      (word) =>
+        requirementLabelWords.get(word.toLowerCase()) ?? word[0].toUpperCase() + word.slice(1)
     )
     .join(' ') ||
     key);

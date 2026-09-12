@@ -197,6 +197,14 @@ edits. The local max-12 complexity check also passed. No tests were added.
 96% statement coverage for `KarpenterSections.tsx`.
 
 The Capacity tooltip is supplied by the claim overview instead of the shared
-capacity component, so pool and overlay overviews omit it. Verification of this
-final presentation adjustment is pending; native visual acceptance stays with
-the user.
+capacity component, so pool and overlay overviews omit it. Final typecheck, Biome
+and max-12 complexity checks pass. The 7 existing overview tests pass with 96%
+statement coverage for `KarpenterSections.tsx` and 95% for the descriptor.
+The final `mise exec -- wails3 task qc:prerelease` run also passed; no tests were
+added. Native visual acceptance stays with the user.
+
+Two validation failures were resolved before the final gate: generated coverage
+HTML/CSS entered the lint scope, so those reports were moved outside the frontend
+tree; `Object.hasOwn` was incompatible with the TypeScript target, so the label
+lookups now use Maps. The successful final gate log is
+`/tmp/karpenter-final-prerelease.log`.
