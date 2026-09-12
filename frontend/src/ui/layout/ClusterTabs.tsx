@@ -370,6 +370,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       {orderedTabs.length > 0 && (
         <Tabs
           aria-label="Cluster Tabs"
+          tabNavigation="sequential"
           tabs={tabDescriptors}
           activeId={activeTabId}
           onActivate={(id) => {

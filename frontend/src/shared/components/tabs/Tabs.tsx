@@ -279,6 +279,8 @@ export interface TabsProps {
   minTabWidth?: number;
   maxTabWidth?: number;
   overflow?: 'scroll' | 'none';
+  /** Tab/Shift+Tab visits every enabled tab in sequential mode; arrows work in both modes. */
+  tabNavigation?: 'roving' | 'sequential';
   className?: string;
   id?: string;
   /**
@@ -312,6 +314,7 @@ export function Tabs({
   minTabWidth,
   maxTabWidth = 240,
   overflow = 'scroll',
+  tabNavigation = 'roving',
   className: classNameProp,
   id,
   dropInsertIndex = null,
@@ -664,7 +667,7 @@ export function Tabs({
           domId={getTabDOMId(tab.id)}
           index={index}
           activeId={activeId}
-          focusStopId={focusStopId}
+          focusStopId={tabNavigation === 'sequential' ? tab.id : focusStopId}
           onFocusTab={(tabId, event) => {
             rememberFocus(event);
             setFocusedTab({ id: tabId, activeId });

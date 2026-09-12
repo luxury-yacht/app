@@ -10,10 +10,13 @@ import {
   setClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
 import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
+import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
 import ClusterTabs, { toClusterInsertIndex } from '@ui/layout/ClusterTabs';
+import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import { installWindowProperty } from '@/test-utils/windowProperty';
 
 vi.mock('@/core/contexts/ZoomContext', () => ({ useZoom: () => ({ zoomLevel: 100 }) }));
@@ -58,6 +61,7 @@ vi.mock('@core/backend-api', () => ({
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => true,
   getWindowIdentity: () => 'app-a',
+  onEvent: () => () => undefined,
 }));
 
 type MockState = {
@@ -147,6 +151,79 @@ describe('ClusterTabs', () => {
     expect(toClusterInsertIndex(2, true)).toBe(1);
     expect(toClusterInsertIndex(2, false)).toBe(2);
   });
+
+  it.each(['Enter', ' '])(
+    'visits every cluster with Tab and arrows, activating only on %s',
+    async (activationKey) => {
+      mockState.selectedKubeconfigs = ['a', 'b', 'c'];
+      mockState.selectedKubeconfig = 'b';
+      await act(async () => {
+        root.render(
+          <KeyboardProvider>
+            <AppRegionNavigation />
+            <TabDragProvider>
+              <ClusterTabs />
+            </TabDragProvider>
+            <aside data-app-region="sidebar">
+              <button type="button">Overview</button>
+            </aside>
+          </KeyboardProvider>
+        );
+      });
+      const [globalTab, firstTab, activeTab, lastTab] =
+        container.querySelectorAll<HTMLElement>('[role="tab"]');
+      const button = (label: string) =>
+        requireValue(container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`), label);
+      const pressKey = async (key: string, modifiers: KeyboardEventInit = {}) => {
+        await act(async () => {
+          requireValue(document.activeElement, 'focused control').dispatchEvent(
+            new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modifiers })
+          );
+        });
+      };
+      const order = [
+        globalTab,
+        firstTab,
+        button('Close a'),
+        activeTab,
+        button('Close b'),
+        lastTab,
+        button('Close c'),
+        button('Open Cluster'),
+      ];
+      act(() => globalTab.focus());
+      for (const control of order.slice(1)) {
+        await pressKey('Tab');
+        expect(document.activeElement).toBe(control);
+      }
+      for (const control of order.slice(0, -1).reverse()) {
+        await pressKey('Tab', { shiftKey: true });
+        expect(document.activeElement).toBe(control);
+      }
+      await pressKey('ArrowRight');
+      expect(document.activeElement).toBe(firstTab);
+      await pressKey('Tab');
+      expect(document.activeElement).toBe(button('Close a'));
+      await pressKey('Tab');
+      expect(document.activeElement).toBe(activeTab);
+      await pressKey('ArrowRight');
+      expect(document.activeElement).toBe(lastTab);
+      await pressKey('ArrowLeft');
+      expect(document.activeElement).toBe(activeTab);
+      await pressKey('ArrowRight');
+      await pressKey('Tab', { ctrlKey: true });
+      expect(document.activeElement).toBe(container.querySelector('aside button'));
+      await pressKey('Tab', { ctrlKey: true, shiftKey: true });
+      expect(document.activeElement).toBe(lastTab);
+      expect(activeTab.getAttribute('aria-selected')).toBe('true');
+      expect(mockState.setActiveKubeconfig).not.toHaveBeenCalled();
+      expect(viewState.activateClusterWorkspace).not.toHaveBeenCalled();
+      expect(viewState.navigateToGlobal).not.toHaveBeenCalled();
+      await pressKey(activationKey);
+      expect(mockState.setActiveKubeconfig).toHaveBeenCalledExactlyOnceWith('c');
+      expect(viewState.activateClusterWorkspace).toHaveBeenCalledExactlyOnceWith('c');
+    }
+  );
 
   it('dismisses actions when their cluster closes and does not revive them on reopen', async () => {
     mockState.selectedKubeconfigs = ['a', 'b'];
