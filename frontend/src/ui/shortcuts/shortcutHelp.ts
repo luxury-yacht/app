@@ -40,12 +40,15 @@ export function buildShortcutHelpGroups(shortcuts: ShortcutMap): ShortcutGroup[]
         (CATEGORY_ORDER[a] ?? Number.MAX_SAFE_INTEGER) -
           (CATEGORY_ORDER[b] ?? Number.MAX_SAFE_INTEGER) || a.localeCompare(b)
     )
-    .map(([category, group]) => ({
-      category,
-      shortcuts: group.sort(compareHelpShortcuts).map(({ key, modifiers, description }) => ({
-        key,
-        modifiers,
-        description,
-      })),
-    }));
+    .map(([category, group]) => {
+      group.sort(compareHelpShortcuts);
+      return {
+        category,
+        shortcuts: group.map(({ key, modifiers, description }) => ({
+          key,
+          modifiers,
+          description,
+        })),
+      };
+    });
 }
