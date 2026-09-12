@@ -33,5 +33,10 @@ func (p *objectDetailProvider) fetchDiscoveredResourceDetails(ctx context.Contex
 	// live object so a prior header cache entry cannot conceal a changed spec.
 	p.gateway.responseCacheStore(resolved.selectionKey, objectHeaderMetadataCacheKey(gvk, "", name), objectHeaderMetadata(object))
 	descriptor := customresource.NewDescriptor(gvr.Group, gvr.Version, gvr.Resource, gvk.Kind, gvr.Resource+"."+gvr.Group)
-	return customresource.BuildDetails(snapshot.ClusterMetaFromContext(ctx).ClusterID, object, descriptor), nil
+	clusterID := snapshot.ClusterMetaFromContext(ctx).ClusterID
+	details := customresource.BuildDetails(clusterID, object, descriptor)
+	if details.Karpenter != nil {
+		details.Karpenter.NodeClass = p.gateway.objectCatalogServiceForCluster(clusterID).ResolveRelatedResourceLink(details.Karpenter.NodeClass)
+	}
+	return details, nil
 }

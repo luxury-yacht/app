@@ -42,18 +42,11 @@ export function karpenterColumns(
         (row) => row.karpenter?.instanceType,
         { sortable: false }
       ),
-      createTextColumn<CustomResourceGridRow>(
-        'capacityType',
-        'Capacity Type',
-        (row) => row.karpenter?.capacityType,
-        { sortable: false }
-      ),
       ...parts.baseColumns.filter((column) => column.key === 'age'),
     ],
     {
       status: { minWidth: '6rem' },
       instanceType: { minWidth: '10rem' },
-      capacityType: { minWidth: '10rem' },
     }
   );
 }

@@ -25,7 +25,14 @@ const source: CustomResourceGridRow = {
       },
     },
     nodeClass: {
-      display: { clusterId: 'a', group: 'karpenter.k8s.aws', kind: 'EC2NodeClass', name: 'class' },
+      ref: {
+        clusterId: 'a',
+        group: 'karpenter.k8s.aws',
+        version: 'v1beta1',
+        kind: 'EC2NodeClass',
+        resource: 'ec2nodeclasses',
+        name: 'class',
+      },
     },
     instanceType: 'm7g.large',
     capacityType: 'spot',
@@ -34,7 +41,7 @@ const source: CustomResourceGridRow = {
 
 describe('Karpenter columns', () => {
   const parts = {
-    baseColumns: [],
+    baseColumns: [{ key: 'crd', header: 'CRD', render: () => '-' }],
     openReference: vi.fn(),
     navigateReference: vi.fn(),
     selectedClusterName: 'Cluster',
@@ -42,7 +49,7 @@ describe('Karpenter columns', () => {
   it('renders one field per cell and exports only that value', () => {
     const columns = karpenterColumns(parts);
     const dom = document.createElement('div');
-    for (const [index, value] of ['pool', 'class', 'm7g.large', 'spot'].entries()) {
+    for (const [index, value] of ['pool', 'class', 'm7g.large'].entries()) {
       const column = columns[index];
       dom.innerHTML = renderToStaticMarkup(column.render(source));
       expect(dom.textContent).toBe(value);
@@ -59,25 +66,40 @@ describe('Karpenter columns', () => {
     const columns = karpenterColumns(parts);
     const dom = document.createElement('div');
     const root = createRoot(dom);
+    for (const [index, link] of [
+      source.karpenter?.nodePool,
+      source.karpenter?.nodeClass,
+    ].entries()) {
+      await act(async () => {
+        root.render(columns[index].render(source));
+      });
+      const button = dom.querySelector('button');
+      expect(button?.textContent).toBe(link?.ref?.name);
+      await act(async () => {
+        button?.click();
+      });
+      expect(parts.openReference).toHaveBeenLastCalledWith(expect.objectContaining(link?.ref));
+      await act(async () => {
+        button?.dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true }));
+      });
+      expect(parts.navigateReference).toHaveBeenLastCalledWith(expect.objectContaining(link?.ref));
+    }
     await act(async () => {
-      root.render(columns[0].render(source));
-    });
-    const button = dom.querySelector('button');
-    expect(button?.textContent).toBe('pool');
-    await act(async () => {
-      button?.click();
-    });
-    expect(parts.openReference).toHaveBeenCalledWith(
-      expect.objectContaining(source.karpenter?.nodePool?.ref)
-    );
-    await act(async () => {
-      button?.dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true }));
-    });
-    expect(parts.navigateReference).toHaveBeenCalledWith(
-      expect.objectContaining(source.karpenter?.nodePool?.ref)
-    );
-    await act(async () => {
-      root.render(columns[1].render(source));
+      root.render(
+        columns[1].render({
+          ...source,
+          karpenter: {
+            nodeClass: {
+              display: {
+                clusterId: 'a',
+                group: 'karpenter.k8s.aws',
+                kind: 'EC2NodeClass',
+                name: 'class',
+              },
+            },
+          },
+        })
+      );
     });
     expect(dom.querySelector('button')).toBeNull();
     expect(dom.textContent).toBe('class');

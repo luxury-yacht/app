@@ -10,6 +10,13 @@ import { karpenterColumns } from './karpenterColumns';
 import './ClusterViewCustom.css';
 
 const ref = { clusterId: 'story-cluster', group: 'karpenter.sh', version: 'v1', namespace: '' };
+const nodeClassRef = {
+  ...ref,
+  group: 'karpenter.k8s.aws',
+  kind: 'EC2NodeClass',
+  resource: 'ec2nodeclasses',
+  name: 'general-purpose',
+};
 const rows: CustomResourceGridRow[] = [
   {
     ref: {
@@ -30,7 +37,7 @@ const rows: CustomResourceGridRow[] = [
     age: '12d',
     karpenter: {
       nodeClass: {
-        display: { clusterId: ref.clusterId, kind: 'EC2NodeClass', name: 'general-purpose' },
+        ref: nodeClassRef,
       },
     },
   },
@@ -44,7 +51,7 @@ const rows: CustomResourceGridRow[] = [
         ref: { ...ref, kind: 'NodePool', resource: 'nodepools', name: 'general-purpose' },
       },
       nodeClass: {
-        display: { clusterId: ref.clusterId, kind: 'EC2NodeClass', name: 'general-purpose' },
+        ref: nodeClassRef,
       },
       instanceType: 'm7g.2xlarge',
       capacityType: 'spot',

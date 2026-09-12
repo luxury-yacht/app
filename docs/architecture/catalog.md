@@ -127,7 +127,12 @@ in `backend/resources/karpenter`. Cluster custom rows carry a compact
 `KarpenterSummary` with named relationship and instance fields; table cells and CSV
 exports each display one value. The single table retains its kind filter. The overview exposes source configuration,
 capacity, relationships, and conditions without inventing defaults. Related
-references without a source API version remain display-only. Enriched details
+NodeClass references without a source API version are resolved at the gateway
+boundary using this cluster's catalog discovery, for both hydrated rows and rich
+details. Resolution requires an unambiguous group/kind/scope match; unavailable
+or ambiguous discovery leaves the reference display-only. Explicit source
+versions are preserved. Resolution neither waits for object collection nor adds
+API requests. Enriched details
 use a live, cluster-scoped GET and refresh header metadata from that same object,
 so the snapshot's source version changes with its contents. Existing custom
 resource YAML, capabilities, edit, and delete paths retain discovered identity.

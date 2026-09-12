@@ -123,10 +123,27 @@ const capacityResourceRank = (resource: string): number => {
   return index < 0 ? capacityResourceOrder.length : index;
 };
 
+const formatPoolCapacitySummary = (
+  resource: 'cpu' | 'memory',
+  facts: KarpenterFacts,
+  usage: string,
+  limit: string
+): string => {
+  const pair = `${usage} / ${limit}`;
+  const rawLimit = parseResourceValue(facts.limits?.[resource], resource);
+  if (usage === '-' || limit === '-' || rawLimit <= 0) {
+    return pair;
+  }
+  const rawUsage = parseResourceValue(facts.capacity?.[resource], resource);
+  const percentage = Number(((rawUsage / rawLimit) * 100).toFixed(1));
+  return `${pair} (${percentage}%)`;
+};
+
 const formatCapacitySummary = (
   resource: string,
   facts: KarpenterFacts,
-  cpuUnit: 'cores' | 'millicores'
+  cpuUnit: 'cores' | 'millicores',
+  showUsagePercentage: boolean
 ): string => {
   const total = formatCapacityValue(resource, facts.capacity?.[resource], cpuUnit);
   const allocatable = facts.allocatable?.[resource];
@@ -135,15 +152,20 @@ const formatCapacitySummary = (
     return available === total ? available : `${available} of ${total}`;
   }
   const limit = facts.limits?.[resource];
-  return limit === undefined
-    ? total
-    : `${total} (limit ${formatCapacityValue(resource, limit, cpuUnit)})`;
+  if (limit === undefined) {
+    return total;
+  }
+  const formattedLimit = formatCapacityValue(resource, limit, cpuUnit);
+  return showUsagePercentage && (resource === 'cpu' || resource === 'memory')
+    ? formatPoolCapacitySummary(resource, facts, total, formattedLimit)
+    : `${total} (limit ${formattedLimit})`;
 };
 
 export function KarpenterCapacity({
   facts,
   tooltip,
-}: Readonly<{ facts: KarpenterFacts; tooltip?: string }>) {
+  showUsagePercentage = false,
+}: Readonly<{ facts: KarpenterFacts; tooltip?: string; showUsagePercentage?: boolean }>) {
   const cpuUnit = [facts.capacity?.cpu, facts.allocatable?.cpu ?? facts.limits?.cpu].some(
     (value) => parseResourceValue(value, 'cpu') % 1000 !== 0
   )
@@ -165,7 +187,7 @@ export function KarpenterCapacity({
         <div className="overview-row" key={resource}>
           <span className="overview-row-label">{capacityResourceLabels[resource] ?? resource}</span>
           <span className="overview-row-value">
-            {formatCapacitySummary(resource, facts, cpuUnit)}
+            {formatCapacitySummary(resource, facts, cpuUnit, showUsagePercentage)}
           </span>
         </div>
       ))}

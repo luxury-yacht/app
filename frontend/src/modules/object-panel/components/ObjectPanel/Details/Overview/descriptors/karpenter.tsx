@@ -32,7 +32,7 @@ function PoolOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
           ['Replicas', facts.replicas],
         ]}
       />
-      <KarpenterCapacity facts={facts} />
+      <KarpenterCapacity facts={facts} showUsagePercentage />
       <KarpenterScheduling facts={facts} />
       <KarpenterDisruption facts={facts} />
       <KarpenterLifecycle facts={facts} />

@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -24,9 +26,15 @@ import (
 func TestKarpenterDetailsUseDiscoveredVersionAndCluster(t *testing.T) {
 	gvk := schema.GroupVersionKind{Group: "karpenter.sh", Version: "v1beta1", Kind: "NodePool"}
 	client := fake.NewClientset()
-	client.Discovery().(*fakediscovery.FakeDiscovery).Resources = []*metav1.APIResourceList{{GroupVersion: gvk.GroupVersion().String(), APIResources: []metav1.APIResource{{Name: "nodepools", Kind: "NodePool", Verbs: metav1.Verbs{"list", "get"}}}}}
+	classGVK := schema.GroupVersionKind{Group: "karpenter.k8s.aws", Version: "v1", Kind: "EC2NodeClass"}
+	client.Discovery().(*fakediscovery.FakeDiscovery).Resources = []*metav1.APIResourceList{
+		{GroupVersion: gvk.GroupVersion().String(), APIResources: []metav1.APIResource{{Name: "nodepools", Kind: "NodePool", Verbs: metav1.Verbs{"list", "get"}}}},
+		{GroupVersion: classGVK.GroupVersion().String(), APIResources: []metav1.APIResource{{Name: "ec2nodeclasses", Kind: "EC2NodeClass", Verbs: metav1.Verbs{"list", "get"}}}},
+	}
 	object := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "karpenter.sh/v1beta1", "kind": "NodePool", "metadata": map[string]any{"name": "pool"}, "spec": map[string]any{"weight": int64(30)}}}
-	dynamic := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), object)
+	require.NoError(t, unstructured.SetNestedMap(object.Object, map[string]any{"group": classGVK.Group, "kind": classGVK.Kind, "name": "class"}, "spec", "template", "spec", "nodeClassRef"))
+	class := &unstructured.Unstructured{Object: map[string]any{"apiVersion": classGVK.GroupVersion().String(), "kind": classGVK.Kind, "metadata": map[string]any{"name": "class"}}}
+	dynamic := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), object, class)
 	gateway := newObjectDetailResourceGateway(map[string]*clusterClients{"a": {meta: ClusterMeta{ID: "a", Name: "a"}, client: client, dynamicClient: dynamic}})
 	gateway.responseCache = newResponseCache(time.Minute, 20)
 	client.PrependReactor("create", "selfsubjectaccessreviews", func(ktesting.Action) (bool, runtime.Object, error) {
@@ -41,6 +49,29 @@ func TestKarpenterDetailsUseDiscoveredVersionAndCluster(t *testing.T) {
 	require.Equal(t, "v1beta1", detail.Ref.Version)
 	require.Equal(t, int64(30), *detail.Karpenter.Weight)
 	require.Equal(t, "nodepools", detail.Ref.Resource)
+	require.NotNil(t, detail.Karpenter.NodeClass.Display, "details must still load before catalog discovery")
+
+	catalog := objectcatalog.NewService(objectcatalog.Dependencies{ClusterID: "a", Common: common.Dependencies{KubernetesClient: client}}, nil)
+	_, found, err := catalog.ResolveResourceForGVK(ctx, classGVK)
+	require.NoError(t, err)
+	require.True(t, found)
+	gateway.refreshProjection.publishCatalogEntry("a", &objectCatalogEntry{service: catalog, meta: ClusterMeta{ID: "a"}})
+	raw, err = provider.FetchObjectDetails(ctx, gvk, "", "pool")
+	require.NoError(t, err)
+	detail = raw.(*customresource.Details)
+	require.NotNil(t, detail.Karpenter.NodeClass.Ref, "versionless NodeClass reference must resolve through this cluster's discovery")
+	classRef := detail.Karpenter.NodeClass.Ref
+	require.Equal(t, "a", classRef.ClusterID)
+	require.Equal(t, classGVK.Group, classRef.Group)
+	require.Equal(t, classGVK.Version, classRef.Version, "NodeClass version must not be copied from its NodePool")
+	require.Equal(t, "ec2nodeclasses", classRef.Resource)
+	rows, err := gateway.HydrateCatalogCustomRows("a", []snapshot.ResourceQueryRow{{ClusterID: "a", Group: gvk.Group, Version: gvk.Version, Kind: gvk.Kind, Resource: "nodepools", Name: "pool"}})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, detail.Karpenter.NodeClass, rows[0].Karpenter.NodeClass, "table and details must share the resolved target")
+	classRaw, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Group: classRef.Group, Version: classRef.Version, Kind: classRef.Kind}, classRef.Namespace, classRef.Name)
+	require.NoError(t, err)
+	require.Equal(t, "class", classRaw.(*customresource.Details).Name)
 	lowerCaseKind := gvk
 	lowerCaseKind.Kind = "nodepool"
 	lowerRaw, err := provider.FetchObjectDetails(ctx, lowerCaseKind, "", "pool")

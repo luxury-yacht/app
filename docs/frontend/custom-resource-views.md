@@ -35,9 +35,14 @@ separate groups, with long values allowed to wrap.
   including Kubernetes milli-byte quantities.
 - Compare CPU values using whole cores when both values are whole CPUs; otherwise
   use millicores for both. Apply this to total/allocatable and total/limit pairs.
+- For NodePool CPU and memory with configured limits, show `usage / limit (n%)`.
+  Calculate the percentage from parsed source quantities before display rounding,
+  using up to one decimal place. Keep values over 100% visible. Omit the percentage
+  when usage is unavailable or the limit is zero; without a limit, show usage alone.
 - Show `n of n` (allocatable, then total) when the displayed values differ; when
-  they match, show only the allocatable number. With a limit and no allocatable
-  value, show `n (limit n)`; otherwise show the total alone. Do not add legends.
+  they match, show only the allocatable number. For other resource limits with no
+  allocatable value, show `n (limit n)`; otherwise show the total alone. Do not add
+  legends.
 - Keep the header **Capacity**. The explanation tooltip belongs to the claim
   overview; pools and overlays do not supply it.
 - Order resources as CPU, memory, storage, nodes, pods, pod-eni, hugepages, then

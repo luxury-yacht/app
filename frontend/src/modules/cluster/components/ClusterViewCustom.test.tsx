@@ -303,7 +303,6 @@ describe('ClusterViewCustom', () => {
       'NodePool',
       'NodeClass',
       'Instance Type',
-      'Capacity Type',
       'Age',
     ]);
   });
