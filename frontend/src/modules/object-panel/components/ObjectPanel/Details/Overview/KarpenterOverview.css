@@ -27,6 +27,9 @@
 }
 
 .karpenter-overview-section h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
   margin: 0;
   padding: 0;
 }
@@ -58,14 +61,46 @@
   padding-top: var(--spacing-sm);
 }
 
-/* Requirement keys are often longer than a panel's label column. Put each key
-   above its operator and values, following the existing stacked-list pattern. */
-.karpenter-overview .karpenter-requirement {
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  padding-bottom: var(--spacing-sm);
+.karpenter-scheduling-group + .karpenter-scheduling-group {
+  margin-top: var(--spacing-sm);
 }
 
-.karpenter-requirement .overview-row-label {
+.karpenter-overview .karpenter-requirement {
+  padding: var(--spacing-xs) 0;
+}
+
+.karpenter-overview .karpenter-requirement > .overview-row-label {
+  flex-basis: 9rem;
+  font-family: var(--font-family-base);
+}
+
+.karpenter-requirement .tooltip-trigger {
+  text-decoration: underline dotted var(--color-text-tertiary);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+.karpenter-requirement-minimum {
+  display: block;
+  margin-top: var(--spacing-xs);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+}
+
+.karpenter-overview .karpenter-requirement--custom {
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.karpenter-overview .karpenter-requirement--custom > .overview-row-label {
   flex: none;
+  font-family: var(--font-family-mono);
+}
+
+.karpenter-taint {
+  max-width: 100%;
+  font-family: var(--font-family-mono);
+  text-transform: none;
+  overflow-wrap: anywhere;
 }

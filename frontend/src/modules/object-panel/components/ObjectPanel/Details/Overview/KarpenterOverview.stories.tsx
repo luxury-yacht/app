@@ -92,6 +92,44 @@ const meta: Meta<typeof KarpenterOverviewPreview> = {
 export default meta;
 type Story = StoryObj<typeof KarpenterOverviewPreview>;
 export const NodePool: Story = { args: { detail: pool } };
+export const SchedulingConstraints: Story = {
+  args: {
+    detail: {
+      ...pool,
+      karpenter: {
+        ...pool.karpenter,
+        requirements: [
+          { key: 'kubernetes.io/arch', operator: 'In', values: ['amd64', 'arm64'] },
+          { key: 'karpenter.k8s.aws/instance-category', operator: 'NotIn', values: ['t', 'a'] },
+          { key: 'karpenter.k8s.aws/instance-generation', operator: 'Gt', values: ['5'] },
+          { key: 'karpenter.k8s.aws/instance-cpu', operator: 'Lt', values: ['64'] },
+          {
+            key: 'node.kubernetes.io/instance-type',
+            operator: 'In',
+            values: [
+              'm7g.large',
+              'm7g.xlarge',
+              'm7g.2xlarge',
+              'c7g.large',
+              'c7g.xlarge',
+              'r7g.large',
+            ],
+            minValues: 2,
+          },
+          { key: 'topology.kubernetes.io/region', operator: 'Exists' },
+          { key: 'workloads.example.com/do-not-schedule', operator: 'DoesNotExist' },
+        ],
+        taints: [
+          { key: 'dedicated', value: 'batch', effect: 'NoSchedule' },
+          {
+            key: 'workloads.example.com/reserved-for-platform-services',
+            effect: 'PreferNoSchedule',
+          },
+        ],
+      },
+    },
+  },
+};
 export const NodeClaim: Story = {
   args: {
     detail: {

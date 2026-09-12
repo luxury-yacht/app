@@ -153,3 +153,28 @@ layout was removed. No separate Limits section is added. Typecheck, Biome check,
 local max-12 complexity and 28 existing tests passed during this change. No tests
 were added; visual confirmation remains with the user and the full gate was not
 rerun for this presentation change.
+
+## Scheduling layout revision
+
+Requirements use compact label/value rows. Common Kubernetes and AWS keys have
+readable labels, with complete keys in the shared, keyboard-accessible Tooltip;
+unrecognized keys stay fully visible. Membership values omit the redundant `In`
+prefix; exclusions, comparisons and existence constraints retain distinct wording.
+Minimum-value constraints remain visible. Taints and startup taints use the Node
+panel's shared StatusChip pattern, preserving case and wrapping long keys.
+
+Rendered verification uses the real descriptor and CSS in Storybook. The added
+`SchedulingConstraints` story supplies longer lists, membership/comparison/existence operators,
+minimum values, custom keys and taints. At viewport widths 360/420/600, Playwright
+measured section client/scroll widths of 312/312, 372/372 and 552/552. Mouse
+selection and clipboard checks copied `amd64, arm64`, `dedicated=batch:NoSchedule`
+and the tooltip key `kubernetes.io/arch` exactly. Enter opens the key tooltip and
+Escape closes it. The newly-created fixture renders zero Scheduling sections.
+Light/dark screenshots were inspected: `.playwright-mcp/karpenter-scheduling-revision.png`,
+`karpenter-scheduling-constraints.png` and `karpenter-scheduling-dark.png`.
+
+Typecheck, Biome check, the local max-12 complexity check and all 7 existing
+Karpenter overview tests pass. No tests were added; the story uses fixture data
+and provider responses, not native Wails. The agent's Storybook server was stopped.
+Native visual acceptance remains with the user; the full prerelease gate was not
+rerun for this presentation revision.
