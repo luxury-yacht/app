@@ -88,6 +88,14 @@ destinations, resource permissions, roles and sync windows. Conditions use the
 shared StatusChip with backend presentation. Values remain selectable. Raw Helm
 values and project JWT token metadata stay out of these display projections.
 
+Status and conditions lead the detail content. Source cards show target revisions;
+deployed revisions remain a labelled group alongside them because the facts do
+not identify which source was compared for each revision. ApplicationSet template
+identity, sources, sync policy, and management are peer sections. AppProject access rules are grouped
+by source access, destination, resource scope, role, and sync window. Repeated
+entries have titles, and policy lists and messages have labels and full-width
+content. Operation timestamps use the shared local date formatter.
+
 ApplicationSet owner references preserve their source GVK and the Application's
 namespace. Project names remain plain text: Applications can live outside the
 Argo CD control-plane namespace, so their own namespace cannot identify the

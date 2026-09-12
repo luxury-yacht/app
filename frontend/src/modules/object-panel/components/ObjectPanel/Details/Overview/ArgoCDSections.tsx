@@ -9,10 +9,13 @@ import type {
   ArgoCDApplicationSpec,
   ArgoCDCondition,
   ArgoCDDestination,
+  ArgoCDFacts,
   ArgoCDProjectFacts,
   ArgoCDResourceRestriction,
+  ArgoCDSource,
   ArgoCDSyncPolicy,
 } from '@/core/refresh/types';
+import { formatFullDate } from '@/utils/ageFormatter';
 import { OverviewItem } from './shared/OverviewItem';
 import './shared/OverviewBlocks.css';
 import './ArgoCDOverview.css';
@@ -25,19 +28,32 @@ function ArgoCDSection({ title, children }: Readonly<{ title: string; children: 
     </section>
   );
 }
+
 function Fields({ fields }: Readonly<{ fields: readonly (readonly [string, ReactNode])[] }>) {
-  return (
-    <>
-      {fields.map(([label, value]) => (
-        <OverviewItem key={label} label={label} value={value === '' ? undefined : value} />
+  const visible = fields.filter(
+    ([, value]) => value !== '' && value !== undefined && value !== null
+  );
+  return visible.length ? (
+    <div className="argocd-fields">
+      {visible.map(([label, value]) => (
+        <OverviewItem key={label} label={label} value={value} />
       ))}
-    </>
+    </div>
+  ) : null;
+}
+
+function Card({ title, children }: Readonly<{ title: string; children: ReactNode }>) {
+  return (
+    <div className="overview-card">
+      <div className="overview-card-header">
+        <h4 className="overview-card-title">{title}</h4>
+      </div>
+      {children}
+    </div>
   );
 }
-function Values({ values }: Readonly<{ values?: string[] }>) {
-  if (!values?.length) {
-    return null;
-  }
+
+function Values({ values }: Readonly<{ values: string[] }>) {
   return (
     <div className="overview-ref-list">
       {withStableListKeys(values, (value) => value).map(({ key, value }) => (
@@ -48,6 +64,25 @@ function Values({ values }: Readonly<{ values?: string[] }>) {
     </div>
   );
 }
+
+function ValueGroup({ label, values }: Readonly<{ label: string; values?: string[] }>) {
+  return values?.length ? (
+    <section className="overview-stacked" aria-label={label}>
+      <div className="argocd-overview-subtitle">{label}</div>
+      <Values values={values} />
+    </section>
+  ) : null;
+}
+
+function Message({ label, text }: Readonly<{ label: string; text?: string }>) {
+  return text ? (
+    <section className="overview-stacked" aria-label={label}>
+      <div className="argocd-overview-subtitle">{label}</div>
+      <p className="argocd-overview-message">{text}</p>
+    </section>
+  ) : null;
+}
+
 const variants: Record<string, StatusChipVariant> = {
   ready: 'healthy',
   error: 'unhealthy',
@@ -55,7 +90,8 @@ const variants: Record<string, StatusChipVariant> = {
   progressing: 'info',
   unknown: 'info',
 };
-export function ArgoCDBadge({
+
+function ArgoCDBadge({
   value,
   presentation,
   tooltip,
@@ -66,116 +102,173 @@ export function ArgoCDBadge({
     </StatusChip>
   ) : null;
 }
-export function ArgoCDConditions({ conditions }: Readonly<{ conditions?: ArgoCDCondition[] }>) {
-  if (!conditions?.length) {
-    return null;
-  }
+
+function Conditions({ conditions }: Readonly<{ conditions?: ArgoCDCondition[] }>) {
+  return conditions?.length ? (
+    <OverviewItem
+      label="Conditions"
+      value={
+        <div className="overview-condition-list">
+          {withStableListKeys(conditions, (condition) => condition.type).map(({ key, value }) => (
+            <ArgoCDBadge
+              key={key}
+              value={value.type}
+              presentation={value.presentation}
+              tooltip={[value.status, value.message || value.reason].filter(Boolean).join(': ')}
+            />
+          ))}
+        </div>
+      }
+    />
+  ) : null;
+}
+
+export function ArgoCDStatus({
+  facts,
+  status,
+  presentation,
+}: Readonly<{ facts: ArgoCDFacts; status?: string; presentation?: string }>) {
   return (
-    <ArgoCDSection title="Conditions">
-      <div className="overview-condition-list">
-        {withStableListKeys(conditions, (condition) => condition.type).map(({ key, value }) => (
-          <ArgoCDBadge
-            key={key}
-            value={value.type}
-            presentation={value.presentation}
-            tooltip={[value.status, value.message || value.reason].filter(Boolean).join(': ')}
-          />
-        ))}
-      </div>
-    </ArgoCDSection>
+    <div className="argocd-fields">
+      {(facts.applicationSet || presentation === 'terminating') && (
+        <OverviewItem
+          label="Status"
+          value={<ArgoCDBadge value={status} presentation={presentation} />}
+        />
+      )}
+      {!!facts.application && (
+        <Fields
+          fields={[
+            [
+              'Health',
+              <ArgoCDBadge
+                key="health"
+                value={facts.application.health}
+                presentation={facts.application.healthPresentation}
+              />,
+            ],
+            [
+              'Sync',
+              <ArgoCDBadge
+                key="sync"
+                value={facts.application.sync}
+                presentation={facts.application.syncPresentation}
+              />,
+            ],
+          ]}
+        />
+      )}
+      <Conditions conditions={facts.conditions} />
+      <Message label="Health Message" text={facts.application?.healthMessage} />
+    </div>
   );
 }
+
+const destinationName = (destination: ArgoCDDestination) =>
+  destination.name || destination.resolvedName || destination.server || '';
+
 function Destination({ destination }: Readonly<{ destination: ArgoCDDestination }>) {
   return (
     <Fields
       fields={[
-        ['Cluster', destination.name || destination.resolvedName || destination.server],
+        ['Cluster', destinationName(destination)],
         ['Server', destination.name ? destination.server : undefined],
         ['Namespace', destination.namespace],
       ]}
     />
   );
 }
-function Sources({ spec }: Readonly<{ spec: ArgoCDApplicationSpec }>) {
+
+function SourceCard({ source, index }: Readonly<{ source: ArgoCDSource; index: number }>) {
+  return (
+    <Card title={source.name || `Source ${index + 1}`}>
+      <ValueGroup label="Repository" values={source.repoURL ? [source.repoURL] : undefined} />
+      <Fields
+        fields={[
+          ['Path', source.path],
+          ['Chart', source.chart],
+          ['Target Revision', source.targetRevision],
+          ['Ref', source.ref],
+        ]}
+      />
+    </Card>
+  );
+}
+
+function Sources({
+  spec,
+  revisions,
+  title = 'Sources',
+}: Readonly<{ spec: ArgoCDApplicationSpec; revisions?: string[]; title?: string }>) {
   const sources = spec.sources?.length ? spec.sources : spec.source ? [spec.source] : [];
   if (!sources.length) {
-    return null;
+    return revisions?.length ? (
+      <ArgoCDSection title="Deployed Revisions">
+        <Values values={revisions} />
+      </ArgoCDSection>
+    ) : null;
   }
   return (
-    <ArgoCDSection title="Sources">
+    <ArgoCDSection title={title}>
       <div className="overview-card-list">
         {withStableListKeys(
           sources,
           (source) => `${source.repoURL}:${source.path}:${source.chart}:${source.ref}`
-        ).map(({ key, value }) => (
-          <div className="overview-card" key={key}>
-            <Fields
-              fields={[
-                ['Repository', value.repoURL],
-                ['Path', value.path],
-                ['Chart', value.chart],
-                ['Revision', value.targetRevision],
-                ['Ref', value.ref],
-                ['Name', value.name],
-              ]}
-            />
-          </div>
+        ).map(({ key, value }, index) => (
+          <SourceCard key={key} source={value} index={index} />
         ))}
       </div>
+      <ValueGroup label="Deployed Revisions" values={revisions} />
     </ArgoCDSection>
   );
 }
+
 const yesNo = (value: boolean) => (value ? 'Yes' : 'No');
-function SyncPolicy({ policy }: Readonly<{ policy?: ArgoCDSyncPolicy }>) {
+
+function SyncPolicy({
+  policy,
+  title = 'Sync Policy',
+}: Readonly<{ policy?: ArgoCDSyncPolicy; title?: string }>) {
   const automated = policy?.automated;
   return (
-    <ArgoCDSection title="Sync Policy">
+    <ArgoCDSection title={title}>
       <Fields
         fields={[
-          ['Automated', automated && automated.enabled !== false ? 'Enabled' : 'Disabled'],
+          ['Automated Sync', automated && automated.enabled !== false ? 'Enabled' : 'Disabled'],
           ['Prune', automated ? yesNo(automated.prune) : undefined],
           ['Self Heal', automated ? yesNo(automated.selfHeal) : undefined],
           ['Allow Empty', automated ? yesNo(automated.allowEmpty) : undefined],
         ]}
       />
-      <Values values={policy?.syncOptions} />
+      <ValueGroup label="Sync Options" values={policy?.syncOptions} />
     </ArgoCDSection>
   );
 }
-function ApplicationConfiguration({ spec }: Readonly<{ spec: ArgoCDApplicationSpec }>) {
-  return (
-    <>
-      <Fields fields={[['Project', spec.project]]} />
-      {!!(spec.destination.name || spec.destination.server || spec.destination.namespace) && (
-        <ArgoCDSection title="Destination">
-          <Destination destination={spec.destination} />
-        </ArgoCDSection>
-      )}
-      <Sources spec={spec} />
-      <SyncPolicy policy={spec.syncPolicy} />
-    </>
-  );
+
+function LastOperation({
+  operation,
+}: Readonly<{ operation: ArgoCDApplicationFacts['operation'] }>) {
+  return operation ? (
+    <ArgoCDSection title="Last Operation">
+      <Fields
+        fields={[
+          ['Phase', operation.phase],
+          ['Started', operation.startedAt ? formatFullDate(operation.startedAt) : undefined],
+          ['Finished', operation.finishedAt ? formatFullDate(operation.finishedAt) : undefined],
+        ]}
+      />
+      <Message label="Message" text={operation.message} />
+    </ArgoCDSection>
+  ) : null;
 }
+
 export function ArgoCDApplication({ facts }: Readonly<{ facts: ArgoCDApplicationFacts }>) {
   const owner = resourceLinkToObjectReference(facts.applicationSet);
   return (
     <>
       <Fields
         fields={[
-          [
-            'Sync',
-            <ArgoCDBadge key="sync" value={facts.sync} presentation={facts.syncPresentation} />,
-          ],
-          [
-            'Health',
-            <ArgoCDBadge
-              key="health"
-              value={facts.health}
-              presentation={facts.healthPresentation}
-              tooltip={facts.healthMessage}
-            />,
-          ],
-          ['Resources', facts.resourceCount],
+          ['Project', facts.spec.project],
           [
             'ApplicationSet',
             owner ? (
@@ -184,61 +277,79 @@ export function ArgoCDApplication({ facts }: Readonly<{ facts: ArgoCDApplication
               </ObjectPanelLink>
             ) : undefined,
           ],
+          ['Managed Resources', facts.resourceCount],
         ]}
       />
-      <ApplicationConfiguration spec={facts.spec} />
-      {!!facts.revisions?.length && (
-        <ArgoCDSection title="Deployed Revisions">
-          <Values values={facts.revisions} />
+      {!!(destinationName(facts.spec.destination) || facts.spec.destination.namespace) && (
+        <ArgoCDSection title="Destination">
+          <Destination destination={facts.spec.destination} />
         </ArgoCDSection>
       )}
-      {!!facts.operation && (
-        <ArgoCDSection title="Last Operation">
-          <Fields
-            fields={[
-              ['Phase', facts.operation.phase],
-              ['Message', facts.operation.message],
-              ['Started', facts.operation.startedAt],
-              ['Finished', facts.operation.finishedAt],
-            ]}
-          />
-        </ArgoCDSection>
-      )}
+      <Sources spec={facts.spec} revisions={facts.revisions} />
+      <SyncPolicy policy={facts.spec.syncPolicy} />
+      <LastOperation operation={facts.operation} />
     </>
   );
 }
-export function ArgoCDApplicationSet({ facts }: Readonly<{ facts: ArgoCDApplicationSetFacts }>) {
+
+function Generators({
+  generators,
+}: Readonly<{ generators: ArgoCDApplicationSetFacts['generators'] }>) {
+  return generators?.length ? (
+    <ArgoCDSection title="Generators">
+      <div className="overview-card-list">
+        {withStableListKeys(
+          generators,
+          (generator) => `${generator.type}:${generator.repoURL}`
+        ).map(({ key, value }) => (
+          <Card key={key} title={value.type}>
+            <ValueGroup label="Repository" values={value.repoURL ? [value.repoURL] : undefined} />
+            <Fields fields={[['Revision', value.revision]]} />
+          </Card>
+        ))}
+      </div>
+    </ArgoCDSection>
+  ) : null;
+}
+
+function ApplicationTemplate({ facts }: Readonly<{ facts: ArgoCDApplicationSetFacts }>) {
+  const hasDestination = Boolean(
+    destinationName(facts.template.destination) || facts.template.destination.namespace
+  );
+  if (
+    !facts.templateName &&
+    !facts.template.project &&
+    facts.goTemplate === undefined &&
+    !hasDestination
+  ) {
+    return null;
+  }
   return (
-    <>
+    <ArgoCDSection title="Application Template">
       <Fields
         fields={[
-          ['Template Name', facts.templateName],
+          ['Name', facts.templateName],
+          ['Project', facts.template.project],
           ['Go Template', facts.goTemplate === undefined ? undefined : yesNo(facts.goTemplate)],
         ]}
       />
-      {!!facts.generators?.length && (
-        <ArgoCDSection title="Generators">
-          <div className="overview-card-list">
-            {withStableListKeys(
-              facts.generators,
-              (generator) => `${generator.type}:${generator.repoURL}`
-            ).map(({ key, value }) => (
-              <div key={key} className="overview-card">
-                <Fields
-                  fields={[
-                    ['Type', value.type],
-                    ['Repository', value.repoURL],
-                    ['Revision', value.revision],
-                  ]}
-                />
-              </div>
-            ))}
-          </div>
-        </ArgoCDSection>
+      {hasDestination && (
+        <section className="overview-stacked" aria-label="Destination">
+          <div className="argocd-overview-subtitle">Destination</div>
+          <Destination destination={facts.template.destination} />
+        </section>
       )}
-      <ArgoCDSection title="Application Template">
-        <ApplicationConfiguration spec={facts.template} />
-      </ArgoCDSection>
+    </ArgoCDSection>
+  );
+}
+
+export function ArgoCDApplicationSet({ facts }: Readonly<{ facts: ArgoCDApplicationSetFacts }>) {
+  return (
+    <>
+      <Generators generators={facts.generators} />
+      <ApplicationTemplate facts={facts} />
+      <Sources spec={facts.template} title="Template Sources" />
+      <SyncPolicy policy={facts.template.syncPolicy} title="Template Sync Policy" />
       <ArgoCDSection title="Application Management">
         <Fields
           fields={[
@@ -251,25 +362,32 @@ export function ArgoCDApplicationSet({ facts }: Readonly<{ facts: ArgoCDApplicat
     </>
   );
 }
+
 function ResourcePolicy({
-  label,
-  resources,
-}: Readonly<{ label: string; resources?: ArgoCDResourceRestriction[] }>) {
-  if (!resources?.length) {
+  title,
+  allowed,
+  denied,
+}: Readonly<{
+  title: string;
+  allowed?: ArgoCDResourceRestriction[];
+  denied?: ArgoCDResourceRestriction[];
+}>) {
+  if (!allowed?.length && !denied?.length) {
     return null;
   }
+  const values = (resources?: ArgoCDResourceRestriction[]) =>
+    resources?.map(
+      (resource) =>
+        `${resource.group || 'core'}/${resource.kind}${resource.name ? ` (${resource.name})` : ''}`
+    );
   return (
-    <div className="overview-stacked">
-      <div className="overview-card-title">{label}</div>
-      <Values
-        values={resources.map(
-          (resource) =>
-            `${resource.group || 'core'}/${resource.kind}${resource.name ? ` (${resource.name})` : ''}`
-        )}
-      />
-    </div>
+    <Card title={title}>
+      <ValueGroup label="Allowed" values={values(allowed)} />
+      <ValueGroup label="Denied" values={values(denied)} />
+    </Card>
   );
 }
+
 function ProjectResourcePolicy({ facts }: Readonly<{ facts: ArgoCDProjectFacts }>) {
   if (
     ![
@@ -283,111 +401,104 @@ function ProjectResourcePolicy({ facts }: Readonly<{ facts: ArgoCDProjectFacts }
   }
   return (
     <ArgoCDSection title="Resource Permissions">
-      <ResourcePolicy
-        label="Allowed Cluster Resources"
-        resources={facts.clusterResourceWhitelist}
-      />
-      <ResourcePolicy label="Denied Cluster Resources" resources={facts.clusterResourceBlacklist} />
-      <ResourcePolicy
-        label="Allowed Namespace Resources"
-        resources={facts.namespaceResourceWhitelist}
-      />
-      <ResourcePolicy
-        label="Denied Namespace Resources"
-        resources={facts.namespaceResourceBlacklist}
-      />
+      <div className="overview-card-list">
+        <ResourcePolicy
+          title="Cluster Resources"
+          allowed={facts.clusterResourceWhitelist}
+          denied={facts.clusterResourceBlacklist}
+        />
+        <ResourcePolicy
+          title="Namespaced Resources"
+          allowed={facts.namespaceResourceWhitelist}
+          denied={facts.namespaceResourceBlacklist}
+        />
+      </div>
     </ArgoCDSection>
   );
 }
+
+function ProjectDestinations({
+  destinations,
+}: Readonly<{ destinations: ArgoCDProjectFacts['destinations'] }>) {
+  return destinations?.length ? (
+    <ArgoCDSection title="Destinations">
+      <div className="overview-card-list">
+        {withStableListKeys(
+          destinations,
+          (destination) => `${destination.name}:${destination.server}:${destination.namespace}`
+        ).map(({ key, value }) => (
+          <Card key={key} title={destinationName(value) || 'Destination'}>
+            <Fields
+              fields={[
+                ['Namespace', value.namespace],
+                ['Server', value.name ? value.server : undefined],
+              ]}
+            />
+          </Card>
+        ))}
+      </div>
+    </ArgoCDSection>
+  ) : null;
+}
+
+function ProjectRoles({ roles }: Readonly<{ roles: ArgoCDProjectFacts['roles'] }>) {
+  return roles?.length ? (
+    <ArgoCDSection title="Roles">
+      <div className="overview-card-list">
+        {withStableListKeys(roles, (role) => role.name).map(({ key, value }) => (
+          <Card key={key} title={value.name}>
+            {!!value.description && <p className="argocd-overview-message">{value.description}</p>}
+            <ValueGroup label="Groups" values={value.groups} />
+            <ValueGroup label="Policies" values={value.policies} />
+          </Card>
+        ))}
+      </div>
+    </ArgoCDSection>
+  ) : null;
+}
+
+function ProjectSyncWindows({ windows }: Readonly<{ windows: ArgoCDProjectFacts['syncWindows'] }>) {
+  return windows?.length ? (
+    <ArgoCDSection title="Sync Windows">
+      <div className="overview-card-list">
+        {withStableListKeys(
+          windows,
+          (window) => `${window.kind}:${window.schedule}:${window.duration}`
+        ).map(({ key, value }) => (
+          <Card key={key} title={value.kind || 'Sync Window'}>
+            <Fields
+              fields={[
+                ['Schedule', value.schedule],
+                ['Duration', value.duration],
+                ['Time Zone', value.timeZone],
+                ['Manual Sync', yesNo(value.manualSync)],
+                ['Selector Match', value.andOperator ? 'All' : 'Any'],
+              ]}
+            />
+            <ValueGroup label="Applications" values={value.applications} />
+            <ValueGroup label="Namespaces" values={value.namespaces} />
+            <ValueGroup label="Clusters" values={value.clusters} />
+          </Card>
+        ))}
+      </div>
+    </ArgoCDSection>
+  ) : null;
+}
+
 export function ArgoCDProject({ facts }: Readonly<{ facts: ArgoCDProjectFacts }>) {
   return (
     <>
-      <Fields fields={[['Description', facts.description]]} />
-      {!!facts.sourceRepos?.length && (
-        <ArgoCDSection title="Source Repositories">
-          <Values values={facts.sourceRepos} />
+      <Message label="Description" text={facts.description} />
+      {!!(facts.sourceRepos?.length || facts.sourceNamespaces?.length) && (
+        <ArgoCDSection title="Source Access">
+          <ValueGroup label="Repositories" values={facts.sourceRepos} />
+          <ValueGroup label="Source Namespaces" values={facts.sourceNamespaces} />
         </ArgoCDSection>
       )}
-      {!!facts.sourceNamespaces?.length && (
-        <ArgoCDSection title="Source Namespaces">
-          <Values values={facts.sourceNamespaces} />
-        </ArgoCDSection>
-      )}
-      {!!facts.destinations?.length && (
-        <ArgoCDSection title="Destinations">
-          <div className="overview-card-list">
-            {withStableListKeys(
-              facts.destinations,
-              (destination) => `${destination.name}:${destination.server}:${destination.namespace}`
-            ).map(({ key, value }) => (
-              <div className="overview-card" key={key}>
-                <Destination destination={value} />
-              </div>
-            ))}
-          </div>
-        </ArgoCDSection>
-      )}
+      <ProjectDestinations destinations={facts.destinations} />
       <ProjectResourcePolicy facts={facts} />
-      {!!facts.roles?.length && (
-        <ArgoCDSection title="Roles">
-          <div className="overview-card-list">
-            {withStableListKeys(facts.roles, (role) => role.name).map(({ key, value }) => (
-              <div className="overview-card" key={key}>
-                <Fields
-                  fields={[
-                    ['Name', value.name],
-                    ['Description', value.description],
-                  ]}
-                />
-                <OverviewItem
-                  label="Groups"
-                  value={value.groups?.length ? <Values values={value.groups} /> : undefined}
-                />
-                <Values values={value.policies} />
-              </div>
-            ))}
-          </div>
-        </ArgoCDSection>
-      )}
-      {!!facts.syncWindows?.length && (
-        <ArgoCDSection title="Sync Windows">
-          <div className="overview-card-list">
-            {withStableListKeys(
-              facts.syncWindows,
-              (window) => `${window.kind}:${window.schedule}:${window.duration}`
-            ).map(({ key, value }) => (
-              <div className="overview-card" key={key}>
-                <Fields
-                  fields={[
-                    ['Kind', value.kind],
-                    ['Schedule', value.schedule],
-                    ['Duration', value.duration],
-                    ['Time Zone', value.timeZone],
-                    ['Manual Sync', yesNo(value.manualSync)],
-                    ['Match All Selectors', yesNo(value.andOperator)],
-                  ]}
-                />
-                <OverviewItem
-                  label="Applications"
-                  value={
-                    value.applications?.length ? <Values values={value.applications} /> : undefined
-                  }
-                />
-                <OverviewItem
-                  label="Namespaces"
-                  value={
-                    value.namespaces?.length ? <Values values={value.namespaces} /> : undefined
-                  }
-                />
-                <OverviewItem
-                  label="Clusters"
-                  value={value.clusters?.length ? <Values values={value.clusters} /> : undefined}
-                />
-              </div>
-            ))}
-          </div>
-        </ArgoCDSection>
-      )}
+      <ProjectRoles roles={facts.roles} />
+      <ProjectSyncWindows windows={facts.syncWindows} />
     </>
   );
 }

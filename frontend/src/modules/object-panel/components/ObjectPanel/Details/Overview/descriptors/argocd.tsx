@@ -2,9 +2,8 @@ import type { CustomResourceDetails } from '@/core/refresh/types';
 import {
   ArgoCDApplication,
   ArgoCDApplicationSet,
-  ArgoCDBadge,
-  ArgoCDConditions,
   ArgoCDProject,
+  ArgoCDStatus,
 } from '../ArgoCDSections';
 import type { OverviewDescriptor } from '../schema';
 
@@ -23,18 +22,16 @@ export const argoCDDescriptor: OverviewDescriptor<CustomResourceDetails> = {
           }
           return (
             <div className="argocd-overview">
-              {data.statusPresentation === 'terminating' && (
-                <ArgoCDBadge value={data.status} presentation={data.statusPresentation} />
-              )}
+              <ArgoCDStatus
+                facts={data.argoCD}
+                status={data.status}
+                presentation={data.statusPresentation}
+              />
               {!!data.argoCD.application && <ArgoCDApplication facts={data.argoCD.application} />}
               {!!data.argoCD.applicationSet && (
-                <>
-                  <ArgoCDBadge value={data.status} presentation={data.statusPresentation} />
-                  <ArgoCDApplicationSet facts={data.argoCD.applicationSet} />
-                </>
+                <ArgoCDApplicationSet facts={data.argoCD.applicationSet} />
               )}
               {!!data.argoCD.project && <ArgoCDProject facts={data.argoCD.project} />}
-              <ArgoCDConditions conditions={data.argoCD.conditions} />
             </div>
           );
         },
