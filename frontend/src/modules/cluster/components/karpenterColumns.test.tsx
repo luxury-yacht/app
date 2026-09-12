@@ -49,7 +49,7 @@ describe('Karpenter columns', () => {
   it('renders one field per cell and exports only that value', () => {
     const columns = karpenterColumns(parts);
     const dom = document.createElement('div');
-    for (const [index, value] of ['pool', 'class', 'm7g.large'].entries()) {
+    for (const [index, value] of ['-', 'pool', 'class', 'm7g.large'].entries()) {
       const column = columns[index];
       dom.innerHTML = renderToStaticMarkup(column.render(source));
       expect(dom.textContent).toBe(value);
@@ -62,8 +62,41 @@ describe('Karpenter columns', () => {
     }
     expect(dom.textContent).not.toContain('Configuration');
   });
+  it('calculates NodePool usage against limits without treating unavailable percentages as zero', () => {
+    const column = karpenterColumns(parts).find((entry) => entry.key === 'usage');
+    expect(column).toBeDefined();
+    const pool = { ...source, ref: { ...source.ref, kind: 'NodePool', resource: 'nodepools' } };
+    const dom = document.createElement('div');
+    for (const [capacity, limits, expected] of [
+      [{ cpu: '1250m', memory: '768Gi' }, { cpu: '2', memory: '1Ti' }, 'CPU 62.5% / Mem 75%'],
+      [{ cpu: '8', memory: '0' }, { cpu: '10', memory: '1Ti' }, 'CPU 80% / Mem 0%'],
+      [{ cpu: '8500m', memory: '1.2Ti' }, { cpu: '10', memory: '1Ti' }, 'CPU 85% / Mem 120%'],
+      [{ cpu: '1', memory: '2Gi' }, { cpu: '0' }, '-'],
+      [{ memory: '1Gi' }, { cpu: '10', memory: '2Gi' }, 'CPU - / Mem 50%'],
+    ] as const) {
+      dom.innerHTML = renderToStaticMarkup(
+        column?.render({ ...pool, karpenter: { capacity, limits } })
+      );
+      expect(dom.textContent).toBe(expected);
+      expect(
+        dom
+          .querySelector('[data-gridtable-export-text]')
+          ?.getAttribute('data-gridtable-export-text') ?? dom.textContent
+      ).toBe(expected);
+    }
+    expect(column?.render(source)).toBe('-');
+    expect(
+      column?.render({
+        ...source,
+        ref: { ...source.ref, kind: 'EC2NodeClass', resource: 'ec2nodeclasses' },
+      })
+    ).toBe('-');
+  });
   it('preserves full linked identity for click and alt-click and leaves incomplete references as text', async () => {
     const columns = karpenterColumns(parts);
+    const referenceColumns = columns.filter(
+      (column) => column.key === 'nodePool' || column.key === 'nodeClass'
+    );
     const dom = document.createElement('div');
     const root = createRoot(dom);
     for (const [index, link] of [
@@ -71,7 +104,7 @@ describe('Karpenter columns', () => {
       source.karpenter?.nodeClass,
     ].entries()) {
       await act(async () => {
-        root.render(columns[index].render(source));
+        root.render(referenceColumns[index].render(source));
       });
       const button = dom.querySelector('button');
       expect(button?.textContent).toBe(link?.ref?.name);
@@ -86,7 +119,7 @@ describe('Karpenter columns', () => {
     }
     await act(async () => {
       root.render(
-        columns[1].render({
+        referenceColumns[1].render({
           ...source,
           karpenter: {
             nodeClass: {

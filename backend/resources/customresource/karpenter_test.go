@@ -17,6 +17,8 @@ func TestKarpenterDetailsAndTableProjectionParity(t *testing.T) {
 		"spec":     map[string]any{"weight": int64(10)},
 		"status":   map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "False", "reason": "NodeClassNotReady", "message": "NodeClass is not ready"}}},
 	}}
+	require.NoError(t, unstructured.SetNestedMap(object.Object, map[string]any{"cpu": "1250m", "memory": "768Gi"}, "status", "resources"))
+	require.NoError(t, unstructured.SetNestedMap(object.Object, map[string]any{"cpu": "2", "memory": "1Ti"}, "spec", "limits"))
 	descriptor := NewDescriptor("karpenter.sh", "v1", "nodepools", "NodePool", "nodepools.karpenter.sh")
 	row := BuildClusterStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, object, descriptor)
 	detail := BuildDetails("cluster-a", object, descriptor)
@@ -27,6 +29,12 @@ func TestKarpenterDetailsAndTableProjectionParity(t *testing.T) {
 	require.Equal(t, row.Conditions, detail.Conditions)
 	require.Equal(t, "infra", detail.Labels["team"])
 	require.Equal(t, karpenterTableSummary(detail.Karpenter), row.Karpenter)
+	encoded, err := json.Marshal(row.Karpenter)
+	require.NoError(t, err)
+	var wire map[string]map[string]string
+	require.NoError(t, json.Unmarshal(encoded, &wire))
+	require.Equal(t, detail.Karpenter.Capacity, wire["capacity"], "table usage must preserve source units and match details")
+	require.Equal(t, detail.Karpenter.Limits, wire["limits"])
 	require.Equal(t, "warning", row.StatusPresentation)
 	require.NoError(t, resourcemodel.ValidateResourceRef(detail.Ref))
 }

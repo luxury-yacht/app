@@ -694,6 +694,8 @@ export interface KarpenterSummary {
   nodeClass?: ResourceLink;
   instanceType?: string;
   capacityType?: string;
+  capacity?: Record<string, string>;
+  limits?: Record<string, string>;
 }
 
 export interface KarpenterTaint {

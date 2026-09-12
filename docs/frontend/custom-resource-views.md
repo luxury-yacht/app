@@ -31,6 +31,10 @@ separate groups, with long values allowed to wrap.
 
 ## Karpenter capacity
 
+- The table Usage column sits before NodePool. For NodePools, show capacity divided
+  by configured limits as `CPU n% / Mem n%`, using the same calculation as the Capacity section. Each
+  percentage strictly above 80% uses the warning text color. Other kinds show `-`.
+  A missing usage or missing/zero limit leaves that percentage unavailable.
 - Use shared quantity parsing and formatting for memory and ephemeral storage,
   including Kubernetes milli-byte quantities.
 - Compare CPU values using whole cores when both values are whole CPUs; otherwise
@@ -52,7 +56,7 @@ separate groups, with long values allowed to wrap.
 The owning implementations are
 [KarpenterSections.tsx](../../frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/KarpenterSections.tsx),
 the [overview descriptor](../../frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/karpenter.tsx)
-and [column factory](../../frontend/src/modules/cluster/components/karpenterColumns.ts).
+and [column factory](../../frontend/src/modules/cluster/components/karpenterColumns.tsx).
 
 ## Validation
 

@@ -3,6 +3,7 @@ import Tooltip from '@shared/components/Tooltip';
 import {
   formatCpuValue,
   formatResourceValue,
+  getResourceLimitUsagePercent,
   parseResourceValue,
 } from '@shared/utils/resourceCalculations';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
@@ -130,13 +131,15 @@ const formatPoolCapacitySummary = (
   limit: string
 ): string => {
   const pair = `${usage} / ${limit}`;
-  const rawLimit = parseResourceValue(facts.limits?.[resource], resource);
-  if (usage === '-' || limit === '-' || rawLimit <= 0) {
+  const percentage = getResourceLimitUsagePercent(
+    facts.capacity?.[resource],
+    facts.limits?.[resource],
+    resource
+  );
+  if (percentage === undefined) {
     return pair;
   }
-  const rawUsage = parseResourceValue(facts.capacity?.[resource], resource);
-  const percentage = Number(((rawUsage / rawLimit) * 100).toFixed(1));
-  return `${pair} (${percentage}%)`;
+  return `${pair} (${Number(percentage.toFixed(1))}%)`;
 };
 
 const formatCapacitySummary = (

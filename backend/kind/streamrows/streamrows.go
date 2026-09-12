@@ -312,12 +312,15 @@ type NamespaceCustomSummary struct {
 }
 
 // KarpenterSummary contains only the facts shown in the Karpenter table.
-// Scheduling, capacity and provider configuration belong to the rich detail DTO.
+// Capacity and limits supply NodePool usage; scheduling and provider configuration
+// belong to the rich detail DTO.
 type KarpenterSummary struct {
 	NodePool     *resourcemodel.ResourceLink `json:"nodePool,omitempty"`
 	NodeClass    *resourcemodel.ResourceLink `json:"nodeClass,omitempty"`
 	InstanceType string                      `json:"instanceType,omitempty"`
 	CapacityType string                      `json:"capacityType,omitempty"`
+	Capacity     map[string]string           `json:"capacity,omitempty"`
+	Limits       map[string]string           `json:"limits,omitempty"`
 }
 
 // ClusterCustomSummary is a CRD-backed cluster-scoped custom resource row.

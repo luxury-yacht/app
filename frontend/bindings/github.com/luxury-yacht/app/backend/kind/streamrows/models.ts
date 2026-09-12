@@ -7,11 +7,14 @@ import * as resourcemodel$0 from "../../resourcemodel/models.js";
 
 /**
  * KarpenterSummary contains only the facts shown in the Karpenter table.
- * Scheduling, capacity and provider configuration belong to the rich detail DTO.
+ * Capacity and limits supply NodePool usage; scheduling and provider configuration
+ * belong to the rich detail DTO.
  */
 export interface KarpenterSummary {
     "nodePool"?: resourcemodel$0.ResourceLink | null;
     "nodeClass"?: resourcemodel$0.ResourceLink | null;
     "instanceType"?: string;
     "capacityType"?: string;
+    "capacity"?: { [_ in string]?: string } | null;
+    "limits"?: { [_ in string]?: string } | null;
 }

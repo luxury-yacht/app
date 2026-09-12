@@ -300,6 +300,7 @@ describe('ClusterViewCustom', () => {
       'Kind',
       'Name',
       'Status',
+      'Usage',
       'NodePool',
       'NodeClass',
       'Instance Type',

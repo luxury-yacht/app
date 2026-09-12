@@ -26,6 +26,8 @@ describe('customCatalogRowAdapter', () => {
       karpenter: {
         instanceType: 'm7g.large',
         capacityType: 'spot',
+        capacity: { cpu: '1250m', memory: '768Gi' },
+        limits: { cpu: '2', memory: '1Ti' },
         nodePool: {
           ref: {
             clusterId: 'cluster-b',
