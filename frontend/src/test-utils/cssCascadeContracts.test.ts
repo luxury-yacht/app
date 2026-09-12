@@ -55,6 +55,70 @@ afterEach(() => {
 
 describe('strict CSS cascade contracts', () => {
   it.each([false, true])(
+    'preserves table and content backgrounds on focus return with focus styles loaded last=%s',
+    (focusLast) => {
+      const paths = [
+        'styles/utilities/focus.css',
+        'src/App.css',
+        'styles/components/gridtables.css',
+      ];
+      if (focusLast) {
+        paths.push(requireValue(paths.shift(), 'focus stylesheet'));
+      }
+      const style = installStyles(
+        ...paths.map((path) =>
+          resolveFocusColors(readProjectFile(path))
+            .replace(/@import[^;]+;/g, '')
+            .replace(/:hover/g, '.css-contract-hover')
+        )
+      );
+      style.dataset.cssContract = 'table-focus-return';
+      document.body.innerHTML = `
+        <div class="app">
+          <div id="content" class="content-body" data-app-region="content" tabindex="-1">
+            <div class="content-body__main"><div class="view-content"><div class="gridtable-container">
+              <div class="gridtable-filter-container"><input id="filter" aria-label="Filter" /></div>
+              <div class="gridtable-header-container"><button id="sort">Sort by Name</button></div>
+              <div id="viewport" class="gridtable-wrapper">
+                <table id="table" class="gridtable gridtable--body" tabindex="0" aria-label="Data table">
+                  <tbody><tr id="row" class="gridtable-row gridtable-row--focused"><td>Object</td></tr></tbody>
+                </table>
+              </div>
+            </div></div></div>
+          </div>
+        </div>
+        <button id="close">Close keyboard shortcuts</button>
+      `;
+      const close = requireValue(document.getElementById('close'), 'close control');
+      const row = requireValue(document.getElementById('row'), 'focused row');
+      const surfaces = ['content', 'viewport', 'table'].map((id) =>
+        requireValue(document.getElementById(id), id)
+      );
+      for (const id of ['content', 'table']) {
+        close.focus();
+        const target = requireValue(document.getElementById(id), id);
+        target.classList.add('keyboard-programmatic-focus');
+        target.focus();
+        expect(document.activeElement).toBe(target);
+        for (const hovered of [false, true]) {
+          target.classList.toggle('css-contract-hover', hovered);
+          for (const surface of surfaces) {
+            expect(getComputedStyle(surface).backgroundColor, surface.id).toBe('rgba(0, 0, 0, 0)');
+          }
+          expect(getComputedStyle(row).backgroundColor).toBe('rgb(240, 240, 240)');
+          expect(getComputedStyle(row).borderLeftColor).toBe('rgb(50, 108, 229)');
+        }
+      }
+      for (const id of ['filter', 'sort']) {
+        const control = requireValue(document.getElementById(id), id);
+        control.classList.add('keyboard-programmatic-focus');
+        control.focus();
+        expect(getComputedStyle(control).backgroundColor, id).toBe(focusFill);
+      }
+    }
+  );
+
+  it.each([false, true])(
     'preserves log backgrounds with focus styles loaded last=%s',
     (focusLast) => {
       const paths = [
