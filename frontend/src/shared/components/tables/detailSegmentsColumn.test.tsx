@@ -213,20 +213,6 @@ describe('createDetailSegmentsColumn', () => {
     );
   });
 
-  it('keeps labels visibly associated with their values', () => {
-    const column = buildColumn({ slot: 'address' });
-    const markup = renderToStaticMarkup(
-      column.render({
-        details: [
-          { slot: 'address', label: 'Cluster IP', value: '10.0.0.10' },
-          { slot: 'address', label: 'Ports', value: '443/TCP' },
-        ],
-      }) as React.ReactElement
-    );
-    expect(markup).toContain('Cluster IP:');
-    expect(markup).toContain('Ports:');
-  });
-
   it('renders link segments as buttons', () => {
     const openReference = vi.fn();
     const column = buildColumn({ slot: 'reference', openReference });

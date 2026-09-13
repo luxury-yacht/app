@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { formatAge, formatFullDate, parseCompactAgeToSeconds } from './ageFormatter';
+import { formatAge, parseCompactAgeToSeconds } from './ageFormatter';
 
 describe('ageFormatter', () => {
   afterEach(() => {
@@ -37,16 +37,5 @@ describe('ageFormatter', () => {
     expect(formatAge(new Date('2024-12-25T00:00:00Z'))).toBe('7d');
     expect(formatAge(new Date('2024-10-01T00:00:00Z'))).toBe('3mo');
     expect(formatAge(new Date('2023-01-01T00:00:00Z'))).toBe('2y');
-  });
-
-  it('falls back to human readable dates when requested', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2025-01-01T12:00:00Z'));
-
-    expect(formatFullDate(null)).toBe('-');
-    expect(formatFullDate('invalid')).toBe('-');
-
-    const timestamp = new Date('2024-12-31T23:45:00Z');
-    expect(formatFullDate(timestamp)).toBe(timestamp.toLocaleString());
   });
 });

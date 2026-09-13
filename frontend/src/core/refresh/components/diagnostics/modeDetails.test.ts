@@ -47,7 +47,6 @@ describe('resolveModeDetails', () => {
       streamingBlocked: false,
     });
     expect(details.label).toBe('polling (fallback)');
-    expect(details.tooltip).toContain('resumes automatically');
   });
 
   it('labels a drift-blocked scope distinctly — it will NOT self-heal', () => {
@@ -60,7 +59,6 @@ describe('resolveModeDetails', () => {
       streamingBlocked: true,
     });
     expect(details.label).toBe('polling (blocked: drift)');
-    expect(details.tooltip).toContain('manual refresh');
   });
 
   it('keeps the stream-only and on-demand labels', () => {

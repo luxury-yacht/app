@@ -9,11 +9,8 @@ package common
 
 import (
 	"testing"
-	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
-
-	"github.com/luxury-yacht/app/backend/internal/timeutil"
 )
 
 func TestFormatCPU(t *testing.T) {
@@ -65,16 +62,5 @@ func TestFormatMemory(t *testing.T) {
 				t.Fatalf("FormatMemory(%v) = %q, want %q", tc.qty, got, tc.want)
 			}
 		})
-	}
-}
-
-func TestFormatAgeDelegatesToTimeutil(t *testing.T) {
-	t.Parallel()
-
-	ts := time.Now().Add(-3 * time.Hour)
-	want := timeutil.FormatAge(ts)
-	got := FormatAge(ts)
-	if got != want {
-		t.Fatalf("expected FormatAge to match timeutil.FormatAge output %q, got %q", want, got)
 	}
 }

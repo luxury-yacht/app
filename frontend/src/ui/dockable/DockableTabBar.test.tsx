@@ -158,25 +158,6 @@ describe('DockableTabBar', () => {
     await unmount();
   });
 
-  it('renders a small kind indicator square when tab kindClass is provided', async () => {
-    const tabs: TabInfo[] = [
-      { panelId: 'p1', title: 'api', kindClass: 'deployment' },
-      { panelId: 'p2', title: 'worker' },
-    ];
-
-    const { host, unmount } = await renderTabBar(
-      <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="right" />
-    );
-
-    const indicators = host.querySelectorAll('.dockable-tab__kind-indicator');
-    expect(indicators).toHaveLength(1);
-    expect(indicators[0].classList.contains('kind-badge')).toBe(true);
-    expect(indicators[0].classList.contains('deployment')).toBe(true);
-    expect(indicators[0].textContent).toBe('');
-
-    await unmount();
-  });
-
   it('sets data-panel-id on each tab for DOM lookup', async () => {
     const tabs: TabInfo[] = [
       { panelId: 'p1', title: 'Logs' },

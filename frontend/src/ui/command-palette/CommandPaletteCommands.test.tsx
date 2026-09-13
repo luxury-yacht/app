@@ -642,13 +642,6 @@ describe('CommandPaletteCommands', () => {
     const dimCommand = commands.find((entry) => entry.id === 'toggle-dim-inactive-namespaces');
     const exclusiveCommand = commands.find((entry) => entry.id === 'toggle-exclusive-namespaces');
 
-    expect(dimCommand?.label).toBe('Disable inactive namespace dimming');
-    expect(dimCommand?.description).toBe('Dim namespaces in the Sidebar that have no Workloads.');
-    expect(exclusiveCommand?.label).toBe('Disable exclusive namespaces');
-    expect(exclusiveCommand?.description).toBe(
-      'When enabled, only one namespace at a time can be expanded in the Sidebar. Expanding a different namespace will collapse the currently expanded one.'
-    );
-
     await act(async () => {
       dimCommand?.action();
       exclusiveCommand?.action();

@@ -385,58 +385,6 @@ describe('AboutModal', () => {
     await modal.unmount();
   });
 
-  it('styles update actions with the shared button vocabulary', async () => {
-    appInfoMock.GetAppInfo.mockResolvedValue({
-      version: '1.10.0',
-      update: {
-        status: 'available',
-        currentVersion: '1.10.0',
-        availableVersion: '1.10.1',
-        canCheck: true,
-        canInstall: true,
-      },
-    });
-    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
-    await act(async () => Promise.resolve());
-
-    const buttons = Array.from(document.querySelectorAll('.about-update-actions button'));
-    expect(buttons.map((button) => button.textContent)).toEqual([
-      'Download Update',
-      'Skip This Version',
-    ]);
-    expect(buttons[0]?.className).toContain('button save');
-    expect(buttons[1]?.className).toContain('button generic');
-    // The undefined `p-btn` / `p-prim-col` classes are not part of this app's
-    // vocabulary and left the actions unstyled.
-    expect(document.querySelector('[class*="p-btn"]')).toBeNull();
-
-    await modal.unmount();
-  });
-
-  it('states the update status as a sentence, with no status pill', async () => {
-    appInfoMock.GetAppInfo.mockResolvedValue({
-      version: '1.10.0',
-      update: {
-        status: 'ready',
-        currentVersion: '1.10.0',
-        availableVersion: '1.10.1',
-        canCheck: true,
-        canInstall: true,
-      },
-    });
-    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
-    await act(async () => Promise.resolve());
-
-    // The message is the status; a pill above it only repeated the sentence.
-    expect(document.querySelector('.about-update-message')?.textContent).toBe(
-      'Luxury Yacht 1.10.1 is ready to install.'
-    );
-    expect(document.querySelector('.about-update .status-chip')).toBeNull();
-    expect(document.body.textContent).not.toContain('Restart to update');
-
-    await modal.unmount();
-  });
-
   it('omits the release block when the check found no release', async () => {
     appInfoMock.GetAppInfo.mockResolvedValue({
       version: '1.10.0',

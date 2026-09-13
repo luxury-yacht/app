@@ -135,25 +135,7 @@ describe('ConfirmationModal', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('renders custom button labels and classes', async () => {
-    await renderModal({
-      confirmText: 'Delete Everything',
-      cancelText: 'Never mind',
-      confirmButtonClass: 'warning',
-    });
-
-    const confirmButton = document.querySelector(
-      '.confirmation-modal-footer .button.warning'
-    ) as HTMLButtonElement;
-    const cancelButton = document.querySelector(
-      '.confirmation-modal-footer .button.cancel'
-    ) as HTMLButtonElement;
-
-    expect(confirmButton.textContent).toBe('Delete Everything');
-    expect(cancelButton.textContent).toBe('Never mind');
-  });
-
-  it('renders an optional details table with monospace columns', async () => {
+  it('preserves field ownership data in the confirmation details', async () => {
     await renderModal({
       detailsTable: {
         columns: [{ header: 'Owner' }, { header: 'Path', monospace: true }],
@@ -177,30 +159,6 @@ describe('ConfirmationModal', () => {
       ['flux', 'spec.replicas'],
       ['kube-controller-manager', 'spec.strategy.rollingUpdate.maxSurge'],
     ]);
-
-    const firstRowCells = document.querySelectorAll(
-      '.confirmation-modal-details-table tbody tr td'
-    );
-    expect(firstRowCells[0]?.classList.contains('monospace')).toBe(false);
-    expect(firstRowCells[1]?.classList.contains('monospace')).toBe(true);
-  });
-
-  it('renders an optional notice between the main message and warning', async () => {
-    await renderModal({
-      notice: 'Give the controller more time.',
-      warning: 'This may leave objects in an unknown or bad state.',
-    });
-
-    const paragraphs = Array.from(
-      document.querySelectorAll<HTMLElement>('.confirmation-modal-body > p')
-    );
-    expect(paragraphs.map((paragraph) => paragraph.textContent)).toEqual([
-      'Are you sure?',
-      'Give the controller more time.',
-      'This may leave objects in an unknown or bad state.',
-    ]);
-    expect(paragraphs[1]?.classList.contains('confirmation-modal-notice')).toBe(true);
-    expect(paragraphs[2]?.classList.contains('confirmation-modal-warning')).toBe(true);
   });
 
   it('omits the details table when not provided', async () => {

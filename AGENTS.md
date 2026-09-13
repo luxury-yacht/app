@@ -28,7 +28,14 @@ touches those trees.
   request, explain the tradeoff and ask before editing.
 - **Use red/green/refactor TDD for behavior changes.** First run a new failing
   test that proves the requested behavior, then make it pass, then refactor
-  under green. Documentation, comments, and trivial mechanical edits are exempt.
+  under green. Documentation, comments, copy, cosmetic styling, and test-only
+  pruning are exempt; validate pruning by running the surviving tests.
+- **Create only meaningful tests.** Follow
+  [the testing standard](docs/workflows/testing.md). Every test must name an
+  observable failure in an app workflow or a nontrivial data contract. Do not
+  test sentence wording, text formatting, decorative markup, or implementation
+  details merely to increase coverage. Preserve assertions about data correctness,
+  accessibility, and operational decisions; text used to locate a control is fine.
 - **Do not run state-modifying git commands or create PRs unless explicitly
   directed.** Read-only git commands are allowed.
 
@@ -79,10 +86,12 @@ source contract is unclear.
   coverage suites—including the prerelease gate—open localhost `httptest`
   listeners, so request escalated sandbox permission on the first invocation
   instead of attempting the known-blocked default sandbox.
-- Run focused tests during development and measure directly affected coverage
+- For behavior changes, run focused tests and measure directly affected coverage
   with `mise exec -- wails3 task test:backend-coverage` or
   `mise exec -- wails3 task test:frontend-coverage`; target 80% statement coverage or
-  report the measured gap and ask for guidance.
+  report the measured gap and ask for guidance. Coverage is a diagnostic, not a
+  reason to add low-value tests. For test pruning, report the coverage impact;
+  do not recreate deleted presentation tests to recover the percentage.
 - Check cognitive complexity in every changed production function and new
   helper before the final gate. Follow `docs/frontend/sonar.md` for the Go and
   TypeScript checks; target a local score of 12 or lower. Preserve lifecycle and

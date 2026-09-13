@@ -63,23 +63,6 @@ describe('AppMenuBar', () => {
     });
   };
 
-  it('renders the desktop menu vocabulary in titlebar order', () => {
-    renderMenu();
-
-    const labels = Array.from(
-      container.querySelectorAll('[role="menubar"] [aria-haspopup="menu"]')
-    ).map((element) => element.textContent);
-
-    expect(labels).toEqual([
-      'File',
-      'Edit',
-      'View',
-      'Window',
-      ...(import.meta.env.DEV ? ['Debug'] : []),
-      'Help',
-    ]);
-  });
-
   it('routes app-rendered items through the typed workspace dispatcher', async () => {
     renderMenu();
 

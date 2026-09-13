@@ -172,9 +172,6 @@ describe('CustomMetadataColumnEditor', () => {
     expect(
       document.querySelector<HTMLButtonElement>('button[aria-label="Metadata Key"]')?.textContent
     ).toContain('No metadata keys available');
-    expect(document.body.textContent).toContain(
-      'No label or annotation keys are available in the current rows.'
-    );
     expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
   });
 
@@ -189,9 +186,6 @@ describe('CustomMetadataColumnEditor', () => {
     if (!headingInput) {
       throw new Error('expected column heading input');
     }
-    expect(document.body.textContent).not.toContain(
-      'Renaming keeps the column’s width, order, visibility, and favorite reference.'
-    );
 
     await changeInput(headingInput, 'Release revision');
     await act(async () => {

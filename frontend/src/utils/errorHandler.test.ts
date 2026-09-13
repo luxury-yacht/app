@@ -47,7 +47,7 @@ describe('ErrorHandler', () => {
     console.groupEnd = originalConsole.groupEnd;
   });
 
-  it('categorises network errors, marks retryable, emits suggestions and history', () => {
+  it('categorises network errors, marks retryable, and notifies subscribers and telemetry', () => {
     const listener = vi.fn();
     const unsubscribe = handler.subscribe(listener);
     const details = handler.handle(new Error('Network connection lost'));
@@ -55,7 +55,6 @@ describe('ErrorHandler', () => {
     expect(details.category).toBe(ErrorCategory.NETWORK);
     expect(details.retryable).toBe(true);
     expect(details.severity).toBe(ErrorSeverity.ERROR);
-    expect(details.suggestions).toContain('Check your internet connection');
     expect(handler.getHistory()).toHaveLength(1);
     expect(listener).toHaveBeenCalledWith(
       expect.objectContaining({ category: ErrorCategory.NETWORK })

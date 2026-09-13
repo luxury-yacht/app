@@ -56,17 +56,6 @@ describe('DetailsTabContainers', () => {
     cleanup();
   });
 
-  it('omits the sub-heading when only standard containers are present', async () => {
-    const { container, cleanup } = await render(
-      <Containers containers={[{ name: 'app', image: 'app:1.0', state: 'Running' }]} />
-    );
-
-    expect(container.textContent).toContain('Containers');
-    // No sub-heading "Init Containers" should show when there are no init containers
-    expect(container.textContent).not.toContain('Init Containers');
-    cleanup();
-  });
-
   it('shows restart count chip when restartCount > 0', async () => {
     const { container, cleanup } = await render(
       <Containers

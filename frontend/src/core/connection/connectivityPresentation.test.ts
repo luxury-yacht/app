@@ -122,23 +122,6 @@ describe('buildConnectivityPresentation', () => {
     });
   });
 
-  it('reports an immediate authentication retry without a countdown', () => {
-    const presentation = buildConnectivityPresentation(
-      createInput({
-        authState: {
-          hasError: true,
-          isRecovering: true,
-          errorClass: 'auth',
-          secondsUntilRetry: 0,
-        },
-      })
-    );
-
-    expect(presentation.detail).toBe(
-      'alpha is recovering from an authentication failure. Rechecking now.'
-    );
-  });
-
   it('shows "No cluster selected" when there is no lifecycle state (untracked/none selected)', () => {
     const presentation = buildConnectivityPresentation({
       clusterId: undefined,
@@ -193,12 +176,9 @@ describe('buildConnectivityPresentation', () => {
     // yet" (the old copy) misreports it as pending forever.
     expect(presentation.status).toBe('healthy');
     expect(presentation.summary).toBe('Connected — restricted access');
-    expect(presentation.detail).toBe(
-      'alpha is connected, but you do not have permission to list namespaces. Namespace views are unavailable.'
-    );
     expect(presentation.actionLabel).toBeUndefined();
   });
-  it('keeps ready copy stable while a connected cluster is refreshing', () => {
+  it('preserves ready guidance and the refresh action during background refresh', () => {
     const presentation = buildConnectivityPresentation({
       clusterId: 'cluster-a',
       clusterName: 'alpha',
@@ -221,9 +201,11 @@ describe('buildConnectivityPresentation', () => {
     });
 
     expect(presentation.status).toBe('refreshing');
-    expect(presentation.summary).toBe('Ready');
-    expect(presentation.detail).toBe('alpha is connected is ready to use.');
-    expect(presentation.actionLabel).toBe('Refresh Now');
+    const idle = buildConnectivityPresentation(createInput());
+    expect(presentation.summary).toBe(idle.summary);
+    expect(presentation.detail).toBe(idle.detail);
+    expect(presentation.actionLabel).toBeTruthy();
+    expect(presentation.actionLabel).toBe(idle.actionLabel);
   });
 
   it('presents a recovering cluster with a connectivity verdict as reconnecting', () => {
@@ -250,7 +232,6 @@ describe('buildConnectivityPresentation', () => {
 
     expect(presentation.status).toBe('degraded');
     expect(presentation.summary).toBe('Reconnecting');
-    expect(presentation.detail).toContain('unreachable');
   });
 
   it('presents a recovering cluster with an auth verdict as retrying authentication', () => {

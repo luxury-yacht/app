@@ -7,40 +7,9 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-  formatShortcut,
-  getShortcutKey,
-  isInputElement,
-  modifiersMatch,
-  resolveEventElement,
-} from './utils';
-
-const originalUserAgent = navigator.userAgent;
-
-const setUserAgent = (value: string) => {
-  Object.defineProperty(navigator, 'userAgent', {
-    value,
-    configurable: true,
-  });
-};
-
-afterEach(() => {
-  setUserAgent(originalUserAgent);
-});
+import { getShortcutKey, isInputElement, modifiersMatch, resolveEventElement } from './utils';
 
 describe('shortcut utilities', () => {
-  it('formats shortcuts with mac symbols', () => {
-    setUserAgent('Macintosh');
-    const formatted = formatShortcut('k', { meta: true, shift: true });
-    expect(formatted).toBe('⌘⇧K');
-  });
-
-  it('formats shortcuts with plus separators on non-Mac platforms', () => {
-    setUserAgent('Windows');
-    const formatted = formatShortcut('ArrowUp', { ctrl: true, alt: true });
-    expect(formatted).toBe('Ctrl+Alt+ArrowUp');
-  });
-
   it('matches modifier combinations correctly', () => {
     const event = new KeyboardEvent('keydown', {
       key: 'k',

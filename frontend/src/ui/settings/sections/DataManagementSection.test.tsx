@@ -73,30 +73,6 @@ describe('DataManagementSection', () => {
     container.remove();
   });
 
-  it('contains the data transfer actions and Error Reporting preference', () => {
-    expect(container.textContent).toContain('Data Management');
-    expect(container.textContent).toContain('Export Settings');
-    expect(container.textContent).toContain('Import Settings');
-    expect(container.textContent).toContain('Export Favorites');
-    expect(container.textContent).toContain('Import Favorites');
-    expect(container.textContent).toContain('Error Reporting');
-    expect(container.textContent).toContain(
-      'Sends pseudonymous error diagnostics linked to this installation. Reports exclude request data and redact common credentials and infrastructure identifiers. Disable this to stop future reports.'
-    );
-  });
-
-  it('groups transfer controls under Export and Import and reporting under Telemetry', () => {
-    const subsectionLabels = Array.from(
-      container.querySelectorAll<HTMLElement>('.settings-subgroup-label')
-    ).map((label) => label.textContent);
-    const text = container.textContent ?? '';
-
-    expect(subsectionLabels).toEqual(['Export and Import', 'Telemetry']);
-    expect(text.indexOf('Export and Import')).toBeLessThan(text.indexOf('Settings'));
-    expect(text.indexOf('Favorites')).toBeLessThan(text.indexOf('Telemetry'));
-    expect(text.indexOf('Telemetry')).toBeLessThan(text.indexOf('Error Reporting'));
-  });
-
   it('persists the Error Reporting toggle', async () => {
     const toggle = requireValue(
       container.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Error Reporting"]'),

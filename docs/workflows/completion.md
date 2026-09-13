@@ -4,7 +4,11 @@ For behavior changes, define observable acceptance criteria before editing.
 Include related actions that share the changed lifecycle or state: success,
 failure, cancellation, readiness, cleanup, and relevant concurrent operations.
 Scale the record to the change; wording and mechanical edits do not need behavior
-tests. For work spanning sessions, keep the record in the task's existing plan
+tests. Apply the [testing standard](testing.md); copy and cosmetic styling do not
+justify new regression tests. Test-only pruning requires the surviving tests,
+coverage impact, and repository gate, without a fabricated red/green cycle or
+native interaction checks for unchanged production code.
+For work spanning sessions, keep the record in the task's existing plan
 under `docs/plans` rather than creating a second plan.
 
 For each criterion, record its status (`pending`, `passed`, `failed`, or `blocked`)

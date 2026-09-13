@@ -59,18 +59,6 @@ describe('IconDebugOverlay', () => {
     expect(overlay?.querySelectorAll('.icon-debug__asset-preview').length).toBeGreaterThan(0);
   });
 
-  it('renders component previews at their default svg size', () => {
-    renderOverlay();
-
-    const overlay = document.body.querySelector('[data-testid="icon-debug-overlay"]');
-    const rows = Array.from(overlay?.querySelectorAll<HTMLTableRowElement>('tbody tr') ?? []);
-    const dockBottomRow = rows.find((row) => row.textContent?.includes('DockBottomIcon'));
-    const previewSvg = dockBottomRow?.querySelector('.icon-debug-row__preview svg');
-
-    expect(previewSvg?.getAttribute('width')).toBe('24');
-    expect(previewSvg?.getAttribute('height')).toBe('24');
-  });
-
   it('closes from the debug overlay close button', () => {
     const onClose = vi.fn();
     renderOverlay(onClose);

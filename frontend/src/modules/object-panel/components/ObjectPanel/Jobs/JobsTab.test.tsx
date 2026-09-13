@@ -389,12 +389,4 @@ describe('JobsTab', () => {
       { initialTab: 'map' }
     );
   });
-
-  it('uses the shared filter placeholder for the local table filter', () => {
-    act(() => {
-      root.render(<JobsTab jobs={[]} loading={false} isActive={true} />);
-    });
-
-    expect(getGridTableProps().filters?.options?.searchPlaceholder).toBeUndefined();
-  });
 });
