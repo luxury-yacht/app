@@ -139,6 +139,10 @@
   outline: none;
 }
 
+.sidebar-cluster-group > .sidebar-views > .sidebar-item:first-child {
+  margin-top: 0;
+}
+
 .sidebar-item-row {
   display: flex;
   align-items: center;
