@@ -139,7 +139,7 @@
   outline: none;
 }
 
-.sidebar-cluster-group > .sidebar-views > .sidebar-item:first-child {
+.sidebar-view-group > .sidebar-views > .sidebar-item:first-child {
   margin-top: 0;
 }
 
@@ -276,6 +276,10 @@
 /* Indented child items under Resources or expanded namespaces */
 .sidebar-item.indented {
   padding-left: 1.8rem;
+}
+
+.sidebar-item.indented.nested {
+  padding-left: calc(1.8rem + var(--spacing-lg));
 }
 
 .sidebar-item.dimmed {

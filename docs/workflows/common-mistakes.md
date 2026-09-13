@@ -74,6 +74,12 @@ Keyboard access does not authorize adding visible controls or changing spacing
 and layout. Before editing, distinguish the requested interaction from a proposed
 UI change; preserve the existing appearance unless that change was requested.
 
+When grouping existing navigation rows, preserve their density. Do not add group
+margins or separators unless selected by the user. Inspect spacing at wrapper
+boundaries: an overflow container can prevent a child's margin from collapsing,
+so a header's bottom margin and its first row's top margin can stack. Use the
+shared group styles to keep the intended gap consistent across scopes.
+
 ## Treating a passing automated gate as task completion
 
 The gate covers its configured checks. It does not establish that every requested

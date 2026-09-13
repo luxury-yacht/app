@@ -5,7 +5,7 @@
  * Implements SidebarKeys logic for the UI layer.
  */
 
-import { CLUSTER_SIDEBAR_GROUPS, type ClusterSidebarGroup } from '@core/navigation/viewRegistry';
+import { SIDEBAR_VIEW_GROUPS, type SidebarViewGroupId } from '@core/navigation/viewRegistry';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import { isInputElement, resolveEventElement } from '@ui/shortcuts/utils';
@@ -24,7 +24,8 @@ export type SidebarCursorTarget =
   | { kind: 'global-view'; view: GlobalViewType }
   | { kind: 'cluster-view'; view: ClusterViewType }
   | { kind: 'namespace-view'; namespace: string; view: NamespaceViewType }
-  | { kind: 'cluster-toggle'; id: ClusterSidebarGroup }
+  | { kind: 'cluster-toggle'; id: SidebarViewGroupId }
+  | { kind: 'namespace-group-toggle'; namespace: string; id: SidebarViewGroupId }
   | { kind: 'namespace-toggle'; namespace: string };
 
 export const targetsAreEqual = (a: SidebarCursorTarget | null, b: SidebarCursorTarget | null) => {
@@ -42,6 +43,8 @@ export const targetsAreEqual = (a: SidebarCursorTarget | null, b: SidebarCursorT
       return b.kind === 'namespace-view' && a.view === b.view && a.namespace === b.namespace;
     case 'cluster-toggle':
       return b.kind === 'cluster-toggle' && a.id === b.id;
+    case 'namespace-group-toggle':
+      return b.kind === 'namespace-group-toggle' && a.id === b.id && a.namespace === b.namespace;
     case 'namespace-toggle':
       return b.kind === 'namespace-toggle' && a.namespace === b.namespace;
     default:
@@ -70,10 +73,17 @@ const describeNamespaceToggleTarget = (element: HTMLElement): SidebarCursorTarge
   return namespace ? { kind: 'namespace-toggle', namespace } : null;
 };
 
-const describeClusterToggleTarget = (element: HTMLElement): SidebarCursorTarget | null => {
+const describeGroupToggleTarget = (element: HTMLElement): SidebarCursorTarget | null => {
   const id = element.dataset.sidebarTargetId;
-  const group = CLUSTER_SIDEBAR_GROUPS.find((candidate) => candidate.id === id);
-  return group ? { kind: 'cluster-toggle', id: group.id } : null;
+  const group = SIDEBAR_VIEW_GROUPS.find((candidate) => candidate.id === id);
+  if (!group) {
+    return null;
+  }
+  if (element.dataset.sidebarTargetKind === 'cluster-toggle') {
+    return { kind: 'cluster-toggle', id: group.id };
+  }
+  const namespace = element.dataset.sidebarTargetNamespace;
+  return namespace ? { kind: 'namespace-group-toggle', namespace, id: group.id } : null;
 };
 
 export const describeElementTarget = (element: HTMLElement | null): SidebarCursorTarget | null => {
@@ -92,7 +102,8 @@ export const describeElementTarget = (element: HTMLElement | null): SidebarCurso
     case 'namespace-toggle':
       return describeNamespaceToggleTarget(element);
     case 'cluster-toggle':
-      return describeClusterToggleTarget(element);
+    case 'namespace-group-toggle':
+      return describeGroupToggleTarget(element);
     default:
       return null;
   }

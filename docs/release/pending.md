@@ -6,3 +6,4 @@
 ### Changed
 
 - Organized the cluster sidebar into Resources (including Namespaces) and Extensions, with Overview, Attention, Browse, and Events above both groups.
+- Grouped namespace views under Resources and Extensions, collapsed by default, with Workloads, Browse, Map, and Events as direct links.

@@ -28,7 +28,8 @@ one retained workspace per open cluster.
 ## Cluster Sidebar Organization
 
 Overview, Attention, Browse, and Events are direct cluster links. The independently
-collapsible Resources group contains Namespaces, Nodes, Storage, Config, and RBAC.
+collapsible Resources group contains Config, Namespaces, Nodes, RBAC, and Storage,
+in that order.
 The Extensions group contains CRDs and Custom Resources, followed by discovered
 resource families in this order: Cert Manager, External Secrets, Karpenter.
 
@@ -39,6 +40,23 @@ and the existing keyboard navigation surface; target parsing accepts only the
 registered group IDs. Grouping does not change stable view IDs or the ordering
 of route updates before entering the Cluster view. Command-palette and favorite
 view choices continue to consume the same ordered descriptors.
+
+## Namespace Sidebar Organization
+
+Each namespace begins with Workloads, Browse, Map, and Events as direct links.
+Resources contains Autoscaling, Config, Helm, Network, Quotas, RBAC, and Storage,
+in that order. Extensions contains Custom Resources, Argo CD,
+Cert Manager, External Secrets, and Prometheus Operator, with resource families
+filtered by active-cluster discovery. Apply the existing All Namespaces support
+filter before grouping, so Map remains available only for individual namespaces.
+
+Both scopes use `SIDEBAR_VIEW_GROUPS` and the shared `SidebarViewGroup` renderer.
+Keep compact row spacing and omit separators. Namespace Resources and Extensions
+start collapsed. Namespace group disclosure is independent for each
+cluster-qualified namespace key and survives collapsing its
+parent namespace. Keyboard group targets carry that namespace key and group ID.
+When a subgroup expands, the namespace scroll owner rechecks the full namespace
+group after the expansion animation.
 
 ## Cluster Attention Routing
 

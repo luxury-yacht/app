@@ -53,6 +53,12 @@ describe('Sidebar keyboard helpers', () => {
       )
     ).toBe(true);
     expect(targetsAreEqual({ kind: 'overview' }, null)).toBe(false);
+    expect(
+      targetsAreEqual(
+        { kind: 'namespace-group-toggle', namespace: 'a|dev', id: 'resources' },
+        { kind: 'namespace-group-toggle', namespace: 'b|dev', id: 'resources' }
+      )
+    ).toBe(false);
   });
 
   it('describes sidebar targets from DOM nodes', () => {
@@ -103,6 +109,29 @@ describe('Sidebar keyboard helpers', () => {
   });
 
   it('yields no target for dataset view values outside the view unions', () => {
+    expect(
+      describeElementTarget(
+        buildTargetElement({
+          'data-sidebar-target-kind': 'namespace-group-toggle',
+          'data-sidebar-target-namespace': 'a|dev',
+          'data-sidebar-target-id': 'resources',
+        })
+      )
+    ).toEqual({ kind: 'namespace-group-toggle', namespace: 'a|dev', id: 'resources' });
+    const invalidGroupAttributes: Record<string, string>[] = [
+      { 'data-sidebar-target-id': 'resources' },
+      { 'data-sidebar-target-namespace': 'a|dev', 'data-sidebar-target-id': 'unknown' },
+    ];
+    for (const attributes of invalidGroupAttributes) {
+      expect(
+        describeElementTarget(
+          buildTargetElement({
+            'data-sidebar-target-kind': 'namespace-group-toggle',
+            ...attributes,
+          })
+        )
+      ).toBeNull();
+    }
     expect(
       describeElementTarget(
         buildTargetElement({
