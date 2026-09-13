@@ -9,9 +9,10 @@ vi.mock('@modules/cluster/components/ClusterViewAttention', () => ({
 }));
 vi.mock('@modules/cluster/components/ClusterViewCRDs', () => ({ default: () => null }));
 vi.mock('@modules/cluster/components/ClusterViewCustom', () => ({
-  default: ({ resourceFamily }: { resourceFamily?: string }) => (
-    <div data-testid={resourceFamily ?? 'custom'} />
-  ),
+  default: () => <div data-testid="custom" />,
+  ClusterViewKarpenter: () => <div data-testid="karpenter" />,
+  ClusterViewCertManager: () => <div data-testid="cert-manager" />,
+  ClusterViewExternalSecrets: () => <div data-testid="external-secrets" />,
 }));
 vi.mock('@modules/cluster/components/ClusterViewEvents', () => ({ default: () => null }));
 vi.mock('@modules/cluster/components/ClusterViewNamespaces', () => ({
@@ -42,9 +43,11 @@ describe('ClusterResourcesViews', () => {
     expect(container.querySelector('[data-testid="namespaces"]')).not.toBeNull();
   });
 
-  it('routes Karpenter and generic custom resources to separate inventories', () => {
-    act(() => root.render(<ClusterResourcesViews activeTab="karpenter" />));
-    expect(container.querySelector('[data-testid="karpenter"]')).not.toBeNull();
+  it('routes extensions and generic custom resources to their inventories', () => {
+    for (const family of ['karpenter', 'cert-manager', 'external-secrets'] as const) {
+      act(() => root.render(<ClusterResourcesViews activeTab={family} />));
+      expect(container.querySelector(`[data-testid="${family}"]`)).not.toBeNull();
+    }
     act(() => root.render(<ClusterResourcesViews activeTab="custom" />));
     expect(container.querySelector('[data-testid="custom"]')).not.toBeNull();
   });

@@ -11,7 +11,12 @@
 import BrowseView from '@modules/browse/components/BrowseView';
 import NsViewAutoscaling from '@modules/namespace/components/NsViewAutoscaling';
 import NsViewConfig from '@modules/namespace/components/NsViewConfig';
-import NsViewCustom from '@modules/namespace/components/NsViewCustom';
+import NsViewCustom, {
+  NsViewArgoCD,
+  NsViewCertManager,
+  NsViewExternalSecrets,
+  NsViewPrometheus,
+} from '@modules/namespace/components/NsViewCustom';
 import NsViewEvents from '@modules/namespace/components/NsViewEvents';
 import NsViewHelm from '@modules/namespace/components/NsViewHelm';
 import NsViewNetwork from '@modules/namespace/components/NsViewNetwork';
@@ -49,16 +54,13 @@ const AllNamespacesView: React.FC<AllNamespacesViewProps> = ({ activeTab }) => {
       case 'storage':
         return <NsViewStorage namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'cert-manager':
+        return <NsViewCertManager namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'external-secrets':
+        return <NsViewExternalSecrets namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'prometheus':
+        return <NsViewPrometheus namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'argocd':
-        return (
-          <NsViewCustom
-            namespace={ALL_NAMESPACES_SCOPE}
-            showNamespaceColumn
-            resourceFamily={activeTab}
-          />
-        );
+        return <NsViewArgoCD namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'custom':
         return <NsViewCustom namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'browse':

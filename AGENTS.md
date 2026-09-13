@@ -7,6 +7,11 @@ touches those trees.
 
 ## Non-negotiable contracts
 
+- **Prioritize consistency in design and implementation.** Follow the app's
+  established UI, shared-component, state-ownership, and lifecycle patterns.
+  Before introducing an exception, explain the requirement the existing pattern
+  cannot meet and justify the added complexity. Extensibility or fewer lines of
+  code alone do not justify a separate implementation pattern.
 - **Ground every externally checkable claim.** Cite evidence gathered this turn
   (`file:line` or command and output) in the same statement, or prefix it with
   **`[unverified]`** / **`[assumed]`**. A code path is not runtime behavior, a

@@ -167,4 +167,12 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
 
 ClusterViewCustom.displayName = 'ClusterViewCustom';
 
+export const ClusterViewKarpenter = () => <ClusterViewCustom resourceFamily="karpenter" />;
+
+export const ClusterViewCertManager = () => <ClusterViewCustom resourceFamily="cert-manager" />;
+
+export const ClusterViewExternalSecrets = () => (
+  <ClusterViewCustom resourceFamily="external-secrets" />
+);
+
 export default ClusterViewCustom;

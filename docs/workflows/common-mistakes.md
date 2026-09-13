@@ -408,6 +408,13 @@ creates and removes temporary trees while those tests enumerate frontend files.
 
 ## Resource-family integration
 
+- New resource families are peer views. Follow the existing per-view component
+  lifecycle in cluster, namespace, and all-namespaces routing while using the
+  shared ResourceInventoryTable/GridTable infrastructure. A shared data adapter
+  does not require retaining the same view instance across families. Compare
+  navigation cleanup as well as table appearance; pending actions must remain
+  owned by the view that opened them. Explain any shared-table limitation before
+  introducing a different implementation pattern.
 - Exercise switching families through the shared catalog, hydration, and table
   replay cache. Clear structural scope state before commit; an effect-only clear
   can cache the preceding family's rows under the new identity. Retain hydrated

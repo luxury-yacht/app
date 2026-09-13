@@ -8,7 +8,11 @@
 import ClusterViewAttention from '@modules/cluster/components/ClusterViewAttention';
 import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
 import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
-import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
+import ClusterViewCustom, {
+  ClusterViewCertManager,
+  ClusterViewExternalSecrets,
+  ClusterViewKarpenter,
+} from '@modules/cluster/components/ClusterViewCustom';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
 import ClusterViewNamespaces from '@modules/cluster/components/ClusterViewNamespaces';
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
@@ -78,9 +82,11 @@ function ClusterResourcesViews({
       case 'crds':
         return <ClusterViewCRDs error={crdsError} />;
       case 'cert-manager':
+        return <ClusterViewCertManager />;
       case 'external-secrets':
+        return <ClusterViewExternalSecrets />;
       case 'karpenter':
-        return <ClusterViewCustom resourceFamily={activeTab} />;
+        return <ClusterViewKarpenter />;
       case 'custom':
         return (
           <ClusterViewCustom loading={customLoading} loaded={customLoaded} error={customError} />

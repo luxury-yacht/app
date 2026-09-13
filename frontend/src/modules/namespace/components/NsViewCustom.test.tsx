@@ -5,6 +5,8 @@
  * Covers key behaviors and edge cases for NsViewCustom.
  */
 
+import AllNamespacesView from '@modules/namespace/components/AllNamespacesView';
+import NsResourcesViews from '@modules/namespace/components/NsResourcesViews';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
@@ -167,6 +169,7 @@ vi.mock('@/core/capabilities', () => ({
       ['CronJob:delete', { allowed: true, pending: false }],
       ['CustomResource:delete', { allowed: true, pending: false }],
       ['DBInstance:delete', { allowed: true, pending: false }],
+      ['Application:delete', { allowed: true, pending: false }],
     ]),
   getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
   // Stubbed for CRDs not covered by the static permission map; the real
@@ -333,6 +336,50 @@ describe('NsViewCustom', () => {
       await Promise.resolve();
     });
   };
+
+  it.each(['all namespaces', 'one namespace'] as const)(
+    'discards a pending object action when leaving an extension in %s',
+    async (scope) => {
+      const application = catalogItemFromResource({
+        ref: {
+          clusterId: 'cluster-a',
+          group: 'argoproj.io',
+          version: 'v1alpha1',
+          kind: 'Application',
+          resource: 'applications',
+          namespace: 'argocd',
+          name: 'app',
+        },
+      });
+      useBrowseCatalogMock.mockReturnValue(browseCatalogResult([application]));
+      const renderRoute = async (activeTab: 'argocd' | 'external-secrets') => {
+        await act(async () => {
+          root.render(
+            scope === 'all namespaces' ? (
+              <AllNamespacesView activeTab={activeTab} />
+            ) : (
+              <NsResourcesViews namespace="argocd" activeTab={activeTab} />
+            )
+          );
+        });
+      };
+      await renderRoute('argocd');
+      const grid = requireValue(getLastGridProps(), 'expected the resource table');
+      const remove = grid
+        .getCustomContextMenuItems(grid.data[0], 'name')
+        .find((item) => item.actionId === OBJECT_ACTION_IDS.delete);
+      act(() => requireValue(remove?.onClick, 'expected the delete action')());
+      expect(modalProps.current.isOpen).toBe(true);
+
+      await renderRoute('argocd');
+      expect(modalProps.current.isOpen).toBe(true);
+      await renderRoute('external-secrets');
+      expect(modalProps.current.isOpen).toBe(false);
+      await renderRoute('argocd');
+      expect(modalProps.current.isOpen).toBe(false);
+      expect(runObjectActionMock).not.toHaveBeenCalled();
+    }
+  );
 
   it('renders GridTable with context menu actions and opens the object panel', async () => {
     useBrowseCatalogMock.mockReturnValue(

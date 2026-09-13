@@ -187,18 +187,20 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
 
 CustomViewGrid.displayName = 'NsViewCustom';
 
-export const NsViewArgoCD = ({ namespace }: { namespace: string }) => (
-  <CustomViewGrid namespace={namespace} resourceFamily="argocd" />
+type NamespaceCustomViewProps = Omit<CustomViewProps, 'resourceFamily'>;
+
+export const NsViewArgoCD = (props: NamespaceCustomViewProps) => (
+  <CustomViewGrid {...props} resourceFamily="argocd" />
 );
 
-export const NsViewCertManager = ({ namespace }: { namespace: string }) => (
-  <CustomViewGrid namespace={namespace} resourceFamily="cert-manager" />
+export const NsViewCertManager = (props: NamespaceCustomViewProps) => (
+  <CustomViewGrid {...props} resourceFamily="cert-manager" />
 );
-export const NsViewExternalSecrets = ({ namespace }: { namespace: string }) => (
-  <CustomViewGrid namespace={namespace} resourceFamily="external-secrets" />
+export const NsViewExternalSecrets = (props: NamespaceCustomViewProps) => (
+  <CustomViewGrid {...props} resourceFamily="external-secrets" />
 );
-export const NsViewPrometheus = ({ namespace }: { namespace: string }) => (
-  <CustomViewGrid namespace={namespace} resourceFamily="prometheus" />
+export const NsViewPrometheus = (props: NamespaceCustomViewProps) => (
+  <CustomViewGrid {...props} resourceFamily="prometheus" />
 );
 
 export default CustomViewGrid;

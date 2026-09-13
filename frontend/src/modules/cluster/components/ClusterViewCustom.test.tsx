@@ -9,8 +9,10 @@ import {
   type CatalogBackedCustomResourceRow,
   catalogItemToFallbackCustomRow,
 } from '@modules/browse/hooks/customCatalogRowAdapter';
+import ClusterResourcesViews from '@modules/cluster/components/ClusterResourcesViews';
 import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
 import { resetResourceInventoryRowCache } from '@modules/resource-grid/useResourceInventoryTable';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
@@ -158,6 +160,7 @@ vi.mock('@/core/capabilities', () => ({
     new Map([
       ['Widget:delete', { allowed: true, pending: false }],
       ['DBCluster:delete', { allowed: true, pending: false }],
+      ['NodePool:delete', { allowed: true, pending: false }],
     ]),
   getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
   queryKindPermissions: vi.fn(),
@@ -282,6 +285,39 @@ describe('ClusterViewCustom', () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it('discards a pending object action when leaving a cluster extension', async () => {
+    const nodePool = catalogItemFromCustom({
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'karpenter.sh',
+        version: 'v1',
+        kind: 'NodePool',
+        resource: 'nodepools',
+        namespace: '',
+        name: 'workers',
+      },
+    });
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([nodePool]));
+    const renderRoute = async (activeTab: 'karpenter' | 'external-secrets') => {
+      await act(async () => root.render(<ClusterResourcesViews activeTab={activeTab} />));
+    };
+    await renderRoute('karpenter');
+    const grid = gridTablePropsRef.current;
+    const remove = grid
+      .getCustomContextMenuItems(grid.data[0], 'name')
+      .find((item) => item.actionId === OBJECT_ACTION_IDS.delete);
+    act(() => requireValue(remove?.onClick, 'expected the delete action')());
+    expect(modalProps.current.isOpen).toBe(true);
+
+    await renderRoute('karpenter');
+    expect(modalProps.current.isOpen).toBe(true);
+    await renderRoute('external-secrets');
+    expect(modalProps.current.isOpen).toBe(false);
+    await renderRoute('karpenter');
+    expect(modalProps.current.isOpen).toBe(false);
+    expect(runObjectActionMock).not.toHaveBeenCalled();
   });
 
   it('scopes Karpenter queries and renders the resource-specific columns', async () => {

@@ -53,7 +53,13 @@ vi.mock('@modules/namespace/components/NsViewNetwork', () => hoistedMocks.makeMo
 vi.mock('@modules/namespace/components/NsViewQuotas', () => hoistedMocks.makeMock('quotas-view'));
 vi.mock('@modules/namespace/components/NsViewRBAC', () => hoistedMocks.makeMock('rbac-view'));
 vi.mock('@modules/namespace/components/NsViewStorage', () => hoistedMocks.makeMock('storage-view'));
-vi.mock('@modules/namespace/components/NsViewCustom', () => hoistedMocks.makeMock('custom-view'));
+vi.mock('@modules/namespace/components/NsViewCustom', () => ({
+  ...hoistedMocks.makeMock('custom-view'),
+  NsViewArgoCD: hoistedMocks.makeMock('argocd-view').default,
+  NsViewCertManager: hoistedMocks.makeMock('cert-manager-view').default,
+  NsViewExternalSecrets: hoistedMocks.makeMock('external-secrets-view').default,
+  NsViewPrometheus: hoistedMocks.makeMock('prometheus-view').default,
+}));
 vi.mock('@modules/namespace/components/NsViewHelm', () => hoistedMocks.makeMock('helm-view'));
 vi.mock('@modules/namespace/components/NsViewEvents', () => hoistedMocks.makeMock('events-view'));
 vi.mock('@modules/browse/components/BrowseView', () => hoistedMocks.makeMock('browse-view'));
@@ -102,6 +108,10 @@ describe('AllNamespacesView', () => {
     ['storage', 'storage-view'],
     ['helm', 'helm-view'],
     ['events', 'events-view'],
+    ['argocd', 'argocd-view'],
+    ['cert-manager', 'cert-manager-view'],
+    ['external-secrets', 'external-secrets-view'],
+    ['prometheus', 'prometheus-view'],
   ];
 
   it.each(tableTabs)(
