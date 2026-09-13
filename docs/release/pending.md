@@ -1,9 +1,15 @@
 ### Added
 
-- Dedicated cert-manager, External Secrets, and Prometheus Operator resource views and detail panels, shown when their CRDs are discovered in the matching cluster or namespace scope.
-- Argo CD and Karpenter CRDs are now first-class objects, with a dedicated view and detail panels. Sidebar items for these CRD types are only visible when discovered.
+- Some commonly-used CRDs are now first-class objects, with dedicated views and detail panels.
+  - Argo CD `Application`, `ApplicationSet`, and `AppProject`.
+  - Cert Manager `Certificate`, `Certificate Request`, and `ClusterIssuer`.
+  - External Secrets operator `ClusterSecret`, `ClusterSecretStore`, and `ExternalSecret`.
+  - Karpenter `EC2NodeClass`, `NodeClaim`, and `NodePool`
+  - Prometheus `ServiceMonitor` and `PodMonitor`
+- These new categories will only appear in the sidebar if they are discovered in the cluster.
 
 ### Changed
 
-- Organized the cluster sidebar into Resources (including Namespaces) and Extensions, with Overview, Attention, Browse, and Events above both groups.
-- Grouped namespace views under Resources and Extensions, collapsed by default, with Workloads, Browse, Map, and Events as direct links.
+- Sidebar categories have been reorganized, with new Resources and Extensions categories.
+  - Resources contains built-in resource objects, organized by subcategories as before.
+  - CRDs and custom resources have been moved into the Extensions category.

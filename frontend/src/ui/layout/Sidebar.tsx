@@ -613,7 +613,7 @@ const ClusterSidebarGroup = ({
   views: ClusterViewDescriptor[];
   elementIdPrefix: string;
 }) => {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   return (
     <SidebarViewGroup
       label={group.label}

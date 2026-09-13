@@ -227,14 +227,14 @@ describe('Sidebar', () => {
     expect(overview?.tagName).toBe('BUTTON');
     expect(overview?.getAttribute('aria-current')).toBe('page');
     expect(resources?.tagName).toBe('BUTTON');
-    expect(resources?.getAttribute('aria-expanded')).toBe('true');
+    expect(resources?.getAttribute('aria-expanded')).toBe('false');
     expect(resources?.getAttribute('aria-controls')).toBeTruthy();
     expect(namespace?.tagName).toBe('BUTTON');
     expect(namespace?.getAttribute('aria-expanded')).toBe('false');
     expect(namespace?.getAttribute('aria-controls')).toBeTruthy();
 
     act(() => resources?.click());
-    expect(resources?.getAttribute('aria-expanded')).toBe('false');
+    expect(resources?.getAttribute('aria-expanded')).toBe('true');
   });
 
   const pressKey = (key: string, shiftKey = false) => {
@@ -243,7 +243,18 @@ describe('Sidebar', () => {
     return event;
   };
 
+  const toggleClusterGroup = (id: 'resources' | 'extensions') => {
+    const toggle = requireValue(
+      container?.querySelector<HTMLButtonElement>(
+        `[data-sidebar-target-kind="cluster-toggle"][data-sidebar-target-id="${id}"]`
+      ),
+      `expected ${id} disclosure`
+    );
+    act(() => toggle.click());
+  };
+
   const clickNodes = () => {
+    toggleClusterGroup('resources');
     const nodes = requireValue(
       container?.querySelector<HTMLButtonElement>('[data-sidebar-target-view="nodes"]'),
       'expected Nodes item'
@@ -352,6 +363,7 @@ describe('Sidebar', () => {
 
   it('shows Karpenter only for the selected cluster discovery, including empty installations', () => {
     renderSidebar();
+    toggleClusterGroup('extensions');
     const button = () => container?.querySelector('[data-sidebar-target-view="karpenter"]');
     expect(button()).toBeNull();
     discoveredFamilies.byCluster['cluster-a'] = { cluster: ['karpenter'] };
@@ -460,13 +472,12 @@ describe('Sidebar', () => {
       );
     const resources = toggle('resources');
     const extensions = toggle('extensions');
-    act(() => {
-      resources.focus();
-      resources.click();
-    });
+    expect(resources.getAttribute('aria-expanded')).toBe('false');
+    expect(extensions.getAttribute('aria-expanded')).toBe('false');
     expect(view('namespaces')).toBeNull();
     expect(view('nodes')).toBeNull();
-    expect(view('karpenter')).not.toBeNull();
+    expect(view('karpenter')).toBeNull();
+    expect(view('custom')).toBeNull();
     for (const id of ['browse', 'events']) {
       act(() => view(id)?.click());
       expect(viewStateMock.setActiveClusterView).toHaveBeenLastCalledWith(id);
@@ -475,14 +486,15 @@ describe('Sidebar', () => {
     pressKey('ArrowDown');
     expect(document.activeElement).toBe(extensions);
     pressKey('Enter');
-    expect(extensions.getAttribute('aria-expanded')).toBe('false');
-    expect(view('karpenter')).toBeNull();
-    expect(view('custom')).toBeNull();
+    expect(extensions.getAttribute('aria-expanded')).toBe('true');
+    expect(view('karpenter')).not.toBeNull();
+    expect(view('custom')).not.toBeNull();
+    expect(view('nodes')).toBeNull();
     pressKey('ArrowUp');
     expect(document.activeElement).toBe(resources);
     pressKey(' ');
     expect(resources.getAttribute('aria-expanded')).toBe('true');
-    expect(view('karpenter')).toBeNull();
+    expect(view('karpenter')).not.toBeNull();
     pressKey('ArrowDown');
     expect(document.activeElement).toBe(view('config'));
     pressKey('Enter');
@@ -491,6 +503,9 @@ describe('Sidebar', () => {
       extensions.focus();
       extensions.click();
     });
+    expect(view('karpenter')).toBeNull();
+    expect(view('nodes')).not.toBeNull();
+    act(() => extensions.click());
     pressKey('ArrowDown');
     expect(document.activeElement).toBe(view('crds'));
     pressKey('Enter');
@@ -604,8 +619,8 @@ describe('Sidebar', () => {
     expect(globalNamespaces.textContent?.trim()).toBe('Namespaces');
 
     const clusterViews = requireValue(
-      host.querySelector('[id$="-sidebar-cluster-resources-views"]'),
-      'expected cluster resource views'
+      host.querySelector('[data-sidebar-target-kind="overview"]')?.closest('.cluster-items'),
+      'expected cluster navigation'
     );
     expect(clusterViews.querySelector('[data-sidebar-target-view="fleet"]')).toBeNull();
     expect(clusterViews.querySelector('[data-sidebar-target-view="global-namespaces"]')).toBeNull();
@@ -945,6 +960,7 @@ describe('Sidebar', () => {
 
   it('collapses cluster resources when toggled', () => {
     renderSidebar();
+    toggleClusterGroup('resources');
     const nodesItemBefore = requireValue(
       container,
       'expected test value in Sidebar.test.tsx'
@@ -973,6 +989,7 @@ describe('Sidebar', () => {
 
   it('activates a specific cluster resource view when clicked', () => {
     renderSidebar();
+    toggleClusterGroup('resources');
     const nodesItem = requireValue(
       container,
       'expected test value in Sidebar.test.tsx'

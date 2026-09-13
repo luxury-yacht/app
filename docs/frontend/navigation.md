@@ -32,6 +32,7 @@ collapsible Resources group contains Config, Namespaces, Nodes, RBAC, and Storag
 in that order.
 The Extensions group contains CRDs and Custom Resources, followed by discovered
 resource families in this order: Cert Manager, External Secrets, Karpenter.
+Both groups start collapsed.
 
 `viewRegistry.ts` owns the ordered view descriptors and their required
 `sidebarGroup` placement. Filter resource families using active-cluster discovery
