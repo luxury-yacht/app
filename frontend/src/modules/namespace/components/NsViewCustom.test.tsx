@@ -1043,7 +1043,7 @@ describe('NsViewCustom', () => {
         ['destination', 'remote-prod', undefined],
         ['destinationNamespace', 'store', undefined],
       ] as const) {
-        const rendered = renderToStaticMarkup(<>{findColumn(props, key).render(props.data[0])}</>);
+        const rendered = renderToStaticMarkup(findColumn(props, key).render(props.data[0]));
         expect(rendered).toContain(value);
         if (presentation) {
           expect(rendered).toContain(presentation);
