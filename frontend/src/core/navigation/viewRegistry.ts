@@ -42,9 +42,21 @@ export const GLOBAL_VIEW_DESCRIPTORS = [
   },
 ] as const satisfies readonly ViewDescriptor<'global', string>[];
 
+export const CLUSTER_SIDEBAR_GROUPS = [
+  { id: 'resources', label: 'Resources' },
+  { id: 'extensions', label: 'Extensions' },
+] as const;
+
+export type ClusterSidebarGroup = (typeof CLUSTER_SIDEBAR_GROUPS)[number]['id'];
+
+interface ClusterViewDefinition extends ViewDescriptor<'cluster', string> {
+  readonly sidebarGroup: 'primary' | ClusterSidebarGroup;
+}
+
 export const CLUSTER_VIEW_DESCRIPTORS = [
   {
     scope: 'cluster',
+    sidebarGroup: 'primary',
     id: 'attention',
     label: 'Attention',
     description: 'Review cluster objects that currently need operator attention',
@@ -53,14 +65,7 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
   },
   {
     scope: 'cluster',
-    id: 'namespaces',
-    label: 'Namespaces',
-    description: 'Compare health, workloads, events, utilization, and quotas across namespaces',
-    keywords: ['namespaces', 'cluster', 'health', 'workloads', 'events', 'utilization', 'quotas'],
-    refresher: null,
-  },
-  {
-    scope: 'cluster',
+    sidebarGroup: 'primary',
     id: 'browse',
     label: 'Browse',
     description: 'Inspect the inventory of all catalogued Kubernetes objects',
@@ -69,6 +74,7 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
   },
   {
     scope: 'cluster',
+    sidebarGroup: 'primary',
     id: 'events',
     label: 'Events',
     description: 'Review cluster events associated with recent changes and operations',
@@ -77,6 +83,16 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
   },
   {
     scope: 'cluster',
+    sidebarGroup: 'resources',
+    id: 'namespaces',
+    label: 'Namespaces',
+    description: 'Compare health, workloads, events, utilization, and quotas across namespaces',
+    keywords: ['namespaces', 'cluster', 'health', 'workloads', 'events', 'utilization', 'quotas'],
+    refresher: null,
+  },
+  {
+    scope: 'cluster',
+    sidebarGroup: 'resources',
     id: 'nodes',
     label: 'Nodes',
     description: 'Inspect node health, scheduling, and capacity',
@@ -85,14 +101,7 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
   },
   {
     scope: 'cluster',
-    id: 'config',
-    label: 'Config',
-    description: 'View cluster configuration resources',
-    keywords: ['config', 'cluster', 'ingress', 'classes'],
-    refresher: 'cluster-config',
-  },
-  {
-    scope: 'cluster',
+    sidebarGroup: 'resources',
     id: 'storage',
     label: 'Storage',
     description: 'View persistent volumes and storage classes',
@@ -101,6 +110,25 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
   },
   {
     scope: 'cluster',
+    sidebarGroup: 'resources',
+    id: 'config',
+    label: 'Config',
+    description: 'View cluster configuration resources',
+    keywords: ['config', 'cluster', 'ingress', 'classes'],
+    refresher: 'cluster-config',
+  },
+  {
+    scope: 'cluster',
+    sidebarGroup: 'resources',
+    id: 'rbac',
+    label: 'RBAC',
+    description: 'View cluster RBAC resources',
+    keywords: ['rbac', 'cluster', 'security', 'roles', 'bindings', 'admission'],
+    refresher: 'cluster-rbac',
+  },
+  {
+    scope: 'cluster',
+    sidebarGroup: 'extensions',
     id: 'crds',
     label: 'CRDs',
     description: 'View custom resource definitions',
@@ -109,14 +137,36 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
   },
   {
     scope: 'cluster',
+    sidebarGroup: 'extensions',
     id: 'custom',
-    label: 'Custom',
+    label: 'Custom Resources',
     description: 'View cluster-scoped custom resources',
     keywords: ['custom', 'cluster', 'custom resources', 'crs'],
     refresher: null,
   },
   {
     scope: 'cluster',
+    sidebarGroup: 'extensions',
+    id: 'cert-manager',
+    resourceFamily: 'cert-manager',
+    label: 'Cert Manager',
+    description: 'View cert-manager resources',
+    keywords: ['cert-manager', 'certificates', 'issuers'],
+    refresher: null,
+  },
+  {
+    scope: 'cluster',
+    sidebarGroup: 'extensions',
+    id: 'external-secrets',
+    resourceFamily: 'external-secrets',
+    label: 'External Secrets',
+    description: 'View External Secrets resources',
+    keywords: ['external-secrets', 'external secrets', 'secret stores'],
+    refresher: null,
+  },
+  {
+    scope: 'cluster',
+    sidebarGroup: 'extensions',
     id: 'karpenter',
     resourceFamily: 'karpenter',
     label: 'Karpenter',
@@ -131,33 +181,7 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     ],
     refresher: null,
   },
-  {
-    scope: 'cluster',
-    id: 'cert-manager',
-    resourceFamily: 'cert-manager',
-    label: 'cert-manager',
-    description: 'View cert-manager resources',
-    keywords: ['cert-manager', 'certificates', 'issuers'],
-    refresher: null,
-  },
-  {
-    scope: 'cluster',
-    id: 'external-secrets',
-    resourceFamily: 'external-secrets',
-    label: 'External Secrets',
-    description: 'View External Secrets resources',
-    keywords: ['external-secrets', 'external secrets', 'secret stores'],
-    refresher: null,
-  },
-  {
-    scope: 'cluster',
-    id: 'rbac',
-    label: 'RBAC',
-    description: 'View cluster RBAC resources',
-    keywords: ['rbac', 'cluster', 'security', 'roles', 'bindings', 'admission'],
-    refresher: 'cluster-rbac',
-  },
-] as const satisfies readonly ViewDescriptor<'cluster', string>[];
+] as const satisfies readonly ClusterViewDefinition[];
 
 export const NAMESPACE_VIEW_DESCRIPTORS = [
   {
@@ -273,7 +297,7 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     scope: 'namespace',
     id: 'cert-manager',
     resourceFamily: 'cert-manager',
-    label: 'cert-manager',
+    label: 'Cert Manager',
     description: 'View cert-manager resources',
     keywords: ['cert-manager', 'certificates', 'issuers'],
     refresher: null,

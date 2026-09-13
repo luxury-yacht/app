@@ -25,11 +25,26 @@ one retained workspace per open cluster.
 - Foreground-cluster blocking overlays must not cover Global views. Each Global
   row owns and presents its originating cluster's lifecycle/auth state.
 
+## Cluster Sidebar Organization
+
+Overview, Attention, Browse, and Events are direct cluster links. The independently
+collapsible Resources group contains Namespaces, Nodes, Storage, Config, and RBAC.
+The Extensions group contains CRDs and Custom Resources, followed by discovered
+resource families in this order: Cert Manager, External Secrets, Karpenter.
+
+`viewRegistry.ts` owns the ordered view descriptors and their required
+`sidebarGroup` placement. Filter resource families using active-cluster discovery
+before grouping the available views. Sidebar groups use local disclosure state
+and the existing keyboard navigation surface; target parsing accepts only the
+registered group IDs. Grouping does not change stable view IDs or the ordering
+of route updates before entering the Cluster view. Command-palette and favorite
+view choices continue to consume the same ordered descriptors.
+
 ## Cluster Attention Routing
 
 Cluster Overview is the cluster-level landing surface for health and capacity.
 Cluster Attention is the inventory of objects that currently warrant operator
-action. It appears between Overview and Resources and is scoped to exactly one
+action. It appears immediately after Overview and is scoped to exactly one
 cluster.
 
 Overview pod-health and restart signals open Cluster Attention with `Kind = Pod`

@@ -32,7 +32,11 @@ import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { useRefreshDomainHandle } from '@/core/data-access';
 import { eventBus } from '@/core/events';
-import { CLUSTER_VIEW_DESCRIPTORS, GLOBAL_VIEW_DESCRIPTORS } from '@/core/navigation/viewRegistry';
+import {
+  CLUSTER_SIDEBAR_GROUPS,
+  CLUSTER_VIEW_DESCRIPTORS,
+  GLOBAL_VIEW_DESCRIPTORS,
+} from '@/core/navigation/viewRegistry';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
@@ -448,20 +452,91 @@ const SidebarAttentionBadges = ({ counts }: { counts?: AttentionCounts }) => {
   );
 };
 
-interface ClusterSidebarSectionProps {
+interface ClusterViewControls {
+  buildSidebarItemClassName: SidebarKeyboardControls['buildSidebarItemClassName'];
+  isTargetSelected: SidebarKeyboardControls['isTargetSelected'];
+  onSelect: (view: ClusterViewType) => void;
+}
+
+const ClusterSidebarView = ({
+  view,
+  indented = false,
+  ...controls
+}: ClusterViewControls & {
+  view: ClusterViewDescriptor;
+  indented?: boolean;
+}) => (
+  <button
+    type="button"
+    className={controls.buildSidebarItemClassName(
+      indented ? ['sidebar-item', 'indented'] : ['sidebar-item'],
+      { kind: 'cluster-view', view: view.id }
+    )}
+    onClick={() => controls.onSelect(view.id)}
+    data-sidebar-focusable="true"
+    data-sidebar-target-kind="cluster-view"
+    data-sidebar-target-view={view.id}
+    tabIndex={-1}
+    aria-current={
+      controls.isTargetSelected({ kind: 'cluster-view', view: view.id }) ? 'page' : undefined
+    }
+  >
+    <CategoryIcon width={14} height={14} />
+    <span>{view.label}</span>
+  </button>
+);
+
+const ClusterSidebarGroup = ({
+  group,
+  views,
+  elementIdPrefix,
+  ...controls
+}: ClusterViewControls & {
+  group: (typeof CLUSTER_SIDEBAR_GROUPS)[number];
+  views: ClusterViewDescriptor[];
+  elementIdPrefix: string;
+}) => {
+  const [expanded, setExpanded] = useState(true);
+  const regionId = `${elementIdPrefix}-sidebar-cluster-${group.id}-views`;
+  return (
+    <div className="sidebar-cluster-group">
+      <button
+        type="button"
+        className={controls.buildSidebarItemClassName(['sidebar-item', 'header', 'clickable'], {
+          kind: 'cluster-toggle',
+          id: group.id,
+        })}
+        onClick={() => setExpanded((previous) => !previous)}
+        data-sidebar-focusable="true"
+        data-sidebar-target-kind="cluster-toggle"
+        data-sidebar-target-id={group.id}
+        tabIndex={-1}
+        aria-expanded={expanded}
+        aria-controls={regionId}
+      >
+        <ClusterResourcesIcon width={14} height={14} />
+        <span>{group.label}</span>
+      </button>
+      {expanded ? (
+        <div className="sidebar-views" id={regionId}>
+          {views.map((view) => (
+            <ClusterSidebarView key={view.id} view={view} indented {...controls} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+interface ClusterSidebarSectionProps extends ClusterViewControls {
   hidden: boolean;
   elementIdPrefix: string;
   attentionView?: ClusterViewDescriptor;
   attentionCounts?: AttentionCounts;
   attentionAriaLabel?: string;
-  resourceViews: ClusterViewDescriptor[];
-  resourcesExpanded: boolean;
-  buildSidebarItemClassName: SidebarKeyboardControls['buildSidebarItemClassName'];
-  isTargetSelected: SidebarKeyboardControls['isTargetSelected'];
+  views: ClusterViewDescriptor[];
   onOverviewSelect: () => void;
   onAttentionSelect: (view: ClusterViewType) => void;
-  onResourceViewSelect: (view: ClusterViewType) => void;
-  onToggleResources: () => void;
 }
 
 const ClusterSidebarSection = (props: ClusterSidebarSectionProps) => (
@@ -504,51 +579,28 @@ const ClusterSidebarSection = (props: ClusterSidebarSectionProps) => (
           <SidebarAttentionBadges counts={props.attentionCounts} />
         </button>
       ) : null}
-      <button
-        type="button"
-        className={props.buildSidebarItemClassName(['sidebar-item', 'header', 'clickable'], {
-          kind: 'cluster-toggle',
-          id: 'resources',
-        })}
-        onClick={props.onToggleResources}
-        data-sidebar-focusable="true"
-        data-sidebar-target-kind="cluster-toggle"
-        data-sidebar-target-id="resources"
-        tabIndex={-1}
-        aria-expanded={props.resourcesExpanded}
-        aria-controls={`${props.elementIdPrefix}-sidebar-cluster-resource-views`}
-      >
-        <ClusterResourcesIcon width={14} height={14} />
-        <span>Resources</span>
-      </button>
-      {props.resourcesExpanded ? (
-        <div
-          className="sidebar-views"
-          id={`${props.elementIdPrefix}-sidebar-cluster-resource-views`}
-        >
-          {props.resourceViews.map((view) => (
-            <button
-              type="button"
-              key={view.id}
-              className={props.buildSidebarItemClassName(['sidebar-item', 'indented'], {
-                kind: 'cluster-view',
-                view: view.id,
-              })}
-              onClick={() => props.onResourceViewSelect(view.id)}
-              data-sidebar-focusable="true"
-              data-sidebar-target-kind="cluster-view"
-              data-sidebar-target-view={view.id}
-              tabIndex={-1}
-              aria-current={
-                props.isTargetSelected({ kind: 'cluster-view', view: view.id }) ? 'page' : undefined
-              }
-            >
-              <CategoryIcon width={14} height={14} />
-              <span>{view.label}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
+      {props.views
+        .filter((view) => view.sidebarGroup === 'primary')
+        .map((view) => (
+          <ClusterSidebarView
+            key={view.id}
+            view={view}
+            buildSidebarItemClassName={props.buildSidebarItemClassName}
+            isTargetSelected={props.isTargetSelected}
+            onSelect={props.onSelect}
+          />
+        ))}
+      {CLUSTER_SIDEBAR_GROUPS.map((group) => (
+        <ClusterSidebarGroup
+          key={group.id}
+          group={group}
+          views={props.views.filter((view) => view.sidebarGroup === group.id)}
+          elementIdPrefix={props.elementIdPrefix}
+          buildSidebarItemClassName={props.buildSidebarItemClassName}
+          isTargetSelected={props.isTargetSelected}
+          onSelect={props.onSelect}
+        />
+      ))}
     </div>
   </div>
 );
@@ -729,7 +781,6 @@ function Sidebar() {
   const showGlobalViews = selectedClusterIds.length > 1 && viewState.viewType === 'global';
   const [expandedNamespaceKeys, setExpandedNamespaceKeys] = useState<Set<string>>(() => new Set());
   const [lastExpandedNamespaceKey, setLastExpandedNamespaceKey] = useState<string | null>(null);
-  const [clusterResourcesExpanded, setClusterResourcesExpanded] = useState<boolean>(true);
 
   const width = viewState.isSidebarVisible ? viewState.sidebarWidth : 50;
   const isCollapsed = !viewState.isSidebarVisible;
@@ -815,7 +866,7 @@ function Sidebar() {
 
   // Cluster views include optional families discovered in the active cluster.
   const attentionView = CLUSTER_VIEW_DESCRIPTORS.find((view) => view.id === 'attention');
-  const resourceViews = useAvailableClusterViews(selectedClusterId).filter(
+  const clusterViews = useAvailableClusterViews(selectedClusterId).filter(
     (view) => view.id !== 'attention'
   );
 
@@ -998,14 +1049,12 @@ function Sidebar() {
               attentionView={attentionView}
               attentionCounts={attentionCounts}
               attentionAriaLabel={attentionAriaLabel}
-              resourceViews={resourceViews}
-              resourcesExpanded={clusterResourcesExpanded}
+              views={clusterViews}
               buildSidebarItemClassName={buildSidebarItemClassName}
               isTargetSelected={isTargetSelected}
               onOverviewSelect={handleOverviewSelect}
               onAttentionSelect={handleClusterViewSelect}
-              onResourceViewSelect={handleResourceViewSelect}
-              onToggleResources={() => setClusterResourcesExpanded((previous) => !previous)}
+              onSelect={handleResourceViewSelect}
             />
           }
           namespaceSection={

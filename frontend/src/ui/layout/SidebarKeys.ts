@@ -5,6 +5,7 @@
  * Implements SidebarKeys logic for the UI layer.
  */
 
+import { CLUSTER_SIDEBAR_GROUPS, type ClusterSidebarGroup } from '@core/navigation/viewRegistry';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import { isInputElement, resolveEventElement } from '@ui/shortcuts/utils';
@@ -23,7 +24,7 @@ export type SidebarCursorTarget =
   | { kind: 'global-view'; view: GlobalViewType }
   | { kind: 'cluster-view'; view: ClusterViewType }
   | { kind: 'namespace-view'; namespace: string; view: NamespaceViewType }
-  | { kind: 'cluster-toggle'; id: 'resources' }
+  | { kind: 'cluster-toggle'; id: ClusterSidebarGroup }
   | { kind: 'namespace-toggle'; namespace: string };
 
 export const targetsAreEqual = (a: SidebarCursorTarget | null, b: SidebarCursorTarget | null) => {
@@ -71,7 +72,8 @@ const describeNamespaceToggleTarget = (element: HTMLElement): SidebarCursorTarge
 
 const describeClusterToggleTarget = (element: HTMLElement): SidebarCursorTarget | null => {
   const id = element.dataset.sidebarTargetId;
-  return id ? { kind: 'cluster-toggle', id: id as 'resources' } : null;
+  const group = CLUSTER_SIDEBAR_GROUPS.find((candidate) => candidate.id === id);
+  return group ? { kind: 'cluster-toggle', id: group.id } : null;
 };
 
 export const describeElementTarget = (element: HTMLElement | null): SidebarCursorTarget | null => {

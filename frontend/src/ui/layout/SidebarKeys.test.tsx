@@ -103,6 +103,14 @@ describe('Sidebar keyboard helpers', () => {
   });
 
   it('yields no target for dataset view values outside the view unions', () => {
+    expect(
+      describeElementTarget(
+        buildTargetElement({
+          'data-sidebar-target-kind': 'cluster-toggle',
+          'data-sidebar-target-id': 'not-a-group',
+        })
+      )
+    ).toBeNull();
     // The dataset round-trips through the DOM as strings; a value that is not
     // a member of the view unions must not become a cursor target.
     expect(
