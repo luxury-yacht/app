@@ -447,7 +447,9 @@ func (run *catalogSync) prepare(ctx context.Context) {
 	sortResourceDescriptors(run.descriptors)
 	s := run.service
 	run.aggregator = newStreamingAggregator(s)
-	s.broadcastStreaming(false)
+	if run.aggregator.publishProgress {
+		s.broadcastStreaming(false)
+	}
 	if factory := s.deps.CapabilityFactory; factory != nil {
 		run.capabilityService = factory()
 	}
@@ -484,9 +486,10 @@ func (run *catalogSync) preparePublishedState() {
 	defer s.mu.Unlock()
 	s.items = run.newItems
 	s.lastSeen = run.newLastSeen
-	s.catalogIndex.replaceResources(nil)
-	// Collectors incrementally rebuild this sync's query view after this reset.
-	s.catalogIndex.resetQueryStore()
+	if run.aggregator.publishProgress {
+		s.catalogIndex.replaceResources(nil)
+		s.catalogIndex.resetQueryStore()
+	}
 }
 
 func (run *catalogSync) evaluateCapabilities(ctx context.Context) {
@@ -681,9 +684,7 @@ func (run *catalogSync) applyCollectionResults() []Descriptor {
 		}
 	}
 	s.mu.Lock()
-	for gvr, desc := range run.allowedSet {
-		s.catalogIndex.setResource(gvr, desc)
-	}
+	s.catalogIndex.replaceResources(run.allowedSet)
 	s.mu.Unlock()
 	return toDescriptorSlice(allowedDescriptors)
 }
@@ -737,9 +738,14 @@ func (run *catalogSync) restoreFailedDescriptors() {
 }
 
 func (run *catalogSync) publish(descriptors []Descriptor, collectErr error) {
-	run.aggregator.finalize(descriptors, collectErr == nil)
+	if run.aggregator.publishProgress {
+		run.aggregator.finalize(descriptors, collectErr == nil)
+	}
 	run.service.rebuildCacheFromItems(run.newItems, descriptors)
 	run.service.pruneMissing(run.newLastSeen)
+	// Notify after publishing the complete replacement, including rows retained
+	// for failed descriptors, so readers never observe the intermediate batches.
+	run.service.broadcastStreaming(collectErr == nil)
 }
 
 func (run *catalogSync) recordCompletion(collectErr error) {

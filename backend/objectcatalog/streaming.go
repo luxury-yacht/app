@@ -17,22 +17,24 @@ type StreamingUpdate struct {
 }
 
 type streamingAggregator struct {
-	service      *Service            // service is the catalog service associated with this aggregator.
-	mu           sync.Mutex          // mu protects access to the aggregator's state.
-	chunks       []*summaryChunk     // chunks holds the summary chunks collected by the aggregator.
-	kindSet      map[string]bool     // kindSet tracks the kinds present in the aggregator (value = namespaced).
-	namespaceSet map[string]struct{} // namespaceSet tracks the namespaces present in the aggregator.
-	start        time.Time           // start is the time when the aggregator was created.
-	firstFlush   time.Time           // firstFlush is the time when the first flush occurred.
+	publishProgress bool                // Only cold startup publishes incomplete batches to readers.
+	service         *Service            // service is the catalog service associated with this aggregator.
+	mu              sync.Mutex          // mu protects access to the aggregator's state.
+	chunks          []*summaryChunk     // chunks holds the summary chunks collected by the aggregator.
+	kindSet         map[string]bool     // kindSet tracks the kinds present in the aggregator (value = namespaced).
+	namespaceSet    map[string]struct{} // namespaceSet tracks the namespaces present in the aggregator.
+	start           time.Time           // start is the time when the aggregator was created.
+	firstFlush      time.Time           // firstFlush is the time when the first flush occurred.
 }
 
 func newStreamingAggregator(s *Service) *streamingAggregator {
 	return &streamingAggregator{
-		service:      s,                         // service is the catalog service associated with this aggregator.
-		chunks:       make([]*summaryChunk, 0),  // chunks holds the summary chunks collected by the aggregator.
-		kindSet:      make(map[string]bool),     // kindSet tracks the kinds present in the aggregator (value = namespaced).
-		namespaceSet: make(map[string]struct{}), // namespaceSet tracks the namespaces present in the aggregator.
-		start:        s.now(),                   // start is the time when the aggregator was created.
+		publishProgress: !s.CachesReady(),
+		service:         s,                         // service is the catalog service associated with this aggregator.
+		chunks:          make([]*summaryChunk, 0),  // chunks holds the summary chunks collected by the aggregator.
+		kindSet:         make(map[string]bool),     // kindSet tracks the kinds present in the aggregator (value = namespaced).
+		namespaceSet:    make(map[string]struct{}), // namespaceSet tracks the namespaces present in the aggregator.
+		start:           s.now(),                   // start is the time when the aggregator was created.
 	}
 }
 
@@ -64,11 +66,14 @@ func (a *streamingAggregator) emit(_ int, items []Summary) {
 		a.firstFlush = a.service.now()
 	}
 	a.mu.Unlock()
+	if !a.publishProgress {
+		return
+	}
 
 	// Publish only this chunk's items, upserting them into the maintained store, rather than
 	// rebuilding the store from every chunk emitted so far. Concurrent collectors each emit
-	// here; the incremental upsert is order-independent, and the sync resets the store once at
-	// start (Service.sync) so the streaming view holds only the in-progress sync's data.
+	// here; the incremental upsert is order-independent. Warm resyncs retain the published
+	// view until collection finishes, so they never expose a temporarily missing kind.
 	a.service.streamChunk(chunkCopy, kindSnapshot, namespaceSnapshot)
 	if a.service != nil {
 		a.service.broadcastStreaming(false)

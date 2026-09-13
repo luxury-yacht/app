@@ -26,8 +26,9 @@ const customRowKey = ({
   kind,
   namespace,
   name,
+  uid,
 }: CanonicalResourceRef): string =>
-  [clusterId ?? '', group ?? '', version ?? '', kind ?? '', namespace ?? '', name ?? ''].join('|');
+  [clusterId, group, version, kind, namespace ?? '', name ?? '', uid ?? ''].join('|');
 
 const catalogItemToHydrationQueryRow = (item: CatalogItem): HydrationQueryRow => ({
   clusterId: item.ref.clusterId,
@@ -44,11 +45,10 @@ const catalogItemToHydrationQueryRow = (item: CatalogItem): HydrationQueryRow =>
 // group/version/resource fields. Shared by the page hook and the imperative export path.
 const mergeHydratedRows = (
   fallbackRows: CatalogBackedCustomResourceRow[],
-  hydratedRaw: readonly unknown[] | null | undefined
+  hydratedRows: readonly CatalogBackedCustomResourceRow[]
 ): CatalogBackedCustomResourceRow[] => {
   const hydratedByKey = new Map<string, CatalogBackedCustomResourceRow>();
-  for (const rawRow of hydratedRaw ?? []) {
-    const hydrated = normalizeHydratedCustomRow(rawRow);
+  for (const hydrated of hydratedRows) {
     hydratedByKey.set(customRowKey(hydrated.ref), hydrated);
   }
   return fallbackRows.map((row) => {
@@ -94,7 +94,7 @@ export async function hydrateCustomCatalogRows(
     if (result.status !== 'executed') {
       return fallbackRows;
     }
-    return mergeHydratedRows(fallbackRows, result.data);
+    return mergeHydratedRows(fallbackRows, (result.data ?? []).map(normalizeHydratedCustomRow));
   } catch (error) {
     reportOperationalError(error, {
       source: 'CustomCatalogRows',
@@ -116,10 +116,9 @@ export function useHydratedCustomCatalogRows(
     () => catalogItems.map(catalogItemToHydrationQueryRow),
     [catalogItems]
   );
-  const [rows, setRows] = useState<CatalogBackedCustomResourceRow[]>(fallbackRows);
+  const [hydratedRows, setHydratedRows] = useState<CatalogBackedCustomResourceRow[]>([]);
 
   useEffect(() => {
-    setRows(fallbackRows);
     const resolvedClusterId = clusterId?.trim();
     if (!resolvedClusterId || requestRows.length === 0) {
       return undefined;
@@ -138,26 +137,23 @@ export function useHydratedCustomCatalogRows(
         if (cancelled) {
           return;
         }
-        if (result.status !== 'executed') {
-          setRows(fallbackRows);
-          return;
+        if (result.status === 'executed') {
+          setHydratedRows((result.data ?? []).map(normalizeHydratedCustomRow));
         }
-        setRows(mergeHydratedRows(fallbackRows, result.data));
       })
       .catch((error) => {
         reportOperationalError(error, {
           source: 'CustomCatalogRows',
           action: 'hydrateCatalogRows',
         });
-        if (!cancelled) {
-          setRows(fallbackRows);
-        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [clusterId, fallbackRows, requestRows]);
+  }, [clusterId, requestRows]);
 
-  return rows;
+  // Catalog membership wins on every render. Retain details only for the same
+  // object while refreshing; a new page, cluster or UID cannot inherit them.
+  return useMemo(() => mergeHydratedRows(fallbackRows, hydratedRows), [fallbackRows, hydratedRows]);
 }

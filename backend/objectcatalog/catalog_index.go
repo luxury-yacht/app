@@ -85,9 +85,8 @@ func (idx *catalogIndex) rebuildQueryStore(chunks []*summaryChunk) {
 }
 
 // resetQueryStore replaces the maintained query store with a fresh empty one. The sync
-// pipeline calls it once at sync start (before the parallel collectors emit) so a resync's
-// progressive streaming view holds only the in-progress sync's data — matching the previous
-// per-emit wholesale rebuild's "this sync only" semantics, but without the O(N²) cost.
+// pipeline calls it at cold sync start, before parallel collectors publish progressive
+// batches. Warm resyncs keep the published store until their replacement is collected.
 func (idx *catalogIndex) resetQueryStore() {
 	idx.queryEngineStore = querypage.NewStore(newCatalogQueryStoreSchema())
 }

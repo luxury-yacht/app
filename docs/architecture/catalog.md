@@ -48,6 +48,15 @@ Keep `catalog-first`. Do not turn that into `catalog-only`.
   selection before the dependent query runs.
 - `unfilteredTotal` removes search, Kind, user namespace, and API-group filters
   while retaining the structural boundary.
+- Cold collection may publish progressive batches. A warm resync retains the
+  published query rows, counts, facets, and readiness until collection finishes;
+  it publishes the replacement, including retained failed descriptors, before
+  broadcasting its completion signal. A kind still being collected is not an
+  authoritative deletion.
+- Frontend catalog state resets structural scope changes before React commits,
+  so prior rows cannot enter the destination view's replay cache. Custom-resource
+  hydration decorates only current catalog membership by full identity and UID,
+  retaining those details during background reads and transient failures.
 
 ## Ingest callback ordering
 

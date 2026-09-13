@@ -1118,3 +1118,69 @@ func TestCatalogPreflightEvaluatesNamespacedKindsPerScopeNamespace(t *testing.T)
 		t.Fatal("single-descriptor preflight must also fan out over the scope")
 	}
 }
+
+// A background catalog rebuild must not make an entire extension kind disappear
+// while a slower LIST is pending. Cold startup can still publish its first rows.
+func TestSyncKeepsPublishedFamilyUntilRecollectionFinishes(t *testing.T) {
+	ctx := context.Background()
+	client := kubernetesfake.NewClientset()
+	baseDiscovery := client.Discovery().(*fakediscovery.FakeDiscovery)
+	resources := []*metav1.APIResourceList{{
+		GroupVersion: "argoproj.io/v1alpha1",
+		APIResources: []metav1.APIResource{
+			{Name: "appprojects", Kind: "AppProject", Namespaced: true, Verbs: metav1.Verbs{"list"}},
+			{Name: "applications", Kind: "Application", Namespaced: true, Verbs: metav1.Verbs{"list"}},
+		},
+	}}
+	projectGVR := schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "appprojects"}
+	appGVR := schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}
+	project := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "argoproj.io/v1alpha1", "kind": "AppProject",
+		"metadata": map[string]interface{}{"name": "default", "namespace": "argocd", "uid": "project"},
+	}}
+	app := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
+		"metadata": map[string]interface{}{"name": "app", "namespace": "argocd", "uid": "app"},
+	}}
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{projectGVR: "AppProjectList", appGVR: "ApplicationList"}, project, app)
+	svc := NewService(Dependencies{ClusterID: "cluster-1", Common: common.Dependencies{
+		KubernetesClient: &discoveryOverrideClient{Clientset: client, discovery: &preferredDiscovery{FakeDiscovery: baseDiscovery, resources: resources}},
+		DynamicClient:    dyn,
+	}}, &Options{PageSize: 100, ListWorkers: 1})
+	query := QueryOptions{ResourceFamily: "argocd", Scope: ScopeNamespace, Limit: 100}
+	var during []QueryResult
+	var readiness []bool
+	dyn.PrependReactor("list", "*", func(k8stesting.Action) (bool, runtime.Object, error) {
+		during = append(during, svc.Query(query))
+		readiness = append(readiness, svc.CachesReady())
+		return false, nil, nil
+	})
+
+	require.NoError(t, svc.sync(ctx))
+	require.Len(t, during, 2)
+	require.Empty(t, during[0].Items)
+	require.Len(t, during[1].Items, 1, "cold startup should publish its first collected kind")
+	require.Equal(t, []bool{false, false}, readiness)
+	published := svc.Query(query)
+	require.Len(t, published.Items, 2)
+
+	// Recollection must retain both rows/facets even though Application has now
+	// been deleted; that deletion becomes authoritative at publication.
+	require.NoError(t, dyn.Resource(appGVR).Namespace("argocd").Delete(ctx, "app", metav1.DeleteOptions{}))
+	during = nil
+	readiness = nil
+	require.NoError(t, svc.sync(ctx))
+	require.Len(t, during, 2)
+	for _, page := range during {
+		require.Equal(t, published.Items, page.Items)
+		require.Equal(t, published.Kinds, page.Kinds)
+		require.Equal(t, published.Namespaces, page.Namespaces)
+		require.Equal(t, published.TotalItems, page.TotalItems)
+	}
+	require.Equal(t, []bool{true, true}, readiness)
+	final := svc.Query(query)
+	require.Len(t, final.Items, 1)
+	require.Equal(t, "AppProject", final.Items[0].Ref.Kind)
+	require.Equal(t, "cluster-1", final.Items[0].Ref.ClusterID)
+}

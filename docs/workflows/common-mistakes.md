@@ -408,6 +408,13 @@ creates and removes temporary trees while those tests enumerate frontend files.
 
 ## Resource-family integration
 
+- Exercise switching families through the shared catalog, hydration, and table
+  replay cache. Clear structural scope state before commit; an effect-only clear
+  can cache the preceding family's rows under the new identity. Retain hydrated
+  fields for matching current objects during refresh, but reject another UID.
+- During a warm catalog resync, query between individual kind collections. Rows,
+  counts, and facets must retain the published catalog until replacement is ready;
+  verify actual deletions after publication and progressive rows on cold startup.
 - Keep an optional family filter in every catalog scope transformation, including
   normalization, metadata queries, continuation signatures, pages, and exports.
   A view-only filter does not constrain server counts or later pages.

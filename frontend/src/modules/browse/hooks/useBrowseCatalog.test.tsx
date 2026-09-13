@@ -14,6 +14,11 @@ import type {
   CatalogItem,
   CatalogSnapshotPayload,
 } from '@/core/refresh/types';
+import { backendQuerySource } from '@/modules/resource-grid/backendQuerySource';
+import {
+  resetResourceInventoryRowCache,
+  useResourceInventoryTable,
+} from '@/modules/resource-grid/useResourceInventoryTable';
 import { requireValue } from '@/test-utils/requireValue';
 import { type UseBrowseCatalogResult, useBrowseCatalog } from './useBrowseCatalog';
 
@@ -139,6 +144,9 @@ describe('useBrowseCatalog', () => {
   let result: UseBrowseCatalogResult | null;
 
   const Harness = ({
+    clusterId = 'cluster-1',
+    resourceFamily,
+    onCommit,
     search = '',
     kinds = [],
     namespaces = [],
@@ -149,6 +157,9 @@ describe('useBrowseCatalog', () => {
     initialPageLimit = 2,
     onPageLimitChange,
   }: {
+    clusterId?: string;
+    resourceFamily?: string;
+    onCommit?: (value: UseBrowseCatalogResult) => void;
     // initialPageLimit seeds the harness's controlled pageLimit state, which
     // feeds accepted changes back to the hook the way persistence does in
     // production (the hook holds no page-size state of its own).
@@ -167,7 +178,8 @@ describe('useBrowseCatalog', () => {
     const [pageLimitOverride, setHarnessPageLimit] = React.useState<number | null>(null);
     result = useBrowseCatalog({
       enabled,
-      clusterId: 'cluster-1',
+      clusterId,
+      resourceFamily,
       pinnedNamespaces,
       clusterScopedOnly,
       customOnly,
@@ -179,7 +191,21 @@ describe('useBrowseCatalog', () => {
       filters: { search, kinds, namespaces },
       diagnosticLabel: 'test browse',
     });
-    return null;
+    const catalog = result;
+    React.useLayoutEffect(() => {
+      onCommit?.(catalog);
+    });
+    const inventory = useResourceInventoryTable(
+      backendQuerySource({
+        enabled,
+        rows: catalog.items,
+        loading: catalog.loading,
+        loaded: catalog.hasLoadedOnce,
+        error: catalog.error,
+        cacheKey: `${resourceFamily ?? 'browse'}|${clusterId}|${pinnedNamespaces.join(',')}`,
+      })
+    );
+    return <output>{inventory.rows.map((row) => row.ref.name).join(',')}</output>;
   };
 
   beforeEach(() => {
@@ -190,6 +216,7 @@ describe('useBrowseCatalog', () => {
     vi.clearAllMocks();
     mocks.refreshFns.clear();
     mocks.handleCalls.length = 0;
+    resetResourceInventoryRowCache();
     defaultTablePageSizeMock.mockReturnValue(50);
     handleInlineMock.mockReset();
     handleInlineMock.mockImplementation((error: unknown) => ({
@@ -332,7 +359,62 @@ describe('useBrowseCatalog', () => {
 
     expect(result?.items.map((item) => item.ref.name)).toEqual(['pod-a']);
     expect(result?.loading).toBe(false);
+
+    // An unfinished rebuild is not an authoritative empty result.
+    scopeState = { ...readyState, data: makePayload({ items: [], total: 0, isFinal: false }) };
+    await act(async () => root.render(<Harness />));
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['pod-a']);
+
+    scopeState = { ...readyState, data: makePayload({ items: [], total: 0, isFinal: true }) };
+    await act(async () => root.render(<Harness />));
+    expect(result?.items).toEqual([]);
+    expect(result?.loading).toBe(false);
   });
+
+  it.each([
+    { resourceFamily: 'external-secrets', clusterId: 'cluster-1', pinnedNamespaces: ['default'] },
+    { resourceFamily: 'argocd', clusterId: 'cluster-2', pinnedNamespaces: ['default'] },
+    { resourceFamily: 'argocd', clusterId: 'cluster-1', pinnedNamespaces: ['other'] },
+  ])(
+    'does not publish or cache previous-scope rows when switching to $resourceFamily/$clusterId/$pinnedNamespaces',
+    async (destination) => {
+      const oldItem = makeItem({ ref: { name: 'old-application', uid: 'old-application' } });
+      let destinationReady = false;
+      mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+        const oldScope =
+          scope.startsWith('cluster-1|') &&
+          scope.includes('resourceFamily=argocd') &&
+          scope.includes('namespace=default');
+        return oldScope || destinationReady
+          ? {
+              status: 'ready',
+              scope,
+              data: makePayload({
+                items: oldScope ? [oldItem] : [],
+                total: oldScope ? 1 : 0,
+                kinds: oldScope ? [{ kind: 'Application', namespaced: true }] : [],
+              }),
+            }
+          : { status: 'loading', scope, data: null };
+      });
+      await act(async () => root.render(<Harness resourceFamily="argocd" />));
+      expect(container.textContent).toBe('old-application');
+
+      const commits: UseBrowseCatalogResult[] = [];
+      await act(async () =>
+        root.render(<Harness {...destination} onCommit={(value) => commits.push(value)} />)
+      );
+      expect(commits.length).toBeGreaterThan(0);
+      expect(commits.every((value) => value.items.length === 0 && !value.hasLoadedOnce)).toBe(true);
+      expect(commits.every((value) => value.filterOptions.kinds.length === 0)).toBe(true);
+      expect(container.textContent).toBe('');
+
+      destinationReady = true;
+      await act(async () => root.render(<Harness {...destination} />));
+      expect(result?.hasLoadedOnce).toBe(true);
+      expect(result?.items).toEqual([]);
+    }
+  );
 
   it('refetches the current catalog query when a catalog doorbell advances its signal clock', async () => {
     const baseScope =
