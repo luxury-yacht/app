@@ -1,9 +1,7 @@
 /**
  * frontend/src/ui/overlays/AuthFailureOverlay.test.tsx
  *
- * Tests the presentational copy of the auth failure overlay, in particular the
- * kubeconfig-centered exec-credential guidance and the avoidance of raw
- * provider stderr in the default copy.
+ * Tests credential recovery decisions and redaction in the auth failure overlay.
  */
 
 import { act } from 'react';
@@ -49,14 +47,13 @@ describe('AuthFailureOverlayContent', () => {
     });
   };
 
-  it('renders kubeconfig-centered copy naming the exec command', async () => {
+  it('identifies the missing credential helper', async () => {
     await renderContent({
       ...baseState,
       execCommand: 'gke-gcloud-auth-plugin',
       diagnosticKind: 'missing-helper',
     });
 
-    expect(container.textContent).toContain('This kubeconfig asks Kubernetes to run');
     const code = container.querySelector('code');
     expect(code?.textContent).toBe('gke-gcloud-auth-plugin');
   });
@@ -99,14 +96,6 @@ describe('AuthFailureOverlayContent', () => {
 
     expect(container.textContent).toMatch(/SSO session is missing/);
     expect(container.textContent).toMatch(/refresh your credentials/i);
-    expect(container.textContent).not.toContain('may need');
     expect(container.textContent).not.toContain('Install that command');
-  });
-
-  it('falls back to generic copy when there is no exec command', async () => {
-    await renderContent(baseState);
-
-    expect(container.textContent).not.toContain('This kubeconfig asks Kubernetes to run');
-    expect(container.textContent).toContain('Retry Now');
   });
 });

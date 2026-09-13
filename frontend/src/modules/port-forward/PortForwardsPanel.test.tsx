@@ -204,14 +204,6 @@ describe('PortForwardsPanel', () => {
     expect(emptyState?.textContent).toContain('No active port forwards');
   });
 
-  it('renders dockable panel with correct title', async () => {
-    await renderPanel();
-
-    const panel = document.querySelector('[data-testid="dockable-panel"]');
-    expect(panel).toBeTruthy();
-    expect(panel?.getAttribute('data-title')).toBe('Port Forwards');
-  });
-
   it('loads sessions when panel opens', async () => {
     mockInitialSessions(mockSessions);
 
@@ -280,16 +272,20 @@ describe('PortForwardsPanel', () => {
   });
 
   it('sorts sessions by status priority (active first)', async () => {
-    // Return sessions in opposite order (error first)
-    mockInitialSessions([mockSessions[1], mockSessions[0]]);
+    mockInitialSessions([
+      mockSessions[1],
+      { ...mockSessions[0], id: 'session-3', targetName: 'recovering', status: 'reconnecting' },
+      mockSessions[0],
+    ]);
 
     await renderPanel();
     await flushPromises();
 
     const sessionCards = document.querySelectorAll('.pf-session-card');
-    // Active should be first due to sorting
-    expect(sessionCards[0].classList.contains('pf-session-active')).toBe(true);
-    expect(sessionCards[1].classList.contains('pf-session-error')).toBe(true);
+    expect(sessionCards).toHaveLength(3);
+    expect(sessionCards[0].textContent).toContain('nginx');
+    expect(sessionCards[1].textContent).toContain('recovering');
+    expect(sessionCards[2].textContent).toContain('kube-dns');
   });
 
   it('shows stop button for active sessions', async () => {
@@ -485,37 +481,6 @@ describe('PortForwardsPanel', () => {
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
       action: 'loadPortForwards',
     });
-  });
-
-  it('renders status icons correctly', async () => {
-    const sessionsWithVariousStatus = [
-      { ...mockSessions[0], status: 'active' },
-      { ...mockSessions[0], id: 'session-3', status: 'reconnecting' },
-      { ...mockSessions[0], id: 'session-4', status: 'error' },
-    ];
-    mockInitialSessions(sessionsWithVariousStatus);
-
-    await renderPanel();
-    await flushPromises();
-
-    expect(document.querySelector('.pf-status-active')).toBeTruthy();
-    expect(document.querySelector('.pf-status-reconnecting')).toBeTruthy();
-    expect(document.querySelector('.pf-status-error')).toBeTruthy();
-  });
-
-  it('shows port mapping information correctly', async () => {
-    mockInitialSessions([mockSessions[0]]);
-
-    await renderPanel();
-    await flushPromises();
-
-    // Check target port display
-    const targetPort = document.querySelector('.pf-target-port');
-    expect(targetPort?.textContent).toContain('nginx:80');
-
-    // Check local port display
-    const localPort = document.querySelector('.pf-local-port');
-    expect(localPort?.textContent).toContain('localhost:8080');
   });
 
   it('auto-opens panel when first session is added', async () => {

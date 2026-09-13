@@ -127,7 +127,7 @@ const GRID_TABLE_DIAGNOSTICS_MODE_CONTRACTS: Record<
   },
 };
 
-export const getGridTableDiagnosticsModeContract = (
+const getGridTableDiagnosticsModeContract = (
   mode: GridTableDiagnosticsMode
 ): GridTableDiagnosticsModeContract => GRID_TABLE_DIAGNOSTICS_MODE_CONTRACTS[mode];
 

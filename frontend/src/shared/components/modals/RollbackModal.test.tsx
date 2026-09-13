@@ -185,24 +185,6 @@ describe('RollbackModal', () => {
     expect(emptyEl?.textContent).toBe('No previous revisions available for rollback');
   });
 
-  it('displays correct modal title', async () => {
-    backendMocks.GetRevisionHistory.mockResolvedValue([
-      makeRevision(2, true),
-      makeRevision(1, false),
-    ]);
-
-    await renderModal({ kind: 'StatefulSet', name: 'redis' });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    const header = document.querySelector('.modal-header h2');
-    expect(header).not.toBeNull();
-    expect(header?.textContent).toContain('Rollback StatefulSet');
-    expect(header?.textContent).toContain('redis');
-  });
-
   it('marks the current revision as disabled and unselectable', async () => {
     backendMocks.GetRevisionHistory.mockResolvedValue([
       makeRevision(3, true),
@@ -291,9 +273,7 @@ describe('RollbackModal', () => {
     });
 
     const warning = document.querySelector('[data-testid="rollback-diff-warning"]');
-    expect(warning?.textContent).toContain(
-      'The diff is too large to display in the current view (15,001 lines exceed the limit of 15,000).'
-    );
+    expect(warning).not.toBeNull();
     expect(document.querySelector('.object-diff-table')).toBeNull();
   });
 });

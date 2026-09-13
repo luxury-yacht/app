@@ -137,16 +137,6 @@ describe('Tooltip', () => {
   // -----------------------------------------------------------------------
   // Default icon
   // -----------------------------------------------------------------------
-  it('renders a default info icon when no children are provided', async () => {
-    const { container, cleanup } = await renderTooltip({ content: 'Help text' });
-
-    const icon = container.querySelector('.tooltip-info-icon');
-    expect(icon).toBeTruthy();
-    expect(icon?.tagName.toLowerCase()).toBe('svg');
-
-    cleanup();
-  });
-
   // -----------------------------------------------------------------------
   // Custom children as trigger
   // -----------------------------------------------------------------------
@@ -595,31 +585,6 @@ describe('Tooltip', () => {
   // -----------------------------------------------------------------------
   // Variant class
   // -----------------------------------------------------------------------
-  it('applies the variant class to the tooltip element', async () => {
-    vi.useFakeTimers();
-
-    const { container, cleanup } = await renderTooltip({
-      content: 'Warning!',
-      variant: 'warning',
-    });
-
-    const trigger = container.querySelector('.tooltip-trigger') as HTMLElement;
-
-    await act(async () => {
-      trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(250);
-    });
-
-    const tooltip = container.querySelector('.tooltip') as HTMLElement;
-    expect(tooltip.className).toContain('warning');
-    expect(tooltip.className).toContain('tooltip--portal');
-
-    cleanup();
-    vi.useRealTimers();
-  });
-
   // -----------------------------------------------------------------------
   // showArrow false hides data-placement
   // -----------------------------------------------------------------------

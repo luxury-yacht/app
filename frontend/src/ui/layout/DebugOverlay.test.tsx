@@ -36,17 +36,6 @@ describe('DebugOverlay', () => {
     expect(document.body.querySelector('[data-testid="debug-overlay-under-test"]')).not.toBeNull();
   });
 
-  it('uses fixed default dimensions', () => {
-    renderOverlay();
-
-    const overlay = document.body.querySelector<HTMLElement>(
-      '[data-testid="debug-overlay-under-test"]'
-    );
-
-    expect(overlay?.style.width).toBe('600px');
-    expect(overlay?.style.height).toBe('600px');
-  });
-
   it('calls onClose from the close button', () => {
     const onClose = vi.fn();
     renderOverlay({ onClose });
@@ -62,26 +51,5 @@ describe('DebugOverlay', () => {
     });
 
     expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('renders header actions to the left of the close button', () => {
-    renderOverlay({
-      onClose: vi.fn(),
-      headerActions: (
-        <button type="button" aria-label="Copy debug overlay contents">
-          Copy
-        </button>
-      ),
-    });
-
-    const headerActions = document.body.querySelector('.debug-overlay__header-actions');
-    const headerButtons = Array.from(
-      headerActions?.querySelectorAll<HTMLButtonElement>('button') ?? []
-    );
-
-    expect(headerButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
-      'Copy debug overlay contents',
-      'Close debug overlay',
-    ]);
   });
 });

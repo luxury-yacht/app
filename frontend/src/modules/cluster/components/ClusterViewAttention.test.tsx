@@ -535,35 +535,6 @@ describe('ClusterViewAttention', () => {
     expect(restoreObjectMock).toHaveBeenCalledWith('cluster-a', finding.ref, 'replica-mismatch');
   });
 
-  it('renders each ignored scope as an independently styled modal section', async () => {
-    queryPayloadRef.current = {
-      ignoreRules: {
-        objectFindings: [{ ref: finding.ref, findingType: 'replica-mismatch' }],
-        clusterFindingTypes: ['restarts'],
-        globalFindingTypes: ['warning-event'],
-      },
-      findingTypes: [
-        { id: 'replica-mismatch', label: 'Replica mismatch' },
-        { id: 'restarts', label: 'Restarts' },
-        { id: 'warning-event', label: 'Warning events' },
-      ],
-    };
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
-    });
-
-    openIgnoredFindings();
-
-    const sections = Array.from(document.body.querySelectorAll('.attention-ignored-section'));
-    expect(
-      sections.map(
-        (section) => section.querySelector('.attention-ignored-section-title')?.textContent
-      )
-    ).toEqual(['Object-Specific', 'This Cluster', 'All Clusters']);
-    expect(document.body.querySelector('.object-panel-section')).toBeNull();
-  });
-
   it('restores an all-cluster finding type from management', async () => {
     queryPayloadRef.current = {
       ignoreRules: {

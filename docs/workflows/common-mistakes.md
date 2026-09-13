@@ -4,6 +4,23 @@ Read this before editing. When user feedback identifies a recurring mistake,
 record the pattern and a concrete prevention check here. Keep entries focused
 on reusable rules; omit transient logs, credentials, and session history.
 
+## Accumulating tests that freeze presentation instead of behavior
+
+Tests that assert tooltip sentences, punctuation, decorative classes, or icon
+sizes make routine copy and styling changes expensive without protecting an app
+workflow. Coverage targets must not become a reason to add such tests.
+
+Prevention:
+
+- Apply the [testing standard](testing.md) before writing a test; name the
+  observable failure it would catch.
+- In mixed tests, retain actions, state, accessibility, and data assertions while
+  removing incidental wording and style checks.
+- Preserve text assertions for actual data/protocol contracts and recovery
+  decisions. Do not treat every `toContain` or exact string as a deletion target.
+- After pruning, remove unused fixtures, run the surviving tests, and report
+  coverage impact without replacing the removed tests with coverage filler.
+
 ## Packing resource data into generic columns
 
 A passing field-presence test does not prove a usable resource view. Give table

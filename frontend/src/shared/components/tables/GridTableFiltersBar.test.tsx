@@ -556,23 +556,6 @@ describe('GridTableFiltersBar', () => {
     ).toBe('true');
   });
 
-  it('renders the shared filter input without a search-hint tooltip', async () => {
-    await renderFilters({
-      resolvedFilterOptions: {
-        kinds: [],
-        namespaces: [],
-        searchBehavior: 'query',
-      },
-      resultCount: { filtered: 1000, unfiltered: 4200, capped: true },
-    });
-
-    const input = container.querySelector('#search') as HTMLInputElement | null;
-    expect(input?.getAttribute('placeholder')).toBe('Filter');
-    expect(
-      container.querySelector('[data-gridtable-filter-role="search-hint"] .tooltip-trigger')
-    ).toBeNull();
-  });
-
   it('keeps search input focused across controlled filter updates', async () => {
     const setInputValue = (inputElement: HTMLInputElement, value: string) => {
       const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');

@@ -103,21 +103,6 @@ describe('DisplaySection', () => {
   });
 
   it('shows the dim inactive namespaces setting on by default', () => {
-    expect(container.textContent).toContain('Resources');
-    expect(container.textContent).toContain('Sidebar');
-    expect(container.textContent).toContain('Exclusive namespaces');
-    expect(container.textContent).toContain(
-      'When enabled, only one namespace at a time can be expanded in the Sidebar. Expanding a different namespace will collapse the currently expanded one.'
-    );
-    expect(container.textContent).toContain('Dim inactive namespaces');
-    expect(container.textContent).toContain(
-      'Dim namespaces in the Sidebar that have no Workloads.'
-    );
-
-    expect(container.textContent.indexOf('Dim inactive namespaces')).toBeLessThan(
-      container.textContent.indexOf('Exclusive namespaces')
-    );
-
     const toggle = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Dim inactive namespaces"]'
     );
@@ -148,15 +133,7 @@ describe('DisplaySection', () => {
     expect(toggle?.getAttribute('aria-checked')).toBe('false');
   });
 
-  it('shows the Tables subsection first with the Default Page Size dropdown', () => {
-    expect(container.textContent).toContain('Tables');
-    expect(container.textContent).toContain('Default page size');
-
-    // Tables renders FIRST on the page, before Resources.
-    expect(container.textContent.indexOf('Tables')).toBeLessThan(
-      container.textContent.indexOf('Resources')
-    );
-
+  it('offers the shared page sizes and selects the persisted default', () => {
     // The dropdown derives its options from the shared page-size list — the
     // same source as every pagination footer.
     const dropdown = requireValue(

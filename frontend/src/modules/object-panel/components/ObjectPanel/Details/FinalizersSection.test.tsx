@@ -102,36 +102,6 @@ describe('FinalizersSection', () => {
     );
   });
 
-  it('moves finalizer guidance into the shared tooltip beside the section title', async () => {
-    await renderSection();
-
-    expect(container.querySelector('.deletion-explanation')).toBeNull();
-    expect(container.querySelector('.deletion-finalizer-guidance')).toBeNull();
-    expect(container.textContent).not.toContain('There is no simple way');
-
-    const trigger = container.querySelector<HTMLElement>(
-      '.object-panel-section-title .tooltip-trigger'
-    );
-    expect(trigger).not.toBeNull();
-
-    vi.useFakeTimers();
-    await act(async () => {
-      trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-      vi.advanceTimersByTime(250);
-    });
-
-    const tooltip = document.body.querySelector<HTMLElement>('.tooltip[role="tooltip"]');
-    const paragraphs = Array.from(tooltip?.querySelectorAll('p') ?? []).map((paragraph) =>
-      (paragraph.textContent ?? '').replace(/\s+/g, ' ').trim()
-    );
-    expect(paragraphs).toEqual([
-      'Finalizers are used to ensure that required cleanup is completed before an object is deleted. A Finalizer can block object deletion until its controller has finished its work.',
-      'There is no simple way to determine what is preventing a Finalizer from completing. You may be able to get more information by checking Events, the logs of the responsible controller, or the YAML status block of this object.',
-      'If you are certain that this object can be safely deleted, you can remove the finalizer(s) below.',
-    ]);
-    expect(tooltip?.querySelector('code')?.textContent).toBe('status');
-  });
-
   it('leaves the force-removal consequence to the confirmation dialog', async () => {
     await renderSection();
 

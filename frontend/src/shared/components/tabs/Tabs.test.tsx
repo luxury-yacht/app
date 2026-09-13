@@ -7,7 +7,6 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createTestId } from '@/test-utils/createTestId';
 import { requireValue } from '@/test-utils/requireValue';
 import { installWindowProperty } from '@/test-utils/windowProperty';
 
@@ -528,95 +527,6 @@ describe('Tabs', () => {
     expect(tabs[1].getAttribute('aria-label')).toBe('Icon-only tab');
   });
 
-  it('adds the uppercase modifier class when textTransform="uppercase"', () => {
-    act(() => {
-      root.render(
-        <Tabs
-          tabs={[{ id: 'a', label: 'Alpha' }]}
-          activeId="a"
-          onActivate={() => undefined}
-          aria-label="Test Tabs"
-          textTransform="uppercase"
-        />
-      );
-    });
-
-    const tablist = container.querySelector('.tab-strip');
-    expect(tablist?.classList.contains('tab-strip--uppercase')).toBe(true);
-  });
-
-  it('does not add the uppercase modifier class by default', () => {
-    act(() => {
-      root.render(
-        <Tabs
-          tabs={[{ id: 'a', label: 'Alpha' }]}
-          activeId="a"
-          onActivate={() => undefined}
-          aria-label="Test Tabs"
-        />
-      );
-    });
-
-    const tablist = container.querySelector('.tab-strip');
-    expect(tablist?.classList.contains('tab-strip--uppercase')).toBe(false);
-  });
-
-  it('merges a consumer className onto the root and applies an id', () => {
-    const tabListId = createTestId('custom-id');
-    act(() => {
-      root.render(
-        <Tabs
-          tabs={[{ id: 'a', label: 'Alpha' }]}
-          activeId="a"
-          onActivate={() => undefined}
-          aria-label="Test Tabs"
-          className="custom-class"
-          id={tabListId}
-        />
-      );
-    });
-
-    const tablist = container.querySelector('.tab-strip');
-    expect(tablist?.classList.contains('tab-strip')).toBe(true);
-    expect(tablist?.classList.contains('custom-class')).toBe(true);
-    expect(tablist?.id).toBe(tabListId);
-  });
-
-  it('adds the fit sizing modifier class by default', () => {
-    act(() => {
-      root.render(
-        <Tabs
-          tabs={[{ id: 'a', label: 'Alpha' }]}
-          activeId="a"
-          onActivate={() => undefined}
-          aria-label="Test Tabs"
-        />
-      );
-    });
-
-    const tablist = container.querySelector('.tab-strip');
-    expect(tablist?.classList.contains('tab-strip--sizing-fit')).toBe(true);
-    expect(tablist?.classList.contains('tab-strip--sizing-equal')).toBe(false);
-  });
-
-  it('adds the equal sizing modifier class when tabSizing="equal"', () => {
-    act(() => {
-      root.render(
-        <Tabs
-          tabs={[{ id: 'a', label: 'Alpha' }]}
-          activeId="a"
-          onActivate={() => undefined}
-          aria-label="Test Tabs"
-          tabSizing="equal"
-        />
-      );
-    });
-
-    const tablist = container.querySelector('.tab-strip');
-    expect(tablist?.classList.contains('tab-strip--sizing-equal')).toBe(true);
-    expect(tablist?.classList.contains('tab-strip--sizing-fit')).toBe(false);
-  });
-
   it('sets --tab-item-min-width and --tab-item-max-width custom properties from props', () => {
     act(() => {
       root.render(
@@ -880,48 +790,6 @@ describe('Tabs', () => {
     expect(tab?.tabIndex).toBe(0); // active tab gets tabIndex=0 from the base
 
     warn.mockRestore();
-  });
-
-  it('renders the leading slot before the label', () => {
-    act(() => {
-      root.render(
-        <Tabs
-          tabs={[
-            {
-              id: 'a',
-              label: 'Alpha',
-              leading: <span data-testid="leading-a">●</span>,
-            },
-          ]}
-          activeId="a"
-          onActivate={() => undefined}
-          aria-label="Test Tabs"
-        />
-      );
-    });
-
-    const button = container.querySelector<HTMLButtonElement>('[role="tab"]');
-    const leading = button?.querySelector('[data-testid="leading-a"]');
-    const label = button?.querySelector('.tab-item__label');
-    expect(leading).toBeTruthy();
-    // leading should appear before label in the DOM
-    expect(
-      requireValue(leading, 'expected test value in Tabs.test.tsx').compareDocumentPosition(
-        requireValue(label, 'expected test value in Tabs.test.tsx')
-      ) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-  });
-
-  it('renders an empty tablist without crashing when tabs array is empty', () => {
-    act(() => {
-      root.render(
-        <Tabs tabs={[]} activeId={null} onActivate={() => undefined} aria-label="Test Tabs" />
-      );
-    });
-
-    const tablist = container.querySelector('[role="tablist"]');
-    expect(tablist).toBeTruthy();
-    expect(tablist?.querySelectorAll('[role="tab"]').length).toBe(0);
   });
 
   it('does not recreate the scroll observer when only the tabs array identity changes', async () => {
@@ -1293,24 +1161,6 @@ describe('Tabs', () => {
     expect(callArg.behavior).toBe('smooth');
 
     HTMLElement.prototype.scrollIntoView = original;
-  });
-
-  it('renders a custom closeIcon node when a descriptor provides one', () => {
-    const customIcon = <span data-testid="custom-close">✕</span>;
-    act(() => {
-      root.render(
-        <Tabs
-          tabs={[{ id: 'a', label: 'Alpha', onClose: () => undefined, closeIcon: customIcon }]}
-          activeId="a"
-          onActivate={() => undefined}
-          aria-label="Test Tabs"
-        />
-      );
-    });
-    const closeButton = container.querySelector('.tab-item__close');
-    expect(closeButton?.querySelector('[data-testid="custom-close"]')).toBeTruthy();
-    // Plain '×' fallback is NOT rendered when a custom icon is provided.
-    expect(closeButton?.textContent).not.toBe('×');
   });
 
   it('uses a per-tab closeAriaLabel when provided, falling back to "Close"', () => {

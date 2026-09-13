@@ -1,28 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  buildGridTableReferenceChurnSignal,
-  getGridTableDiagnosticsModeContract,
-  getGridTableModeLabel,
-  getGridTableModeTitle,
-  getGridTableRowCountTitle,
-} from './gridTableDiagnosticsMode';
+import { buildGridTableReferenceChurnSignal } from './gridTableDiagnosticsMode';
 
 describe('gridTableDiagnosticsMode', () => {
-  it('exposes stable labels and titles for each diagnostics mode', () => {
-    expect(getGridTableModeLabel('local')).toBe('Local');
-    expect(getGridTableModeLabel('query')).toBe('Query');
-    expect(getGridTableModeLabel('live')).toBe('Live');
-    expect(getGridTableModeTitle('query')).toContain('Query-backed table behavior');
-    expect(getGridTableModeTitle('live')).toContain('Live table behavior');
-  });
-
-  it('provides mode-specific row count semantics', () => {
-    expect(getGridTableRowCountTitle('local', 'source')).toContain('Source is the row count');
-    expect(getGridTableRowCountTitle('query', 'input')).toContain('upstream query result size');
-    expect(getGridTableRowCountTitle('live', 'input')).toContain('Frequent updates are expected');
-  });
-
   it('treats broad replacement as a warning for local and query tables', () => {
     expect(
       buildGridTableReferenceChurnSignal({
@@ -32,7 +12,6 @@ describe('gridTableDiagnosticsMode', () => {
       })
     ).toEqual(
       expect.objectContaining({
-        label: 'Broad replacement',
         severity: 'warning',
       })
     );
@@ -45,7 +24,6 @@ describe('gridTableDiagnosticsMode', () => {
       })
     ).toEqual(
       expect.objectContaining({
-        label: 'Broad replacement',
         severity: 'warning',
       })
     );
@@ -60,7 +38,6 @@ describe('gridTableDiagnosticsMode', () => {
       })
     ).toEqual(
       expect.objectContaining({
-        label: 'Live churn',
         severity: 'info',
       })
     );
@@ -81,14 +58,5 @@ describe('gridTableDiagnosticsMode', () => {
         updates: 10,
       })
     ).toBeNull();
-  });
-
-  it('returns a full shared contract for consumers that need the mode metadata', () => {
-    expect(getGridTableDiagnosticsModeContract('local')).toEqual(
-      expect.objectContaining({
-        mode: 'local',
-        label: 'Local',
-      })
-    );
   });
 });

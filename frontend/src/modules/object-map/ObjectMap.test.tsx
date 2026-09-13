@@ -914,34 +914,13 @@ describe('ObjectMap', () => {
     cleanup();
   });
 
-  it('closes the legend from the legend close button and explains how to reopen it', async () => {
-    vi.useFakeTimers();
+  it('closes the legend and updates the toolbar toggle', async () => {
     const { container, cleanup } = await renderObjectMap();
     const legend = container.querySelector<HTMLElement>('.object-map__legend');
     const closeButton = container.querySelector<HTMLButtonElement>('[aria-label="Close legend"]');
 
     expect(legend).toBeTruthy();
     expect(closeButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(closeButton, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
-        mouseEvent('mouseover')
-      );
-      vi.advanceTimersByTime(499);
-    });
-
-    expect(document.body.textContent).not.toContain(
-      'Close the legend. You can open it again with the Legend button on the toolbar.'
-    );
-
-    await act(async () => {
-      vi.advanceTimersByTime(1);
-    });
-
-    expect(document.body.textContent).toContain(
-      'Close the legend. You can open it again with the Legend button on the toolbar.'
-    );
-    expect(document.body.querySelector('.tooltip')?.getAttribute('data-placement')).toBeNull();
 
     await act(async () => {
       requireValue(closeButton, 'expected test value in ObjectMap.test.tsx').click();

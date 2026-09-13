@@ -107,5 +107,17 @@ Applies to React/TypeScript code under `frontend/`.
 
 ## Testing Guidelines
 
-- Practice red/green/refactor TDD (see root `AGENTS.md` Critical Rules): write the failing `*.test.ts[x]` case first, run Vitest to watch it fail for the right reason, then write the minimum to make it pass, then refactor under green.
+- Apply the [testing standard](../docs/workflows/testing.md) before adding a spec.
+  Test actions and their results, state transitions, data selection, permissions,
+  navigation, persistence, cleanup, and keyboard/accessibility contracts.
+- Do not add tests solely for headings, help text, tooltip sentences, punctuation,
+  capitalization, decorative classes, icon dimensions, or static render smoke
+  checks. Copy and cosmetic styling changes normally need review, not new tests.
+- Use text to find a control or identify fixture data when that supports a
+  behavior assertion. Prefer typed state, enabled/disabled controls, callback
+  payloads, and resulting UI state over matching an entire message. Keep exact
+  strings when they are data or protocol contracts, such as exports and URLs.
+- For behavior changes, practice red/green/refactor TDD: write the failing
+  `*.test.ts[x]` case first, run Vitest to watch it fail for the right reason,
+  then write the minimum to make it pass, then refactor under green.
 - Frontend specs mirror their features (for example `DiagnosticsPanel.test.ts`) and run with Vitest; append `--watch` for interactive loops.

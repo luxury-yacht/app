@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  areTruncationMapsEqual,
-  countVisibleDiffRows,
-  formatTooLargeDiffMessage,
-  mergeDiffLines,
-} from './diffUtils';
+import { areTruncationMapsEqual, countVisibleDiffRows, mergeDiffLines } from './diffUtils';
 import type { DiffLine } from './lineDiff';
 
 describe('diffUtils', () => {
@@ -112,11 +107,5 @@ describe('diffUtils', () => {
 
     expect(countVisibleDiffRows(lines, false)).toBe(2);
     expect(countVisibleDiffRows(lines, true)).toBe(1);
-  });
-
-  it('formats the render-budget message with localized counts', () => {
-    expect(formatTooLargeDiffMessage(12_345, 8_000)).toContain(
-      `${(12_345).toLocaleString()} lines exceed the limit of ${(8_000).toLocaleString()}`
-    );
   });
 });
