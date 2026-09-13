@@ -80,6 +80,12 @@ boundaries: an overflow container can prevent a child's margin from collapsing,
 so a header's bottom margin and its first row's top margin can stack. Use the
 shared group styles to keep the intended gap consistent across scopes.
 
+Grouping navigation links also changes reveal behavior. Exercise an object link's
+Alt-click through the real navigation and sidebar state owners, including a repeat
+after collapsing the currently selected category or namespace. Reveal every parent
+of the destination, preserve unrelated groups, and keep manual collapse stable
+across data refreshes. Use the discovered view descriptors for group membership.
+
 ## Treating a passing automated gate as task completion
 
 The gate covers its configured checks. It does not establish that every requested

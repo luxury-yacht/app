@@ -82,6 +82,45 @@ const expandSelectedNamespace = (
   return next;
 };
 
+const useSidebarGroupExpansion = (
+  selectedView: { readonly sidebarGroup: 'primary' | SidebarViewGroupId } | undefined
+) => {
+  const { sidebarSelection } = useViewState();
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<SidebarViewGroupId>>(
+    () => new Set(SIDEBAR_VIEW_GROUPS.map((group) => group.id))
+  );
+
+  // A fresh selection also reveals a manually collapsed group when navigating
+  // to the same view again. Unrelated renders preserve the user's disclosure.
+  useEffect(() => {
+    const selectedGroup = selectedView?.sidebarGroup;
+    if (!sidebarSelection || !selectedGroup || selectedGroup === 'primary') {
+      return;
+    }
+    setCollapsedGroups((previous) => {
+      if (!previous.has(selectedGroup)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.delete(selectedGroup);
+      return next;
+    });
+  }, [selectedView, sidebarSelection]);
+
+  const toggleGroup = (id: SidebarViewGroupId) => {
+    setCollapsedGroups((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+  return { collapsedGroups, toggleGroup };
+};
+
 const scrollExpandedNamespaceIntoView = (namespaceKey: string) => {
   const escapedKey = escapeAttributeSelectorValue(namespaceKey);
   const namespaceElement = document.querySelector(`.sidebar-item[data-namespace="${escapedKey}"]`);
@@ -254,9 +293,11 @@ const SidebarNamespaceViews = ({
   onNamespaceViewSelect,
 }: SidebarNamespaceViewsProps) => {
   const expandedViewsRef = useRef<HTMLDivElement>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<SidebarViewGroupId>>(
-    () => new Set(SIDEBAR_VIEW_GROUPS.map((group) => group.id))
+  const views = getNamespaceViews(scope, availableViews);
+  const selectedView = views.find((view) =>
+    isTargetSelected({ kind: 'namespace-view', namespace: namespaceKey, view: view.id })
   );
+  const { collapsedGroups, toggleGroup } = useSidebarGroupExpansion(selectedView);
 
   useEffect(() => {
     if (!isExpanded) {
@@ -278,7 +319,6 @@ const SidebarNamespaceViews = ({
   if (!isExpanded) {
     return null;
   }
-  const views = getNamespaceViews(scope, availableViews);
   const controls = {
     namespaceKey,
     scope,
@@ -288,17 +328,6 @@ const SidebarNamespaceViews = ({
     buildSidebarItemClassName,
     isTargetSelected,
     onNamespaceViewSelect,
-  };
-  const toggleGroup = (id: SidebarViewGroupId) => {
-    setCollapsedGroups((previous) => {
-      const next = new Set(previous);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
   };
   return (
     <div ref={expandedViewsRef} className="sidebar-views" id={namespaceViewsId}>
@@ -603,33 +632,6 @@ const SidebarViewGroup = ({
   );
 };
 
-const ClusterSidebarGroup = ({
-  group,
-  views,
-  elementIdPrefix,
-  ...controls
-}: ClusterViewControls & {
-  group: (typeof SIDEBAR_VIEW_GROUPS)[number];
-  views: ClusterViewDescriptor[];
-  elementIdPrefix: string;
-}) => {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <SidebarViewGroup
-      label={group.label}
-      target={{ kind: 'cluster-toggle', id: group.id }}
-      regionId={`${elementIdPrefix}-sidebar-cluster-${group.id}-views`}
-      expanded={expanded}
-      onToggle={() => setExpanded((previous) => !previous)}
-      buildSidebarItemClassName={controls.buildSidebarItemClassName}
-    >
-      {views.map((view) => (
-        <ClusterSidebarView key={view.id} view={view} indented {...controls} />
-      ))}
-    </SidebarViewGroup>
-  );
-};
-
 interface ClusterSidebarSectionProps extends ClusterViewControls {
   hidden: boolean;
   elementIdPrefix: string;
@@ -641,71 +643,83 @@ interface ClusterSidebarSectionProps extends ClusterViewControls {
   onAttentionSelect: (view: ClusterViewType) => void;
 }
 
-const ClusterSidebarSection = (props: ClusterSidebarSectionProps) => (
-  <div className="sidebar-section" hidden={props.hidden}>
-    <h3>Cluster</h3>
-    <div className="cluster-items">
-      <button
-        type="button"
-        className={props.buildSidebarItemClassName(['sidebar-item'], { kind: 'overview' })}
-        onClick={props.onOverviewSelect}
-        data-sidebar-focusable="true"
-        data-sidebar-target-kind="overview"
-        tabIndex={-1}
-        aria-current={props.isTargetSelected({ kind: 'overview' }) ? 'page' : undefined}
-      >
-        <ClusterOverviewIcon width={14} height={14} />
-        <span>Overview</span>
-      </button>
-      {props.attentionView ? (
+const ClusterSidebarSection = (props: ClusterSidebarSectionProps) => {
+  const selectedView = props.views.find((view) =>
+    props.isTargetSelected({ kind: 'cluster-view', view: view.id })
+  );
+  const { collapsedGroups, toggleGroup } = useSidebarGroupExpansion(selectedView);
+  return (
+    <div className="sidebar-section" hidden={props.hidden}>
+      <h3>Cluster</h3>
+      <div className="cluster-items">
         <button
           type="button"
-          className={props.buildSidebarItemClassName(['sidebar-item'], {
-            kind: 'cluster-view',
-            view: props.attentionView.id,
-          })}
-          onClick={() => props.onAttentionSelect(props.attentionView?.id ?? 'attention')}
+          className={props.buildSidebarItemClassName(['sidebar-item'], { kind: 'overview' })}
+          onClick={props.onOverviewSelect}
           data-sidebar-focusable="true"
-          data-sidebar-target-kind="cluster-view"
-          data-sidebar-target-view={props.attentionView.id}
+          data-sidebar-target-kind="overview"
           tabIndex={-1}
-          aria-label={props.attentionAriaLabel}
-          aria-current={
-            props.isTargetSelected({ kind: 'cluster-view', view: props.attentionView.id })
-              ? 'page'
-              : undefined
-          }
+          aria-current={props.isTargetSelected({ kind: 'overview' }) ? 'page' : undefined}
         >
-          <WarningIcon width={14} height={14} />
-          <span className="sidebar-attention-label">{props.attentionView.label}</span>
-          <SidebarAttentionBadges counts={props.attentionCounts} />
+          <ClusterOverviewIcon width={14} height={14} />
+          <span>Overview</span>
         </button>
-      ) : null}
-      {props.views
-        .filter((view) => view.sidebarGroup === 'primary')
-        .map((view) => (
-          <ClusterSidebarView
-            key={view.id}
-            view={view}
+        {props.attentionView ? (
+          <button
+            type="button"
+            className={props.buildSidebarItemClassName(['sidebar-item'], {
+              kind: 'cluster-view',
+              view: props.attentionView.id,
+            })}
+            onClick={() => props.onAttentionSelect(props.attentionView?.id ?? 'attention')}
+            data-sidebar-focusable="true"
+            data-sidebar-target-kind="cluster-view"
+            data-sidebar-target-view={props.attentionView.id}
+            tabIndex={-1}
+            aria-label={props.attentionAriaLabel}
+            aria-current={
+              props.isTargetSelected({ kind: 'cluster-view', view: props.attentionView.id })
+                ? 'page'
+                : undefined
+            }
+          >
+            <WarningIcon width={14} height={14} />
+            <span className="sidebar-attention-label">{props.attentionView.label}</span>
+            <SidebarAttentionBadges counts={props.attentionCounts} />
+          </button>
+        ) : null}
+        {props.views
+          .filter((view) => view.sidebarGroup === 'primary')
+          .map((view) => (
+            <ClusterSidebarView
+              key={view.id}
+              view={view}
+              buildSidebarItemClassName={props.buildSidebarItemClassName}
+              isTargetSelected={props.isTargetSelected}
+              onSelect={props.onSelect}
+            />
+          ))}
+        {SIDEBAR_VIEW_GROUPS.map((group) => (
+          <SidebarViewGroup
+            key={group.id}
+            label={group.label}
+            target={{ kind: 'cluster-toggle', id: group.id }}
+            regionId={`${props.elementIdPrefix}-sidebar-cluster-${group.id}-views`}
+            expanded={!collapsedGroups.has(group.id)}
+            onToggle={() => toggleGroup(group.id)}
             buildSidebarItemClassName={props.buildSidebarItemClassName}
-            isTargetSelected={props.isTargetSelected}
-            onSelect={props.onSelect}
-          />
+          >
+            {props.views
+              .filter((view) => view.sidebarGroup === group.id)
+              .map((view) => (
+                <ClusterSidebarView key={view.id} view={view} indented {...props} />
+              ))}
+          </SidebarViewGroup>
         ))}
-      {SIDEBAR_VIEW_GROUPS.map((group) => (
-        <ClusterSidebarGroup
-          key={group.id}
-          group={group}
-          views={props.views.filter((view) => view.sidebarGroup === group.id)}
-          elementIdPrefix={props.elementIdPrefix}
-          buildSidebarItemClassName={props.buildSidebarItemClassName}
-          isTargetSelected={props.isTargetSelected}
-          onSelect={props.onSelect}
-        />
-      ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 interface NamespaceSidebarSectionProps {
   hidden: boolean;
@@ -984,13 +998,13 @@ function Sidebar() {
 
   // Keep expanded namespace in sync with the current selection key.
   useEffect(() => {
-    if (selectedNamespaceKey) {
+    if (selectedNamespaceKey && sidebarSelection?.type === 'namespace') {
       setLastExpandedNamespaceKey(selectedNamespaceKey);
       setExpandedNamespaceKeys((previous) =>
         expandSelectedNamespace(previous, selectedNamespaceKey, exclusiveNamespaces)
       );
     }
-  }, [exclusiveNamespaces, selectedNamespaceKey]);
+  }, [exclusiveNamespaces, selectedNamespaceKey, sidebarSelection]);
 
   // When switching back to exclusive expansion, keep the active namespace open
   // when possible and collapse any other expanded namespace groups.

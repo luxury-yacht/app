@@ -59,6 +59,13 @@ parent namespace. Keyboard group targets carry that namespace key and group ID.
 When a subgroup expands, the namespace scroll owner rechecks the full namespace
 group after the expansion animation.
 
+Navigation to a grouped view reveals its Resources or Extensions category and,
+for namespace views, its parent namespace. This includes repeated Alt-click
+navigation to the same view after manually collapsing its category or namespace.
+Both scopes share the disclosure policy and resolve the group from the available
+view descriptors, preserving active-cluster discovery gates. Fresh selection
+requests reveal the destination; unrelated data refreshes preserve manual collapse.
+
 ## Cluster Attention Routing
 
 Cluster Overview is the cluster-level landing surface for health and capacity.
