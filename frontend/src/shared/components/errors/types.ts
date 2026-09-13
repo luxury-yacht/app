@@ -29,14 +29,3 @@ export interface ErrorFallbackProps {
   resetError: () => void;
   scope?: string;
 }
-
-export const RecoveryStrategy = {
-  RETRY: 'retry',
-  REFRESH: 'refresh',
-  RELOAD: 'reload',
-  RESET: 'reset',
-  DEGRADE: 'degrade',
-  FATAL: 'fatal',
-} as const;
-
-export type RecoveryStrategy = (typeof RecoveryStrategy)[keyof typeof RecoveryStrategy];

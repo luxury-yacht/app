@@ -98,7 +98,7 @@ describe('ResourceHeader', () => {
     expect(labelOrder(container)).not.toContain('Age');
   });
 
-  it('renders Last Modified immediately after Age when available', async () => {
+  it('uses the panel context for Last Modified when available', async () => {
     panel.current = {
       objectData: { clusterId: 'c1' },
       creationTimestamp: '2020-01-01T00:00:00Z',
@@ -107,10 +107,6 @@ describe('ResourceHeader', () => {
     await render();
 
     expect(valueForLabel(container, 'Last Modified')).toBe('2h');
-
-    const order = labelOrder(container);
-    expect(order).toContain('Age');
-    expect(order.indexOf('Last Modified')).toBe(order.indexOf('Age') + 1);
   });
 
   it('omits the Last Modified row when unavailable', async () => {

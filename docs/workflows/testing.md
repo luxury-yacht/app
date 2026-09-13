@@ -64,6 +64,13 @@ Remove fixtures and imports left unused by pruning.
 Reducing the case count by putting the same assertions into a loop is not pruning.
 Remove redundant obligations rather than changing how the runner counts them.
 
+During a pruning pass, check whether the application still reaches the code
+under test. A dependency audit is a candidate list, not proof: search imports,
+re-exports, lazy loaders, and runtime entry points before removing an orphaned
+module and its tests. Preserve styles or helpers still used by the current UI.
+For a shared pass-through path, keep one representative consumer test; vary
+resource kinds only when the asserted behavior actually branches on kind.
+
 Use red/green/refactor for production behavior changes. Copy, cosmetic styling,
 documentation, and test-only pruning do not need a manufactured failing test.
 For pruning, run the surviving affected tests, measure and report coverage

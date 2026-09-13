@@ -407,42 +407,6 @@ describe('GridTableFiltersBar', () => {
     ).toBe('true');
   });
 
-  it('passes searchable through to the namespace dropdown when enabled', async () => {
-    await renderFilters({
-      showNamespaceDropdown: true,
-      resolvedFilterOptions: {
-        kinds: [],
-        namespaces: [
-          { label: 'team-a', value: 'team-a' },
-          { label: 'team-b', value: 'team-b' },
-        ],
-        namespaceDropdownSearchable: true,
-      },
-    });
-
-    expect(
-      container.querySelector('[data-testid="namespaces"]')?.getAttribute('data-searchable')
-    ).toBe('true');
-  });
-
-  it('passes bulk actions through to the namespace dropdown when enabled', async () => {
-    await renderFilters({
-      showNamespaceDropdown: true,
-      resolvedFilterOptions: {
-        kinds: [],
-        namespaces: [
-          { label: 'team-a', value: 'team-a' },
-          { label: 'team-b', value: 'team-b' },
-        ],
-        namespaceDropdownBulkActions: true,
-      },
-    });
-
-    expect(
-      container.querySelector('[data-testid="namespaces"]')?.getAttribute('data-bulk-actions')
-    ).toBe('true');
-  });
-
   it('keeps search input focused across controlled filter updates', async () => {
     const setInputValue = (inputElement: HTMLInputElement, value: string) => {
       const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');

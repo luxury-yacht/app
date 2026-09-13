@@ -659,54 +659,21 @@ describe('ObjectPanel tab availability', () => {
     expect(mockQueryNamespacePermissions).not.toHaveBeenCalled();
   });
 
-  const detailMappingCases = [
-    ['DaemonSet', { desiredNumberScheduled: 1 }],
-    ['ReplicaSet', { replicas: '1/1' }],
-    ['StatefulSet', { replicas: 2 }],
-    ['Job', { completions: 1 }],
-    ['CronJob', { schedule: '* * * * *' }],
-    ['ConfigMap', { data: { key: 'value' } }],
-    ['Secret', { type: 'Opaque' }],
-    ['Service', { selector: {} }],
-    ['Ingress', { rules: [] }],
-    ['NetworkPolicy', { policyTypes: [] }],
-    ['EndpointSlice', { slices: [] }],
-    ['StorageClass', { provisioner: 'kubernetes.io/aws-ebs' }],
-    ['ServiceAccount', { secrets: [] }],
-    ['Role', { rules: [] }],
-    ['RoleBinding', { subjects: [] }],
-    ['ClusterRole', { rules: [] }],
-    ['ClusterRoleBinding', { subjects: [] }],
-    ['HorizontalPodAutoscaler', { currentReplicas: 1 }],
-    ['PodDisruptionBudget', { selector: {} }],
-    ['ResourceQuota', { hard: {} }],
-    ['LimitRange', { limits: [] }],
-    ['PersistentVolume', { capacity: {} }],
-    ['PersistentVolumeClaim', { status: 'Bound' }],
-    ['Namespace', { status: 'Active' }],
-    ['IngressClass', { controller: 'example' }],
-    ['CustomResourceDefinition', { metadata: { name: 'demo' } }],
-    ['MutatingWebhookConfiguration', { webhooks: [] }],
-    ['ValidatingWebhookConfiguration', { webhooks: [] }],
-  ] as const;
+  it('passes the received detail payload to the Details tab', async () => {
+    const detailsPayload = { data: { key: 'value' } };
+    await renderObjectPanel({
+      kind: 'ConfigMap',
+      name: 'resource',
+      namespace: 'team-a',
+      scopedDomain: {
+        data: { details: detailsPayload },
+        status: 'ready',
+        error: null,
+      },
+    });
 
-  it.each(detailMappingCases)(
-    'exposes the detail payload as the active detail for %s resources',
-    async (kind, detailsPayload) => {
-      await renderObjectPanel({
-        kind,
-        name: 'resource',
-        namespace: 'team-a',
-        scopedDomain: {
-          data: { details: detailsPayload },
-          status: 'ready',
-          error: null,
-        },
-      });
-
-      expect(getDetailsTabProps().detailModel.activeDetail).toEqual(detailsPayload);
-    }
-  );
+    expect(getDetailsTabProps().detailModel.activeDetail).toEqual(detailsPayload);
+  });
 
   it('passes deletion metadata from the refresh envelope to DetailsTab', async () => {
     const deletion = {

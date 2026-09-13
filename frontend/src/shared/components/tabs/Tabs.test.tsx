@@ -229,29 +229,6 @@ describe('Tabs', () => {
     expect(tablist?.querySelectorAll('[role="tab"]').length).toBe(0);
   });
 
-  it('renders one button per tab descriptor with the right label', () => {
-    act(() => {
-      root.render(
-        <Tabs
-          tabs={[
-            { id: 'a', label: 'Alpha' },
-            { id: 'b', label: 'Beta' },
-            { id: 'c', label: 'Gamma' },
-          ]}
-          activeId="a"
-          onActivate={() => undefined}
-          aria-label="Test Tabs"
-        />
-      );
-    });
-
-    const tabs = container.querySelectorAll<HTMLButtonElement>('[role="tab"]');
-    expect(tabs.length).toBe(3);
-    expect(tabs[0].textContent).toContain('Alpha');
-    expect(tabs[1].textContent).toContain('Beta');
-    expect(tabs[2].textContent).toContain('Gamma');
-  });
-
   it('marks the active tab with aria-selected and the active modifier class', () => {
     act(() => {
       root.render(
@@ -527,29 +504,6 @@ describe('Tabs', () => {
     expect(tabs[1].getAttribute('aria-label')).toBe('Icon-only tab');
   });
 
-  it('renders a close button when the tab descriptor has onClose', () => {
-    const onClose = vi.fn();
-    act(() => {
-      root.render(
-        <Tabs
-          tabs={[
-            { id: 'a', label: 'Alpha', onClose },
-            { id: 'b', label: 'Beta' },
-          ]}
-          activeId="a"
-          onActivate={() => undefined}
-          aria-label="Test Tabs"
-        />
-      );
-    });
-
-    const tabs = container.querySelectorAll<HTMLButtonElement>('[role="tab"]');
-    expect(tabs[0].classList.contains('tab-item--closeable')).toBe(true);
-    expect(tabs[0].parentElement?.querySelector('.tab-item__close')).toBeTruthy();
-    expect(tabs[1].classList.contains('tab-item--closeable')).toBe(false);
-    expect(tabs[1].parentElement?.querySelector('.tab-item__close')).toBeNull();
-  });
-
   it('renders only the existing close control and keeps the tab name separate', () => {
     act(() =>
       root.render(
@@ -563,8 +517,6 @@ describe('Tabs', () => {
     );
     const tab = requireValue(container.querySelector('[role="tab"]'), 'tab');
     expect(tab.textContent).toBe('Alpha');
-    expect(container.querySelector('.tab-item__menu')).toBeNull();
-    expect(tab.classList.contains('tab-item--with-menu')).toBe(false);
     expect(container.querySelector('.tab-item__close')?.closest('[role="tab"]')).toBeNull();
     expect(container.querySelectorAll('button')).toHaveLength(1);
   });

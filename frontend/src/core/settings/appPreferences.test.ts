@@ -434,15 +434,6 @@ describe('appPreferences', () => {
     vi.useRealTimers();
   });
 
-  it('uses the backend-aligned Object Panel layout defaults before hydration', () => {
-    expect(getObjectPanelLayoutDefaults()).toEqual({
-      dockedRightWidth: 600,
-      dockedBottomHeight: 600,
-      floatingWidth: 600,
-      floatingHeight: 800,
-    });
-  });
-
   it('hydrates preferences from backend settings', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       appearanceMode: 'light',

@@ -35,25 +35,6 @@ describe('SegmentedButton', () => {
     });
   };
 
-  it('renders options and highlights the active one', async () => {
-    const options = [
-      { value: 'pods', label: 'Pods' },
-      { value: 'events', label: 'Events' },
-    ];
-
-    await renderSegmented({
-      options,
-      value: 'pods',
-      onChange: vi.fn(),
-      size: 'small',
-    });
-
-    const buttons = container.querySelectorAll('.segmented-button__option');
-    expect(buttons).toHaveLength(2);
-    expect(buttons[0].className).toContain('segmented-button__option--active');
-    expect(buttons[1].className).not.toContain('segmented-button__option--active');
-  });
-
   it('invokes onChange when a button is clicked', async () => {
     const onChange = vi.fn();
     const options = [

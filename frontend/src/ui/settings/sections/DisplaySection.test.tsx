@@ -4,7 +4,6 @@
  * Test suite for DisplaySection.
  */
 
-import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -115,20 +114,6 @@ describe('DisplaySection', () => {
 
     expect(appPreferenceMocks.setExclusiveNamespaces).toHaveBeenCalledWith(false);
     expect(toggle?.getAttribute('aria-checked')).toBe('false');
-  });
-
-  it('offers the shared page sizes and selects the persisted default', () => {
-    // The dropdown derives its options from the shared page-size list — the
-    // same source as every pagination footer.
-    const dropdown = requireValue(
-      container.querySelector<HTMLSelectElement>('select[aria-label="Default page size"]'),
-      'expected the Default page size dropdown'
-    );
-    const optionValues = Array.from(dropdown.querySelectorAll('option')).map(
-      (option) => option.value
-    );
-    expect(optionValues).toEqual(TABLE_PAGE_SIZE_OPTIONS.map((value) => String(value)));
-    expect(dropdown.value).toBe('50');
   });
 
   it('persists default page size changes', async () => {

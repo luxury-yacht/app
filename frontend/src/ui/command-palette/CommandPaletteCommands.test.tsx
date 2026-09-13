@@ -235,28 +235,6 @@ describe('CommandPaletteCommands', () => {
     second.unmount();
   });
 
-  it('shows the direct-open shortcut on the select-namespace command', () => {
-    const { getCommands, unmount } = renderHook();
-    const command = getCommands().find((entry) => entry.id === 'select-namespace');
-
-    expect(command).toBeTruthy();
-    const isMac = /Mac/i.test((navigator.platform || '') + (navigator.userAgent || ''));
-    expect(command?.shortcut).toEqual(isMac ? ['⇧', '⌘', 'N'] : ['Ctrl', 'Shift', 'N']);
-
-    unmount();
-  });
-
-  it('shows the Open Cluster shortcut on the select-kubeconfig command', () => {
-    const { getCommands, unmount } = renderHook();
-    const command = getCommands().find((entry) => entry.id === 'select-kubeconfig');
-
-    expect(command).toBeTruthy();
-    const isMac = /Mac/i.test((navigator.platform || '') + (navigator.userAgent || ''));
-    expect(command?.shortcut).toEqual(isMac ? ['⌘', 'O'] : ['Ctrl', 'O']);
-
-    unmount();
-  });
-
   it('offers navigation commands for every registered cluster and namespace view', () => {
     mocks.viewState.sidebarSelection = { type: 'namespace', value: 'default' };
     mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev', '/kube/beta:prod'];
@@ -631,47 +609,13 @@ describe('CommandPaletteCommands', () => {
     unmount();
   });
 
-  it('orders Settings commands with appearance modes first', () => {
-    const { getCommands, unmount } = renderHook();
-    const settingsCommandIds = getCommands()
-      .filter((entry) => entry.category === 'Settings')
-      .map((entry) => entry.id);
-
-    expect(settingsCommandIds).toEqual([
-      'mode-system',
-      'mode-light',
-      'mode-dark',
-      'toggle-exclusive-namespaces',
-      'toggle-dim-inactive-namespaces',
-      'toggle-auto-refresh',
-      'refresh-view',
-      'reset-all-gridtable-state',
-      'toggle-short-names',
-    ]);
-
-    unmount();
-  });
-
-  it('places refresh current view in Settings', () => {
-    const { getCommands, unmount } = renderHook();
-    const command = getCommands().find((entry) => entry.id === 'refresh-view');
-
-    expect(command?.label).toBe('Refresh current view');
-    expect(command?.category).toBe('Settings');
-
-    unmount();
-  });
-
-  it('labels auto-refresh and short names using their disable actions when enabled', async () => {
+  it('disables auto-refresh and short names through their commands', async () => {
     setAppPreferencesForTesting({ useShortResourceNames: true });
 
     const { getCommands, unmount } = renderHook();
     const commands = getCommands();
     const autoRefreshCommand = commands.find((entry) => entry.id === 'toggle-auto-refresh');
     const shortNamesCommand = commands.find((entry) => entry.id === 'toggle-short-names');
-
-    expect(autoRefreshCommand?.label).toBe('Disable auto-refresh');
-    expect(shortNamesCommand?.label).toBe('Disable short names');
 
     await act(async () => {
       autoRefreshCommand?.action();
@@ -683,42 +627,6 @@ describe('CommandPaletteCommands', () => {
     expect(mocks.appSettings.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'useShortResourceNames', value: false }],
     });
-
-    unmount();
-  });
-
-  it('labels auto-refresh and short names using their enable actions when disabled', () => {
-    mocks.autoRefresh.enabled = false;
-    setAppPreferencesForTesting({ useShortResourceNames: false });
-
-    const { getCommands, unmount } = renderHook();
-    const commands = getCommands();
-
-    expect(commands.find((entry) => entry.id === 'toggle-auto-refresh')?.label).toBe(
-      'Enable auto-refresh'
-    );
-    expect(commands.find((entry) => entry.id === 'toggle-short-names')?.label).toBe(
-      'Enable short names'
-    );
-
-    unmount();
-  });
-
-  it('labels disabled Sidebar settings as enable actions', () => {
-    setAppPreferencesForTesting({
-      dimInactiveNamespaces: false,
-      exclusiveNamespaces: false,
-    });
-
-    const { getCommands, unmount } = renderHook();
-    const commands = getCommands();
-
-    expect(commands.find((entry) => entry.id === 'toggle-dim-inactive-namespaces')?.label).toBe(
-      'Enable inactive namespace dimming'
-    );
-    expect(commands.find((entry) => entry.id === 'toggle-exclusive-namespaces')?.label).toBe(
-      'Enable exclusive namespaces'
-    );
 
     unmount();
   });

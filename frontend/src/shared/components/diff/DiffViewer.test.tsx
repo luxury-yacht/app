@@ -447,16 +447,4 @@ describe('DiffViewer', () => {
     });
     expect(requireValue(table, 'expected test value in DiffViewer.test.tsx').scrollTop).toBe(0);
   });
-
-  it('renders empty when no lines provided', () => {
-    act(() => {
-      root.render(<DiffViewer lines={[]} leftText="" rightText="" />);
-    });
-
-    const rows = container.querySelectorAll('.object-diff-row');
-    expect(rows.length).toBe(0);
-
-    const table = container.querySelector('.object-diff-table');
-    expect(table).toBeTruthy();
-  });
 });

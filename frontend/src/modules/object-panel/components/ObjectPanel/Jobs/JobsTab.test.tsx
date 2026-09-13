@@ -188,35 +188,6 @@ describe('JobsTab', () => {
     expect(params.clusterIdentity).not.toBe(SIDEBAR_CLUSTER_ID);
   });
 
-  it('renders without errors when jobs is empty', () => {
-    act(() => {
-      root.render(<JobsTab jobs={[]} loading={false} isActive={true} />);
-    });
-
-    // Should render the grid table (mocked) without crashing.
-    expect(container.querySelector('[data-testid="grid-table"]')).toBeTruthy();
-  });
-
-  it('renders without errors when jobs are provided', () => {
-    const jobs = [
-      makeJob({ name: 'job-a', status: 'Completed' }),
-      makeJob({ name: 'job-b', status: 'Failed' }),
-    ];
-    act(() => {
-      root.render(
-        <JobsTab
-          jobs={jobs}
-          loading={false}
-          isActive={true}
-          clusterId={PANEL_CLUSTER_ID}
-          clusterName="Panel Cluster A"
-        />
-      );
-    });
-
-    expect(container.querySelector('[data-testid="grid-table"]')).toBeTruthy();
-  });
-
   it('omits workspace-only navigation handlers in a panel window', () => {
     navigationMocks.available = false;
     optionalViewState.current = null;

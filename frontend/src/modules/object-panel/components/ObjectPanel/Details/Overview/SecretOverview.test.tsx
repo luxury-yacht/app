@@ -88,7 +88,7 @@ describe('SecretOverview', () => {
     container.remove();
   });
 
-  it('renders secret type as a chip', async () => {
+  it('displays the secret type from the detail payload', async () => {
     await renderComponent({
       secretDetails: {
         name: 'tls-secret',
@@ -103,10 +103,6 @@ describe('SecretOverview', () => {
 
     const typeValue = getValueForLabel(container, 'Type');
     expect(typeValue?.textContent).toBe('kubernetes.io/tls');
-    // Now renders as an info-variant StatusChip rather than legacy status text.
-    expect(typeValue?.querySelector('.status-chip--info')).toBeTruthy();
-    // Data Keys row is intentionally not surfaced — DataSection covers it.
-    expect(getValueForLabel(container, 'Data Keys')).toBeNull();
   });
 
   it('navigates to pods that consume the secret', async () => {

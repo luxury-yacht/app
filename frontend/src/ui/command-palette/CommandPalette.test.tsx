@@ -764,14 +764,6 @@ describe('CommandPalette component behaviour', () => {
     );
   });
 
-  it('shows empty state when no commands are available', async () => {
-    await renderPalette([]);
-    await openPalette();
-
-    const emptyState = document.querySelector<HTMLDivElement>('.command-palette-empty');
-    expect(emptyState?.textContent).toBe('No commands available');
-  });
-
   it('closes when clicking outside and ignores the menu event while already open', async () => {
     await renderPalette([
       { id: 'open-settings', label: 'Open Settings', category: 'Application', action: vi.fn() },

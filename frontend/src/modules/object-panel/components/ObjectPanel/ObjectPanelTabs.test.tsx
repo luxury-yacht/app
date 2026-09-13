@@ -30,19 +30,6 @@ describe('ObjectPanelTabs', () => {
     container.remove();
   });
 
-  it('renders tabs and highlights the active one', () => {
-    act(() => {
-      root.render(<ObjectPanelTabs tabs={tabs} activeTab="logs" onSelect={vi.fn()} />);
-    });
-
-    // The shared Tabs component renders <div role="tab"> rather than <button>,
-    // so we use HTMLElement here. The .tab-item class is still present.
-    const tabItems = Array.from(container.querySelectorAll<HTMLElement>('.tab-item'));
-    expect(tabItems).toHaveLength(3);
-    expect(tabItems[1].classList.contains('tab-item--active')).toBe(true);
-    expect(tabItems[0].classList.contains('tab-item--active')).toBe(false);
-  });
-
   it('invokes onSelect when a tab is clicked', async () => {
     const onSelect = vi.fn();
     act(() => {

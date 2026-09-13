@@ -69,32 +69,6 @@ describe('TabDragProvider', () => {
     container.remove();
   });
 
-  it('renders children and exposes a null currentDrag initially', () => {
-    let observed: { currentDrag: unknown } | null = null;
-    function Probe() {
-      const ctx = useContext(TabDragContext);
-      observed = ctx;
-      return <div data-testid="probe">child</div>;
-    }
-
-    act(() => {
-      root.render(
-        <TabDragProvider>
-          <Probe />
-        </TabDragProvider>
-      );
-    });
-
-    expect(container.querySelector('[data-testid="probe"]')).toBeTruthy();
-    expect(observed).toBeTruthy();
-    expect(
-      requireValue<{ currentDrag: unknown } | null>(
-        observed,
-        'expected the tab drag context after rendering'
-      ).currentDrag
-    ).toBeNull();
-  });
-
   it('tears off an unconsumed drag outside the source webview at screen coordinates', () => {
     const onTearOff = vi.fn();
     let context: React.ContextType<typeof TabDragContext> | null = null;

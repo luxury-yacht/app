@@ -152,28 +152,6 @@ describe('GridTablePerformance', () => {
     );
   });
 
-  it('renders explicit table modes for divergent view families', () => {
-    const markup = renderToStaticMarkup(
-      <GridTablePerformance
-        onReset={() => undefined}
-        summary="Rolling GridTable measurements for the instrumented large-data views."
-        rows={[
-          createRow({
-            label: 'All Namespaces Browse',
-            mode: 'query',
-          }),
-          createRow({
-            label: 'All Namespaces Workloads',
-            mode: 'live',
-          }),
-        ]}
-      />
-    );
-
-    expect(markup).toContain('Query');
-    expect(markup).toContain('Live');
-  });
-
   it('builds a compact profiling overview for the current sample set', () => {
     const overview = buildTablePerformanceOverview([
       createRow({

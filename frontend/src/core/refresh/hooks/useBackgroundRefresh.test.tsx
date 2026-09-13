@@ -59,15 +59,6 @@ describe('useBackgroundRefresh', () => {
 
   const getValue = () => document.querySelector('[data-testid="value"]')?.textContent;
 
-  it('defaults to enabled when using default preferences', async () => {
-    const { unmount } = await renderHookComponent();
-
-    expect(getValue()).toBe('true');
-    expect(getBackgroundRefreshEnabled()).toBe(true);
-
-    unmount();
-  });
-
   it('hydrates from preference cache and responds to event bus updates', async () => {
     setAppPreferencesForTesting({ refreshBackgroundClustersEnabled: false });
     const { unmount } = await renderHookComponent();

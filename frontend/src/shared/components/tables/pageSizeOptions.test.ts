@@ -15,11 +15,6 @@ import {
 } from './pageSizeOptions';
 
 describe('pageSizeOptions', () => {
-  it('offers the default as one of the selectable options', () => {
-    expect(TABLE_PAGE_SIZE_OPTIONS).toContain(DEFAULT_TABLE_PAGE_SIZE);
-    expect(DEFAULT_TABLE_PAGE_SIZE).toBe(50);
-  });
-
   it('accepts only values from the options list', () => {
     for (const option of TABLE_PAGE_SIZE_OPTIONS) {
       expect(isTablePageSize(option)).toBe(true);

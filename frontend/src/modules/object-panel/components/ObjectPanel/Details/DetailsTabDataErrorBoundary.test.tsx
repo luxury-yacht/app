@@ -47,13 +47,6 @@ describe('DetailsTabDataErrorBoundary', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('renders children when no error occurs', async () => {
-    await renderBoundary(<ThrowingChild shouldThrow={false} />);
-    expect(container.querySelector('[data-testid="safe-child"]')).toBeTruthy();
-    expect(container.textContent).toContain('Rendered');
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
-  });
-
   it('renders the default fallback when a child throws', async () => {
     await renderBoundary(<ThrowingChild shouldThrow={true} />);
 

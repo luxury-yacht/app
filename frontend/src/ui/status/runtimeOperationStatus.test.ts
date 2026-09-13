@@ -156,6 +156,7 @@ describe('selectRuntimeOperationRows', () => {
       ],
       portForwardSessions: [
         { ...portForwardSession, id: 'pf-error', status: 'error' },
+        { ...portForwardSession, id: 'pf-reconnecting', status: 'reconnecting' },
         { ...portForwardSession, id: 'pf-active', status: 'active' },
       ],
     };
@@ -165,6 +166,7 @@ describe('selectRuntimeOperationRows', () => {
     expect(rows.shellSessions.map((session) => session.sessionId)).toEqual(['newer', 'older']);
     expect(rows.portForwardSessions.map((session) => session.id)).toEqual([
       'pf-active',
+      'pf-reconnecting',
       'pf-error',
     ]);
   });

@@ -540,15 +540,6 @@ describe('ClusterTabs', () => {
     expect(onOpenCluster).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the Open Cluster label next to the + by default', async () => {
-    mockState.selectedKubeconfigs = ['a'];
-    mockState.selectedKubeconfig = 'a';
-    await renderTabs();
-
-    const addButton = container.querySelector('.cluster-tabs-add');
-    expect(addButton?.textContent).toContain('Open Cluster');
-  });
-
   it('remeasures Open Cluster label fit when the number of tabs changes', async () => {
     const originalClientWidth = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,

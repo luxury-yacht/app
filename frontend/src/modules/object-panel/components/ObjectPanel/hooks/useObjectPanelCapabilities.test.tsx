@@ -164,6 +164,56 @@ describe('useObjectPanelCapabilities', () => {
     expect(result.capabilityStates.removeFinalizer.allowed).toBe(true);
   });
 
+  it('checks CronJob trigger and suspend permissions independently in the object cluster', async () => {
+    let allowedAction = 'trigger';
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: (id: string) => ({ allowed: id === allowedAction, pending: false }),
+    }));
+    mockUseUserPermission.mockReturnValue({ allowed: false, pending: false });
+    const props: HookProps = {
+      objectData: {
+        kind: 'CronJob',
+        name: 'backup',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+        group: 'batch',
+        version: 'v1',
+      },
+      objectKind: 'cronjob',
+      detailScope: 'cluster-a|team-a:batch/v1:cronjob:backup',
+      featureSupport: { ...baseFeatureSupport, trigger: true, suspend: true },
+    };
+
+    const first = await renderHook(props);
+    const [descriptors] = mockUseCapabilities.mock.calls[0];
+    expect(descriptors).toContainEqual({
+      id: 'trigger',
+      clusterId: 'cluster-a',
+      verb: 'create',
+      group: 'batch',
+      version: 'v1',
+      resourceKind: 'Job',
+      namespace: 'team-a',
+    });
+    expect(descriptors).toContainEqual({
+      id: 'suspend',
+      clusterId: 'cluster-a',
+      verb: 'patch',
+      group: 'batch',
+      version: 'v1',
+      resourceKind: 'CronJob',
+      namespace: 'team-a',
+      name: 'backup',
+    });
+    expect(first.capabilities.canTrigger).toBe(true);
+    expect(first.capabilities.canSuspend).toBe(false);
+
+    allowedAction = 'suspend';
+    const second = await renderHook(props);
+    expect(second.capabilities.canTrigger).toBe(false);
+    expect(second.capabilities.canSuspend).toBe(true);
+  });
+
   it('requests exact metadata and Namespace finalize permissions for a Namespace', async () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: () => ({ allowed: true, pending: false }),

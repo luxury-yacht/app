@@ -20,11 +20,7 @@ import {
   selectRuntimeOperationRows,
 } from './runtimeOperationStatusAdapter';
 
-export type {
-  PortForwardSession,
-  PortForwardStatus,
-  ShellSessionInfo,
-} from './runtimeOperationStatusAdapter';
+export type { ShellSessionInfo } from './runtimeOperationStatusAdapter';
 
 type RuntimeOperationStatusReadResource =
   | 'runtime-operations'
