@@ -263,27 +263,6 @@ describe('ClusterViewEvents', () => {
     expect(custom.props).toMatchObject({ children: 'Notice', variant: 'info' });
   });
 
-  it('uses the canonical Event table labels', async () => {
-    await act(async () => {
-      root.render(<ClusterViewEvents />);
-      await Promise.resolve();
-    });
-
-    expect(gridTablePropsRef.current.columns.map((column) => column.header)).toEqual([
-      'Kind',
-      'Type',
-      'Source',
-      'Object Type',
-      'Object Name',
-      'Reason',
-      'Message',
-      'Last Seen',
-    ]);
-    expect(
-      gridTablePropsRef.current.columns.find((column) => column.key === 'objectName')?.hideable
-    ).toBe(false);
-  });
-
   it('opens the involved object with group/version when object name is clicked', async () => {
     await act(async () => {
       root.render(<ClusterViewEvents />);

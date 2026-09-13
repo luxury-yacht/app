@@ -301,30 +301,6 @@ describe('GridTableFiltersBar', () => {
     expect(onFiltersChange).toHaveBeenCalledWith({ kinds: { mode: 'all' } });
   });
 
-  it('uses the selected option label when a built-in filter has one value', async () => {
-    await renderFilters({
-      activeFilters: {
-        search: '',
-        kinds: { mode: 'some', values: ['Pod'] },
-        namespaces: { mode: 'some', values: ['kube-system'] },
-        clusters: { mode: 'some', values: ['cluster-a'] },
-        caseSensitive: false,
-        includeMetadata: false,
-      },
-      resolvedFilterOptions: {
-        kinds: [{ label: 'Pods', value: 'Pod' }],
-        namespaces: [{ label: 'kube-system', value: 'kube-system' }],
-        clusters: [{ label: 'alpha', value: 'cluster-a' }],
-      },
-    });
-
-    const chips = container.querySelector('[aria-label="Active GridTable filters"]');
-    expect(chips?.textContent).toContain('Kind: Pods');
-    expect(chips?.textContent).toContain('Namespace: kube-system');
-    expect(chips?.textContent).toContain('Cluster: alpha');
-    expect(chips?.textContent).not.toContain('Namespaces: 1');
-  });
-
   it('renders query facet counts and clears one facet back to all', async () => {
     const onFiltersChange = vi.fn();
     await renderFilters({
@@ -379,36 +355,6 @@ describe('GridTableFiltersBar', () => {
     });
   });
 
-  it('uses the selected option label when a query facet has one value', async () => {
-    await renderFilters({
-      activeFilters: {
-        search: '',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
-        queryFacets: { apiGroups: { mode: 'some', values: ['(core)'] } },
-        caseSensitive: false,
-        includeMetadata: false,
-      },
-      resolvedFilterOptions: {
-        kinds: [],
-        namespaces: [],
-        queryFacets: [
-          {
-            key: 'apiGroups',
-            label: 'API groups',
-            placeholder: 'All API groups',
-            options: [{ label: 'core', value: '(core)' }],
-          },
-        ],
-      },
-    });
-
-    const chips = container.querySelector('[aria-label="Active GridTable filters"]');
-    expect(chips?.textContent).toContain('API group: core');
-    expect(chips?.textContent).not.toContain('API groups: 1');
-  });
-
   it('renders text and boolean chips with individual and clear-all actions', async () => {
     const onFiltersChange = vi.fn();
     const onReset = vi.fn();
@@ -439,65 +385,6 @@ describe('GridTableFiltersBar', () => {
       container.querySelector<HTMLButtonElement>('button[aria-label="Clear all filters"]')?.click();
     });
     expect(onReset).toHaveBeenCalledTimes(1);
-  });
-
-  it('renders leading query facets before Kinds', async () => {
-    await renderFilters({
-      showKindDropdown: true,
-      resolvedFilterOptions: {
-        kinds: [{ label: 'Pods', value: 'Pod' }],
-        namespaces: [],
-        queryFacets: [
-          {
-            key: 'apiGroups',
-            label: 'API groups',
-            placeholder: 'All API groups',
-            options: [{ label: 'core', value: '(core)' }],
-            placement: 'before-kinds',
-          },
-        ],
-      },
-      queryFacetDropdownIdPrefix: 'facet',
-    });
-
-    const controls = Array.from(
-      container.querySelectorAll<HTMLSelectElement>('.gridtable-filter-subcluster select')
-    ).map((element) => element.dataset.testid);
-    expect(controls).toEqual(['facet-apiGroups', 'kinds']);
-  });
-
-  it('renders structural actions immediately before Namespaces', async () => {
-    await renderFilters({
-      showKindDropdown: true,
-      showNamespaceDropdown: true,
-      resolvedFilterOptions: {
-        kinds: [{ label: 'Deployments', value: 'Deployment' }],
-        namespaces: [{ label: 'team-a', value: 'team-a' }],
-        ...({
-          beforeNamespaceActions: [
-            {
-              type: 'toggle',
-              id: 'pods-pane',
-              icon: <span>toggle</span>,
-              active: true,
-              onClick: vi.fn(),
-              title: 'Collapse Pods',
-            },
-          ],
-        } as Record<string, unknown>),
-      },
-    });
-
-    const controls = Array.from(
-      container.querySelector('[data-gridtable-filter-cluster="primary"]')?.children[0]?.children ??
-        []
-    ).map((element) => element.getAttribute('data-gridtable-filter-role'));
-    expect(controls).toEqual(['kind', 'before-namespace-actions', 'namespace']);
-    expect(
-      container.querySelector<HTMLButtonElement>(
-        '[data-gridtable-filter-role="before-namespace-actions"] button'
-      )?.title
-    ).toBe('Collapse Pods');
   });
 
   it('always enables search and bulk actions for the kind dropdown', async () => {
@@ -843,46 +730,6 @@ describe('GridTableFiltersBar', () => {
     expect(selectSpy).toHaveBeenCalled();
 
     selectSpy.mockRestore();
-  });
-
-  it('does not render the redundant reset-filters icon', async () => {
-    await renderFilters({
-      activeFilters: {
-        search: '',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
-        caseSensitive: false,
-        includeMetadata: true,
-      },
-    });
-
-    const resetButton = container.querySelector<HTMLButtonElement>(
-      '.icon-bar-button[title="Reset filters"]'
-    );
-    expect(resetButton).toBeNull();
-  });
-
-  it('does not add a leading separator when only post-actions are rendered', async () => {
-    await renderFilters({
-      resolvedFilterOptions: {
-        searchBehavior: 'query',
-        kinds: [],
-        namespaces: [],
-      },
-      postActions: [
-        {
-          type: 'action',
-          id: 'load-more',
-          icon: <span>Load</span>,
-          onClick: vi.fn(),
-          title: 'Load more',
-        },
-      ],
-    });
-
-    expect(container.querySelector('.icon-bar-button[title="Load more"]')).not.toBeNull();
-    expect(container.querySelector('.icon-bar-separator')).toBeNull();
   });
 
   it('renders the columns dropdown when enabled', async () => {

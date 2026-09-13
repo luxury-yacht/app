@@ -6,13 +6,9 @@
  */
 
 // Context exports
-export { RefreshManagerProvider, useRefreshManagerContext } from './contexts/RefreshManagerContext';
+export { RefreshManagerProvider } from './contexts/RefreshManagerContext';
 export { initializeAutoRefresh, useAutoRefresh } from './hooks/useAutoRefresh';
 export { useBackgroundRefresh } from './hooks/useBackgroundRefresh';
-export { useRefreshContext } from './hooks/useRefreshContext';
-// Hook exports
-export { useRefreshManager } from './hooks/useRefreshManager';
-export { useRefreshWatcher } from './hooks/useRefreshWatcher';
 export { refreshOrchestrator } from './orchestrator';
 export type { RefreshCallback, RefreshContext, Refresher } from './RefreshManager';
 // Core exports

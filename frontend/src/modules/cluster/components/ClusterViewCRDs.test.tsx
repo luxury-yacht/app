@@ -138,25 +138,6 @@ describe('ClusterViewCRDs', () => {
     container.remove();
   });
 
-  it('passes persisted state to GridTable', async () => {
-    await act(async () => {
-      root.render(<ClusterViewCRDs />);
-      await Promise.resolve();
-    });
-
-    const props = getGridTableProps();
-    expect(props).toBeTruthy();
-    expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
-    expect(props.filters?.value).toEqual({
-      search: '',
-      kinds: [],
-      namespaces: [],
-      caseSensitive: false,
-    });
-    expect(props.columnVisibility).toBeFalsy();
-    expect(props.columnWidths).toBeFalsy();
-  });
-
   it('does not offer a kind dropdown (every row is a CustomResourceDefinition)', async () => {
     await act(async () => {
       root.render(<ClusterViewCRDs />);

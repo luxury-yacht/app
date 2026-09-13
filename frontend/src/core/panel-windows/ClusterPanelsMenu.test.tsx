@@ -49,22 +49,6 @@ const renderMenu = async () => {
 };
 const menuItems = () => Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
 
-it('renders the three cluster actions with icons and a separator before Close', async () => {
-  await renderMenu();
-  expect(menuItems().map((item) => item.textContent)).toEqual([
-    'Open in new window',
-    'Move to new window',
-    'Close',
-  ]);
-  expect(menuItems().every((item) => item.querySelector('.context-menu-icon svg'))).toBe(true);
-  expect(document.querySelector('.context-menu-header')).toBeNull();
-  expect(document.querySelectorAll('.context-menu-divider')).toHaveLength(1);
-  const items = menuItems();
-  expect(
-    items[items.length - 1]?.previousElementSibling?.classList.contains('context-menu-divider')
-  ).toBe(true);
-});
-
 it('closes the requested cluster through its supplied close action and dismisses the menu', async () => {
   await renderMenu();
   const close = menuItems().find((item) => item.textContent === 'Close');

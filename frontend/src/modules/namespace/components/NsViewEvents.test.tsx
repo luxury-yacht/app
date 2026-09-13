@@ -718,20 +718,4 @@ describe('NsViewEvents', () => {
     expect(warning.props).toMatchObject({ children: 'Warning', variant: 'warning' });
     expect(normal.props).toMatchObject({ children: 'Normal', variant: 'healthy' });
   });
-
-  it('uses the canonical Event table labels', async () => {
-    const props = await renderEventsView();
-
-    expect(props.columns.map((column) => column.header)).toEqual([
-      'Kind',
-      'Type',
-      'Namespace',
-      'Source',
-      'Object Type',
-      'Object Name',
-      'Reason',
-      'Message',
-      'Last Seen',
-    ]);
-  });
 });

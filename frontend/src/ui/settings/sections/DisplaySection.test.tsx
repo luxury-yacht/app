@@ -102,22 +102,6 @@ describe('DisplaySection', () => {
     document.body.innerHTML = '';
   });
 
-  it('shows the dim inactive namespaces setting on by default', () => {
-    const toggle = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Dim inactive namespaces"]'
-    );
-    expect(toggle).not.toBeNull();
-    expect(toggle?.getAttribute('aria-checked')).toBe('true');
-  });
-
-  it('shows the exclusive namespaces setting on by default', () => {
-    const toggle = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Exclusive namespaces"]'
-    );
-    expect(toggle).not.toBeNull();
-    expect(toggle?.getAttribute('aria-checked')).toBe('true');
-  });
-
   it('persists exclusive namespaces changes', async () => {
     const toggle = requireValue(
       container.querySelector<HTMLButtonElement>('button[aria-label="Exclusive namespaces"]'),

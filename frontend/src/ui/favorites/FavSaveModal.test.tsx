@@ -367,15 +367,6 @@ describe('FavSaveModal', () => {
   // 2. Renders when isOpen is true
   // -----------------------------------------------------------------------
 
-  it('renders when isOpen is true', async () => {
-    const props = makeProps({ isOpen: true });
-    await renderComponent(props);
-
-    expect(container.querySelector('.modal-overlay')).toBeTruthy();
-    expect(container.querySelector('.fav-save-modal')).toBeTruthy();
-    expect(container.querySelector('.modal-header h2')?.textContent).toBe('Save Favorite');
-  });
-
   it('renders and saves all declared filters for both Workloads panes', async () => {
     const onSave = vi.fn();
     await renderComponent(
@@ -500,14 +491,6 @@ describe('FavSaveModal', () => {
     expect(saved.panes.main.filters.queryFacets?.owners).toEqual({ mode: 'all' });
   });
 
-  it('enables search and bulk actions for the Kinds dropdown', async () => {
-    await renderComponent(makeProps({ availableKinds: ['Pod', 'Deployment'] }));
-
-    const kinds = container.querySelector('[data-testid="dropdown-All kinds"]');
-    expect(kinds?.getAttribute('data-searchable')).toBe('true');
-    expect(kinds?.getAttribute('data-bulk-actions')).toBe('true');
-  });
-
   it('summarizes semantic all and none selections instead of listing option values', async () => {
     await renderComponent(
       makeProps({
@@ -524,21 +507,6 @@ describe('FavSaveModal', () => {
     const namespaces = container.querySelector('[data-testid="dropdown-All namespaces"]');
     expect(kinds?.getAttribute('data-display-value')).toBe('All');
     expect(namespaces?.getAttribute('data-display-value')).toBe('None');
-  });
-
-  it('summarizes explicit selections with their count', async () => {
-    await renderComponent(
-      makeProps({
-        filters: {
-          ...defaultFilters,
-          kinds: { mode: 'some', values: ['Pod', 'Deployment'] },
-        },
-        availableKinds: ['Pod', 'Deployment', 'StatefulSet'],
-      })
-    );
-
-    const kinds = container.querySelector('[data-testid="dropdown-All kinds"]');
-    expect(kinds?.getAttribute('data-display-value')).toBe('2 selected');
   });
 
   it('does not close when overlay is clicked', async () => {
@@ -565,17 +533,6 @@ describe('FavSaveModal', () => {
   // -----------------------------------------------------------------------
   // 3. Name input is pre-populated with defaultName
   // -----------------------------------------------------------------------
-
-  it('name input is pre-populated with defaultName', async () => {
-    const props = makeProps({ defaultName: 'Test Default Name' });
-    await renderComponent(props);
-
-    const input = container.querySelector<HTMLInputElement>('[id$="-fav-name"]');
-    expect(input).toBeTruthy();
-    expect(requireValue(input, 'expected test value in FavSaveModal.test.tsx').value).toBe(
-      'Test Default Name'
-    );
-  });
 
   it('blocks a Favorite name already used by another saved Favorite', async () => {
     const onSave = vi.fn();
@@ -1035,11 +992,4 @@ describe('FavSaveModal', () => {
   // -----------------------------------------------------------------------
   // 9. Header says "Edit Favorite" when editing
   // -----------------------------------------------------------------------
-
-  it('shows "Edit Favorite" header when editing', async () => {
-    const props = makeProps({ existingFavorite: makeFavorite() });
-    await renderComponent(props);
-
-    expect(container.querySelector('.modal-header h2')?.textContent).toBe('Edit Favorite');
-  });
 });

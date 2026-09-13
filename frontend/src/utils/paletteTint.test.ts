@@ -10,7 +10,6 @@ import {
   clearTintedPalette,
   GRAY_STEPS,
   generateTintedPalette,
-  isPaletteActive,
   MAX_SATURATION,
 } from './paletteTint';
 
@@ -33,27 +32,7 @@ describe('paletteTint', () => {
     localStorage.clear();
   });
 
-  describe('isPaletteActive', () => {
-    it('returns false when saturation=0 and brightness=0', () => {
-      expect(isPaletteActive(0, 0)).toBe(false);
-    });
-
-    it('returns true when saturation > 0', () => {
-      expect(isPaletteActive(50, 0)).toBe(true);
-    });
-
-    it('returns true when brightness != 0', () => {
-      expect(isPaletteActive(0, 20)).toBe(true);
-      expect(isPaletteActive(0, -20)).toBe(true);
-    });
-  });
-
   describe('generateTintedPalette', () => {
-    it('returns all 11 gray steps', () => {
-      const palette = generateTintedPalette(200, 50);
-      expect(palette).toHaveLength(11);
-    });
-
     it('produces 0% saturation when saturation is 0', () => {
       const palette = generateTintedPalette(180, 0);
       for (const entry of palette) {
@@ -74,23 +53,6 @@ describe('paletteTint', () => {
       for (const entry of palette) {
         expect(entry.value).toContain(`${expectedSaturation}%`);
       }
-    });
-
-    it('uses correct lightness for first and last steps with brightness=0', () => {
-      const palette = generateTintedPalette(0, 100, 0);
-      // gray-950 has lightness 4
-      expect(palette[0].token).toBe('--color-base-950');
-      expect(palette[0].value).toContain('4%');
-      // gray-50 has lightness 96
-      expect(palette[10].token).toBe('--color-base-50');
-      expect(palette[10].value).toContain('96%');
-    });
-
-    it('handles boundary hue values (0 and 360)', () => {
-      const paletteZero = generateTintedPalette(0, 50);
-      const palette360 = generateTintedPalette(360, 50);
-      expect(paletteZero[0].value).toMatch(/^hsl\(0,/);
-      expect(palette360[0].value).toMatch(/^hsl\(360,/);
     });
 
     it('shifts lightness up with positive brightness', () => {
@@ -119,12 +81,6 @@ describe('paletteTint', () => {
       // brightness=-50 → gray-950 (L=4) → 4-10=-6 → clamped to 1
       const paletteDown = generateTintedPalette(0, 0, -50);
       expect(paletteDown[0].value).toContain('1%');
-    });
-
-    it('defaults brightness to 0 when not provided', () => {
-      const withoutBrightness = generateTintedPalette(200, 50);
-      const withZeroBrightness = generateTintedPalette(200, 50, 0);
-      expect(withoutBrightness).toEqual(withZeroBrightness);
     });
   });
 

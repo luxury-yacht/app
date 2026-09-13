@@ -31,8 +31,6 @@ export type CatalogItemScope = 'Cluster' | 'Namespace';
 
 export type ResourceQueryProvider = 'typed-resource' | 'catalog';
 
-export type ResourceQueryScope = 'cluster' | 'namespace' | 'all-namespaces';
-
 export type ResourceQueryCompleteness = 'complete' | 'partial';
 
 export type NamespaceScopeStatus = 'not-found' | 'no-access';
@@ -1594,29 +1592,6 @@ export interface ResourceQueryDynamicRef {
   policy: string;
 }
 
-export interface ResourceQueryEnvelopeFields {
-  provider: ResourceQueryProvider;
-  table: string;
-  queryIdentity?: string;
-  continue?: string;
-  previous?: string;
-  self?: string;
-  cursorInvalid?: boolean;
-  anchor?: ResourceQueryAnchorResult;
-  pageStartRank?: number;
-  total: number;
-  unfilteredTotal: number;
-  totalIsExact: boolean;
-  kinds?: Array<string>;
-  namespaces?: Array<string>;
-  facetValues?: Array<ResourceQueryFacetValues>;
-  facetsExact: boolean;
-  completeness?: ResourceQueryCompleteness;
-  issues?: Array<ResourceQueryIssue>;
-  dynamic?: ResourceQueryDynamicRef;
-  capabilities: ResourceQueryCapabilities;
-}
-
 export interface ResourceQueryFacetDescriptor {
   key: string;
   label: string;
@@ -1639,32 +1614,6 @@ export interface ResourceQueryFacetValues {
 export interface ResourceQueryIssue {
   kind: string;
   message: string;
-}
-
-export interface ResourceQueryPredicate {
-  field: string;
-  op: string;
-  value?: string;
-}
-
-export interface ResourceQueryRequest {
-  clusterId: string;
-  provider?: ResourceQueryProvider;
-  table: string;
-  scope?: ResourceQueryScope;
-  namespaces?: Array<string>;
-  kinds?: Array<string>;
-  facets?: Record<string, Array<string> | null>;
-  matchNone?: boolean;
-  search?: string;
-  includeMetadata?: boolean;
-  predicates?: Array<ResourceQueryPredicate>;
-  sortField?: string;
-  sortDirection?: string;
-  limit?: number;
-  continue?: string;
-  anchor?: ResourceQueryAnchor;
-  startRank?: number;
 }
 
 export interface ResourceRef {

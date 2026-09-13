@@ -130,18 +130,6 @@ describe('AdvancedSection', () => {
     container.remove();
   });
 
-  it('contains advanced controls without Data Management actions', () => {
-    const text = container.textContent ?? '';
-    expect(text).toContain('Advanced');
-    expect(text).toContain('Refresh');
-    expect(text).toContain('Kubernetes API');
-    expect(text).toContain('Persistence');
-    expect(text).toContain('Deletes all preferences and saved state, then reloads the app.');
-    expect(text).not.toContain('Data Management');
-    expect(text).not.toContain('Export Settings');
-    expect(text).not.toContain('Error Reporting');
-  });
-
   it('keeps the refresh, persistence, and reset controls interactive', async () => {
     const refreshSwitch = requireValue(
       container.querySelector<HTMLButtonElement>('[aria-label="Auto-refresh"]'),

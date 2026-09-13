@@ -1074,40 +1074,6 @@ describe('Dropdown', () => {
     expect(onChange).toHaveBeenCalledWith([]);
   });
 
-  it('renders the searchable input and bulk actions on the same control row', async () => {
-    await mount(
-      <Dropdown
-        options={OPTIONS}
-        value={[]}
-        onChange={vi.fn()}
-        multiple
-        searchable
-        showBulkActions
-      />
-    );
-
-    click(container.querySelector('.dropdown-trigger'));
-
-    const controls = document.body.querySelector('.dropdown-menu-controls');
-    expect(controls).not.toBeNull();
-    expect(controls?.querySelector('.search-input')).not.toBeNull();
-    expect(controls?.querySelectorAll('.dropdown-bulk-action')).toHaveLength(2);
-  });
-
-  it('shows text labels beside bulk-action icons when search is disabled', async () => {
-    await mount(
-      <Dropdown options={OPTIONS} value={[]} onChange={vi.fn()} multiple showBulkActions />
-    );
-
-    click(container.querySelector('.dropdown-trigger'));
-
-    const bulkButtons = document.body.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action');
-    expect(bulkButtons).toHaveLength(2);
-    expect(bulkButtons[0]?.textContent).toContain('All');
-    expect(bulkButtons[1]?.textContent).toContain('None');
-    expect(document.body.querySelector('.search-input')).toBeNull();
-  });
-
   it('renders an additional action beside All and None', async () => {
     const onReset = vi.fn();
     await mount(
@@ -1162,17 +1128,6 @@ describe('Dropdown', () => {
     click(document.body.querySelector('button[aria-label="Close from action"]'));
 
     expect(document.body.querySelector('.dropdown-menu')).toBeNull();
-  });
-
-  it('omits the bulk-action separator when there is nothing to separate', async () => {
-    await mount(
-      <Dropdown options={OPTIONS} value={[]} onChange={vi.fn()} multiple showBulkActions />
-    );
-
-    click(container.querySelector('.dropdown-trigger'));
-    const actions = document.body.querySelector('.dropdown-bulk-actions');
-    expect(actions).not.toBeNull();
-    expect(actions?.querySelector('.dropdown-bulk-actions-divider')).toBeNull();
   });
 
   describe('only action', () => {

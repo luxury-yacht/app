@@ -243,33 +243,6 @@ describe('AppLogsPanel', () => {
     cleanup();
   });
 
-  it('renders a header row for log columns', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      {
-        sequence: 1,
-        timestamp: '2024-01-01T00:00:00.000Z',
-        level: 'info',
-        message: 'Ready',
-        source: 'core',
-      },
-    ]);
-
-    const { container, cleanup } = await renderPanel();
-
-    await flushInitialLoad();
-
-    const header = container.querySelector('.app-logs-header');
-    expect(header).not.toBeNull();
-    expect(
-      Array.from(
-        requireValue(header, 'expected test value in AppLogsPanel.test.tsx').querySelectorAll('th')
-      ).map((cell) => cell.textContent)
-    ).toEqual(['Time', 'Level', 'Source', 'Cluster', 'Message']);
-
-    cleanup();
-  });
-
   it('resizes log columns from the header row', async () => {
     vi.useFakeTimers();
     getAppLogsMock.mockResolvedValue([

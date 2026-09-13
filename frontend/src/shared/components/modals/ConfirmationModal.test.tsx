@@ -161,11 +161,6 @@ describe('ConfirmationModal', () => {
     ]);
   });
 
-  it('omits the details table when not provided', async () => {
-    await renderModal({});
-    expect(document.querySelector('.confirmation-modal-details-table')).toBeNull();
-  });
-
   it('renders an optional secondary action on the left of the footer', async () => {
     const onSecondaryAction = vi.fn();
     await renderModal({
@@ -188,23 +183,5 @@ describe('ConfirmationModal', () => {
   it('omits the secondary action when not provided', async () => {
     await renderModal({});
     expect(document.querySelector('.confirmation-modal-secondary-action')).toBeNull();
-  });
-
-  it('returns null when modal is closed', async () => {
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <ConfirmationModal
-            isOpen={false}
-            title="Hidden"
-            message="Hidden"
-            onConfirm={vi.fn()}
-            onCancel={vi.fn()}
-          />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-    expect(document.querySelector('.confirmation-modal')).toBeNull();
   });
 });

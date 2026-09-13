@@ -188,25 +188,6 @@ describe('ClusterViewConfig', () => {
     container.remove();
   });
 
-  it('passes persisted state to GridTable', async () => {
-    await act(async () => {
-      root.render(<ClusterViewConfig />);
-      await Promise.resolve();
-    });
-
-    const props = getGridTableProps();
-    expect(props).toBeTruthy();
-    expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
-    expect(props.filters?.value).toEqual({
-      search: '',
-      kinds: [],
-      namespaces: [],
-      caseSensitive: false,
-    });
-    expect(props.columnVisibility).toBe(null);
-    expect(props.columnWidths).toBe(null);
-  });
-
   it('keeps initial empty query-backed cluster config behind the loading boundary', async () => {
     requestRefreshDomainStateMock.mockImplementation(() => new Promise(() => undefined));
 

@@ -153,25 +153,6 @@ describe('ClusterViewStorage', () => {
     container.remove();
   });
 
-  it('passes persisted state to GridTable', async () => {
-    await act(async () => {
-      root.render(<ClusterViewStorage />);
-      await Promise.resolve();
-    });
-
-    const props = getGridTableProps();
-    expect(props).toBeTruthy();
-    expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
-    expect(props.columnVisibility).toBe(null);
-    expect(props.filters?.value).toEqual({
-      search: '',
-      kinds: [],
-      namespaces: [],
-      caseSensitive: false,
-    });
-    expect(props.columnWidths).toBe(null);
-  });
-
   it('uses canonical object identity for row keys', async () => {
     await act(async () => {
       root.render(<ClusterViewStorage />);

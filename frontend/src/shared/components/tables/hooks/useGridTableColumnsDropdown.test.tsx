@@ -202,32 +202,6 @@ describe('useGridTableColumnsDropdown', () => {
     expect(latestApplyVisibilityChanges).toHaveBeenCalledTimes(1);
   });
 
-  describe('trigger label', () => {
-    const readLabel = (result: CapturedResult) => {
-      const config = requireValue(
-        result,
-        'expected test value in useGridTableColumnsDropdown.test.tsx'
-      );
-      return config.renderValue?.();
-    };
-
-    it('stays plain while every column is shown', () => {
-      expect(readLabel(renderHook({}))).toBe('Columns');
-    });
-
-    it('names the hidden count rather than making the reader subtract', () => {
-      expect(readLabel(renderHook({ hiddenColumns: new Set(['age']) }))).toBe('Columns (1 hidden)');
-    });
-
-    it('never counts a required column as hidden', () => {
-      const result = renderHook({
-        lockedColumns: new Set(['name']),
-        hiddenColumns: new Set(['status', 'age']),
-      });
-      expect(readLabel(result)).toBe('Columns (2 hidden)');
-    });
-  });
-
   describe('reset', () => {
     it('is unavailable while order and visibility are both at their defaults', () => {
       const result = renderHook({});

@@ -5,14 +5,11 @@
  * Covers key behaviors and edge cases for GridTableBody.
  */
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import GridTableBody from '@shared/components/tables/GridTableBody';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { requireValue } from '@/test-utils/requireValue';
 
 afterEach(() => {
   document.head.querySelectorAll('style[data-gridtable-body-contract]').forEach((style) => {
@@ -88,34 +85,6 @@ describe('GridTableBody', () => {
     };
   };
 
-  it('renders static rows', async () => {
-    const { container } = await renderTableBody();
-
-    const rows = container.querySelectorAll('[data-index]');
-    expect(rows.length).toBe(2);
-    expect(rows[0]?.textContent).toContain('Row 1');
-  });
-
-  it('renders virtualization body when enabled', async () => {
-    const renderRowContent: RenderRowContentFn<TestRow> = (item, _index, _attach, key) => (
-      <tr key={key} data-slot={key}>
-        <td>Virtual {item.id}</td>
-      </tr>
-    );
-
-    const { container } = await renderTableBody({
-      shouldVirtualize: true,
-      virtualRows: [{ id: 'A' }, { id: 'B' }] as unknown as TestRow[],
-      renderRowContent: renderRowContent as RenderRowContentFn<unknown>,
-    });
-
-    const virtualBody = container.querySelector('.gridtable-virtual-body');
-    expect(virtualBody).not.toBeNull();
-    expect(
-      requireValue(virtualBody, 'expected test value in GridTableBody.test.tsx').textContent
-    ).toContain('Virtual A');
-  });
-
   it('remounts virtualized rows when the data window changes to prevent state leaks', async () => {
     const StatefulCell: React.FC<{ id: string }> = ({ id }) => {
       const [initialId] = React.useState(id);
@@ -158,42 +127,6 @@ describe('GridTableBody', () => {
 
     const secondCell = container.querySelector('.stateful-cell');
     expect(secondCell?.getAttribute('data-initial-id')).toBe('row-b');
-  });
-
-  it('shows empty message when no rows', async () => {
-    const { container } = await renderTableBody({
-      tableData: [],
-      virtualRows: [],
-      shouldVirtualize: false,
-    });
-
-    const empty = container.querySelector('.gridtable-empty');
-    expect(empty?.textContent).toBe('No rows');
-  });
-
-  it('centers the semantic empty row horizontally without changing its vertical position', async () => {
-    const style = document.createElement('style');
-    style.dataset.gridtableBodyContract = 'empty-centering';
-    style.textContent = readFileSync(
-      resolve(process.cwd(), 'styles/components/gridtables.css'),
-      'utf8'
-    );
-    document.head.appendChild(style);
-
-    const { container } = await renderTableBody({
-      tableData: [],
-      virtualRows: [],
-      shouldVirtualize: false,
-    });
-
-    const body = container.querySelector<HTMLTableSectionElement>('tbody');
-    const row = container.querySelector<HTMLTableRowElement>('tr');
-    const cell = container.querySelector<HTMLTableCellElement>('td');
-    expect(window.getComputedStyle(body as HTMLTableSectionElement).flexGrow).toBe('0');
-    expect(window.getComputedStyle(body as HTMLTableSectionElement).alignItems).toBe('center');
-    expect(window.getComputedStyle(body as HTMLTableSectionElement).justifyContent).toBe('normal');
-    expect(window.getComputedStyle(row as HTMLTableRowElement).display).toBe('table-row');
-    expect(window.getComputedStyle(cell as HTMLTableCellElement).display).toBe('table-cell');
   });
 
   it('shows a filtered-empty message and clear-filters affordance when filters are active', async () => {

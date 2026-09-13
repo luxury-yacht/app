@@ -11,7 +11,6 @@ import {
   applyAccentColor,
   clearAccentColor,
   DARK_OFFSETS,
-  generateAccentBg,
   generateAccentShades,
   hexToHsl,
   hexToRgb,
@@ -54,16 +53,6 @@ describe('hexToHsl', () => {
     expect(s).toBe(0);
     expect(l).toBe(0);
   });
-
-  it('converts blue (#326ce5)', () => {
-    const { h, s, l } = hexToHsl('#326ce5');
-    // Kubernetes blue is roughly hue ~221, saturation ~77%, lightness ~55%.
-    expect(h).toBeGreaterThanOrEqual(215);
-    expect(h).toBeLessThanOrEqual(225);
-    expect(s).toBeGreaterThan(70);
-    expect(l).toBeGreaterThan(50);
-    expect(l).toBeLessThan(60);
-  });
 });
 
 describe('hslToHex', () => {
@@ -89,53 +78,20 @@ describe('hslToHex', () => {
 });
 
 describe('hexToHsl / hslToHex round-trip', () => {
-  const testColors = ['#326ce5', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6'];
-
-  for (const hex of testColors) {
-    it(`round-trips ${hex}`, () => {
-      const { h, s, l } = hexToHsl(hex);
-      const result = hslToHex(h, s, l);
-      // Allow ±3 per channel due to HSL rounding
-      const orig = hexToRgb(hex);
-      const roundTrip = hexToRgb(result);
-      expect(Math.abs(orig.r - roundTrip.r)).toBeLessThanOrEqual(3);
-      expect(Math.abs(orig.g - roundTrip.g)).toBeLessThanOrEqual(3);
-      expect(Math.abs(orig.b - roundTrip.b)).toBeLessThanOrEqual(3);
-    });
-  }
-});
-
-describe('hexToRgb', () => {
-  it('parses #ff0000', () => {
-    expect(hexToRgb('#ff0000')).toEqual({ r: 255, g: 0, b: 0 });
-  });
-
-  it('parses #326ce5', () => {
-    expect(hexToRgb('#326ce5')).toEqual({ r: 50, g: 108, b: 229 });
+  it('round-trips a color with fractional HSL components', () => {
+    const hex = '#326ce5';
+    const { h, s, l } = hexToHsl(hex);
+    const result = hslToHex(h, s, l);
+    // Allow ±3 per channel due to HSL rounding
+    const orig = hexToRgb(hex);
+    const roundTrip = hexToRgb(result);
+    expect(Math.abs(orig.r - roundTrip.r)).toBeLessThanOrEqual(3);
+    expect(Math.abs(orig.g - roundTrip.g)).toBeLessThanOrEqual(3);
+    expect(Math.abs(orig.b - roundTrip.b)).toBeLessThanOrEqual(3);
   });
 });
 
 describe('generateAccentShades', () => {
-  it('generates 5 shades for light mode', () => {
-    const shades = generateAccentShades('#326ce5', 'light');
-    expect(shades).toHaveLength(Object.keys(LIGHT_OFFSETS).length);
-    // All tokens should be --color-accent-light-*
-    for (const shade of shades) {
-      expect(shade.token).toMatch(/^--color-accent-light-\d+$/);
-      expect(shade.value).toMatch(/^#[0-9a-f]{6}$/);
-    }
-  });
-
-  it('generates 6 shades for dark mode', () => {
-    const shades = generateAccentShades('#f59e0b', 'dark');
-    expect(shades).toHaveLength(Object.keys(DARK_OFFSETS).length);
-    // All tokens should be --color-accent-dark-*
-    for (const shade of shades) {
-      expect(shade.token).toMatch(/^--color-accent-dark-\d+$/);
-      expect(shade.value).toMatch(/^#[0-9a-f]{6}$/);
-    }
-  });
-
   it('produces darker shades for negative offsets', () => {
     const shades = generateAccentShades('#3b82f6', 'light');
     // 700 (offset -8) should be darker than 600 (offset 0)
@@ -156,20 +112,6 @@ describe('generateAccentShades', () => {
     const l300 = hexToHsl(shade300.value).l;
     expect(l700).toBeLessThan(l600);
     expect(l600).toBeLessThan(l300);
-  });
-});
-
-describe('generateAccentBg', () => {
-  it('generates rgba with 0.1 alpha for light mode', () => {
-    const { token, value } = generateAccentBg('#326ce5', 'light');
-    expect(token).toBe('--color-accent-bg');
-    expect(value).toBe('rgba(50, 108, 229, 0.1)');
-  });
-
-  it('generates rgba with 0.15 alpha for dark mode', () => {
-    const { token, value } = generateAccentBg('#f59e0b', 'dark');
-    expect(token).toBe('--color-accent-bg');
-    expect(value).toBe('rgba(245, 158, 11, 0.15)');
   });
 });
 
@@ -227,20 +169,6 @@ describe('applyAccentColor', () => {
 describe('applyAccentBg', () => {
   afterEach(() => {
     document.documentElement.style.removeProperty('--color-accent-bg');
-  });
-
-  it('sets --color-accent-bg for light mode', () => {
-    applyAccentBg('#326ce5', 'light');
-    expect(document.documentElement.style.getPropertyValue('--color-accent-bg')).toBe(
-      'rgba(50, 108, 229, 0.1)'
-    );
-  });
-
-  it('sets --color-accent-bg for dark mode', () => {
-    applyAccentBg('#f59e0b', 'dark');
-    expect(document.documentElement.style.getPropertyValue('--color-accent-bg')).toBe(
-      'rgba(245, 158, 11, 0.15)'
-    );
   });
 
   it('removes --color-accent-bg when hex is empty', () => {

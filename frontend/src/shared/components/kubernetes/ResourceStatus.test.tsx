@@ -99,32 +99,4 @@ describe('ResourceStatus', () => {
     expect(statusText?.textContent).toBe('1/3');
     cleanup();
   });
-
-  it('renders conditions list', async () => {
-    const { container: root, cleanup } = await renderStatus({
-      conditions: [
-        { type: 'Available', status: 'True', message: 'All good' },
-        { type: 'Progressing', status: 'False' },
-      ],
-    });
-    container = root;
-
-    const conditions = root.querySelectorAll('.condition-item');
-    expect(conditions.length).toBe(2);
-    expect(root.textContent).toContain('Available');
-    expect(root.textContent).toContain('All good');
-    cleanup();
-  });
-
-  it('renders custom label when provided', async () => {
-    const { container: root, cleanup } = await renderStatus({
-      status: 'Ready',
-      customLabel: 'Phase',
-    });
-    container = root;
-
-    const mockItem = root.querySelector('.overview-item-mock');
-    expect(mockItem?.getAttribute('data-label')).toBe('Phase');
-    cleanup();
-  });
 });

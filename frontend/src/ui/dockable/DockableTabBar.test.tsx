@@ -66,31 +66,6 @@ describe('DockableTabBar', () => {
     document.body.replaceChildren();
   });
 
-  it('renders tab labels for each panel', async () => {
-    const tabs: TabInfo[] = [
-      { panelId: 'p1', title: 'Logs' },
-      { panelId: 'p2', title: 'Events' },
-      { panelId: 'p3', title: 'Terminal' },
-    ];
-
-    const { host, unmount } = await renderTabBar(
-      <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
-    );
-
-    // Each tab should have a label span with the correct text.
-    const labels = host.querySelectorAll('.tab-item__label');
-    expect(labels).toHaveLength(3);
-    expect(labels[0].textContent).toBe('Logs');
-    expect(labels[1].textContent).toBe('Events');
-    expect(labels[2].textContent).toBe('Terminal');
-
-    // All tabs should have the role="tab" attribute.
-    const tabElements = host.querySelectorAll('[role="tab"]');
-    expect(tabElements).toHaveLength(3);
-
-    await unmount();
-  });
-
   it('marks the active tab via aria-selected and .tab-item--active', async () => {
     const tabs: TabInfo[] = [
       { panelId: 'p1', title: 'Logs' },

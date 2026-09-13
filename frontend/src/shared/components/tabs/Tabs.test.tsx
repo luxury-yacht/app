@@ -527,66 +527,6 @@ describe('Tabs', () => {
     expect(tabs[1].getAttribute('aria-label')).toBe('Icon-only tab');
   });
 
-  it('sets --tab-item-min-width and --tab-item-max-width custom properties from props', () => {
-    act(() => {
-      root.render(
-        <Tabs
-          tabs={[{ id: 'a', label: 'Alpha' }]}
-          activeId="a"
-          onActivate={() => undefined}
-          aria-label="Test Tabs"
-          minTabWidth={100}
-          maxTabWidth={300}
-        />
-      );
-    });
-
-    const tablist = container.querySelector<HTMLDivElement>('.tab-strip');
-    expect(tablist?.style.getPropertyValue('--tab-item-min-width')).toBe('100px');
-    expect(tablist?.style.getPropertyValue('--tab-item-max-width')).toBe('300px');
-  });
-
-  it('uses fit-mode defaults: min 0, max 240 when min/max not provided', () => {
-    act(() => {
-      root.render(
-        <Tabs
-          tabs={[{ id: 'a', label: 'Alpha' }]}
-          activeId="a"
-          onActivate={() => undefined}
-          aria-label="Test Tabs"
-        />
-      );
-    });
-
-    const tablist = container.querySelector<HTMLDivElement>('.tab-strip');
-    // 'fit' mode (the default) sizes tabs to content with no floor — so
-    // short labels like "YAML" don't get bloated. Closeable tabs in fit
-    // mode get an 80px floor via the .tab-strip--sizing-fit
-    // .tab-item--closeable rule in tabs.css (so the close button has room).
-    expect(tablist?.style.getPropertyValue('--tab-item-min-width')).toBe('0px');
-    expect(tablist?.style.getPropertyValue('--tab-item-max-width')).toBe('240px');
-  });
-
-  it('uses equal-mode default: min 80 when min not provided', () => {
-    act(() => {
-      root.render(
-        <Tabs
-          tabs={[{ id: 'a', label: 'Alpha' }]}
-          activeId="a"
-          onActivate={() => undefined}
-          aria-label="Test Tabs"
-          tabSizing="equal"
-        />
-      );
-    });
-
-    const tablist = container.querySelector<HTMLDivElement>('.tab-strip');
-    // 'equal' mode shares the strip width across tabs, so a floor is
-    // necessary to keep tabs from collapsing below readable width.
-    expect(tablist?.style.getPropertyValue('--tab-item-min-width')).toBe('80px');
-    expect(tablist?.style.getPropertyValue('--tab-item-max-width')).toBe('240px');
-  });
-
   it('renders a close button when the tab descriptor has onClose', () => {
     const onClose = vi.fn();
     act(() => {

@@ -6,13 +6,7 @@
  * via the OverviewContext.
  */
 
-import type {
-  clusterrole,
-  clusterrolebinding,
-  role,
-  rolebinding,
-  serviceaccount,
-} from '@core/backend-api/models';
+import type { clusterrolebinding, rolebinding, serviceaccount } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -20,9 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import {
   clusterRoleBindingDescriptor,
-  clusterRoleDescriptor,
   roleBindingDescriptor,
-  roleDescriptor,
   serviceAccountDescriptor,
 } from './descriptors/rbac';
 import { OverviewRenderer } from './OverviewRenderer';
@@ -81,48 +73,6 @@ describe('RBACOverview', () => {
     container.remove();
   });
 
-  it('renders metadata and aggregation/used-by sections for cluster roles', async () => {
-    await renderDescriptor(
-      root,
-      clusterRoleDescriptor,
-      partialModelFixture<clusterrole.ClusterRoleDetails>({
-        kind: 'ClusterRole',
-        name: 'admin',
-        labels: { team: 'platform' },
-        annotations: { owner: 'rbac-admins' },
-        // Rules render in DetailsTabRBACRules now (a sibling section);
-        // the descriptor only handles header/aggregation/used-by/metadata.
-      })
-    );
-
-    expect(container.textContent).toContain('Labels');
-    expect(container.textContent).toContain('team:');
-    expect(container.textContent).toContain('platform');
-    expect(container.textContent).toContain('Annotations');
-    expect(container.textContent).toContain('owner:');
-    expect(container.textContent).toContain('rbac-admins');
-  });
-
-  it('renders labels and annotations for roles', async () => {
-    await renderDescriptor(
-      root,
-      roleDescriptor,
-      partialModelFixture<role.RoleDetails>({
-        kind: 'Role',
-        name: 'reader',
-        labels: { team: 'platform' },
-        annotations: { owner: 'rbac-admins' },
-      })
-    );
-
-    expect(container.textContent).toContain('Labels');
-    expect(container.textContent).toContain('team:');
-    expect(container.textContent).toContain('platform');
-    expect(container.textContent).toContain('Annotations');
-    expect(container.textContent).toContain('owner:');
-    expect(container.textContent).toContain('rbac-admins');
-  });
-
   it('renders binding role reference and inline subjects list', async () => {
     await renderDescriptor(
       root,
@@ -171,29 +121,6 @@ describe('RBACOverview', () => {
       container.querySelectorAll<HTMLElement>('.status-chip--warning')
     ).find((el) => el.textContent?.trim() === 'system');
     expect(warningChip).toBeTruthy();
-  });
-
-  it('renders cluster role binding metadata', async () => {
-    await renderDescriptor(
-      root,
-      clusterRoleBindingDescriptor,
-      partialModelFixture<clusterrolebinding.ClusterRoleBindingDetails>({
-        kind: 'ClusterRoleBinding',
-        name: 'bind-admin',
-        labels: { env: 'prod' },
-        annotations: { owner: 'security' },
-        roleRef: { kind: 'ClusterRole', name: 'admin' },
-      })
-    );
-
-    expect(container.textContent).toContain('Role Reference');
-    expect(container.textContent).toContain('ClusterRole/admin');
-    expect(container.textContent).toContain('Labels');
-    expect(container.textContent).toContain('env:');
-    expect(container.textContent).toContain('prod');
-    expect(container.textContent).toContain('Annotations');
-    expect(container.textContent).toContain('owner:');
-    expect(container.textContent).toContain('security');
   });
 
   it('renders service account specific fields', async () => {

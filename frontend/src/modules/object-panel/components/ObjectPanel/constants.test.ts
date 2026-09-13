@@ -4,13 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  CLUSTER_SCOPE,
-  getObjectDetailsRefresherName,
-  getObjectEventsRefresherName,
-  INACTIVE_SCOPE,
-  RESOURCE_CAPABILITIES,
-} from './constants';
+import { getObjectDetailsRefresherName, getObjectEventsRefresherName } from './constants';
 
 const PANEL_ID = 'obj:cluster-a:apps/v1/deployment:team-a:api';
 
@@ -33,21 +27,5 @@ describe('ObjectPanel constants', () => {
     expect(getObjectDetailsRefresherName('Deployment', null)).toBeNull();
     expect(getObjectEventsRefresherName(undefined, PANEL_ID)).toBeNull();
     expect(getObjectEventsRefresherName('Deployment', null)).toBeNull();
-  });
-
-  it('defines capability presets for key resource kinds', () => {
-    expect(RESOURCE_CAPABILITIES.pod).toMatchObject({
-      objPanelLogs: true,
-      delete: true,
-      debug: true,
-    });
-    expect(RESOURCE_CAPABILITIES.deployment).toMatchObject({ scale: true, restart: true });
-    expect(RESOURCE_CAPABILITIES.replicaset).toMatchObject({ scale: true });
-    expect(RESOURCE_CAPABILITIES.secret).toMatchObject({ delete: true });
-  });
-
-  it('provides scope sentinels for cluster-wide interactions', () => {
-    expect(CLUSTER_SCOPE).toBe('__cluster__');
-    expect(INACTIVE_SCOPE).toBe('__inactive__');
   });
 });

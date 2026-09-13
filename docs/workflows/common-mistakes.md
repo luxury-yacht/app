@@ -20,6 +20,11 @@ Prevention:
   decisions. Do not treat every `toContain` or exact string as a deletion target.
 - After pruning, remove unused fixtures, run the surviving tests, and report
   coverage impact without replacing the removed tests with coverage filler.
+- Check what a mock actually implements before crediting a test with behavior.
+  A fake setter that updates captured props proves its own implementation, not
+  persistence or resizing. Test the real owner once, then retain consumer cases
+  only for distinct wiring and outcomes. Avoid exhaustive copies of lookup tables,
+  export inventories, trivial getter tests, and repeated render-only fixtures.
 
 ## Packing resource data into generic columns
 

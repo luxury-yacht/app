@@ -216,15 +216,6 @@ describe('FavMenuDropdown', () => {
   // 1. Renders the heart button
   // -----------------------------------------------------------------------
 
-  it('renders the heart button', async () => {
-    await renderComponent();
-    const btn = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
-    expect(btn).toBeTruthy();
-    expect(
-      requireValue(btn, 'expected test value in FavMenuDropdown.test.tsx').className
-    ).toContain('settings-button');
-  });
-
   it('opens the dropdown from keyboard activation on the trigger', async () => {
     await renderComponent();
 
@@ -414,20 +405,6 @@ describe('FavMenuDropdown', () => {
   // -----------------------------------------------------------------------
   // 6. Footer legend is rendered
   // -----------------------------------------------------------------------
-
-  it('renders the footer legend', async () => {
-    await renderComponent();
-    await clickButton();
-
-    const footer = container.querySelector('.fav-dropdown-footer');
-    expect(footer).toBeTruthy();
-    expect(
-      requireValue(footer, 'expected test value in FavMenuDropdown.test.tsx').textContent
-    ).toContain('any cluster');
-    expect(
-      requireValue(footer, 'expected test value in FavMenuDropdown.test.tsx').textContent
-    ).toContain('pinned to cluster');
-  });
 
   // -----------------------------------------------------------------------
   // 8. Toggle closes the dropdown on second click

@@ -135,7 +135,7 @@ deliberately rejected (the backend↔frontend loop is already closed at the gene
   accounted for by the descriptor (schema field / `derivedFrom` / status item / widget `consumes` /
   `coveredElsewhere`). A new backend DTO field fails this test by name until placed.
 - `Details/Overview/registry.ts` — legacy fallback only: `GenericOverview` for custom/unregistered
-  resources + per-kind action `getResourceCapabilities`.
+  resources.
 - `Details/objectDetailModel.ts` — builds the single `activeDetail` (raw DTO) the renderer consumes,
   plus the derived sibling sections `DetailsTab` composes (Containers, RBAC rules, ConfigMap/Secret
   data, active pods, port-forward availability, scale replicas, CronJob suspend). Those derivations

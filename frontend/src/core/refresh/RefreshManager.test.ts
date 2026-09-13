@@ -1187,14 +1187,6 @@ describe('RefreshManager guard paths and helpers', () => {
     ]);
   });
 
-  it('returns null for unknown refresher intervals', () => {
-    expect(refreshManager.getRefresherInterval('unknown' as RefresherName)).toBeNull();
-  });
-
-  it('returns null for unknown refresher state lookups', () => {
-    expect(refreshManager.getState('ghost-state' as RefresherName)).toBeNull();
-  });
-
   it('returns early when triggerManualRefreshForContext has no targets', async () => {
     const manualSpy = vi.spyOn(refreshManager, 'triggerManualRefreshMany');
 
@@ -1303,16 +1295,6 @@ describe('RefreshManager guard paths and helpers', () => {
     unsafeRefreshManager.resumeRefresher(name, instance);
 
     expect(refreshManager.getState(name)?.status).toBe('disabled');
-  });
-
-  it('abortRefresher returns when attempting to abort unknown refreshers', () => {
-    expect(() => unsafeRefreshManager.abortRefresher('nobody' as RefresherName)).not.toThrow();
-  });
-
-  it('refreshSingle returns immediately for unknown refreshers', async () => {
-    await expect(
-      unsafeRefreshManager.refreshSingle('shadow' as RefresherName, 'manual')
-    ).resolves.toBeUndefined();
   });
 
   it('refreshSingle skips disabled automatic refreshes', async () => {

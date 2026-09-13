@@ -6,12 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
-import {
-  objectMapCssNumber,
-  objectMapCssVar,
-  readObjectMapG6Palette,
-  sameObjectMapG6Palette,
-} from './objectMapG6Palette';
+import { readObjectMapG6Palette, sameObjectMapG6Palette } from './objectMapG6Palette';
 
 const colorVars = [
   '--color-accent',
@@ -92,42 +87,6 @@ const applyPaletteVars = (element: HTMLElement) => {
 };
 
 describe('objectMapG6Palette', () => {
-  it('reads CSS variables into the G6 palette', () => {
-    const element = document.createElement('div');
-    applyPaletteVars(element);
-    document.body.appendChild(element);
-
-    const palette = readObjectMapG6Palette(element);
-
-    expect(palette.accent).toBe('#000001');
-    expect(palette.statusHealthy).toBe('#000010');
-    expect(palette.statusInactive).toBe('#000014');
-    expect(palette.edgeOwner).toBe('#000015');
-    expect(palette.edgeSelector).toBe('#000017');
-    expect(palette.edgeDefault).toBe('#000029');
-    expect(palette.edgeLineWidth).toBe(1);
-    expect(palette.edgeDash).toEqual([5, 6]);
-    expect(palette.nodeDimmedBackgroundOpacity).toBe(10);
-    expect(palette.nodeDimmedForegroundOpacity).toBe(11);
-    expect(palette.tooltipMaxWidth).toBe(12);
-    expect(palette.tooltipRelationshipBottomPadding).toBe(21);
-    expect(palette.tooltipRelationshipFontWeight).toBe(31);
-    expect(palette.fitViewPadding).toBe(32);
-    expect(palette.fullOpacity).toBe(33);
-    expect(palette.fontFamily).toContain('Inter');
-
-    element.remove();
-  });
-
-  it('trims string variables and parses missing numeric variables as zero', () => {
-    const element = document.createElement('div');
-    element.style.setProperty('--sample-var', '  value  ');
-    const styles = window.getComputedStyle(element);
-
-    expect(objectMapCssVar(styles, '--sample-var')).toBe('value');
-    expect(objectMapCssNumber(styles, '--missing-number')).toBe(0);
-  });
-
   it('compares every palette field including edge dash values', () => {
     const element = document.createElement('div');
     applyPaletteVars(element);

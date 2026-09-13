@@ -72,14 +72,4 @@ describe('podColors', () => {
     const distinctColors = new Set(podNames.map((podName) => colorMap[podName]));
     expect(distinctColors.size).toBe(palette.length);
   });
-
-  it('returns a stable hash index for the same pod name', () => {
-    expect(hashPodColorIndex('api-7', palette.length)).toBe(
-      hashPodColorIndex('api-7', palette.length)
-    );
-  });
-
-  it('hashes Unicode pod names by code point', () => {
-    expect(hashPodColorIndex('api-😀', palette.length)).toBe(18);
-  });
 });

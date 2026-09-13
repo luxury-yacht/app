@@ -5,29 +5,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { ObjectMapG6Palette } from './objectMapG6Data';
 import {
   findObjectMapG6Edge,
   findObjectMapG6Node,
-  objectMapG6EdgeOptions,
   objectMapG6EndpointKind,
   objectMapG6EndpointLabel,
-  objectMapG6NodeOptions,
 } from './objectMapG6RendererOptions';
 import type { ObjectMapLayout } from './objectMapLayout';
-
-const palette = {
-  accent: '#2563eb',
-  edgeHoveredLineWidth: 4,
-  edgeHighlightedLineWidth: 3,
-  edgeDimmedOpacity: 0.2,
-  fullOpacity: 1,
-  nodeConnectedLineWidth: 1,
-  nodeDimmedBackgroundOpacity: 0.25,
-  nodeDimmedForegroundOpacity: 0.45,
-  nodeEdgeHoveredLineWidth: 3,
-  nodeSelectedLineWidth: 1,
-} as ObjectMapG6Palette;
 
 const layout: ObjectMapLayout = {
   nodes: [
@@ -77,18 +61,5 @@ describe('objectMapG6RendererOptions', () => {
     expect(objectMapG6EndpointKind(node)).toBe('Deployment');
     expect(objectMapG6EndpointLabel(null)).toBe('Unknown');
     expect(objectMapG6EndpointKind(null)).toBe('Object');
-  });
-
-  it('builds node and edge states from palette values', () => {
-    expect(objectMapG6NodeOptions(palette).state.selected).toEqual({
-      stroke: '#2563eb',
-      lineWidth: 1,
-      opacity: 1,
-    });
-    expect(objectMapG6NodeOptions(palette).state.dimmed).toEqual({
-      cardBackgroundOpacity: 0.25,
-      cardForegroundOpacity: 0.45,
-    });
-    expect(objectMapG6EdgeOptions(palette).state.dimmed).toEqual({ opacity: 0.2 });
   });
 });

@@ -162,42 +162,6 @@ describe('WorkloadsPodsSplit', () => {
     expect(resizingRule).not.toContain('!important');
   });
 
-  it('places the resize hit area directly on the split boundary', () => {
-    const resizerRule = splitStyles.match(/\.workloads-pods-split__resizer\s*{([^}]*)}/)?.[1];
-
-    expect(resizerRule).toContain('top: var(--workloads-pods-upper-size);');
-    expect(resizerRule).toContain('right: 0;');
-    expect(resizerRule).toContain('left: 0;');
-    expect(resizerRule).toContain('height: 10px;');
-    expect(resizerRule).toContain('transform: translateY(-50%);');
-    expect(resizerRule).not.toContain('inset: 0;');
-  });
-
-  it('does not render a visible divider band', () => {
-    act(() => {
-      root.render(
-        <WorkloadsPodsSplit upper={<div>Workloads table</div>} lower={<div>Pods table</div>} />
-      );
-    });
-
-    expect(container.querySelector('.workloads-pods-split__divider')).toBeNull();
-    expect(container.querySelector('[aria-label="Resize Workloads and Pods"]')).not.toBeNull();
-  });
-
-  it('shows a persistent separator line that thickens when the resize handle is active', () => {
-    const separatorRule = splitStyles.match(
-      /\.workloads-pods-split__resizer::after\s*{([^}]*)}/
-    )?.[1];
-    const activeSeparatorRule = splitStyles.match(
-      /\.workloads-pods-split__resizer:hover::after,[^{]+{([^}]*)}/
-    )?.[1];
-
-    expect(separatorRule).toContain('height: 1px;');
-    expect(separatorRule).toContain('background: var(--color-border);');
-    expect(activeSeparatorRule).toContain('height: 4px;');
-    expect(activeSeparatorRule).toContain('background: var(--color-resize-handle);');
-  });
-
   it('consumes dock offsets once at the split boundary instead of once per table', () => {
     const splitRule = splitStyles.match(/\.workloads-pods-split\s*{([^}]*)}/)?.[1];
     const nestedTableRule = splitStyles.match(

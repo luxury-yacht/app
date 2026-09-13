@@ -188,18 +188,12 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => {
-  const state = { columnWidths: {} as NonNullable<CapturedGridTableProps['columnWidths']> };
   return {
     useNamespaceGridTablePersistence: () => ({
       sortConfig: { key: 'name', direction: 'asc' },
       onSortChange: vi.fn(),
-      columnWidths: state.columnWidths,
-      setColumnWidths: (next: NonNullable<CapturedGridTableProps['columnWidths']>) => {
-        state.columnWidths = next;
-        if (gridTablePropsRef.current) {
-          gridTablePropsRef.current = { ...gridTablePropsRef.current, columnWidths: next };
-        }
-      },
+      columnWidths: {},
+      setColumnWidths: vi.fn(),
       columnVisibility: null,
       setColumnVisibility: vi.fn(),
       filters: persistedFiltersRef.current,
@@ -214,19 +208,13 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => {
 });
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => {
-  const state = { columnWidths: {} as NonNullable<CapturedGridTableProps['columnWidths']> };
   return {
     useGridTablePersistence: () => ({
       storageKey: 'gridtable:v1:alpha:namespace-pods',
       sortConfig: { key: 'name', direction: 'asc' },
       setSortConfig: vi.fn(),
-      columnWidths: state.columnWidths,
-      setColumnWidths: (next: NonNullable<CapturedGridTableProps['columnWidths']>) => {
-        state.columnWidths = next;
-        if (gridTablePropsRef.current) {
-          gridTablePropsRef.current = { ...gridTablePropsRef.current, columnWidths: next };
-        }
-      },
+      columnWidths: {},
+      setColumnWidths: vi.fn(),
       columnVisibility: null,
       setColumnVisibility: vi.fn(),
       filters: persistedFiltersRef.current,
@@ -499,19 +487,6 @@ describe('NsViewPods', () => {
       throw new Error('Expected delete confirmation to open');
     }
   };
-
-  it('passes pod data to GridTable and exposes key columns', async () => {
-    const pods = await renderPods();
-
-    const gridProps = gridTablePropsRef.current;
-    expect(gridProps.data).toEqual(pods);
-    expect(gridProps.enableContextMenu).toBe(true);
-    expect(gridProps.columns.map((col) => col.key)).toEqual(
-      expect.arrayContaining(['name', 'status', 'cpu', 'memory'])
-    );
-    // Single-namespace pod tables are query-backed now, so they issue a typed query.
-    expect(requestRefreshDomainStateMock).toHaveBeenCalled();
-  });
 
   it('owns the Pods collapse action as the first structural filter action', async () => {
     const onPodsCollapsedChange = vi.fn();
@@ -970,37 +945,6 @@ describe('NsViewPods', () => {
       'expected the pod CPU cell element'
     );
     expect(cpuElement.props.metricsError).toBe('metrics api unavailable');
-  });
-
-  it('toggles namespace styling when the column is shown', async () => {
-    await renderPods();
-    expect(gridTablePropsRef.current.tableClassName).toBe('gridtable-pods');
-
-    await renderPods({ showNamespaceColumn: true });
-    expect(gridTablePropsRef.current.tableClassName).toBe(
-      'gridtable-pods gridtable-pods--namespaced'
-    );
-  });
-
-  it('updates column widths when resized', async () => {
-    await renderPods();
-    const nextWidths = { name: { width: 280 } } as unknown as NonNullable<
-      CapturedGridTableProps['columnWidths']
-    >;
-
-    await act(async () => {
-      gridTablePropsRef.current.onColumnWidthsChange(nextWidths);
-      await Promise.resolve();
-    });
-
-    expect(gridTablePropsRef.current.columnWidths).toEqual(nextWidths);
-  });
-
-  it('wires the "updating pods" loading message for the query-backed table', async () => {
-    // The view owns the updating message; whether the overlay is shown (re-fetch in flight over
-    // existing rows) is the controller's behavior, covered by ResourceInventoryTable's own tests.
-    await renderPods();
-    expect(gridTablePropsRef.current.loadingOverlay?.message).toBe('Updating pods…');
   });
 
   it('omits delete context action when permission data is unavailable', async () => {

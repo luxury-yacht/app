@@ -111,10 +111,5 @@ describe('GridTable utils', () => {
       expect(id).toMatch(/^gridtable-row-/);
       expect(id).toMatch(/^[a-zA-Z][a-zA-Z0-9_-]*$/);
     });
-
-    it('produces identical output for identical input', () => {
-      const key = 'cluster-1|pod:ns/name';
-      expect(getStableRowId(key)).toBe(getStableRowId(key));
-    });
   });
 });

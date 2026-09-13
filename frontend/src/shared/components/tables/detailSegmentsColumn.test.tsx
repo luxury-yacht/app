@@ -55,13 +55,6 @@ describe('createDetailSegmentsColumn', () => {
       ...overrides,
     });
 
-  it('defaults to the details key, header, and non-sortable', () => {
-    const column = buildColumn();
-    expect(column.key).toBe('details');
-    expect(column.header).toBe('Details');
-    expect(column.sortable).toBe(false);
-  });
-
   it('renders the no-value marker when segments are missing or empty', () => {
     const column = buildColumn();
     expect(column.render({})).toBe('-');
@@ -213,16 +206,6 @@ describe('createDetailSegmentsColumn', () => {
     );
   });
 
-  it('renders link segments as buttons', () => {
-    const openReference = vi.fn();
-    const column = buildColumn({ slot: 'reference', openReference });
-    const cell = column.render({
-      details: [{ slot: 'reference', value: 'nginx', link: ingressClassLink }],
-    });
-    const [button] = collectElements(cell, (element) => element.type === 'button');
-    expect(button).toBeTruthy();
-  });
-
   it('preserves presentation classes on linked segment values', () => {
     const column = buildColumn({ slot: 'reference', openReference: vi.fn() });
     const cell = column.render({
@@ -246,14 +229,6 @@ describe('createDetailSegmentsColumn', () => {
     expect((presentedValue.props as { className?: string }).className?.split(' ')).toEqual(
       expect.arrayContaining(['status-text', 'warning'])
     );
-  });
-
-  it('leaves auto-width to the render-replica measurement', () => {
-    // No measurementText/measurementElement: the measurer's fallback clones the
-    // rendered cell so labels, separators, and link styling are measured.
-    const column = buildColumn();
-    expect(column.measurementText).toBeUndefined();
-    expect(column.measurementElement).toBeUndefined();
   });
 });
 

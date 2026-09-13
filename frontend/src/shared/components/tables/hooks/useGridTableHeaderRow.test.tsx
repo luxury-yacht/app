@@ -1,12 +1,3 @@
-/**
- * frontend/src/shared/components/tables/hooks/useGridTableHeaderRow.test.tsx
- *
- * Test suite for useGridTableHeaderRow.
- * Covers key behaviors and edge cases for useGridTableHeaderRow.
- */
-
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import type { ColumnRenderModel } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
 import { useGridTableHeaderRow } from '@shared/components/tables/hooks/useGridTableHeaderRow';
@@ -176,84 +167,6 @@ describe('useGridTableHeaderRow', () => {
       await Promise.resolve();
     });
     expect(autoSizeColumn).toHaveBeenCalledWith('name');
-  });
-
-  it('places a non-interactive reorder grip before every column label', async () => {
-    await act(async () => {
-      root.render(<HeaderHarness enableResizing />);
-    });
-
-    const headerContents = Array.from(container.querySelectorAll('.header-content'));
-    expect(headerContents).toHaveLength(columns.length);
-
-    for (const headerContent of headerContents) {
-      const labelGroup = headerContent.firstElementChild;
-      expect(labelGroup?.classList.contains('gridtable-header-label-group')).toBe(true);
-      const grip = labelGroup?.firstElementChild;
-      expect(grip?.classList.contains('gridtable-header-drag-handle')).toBe(true);
-      expect(grip?.getAttribute('aria-hidden')).toBe('true');
-      expect(grip?.textContent).toBe('⠿');
-    }
-  });
-
-  it('keeps the hover-only grip out of layout and the header content shrinkable', async () => {
-    const style = document.createElement('style');
-    style.textContent = readFileSync(
-      resolve(process.cwd(), 'styles/components/gridtables.css'),
-      'utf8'
-    );
-    document.head.appendChild(style);
-
-    try {
-      await act(async () => {
-        root.render(<HeaderHarness enableResizing />);
-      });
-
-      const grip = container.querySelector('.gridtable-header-drag-handle') as HTMLElement;
-      const headerContent = container.querySelector('.header-content') as HTMLElement;
-      expect(window.getComputedStyle(grip).position).toBe('absolute');
-      expect(window.getComputedStyle(headerContent).gap).toBe('');
-      expect(window.getComputedStyle(headerContent).minWidth).toBe('0px');
-    } finally {
-      style.remove();
-    }
-  });
-
-  it('aligns headers independently and defaults omitted alignment to left', async () => {
-    const alignedColumns: GridColumnDefinition<Row>[] = [
-      {
-        key: 'name',
-        header: 'Name',
-        alignData: 'right',
-        render: (row) => row.name,
-      },
-      {
-        key: 'age',
-        header: 'Age',
-        alignHeader: 'center',
-        render: (row) => row.age,
-      },
-      {
-        key: 'role',
-        header: 'Role',
-        alignHeader: 'right',
-        render: (row) => row.role,
-      },
-    ];
-
-    await act(async () => {
-      root.render(<HeaderHarness enableResizing={false} tableColumns={alignedColumns} />);
-    });
-
-    expect(container.querySelector('[data-column="name"]')?.getAttribute('data-align')).toBe(
-      'left'
-    );
-    expect(container.querySelector('[data-column="age"]')?.getAttribute('data-align')).toBe(
-      'center'
-    );
-    expect(container.querySelector('[data-column="role"]')?.getAttribute('data-align')).toBe(
-      'right'
-    );
   });
 
   it('hides resize handles when columns are fixed or resizing disabled', async () => {

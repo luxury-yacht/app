@@ -6,12 +6,7 @@
  */
 
 import { REFRESHER_TIMING_BY_NAME, type RefresherTiming } from './domainRegistry';
-import type {
-  ClusterRefresherName,
-  NamespaceRefresherName,
-  StaticRefresherName,
-  SystemRefresherName,
-} from './refresherTypes';
+import type { StaticRefresherName } from './refresherTypes';
 
 export type { RefresherTiming };
 
@@ -25,12 +20,3 @@ const resolveTiming = (name: StaticRefresherName): RefresherTiming => {
 };
 
 export const refresherConfig = (name: StaticRefresherName): RefresherTiming => resolveTiming(name);
-
-export const namespaceRefresherConfig = (name: NamespaceRefresherName): RefresherTiming =>
-  resolveTiming(name);
-
-export const clusterRefresherConfig = (name: ClusterRefresherName): RefresherTiming =>
-  resolveTiming(name);
-
-export const systemRefresherConfig = (name: SystemRefresherName): RefresherTiming =>
-  resolveTiming(name);

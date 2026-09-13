@@ -11,13 +11,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Overview from './index';
 
 const renderComponentMock = vi.fn();
-const getResourceCapabilitiesMock = vi.fn();
 
 vi.mock('./registry', () => ({
   overviewRegistry: {
     renderComponent: (props: unknown) => renderComponentMock(props),
   },
-  getResourceCapabilities: (kind: unknown) => getResourceCapabilitiesMock(kind),
 }));
 
 // This suite verifies the Overview wrapper's content + ActionsMenu wiring, independent of which
@@ -72,11 +70,9 @@ describe('Overview component', () => {
 
   beforeEach(() => {
     renderComponentMock.mockReset();
-    getResourceCapabilitiesMock.mockReset();
     actionsMenuMock.mockClear();
 
     renderComponentMock.mockReturnValue(<div data-testid="overview-content">Overview body</div>);
-    getResourceCapabilitiesMock.mockReturnValue({ restart: true, scale: false, delete: true });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);

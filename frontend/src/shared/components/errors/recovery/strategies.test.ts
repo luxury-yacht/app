@@ -7,12 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { RecoveryStrategy } from '../types';
-import {
-  canAutoRecover,
-  getRecoveryMessage,
-  getRecoveryStrategy,
-  shouldLogToServer,
-} from './strategies';
+import { canAutoRecover, getRecoveryStrategy, shouldLogToServer } from './strategies';
 
 describe('error recovery strategies', () => {
   it('classifies common failure patterns', () => {
@@ -32,12 +27,6 @@ describe('error recovery strategies', () => {
     expect(getRecoveryStrategy(new Error('Failed to load kubeconfigs'))).toBe(
       RecoveryStrategy.RESET
     );
-  });
-
-  it('provides user-facing guidance strings', () => {
-    expect(getRecoveryMessage(RecoveryStrategy.RETRY)).toMatch(/try again/i);
-    expect(getRecoveryMessage(RecoveryStrategy.RELOAD)).toMatch(/reload/i);
-    expect(getRecoveryMessage(RecoveryStrategy.FATAL)).toMatch(/critical/i);
   });
 
   it('indicates which strategies support automatic recovery', () => {

@@ -21,6 +21,19 @@ test of a mock's own output or a duplicate of the implementation is not evidence
 of app behavior. Add parameterized cases only for distinct failure modes or
 boundary values, not every spelling of equivalent copy.
 
+Avoid repeating a shared component or hook's contract in every consumer suite.
+Keep consumer tests for distinct wiring, identity, permissions, or outcomes;
+remove repetitions that only feed fixed props through a stub. A mock setter that
+rewrites captured props does not test persistence or resizing. Exercise the real
+state owner for those contracts. Do not add runtime tests for barrel exports,
+type-only importability, trivial getters, or assertions against a fixture created
+inside the test. The compiler and existing behavior tests cover those checks.
+
+For data-driven lookup tables, use representative destinations and distinct
+fallback, alias, or normalization paths. Do not copy an entire production table
+into expected values unless exhaustive membership is itself a required contract
+(for example, an API allowlist or supported wire protocol).
+
 ## What to leave to review
 
 Do not create tests solely to freeze sentence wording, headings, tooltips,
@@ -48,6 +61,8 @@ behavioral ones. Prefer an existing behavioral test over another render-only
 case of the same path. Delete an entire test only after checking its assertions
 and nearby coverage; do not delete tests mechanically based on names or matchers.
 Remove fixtures and imports left unused by pruning.
+Reducing the case count by putting the same assertions into a loop is not pruning.
+Remove redundant obligations rather than changing how the runner counts them.
 
 Use red/green/refactor for production behavior changes. Copy, cosmetic styling,
 documentation, and test-only pruning do not need a manufactured failing test.

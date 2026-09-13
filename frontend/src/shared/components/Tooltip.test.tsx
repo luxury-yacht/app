@@ -140,23 +140,6 @@ describe('Tooltip', () => {
   // -----------------------------------------------------------------------
   // Custom children as trigger
   // -----------------------------------------------------------------------
-  it('renders children as the trigger element', async () => {
-    const { container, cleanup } = await renderTooltip({
-      content: 'Tip',
-      children: (
-        <button type="button" data-testid="btn">
-          Hover me
-        </button>
-      ),
-    });
-
-    const trigger = container.querySelector('.tooltip-trigger');
-    expect(trigger?.querySelector('[data-testid="btn"]')).toBeTruthy();
-    // No default icon rendered
-    expect(container.querySelector('.tooltip-info-icon')).toBeFalsy();
-
-    cleanup();
-  });
 
   // -----------------------------------------------------------------------
   // Hover trigger — show after delay
@@ -426,33 +409,6 @@ describe('Tooltip', () => {
   // -----------------------------------------------------------------------
   // Placement attribute
   // -----------------------------------------------------------------------
-  it('sets the correct data-placement attribute', async () => {
-    vi.useFakeTimers();
-
-    const { container, cleanup } = await renderTooltip({
-      content: 'Top tip',
-      placement: 'bottom',
-    });
-
-    const trigger = container.querySelector('.tooltip-trigger') as HTMLElement;
-
-    await act(async () => {
-      trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(250);
-    });
-
-    const tooltip = container.querySelector('.tooltip') as HTMLElement;
-    expect(tooltip).toBeTruthy();
-    // data-placement should reflect the requested placement (bottom)
-    // It may flip based on viewport, but in JSDOM with default viewport it
-    // should keep the requested placement.
-    expect(tooltip.getAttribute('data-placement')).toBeTruthy();
-
-    cleanup();
-    vi.useRealTimers();
-  });
 
   // -----------------------------------------------------------------------
   // disabled prop
@@ -483,33 +439,6 @@ describe('Tooltip', () => {
   // -----------------------------------------------------------------------
   // Rich content (ReactNode)
   // -----------------------------------------------------------------------
-  it('renders rich ReactNode content inside the tooltip', async () => {
-    vi.useFakeTimers();
-
-    const richContent = (
-      <div data-testid="rich">
-        <strong>Bold</strong> text
-      </div>
-    );
-
-    const { container, cleanup } = await renderTooltip({ content: richContent });
-
-    const trigger = container.querySelector('.tooltip-trigger') as HTMLElement;
-
-    await act(async () => {
-      trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(250);
-    });
-
-    const tooltip = container.querySelector('.tooltip');
-    expect(tooltip?.querySelector('[data-testid="rich"]')).toBeTruthy();
-    expect(tooltip?.querySelector('strong')?.textContent).toBe('Bold');
-
-    cleanup();
-    vi.useRealTimers();
-  });
 
   it('keeps page-level hover tooltips below dockable panels', async () => {
     vi.useFakeTimers();
@@ -588,29 +517,6 @@ describe('Tooltip', () => {
   // -----------------------------------------------------------------------
   // showArrow false hides data-placement
   // -----------------------------------------------------------------------
-  it('omits data-placement when showArrow is false', async () => {
-    vi.useFakeTimers();
-
-    const { container, cleanup } = await renderTooltip({
-      content: 'No arrow',
-      showArrow: false,
-    });
-
-    const trigger = container.querySelector('.tooltip-trigger') as HTMLElement;
-
-    await act(async () => {
-      trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(250);
-    });
-
-    const tooltip = container.querySelector('.tooltip') as HTMLElement;
-    expect(tooltip.getAttribute('data-placement')).toBeNull();
-
-    cleanup();
-    vi.useRealTimers();
-  });
 
   // -----------------------------------------------------------------------
   // Hover does not fire on click trigger mode

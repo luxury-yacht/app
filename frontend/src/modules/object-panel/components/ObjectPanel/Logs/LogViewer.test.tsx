@@ -1928,35 +1928,6 @@ describe('LogViewer active pod synchronisation', () => {
     expect(lines).toEqual(['[2024-05-01T12:30:00Z] only container line']);
   });
 
-  it('shows the empty-log placeholder for single container logs', async () => {
-    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
-    seedLogSnapshot(
-      [
-        {
-          pod: 'api',
-          container: 'app',
-          line: '',
-          timestamp: '2024-05-01T12:30:00Z',
-          isInit: false,
-        },
-      ],
-      buildContainerLogsScope('team-a:/v1:pod:api')
-    );
-
-    await renderViewer({
-      resourceKind: 'Pod',
-      activePodNames: ['api'],
-    });
-
-    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
-    await flushAsync();
-
-    const lines = Array.from(container.querySelectorAll('.log-viewer-line')).map((el) =>
-      el.textContent?.replace(/\s+/g, ' ').trim()
-    );
-    expect(lines).toEqual(['[2024-05-01T12:30:00Z] [container emitted an empty log]']);
-  });
-
   it('filters single container logs by selected container', async () => {
     (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
       'app',
@@ -3122,32 +3093,6 @@ describe('LogViewer active pod synchronisation', () => {
 
     const chipStrip = container.querySelector('[aria-label="Active log filters"]');
     expect(chipStrip?.textContent).toContain('Regex: [ (invalid expression)');
-  });
-
-  it('shows Text in the combined chip when regex mode is disabled', async () => {
-    const panelId = 'obj:cluster-a:pod:team-a:api';
-    setLogViewerPrefs(panelId, {
-      selectedContainer: '',
-      selectedFilters: [],
-      autoRefresh: true,
-      timestampMode: 'default',
-      showTimestamps: true,
-      wrapText: true,
-      textFilter: 'panic',
-      highlightMatches: false,
-      inverseMatches: false,
-      caseSensitiveMatches: false,
-      regexMatches: false,
-      displayMode: 'raw',
-      isParsedView: false,
-      expandedRows: [],
-      showPreviousContainerLogs: false,
-    });
-
-    await renderViewer({ panelId });
-
-    const chipStrip = container.querySelector('[aria-label="Active log filters"]');
-    expect(chipStrip?.textContent).toContain('Text: panic');
   });
 
   it('shows a previous-logs chip and returns to live logs when it is cleared', async () => {

@@ -7,7 +7,7 @@
 
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 
-export const objectMapCssVar = (styles: CSSStyleDeclaration, name: string): string =>
+const objectMapCssVar = (styles: CSSStyleDeclaration, name: string): string =>
   styles.getPropertyValue(name).trim();
 
 const objectMapCssColorVar = (
@@ -30,7 +30,7 @@ const objectMapCssColorVar = (
   return resolved || raw;
 };
 
-export const objectMapCssNumber = (styles: CSSStyleDeclaration, name: string): number => {
+const objectMapCssNumber = (styles: CSSStyleDeclaration, name: string): number => {
   const value = Number.parseFloat(objectMapCssVar(styles, name));
   return Number.isFinite(value) ? value : 0;
 };

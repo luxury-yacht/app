@@ -6,9 +6,8 @@
  */
 
 import type { types } from '@core/backend-api/models';
-import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
-import { act, isValidElement } from 'react';
+import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -309,19 +308,6 @@ describe('CommandPaletteCommands', () => {
     unmount();
   });
 
-  it('uses the Attention warning icon for the Cluster Attention command', () => {
-    const { getCommands, unmount } = renderHook();
-    const command = getCommands().find((entry) => entry.id === 'cluster-attention');
-
-    expect(isValidElement(command?.icon)).toBe(true);
-    if (!isValidElement(command?.icon)) {
-      throw new Error('expected Cluster Attention command icon');
-    }
-    expect(command.icon.type).toBe(WarningIcon);
-
-    unmount();
-  });
-
   it('hides Global navigation commands when fewer than two clusters are open', () => {
     mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev'];
 
@@ -557,19 +543,6 @@ describe('CommandPaletteCommands', () => {
     });
 
     expect(mocks.kubeconfig.closeKubeconfig).not.toHaveBeenCalled();
-    unmount();
-  });
-
-  it('labels light, dark, and system choices as appearance modes', () => {
-    const { getCommands, unmount } = renderHook();
-    const commands = getCommands();
-
-    expect(commands.find((entry) => entry.id === 'mode-light')?.label).toBe('Light mode');
-    expect(commands.find((entry) => entry.id === 'mode-dark')?.label).toBe('Dark mode');
-    expect(commands.find((entry) => entry.id === 'mode-system')?.label).toBe(
-      'Follow the system for light/dark mode'
-    );
-
     unmount();
   });
 

@@ -10,8 +10,6 @@ import {
   addPanelToFloatingGroup,
   addPanelToGroup,
   createInitialTabGroupState,
-  getGroupForPanel,
-  getGroupTabs,
   movePanelToGroup,
   removePanelFromGroup,
   reorderTab,
@@ -22,25 +20,6 @@ import type { TabGroupState } from './tabGroupTypes';
 // ---------------------------------------------------------------------------
 // createInitialTabGroupState
 // ---------------------------------------------------------------------------
-describe('createInitialTabGroupState', () => {
-  it('returns empty state with no tabs', () => {
-    const state = createInitialTabGroupState();
-    expect(state).toEqual({
-      right: { tabs: [], activeTab: null },
-      bottom: { tabs: [], activeTab: null },
-      floating: [],
-    });
-  });
-
-  it('returns a new object each time', () => {
-    const a = createInitialTabGroupState();
-    const b = createInitialTabGroupState();
-    expect(a).not.toBe(b);
-    expect(a.right).not.toBe(b.right);
-    expect(a.bottom).not.toBe(b.bottom);
-    expect(a.floating).not.toBe(b.floating);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // addPanelToGroup
@@ -265,30 +244,6 @@ describe('setActiveTab', () => {
 // ---------------------------------------------------------------------------
 // getGroupForPanel
 // ---------------------------------------------------------------------------
-describe('getGroupForPanel', () => {
-  it('returns "right" for a panel in the right group', () => {
-    let state = createInitialTabGroupState();
-    state = addPanelToGroup(state, 'a', 'right');
-    expect(getGroupForPanel(state, 'a')).toBe('right');
-  });
-
-  it('returns "bottom" for a panel in the bottom group', () => {
-    let state = createInitialTabGroupState();
-    state = addPanelToGroup(state, 'a', 'bottom');
-    expect(getGroupForPanel(state, 'a')).toBe('bottom');
-  });
-
-  it('returns the floating groupId for a panel in a floating group', () => {
-    let state = createInitialTabGroupState();
-    state = addPanelToGroup(state, 'a', 'floating');
-    expect(getGroupForPanel(state, 'a')).toBe('floating-1');
-  });
-
-  it('returns null when the panel is not in any group', () => {
-    const state = createInitialTabGroupState();
-    expect(getGroupForPanel(state, 'nonexistent')).toBeNull();
-  });
-});
 
 // ---------------------------------------------------------------------------
 // reorderTab
@@ -451,40 +406,3 @@ describe('addPanelToFloatingGroup', () => {
 // ---------------------------------------------------------------------------
 // getGroupTabs
 // ---------------------------------------------------------------------------
-describe('getGroupTabs', () => {
-  it('returns tabs and activeTab for the right group', () => {
-    let state = createInitialTabGroupState();
-    state = addPanelToGroup(state, 'a', 'right');
-    state = addPanelToGroup(state, 'b', 'right');
-    const result = getGroupTabs(state, 'right');
-    expect(result).toEqual({ tabs: ['a', 'b'], activeTab: 'b' });
-  });
-
-  it('returns tabs and activeTab for the bottom group', () => {
-    let state = createInitialTabGroupState();
-    state = addPanelToGroup(state, 'x', 'bottom');
-    const result = getGroupTabs(state, 'bottom');
-    expect(result).toEqual({ tabs: ['x'], activeTab: 'x' });
-  });
-
-  it('returns tabs and activeTab for a floating group by groupId', () => {
-    let state = createInitialTabGroupState();
-    state = addPanelToGroup(state, 'f1', 'floating');
-    const groupId = state.floating[0].groupId;
-    state = addPanelToFloatingGroup(state, 'f2', groupId);
-    const result = getGroupTabs(state, groupId);
-    expect(result).toEqual({ tabs: ['f1', 'f2'], activeTab: 'f2' });
-  });
-
-  it('returns empty tabs and null activeTab for an empty docked group', () => {
-    const state = createInitialTabGroupState();
-    const result = getGroupTabs(state, 'right');
-    expect(result).toEqual({ tabs: [], activeTab: null });
-  });
-
-  it('returns null for an unknown group key', () => {
-    const state = createInitialTabGroupState();
-    const result = getGroupTabs(state, 'nonexistent-group');
-    expect(result).toBeNull();
-  });
-});

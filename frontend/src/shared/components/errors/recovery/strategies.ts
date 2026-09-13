@@ -67,25 +67,6 @@ export function getRecoveryStrategy(error: Error, scope?: string): RecoveryStrat
   return RecoveryStrategy.RESET;
 }
 
-export function getRecoveryMessage(strategy: RecoveryStrategy): string {
-  switch (strategy) {
-    case RecoveryStrategy.RETRY:
-      return 'This might be a temporary issue. Please try again.';
-    case RecoveryStrategy.REFRESH:
-      return 'Try refreshing the data to resolve this issue.';
-    case RecoveryStrategy.RELOAD:
-      return 'A reload is required to recover from this error.';
-    case RecoveryStrategy.RESET:
-      return 'Resetting the component may resolve this issue.';
-    case RecoveryStrategy.DEGRADE:
-      return 'Some features may be limited due to this error.';
-    case RecoveryStrategy.FATAL:
-      return 'This is a critical error that requires intervention.';
-    default:
-      return 'An unexpected error occurred.';
-  }
-}
-
 export function canAutoRecover(strategy: RecoveryStrategy): boolean {
   const automaticStrategies: RecoveryStrategy[] = [
     RecoveryStrategy.RETRY,

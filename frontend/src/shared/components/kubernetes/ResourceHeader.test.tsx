@@ -9,8 +9,6 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { formatAge } from '@/utils/ageFormatter';
-
 const panel: {
   current: {
     objectData: unknown;
@@ -74,16 +72,6 @@ describe('ResourceHeader', () => {
     });
   };
 
-  it('renders Age formatted from the object creationTimestamp in context', async () => {
-    const created = '2020-01-01T00:00:00Z';
-    panel.current = { objectData: { clusterId: 'c1' }, creationTimestamp: created };
-    await render();
-
-    // Formatted with the same formatter the Browse table uses, so the two
-    // surfaces show byte-identical Age values.
-    expect(valueForLabel(container, 'Age')).toBe(formatAge(created));
-  });
-
   it('updates Age from the object creationTimestamp without receiving new panel data', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:10Z'));
@@ -134,17 +122,6 @@ describe('ResourceHeader', () => {
     await render();
 
     expect(labelOrder(container)).toContain('Age');
-    expect(labelOrder(container)).not.toContain('Last Modified');
-  });
-
-  it('omits the Last Modified row when the value is an empty string', async () => {
-    panel.current = {
-      objectData: { clusterId: 'c1' },
-      creationTimestamp: '2020-01-01T00:00:00Z',
-      lastModified: '',
-    };
-    await render();
-
     expect(labelOrder(container)).not.toContain('Last Modified');
   });
 

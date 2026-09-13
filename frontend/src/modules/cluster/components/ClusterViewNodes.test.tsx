@@ -311,23 +311,6 @@ describe('ClusterViewNodes', () => {
       ([request]) => (request as { domain?: string } | undefined)?.domain === domain
     );
 
-  it('passes persisted state to GridTable', async () => {
-    await renderNodes([baseNode]);
-
-    const props = gridTablePropsRef.current;
-    expect(props).toBeTruthy();
-    expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
-    expect(props.filters?.value).toEqual({
-      search: '',
-      kinds: [],
-      namespaces: [],
-      caseSensitive: false,
-      includeMetadata: false,
-    });
-    expect(props.columnVisibility).toBe(null);
-    expect(props.columnWidths).toBe(null);
-  });
-
   it('wires the Include metadata search toggle for the query-backed nodes table', async () => {
     await renderNodes([baseNode]);
 

@@ -89,16 +89,6 @@ describe('columnFactories', () => {
   });
 
   describe('createTextColumn', () => {
-    it('preserves independent header and data alignment', () => {
-      const column = createTextColumn<RowSample>('name', 'Name', {
-        alignHeader: 'center',
-        alignData: 'right',
-      });
-
-      expect(column.alignHeader).toBe('center');
-      expect(column.alignData).toBe('right');
-    });
-
     it('uses the display accessor as the default local sort value', () => {
       const column = createTextColumn<RowSample>('owner', 'Owner', (row) => row.title ?? row.name, {
         getClassName: () => 'owner-cell',
@@ -211,30 +201,6 @@ describe('columnFactories', () => {
   });
 
   describe('createKindColumn', () => {
-    it('owns badge rendering and ordinary column capabilities', () => {
-      const column = createKindColumn<RowSample>({ getKind: (row) => row.kind ?? '' });
-      const badge = column.render({ id: 'deployment', kind: 'Deployment' }) as React.ReactElement<{
-        className?: string;
-      }>;
-
-      expect(badge.props.className?.split(' ')).toEqual(
-        expect.arrayContaining(['kind-badge', 'hash-color-11'])
-      );
-      expect(column.hideable).not.toBe(false);
-      expect(column.resizable).not.toBe(false);
-    });
-
-    it('preserves independent header and data alignment', () => {
-      const column = createKindColumn<RowSample>({
-        getKind: (row) => row.kind ?? '',
-        alignHeader: 'right',
-        alignData: 'center',
-      });
-
-      expect(column.alignHeader).toBe('right');
-      expect(column.alignData).toBe('center');
-    });
-
     it('prefers aliases when short names are enabled and handles interactions', () => {
       setAppPreferencesForTesting({ useShortResourceNames: true });
       const onKindClick = vi.fn();
@@ -298,19 +264,6 @@ describe('columnFactories', () => {
   });
 
   describe('createResourceBarColumn', () => {
-    it('preserves independent header and data alignment', () => {
-      const column = createResourceBarColumn<RowSample>({
-        header: 'CPU',
-        type: 'cpu',
-        getUsage: () => '200m',
-        alignHeader: 'center',
-        alignData: 'right',
-      });
-
-      expect(column.alignHeader).toBe('center');
-      expect(column.alignData).toBe('right');
-    });
-
     it('returns a ResourceBar element even when values are missing', () => {
       const usageColumn = createResourceBarColumn<RowSample>({
         header: 'CPU',

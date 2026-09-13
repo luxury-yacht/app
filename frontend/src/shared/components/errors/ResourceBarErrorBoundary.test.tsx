@@ -48,12 +48,6 @@ describe('ResourceBarErrorBoundary', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('renders child content when no error is raised', async () => {
-    await renderBoundary(<UnstableMetric shouldThrow={false} />);
-    expect(container.querySelector('[data-testid="metrics"]')).toBeTruthy();
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
-  });
-
   it('renders the default fallback when metrics fail', async () => {
     await renderBoundary(<UnstableMetric shouldThrow />);
     expect(container.querySelector('.resource-bar-container')).toBeTruthy();

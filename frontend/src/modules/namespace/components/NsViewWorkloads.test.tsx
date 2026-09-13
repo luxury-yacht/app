@@ -303,26 +303,6 @@ describe('NsViewWorkloads', () => {
     container.remove();
   });
 
-  it('passes persisted state to GridTable', async () => {
-    await act(async () => {
-      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
-      await Promise.resolve();
-    });
-
-    const props = gridTablePropsRef.current;
-    expect(props).toBeTruthy();
-    expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
-    expect(props.filters?.value).toEqual({
-      search: '',
-      kinds: [],
-      namespaces: [],
-      caseSensitive: false,
-      includeMetadata: false,
-    });
-    expect(props.columnVisibility).toBe(null);
-    expect(props.columnWidths).toBe(null);
-  });
-
   it('queries the cluster bound to the namespace selection when it differs from the active tab', async () => {
     namespaceClusterIdRef.current = 'namespace:context';
 

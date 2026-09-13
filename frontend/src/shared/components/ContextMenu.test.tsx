@@ -1,12 +1,3 @@
-/**
- * frontend/src/shared/components/ContextMenu.test.tsx
- *
- * Test suite for ContextMenu.
- * Covers key behaviors and edge cases for ContextMenu.
- */
-
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act, StrictMode } from 'react';
@@ -149,23 +140,6 @@ describe('ContextMenu', () => {
     expect(document.activeElement).toBe(destination);
     trigger.remove();
     destination.remove();
-  });
-
-  it('renders separators without a native horizontal-rule border', async () => {
-    const style = document.createElement('style');
-    style.textContent = readFileSync(
-      resolve(process.cwd(), 'src/shared/components/ContextMenu.css'),
-      'utf8'
-    );
-    document.head.appendChild(style);
-    const { menu } = await renderMenu({
-      items: [{ label: 'First' }, { divider: true }, { label: 'Second' }],
-    });
-
-    const divider = menu.querySelector<HTMLElement>('.context-menu-divider');
-    expect(divider).toBeTruthy();
-    expect(getComputedStyle(divider as HTMLElement).borderTopWidth).toBe('0px');
-    style.remove();
   });
 
   it('ignores clicks on disabled items', async () => {

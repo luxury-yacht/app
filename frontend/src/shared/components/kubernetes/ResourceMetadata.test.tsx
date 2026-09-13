@@ -47,13 +47,6 @@ describe('ResourceMetadata', () => {
     container?.remove();
   });
 
-  it('returns null when no metadata is provided', async () => {
-    const result = await renderMetadata({});
-    container = result.container;
-    expect(result.container.innerHTML).toBe('');
-    result.cleanup();
-  });
-
   it('highlights selector labels when showSelector is enabled', async () => {
     const { container: root, cleanup } = await renderMetadata({
       showSelector: true,
@@ -111,17 +104,6 @@ describe('ResourceMetadata', () => {
     });
     container = root;
     expect(root.innerHTML).toBe('');
-    cleanup();
-  });
-
-  it('renders labels and annotations via shared component', async () => {
-    const { container: root, cleanup } = await renderMetadata({
-      labels: { app: 'demo' },
-      annotations: { 'deployment.kubernetes.io/revision': '5' },
-    });
-    container = root;
-    expect(root.textContent).toContain('app');
-    expect(root.textContent).toContain('deployment.kubernetes.io/revision');
     cleanup();
   });
 });
