@@ -3,5 +3,8 @@
 
 export type {
     ArgoCDSummary,
-    KarpenterSummary
+    CertManagerSummary,
+    ExternalSecretsSummary,
+    KarpenterSummary,
+    PrometheusSummary
 } from "./models.js";

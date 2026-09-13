@@ -110,7 +110,10 @@ by the change. For non-documentation work, finish with `wails3 task qc:prereleas
 
 The catalog owns optional resource-family availability. `DiscoveredResourceFamilies`
 reads discovered API identities before LIST permissions and object collection;
-`CatalogSnapshot.resourceFamilies` carries that availability with the cluster ID.
+`CatalogSnapshot.resourceFamilies.cluster` and `.namespaced` carry that
+availability separately for each scope with the cluster ID. Only a discovered
+kind in the matching scope enables a family view; a ClusterIssuer alone does
+not enable the namespace cert-manager view.
 The shell subscribes to a small catalog scope before optional views open, and
 accepts availability only for the active cluster. Empty installations remain
 visible; successful rediscovery without the APIs removes the entry.
@@ -151,7 +154,9 @@ over ResourcesUpToDate when projecting health.
 Family availability and catalog filtering are reusable; family registration is
 explicit. Add classification in `backend/resourcekind/family.go`, discovered
 availability in `useAvailableResourceViews`, table selection/persistence, and
-rich-detail projection/descriptor for each family. `customresource.BuildDetails`
+rich-detail projection/descriptor for each family. The navigation registry marks
+optional entries with `resourceFamily`; the availability hook applies the
+discovered scope arrays uniformly. `customresource.BuildDetails`
 accepts the resolved scope; its gateway rejects namespace/scope mismatches before
 GET and keys header metadata by namespace. Preserve discovered scope through
 navigation, queries, details and permissions. Related references need complete
@@ -160,6 +165,18 @@ local cluster or control-plane namespace and must not be guessed into links.
 Family projections may depend on shared resource semantics; they must not import
 catalog, refresh or gateway packages. Object-map support is a separate surface
 and does not follow automatically from a dedicated table or overview.
+
+cert-manager, External Secrets, and Prometheus Operator use this same path.
+Their supported group/kind/scope combinations are explicit in
+`backend/resourcekind/family.go`; served versions remain discovered. Family
+packages share decoding and condition primitives in `backend/resources/crdfacts`.
+Gateway-owned `ResolveLinks` passes the active cluster's catalog resolver into
+detail and row projections. Missing or ambiguous issuer/store versions remain
+display-only; no Secret contents are read to enrich these families. A
+ClusterExternalSecret template has no concrete destination namespace, so its
+namespaced store and Secret references cannot become openable object links.
+Unknown boolean readiness remains absent in row facts, not false. Operator
+status overrides are applied before the shared deletion lifecycle precedence.
 
 Presentation decisions are documented in
 [custom-resource views](../frontend/custom-resource-views.md).

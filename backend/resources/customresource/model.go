@@ -16,6 +16,9 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/argocd"
+	"github.com/luxury-yacht/app/backend/resources/certmanager"
+	"github.com/luxury-yacht/app/backend/resources/externalsecrets"
+	"github.com/luxury-yacht/app/backend/resources/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -120,10 +123,7 @@ func statusPresentation(resource *unstructured.Unstructured, facts Facts) resour
 		})
 	}
 
-	state, label, presentation := primaryStatus(facts)
-	if argoState, argoLabel, argoPresentation, ok := argocd.PrimaryStatus(resource); ok {
-		state, label, presentation = argoState, argoLabel, argoPresentation
-	}
+	state, label, presentation := familyStatus(resource, facts)
 	meta := metav1.ObjectMeta{}
 	if resource != nil {
 		meta = objectMetaFromUnstructured(resource)
@@ -135,6 +135,17 @@ func statusPresentation(resource *unstructured.Unstructured, facts Facts) resour
 		}
 	}
 	return resourcemodel.ObjectSourceStatus(label, state, "", "", presentation, signals, lifecycle)
+}
+
+func familyStatus(resource *unstructured.Unstructured, facts Facts) (string, string, string) {
+	for _, project := range []func(*unstructured.Unstructured) (string, string, string, bool){
+		argocd.PrimaryStatus, certmanager.PrimaryStatus, externalsecrets.PrimaryStatus, prometheus.PrimaryStatus,
+	} {
+		if state, label, presentation, ok := project(resource); ok {
+			return state, label, presentation
+		}
+	}
+	return primaryStatus(facts)
 }
 
 func primaryStatus(facts Facts) (state, label, presentation string) {
@@ -191,14 +202,22 @@ func customResourceReady(object map[string]any) *bool {
 		return &ready
 	}
 	if readyString := nestedString(object, "status", "ready"); readyString != "" {
-		ready := strings.EqualFold(readyString, "true")
-		return &ready
+		return readinessValue(readyString)
 	}
 	if condition := conditionByType(customResourceConditions(object), "Ready"); condition != nil {
-		ready := strings.EqualFold(condition.Status, "true")
-		return &ready
+		return readinessValue(condition.Status)
 	}
 	return nil
+}
+
+func readinessValue(status string) *bool {
+	switch strings.ToLower(status) {
+	case "true", "false":
+		ready := strings.EqualFold(status, "true")
+		return &ready
+	default:
+		return nil
+	}
 }
 
 func conditionByType(conditions []resourcemodel.ConditionFacts, conditionType string) *resourcemodel.ConditionFacts {

@@ -77,8 +77,10 @@ function ClusterResourcesViews({
         return <ClusterViewConfig error={configError} />;
       case 'crds':
         return <ClusterViewCRDs error={crdsError} />;
+      case 'cert-manager':
+      case 'external-secrets':
       case 'karpenter':
-        return <ClusterViewCustom resourceFamily="karpenter" />;
+        return <ClusterViewCustom resourceFamily={activeTab} />;
       case 'custom':
         return (
           <ClusterViewCustom loading={customLoading} loaded={customLoaded} error={customError} />

@@ -68,7 +68,9 @@ const { mocks } = vi.hoisted(() => ({
   },
 }));
 
-const familyState = vi.hoisted(() => ({ families: [] as string[] }));
+const familyState = vi.hoisted(() => ({
+  families: {} as { cluster?: string[]; namespaced?: string[] },
+}));
 vi.mock('@/core/data-access', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/core/data-access')>()),
   useRefreshDomainHandle: () => ({
@@ -182,7 +184,7 @@ const renderHook = () => {
 
 describe('CommandPaletteCommands', () => {
   beforeEach(() => {
-    familyState.families = [];
+    familyState.families = {};
     mocks.kubeconfig.kubeconfigs = [];
     mocks.kubeconfig.selectedKubeconfigs = [];
     mocks.kubeconfig.selectedKubeconfig = '';
@@ -226,7 +228,7 @@ describe('CommandPaletteCommands', () => {
     const first = renderHook();
     expect(first.getCommands().some((entry) => entry.id === 'cluster-karpenter')).toBe(false);
     first.unmount();
-    familyState.families = ['karpenter'];
+    familyState.families = { cluster: ['karpenter'] };
     const second = renderHook();
     const command = second.getCommands().find((entry) => entry.id === 'cluster-karpenter');
     expect(command).toBeDefined();

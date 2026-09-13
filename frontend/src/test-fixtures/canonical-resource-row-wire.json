@@ -272,6 +272,7 @@
           ],
           "provider": "",
           "resourceCount": 0,
+          "resourceFamilies": {},
           "total": 1,
           "totalBatches": 0,
           "totalIsExact": false,

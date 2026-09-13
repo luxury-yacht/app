@@ -115,3 +115,48 @@ The implicit local destination uses `in-cluster` after a successful lookup unles
 a registration overrides its name. Raw destination fields remain intact;
 `resolvedName` is display enrichment. The existing snapshot payload checksum
 changes the Details validator when a registration is renamed or access changes.
+
+## Certificate, secret synchronization, and monitoring operators
+
+The following dedicated views use one family table with the existing Kind
+filter, independent persistence per scope, and discovery-gated sidebar and
+command-palette entries:
+
+| Family | Namespaced kinds | Cluster kinds |
+| --- | --- | --- |
+| cert-manager | Certificate, CertificateRequest, Issuer, Order, Challenge | ClusterIssuer |
+| External Secrets | ExternalSecret, SecretStore | ClusterExternalSecret, ClusterSecretStore |
+| Prometheus Operator | ServiceMonitor, PodMonitor, PrometheusRule, Prometheus, Alertmanager | None |
+
+Other kinds from these ecosystems retain the generic custom-resource view.
+API sources: [cert-manager](https://cert-manager.io/docs/reference/api-docs/),
+[External Secrets](https://external-secrets.io/main/api/spec/), and
+[Prometheus Operator](https://prometheus-operator.dev/docs/api-reference/api/).
+
+cert-manager tables show issuer/Secret links and expiration for namespace
+resources, and issuer type/server for ClusterIssuers. Details group validity,
+certificate identities and usages, private-key configuration, issuer settings,
+and ACME order/challenge progress. Denied CertificateRequests override Ready;
+ACME `ready` means progress, while `valid` means ready. CSR, certificate, and
+ACME token/key material are excluded from display facts.
+
+External Secrets tables show provider, store, target Secret, and refresh
+interval. Details separate synchronization policy, remote key mappings, bulk
+sources, store namespace access, distribution failures, and template settings.
+Target-name defaults follow the generated ExternalSecret name. Template values
+and provider credentials are excluded; namespaced template references remain
+display values until there is a concrete namespace.
+
+Prometheus Operator tables show endpoint/rule counts, configured replicas, and
+version. Details separate target selectors, scrape endpoints, rule groups and
+expressions, instance settings, and resource selection. Empty selectors and
+missing selectors retain distinct API semantics. Numeric ports and expressions
+are projected as display strings without changing source objects. Zero counts
+and replica settings remain visible. Config objects without status have no
+inferred health; CRD configuration does not establish live scrape health or
+whether an alert is firing. Endpoint authentication and remote-write credentials
+are excluded from these projections.
+
+The shared operator overview uses the existing Overview and StatusChip patterns,
+selectable values, titled repeated entries, and full-width messages. It adds no
+operator-specific actions or graph topology.

@@ -1,3 +1,8 @@
+import {
+  type NamespaceResourceFamily,
+  RESOURCE_FAMILY_LABELS,
+} from '@core/navigation/resourceFamilies';
+import { operatorColumns } from '@modules/browse/components/operatorColumns';
 /**
  * frontend/src/modules/namespace/components/NsViewCustom.tsx
  *
@@ -27,20 +32,18 @@ const CUSTOM_VIEW = {
   spinner: 'Loading custom resources...',
   exportFilename: 'custom-resources',
 };
-const ARGOCD_VIEW = {
-  viewId: 'namespace-argocd',
-  label: 'Argo CD',
-  objectLabel: 'Argo CD',
-  spinner: 'Loading Argo CD resources...',
-  exportFilename: 'argocd-resources',
-};
-
+const FAMILY_VIEWS = {
+  argocd: { viewId: 'namespace-argocd' },
+  'cert-manager': { viewId: 'namespace-cert-manager' },
+  'external-secrets': { viewId: 'namespace-external-secrets' },
+  prometheus: { viewId: 'namespace-prometheus' },
+} satisfies Record<NamespaceResourceFamily, { viewId: string }>;
 // Data interface for custom resources
 export type CustomResourceData = CustomResourceGridRow;
 
 interface CustomViewProps {
   namespace: string;
-  resourceFamily?: 'argocd';
+  resourceFamily?: NamespaceResourceFamily;
   showNamespaceColumn?: boolean;
 }
 
@@ -50,16 +53,41 @@ interface CustomViewProps {
 const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
   ({ namespace, resourceFamily, showNamespaceColumn = false }) => {
     const parts = useCustomResourceGridParts({ kindFallback: 'Custom' });
-    const { keyExtractor, selectedClusterId } = parts;
+    const {
+      keyExtractor,
+      selectedClusterId,
+      baseColumns: customColumns,
+      openReference,
+      navigateReference,
+      selectedClusterName,
+    } = parts;
     const namespaceColumnLink = useNamespaceColumnLink<CustomResourceData>(
       resourceFamily ?? 'custom'
     );
 
-    const config = resourceFamily ? ARGOCD_VIEW : CUSTOM_VIEW;
+    const label = resourceFamily ? RESOURCE_FAMILY_LABELS[resourceFamily] : '';
+    const config = resourceFamily
+      ? {
+          ...FAMILY_VIEWS[resourceFamily],
+          label,
+          objectLabel: label,
+          spinner: `Loading ${label} resources...`,
+          exportFilename: `${resourceFamily}-resources`,
+        }
+      : CUSTOM_VIEW;
     const columns = useMemo(() => {
-      const baseColumns = resourceFamily
-        ? argoCDColumns({ baseColumns: parts.baseColumns })
-        : parts.baseColumns;
+      let baseColumns = customColumns;
+      const familyParts = {
+        baseColumns: customColumns,
+        openReference,
+        navigateReference,
+        selectedClusterName,
+      };
+      if (resourceFamily === 'argocd') {
+        baseColumns = argoCDColumns(familyParts);
+      } else if (resourceFamily) {
+        baseColumns = operatorColumns(resourceFamily, familyParts);
+      }
       if (!showNamespaceColumn) {
         return baseColumns;
       }
@@ -69,7 +97,15 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         sortValue: (resource) => (resource.ref.namespace || '').toLowerCase(),
         ...namespaceColumnLink,
       });
-    }, [namespaceColumnLink, parts.baseColumns, showNamespaceColumn, resourceFamily]);
+    }, [
+      namespaceColumnLink,
+      customColumns,
+      openReference,
+      navigateReference,
+      selectedClusterName,
+      showNamespaceColumn,
+      resourceFamily,
+    ]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
     const diagnosticsLabel = `${namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces' : 'Namespace'} ${config.label}`;
@@ -153,6 +189,16 @@ CustomViewGrid.displayName = 'NsViewCustom';
 
 export const NsViewArgoCD = ({ namespace }: { namespace: string }) => (
   <CustomViewGrid namespace={namespace} resourceFamily="argocd" />
+);
+
+export const NsViewCertManager = ({ namespace }: { namespace: string }) => (
+  <CustomViewGrid namespace={namespace} resourceFamily="cert-manager" />
+);
+export const NsViewExternalSecrets = ({ namespace }: { namespace: string }) => (
+  <CustomViewGrid namespace={namespace} resourceFamily="external-secrets" />
+);
+export const NsViewPrometheus = ({ namespace }: { namespace: string }) => (
+  <CustomViewGrid namespace={namespace} resourceFamily="prometheus" />
 );
 
 export default CustomViewGrid;

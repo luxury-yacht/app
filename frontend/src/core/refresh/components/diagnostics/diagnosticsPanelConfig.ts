@@ -62,6 +62,8 @@ const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly PermissionFeatureKey
   crds: [PERMISSION_FEATURES.clusterCRDs],
   custom: [PERMISSION_FEATURES.clusterCustom],
   karpenter: [PERMISSION_FEATURES.clusterCustom],
+  'cert-manager': [PERMISSION_FEATURES.clusterCustom],
+  'external-secrets': [PERMISSION_FEATURES.clusterCustom],
   events: [PERMISSION_FEATURES.clusterEvents],
   browse: [], // Empty = show all cluster-scoped permissions (browse spans all resource types).
 };
@@ -78,6 +80,9 @@ const NAMESPACE_FEATURE_MAP: Record<NamespaceViewType, readonly PermissionFeatur
   quotas: [PERMISSION_FEATURES.namespaceQuotas],
   custom: [PERMISSION_FEATURES.namespaceCustom],
   argocd: [PERMISSION_FEATURES.namespaceCustom],
+  'cert-manager': [PERMISSION_FEATURES.namespaceCustom],
+  'external-secrets': [PERMISSION_FEATURES.namespaceCustom],
+  prometheus: [PERMISSION_FEATURES.namespaceCustom],
   helm: [PERMISSION_FEATURES.namespaceHelm],
   events: [PERMISSION_FEATURES.namespaceEvents],
 };

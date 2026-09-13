@@ -13,7 +13,7 @@ func TestArgoCDDiscoveryAndQueryRemainNamespaced(t *testing.T) {
 		builtinDescriptor("argoproj.io", "v1alpha1", "AppProject", "appprojects", true),
 		builtinDescriptor("argoproj.io", "v1alpha1", "ClusterWorkflowTemplate", "clusterworkflowtemplates", false),
 	})
-	require.Equal(t, []string{"argocd"}, svc.DiscoveredResourceFamilies())
+	require.Equal(t, ResourceFamilies{Namespaced: []string{"argocd"}}, svc.DiscoveredResourceFamilies())
 	require.Empty(t, svc.Query(QueryOptions{}).Items)
 	var rows []Summary
 	for _, input := range []struct{ group, kind, ns, name string }{

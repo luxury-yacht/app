@@ -46,8 +46,6 @@ func (p *objectDetailProvider) fetchDiscoveredResourceDetails(ctx context.Contex
 	clusterID := snapshot.ClusterMetaFromContext(ctx).ClusterID
 	details := customresource.BuildDetails(clusterID, object, descriptor, scope)
 	argocd.NewDestinationResolver(clusterID, resolved.deps.DynamicClient).EnrichFacts(ctx, object, details.ArgoCD)
-	if details.Karpenter != nil {
-		details.Karpenter.NodeClass = p.gateway.objectCatalogServiceForCluster(clusterID).ResolveRelatedResourceLink(details.Karpenter.NodeClass)
-	}
+	details.ResolveLinks(p.gateway.objectCatalogServiceForCluster(clusterID).ResolveRelatedResourceLink)
 	return details, nil
 }

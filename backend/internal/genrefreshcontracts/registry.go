@@ -14,6 +14,11 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/argocd"
+	"github.com/luxury-yacht/app/backend/resources/certmanager"
+	"github.com/luxury-yacht/app/backend/resources/crdfacts"
+	"github.com/luxury-yacht/app/backend/resources/externalsecrets"
+	"github.com/luxury-yacht/app/backend/resources/prometheus"
+
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	"github.com/luxury-yacht/app/backend/resources/karpenter"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -64,6 +69,28 @@ func typeOf[T any]() reflect.Type {
 }
 
 var contractTypes = []typeSpec{
+	{name: "CertManagerFacts", typeOf: typeOf[certmanager.Facts]()},
+	{name: "CertManagerCertificate", typeOf: typeOf[certmanager.Certificate]()},
+	{name: "CertManagerRequest", typeOf: typeOf[certmanager.Request]()},
+	{name: "CertManagerAuthority", typeOf: typeOf[certmanager.Authority]()},
+	{name: "CertManagerOrder", typeOf: typeOf[certmanager.Order]()},
+	{name: "CertManagerChallenge", typeOf: typeOf[certmanager.Challenge]()},
+	{name: "OperatorCondition", typeOf: typeOf[crdfacts.Condition]()},
+	{name: "OperatorLabelSelector", typeOf: typeOf[crdfacts.LabelSelector]()},
+	{name: "ExternalSecretsFacts", typeOf: typeOf[externalsecrets.Facts]()},
+	{name: "ExternalSecretFacts", typeOf: typeOf[externalsecrets.ExternalSecret]()},
+	{name: "ExternalSecretStoreFacts", typeOf: typeOf[externalsecrets.Store]()},
+	{name: "ClusterExternalSecretFacts", typeOf: typeOf[externalsecrets.ClusterExternalSecret]()},
+	{name: "PrometheusFacts", typeOf: typeOf[prometheus.Facts]()},
+	{name: "PrometheusMonitor", typeOf: typeOf[prometheus.Monitor]()},
+	{name: "PrometheusEndpoint", typeOf: typeOf[prometheus.Endpoint]()},
+	{name: "PrometheusRuleGroup", typeOf: typeOf[prometheus.RuleGroup]()},
+	{name: "PrometheusInstance", typeOf: typeOf[prometheus.Instance]()},
+	{name: "CertManagerSummary", typeOf: typeOf[streamrows.CertManagerSummary]()},
+	{name: "ExternalSecretsSummary", typeOf: typeOf[streamrows.ExternalSecretsSummary]()},
+	{name: "PrometheusSummary", typeOf: typeOf[streamrows.PrometheusSummary]()},
+	{name: "ResourceFamilies", typeOf: typeOf[objectcatalog.ResourceFamilies]()},
+
 	{name: "ArgoCDFacts", typeOf: typeOf[argocd.Facts]()},
 	{name: "ArgoCDApplicationFacts", typeOf: typeOf[argocd.ApplicationFacts]()},
 	{name: "ArgoCDApplicationSpec", typeOf: typeOf[argocd.ApplicationSpec]()},

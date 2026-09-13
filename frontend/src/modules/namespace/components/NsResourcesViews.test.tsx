@@ -47,6 +47,9 @@ vi.mock('@modules/namespace/components/NsViewQuotas', () => ({ default: quotasVi
 vi.mock('@modules/namespace/components/NsViewCustom', () => ({
   default: customViewMock,
   NsViewArgoCD: customViewMock,
+  NsViewCertManager: customViewMock,
+  NsViewExternalSecrets: customViewMock,
+  NsViewPrometheus: customViewMock,
 }));
 vi.mock('@modules/namespace/components/NsViewHelm', () => ({ default: helmViewMock }));
 vi.mock('@modules/namespace/components/NsViewEvents', () => ({ default: eventsViewMock }));

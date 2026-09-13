@@ -8,6 +8,7 @@
  * Returns null for unknown kinds — callers should fall back to browse.
  */
 
+import { resourceFamilyForObject } from '@core/navigation/resourceFamilies';
 import type { ClusterViewType, NamespaceViewType, ViewType } from '@/types/navigation/views';
 
 export interface ViewDestination {
@@ -78,16 +79,10 @@ export function getViewForKind(
   group?: string | null,
   namespace?: string | null
 ): ViewDestination | null {
-  if (group?.startsWith('karpenter.') && !namespace) {
-    return { viewType: 'cluster', tab: 'karpenter' };
+  const family = group ? resourceFamilyForObject(group, kind, Boolean(namespace)) : undefined;
+  if (family) {
+    return { viewType: namespace ? 'namespace' : 'cluster', tab: family };
   }
   const normalized = kind.toLowerCase();
-  if (
-    group === 'argoproj.io' &&
-    namespace &&
-    ['application', 'applicationset', 'appproject'].includes(normalized)
-  ) {
-    return { viewType: 'namespace', tab: 'argocd' };
-  }
   return NAMESPACE_SCOPED_MAP[normalized] ?? CLUSTER_SCOPED_MAP[normalized] ?? null;
 }

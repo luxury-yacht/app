@@ -144,6 +144,7 @@ export const makeClusterNodeSnapshotPayload = (
 export const makeCatalogSnapshotPayload = (
   overrides: Partial<CatalogSnapshotPayload> = {}
 ): CatalogSnapshotPayload => ({
+  resourceFamilies: {},
   clusterId: 'cluster-a',
   clusterName: 'Cluster A',
   provider: 'catalog',

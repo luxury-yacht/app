@@ -38,7 +38,7 @@ type CatalogConfig struct {
 // contract fields directly alongside its own projection so the frontend
 // controller can treat it as a conformant provider.
 type CatalogSnapshot struct {
-	ResourceFamilies []string `json:"resourceFamilies,omitempty"`
+	ResourceFamilies objectcatalog.ResourceFamilies `json:"resourceFamilies"`
 	ClusterMeta
 	Provider     ResourceQueryProvider     `json:"provider"`
 	Completeness ResourceQueryCompleteness `json:"completeness,omitempty"`

@@ -21,13 +21,13 @@ function useDiscoveredResourceFamilies(clusterId: string | null | undefined) {
 export function useAvailableClusterViews(clusterId: string | null | undefined) {
   const families = useDiscoveredResourceFamilies(clusterId);
   return CLUSTER_VIEW_DESCRIPTORS.filter(
-    (view) => view.id !== 'karpenter' || families?.includes('karpenter')
+    (view) => !('resourceFamily' in view) || families?.cluster?.includes(view.resourceFamily)
   );
 }
 
 export function useAvailableNamespaceViews(clusterId: string | null | undefined) {
   const families = useDiscoveredResourceFamilies(clusterId);
   return NAMESPACE_VIEW_DESCRIPTORS.filter(
-    (view) => view.id !== 'argocd' || families?.includes('argocd')
+    (view) => !('resourceFamily' in view) || families?.namespaced?.includes(view.resourceFamily)
   );
 }

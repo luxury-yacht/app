@@ -298,6 +298,10 @@ type ClusterCRDEntry struct {
 
 // NamespaceCustomSummary is a CRD-backed namespaced custom resource row.
 type NamespaceCustomSummary struct {
+	CertManager     *CertManagerSummary     `json:"certManager,omitempty"`
+	ExternalSecrets *ExternalSecretsSummary `json:"externalSecrets,omitempty"`
+	Prometheus      *PrometheusSummary      `json:"prometheus,omitempty"`
+
 	ArgoCD             *ArgoCDSummary                 `json:"argoCD,omitempty"`
 	Ref                resourcemodel.ResourceRef      `json:"ref"`
 	CRDName            string                         `json:"crdName,omitempty"`
@@ -337,6 +341,10 @@ type KarpenterSummary struct {
 
 // ClusterCustomSummary is a CRD-backed cluster-scoped custom resource row.
 type ClusterCustomSummary struct {
+	CertManager     *CertManagerSummary     `json:"certManager,omitempty"`
+	ExternalSecrets *ExternalSecretsSummary `json:"externalSecrets,omitempty"`
+	Prometheus      *PrometheusSummary      `json:"prometheus,omitempty"`
+
 	Karpenter          *KarpenterSummary              `json:"karpenter,omitempty"`
 	Ref                resourcemodel.ResourceRef      `json:"ref"`
 	CRDName            string                         `json:"crdName,omitempty"`

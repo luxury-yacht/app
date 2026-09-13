@@ -5,6 +5,8 @@
  * and UI navigation all consume the same vocabulary.
  */
 
+import type { ResourceFamily } from './resourceFamilies';
+
 export type ViewScope = 'global' | 'cluster' | 'namespace';
 
 interface ViewDescriptor<Scope extends ViewScope, Id extends string> {
@@ -15,6 +17,7 @@ interface ViewDescriptor<Scope extends ViewScope, Id extends string> {
   readonly keywords: readonly string[];
   readonly refresher: string | null;
   readonly supportsAllNamespaces?: boolean;
+  readonly resourceFamily?: ResourceFamily;
 }
 
 // Global views compare data across the app's open clusters. Presentation scope
@@ -115,6 +118,7 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
   {
     scope: 'cluster',
     id: 'karpenter',
+    resourceFamily: 'karpenter',
     label: 'Karpenter',
     description: 'View Karpenter node pools, node claims, and provider node classes',
     keywords: [
@@ -125,6 +129,24 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
       'provisioners',
       'nodeoverlays',
     ],
+    refresher: null,
+  },
+  {
+    scope: 'cluster',
+    id: 'cert-manager',
+    resourceFamily: 'cert-manager',
+    label: 'cert-manager',
+    description: 'View cert-manager resources',
+    keywords: ['cert-manager', 'certificates', 'issuers'],
+    refresher: null,
+  },
+  {
+    scope: 'cluster',
+    id: 'external-secrets',
+    resourceFamily: 'external-secrets',
+    label: 'External Secrets',
+    description: 'View External Secrets resources',
+    keywords: ['external-secrets', 'external secrets', 'secret stores'],
     refresher: null,
   },
   {
@@ -240,11 +262,42 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
   {
     scope: 'namespace',
     id: 'argocd',
+    resourceFamily: 'argocd',
     supportsAllNamespaces: true,
     label: 'Argo CD',
     description: 'View Argo CD applications, application sets, and projects',
     keywords: ['argocd', 'argo cd', 'gitops', 'applications', 'applicationsets', 'appprojects'],
     refresher: null,
+  },
+  {
+    scope: 'namespace',
+    id: 'cert-manager',
+    resourceFamily: 'cert-manager',
+    label: 'cert-manager',
+    description: 'View cert-manager resources',
+    keywords: ['cert-manager', 'certificates', 'issuers'],
+    refresher: null,
+    supportsAllNamespaces: true,
+  },
+  {
+    scope: 'namespace',
+    id: 'external-secrets',
+    resourceFamily: 'external-secrets',
+    label: 'External Secrets',
+    description: 'View External Secrets resources',
+    keywords: ['external-secrets', 'external secrets', 'secret stores'],
+    refresher: null,
+    supportsAllNamespaces: true,
+  },
+  {
+    scope: 'namespace',
+    id: 'prometheus',
+    resourceFamily: 'prometheus',
+    label: 'Prometheus Operator',
+    description: 'View Prometheus Operator resources',
+    keywords: ['prometheus', 'prometheus operator', 'monitors', 'rules', 'alertmanager'],
+    refresher: null,
+    supportsAllNamespaces: true,
   },
   {
     scope: 'namespace',

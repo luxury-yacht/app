@@ -22,6 +22,9 @@ import (
 func BuildNamespaceStreamSummary(meta streamrows.ClusterMeta, resource *unstructured.Unstructured, descriptor Descriptor, defaultNamespace string) streamrows.NamespaceCustomSummary {
 	if resource == nil {
 		return streamrows.NamespaceCustomSummary{
+			CertManager:     certManagerSummary(meta.ClusterID, resource),
+			ExternalSecrets: externalSecretsSummary(meta.ClusterID, resource),
+			Prometheus:      prometheusSummary(meta.ClusterID, resource),
 			Ref: resourcemodel.NewResourceRef(resourcemodel.ResourceRef{
 				ClusterID: meta.ClusterID, Group: descriptor.GVR.Group, Version: descriptor.GVR.Version,
 				Kind: descriptor.KindFallback, Resource: descriptor.GVR.Resource,
@@ -33,6 +36,9 @@ func BuildNamespaceStreamSummary(meta streamrows.ClusterMeta, resource *unstruct
 	model := BuildResourceModel(meta.ClusterID, resource, descriptor, resourcemodel.ResourceScopeNamespaced, defaultNamespace)
 	facts := BuildFacts(meta.ClusterID, resource, gvr, descriptor.CRDName, resourcemodel.ResourceModelBuildOptions{})
 	return streamrows.NamespaceCustomSummary{
+		CertManager:        certManagerSummary(meta.ClusterID, resource),
+		ExternalSecrets:    externalSecretsSummary(meta.ClusterID, resource),
+		Prometheus:         prometheusSummary(meta.ClusterID, resource),
 		ArgoCD:             argoCDTableSummary(argocd.BuildFacts(meta.ClusterID, resource), model.Status),
 		Ref:                model.Ref,
 		CRDName:            descriptor.CRDName,
@@ -53,6 +59,9 @@ func BuildNamespaceStreamSummary(meta streamrows.ClusterMeta, resource *unstruct
 func BuildClusterStreamSummary(meta streamrows.ClusterMeta, resource *unstructured.Unstructured, descriptor Descriptor) streamrows.ClusterCustomSummary {
 	if resource == nil {
 		return streamrows.ClusterCustomSummary{
+			CertManager:     certManagerSummary(meta.ClusterID, resource),
+			ExternalSecrets: externalSecretsSummary(meta.ClusterID, resource),
+			Prometheus:      prometheusSummary(meta.ClusterID, resource),
 			Ref: resourcemodel.NewResourceRef(resourcemodel.ResourceRef{
 				ClusterID: meta.ClusterID, Group: descriptor.GVR.Group, Version: descriptor.GVR.Version,
 				Kind: descriptor.KindFallback, Resource: descriptor.GVR.Resource,
@@ -64,6 +73,9 @@ func BuildClusterStreamSummary(meta streamrows.ClusterMeta, resource *unstructur
 	model := BuildResourceModel(meta.ClusterID, resource, descriptor, resourcemodel.ResourceScopeCluster, "")
 	facts := BuildFacts(meta.ClusterID, resource, gvr, descriptor.CRDName, resourcemodel.ResourceModelBuildOptions{})
 	return streamrows.ClusterCustomSummary{
+		CertManager:        certManagerSummary(meta.ClusterID, resource),
+		ExternalSecrets:    externalSecretsSummary(meta.ClusterID, resource),
+		Prometheus:         prometheusSummary(meta.ClusterID, resource),
 		Karpenter:          karpenterTableSummary(karpenter.BuildFacts(meta.ClusterID, resource)),
 		Ref:                model.Ref,
 		CRDName:            descriptor.CRDName,

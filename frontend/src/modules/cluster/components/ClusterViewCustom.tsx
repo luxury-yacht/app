@@ -1,3 +1,8 @@
+import {
+  type ClusterResourceFamily,
+  RESOURCE_FAMILY_LABELS,
+} from '@core/navigation/resourceFamilies';
+import { operatorColumns } from '@modules/browse/components/operatorColumns';
 /**
  * frontend/src/modules/cluster/components/ClusterViewCustom.tsx
  *
@@ -29,16 +34,14 @@ const CUSTOM_VIEW = {
   spinner: 'Loading cluster custom resources...',
   empty: 'No cluster-scoped custom objects found',
 };
-const KARPENTER_VIEW = {
-  viewId: 'cluster-karpenter',
-  label: 'Karpenter',
-  spinner: 'Loading Karpenter resources...',
-  empty: 'No Karpenter objects found',
-};
-
+const FAMILY_VIEWS = {
+  karpenter: { viewId: 'cluster-karpenter' },
+  'cert-manager': { viewId: 'cluster-cert-manager' },
+  'external-secrets': { viewId: 'cluster-external-secrets' },
+} satisfies Record<ClusterResourceFamily, { viewId: string }>;
 // Define props for ClusterViewCustom component
 interface ClusterCustomViewProps {
-  resourceFamily?: 'karpenter';
+  resourceFamily?: ClusterResourceFamily;
   loading?: boolean;
   loaded?: boolean;
   error?: string | null;
@@ -50,7 +53,15 @@ interface ClusterCustomViewProps {
  */
 const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
   ({ loading = false, loaded = false, error, resourceFamily }) => {
-    const config = resourceFamily ? KARPENTER_VIEW : CUSTOM_VIEW;
+    const label = resourceFamily ? RESOURCE_FAMILY_LABELS[resourceFamily] : '';
+    const config = resourceFamily
+      ? {
+          ...FAMILY_VIEWS[resourceFamily],
+          label,
+          spinner: `Loading ${label} resources...`,
+          empty: `No ${label} objects found`,
+        }
+      : CUSTOM_VIEW;
     const parts = useCustomResourceGridParts();
     const {
       keyExtractor,
@@ -64,7 +75,12 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       if (!resourceFamily) {
         return baseColumns;
       }
-      return karpenterColumns({
+      const buildColumns =
+        resourceFamily === 'karpenter'
+          ? karpenterColumns
+          : (columnParts: Parameters<typeof operatorColumns>[1]) =>
+              operatorColumns(resourceFamily, columnParts, true);
+      return buildColumns({
         baseColumns,
         openReference,
         navigateReference,

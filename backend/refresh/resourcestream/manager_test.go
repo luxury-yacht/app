@@ -728,7 +728,7 @@ func TestManagerSkipsCustomInformerForFirstClassGatewayCRD(t *testing.T) {
 	manager := &Manager{
 		clusterMeta:     snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:          applog.Noop,
-		dynamicClient:   dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		dynamicClient:   newWidgetDynamicClient(),
 		customInformers: make(map[string]*customResourceInformer),
 		subscribers:     make(map[string]map[string]map[uint64]*subscription),
 	}
@@ -773,7 +773,7 @@ func TestManagerCustomInformerGuardsMissingDependencies(t *testing.T) {
 	manager.ensureCustomInformer(crd)
 	manager.removeCustomInformer("")
 
-	manager.dynamicClient = dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	manager.dynamicClient = newWidgetDynamicClient()
 	manager.ensureCustomInformer(nil)
 }
 
@@ -785,7 +785,7 @@ func TestManagerStartsCustomInformersOnlyInPermittedNamespaces(t *testing.T) {
 		clusterMeta:       snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:            applog.Noop,
 		permissions:       permissionChecks,
-		dynamicClient:     dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		dynamicClient:     newWidgetDynamicClient(),
 		allowedNamespaces: []string{"allowed", "denied"},
 		customInformers:   make(map[string]*customResourceInformer),
 		subscribers:       make(map[string]map[string]map[uint64]*subscription),
@@ -813,7 +813,7 @@ func TestManagerDoesNotStartCustomInformerWhenListWatchIsDenied(t *testing.T) {
 		clusterMeta:       snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:            applog.Noop,
 		permissions:       permissionChecks,
-		dynamicClient:     dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		dynamicClient:     newWidgetDynamicClient(),
 		allowedNamespaces: []string{"denied"},
 		customInformers: map[string]*customResourceInformer{
 			crd.Name: {stopCh: staleStopCh},
@@ -838,7 +838,7 @@ func TestManagerRemovesCustomInformerForUnknownCRDScope(t *testing.T) {
 	manager := &Manager{
 		clusterMeta:   snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:        applog.Noop,
-		dynamicClient: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		dynamicClient: newWidgetDynamicClient(),
 		customInformers: map[string]*customResourceInformer{
 			crd.Name: {stopCh: staleStopCh},
 		},
@@ -862,7 +862,7 @@ func TestManagerRetainsCustomInformerForIncompleteCRDDefinition(t *testing.T) {
 	manager := &Manager{
 		clusterMeta:   snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:        applog.Noop,
-		dynamicClient: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		dynamicClient: newWidgetDynamicClient(),
 		customInformers: map[string]*customResourceInformer{
 			crd.Name: existing,
 		},
@@ -888,7 +888,7 @@ func TestManagerChecksClusterScopedCustomInformerAtClusterScope(t *testing.T) {
 		clusterMeta:     snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:          applog.Noop,
 		permissions:     permissionChecks,
-		dynamicClient:   dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		dynamicClient:   newWidgetDynamicClient(),
 		customInformers: make(map[string]*customResourceInformer),
 		subscribers:     make(map[string]map[string]map[uint64]*subscription),
 	}
@@ -912,7 +912,7 @@ func TestManagerChecksUnscopedNamespacedCustomInformerAtAllNamespaces(t *testing
 		clusterMeta:     snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:          applog.Noop,
 		permissions:     permissionChecks,
-		dynamicClient:   dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		dynamicClient:   newWidgetDynamicClient(),
 		customInformers: make(map[string]*customResourceInformer),
 		subscribers:     make(map[string]map[string]map[uint64]*subscription),
 	}
@@ -933,7 +933,7 @@ func TestManagerReusesMatchingCustomInformerWithoutDuplicates(t *testing.T) {
 	manager := &Manager{
 		clusterMeta:     snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:          applog.Noop,
-		dynamicClient:   dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		dynamicClient:   newWidgetDynamicClient(),
 		customInformers: make(map[string]*customResourceInformer),
 		subscribers:     make(map[string]map[string]map[uint64]*subscription),
 	}
@@ -957,7 +957,7 @@ func TestManagerReplacesChangedCustomInformerAndStopsPrevious(t *testing.T) {
 	manager := &Manager{
 		clusterMeta:     snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:          applog.Noop,
-		dynamicClient:   dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		dynamicClient:   newWidgetDynamicClient(),
 		customInformers: make(map[string]*customResourceInformer),
 		subscribers:     make(map[string]map[string]map[uint64]*subscription),
 	}
@@ -985,7 +985,7 @@ func TestManagerStopCleansCustomInformers(t *testing.T) {
 	manager := &Manager{
 		clusterMeta:     snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:          applog.Noop,
-		dynamicClient:   dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		dynamicClient:   newWidgetDynamicClient(),
 		customInformers: make(map[string]*customResourceInformer),
 		subscribers:     make(map[string]map[string]map[uint64]*subscription),
 	}
@@ -1008,7 +1008,7 @@ func TestManagerDoesNotRecreateCustomInformerAfterStop(t *testing.T) {
 	manager := &Manager{
 		clusterMeta:     snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:          applog.Noop,
-		dynamicClient:   dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		dynamicClient:   newWidgetDynamicClient(),
 		customInformers: make(map[string]*customResourceInformer),
 		subscribers:     make(map[string]map[string]map[uint64]*subscription),
 	}
@@ -1833,6 +1833,13 @@ func deploymentListerWith(items ...*appsv1.Deployment) appslisters.DeploymentLis
 		_ = indexer.Add(item)
 	}
 	return appslisters.NewDeploymentLister(indexer)
+}
+
+// Informer tests may start their LIST before cleanup closes the watch.
+func newWidgetDynamicClient() *dynamicfake.FakeDynamicClient {
+	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		{Group: "example.com", Version: "v1", Resource: "widgets"}: "WidgetList",
+	})
 }
 
 func customResourceDefinition(

@@ -141,6 +141,18 @@ export const normalizeHydratedCustomRow = (row: unknown): CatalogBackedCustomRes
     ref,
     kindAlias: optionalString(record.kindAlias) ?? ref.kind,
     crdName: optionalString(record.crdName),
+    certManager:
+      record.certManager && typeof record.certManager === 'object'
+        ? (record.certManager as CatalogBackedCustomResourceRow['certManager'])
+        : undefined,
+    externalSecrets:
+      record.externalSecrets && typeof record.externalSecrets === 'object'
+        ? (record.externalSecrets as CatalogBackedCustomResourceRow['externalSecrets'])
+        : undefined,
+    prometheus:
+      record.prometheus && typeof record.prometheus === 'object'
+        ? (record.prometheus as CatalogBackedCustomResourceRow['prometheus'])
+        : undefined,
     argoCD:
       record.argoCD && typeof record.argoCD === 'object'
         ? (record.argoCD as CatalogBackedCustomResourceRow['argoCD'])

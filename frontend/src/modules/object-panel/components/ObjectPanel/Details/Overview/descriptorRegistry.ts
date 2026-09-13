@@ -34,6 +34,7 @@ import { cronJobDescriptor, jobDescriptor } from './descriptors/job';
 import { getKarpenterOverviewDescriptor, karpenterDescriptor } from './descriptors/karpenter';
 import { networkPolicyDescriptor } from './descriptors/networkpolicy';
 import { nodeDescriptor } from './descriptors/node';
+import { getOperatorOverviewDescriptor, operatorDescriptor } from './descriptors/operators';
 import { podDescriptor } from './descriptors/pod';
 import {
   hpaDescriptor,
@@ -130,6 +131,7 @@ export function getOverviewDescriptor(
   return (
     getArgoCDOverviewDescriptor(kind, detail) ??
     getKarpenterOverviewDescriptor(kind, detail) ??
+    getOperatorOverviewDescriptor(kind, detail) ??
     byKind.get(kind.toLowerCase())
   );
 }
@@ -139,4 +141,5 @@ export const registeredDescriptors = [
   ...registrations.map((reg) => reg.descriptor),
   karpenterDescriptor as OverviewDescriptor<never>,
   argoCDDescriptor as OverviewDescriptor<never>,
+  operatorDescriptor as OverviewDescriptor<never>,
 ];

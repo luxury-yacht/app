@@ -48,12 +48,15 @@ const AllNamespacesView: React.FC<AllNamespacesViewProps> = ({ activeTab }) => {
         return <NsViewRBAC namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'storage':
         return <NsViewStorage namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
+      case 'cert-manager':
+      case 'external-secrets':
+      case 'prometheus':
       case 'argocd':
         return (
           <NsViewCustom
             namespace={ALL_NAMESPACES_SCOPE}
             showNamespaceColumn
-            resourceFamily="argocd"
+            resourceFamily={activeTab}
           />
         );
       case 'custom':

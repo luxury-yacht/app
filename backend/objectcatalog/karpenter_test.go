@@ -52,7 +52,7 @@ func TestDiscoveredFamiliesDoNotDependOnObjectsOrListPermission(t *testing.T) {
 		builtinDescriptor("other.io", "v1", "NodePool", "nodepools", false),
 	})
 	require.Empty(t, svc.Query(QueryOptions{}).Items)
-	require.Equal(t, []string{"karpenter"}, svc.DiscoveredResourceFamilies())
+	require.Equal(t, ResourceFamilies{Cluster: []string{"karpenter"}}, svc.DiscoveredResourceFamilies())
 	other := NewService(Dependencies{}, nil)
 	require.Empty(t, other.DiscoveredResourceFamilies())
 	svc.identity.replaceDiscovered(nil)

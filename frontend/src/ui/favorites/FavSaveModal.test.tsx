@@ -942,6 +942,8 @@ describe('FavSaveModal', () => {
       'cluster:crds',
       'cluster:custom',
       'cluster:karpenter',
+      'cluster:cert-manager',
+      'cluster:external-secrets',
       'cluster:rbac',
       'namespace:browse',
       'namespace:map',
@@ -954,6 +956,9 @@ describe('FavSaveModal', () => {
       'namespace:storage',
       'namespace:custom',
       'namespace:argocd',
+      'namespace:cert-manager',
+      'namespace:external-secrets',
+      'namespace:prometheus',
       'namespace:quotas',
       'namespace:rbac',
     ]);

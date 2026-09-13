@@ -40,7 +40,9 @@ const autoRefreshLoadingState = vi.hoisted(() => ({
   suppressPassiveLoading: false,
 }));
 
-const discoveredFamilies = vi.hoisted(() => ({ byCluster: {} as Record<string, string[]> }));
+const discoveredFamilies = vi.hoisted(() => ({
+  byCluster: {} as Record<string, { cluster?: string[]; namespaced?: string[] }>,
+}));
 
 const attentionState = vi.hoisted(() => ({
   byScope: {
@@ -78,7 +80,7 @@ vi.mock('@/core/data-access', () => ({
     if (options.domain === 'catalog') {
       const clusterId = options.scope?.split('|')[0] ?? '';
       return {
-        data: { clusterId, resourceFamilies: discoveredFamilies.byCluster[clusterId] ?? [] },
+        data: { clusterId, resourceFamilies: discoveredFamilies.byCluster[clusterId] ?? {} },
       };
     }
     attentionState.recordRefreshHandle(options);
@@ -352,7 +354,7 @@ describe('Sidebar', () => {
     renderSidebar();
     const button = () => container?.querySelector('[data-sidebar-target-view="karpenter"]');
     expect(button()).toBeNull();
-    discoveredFamilies.byCluster['cluster-a'] = ['karpenter'];
+    discoveredFamilies.byCluster['cluster-a'] = { cluster: ['karpenter'] };
     renderSidebar();
     expect(button()?.textContent).toBe('Karpenter');
     act(() => (button() as HTMLButtonElement).click());
@@ -361,7 +363,7 @@ describe('Sidebar', () => {
     renderSidebar();
     expect(button()).toBeNull();
     kubeconfigState.selectedClusterId = 'cluster-a';
-    discoveredFamilies.byCluster['cluster-a'] = [];
+    discoveredFamilies.byCluster['cluster-a'] = {};
     renderSidebar();
     expect(button()).toBeNull();
   });
@@ -378,7 +380,7 @@ describe('Sidebar', () => {
     const button = () =>
       container?.querySelector<HTMLButtonElement>('[data-sidebar-target-view="argocd"]');
     expect(button()).toBeNull();
-    discoveredFamilies.byCluster['cluster-a'] = ['argocd'];
+    discoveredFamilies.byCluster['cluster-a'] = { namespaced: ['argocd'] };
     renderSidebar();
     expect(button()?.textContent).toBe('Argo CD');
     act(() => button()?.click());
@@ -388,7 +390,7 @@ describe('Sidebar', () => {
         '[data-sidebar-target-kind="cluster-view"][data-sidebar-target-view="argocd"]'
       )
     ).toBeNull();
-    discoveredFamilies.byCluster['cluster-a'] = [];
+    discoveredFamilies.byCluster['cluster-a'] = {};
     renderSidebar();
     expect(button()).toBeNull();
   });

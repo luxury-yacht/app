@@ -18,6 +18,23 @@ export interface ArgoCDSummary {
     "destinationNamespace"?: string;
 }
 
+export interface CertManagerSummary {
+    "issuerType"?: string;
+    "server"?: string;
+    "issuer"?: resourcemodel$0.ResourceLink | null;
+    "secret"?: resourcemodel$0.ResourceLink | null;
+    "notAfter"?: string;
+}
+
+export interface ExternalSecretsSummary {
+    "provider"?: string;
+    "storeName"?: string;
+    "store"?: resourcemodel$0.ResourceLink | null;
+    "target"?: resourcemodel$0.ResourceLink | null;
+    "targetName"?: string;
+    "refreshInterval"?: string;
+}
+
 /**
  * KarpenterSummary contains only the facts shown in the Karpenter table.
  * Capacity and limits supply NodePool usage; scheduling and provider configuration
@@ -30,4 +47,12 @@ export interface KarpenterSummary {
     "capacityType"?: string;
     "capacity"?: { [_ in string]?: string } | null;
     "limits"?: { [_ in string]?: string } | null;
+}
+
+export interface PrometheusSummary {
+    "endpoints"?: number | null;
+    "rules"?: number | null;
+    "version"?: string;
+    "replicas"?: number | null;
+    "availableReplicas"?: number | null;
 }

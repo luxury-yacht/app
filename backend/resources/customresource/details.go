@@ -4,12 +4,18 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/argocd"
+	"github.com/luxury-yacht/app/backend/resources/certmanager"
+	"github.com/luxury-yacht/app/backend/resources/externalsecrets"
 	"github.com/luxury-yacht/app/backend/resources/karpenter"
+	"github.com/luxury-yacht/app/backend/resources/prometheus"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // Details enriches discovery-backed objects without declaring their GVK built-in.
 type Details struct {
+	CertManager        *certmanager.Facts             `json:"certManager,omitempty"`
+	ExternalSecrets    *externalsecrets.Facts         `json:"externalSecrets,omitempty"`
+	Prometheus         *prometheus.Facts              `json:"prometheus,omitempty"`
 	ArgoCD             *argocd.Facts                  `json:"argoCD,omitempty"`
 	Ref                resourcemodel.ResourceRef      `json:"ref"`
 	ResourceFamily     string                         `json:"resourceFamily"`
@@ -28,7 +34,10 @@ func BuildDetails(clusterID string, object *unstructured.Unstructured, descripto
 	model := BuildResourceModel(clusterID, object, descriptor, scope, "")
 	facts := BuildFacts(clusterID, object, descriptor.GVR, descriptor.CRDName, resourcemodel.ResourceModelBuildOptions{})
 	return &Details{
-		Ref: model.Ref, ResourceFamily: resourcekind.FamilyForResource(descriptor.GVR.Group, model.Ref.Kind, scope == resourcemodel.ResourceScopeNamespaced),
+		CertManager:     certmanager.BuildFacts(clusterID, object),
+		ExternalSecrets: externalsecrets.BuildFacts(clusterID, object),
+		Prometheus:      prometheus.BuildFacts(clusterID, object),
+		Ref:             model.Ref, ResourceFamily: resourcekind.FamilyForResource(descriptor.GVR.Group, model.Ref.Kind, scope == resourcemodel.ResourceScopeNamespaced),
 		Kind: model.Ref.Kind, Name: model.Ref.Name, Status: model.Status.Label,
 		StatusState: model.Status.State, StatusPresentation: model.Status.Presentation,
 		Conditions: facts.Conditions, Labels: model.Metadata.Labels, Annotations: model.Metadata.Annotations,

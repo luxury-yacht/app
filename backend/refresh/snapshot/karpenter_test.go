@@ -36,7 +36,7 @@ func TestCatalogSnapshotPublishesDiscoveredKarpenterWithoutRows(t *testing.T) {
 	payload := snap.Payload.(CatalogSnapshot)
 	require.Equal(t, "a", payload.ClusterID)
 	require.Empty(t, payload.Items)
-	require.Equal(t, []string{"karpenter"}, payload.ResourceFamilies)
+	require.Equal(t, []string{"karpenter"}, payload.ResourceFamilies.Cluster)
 	other := newCatalogRefreshAdapter(objectcatalog.NewService(objectcatalog.Dependencies{}, nil), ClusterMeta{ClusterID: "b"}, nil)
 	require.Empty(t, other.BuildSnapshot("catalog", "limit=1", browseQueryOptions{Limit: 1}).Payload.(CatalogSnapshot).ResourceFamilies)
 }

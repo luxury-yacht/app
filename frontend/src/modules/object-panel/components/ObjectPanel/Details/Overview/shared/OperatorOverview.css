@@ -1,0 +1,75 @@
+.operator-overview,
+.operator-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.operator-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  min-width: 0;
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.operator-section > h3,
+.operator-overview .overview-card-title {
+  margin: 0;
+}
+
+.operator-overview .overview-label {
+  flex: 0 0 8rem;
+  min-width: 0;
+}
+
+.operator-overview .overview-value,
+.operator-overview .overview-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.operator-overview .overview-card {
+  gap: var(--spacing-md);
+}
+
+.operator-overview .overview-card .overview-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  text-transform: none;
+}
+
+.operator-subtitle {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.operator-rule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.operator-message,
+.operator-overview .overview-ref-item,
+.operator-overview .overview-card-title {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.app .operator-overview .overview-value,
+.app .operator-overview .overview-value *,
+.app .operator-overview .overview-ref-item,
+.app .operator-overview .overview-card-title,
+.app .operator-overview .operator-message {
+  user-select: text;
+  -webkit-user-select: text;
+}

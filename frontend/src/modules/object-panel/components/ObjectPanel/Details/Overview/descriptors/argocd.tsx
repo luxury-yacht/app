@@ -10,7 +10,15 @@ import type { OverviewDescriptor } from '../schema';
 export const argoCDDescriptor: OverviewDescriptor<CustomResourceDetails> = {
   displayKind: 'Argo CD',
   dtoName: 'CustomResourceDetails',
-  coveredElsewhere: ['ref', 'resourceFamily', 'karpenter', 'conditions'],
+  coveredElsewhere: [
+    'ref',
+    'resourceFamily',
+    'karpenter',
+    'conditions',
+    'certManager',
+    'externalSecrets',
+    'prometheus',
+  ],
   schema: {
     items: [
       {
