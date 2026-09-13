@@ -77,7 +77,7 @@ export function operatorColumns(
           (row) => row.externalSecrets?.target,
           (row) => row.externalSecrets?.targetName
         ),
-        text('refreshInterval', 'Refresh Interval', (row) => row.externalSecrets?.refreshInterval),
+        text('refreshInterval', 'Refresh', (row) => row.externalSecrets?.refreshInterval),
       ];
       break;
     default:
