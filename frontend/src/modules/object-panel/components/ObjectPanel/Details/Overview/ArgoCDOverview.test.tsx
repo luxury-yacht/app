@@ -227,6 +227,19 @@ describe('Argo CD overview', () => {
     expect(headings(dom)).toEqual(['Sources', 'Sync Policy']);
     expect(rowValue(dom, 'Status')).toBeUndefined();
   });
+  it.each([
+    ['trailing slashes', 'https://git.example.com/platform/deploy-config.git///'],
+    ['long internal slash runs', `https://git.example.com/${'/'.repeat(10_000)}deploy-config.git`],
+  ])('extracts the repository name from sources with %s', (_description, repoURL) => {
+    const dom = mount({
+      ...base,
+      argoCD: { application: { spec: { destination: {}, source: { repoURL } } } },
+    });
+    const source = cards(section(dom, 'Sources'))[0];
+    expect(source.title).toBe('deploy-config');
+    expect(source.rows).toEqual([['Repository', repoURL]]);
+  });
+
   it('titles source cards from name, chart or repository, keeps revisions separate and summarises automation', () => {
     const application = {
       spec: {

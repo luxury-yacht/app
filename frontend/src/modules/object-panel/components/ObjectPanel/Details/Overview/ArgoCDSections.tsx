@@ -170,7 +170,13 @@ function destinationValue(destination: ArgoCDDestination): ReactNode | undefined
 }
 
 const repoLeaf = (repoURL?: string): string => {
-  const trimmed = (repoURL ?? '').replace(/\/+$/, '').replace(/\.git$/, '');
+  const url = repoURL ?? '';
+  let end = url.length;
+  // Scan from the end to avoid regex backtracking on long slash runs.
+  while (end > 0 && url[end - 1] === '/') {
+    end--;
+  }
+  const trimmed = url.slice(0, end).replace(/\.git$/, '');
   return trimmed.slice(trimmed.lastIndexOf('/') + 1);
 };
 
