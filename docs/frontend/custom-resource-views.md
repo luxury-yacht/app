@@ -203,6 +203,18 @@ inferred health; CRD configuration does not establish live scrape health or
 whether an alert is firing. Endpoint authentication and remote-write credentials
 are excluded from these projections.
 
+ServiceMonitor and PodMonitor details use label/value rows for **Targets**: the
+selector row is labeled **Services** or **Pods** by kind (an empty selector reads
+`All`), **Namespaces** resolves the empty namespace selector to the object's own
+namespace as `<name> (same namespace)`, lists `matchNames`, or reads
+`All namespaces`; job label, sample/target limits (zero stays visible) and
+target/pod target labels follow. Each scrape endpoint is one card: the title is
+the named port, or the numeric `targetPort`/`portNumber` with that field name as
+the card meta; scheme and path appear in the meta only when set (defaults are not
+invented); interval and timeout form the right-aligned `every … · timeout …` tag;
+only the remaining set fields (a numeric target port alongside a named port,
+honor labels, honor timestamps) render as rows inside the card.
+
 The shared operator overview uses the existing Overview and StatusChip patterns,
 selectable values, titled repeated entries, and full-width messages. It adds no
 operator-specific actions or graph topology.

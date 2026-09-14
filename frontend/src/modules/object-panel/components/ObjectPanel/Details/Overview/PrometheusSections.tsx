@@ -1,63 +1,127 @@
 import type {
+  PrometheusEndpoint,
   PrometheusFacts,
   PrometheusInstance,
   PrometheusMonitor,
+  PrometheusNamespaceSelector,
   PrometheusRuleGroup,
 } from '@core/refresh/types';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import {
   OperatorCard as Card,
   OperatorFields as Fields,
+  OperatorList as List,
   OperatorMessage as Message,
   operatorBoolean,
   operatorEntries,
+  operatorSelectorValues,
   OperatorSection as Section,
   OperatorSelector as Selector,
   OperatorValues as Values,
 } from './shared/OperatorOverview';
 
-function Monitor({ facts }: Readonly<{ facts: PrometheusMonitor }>) {
-  let namespaces = facts.namespaceSelector.matchNames ?? [];
-  if (facts.namespaceSelector.any) {
-    namespaces = ['All Namespaces'];
-  } else if (!namespaces.length) {
-    namespaces = ['Same Namespace'];
+// ServiceMonitors select Services, PodMonitors select Pods; the row label says which.
+const targetKind = (kind: string): string =>
+  kind.toLowerCase() === 'podmonitor' ? 'Pods' : 'Services';
+
+// An empty namespace selector means the monitor's own namespace, so name it when known.
+const namespaceValues = (selector: PrometheusNamespaceSelector, namespace?: string): string[] => {
+  if (selector.any) {
+    return ['All namespaces'];
   }
+  if (selector.matchNames?.length) {
+    return selector.matchNames;
+  }
+  return [namespace ? `${namespace} (same namespace)` : 'Same namespace'];
+};
+
+const listOrNothing = (values?: string[]) =>
+  values?.length ? <List values={values} /> : undefined;
+
+// The card title is the port the endpoint names; when only a numeric target port or port number
+// is set, the API field name says where the number came from.
+const endpointIdentity = (
+  endpoint: PrometheusEndpoint,
+  index: number
+): { title: string; source?: string } => {
+  if (endpoint.port) {
+    return { title: endpoint.port };
+  }
+  if (endpoint.targetPort) {
+    return { title: endpoint.targetPort, source: 'targetPort' };
+  }
+  if (endpoint.portNumber !== undefined) {
+    return { title: String(endpoint.portNumber), source: 'portNumber' };
+  }
+  return { title: `Endpoint ${index + 1}` };
+};
+
+const endpointCadence = (endpoint: PrometheusEndpoint): string =>
+  [
+    endpoint.interval ? `every ${endpoint.interval}` : '',
+    endpoint.scrapeTimeout ? `timeout ${endpoint.scrapeTimeout}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+function Endpoint({ endpoint, index }: Readonly<{ endpoint: PrometheusEndpoint; index: number }>) {
+  const identity = endpointIdentity(endpoint, index);
+  // Scheme and path are shown only when the object sets them; defaults are not invented here.
+  const meta = [identity.source, endpoint.scheme, endpoint.path].filter(Boolean).join(' ');
+  const named = !!endpoint.port;
+  return (
+    <Card
+      title={identity.title}
+      meta={meta || undefined}
+      tag={endpointCadence(endpoint) || undefined}
+    >
+      <Fields
+        fields={[
+          ['Target Port', named ? endpoint.targetPort : undefined],
+          ['Port Number', named || endpoint.targetPort ? endpoint.portNumber : undefined],
+          ['Honor Labels', operatorBoolean(endpoint.honorLabels)],
+          ['Honor Timestamps', operatorBoolean(endpoint.honorTimestamps)],
+        ]}
+      />
+    </Card>
+  );
+}
+
+function Monitor({
+  facts,
+  kind,
+  namespace,
+}: Readonly<{ facts: PrometheusMonitor; kind: string; namespace?: string }>) {
   return (
     <>
       <Section title="Targets">
-        <Selector label="Selector" selector={facts.selector} />
-        <Values label="Namespaces" values={namespaces} />
         <Fields
           fields={[
+            [
+              targetKind(kind),
+              <List key="selector" values={operatorSelectorValues(facts.selector)} />,
+            ],
+            [
+              'Namespaces',
+              <List
+                key="namespaces"
+                values={namespaceValues(facts.namespaceSelector, namespace)}
+              />,
+            ],
             ['Job Label', facts.jobLabel],
             ['Sample Limit', facts.sampleLimit],
             ['Target Limit', facts.targetLimit],
+            ['Target Labels', listOrNothing(facts.targetLabels)],
+            ['Pod Target Labels', listOrNothing(facts.podTargetLabels)],
           ]}
         />
-        <Values label="Target Labels" values={facts.targetLabels} />
-        <Values label="Pod Target Labels" values={facts.podTargetLabels} />
       </Section>
       {!!facts.endpoints?.length && (
         <Section title="Scrape Endpoints">
           <div className="overview-card-list">
             {withStableListKeys(facts.endpoints, (endpoint) => JSON.stringify(endpoint)).map(
               ({ key, value }, index) => (
-                <Card key={key} title={value.port || value.targetPort || `Endpoint ${index + 1}`}>
-                  <Fields
-                    fields={[
-                      ['Port', value.port],
-                      ['Port Number', value.portNumber],
-                      ['Target Port', value.targetPort],
-                      ['Path', value.path],
-                      ['Scheme', value.scheme],
-                      ['Interval', value.interval],
-                      ['Timeout', value.scrapeTimeout],
-                      ['Honor Labels', operatorBoolean(value.honorLabels)],
-                      ['Honor Timestamps', operatorBoolean(value.honorTimestamps)],
-                    ]}
-                  />
-                </Card>
+                <Endpoint key={key} endpoint={value} index={index} />
               )
             )}
           </div>
@@ -170,10 +234,11 @@ function Instance({ facts, kind }: Readonly<{ facts: PrometheusInstance; kind: s
 export function PrometheusSections({
   facts,
   kind,
-}: Readonly<{ facts: PrometheusFacts; kind: string }>) {
+  namespace,
+}: Readonly<{ facts: PrometheusFacts; kind: string; namespace?: string }>) {
   return (
     <>
-      {!!facts.monitor && <Monitor facts={facts.monitor} />}
+      {!!facts.monitor && <Monitor facts={facts.monitor} kind={kind} namespace={namespace} />}
       {!!facts.ruleGroups?.length && <Rules groups={facts.ruleGroups} />}
       {!!facts.instance && <Instance facts={facts.instance} kind={kind} />}
     </>

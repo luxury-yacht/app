@@ -17,7 +17,13 @@ function OperatorContent({ data }: Readonly<{ data: CustomResourceDetails }>) {
       />
       {!!data.certManager && <CertManagerSections facts={data.certManager} />}
       {!!data.externalSecrets && <ExternalSecretsSections facts={data.externalSecrets} />}
-      {!!data.prometheus && <PrometheusSections facts={data.prometheus} kind={data.kind} />}
+      {!!data.prometheus && (
+        <PrometheusSections
+          facts={data.prometheus}
+          kind={data.kind}
+          namespace={data.ref.namespace}
+        />
+      )}
     </div>
   );
 }
@@ -25,12 +31,13 @@ function OperatorContent({ data }: Readonly<{ data: CustomResourceDetails }>) {
 export const operatorDescriptor: OverviewDescriptor<CustomResourceDetails> = {
   displayKind: 'Custom Resource',
   dtoName: 'CustomResourceDetails',
-  coveredElsewhere: ['ref', 'resourceFamily', 'karpenter', 'argoCD', 'conditions'],
+  coveredElsewhere: ['resourceFamily', 'karpenter', 'argoCD', 'conditions'],
   schema: {
     items: [
       {
         kind: 'widget',
         consumes: [
+          'ref',
           'certManager',
           'externalSecrets',
           'prometheus',
