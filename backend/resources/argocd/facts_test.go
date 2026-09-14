@@ -94,3 +94,11 @@ func TestArgoCDUnknownAndMissingStatusStayUnknown(t *testing.T) {
 	require.Nil(t, BuildFacts("a", nil))
 	require.Nil(t, BuildFacts("a", resource("Workflow", `{}`, `{}`)))
 }
+
+func TestApplicationOperationCarriesBackendPhasePresentation(t *testing.T) {
+	for _, input := range []struct{ phase, presentation string }{{"Succeeded", "ready"}, {"Running", "progressing"}, {"Failed", "error"}, {"Error", "error"}, {"Terminating", "unknown"}} {
+		facts := BuildFacts("a", resource("Application", `{}`, `{"operationState":{"phase":"`+input.phase+`","startedAt":"2026-09-01T00:00:00Z"}}`))
+		require.Equal(t, input.phase, facts.Application.Operation.Phase)
+		require.Equal(t, input.presentation, facts.Application.Operation.PhasePresentation, input.phase)
+	}
+}

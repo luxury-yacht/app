@@ -64,10 +64,11 @@ type ApplicationFacts struct {
 	ResourceCount      *int64                      `json:"resourceCount,omitempty"`
 }
 type Operation struct {
-	Phase      string `json:"phase,omitempty"`
-	Message    string `json:"message,omitempty"`
-	StartedAt  string `json:"startedAt,omitempty"`
-	FinishedAt string `json:"finishedAt,omitempty"`
+	Phase             string `json:"phase,omitempty"`
+	PhasePresentation string `json:"phasePresentation,omitempty"`
+	Message           string `json:"message,omitempty"`
+	StartedAt         string `json:"startedAt,omitempty"`
+	FinishedAt        string `json:"finishedAt,omitempty"`
 }
 type ApplicationSetFacts struct {
 	TemplateName                string          `json:"templateName,omitempty"`
@@ -150,6 +151,9 @@ func applicationFacts(clusterID string, object *unstructured.Unstructured) *Appl
 	facts := &ApplicationFacts{Spec: applicationSpec(object.Object, "spec"), Sync: statusOrUnknown(text(object.Object, "status", "sync", "status")), Health: statusOrUnknown(text(object.Object, "status", "health", "status")), HealthMessage: text(object.Object, "status", "health", "message"), Operation: read[Operation](object.Object, "status", "operationState")}
 	facts.SyncPresentation = statusPresentation(facts.Sync)
 	facts.HealthPresentation = statusPresentation(facts.Health)
+	if facts.Operation != nil {
+		facts.Operation.PhasePresentation = statusPresentation(facts.Operation.Phase)
+	}
 	facts.Revisions, _, _ = unstructured.NestedStringSlice(object.Object, "status", "sync", "revisions")
 	if len(facts.Revisions) == 0 {
 		if revision := text(object.Object, "status", "sync", "revision"); revision != "" {

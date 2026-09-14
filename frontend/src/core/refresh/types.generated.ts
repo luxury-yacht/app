@@ -154,6 +154,7 @@ export interface ArgoCDGenerator {
 
 export interface ArgoCDOperation {
   phase?: string;
+  phasePresentation?: string;
   message?: string;
   startedAt?: string;
   finishedAt?: string;

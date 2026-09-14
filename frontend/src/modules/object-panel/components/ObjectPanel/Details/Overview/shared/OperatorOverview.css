@@ -73,6 +73,48 @@
   overflow-wrap: anywhere;
 }
 
+/* A status chip with its explanation in place: chip plus a short detail on one line, the
+   controller's message beneath in secondary text. */
+.operator-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.operator-status-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.operator-status-detail,
+.operator-secondary {
+  color: var(--color-text-secondary);
+}
+
+.operator-status-detail {
+  font-size: var(--font-size-sm);
+}
+
+.operator-note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A primary value followed by a secondary identifier, e.g. a destination name and its server. */
+.operator-inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+}
+
 .app .operator-overview .overview-value,
 .app .operator-overview .overview-value *,
 .app .operator-overview .overview-ref-item,

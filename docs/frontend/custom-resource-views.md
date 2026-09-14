@@ -134,13 +134,26 @@ destinations, resource permissions, roles and sync windows. Conditions use the
 shared StatusChip with backend presentation. Values remain selectable. Raw Helm
 values and project JWT token metadata stay out of these display projections.
 
-Status and conditions lead the detail content. Source cards show target revisions;
-deployed revisions remain a labelled group alongside them because the facts do
-not identify which source was compared for each revision. ApplicationSet template
-identity, sources, sync policy, and management are peer sections. AppProject access rules are grouped
-by source access, destination, resource scope, role, and sync window. Repeated
-entries have titles, and policy lists and messages have labels and full-width
-content. Operation timestamps use the shared local date formatter.
+Argo CD overviews use the shared operator primitives. An Application opens with
+Health (chip, with the health message beneath it), Sync, **Last Sync** (the last
+operation's phase chip with its backend `phasePresentation`, started/finished
+timestamps from the shared local date formatter, and the operation message) and
+Conditions, then Project, Destination (name or resolved name with the server
+beside it, or the server alone), Namespace, ApplicationSet and Managed Resources
+as rows. Source cards are titled by name, else chart, else the repository's last
+path segment, with the path as meta and the target revision as the tag; the
+repository URL, chart (when the title is a name) and ref are rows inside.
+Deployed revisions remain a labelled row alongside them because the facts do not
+identify which source was compared for each revision. Sync policy is one
+`Automated Sync` row (`Disabled`, or `Enabled` followed by the active
+prune / self heal / allow empty flags) plus sync options; Applications always
+show it, templates only when a policy is set. ApplicationSet template identity
+(template name, project, destination, namespace, Go template) is a row block,
+generators are one-line cards (type, repository, revision), and template sources,
+template sync policy and management are peer sections. AppProject access rules are
+grouped by source access rows, destination cards (name or server, namespace,
+server), resource-permission cards with Allowed/Denied rows, role cards, and
+sync-window cards (kind, schedule · duration, time zone).
 
 ApplicationSet owner references preserve their source GVK and the Application's
 namespace. Project names remain plain text: Applications can live outside the

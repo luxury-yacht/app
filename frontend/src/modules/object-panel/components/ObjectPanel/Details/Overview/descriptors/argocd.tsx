@@ -29,7 +29,7 @@ export const argoCDDescriptor: OverviewDescriptor<CustomResourceDetails> = {
             return null;
           }
           return (
-            <div className="argocd-overview">
+            <div className="operator-overview">
               <ArgoCDStatus
                 facts={data.argoCD}
                 status={data.status}
