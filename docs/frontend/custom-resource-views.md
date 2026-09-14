@@ -39,22 +39,68 @@ separate groups, with long values allowed to wrap.
   including Kubernetes milli-byte quantities.
 - Compare CPU values using whole cores when both values are whole CPUs; otherwise
   use millicores for both. Apply this to total/allocatable and total/limit pairs.
-- For NodePool CPU and memory with configured limits, show `usage / limit (n%)`.
-  Calculate the percentage from parsed source quantities before display rounding,
-  using up to one decimal place. Keep values over 100% visible. Omit the percentage
-  when usage is unavailable or the limit is zero; without a limit, show usage alone.
-- Show `n of n` (allocatable, then total) when the displayed values differ; when
-  they match, show only the allocatable number. For other resource limits with no
-  allocatable value, show `n (limit n)`; otherwise show the total alone. Do not add
-  legends.
+- The Capacity section is one small table for every Karpenter kind: one row per
+  resource, a **Capacity** column always, an **Allocatable** column before it when
+  the object reports allocatable (NodeClaims), and **Limit** and **Used** columns
+  after it when limits are configured (NodePools). A cell with no source value
+  shows `-`. The table hugs its content rather than the panel width, and its first
+  column matches the panel's label column. Do not add legends.
+- **Used** is capacity divided by limit for CPU and memory only, calculated from
+  parsed source quantities before display rounding, using up to one decimal place.
+  Keep values over 100% visible, and use the warning text color strictly above 80%,
+  the same rule as the table Usage column. Omit the value when capacity is
+  unavailable or the limit is zero.
 - Keep the header **Capacity**. The explanation tooltip belongs to the claim
   overview; pools and overlays do not supply it.
 - Order resources as CPU, memory, storage, nodes, pods, pod-eni, hugepages, then
   other resources alphabetically. Display `ephemeral-storage` as `storage` and
   `vpc.amazonaws.com/pod-eni` as `pod-eni`; retain hugepage size suffixes.
 
+## Karpenter condition progress
+
+NodeClaims and NodePools open with their condition progress instead of a
+trailing Conditions section. A progress track lists condition types in
+Karpenter's order; a `True` condition is a completed step, `False` is a failed
+step, and `Unknown` or missing is pending. The earliest incomplete step that
+carries a reason or message is shown under the steps as the blocking
+explanation; later steps' messages are not repeated. A track renders only once
+one of its prerequisite conditions is reported, so an object that reports just
+the rolled-up `Ready` keeps that condition as a chip. Conditions outside every
+rendered track stay `StatusChip`s: Drifted and DisruptionReason use the warning
+variant when `True`, Consolidatable uses info when `True`, and all three are
+healthy when `False`; other conditions keep the default `True`=healthy,
+`False`=unhealthy, otherwise warning.
+
+- NodePool **Readiness**: ValidationSucceeded, NodeClassReady, Ready.
+  NodeRegistrationHealthy and any other condition stay chips.
+- NodeClaim **Provisioning**: Launched, Registered, Initialized, Ready.
+  **Termination** appears only when a termination condition exists and lists
+  Drained, VolumesDetached, InstanceTerminating.
+
+## Karpenter NodePool overview
+
+A pool reads top-down as readiness, source, provisioned capacity against limits,
+then scheduling and disruption policy: Readiness and remaining condition chips,
+NodeClass / Weight / Replicas rows, the Capacity table with Limit and Used
+columns, then the Scheduling, Disruption and Lifecycle sections. No Conditions
+section trails the pool view.
+
+## Karpenter NodeClaim overview
+
+A claim reads top-down as lifecycle, ownership, outcome, then capacity:
+
+- Provisioning and Termination progress follow the Status row, then the
+  remaining condition chips.
+- NodePool, NodeClass and Node remain link rows. **Instance** composes the
+  instance type, a capacity-type chip, and zone · architecture on one row,
+  followed by Provider ID and Image ID in monospace. Requirements, taints and
+  the expiry/grace-period **Lifecycle** section are unchanged.
+- No Conditions or Provider sections trail the claim view.
+
 The owning implementations are
 [KarpenterSections.tsx](../../frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/KarpenterSections.tsx),
+[KarpenterProgress.tsx](../../frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/KarpenterProgress.tsx),
+the shared [capacity formatter](../../frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/karpenterCapacityFormat.ts),
 the [overview descriptor](../../frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/karpenter.tsx)
 and [column factory](../../frontend/src/modules/cluster/components/karpenterColumns.tsx).
 

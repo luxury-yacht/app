@@ -73,13 +73,10 @@ const pool: CustomResourceDetails = {
     startupTaints: [{ key: 'node.cilium.io/agent-not-ready', value: 'true', effect: 'NoExecute' }],
   },
   conditions: [
-    {
-      type: 'Ready',
-      status: 'True',
-      reason: 'Ready',
-      message: 'All dependencies are ready',
-      lastTransitionTime: null,
-    },
+    { type: 'ValidationSucceeded', status: 'True', lastTransitionTime: null },
+    { type: 'NodeClassReady', status: 'True', lastTransitionTime: null },
+    { type: 'Ready', status: 'True', reason: 'Ready', lastTransitionTime: null },
+    { type: 'NodeRegistrationHealthy', status: 'True', lastTransitionTime: null },
   ],
 };
 
@@ -92,6 +89,39 @@ const meta: Meta<typeof KarpenterOverviewPreview> = {
 export default meta;
 type Story = StoryObj<typeof KarpenterOverviewPreview>;
 export const NodePool: Story = { args: { detail: pool } };
+export const NodePoolBlocked: Story = {
+  args: {
+    detail: {
+      ...pool,
+      conditions: [
+        { type: 'ValidationSucceeded', status: 'True', lastTransitionTime: null },
+        {
+          type: 'NodeClassReady',
+          status: 'False',
+          reason: 'NodeClassNotReady',
+          message: 'EC2NodeClass general-purpose is not ready: SubnetsReady=False',
+          lastTransitionTime: null,
+        },
+        {
+          type: 'Ready',
+          status: 'False',
+          reason: 'UnhealthyDependents',
+          message: 'NodeClassReady=False',
+          lastTransitionTime: null,
+        },
+        {
+          type: 'NodeRegistrationHealthy',
+          status: 'False',
+          reason: 'RegistrationFailed',
+          message: 'Nodes launched by this NodePool are failing to register',
+          lastTransitionTime: null,
+        },
+      ],
+      status: 'NotReady',
+      statusPresentation: 'warning',
+    },
+  },
+};
 export const SchedulingConstraints: Story = {
   args: {
     detail: {
@@ -173,17 +203,126 @@ export const NodeClaim: Story = {
         expireAfter: '720h',
       },
       conditions: [
+        { type: 'Launched', status: 'True', reason: 'Launched', lastTransitionTime: null },
+        { type: 'Registered', status: 'True', reason: 'Registered', lastTransitionTime: null },
         {
-          type: 'Ready',
+          type: 'Initialized',
           status: 'False',
           reason: 'NodeNotReady',
           message:
             'Node registered but has not reported Ready. Waiting for the network plugin to initialize and remove the startup taint.',
           lastTransitionTime: null,
         },
+        {
+          type: 'Ready',
+          status: 'False',
+          reason: 'UnhealthyDependents',
+          message: 'Initialized=False',
+          lastTransitionTime: null,
+        },
+        { type: 'Consolidatable', status: 'Unknown', lastTransitionTime: null },
       ],
       status: 'NodeNotReady',
       statusPresentation: 'warning',
+    },
+  },
+};
+const readyClaim = NodeClaim.args?.detail as CustomResourceDetails;
+export const NodeClaimReady: Story = {
+  args: {
+    detail: {
+      ...readyClaim,
+      conditions: [
+        { type: 'Launched', status: 'True', reason: 'Launched', lastTransitionTime: null },
+        { type: 'Registered', status: 'True', reason: 'Registered', lastTransitionTime: null },
+        { type: 'Initialized', status: 'True', reason: 'Initialized', lastTransitionTime: null },
+        { type: 'Ready', status: 'True', reason: 'Ready', lastTransitionTime: null },
+        { type: 'ConsistentStateFound', status: 'True', lastTransitionTime: null },
+        {
+          type: 'Consolidatable',
+          status: 'False',
+          reason: 'NotConsolidatable',
+          message: 'Node has been running for less than consolidateAfter',
+          lastTransitionTime: null,
+        },
+      ],
+      status: 'Ready',
+      statusPresentation: 'ready',
+    },
+  },
+};
+export const NodeClaimLaunching: Story = {
+  args: {
+    detail: {
+      ...readyClaim,
+      name: 'general-purpose-x9k2p',
+      ref: { ...readyClaim.ref, name: 'general-purpose-x9k2p' },
+      karpenter: {
+        nodePool: readyClaim.karpenter?.nodePool,
+        nodeClass: readyClaim.karpenter?.nodeClass,
+        requirements: readyClaim.karpenter?.requirements?.slice(0, 2),
+        expireAfter: '720h',
+      },
+      conditions: [
+        {
+          type: 'Launched',
+          status: 'Unknown',
+          reason: 'InsufficientCapacity',
+          message:
+            'creating instance, insufficient capacity for m7g.2xlarge in us-west-2a; retrying with fallback instance types',
+          lastTransitionTime: null,
+        },
+        {
+          type: 'Registered',
+          status: 'Unknown',
+          reason: 'AwaitingReconciliation',
+          lastTransitionTime: null,
+        },
+        {
+          type: 'Initialized',
+          status: 'Unknown',
+          reason: 'AwaitingReconciliation',
+          lastTransitionTime: null,
+        },
+        {
+          type: 'Ready',
+          status: 'Unknown',
+          reason: 'ReconcilingDependents',
+          lastTransitionTime: null,
+        },
+      ],
+      status: 'Unknown',
+      statusPresentation: 'unknown',
+    },
+  },
+};
+export const NodeClaimTerminating: Story = {
+  args: {
+    detail: {
+      ...readyClaim,
+      conditions: [
+        { type: 'Launched', status: 'True', reason: 'Launched', lastTransitionTime: null },
+        { type: 'Registered', status: 'True', reason: 'Registered', lastTransitionTime: null },
+        { type: 'Initialized', status: 'True', reason: 'Initialized', lastTransitionTime: null },
+        { type: 'Ready', status: 'True', reason: 'Ready', lastTransitionTime: null },
+        {
+          type: 'Drifted',
+          status: 'True',
+          reason: 'RequirementsDrifted',
+          message: 'NodePool requirements no longer match this instance',
+          lastTransitionTime: null,
+        },
+        { type: 'Drained', status: 'True', reason: 'Drained', lastTransitionTime: null },
+        {
+          type: 'VolumesDetached',
+          status: 'Unknown',
+          reason: 'AwaitingVolumeDetachment',
+          message: 'Waiting for 2 volume attachments to be deleted',
+          lastTransitionTime: null,
+        },
+      ],
+      status: 'Terminating',
+      statusPresentation: 'terminating',
     },
   },
 };

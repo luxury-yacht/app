@@ -111,3 +111,117 @@
   text-transform: none;
   overflow-wrap: anywhere;
 }
+
+/* NodeClaim lifecycle progress. Steps read left to right in Karpenter's order; a filled
+   marker is a completed step, an outlined one is still pending, red marks the step that
+   failed. The list wraps on narrow panels and the blocking reason sits underneath. */
+.karpenter-lifecycle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.karpenter-lifecycle-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.karpenter-lifecycle-step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+}
+
+.karpenter-lifecycle-step + .karpenter-lifecycle-step::before {
+  content: "";
+  width: var(--spacing-md);
+  height: 1px;
+  margin: 0 var(--spacing-xs);
+  background: var(--color-border);
+}
+
+.karpenter-lifecycle-marker {
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--color-text-tertiary);
+  border-radius: var(--border-radius-round);
+}
+
+.karpenter-lifecycle-step--done .karpenter-lifecycle-marker {
+  border-color: var(--color-success);
+  background: var(--color-success);
+}
+
+.karpenter-lifecycle-step--failed .karpenter-lifecycle-marker {
+  border-color: var(--color-error);
+  background: var(--color-error);
+}
+
+.karpenter-lifecycle-step--pending {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-normal);
+}
+
+.karpenter-lifecycle-note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.karpenter-lifecycle-note .status-text {
+  margin-right: var(--spacing-xs);
+  font-weight: var(--font-weight-bold);
+}
+
+/* Resolved instance identity: type, capacity-type chip, then zone and architecture. */
+.karpenter-instance {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.karpenter-instance-placement {
+  color: var(--color-text-secondary);
+}
+
+/* Allocatable/capacity table: one row per resource, values aligned in labeled columns.
+   The first column matches the panel's label column so values line up with rows above. */
+.karpenter-capacity-table {
+  align-self: flex-start;
+  border-collapse: collapse;
+  border-spacing: 0;
+  text-align: left;
+}
+
+.karpenter-capacity-table th,
+.karpenter-capacity-table td {
+  padding: 0 var(--spacing-lg) var(--spacing-xs) 0;
+  font-weight: inherit;
+  vertical-align: baseline;
+}
+
+.karpenter-capacity-table thead th {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.karpenter-capacity-table tbody th {
+  width: 7rem;
+}

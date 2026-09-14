@@ -1,11 +1,6 @@
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import Tooltip from '@shared/components/Tooltip';
-import {
-  formatCpuValue,
-  formatResourceValue,
-  getResourceLimitUsagePercent,
-  parseResourceValue,
-} from '@shared/utils/resourceCalculations';
+import { getResourceLimitUsagePercent } from '@shared/utils/resourceCalculations';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { type ReactNode, useId, useState } from 'react';
 import type {
@@ -14,6 +9,12 @@ import type {
   KarpenterRequirement,
   KarpenterTaint,
 } from '@/core/refresh/types';
+import {
+  capacityResourceLabel,
+  detectCpuUnit,
+  formatCapacityValue,
+  sortedCapacityResources,
+} from './karpenterCapacityFormat';
 import { OverviewItem } from './shared/OverviewItem';
 import './shared/OverviewBlocks.css';
 import './KarpenterOverview.css';
@@ -85,116 +86,120 @@ export function KarpenterMap({
   );
 }
 
-const formatCapacityValue = (
+const hasEntries = (values: Record<string, string> | undefined): boolean =>
+  Object.keys(values ?? {}).length > 0;
+
+// Capacity-to-limit percentage for the resources the shared calculation understands; the same
+// number the family table's Usage column shows, warning-colored strictly above 80%.
+const usedOfLimit = (
   resource: string,
-  value: string | undefined,
-  cpuUnit: 'cores' | 'millicores'
-): string => {
-  if (value === undefined || value === '') {
-    return '-';
-  }
-  if (resource === 'cpu') {
-    const millicores = parseResourceValue(value, 'cpu');
-    const formatted = formatResourceValue(value, millicores, 'cpu');
-    return cpuUnit === 'cores' && formatted !== '-' ? formatCpuValue(millicores) : formatted;
-  }
-  return resource === 'memory' || resource === 'ephemeral-storage'
-    ? formatResourceValue(value, parseResourceValue(value, 'memory'), 'memory')
-    : value;
-};
-
-const capacityResourceOrder = [
-  'cpu',
-  'memory',
-  'ephemeral-storage',
-  'nodes',
-  'pods',
-  'vpc.amazonaws.com/pod-eni',
-  'hugepages',
-];
-
-const capacityResourceLabels: Record<string, string> = {
-  'ephemeral-storage': 'storage',
-  'vpc.amazonaws.com/pod-eni': 'pod-eni',
-};
-
-const capacityResourceRank = (resource: string): number => {
-  const key = resource.startsWith('hugepages-') ? 'hugepages' : resource;
-  const index = capacityResourceOrder.indexOf(key);
-  return index < 0 ? capacityResourceOrder.length : index;
-};
-
-const formatPoolCapacitySummary = (
-  resource: 'cpu' | 'memory',
-  facts: KarpenterFacts,
-  usage: string,
-  limit: string
-): string => {
-  const pair = `${usage} / ${limit}`;
-  const percentage = getResourceLimitUsagePercent(
-    facts.capacity?.[resource],
-    facts.limits?.[resource],
-    resource
-  );
+  facts: KarpenterFacts
+): { text: string; warning: boolean } => {
+  const percentage =
+    resource === 'cpu' || resource === 'memory'
+      ? getResourceLimitUsagePercent(facts.capacity?.[resource], facts.limits?.[resource], resource)
+      : undefined;
   if (percentage === undefined) {
-    return pair;
+    return { text: '-', warning: false };
   }
-  return `${pair} (${Number(percentage.toFixed(1))}%)`;
+  return { text: `${Number(percentage.toFixed(1))}%`, warning: percentage > 80 };
 };
 
-const formatCapacitySummary = (
-  resource: string,
-  facts: KarpenterFacts,
-  cpuUnit: 'cores' | 'millicores',
-  showUsagePercentage: boolean
-): string => {
-  const total = formatCapacityValue(resource, facts.capacity?.[resource], cpuUnit);
-  const allocatable = facts.allocatable?.[resource];
-  if (allocatable !== undefined) {
-    const available = formatCapacityValue(resource, allocatable, cpuUnit);
-    return available === total ? available : `${available} of ${total}`;
-  }
-  const limit = facts.limits?.[resource];
-  if (limit === undefined) {
-    return total;
-  }
-  const formattedLimit = formatCapacityValue(resource, limit, cpuUnit);
-  return showUsagePercentage && (resource === 'cpu' || resource === 'memory')
-    ? formatPoolCapacitySummary(resource, facts, total, formattedLimit)
-    : `${total} (limit ${formattedLimit})`;
-};
+function KarpenterUsedCell({
+  resource,
+  facts,
+}: Readonly<{ resource: string; facts: KarpenterFacts }>) {
+  const used = usedOfLimit(resource, facts);
+  return (
+    <td className="overview-row-value">
+      {used.warning ? <span className="status-text warning">{used.text}</span> : used.text}
+    </td>
+  );
+}
 
+// One row per resource. Allocatable appears when the object reports it (claims); Limit and Used
+// appear when limits are configured (pools). Capacity is always present.
 export function KarpenterCapacity({
   facts,
   tooltip,
-  showUsagePercentage = false,
-}: Readonly<{ facts: KarpenterFacts; tooltip?: string; showUsagePercentage?: boolean }>) {
-  const cpuUnit = [facts.capacity?.cpu, facts.allocatable?.cpu ?? facts.limits?.cpu].some(
-    (value) => parseResourceValue(value, 'cpu') % 1000 !== 0
-  )
-    ? 'millicores'
-    : 'cores';
-  const resources = [
-    ...new Set([
-      ...Object.keys(facts.capacity ?? {}),
-      ...Object.keys(facts.allocatable ?? {}),
-      ...Object.keys(facts.limits ?? {}),
-    ]),
-  ].sort((a, b) => capacityResourceRank(a) - capacityResourceRank(b) || a.localeCompare(b));
+}: Readonly<{ facts: KarpenterFacts; tooltip?: string }>) {
+  const resources = sortedCapacityResources([facts.capacity, facts.allocatable, facts.limits]);
   if (!resources.length) {
     return null;
   }
+  const cpuUnit = detectCpuUnit([facts.capacity?.cpu, facts.allocatable?.cpu ?? facts.limits?.cpu]);
+  const showAllocatable = hasEntries(facts.allocatable);
+  const showLimits = hasEntries(facts.limits);
+  const quantity = (values: Record<string, string> | undefined, resource: string) =>
+    formatCapacityValue(resource, values?.[resource], cpuUnit);
   return (
     <KarpenterSection title="Capacity" tooltip={tooltip}>
-      {resources.map((resource) => (
-        <div className="overview-row" key={resource}>
-          <span className="overview-row-label">{capacityResourceLabels[resource] ?? resource}</span>
-          <span className="overview-row-value">
-            {formatCapacitySummary(resource, facts, cpuUnit, showUsagePercentage)}
-          </span>
-        </div>
-      ))}
+      <table className="karpenter-capacity-table">
+        <thead>
+          <tr>
+            <th scope="col">Resource</th>
+            {showAllocatable && <th scope="col">Allocatable</th>}
+            <th scope="col">Capacity</th>
+            {showLimits && <th scope="col">Limit</th>}
+            {showLimits && <th scope="col">Used</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {resources.map((resource) => (
+            <tr key={resource}>
+              <th scope="row" className="overview-row-label">
+                {capacityResourceLabel(resource)}
+              </th>
+              {showAllocatable && (
+                <td className="overview-row-value">{quantity(facts.allocatable, resource)}</td>
+              )}
+              <td className="overview-row-value">{quantity(facts.capacity, resource)}</td>
+              {showLimits && (
+                <td className="overview-row-value">{quantity(facts.limits, resource)}</td>
+              )}
+              {showLimits && <KarpenterUsedCell resource={resource} facts={facts} />}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </KarpenterSection>
+  );
+}
+
+export function KarpenterClaimInstance({ facts }: Readonly<{ facts: KarpenterFacts }>) {
+  const { instanceType, capacityType, zone, architecture, providerID, imageID } = facts;
+  const placement = [zone, architecture].filter(Boolean).join(' · ');
+  const hasInstance = !!(instanceType || capacityType || placement);
+  if (!hasInstance && !providerID && !imageID) {
+    return null;
+  }
+  return (
+    <>
+      {hasInstance && (
+        <OverviewItem
+          label="Instance"
+          value={
+            <span className="karpenter-instance">
+              {!!instanceType && <span className="overview-value-mono">{instanceType}</span>}
+              {!!capacityType && <StatusChip variant="info">{capacityType}</StatusChip>}
+              {!!placement && <span className="karpenter-instance-placement">{placement}</span>}
+            </span>
+          }
+        />
+      )}
+      {!!providerID && (
+        <OverviewItem
+          label="Provider ID"
+          value={<span className="overview-value-mono">{providerID}</span>}
+        />
+      )}
+      {!!imageID && (
+        <OverviewItem
+          label="Image ID"
+          value={<span className="overview-value-mono">{imageID}</span>}
+        />
+      )}
+    </>
   );
 }
 

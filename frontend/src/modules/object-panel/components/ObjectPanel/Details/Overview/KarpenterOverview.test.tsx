@@ -69,6 +69,17 @@ describe('Karpenter overview', () => {
           { key: 'karpenter.sh/capacity-type', operator: 'In', values: ['spot', 'on-demand'] },
         ],
       },
+      conditions: [
+        { type: 'ValidationSucceeded', status: 'True', lastTransitionTime: null },
+        {
+          type: 'NodeClassReady',
+          status: 'False',
+          reason: 'NodeClassNotReady',
+          message: 'EC2NodeClass default is not ready',
+          lastTransitionTime: null,
+        },
+        { type: 'Ready', status: 'False', reason: 'UnhealthyDependents', lastTransitionTime: null },
+      ],
     };
     const descriptor = requireDescriptor('NodePool', data);
     const html = renderToStaticMarkup(
@@ -76,13 +87,16 @@ describe('Karpenter overview', () => {
     );
     const dom = document.createElement('div');
     dom.innerHTML = html;
+    // Readiness leads the pool view and conditions no longer trail it as a section.
+    expect(dom.querySelector('[aria-label="Readiness steps"]')).not.toBeNull();
+    expect(html).toContain('EC2NodeClass default is not ready');
     expect([...dom.querySelectorAll('h3')].map((heading) => heading.textContent)).toEqual([
       'Capacity',
       'Scheduling',
       'Disruption',
       'Lifecycle',
-      'Conditions',
     ]);
+    expect(dom.querySelector('section[aria-label="Capacity"] table')).not.toBeNull();
     expect(dom.querySelectorAll('[aria-label="Requirements"] .overview-row')).toHaveLength(2);
     expect(html).not.toContain('cpu: 8, memory: 32Gi');
   });
@@ -146,6 +160,16 @@ describe('Karpenter overview', () => {
         images: ['ami-123'],
         tags: { team: 'platform' },
       },
+      conditions: [
+        { type: 'Launched', status: 'True', lastTransitionTime: null },
+        {
+          type: 'Registered',
+          status: 'False',
+          reason: 'NodeNotFound',
+          message: 'Node not registered with cluster',
+          lastTransitionTime: null,
+        },
+      ],
     };
     const descriptor = getOverviewDescriptor('NodeClaim', claim);
     if (!descriptor) {
@@ -165,6 +189,7 @@ describe('Karpenter overview', () => {
       'NoSchedule',
       'initializing',
       'NoExecute',
+      'Node not registered with cluster',
     ]) {
       expect(html).toContain(value);
     }
@@ -172,6 +197,16 @@ describe('Karpenter overview', () => {
     expect(html).not.toContain('Disruption');
     expect(html).toContain('<button type="button">linked-pool</button>');
     expect(html).not.toContain('<button type="button">display-class</button>');
+    const dom = document.createElement('div');
+    dom.innerHTML = html;
+    // Lifecycle progress leads the claim view; the resolved capacity is a grid, and the
+    // provider-class sections (Networking/Images/Tags) never appear for a claim.
+    expect(dom.querySelector('[aria-label="Provisioning steps"]')).not.toBeNull();
+    expect([...dom.querySelectorAll('h3')].map((heading) => heading.textContent)).toEqual([
+      'Capacity',
+      'Scheduling',
+    ]);
+    expect(dom.querySelector('section[aria-label="Capacity"] table')).not.toBeNull();
   });
   it('gives provider resolution its own sections without flattening lists', () => {
     const data: CustomResourceDetails = {

@@ -1,8 +1,15 @@
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { resourceLinkToObjectReference } from '@shared/utils/resourceLinkIdentity';
-import type { CustomResourceDetails, KarpenterFacts, ResourceLink } from '@/core/refresh/types';
+import type {
+  ConditionFacts,
+  CustomResourceDetails,
+  KarpenterFacts,
+  ResourceLink,
+} from '@/core/refresh/types';
+import { claimProgressTracks, KarpenterProgress, poolProgressTracks } from '../KarpenterProgress';
 import {
   KarpenterCapacity,
+  KarpenterClaimInstance,
   KarpenterConditions,
   KarpenterDisruption,
   KarpenterFields,
@@ -22,9 +29,17 @@ const renderLink = (link?: ResourceLink) => {
   return ref ? <ObjectPanelLink objectRef={ref}>{ref.name}</ObjectPanelLink> : link.display?.name;
 };
 
-function PoolOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
+interface KindOverviewProps {
+  facts: KarpenterFacts;
+  conditions?: ConditionFacts[];
+}
+
+// A pool reads top-down as: whether it can provision, what it provisions from, what it has
+// provisioned against its limits, and how it schedules and disrupts nodes.
+function PoolOverview({ facts, conditions }: Readonly<KindOverviewProps>) {
   return (
     <>
+      <KarpenterProgress conditions={conditions} tracks={poolProgressTracks} />
       <KarpenterFields
         fields={[
           ['NodeClass', renderLink(facts.nodeClass)],
@@ -32,7 +47,7 @@ function PoolOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
           ['Replicas', facts.replicas],
         ]}
       />
-      <KarpenterCapacity facts={facts} showUsagePercentage />
+      <KarpenterCapacity facts={facts} />
       <KarpenterScheduling facts={facts} />
       <KarpenterDisruption facts={facts} />
       <KarpenterLifecycle facts={facts} />
@@ -40,43 +55,31 @@ function PoolOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
   );
 }
 
-function ClaimOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
+const claimCapacityTooltip =
+  'Capacity is the instance total. Allocatable is what remains for pods after the kubelet reserves resources for the system.';
+
+// A claim reads top-down as: where it is in its lifecycle, what it belongs to, what it became,
+// and what the node offers. Conditions feed the lifecycle rows instead of a trailing chip list.
+function ClaimOverview({ facts, conditions }: Readonly<KindOverviewProps>) {
   return (
     <>
+      <KarpenterProgress conditions={conditions} tracks={claimProgressTracks} />
       <KarpenterFields
         fields={[
           ['NodePool', renderLink(facts.nodePool)],
-          ['Node', renderLink(facts.node)],
           ['NodeClass', renderLink(facts.nodeClass)],
-          ['Instance Type', facts.instanceType],
-          ['Capacity Type', facts.capacityType],
-          ['Zone', facts.zone],
-          ['Architecture', facts.architecture],
+          ['Node', renderLink(facts.node)],
         ]}
       />
-      <KarpenterCapacity
-        facts={facts}
-        tooltip={
-          'Some resource capacity may be reserved for the system. In this case, the value will read "n of n" to show how much of that resource is available for pods.'
-        }
-      />
+      <KarpenterClaimInstance facts={facts} />
+      <KarpenterCapacity facts={facts} tooltip={claimCapacityTooltip} />
       <KarpenterScheduling facts={facts} />
       <KarpenterLifecycle facts={facts} />
-      {!!(facts.providerID || facts.imageID) && (
-        <KarpenterSection title="Provider">
-          <KarpenterFields
-            fields={[
-              ['Provider ID', facts.providerID],
-              ['Image ID', facts.imageID],
-            ]}
-          />
-        </KarpenterSection>
-      )}
     </>
   );
 }
 
-function ClassOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
+function ClassOverview({ facts, conditions }: Readonly<KindOverviewProps>) {
   return (
     <>
       <KarpenterFields
@@ -108,11 +111,12 @@ function ClassOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
           <KarpenterMap label="Tags" values={facts.tags} />
         </KarpenterSection>
       )}
+      <KarpenterConditions conditions={conditions} />
     </>
   );
 }
 
-function OverlayOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
+function OverlayOverview({ facts, conditions }: Readonly<KindOverviewProps>) {
   return (
     <>
       <KarpenterFields
@@ -123,6 +127,7 @@ function OverlayOverview({ facts }: Readonly<{ facts: KarpenterFacts }>) {
       />
       <KarpenterCapacity facts={facts} />
       <KarpenterScheduling facts={facts} />
+      <KarpenterConditions conditions={conditions} />
     </>
   );
 }
@@ -159,8 +164,7 @@ export const karpenterDescriptor: OverviewDescriptor<CustomResourceDetails> = {
           const KindOverview = kindOverviews[data.kind.toLowerCase()] ?? ClassOverview;
           return (
             <div className="karpenter-overview">
-              <KindOverview facts={data.karpenter} />
-              <KarpenterConditions conditions={data.conditions} />
+              <KindOverview facts={data.karpenter} conditions={data.conditions} />
             </div>
           );
         },
