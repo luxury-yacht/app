@@ -66,6 +66,7 @@
 }
 
 .karpenter-overview .karpenter-requirement {
+  align-items: flex-start;
   padding: var(--spacing-xs) 0;
 }
 
@@ -86,6 +87,22 @@
   color: var(--color-text-secondary);
   font-family: var(--font-family-base);
   font-size: var(--font-size-sm);
+}
+
+.karpenter-value-toggle {
+  border: none;
+  border-radius: var(--border-radius-xs);
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.karpenter-value-toggle:hover {
+  color: var(--color-link);
 }
 
 .karpenter-taint {

@@ -7,7 +7,7 @@ import {
   parseResourceValue,
 } from '@shared/utils/resourceCalculations';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
-import type { ReactNode } from 'react';
+import { type ReactNode, useId, useState } from 'react';
 import type {
   ConditionFacts,
   KarpenterFacts,
@@ -283,8 +283,40 @@ const requirementOperators: Record<string, string> = {
   Exists: 'Exists',
   DoesNotExist: 'Does not exist',
   Gt: '>',
+  Gte: '≥',
   Lt: '<',
+  Lte: '≤',
 };
+
+function KarpenterRequirementValue({ value, label }: Readonly<{ value: string; label: string }>) {
+  const [expanded, setExpanded] = useState(false);
+  const valueId = useId();
+  const isLong = value.length > 150;
+  const action = expanded ? 'Collapse' : 'Expand';
+  const displayValue = isLong && !expanded ? value.slice(0, 150) : value;
+  const content = (
+    <span id={valueId} className="selectable">
+      {displayValue}
+    </span>
+  );
+  if (!isLong) {
+    return content;
+  }
+  return (
+    <button
+      type="button"
+      className="karpenter-value-toggle selectable"
+      aria-label={`${action} ${label}`}
+      aria-expanded={expanded}
+      aria-controls={valueId}
+      title={`${action} ${label}`}
+      onClick={() => setExpanded((current) => !current)}
+    >
+      {content}
+      {!expanded && '…'}
+    </button>
+  );
+}
 
 function KarpenterRequirementRow({ requirement }: Readonly<{ requirement: KarpenterRequirement }>) {
   const label = formatRequirementLabel(requirement.key);
@@ -306,7 +338,7 @@ function KarpenterRequirementRow({ requirement }: Readonly<{ requirement: Karpen
         </Tooltip>
       </span>
       <span className="overview-row-value selectable">
-        {constraint || '-'}
+        <KarpenterRequirementValue value={constraint || '-'} label={label} />
         {requirement.minValues !== undefined && (
           <span className="karpenter-requirement-minimum">min values: {requirement.minValues}</span>
         )}
