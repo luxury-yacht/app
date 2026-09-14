@@ -45,6 +45,18 @@ type CatalogRowsResult = ReturnType<typeof useCatalogBackedCustomResourceRows>;
  * and the context menu. `kindFallback` reproduces NsViewCustom's display
  * fallback for rows with no kind; the cluster view passes none.
  */
+// Status is whatever the backend projected for the object. Kinds whose API defines no status
+// arrive without one and fall through to the factory's placeholder rather than a made-up label.
+export const customResourceStatusColumn = cf.createTextColumn<CustomResourceGridRow>(
+  'status',
+  'Status',
+  (resource) => resource.status || undefined,
+  {
+    sortable: false,
+    getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
+  }
+);
+
 export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: string } = {}) {
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
@@ -163,15 +175,7 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
         crdColumn.sortValue = (resource) => (resource.crdName ?? '').toLowerCase();
         return crdColumn;
       })(),
-      cf.createTextColumn<CustomResourceGridRow>(
-        'status',
-        'Status',
-        (resource) => resource.status || 'Unknown',
-        {
-          sortable: false,
-          getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
-        }
-      ),
+      customResourceStatusColumn,
       cf.createAgeColumn(),
     ],
     [

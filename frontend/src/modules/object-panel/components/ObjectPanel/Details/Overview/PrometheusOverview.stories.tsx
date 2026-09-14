@@ -38,9 +38,9 @@ const base: CustomResourceDetails = {
   kind: 'ServiceMonitor',
   name: 'payments-api',
   resourceFamily: 'prometheus',
-  status: 'Unknown',
-  statusPresentation: 'unknown',
-  statusState: 'unknown',
+  status: '',
+  statusPresentation: '',
+  statusState: '',
   labels: { release: 'kube-prometheus-stack', team: 'payments' },
 };
 

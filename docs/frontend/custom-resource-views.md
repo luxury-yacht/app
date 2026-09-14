@@ -198,10 +198,12 @@ version. Details separate target selectors, scrape endpoints, rule groups and
 expressions, instance settings, and resource selection. Empty selectors and
 missing selectors retain distinct API semantics. Numeric ports and expressions
 are projected as display strings without changing source objects. Zero counts
-and replica settings remain visible. Config objects without status have no
-inferred health; CRD configuration does not establish live scrape health or
-whether an alert is firing. Endpoint authentication and remote-write credentials
-are excluded from these projections.
+and replica settings remain visible. ServiceMonitor, PodMonitor and
+PrometheusRule define no status in the API, so the backend projects none for
+them: the table Status cell shows the placeholder and the details panel has no
+Status row (a pending deletion still reports Terminating). CRD configuration does
+not establish live scrape health or whether an alert is firing. Endpoint
+authentication and remote-write credentials are excluded from these projections.
 
 ServiceMonitor and PodMonitor details use label/value rows for **Targets**: the
 selector row is labeled **Services** or **Pods** by kind (an empty selector reads

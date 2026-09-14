@@ -35,6 +35,7 @@
 
 - Karpenter detail panels lead with condition progress and the blocking reason instead of a trailing conditions list: NodeClaims show provisioning (Launched → Registered → Initialized → Ready) and, while a node is being removed, termination progress; NodePools show readiness (ValidationSucceeded → NodeClassReady → Ready). Disruption conditions (Drifted, Consolidatable) are colored by what they mean. The Capacity section is now a table: NodeClaims list allocatable next to capacity, and NodePools list capacity against limits with the used percentage. The NodeClaim instance type, capacity type, zone and architecture are folded into one row.
 - Prometheus Operator ServiceMonitor and PodMonitor detail panels say what they select (Services or Pods), resolve the default namespace scope to the object's namespace, and show each scrape endpoint as one compact card (port, scheme and path, scrape interval and timeout) instead of a row per field.
+- ServiceMonitor, PodMonitor and PrometheusRule no longer show an "Unknown" status in the table or the details panel; those kinds have no status in the Prometheus Operator API.
 - Sidebar categories have been reorganized, with new Resources and Extensions categories.
   - Resources contains built-in resource objects, organized by subcategories as before.
   - CRDs and custom resources, including the new CRDs mentioned above, have been moved into the Extensions category.

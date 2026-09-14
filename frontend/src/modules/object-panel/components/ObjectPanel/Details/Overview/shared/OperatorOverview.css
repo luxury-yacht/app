@@ -16,6 +16,14 @@
   border-top: 1px solid var(--color-border);
 }
 
+/* When an object has no status or conditions the first section leads the block; the frame's
+   separator above it already draws the line, so the section's own rule would double it. */
+.operator-overview > .operator-section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .operator-section > h3,
 .operator-overview .overview-card-title {
   margin: 0;

@@ -158,9 +158,16 @@ func instance(object *unstructured.Unstructured) *Instance {
 	return facts
 }
 
+// ServiceMonitor, PodMonitor and PrometheusRule are configuration only: the API defines no status
+// for them, so nothing is projected instead of an "Unknown" that could never resolve.
+var configOnlyKinds = map[string]bool{"servicemonitor": true, "podmonitor": true, "prometheusrule": true}
+
 func PrimaryStatus(object *unstructured.Unstructured) (state, label, presentation string, ok bool) {
 	if !matches(object) {
 		return "", "", "", false
+	}
+	if configOnlyKinds[strings.ToLower(object.GetKind())] {
+		return "", "", "", true
 	}
 	if paused := crdfacts.Bool(object.Object, "spec", "paused"); paused != nil && *paused {
 		return "paused", "Paused", "warning", true

@@ -64,3 +64,19 @@ func TestRuleExpressionsAndInstanceSelectionRetainMissingVersusEmpty(t *testing.
 	require.NotNil(t, BuildFacts("a", object).Monitor)
 	require.Nil(t, BuildFacts("a", nil))
 }
+
+func TestPrimaryStatusProjectsNothingForConfigOnlyKinds(t *testing.T) {
+	for _, kind := range []string{"ServiceMonitor", "PodMonitor", "PrometheusRule"} {
+		object := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "monitoring.coreos.com/v1", "kind": kind, "metadata": map[string]any{"name": "web", "namespace": "team-a"}, "spec": map[string]any{}}}
+		state, label, presentation, ok := PrimaryStatus(object)
+		require.True(t, ok, kind)
+		require.Empty(t, state, kind)
+		require.Empty(t, label, kind)
+		require.Empty(t, presentation, kind)
+	}
+	instance := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "monitoring.coreos.com/v1", "kind": "Prometheus", "metadata": map[string]any{"name": "main", "namespace": "monitoring"}, "spec": map[string]any{}}}
+	_, label, presentation, ok := PrimaryStatus(instance)
+	require.True(t, ok)
+	require.Equal(t, "Unknown", label, "an instance kind that has not reported conditions is still unknown")
+	require.Equal(t, "unknown", presentation)
+}

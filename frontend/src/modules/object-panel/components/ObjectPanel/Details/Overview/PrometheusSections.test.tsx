@@ -143,9 +143,9 @@ describe('Prometheus monitor overview wiring', () => {
       kind: 'PodMonitor',
       name: 'workers',
       resourceFamily: 'prometheus',
-      status: 'Unknown',
-      statusState: 'unknown',
-      statusPresentation: 'unknown',
+      status: '',
+      statusState: '',
+      statusPresentation: '',
       prometheus: {
         monitor: {
           selector: { matchLabels: { app: 'worker' } },
@@ -162,6 +162,9 @@ describe('Prometheus monitor overview wiring', () => {
     dom.innerHTML = renderToStaticMarkup(
       <OverviewRenderer descriptor={descriptor} data={detail as never} />
     );
+    // Monitors carry no status in the API, so the backend projects none and no Status row renders.
+    expect(rowValue(dom, 'Status')).toBeUndefined();
+    expect(dom.textContent).not.toContain('Unknown');
     expect(rowValue(dom, 'Pods')).toBe('app=worker');
     expect(rowValue(dom, 'Namespaces')).toBe('payments (same namespace)');
     expect([...dom.querySelectorAll('h3')].map((heading) => heading.textContent)).toEqual([

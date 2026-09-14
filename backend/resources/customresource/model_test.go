@@ -85,3 +85,26 @@ func TestBuildFactsMaterializationControlsRawStatus(t *testing.T) {
 	})
 	require.Equal(t, "large provider-specific payload", detail.RawStatus["message"])
 }
+
+func TestBuildResourceModelLeavesConfigOnlyMonitorsWithoutStatusUntilDeleted(t *testing.T) {
+	resource := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "monitoring.coreos.com/v1",
+		"kind":       "ServiceMonitor",
+		"metadata":   map[string]any{"name": "web", "namespace": "team-a", "uid": "sm-uid"},
+		"spec":       map[string]any{"endpoints": []any{map[string]any{"port": "metrics"}}},
+	}}
+	descriptor := Descriptor{
+		GVR:          schema.GroupVersionResource{Group: "monitoring.coreos.com", Version: "v1", Resource: "servicemonitors"},
+		KindFallback: "ServiceMonitor",
+		CRDName:      "servicemonitors.monitoring.coreos.com",
+	}
+
+	model := BuildResourceModel("cluster-a", resource, descriptor, resourcemodel.ResourceScopeNamespaced, "")
+	require.Empty(t, model.Status.Label)
+	require.Empty(t, model.Status.Presentation)
+
+	resource.Object["metadata"].(map[string]any)["deletionTimestamp"] = "2026-09-14T10:00:00Z"
+	model = BuildResourceModel("cluster-a", resource, descriptor, resourcemodel.ResourceScopeNamespaced, "")
+	require.Equal(t, "Terminating", model.Status.Label)
+	require.Equal(t, "terminating", model.Status.Presentation)
+}
