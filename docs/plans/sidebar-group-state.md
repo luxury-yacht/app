@@ -88,3 +88,28 @@ The first read-only lint attempt included generated coverage HTML after moving
 the report failed across filesystem volumes. A cross-volume move succeeded;
 the rerun checked all 1,373 source files with no fixes and exited 0. The report
 was outside the frontend tree before starting the prerelease gate.
+
+## Follow-up: Cluster close acknowledgement
+
+Accept a cluster tab close after panel guards and authoritative selection commit,
+then finish runtime cleanup asynchronously. Preserve the existing serialized
+selection boundary, cluster identity, peer-view retention, error reporting, and
+shutdown drain. Reopening must wait for old cleanup, and rejected guards must
+leave the tab available. The frontend must render the accepted removal before
+its follow-up selection RPC finishes.
+
+Ownership: WorkspacePanelLifecycle guards and flushes panels, then calls the
+registry. The registry gathers native-panel approvals and delegates to
+WorkspaceCoordinator. Workspace owns selection commit and runtime cleanup;
+KubeconfigContext consumes acceptance through its existing selection transition.
+Dependencies stay one-way; asynchronous cleanup must not hold registry locks or
+call back into the registry synchronously.
+
+| Criterion | Status | Evidence |
+| --- | --- | --- |
+| A blocked runtime stop does not delay acknowledgement; selection is already committed | passed | The new Workspace close regression first failed at `tab close acknowledgement waited for runtime cleanup`, then passed while the operations stopper remained blocked. It checks per-window/process selection, a fresh preferences load from disk, and the pending shutdown drain. The multi-cluster case retains the other cluster and its client. |
+| Close rejection, peer retention, reopen ordering, failure reporting, shutdown drain | passed | Focused `go test ./backend ./internal/appwindow` lifecycle cases passed. New cases retain a rejected view and panel placement, queue a reopen behind cleanup (including connection-failure recovery), and report a post-acceptance refresh failure through diagnostics and cluster-scoped logs without restoring the tab. Native registry guard/denial/peer-retention cases use stubbed window hooks. Log: `/tmp/cluster-close-lifecycle-tests.log`. |
+| Frontend removal before follow-up RPC completion; existing panel guards | passed | Six focused frontend files passed 137 tests. The new integration case uses real ClusterTabs, Tabs, and KubeconfigContext with mocked Wails/preflight/view-navigation boundaries: denied close remains visible; accepted close selects the remaining tab before the follow-up RPC settles; the close guard releases afterward. Existing panel lifecycle/sync cases preserve unsaved edits, publication waits, denial, and failure recovery. |
+| Coverage and local complexity | passed | Backend coverage task passed: `workspace_cluster_close.go` 41/41 statements (100%), `workspace_kubeconfigs.go` 232/271 (85.61%). Frontend coverage task passed 511 files / 4,685 tests: KubeconfigContext 300/334 (89.82%), ClusterTabs 118/134 (88.05%). Frontend report: `/tmp/cluster-close-frontend-coverage-report/coverage-summary.json`; backend report: `build/coverage/backend.coverage.out`. Pinned gocognit v1.2.1 scored changed functions 0–9 (maximum 12). TypeScript and source lint passed. `gh pr view` found no PR for this branch, so no current PR Sonar analysis was available. |
+| Prerelease and final worktree | passed | `mise exec -- wails3 task qc:prerelease` exited 0: formatting/bindings, vet/staticcheck, all backend race tests, frontend lint/typecheck, 511 frontend files / 4,685 tests, Knip, and Trivy. Source lint checked 1,373 files with no fixes. Final inspection found only the two backend implementation files, backend/frontend regressions, and the three intended documentation updates; `git diff --check` passed. Log: `/tmp/cluster-close-prerelease.log`. |
+| Rendered close responsiveness | pending | User owns visual confirmation. |

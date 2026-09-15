@@ -382,6 +382,12 @@ Prevention:
 Panel ownership bookkeeping shares the cluster selection queue. Test its waiting
 and failure paths through the registry and frontend consumers, including:
 
+- Distinguish close acceptance from runtime cleanup. A blocked operations stop
+  must not delay acknowledgement of committed tab removal, while reopening and
+  shutdown still respect the cleanup lease. Pair backend acceptance tests with
+  a real tab/context test that removes the tab before the follow-up RPC settles;
+  retain rejected-guard and post-acceptance failure cases.
+
 - A peer connection must not hold the shared panel lock through a backend wait.
   Revalidate admission inside the placement commit, after a possible removal.
 - Publication failure must permit retry without a layout change; readiness must

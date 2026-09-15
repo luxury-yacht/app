@@ -115,6 +115,13 @@ retains docked panels and leaves floating panels open. Teardown requires that
 neither app views nor panel references retain the cluster. The native close
 command records a view's removal before another close decides whether it is the
 final view; renderer selection updates then reconcile that authoritative result.
+Close acknowledgement follows the membership and restart-selection commit,
+before client, refresh, and catalog cleanup finishes. Cleanup remains inside
+the existing serialized selection mutation and shutdown drain. Reopens and later
+selection mutations wait for that cleanup; background cleanup failures are
+reported in selection diagnostics and cluster-scoped application logs without
+restoring an accepted tab close. Panel guards and publication flushes still
+finish before the close is accepted.
 Cluster-tab movement stages the target
 before removing the source, preserving the process selection throughout.
 A panel-only renderer projects its fixed cluster without creating an app-view

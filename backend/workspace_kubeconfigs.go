@@ -95,23 +95,38 @@ func (a *WorkspaceCoordinator) SetSelectedKubeconfigs(selections []string) error
 }
 
 func (a *WorkspaceCoordinator) setSelectedKubeconfigs(mutation *selectionMutation, selections []string) error {
-	intentStart := time.Now()
-	intent, err := a.buildSelectionChangeIntent(selections, mutation.generation)
-	mutation.phases.intent = time.Since(intentStart)
+	intent, err := a.prepareKubeconfigSelection(mutation, selections)
 	if err != nil {
 		return err
 	}
+	a.commitKubeconfigSelection(mutation, &intent)
+	return a.finishKubeconfigSelection(mutation, intent)
+}
 
+func (a *WorkspaceCoordinator) prepareKubeconfigSelection(mutation *selectionMutation, selections []string) (selectionChangeIntent, error) {
+	intentStart := time.Now()
+	intent, err := a.buildSelectionChangeIntent(selections, mutation.generation)
+	mutation.phases.intent = time.Since(intentStart)
+	return intent, err
+}
+
+// Commit selection and restart state before potentially slow runtime work.
+func (a *WorkspaceCoordinator) commitKubeconfigSelection(mutation *selectionMutation, intent *selectionChangeIntent) {
 	a.beginDeferredSelectionGeneration(mutation)
 	intent.generation = mutation.generation
-
 	if intent.clearSelection {
-		return a.clearKubeconfigSelection(!mutation.preserveRestartSelection)
+		a.retainWorkspaceSelections(nil)
 	}
-
 	commitStart := time.Now()
-	a.commitSelectionChangeIntent(intent, !mutation.preserveRestartSelection)
+	a.commitSelectionChangeIntent(*intent, !mutation.preserveRestartSelection)
 	mutation.phases.commit = time.Since(commitStart)
+}
+
+func (a *WorkspaceCoordinator) finishKubeconfigSelection(mutation *selectionMutation, intent selectionChangeIntent) error {
+	if intent.clearSelection {
+		a.clearClusterRuntime()
+		return nil
+	}
 	return a.executeSelectionChangeWork(mutation.context(), intent, &mutation.phases)
 }
 
@@ -284,13 +299,16 @@ func (a *WorkspaceCoordinator) reconcileRefreshSubsystemSelections(selections []
 	return a.refresh.updateRefreshSubsystemSelections(selections)
 }
 
-// clearKubeconfigSelection clears the active selection and resets client state.
+// Runtime reset callers already own the selection mutation boundary.
 func (a *WorkspaceCoordinator) clearKubeconfigSelection(persist bool) error {
-	a.logger.Info("Clearing kubeconfig selection", logsources.KubeconfigManager)
 	a.retainWorkspaceSelections(nil)
-	a.kubeconfigsMu.Lock()
-	a.setSelectedKubeconfigsLocked(nil)
-	a.kubeconfigsMu.Unlock()
+	a.commitSelectionChangeIntent(selectionChangeIntent{clearSelection: true}, persist)
+	a.clearClusterRuntime()
+	return nil
+}
+
+// clearClusterRuntime retires the clients after empty selection has committed.
+func (a *WorkspaceCoordinator) clearClusterRuntime() {
 	removed := a.clusterRuntime.clearClusterClientPool()
 	for _, item := range removed {
 		if item.authManager != nil {
@@ -304,14 +322,6 @@ func (a *WorkspaceCoordinator) clearKubeconfigSelection(persist bool) error {
 		a.removeClusterWorkspaceState(item.clusterID)
 	}
 	a.refresh.teardownRefreshSubsystem()
-
-	if persist {
-		if err := a.preferences.SaveSelectedKubeconfigs(nil); err != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), logsources.KubeconfigManager)
-		}
-	}
-
-	return nil
 }
 
 // handleKubeconfigChange is called (debounced) when file changes are detected.

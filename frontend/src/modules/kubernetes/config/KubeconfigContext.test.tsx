@@ -10,11 +10,14 @@ import {
   resetClusterTabOrderCacheForTesting,
   setClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import { clusterReadiness } from '@/core/refresh/clusterReadiness';
+import { TabDragProvider } from '@/shared/components/tabs/dragCoordinator';
+import { requireValue } from '@/test-utils/requireValue';
+import ClusterTabs from '@/ui/layout/ClusterTabs';
 import { KubeconfigProvider, useKubeconfig } from './KubeconfigContext';
 
 const {
@@ -45,6 +48,8 @@ const {
 }));
 
 vi.mock('@core/backend-api', () => ({
+  GetClusterTabOrder: async () => [],
+  SetClusterTabOrder: async () => undefined,
   GetKubeconfigs: () => getKubeconfigsMock(),
   GetClusterWorkspaceStateForWindow: async () => {
     workspaceState.selections = [...((await getSelectedKubeconfigsMock()) || [])];
@@ -78,6 +83,14 @@ vi.mock('@core/backend-api', () => ({
   },
 }));
 
+vi.mock('@/core/contexts/ViewStateContext', () => ({
+  useViewState: () => ({
+    viewType: 'overview',
+    navigateToGlobal: vi.fn(),
+    activateClusterWorkspace: vi.fn(),
+  }),
+}));
+
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: mocks.refreshOrchestrator,
   useBackgroundRefresh: () => mocks.backgroundRefreshState,
@@ -100,7 +113,7 @@ const kubeconfigDiscoveryResult = (kubeconfigs: types.KubeconfigInfo[]) => ({
   searchPaths: [],
 });
 
-const renderProvider = async () => {
+const renderProvider = async (children?: ReactNode) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
@@ -109,7 +122,7 @@ const renderProvider = async () => {
 
   const HookHost = () => {
     context = useKubeconfig();
-    return null;
+    return children ?? null;
   };
 
   await act(async () => {
@@ -123,6 +136,7 @@ const renderProvider = async () => {
   });
 
   return {
+    container,
     getContext() {
       if (!context) {
         throw new Error('Kubeconfig context not set');
@@ -139,6 +153,61 @@ const renderProvider = async () => {
 };
 
 describe('KubeconfigContext', () => {
+  it('keeps a denied tab open and removes an accepted tab before the follow-up selection RPC settles', async () => {
+    getKubeconfigsMock.mockResolvedValue(
+      kubeconfigDiscoveryResult(
+        ['alpha', 'beta'].map((name) => ({
+          name,
+          path: `/kube/${name}`,
+          context: name,
+          isDefault: false,
+          isCurrentContext: false,
+          invalid: false,
+          invalidReason: '',
+        }))
+      )
+    );
+    getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:alpha', '/kube/beta:beta']);
+    const { container, getContext, unmount } = await renderProvider(
+      <TabDragProvider>
+        <ClusterTabs />
+      </TabDragProvider>
+    );
+    const release = vi.fn();
+    const preflight = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ release });
+    getContext().registerClusterClosePreflight(preflight);
+    const closeAlpha = () =>
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Close alpha"]'),
+        'Alpha close button'
+      ).click();
+    await act(async () => closeAlpha());
+    expect(container.querySelector('button[aria-label="Close alpha"]')).not.toBeNull();
+    expect(setSelectedKubeconfigsMock).not.toHaveBeenCalled();
+
+    let finishSelection: () => void = () => undefined;
+    setSelectedKubeconfigsMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSelection = resolve;
+        })
+    );
+    try {
+      await act(async () => closeAlpha());
+      expect(preflight).toHaveBeenLastCalledWith('alpha:alpha');
+      expect(container.querySelector('button[aria-label="Close alpha"]')).toBeNull();
+      expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
+        'beta'
+      );
+      expect(getContext().selectedKubeconfigs).toEqual(['/kube/beta:beta']);
+      expect(release).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => finishSelection());
+      unmount();
+    }
+    expect(release).toHaveBeenCalledOnce();
+  });
+
   it('deduplicates a pending close by cluster identity and ignores stale close targets', async () => {
     getKubeconfigsMock.mockResolvedValue(
       kubeconfigDiscoveryResult([
