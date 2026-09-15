@@ -78,3 +78,15 @@ impact, and run the repository gate. Keep production behavior and test/coverage
 configuration unchanged. A lower percentage is acceptable when it reflects
 removing tests that only exercise presentation; do not add filler tests to
 restore it. Investigate lost coverage of meaningful branches.
+
+## Test environment
+
+Isolate the backend test process's config and cache directories before fixtures
+run, as in [TestMain](../../backend/main_test.go). Per-test overrides must restore
+to those disposable roots so late background work cannot write real app settings.
+Validate isolation through the real state resolver in a child process.
+
+Finish binding generation before source-inventory tests enumerate frontend files;
+generation can create and remove temporary trees. If generated coverage HTML enters
+frontend lint scope, preserve the reports outside the frontend tree and rerun the
+unchanged gate. Keep coverage summaries for evidence; do not weaken source lint.

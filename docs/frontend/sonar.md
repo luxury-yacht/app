@@ -97,10 +97,6 @@ operation admission, generation replacement, live delivery, and terminal cleanup
 before adding more nesting. Preserve the timing of stale-generation guards,
 cancellation, publication, and completion while moving code.
 
-Recurring mistakes and their prevention steps are recorded in
-[the shared workflow guidance](../workflows/common-mistakes.md); read it before
-editing.
-
 ## Required remediation loop
 
 1. Record the Sonar key, score, owning contract, consumers, and directly affected

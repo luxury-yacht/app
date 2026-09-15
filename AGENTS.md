@@ -61,9 +61,11 @@ source contract is unclear.
 
 ## Working rules
 
-- Read `docs/workflows/common-mistakes.md` before editing and apply its
-  prevention checks to the affected code. Record recurring mistakes and shared
-  prevention rules there so they travel with the repository.
+- Read the short `docs/workflows/common-mistakes.md` checklist before editing;
+  follow linked guidance only for the affected work. Improve existing guidance
+  in its owning doc and keep regression scenarios in tests. Add a checklist item
+  only for a broadly recurring failure pattern; remove duplicated or superseded
+  guidance instead of appending fix histories.
 - Preserve unrelated worktree changes and existing project patterns.
 - Do not change behavior, appearance, dependencies, or unrelated files unless
   required for the requested contract.

@@ -7,10 +7,16 @@ query boundaries and projection ownership follow the
 
 ## Presentation contracts
 
+- Keep each family in the existing per-view lifecycle for cluster, namespace,
+  and All Namespaces routes. Reuse ResourceInventoryTable/GridTable while keeping
+  pending actions owned by the view that opened them; sharing a data adapter does
+  not justify retaining a view instance across families.
 - Keep a single family table with the existing Kind filter. Do not introduce
   per-kind tabs to accommodate different fields.
 - Give columns specific names and one fact per cell; CSV values must represent
   the same field. Put long configuration lists in Details.
+- Production column builders own sizing. Stories must use that same path rather
+  than adding layout transformations absent from the live view.
 - Use the shared Overview frame, kind-specific summaries and labeled sections.
   Omit empty sections and preserve meaningful zero values.
 - Resource identifiers and values must remain selectable and copyable, including

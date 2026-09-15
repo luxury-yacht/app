@@ -163,12 +163,15 @@ over ResourcesUpToDate when projecting health.
 Family availability and catalog filtering are reusable; family registration is
 explicit. Add classification in `backend/resourcekind/family.go`, discovered
 availability in `useAvailableResourceViews`, table selection/persistence, and
-rich-detail projection/descriptor for each family. The navigation registry marks
+rich-detail projection/descriptor for each family. Register each table's explicit
+`viewId` with persistence cleanup. The navigation registry marks
 optional entries with `resourceFamily`; the availability hook applies the
 discovered scope arrays uniformly. `customresource.BuildDetails`
 accepts the resolved scope; its gateway rejects namespace/scope mismatches before
-GET and keys header metadata by namespace. Preserve discovered scope through
-navigation, queries, details and permissions. Related references need complete
+GET and keys header metadata by namespace. A normalized request kind is only a
+lookup key; dynamic projections retain the API object's canonical kind.
+Preserve discovered scope through navigation, queries, details and permissions.
+Related references need complete
 identity; Argo destination cluster names and project names do not establish a
 local cluster or control-plane namespace and must not be guessed into links.
 Family projections may depend on shared resource semantics; they must not import

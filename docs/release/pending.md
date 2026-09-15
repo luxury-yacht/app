@@ -33,6 +33,8 @@
 
 ### Changed
 
+- The Open Cluster button moved to the left and now stays pinned to the rightmost open cluster, instead of always being right-aligned.
 - Sidebar categories have been reorganized, with new Resources and Extensions categories.
   - Resources contains built-in resource objects, organized by subcategories as before.
   - Extensions contains CRDs and custom resources, including the new CRDs mentioned above.
+  - Helm has been moved to Extensions.
