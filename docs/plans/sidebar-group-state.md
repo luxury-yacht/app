@@ -61,3 +61,30 @@ production function changes are needed.
 | Coverage and local complexity | passed | `mise exec -- wails3 task test:frontend-coverage`: 511 files / 4,685 tests passed. Statement coverage: view registry 12/12 (100%), Sidebar 275/285 (96.49%). Report preserved at `/tmp/helm-sidebar-final-coverage/coverage-summary.json` outside source lint scope. No production functions changed; Biome complexity-only lint passed on the registry. |
 | Final gate and worktree inspection | passed | `mise exec -- wails3 task qc:prerelease` exited 0: formatting/bindings, vet/staticcheck, race tests, frontend lint/typecheck, all 4,685 frontend tests, Knip, and Trivy. Lint inspected 1,373 files with no fixes. Final diff is limited to the registry move, three affected test files, and this completion record; `git diff --check` passed. Log: `/tmp/helm-sidebar-prerelease.log`. |
 | Visual placement | pending | User owns visual confirmation, per earlier instruction. |
+
+## Follow-up: Open Cluster placement
+
+With no clusters open, show the labelled Open Cluster button at the left. With
+clusters open, show only its plus icon immediately after the last tab. Let the
+tab strip shrink and scroll on overflow while reserving space for the button.
+Restore the label after the final cluster closes; retain its accessible name,
+tooltip, and open action throughout.
+
+`KubeconfigContext` supplies the selected clusters and loading state. ClusterTabs
+derives ordered tabs and owns the open button; shared Tabs owns scrolling,
+overflow controls, and tab keyboard navigation. Keep the existing hydration gate,
+height observer, selection, close, and drag ordering paths. This changes no
+provider ordering, persistence, cluster identity, or dependencies.
+
+| Criterion | Status | Evidence |
+| --- | --- | --- |
+| Open button transitions between empty and populated selection | passed | The new regression failed with the label still present after opening a cluster, then passed for empty → one → multiple → empty selections and the accessible open action. Real ClusterTabs and Tabs; cluster context and open callback mocked. Replaces the obsolete width-measurement test and retains the click assertion in the transition test. |
+| Loading, selection, close, keyboard, and drag workflows | passed | `npm run test --prefix frontend -- src/ui/layout/ClusterTabs.test.tsx src/shared/components/tabs/Tabs.test.tsx`: 64 tests passed, including saved-selection loading, tab ordering, keyboard navigation, close, drag, and shared scrolling behavior. Shared overflow tests mock element measurements; they do not prove rendered placement. |
+| Coverage and local complexity | passed | `mise exec -- wails3 task test:frontend-coverage`: 511 files / 4,684 tests passed. ClusterTabs statement coverage is 118/134 (88.05%), previously 148/163 (90.79%); removal of the label observer and its obsolete test reduced the measured surface. Report: `/tmp/open-cluster-coverage-report/coverage-summary.json`. TypeScript and Biome complexity-only lint with maximum 12 passed. `gh pr view` found no PR for `resources-extensions-state`, so no current PR Sonar findings were available. |
+| Final gate and worktree inspection | passed | `mise exec -- wails3 task qc:prerelease` exited 0: formatting/bindings, vet/staticcheck, backend race tests, frontend lint/typecheck, all 4,684 frontend tests, Knip, and Trivy. Lint inspected 1,373 files with no fixes. Final diff is limited to ClusterTabs, its CSS and test, and this completion record; `git diff --check` passed. Log: `/tmp/open-cluster-prerelease.log`. |
+| Rendered placement, overflow, and window resizing | pending | User owns visual confirmation, per earlier instruction. |
+
+The first read-only lint attempt included generated coverage HTML after moving
+the report failed across filesystem volumes. A cross-volume move succeeded;
+the rerun checked all 1,373 source files with no fixes and exited 0. The report
+was outside the frontend tree before starting the prerelease gate.

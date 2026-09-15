@@ -17,7 +17,6 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
-import { installWindowProperty } from '@/test-utils/windowProperty';
 
 vi.mock('@/core/contexts/ZoomContext', () => ({ useZoom: () => ({ zoomLevel: 100 }) }));
 vi.mock('@/ui/shortcuts', async (importOriginal) => ({
@@ -524,87 +523,37 @@ describe('ClusterTabs', () => {
     }
   });
 
-  it('invokes onOpenCluster when the add-cluster button is clicked', async () => {
+  it('keeps Open Cluster accessible as its label follows empty and populated selections', async () => {
     const onOpenCluster = vi.fn();
+    const renderOpenButton = async () => {
+      await renderTabs({ onOpenCluster: () => onOpenCluster() });
+      return requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Open Cluster"]'),
+        'Open Cluster button'
+      );
+    };
+
+    const emptyButton = await renderOpenButton();
+    expect(emptyButton.textContent).toBe('Open Cluster');
+    act(() => emptyButton.click());
+    expect(onOpenCluster).toHaveBeenCalledTimes(1);
+
     mockState.selectedKubeconfigs = ['a'];
     mockState.selectedKubeconfig = 'a';
-    await renderTabs({ onOpenCluster });
+    const populatedButton = await renderOpenButton();
+    expect(populatedButton.textContent).toBe('');
+    act(() => populatedButton.click());
+    expect(onOpenCluster).toHaveBeenCalledTimes(2);
 
-    const addButton = container.querySelector('.cluster-tabs-add') as HTMLElement | null;
-    expect(addButton).not.toBeNull();
+    mockState.selectedKubeconfigs = ['a', 'b', 'c'];
+    expect((await renderOpenButton()).textContent).toBe('');
 
-    act(() => {
-      addButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(onOpenCluster).toHaveBeenCalledTimes(1);
-  });
-
-  it('remeasures Open Cluster label fit when the number of tabs changes', async () => {
-    const originalClientWidth = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      'clientWidth'
-    );
-    const originalOffsetWidth = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      'offsetWidth'
-    );
-    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
-      configurable: true,
-      get() {
-        return this.classList.contains('cluster-tabs-wrapper') ? 300 : 0;
-      },
-    });
-    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
-      configurable: true,
-      get() {
-        if (this.classList.contains('cluster-tabs-add')) {
-          return 100;
-        }
-        if (this.classList.contains('tab-item')) {
-          return 80;
-        }
-        return 0;
-      },
-    });
-    const restoreResizeObserver = installWindowProperty(
-      'ResizeObserver',
-      class implements ResizeObserver {
-        observe() {
-          return undefined;
-        }
-        unobserve() {
-          return undefined;
-        }
-        disconnect() {
-          return undefined;
-        }
-      }
-    );
-
-    try {
-      mockState.selectedKubeconfigs = ['a'];
-      mockState.selectedKubeconfig = 'a';
-      await renderTabs({ onOpenCluster: vi.fn() });
-      expect(container.querySelector('.cluster-tabs-add__label')).not.toBeNull();
-
-      mockState.selectedKubeconfigs = ['a', 'b', 'c'];
-      await renderTabs({ onOpenCluster: vi.fn() });
-
-      expect(container.querySelector('.cluster-tabs-add__label')).toBeNull();
-    } finally {
-      restoreResizeObserver();
-      if (originalClientWidth) {
-        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
-      } else {
-        Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
-      }
-      if (originalOffsetWidth) {
-        Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth);
-      } else {
-        Reflect.deleteProperty(HTMLElement.prototype, 'offsetWidth');
-      }
-    }
+    mockState.selectedKubeconfigs = [];
+    mockState.selectedKubeconfig = '';
+    const restoredButton = await renderOpenButton();
+    expect(restoredButton.textContent).toBe('Open Cluster');
+    act(() => restoredButton.click());
+    expect(onOpenCluster).toHaveBeenCalledTimes(3);
   });
 
   it('orders tabs by persisted drag order with selection-order fallback', async () => {
