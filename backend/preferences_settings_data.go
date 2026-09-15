@@ -27,6 +27,8 @@ type preferenceDescriptor struct {
 	// logsValue marks keys whose applied value appears in the change log; the
 	// rest log a nil value (the historical log output).
 	logsValue bool
+	// skipChangeLog suppresses both named and generic preference log entries.
+	skipChangeLog bool
 	// current reads the schema CurrentValue (and the logged value).
 	current func(*AppSettings) any
 	// apply validates/clamps the incoming value and writes it, flagging any
@@ -49,6 +51,11 @@ func boolPreference(key string, defaultValue, sideEffect bool, logText string, f
 			return nil
 		},
 	}
+}
+
+func unloggedPreference(descriptor preferenceDescriptor) preferenceDescriptor {
+	descriptor.skipChangeLog = true
+	return descriptor
 }
 
 // intPreference declares an integer preference over a field pointer. transform
@@ -197,14 +204,14 @@ func appPreferenceDescriptors() []preferenceDescriptor {
 	}
 
 	return []preferenceDescriptor{
-		boolPreference(appPreferenceSidebarClusterResourcesExpanded, false, false,
-			"Sidebar group expansion changed to", func(s *AppSettings) *bool { return &s.SidebarClusterResourcesExpanded }),
-		boolPreference(appPreferenceSidebarClusterExtensionsExpanded, false, false,
-			"Sidebar group expansion changed to", func(s *AppSettings) *bool { return &s.SidebarClusterExtensionsExpanded }),
-		boolPreference(appPreferenceSidebarNamespaceResourcesExpanded, false, false,
-			"Sidebar group expansion changed to", func(s *AppSettings) *bool { return &s.SidebarNamespaceResourcesExpanded }),
-		boolPreference(appPreferenceSidebarNamespaceExtensionsExpanded, false, false,
-			"Sidebar group expansion changed to", func(s *AppSettings) *bool { return &s.SidebarNamespaceExtensionsExpanded }),
+		unloggedPreference(boolPreference(appPreferenceSidebarClusterResourcesExpanded, false, false,
+			"", func(s *AppSettings) *bool { return &s.SidebarClusterResourcesExpanded })),
+		unloggedPreference(boolPreference(appPreferenceSidebarClusterExtensionsExpanded, false, false,
+			"", func(s *AppSettings) *bool { return &s.SidebarClusterExtensionsExpanded })),
+		unloggedPreference(boolPreference(appPreferenceSidebarNamespaceResourcesExpanded, false, false,
+			"", func(s *AppSettings) *bool { return &s.SidebarNamespaceResourcesExpanded })),
+		unloggedPreference(boolPreference(appPreferenceSidebarNamespaceExtensionsExpanded, false, false,
+			"", func(s *AppSettings) *bool { return &s.SidebarNamespaceExtensionsExpanded })),
 		enumPreference(appPreferenceAppearanceMode, "system", "appearance mode", []string{"light", "dark", "system"}, true,
 			"Appearance mode changed to", func(s *AppSettings) *string { return &s.AppearanceMode }),
 		boolPreference(appPreferenceUseShortResourceNames, false, false,
@@ -352,10 +359,17 @@ func logPreferenceChange(logger *Logger, key string, value any) {
 		return
 	}
 	for _, descriptor := range appPreferenceDescriptors() {
-		if descriptor.key == key && descriptor.logText != "" {
+		if descriptor.key != key {
+			continue
+		}
+		if descriptor.skipChangeLog {
+			return
+		}
+		if descriptor.logText != "" {
 			logger.Info(fmt.Sprintf("%s: %v", descriptor.logText, value), logsources.Settings)
 			return
 		}
+		break
 	}
 	logger.Info(fmt.Sprintf("Preference %s changed to: %v", key, value), logsources.Settings)
 }

@@ -471,9 +471,10 @@ func TestAppSetDimInactiveNamespacesPersists(t *testing.T) {
 	require.Contains(t, last.Message, "Dim inactive namespaces changed to: false")
 }
 
-func TestSidebarGroupExpansionPersistsIndependently(t *testing.T) {
+func TestSidebarGroupExpansionPersistsIndependentlyWithoutLogging(t *testing.T) {
 	setTestConfigEnv(t)
-	preferences := NewPreferencesService(nil, nil, nil)
+	logger := NewLogger(20)
+	preferences := NewPreferencesService(nil, nil, logger)
 	keys := []string{"sidebarClusterResourcesExpanded", "sidebarClusterExtensionsExpanded", "sidebarNamespaceResourcesExpanded", "sidebarNamespaceExtensionsExpanded"}
 	read := func(owner *PreferencesService) map[string]any {
 		t.Helper()
@@ -498,6 +499,20 @@ func TestSidebarGroupExpansionPersistsIndependently(t *testing.T) {
 	require.Equal(t, true, values[keys[1]])
 	require.Equal(t, true, values[keys[2]])
 	require.Equal(t, false, values[keys[3]])
+	require.Empty(t, logger.GetEntries(), "sidebar disclosure must persist without creating application logs")
+}
+
+func TestAppPreferenceBatchKeepsOtherLogsWithSidebarChanges(t *testing.T) {
+	setTestConfigEnv(t)
+	logger := NewLogger(20)
+	preferences := NewPreferencesService(nil, nil, logger)
+	require.NoError(t, updatePreferences(preferences,
+		AppPreferenceChange{Key: appPreferenceSidebarClusterResourcesExpanded, Value: true},
+		AppPreferenceChange{Key: appPreferenceUseShortResourceNames, Value: true},
+		AppPreferenceChange{Key: appPreferenceSidebarNamespaceExtensionsExpanded, Value: true},
+		AppPreferenceChange{Key: appPreferenceObjectPanelFloatingWidth, Value: 800},
+	))
+	require.Len(t, logger.GetEntries(), 2, "both named and generic logs must survive a batch containing sidebar changes")
 }
 
 func TestAppSetExclusiveNamespacesPersists(t *testing.T) {
