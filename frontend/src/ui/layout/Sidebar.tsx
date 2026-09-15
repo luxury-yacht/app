@@ -37,7 +37,6 @@ import {
   GLOBAL_VIEW_DESCRIPTORS,
   type NamespaceViewDescriptor,
   SIDEBAR_VIEW_GROUPS,
-  type SidebarViewGroupId,
 } from '@/core/navigation/viewRegistry';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -49,6 +48,7 @@ import type { ClusterViewType, GlobalViewType, NamespaceViewType } from '@/types
 import { isMacPlatform } from '@/utils/platform';
 import { NamespaceScopeAddRow, useNamespaceScope } from './NamespaceScopeEditor';
 import { type SidebarCursorTarget, useSidebarKeyboardControls } from './SidebarKeys';
+import { useSidebarGroupExpansion } from './useSidebarGroupExpansion';
 
 const toNamespaceKey = (clusterId: string | undefined, scope: string): string => {
   const scoped = buildClusterScope(clusterId, scope);
@@ -80,45 +80,6 @@ const expandSelectedNamespace = (
   const next = new Set(previous);
   next.add(selectedNamespaceKey);
   return next;
-};
-
-const useSidebarGroupExpansion = (
-  selectedView: { readonly sidebarGroup: 'primary' | SidebarViewGroupId } | undefined
-) => {
-  const { sidebarSelection } = useViewState();
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<SidebarViewGroupId>>(
-    () => new Set(SIDEBAR_VIEW_GROUPS.map((group) => group.id))
-  );
-
-  // A fresh selection also reveals a manually collapsed group when navigating
-  // to the same view again. Unrelated renders preserve the user's disclosure.
-  useEffect(() => {
-    const selectedGroup = selectedView?.sidebarGroup;
-    if (!sidebarSelection || !selectedGroup || selectedGroup === 'primary') {
-      return;
-    }
-    setCollapsedGroups((previous) => {
-      if (!previous.has(selectedGroup)) {
-        return previous;
-      }
-      const next = new Set(previous);
-      next.delete(selectedGroup);
-      return next;
-    });
-  }, [selectedView, sidebarSelection]);
-
-  const toggleGroup = (id: SidebarViewGroupId) => {
-    setCollapsedGroups((previous) => {
-      const next = new Set(previous);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-  return { collapsedGroups, toggleGroup };
 };
 
 const scrollExpandedNamespaceIntoView = (namespaceKey: string) => {
@@ -297,7 +258,7 @@ const SidebarNamespaceViews = ({
   const selectedView = views.find((view) =>
     isTargetSelected({ kind: 'namespace-view', namespace: namespaceKey, view: view.id })
   );
-  const { collapsedGroups, toggleGroup } = useSidebarGroupExpansion(selectedView);
+  const { isGroupExpanded, toggleGroup } = useSidebarGroupExpansion('namespace', selectedView);
 
   useEffect(() => {
     if (!isExpanded) {
@@ -342,7 +303,7 @@ const SidebarNamespaceViews = ({
           label={group.label}
           target={{ kind: 'namespace-group-toggle', namespace: namespaceKey, id: group.id }}
           regionId={`${namespaceViewsId}-${group.id}`}
-          expanded={!collapsedGroups.has(group.id)}
+          expanded={isGroupExpanded(group.id)}
           onToggle={() => toggleGroup(group.id)}
           buildSidebarItemClassName={buildSidebarItemClassName}
         >
@@ -647,7 +608,7 @@ const ClusterSidebarSection = (props: ClusterSidebarSectionProps) => {
   const selectedView = props.views.find((view) =>
     props.isTargetSelected({ kind: 'cluster-view', view: view.id })
   );
-  const { collapsedGroups, toggleGroup } = useSidebarGroupExpansion(selectedView);
+  const { isGroupExpanded, toggleGroup } = useSidebarGroupExpansion('cluster', selectedView);
   return (
     <div className="sidebar-section" hidden={props.hidden}>
       <h3>Cluster</h3>
@@ -705,7 +666,7 @@ const ClusterSidebarSection = (props: ClusterSidebarSectionProps) => {
             label={group.label}
             target={{ kind: 'cluster-toggle', id: group.id }}
             regionId={`${props.elementIdPrefix}-sidebar-cluster-${group.id}-views`}
-            expanded={!collapsedGroups.has(group.id)}
+            expanded={isGroupExpanded(group.id)}
             onToggle={() => toggleGroup(group.id)}
             buildSidebarItemClassName={props.buildSidebarItemClassName}
           >

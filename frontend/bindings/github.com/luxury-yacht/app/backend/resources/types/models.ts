@@ -36,6 +36,11 @@ export interface AppPreferenceSchema {
  * AppSettings represents the application settings
  */
 export interface AppSettings {
+    "sidebarClusterResourcesExpanded": boolean;
+    "sidebarClusterExtensionsExpanded": boolean;
+    "sidebarNamespaceResourcesExpanded": boolean;
+    "sidebarNamespaceExtensionsExpanded": boolean;
+
     /**
      * Random local installation identifier used for pseudonymous telemetry
      */

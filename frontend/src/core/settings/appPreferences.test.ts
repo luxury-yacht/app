@@ -34,6 +34,7 @@ import {
   getPaletteTint,
   getPermissionSSRRFetchConcurrency,
   getPreferenceMetadata,
+  getSidebarGroupExpanded,
   getUseShortResourceNames,
   hydrateAppPreferences,
   KUBERNETES_CLIENT_BURST_DEFAULT,
@@ -74,6 +75,7 @@ import {
   setObjPanelLogsTargetPerScopeLimit,
   setPaletteTint,
   setPermissionSSRRFetchConcurrency,
+  setSidebarGroupExpanded,
   setUseShortResourceNames,
   validateThemeClusterPattern,
 } from './appPreferences';
@@ -904,6 +906,58 @@ describe('appPreferences', () => {
     expect(events).toEqual([false, true]);
     unsubscribe();
     consoleError.mockRestore();
+  });
+
+  it('hydrates sidebar groups, persists toggles and rolls back a failed toggle for subscribers', async () => {
+    appMocks.GetAppSettingsSchema.mockResolvedValue({
+      preferences: [
+        {
+          key: 'sidebarClusterResourcesExpanded',
+          type: 'boolean',
+          defaultValue: false,
+          currentValue: true,
+        },
+        {
+          key: 'sidebarNamespaceExtensionsExpanded',
+          type: 'boolean',
+          defaultValue: false,
+          currentValue: true,
+        },
+      ],
+    });
+    await hydrateAppPreferences({ force: true });
+    expect(getSidebarGroupExpanded('cluster', 'resources')).toBe(true);
+    expect(getSidebarGroupExpanded('cluster', 'extensions')).toBe(false);
+    expect(getSidebarGroupExpanded('namespace', 'resources')).toBe(false);
+    expect(getSidebarGroupExpanded('namespace', 'extensions')).toBe(true);
+    const observed: boolean[] = [];
+    const unsubscribe = eventBus.on('settings:sidebar-expansion', () => {
+      observed.push(getSidebarGroupExpanded('namespace', 'extensions'));
+    });
+    try {
+      setSidebarGroupExpanded('namespace', 'extensions', false);
+      await flushPromises();
+      expect(appMocks.UpdateAppPreferences).toHaveBeenLastCalledWith({
+        changes: [{ key: 'sidebarNamespaceExtensionsExpanded', value: false }],
+      });
+      expect(getSidebarGroupExpanded('namespace', 'extensions')).toBe(false);
+      expect(desktopRuntimeMocks.emitBroadcastEvent).toHaveBeenCalledWith(
+        'settings:preferences-changed',
+        undefined
+      );
+
+      desktopRuntimeMocks.emitBroadcastEvent.mockClear();
+      appMocks.UpdateAppPreferences.mockRejectedValueOnce(new Error('forced persistence failure'));
+      setSidebarGroupExpanded('namespace', 'extensions', true);
+      expect(getSidebarGroupExpanded('namespace', 'extensions')).toBe(true);
+      await flushPromises();
+      expect(getSidebarGroupExpanded('namespace', 'extensions')).toBe(false);
+      expect(getSidebarGroupExpanded('cluster', 'resources')).toBe(true);
+      expect(observed).toEqual([false, true, false]);
+      expect(desktopRuntimeMocks.emitBroadcastEvent).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+    }
   });
 
   it('rolls back appearance localStorage mirrors when persistence fails', async () => {

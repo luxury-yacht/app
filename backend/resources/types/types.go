@@ -34,6 +34,10 @@ type WindowSettings struct {
 
 // AppSettings represents the application settings
 type AppSettings struct {
+	SidebarClusterResourcesExpanded          bool     `json:"sidebarClusterResourcesExpanded"`
+	SidebarClusterExtensionsExpanded         bool     `json:"sidebarClusterExtensionsExpanded"`
+	SidebarNamespaceResourcesExpanded        bool     `json:"sidebarNamespaceResourcesExpanded"`
+	SidebarNamespaceExtensionsExpanded       bool     `json:"sidebarNamespaceExtensionsExpanded"`
 	AnonymizedID                             string   `json:"anonymizedId"`                             // Random local installation identifier used for pseudonymous telemetry
 	AppearanceMode                           string   `json:"appearanceMode"`                           // "light", "dark", or "system"
 	SelectedKubeconfigs                      []string `json:"selectedKubeconfigs"`                      // Multi-cluster selections in "path:context" form

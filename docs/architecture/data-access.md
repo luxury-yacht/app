@@ -150,6 +150,14 @@ Persisted preference mutations should batch through `UpdateAppPreferences` so
 validation, persistence, side effects, normalized return values, and optimistic
 rollback stay aligned.
 
+Sidebar Resources and Extensions expansion uses four global preferences:
+one per group for Cluster and one per group for Namespaces. Cluster expansion
+is shared across clusters; namespace expansion is shared across all namespaces
+and clusters. Missing preferences default to collapsed. Both manual disclosure
+and explicit navigation reveal update the shared state. Namespace row expansion
+remains separate. The shared sidebar hook subscribes to preference changes, so
+hydration, sibling toggles, and persistence rollback update mounted groups.
+
 `PreferencesService` owns one coalesced lazy-load attempt. `EnsureLoaded`
 surfaces a load error without installing state or dispatching effects;
 `EnsureLoadedForStartup` joins that same attempt and may atomically install a

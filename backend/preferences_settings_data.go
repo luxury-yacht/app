@@ -197,6 +197,14 @@ func appPreferenceDescriptors() []preferenceDescriptor {
 	}
 
 	return []preferenceDescriptor{
+		boolPreference(appPreferenceSidebarClusterResourcesExpanded, false, false,
+			"Sidebar group expansion changed to", func(s *AppSettings) *bool { return &s.SidebarClusterResourcesExpanded }),
+		boolPreference(appPreferenceSidebarClusterExtensionsExpanded, false, false,
+			"Sidebar group expansion changed to", func(s *AppSettings) *bool { return &s.SidebarClusterExtensionsExpanded }),
+		boolPreference(appPreferenceSidebarNamespaceResourcesExpanded, false, false,
+			"Sidebar group expansion changed to", func(s *AppSettings) *bool { return &s.SidebarNamespaceResourcesExpanded }),
+		boolPreference(appPreferenceSidebarNamespaceExtensionsExpanded, false, false,
+			"Sidebar group expansion changed to", func(s *AppSettings) *bool { return &s.SidebarNamespaceExtensionsExpanded }),
 		enumPreference(appPreferenceAppearanceMode, "system", "appearance mode", []string{"light", "dark", "system"}, true,
 			"Appearance mode changed to", func(s *AppSettings) *string { return &s.AppearanceMode }),
 		boolPreference(appPreferenceUseShortResourceNames, false, false,

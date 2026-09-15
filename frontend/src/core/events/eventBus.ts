@@ -133,6 +133,7 @@ export interface AppEvents {
   'settings:short-names': boolean;
   'settings:dim-inactive-namespaces': boolean;
   'settings:exclusive-namespaces': boolean;
+  'settings:sidebar-expansion': undefined;
   'settings:error-reporting': boolean;
   'settings:appearance-mode': 'light' | 'dark' | 'system';
   'settings:kubernetes-client-qps': number;

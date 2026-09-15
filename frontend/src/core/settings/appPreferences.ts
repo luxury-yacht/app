@@ -28,6 +28,7 @@ import {
 } from '@/core/backend-api';
 import { desktopRuntimeAvailable, emitBroadcastEvent } from '@/core/desktop-runtime';
 import { type AppEvents, eventBus } from '@/core/events';
+import type { SidebarViewGroupId, ViewScope } from '@/core/navigation/viewRegistry';
 import { captureBootstrapError } from '@/core/telemetry/sentry';
 import {
   APPEARANCE_BOOTSTRAP_STORAGE_KEY,
@@ -43,8 +44,24 @@ import {
 export type AppearanceMode = 'light' | 'dark' | 'system';
 export type GridTablePersistenceMode = 'namespaced' | 'shared';
 export type ObjectPanelPosition = 'right' | 'bottom' | 'floating';
+export type SidebarGroupScope = Extract<ViewScope, 'cluster' | 'namespace'>;
+
+const sidebarGroupPreferenceKeys = {
+  cluster: {
+    resources: 'sidebarClusterResourcesExpanded',
+    extensions: 'sidebarClusterExtensionsExpanded',
+  },
+  namespace: {
+    resources: 'sidebarNamespaceResourcesExpanded',
+    extensions: 'sidebarNamespaceExtensionsExpanded',
+  },
+} as const satisfies Record<SidebarGroupScope, Record<SidebarViewGroupId, AppPreferenceKey>>;
 
 export interface AppPreferences {
+  sidebarClusterResourcesExpanded: boolean;
+  sidebarClusterExtensionsExpanded: boolean;
+  sidebarNamespaceResourcesExpanded: boolean;
+  sidebarNamespaceExtensionsExpanded: boolean;
   appearanceMode: AppearanceMode;
   useShortResourceNames: boolean;
   dimInactiveNamespaces: boolean;
@@ -139,6 +156,10 @@ export interface ColorPreferenceInput {
 }
 
 interface AppSettingsPayload {
+  sidebarClusterResourcesExpanded?: boolean;
+  sidebarClusterExtensionsExpanded?: boolean;
+  sidebarNamespaceResourcesExpanded?: boolean;
+  sidebarNamespaceExtensionsExpanded?: boolean;
   anonymizedId?: string;
   appearanceMode?: string;
   useShortResourceNames?: boolean;
@@ -213,6 +234,10 @@ export const OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX = 1000;
 export const OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT = 200;
 
 const DEFAULT_PREFERENCES: AppPreferences = {
+  sidebarClusterResourcesExpanded: false,
+  sidebarClusterExtensionsExpanded: false,
+  sidebarNamespaceResourcesExpanded: false,
+  sidebarNamespaceExtensionsExpanded: false,
   appearanceMode: 'system',
   useShortResourceNames: false,
   dimInactiveNamespaces: true,
@@ -272,6 +297,26 @@ const createPreferenceMetadata = <K extends AppPreferenceKey>(
 const FALLBACK_PREFERENCE_METADATA: {
   [K in AppPreferenceKey]: AppPreferenceMetadata<K>;
 } = {
+  sidebarClusterResourcesExpanded: createPreferenceMetadata(
+    'sidebarClusterResourcesExpanded',
+    'boolean',
+    { runtimeSideEffect: false }
+  ),
+  sidebarClusterExtensionsExpanded: createPreferenceMetadata(
+    'sidebarClusterExtensionsExpanded',
+    'boolean',
+    { runtimeSideEffect: false }
+  ),
+  sidebarNamespaceResourcesExpanded: createPreferenceMetadata(
+    'sidebarNamespaceResourcesExpanded',
+    'boolean',
+    { runtimeSideEffect: false }
+  ),
+  sidebarNamespaceExtensionsExpanded: createPreferenceMetadata(
+    'sidebarNamespaceExtensionsExpanded',
+    'boolean',
+    { runtimeSideEffect: false }
+  ),
   appearanceMode: createPreferenceMetadata('appearanceMode', 'enum', {
     enumOptions: ['light', 'dark', 'system'],
     runtimeSideEffect: true,
@@ -682,6 +727,16 @@ const modeColorsEqual = (previous: ModeColor, next: ModeColor): boolean =>
   previous.color === next.color;
 
 const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): void => {
+  for (const keys of Object.values(sidebarGroupPreferenceKeys)) {
+    for (const key of Object.values(keys)) {
+      emitSelectedPreferenceChange(
+        previous,
+        next,
+        (value) => value[key],
+        () => eventBus.emit('settings:sidebar-expansion')
+      );
+    }
+  }
   emitSelectedPreferenceChange(
     previous,
     next,
@@ -1046,6 +1101,22 @@ export const hydrateAppPreferences = async (options?: {
     settingsReadFailed = settingsResult.failed;
   }
   const preferences: AppPreferences = {
+    sidebarClusterResourcesExpanded: normalizeBooleanPreferenceValue(
+      'sidebarClusterResourcesExpanded',
+      backendSettings?.sidebarClusterResourcesExpanded
+    ),
+    sidebarClusterExtensionsExpanded: normalizeBooleanPreferenceValue(
+      'sidebarClusterExtensionsExpanded',
+      backendSettings?.sidebarClusterExtensionsExpanded
+    ),
+    sidebarNamespaceResourcesExpanded: normalizeBooleanPreferenceValue(
+      'sidebarNamespaceResourcesExpanded',
+      backendSettings?.sidebarNamespaceResourcesExpanded
+    ),
+    sidebarNamespaceExtensionsExpanded: normalizeBooleanPreferenceValue(
+      'sidebarNamespaceExtensionsExpanded',
+      backendSettings?.sidebarNamespaceExtensionsExpanded
+    ),
     appearanceMode: normalizeAppearanceMode(backendSettings?.appearanceMode),
     useShortResourceNames: normalizeBooleanPreferenceValue(
       'useShortResourceNames',
@@ -1193,6 +1264,11 @@ export const getDimInactiveNamespaces = (): boolean => {
 export const getExclusiveNamespaces = (): boolean => {
   return preferenceCache.exclusiveNamespaces;
 };
+
+export const getSidebarGroupExpanded = (
+  scope: SidebarGroupScope,
+  group: SidebarViewGroupId
+): boolean => preferenceCache[sidebarGroupPreferenceKeys[scope][group]];
 
 export const getErrorReportingEnabled = (): boolean => {
   return preferenceCache.errorReportingEnabled;
@@ -1367,6 +1443,17 @@ export const setDimInactiveNamespaces = async (enabled: boolean): Promise<void> 
 export const setExclusiveNamespaces = async (enabled: boolean): Promise<void> => {
   const mutation = singlePreferenceMutation('exclusiveNamespaces', enabled);
   await optimisticPreferenceUpdate(mutation.updates, mutation.changes, mutation.options);
+};
+
+export const setSidebarGroupExpanded = (
+  scope: SidebarGroupScope,
+  group: SidebarViewGroupId,
+  expanded: boolean
+): void => {
+  commitPreferenceMutation(
+    'Failed to persist sidebar group expansion:',
+    singlePreferenceMutation(sidebarGroupPreferenceKeys[scope][group], expanded)
+  );
 };
 
 export const setErrorReportingEnabled = async (enabled: boolean): Promise<void> => {

@@ -25,6 +25,10 @@ const (
 )
 
 const (
+	appPreferenceSidebarClusterResourcesExpanded          = "sidebarClusterResourcesExpanded"
+	appPreferenceSidebarClusterExtensionsExpanded         = "sidebarClusterExtensionsExpanded"
+	appPreferenceSidebarNamespaceResourcesExpanded        = "sidebarNamespaceResourcesExpanded"
+	appPreferenceSidebarNamespaceExtensionsExpanded       = "sidebarNamespaceExtensionsExpanded"
 	appPreferenceAppearanceMode                           = "appearanceMode"
 	appPreferenceUseShortResourceNames                    = "useShortResourceNames"
 	appPreferenceDimInactiveNamespaces                    = "dimInactiveNamespaces"
@@ -99,21 +103,25 @@ type settingsClusterSection struct {
 
 // settingsPreferences captures user-configurable preferences.
 type settingsPreferences struct {
-	AppearanceMode                string                 `json:"appearanceMode"`
-	UseShortResourceNames         bool                   `json:"useShortResourceNames"`
-	DimInactiveNamespaces         *bool                  `json:"dimInactiveNamespaces,omitempty"`
-	ExclusiveNamespaces           *bool                  `json:"exclusiveNamespaces,omitempty"`
-	ErrorReportingEnabled         *bool                  `json:"errorReportingEnabled,omitempty"`
-	Refresh                       *settingsRefresh       `json:"refresh"`
-	KubernetesAPI                 *settingsKubernetesAPI `json:"kubernetesAPI,omitempty"`
-	ObjPanelLogs                  *settingsObjPanelLogs  `json:"objPanelLogs,omitempty"`
-	GridTablePersistenceMode      string                 `json:"gridTablePersistenceMode"`
-	DefaultTablePageSize          int                    `json:"defaultTablePageSize"`
-	DefaultObjectPanelPosition    string                 `json:"defaultObjectPanelPosition"`
-	ObjectPanelDockedRightWidth   int                    `json:"objectPanelDockedRightWidth"`
-	ObjectPanelDockedBottomHeight int                    `json:"objectPanelDockedBottomHeight"`
-	ObjectPanelFloatingWidth      int                    `json:"objectPanelFloatingWidth"`
-	ObjectPanelFloatingHeight     int                    `json:"objectPanelFloatingHeight"`
+	SidebarClusterResourcesExpanded    bool                   `json:"sidebarClusterResourcesExpanded"`
+	SidebarClusterExtensionsExpanded   bool                   `json:"sidebarClusterExtensionsExpanded"`
+	SidebarNamespaceResourcesExpanded  bool                   `json:"sidebarNamespaceResourcesExpanded"`
+	SidebarNamespaceExtensionsExpanded bool                   `json:"sidebarNamespaceExtensionsExpanded"`
+	AppearanceMode                     string                 `json:"appearanceMode"`
+	UseShortResourceNames              bool                   `json:"useShortResourceNames"`
+	DimInactiveNamespaces              *bool                  `json:"dimInactiveNamespaces,omitempty"`
+	ExclusiveNamespaces                *bool                  `json:"exclusiveNamespaces,omitempty"`
+	ErrorReportingEnabled              *bool                  `json:"errorReportingEnabled,omitempty"`
+	Refresh                            *settingsRefresh       `json:"refresh"`
+	KubernetesAPI                      *settingsKubernetesAPI `json:"kubernetesAPI,omitempty"`
+	ObjPanelLogs                       *settingsObjPanelLogs  `json:"objPanelLogs,omitempty"`
+	GridTablePersistenceMode           string                 `json:"gridTablePersistenceMode"`
+	DefaultTablePageSize               int                    `json:"defaultTablePageSize"`
+	DefaultObjectPanelPosition         string                 `json:"defaultObjectPanelPosition"`
+	ObjectPanelDockedRightWidth        int                    `json:"objectPanelDockedRightWidth"`
+	ObjectPanelDockedBottomHeight      int                    `json:"objectPanelDockedBottomHeight"`
+	ObjectPanelFloatingWidth           int                    `json:"objectPanelFloatingWidth"`
+	ObjectPanelFloatingHeight          int                    `json:"objectPanelFloatingHeight"`
 
 	// Migration: old single-value palette fields, read-only, omitted when zero.
 	PaletteHue        int `json:"paletteHue,omitempty"`
@@ -736,6 +744,10 @@ func appSettingsFromFile(settings *settingsFile) *AppSettings {
 		SelectedKubeconfigs:                      append([]string(nil), settings.Kubeconfig.Selected...),
 		UseShortResourceNames:                    settings.Preferences.UseShortResourceNames,
 		DimInactiveNamespaces:                    boolPreferenceOrDefault(settings.Preferences.DimInactiveNamespaces, true),
+		SidebarClusterResourcesExpanded:          settings.Preferences.SidebarClusterResourcesExpanded,
+		SidebarClusterExtensionsExpanded:         settings.Preferences.SidebarClusterExtensionsExpanded,
+		SidebarNamespaceResourcesExpanded:        settings.Preferences.SidebarNamespaceResourcesExpanded,
+		SidebarNamespaceExtensionsExpanded:       settings.Preferences.SidebarNamespaceExtensionsExpanded,
 		ExclusiveNamespaces:                      boolPreferenceOrDefault(settings.Preferences.ExclusiveNamespaces, true),
 		ErrorReportingEnabled:                    boolPreferenceOrDefault(settings.Preferences.ErrorReportingEnabled, true),
 		AutoRefreshEnabled:                       settings.Preferences.Refresh.Auto,
@@ -852,6 +864,10 @@ func (p *PreferencesService) saveAppSettings() error {
 	settings.Preferences.UseShortResourceNames = p.appSettings.UseShortResourceNames
 	settings.Preferences.DimInactiveNamespaces = boolPtr(p.appSettings.DimInactiveNamespaces)
 	settings.Preferences.ExclusiveNamespaces = boolPtr(p.appSettings.ExclusiveNamespaces)
+	settings.Preferences.SidebarClusterResourcesExpanded = p.appSettings.SidebarClusterResourcesExpanded
+	settings.Preferences.SidebarClusterExtensionsExpanded = p.appSettings.SidebarClusterExtensionsExpanded
+	settings.Preferences.SidebarNamespaceResourcesExpanded = p.appSettings.SidebarNamespaceResourcesExpanded
+	settings.Preferences.SidebarNamespaceExtensionsExpanded = p.appSettings.SidebarNamespaceExtensionsExpanded
 	settings.Preferences.ErrorReportingEnabled = boolPtr(p.appSettings.ErrorReportingEnabled)
 	if settings.Preferences.Refresh == nil {
 		settings.Preferences.Refresh = &settingsRefresh{}
