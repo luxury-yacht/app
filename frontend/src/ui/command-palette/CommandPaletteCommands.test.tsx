@@ -270,12 +270,12 @@ describe('CommandPaletteCommands', () => {
       'namespace-events',
       'namespace-autoscaling',
       'namespace-config',
-      'namespace-helm',
       'namespace-network',
       'namespace-quotas',
       'namespace-rbac',
       'namespace-storage',
       'namespace-custom',
+      'namespace-helm',
     ]);
 
     const globalClusters = getCommands().find((command) => command.id === 'global-fleet');

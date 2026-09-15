@@ -45,3 +45,19 @@ tree. Read-only `npm run check --prefix frontend` then passed all 1,373 source
 files without fixes. Automatic review initially rejected a gate rerun because
 of the generated-file formatting count; it approved the retry after those
 read-only checks and worktree inspection established its scope.
+
+## Follow-up: Helm in Extensions
+
+Move namespace Helm from Resources into Extensions, immediately after External
+Secrets and before Prometheus Operator. The view registry owns grouping and order;
+Sidebar filters that registry through discovery and all-namespaces availability.
+Its keyboard navigation follows the rendered order. Existing route IDs, refresh
+mapping, and namespace/cluster identity stay unchanged. No dependency or
+production function changes are needed.
+
+| Criterion | Status | Evidence |
+| --- | --- | --- |
+| Helm follows Extensions disclosure and keyboard order | passed | The final-order regression first failed because focus skipped Helm after External Secrets. After the registry move, keyboard focus follows External Secrets → Helm → Prometheus Operator, Helm activates in `cluster-a/default`, and collapsing Extensions hides it. All 97 tests in the six focused sidebar/navigation/Favorites/command-palette files passed; the latter two suites now expect the shared registry order. |
+| Coverage and local complexity | passed | `mise exec -- wails3 task test:frontend-coverage`: 511 files / 4,685 tests passed. Statement coverage: view registry 12/12 (100%), Sidebar 275/285 (96.49%). Report preserved at `/tmp/helm-sidebar-final-coverage/coverage-summary.json` outside source lint scope. No production functions changed; Biome complexity-only lint passed on the registry. |
+| Final gate and worktree inspection | passed | `mise exec -- wails3 task qc:prerelease` exited 0: formatting/bindings, vet/staticcheck, race tests, frontend lint/typecheck, all 4,685 frontend tests, Knip, and Trivy. Lint inspected 1,373 files with no fixes. Final diff is limited to the registry move, three affected test files, and this completion record; `git diff --check` passed. Log: `/tmp/helm-sidebar-prerelease.log`. |
+| Visual placement | pending | User owns visual confirmation, per earlier instruction. |

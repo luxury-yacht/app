@@ -512,6 +512,38 @@ describe('Sidebar', () => {
     expect(viewStateMock.setActiveClusterView).toHaveBeenLastCalledWith('crds');
   });
 
+  it('navigates to Helm between External Secrets and Prometheus Operator inside Extensions', () => {
+    discoveredFamilies.byCluster['cluster-a'] = {
+      namespaced: ['cert-manager', 'external-secrets', 'prometheus'],
+    };
+    renderSidebar();
+    const find = (kind: string, attribute = '') =>
+      requireValue(
+        container?.querySelector<HTMLButtonElement>(
+          `[data-sidebar-target-namespace="${namespaceKey('default')}"]` +
+            `[data-sidebar-target-kind="${kind}"]${attribute}`
+        ),
+        `expected ${kind} ${attribute}`
+      );
+    const group = (id: string) =>
+      find('namespace-group-toggle', `[data-sidebar-target-id="${id}"]`);
+    const view = (id: string) => find('namespace-view', `[data-sidebar-target-view="${id}"]`);
+    act(() => find('namespace-toggle').click());
+    act(() => group('resources').click());
+    expect(container?.querySelector('[data-sidebar-target-view="helm"]')).toBeNull();
+    act(() => group('extensions').click());
+    act(() => view('external-secrets').focus());
+    pressKey('ArrowDown');
+    expect(document.activeElement).toBe(view('helm'));
+    pressKey('Enter');
+    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('helm');
+    expect(namespaceState.setSelectedNamespace).toHaveBeenLastCalledWith('default', 'cluster-a');
+    pressKey('ArrowDown');
+    expect(document.activeElement).toBe(view('prometheus'));
+    act(() => group('extensions').click());
+    expect(container?.querySelector('[data-sidebar-target-view="helm"]')).toBeNull();
+  });
+
   it('shares namespace group state across namespaces and clusters and routes keyboard selection', () => {
     setAppPreferencesForTesting({ exclusiveNamespaces: false });
     discoveredFamilies.byCluster['cluster-a'] = { namespaced: ['argocd'] };

@@ -951,7 +951,6 @@ describe('FavSaveModal', () => {
       'namespace:events',
       'namespace:autoscaling',
       'namespace:config',
-      'namespace:helm',
       'namespace:network',
       'namespace:quotas',
       'namespace:rbac',
@@ -960,6 +959,7 @@ describe('FavSaveModal', () => {
       'namespace:argocd',
       'namespace:cert-manager',
       'namespace:external-secrets',
+      'namespace:helm',
       'namespace:prometheus',
     ]);
     expect(viewSelect.options[0]?.textContent).toBe('Clusters');

@@ -257,16 +257,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
   {
     scope: 'namespace',
     sidebarGroup: 'resources',
-    id: 'helm',
-    supportsAllNamespaces: true,
-    label: 'Helm',
-    description: 'View Helm releases',
-    keywords: ['helm', 'namespace', 'charts', 'releases'],
-    refresher: 'helm',
-  },
-  {
-    scope: 'namespace',
-    sidebarGroup: 'resources',
     id: 'network',
     supportsAllNamespaces: true,
     label: 'Network',
@@ -346,6 +336,16 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     keywords: ['external-secrets', 'external secrets', 'secret stores'],
     refresher: null,
     supportsAllNamespaces: true,
+  },
+  {
+    scope: 'namespace',
+    sidebarGroup: 'extensions',
+    id: 'helm',
+    supportsAllNamespaces: true,
+    label: 'Helm',
+    description: 'View Helm releases',
+    keywords: ['helm', 'namespace', 'charts', 'releases'],
+    refresher: 'helm',
   },
   {
     scope: 'namespace',
