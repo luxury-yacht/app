@@ -241,7 +241,10 @@ func TestInstallationMetricRetriesAfterFlushFailure(t *testing.T) {
 	reporter := newRecordingInstallationReporter(false, true)
 	app := newSettingsEffectsTestFixture(t, reporter)
 
-	require.NoError(t, InitializeErrorReporting(app.Preferences, app.ErrorReporting))
+	// Keep initialization from racing the explicit failed/successful flush attempts.
+	require.NoError(t, app.ErrorReporting.WithInstallationTelemetryQuiesced(func() error {
+		return InitializeErrorReporting(app.Preferences, app.ErrorReporting)
+	}))
 	app.ErrorReporting.reportInstallationMetricIfNeeded(context.Background())
 	failed, err := app.Preferences.loadSettingsFile()
 	require.NoError(t, err)

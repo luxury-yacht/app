@@ -25,7 +25,6 @@ const { fetchSnapshotMock } = vi.hoisted(() => ({
 
 vi.mock('./client', () => ({
   fetchSnapshot: (...args: unknown[]) => fetchSnapshotMock(...args),
-  isSnapshotPermissionDenied: () => false,
   setMetricsActive: () => undefined,
 }));
 

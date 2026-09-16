@@ -154,9 +154,6 @@ const clientMocks = vi.hoisted(() => ({
 vi.mock('./client', () => ({
   fetchSnapshot: clientMocks.fetchSnapshotMock,
   setMetricsActive: clientMocks.setMetricsActiveMock,
-  // Mirrors the real structural guard (marker property, not instanceof).
-  isSnapshotPermissionDenied: (error: unknown) =>
-    error instanceof Error && (error as { permissionDenied?: boolean }).permissionDenied === true,
 }));
 
 const containerLogsStreamMocks = vi.hoisted(() => ({

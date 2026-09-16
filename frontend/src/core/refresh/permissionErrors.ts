@@ -6,6 +6,10 @@
 
 import type { PermissionDeniedStatus } from './types';
 
+// Match the snapshot error marker without importing the HTTP client.
+export const isSnapshotPermissionDenied = (error: unknown): boolean =>
+  error instanceof Error && (error as { permissionDenied?: boolean }).permissionDenied === true;
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 

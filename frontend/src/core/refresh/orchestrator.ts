@@ -15,12 +15,7 @@ import {
 import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import { reportOperationalError } from '@/utils/errorHandler';
-import {
-  fetchSnapshot,
-  isSnapshotPermissionDenied,
-  type Snapshot,
-  setMetricsActive,
-} from './client';
+import { fetchSnapshot, type Snapshot, setMetricsActive } from './client';
 import { clusterReadiness } from './clusterReadiness';
 import { buildClusterScope, parseClusterScope, parseClusterScopeList } from './clusterScope';
 import { registerDefaultRefreshDomains } from './domainRegistrations';
@@ -30,6 +25,7 @@ import {
   type MetricsDemandState,
   transitionMetricsDemandState,
 } from './metricsDemandState';
+import { isSnapshotPermissionDenied } from './permissionErrors';
 import { type RefreshContext, refreshManager } from './RefreshManager';
 import { RefreshErrorNotifier } from './refreshErrorNotifier';
 import { type RefresherTiming, refresherConfig } from './refresherConfig';

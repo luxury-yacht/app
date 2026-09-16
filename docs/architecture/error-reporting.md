@@ -342,8 +342,9 @@ poller shut down — and must not be reported as a failure.
   cause and stack in one error report per API during a continuous failure run;
   successful collection resets that latch.
 
-`context.DeadlineExceeded` is deliberately still an error: a request that ran
-out of time is a real problem, unlike one the app itself cancelled.
+Cancellation and timeouts are classified separately. A standalone client-side
+`context.DeadlineExceeded` remains reportable; recognized network timeouts follow
+the connectivity policy below.
 
 Expected cluster authentication and connectivity outcomes also remain in the
 local application log instead of creating Sentry issues. The backend uses the

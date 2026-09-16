@@ -232,11 +232,6 @@ export class SnapshotPermissionDeniedError extends Error {
   readonly permissionDenied = true;
 }
 
-// Structural guard (marker property, not instanceof) so it survives module
-// mocking and error re-wrapping.
-export const isSnapshotPermissionDenied = (error: unknown): boolean =>
-  error instanceof Error && (error as { permissionDenied?: boolean }).permissionDenied === true;
-
 async function safeParseError(
   response: Response
 ): Promise<{ message: string; permissionDenied: boolean }> {

@@ -1,4 +1,7 @@
-import { isPermissionDeniedStatus } from '@/core/refresh/permissionErrors';
+import {
+  isPermissionDeniedStatus,
+  isSnapshotPermissionDenied,
+} from '@/core/refresh/permissionErrors';
 
 // Wails preserves many Go errors as messages. Match concrete outcomes, not UI
 // category words such as "permission", "token", or "missing" on their own.
@@ -6,18 +9,19 @@ const expectedMessages = [
   /(?:^|:\s*)context cancel(?:ed|led)\s*$/i,
   /\b(?:permission denied|access denied|is forbidden)\b/i,
   /\b(?:401 unauthorized|403 forbidden)\b/i,
-  /\b(?:http(?:\/\d(?:\.\d)?)?\s+|status(?:\s+(?:code|of))?(?:\s*[:=]\s*|\s+))(?:401|403)\b/i,
+  /\bhttp(?:\/\d(?:\.\d)?)?\s+(?:401|403)\b/i,
+  /\bstatus(?:\s+(?:code|of))?(?:\s*[:=]\s*|\s+)(?:401|403)\b/i,
   /\b(?:unauthorized|authentication required)\b|\bauth invalid:/i,
   /\b(?:token|credentials?|sso session) (?:has |have |is |are )?expired\b/i,
   /\bgetting credentials: exec:/i,
-  /\b[\w.-]+ "[^"]+" not found\b/i,
+  /(?:^|: )[a-z][a-z0-9]*(?:\.[a-z0-9.-]+)? "[^"]+" not found$/i,
 ];
 
 const isExpectedStatus = (error: object): boolean => {
   if (isPermissionDeniedStatus(error)) {
     return true;
   }
-  if ('permissionDenied' in error && error.permissionDenied === true) {
+  if (isSnapshotPermissionDenied(error)) {
     return true;
   }
   if (!('kind' in error) || error.kind !== 'Status' || !('code' in error) || !('reason' in error)) {
@@ -39,8 +43,8 @@ const isExpectedValue = (error: unknown): boolean => {
   if (typeof error === 'object' && error !== null && isExpectedStatus(error)) {
     return true;
   }
-  const message = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
-  return expectedMessages.some((pattern) => pattern.test(message));
+  const message = error instanceof Error ? error.message : error;
+  return typeof message === 'string' && expectedMessages.some((pattern) => pattern.test(message));
 };
 
 // One decision for all handled-error surfaces, including wrapped Wails causes.
