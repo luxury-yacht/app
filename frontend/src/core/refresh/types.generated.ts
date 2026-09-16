@@ -2994,3 +2994,57 @@ export interface BackendDomainPayloadMap {
   'object-map': ObjectMapSnapshotPayload;
   'object-maintenance': NodeMaintenanceSnapshotPayload;
 }
+export const RESOURCE_FAMILY_RULES = [
+  {
+    "groupPrefix": "karpenter.",
+    "family": "karpenter"
+  },
+  {
+    "group": "acme.cert-manager.io",
+    "family": "cert-manager",
+    "kinds": {
+      "challenge": true,
+      "order": true
+    }
+  },
+  {
+    "group": "argoproj.io",
+    "family": "argocd",
+    "kinds": {
+      "application": true,
+      "applicationset": true,
+      "appproject": true
+    }
+  },
+  {
+    "group": "cert-manager.io",
+    "family": "cert-manager",
+    "kinds": {
+      "certificate": true,
+      "certificaterequest": true,
+      "clusterissuer": false,
+      "issuer": true
+    }
+  },
+  {
+    "group": "external-secrets.io",
+    "family": "external-secrets",
+    "kinds": {
+      "clusterexternalsecret": false,
+      "clustersecretstore": false,
+      "externalsecret": true,
+      "secretstore": true
+    }
+  },
+  {
+    "group": "monitoring.coreos.com",
+    "family": "prometheus",
+    "kinds": {
+      "alertmanager": true,
+      "podmonitor": true,
+      "prometheus": true,
+      "prometheusrule": true,
+      "servicemonitor": true
+    }
+  }
+] as const;

@@ -156,8 +156,8 @@ function ClusterSecret({ facts }: Readonly<{ facts: ClusterExternalSecretFacts }
           fields={[
             ['ExternalSecret Name', facts.externalSecretName],
             ['Refresh Interval', facts.refreshTime],
-            ['Provisioned Namespaces', facts.provisionedNamespaces?.length],
-            ['Failed Namespaces', facts.failedNamespaces?.length],
+            ['Provisioned Namespace Count', facts.provisionedNamespaces?.length],
+            ['Failed Namespace Count', facts.failedNamespaces?.length],
           ]}
         />
         <Values label="Target Namespaces" values={facts.namespaces} />

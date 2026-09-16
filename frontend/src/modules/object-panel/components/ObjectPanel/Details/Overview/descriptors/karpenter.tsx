@@ -20,6 +20,7 @@ import {
   KarpenterValues,
 } from '../KarpenterSections';
 import type { OverviewDescriptor } from '../schema';
+import { OperatorStatus } from '../shared/OperatorOverview';
 
 const renderLink = (link?: ResourceLink) => {
   if (!link) {
@@ -153,10 +154,9 @@ export const karpenterDescriptor: OverviewDescriptor<CustomResourceDetails> = {
   ],
   schema: {
     items: [
-      { kind: 'status' },
       {
         kind: 'widget',
-        consumes: ['karpenter', 'conditions'],
+        consumes: ['karpenter', 'conditions', 'status', 'statusState', 'statusPresentation'],
         render: (data) => {
           if (!data.karpenter) {
             return null;
@@ -164,6 +164,7 @@ export const karpenterDescriptor: OverviewDescriptor<CustomResourceDetails> = {
           const KindOverview = kindOverviews[data.kind.toLowerCase()] ?? ClassOverview;
           return (
             <div className="karpenter-overview">
+              <OperatorStatus status={data.status} presentation={data.statusPresentation} />
               <KindOverview facts={data.karpenter} conditions={data.conditions} />
             </div>
           );

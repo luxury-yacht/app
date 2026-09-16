@@ -20,7 +20,6 @@ type streamingAggregator struct {
 	publishProgress bool                // Only cold startup publishes incomplete batches to readers.
 	service         *Service            // service is the catalog service associated with this aggregator.
 	mu              sync.Mutex          // mu protects access to the aggregator's state.
-	chunks          []*summaryChunk     // chunks holds the summary chunks collected by the aggregator.
 	kindSet         map[string]bool     // kindSet tracks the kinds present in the aggregator (value = namespaced).
 	namespaceSet    map[string]struct{} // namespaceSet tracks the namespaces present in the aggregator.
 	start           time.Time           // start is the time when the aggregator was created.
@@ -31,7 +30,6 @@ func newStreamingAggregator(s *Service) *streamingAggregator {
 	return &streamingAggregator{
 		publishProgress: !s.CachesReady(),
 		service:         s,                         // service is the catalog service associated with this aggregator.
-		chunks:          make([]*summaryChunk, 0),  // chunks holds the summary chunks collected by the aggregator.
 		kindSet:         make(map[string]bool),     // kindSet tracks the kinds present in the aggregator (value = namespaced).
 		namespaceSet:    make(map[string]struct{}), // namespaceSet tracks the namespaces present in the aggregator.
 		start:           s.now(),                   // start is the time when the aggregator was created.
@@ -43,14 +41,19 @@ func (a *streamingAggregator) emit(_ int, items []Summary) {
 	if a == nil || len(items) == 0 {
 		return
 	}
+	if !a.publishProgress {
+		a.mu.Lock()
+		if a.firstFlush.IsZero() {
+			a.firstFlush = a.service.now()
+		}
+		a.mu.Unlock()
+		return
+	}
 	chunkCopy := make([]Summary, len(items))
 	copy(chunkCopy, items)
 	sortSummaries(chunkCopy)
 
 	a.mu.Lock()
-	chunk := &summaryChunk{items: make([]Summary, len(chunkCopy))}
-	copy(chunk.items, chunkCopy)
-	a.chunks = append(a.chunks, chunk)
 	for _, summary := range chunkCopy {
 		if summary.Ref.Kind != "" {
 			// Track whether the kind is namespaced (Scope == ScopeNamespace)
@@ -66,9 +69,6 @@ func (a *streamingAggregator) emit(_ int, items []Summary) {
 		a.firstFlush = a.service.now()
 	}
 	a.mu.Unlock()
-	if !a.publishProgress {
-		return
-	}
 
 	// Publish only this chunk's items, upserting them into the maintained store, rather than
 	// rebuilding the store from every chunk emitted so far. Concurrent collectors each emit
@@ -80,41 +80,12 @@ func (a *streamingAggregator) emit(_ int, items []Summary) {
 	}
 }
 
-// cloneChunksLocked snapshots the aggregator's chunk list. Chunks are
-// immutable once appended (their items are never mutated after creation), so
-// only the pointer slice is copied — deep-copying every item made each emit
-// cost O(total items), quadratic across an initial sync.
-func (a *streamingAggregator) cloneChunksLocked() []*summaryChunk {
-	if len(a.chunks) == 0 {
-		return nil
-	}
-	result := make([]*summaryChunk, len(a.chunks))
-	copy(result, a.chunks)
-	return result
-}
-
 // firstFlushLatency returns the duration between the aggregator's creation and its first flush.
 func (a *streamingAggregator) firstFlushLatency() time.Duration {
 	if a == nil || a.firstFlush.IsZero() || a.start.IsZero() {
 		return 0
 	}
 	return a.firstFlush.Sub(a.start)
-}
-
-// finalize publishes the final state of the aggregator.
-func (a *streamingAggregator) finalize(descriptors []Descriptor, ready bool) {
-	if a == nil {
-		return
-	}
-	a.mu.Lock()
-	chunks := a.cloneChunksLocked()
-	kindSnapshot := cloneKindSet(a.kindSet)
-	namespaceSnapshot := cloneSet(a.namespaceSet)
-	a.mu.Unlock()
-	a.service.publishStreamingState(chunks, kindSnapshot, namespaceSnapshot, descriptors, ready)
-	if a.service != nil {
-		a.service.broadcastStreaming(ready)
-	}
 }
 
 // emitSummaries adds a batch of summaries to the aggregator.

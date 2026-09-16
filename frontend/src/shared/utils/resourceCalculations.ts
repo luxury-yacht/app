@@ -34,46 +34,47 @@ const EMPTY_RESOURCE_VALUES = new Set(['-', 'undefined', 'null', 'not set']);
 
 const isEmptyResourceValue = (value: string): boolean => !value || EMPTY_RESOURCE_VALUES.has(value);
 
-const isNumericResourceValue = (value: string): boolean =>
-  Number.isFinite(Number.parseFloat(value));
-
-// Parse CPU values to millicores.
-const parseCpuValue = (value: string): number => {
-  const parsed = Number.parseFloat(value);
-  if (Number.isNaN(parsed)) {
-    return 0;
-  }
-  return value.endsWith('m') ? parsed : parsed * 1000;
+// Kubernetes quantities use decimal SI, binary SI, or a decimal exponent. UI
+// producers also supply spaced values and the existing MB/GB display aliases.
+const QUANTITY_FACTORS: Readonly<Record<string, number>> = {
+  '': 1,
+  n: 1e-9,
+  u: 1e-6,
+  m: 1e-3,
+  k: 1e3,
+  M: 1e6,
+  G: 1e9,
+  T: 1e12,
+  P: 1e15,
+  E: 1e18,
+  Ki: 1024,
+  Mi: 1024 ** 2,
+  Gi: 1024 ** 3,
+  Ti: 1024 ** 4,
+  Pi: 1024 ** 5,
+  Ei: 1024 ** 6,
 };
 
-// Parse Memory values to MB (Mi)
-const MEMORY_MIB_FACTORS = [
-  // Kubernetes can express allocatable storage in milli-bytes.
-  ['m', 1 / (1000 * 1024 * 1024)],
-  ['Ki', 1 / 1024],
-  ['Mi', 1],
-  ['Gi', 1024],
-  ['Ti', 1024 * 1024],
-  ['GB', 1024],
-  ['MB', 1],
-] as const;
-
-const parseMemoryValue = (value: string): number => {
-  const parsed = Number.parseFloat(value);
-  if (Number.isNaN(parsed)) {
-    return 0;
+const parseQuantity = (value: string | undefined, type: ResourceType): number | undefined => {
+  const match = value?.trim().match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*([a-zA-Z]*|[eE][+-]?\d+)$/);
+  if (!match) {
+    return undefined;
   }
-
-  const unit = MEMORY_MIB_FACTORS.find(([suffix]) => value.endsWith(suffix));
-  return unit ? parsed * unit[1] : parsed / (1024 * 1024);
+  const suffix = match[2];
+  const aliases: Readonly<Record<string, number>> = { MB: 1024 ** 2, GB: 1024 ** 3 };
+  const factor = /^[eE][+-]?\d+$/.test(suffix)
+    ? 10 ** Number(suffix.slice(1))
+    : (QUANTITY_FACTORS[suffix] ?? (type === 'memory' ? aliases[suffix] : undefined));
+  if (factor === undefined) {
+    return undefined;
+  }
+  const parsed = Number(match[1]) * factor * (type === 'cpu' ? 1000 : 1 / 1024 ** 2);
+  return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-export const parseResourceValue = (value: string | undefined, type: ResourceType): number => {
-  if (value === undefined || isEmptyResourceValue(value)) {
-    return 0;
-  }
-  return type === 'cpu' ? parseCpuValue(value) : parseMemoryValue(value);
-};
+// CPU is expressed in millicores; memory is expressed in MiB.
+export const parseResourceValue = (value: string | undefined, type: ResourceType): number =>
+  parseQuantity(value, type) ?? 0;
 
 // A missing usage or limit is unknown, while an explicit zero usage is valid.
 export const getResourceLimitUsagePercent = (
@@ -81,12 +82,9 @@ export const getResourceLimitUsagePercent = (
   limit: string | undefined,
   type: ResourceType
 ): number | undefined => {
-  if (usage === undefined || isEmptyResourceValue(usage) || !isNumericResourceValue(usage)) {
-    return undefined;
-  }
-  const rawUsage = parseResourceValue(usage, type);
-  const rawLimit = parseResourceValue(limit, type);
-  if (rawLimit <= 0 || rawUsage < 0) {
+  const rawUsage = parseQuantity(usage, type);
+  const rawLimit = parseQuantity(limit, type);
+  if (rawUsage === undefined || rawLimit === undefined || rawLimit <= 0 || rawUsage < 0) {
     return undefined;
   }
   const percentage = (rawUsage / rawLimit) * 100;
@@ -128,7 +126,11 @@ export const formatResourceValue = (
   parsedValue: number,
   type: ResourceType
 ): string => {
-  if (value === undefined || isEmptyResourceValue(value) || !isNumericResourceValue(value)) {
+  if (
+    value === undefined ||
+    isEmptyResourceValue(value) ||
+    parseQuantity(value, type) === undefined
+  ) {
     return '-';
   }
   if (type === 'cpu') {

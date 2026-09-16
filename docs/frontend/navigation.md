@@ -36,8 +36,8 @@ Both groups start collapsed.
 
 `viewRegistry.ts` owns the ordered view descriptors and their required
 `sidebarGroup` placement. Filter resource families using active-cluster discovery
-before grouping the available views. Sidebar groups use local disclosure state
-and the existing keyboard navigation surface; target parsing accepts only the
+before grouping the available views. Sidebar groups use four persisted app preferences (Resources and Extensions for
+each of Cluster and Namespace) and the existing keyboard navigation surface; target parsing accepts only the
 registered group IDs. Grouping does not change stable view IDs or the ordering
 of route updates before entering the Cluster view. Command-palette and favorite
 view choices continue to consume the same ordered descriptors.
@@ -45,17 +45,16 @@ view choices continue to consume the same ordered descriptors.
 ## Namespace Sidebar Organization
 
 Each namespace begins with Workloads, Browse, Map, and Events as direct links.
-Resources contains Autoscaling, Config, Helm, Network, Quotas, RBAC, and Storage,
+Resources contains Autoscaling, Config, Network, Quotas, RBAC, and Storage,
 in that order. Extensions contains Custom Resources, Argo CD,
-Cert Manager, External Secrets, and Prometheus Operator, with resource families
+Cert Manager, External Secrets, Helm, and Prometheus Operator, with resource families
 filtered by active-cluster discovery. Apply the existing All Namespaces support
 filter before grouping, so Map remains available only for individual namespaces.
 
 Both scopes use `SIDEBAR_VIEW_GROUPS` and the shared `SidebarViewGroup` renderer.
 Keep compact row spacing and omit separators. Namespace Resources and Extensions
-start collapsed. Namespace group disclosure is independent for each
-cluster-qualified namespace key and survives collapsing its
-parent namespace. Keyboard group targets carry that namespace key and group ID.
+start collapsed. Namespace group disclosure is shared across namespaces and clusters and survives
+collapsing a parent namespace. Keyboard group targets carry that namespace key and group ID.
 When a subgroup expands, the namespace scroll owner rechecks the full namespace
 group after the expansion animation.
 
@@ -64,7 +63,8 @@ for namespace views, its parent namespace. This includes repeated Alt-click
 navigation to the same view after manually collapsing its category or namespace.
 Both scopes share the disclosure policy and resolve the group from the available
 view descriptors, preserving active-cluster discovery gates. Fresh selection
-requests reveal the destination; unrelated data refreshes preserve manual collapse.
+requests reveal the destination, including when discovery arrives later. Mounting
+with a restored selection and unrelated data refreshes preserve manual collapse.
 
 ## Cluster Attention Routing
 

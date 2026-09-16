@@ -179,6 +179,54 @@ describe('SessionsStatus shell session jump action', () => {
       | number
       | undefined;
 
+  it.each([false, true])(
+    'stops the selected port forward and restores its control after rejection=%s',
+    async (reject) => {
+      listRuntimeOperationsMock.mockRejectedValue(new Error('runtime list unavailable'));
+      listPortForwardsMock.mockResolvedValue([
+        {
+          id: 'pf-1',
+          clusterId: 'cluster-a',
+          clusterName: 'a',
+          namespace: 'default',
+          podName: 'web-abc',
+          containerPort: 8080,
+          localPort: 18080,
+          localAddress: '127.0.0.1',
+          status: 'active',
+          startedAt: '2026-02-20T00:00:00Z',
+        },
+      ]);
+      let finish: () => void = () => undefined;
+      const failure = new Error('stop failed');
+      stopPortForwardMock.mockImplementation(
+        () =>
+          new Promise<void>((resolve, rejectPromise) => {
+            finish = () => (reject ? rejectPromise(failure) : resolve());
+          })
+      );
+      await renderStatus();
+      const button = container.querySelector<HTMLButtonElement>('[aria-label="Stop port forward"]');
+      expect(button).not.toBeNull();
+      await act(async () => button?.click());
+      expect(stopPortForwardMock).toHaveBeenCalledExactlyOnceWith('pf-1');
+      expect(button?.disabled).toBe(true);
+      await act(async () => finish());
+      expect(button?.disabled).toBe(false);
+      if (reject) {
+        expect(errorHandlerMock.handle).toHaveBeenCalledWith(
+          failure,
+          expect.objectContaining({
+            action: 'stopPortForward',
+            sessionId: 'pf-1',
+          })
+        );
+      } else {
+        expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+      }
+    }
+  );
+
   it('opens and focuses the shell tab immediately for sessions on the active cluster', async () => {
     await renderStatus();
 

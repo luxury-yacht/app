@@ -15,6 +15,7 @@ import {
   formatCapacityValue,
   sortedCapacityResources,
 } from './karpenterCapacityFormat';
+import { ConditionChips } from './shared/ConditionChips';
 import { OverviewItem } from './shared/OverviewItem';
 import './shared/OverviewBlocks.css';
 import './KarpenterOverview.css';
@@ -438,19 +439,10 @@ export function KarpenterConditions({ conditions }: Readonly<{ conditions?: Cond
   }
   return (
     <KarpenterSection title="Conditions">
-      <div className="overview-condition-list">
-        {withStableListKeys(conditions, (condition) => condition.type).map(
-          ({ key, value: condition }) => (
-            <StatusChip
-              key={key}
-              variant={conditionVariants[condition.status] ?? 'warning'}
-              tooltip={condition.message || condition.reason || undefined}
-            >
-              {condition.type}
-            </StatusChip>
-          )
-        )}
-      </div>
+      <ConditionChips
+        conditions={conditions}
+        variant={(condition) => conditionVariants[condition.status] ?? 'warning'}
+      />
     </KarpenterSection>
   );
 }

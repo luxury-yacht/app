@@ -5,6 +5,7 @@ import { resourceLinkToObjectReference } from '@shared/utils/resourceLinkIdentit
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type { ReactNode } from 'react';
 import { formatFullDate } from '@/utils/ageFormatter';
+import { ConditionChips } from './ConditionChips';
 import { OverviewItem } from './OverviewItem';
 import './OverviewBlocks.css';
 import './OperatorOverview.css';
@@ -121,21 +122,11 @@ export function OperatorStatus({
         [
           'Conditions',
           conditions?.length ? (
-            <div key="conditions" className="overview-condition-list">
-              {withStableListKeys(conditions, (condition) => condition.type).map(
-                ({ key, value }) => (
-                  <StatusChip
-                    key={key}
-                    variant={variants[value.presentation] ?? 'info'}
-                    tooltip={[value.status, value.message || value.reason]
-                      .filter(Boolean)
-                      .join(': ')}
-                  >
-                    {value.type}
-                  </StatusChip>
-                )
-              )}
-            </div>
+            <ConditionChips
+              key="conditions"
+              conditions={conditions}
+              variant={(condition) => variants[condition.presentation] ?? 'info'}
+            />
           ) : undefined,
         ],
       ]}

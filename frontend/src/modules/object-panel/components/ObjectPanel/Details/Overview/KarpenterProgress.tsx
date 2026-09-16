@@ -1,3 +1,4 @@
+import { ConditionChips } from './shared/ConditionChips';
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/KarpenterProgress.tsx
  *
@@ -6,8 +7,7 @@
  * blocking reason underneath, followed by any remaining conditions as chips.
  */
 
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
-import { withStableListKeys } from '@shared/utils/stableListKeys';
+import type { StatusChipVariant } from '@shared/components/StatusChip';
 import type { ConditionFacts } from '@/core/refresh/types';
 import { OverviewItem } from './shared/OverviewItem';
 import './KarpenterOverview.css';
@@ -160,21 +160,7 @@ export function KarpenterProgress({
       {others.length > 0 && (
         <OverviewItem
           label="Conditions"
-          value={
-            <div className="overview-condition-list">
-              {withStableListKeys(others, (condition) => condition.type).map(
-                ({ key, value: condition }) => (
-                  <StatusChip
-                    key={key}
-                    variant={conditionVariant(condition)}
-                    tooltip={condition.message || condition.reason || undefined}
-                  >
-                    {condition.type}
-                  </StatusChip>
-                )
-              )}
-            </div>
-          }
+          value={<ConditionChips conditions={others} variant={conditionVariant} />}
         />
       )}
     </>

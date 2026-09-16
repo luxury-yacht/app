@@ -1,5 +1,5 @@
 import { useViewState } from '@core/contexts/ViewStateContext';
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { eventBus } from '@/core/events';
 import type { SidebarViewGroupId } from '@/core/navigation/viewRegistry';
 import {
@@ -22,10 +22,21 @@ export const useSidebarGroupExpansion = (
     getSidebarGroupExpanded(scope, 'extensions')
   );
 
+  const previousSelection = useRef(sidebarSelection);
+
   // Explicit navigation reveals its destination again after a manual collapse.
   // Preference updates and unrelated renders must preserve the user's disclosure.
   useEffect(() => {
-    const group = selectedView?.sidebarGroup;
+    if (previousSelection.current === sidebarSelection) {
+      return;
+    }
+    // Discovery may arrive after navigation; consume the request only once
+    // its destination is available in this scope.
+    if (!selectedView) {
+      return;
+    }
+    previousSelection.current = sidebarSelection;
+    const group = selectedView.sidebarGroup;
     if (
       sidebarSelection &&
       group &&

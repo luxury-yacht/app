@@ -36,7 +36,7 @@ func newTestServiceForStreaming() *Service {
 	}
 }
 
-func TestStreamingAggregatorFinalizePublishesState(t *testing.T) {
+func TestCatalogSyncPublishesState(t *testing.T) {
 	svc := newTestServiceForStreaming()
 	agg := newStreamingAggregator(svc)
 
@@ -52,7 +52,7 @@ func TestStreamingAggregatorFinalizePublishesState(t *testing.T) {
 		t.Fatalf("expected non-negative latency")
 	}
 
-	agg.finalize([]Descriptor{{Kind: "Pod", Resource: "pods"}}, true)
+	publishTestSummaries(svc, []Summary{{Ref: resourcemodel.ResourceRef{Kind: "Pod", Namespace: "default", Name: "obj1"}, Scope: ScopeNamespace}}, []Descriptor{{Kind: "Pod", Resource: "pods"}})
 
 	svc.mu.Lock()
 	defer svc.mu.Unlock()
@@ -112,8 +112,8 @@ func TestEmitSummariesRoutesToAggregator(t *testing.T) {
 	if err != nil || !handled {
 		t.Fatalf("expected handled success, got handled=%v err=%v", handled, err)
 	}
-	if len(agg.cloneChunksLocked()) != 1 {
-		t.Fatalf("expected aggregator to store summaries")
+	if got := agg.service.Query(QueryOptions{Limit: 10}); len(got.Items) != 1 {
+		t.Fatalf("expected emitted summaries to be queryable, got %+v", got.Items)
 	}
 	if len(result) != 1 {
 		t.Fatalf("expected passthrough summaries, got %#v", result)
@@ -161,7 +161,7 @@ func TestServiceStreamingSubscriptionReceivesUpdates(t *testing.T) {
 		t.Fatalf("timed out waiting for flush update")
 	}
 
-	agg.finalize(nil, true)
+	publishTestSummaries(svc, []Summary{{Ref: resourcemodel.ResourceRef{Kind: "Pod", Name: "p1"}}}, nil)
 
 	select {
 	case update := <-updates:
@@ -192,16 +192,17 @@ func TestStreamingAggregatorEmitsOutOfOrderBatches(t *testing.T) {
 	}
 }
 
-func TestStreamingAggregatorFinalizeReplacesStaleObjects(t *testing.T) {
+func TestCatalogSyncReplacesStaleObjects(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
 	descriptors := []Descriptor{{Kind: "Pod", Resource: "pods", Version: "v1", Scope: ScopeNamespace, Namespaced: true}}
 
 	agg := newStreamingAggregator(svc)
-	agg.emit(0, []Summary{
+	rows := []Summary{
 		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "survivor", UID: "uid-survivor"}, Scope: ScopeNamespace},
 		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "stale", UID: "uid-stale"}, Scope: ScopeNamespace},
-	})
-	agg.finalize(descriptors, true)
+	}
+	agg.emit(0, rows)
+	publishTestSummaries(svc, rows, descriptors)
 
 	result := svc.Query(QueryOptions{Limit: 10})
 	if result.TotalItems != 2 {
@@ -209,10 +210,9 @@ func TestStreamingAggregatorFinalizeReplacesStaleObjects(t *testing.T) {
 	}
 
 	agg = newStreamingAggregator(svc)
-	agg.emit(0, []Summary{
-		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "survivor", UID: "uid-survivor"}, Scope: ScopeNamespace},
-	})
-	agg.finalize(descriptors, true)
+	rows = rows[:1]
+	agg.emit(0, rows)
+	publishTestSummaries(svc, rows, descriptors)
 
 	result = svc.Query(QueryOptions{Limit: 10})
 	if result.TotalItems != 1 || len(result.Items) != 1 {
@@ -242,4 +242,14 @@ func TestPruneMissingHonorsTTL(t *testing.T) {
 	if _, ok := seen["b"]; !ok {
 		t.Fatalf("expected recent entry b to remain")
 	}
+}
+
+// Exercise the same final replacement and notification boundary used by collection.
+func publishTestSummaries(svc *Service, rows []Summary, descriptors []Descriptor) {
+	items := make(map[string]Summary, len(rows))
+	for _, row := range rows {
+		items[row.Ref.Name] = row
+	}
+	run := catalogSync{service: svc, newItems: items}
+	run.publish(descriptors, nil)
 }

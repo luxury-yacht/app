@@ -5,11 +5,30 @@
  * Covers key behaviors and edge cases for utils.
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getShortcutKey, isInputElement, modifiersMatch, resolveEventElement } from './utils';
+import {
+  formatShortcut,
+  getShortcutKey,
+  isInputElement,
+  modifiersMatch,
+  resolveEventElement,
+} from './utils';
 
 describe('shortcut utilities', () => {
+  it.each([
+    ['Macintosh', '⌘⌃⌥⇧K'],
+    ['Windows', 'Win+Ctrl+Alt+Shift+K'],
+  ])('identifies the platform modifier keys for %s', (userAgent, expected) => {
+    const platform = vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(userAgent);
+    try {
+      expect(formatShortcut('k', { meta: true, ctrl: true, alt: true, shift: true })).toBe(
+        expected
+      );
+    } finally {
+      platform.mockRestore();
+    }
+  });
   it('matches modifier combinations correctly', () => {
     const event = new KeyboardEvent('keydown', {
       key: 'k',

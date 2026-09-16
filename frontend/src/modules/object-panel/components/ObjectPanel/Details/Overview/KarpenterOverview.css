@@ -50,12 +50,6 @@
   font-weight: var(--font-weight-bold);
 }
 
-.karpenter-fact-caption {
-  color: var(--color-text-secondary);
-  font-family: var(--font-family-base);
-  font-size: var(--font-size-sm);
-}
-
 .karpenter-budget + .karpenter-budget {
   border-top: 1px solid var(--color-border);
   padding-top: var(--spacing-sm);
@@ -224,4 +218,13 @@
 
 .karpenter-capacity-table tbody th {
   width: 7rem;
+}
+
+.app .karpenter-overview .overview-value,
+.app .karpenter-overview .overview-value *,
+.app .karpenter-overview .overview-ref-item,
+.app .karpenter-overview .karpenter-lifecycle-step,
+.app .karpenter-overview .karpenter-lifecycle-note {
+  user-select: text;
+  -webkit-user-select: text;
 }

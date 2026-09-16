@@ -6,7 +6,7 @@
 
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClusterAuthState } from '@/core/contexts/AuthErrorContext';
 import { AuthFailureOverlayContent } from './AuthFailureOverlay';
 
@@ -46,6 +46,21 @@ describe('AuthFailureOverlayContent', () => {
       );
     });
   };
+
+  it('allows retry without diagnosing an absent exec helper', async () => {
+    const retry = vi.fn();
+    await act(async () => {
+      root.render(
+        <AuthFailureOverlayContent authState={baseState} clusterId="c1" onRetry={retry} />
+      );
+    });
+    expect(container.querySelector('code')).toBeNull();
+    expect(container.textContent).not.toContain('Install that command');
+    const button = container.querySelector('button');
+    expect(button).not.toBeNull();
+    act(() => button?.click());
+    expect(retry).toHaveBeenCalledOnce();
+  });
 
   it('identifies the missing credential helper', async () => {
     await renderContent({

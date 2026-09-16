@@ -1,6 +1,33 @@
 package resourcekind
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestFamilyRulesMatchCatalogClassification(t *testing.T) {
+	for _, rule := range FamilyRules() {
+		if !IsResourceFamily(rule.Family) {
+			t.Fatalf("unknown family in generated policy: %q", rule.Family)
+		}
+		for kind, namespaced := range rule.Kinds {
+			if got := FamilyForResource(rule.Group, strings.ToUpper(kind), namespaced); got != rule.Family {
+				t.Errorf("%s/%s classifies as %q instead of %q", rule.Group, kind, got, rule.Family)
+			}
+			if got := FamilyForResource(rule.Group, kind, !namespaced); got != "" {
+				t.Errorf("wrong scope accepted for %s/%s", rule.Group, kind)
+			}
+		}
+		if rule.GroupPrefix != "" {
+			if got := FamilyForResource(rule.GroupPrefix+"provider", "NewClass", false); got != rule.Family {
+				t.Errorf("prefix policy differs from catalog classification: %q", got)
+			}
+		}
+	}
+	if IsResourceFamily("unrelated") {
+		t.Fatal("unknown family accepted")
+	}
+}
 
 func TestKarpenterFamilyRequiresDiscoveredClusterScope(t *testing.T) {
 	for _, test := range []struct {

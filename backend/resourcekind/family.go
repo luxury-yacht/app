@@ -1,6 +1,10 @@
 package resourcekind
 
-import "strings"
+import (
+	"maps"
+	"sort"
+	"strings"
+)
 
 const (
 	KarpenterFamily       = "karpenter"
@@ -8,6 +12,7 @@ const (
 	CertManagerFamily     = "cert-manager"
 	ExternalSecretsFamily = "external-secrets"
 	PrometheusFamily      = "prometheus"
+	karpenterGroupPrefix  = "karpenter."
 )
 
 type familyDefinition struct {
@@ -23,10 +28,33 @@ var discoveredFamilies = map[string]familyDefinition{
 	"monitoring.coreos.com": {PrometheusFamily, map[string]bool{"servicemonitor": true, "podmonitor": true, "prometheusrule": true, "prometheus": true, "alertmanager": true}},
 }
 
+// FamilyRule is the backend-owned discovery policy exported to navigation by
+// genrefreshcontracts. Versions remain discovery-owned.
+type FamilyRule struct {
+	Group       string          `json:"group,omitempty"`
+	GroupPrefix string          `json:"groupPrefix,omitempty"`
+	Family      string          `json:"family"`
+	Kinds       map[string]bool `json:"kinds,omitempty"`
+}
+
+func FamilyRules() []FamilyRule {
+	rules := []FamilyRule{{GroupPrefix: karpenterGroupPrefix, Family: KarpenterFamily}}
+	groups := make([]string, 0, len(discoveredFamilies))
+	for group := range discoveredFamilies {
+		groups = append(groups, group)
+	}
+	sort.Strings(groups)
+	for _, group := range groups {
+		definition := discoveredFamilies[group]
+		rules = append(rules, FamilyRule{Group: group, Family: definition.family, Kinds: maps.Clone(definition.kinds)})
+	}
+	return rules
+}
+
 // FamilyForResource classifies discovered APIs without pinning served versions.
 // Argo products share a group, so Argo CD also requires an explicit kind match.
 func FamilyForResource(group, kind string, namespaced bool) string {
-	if !namespaced && strings.HasPrefix(group, "karpenter.") {
+	if !namespaced && strings.HasPrefix(group, karpenterGroupPrefix) {
 		return KarpenterFamily
 	}
 	definition := discoveredFamilies[group]

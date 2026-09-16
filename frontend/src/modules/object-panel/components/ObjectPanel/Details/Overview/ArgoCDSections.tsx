@@ -8,7 +8,6 @@ import type {
   ArgoCDApplicationSetFacts,
   ArgoCDApplicationSpec,
   ArgoCDAutomatedSync,
-  ArgoCDCondition,
   ArgoCDDestination,
   ArgoCDFacts,
   ArgoCDGenerator,
@@ -21,6 +20,7 @@ import type {
   ArgoCDSyncWindow,
 } from '@/core/refresh/types';
 import { formatFullDate } from '@/utils/ageFormatter';
+import { ConditionChips } from './shared/ConditionChips';
 import {
   OperatorCard as Card,
   OperatorFields as Fields,
@@ -72,21 +72,6 @@ const listOrNothing = (values?: string[]) =>
   values?.length ? <List values={values} /> : undefined;
 
 const yesNo = (value: boolean) => (value ? 'Yes' : 'No');
-
-function conditionChips(conditions?: ArgoCDCondition[]) {
-  return conditions?.length ? (
-    <div className="overview-condition-list">
-      {withStableListKeys(conditions, (condition) => condition.type).map(({ key, value }) => (
-        <Badge
-          key={key}
-          value={value.type}
-          presentation={value.presentation}
-          tooltip={[value.status, value.message || value.reason].filter(Boolean).join(': ')}
-        />
-      ))}
-    </div>
-  ) : undefined;
-}
 
 const operationDetail = (operation: ArgoCDOperation): string =>
   [
@@ -144,7 +129,16 @@ export function ArgoCDStatus({
           ) : undefined,
         ],
         ['Last Sync', lastSync(application?.operation)],
-        ['Conditions', conditionChips(facts.conditions)],
+        [
+          'Conditions',
+          facts.conditions?.length ? (
+            <ConditionChips
+              key="conditions"
+              conditions={facts.conditions}
+              variant={(condition) => variants[condition.presentation] ?? 'info'}
+            />
+          ) : undefined,
+        ],
       ]}
     />
   );
@@ -334,9 +328,14 @@ export function ArgoCDApplicationSet({ facts }: Readonly<{ facts: ArgoCDApplicat
       <Section title="Application Management">
         <Fields
           fields={[
-            ['Applications Sync', facts.applicationsSync || 'sync'],
-            ['Preserve on Delete', yesNo(facts.preserveResourcesOnDeletion ?? false)],
-            ['Strategy', facts.strategy || 'AllAtOnce'],
+            ['Applications Sync', facts.applicationsSync],
+            [
+              'Preserve on Delete',
+              typeof facts.preserveResourcesOnDeletion !== 'boolean'
+                ? undefined
+                : yesNo(facts.preserveResourcesOnDeletion),
+            ],
+            ['Strategy', facts.strategy],
           ]}
         />
       </Section>

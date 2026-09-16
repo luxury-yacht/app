@@ -738,9 +738,6 @@ func (run *catalogSync) restoreFailedDescriptors() {
 }
 
 func (run *catalogSync) publish(descriptors []Descriptor, collectErr error) {
-	if run.aggregator.publishProgress {
-		run.aggregator.finalize(descriptors, collectErr == nil)
-	}
 	run.service.rebuildCacheFromItems(run.newItems, descriptors)
 	run.service.pruneMissing(run.newLastSeen)
 	// Notify after publishing the complete replacement, including rows retained

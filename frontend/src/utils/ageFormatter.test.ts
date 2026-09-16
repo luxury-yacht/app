@@ -7,9 +7,14 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { formatAge, parseCompactAgeToSeconds } from './ageFormatter';
+import { formatAge, formatFullDate, parseCompactAgeToSeconds } from './ageFormatter';
 
 describe('ageFormatter', () => {
+  it('keeps missing and invalid full timestamps distinct from real dates', () => {
+    expect(formatFullDate(null)).toBe('-');
+    expect(formatFullDate('invalid')).toBe('-');
+    expect(formatFullDate(new Date(Number.NaN))).toBe('-');
+  });
   afterEach(() => {
     vi.useRealTimers();
   });

@@ -38,3 +38,9 @@
   - Resources contains built-in resource objects, organized by subcategories as before.
   - Extensions contains CRDs and custom resources, including the new CRDs mentioned above.
   - Helm has been moved to Extensions.
+
+- Updated the Wails Go module, CLI, and frontend runtime together from beta.20 to beta.22.
+  Upstream [beta.21 notes](https://github.com/wailsapp/wails/releases/tag/v3.0.0-beta.21)
+  cover binding-generation, updater, signal-handler, and Windows-menu fixes;
+  [beta.22 notes](https://github.com/wailsapp/wails/releases/tag/v3.0.0-beta.22)
+  cover documentation changes.

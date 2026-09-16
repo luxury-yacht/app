@@ -61,6 +61,24 @@ const cards = (scope: ParentNode) =>
 const section = (dom: HTMLElement, label: string) =>
   dom.querySelector(`section[aria-label="${label}"]`) ?? document.createElement('div');
 describe('Argo CD overview', () => {
+  it('keeps omitted ApplicationSet policy unknown and preserves explicit false', () => {
+    const data: CustomResourceDetails = {
+      ...base,
+      kind: 'ApplicationSet',
+      argoCD: { applicationSet: { template: { destination: {} } } },
+    };
+    const absent = mount(data);
+    for (const label of ['Applications Sync', 'Preserve on Delete', 'Strategy']) {
+      expect(rowValue(absent, label)).toBeUndefined();
+    }
+    const explicit = mount({
+      ...data,
+      argoCD: {
+        applicationSet: { template: { destination: {} }, preserveResourcesOnDeletion: false },
+      },
+    });
+    expect(rowValue(explicit, 'Preserve on Delete')).toBe('No');
+  });
   it('shows independent sync and health, multiple sources, disabled automation and the namespaced owner', () => {
     const html = render({
       ...base,

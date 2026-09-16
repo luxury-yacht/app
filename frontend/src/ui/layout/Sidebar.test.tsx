@@ -649,6 +649,30 @@ describe('Sidebar', () => {
     expect(find('namespace-group-toggle', 'extensions').getAttribute('aria-expanded')).toBe('true');
   });
 
+  it('preserves a persisted collapse on mount with a grouped view selected, then reveals fresh navigation', () => {
+    viewStateMock.viewType = 'cluster';
+    viewStateMock.sidebarSelection = { type: 'cluster', value: 'nodes' };
+    renderSidebar();
+    const resources = () =>
+      requireValue(
+        container?.querySelector<HTMLButtonElement>(
+          '[data-sidebar-target-kind="cluster-toggle"][data-sidebar-target-id="resources"]'
+        ),
+        'expected Resources toggle'
+      );
+    expect(resources().getAttribute('aria-expanded')).toBe('false');
+    viewStateMock.sidebarSelection = { type: 'cluster', value: 'nodes' };
+    renderSidebar();
+    expect(resources().getAttribute('aria-expanded')).toBe('true');
+    act(() => resources().click());
+    renderSidebar();
+    expect(resources().getAttribute('aria-expanded')).toBe('false');
+    act(() => root?.unmount());
+    root = ReactDOM.createRoot(requireValue(container, 'expected container'));
+    renderSidebar();
+    expect(resources().getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('presents cross-cluster views under the Global scope instead of Cluster resources', () => {
     viewStateMock.viewType = 'global' as never;
     renderSidebar();

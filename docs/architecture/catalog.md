@@ -161,7 +161,8 @@ health and sync are separate signals, and ApplicationSet errors take precedence
 over ResourcesUpToDate when projecting health.
 
 Family availability and catalog filtering are reusable; family registration is
-explicit. Add classification in `backend/resourcekind/family.go`, discovered
+explicit. Add classification in `backend/resourcekind/family.go` and regenerate
+refresh contracts to export the same rules to frontend routing. Update discovered
 availability in `useAvailableResourceViews`, table selection/persistence, and
 rich-detail projection/descriptor for each family. Register each table's explicit
 `viewId` with persistence cleanup. The navigation registry marks

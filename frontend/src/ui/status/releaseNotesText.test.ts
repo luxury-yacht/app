@@ -9,6 +9,15 @@ import { describe, expect, it } from 'vitest';
 import { toPlainReleaseNotes } from './releaseNotesText';
 
 describe('toPlainReleaseNotes', () => {
+  it('preserves nested list content while removing media and standalone rules', () => {
+    expect(toPlainReleaseNotes('')).toBe('');
+    expect(
+      toPlainReleaseNotes(
+        '![image](https://example.com/image.png)\r\n---\r\n  - `code` and ~~removed~~\r\n> __note__'
+      )
+    ).toBe('  • code and removed\nnote');
+    expect(toPlainReleaseNotes('[unfinished](target')).toBe('[unfinished](target');
+  });
   it('leaves malformed media intact while continuing to process later links', () => {
     expect(toPlainReleaseNotes('![broken] trailing [valid](https://example.com)')).toBe(
       '![broken] trailing valid'
