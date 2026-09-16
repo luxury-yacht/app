@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -229,6 +230,14 @@ func TestLoggerKeepsExpectedClusterFailuresLocal(t *testing.T) {
 			err:  apierrors.NewUnauthorized("credentials rejected"),
 		},
 		{
+			name: "structured permission denial",
+			err:  apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "example", errors.New("denied")),
+		},
+		{
+			name: "refresh domain permission denial",
+			err:  fmt.Errorf("snapshot blocked: %w", refresh.NewPermissionDeniedError("pods", "core/pods")),
+		},
+		{
 			name: "wrapped structured not found",
 			err: fmt.Errorf(
 				"resource fetch failed: %w",
@@ -411,11 +420,7 @@ func TestLoggerForwardsOperationIdentityToBreadcrumbsAndError(t *testing.T) {
 func TestFetchResourceReportsOriginalKubernetesError(t *testing.T) {
 	reporter := &recordingErrorReporter{}
 	app := newWorkspaceCoordinatorTestFixture(t, reporter)
-	cause := apierrors.NewForbidden(
-		schema.GroupResource{Group: "apps", Resource: "deployments"},
-		"web",
-		errors.New("RBAC denied the request"),
-	)
+	cause := apierrors.NewInternalError(errors.New("unexpected API response"))
 
 	_, err := FetchResourceWithSelection(
 		app.Resources,
@@ -434,6 +439,34 @@ func TestFetchResourceReportsOriginalKubernetesError(t *testing.T) {
 	require.Equal(t, sentryreporting.Operation{}, reporter.exceptions[0].context.Operation)
 	require.Equal(t, "cluster-a", reporter.exceptions[0].context.ClusterID)
 	reporter.mu.Unlock()
+}
+
+func TestFetchResourceKeepsPermissionDenialLocal(t *testing.T) {
+	reporter := &recordingErrorReporter{}
+	app := newWorkspaceCoordinatorTestFixture(t, reporter)
+	cause := apierrors.NewForbidden(
+		schema.GroupResource{Group: "apps", Resource: "deployments"},
+		"web",
+		errors.New("RBAC denied the request"),
+	)
+
+	_, err := FetchResourceWithSelection(
+		app.Resources,
+		"cluster-a",
+		"deployment/default/web",
+		"Deployment",
+		"default/web",
+		func(context.Context) (string, error) {
+			return "", fmt.Errorf("read deployment: %w", cause)
+		},
+	)
+	require.ErrorIs(t, err, cause, "the UI still receives the permission denial")
+	require.True(t, apierrors.IsForbidden(err))
+
+	reporter.mu.Lock()
+	defer reporter.mu.Unlock()
+	require.Empty(t, reporter.messages)
+	require.Empty(t, reporter.exceptions, "RBAC denial is not an application defect")
 }
 
 func TestFetchResourceDoesNotReportTelemetryHandledErrorAgain(t *testing.T) {

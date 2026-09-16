@@ -24,12 +24,17 @@ data-collection defaults with an application-owned privacy boundary:
   create Sentry exceptions or breadcrumbs. Network and timeout conditions may
   still publish their normal UI notification, but `handle` marks them as
   expected cluster conditions so the telemetry boundary keeps them local.
-  Category alone never suppresses an exception: `handleInline` and
-  `handleOperational` remain exception boundaries even for permission-shaped
-  or connectivity-shaped text, so an unexpected internal failure does not
-  disappear merely because its message contains `permission`, `403`, `network`,
-  or `timeout`. Both preserve the original JavaScript `Error` for
-  `captureException`. Validation messages and advisory warnings are not
+  All three handled-error paths share the expected-outcome filter in
+  `core/telemetry/expectedErrors.ts`, before Sentry scope or error-breadcrumb
+  creation. It recognizes browser clipboard denials, browser/Wails cancellation,
+  structured permission and Kubernetes status errors, and concrete denial,
+  expired-credential, cancellation, and missing-object messages from Wails.
+  Wrapped causes use the same filter. The original error and UI feedback remain
+  available locally. At this boundary, category alone never suppresses an
+  exception: unexpected failures at `handleInline` and `handleOperational` still
+  report when their text merely contains `permission`, `token`, `missing`,
+  `network`, or incidental status-code digits. Both preserve the original
+  JavaScript `Error` for `captureException`. Validation messages and advisory warnings are not
   exceptions and stay local. Render failures already owned by the React 19 root
   handler are not captured a second time by legacy component boundaries.
 - `frontend/src/shared/components/errors/ErrorSurface.tsx` is the rendering
@@ -346,12 +351,14 @@ known-only credential classifier for this decision: wrapped auth-state errors,
 raw 401 credential rejection or helper failures, API-server
 unavailable/timeouts, and recognized DNS, TCP, or TLS failures are expected.
 Unrecognized errors are reported. Structured Kubernetes 403 authorization
-failures remain reportable at backend exception boundaries. The auth recovery
-loop separately retains its conservative fallback that treats an unknown probe
+failures, refresh-domain permission-denied errors, and Kubernetes NotFound
+responses remain local; permission decisions and errors returned to callers
+are unchanged. The auth recovery loop separately retains its conservative
+fallback that treats an unknown probe
 failure as connectivity, because an inconclusive probe must not invalidate
-credentials. A client-side
-`context.DeadlineExceeded` is explicitly excluded from suppression even though
-it is connectivity-shaped for recovery purposes.
+credentials. A standalone client-side `context.DeadlineExceeded` remains
+reportable; a deadline carried by a URL or network operation is a recognized
+connectivity outcome.
 
 Entries from `logsources.ErrorCapture` never reach the reporter at all.
 `backend/internal/errorcapture` scrapes third-party stderr — klog lines from

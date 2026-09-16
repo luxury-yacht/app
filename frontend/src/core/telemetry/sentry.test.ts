@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events/eventBus';
+import { errorHandler } from '@/utils/errorHandler';
 
 const sentryMocks = vi.hoisted(() => ({
   addBreadcrumb: vi.fn(),
@@ -544,6 +545,118 @@ describe('Sentry error reporting', () => {
       expect.anything(),
       expect.objectContaining({ secretValue: expect.anything() })
     );
+    expect(sentryMocks.captureException).toHaveBeenCalledWith(error);
+  });
+
+  it.each(['handle', 'handleInline', 'handleOperational'] as const)(
+    'keeps clipboard permission denial local through %s',
+    (method) => {
+      initializeErrorReporting({
+        enabled: true,
+        dsn: 'https://public@example.com/1',
+        environment: 'production',
+      });
+      const error = new DOMException('Clipboard request denied', 'NotAllowedError');
+
+      const details = errorHandler[method](error, { source: 'GridTable', action: 'copyCsv' });
+
+      expect(details.originalError).toBe(error);
+      expect(details.message).toBe(error.message);
+      expect(sentryMocks.captureException).not.toHaveBeenCalled();
+      expect(scopeMocks.addBreadcrumb).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ['browser cancellation', new DOMException('Request aborted', 'AbortError')],
+    [
+      'refresh cancellation',
+      Object.assign(new Error('Refresh superseded'), { name: 'AbortError' }),
+    ],
+    [
+      'Wails cancellation',
+      Object.assign(new Error('User canceled the call'), { name: 'CancelError' }),
+    ],
+    ['backend cancellation', new Error('read resource: context canceled')],
+    ['Kubernetes denial', new Error('pods "example" is forbidden: access denied')],
+    ['HTTP denial', new Error('Snapshot request failed: 403 Forbidden')],
+    ['snapshot denial', Object.assign(new Error('Read blocked'), { permissionDenied: true })],
+    ['expired credentials', new Error('The authentication token has expired')],
+    ['credential helper', new Error('getting credentials: exec: executable login-helper failed')],
+    ['rejected credentials', new Error('read resource: auth invalid: credentials rejected')],
+    ['removed resource', new Error('read resource: pods "example" not found')],
+    [
+      'wrapped status',
+      Object.assign(new Error('Backend request failed'), {
+        cause: { code: 403, reason: 'Forbidden' },
+      }),
+    ],
+    [
+      'missing status',
+      Object.assign(new Error('Backend request failed'), {
+        cause: { kind: 'Status', code: 404, reason: 'NotFound' },
+      }),
+    ],
+  ])('keeps %s local at inline and background boundaries', (_name, error) => {
+    initializeErrorReporting({ enabled: true, dsn: 'https://public@example.com/1' });
+
+    for (const method of ['handleInline', 'handleOperational'] as const) {
+      const details = errorHandler[method](error, {
+        source: 'object-panel',
+        clusterId: 'cluster-a',
+      });
+      expect(details.originalError).toBe(error);
+      expect(details.message).toBe(error.message);
+      expect(details.context?.clusterId).toBe('cluster-a');
+    }
+
+    expect(sentryMocks.captureException).not.toHaveBeenCalled();
+    expect(scopeMocks.addBreadcrumb).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    new Error('permission cache invariant failed'),
+    new Error('token parser invariant failed'),
+    new Error('missing renderer state'),
+    new Error('request took 403 ms: internal server error'),
+    new TypeError('Cannot read properties of undefined'),
+    new Error('context deadline exceeded'),
+    Object.assign(new Error('Backend request failed'), {
+      cause: { code: '403', reason: 'Forbidden' },
+    }),
+    Object.assign(new Error('Backend request failed'), {
+      cause: { kind: 'Status', code: 400, reason: 'NotFound' },
+    }),
+  ])('still reports application failures at operational boundaries: %s', (error) => {
+    initializeErrorReporting({ enabled: true, dsn: 'https://public@example.com/1' });
+
+    errorHandler.handleInline(error, { source: 'object-panel' });
+    errorHandler.handleOperational(error, { source: 'object-panel' });
+
+    expect(sentryMocks.captureException).toHaveBeenCalledTimes(2);
+    expect(sentryMocks.captureException).toHaveBeenNthCalledWith(1, error);
+    expect(sentryMocks.captureException).toHaveBeenNthCalledWith(2, error);
+  });
+
+  it('keeps string-only Wails permission denials local', () => {
+    initializeErrorReporting({ enabled: true, dsn: 'https://public@example.com/1' });
+    const error = 'permission denied for get pods/log';
+
+    const details = errorHandler.handleInline(error, { action: 'readLogs' });
+
+    expect(details.message).toBe(error);
+    expect(sentryMocks.captureException).not.toHaveBeenCalled();
+  });
+
+  it('reports an unknown failure even when its cause chain is cyclic', () => {
+    initializeErrorReporting({ enabled: true, dsn: 'https://public@example.com/1' });
+    const error = Object.assign(new Error('State invariant failed'), {
+      cause: undefined as unknown,
+    });
+    error.cause = error;
+
+    errorHandler.handleOperational(error, { source: 'object-panel' });
+
     expect(sentryMocks.captureException).toHaveBeenCalledWith(error);
   });
 

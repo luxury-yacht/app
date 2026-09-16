@@ -40,7 +40,7 @@ func TestIsExpectedClusterFailure(t *testing.T) {
 				"pod-a",
 				errors.New("permission denied"),
 			),
-			want: false,
+			want: true,
 		},
 		{
 			name: "wrapped structured not found failure",

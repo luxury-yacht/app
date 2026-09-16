@@ -8,6 +8,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/credentialerrors"
+	"github.com/luxury-yacht/app/backend/refresh"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -29,11 +30,8 @@ func IsExpectedClusterFailure(err error) bool {
 	if errors.Is(err, context.Canceled) {
 		return true
 	}
-	if apierrors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) || apierrors.IsForbidden(err) || refresh.IsPermissionDenied(err) {
 		return true
-	}
-	if apierrors.IsForbidden(err) {
-		return false
 	}
 
 	var authErr *authstate.AuthInvalidError

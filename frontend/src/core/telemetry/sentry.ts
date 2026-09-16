@@ -6,6 +6,7 @@ import {
   type ErrorCategory,
   isExpectedClusterErrorCategory,
 } from '@/shared/constants/errorCategories';
+import { isExpectedOperationalError } from './expectedErrors';
 
 export interface SentryRuntimeConfig {
   enabled: boolean;
@@ -1094,6 +1095,7 @@ const buildErrorBreadcrumb = (capture: ResolvedErrorCapture, category: string): 
 export function captureUserVisibleError(error: unknown, details: UserVisibleErrorCapture): void {
   if (
     !reportingInitialized ||
+    isExpectedOperationalError(error) ||
     (details.expectedCondition && isExpectedClusterErrorCategory(details.category))
   ) {
     return;
