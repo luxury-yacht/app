@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"html"
 	"io/fs"
 	"net/url"
 	"os"
@@ -12,8 +11,12 @@ import (
 	"testing/fstest"
 	"unicode"
 
-	"github.com/russross/blackfriday/v2"
 	"github.com/stretchr/testify/require"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/util"
 )
 
 // Guard the destinations agents use to retrieve contracts, including new,
@@ -75,6 +78,46 @@ func TestMarkdownLinksDoNotResolveHeadingsInsideCodeExamples(t *testing.T) {
 		"router.md": {Data: []byte("[example](#phantom)\n\n```md\n# Phantom\n```\n")},
 	}
 	require.Len(t, markdownLinkProblems(files, []string{"router.md"}), 1)
+}
+
+func TestMarkdownLinksResolveCommonMarkHeadings(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		body string
+	}{
+		{"indented heading", "   # Readiness\n"},
+		{"heading interrupts paragraph", "Introductory text\n# Readiness\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			files := fstest.MapFS{
+				"guide.md": {Data: []byte(tt.body + "\n[contract](#readiness)\n")},
+			}
+			require.Empty(t, markdownLinkProblems(files, []string{"guide.md"}))
+		})
+	}
+}
+
+func TestMarkdownLinksIgnoreIndentedFencedExamples(t *testing.T) {
+	files := fstest.MapFS{
+		"guide.md": {Data: []byte("   ```markdown\n   [example](missing.md)\n   ```\n")},
+	}
+	require.Empty(t, markdownLinkProblems(files, []string{"guide.md"}))
+}
+
+func TestMarkdownLinksResolveEscapedDestinations(t *testing.T) {
+	files := fstest.MapFS{
+		"router.md":   {Data: []byte("[escaped](guide\\(1\\).md#topic) [entity](a&amp;b.md#topic)\n")},
+		"guide(1).md": {Data: []byte("# Topic\n")},
+		"a&b.md":      {Data: []byte("# Topic\n")},
+	}
+	require.Empty(t, markdownLinkProblems(files, []string{"router.md"}))
+}
+
+func TestMarkdownLinksKeepCodeSpanEntitiesLiteralInHeadingAnchors(t *testing.T) {
+	files := fstest.MapFS{
+		"guide.md": {Data: []byte("# &#65; &amp; `&#66;`\n\n[contract](#a--66)\n")},
+	}
+	require.Empty(t, markdownLinkProblems(files, []string{"guide.md"}))
 }
 
 func TestMarkdownLinksCheckStaticLinksAlongsideTemplateDestinations(t *testing.T) {
@@ -173,37 +216,55 @@ func markdownLinkPath(source, target string) string {
 
 func parseMarkdownLinks(data []byte) markdownLinkDocument {
 	document := markdownLinkDocument{anchors: make(map[string]bool)}
-	parser := blackfriday.New(blackfriday.WithExtensions(blackfriday.FencedCode | blackfriday.Tables |
-		blackfriday.Strikethrough | blackfriday.NoIntraEmphasis | blackfriday.SpaceHeadings))
-	parser.Parse(data).Walk(func(node *blackfriday.Node, entering bool) blackfriday.WalkStatus {
+	parser := goldmark.New(goldmark.WithExtensions(extension.GFM)).Parser()
+	_ = ast.Walk(parser.Parse(text.NewReader(data)), func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
-			return blackfriday.GoToNext
+			return ast.WalkContinue, nil
 		}
-		switch node.Type {
-		case blackfriday.Link, blackfriday.Image:
-			document.links = append(document.links, string(node.Destination))
-		case blackfriday.Heading:
-			base := markdownHeadingSlug(node)
+		switch node := node.(type) {
+		case *ast.Link:
+			document.links = append(document.links, markdownTextValue(node.Destination, false))
+		case *ast.Image:
+			document.links = append(document.links, markdownTextValue(node.Destination, false))
+		case *ast.Heading:
+			base := markdownHeadingSlug(node, data)
 			anchor := base
 			for suffix := 1; document.anchors[anchor]; suffix++ {
 				anchor = fmt.Sprintf("%s-%d", base, suffix)
 			}
 			document.anchors[anchor] = true
 		}
-		return blackfriday.GoToNext
+		return ast.WalkContinue, nil
 	})
 	return document
 }
 
-func markdownHeadingSlug(heading *blackfriday.Node) string {
-	var text strings.Builder
-	heading.Walk(func(node *blackfriday.Node, entering bool) blackfriday.WalkStatus {
-		if entering && (node.Type == blackfriday.Text || node.Type == blackfriday.Code) {
-			text.Write(node.Literal)
+func markdownHeadingSlug(heading *ast.Heading, source []byte) string {
+	var value strings.Builder
+	_ = ast.Walk(heading, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		return blackfriday.GoToNext
+		switch node := node.(type) {
+		case *ast.Text:
+			value.WriteString(markdownTextValue(node.Value(source), node.IsRaw()))
+		case *ast.String:
+			value.WriteString(markdownTextValue(node.Value, node.IsRaw() || node.IsCode()))
+		case *ast.AutoLink:
+			value.Write(node.Label(source))
+		}
+		return ast.WalkContinue, nil
 	})
-	return strings.Map(markdownHeadingRune, strings.ToLower(html.UnescapeString(text.String())))
+	return strings.Map(markdownHeadingRune, strings.ToLower(value.String()))
+}
+
+func markdownTextValue(value []byte, raw bool) string {
+	if raw {
+		return string(value)
+	}
+	value = util.UnescapePunctuations(value)
+	value = util.ResolveNumericReferences(value)
+	return string(util.ResolveEntityNames(value))
 }
 
 func markdownHeadingRune(r rune) rune {
