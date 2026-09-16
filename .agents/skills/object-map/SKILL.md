@@ -17,17 +17,17 @@ It is not a rich detail service and not an SSE/resource-stream path. The backend
 snapshot builds graph data; the frontend filters, annotates, lays out, and
 renders that graph.
 
-Read:
+## Route context
 
-1. `AGENTS.md`
-2. `backend/AGENTS.md` for backend changes
-3. `frontend/AGENTS.md` for frontend changes
-4. `docs/workflows/object-map.md`
-5. `docs/architecture/shared-resource-model.md` when identity, status, facts,
-   or relationships are involved
-6. `docs/architecture/refresh-system.md` when domain registration, scopes, or
-   diagnostics are involved
-7. `docs/frontend/live-age.md` when changing card age text
+Read only the contracts selected by the change. Follow further links when the
+changed path crosses that boundary.
+
+| Change | Read |
+| --- | --- |
+| Graph data, relationships, layout or rendering | [object-map](../../../docs/workflows/object-map.md) |
+| Identity, status, facts or shared relationships | [shared-resource-model](../../../docs/architecture/shared-resource-model.md) |
+| Domain registration, scope or diagnostics | [refresh-system](../../../docs/architecture/refresh-system.md) |
+| Card age text | [live-age](../../../docs/frontend/live-age.md) |
 
 ## Backend Entry Points
 

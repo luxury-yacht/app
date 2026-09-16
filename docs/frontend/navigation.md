@@ -3,6 +3,16 @@
 The app shell has two workspace owners: one independent Global workspace and
 one retained workspace per open cluster.
 
+## Read by change
+
+Read the shared [agent contract](#agent-contract) and only the sections
+matching the changed contract. Follow other document links when the affected
+producer or consumer needs that boundary.
+
+- [Cluster Sidebar Organization](#cluster-sidebar-organization).
+- [Namespace Sidebar Organization](#namespace-sidebar-organization).
+- [Cluster Attention Routing](#cluster-attention-routing).
+
 ## Agent Contract
 
 - `ViewStateContext` owns the active workspace. Global state is not stored in

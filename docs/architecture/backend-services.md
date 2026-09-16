@@ -5,6 +5,19 @@ the canonical map of those owners and the permitted dependency directions. The
 domain documents linked below remain authoritative for each owner's detailed
 behavior.
 
+## Read by change
+
+Read the ownership constraints in the introduction, then the sections matching
+the changed contract. Follow other document links when the affected
+producer or consumer needs that boundary.
+
+- [Composition and transport](#composition-and-transport).
+- [Owner map](#owner-map).
+- [Dependency direction](#dependency-direction).
+- [Source placement](#source-placement).
+- [Settings effects](#settings-effects).
+- [Placing new behavior](#placing-new-behavior).
+
 ## Composition and transport
 
 `internal/bootstrap` creates the Wails application, passes that concrete application to

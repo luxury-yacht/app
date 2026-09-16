@@ -3,6 +3,17 @@
 Frontend reads must go through one of the app data brokers. Components and
 feature hooks should not call backend read transports directly.
 
+## Read by change
+
+Read the shared [agent contract](#agent-contract) and only the sections
+matching the changed contract. Follow other document links when the affected
+producer or consumer needs that boundary.
+
+- [Broker Choice](#broker-choice).
+- [Wails command boundary](#wails-command-boundary).
+- [Settings Rule](#settings-rule).
+- [Scope Rules](#scope-rules).
+
 ## Agent Contract
 
 - Use `dataAccess` for cluster/resource reads.
@@ -141,51 +152,9 @@ requires first adding and testing a target-package option in that generator.
 
 ## Settings Rule
 
-Backend-owned preferences, defaults, bounds, enum values, validation, and
-runtime side effects come from the backend settings schema. Frontend settings UI
-may cache metadata for first paint or tests, but the cache is not a second
-contract.
-
-Persisted preference mutations should batch through `UpdateAppPreferences` so
-validation, persistence, side effects, normalized return values, and optimistic
-rollback stay aligned.
-
-Sidebar Resources and Extensions expansion uses four global preferences:
-one per group for Cluster and one per group for Namespaces. Cluster expansion
-is shared across clusters; namespace expansion is shared across all namespaces
-and clusters. Missing preferences default to collapsed. Both manual disclosure
-and explicit navigation reveal update the shared state. Namespace row expansion
-remains separate. The shared sidebar hook subscribes to preference changes, so
-hydration, sibling toggles, and persistence rollback update mounted groups.
-
-`PreferencesService` owns one coalesced lazy-load attempt. `EnsureLoaded`
-surfaces a load error without installing state or dispatching effects;
-`EnsureLoadedForStartup` joins that same attempt and may atomically install a
-snapshot marked `startup-default`. Callers receive copied snapshots and never
-hold the preferences mutex or invoke a raw settings loader.
-
-Runtime effects cross one stateless six-route dispatcher: error-reporting
-enablement, Kubernetes client QPS/burst, SSRR fetch concurrency, per-scope
-container-log target limit, global container-log target limit, and metrics
-refresh interval. A mutation captures its immutable snapshot and effect flags,
-persists under the preferences lock, releases the lock, then dispatches to
-owner-shaped write-only sinks. Persistence failure dispatches nothing. Sinks
-must not read preferences, call another effect owner, or acquire a refresh lock
-while holding a leaf-policy lock.
-
-| Setting effect | Target owner |
-| --- | --- |
-| Error-reporting enablement | `ErrorReportingService` |
-| Kubernetes client QPS/burst | `ClusterRuntimeManager` |
-| SSRR fetch concurrency | `PermissionFetchPolicy` |
-| Per-scope container-log target limit | `ContainerLogsSelectionPolicy` |
-| Global container-log target limit | `RefreshCoordinator` |
-| Metrics refresh interval | `RefreshCoordinator` |
-
-All six targets start with backend defaults. Successful load, startup-default
-fallback, applicable update, and import publish the relevant values after the
-Preferences lock is released. A target failure is reported without suppressing
-independent targets; no target may reach back into Preferences.
+Read the [app preferences contract](app-preferences.md) when changing settings
+schema, preference mutations, optimistic rollback, load ownership, or runtime
+effects. `appStateAccess` remains the frontend read boundary.
 
 ## Scope Rules
 

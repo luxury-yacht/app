@@ -13,76 +13,44 @@ Applies to React/TypeScript code under `frontend/`.
 - Resource utilization reads and adapters belong to
   `frontend/src/core/resource-metrics`; follow
   `docs/architecture/resource-metrics.md` before adding metric consumers.
-- Wire namespace/cluster data through the refresh orchestrator + diagnostics flow (`frontend/src/core/refresh`); no ad-hoc polling loops.
-  Follow `docs/architecture/data-freshness.md`,
-  `docs/architecture/refresh-system.md`, and
-  `docs/architecture/data-access.md`.
+- Wire namespace/cluster data through the refresh orchestrator + diagnostics
+  flow (`frontend/src/core/refresh`); no ad-hoc polling loops. For timing or
+  visibility changes, follow `docs/architecture/data-freshness.md`; for refresh
+  mechanics, use the refresh skill's task routes below.
 - Treat backend `statusPresentation` and `ResourceLink.ref` as authoritative.
   Before adding frontend status styling, relationship navigation, or object
   identity helpers, follow `docs/architecture/shared-resource-model.md`.
 - For frontend file placement and shared UI infrastructure, follow
   `docs/frontend/component-structure.md`.
 
-## Refresh Orchestrator Notes
+## Data Boundaries
 
-- Add backend-owned domain payload DTOs to
-  `backend/internal/genrefreshcontracts/registry.go`, then run
-  `mise exec -- go generate ./backend`. Never hand-edit
-	`frontend/src/core/refresh/types.generated.ts` or format it with Biome; the
-	Go generator is its only writer. Set domain payload mappings through
-	`refreshPayloadType` in `backend/refresh/domain/refresh-domain-contract.json`.
-	Keep only frontend-owned reducer state in `frontend/src/core/refresh/types.ts`.
-- Register refresher names in `frontend/src/core/refresh/refresherTypes.ts` and timing in `frontend/src/core/refresh/refresherConfig.ts`.
-- Register domains in `frontend/src/core/refresh/orchestrator.ts` and diagnostics config in `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts`.
-- Manual refresh targets are mapped in `frontend/src/core/refresh/refresherTypes.ts` and selected in `frontend/src/core/refresh/RefreshManager.ts`.
-- Wire Wails `JSONStream` managers under `frontend/src/core/refresh/streaming`.
-- Do not call `fetch` directly; use the refresh orchestrator/client (Biome plugins allow direct fetch only in the refresh and data-access infrastructure; see `frontend/biome.jsonc` and `frontend/biome-plugins/`).
-- Import generated Wails `DesktopService` bindings only through `frontend/src/core/backend-api`; its explicit export list is the frontend backend-call allowlist. Application reads still belong in `appStateAccess` or `dataAccess`, and object mutations belong in their owning action/workflow client.
-- Validate domain state in the Diagnostics panel.
-- Catalog browse: keep snapshot/manual refresh flow (see `frontend/src/core/refresh/orchestrator.ts` catalog registration); avoid stream-driven renders for Browse.
-- Frontend reads must go through `dataAccess` or `appStateAccess` as documented
-  in `docs/architecture/data-access.md`.
+- Reads use `dataAccess` for resources and `appStateAccess` for app state.
+- Import generated `DesktopService` bindings only through
+  `frontend/src/core/backend-api`; its explicit exports are the backend-call
+  allowlist. Mutations belong in their owning action/workflow client.
+- Do not call `fetch` directly from feature code; use the refresh/data-access
+  infrastructure allowed by `frontend/biome.jsonc` and `frontend/biome-plugins/`.
+- Generated refresh types have one Go-generator owner; never hand-edit or format
+  them with Biome. Load domain wiring below when changing payloads or registration.
 
-## App State And Settings
+## Task Guidance
 
-- Persisted app preferences hydrate from the backend settings schema through
-  `appStateAccess` (`readAppSettingsSchema`) and mutate through the shared
-  `UpdateAppPreferences` command.
-- Keep typed frontend getters/setters in `frontend/src/core/settings`, but route
-  persistence through the common optimistic update path instead of importing
-  preference-specific generated Wails setters in UI components.
-- `frontend/src/core/settings/appPreferences.ts` owns schema metadata caching,
-  fallback metadata, and typed metadata helpers. Settings UI sections should
-  consume backend-owned defaults, bounds, enum options, validation hints, and
-  runtime flags through those helpers instead of fetching schema directly or
-  duplicating constants locally.
-- On failed preference persistence, rollback every frontend-owned optimistic
-  side effect: preference cache values, preference change events, appearance
-  mode localStorage, and appearance bootstrap localStorage.
-- Frontend-owned state stays local when it is transient, component-local, or
-  needed before Wails is available. Examples include the last active Settings
-  tab and first-paint appearance bootstrap caches.
+Read the matching route only when that contract changes:
 
-## UI Infrastructure Docs
-
-- Shared table system: `docs/frontend/gridtable.md`.
-- Live object age rendering: `docs/frontend/live-age.md`.
-- Keyboard/focus and shortcut ownership: `docs/frontend/keyboard.md`.
-- Blocking modal foundation: `docs/frontend/modals.md`.
-- Shared tab component and drag coordinator: `docs/frontend/tabs.md`.
-- Dockable object panels and grouped panel tabs:
-  `docs/frontend/dockable-panels.md`.
-- Shared YAML editor surfaces: `docs/frontend/yaml-editor.md`.
-- Log viewers: `docs/workflows/logs/overview.md`.
-- Object map UI: `docs/workflows/object-map.md`.
-
-## Storybook
-
-- Stories must use real components and real CSS classes — never inline style
-  approximations. Mock only the data/provider layer, not the rendering.
-- Changes belong in production code. Stories verify changes, they don't contain them.
-- Before writing a story, trace ALL hook dependencies to identify required providers.
-  Don't discover them one crash at a time.
+| Change | Start here |
+| --- | --- |
+| Refresh payloads, registration, scheduling, streams, diagnostics | [refresh skill](../.agents/skills/refresh-subsystem/SKILL.md) |
+| Settings schema, preferences, persistence, rollback | [app preferences](../docs/architecture/app-preferences.md) |
+| Shared table behavior | [GridTable router](../docs/frontend/gridtable.md) |
+| Shortcuts or focus | [keyboard](../docs/frontend/keyboard.md) |
+| Blocking modals | [modals](../docs/frontend/modals.md) |
+| Tabs or tab dragging | [tabs](../docs/frontend/tabs.md) |
+| Docked/floating panels | [dockable panels](../docs/frontend/dockable-panels.md) |
+| YAML editor mechanics | [YAML editor](../docs/frontend/yaml-editor.md) |
+| Log viewers | [logs router](../docs/workflows/logs/overview.md) |
+| Object map | [object map](../docs/workflows/object-map.md) |
+| Storybook stories | [new-story skill](../.agents/skills/new-story/SKILL.md) |
 
 ## CSS
 

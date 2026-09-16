@@ -9,20 +9,19 @@ Use this when touching logs, shell exec, debug containers, port-forward, node
 drain/maintenance, session lifecycle, operation cancellation, permission-gated
 actions, or related tests.
 
-## Core Contracts
+## Route context
 
-Read:
+Read only the contracts selected by the change. Follow further links when the
+changed path crosses that boundary.
 
-1. `AGENTS.md`
-2. `backend/AGENTS.md`
-3. `frontend/AGENTS.md`
-4. `docs/workflows/logs/overview.md`
-5. `docs/workflows/shell-debug.md`
-6. `docs/architecture/permissions.md`
-7. `docs/architecture/multi-cluster.md`
-8. `docs/architecture/auth.md` when cluster auth or recovery is involved
-9. `docs/workflows/operation-lifecycle.md` when touching live operation
-   registry, cleanup, or status behavior
+| Change | Read |
+| --- | --- |
+| Application, container or node logs | [overview](../../../docs/workflows/logs/overview.md); select the affected log surface |
+| Shell exec or debug containers | [shell-debug](../../../docs/workflows/shell-debug.md) |
+| Port-forward, drain, session registry, cancellation or cleanup | [operation-lifecycle](../../../docs/workflows/operation-lifecycle.md) |
+| Permission checks, action availability or denial | [permissions](../../../docs/architecture/permissions.md) |
+| Cluster selection, removal or per-cluster lifetime | [multi-cluster](../../../docs/architecture/multi-cluster.md) |
+| Auth failure or recovery | [auth](../../../docs/architecture/auth.md) |
 
 ## Backend Entry Points
 

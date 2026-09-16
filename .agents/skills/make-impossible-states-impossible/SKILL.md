@@ -69,8 +69,9 @@ genuinely un-tightenable.
 4. **Rank & present** like the `improve-*` skills: a numbered list, each with the
    invalid value it permits today and the proposed representation. Let the user pick
    one. Don't batch a module-wide rewrite into one step.
-5. **Impact gate.** Before editing production source, write a fresh entry to
-   `.claude/impact-analysis.md` (the hook blocks edits otherwise).
+5. **Runtime prerequisite.** When using Claude Code's edit tools, follow
+   [the impact-analysis workflow](../../../docs/workflows/impact-analysis.md)
+   before production edits. Other runtimes follow the root cross-layer contract.
 6. **TDD (required, AGENTS.md).**
    - *Red:* write a test that pins the behavior — for a chokepoint, that the
      invalid construction is rejected; for a union conversion, that consumers handle

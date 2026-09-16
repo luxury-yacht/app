@@ -118,6 +118,9 @@ source contract is unclear.
 
 ## Routing and documentation
 
+- Apply root and scoped `AGENTS.md` guidance already in context. Before working
+  in a scope whose instructions are missing, read its `AGENTS.md` once; do not
+  assume every agent runtime injects it or reread instructions already loaded.
 - Use `.agents/README.md` only for broad, ambiguous, or cross-layer routing;
   narrow tasks should open the matching skill or owning doc directly.
 - Use `docs/README.md` when ownership is unclear. Freshness work starts with

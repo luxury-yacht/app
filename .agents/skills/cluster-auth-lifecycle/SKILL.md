@@ -10,16 +10,20 @@ overlays, retry/recovery, selected/background cluster state, cluster tabs,
 refresh subsystem rebuilds, object catalog start/stop, or tests for cluster
 add/remove behavior.
 
-## Read First
+## Route context
 
-1. `AGENTS.md`
-2. `backend/AGENTS.md` for backend lifecycle/client changes
-3. `frontend/AGENTS.md` for frontend cluster state or UI changes
-4. `docs/architecture/multi-cluster.md`
-5. `docs/architecture/data-freshness.md`
-6. `docs/architecture/auth.md`
-7. `docs/architecture/refresh-system.md`
-8. `docs/architecture/catalog.md` when object catalog lifecycle is involved
+Read only the contracts selected by the change. Follow further links when the
+changed path crosses that boundary.
+
+| Change | Read |
+| --- | --- |
+| Kubeconfig selection, cluster tabs, selected/background state | [multi-cluster](../../../docs/architecture/multi-cluster.md#cluster-workspace-state-plane) |
+| Auth failure, retry, recovery, credential helpers | [auth](../../../docs/architecture/auth.md) |
+| Refresh construction, replacement, readiness, teardown | [refresh-system](../../../docs/architecture/refresh-system.md#ownership), [auth](../../../docs/architecture/auth.md#rebuild-wiring-invariant) for auth recovery |
+| Retained data, foreground/background work, leases | [data-freshness](../../../docs/architecture/data-freshness.md#retention-and-leases) |
+| Cluster identity, scopes, isolation | [multi-cluster](../../../docs/architecture/multi-cluster.md#identity-and-scopes) |
+| Object catalog start, stop, discovery or replacement | [catalog](../../../docs/architecture/catalog.md) |
+| Operation cleanup when clusters close or fail | [operation-lifecycle](../../../docs/workflows/operation-lifecycle.md) |
 
 ## Backend Entry Points
 

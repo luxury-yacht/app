@@ -6,6 +6,20 @@ user consent, process lifecycle, durable helper reconciliation, and release
 publication. The website is not part of release discovery or self-update
 payload delivery; it hosts only manual recovery guidance.
 
+## Read by change
+
+Read the ownership constraints in the introduction, then the sections matching
+the changed contract. Follow other document links when the affected
+producer or consumer needs that boundary.
+
+- [Runtime and user contract](#runtime-and-user-contract).
+- [Installation eligibility](#installation-eligibility).
+- [Release and trust contract](#release-and-trust-contract).
+- [Staging, restart, and recovery](#staging-restart-and-recovery).
+- [Factory Reset](#factory-reset).
+- [Signing-key handling](#signing-key-handling).
+- [Starting points and validation](#starting-points-and-validation).
+
 ## Runtime and user contract
 
 The first runtime-ready workspace starts one process-wide coordinator. It

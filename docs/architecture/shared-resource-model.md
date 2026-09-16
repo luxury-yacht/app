@@ -4,6 +4,17 @@ The backend shared resource model owns Kubernetes object identity, primary
 status, durable facts, and relationship links. Frontend code consumes projected
 DTO fields; it does not reinterpret primary resource semantics.
 
+## Read by change
+
+Read the shared [agent contract](#agent-contract) and only the sections
+matching the changed contract. Follow other document links when the affected
+producer or consumer needs that boundary.
+
+- [Use The Model For](#use-the-model-for).
+- [Identity](#identity).
+- [Status](#status).
+- [Links](#links).
+
 ## Agent Contract
 
 - Object references crossing package, API, cache, event, action, refresh, or

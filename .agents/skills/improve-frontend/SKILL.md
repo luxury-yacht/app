@@ -27,7 +27,8 @@ simplicity), present them to the user, and fix the one they choose.
 
 ### Phase 1: Gather Context
 
-- Use the injected frontend instructions. Open backend contracts only when a
+- Apply frontend instructions already in context; read `frontend/AGENTS.md` if
+  missing. Open backend contracts only when a
   candidate crosses into a backend producer.
 - If an `[area]` argument was given, scope file discovery to that module/directory.
   Otherwise, sample broadly: pick 8-12 files across `core/`, `modules/`, `shared/`,

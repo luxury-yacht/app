@@ -6,6 +6,19 @@ else (detail, object-map, overview, logs, metrics, permissions) is a deliberatel
 separate path (see "Boundaries"). This doc is the durable architecture extracted from
 the completed `v2` rewrite plan.
 
+## Read by change
+
+Read the shared [invariants](#invariants) and only the sections
+matching the changed contract. Follow other document links when the affected
+producer or consumer needs that boundary.
+
+- [Store & query engine (`querypage`)](#store--query-engine-querypage).
+- [Ingestion (owned-reflector LIST+WATCH + projection-at-intake)](#ingestion-owned-reflector-listwatch--projection-at-intake).
+- [Lifecycle & governor](#lifecycle--governor).
+- [Delivery — page + refetch-on-signal](#delivery--page--refetch-on-signal).
+- [Boundaries (deliberately NOT this path)](#boundaries-deliberately-not-this-path).
+- [Deliberately not built (do not re-attempt as TODOs)](#deliberately-not-built-do-not-re-attempt-as-todos).
+
 ## Ownership
 
 - **Store + query engine:** `backend/refresh/querypage/` — the owned columnar

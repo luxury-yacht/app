@@ -5,6 +5,20 @@ discovered CRD family dedicated presentation. Discovery, identity, visibility,
 query boundaries and projection ownership follow the
 [catalog contract](../architecture/catalog.md#discovered-resource-families).
 
+## Read by change
+
+Read the shared [presentation contracts](#presentation-contracts) and only the sections
+matching the changed contract. Follow other document links when the affected
+producer or consumer needs that boundary.
+
+- [Karpenter requirements](#karpenter-requirements).
+- [Karpenter capacity](#karpenter-capacity).
+- [Karpenter condition progress](#karpenter-condition-progress).
+- [Karpenter NodePool overview](#karpenter-nodepool-overview).
+- [Karpenter NodeClaim overview](#karpenter-nodeclaim-overview).
+- [Argo CD](#argo-cd).
+- [Certificate, secret synchronization, and monitoring operators](#certificate-secret-synchronization-and-monitoring-operators).
+
 ## Presentation contracts
 
 - Keep each family in the existing per-view lifecycle for cluster, namespace,

@@ -3,6 +3,16 @@
 Keyboard behavior is owned by active surfaces and registered shortcuts. Do not
 add global document/window listeners for ordinary app behavior.
 
+## Read by change
+
+Read the shared [agent contract](#agent-contract) and only the sections
+matching the changed contract. Follow other document links when the affected
+producer or consumer needs that boundary.
+
+- [Region navigation](#region-navigation).
+- [Surface Model](#surface-model).
+- [Rules By Surface](#rules-by-surface).
+
 ## Agent Contract
 
 - Register global commands through the shortcut system.

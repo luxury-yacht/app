@@ -9,22 +9,22 @@ Use this when touching object detail panels, overview/detail tabs, YAML
 read/apply/edit flows, related objects, logs, shell/debug tabs, Helm content,
 object actions, panel docking, or object-panel tests.
 
-## Core Contracts
+## Route context
 
-Read:
+Read only the contracts selected by the change. Follow further links when the
+changed path crosses that boundary.
 
-1. `AGENTS.md`
-2. `backend/AGENTS.md` for backend detail/action changes
-3. `frontend/AGENTS.md` for frontend panel changes
-4. `docs/frontend/dockable-panels.md`
-5. `docs/frontend/yaml-editor.md` for YAML editor surfaces
-6. `docs/architecture/shared-resource-model.md` for identity, status, links,
-   facts, or lifecycle
-7. `docs/architecture/data-access.md` for frontend reads
-8. `docs/architecture/resource-metrics.md` for Resource Utilization
-9. `docs/frontend/live-age.md` for object/header/embedded-table age display
-10. Workflow docs for the specific tab: `docs/workflows/logs/overview.md`,
-   `docs/workflows/shell-debug.md`, or `docs/workflows/object-map.md`
+| Change | Read |
+| --- | --- |
+| Docking, placement, close, handoffs or panel lifetime | [dockable-panels](../../../docs/frontend/dockable-panels.md) |
+| Overview descriptors or derived detail sections | [component-structure](../../../docs/frontend/component-structure.md#object-panel-overview-rendering-descriptor-driven) |
+| YAML editor mechanics | [yaml-editor](../../../docs/frontend/yaml-editor.md) |
+| YAML read, save, merge or field ownership | [yaml-editing](../../../docs/architecture/yaml-editing.md) |
+| Object refs, status, facts or links | [shared-resource-model](../../../docs/architecture/shared-resource-model.md) |
+| Frontend data reads | [data-access](../../../docs/architecture/data-access.md) |
+| Resource Utilization | [resource-metrics](../../../docs/architecture/resource-metrics.md) |
+| Object/header/table age display | [live-age](../../../docs/frontend/live-age.md) |
+| Logs, shell/debug or map tab behavior | [overview](../../../docs/workflows/logs/overview.md), [shell-debug](../../../docs/workflows/shell-debug.md), or [object-map](../../../docs/workflows/object-map.md) for the affected tab |
 
 ## Backend Entry Points
 

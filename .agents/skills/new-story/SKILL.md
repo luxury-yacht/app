@@ -24,8 +24,9 @@ Generate a Storybook story for a given component.
    - `KubeconfigProviderDecorator` — kubeconfig only
    - `ZoomProviderDecorator` — zoom context
 6. **Use existing mocks.** Check `frontend/.storybook/mocks/` for Go backend mocks (`wailsBackendApp.ts`, `wailsBackendSettings.ts`, `wailsModels.ts`).
-7. **Story file location.** Place the `.stories.tsx` file next to the component it tests.
-8. **Multiple stories per file.** Create stories for the main states: default, loading, error, empty, and any interesting prop variations.
+7. **Production ownership.** Implement behavior and appearance changes in production code; stories verify them.
+8. **Story file location.** Place the `.stories.tsx` file next to the component it tests.
+9. **Multiple stories per file.** Create stories for the main states: default, loading, error, empty, and any interesting prop variations.
 
 ## Template
 

@@ -30,8 +30,24 @@ before the runtime `permissionGate`. Informers register in
 refresher, timing, orchestrator, diagnostics, source-clock, stream, and payload
 metadata. Register backend-owned DTOs/enums in
 `backend/internal/genrefreshcontracts/registry.go`, run
-`mise exec -- go generate ./backend`, and never hand-edit generated frontend
-types.
+`mise exec -- go generate ./backend`, and never hand-edit generated outputs.
+Set each domain's `refreshPayloadType` in the shared contract. The generator is
+the only writer of `frontend/src/core/refresh/types.generated.ts` and
+`backend/refresh/domain/policy_generated.go`; do not format the frontend output
+with Biome. Keep only frontend-owned reducer state in `types.ts`.
+
+Snapshot builders live in `backend/refresh/snapshot`. Align the registration's
+permission gate with `backend/refresh/system/permission_gate.go`; denied domains
+use `RegisterPermissionDeniedDomain` and surface `PermissionIssue` entries.
+Manual refresh enters at `/api/v2/refresh/{domain}` through
+`backend/refresh/api/server.go` and `ManualQueue` in `backend/refresh/types.go`.
+
+Per-cluster streams are wired in `backend/refresh/system/streams.go`;
+`RefreshCoordinator` builds aggregate routing in `backend/refresh_setup.go`,
+and `internal/bootstrap` registers streams before the sole Wails service.
+Atomic handler publication lives in `backend/refresh_transport.go`.
+`ClusterRuntimeManager` owns client lifetime; `WorkspaceCoordinator` owns client
+and selection orchestration in `backend/workspace_cluster_clients.go`.
 
 Cross-layer landmarks:
 
@@ -44,6 +60,18 @@ Cross-layer landmarks:
 
 These mappings, manual refresh behavior, diagnostics, and stream descriptors
 must remain synchronized through the shared contract tests.
+
+Frontend refresher names and manual targets live in `refresherTypes.ts`, timing
+in `refresherConfig.ts`, registration in `orchestrator.ts`, and diagnostics
+configuration in `components/diagnostics/diagnosticsPanelConfig.ts` (all under
+`frontend/src/core/refresh`). `RefreshManager.ts` selects manual targets;
+Wails `JSONStream` managers live under `streaming`.
+
+Validate changed domain state in the Diagnostics panel. Backend telemetry comes
+from `backend/refresh/telemetry/recorder.go`; catalog lifecycle and diagnostics
+are owned by `RefreshCoordinator` in `backend/refresh_object_catalog.go`.
+Browse keeps its catalog snapshot/manual-refresh flow; do not add stream-driven
+renders for Browse.
 
 ## Streamed tables
 

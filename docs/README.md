@@ -13,6 +13,11 @@ Durable docs should answer:
 Do not use durable docs for implementation inventories, current UI walkthroughs,
 completed phase plans, or test lists that can be discovered with `rg`.
 
+Use the matching question below. Within a long document, read its shared
+invariants and the sections selected by the task. Follow links only when the
+changed producer/consumer path needs that contract; links are not a recursive
+reading checklist.
+
 ## Architecture Contracts
 
 | Question | Start here |
@@ -27,6 +32,7 @@ completed phase plans, or test lists that can be discovered with `rg`.
 | What owns object refs, status, facts, and links? | [architecture/shared-resource-model.md](architecture/shared-resource-model.md) |
 | How is per-kind behavior declared and dispatched, and where does the kind vocabulary live? | [architecture/resource-kind-registry.md](architecture/resource-kind-registry.md) |
 | Where should cross-layer contracts live? | [architecture/shared-contracts.md](architecture/shared-contracts.md) |
+| Who owns settings schema, preference persistence, rollback, and runtime effects? | [architecture/app-preferences.md](architecture/app-preferences.md) |
 | How should frontend reads reach backend data? | [architecture/data-access.md](architecture/data-access.md) |
 | How do permission gates and action capabilities work? | [architecture/permissions.md](architecture/permissions.md) |
 | How are auth failures represented and recovered? | [architecture/auth.md](architecture/auth.md) |
@@ -56,6 +62,7 @@ completed phase plans, or test lists that can be discovered with `rg`.
 
 | Question | Start here |
 | --- | --- |
+| What must Claude Code prepare before a production edit? | [workflows/impact-analysis.md](workflows/impact-analysis.md) |
 | Which recurring implementation mistakes must agents prevent? | [workflows/common-mistakes.md](workflows/common-mistakes.md) |
 | Which tests are worth adding or retaining? | [workflows/testing.md](workflows/testing.md) |
 | How does the object map work? | [workflows/object-map.md](workflows/object-map.md) |
@@ -81,6 +88,9 @@ completed phase plans, or test lists that can be discovered with `rg`.
 
 - Keep each durable doc under roughly 150 lines unless the extra detail prevents
   repeated mistakes.
+- Keep entry rules and skill bodies focused on shared invariants and task
+  routing. Put substantial conditional procedures in the owning doc/reference;
+  give long documents section routes instead of requiring whole-file reads.
 - Prefer links to owning code over copied implementation detail.
 - Delete completed or stale plans instead of indexing them here.
 - Put temporary implementation plans in `docs/plans/` only while they are active.

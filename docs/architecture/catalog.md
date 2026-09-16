@@ -6,6 +6,16 @@ metadata.
 
 Keep `catalog-first`. Do not turn that into `catalog-only`.
 
+## Read by change
+
+Read the shared [agent contract](#agent-contract) and only the sections
+matching the changed contract. Follow other document links when the affected
+producer or consumer needs that boundary.
+
+- [Ingest callback ordering](#ingest-callback-ordering).
+- [Layer Model](#layer-model).
+- [Discovered resource families](#discovered-resource-families).
+
 ## Agent Contract
 
 - Use the catalog to answer what object exists, which cluster it belongs to, and
@@ -79,6 +89,14 @@ signaling completion.
 Typed refresh rows are enrichments. They are not competing identity systems.
 
 ## Ownership
+
+`backend/objectcatalog.Service` / `Summary` are owned per cluster by
+`RefreshCoordinator` in `backend/refresh_object_catalog.go`. Browse snapshots
+use the `catalog` domain in `backend/refresh/snapshot/catalog.go`. GVK/GVR
+resolution belongs to `backend/objectcatalog/identity.go`;
+`backend/resources/common/resource_identity.go` is only the shared resolver
+interface/result contract. Do not add parallel resolver tables or kind-only
+fallbacks outside the catalog.
 
 - Catalog service and identity store: `backend/objectcatalog`
 - Built-in and discovery-backed GVK/GVR resolution:

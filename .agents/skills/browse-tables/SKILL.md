@@ -14,12 +14,15 @@ Classify the table task before loading broad table architecture.
    inventory unrelated tables.
 2. **Shared table behavior:** GridTable, resource-table controller, adapters,
    persistence, shared filtering/sorting/pagination, identity, or columns.
-   Inventory affected usages and read `docs/frontend/gridtable.md` plus
-   [table modes](references/table-modes.md).
+   Inventory affected usages and use the task routes in
+   `docs/frontend/gridtable.md`; read only the matching reference sections.
+   Read [table modes](references/table-modes.md) when source/completeness semantics
+   are involved.
 3. **Architecture or large-data behavior:** query ownership, global semantics,
    pagination/windowing, caps, dynamic metrics, export, or select-all. Inventory
-   every production resource-table usage, read
-   `docs/architecture/large-data.md`, and use [table modes](references/table-modes.md).
+   every production resource-table usage, read the shared contract and selected
+   references in `docs/architecture/large-data.md`, and use
+   [table modes](references/table-modes.md).
 
 Use `docs/architecture/catalog.md` for discovery/Browse changes,
 `docs/architecture/refresh-system.md` for snapshot/stream contracts,

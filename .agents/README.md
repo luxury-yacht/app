@@ -1,8 +1,11 @@
 # Agent Router
 
 Use this index only when a task is broad, ambiguous, or crosses workflows.
-`AGENTS.md` files are injected by scope; do not reread them. Open one matching
-skill first, then only the docs or references that skill selects.
+Apply `AGENTS.md` guidance already in context; load a scoped file once when
+entering that scope if its instructions are missing. Open one matching skill
+first, then only the docs or reference sections selected by the changed contract.
+Expand the reading set when tracing producers and consumers reveals another
+affected boundary. A link is a route, not a requirement to load its whole subtree.
 
 ## Route by task
 

@@ -4,6 +4,20 @@ This is the single normative contract for when cluster data appears, refreshes,
 and causes Kubernetes API work. Other architecture docs describe ownership and
 payload shape; they link here instead of restating freshness behavior.
 
+## Read by change
+
+Read the shared [user-visible contract](#user-visible-contract) and only the sections
+matching the changed contract. Follow other document links when the affected
+producer or consumer needs that boundary.
+
+- [Request intents](#request-intents).
+- [Retention and leases](#retention-and-leases).
+- [Signals and source clocks](#signals-and-source-clocks).
+- [Metrics](#metrics).
+- [Errors and readiness](#errors-and-readiness).
+- [Owning code](#owning-code).
+- [Snapshot and cooled-store lifetime](#snapshot-and-cooled-store-lifetime).
+
 ## User-visible contract
 
 1. **Paint retained data immediately.** Selecting a tab or view reads that

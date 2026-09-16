@@ -10,17 +10,18 @@ Use this when touching canonical object identity, resource status,
 `ResourceLink`, event involved-object identity, DTO projection, or parity across
 refresh rows, streams, object panel details, and object map nodes/edges.
 
-## Read First
+## Route context
 
-1. `AGENTS.md`
-2. `backend/AGENTS.md`
-3. `frontend/AGENTS.md` for frontend consumers
-4. `docs/architecture/shared-resource-model.md`
-5. `docs/architecture/resource-kind-registry.md` for the per-kind package +
-   registry layout (where identity, model, facts, and DTO live)
-6. `docs/architecture/catalog.md` when identity/existence is involved
-7. `docs/architecture/refresh-system.md` when rows, streams, events, or object
-   details consume the model
+Read only the contracts selected by the change. Follow further links when the
+changed path crosses that boundary.
+
+| Change | Read |
+| --- | --- |
+| Object references or GVK identity | [shared-resource-model](../../../docs/architecture/shared-resource-model.md#identity) |
+| Status, lifecycle, facts or relationship projections | [shared-resource-model](../../../docs/architecture/shared-resource-model.md); select Status, Links, or Use The Model For |
+| Per-kind package, descriptor or registry layout | [resource-kind-registry](../../../docs/architecture/resource-kind-registry.md) |
+| Discovery, existence or GVK/GVR resolution | [catalog](../../../docs/architecture/catalog.md) |
+| Refresh payload, scope or stream consumers | [refresh-system](../../../docs/architecture/refresh-system.md) |
 
 ## Backend Entry Points
 

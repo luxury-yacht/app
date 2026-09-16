@@ -9,15 +9,17 @@ Use this when touching backend RBAC checks, capability services, permission
 diagnostics, frontend capability hooks, object action availability, YAML/edit
 gating, delete/scale/restart/trigger/suspend actions, or restricted-RBAC tests.
 
-## Read First
+## Route context
 
-1. `AGENTS.md`
-2. `backend/AGENTS.md`
-3. `frontend/AGENTS.md`
-4. `docs/architecture/permissions.md`
-5. `docs/architecture/shared-resource-model.md` for object identity and refs
-6. `docs/architecture/refresh-system.md` for permission-denied domains and
-   diagnostics
+Read only the contracts selected by the change. Follow further links when the
+changed path crosses that boundary.
+
+| Change | Read |
+| --- | --- |
+| RBAC checks, capability policy or denied actions | [permissions](../../../docs/architecture/permissions.md) |
+| Object identity, reference construction or resolution | [shared-resource-model](../../../docs/architecture/shared-resource-model.md#identity) |
+| Permission-denied domains, stream gates or readiness | [refresh-system](../../../docs/architecture/refresh-system.md#permission-and-readiness) |
+| Permission diagnostic surfaces | [refresh-system](../../../docs/architecture/refresh-system.md#diagnostics-surfaces) |
 
 ## Backend Entry Points
 

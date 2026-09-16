@@ -5,6 +5,22 @@ queries, signals, manual jobs, retained frontend state, and diagnostics. The
 normative timing and visibility rules live in
 [data-freshness.md](data-freshness.md).
 
+## Read by change
+
+Read the ownership constraints in the introduction, then the sections matching
+the changed contract. Follow other document links when the affected
+producer or consumer needs that boundary.
+
+- [Domain contract](#domain-contract).
+- [Transport boundary](#transport-boundary).
+- [Scope and identity](#scope-and-identity).
+- [Frontend runtime state](#frontend-runtime-state).
+- [Behavior classes](#behavior-classes).
+- [Query payloads](#query-payloads).
+- [Permission and readiness](#permission-and-readiness).
+- [Stream start invariant](#stream-start-invariant).
+- [Diagnostics surfaces](#diagnostics-surfaces).
+
 ## Domain contract
 
 `backend/refresh/domain/refresh-domain-contract.json` is the join key for:
@@ -26,6 +42,20 @@ table is written.
 Do not add aliases or parallel registration tables, and never hand-edit either
 generated file. Change the authored entry, keyed backend/frontend callback when
 needed, DTO registry, and parity tests together, then run `go generate ./backend`.
+
+## Transport boundary
+
+`backend/refresh/api/` owns mount-relative handlers published atomically through
+the same-origin Wails service route `/api/v2`. Resource and container-log
+protocols use the named Wails JSON streams `refresh-resources` and
+`refresh-container-logs`, not HTTP upgrade or event-stream routes. Preserve
+early-unready responses, cluster scoping, complete identity, RBAC, request
+validation, ordered publication/replacement, and teardown. Do not add a loopback
+listener, runtime base-URL bridge, CORS layer, raw browser WebSocket,
+EventSource, or fallback transport.
+
+For domain or payload changes, use the
+[domain wiring reference](../../.agents/skills/refresh-subsystem/references/domain-wiring.md).
 
 ## Scope and identity
 
