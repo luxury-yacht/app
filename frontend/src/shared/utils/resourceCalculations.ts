@@ -56,15 +56,17 @@ const QUANTITY_FACTORS: Readonly<Record<string, number>> = {
 };
 
 const parseQuantity = (value: string | undefined, type: ResourceType): number | undefined => {
-  const match = value?.trim().match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*([a-zA-Z]*|[eE][+-]?\d+)$/);
+  // Number conversion below rejects malformed decimal parts such as multiple dots.
+  const match = value?.trim().match(/^([+-]?[\d.]+)\s*([a-zA-Z]*|[eE][+-]?\d+)$/);
   if (!match) {
     return undefined;
   }
   const suffix = match[2];
   const aliases: Readonly<Record<string, number>> = { MB: 1024 ** 2, GB: 1024 ** 3 };
+  const aliasFactor = type === 'memory' ? aliases[suffix] : undefined;
   const factor = /^[eE][+-]?\d+$/.test(suffix)
     ? 10 ** Number(suffix.slice(1))
-    : (QUANTITY_FACTORS[suffix] ?? (type === 'memory' ? aliases[suffix] : undefined));
+    : (QUANTITY_FACTORS[suffix] ?? aliasFactor);
   if (factor === undefined) {
     return undefined;
   }

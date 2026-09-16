@@ -26,7 +26,19 @@ describe('shared resource calculations', () => {
 
   it('distinguishes zero usage from missing, invalid, or nonpositive capacity', () => {
     expect(getResourceLimitUsagePercent('0', '1Gi', 'memory')).toBe(0);
-    for (const usage of [undefined, '', '-', 'invalid', '1garbage', '-1', '1e999']) {
+    for (const usage of [
+      undefined,
+      '',
+      '-',
+      '.',
+      '+.',
+      '1..2',
+      '1.2.3Gi',
+      'invalid',
+      '1garbage',
+      '-1',
+      '1e999',
+    ]) {
       expect(getResourceLimitUsagePercent(usage, '1Gi', 'memory')).toBeUndefined();
     }
     for (const limit of [undefined, '', '-', 'invalid', '1garbage', '0', '-1', '1e999']) {
@@ -74,6 +86,11 @@ describe('shared resource calculations', () => {
   it.each([
     ['cpu', '250m', 250],
     ['cpu', '0.25', 250],
+    ['cpu', '.25', 250],
+    ['cpu', '+1.', 1000],
+    ['cpu', '-0.25', -250],
+    ['cpu', '5e-1', 500],
+    ['cpu', '+2E+3', 2_000_000],
     ['memory', '1024Ki', 1],
     ['memory', '128Mi', 128],
     ['memory', '2Gi', 2048],
