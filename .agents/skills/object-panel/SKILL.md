@@ -9,7 +9,7 @@ Use this when touching object detail panels, overview/detail tabs, YAML
 read/apply/edit flows, related objects, logs, shell/debug tabs, Helm content,
 object actions, panel docking, or object-panel tests.
 
-## Route context
+## Task routes
 
 Read only the contracts selected by the change. Follow further links when the
 changed path crosses that boundary.

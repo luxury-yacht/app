@@ -4,16 +4,6 @@ Every cluster is independent. Auth, refresh state, caches, navigation, runtime
 operations, permissions, and object actions for one cluster must not affect
 another cluster.
 
-## Read by change
-
-Read the shared [agent contract](#agent-contract) and only the sections
-matching the changed contract. Follow other document links when the affected
-producer or consumer needs that boundary.
-
-- [Identity And Scopes](#identity-and-scopes).
-- [Cluster Workspace State Plane](#cluster-workspace-state-plane).
-- [Global Clusters View](#global-clusters-view).
-
 ## Agent Contract
 
 - Carry `clusterId` through every cluster-data path: APIs, refresh scopes,

@@ -5,22 +5,6 @@ queries, signals, manual jobs, retained frontend state, and diagnostics. The
 normative timing and visibility rules live in
 [data-freshness.md](data-freshness.md).
 
-## Read by change
-
-Read the ownership constraints in the introduction, then the sections matching
-the changed contract. Follow other document links when the affected
-producer or consumer needs that boundary.
-
-- [Domain contract](#domain-contract).
-- [Transport boundary](#transport-boundary).
-- [Scope and identity](#scope-and-identity).
-- [Frontend runtime state](#frontend-runtime-state).
-- [Behavior classes](#behavior-classes).
-- [Query payloads](#query-payloads).
-- [Permission and readiness](#permission-and-readiness).
-- [Stream start invariant](#stream-start-invariant).
-- [Diagnostics surfaces](#diagnostics-surfaces).
-
 ## Domain contract
 
 `backend/refresh/domain/refresh-domain-contract.json` is the join key for:

@@ -3,19 +3,6 @@
 Biome owns frontend formatting, linting, import organization, and repository-specific Grit rules.
 The commented global configuration is `frontend/biome.jsonc`.
 
-## Read by change
-
-Read the shared [strictness contract](#strictness-contract) and only the sections
-matching the changed contract. Follow other document links when the affected
-producer or consumer needs that boundary.
-
-- [Project import-resolution rules](#project-import-resolution-rules).
-- [Rules deliberately not adopted](#rules-deliberately-not-adopted).
-- [React hook dependency lifetimes](#react-hook-dependency-lifetimes).
-- [Suppression guard](#suppression-guard).
-- [Reviewing a config override](#reviewing-a-config-override).
-- [Reviewing an inline suppression](#reviewing-an-inline-suppression).
-
 ## Strictness contract
 
 - New production code must pass the global rule set without broad overrides.

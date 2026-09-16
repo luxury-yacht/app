@@ -26,9 +26,9 @@ What the user wants to know:
 
 Unless the user explicitly asks for fixes, begin in review mode.
 
-1. Do not reread injected `AGENTS.md` files. Use `.agents/README.md` only when
-   the diff spans an ambiguous workflow, and `docs/README.md` only when the
-   owning contract is unclear.
+1. Apply root and scoped guidance already in context; read a missing `AGENTS.md`
+   once before entering its scope. Use `.agents/README.md` only when the diff
+   spans an ambiguous workflow, and `docs/README.md` only when ownership is unclear.
 2. Check repository state with read-only git commands:
    - `git status --short`
    - `git branch --show-current`

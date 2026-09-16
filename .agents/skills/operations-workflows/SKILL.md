@@ -9,7 +9,7 @@ Use this when touching logs, shell exec, debug containers, port-forward, node
 drain/maintenance, session lifecycle, operation cancellation, permission-gated
 actions, or related tests.
 
-## Route context
+## Task routes
 
 Read only the contracts selected by the change. Follow further links when the
 changed path crosses that boundary.

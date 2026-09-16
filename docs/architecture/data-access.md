@@ -3,17 +3,6 @@
 Frontend reads must go through one of the app data brokers. Components and
 feature hooks should not call backend read transports directly.
 
-## Read by change
-
-Read the shared [agent contract](#agent-contract) and only the sections
-matching the changed contract. Follow other document links when the affected
-producer or consumer needs that boundary.
-
-- [Broker Choice](#broker-choice).
-- [Wails command boundary](#wails-command-boundary).
-- [Settings Rule](#settings-rule).
-- [Scope Rules](#scope-rules).
-
 ## Agent Contract
 
 - Use `dataAccess` for cluster/resource reads.

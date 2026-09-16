@@ -9,7 +9,7 @@ Use this when touching settings, preferences, command palette, sidebar,
 shortcuts, global navigation, modals, overlays, dockable panels, favorites,
 saved views, app-shell persistence, or visual shell tests.
 
-## Route context
+## Task routes
 
 Read only the contracts selected by the change. Follow further links when the
 changed path crosses that boundary.

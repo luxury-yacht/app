@@ -7,19 +7,6 @@ configured namespace instead of cluster-wide, which makes the app usable for
 identities whose RBAC grants only per-namespace RoleBindings (issue #243) and
 doubles as a noise/perf scope on large clusters.
 
-## Read by change
-
-Read the ownership constraints in the introduction, then the sections matching
-the changed contract. Follow other document links when the affected
-producer or consumer needs that boundary.
-
-- [One code path, scope as a value](#one-code-path-scope-as-a-value).
-- [The source-scope rule](#the-source-scope-rule).
-- [Enforcement points](#enforcement-points).
-- [Scope-change convergence (the `cluster:scope:changed` event)](#scope-change-convergence-the-clusterscopechanged-event).
-- [Fail-fast contract for denied domains](#fail-fast-contract-for-denied-domains).
-- [Deliberately cluster-wide](#deliberately-cluster-wide).
-
 ## One code path, scope as a value
 
 There is no "restricted mode". Every enforcement point takes a list of

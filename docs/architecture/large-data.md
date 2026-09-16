@@ -4,7 +4,7 @@ Large-cluster support is a product constraint, not a table decoration. The app
 must avoid loading, rendering, filtering, or exporting unbounded cluster data
 without an explicit cap or pagination model.
 
-## Read by change
+## Task routes
 
 Read the shared contract and the sections matching the changed data path.
 
@@ -12,7 +12,8 @@ Read the shared contract and the sections matching the changed data path.
 | --- | --- |
 | Completeness, local/query behavior, partial data or action limits | [Table modes](#table-modes) and [app-wide state](#app-wide-table-state) |
 | Resource table adapters or lifecycle presentation | [Source model](#resource-inventory-source-model), then [frontend resource tables](../frontend/gridtable-resource-tables.md) |
-| Browse query, keyset/anchor paging, typed envelopes or liveness | [Query contract](large-data-query.md) |
+| Browse query, typed envelopes or liveness | [Query contract](large-data-query.md) |
+| Keyset/anchor paging, page ranks or export continuity | [Paging contract](large-data-paging.md) |
 | Specific typed resource family or producer/consumer tracing | [Producer reference](large-data-producers.md) |
 | Performance budgets, benchmarking or reconsidering a rejected optimization | [Measurements](large-data-measurements.md) |
 

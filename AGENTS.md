@@ -110,7 +110,8 @@ source contract is unclear.
   non-documentation work, run
   `mise exec -- wails3 task qc:prerelease`, then inspect the worktree because the gate
   may format files. Report exact failures. Documentation/comment-only work is
-  exempt and must at least pass `git diff --check`.
+  exempt and must at least pass `git diff --check`; Markdown guidance changes
+  also run `mise exec -- wails3 task qc:docs`.
 - Rendered Wails UI validation uses the standalone Playwright MCP when
   available. Start the app with `mise exec -- wails3 dev`, use the emitted URL,
   and exercise relevant loading, error, empty, populated, navigation, and

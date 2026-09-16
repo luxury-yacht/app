@@ -6,17 +6,6 @@ preference has loaded and the corresponding DSN is configured. Users can turn
 both reporters off under **Settings → Data Management → Telemetry**. Development
 builds disable both SDKs even when Sentry environment variables are present.
 
-## Read by change
-
-Read the ownership constraints in the introduction, then the sections matching
-the changed contract. Follow other document links when the affected
-producer or consumer needs that boundary.
-
-- [Runtime Behavior](#runtime-behavior).
-- [Telemetry Cadence](#telemetry-cadence).
-- [Cancellation Is Not a Failure](#cancellation-is-not-a-failure).
-- [Build Configuration](#build-configuration).
-
 ## Runtime Behavior
 
 The integration keeps Sentry's exception processing while replacing its broad

@@ -22,22 +22,6 @@ reporting setup belongs to `internal/sentry`. Tests live beside those owners.
 Only bootstrap imports both the backend composition and native window registry;
 the registry bridge must not depend on backend implementation types.
 
-## Read by change
-
-Read the ownership constraints in the introduction, then the sections matching
-the changed contract. Follow other document links when the affected
-producer or consumer needs that boundary.
-
-- [Startup and readiness](#startup-and-readiness).
-- [Service and runtime boundaries](#service-and-runtime-boundaries).
-- [Application and window event matrix](#application-and-window-event-matrix).
-- [Cluster-owned panel workspaces](#cluster-owned-panel-workspaces).
-- [Window identity and restoration](#window-identity-and-restoration).
-- [Process multiplicity](#process-multiplicity).
-- [Shutdown](#shutdown).
-- [Factory Reset](#factory-reset).
-- [Development Inspector on macOS](#development-inspector-on-macos).
-
 ## Startup and readiness
 
 `backend.DesktopService.ServiceStartup` runs synchronously before Wails creates

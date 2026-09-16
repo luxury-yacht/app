@@ -84,6 +84,11 @@ tasks:
     cmds:
       - go run ./cmd/project bindings
 
+  qc:docs:
+    desc: Checks local Markdown links and heading anchors
+    cmds:
+      - go test ./cmd/project -run '^(TestRepositoryMarkdownLinks|TestMarkdownLinks.*)$' -count=1
+
   qc:fmt:
     desc: Checks that all Go files are gofmt-formatted
     cmds:
@@ -156,6 +161,7 @@ tasks:
   qc:prerelease:
     desc: Runs all checks that can cause a release to fail
     cmds:
+      - task: qc:docs
       - task: qc:fmt
       - task: qc:bindings
       - task: qc:vet

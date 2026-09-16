@@ -59,7 +59,7 @@ A mutation captures its immutable snapshot and effect flags, persists under
 the preferences lock, releases the lock, then dispatches through one stateless
 six-route dispatcher to owner-shaped write-only sinks. Persistence failure
 dispatches nothing. Sinks must not read preferences, call another effect owner,
-or acquire a refresh lock while holding a leaf-policy lock. Settings UI must
+or acquire a settings or refresh lock while holding a leaf-policy lock. Settings UI must
 not call runtime owners directly.
 
 | Setting effect | Target owner |

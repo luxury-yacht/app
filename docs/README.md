@@ -18,6 +18,17 @@ invariants and the sections selected by the task. Follow links only when the
 changed producer/consumer path needs that contract; links are not a recursive
 reading checklist.
 
+## Reading a section
+
+A Markdown fragment names a heading; it does not limit a file read. For a link
+such as `gridtable-columns.md#column-definitions`, list headings with
+`rg -n '^#{1,6} ' docs/frontend/gridtable-columns.md`. Find the target heading and
+the next heading at the same or higher level, then use `sed -n 'START,ENDp'` with
+the start line through the line before that next heading (or EOF) to read only
+that section, including its subsections. Read shared invariants when first
+entering the subsystem; expand only for affected contracts. Small documents can
+be read in full.
+
 ## Architecture Contracts
 
 | Question | Start here |
@@ -90,7 +101,12 @@ reading checklist.
   repeated mistakes.
 - Keep entry rules and skill bodies focused on shared invariants and task
   routing. Put substantial conditional procedures in the owning doc/reference;
-  give long documents section routes instead of requiring whole-file reads.
+  add a route block when it selects a meaningful subset or redirects to another
+  file, not merely to repeat the document's headings.
+- Run `mise exec -- wails3 task qc:docs` after changing Markdown links or
+  headings. It checks local link targets and heading anchors in versioned and
+  untracked, non-ignored Markdown; external URLs, code-span paths, and dynamic
+  release-template destinations are excluded.
 - Prefer links to owning code over copied implementation detail.
 - Delete completed or stale plans instead of indexing them here.
 - Put temporary implementation plans in `docs/plans/` only while they are active.

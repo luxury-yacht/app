@@ -25,8 +25,9 @@ Start read-only unless the user explicitly requests planning or implementation.
    [settled findings](references/settled-findings.md) and reject candidates already consolidated,
    dismissed, or trigger-gated unless current evidence overturns that verdict.
 
-Do not reread injected `AGENTS.md` files. Open owning architecture docs only
-after the domain is chosen.
+Apply root and scoped guidance already in context; read a missing `AGENTS.md`
+once before entering its scope. Open owning architecture docs only after the
+domain is chosen.
 
 ## Review questions
 

@@ -7,17 +7,6 @@ floating, viewport-relative geometry, or blank-space drag. Docked panels retain
 their existing in-page maximize behavior; native panel windows use OS window
 maximize and restore.
 
-## Read by change
-
-Read the shared [agent contract](#agent-contract) and only the sections
-matching the changed contract. Follow other document links when the affected
-producer or consumer needs that boundary.
-
-- [Placement and Uniqueness](#placement-and-uniqueness).
-- [Acknowledged Handoffs](#acknowledged-handoffs).
-- [Refresh and runtime state](#refresh-and-runtime-state).
-- [Close ordering](#close-ordering).
-
 ## Agent Contract
 
 - Panel tabs preserve complete object identity: `clusterId`, `group`,

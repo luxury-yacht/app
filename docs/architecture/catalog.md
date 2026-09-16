@@ -6,16 +6,6 @@ metadata.
 
 Keep `catalog-first`. Do not turn that into `catalog-only`.
 
-## Read by change
-
-Read the shared [agent contract](#agent-contract) and only the sections
-matching the changed contract. Follow other document links when the affected
-producer or consumer needs that boundary.
-
-- [Ingest callback ordering](#ingest-callback-ordering).
-- [Layer Model](#layer-model).
-- [Discovered resource families](#discovered-resource-families).
-
 ## Agent Contract
 
 - Use the catalog to answer what object exists, which cluster it belongs to, and

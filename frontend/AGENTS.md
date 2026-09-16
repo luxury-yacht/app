@@ -34,7 +34,7 @@ Applies to React/TypeScript code under `frontend/`.
 - Generated refresh types have one Go-generator owner; never hand-edit or format
   them with Biome. Load domain wiring below when changing payloads or registration.
 
-## Task Guidance
+## Task routes
 
 Read the matching route only when that contract changes:
 

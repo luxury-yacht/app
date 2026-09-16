@@ -3,14 +3,6 @@
 Auth state is per cluster. An auth failure, retry, or recovery in one cluster
 must not poison other selected clusters.
 
-## Read by change
-
-Read the shared [agent contract](#agent-contract) and only the sections
-matching the changed contract. Follow other document links when the affected
-producer or consumer needs that boundary.
-
-- [State Model](#state-model).
-
 ## Agent Contract
 
 - Track auth state by `clusterId`.

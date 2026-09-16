@@ -3,18 +3,6 @@
 Frontend placement should make ownership obvious and keep dependencies flowing
 from app infrastructure to features to reusable building blocks.
 
-## Read by change
-
-Read the shared [agent contract](#agent-contract) and only the sections
-matching the changed contract. Follow other document links when the affected
-producer or consumer needs that boundary.
-
-- [Directory Roles](#directory-roles).
-- [Lazy loading](#lazy-loading).
-- [Shared Transient Popups](#shared-transient-popups).
-- [Multi-select dropdown options](#multi-select-dropdown-options).
-- [Object-panel Overview rendering (descriptor-driven)](#object-panel-overview-rendering-descriptor-driven).
-
 ## Agent Contract
 
 - Put app infrastructure in `core/`.

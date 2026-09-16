@@ -34,7 +34,7 @@ Applies to Go code under `backend/`.
     `resource_details_generated.go` / `object_detail_fetchers_generated.go`.
 - Manual refreshes and streaming domains belong to the backend refresh registry + ManualQueue; avoid bespoke refresh/streaming code.
 
-## Task Guidance
+## Task routes
 
 Read the matching route only when that contract changes:
 

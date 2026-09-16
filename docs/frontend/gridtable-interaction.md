@@ -2,7 +2,7 @@
 
 Read for row activation/selection, focus, dropdown placement, dock offsets,
 virtualization, or native table accessibility. Apply the [shared contract](gridtable.md).
-Column measurement and resizing are in [column sizing](gridtable-columns.md#column-sizing).
+Column measurement and resizing are in [column sizing](gridtable-sizing.md#column-sizing).
 
 ## Interaction boundaries
 

@@ -10,7 +10,7 @@ Use this when touching canonical object identity, resource status,
 `ResourceLink`, event involved-object identity, DTO projection, or parity across
 refresh rows, streams, object panel details, and object map nodes/edges.
 
-## Route context
+## Task routes
 
 Read only the contracts selected by the change. Follow further links when the
 changed path crosses that boundary.

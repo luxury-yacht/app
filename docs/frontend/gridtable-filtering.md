@@ -1,14 +1,8 @@
 # GridTable Filtering
 
 Read for filter controls, query facets, search, cross-view filter requests,
-or favorite snapshots. Apply the [shared contract](gridtable.md).
-
-## Read by change
-
-- Filter controls, chips, keyboard order or cross-view navigation: [controls](#filter-controls-and-navigation).
-- Local/query filtering, facets and option vocabulary: [search](#filtering-and-search).
-- Saving/restoring table state: [favorites](#favorite-snapshots).
-- Dropdown placement/zoom: [interaction](gridtable-interaction.md#interaction-boundaries).
+or favorite snapshots. Apply the [shared contract](gridtable.md). Dropdown
+placement and zoom follow [interaction boundaries](gridtable-interaction.md#interaction-boundaries).
 
 ## Filter controls and navigation
 

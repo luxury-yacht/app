@@ -9,7 +9,7 @@ Use this when touching backend RBAC checks, capability services, permission
 diagnostics, frontend capability hooks, object action availability, YAML/edit
 gating, delete/scale/restart/trigger/suspend actions, or restricted-RBAC tests.
 
-## Route context
+## Task routes
 
 Read only the contracts selected by the change. Follow further links when the
 changed path crosses that boundary.

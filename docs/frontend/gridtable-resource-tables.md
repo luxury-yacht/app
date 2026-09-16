@@ -4,13 +4,6 @@ Read for pagination, source adapters, loading/empty/partial state, or a new
 resource table. Apply the [shared contract](gridtable.md); backend query and
 completeness changes also use [large data](../architecture/large-data.md).
 
-## Read by change
-
-- Footer, page size and reset/clamp behavior: [pagination](#pagination) and [table modes](#table-modes-and-user-claims).
-- Loading, empty, partial or retained rows: [controller](#resource-inventory-tables).
-- Source lifecycle, vocabulary or quiet refresh: [adapters](#source-adapters).
-- New table: [construction](#building-a-new-resource-table) and [enforcement](#enforcement).
-
 ## Pagination
 
 - Do not split pagination controls across unrelated parts of the view. For

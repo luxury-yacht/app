@@ -4,14 +4,15 @@
 feature-specific table systems unless the shared contract cannot fit the
 workflow and that exception is documented.
 
-## Read by change
+## Task routes
 
 Read the shared rules below, then only the matching reference and its selected
 sections. Trace related consumers before expanding to another table contract.
 
 | Change | Reference |
 | --- | --- |
-| Column definitions, persistence, visibility, ordering, sizing, sorting, age or metrics | [Columns](gridtable-columns.md) |
+| Column definitions, persistence, visibility, ordering, sorting, age or metrics | [Columns](gridtable-columns.md) |
+| Width measurement, auto-width or resizing | [Column sizing](gridtable-sizing.md) |
 | User-defined label or annotation columns | [Custom metadata columns](gridtable-metadata.md) |
 | Row actions, selection, focus, virtualization, native table semantics or dropdown placement | [Interaction](gridtable-interaction.md) |
 | Search, filters, facets, filter chips, navigation or favorites | [Filtering](gridtable-filtering.md) |

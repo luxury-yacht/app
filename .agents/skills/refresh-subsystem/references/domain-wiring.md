@@ -46,8 +46,6 @@ Per-cluster streams are wired in `backend/refresh/system/streams.go`;
 `RefreshCoordinator` builds aggregate routing in `backend/refresh_setup.go`,
 and `internal/bootstrap` registers streams before the sole Wails service.
 Atomic handler publication lives in `backend/refresh_transport.go`.
-`ClusterRuntimeManager` owns client lifetime; `WorkspaceCoordinator` owns client
-and selection orchestration in `backend/workspace_cluster_clients.go`.
 
 Cross-layer landmarks:
 
