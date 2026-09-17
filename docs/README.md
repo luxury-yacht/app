@@ -76,6 +76,7 @@ be read in full.
 | What must Claude Code prepare before a production edit? | [workflows/impact-analysis.md](workflows/impact-analysis.md) |
 | Which recurring implementation mistakes must agents prevent? | [workflows/common-mistakes.md](workflows/common-mistakes.md) |
 | Which tests are worth adding or retaining? | [workflows/testing.md](workflows/testing.md) |
+| How do simplification passes systematically cover the repository? | [workflows/code-simplification.md](workflows/code-simplification.md) |
 | How does the object map work? | [workflows/object-map.md](workflows/object-map.md) |
 | How are live operations tracked and cleaned up? | [workflows/operation-lifecycle.md](workflows/operation-lifecycle.md) |
 | How do shell exec and debug containers work? | [workflows/shell-debug.md](workflows/shell-debug.md) |

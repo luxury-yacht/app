@@ -100,7 +100,14 @@ Simplification has a failure mode: over-simplification. Watch for these traps:
 
 ### 5. Scope to What Changed
 
-Default to simplifying recently modified code. Avoid drive-by refactors of unrelated code unless explicitly asked to broaden scope. Unscoped simplification creates noise in diffs and risks unintended regressions.
+Default to simplifying recently modified code for a local pass. Avoid drive-by refactors of unrelated code unless explicitly asked to broaden scope.
+
+For a repository-wide or systematic effort, follow the
+[systematic simplification workflow](../../../docs/workflows/code-simplification.md)
+and resume its active ledger under `docs/plans/`. Inventory and rotate through
+review domains; use recency only as a tie-breaker. Record inspected scope and
+candidate dispositions so a few local edits cannot stand in for a subsystem
+review. Preserve exact behavior and the incremental validation process below.
 
 ## The Simplification Process
 
