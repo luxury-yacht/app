@@ -65,16 +65,6 @@ export const CurrentObjectPanelContext = createContext<CurrentObjectPanelContext
 export const useCurrentObjectPanel = () => useContext(CurrentObjectPanelContext);
 
 // ---------------------------------------------------------------------------
-// closeObjectPanelGlobal  (test-only)
-// ---------------------------------------------------------------------------
-
-// Module-level callback used by closeObjectPanelGlobal(). In a multi-panel
-// scenario only the last-mounted useObjectPanel() instance sets this, so
-// it is NOT safe for production use with concurrent panels. It exists
-// solely to allow tests to close the panel from outside the React tree.
-let closeCallback: (() => void) | null = null;
-
-// ---------------------------------------------------------------------------
 // useObjectPanel
 // ---------------------------------------------------------------------------
 
@@ -111,18 +101,6 @@ export function useObjectPanel() {
     lastModified,
   } = useCurrentObjectPanel();
   const pendingFloatPanelIdRef = useRef<string | null>(null);
-
-  // Keep the close callback updated for closeObjectPanelGlobal (test-only).
-  // Last mount wins — not safe for concurrent multi-panel production use.
-  const closeRef = useRef(onCloseObjectPanel);
-  closeRef.current = onCloseObjectPanel;
-
-  useEffect(() => {
-    closeCallback = () => closeRef.current();
-    return () => {
-      closeCallback = null;
-    };
-  }, []);
 
   useEffect(() => {
     const panelId = pendingFloatPanelIdRef.current;
@@ -269,14 +247,4 @@ export function useObjectPanel() {
     // Close the current panel (or all panels if outside ObjectPanel tree).
     close,
   };
-}
-
-/**
- * Close the object panel from outside of React components.
- * Prefer using the close() method from useObjectPanel() when possible.
- *
- * Used by tests to reset panel state.
- */
-export function closeObjectPanelGlobal() {
-  closeCallback?.();
 }

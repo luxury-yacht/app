@@ -20,24 +20,14 @@ import (
 	"gopkg.in/yaml.v2"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/release"
 )
 
 // ReleaseDetails returns detailed information about a Helm release.
 func (s *Service) ReleaseDetails(ctx context.Context, namespace, name string) (*HelmReleaseDetails, error) {
-	if err := s.ensureClient(); err != nil {
-		return nil, err
-	}
-
-	settings := s.helmSettings()
-	actionConfig, err := s.initActionConfig(settings, namespace)
+	actionConfig, release, err := s.getRelease(namespace, name)
 	if err != nil {
 		return nil, err
-	}
-
-	client := action.NewGet(actionConfig)
-	release, err := client.Run(name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get release %s: %w", name, err)
 	}
 
 	historyClient := action.NewHistory(actionConfig)
@@ -95,20 +85,9 @@ func (s *Service) ReleaseDetails(ctx context.Context, namespace, name string) (*
 
 // ReleaseManifest returns the rendered manifest for a Helm release.
 func (s *Service) ReleaseManifest(namespace, name string) (string, error) {
-	if err := s.ensureClient(); err != nil {
-		return "", err
-	}
-
-	settings := s.helmSettings()
-	actionConfig, err := s.initActionConfig(settings, namespace)
+	_, release, err := s.getRelease(namespace, name)
 	if err != nil {
 		return "", err
-	}
-
-	client := action.NewGet(actionConfig)
-	release, err := client.Run(name)
-	if err != nil {
-		return "", fmt.Errorf("failed to get release %s: %w", name, err)
 	}
 
 	return release.Manifest, nil
@@ -116,20 +95,9 @@ func (s *Service) ReleaseManifest(namespace, name string) (string, error) {
 
 // ReleaseValues returns chart defaults, merged values, and user overrides for a Helm release.
 func (s *Service) ReleaseValues(namespace, name string) (map[string]interface{}, error) {
-	if err := s.ensureClient(); err != nil {
-		return nil, err
-	}
-
-	settings := s.helmSettings()
-	actionConfig, err := s.initActionConfig(settings, namespace)
+	actionConfig, release, err := s.getRelease(namespace, name)
 	if err != nil {
 		return nil, err
-	}
-
-	getClient := action.NewGet(actionConfig)
-	release, err := getClient.Run(name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get release %s: %w", name, err)
 	}
 
 	defaults := release.Chart.Values
@@ -153,6 +121,23 @@ func (s *Service) ReleaseValues(namespace, name string) (map[string]interface{},
 		"allValues":     mergedValues,
 		"userValues":    userValues,
 	}, nil
+}
+
+// getRelease keeps the client, configuration, and release-read policy shared by
+// the object panel's detail, manifest, and values reads.
+func (s *Service) getRelease(namespace, name string) (*action.Configuration, *release.Release, error) {
+	if err := s.ensureClient(); err != nil {
+		return nil, nil, err
+	}
+	actionConfig, err := s.initActionConfig(s.helmSettings(), namespace)
+	if err != nil {
+		return nil, nil, err
+	}
+	value, err := action.NewGet(actionConfig).Run(name)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get release %s: %w", name, err)
+	}
+	return actionConfig, value, nil
 }
 
 // DeleteRelease removes a Helm release.

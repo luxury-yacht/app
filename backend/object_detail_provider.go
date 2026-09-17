@@ -305,24 +305,7 @@ func (p *objectDetailProvider) FetchObjectYAML(ctx context.Context, gvk schema.G
 
 // FetchHelmManifest retrieves the manifest for a Helm release.
 func (p *objectDetailProvider) FetchHelmManifest(ctx context.Context, namespace, name string) (string, int, error) {
-	resolved := p.resolveDetailContext(ctx)
-	if !resolved.scoped {
-		return "", 0, fmt.Errorf("cluster scope is required")
-	}
-
-	service := helm.NewService(helm.Dependencies{Common: resolved.deps})
-	manifestCacheKey := objectDetailCacheKey("HelmManifest", namespace, name)
-	if manifest, revision, ok := cachedHelmDetail[string](p, ctx, resolved, service, "HelmManifest", namespace, name); ok {
-		return manifest, revision, nil
-	}
-	manifest, err := service.ReleaseManifest(namespace, name)
-	if err != nil {
-		return "", 0, err
-	}
-	if p != nil && p.gateway != nil {
-		p.gateway.responseCacheStore(resolved.selectionKey, manifestCacheKey, manifest)
-	}
-	return manifest, helmRevisionOrZero(ctx, p, resolved, service, namespace, name), nil
+	return fetchHelmContent(p, ctx, "HelmManifest", namespace, name, (*helm.Service).ReleaseManifest)
 }
 
 func (p *objectDetailProvider) ResourceResolver(ctx context.Context) common.ResourceResolver {
@@ -335,24 +318,34 @@ func (p *objectDetailProvider) ResourceResolver(ctx context.Context) common.Reso
 
 // FetchHelmValues retrieves the values for a Helm release.
 func (p *objectDetailProvider) FetchHelmValues(ctx context.Context, namespace, name string) (map[string]interface{}, int, error) {
+	return fetchHelmContent(p, ctx, "HelmValues", namespace, name, (*helm.Service).ReleaseValues)
+}
+
+// fetchHelmContent preserves the shared cache authorization and best-effort
+// revision sequence for both Helm content domains.
+func fetchHelmContent[T any](
+	p *objectDetailProvider,
+	ctx context.Context,
+	kind, namespace, name string,
+	fetch func(*helm.Service, string, string) (T, error),
+) (T, int, error) {
+	var zero T
 	resolved := p.resolveDetailContext(ctx)
 	if !resolved.scoped {
-		return nil, 0, fmt.Errorf("cluster scope is required")
+		return zero, 0, fmt.Errorf("cluster scope is required")
 	}
-
 	service := helm.NewService(helm.Dependencies{Common: resolved.deps})
-	valuesCacheKey := objectDetailCacheKey("HelmValues", namespace, name)
-	if values, revision, ok := cachedHelmDetail[map[string]interface{}](p, ctx, resolved, service, "HelmValues", namespace, name); ok {
-		return values, revision, nil
+	if content, revision, ok := cachedHelmDetail[T](p, ctx, resolved, service, kind, namespace, name); ok {
+		return content, revision, nil
 	}
-	values, err := service.ReleaseValues(namespace, name)
+	content, err := fetch(service, namespace, name)
 	if err != nil {
-		return nil, 0, err
+		return zero, 0, err
 	}
 	if p != nil && p.gateway != nil {
-		p.gateway.responseCacheStore(resolved.selectionKey, valuesCacheKey, values)
+		p.gateway.responseCacheStore(resolved.selectionKey, objectDetailCacheKey(kind, namespace, name), content)
 	}
-	return values, helmRevisionOrZero(ctx, p, resolved, service, namespace, name), nil
+	return content, helmRevisionOrZero(ctx, p, resolved, service, namespace, name), nil
 }
 
 func cachedHelmDetail[T any](

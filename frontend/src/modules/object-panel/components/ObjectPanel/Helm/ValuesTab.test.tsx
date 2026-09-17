@@ -395,6 +395,56 @@ describe('ValuesTab', () => {
     await unmount();
   });
 
+  it('preserves arrays, nulls, empty maps and nested overrides when switching modes', async () => {
+    snapshotState.current = {
+      status: 'ready',
+      data: {
+        values: {
+          allValues: {
+            nested: { retained: null, replaced: 'base', empty: {} },
+            list: ['base'],
+            disabled: true,
+            count: 1,
+            text: 'base',
+            shape: { child: 'retained' },
+          },
+          userValues: {
+            nested: { replaced: null },
+            list: ['override', { enabled: false }],
+            disabled: false,
+            count: 0,
+            text: '',
+            shape: 'scalar',
+            extra: 'user-only',
+          },
+        },
+      },
+      error: null,
+    };
+    const original = structuredClone(snapshotState.current.data);
+    const { container, unmount } = await renderValuesTab();
+    try {
+      expect(parsedValue()).toEqual({
+        nested: { retained: null },
+        shape: { child: 'retained' },
+      });
+      await clickSegmentedOption(container, 'Overrides');
+      expect(parsedValue()).toEqual(original?.values?.userValues);
+      await clickSegmentedOption(container, 'Merged');
+      expect(parsedValue()).toEqual({
+        nested: { retained: null, replaced: null, empty: {} },
+        list: ['override', { enabled: false }],
+        disabled: false,
+        count: 0,
+        text: '',
+        shape: { child: 'retained' },
+      });
+      expect(snapshotState.current.data).toEqual(original);
+    } finally {
+      await unmount();
+    }
+  });
+
   // -----------------------------------------------------------------------
   // Loading / error / empty states
   // -----------------------------------------------------------------------

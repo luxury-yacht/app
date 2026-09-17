@@ -78,7 +78,6 @@ vi.mock('@/utils/errorHandler', () => ({
 describe('useObjectPanel', () => {
   type UseObjectPanelExports = typeof import('./useObjectPanel');
   let useObjectPanel: UseObjectPanelExports['useObjectPanel'];
-  let closeObjectPanelGlobal: UseObjectPanelExports['closeObjectPanelGlobal'];
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   let hookResult: ReturnType<UseObjectPanelExports['useObjectPanel']>;
@@ -105,7 +104,7 @@ describe('useObjectPanel', () => {
   }
 
   beforeAll(async () => {
-    ({ useObjectPanel, closeObjectPanelGlobal } = await import('./useObjectPanel'));
+    ({ useObjectPanel } = await import('./useObjectPanel'));
   });
 
   function renderHookComponent() {
@@ -135,7 +134,7 @@ describe('useObjectPanel', () => {
     kubeconfigMocks.selectedClusterId = 'test-cluster';
     kubeconfigMocks.selectedClusterName = 'test';
     kubeconfigMocks.setActiveKubeconfig.mockClear();
-    if (!useObjectPanel || !closeObjectPanelGlobal) {
+    if (!useObjectPanel) {
       throw new Error('Object panel hooks failed to load');
     }
     renderHookComponent();
@@ -407,9 +406,11 @@ describe('useObjectPanel', () => {
 
     await act(async () => {
       hookResult.openWithObject(resource);
+      hookResult.openWithObject({ ...resource, name: 'other-settings' });
     });
 
     expect(hookResult.isOpen).toBe(true);
+    expect(hookResult.openPanels.size).toBe(2);
 
     await act(async () => {
       hookResult.close();
@@ -419,30 +420,6 @@ describe('useObjectPanel', () => {
     // which clears all panels.
     expect(hookResult.isOpen).toBe(false);
     expect(hookResult.openPanels.size).toBe(0);
-  });
-
-  it('closeObjectPanelGlobal closes all panels', async () => {
-    const resource = {
-      kind: 'Secret',
-      group: '',
-      version: 'v1',
-      name: 'credentials',
-      namespace: 'default',
-      clusterId: 'test-cluster',
-    };
-
-    await act(async () => {
-      hookResult.openWithObject(resource);
-    });
-
-    expect(hookResult.openPanels.size).toBe(1);
-
-    await act(async () => {
-      closeObjectPanelGlobal();
-    });
-
-    expect(hookResult.openPanels.size).toBe(0);
-    expect(hookResult.isOpen).toBe(false);
   });
 
   // Runtime defense for the kind-only-objects bug. The audit test

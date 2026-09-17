@@ -77,8 +77,8 @@ correctness-driven interruption and resume the rotation afterwards.
 | 2 | Catalog and resource projections | Object catalog; per-kind resources; kind/model contracts; Browse adapters | S002 query/facet/snapshot batch; remaining scope recorded |
 | 3 | Cluster/workspace/auth | Backend cluster/workspace owners and auth helpers; Kubernetes/cluster workspace contexts | S003 selection/hydration batch; remaining scope recorded |
 | 4 | Refresh and data access | Refresh APIs, stores, snapshots, ingestion, streams, metrics and governor; frontend refresh/data brokers | S004 state/demand/cadence/readiness batch; remaining scope recorded |
-| 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | Next: S005 |
-| 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | Inventoried |
+| 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | S005 Helm content/read ownership batch; remaining scope recorded |
+| 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | Next: S006 |
 | 7 | Object map | Backend graph producers and relationships; frontend graph, layout and renderer | Inventoried |
 | 8 | Permissions and mutations | Capability policy, permission caches, object actions/YAML; frontend availability gates | Inventoried |
 | 9 | Navigation and interaction | Sidebar, routing, shortcuts, command palette, modals, shared inputs and menus | Inventoried |
@@ -256,12 +256,98 @@ and the ingest manager/reflector/store internals. The inspected bundle queue and
 partition replacement retain their ordering and namespace-specific behavior;
 combining them would obscure distinct contracts.
 
-## Next batch: S005 — object details and panels
+## S005 — object-panel Helm content and read ownership
 
-Trace detail gateway dispatch, object-panel overview/YAML/action consumers,
-tab state, and panel ownership. Collect a cohesive batch from those contracts,
-preserve complete object identity and native ownership ordering, then use focused
-incremental checks and one final repository gate.
+**Status: selected batch implemented; affected checks and final gate passed.** Baseline:
+`ebd67a62b253940e72a6cdc53484cc134904b802`; `git status --short` was empty.
+Inventory refresh (`git diff --name-status 6d93acb7 HEAD`) found only the new
+production selection model already recorded in S003. S005 adds `helmValues.ts`
+within the object-panel Helm directory; the inventory retains baseline counts.
+
+Inspected: object-detail dispatch and cache paths, Helm service/content snapshots,
+panel composition, tab eligibility, scoped lifecycle/refresh hooks, detail-model
+derivations, panel-open/close hook and state-provider seams, Helm tabs, and the
+documented overview/YAML/native ownership boundaries. Existing generated detail
+dispatch, descriptor-driven overview, shared action controller, and retained
+YAML/logs mounting stay in their owners.
+
+Implemented batch:
+
+- Replaced the Values tab's repeated full-path walks and callback dependency chain
+  with a pure Helm-values model. Traverse matching subtrees directly; preserve
+  own-property checks, atomic arrays, nulls, defaults/overrides/merged behavior,
+  legacy payloads, serialization, and value order. Nested edge cases were
+  characterized against the original component before editing.
+- Centralized Helm release acquisition in the Helm service for details, manifest,
+  and values, and the provider's manifest/values cache-read-fetch-store-
+  revision sequence. These remove repeated read and error policy within each
+  existing owner, without changing action configuration or snapshot interfaces.
+  Cache authorization, content-before-revision ordering, best-effort revision,
+  and per-cluster keys remain explicit; validate through release/storage tests
+  and provider reads against a local Kubernetes API fixture.
+- Removed the panel hook's global test-only close callback, ref, and registration
+  effect. `git grep -n closeObjectPanelGlobal HEAD -- frontend/src` found its only
+  caller in the hook test. The surviving close-all workflow test now opens two
+  panels before exercising the hook's real close method.
+
+Producer/consumer path: Helm storage → service → cluster-scoped detail provider
+→ content snapshot → refresh handle → Helm tab → shared YAML editor. The new
+value model has no imports; existing service/provider import directions remain.
+Wire DTOs, native transfer, editor mechanics, and mutation policy were not edited.
+Scope admission, cache authorization, and failure behavior were characterized
+before consolidation.
+
+Validation:
+
+- Original-code characterization passed for nested value modes and provider
+  content/cache reads. Provider cases cover cluster isolation, wrong-type cache
+  entries, authorization revocation, content retention during revision failure,
+  and missing cluster scope. Logs:
+  `/tmp/luxury-yacht-s005-characterization-frontend.log` and
+  `/tmp/luxury-yacht-s005-characterization-backend.log`.
+- Incremental Helm tab, panel hook, and backend read tests passed after their
+  edits. A deterministic differential check compared the extracted selector
+  against the original callbacks across 3,000 generated inputs in all three
+  modes: all 9,000 results matched. Log:
+  `/tmp/luxury-yacht-s005-values-comparison.log`. This establishes those sampled
+  outputs, not exhaustive equivalence or runtime performance.
+- Object-panel and adjacent panel-window tests passed 101 files / 877 tests.
+  Affected statement coverage: Values tab 92.59%, value model 90%, panel hook
+  88.33%; combined 89.76% (114/127). Removing the global helper's test and
+  implementation changed hook coverage from 62/69 (89.85%) to 53/60 (88.33%);
+  surviving branch coverage remains 26/33. Logs:
+  `/tmp/luxury-yacht-s005-before-frontend.log` and
+  `/tmp/luxury-yacht-s005-frontend-coverage.log`.
+- Backend, Helm service, and adjacent snapshot suites passed with statement
+  coverage of 80.3%, 90.8%, and 82.6%. Changed Go functions are 86.7–100%
+  covered; the new acquisition and provider helpers are 100%. Logs:
+  `/tmp/luxury-yacht-s005-backend-coverage.log` and
+  `/tmp/luxury-yacht-s005-function-coverage.txt`. macOS deployment-target linker
+  warnings appeared in baseline and affected runs; both exited successfully.
+- Typecheck passed. Changed Go functions score 0–5 under gocognit v1.2.1;
+  Biome's threshold-12 check passed all three changed TS/TSX sources. Logs:
+  `/tmp/luxury-yacht-s005-typecheck.log`,
+  `/tmp/luxury-yacht-s005-go-complexity.json`, and
+  `/tmp/luxury-yacht-s005-ts-complexity.log`.
+  `gh pr view code-simplification` found no PR; no remote Sonar result is claimed.
+- One final `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease` passed, including backend race tests, frontend checks and 4,772 tests, Knip, and Trivy. Log: `/tmp/luxury-yacht-s005-prerelease.log`. Post-gate SHA-256 comparison and worktree inspection found no additional files or formatter changes; `git diff --check` passed (`/tmp/luxury-yacht-s005-post-gate.log`). Only this ledger is finalized afterwards, with a separate `qc:docs` check.
+
+Frontend tests mock native calls and refresh transport; provider tests use local
+API fixtures. No native window or rendered-layout validation is claimed.
+
+Remaining domain scope: full capability resolution, overview widgets/descriptors,
+YAML transaction/merge/ownership internals, panel-state reconciliation, native
+transfer implementations, and detail enrichments. Their interfaces were inspected
+where needed; this pass does not close those responsibilities.
+
+## Next batch — S006 operations
+
+Inspect shell/debug sessions, log readers and streams, port-forward, drain, and
+the runtime registry alongside their detail/event consumers. Collect related
+ownership, cleanup, error-policy, and representation simplifications before
+editing. Preserve cluster/object identity, cancellation, session lifetime, and
+terminal/log ordering; retain distinct cleanup policies where the contracts differ.
+Run focused checks during edits and one repository gate at the batch boundary.
 
 S001 established an inefficient delivery size: a one-file production change paid
 for a full frontend coverage run and a full repository gate. Future batches
@@ -503,7 +589,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/(root: logger)` | 1 | 371 | — / — | Inventoried |
 | `backend/(root: menu)` | 1 | 246 | — / — | Inventoried |
 | `backend/(root: node)` | 3 | 145 | — / — | Inventoried |
-| `backend/(root: object)` | 11 | 2243 | — / — | Inventoried |
+| `backend/(root: object)` | 11 | 2243 | — / — | Partial S005: detail/provider seams and Helm content read ownership; remaining enrichments recorded |
 | `backend/(root: operations)` | 2 | 323 | — / — | Inventoried |
 | `backend/(root: pod)` | 3 | 161 | — / — | Inventoried |
 | `backend/(root: portforward)` | 6 | 1133 | 2 / — | Inventoried |
@@ -596,7 +682,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/resources/gatewayclass` | 12 | 307 | — / — | Inventoried |
 | `backend/resources/generic` | 3 | 269 | 1 / — | Inventoried |
 | `backend/resources/grpcroute` | 11 | 262 | — / — | Inventoried |
-| `backend/resources/helm` | 5 | 750 | — / — | Inventoried |
+| `backend/resources/helm` | 5 | 750 | — / — | Partial S005: detail/manifest/values acquisition; other Helm operations remain |
 | `backend/resources/hpa` | 12 | 866 | — / — | Inventoried |
 | `backend/resources/httproute` | 11 | 257 | — / — | Inventoried |
 | `backend/resources/ingress` | 13 | 604 | 2 / — | Inventoried |
@@ -661,7 +747,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/modules/kubernetes` | 1 | 856 | — / — | S003 provider inspected; adds selection model |
 | `frontend/src/modules/namespace` | 30 | 4701 | — / 1 | Inventoried |
 | `frontend/src/modules/object-map` | 38 | 8546 | — / 12 | Inventoried |
-| `frontend/src/modules/object-panel` | 141 | 32321 | — / 31 | Inventoried |
+| `frontend/src/modules/object-panel` | 141 | 32321 | — / 31 | Partial S005: composition/tab/lifecycle seams, Helm values model, open/close hook; remaining responsibilities recorded |
 | `frontend/src/modules/port-forward` | 4 | 874 | — / 1 | Inventoried |
 | `frontend/src/modules/resource-grid` | 15 | 4107 | — / 1 | Inventoried |
 | `frontend/src/shared/actions` | 4 | 772 | — / — | Inventoried |
