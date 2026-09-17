@@ -3,7 +3,6 @@ package backend
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -202,11 +201,8 @@ func (a *WorkspaceCoordinator) normalizeSelectionSet(selections []string) ([]kub
 	normalizedStrings := make([]string, 0, len(selections))
 	seenContexts := make(map[string]struct{}, len(selections))
 	for _, selection := range selections {
-		parsed, err := a.clusterRuntime.normalizeKubeconfigSelection(selection)
+		parsed, err := a.clusterRuntime.resolveKubeconfigSelection(selection)
 		if err != nil {
-			return nil, nil, err
-		}
-		if err := a.clusterRuntime.validateKubeconfigSelection(parsed); err != nil {
 			return nil, nil, err
 		}
 		selectionKey := parsed.String()
@@ -433,16 +429,9 @@ func (a *WorkspaceCoordinator) deselectClusters(clusterIDs []string) {
 		return
 	}
 
-	type pathContextKey struct {
-		path    string
-		context string
-	}
-	removalKeys := make(map[pathContextKey]struct{}, len(clusterIDs))
+	removalKeys := make(map[kubeconfigSelectionKey]struct{}, len(clusterIDs))
 	for _, selection := range a.clusterRuntime.selectionsForClusterIDs(clusterIDs) {
-		removalKeys[pathContextKey{
-			path:    kubeconfigPathKey(filepath.Clean(selection.Path)),
-			context: selection.Context,
-		}] = struct{}{}
+		removalKeys[newKubeconfigSelectionKey(selection.Path, selection.Context)] = struct{}{}
 	}
 
 	a.kubeconfigsMu.RLock()
@@ -456,10 +445,7 @@ func (a *WorkspaceCoordinator) deselectClusters(clusterIDs []string) {
 		if err != nil {
 			continue
 		}
-		key := pathContextKey{
-			path:    kubeconfigPathKey(filepath.Clean(parsed.Path)),
-			context: parsed.Context,
-		}
+		key := newKubeconfigSelectionKey(parsed.Path, parsed.Context)
 		if _, removed := removalKeys[key]; !removed {
 			remainingSelections = append(remainingSelections, sel)
 			remainingParsed = append(remainingParsed, parsed)

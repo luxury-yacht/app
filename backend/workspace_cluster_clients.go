@@ -107,16 +107,13 @@ func (a *WorkspaceCoordinator) restoreKubeconfigSelection() {
 	var normalized []string
 	if len(savedSelections) > 0 {
 		normalized = make([]string, 0, len(savedSelections))
-		for _, selection := range savedSelections {
-			parsed, err := a.clusterRuntime.normalizeKubeconfigSelection(selection)
-			if err != nil {
-				continue
-			}
-			if err := a.clusterRuntime.validateKubeconfigSelection(parsed); err != nil {
-				continue
-			}
-			normalized = append(normalized, parsed.String())
+	}
+	for _, selection := range savedSelections {
+		parsed, err := a.clusterRuntime.resolveKubeconfigSelection(selection)
+		if err != nil {
+			continue
 		}
+		normalized = append(normalized, parsed.String())
 	}
 
 	a.kubeconfigsMu.Lock()

@@ -34,7 +34,7 @@ type workspaceClusterRuntime interface {
 	ensureClusterClientsForSelections(context.Context, []kubeconfigSelection) error
 	ensureKubernetesAPIMetricsRegistry() *kubernetesAPIMetricsRegistry
 	getTransportState(string) *transportFailureState
-	normalizeKubeconfigSelection(string) (kubeconfigSelection, error)
+	resolveKubeconfigSelection(string) (kubeconfigSelection, error)
 	refreshKubeconfigDiscoveryAndWatch() error
 	removeClusterClients([]string) []removedClusterClient
 	removeClusterLifecycleState(string)

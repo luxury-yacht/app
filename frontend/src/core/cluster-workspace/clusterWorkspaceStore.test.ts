@@ -14,6 +14,61 @@ afterEach(() => {
 });
 
 describe('ClusterWorkspaceStore', () => {
+  it('preserves only fields changed during each overlapping read, including newly seen clusters', async () => {
+    const runtime = createWailsRuntimeHarness();
+    const replies: Array<(state: ClusterWorkspaceWireState) => void> = [];
+    const store = new ClusterWorkspaceStore({
+      read: () => new Promise((resolve) => replies.push(resolve)),
+      onEvent: runtime.onEvent,
+    });
+    const release = store.acquire();
+    try {
+      const initial = store.hydrate();
+      runtime.emit('cluster:auth:failed', { clusterId: 'cluster-a', reason: 'expired' });
+      const later = store.refresh();
+      runtime.emit('cluster:health:degraded', { clusterId: 'cluster-b' });
+      runtime.emit('cluster:scope:changed', { clusterId: 'new-cluster' });
+      const wire: ClusterWorkspaceWireState = {
+        ...emptyState(),
+        clusters: Object.fromEntries(
+          ['cluster-a', 'cluster-b'].map((clusterId) => [
+            clusterId,
+            {
+              clusterId,
+              clusterName: clusterId,
+              lifecycle: 'ready',
+              auth: { state: 'valid' },
+              health: 'healthy',
+              scopeRevision: 4,
+            },
+          ])
+        ),
+      };
+
+      replies[0](wire);
+      await initial;
+      expect(store.getCluster('cluster-a')).toMatchObject({
+        auth: { hasError: true, reason: 'expired' },
+        health: 'healthy',
+        scopeRevision: 4,
+      });
+      expect(store.getCluster('cluster-b')).toMatchObject({
+        auth: { hasError: false },
+        health: 'degraded',
+        scopeRevision: 4,
+      });
+      expect(store.getCluster('new-cluster')?.scopeRevision).toBe(1);
+
+      replies[1](wire);
+      await later;
+      expect(store.getAuth('cluster-a').hasError).toBe(false);
+      expect(store.getHealth('cluster-b')).toBe('degraded');
+      expect(store.getCluster('new-cluster')?.scopeRevision).toBe(1);
+    } finally {
+      release();
+    }
+  });
+
   it('bridges permission recovery without changing namespace scope revisions', async () => {
     const runtime = createWailsRuntimeHarness();
     const store = new ClusterWorkspaceStore({

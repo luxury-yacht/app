@@ -5,6 +5,19 @@ import (
 	"path/filepath"
 )
 
+// resolveKubeconfigSelection normalizes a requested selection and checks it
+// against discovery before workspace callers commit or connect it.
+func (a *ClusterRuntimeManager) resolveKubeconfigSelection(selection string) (kubeconfigSelection, error) {
+	parsed, err := a.normalizeKubeconfigSelection(selection)
+	if err != nil {
+		return kubeconfigSelection{}, err
+	}
+	if err := a.validateKubeconfigSelection(parsed); err != nil {
+		return kubeconfigSelection{}, err
+	}
+	return parsed, nil
+}
+
 // normalizeKubeconfigSelection ensures a selection has an explicit context when available.
 func (a *ClusterRuntimeManager) normalizeKubeconfigSelection(selection string) (kubeconfigSelection, error) {
 	parsed, err := parseKubeconfigSelection(selection)

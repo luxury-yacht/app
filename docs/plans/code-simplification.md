@@ -75,8 +75,8 @@ correctness-driven interruption and resume the rotation afterwards.
 | --- | --- | --- | --- |
 | 1 | Shared tables | Shared table hooks/rendering; resource-grid adapters; snapshot/querypage consumers | S001 sizing/measurement inspected; remaining scope below |
 | 2 | Catalog and resource projections | Object catalog; per-kind resources; kind/model contracts; Browse adapters | S002 query/facet/snapshot batch; remaining scope recorded |
-| 3 | Cluster/workspace/auth | Backend cluster/workspace owners and auth helpers; Kubernetes/cluster workspace contexts | Next: S003 |
-| 4 | Refresh and data access | Refresh APIs, stores, snapshots, ingestion, streams, metrics and governor; frontend refresh/data brokers | Inventoried |
+| 3 | Cluster/workspace/auth | Backend cluster/workspace owners and auth helpers; Kubernetes/cluster workspace contexts | S003 selection/hydration batch; remaining scope recorded |
+| 4 | Refresh and data access | Refresh APIs, stores, snapshots, ingestion, streams, metrics and governor; frontend refresh/data brokers | Next: S004 |
 | 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | Inventoried |
 | 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | Inventoried |
 | 7 | Object map | Backend graph producers and relationships; frontend graph, layout and renderer | Inventoried |
@@ -93,13 +93,89 @@ package. Assign each visited unit a primary domain in its pass record. Cross-lay
 consumers may be inspected in several passes; that does not automatically close
 all responsibilities in those consumers. Split oversized buckets before review.
 
-## Next batch: S003 — cluster/workspace/auth
+## S003 — cluster/workspace selection and hydration
 
-Review cluster/workspace/auth owners and their frontend contexts as a subsystem.
-Inventory related candidates before editing, then implement the worthwhile
-behavior-preserving improvements together. Preserve the settled ownership and
-lifecycle decisions; do not stop after the first function cleanup. Focused tests
-accompany incremental edits, with one final repository gate for the batch.
+**Status: selected batch implemented; affected checks and final gate passed.** Baseline:
+`2e6b4a5d410f525ebca19e733b988ffb10d29fba`; `git status --short` was empty.
+Inventory refresh (`git diff --name-status 6d93acb7 HEAD`) showed no authored
+production file additions/removals since the source baseline. S003 adds
+`frontend/src/modules/kubernetes/config/kubeconfigSelection.ts` to the existing
+Kubernetes bucket; source counts in the table below remain baseline counts.
+
+Inspected: workspace selection/restore/prune/close ownership, client pool
+construction/removal, mutation generations and runtime intents, auth recovery
+manager and event projection, frontend workspace hydration, kubeconfig provider,
+and lifecycle/auth/readiness selector seams. Preserve independent owner locks,
+the auth retry loop, queued callback admission, and visible versus committed
+frontend selection; these encode documented ordering, not duplicate ownership.
+
+Implemented candidates:
+
+- Centralize normalize-and-validate in Cluster Runtime for startup restore,
+  startup connection, and selection commands; retain each caller's error policy.
+  Reuse the existing path/context identity key for watcher deselection.
+- Give frontend selection rules one local model: parsing/identity, normalization,
+  active-tab planning, and cluster-ID projection in `kubeconfigSelection.ts`.
+  Resolve the next active tab once per transition and reuse existing
+  visible/committed update helpers during
+  hydration. Keep RPCs, event order, rollback, and async guards in the provider.
+- Represent live hydration fields directly by cluster and typed field instead
+  of encoded strings and repeated prefix scans. Keep markers per in-flight read,
+  preserve later-authoritative healing, and publish before waking readiness.
+
+Producer/consumer boundaries: discovered kubeconfigs feed all three backend
+selection paths; runtime events and workspace RPCs feed the existing frontend
+store; provider selection feeds tabs, panel preflights, auth overlay, and refresh
+context. No wire DTO, import direction, owner lock, callback order, readiness
+gate, or runtime dependency changes are intended. The selection model depends
+only on backend model types and the existing tab-order helper, not its provider.
+Characterization covers tolerant restore versus rejecting commands, independent
+live fields during overlapping reads, removal/re-addition, stale requests,
+foreground activation, and cluster-close rollback.
+
+Validation:
+
+- New characterization cases passed on the original code before refactoring:
+  `TestWorkspaceSelectionResolutionPreservesRestoreAndCommandPolicies` and
+  the overlapping-read case in `clusterWorkspaceStore.test.ts`. Focused baseline
+  logs: `/tmp/luxury-yacht-s003-before-backend.log` and
+  `/tmp/luxury-yacht-s003-before-frontend.log`.
+- Incremental selection, store, and provider checks passed after their edits.
+  Logs: `/tmp/luxury-yacht-s003-selection.log`,
+  `/tmp/luxury-yacht-s003-store.log`, `/tmp/luxury-yacht-s003-provider.log`.
+- Affected backend suites passed with coverage: `backend` 80.0%,
+  `backend/internal/authstate` 93.0%. Changed production functions are 89.5–100%
+  covered. Evidence: `/tmp/luxury-yacht-s003-backend-coverage.log` and
+  `/tmp/luxury-yacht-s003-backend-functions.txt`. The linker printed macOS
+  deployment-target warnings in both baseline and final package runs; both
+  exited successfully.
+- Frontend selection/store and adjacent tab/auth/lifecycle/readiness consumers
+  passed 10 files / 117 tests with affected coverage: workspace store 89.33%,
+  provider 90.79%, selection model 84.72%. Log:
+  `/tmp/luxury-yacht-s003-frontend-coverage.log`. These exercise real React/store
+  owners with backend/native calls mocked; native window placement, focus, and
+  destruction were not changed or claimed as validated.
+- Typecheck passed. All changed Go functions score 2–8 under pinned gocognit
+  v1.2.1; Biome's isolated complexity check passed all three changed TS/TSX
+  sources at threshold 12. Logs: `/tmp/luxury-yacht-s003-typecheck.log`,
+  `/tmp/luxury-yacht-s003-go-complexity.json`, and
+  `/tmp/luxury-yacht-s003-ts-complexity.log`. No remote Sonar result is claimed.
+- One final `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease` passed, including backend race tests, frontend checks and 4,766 tests, Knip, and Trivy. Log: `/tmp/luxury-yacht-s003-prerelease.log`. Post-gate `git status --short` and diff inspection showed only the eight production files, two characterization test files, and this ledger; no additional formatter changes. `git diff --check` passed. The final ledger update receives a separate `qc:docs` check.
+
+Remaining domain scope: kubeconfig discovery internals/watch delivery, transport
+health/heartbeat, API diagnostics, native panel transfer/close implementations,
+and credential-helper internals. Their call sites/contracts were inspected where
+needed; this batch does not close those responsibilities. Rejected consolidation:
+client-removal loops differ in auth shutdown, operation cleanup, metrics, and
+publication order; combining them behind flags would obscure those contracts.
+The established auth retry state machine and separate owner locks remain intact.
+
+## Next batch: S004 — refresh and data access
+
+Review refresh scheduling, state ingestion, and frontend data-access ownership.
+Start from the freshness contract and retained/background demand boundaries;
+collect related simplifications before editing, with focused incremental checks
+and one final repository gate.
 
 S001 established an inefficient delivery size: a one-file production change paid
 for a full frontend coverage run and a full repository gate. Future batches
@@ -323,7 +399,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/(root: application)` | 6 | 1084 | 1 / — | Inventoried |
 | `backend/(root: auth)` | 1 | 185 | — / — | Inventoried |
 | `backend/(root: autoscaling)` | 1 | 60 | — / — | Inventoried |
-| `backend/(root: cluster)` | 23 | 3451 | 1 / — | Inventoried |
+| `backend/(root: cluster)` | 23 | 3451 | 1 / — | Reviewing: S003 selection resolution; remaining scope recorded |
 | `backend/(root: crd)` | 1 | 28 | — / — | Inventoried |
 | `backend/(root: data)` | 2 | 517 | 1 / — | Inventoried |
 | `backend/(root: desktop)` | 10 | 1689 | — / — | Inventoried |
@@ -359,7 +435,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/(root: update)` | 8 | 1186 | — / — | Inventoried |
 | `backend/(root: window)` | 1 | 112 | — / — | Inventoried |
 | `backend/(root: workload)` | 2 | 502 | 1 / — | Inventoried |
-| `backend/(root: workspace)` | 16 | 2130 | — / — | Inventoried |
+| `backend/(root: workspace)` | 16 | 2130 | — / — | Reviewing: S003 selection/restore/prune; remaining scope recorded |
 | `backend/capabilities` | 4 | 866 | — / — | Inventoried |
 | `backend/internal/applog` | 6 | 323 | — / — | Inventoried |
 | `backend/internal/appupdates` | 2 | 1125 | 1 / — | Inventoried |
@@ -475,7 +551,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/core/app-state-access` | 4 | 75 | — / — | Inventoried |
 | `frontend/src/core/backend-api` | 2 | 166 | — / — | Inventoried |
 | `frontend/src/core/capabilities` | 11 | 2623 | — / 5 | Inventoried |
-| `frontend/src/core/cluster-workspace` | 2 | 755 | — / — | Inventoried |
+| `frontend/src/core/cluster-workspace` | 2 | 755 | — / — | S003 store/hydration inspected and simplified |
 | `frontend/src/core/codemirror` | 3 | 640 | — / — | Inventoried |
 | `frontend/src/core/connection` | 1 | 237 | — / — | Inventoried |
 | `frontend/src/core/contexts` | 11 | 1875 | — / 1 | Inventoried |
@@ -496,7 +572,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/modules/browse` | 13 | 3294 | — / 1 | Inventoried |
 | `frontend/src/modules/cluster` | 26 | 5362 | — / — | Inventoried |
 | `frontend/src/modules/global` | 5 | 773 | — / 2 | Inventoried |
-| `frontend/src/modules/kubernetes` | 1 | 856 | — / — | Inventoried |
+| `frontend/src/modules/kubernetes` | 1 | 856 | — / — | S003 provider inspected; adds selection model |
 | `frontend/src/modules/namespace` | 30 | 4701 | — / 1 | Inventoried |
 | `frontend/src/modules/object-map` | 38 | 8546 | — / 12 | Inventoried |
 | `frontend/src/modules/object-panel` | 141 | 32321 | — / 31 | Inventoried |

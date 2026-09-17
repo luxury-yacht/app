@@ -9,11 +9,8 @@ func (a *WorkspaceCoordinator) selectedKubeconfigSelections() ([]kubeconfigSelec
 
 	selections := make([]kubeconfigSelection, 0, len(rawSelections))
 	for _, raw := range rawSelections {
-		parsed, err := a.clusterRuntime.normalizeKubeconfigSelection(raw)
+		parsed, err := a.clusterRuntime.resolveKubeconfigSelection(raw)
 		if err != nil {
-			return nil, err
-		}
-		if err := a.clusterRuntime.validateKubeconfigSelection(parsed); err != nil {
 			return nil, err
 		}
 		selections = append(selections, parsed)

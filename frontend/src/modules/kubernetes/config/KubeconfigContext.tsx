@@ -8,10 +8,6 @@
 import type { types } from '@core/backend-api/models';
 import { onEvent } from '@core/desktop-runtime';
 import {
-  getClusterTabOrder,
-  getNextClusterTabSelectionAfterClose,
-} from '@core/persistence/clusterTabOrder';
-import {
   computeClusterHashes,
   runGridTableGC,
 } from '@shared/components/tables/persistence/gridTablePersistenceGC';
@@ -34,6 +30,15 @@ import { eventBus } from '@/core/events';
 import { refreshOrchestrator, useBackgroundRefresh } from '@/core/refresh';
 import { clusterReadiness } from '@/core/refresh/clusterReadiness';
 import { getWindowIdentity } from '@/core/window-identity';
+import {
+  buildSelectionTransitionPlan,
+  normalizeSelections,
+  resolveClusterMeta,
+  resolveNextActiveSelection,
+  retainedActiveSelection,
+  type SelectionTransitionPlan,
+  selectedClusterIdsFor,
+} from './kubeconfigSelection';
 
 export type KubeconfigDiscoveryState = 'available' | 'search_paths_missing' | 'no_kubeconfigs';
 
@@ -77,10 +82,6 @@ const resolveKubeconfigDiscoveryState = (
   return kubeconfigs.length > 0 ? 'available' : 'no_kubeconfigs';
 };
 
-function retainedActiveSelection(selections: string[], current: string): string {
-  return selections.includes(current) ? current : selections[0] || '';
-}
-
 interface KubeconfigContextType {
   kubeconfigs: types.KubeconfigInfo[];
   kubeconfigDiscoveryState: KubeconfigDiscoveryState;
@@ -101,37 +102,6 @@ interface KubeconfigContextType {
 }
 
 const KubeconfigContext = createContext<KubeconfigContextType | undefined>(undefined);
-
-const hasWindowsDrivePrefix = (value: string): boolean => {
-  if (!value || value.length < 2) {
-    return false;
-  }
-  const first = value[0];
-  const isAlpha = (first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z');
-  if (!isAlpha || value[1] !== ':') {
-    return false;
-  }
-  if (value.length === 2) {
-    return true;
-  }
-  return value[2] !== ':';
-};
-
-const splitSelectionComponents = (selection: string): { path: string; context: string } => {
-  const trimmed = selection.trim();
-  if (!trimmed) {
-    return { path: '', context: '' };
-  }
-  const startIndex = hasWindowsDrivePrefix(trimmed) ? 2 : 0;
-  const delimiterIndex = trimmed.indexOf(':', startIndex);
-  if (delimiterIndex === -1) {
-    return { path: trimmed, context: '' };
-  }
-  return {
-    path: trimmed.slice(0, delimiterIndex),
-    context: trimmed.slice(delimiterIndex + 1),
-  };
-};
 
 export const useKubeconfig = () => {
   const context = useContext(KubeconfigContext);
@@ -195,89 +165,6 @@ type SelectionTransitionOptions = {
 
 type SelectionTransitionResult = Awaited<ReturnType<typeof ApplyClusterWorkspace>>;
 
-const resolveActiveAfterClose = (
-  previousSelections: string[],
-  previousActive: string,
-  normalizedSelections: string[]
-): string => {
-  const removedSelections = previousSelections.filter(
-    (selection) => !normalizedSelections.includes(selection)
-  );
-  if (removedSelections.length !== 1) {
-    return normalizedSelections[0] || '';
-  }
-  const nextAfterClose = getNextClusterTabSelectionAfterClose(
-    previousSelections,
-    removedSelections[0],
-    previousActive,
-    getClusterTabOrder()
-  );
-  return nextAfterClose && normalizedSelections.includes(nextAfterClose)
-    ? nextAfterClose
-    : normalizedSelections[0] || '';
-};
-
-const resolveNextActiveSelection = (
-  previousSelections: string[],
-  previousActive: string,
-  normalizedSelections: string[],
-  activeSelection?: string
-): string => {
-  if (activeSelection !== undefined) {
-    return normalizedSelections.includes(activeSelection) ? activeSelection : '';
-  }
-  const addedSelections = normalizedSelections.filter(
-    (selection) => !previousSelections.includes(selection)
-  );
-  if (addedSelections.length > 0) {
-    return addedSelections[addedSelections.length - 1];
-  }
-  if (previousActive && !normalizedSelections.includes(previousActive)) {
-    return resolveActiveAfterClose(previousSelections, previousActive, normalizedSelections);
-  }
-  return previousActive && normalizedSelections.includes(previousActive)
-    ? previousActive
-    : normalizedSelections[0] || '';
-};
-
-interface SelectionTransitionPlan {
-  normalizedSelections: string[];
-  nextActive: string;
-  nextClusterId: string;
-  shouldEmitChanging: boolean;
-  shouldEmitChanged: boolean;
-  shouldEmitSelectionChanged: boolean;
-}
-
-const selectionsAreEqual = (left: string[], right: string[]): boolean =>
-  left.length === right.length && left.every((selection, index) => selection === right[index]);
-
-const buildSelectionTransitionPlan = (
-  previousSelections: string[],
-  previousActive: string,
-  normalizedSelections: string[],
-  activeSelection: string | undefined,
-  nextClusterId: string
-): SelectionTransitionPlan => {
-  const nextActive = resolveNextActiveSelection(
-    previousSelections,
-    previousActive,
-    normalizedSelections,
-    activeSelection
-  );
-  const wasEmpty = previousSelections.length === 0;
-  const willBeEmpty = normalizedSelections.length === 0;
-  const selectionChanged = !selectionsAreEqual(previousSelections, normalizedSelections);
-  return {
-    normalizedSelections,
-    nextActive,
-    nextClusterId,
-    shouldEmitChanging: selectionChanged && willBeEmpty,
-    shouldEmitChanged: !willBeEmpty && wasEmpty,
-    shouldEmitSelectionChanged: selectionChanged && !willBeEmpty,
-  };
-};
-
 export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children }) => {
   const [kubeconfigs, setKubeconfigs] = useState<types.KubeconfigInfo[]>([]);
   const [kubeconfigDiscoveryState, setKubeconfigDiscoveryState] =
@@ -302,46 +189,18 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
 
   useEffect(() => clusterWorkspaceStore.acquire(), []);
 
-  // Resolve cluster identity metadata from the current selection and config list.
-  const resolveClusterMeta = useCallback((selection: string, configs: types.KubeconfigInfo[]) => {
-    const trimmed = selection.trim();
-    if (!trimmed) {
-      return { id: '', name: '' };
-    }
-
-    const { path, context } = splitSelectionComponents(trimmed);
-
-    const match = configs.find((config) => config.path === path && config.context === context);
-    if (match) {
-      return { id: `${match.name}:${match.context}`, name: match.context };
-    }
-
-    const pathParts = path.split(/[/\\]/);
-    const filename = pathParts[pathParts.length - 1] ?? '';
-    if (!filename && !context) {
-      return { id: '', name: '' };
-    }
-    if (!context) {
-      return { id: filename, name: '' };
-    }
-    if (!filename) {
-      return { id: context, name: context };
-    }
-    return { id: `${filename}:${context}`, name: context };
-  }, []);
-
   // Public selection follows the active tab immediately so cluster-scoped UI
   // cannot keep rendering the previous cluster while activation is pending.
   const selectedClusterMeta = useMemo(
     () => resolveClusterMeta(selectedKubeconfig, kubeconfigs),
-    [resolveClusterMeta, selectedKubeconfig, kubeconfigs]
+    [selectedKubeconfig, kubeconfigs]
   );
 
   // Refresh selection stays on the last backend-confirmed open set. A switch
   // among those already-open tabs commits immediately below.
   const committedSelectedClusterMeta = useMemo(
     () => resolveClusterMeta(committedSelectedKubeconfig, kubeconfigs),
-    [resolveClusterMeta, committedSelectedKubeconfig, kubeconfigs]
+    [committedSelectedKubeconfig, kubeconfigs]
   );
 
   useEffect(() => {
@@ -358,53 +217,18 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
 
   const getClusterMeta = useCallback(
     (selection: string) => resolveClusterMeta(selection, kubeconfigs),
-    [resolveClusterMeta, kubeconfigs]
+    [kubeconfigs]
   );
 
-  const normalizeSelections = useCallback((selections: string[]) => {
-    const deduped: string[] = [];
-    const seenSelections = new Set<string>();
+  const selectedClusterIds = useMemo(
+    () => selectedClusterIdsFor(selectedKubeconfigs, kubeconfigs),
+    [kubeconfigs, selectedKubeconfigs]
+  );
 
-    selections.forEach((selection) => {
-      const trimmed = selection.trim();
-      if (!trimmed) {
-        return;
-      }
-
-      // Dedupe by full selection string (path:context) to allow the same context name
-      // from different kubeconfig files (e.g., "dev" in both ~/.kube/config and ~/.kube/staging).
-      if (seenSelections.has(trimmed)) {
-        return;
-      }
-      seenSelections.add(trimmed);
-
-      deduped.push(trimmed);
-    });
-
-    return deduped;
-  }, []);
-
-  const selectedClusterIds = useMemo(() => {
-    const ids = new Set<string>();
-    selectedKubeconfigs.forEach((selection) => {
-      const id = resolveClusterMeta(selection, kubeconfigs).id;
-      if (id) {
-        ids.add(id);
-      }
-    });
-    return Array.from(ids);
-  }, [kubeconfigs, resolveClusterMeta, selectedKubeconfigs]);
-
-  const committedSelectedClusterIds = useMemo(() => {
-    const ids = new Set<string>();
-    committedSelectedKubeconfigs.forEach((selection) => {
-      const id = resolveClusterMeta(selection, kubeconfigs).id;
-      if (id) {
-        ids.add(id);
-      }
-    });
-    return Array.from(ids);
-  }, [committedSelectedKubeconfigs, kubeconfigs, resolveClusterMeta]);
+  const committedSelectedClusterIds = useMemo(
+    () => selectedClusterIdsFor(committedSelectedKubeconfigs, kubeconfigs),
+    [committedSelectedKubeconfigs, kubeconfigs]
+  );
 
   const updateRefreshContext = useCallback(
     (meta: { id: string; name: string }, clusterIds: string[]) => {
@@ -461,6 +285,20 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       });
   }, []);
 
+  const applyVisibleSelection = useCallback((selections: string[], activeSelection: string) => {
+    selectedKubeconfigsRef.current = selections;
+    selectedKubeconfigRef.current = activeSelection;
+    setSelectedKubeconfigsState(selections);
+    setSelectedKubeconfigState(activeSelection);
+  }, []);
+
+  const applyCommittedSelection = useCallback((selections: string[], activeSelection: string) => {
+    committedSelectionsRef.current = selections;
+    committedActiveRef.current = activeSelection;
+    setCommittedSelectedKubeconfigs(selections);
+    setCommittedSelectedKubeconfig(activeSelection);
+  }, []);
+
   const loadKubeconfigs = useCallback(
     async (refreshWorkspace = false) => {
       setKubeconfigsLoading(true);
@@ -487,14 +325,8 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           selectedKubeconfigRef.current
         );
         const initialMeta = resolveClusterMeta(activeSelection, configs);
-        selectedKubeconfigsRef.current = normalizedSelection;
-        selectedKubeconfigRef.current = activeSelection;
-        committedSelectionsRef.current = normalizedSelection;
-        committedActiveRef.current = activeSelection;
-        setSelectedKubeconfigsState(normalizedSelection);
-        setSelectedKubeconfigState(activeSelection);
-        setCommittedSelectedKubeconfigs(normalizedSelection);
-        setCommittedSelectedKubeconfig(activeSelection);
+        applyVisibleSelection(normalizedSelection, activeSelection);
+        applyCommittedSelection(normalizedSelection, activeSelection);
         if (initialMeta.id) {
           activateVisibleCluster(initialMeta.id, true);
         }
@@ -511,22 +343,8 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         setKubeconfigsLoading(false);
       }
     },
-    [activateVisibleCluster, normalizeSelections, resolveClusterMeta]
+    [activateVisibleCluster, applyVisibleSelection, applyCommittedSelection]
   );
-
-  const applyVisibleSelection = useCallback((selections: string[], activeSelection: string) => {
-    selectedKubeconfigsRef.current = selections;
-    selectedKubeconfigRef.current = activeSelection;
-    setSelectedKubeconfigsState(selections);
-    setSelectedKubeconfigState(activeSelection);
-  }, []);
-
-  const applyCommittedSelection = useCallback((selections: string[], activeSelection: string) => {
-    committedSelectionsRef.current = selections;
-    committedActiveRef.current = activeSelection;
-    setCommittedSelectedKubeconfigs(selections);
-    setCommittedSelectedKubeconfig(activeSelection);
-  }, []);
 
   const beginSelectionTransition = useCallback(
     (plan: SelectionTransitionPlan) => {
@@ -546,9 +364,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         throw new Error(result.error);
       }
       const confirmedSelections = normalizeSelections(result.state.selectedKubeconfigs || []);
-      const confirmedActive = confirmedSelections.includes(plan.nextActive)
-        ? plan.nextActive
-        : confirmedSelections[0] || '';
+      const confirmedActive = retainedActiveSelection(confirmedSelections, plan.nextActive);
       applyVisibleSelection(confirmedSelections, confirmedActive);
       if (plan.shouldEmitSelectionChanged) {
         eventBus.emit('kubeconfig:selection-changed');
@@ -559,7 +375,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         eventBus.emit('kubeconfig:changed', '');
       }
     },
-    [applyCommittedSelection, applyVisibleSelection, normalizeSelections]
+    [applyCommittedSelection, applyVisibleSelection]
   );
 
   const rollbackSelectionTransition = useCallback(() => {
@@ -571,14 +387,10 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       workspaceSelections.length === 0 && committedSelectionsRef.current.length > 0
         ? committedSelectionsRef.current
         : workspaceSelections;
-    const committedActive = committedActiveRef.current;
-    const rollbackActive =
-      committedActive && rollbackSelections.includes(committedActive)
-        ? committedActive
-        : rollbackSelections[0] || '';
+    const rollbackActive = retainedActiveSelection(rollbackSelections, committedActiveRef.current);
     applyCommittedSelection(rollbackSelections, rollbackActive);
     applyVisibleSelection(rollbackSelections, rollbackActive);
-  }, [applyCommittedSelection, applyVisibleSelection, normalizeSelections]);
+  }, [applyCommittedSelection, applyVisibleSelection]);
 
   const applySelectionTransition = useCallback(
     async ({
@@ -591,19 +403,12 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       const previousSelections = selectedKubeconfigsRef.current;
       const previousActive = selectedKubeconfigRef.current;
       const normalizedSelections = normalizeSelections(configs);
-      const nextActive = resolveNextActiveSelection(
-        previousSelections,
-        previousActive,
-        normalizedSelections,
-        activeSelection
-      );
-      const nextMeta = resolveClusterMeta(nextActive, kubeconfigsRef.current);
       const plan = buildSelectionTransitionPlan(
         previousSelections,
         previousActive,
         normalizedSelections,
         activeSelection,
-        nextMeta.id
+        kubeconfigsRef.current
       );
 
       try {
@@ -635,13 +440,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         throw error;
       }
     },
-    [
-      beginSelectionTransition,
-      completeSelectionTransition,
-      normalizeSelections,
-      resolveClusterMeta,
-      rollbackSelectionTransition,
-    ]
+    [beginSelectionTransition, completeSelectionTransition, rollbackSelectionTransition]
   );
 
   const setSelectedKubeconfigs = useCallback(
@@ -735,7 +534,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         closingClusterIdsRef.current.delete(targetClusterId);
       }
     },
-    [applySelectionTransition, applyCommittedSelection, resolveClusterMeta]
+    [applySelectionTransition, applyCommittedSelection]
   );
 
   const registerClusterClosePreflight = useCallback((preflight: ClusterClosePreflight) => {
@@ -770,7 +569,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         }
       }
     },
-    [activateVisibleCluster, resolveClusterMeta, selectedKubeconfig, selectedKubeconfigs]
+    [activateVisibleCluster, selectedKubeconfig, selectedKubeconfigs]
   );
 
   // Load kubeconfigs on mount

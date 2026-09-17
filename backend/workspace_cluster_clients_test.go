@@ -139,3 +139,36 @@ func TestStartupClusterConnectionFailsWithInvalidSelection(t *testing.T) {
 	err := app.Workspace.connectSelectedClustersAtStartup(context.Background())
 	require.Error(t, err, "startup connection should fail with invalid kubeconfig path")
 }
+
+func TestWorkspaceSelectionResolutionPreservesRestoreAndCommandPolicies(t *testing.T) {
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
+		{Path: "/tmp/alpha", Context: "dev"},
+		{Path: "/tmp/beta", Context: "dev"},
+	}
+	app.Preferences.appSettings = getDefaultAppSettings()
+	app.Preferences.appSettings.SelectedKubeconfigs = []string{
+		"/tmp/alpha", "", "/tmp/missing:dev", "/tmp/beta:missing", "/tmp/beta:dev", "/tmp/alpha:dev",
+	}
+
+	app.Workspace.restoreKubeconfigSelection()
+	want := []string{"/tmp/alpha:dev", "/tmp/beta:dev", "/tmp/alpha:dev"}
+	require.Equal(t, want, app.Workspace.GetSelectedKubeconfigs())
+	require.Equal(t, want, app.Preferences.SelectedKubeconfigs())
+	resolved, err := app.Workspace.selectedKubeconfigSelections()
+	require.NoError(t, err)
+	require.Len(t, resolved, 3)
+	require.Equal(t, "dev", resolved[0].Context)
+	require.Equal(t, "/tmp/beta", resolved[1].Path)
+
+	// Restore tolerates unavailable entries and preserves its saved sequence;
+	// an explicit command rejects invalid or duplicate selections as a whole.
+	for _, invalid := range [][]string{{""}, {"/tmp/missing"}, {"/tmp/beta:missing"}, {"/tmp/alpha", "/tmp/alpha:dev"}} {
+		_, err := app.Workspace.buildSelectionChangeIntent(invalid, 1)
+		require.Error(t, err)
+		require.Equal(t, want, app.Workspace.GetSelectedKubeconfigs())
+	}
+	intent, err := app.Workspace.buildSelectionChangeIntent([]string{"/tmp/alpha", "/tmp/beta:dev"}, 1)
+	require.NoError(t, err)
+	require.Equal(t, want[:2], intent.normalizedSelectionText)
+}
