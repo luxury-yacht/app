@@ -1,8 +1,7 @@
 /**
  * frontend/src/core/refresh/store.ts
  *
- * State store for store.
- * Manages cached data, updates, and subscriptions for the core layer.
+ * Retains scoped refresh snapshots and publishes consistent views to subscribers.
  */
 
 import { useSyncExternalStore } from 'react';
@@ -55,10 +54,6 @@ export interface DomainSnapshotState<TPayload> {
   scope?: string;
 }
 
-type DomainStateMap = {
-  [K in RefreshDomain]: DomainSnapshotState<DomainPayloadMap[K]>;
-};
-
 type ScopedDomainStateMap = {
   [K in RefreshDomain]?: Record<string, DomainSnapshotState<DomainPayloadMap[K]>>;
 };
@@ -68,20 +63,10 @@ type ScopedDomainEntriesMap = {
 };
 
 interface RefreshStoreState {
-  domains: DomainStateMap;
   scopedDomains: ScopedDomainStateMap;
   scopedDomainEntries: ScopedDomainEntriesMap;
   pendingRequests: number;
 }
-
-const createInitialDomainState = <TPayload>(): DomainSnapshotState<TPayload> => ({
-  status: 'idle',
-  data: null,
-  stats: null,
-  error: null,
-  droppedAutoRefreshes: 0,
-  scope: undefined,
-});
 
 const EMPTY_SCOPED_STATE: DomainSnapshotState<unknown> = Object.freeze({
   status: 'idle',
@@ -98,44 +83,6 @@ const EMPTY_SCOPED_ENTRIES: ReadonlyArray<[string, DomainSnapshotState<unknown>]
 );
 
 const state: RefreshStoreState = {
-  domains: {
-    // All domains are scoped and use the scopedDomains map below; these entries
-    // exist for type safety and are never read at runtime for scoped domains.
-    'object-maintenance': createInitialDomainState(),
-    namespaces: createInitialDomainState(),
-    'namespace-metrics': createInitialDomainState(),
-    'cluster-overview': createInitialDomainState(),
-    'cluster-attention': createInitialDomainState(),
-    // Scoped domains use scopedDomains map below; these entries exist for type safety.
-    // They are never read for scoped domains at runtime.
-    nodes: createInitialDomainState(),
-    pods: createInitialDomainState(),
-    'object-details': createInitialDomainState(),
-    'object-events': createInitialDomainState(),
-    'object-map': createInitialDomainState(),
-    'object-yaml': createInitialDomainState(),
-    'object-helm-manifest': createInitialDomainState(),
-    'object-helm-values': createInitialDomainState(),
-    'container-logs': createInitialDomainState(),
-    'cluster-rbac': createInitialDomainState(),
-    'cluster-storage': createInitialDomainState(),
-    'cluster-config': createInitialDomainState(),
-    'cluster-crds': createInitialDomainState(),
-    'cluster-custom': createInitialDomainState(),
-    'cluster-events': createInitialDomainState(),
-    catalog: createInitialDomainState(),
-    'catalog-diff': createInitialDomainState(),
-    'namespace-workloads': createInitialDomainState(),
-    'namespace-config': createInitialDomainState(),
-    'namespace-network': createInitialDomainState(),
-    'namespace-rbac': createInitialDomainState(),
-    'namespace-storage': createInitialDomainState(),
-    'namespace-autoscaling': createInitialDomainState(),
-    'namespace-quotas': createInitialDomainState(),
-    'namespace-events': createInitialDomainState(),
-    'namespace-custom': createInitialDomainState(),
-    'namespace-helm': createInitialDomainState(),
-  },
   scopedDomains: {},
   scopedDomainEntries: {},
   pendingRequests: 0,
@@ -157,10 +104,6 @@ export const subscribe = (listener: () => void): (() => void) => {
 };
 
 export const getRefreshState = (): RefreshStoreState => state;
-
-export const getDomainState = <K extends RefreshDomain>(
-  domain: K
-): DomainSnapshotState<DomainPayloadMap[K]> => state.domains[domain];
 
 export const getScopedDomainState = <K extends RefreshDomain>(
   domain: K,
@@ -199,32 +142,28 @@ export const getScopedDomainEntries = <K extends RefreshDomain>(
   );
 };
 
-export const setDomainState = <K extends RefreshDomain>(
+// Publish both cached views before subscribers can read either one.
+const publishScopedDomainStates = <K extends RefreshDomain>(
   domain: K,
-  updater: (
-    previous: DomainSnapshotState<DomainPayloadMap[K]>
-  ) => DomainSnapshotState<DomainPayloadMap[K]>
+  nextMap: Record<string, DomainSnapshotState<DomainPayloadMap[K]>>
 ): void => {
-  const previous = state.domains[domain];
-  const next = updater(previous);
-
-  if (next === previous) {
-    return;
+  const entries = Object.entries(nextMap);
+  if (entries.length === 0) {
+    const { [domain]: _, ...rest } = state.scopedDomains;
+    state.scopedDomains = rest as ScopedDomainStateMap;
+    const { [domain]: __, ...restEntries } = state.scopedDomainEntries;
+    state.scopedDomainEntries = restEntries as ScopedDomainEntriesMap;
+  } else {
+    state.scopedDomains = {
+      ...state.scopedDomains,
+      [domain]: nextMap,
+    } as ScopedDomainStateMap;
+    state.scopedDomainEntries = {
+      ...state.scopedDomainEntries,
+      [domain]: entries,
+    } as ScopedDomainEntriesMap;
   }
 
-  state.domains = {
-    ...state.domains,
-    [domain]: next,
-  } as DomainStateMap;
-
-  notify();
-};
-
-export const resetDomainState = <K extends RefreshDomain>(domain: K): void => {
-  state.domains = {
-    ...state.domains,
-    [domain]: createInitialDomainState(),
-  } as DomainStateMap;
   notify();
 };
 
@@ -252,17 +191,7 @@ export const setScopedDomainState = <K extends RefreshDomain>(
     [scope]: nextState,
   };
 
-  state.scopedDomains = {
-    ...state.scopedDomains,
-    [domain]: nextMap,
-  } as ScopedDomainStateMap;
-
-  state.scopedDomainEntries = {
-    ...state.scopedDomainEntries,
-    [domain]: Object.entries(nextMap) as Array<[string, DomainSnapshotState<DomainPayloadMap[K]>]>,
-  } as ScopedDomainEntriesMap;
-
-  notify();
+  publishScopedDomainStates(domain, nextMap);
 };
 
 export const resetScopedDomainState = <K extends RefreshDomain>(domain: K, scope: string): void => {
@@ -277,36 +206,14 @@ export const resetScopedDomainState = <K extends RefreshDomain>(domain: K, scope
   const nextMap = { ...currentMap };
   delete nextMap[scope];
 
-  if (Object.keys(nextMap).length === 0) {
-    const { [domain]: _, ...rest } = state.scopedDomains;
-    state.scopedDomains = rest as ScopedDomainStateMap;
-    const { [domain]: __, ...restEntries } = state.scopedDomainEntries;
-    state.scopedDomainEntries = restEntries as ScopedDomainEntriesMap;
-  } else {
-    state.scopedDomains = {
-      ...state.scopedDomains,
-      [domain]: nextMap,
-    } as ScopedDomainStateMap;
-    state.scopedDomainEntries = {
-      ...state.scopedDomainEntries,
-      [domain]: Object.entries(nextMap) as Array<
-        [string, DomainSnapshotState<DomainPayloadMap[K]>]
-      >,
-    } as ScopedDomainEntriesMap;
-  }
-
-  notify();
+  publishScopedDomainStates(domain, nextMap);
 };
 
 export const resetAllScopedDomainStates = <K extends RefreshDomain>(domain: K): void => {
   if (!state.scopedDomains[domain]) {
     return;
   }
-  const { [domain]: _, ...rest } = state.scopedDomains;
-  state.scopedDomains = rest as ScopedDomainStateMap;
-  const { [domain]: __, ...restEntries } = state.scopedDomainEntries;
-  state.scopedDomainEntries = restEntries as ScopedDomainEntriesMap;
-  notify();
+  publishScopedDomainStates(domain, {});
 };
 
 /** Resets denied snapshots only for the cluster whose permission epoch changed. */

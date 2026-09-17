@@ -43,20 +43,19 @@ type ingestInformerHub struct {
 	factory ingestHubFactory
 	ingest  ingestHubManager
 
-	// ingestKeys is the set of canonical resource keys (permissions.ResourceKey
-	// format) the ingest manager owns, so ResourcesSettled routes each requested key
-	// to the right readiness source. Built once from the registry's IngestOwned facet.
-	ingestKeys map[string]struct{}
+	// ingestResources routes canonical permission keys to the owned GVR for both
+	// settlement and data readiness. Built once from the registry's IngestOwned facet.
+	ingestResources map[string]schema.GroupVersionResource
 }
 
-// newIngestInformerHub builds the composite hub. ingestManager may be nil, in which
-// case the hub is a thin pass-through to the factory (no cut kinds wired).
+// newIngestInformerHub builds the composite hub. Without an ingest manager,
+// ingest-owned keys are settled but report their data as unavailable.
 func newIngestInformerHub(factory ingestHubFactory, ingestManager ingestHubManager) *ingestInformerHub {
-	keys := make(map[string]struct{})
+	resources := make(map[string]schema.GroupVersionResource)
 	for _, d := range kindregistry.IngestOwnedDescriptors() {
-		keys[permissions.ResourceKey(d.Identity.Group, d.Identity.Resource)] = struct{}{}
+		resources[permissions.ResourceKey(d.Identity.Group, d.Identity.Resource)] = d.Identity.GVR()
 	}
-	return &ingestInformerHub{factory: factory, ingest: ingestManager, ingestKeys: keys}
+	return &ingestInformerHub{factory: factory, ingest: ingestManager, ingestResources: resources}
 }
 
 var _ refresh.InformerHub = (*ingestInformerHub)(nil)
@@ -97,8 +96,8 @@ func (h *ingestInformerHub) ResourcesSettled(keys []string) bool {
 	}
 	factoryKeys := make([]string, 0, len(keys))
 	for _, key := range keys {
-		if _, owned := h.ingestKeys[key]; owned {
-			if h.ingest != nil && !h.ingestKeySettled(key) {
+		if gvr, owned := h.ingestResources[key]; owned {
+			if h.ingest != nil && h.ingest.StoreFor(gvr) != nil && !h.ingest.HasSyncedFor(gvr) {
 				return false
 			}
 			continue
@@ -120,7 +119,8 @@ func (h *ingestInformerHub) ResourceReadiness(keys []string) map[string]refresh.
 	factoryKeys := make([]string, 0, len(keys))
 	for _, key := range keys {
 		result[key] = refresh.ResourceReadinessUnknown
-		if _, owned := h.ingestKeys[key]; !owned {
+		gvr, owned := h.ingestResources[key]
+		if !owned {
 			factoryKeys = append(factoryKeys, key)
 			continue
 		}
@@ -128,7 +128,7 @@ func (h *ingestInformerHub) ResourceReadiness(keys []string) map[string]refresh.
 			result[key] = refresh.ResourceReadinessUnavailable
 			continue
 		}
-		result[key] = h.ingest.ResourceReadinessFor(ingestGVRForKey(key))
+		result[key] = h.ingest.ResourceReadinessFor(gvr)
 	}
 	if reporter, ok := h.factory.(refresh.ResourceReadinessReporter); ok {
 		for key, readiness := range reporter.ResourceReadiness(factoryKeys) {
@@ -136,34 +136,6 @@ func (h *ingestInformerHub) ResourceReadiness(keys []string) map[string]refresh.
 		}
 	}
 	return result
-}
-
-func ingestGVRForKey(key string) schema.GroupVersionResource {
-	for _, descriptor := range kindregistry.IngestOwnedDescriptors() {
-		if permissions.ResourceKey(descriptor.Identity.Group, descriptor.Identity.Resource) == key {
-			return descriptor.Identity.GVR()
-		}
-	}
-	return schema.GroupVersionResource{}
-}
-
-// ingestKeySettled reports whether the ingest store(s) backing a canonical resource
-// key have synced. A cut domain may declare several ingest-owned keys; each maps to
-// one GVR via the registry, so the key is settled when that GVR's store has synced or
-// has no entry (the kind was skipped).
-func (h *ingestInformerHub) ingestKeySettled(key string) bool {
-	for _, d := range kindregistry.IngestOwnedDescriptors() {
-		if permissions.ResourceKey(d.Identity.Group, d.Identity.Resource) != key {
-			continue
-		}
-		gvr := d.Identity.GVR()
-		if h.ingest.StoreFor(gvr) == nil {
-			// No reflector for this kind (skipped — no client/scheme); nothing to wait on.
-			return true
-		}
-		return h.ingest.HasSyncedFor(gvr)
-	}
-	return true
 }
 
 // Shutdown stops the ingest reflectors and the factory.

@@ -143,7 +143,7 @@ func TestIngestManagerPermissionSkippedFor(t *testing.T) {
 }
 
 // TestIngestManagerHasSyncedForDegradesAfterDeadline pins the same contract on the
-// per-GVR readiness path (ingest_hub.go ingestKeySettled -> HasSyncedFor), which each
+// per-GVR readiness path (ingest_hub.go ResourcesSettled -> HasSyncedFor), which each
 // cut domain's ResourcesSettled gate uses to decide it can serve.
 func TestIngestManagerHasSyncedForDegradesAfterDeadline(t *testing.T) {
 	mgr := NewIngestManager(testMeta, unreachableKube(t), nil, nil)

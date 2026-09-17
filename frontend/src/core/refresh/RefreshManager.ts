@@ -437,17 +437,8 @@ class RefreshManager {
       return;
     }
 
-    const previousInterval = refresherIntervalTimer(instance.runtime);
-    if (previousInterval !== undefined) {
-      globalThis.clearInterval(previousInterval);
-    }
-
     // Reset the cadence without forcing an immediate refresh.
-    const intervalTimer = globalThis.setInterval(() => {
-      if (this.statusFor(instance) === 'idle') {
-        this.refreshSingle(name, 'automatic');
-      }
-    }, instance.config.interval);
+    const intervalTimer = this.replaceInterval(name, instance);
     this.transition(instance, { type: 'interval-replaced', intervalTimer });
 
     if (this.statusFor(instance) === 'idle') {
@@ -583,20 +574,8 @@ class RefreshManager {
       return;
     }
 
-    // Clear existing timer if any
-    const previousInterval = refresherIntervalTimer(instance.runtime);
-    if (previousInterval !== undefined) {
-      globalThis.clearInterval(previousInterval);
-    }
-
     const hasCompletedInitialRun = instance.lastRefreshTime !== null;
-
-    // Set up the interval
-    const intervalTimer = globalThis.setInterval(() => {
-      if (this.statusFor(instance) === 'idle') {
-        this.refreshSingle(name, 'automatic');
-      }
-    }, instance.config.interval);
+    const intervalTimer = this.replaceInterval(name, instance);
 
     // Update next refresh time
     instance.nextRefreshTime = new Date(Date.now() + instance.config.interval);
@@ -606,6 +585,21 @@ class RefreshManager {
     if (!hasCompletedInitialRun && instance.runtime.execution.status === 'idle') {
       void this.refreshSingle(name, 'automatic');
     }
+  }
+
+  private replaceInterval(
+    name: RefresherName,
+    instance: RefresherInstance
+  ): ReturnType<typeof globalThis.setInterval> {
+    const previousInterval = refresherIntervalTimer(instance.runtime);
+    if (previousInterval !== undefined) {
+      globalThis.clearInterval(previousInterval);
+    }
+    return globalThis.setInterval(() => {
+      if (this.statusFor(instance) === 'idle') {
+        this.refreshSingle(name, 'automatic');
+      }
+    }, instance.config.interval);
   }
 
   private abortRefresher(name: RefresherName): void {

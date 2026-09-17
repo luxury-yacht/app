@@ -346,9 +346,6 @@ class RefreshOrchestrator {
     scopes.forEach((scope) => {
       this.setScopedDomainEnabled(domain, scope, enabled);
     });
-    if (scopes.length === 0) {
-      this.coordinatorRuntime.markDomainKnown(domain);
-    }
     this.updateMetricsDemand();
   }
 

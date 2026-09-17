@@ -134,7 +134,6 @@ vi.mock('@ui/dockable', () => ({
   }) => React.createElement('div', { ref: panelRef }, children),
 }));
 
-const domainStateMap: Record<string, DomainSnapshotState<unknown>> = {};
 const scopedEntriesMap: Record<string, Array<[string, DomainSnapshotState<unknown>]>> = {};
 let refreshState: { pendingRequests: number } = { pendingRequests: 0 };
 
@@ -211,10 +210,6 @@ const getPermissionKeySafe = (
   return getPermissionKeyRef(resourceKind, verb, namespace, subresource);
 };
 
-const setDomainState = (domain: string, state: DomainSnapshotState<unknown>) => {
-  domainStateMap[domain] = state;
-};
-
 const setScopedEntries = (
   domain: string,
   entries: Array<[string, DomainSnapshotState<unknown>]>
@@ -223,9 +218,6 @@ const setScopedEntries = (
 };
 
 const resetDomainStates = () => {
-  Object.keys(domainStateMap).forEach((key) => {
-    delete domainStateMap[key];
-  });
   Object.keys(scopedEntriesMap).forEach((key) => {
     delete scopedEntriesMap[key];
   });
@@ -1359,16 +1351,6 @@ describe('DiagnosticsPanel component', () => {
       lastReason: 'set-selected-kubeconfigs',
       lastError: 'context canceled',
     });
-
-    const catalogState = createReadyState({
-      firstBatchLatencyMs: 900,
-    });
-    catalogState.stats = {
-      itemCount: 0,
-      buildDurationMs: 0,
-      timeToFirstRowMs: 450,
-    };
-    setDomainState('catalog', catalogState);
 
     scopedEntriesMap['container-logs'] = [
       [

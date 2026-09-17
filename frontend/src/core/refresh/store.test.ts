@@ -11,24 +11,21 @@ import {
   makeNamespaceConfigSnapshotPayload,
 } from './refreshContractTestBuilders';
 import {
-  getDomainState,
   getRefreshState,
   getScopedDomainEntries,
   getScopedDomainState,
   getScopedDomainStates,
   markPendingRequest,
   resetAllScopedDomainStates,
-  resetDomainState,
   resetPermissionDeniedScopedDomainStates,
   resetScopedDomainState,
-  setDomainState,
   setScopedDomainState,
   subscribe,
 } from './store';
 
 describe('refresh store helpers', () => {
   afterEach(() => {
-    resetDomainState('cluster-config');
+    resetAllScopedDomainStates('cluster-config');
     resetAllScopedDomainStates('namespace-config');
     const { pendingRequests } = getRefreshState();
     if (pendingRequests !== 0) {
@@ -40,7 +37,7 @@ describe('refresh store helpers', () => {
     const listener = vi.fn();
     const unsubscribe = subscribe(listener);
 
-    setDomainState('cluster-config', (previous) => ({
+    setScopedDomainState('cluster-config', 'test-cluster|', (previous) => ({
       ...previous,
       status: 'ready',
       data: makeClusterConfigSnapshotPayload({ clusterId: 'test-cluster' }),
@@ -49,7 +46,7 @@ describe('refresh store helpers', () => {
     expect(listener).toHaveBeenCalled();
     unsubscribe();
 
-    const state = getDomainState('cluster-config');
+    const state = getScopedDomainState('cluster-config', 'test-cluster|');
     expect(state.status).toBe('ready');
     expect(state.data).toMatchObject({ rows: [], clusterId: 'test-cluster' });
   });
@@ -57,9 +54,9 @@ describe('refresh store helpers', () => {
   it('skips notifications when domain state updater returns the existing reference', () => {
     const listener = vi.fn();
     const unsubscribe = subscribe(listener);
-    const before = getDomainState('cluster-config');
+    const before = getScopedDomainState('cluster-config', 'test-cluster|');
 
-    setDomainState('cluster-config', () => before);
+    setScopedDomainState('cluster-config', 'test-cluster|', () => before);
 
     expect(listener).not.toHaveBeenCalled();
     unsubscribe();
@@ -172,6 +169,42 @@ describe('refresh store helpers', () => {
 
     markPendingRequest(-5);
     expect(getRefreshState().pendingRequests).toBe(0);
+  });
+
+  it('publishes matching snapshot and entry views before notifying, while retaining other clusters', () => {
+    const domain = 'namespace-config';
+    const scope = 'cluster-a|namespace:prod';
+    const otherScope = 'cluster-b|namespace:prod';
+    setScopedDomainState(domain, otherScope, (previous) => ({
+      ...previous,
+      status: 'ready',
+      data: makeNamespaceConfigSnapshotPayload({ clusterId: 'cluster-b' }),
+    }));
+    setScopedDomainState('cluster-config', 'cluster-b|', (previous) => ({
+      ...previous,
+      status: 'ready',
+    }));
+    const otherCluster = getScopedDomainState(domain, otherScope);
+    const otherDomain = getScopedDomainStates('cluster-config');
+    const observedScopes: string[][] = [];
+    const unsubscribe = subscribe(() => {
+      const states = getScopedDomainStates(domain);
+      const entries = getScopedDomainEntries(domain);
+      expect(entries).toEqual(Object.entries(states));
+      expect(getScopedDomainEntries(domain)).toBe(entries);
+      expect(getScopedDomainStates('cluster-config')).toBe(otherDomain);
+      observedScopes.push(entries.map(([key]) => key));
+    });
+
+    try {
+      setScopedDomainState(domain, scope, (previous) => ({ ...previous, status: 'ready' }));
+      resetScopedDomainState(domain, scope);
+      expect(getScopedDomainState(domain, otherScope)).toBe(otherCluster);
+      resetAllScopedDomainStates(domain);
+      expect(observedScopes).toEqual([[otherScope, scope], [otherScope], []]);
+    } finally {
+      unsubscribe();
+    }
   });
 });
 

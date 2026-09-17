@@ -76,8 +76,8 @@ correctness-driven interruption and resume the rotation afterwards.
 | 1 | Shared tables | Shared table hooks/rendering; resource-grid adapters; snapshot/querypage consumers | S001 sizing/measurement inspected; remaining scope below |
 | 2 | Catalog and resource projections | Object catalog; per-kind resources; kind/model contracts; Browse adapters | S002 query/facet/snapshot batch; remaining scope recorded |
 | 3 | Cluster/workspace/auth | Backend cluster/workspace owners and auth helpers; Kubernetes/cluster workspace contexts | S003 selection/hydration batch; remaining scope recorded |
-| 4 | Refresh and data access | Refresh APIs, stores, snapshots, ingestion, streams, metrics and governor; frontend refresh/data brokers | Next: S004 |
-| 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | Inventoried |
+| 4 | Refresh and data access | Refresh APIs, stores, snapshots, ingestion, streams, metrics and governor; frontend refresh/data brokers | S004 state/demand/cadence/readiness batch; remaining scope recorded |
+| 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | Next: S005 |
 | 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | Inventoried |
 | 7 | Object map | Backend graph producers and relationships; frontend graph, layout and renderer | Inventoried |
 | 8 | Permissions and mutations | Capability policy, permission caches, object actions/YAML; frontend availability gates | Inventoried |
@@ -170,12 +170,98 @@ client-removal loops differ in auth shutdown, operation cleanup, metrics, and
 publication order; combining them behind flags would obscure those contracts.
 The established auth retry state machine and separate owner locks remain intact.
 
-## Next batch: S004 — refresh and data access
+## S004 — refresh state, demand, scheduling, and readiness
 
-Review refresh scheduling, state ingestion, and frontend data-access ownership.
-Start from the freshness contract and retained/background demand boundaries;
-collect related simplifications before editing, with focused incremental checks
-and one final repository gate.
+**Status: selected batch implemented; affected checks and final gate passed.** Baseline:
+`218e1760786444fe929f9ca6ddf4253a1256ec32`; `git status --short` was empty.
+Inventory refresh (`git diff --name-status 6d93acb7 HEAD`) found only the new
+production selection model already recorded in S003. S004 adds no source files;
+the inventory retains its baseline counts.
+
+Inspected: frontend retained store and diagnostics readers, scoped runtime and
+orchestrator fetch/lease/stream ownership, scheduler cadence and cancellation,
+data-access broker/readers/lifecycle hooks; backend ingest hub, asynchronous
+bundle sink, partition replacement, and registry ownership. Preserve separate
+query/snapshot demand, stream acknowledgement/source clocks, fetch generations,
+and the ordered asynchronous bundle queue.
+
+Implemented candidates, in ownership order:
+
+- Make the scoped store the sole snapshot representation. Repository searches
+  find the unscoped get/set/reset API only in its tests; diagnostics reads scoped
+  entries and pending requests. Remove the parallel domain initializer/API and
+  centralize map/entry publication so both views update before notification.
+  Retain the notification assertions against the scoped API.
+- Remove the runtime's write-only known-domain set and its orchestrator marker;
+  scoped records already own the active/known scope queries. Consolidate broker
+  lease-option construction so acquisition/release use one demand policy.
+- Consolidate scheduler interval replacement, retaining caller-specific state
+  transitions, cooldowns, and the initial-run policy.
+- Index ingest-owned resource keys directly to GVRs at hub construction. Both
+  readiness paths use that index instead of a set plus repeated registry scans.
+  Keep missing-store settlement distinct from typed data readiness.
+
+These are internal representations in existing owners. Producers remain snapshot
+fetches/streams, consumer leases, scheduler commands, and the kind registry;
+consumers remain retained-data hooks/diagnostics, scoped runtime, and refresh
+readiness gates. Publication precedes notification; acquisition precedes reads;
+ingest starts before the factory readiness wait. No dependency directions or wire
+types change. Characterization covers store view consistency and isolation,
+lease demand, cadence replacement, and ingest/factory readiness routing. Focused
+tests run during edits; affected coverage and one repository gate close the batch.
+
+Validation:
+
+- The baseline refresh/data-access selection passed 44 files / 607 tests.
+  Characterization cases passed against the original production code: 82
+  frontend tests and the ingest hub tests. Logs:
+  `/tmp/luxury-yacht-s004-characterization-frontend.log` and
+  `/tmp/luxury-yacht-s004-characterization-backend.log`.
+- Incremental store/diagnostics/orchestrator checks passed 169 tests; subsequent
+  runtime/broker/scheduler checks passed 228 tests; ingest hub checks passed.
+  Logs: `/tmp/luxury-yacht-s004-store.log`,
+  `/tmp/luxury-yacht-s004-runtime-broker-scheduler.log`, and
+  `/tmp/luxury-yacht-s004-hub.log`.
+- Final affected frontend coverage passed 44 files / 613 tests. Statement
+  coverage: broker 83.33%, scheduler 96.05%, orchestrator 83.12%, runtime 97.23%,
+  scoped store 91.13%. Overall affected coverage moved from 89.09% to 89.30%.
+  Store coverage moved from 88/96 statements (91.66%) to 72/79 (91.13%) after
+  removing the unscoped API; its notification assertions now exercise the scoped
+  API. The obsolete helper assertion became an unknown-resource readiness
+  assertion, and unused diagnostics fixture data was removed without deleting
+  test cases. Logs: `/tmp/luxury-yacht-s004-before-frontend.log` and
+  `/tmp/luxury-yacht-s004-frontend-coverage.log`.
+- Backend system, ingest, and adjacent snapshot suites passed with statement
+  coverage of 79.6%, 83.2%, and 82.6%. All three changed hub functions are 100%
+  covered; the system package baseline was 79.2%. Logs:
+  `/tmp/luxury-yacht-s004-backend-coverage.log` and
+  `/tmp/luxury-yacht-s004-backend-functions.txt`.
+- Typecheck passed. Changed Go functions score 1, 8, and 9 under gocognit
+  v1.2.1. Biome's threshold-12 scan reports no changed function; its one failure
+  is the untouched scheduler `statusFor` at 13, reproduced on HEAD before the
+  changes. Logs: `/tmp/luxury-yacht-s004-typecheck.log`,
+  `/tmp/luxury-yacht-s004-go-complexity.json`,
+  `/tmp/luxury-yacht-s004-ts-complexity.log`, and
+  `/tmp/luxury-yacht-s004-ts-complexity-before.log`.
+  `gh pr view code-simplification` found no PR; no remote Sonar result is claimed.
+- One final `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease` passed, including backend race tests, frontend checks and tests, Knip, and Trivy. Log: `/tmp/luxury-yacht-s004-prerelease.log`. Post-gate worktree inspection and SHA-256 comparison found no additional files or formatter changes (`/tmp/luxury-yacht-s004-post-gate.log`); `git diff --check` passed. Only this ledger is finalized afterwards, with a separate `qc:docs` check.
+
+The frontend checks exercise real store/runtime/scheduler owners with transport
+and native calls mocked. This batch changes internal representation and shared
+bookkeeping; it makes no native window or rendered-layout validation claim.
+
+Remaining domain scope: backend snapshot/service internals, stream delivery and
+recovery implementations, metrics/governor policies, permission revalidation,
+and the ingest manager/reflector/store internals. The inspected bundle queue and
+partition replacement retain their ordering and namespace-specific behavior;
+combining them would obscure distinct contracts.
+
+## Next batch: S005 — object details and panels
+
+Trace detail gateway dispatch, object-panel overview/YAML/action consumers,
+tab state, and panel ownership. Collect a cohesive batch from those contracts,
+preserve complete object identity and native ownership ordering, then use focused
+incremental checks and one final repository gate.
 
 S001 established an inefficient delivery size: a one-file production change paid
 for a full frontend coverage run and a full repository gate. Future batches
@@ -455,7 +541,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/internal/logsources` | 1 | 27 | — / — | Inventoried |
 | `backend/internal/parallel` | 1 | 71 | — / — | Inventoried |
 | `backend/internal/timeutil` | 2 | 107 | — / — | Inventoried |
-| `backend/kind/kindregistry` | 2 | 168 | — / — | Inventoried |
+| `backend/kind/kindregistry` | 2 | 168 | — / — | Partial: S004 ingest-owned descriptor contract |
 | `backend/kind/kindspec` | 1 | 176 | — / — | Inventoried |
 | `backend/kind/objectmap` | 1 | 54 | — / — | Inventoried |
 | `backend/kind/objectmapnode` | 2 | 134 | — / — | Inventoried |
@@ -473,7 +559,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/refresh/domainpermissions` | 2 | 754 | — / — | Inventoried |
 | `backend/refresh/eventstream` | 2 | 484 | — / — | Inventoried |
 | `backend/refresh/informer` | 4 | 1065 | 1 / — | Inventoried |
-| `backend/refresh/ingest` | 6 | 2779 | 3 / — | Inventoried |
+| `backend/refresh/ingest` | 6 | 2779 | 3 / — | Partial: S004 bundle queue and partition replacement |
 | `backend/refresh/metrics` | 4 | 999 | 2 / — | Inventoried |
 | `backend/refresh/permissions` | 2 | 457 | — / — | Inventoried |
 | `backend/refresh/querypage` | 10 | 3065 | 5 / — | Inventoried |
@@ -481,7 +567,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/refresh/ringbuffer` | 1 | 68 | — / — | Inventoried |
 | `backend/refresh/snapshot` | 77 | 20864 | 11 / — | Reviewing: S002 catalog snapshot; other domains remain |
 | `backend/refresh/streammux` | 3 | 844 | 2 / — | Inventoried |
-| `backend/refresh/system` | 9 | 2505 | 1 / — | Inventoried |
+| `backend/refresh/system` | 9 | 2505 | 1 / — | Partial: S004 ingest readiness hub |
 | `backend/refresh/telemetry` | 1 | 707 | — / — | Inventoried |
 | `backend/resourcecontract` | 1 | 200 | — / — | Inventoried |
 | `backend/resourcekind` | 2 | 113 | — / — | Inventoried |
@@ -555,7 +641,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/core/codemirror` | 3 | 640 | — / — | Inventoried |
 | `frontend/src/core/connection` | 1 | 237 | — / — | Inventoried |
 | `frontend/src/core/contexts` | 11 | 1875 | — / 1 | Inventoried |
-| `frontend/src/core/data-access` | 6 | 700 | — / — | Inventoried |
+| `frontend/src/core/data-access` | 6 | 700 | — / — | Partial: S004 broker, leases, lifecycle/readers |
 | `frontend/src/core/desktop-runtime` | 1 | 81 | — / — | Inventoried |
 | `frontend/src/core/events` | 3 | 317 | — / — | Inventoried |
 | `frontend/src/core/logging` | 1 | 112 | — / — | Inventoried |
@@ -563,7 +649,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/core/panel-windows` | 17 | 2600 | — / — | Inventoried |
 | `frontend/src/core/persistence` | 2 | 448 | — / — | Inventoried |
 | `frontend/src/core/read-diagnostics` | 2 | 312 | — / — | Inventoried |
-| `frontend/src/core/refresh` | 60 | 17381 | — / 9 | Inventoried |
+| `frontend/src/core/refresh` | 60 | 17381 | — / 9 | Partial: S004 store/runtime/scheduler and orchestrator seams |
 | `frontend/src/core/resource-metrics` | 6 | 726 | — / 2 | Inventoried |
 | `frontend/src/core/settings` | 4 | 1890 | — / — | Inventoried |
 | `frontend/src/core/telemetry` | 2 | 1175 | — / — | Inventoried |

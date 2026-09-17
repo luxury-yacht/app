@@ -100,7 +100,48 @@ func TestIngestInformerHubRoutesPerResourceDataReadiness(t *testing.T) {
 
 	hubWithoutIngest := newIngestInformerHub(factory, nil)
 	require.Equal(t, refresh.ResourceReadinessUnavailable, hubWithoutIngest.ResourceReadiness([]string{configMapsKey})[configMapsKey])
-	require.Empty(t, ingestGVRForKey("unknown.example.com/unknowns").Resource)
+	require.Equal(t, refresh.ResourceReadinessUnknown, hub.ResourceReadiness([]string{"unknown.example.com/unknowns"})["unknown.example.com/unknowns"])
+}
+
+func TestIngestInformerHubRoutesSettlementAndReadinessByResourceIdentity(t *testing.T) {
+	configMaps := schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
+	deployments := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
+	manager := &recordingHubManager{
+		stores: map[schema.GroupVersionResource]*ingest.ProjectingStore{
+			configMaps: {}, deployments: {},
+		},
+		synced: map[schema.GroupVersionResource]bool{configMaps: true},
+		readinessByGVR: map[schema.GroupVersionResource]refresh.ResourceReadiness{
+			configMaps:  refresh.ResourceReadinessReady,
+			deployments: refresh.ResourceReadinessPending,
+		},
+	}
+	factory := &reportingHubFactory{
+		settled:   map[string]bool{"core/namespaces": false},
+		readiness: map[string]refresh.ResourceReadiness{"core/namespaces": refresh.ResourceReadinessDegraded},
+	}
+	hub := newIngestInformerHub(factory, manager)
+	for _, tc := range []struct {
+		name    string
+		keys    []string
+		settled bool
+	}{
+		{name: "empty request", settled: true},
+		{name: "synced ingest resource", keys: []string{"core/configmaps"}, settled: true},
+		{name: "warming ingest resource", keys: []string{"core/configmaps", "apps/deployments"}},
+		{name: "skipped ingest resource", keys: []string{"core/secrets"}, settled: true},
+		{name: "mixed factory resource", keys: []string{"core/configmaps", "core/namespaces"}},
+		{name: "unknown resource", keys: []string{"example.com/widgets"}, settled: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.settled, hub.ResourcesSettled(tc.keys))
+		})
+	}
+	require.Equal(t, map[string]refresh.ResourceReadiness{
+		"core/configmaps":  refresh.ResourceReadinessReady,
+		"apps/deployments": refresh.ResourceReadinessPending,
+		"core/namespaces":  refresh.ResourceReadinessDegraded,
+	}, hub.ResourceReadiness([]string{"core/configmaps", "apps/deployments", "core/namespaces"}))
 }
 
 func newTestInformerFactory() *informer.Factory {
@@ -124,12 +165,20 @@ type blockingHubFactory struct {
 
 type reportingHubFactory struct {
 	readiness map[string]refresh.ResourceReadiness
+	settled   map[string]bool
 }
 
 func (f *reportingHubFactory) Start(context.Context) error    { return nil }
 func (f *reportingHubFactory) HasSynced(context.Context) bool { return true }
-func (f *reportingHubFactory) ResourcesSettled([]string) bool { return true }
-func (f *reportingHubFactory) Shutdown() error                { return nil }
+func (f *reportingHubFactory) ResourcesSettled(keys []string) bool {
+	for _, key := range keys {
+		if settled, known := f.settled[key]; known && !settled {
+			return false
+		}
+	}
+	return true
+}
+func (f *reportingHubFactory) Shutdown() error { return nil }
 func (f *reportingHubFactory) ResourceReadiness(keys []string) map[string]refresh.ResourceReadiness {
 	result := make(map[string]refresh.ResourceReadiness, len(keys))
 	for _, key := range keys {
@@ -155,20 +204,28 @@ func (f *blockingHubFactory) ResourcesSettled([]string) bool { return false }
 func (f *blockingHubFactory) Shutdown() error { return nil }
 
 type recordingHubManager struct {
-	started   chan struct{}
-	readiness refresh.ResourceReadiness
+	started        chan struct{}
+	readiness      refresh.ResourceReadiness
+	stores         map[schema.GroupVersionResource]*ingest.ProjectingStore
+	synced         map[schema.GroupVersionResource]bool
+	readinessByGVR map[schema.GroupVersionResource]refresh.ResourceReadiness
 }
 
 func (m *recordingHubManager) Start(context.Context) { close(m.started) }
 
 func (m *recordingHubManager) Stop() {}
 
-func (m *recordingHubManager) StoreFor(schema.GroupVersionResource) *ingest.ProjectingStore {
-	return nil
+func (m *recordingHubManager) StoreFor(gvr schema.GroupVersionResource) *ingest.ProjectingStore {
+	return m.stores[gvr]
 }
 
-func (m *recordingHubManager) HasSyncedFor(schema.GroupVersionResource) bool { return false }
+func (m *recordingHubManager) HasSyncedFor(gvr schema.GroupVersionResource) bool {
+	return m.synced[gvr]
+}
 
-func (m *recordingHubManager) ResourceReadinessFor(schema.GroupVersionResource) refresh.ResourceReadiness {
+func (m *recordingHubManager) ResourceReadinessFor(gvr schema.GroupVersionResource) refresh.ResourceReadiness {
+	if readiness, ok := m.readinessByGVR[gvr]; ok {
+		return readiness
+	}
 	return m.readiness
 }

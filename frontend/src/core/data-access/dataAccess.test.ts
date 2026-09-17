@@ -40,7 +40,9 @@ vi.mock('@/core/settings/appPreferences', () => ({
 }));
 
 import {
+  acquireRefreshDomainLease,
   isDataAccessBlocked,
+  releaseRefreshDomainLease,
   requestContextRefresh,
   requestData,
   requestRefreshDomain,
@@ -56,6 +58,43 @@ describe('dataAccess', () => {
     hoisted.triggerManualRefreshForContext.mockResolvedValue(undefined);
     hoisted.getAutoRefreshEnabled.mockReturnValue(true);
   });
+
+  it.each([
+    { demand: 'snapshot' as const, preserveState: false, expected: undefined },
+    { demand: 'snapshot' as const, preserveState: true, expected: { preserveState: true } },
+    {
+      demand: 'query' as const,
+      preserveState: false,
+      expected: { preserveState: false, demand: 'query' },
+    },
+    {
+      demand: 'query' as const,
+      preserveState: true,
+      expected: { preserveState: true, demand: 'query' },
+    },
+  ])(
+    'balances $demand demand with preserveState=$preserveState across lease acquisition and release',
+    ({ demand, preserveState, expected }) => {
+      const lease = {
+        domain: 'pods' as const,
+        scope: 'cluster-a|namespace:prod',
+        demand,
+        preserveState,
+      };
+      acquireRefreshDomainLease(lease);
+      releaseRefreshDomainLease(lease);
+      expect(hoisted.acquireScopedDomainLease).toHaveBeenCalledWith(
+        lease.domain,
+        lease.scope,
+        expected
+      );
+      expect(hoisted.releaseScopedDomainLease).toHaveBeenCalledWith(
+        lease.domain,
+        lease.scope,
+        expected
+      );
+    }
+  );
 
   it('blocks startup requests when auto-refresh is disabled', async () => {
     hoisted.getAutoRefreshEnabled.mockReturnValue(false);
