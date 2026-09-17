@@ -516,6 +516,125 @@ describe('useGridTableColumnWidths', () => {
     wrapper.remove();
   });
 
+  const setupQueuedMeasurement = async (withVisibleCells = true) => {
+    const tableRef = { current: null as HTMLElement | null };
+    createWrapper(tableRef);
+    const table = requireValue(tableRef.current, 'expected measurement table');
+    const columns = [
+      createColumn('name', { autoWidth: true }),
+      createColumn('kind', { autoWidth: true }),
+    ];
+    const showCells = () => {
+      table.innerHTML = columns
+        .map(
+          ({ key }) =>
+            `<div class="grid-cell" data-column="${key}"><span class="grid-cell-content">${key}</span></div>`
+        )
+        .join('');
+    };
+    if (withVisibleCells) {
+      showCells();
+    }
+    const measureColumnWidth = vi.fn((_column: GridColumnDefinition<Row>) => 100);
+    const onColumnWidthsChange = vi.fn();
+    const { getResult } = await renderHook({
+      columns,
+      renderedColumns: columns,
+      tableRef,
+      tableData: [{ id: '1', name: 'alpha' }],
+      controlledColumnWidths: null,
+      externalColumnWidths: null,
+      enableColumnResizing: true,
+      onColumnWidthsChange,
+      useShortNames: false,
+      measureColumnWidth,
+    });
+    return {
+      read: () => requireValue(getResult(), 'expected column width state'),
+      measureColumnWidth,
+      onColumnWidthsChange,
+      showCells,
+    };
+  };
+
+  it('retries unrendered cells and skips unchanged visible content', async () => {
+    const { read, measureColumnWidth, showCells } = await setupQueuedMeasurement(false);
+    measureColumnWidth.mockClear().mockReturnValue(220);
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(measureColumnWidth).not.toHaveBeenCalled();
+    expect(read().columnWidths.name).toBe(100);
+
+    showCells();
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(read().columnWidths.name).toBe(220);
+
+    measureColumnWidth.mockClear();
+    await act(async () => {
+      read().markColumnsDirty(['name']);
+      vi.advanceTimersByTime(300);
+    });
+    expect(measureColumnWidth).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { type: 'autoSize' as const, expectedKindWidth: 100 },
+    { type: 'reset' as const, expectedKindWidth: 200 },
+  ])(
+    '$type permits shrinking requested columns with the correct remeasurement scope',
+    async ({ type, expectedKindWidth }) => {
+      const { read, measureColumnWidth } = await setupQueuedMeasurement();
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+      measureColumnWidth.mockImplementation((column) => (column.key === 'name' ? 80 : 200));
+
+      await act(async () => {
+        read().handleManualResizeEvent({ type, columns: ['name'] });
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+
+      expect(read().columnWidths).toEqual({ name: 80, kind: expectedKindWidth });
+    }
+  );
+
+  it('cancels queued measurement during a drag and resumes for automatic columns after drag end', async () => {
+    const { read, measureColumnWidth, onColumnWidthsChange } = await setupQueuedMeasurement();
+    measureColumnWidth.mockClear().mockReturnValue(250);
+    onColumnWidthsChange.mockClear();
+
+    await act(async () => {
+      read().handleManualResizeEvent({ type: 'dragStart', columns: ['name'] });
+      read().handleManualResizeEvent({ type: 'drag', columns: ['name'] });
+      read().setColumnWidths((previous) => ({ ...previous, name: 180 }));
+      read().manuallyResizedColumnsRef.current.add('name');
+      read().markColumnsDirty(['name', 'kind']);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(measureColumnWidth).not.toHaveBeenCalled();
+    expect(onColumnWidthsChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      read().handleManualResizeEvent({ type: 'dragEnd', columns: ['name'] });
+      read().markColumnsDirty(['name', 'kind']);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(read().columnWidths).toEqual({ name: 180, kind: 250 });
+    expect(onColumnWidthsChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ name: expect.objectContaining({ width: 180, source: 'user' }) })
+    );
+  });
+
   it('remeasures automatic widths in both directions when the page data changes', async () => {
     const tableRef = { current: null as HTMLElement | null };
     const wrapper = createWrapper(tableRef);

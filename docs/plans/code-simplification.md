@@ -65,15 +65,17 @@ companions have been audited from the numeric inventory.
 ## Rotation through review domains
 
 This is an investigation order, not a list of approved rewrites. Each visit
-selects one cohesive responsibility and records the remaining domain scope.
+reviews a substantial subsystem scope and groups its related simplifications
+into one delivery batch. Incremental edits get focused checks; the full
+repository gate runs at the batch boundary. Record the remaining domain scope.
 After domain 14, restart with unreviewed responsibilities. Record any
 correctness-driven interruption and resume the rotation afterwards.
 
 | Order | Domain | Initial scope and required adjacent paths | Status |
 | --- | --- | --- | --- |
-| 1 | Shared tables | Shared table hooks/rendering; resource-grid adapters; snapshot/querypage consumers | Selected: sizing/measurement |
-| 2 | Catalog and resource projections | Object catalog; per-kind resources; kind/model contracts; Browse adapters | Inventoried |
-| 3 | Cluster/workspace/auth | Backend cluster/workspace owners and auth helpers; Kubernetes/cluster workspace contexts | Inventoried |
+| 1 | Shared tables | Shared table hooks/rendering; resource-grid adapters; snapshot/querypage consumers | S001 sizing/measurement inspected; remaining scope below |
+| 2 | Catalog and resource projections | Object catalog; per-kind resources; kind/model contracts; Browse adapters | S002 query/facet/snapshot batch; remaining scope recorded |
+| 3 | Cluster/workspace/auth | Backend cluster/workspace owners and auth helpers; Kubernetes/cluster workspace contexts | Next: S003 |
 | 4 | Refresh and data access | Refresh APIs, stores, snapshots, ingestion, streams, metrics and governor; frontend refresh/data brokers | Inventoried |
 | 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | Inventoried |
 | 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | Inventoried |
@@ -91,37 +93,202 @@ package. Assign each visited unit a primary domain in its pass record. Cross-lay
 consumers may be inspected in several passes; that does not automatically close
 all responsibilities in those consumers. Split oversized buckets before review.
 
-## Next pass: S001 — table sizing and measurement
+## Next batch: S003 — cluster/workspace/auth
 
-**Status: selected for investigation; no implementation finding confirmed.**
+Review cluster/workspace/auth owners and their frontend contexts as a subsystem.
+Inventory related candidates before editing, then implement the worthwhile
+behavior-preserving improvements together. Preserve the settled ownership and
+lifecycle decisions; do not stop after the first function cleanup. Focused tests
+accompany incremental edits, with one final repository gate for the batch.
 
-Selection evidence: the table bucket has 79 authored files and 25 Biome signals;
-the [GridTable contract](../frontend/gridtable.md) makes it the shared table
-owner. [Sizing](../frontend/gridtable-sizing.md) documents page replacement,
-virtualization, zoom conversion, inert measurement, and persisted width ownership.
-These obligations make an owner/consumer trace more useful than isolated edits
-in whichever function has the largest score.
+S001 established an inefficient delivery size: a one-file production change paid
+for a full frontend coverage run and a full repository gate. Future batches
+follow the revised workflow's validation levels; S001 is not the throughput model.
 
-- [ ] Split the table bucket into sizing/measurement, columns/persistence,
-  filtering/pagination, keyboard/selection, and rendering/virtualization.
-- [ ] Trace `useGridTableColumnWidths`, its helpers, `useDirtyQueue`,
-  `useGridTableColumnMeasurer`, resize control, the controller, and persistence.
-  Inventory the actual callers and tests before judging duplication.
-- [ ] Record which state each layer owns and why. Check the
-  [settled findings](../../.agents/skills/app-review/references/settled-findings.md):
-  table configuration and persistence are already consolidated; do not propose
-  another general schema or wrapper on the basis of this scan.
-- [ ] Identify a concrete simplification with before/after responsibilities, or
-  record why the current decomposition should remain. Compare total complexity
-  of the solution, including helper indirection, rather than a single score.
-- [ ] For an accepted candidate, confirm characterization of page replacement,
-  user-width persistence, virtualization invalidation, pending measurement,
-  zoom conversion, and cancellation/cleanup as applicable.
-- [ ] Refactor incrementally and run the affected validation from the
-  [completion contract](../workflows/completion.md), including rendered/native
-  interaction evidence when required by the changed contract.
-- [ ] Record remaining table scope and advance to domain 2. Do not mark all 79
-  files reviewed because one sizing function changed.
+## S002 — catalog query, facets, and snapshot assembly
+
+**Status: selected batch implemented; affected checks and final gate passed.**
+Baseline remains `3741bafe3443346cbf8190fc2cad7327ea4f824d`; S001's uncommitted
+changes were preserved. The batch removes three related sources of repetition:
+
+- `backend/objectcatalog/query_engine.go`: two facet-filter representations,
+  constructors, dependency matchers, and collection loops become one owner.
+  Maintained-store and snapshot selectors retain their different namespace
+  universes through an explicit predicate and retain cached/approximate behavior.
+  Named facet sets replace positional map tuples with different return orders.
+- `backend/refresh/snapshot/catalog.go` and `catalog_refresh_adapter.go`: parse
+  validated Browse scopes directly into `objectcatalog.QueryOptions`, removing
+  the duplicate 16-field `browseQueryOptions` and field-copy method. Same-cluster
+  anchor validation still precedes the service-local anchor conversion; query
+  signature, cursor, structural scope, and readiness ordering stay in their
+  existing owners. Snapshot pagination fallback is expressed once.
+- Four snapshot slice-copy implementations become `cloneCatalogValues`, retaining
+  detached slice storage and non-null empty arrays. Tests cover input mutation
+  after snapshot assembly and the JSON empty-items contract.
+
+Inspected source scope: catalog query normalization/execution/facets, index and
+query-store interfaces, summary construction and metadata, registry-backed RBAC
+summary producers, snapshot parsing/assembly/adapter, and their tests. Consumer
+seams checked: Browse baseline/page reconciliation and filter options, command
+palette catalog results, ObjectDiff namespace options, catalog-diff snapshot
+merge, and catalog diagnostics. The stateful catalog collect/watch/sync lifecycle
+and other per-kind projections remain unreviewed. Existing registry dispatch and
+separate maintained/snapshot result policies remain warranted; no new catalog
+engine, kind registry, or cross-owner state was introduced.
+
+The producer chain remains validated scope → per-cluster catalog query → snapshot
+assembly → existing refresh consumers. The changes introduce no package import
+direction or runtime dependency. Five facet characterization scenarios and two
+snapshot ownership/JSON scenarios passed before refactoring. Existing anchor,
+family, scope, cursor, and query-oracle assertions are retained; test call sites
+now use the single options type.
+
+Validation:
+
+- Focused query and catalog snapshot tests passed before and after their edits;
+  no unrelated full-suite baseline was run.
+- Both affected package suites passed with coverage: `backend/objectcatalog`
+  86.3%, `backend/refresh/snapshot` 82.6%. Directly changed functions range from
+  81.5% to 100%; the shared facet path and copy helper are 100%. Evidence:
+  `/tmp/luxury-yacht-s002-coverage.log` and
+  `/tmp/luxury-yacht-s002-function-coverage.txt`.
+- Frontend consumer selection passed 15 files / 166 tests (Browse, command
+  palette, ObjectDiff, snapshot merge, catalog diagnostics). These use the test
+  environment and do not establish native layout behavior; no UI interaction or
+  appearance behavior was changed.
+- All changed Go functions/new helpers are at most 12 under pinned gocognit
+  v1.2.1; the generic copy helper is 0. This is local complexity evidence, not a
+  claim about remote Sonar analysis.
+- Existing 10,000-row query microbenchmarks ran twice at 10 iterations using a Go overlay for the original implementation. Empty-search samples were 8.96–9.27 ms before / 8.72–8.78 ms after; namespace-filter samples were 10.73–11.02 ms before / 10.91–10.97 ms after, with approximately the same allocations. This limited local sample is not a system-performance result. Logs: `/tmp/luxury-yacht-s002-benchmark-before.log` and `/tmp/luxury-yacht-s002-benchmark-after.log`.
+- One final `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease` passed for the accumulated batch, including backend race tests, frontend checks and 4,765 tests, Knip, and Trivy. Log: `/tmp/luxury-yacht-s002-prerelease.log`. Post-gate `git status --short` and `git diff --stat` showed the expected S002 files plus preserved S001 changes, with no additional formatter changes; `git diff --check` passed. Only this validation record was finalized after the gate; `qc:docs` was rerun for the documentation update.
+
+Remaining domain scope includes lifecycle/ingest, descriptor discovery and lookup,
+action-fact enrichment, and other kind projections. This closes the selected
+query/facet/snapshot responsibility only, not the whole catalog domain. S001-C2
+remains a separately deferred behavior issue.
+
+## S001 — table sizing and measurement
+
+Baseline: `3741bafe3443346cbf8190fc2cad7327ea4f824d`. A read-only
+`git diff --name-only 6d93acb7 HEAD` before editing listed only the four workflow,
+skill, and ledger documents; the authored-source inventory still had 79 table
+files. Source counts below retain the original baseline rather than mixing old
+and new physical line counts.
+
+### Review partition and inspected scope
+
+| Responsibility | Baseline files | Baseline lines | Biome signals | Review status |
+| --- | ---: | ---: | ---: | --- |
+| Sizing/measurement | 8 | 2059 | 7 | Inspected; dispositions below |
+| Columns/persistence | 18 | 3281 | 5 | Inventoried; width persistence seam inspected only |
+| Filtering/pagination | 13 | 2613 | 2 | Inventoried |
+| Keyboard/selection/menus | 15 | 2546 | 4 | Inventoried |
+| Rendering/virtualization/composition | 25 | 4084 | 7 | Inventoried; sizing invalidation seam inspected only |
+
+These subgroups partition the original 79-file bucket; they are not five
+completed subsystem reviews. Assign files in order: the eight sizing files
+below; filenames containing `Filter`, `Pagination`, `pageSize`, or
+`MetadataSearch`; filenames containing `Keyboard`, `Focus`, `Hover`,
+`ContextMenu`, `Shortcuts`, `RowControls`, `Interaction`, `FrameSampler`,
+`HeaderActions`, or `Keys`; the persistence directory and filenames containing
+`Column`, `column`, `Metadata`, or `restartCount` except `Virtualization`;
+finally the remaining rendering/composition files. Revise these search buckets
+when a later owner trace establishes a better boundary.
+
+All eight sizing sources were read under
+`frontend/src/shared/components/tables/hooks/`:
+`gridTableColumnWidthMath.ts`, `useColumnResizeController.ts`,
+`useGridTableAutoWidthMeasurementQueue.ts`, `useGridTableColumnLayout.ts`,
+`useGridTableColumnMeasurer.ts`, `useGridTableColumnWidths.helpers.ts`,
+`useGridTableColumnWidths.ts`, and `useGridTableExternalWidths.ts`.
+
+Additional inspected seams: the controller's column-layout call and virtual-row
+invalidation effect; `useGridTableBinding.ts` width-prop forwarding;
+`useGridTablePersistence.ts` width setter and save effect; the relevant sizing,
+measuring, resize, queue, and GridTable interaction tests. Reading these seams
+does not close the containing files' other responsibilities.
+
+### Contract and decisions
+
+The layout hook passes the page-backed measurer and controlled widths to the
+width owner. That owner creates the dirty queue; the resize controller produces
+manual-resize events, while the table controller marks visible automatic
+columns dirty after virtual-row bounds change. Width changes flow through the
+notifier to the persistence-backed callback. The sizing path consumes column
+keys, not Kubernetes object references; no cluster/object boundary was changed.
+
+Preserved ordering: clear pending measurements before entering drag; clear
+per-column state before leaving drag; allow the queue to admit work only outside
+drag; clear stale signatures before auto-size/reset; reset additionally queues
+all automatic columns. Missing rendered cells retry after the existing throttle,
+page replacement retains its independent full-page measurement, and unmount
+retains timer cleanup. Imports and dependency directions were not changed; no
+new helper or runtime dependency was introduced.
+
+- **S001-C1 — queue event/admission duplication: validated.**
+  `useGridTableAutoWidthMeasurementQueue.ts` had repeated drag/drag-end cleanup
+  and auto-size/reset setup. Grouped their shared switch cases while retaining
+  distinct phase changes and reset scope. Combined the admission guards and
+  removed the duplicate drag guard from the caller. Removed `pendingRetryRef`:
+  a whole-file search found its declaration and assignments, with no reads;
+  the retry set and timer continue to own pending work. Production diff is one
+  file; the consolidation introduces no additional helpers.
+- **S001-C2 — delayed width notification: deferred behavior issue.** A new
+  characterization probe on the pre-refactor code measured delayed cells at 220
+  after initialization at 100. The width record read 220, but the expected
+  `onColumnWidthsChange` callback did not run. Temporary instrumentation showed
+  notifier effects only for 150 and 100. This is hook-level evidence, not a claim
+  about the rendered/native app. Suspected cause: the initial width plan returns
+  the same object for `widths` and `naturalWidths`, while the dirty flush mutates
+  natural widths after scheduling a state update. Investigate state aliasing
+  under a separately scoped behavior fix; preserve current behavior here.
+  Reproduce by adding a callback assertion after the 220-width assertion in
+  `useGridTableColumnWidths.test.tsx`'s “retries unrendered cells” case, using the
+  existing setup callback, cleared after initialization. The new passing test
+  deliberately asserts retry/measurement/deduplication only; it does not establish
+  notification correctness. Diagnostic log:
+  `/tmp/luxury-yacht-s001-notifier-diagnostic.log` (temporary evidence).
+- **S001-C3 — merge page measurement with the dirty queue: not warranted.**
+  `gridtable-sizing.md` and `useGridTableColumnWidths.helpers.ts` require page
+  replacement to shrink widths even without rendered cells; the dirty queue
+  deliberately waits for visible signatures and normally only grows widths.
+  Combining them would obscure two different invalidation contracts.
+- **S001-C4 — general table configuration/width-state replacement: not warranted
+  by this pass.** Existing layout, persistence, resize, and inert-measurement
+  owners already separate these responsibilities. The settled table-schema
+  finding remains applicable. The unchanged per-column dirty-flush callback
+  still has a local Biome score of 23; do not claim the whole file is below 12.
+  Reconsider that callback while investigating C2 rather than layering new
+  helpers over an unresolved state-ownership question.
+
+### Validation evidence
+
+- Before refactoring, all 60 table test files / 436 tests passed
+  (`mise exec -- npm run test --prefix frontend -- src/shared/components/tables`).
+- Four new characterization cases passed against the original implementation:
+  delayed-cell retry and signature deduplication; auto-size shrink scope;
+  reset remeasurement scope; drag cancellation, notification suspension, and
+  resumed automatic measurement. They use the real width-state hook, fake
+  timers, synthetic DOM cells, and a stubbed measurer; they do not prove browser
+  layout or native window behavior. Existing assertions were not changed.
+- After refactoring, the same table command passed 60 files / 440 tests.
+- `mise exec -- wails3 task test:frontend-coverage` passed 512 files / 4765 tests.
+  Statement coverage: queue 92.76%, width owner 92.24%, width helpers 95.3%.
+  Reports moved to `/tmp/luxury-yacht-s001-coverage` before repository lint.
+- Local Biome checks: changed queue admission 18 → 10; resize dispatcher 13 → 11;
+  changed flush function 12; shared case callbacks 4 each; caller and outer hook
+  at most 1. All changed functions are at most 12. The unchanged inner flush
+  callback remains 23. These are local signals, not remote Sonar closure.
+- `mise exec -- npm run typecheck --prefix frontend` passed.
+  `mise exec -- npm run build:dev --prefix frontend` passed with the Vite warning
+  about chunks larger than 500 kB; no rendered/native interaction claim is made.
+  The production diff changes queue bookkeeping, not sizing geometry, gesture
+  coordinates, markup, or native window calls.
+- `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease` passed, including race tests, frontend checks/tests, Knip, and Trivy. Log: `/tmp/luxury-yacht-s001-prerelease.log`. The final worktree contains only this ledger, the queue source, and its added width-hook characterization cases; no formatter changes outside that scope were present. `git diff --check` passed. After this evidence update, `qc:docs` was rerun.
+
+Remaining table scope: C2, the dirty-flush callback, and the other four review
+subgroups. The eight-source review and validated refactor must not be reported
+as completion of the entire table bucket or resolution of the deferred bug.
 
 ## Pass record format
 
@@ -221,7 +388,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/kind/streamspec` | 1 | 64 | — / — | Inventoried |
 | `backend/nodemaintenance` | 1 | 584 | — / — | Inventoried |
 | `backend/objectaction` | 1 | 150 | — / — | Inventoried |
-| `backend/objectcatalog` | 25 | 5995 | 8 / — | Inventoried |
+| `backend/objectcatalog` | 25 | 5995 | 8 / — | Reviewing: S002 query/facets; other responsibilities remain |
 | `backend/objectyaml` | 1 | 130 | — / — | Inventoried |
 | `backend/refresh` | 6 | 804 | 2 / — | Inventoried |
 | `backend/refresh/api` | 1 | 304 | — / — | Inventoried |
@@ -236,7 +403,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/refresh/querypage` | 10 | 3065 | 5 / — | Inventoried |
 | `backend/refresh/resourcestream` | 20 | 3531 | 2 / — | Inventoried |
 | `backend/refresh/ringbuffer` | 1 | 68 | — / — | Inventoried |
-| `backend/refresh/snapshot` | 77 | 20864 | 11 / — | Inventoried |
+| `backend/refresh/snapshot` | 77 | 20864 | 11 / — | Reviewing: S002 catalog snapshot; other domains remain |
 | `backend/refresh/streammux` | 3 | 844 | 2 / — | Inventoried |
 | `backend/refresh/system` | 9 | 2505 | 1 / — | Inventoried |
 | `backend/refresh/telemetry` | 1 | 707 | — / — | Inventoried |
@@ -348,7 +515,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/shared/components/kubernetes` | 5 | 413 | — / — | Inventoried |
 | `frontend/src/shared/components/modals` | 14 | 2617 | — / — | Inventoried |
 | `frontend/src/shared/components/status` | 2 | 233 | — / — | Inventoried |
-| `frontend/src/shared/components/tables` | 79 | 14583 | — / 25 | Inventoried |
+| `frontend/src/shared/components/tables` | 79 | 14583 | — / 25 | Reviewing: S001 sizing 8 files inspected; 71 remain; C2 deferred |
 | `frontend/src/shared/components/tabs` | 9 | 1470 | — / — | Inventoried |
 | `frontend/src/shared/components/yaml` | 3 | 807 | — / 2 | Inventoried |
 | `frontend/src/shared/constants` | 2 | 139 | — / — | Inventoried |

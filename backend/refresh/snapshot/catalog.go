@@ -94,25 +94,6 @@ type catalogBuilder struct {
 	logger          containerlogsstream.Logger
 }
 
-type browseQueryOptions struct {
-	ResourceFamily  string
-	Scope           objectcatalog.Scope
-	ScopeNamespaces []string
-	Kinds           []string
-	Namespaces      []string
-	Groups          []string
-	ResourceScopes  []objectcatalog.Scope
-	Search          string
-	SortField       string
-	SortDir         string
-	Limit           int
-	Continue        string
-	CustomOnly      bool
-	MatchNone       bool
-	Anchor          *ResourceQueryAnchor
-	StartRank       *int
-}
-
 // RegisterCatalogDomain registers the catalog browse domain with the registry.
 func RegisterCatalogDomain(reg *domain.Registry, cfg CatalogConfig) error {
 	return registerCatalogDomain(reg, cfg, catalogDomain)
@@ -179,23 +160,20 @@ func newCatalogCapabilities() ResourceQueryCapabilities {
 
 func buildCatalogSnapshot(
 	result objectcatalog.QueryResult,
-	opts browseQueryOptions,
+	opts objectcatalog.QueryOptions,
 	health objectcatalog.HealthStatus,
 	cachesReady bool,
 	forceFinal bool,
 ) (CatalogSnapshot, bool) {
 	effectiveLimit := opts.Limit
 	if effectiveLimit <= 0 {
-		effectiveLimit = len(result.Items)
-	}
-	if effectiveLimit <= 0 {
-		effectiveLimit = 1
+		effectiveLimit = max(1, len(result.Items))
 	}
 	hasNext := result.ContinueToken != ""
 	hasPrevious := result.PreviousToken != ""
 	batchIndex := keysetCatalogBatchIndex(hasPrevious)
 	totalBatches := 0
-	if result.TotalIsExact && !hasPrevious && result.TotalItems > 0 && effectiveLimit > 0 {
+	if result.TotalIsExact && !hasPrevious && result.TotalItems > 0 {
 		totalBatches = (result.TotalItems + effectiveLimit - 1) / effectiveLimit
 	}
 	isFinal := !hasNext || result.TotalItems == 0
@@ -214,7 +192,7 @@ func buildCatalogSnapshot(
 	if forceFinal {
 		isFinal = true
 		if totalBatches == 0 && !hasPrevious {
-			totalBatches = max(1, totalBatches)
+			totalBatches = 1
 		}
 	} else if !cachesReady {
 		isFinal = false
@@ -222,17 +200,13 @@ func buildCatalogSnapshot(
 
 	truncated := result.ContinueToken != "" || (result.TotalItems > 0 && len(result.Items) < result.TotalItems)
 
-	// Completeness mirrors the typed providers' degraded-based meaning, NOT
-	// "fits in one page": a healthy catalog that simply has more pages is
-	// `complete` (pagination is the recourse), and only a degraded catalog —
-	// where streaming/pagination is disabled, so what you see is all you get —
-	// is `partial`. This keeps the frontend controller's partial/degraded banner
-	// off normal paginated browsing.
+	// Completeness describes catalog health independently of pagination: a
+	// healthy catalog remains complete even when more pages are available.
 	payload := CatalogSnapshot{
 		Provider:        ResourceQueryProviderCatalog,
 		Completeness:    resourceQueryCompleteness(!degraded),
 		Capabilities:    newCatalogCapabilities(),
-		Items:           cloneSummaries(result.Items),
+		Items:           cloneCatalogValues(result.Items),
 		Continue:        result.ContinueToken,
 		Previous:        result.PreviousToken,
 		Self:            result.SelfToken,
@@ -243,10 +217,10 @@ func buildCatalogSnapshot(
 		UnfilteredTotal: result.UnfilteredTotal,
 		TotalIsExact:    result.TotalIsExact,
 		ResourceCount:   result.ResourceCount,
-		Kinds:           cloneKindInfos(result.Kinds),
-		Namespaces:      cloneStrings(result.Namespaces),
-		Groups:          cloneStrings(result.Groups),
-		ResourceScopes:  cloneResourceScopes(result.ResourceScopes),
+		Kinds:           cloneCatalogValues(result.Kinds),
+		Namespaces:      cloneCatalogValues(result.Namespaces),
+		Groups:          cloneCatalogValues(result.Groups),
+		ResourceScopes:  cloneCatalogValues(result.ResourceScopes),
 		FacetsExact:     result.FacetsExact,
 		Issues:          issues,
 		HasNext:         hasNext,
@@ -349,7 +323,7 @@ func buildCatalogNamespaceGroups(
 		if namespaces := svc.Namespaces(); len(namespaces) > 0 {
 			groups = []CatalogNamespaceGroup{{
 				ClusterMeta: meta,
-				Namespaces:  cloneStrings(namespaces),
+				Namespaces:  cloneCatalogValues(namespaces),
 			}}
 		}
 	}
@@ -362,7 +336,7 @@ func buildCatalogNamespaceGroups(
 	if len(selected) > 0 {
 		for i := range groups {
 			if len(groups[i].SelectedNamespaces) == 0 {
-				groups[i].SelectedNamespaces = cloneStrings(selected)
+				groups[i].SelectedNamespaces = cloneCatalogValues(selected)
 			}
 		}
 	}
@@ -376,20 +350,20 @@ func max(a, b int) int {
 	return b
 }
 
-func parseBrowseScope(scope string) (browseQueryOptions, error) {
+func parseBrowseScope(scope string) (objectcatalog.QueryOptions, error) {
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
 	if trimmed == "" {
-		return browseQueryOptions{}, nil
+		return objectcatalog.QueryOptions{}, nil
 	}
 	values, err := url.ParseQuery(trimmed)
 	if err != nil {
-		return browseQueryOptions{}, err
+		return objectcatalog.QueryOptions{}, err
 	}
 	// The scope's cluster id is the request cluster: the anchor's same-cluster
 	// rule must be checked against it, not a placeholder.
 	request := resourceQueryRequestFromValues(clusterID, "browse", values, ResourceQueryRequest{})
 	if err := request.validate(); err != nil {
-		return browseQueryOptions{}, err
+		return objectcatalog.QueryOptions{}, err
 	}
 	var resourceScope objectcatalog.Scope
 	switch strings.ToLower(strings.TrimSpace(values.Get("resourceScope"))) {
@@ -399,7 +373,7 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 	case "namespace":
 		resourceScope = objectcatalog.ScopeNamespace
 	default:
-		return browseQueryOptions{}, fmt.Errorf("invalid catalog resource scope %q", values.Get("resourceScope"))
+		return objectcatalog.QueryOptions{}, fmt.Errorf("invalid catalog resource scope %q", values.Get("resourceScope"))
 	}
 	resourceScopeFilters := make([]objectcatalog.Scope, 0, len(values["resourceScopeFilter"]))
 	for _, raw := range values["resourceScopeFilter"] {
@@ -409,14 +383,14 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 		case "namespace":
 			resourceScopeFilters = append(resourceScopeFilters, objectcatalog.ScopeNamespace)
 		default:
-			return browseQueryOptions{}, fmt.Errorf("invalid catalog resource scope filter %q", raw)
+			return objectcatalog.QueryOptions{}, fmt.Errorf("invalid catalog resource scope filter %q", raw)
 		}
 	}
 	family := values.Get("resourceFamily")
 	if family != "" && !resourcekind.IsResourceFamily(family) {
-		return browseQueryOptions{}, fmt.Errorf("invalid catalog resource family %q", family)
+		return objectcatalog.QueryOptions{}, fmt.Errorf("invalid catalog resource family %q", family)
 	}
-	opts := browseQueryOptions{
+	opts := objectcatalog.QueryOptions{
 		ResourceFamily:  family,
 		Scope:           resourceScope,
 		ScopeNamespaces: values["scopeNamespace"],
@@ -426,82 +400,27 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 		ResourceScopes:  resourceScopeFilters,
 		Search:          request.Search,
 		SortField:       request.SortField,
-		SortDir:         request.SortDirection,
+		SortDirection:   request.SortDirection,
 		Continue:        request.Continue,
 		Limit:           request.Limit,
 		CustomOnly:      values.Get("customOnly") == "true",
 		MatchNone:       request.MatchNone,
-		Anchor:          request.Anchor,
 		StartRank:       request.StartRank,
+	}
+	if anchor := request.Anchor; anchor != nil {
+		// The request was validated against the scope's cluster above; the catalog
+		// service owns that cluster, so its internal anchor contains object identity.
+		opts.Anchor = &objectcatalog.QueryAnchor{
+			Group: anchor.Group, Version: anchor.Version, Kind: anchor.Kind,
+			Namespace: anchor.Namespace, Name: anchor.Name, UID: anchor.UID,
+		}
 	}
 	return opts, nil
 }
 
-func (o browseQueryOptions) toQueryOptions() objectcatalog.QueryOptions {
-	opts := objectcatalog.QueryOptions{
-		ResourceFamily:  o.ResourceFamily,
-		Scope:           o.Scope,
-		ScopeNamespaces: o.ScopeNamespaces,
-		Kinds:           o.Kinds,
-		Namespaces:      o.Namespaces,
-		Groups:          o.Groups,
-		ResourceScopes:  o.ResourceScopes,
-		Search:          o.Search,
-		SortField:       o.SortField,
-		SortDirection:   o.SortDir,
-		Limit:           o.Limit,
-		Continue:        o.Continue,
-		CustomOnly:      o.CustomOnly,
-		MatchNone:       o.MatchNone,
-	}
-	if a := o.Anchor; a != nil {
-		// ClusterID stays behind: parseBrowseScope already enforced the
-		// same-cluster rule, and the catalog service is per-cluster.
-		opts.Anchor = &objectcatalog.QueryAnchor{
-			Group:     a.Group,
-			Version:   a.Version,
-			Kind:      a.Kind,
-			Namespace: a.Namespace,
-			Name:      a.Name,
-			UID:       a.UID,
-		}
-	}
-	opts.StartRank = o.StartRank
-	return opts
-}
-
-func cloneSummaries(items []objectcatalog.Summary) []objectcatalog.Summary {
-	if len(items) == 0 {
-		return []objectcatalog.Summary{}
-	}
-	cloned := make([]objectcatalog.Summary, len(items))
-	copy(cloned, items)
-	return cloned
-}
-
-func cloneStrings(values []string) []string {
-	if len(values) == 0 {
-		return []string{}
-	}
-	cloned := make([]string, len(values))
-	copy(cloned, values)
-	return cloned
-}
-
-func cloneKindInfos(values []objectcatalog.KindInfo) []objectcatalog.KindInfo {
-	if len(values) == 0 {
-		return []objectcatalog.KindInfo{}
-	}
-	cloned := make([]objectcatalog.KindInfo, len(values))
-	copy(cloned, values)
-	return cloned
-}
-
-func cloneResourceScopes(values []objectcatalog.Scope) []objectcatalog.Scope {
-	if len(values) == 0 {
-		return []objectcatalog.Scope{}
-	}
-	cloned := make([]objectcatalog.Scope, len(values))
+// cloneCatalogValues detaches published slices and keeps empty JSON arrays non-null.
+func cloneCatalogValues[T any](values []T) []T {
+	cloned := make([]T, len(values))
 	copy(cloned, values)
 	return cloned
 }
@@ -513,8 +432,8 @@ func cloneNamespaceGroups(groups []CatalogNamespaceGroup) []CatalogNamespaceGrou
 	cloned := make([]CatalogNamespaceGroup, len(groups))
 	for i, group := range groups {
 		cloned[i] = group
-		cloned[i].Namespaces = cloneStrings(group.Namespaces)
-		cloned[i].SelectedNamespaces = cloneStrings(group.SelectedNamespaces)
+		cloned[i].Namespaces = cloneCatalogValues(group.Namespaces)
+		cloned[i].SelectedNamespaces = cloneCatalogValues(group.SelectedNamespaces)
 	}
 	return cloned
 }

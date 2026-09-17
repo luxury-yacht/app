@@ -15,11 +15,11 @@ import (
 func TestCatalogResourceFamilyScope(t *testing.T) {
 	opts, err := parseBrowseScope("cluster-a|resourceFamily=karpenter&limit=25")
 	require.NoError(t, err)
-	require.Equal(t, "karpenter", opts.toQueryOptions().ResourceFamily)
+	require.Equal(t, "karpenter", opts.ResourceFamily)
 	argo, err := parseBrowseScope("cluster-a|resourceFamily=argocd&resourceScope=namespace&scopeNamespace=team-a")
 	require.NoError(t, err)
-	require.Equal(t, "argocd", argo.toQueryOptions().ResourceFamily)
-	require.Equal(t, []string{"team-a"}, argo.toQueryOptions().ScopeNamespaces)
+	require.Equal(t, "argocd", argo.ResourceFamily)
+	require.Equal(t, []string{"team-a"}, argo.ScopeNamespaces)
 	_, err = parseBrowseScope("cluster-a|resourceFamily=unknown")
 	require.Error(t, err)
 }
@@ -32,11 +32,11 @@ func TestCatalogSnapshotPublishesDiscoveredKarpenterWithoutRows(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	adapter := newCatalogRefreshAdapter(svc, ClusterMeta{ClusterID: "a"}, nil)
-	snap := adapter.BuildSnapshot("catalog", "limit=1", browseQueryOptions{Limit: 1})
+	snap := adapter.BuildSnapshot("catalog", "limit=1", objectcatalog.QueryOptions{Limit: 1})
 	payload := snap.Payload.(CatalogSnapshot)
 	require.Equal(t, "a", payload.ClusterID)
 	require.Empty(t, payload.Items)
 	require.Equal(t, []string{"karpenter"}, payload.ResourceFamilies.Cluster)
 	other := newCatalogRefreshAdapter(objectcatalog.NewService(objectcatalog.Dependencies{}, nil), ClusterMeta{ClusterID: "b"}, nil)
-	require.Empty(t, other.BuildSnapshot("catalog", "limit=1", browseQueryOptions{Limit: 1}).Payload.(CatalogSnapshot).ResourceFamilies)
+	require.Empty(t, other.BuildSnapshot("catalog", "limit=1", objectcatalog.QueryOptions{Limit: 1}).Payload.(CatalogSnapshot).ResourceFamilies)
 }

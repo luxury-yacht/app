@@ -92,7 +92,6 @@ export function useDirtyQueue<T>({
   // contents change and skips anything the user has manually resized.
   const dirtyTimerRef = useRef<number | null>(null);
   const lastDirtyFlushRef = useRef<number>(0);
-  const pendingRetryRef = useRef(false);
   const isMountedRef = useRef(true);
   const flushDirtyColumnsRef = useRef<(() => void) | null>(null);
 
@@ -135,20 +134,17 @@ export function useDirtyQueue<T>({
       const dirty = dirtyColumnsRef.current;
       const columns = renderedColumnsRef.current;
       for (const key of keys) {
-        if (!key) {
-          continue;
-        }
         const column = columns.find((col) => col.key === key);
-        if (!column?.autoWidth) {
+        if (
+          !key ||
+          !column?.autoWidth ||
+          manuallyResizedColumnsRef.current.has(key) ||
+          dirty.has(key)
+        ) {
           continue;
         }
-        if (manuallyResizedColumnsRef.current.has(key)) {
-          continue;
-        }
-        if (!dirty.has(key)) {
-          dirty.add(key);
-          added = true;
-        }
+        dirty.add(key);
+        added = true;
       }
       if (added) {
         scheduleDirtyFlush();
@@ -158,11 +154,8 @@ export function useDirtyQueue<T>({
   );
 
   const markAllAutoColumnsDirty = useCallback(() => {
-    if (phaseRef.current === 'dragging') {
-      return;
-    }
     markColumnsDirty(renderedColumnsRef.current.map((col) => col.key));
-  }, [markColumnsDirty, renderedColumnsRef, phaseRef]);
+  }, [markColumnsDirty, renderedColumnsRef]);
 
   const handleManualResizeEvent = useCallback(
     (event: ManualResizeEvent) => {
@@ -171,65 +164,37 @@ export function useDirtyQueue<T>({
         return;
       }
 
-      // Each event type gets a clear, distinct branch:
-
-      if (type === 'dragStart') {
-        clearMeasurementQueue();
-        transitionPhase('dragging');
-        return;
-      }
-
-      if (type === 'drag') {
-        // Per-column cleanup while dragging — no phase change.
-        keys.forEach((key) => {
-          if (!key) {
-            return;
+      switch (type) {
+        case 'dragStart':
+          clearMeasurementQueue();
+          transitionPhase('dragging');
+          return;
+        case 'drag':
+        case 'dragEnd':
+          keys.forEach((key) => {
+            if (key) {
+              dirtyColumnsRef.current.delete(key);
+              columnHashesRef.current.delete(key);
+              allowShrinkColumnsRef.current.delete(key);
+            }
+          });
+          if (type === 'dragEnd') {
+            transitionPhase('idle');
+            scheduleDirtyFlush(DIRTY_DEBOUNCE_MS);
           }
-          dirtyColumnsRef.current.delete(key);
-          columnHashesRef.current.delete(key);
-          allowShrinkColumnsRef.current.delete(key);
-        });
-        return;
-      }
-
-      if (type === 'dragEnd') {
-        // Per-column cleanup, then resume idle.
-        keys.forEach((key) => {
-          if (!key) {
-            return;
+          return;
+        case 'autoSize':
+        case 'reset':
+          clearMeasurementQueue();
+          keys.forEach((key) => {
+            if (key) {
+              allowShrinkColumnsRef.current.add(key);
+            }
+          });
+          markColumnsDirty(keys);
+          if (type === 'reset') {
+            markColumnsDirty(renderedColumnsRef.current.map((col) => col.key));
           }
-          dirtyColumnsRef.current.delete(key);
-          columnHashesRef.current.delete(key);
-          allowShrinkColumnsRef.current.delete(key);
-        });
-        transitionPhase('idle');
-        scheduleDirtyFlush(DIRTY_DEBOUNCE_MS);
-        return;
-      }
-
-      if (type === 'autoSize') {
-        // Clear stale queue state, then re-queue with allowShrink.
-        clearMeasurementQueue();
-        keys.forEach((key) => {
-          if (!key) {
-            return;
-          }
-          allowShrinkColumnsRef.current.add(key);
-        });
-        markColumnsDirty(keys);
-        return;
-      }
-
-      if (type === 'reset') {
-        // Clear everything and re-measure the specified + all auto columns.
-        clearMeasurementQueue();
-        keys.forEach((key) => {
-          if (key) {
-            allowShrinkColumnsRef.current.add(key);
-          }
-        });
-        markColumnsDirty(keys);
-        markColumnsDirty(renderedColumnsRef.current.map((col) => col.key));
       }
     },
     [
@@ -252,7 +217,6 @@ export function useDirtyQueue<T>({
       return;
     }
     if (dirtyColumnsRef.current.size === 0) {
-      pendingRetryRef.current = false;
       return;
     }
 
@@ -317,10 +281,7 @@ export function useDirtyQueue<T>({
       retryKeys.forEach((key) => {
         dirtyColumnsRef.current.add(key);
       });
-      pendingRetryRef.current = true;
       scheduleDirtyFlush(50);
-    } else {
-      pendingRetryRef.current = false;
     }
 
     if (Object.keys(updates).length === 0) {

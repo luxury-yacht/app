@@ -22,7 +22,7 @@ func TestParseBrowseScopeParsesAnchor(t *testing.T) {
 		t.Fatalf("anchor lost in browse parse: %+v", opts.Anchor)
 	}
 
-	qo := opts.toQueryOptions()
+	qo := opts
 	if qo.Anchor == nil || qo.Anchor.Name != "web-1" || qo.Anchor.Kind != "Pod" ||
 		qo.Anchor.Namespace != "default" || qo.Anchor.UID != "uid-9" || qo.Anchor.Version != "v1" {
 		t.Fatalf("anchor lost mapping to catalog options: %+v", qo.Anchor)
@@ -53,7 +53,7 @@ func TestBuildCatalogSnapshotCarriesAnchor(t *testing.T) {
 		AnchorOutcome: &querypage.AnchorOutcome{Found: true, Rank: 0},
 		PageStartRank: 0,
 	}
-	payload, _ := buildCatalogSnapshot(result, browseQueryOptions{Limit: 10}, objectcatalog.HealthStatus{}, true, false)
+	payload, _ := buildCatalogSnapshot(result, objectcatalog.QueryOptions{Limit: 10}, objectcatalog.HealthStatus{}, true, false)
 	if payload.Anchor == nil || !payload.Anchor.Found || payload.Anchor.Rank != 0 {
 		t.Fatalf("payload anchor = %+v, want found rank 0", payload.Anchor)
 	}
@@ -64,7 +64,7 @@ func TestBuildCatalogSnapshotCarriesAnchor(t *testing.T) {
 	// Filtered outcome maps to the user-visible reason.
 	result.AnchorOutcome = &querypage.AnchorOutcome{Filtered: true, Rank: -1}
 	result.PageStartRank = -1
-	payload, _ = buildCatalogSnapshot(result, browseQueryOptions{Limit: 10}, objectcatalog.HealthStatus{}, true, false)
+	payload, _ = buildCatalogSnapshot(result, objectcatalog.QueryOptions{Limit: 10}, objectcatalog.HealthStatus{}, true, false)
 	if payload.Anchor == nil || payload.Anchor.Found || payload.Anchor.Reason != "filtered" {
 		t.Fatalf("payload filtered anchor = %+v", payload.Anchor)
 	}
@@ -74,7 +74,7 @@ func TestBuildCatalogSnapshotCarriesAnchor(t *testing.T) {
 
 	// No anchor on the request → no anchor on the payload.
 	result.AnchorOutcome = nil
-	payload, _ = buildCatalogSnapshot(result, browseQueryOptions{Limit: 10}, objectcatalog.HealthStatus{}, true, false)
+	payload, _ = buildCatalogSnapshot(result, objectcatalog.QueryOptions{Limit: 10}, objectcatalog.HealthStatus{}, true, false)
 	if payload.Anchor != nil {
 		t.Fatalf("anchor-less payload carries %+v", payload.Anchor)
 	}

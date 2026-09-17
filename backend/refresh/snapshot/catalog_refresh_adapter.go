@@ -35,7 +35,7 @@ func newCatalogRefreshAdapter(
 func (a catalogRefreshAdapter) BuildSnapshot(
 	domainName string,
 	scope string,
-	opts browseQueryOptions,
+	opts objectcatalog.QueryOptions,
 ) *refresh.Snapshot {
 	cachesReady := a.service.CachesReady()
 	assembly := a.assemble(opts, cachesReady)
@@ -69,10 +69,10 @@ func (a catalogRefreshAdapter) BuildSnapshot(
 }
 
 func (a catalogRefreshAdapter) assemble(
-	opts browseQueryOptions,
+	opts objectcatalog.QueryOptions,
 	forceFinal bool,
 ) catalogRefreshAssembly {
-	result := a.service.Query(opts.toQueryOptions())
+	result := a.service.Query(opts)
 	health := a.service.Health()
 	cachesReady := a.service.CachesReady()
 

@@ -26,10 +26,13 @@ consumers, and contracts were inspected. A local refactor does not close its
 containing subsystem. Add new and previously missed files at the next pass;
 preserve the existing review history when the inventory changes.
 
-## Choose the next pass
+## Choose the next delivery batch
 
-Maintain an explicit rotation through the review domains. Visit each domain
-before starting another cycle. A discovered correctness problem may interrupt
+Maintain an explicit rotation through the review domains. Review a substantial
+subsystem scope and collect its worthwhile candidates before editing. A domain
+visit is a delivery batch containing related simplifications, not one function
+or the first easy finding. Visit each domain before starting another cycle.
+A discovered correctness problem may interrupt
 the rotation; record why and return to the interrupted domain afterwards.
 Recent changes are a tie-breaker, not the scope boundary. Include quiet code
 and units with no complexity warnings.
@@ -54,9 +57,42 @@ Check the [settled findings](../../.agents/skills/app-review/references/settled-
 before re-proposing a consolidation. Record rejected candidates and the evidence
 or future trigger that would justify revisiting them.
 
-## One pass
+## Batch size and validation cost
 
-1. Name one responsibility and the files to inspect. Trace its producer,
+Separate incremental edits from delivery boundaries. The skill's instruction
+to test each simplification means focused checks while building the batch; it
+does not mean stopping or running the repository gate after every edit.
+
+Choose a batch that removes repeated reasoning across an owner and its affected
+consumers, or combines several worthwhile improvements within the same subsystem.
+Do not stop after the first local cleanup when the selected scope remains largely
+unexamined. Size the batch by coherent ownership and reviewability, not a fixed
+file count, line-deletion quota, or an arbitrary number of findings. If the
+review finds little worth changing, record that evidence and move on rather than
+forcing changes to make the diff bigger.
+
+Use three validation levels:
+
+1. During investigation, inspect existing tests and run the relevant cases to
+   establish behavior. Do not run an unrelated full-suite baseline by default.
+2. After each incremental edit, run the smallest meaningful affected tests and
+   local complexity checks. Expand to adjacent consumers when the change crosses
+   their contract. Reuse passing results until a subsequent change invalidates
+   them. Measure affected coverage at the batch boundary; do not repeatedly run
+   full-repository coverage for each local refactor.
+3. Once the planned batch is implemented and reviewed, run its remaining required
+   coverage/runtime checks and the repository's final `qc:prerelease` gate once.
+   Repeat checks only for failures, formatter changes, later edits, or unresolved
+   concerns that invalidate their evidence. Preserve all root validation rules.
+
+Progress updates report ongoing batch work; they are not delivery boundaries.
+Keep the ledger concise: inspected scope, changes, exceptions, validation, and
+what remains. Documentation maintenance must not become the main output of a
+code simplification batch.
+
+## Execute the batch
+
+1. Name the subsystem responsibilities and files to inspect. Trace their producers,
    consumers, identity, ordering, failure paths, and cleanup. Record dependency
    directions and any cycle risk before proposing a shared owner.
 2. State the maintenance problem and a before/after explanation. Name what
@@ -66,14 +102,15 @@ or future trigger that would justify revisiting them.
    run them against the current implementation before a behavior-preserving
    refactor. An intended behavior change is separate work and requires the
    repository's red/green/refactor process.
-4. Make one cohesive change and rerun focused tests. Existing tests must not
+4. Make cohesive incremental changes and rerun focused tests. Continue through
+   the batch's accepted candidates before the full gate. Existing tests must not
    need weaker assertions to accommodate the refactor. Follow shared owners;
    avoid feature-local exceptions and speculative general frameworks.
 5. Review readability and total responsibilities, including new helpers.
    Extracting branches merely to move a complexity score does not qualify.
 6. Run the applicable coverage, complexity, runtime, and final checks from the
    [completion contract](completion.md). Inspect formatter changes. Preserve
-   failed, blocked, or unrun checks in the ledger; do not close the pass.
+   failed, blocked, or unrun checks in the ledger; do not close the batch.
 7. Record the result, disposition of each candidate, remaining scope, and the
    next domain. Commit or publish only when separately authorized.
 
