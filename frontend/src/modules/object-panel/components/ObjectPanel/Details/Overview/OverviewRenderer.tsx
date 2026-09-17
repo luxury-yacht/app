@@ -11,13 +11,7 @@ import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import React from 'react';
-import type {
-  OverviewContext,
-  OverviewDescriptor,
-  OverviewField,
-  OverviewStatusItem,
-  OverviewWidget,
-} from './schema';
+import type { OverviewContext, OverviewDescriptor, OverviewField } from './schema';
 import { OverviewItem } from './shared/OverviewItem';
 
 /** Frame fields read off any DTO (optional so T is not over-constrained). */
@@ -103,28 +97,21 @@ export function OverviewRenderer<T>({
         }
         return `field:${item.field ?? String(item.label)}`;
       }).map(({ key, value: item }) => {
-        const itemKind = (item as { kind?: string }).kind;
-        if (itemKind === 'status') {
-          const statusItem = item as OverviewStatusItem;
+        if (item.kind === 'status') {
           return (
             <ResourceStatus
               key={key}
               status={frame.status}
               statusState={frame.statusState}
               statusPresentation={frame.statusPresentation}
-              customLabel={statusItem.label}
+              customLabel={item.label}
             />
           );
         }
-        if (itemKind === 'widget') {
-          return (
-            <React.Fragment key={key}>
-              {(item as OverviewWidget<T>).render(data, context)}
-            </React.Fragment>
-          );
+        if (item.kind === 'widget') {
+          return <React.Fragment key={key}>{item.render(data, context)}</React.Fragment>;
         }
-        const field = item as OverviewField<T>;
-        return renderField(field, data, context, key);
+        return renderField(item, data, context, key);
       })}
 
       <ResourceMetadata

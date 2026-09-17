@@ -11,18 +11,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Overview from './index';
 
 const renderComponentMock = vi.fn();
+const descriptorMock = vi.hoisted(() =>
+  vi.fn<typeof import('./descriptorRegistry').getOverviewDescriptor>()
+);
 
-vi.mock('./registry', () => ({
-  overviewRegistry: {
-    renderComponent: (props: unknown) => renderComponentMock(props),
-  },
+vi.mock('./GenericOverview', () => ({
+  GenericOverview: (props: unknown) => renderComponentMock(props),
 }));
 
-// This suite verifies the Overview wrapper's content + ActionsMenu wiring, independent of which
-// kinds have migrated to descriptors. Force the legacy render path so the assertions hold for any
-// kind; the descriptor path is covered by the per-kind descriptor tests.
+// Most cases isolate action wiring through the generic path; the dispatch case
+// below uses the real descriptor registry and renderer.
 vi.mock('./descriptorRegistry', () => ({
-  getOverviewDescriptor: () => undefined,
+  getOverviewDescriptor: descriptorMock,
 }));
 
 const actionsMenuMock = vi.fn((props: unknown) => {
@@ -70,6 +70,7 @@ describe('Overview component', () => {
 
   beforeEach(() => {
     renderComponentMock.mockReset();
+    descriptorMock.mockReset();
     actionsMenuMock.mockClear();
 
     renderComponentMock.mockReturnValue(<div data-testid="overview-content">Overview body</div>);
@@ -114,6 +115,37 @@ describe('Overview component', () => {
       }),
       currentReplicas: 5,
     });
+  });
+
+  it('renders the registered raw detail and switches to generic metadata for an unregistered kind', async () => {
+    const registry =
+      await vi.importActual<typeof import('./descriptorRegistry')>('./descriptorRegistry');
+    descriptorMock.mockImplementation(registry.getOverviewDescriptor);
+    await renderComponent({
+      kind: 'ConfigMap',
+      name: 'action-target',
+      activeDetail: { kind: 'ConfigMap', name: 'raw-detail-name', usedBy: [] },
+    });
+    expect(container.textContent).toContain('raw-detail-name');
+    expect(renderComponentMock).not.toHaveBeenCalled();
+    objectPanelState.objectData = buildRequiredObjectReference({
+      clusterId: 'test-cluster',
+      group: 'example.test',
+      version: 'v1',
+      kind: 'Widget',
+      name: 'custom-target',
+    });
+    await act(async () => {
+      root.render(<Overview kind="Widget" name="custom-target" labels={{ owner: 'team-a' }} />);
+    });
+    expect(renderComponentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Widget',
+        name: 'custom-target',
+        group: 'example.test',
+        labels: { owner: 'team-a' },
+      })
+    );
   });
 
   it('passes replica string desired count to ActionsMenu when desiredReplicas is missing', async () => {

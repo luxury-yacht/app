@@ -494,6 +494,38 @@ describe('NodeLogsTab', () => {
     expect(container.textContent).toContain('boot complete');
   });
 
+  it('exports parsed node columns as data, including metadata-like keys and nested values', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: JSON.stringify({
+        _pod: 'literal',
+        level: 'info',
+        count: 0,
+        enabled: false,
+        extra: { value: 'x' },
+        message: 'boot, complete',
+      }),
+    });
+    await renderTab();
+    await selectSource('kubelet');
+    await act(async () => {
+      requireValue(
+        container.querySelector('button[aria-label="Parse the JSON into a table"]'),
+        'parse control'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await act(async () => {
+      requireValue(
+        container.querySelector('button[aria-label="Copy to clipboard"]'),
+        'copy control'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      'level,_pod,count,enabled,extra,message\ninfo,literal,0,false,"{""value"":""x""}","boot, complete"'
+    );
+  });
+
   it('supports parsed-table row expansion and collapse like container logs', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       source: sources[0],

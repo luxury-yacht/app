@@ -1418,6 +1418,39 @@ describe('LogViewer active pod synchronisation', () => {
     );
   });
 
+  it('keeps reserved metadata values in CSV when pod and timestamp columns are hidden', async () => {
+    const scope = buildContainerLogsScope('team-a:/v1:pod:api');
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: '{"_pod":"payload-pod","_timestamp":"payload-time"}',
+          timestamp: '2024-05-01T11:00:00Z',
+          isInit: false,
+        },
+      ],
+      scope
+    );
+    await renderViewer({ resourceKind: 'pod', containerLogsScope: scope });
+
+    for (const label of [
+      'Show timestamps from the Kubernetes API',
+      'Parse the JSON into a table',
+      'Copy to clipboard',
+    ]) {
+      await act(async () => {
+        requireValue(
+          container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`),
+          `expected ${label} control`
+        ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    }
+
+    expect(writeTextMock).toHaveBeenCalledWith('Container,_pod,_timestamp\napp,-,');
+  });
+
   it('copies selected log text through the app native-action path', async () => {
     seedLogSnapshot([
       {

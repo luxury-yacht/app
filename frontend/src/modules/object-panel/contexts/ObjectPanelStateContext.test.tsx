@@ -15,6 +15,7 @@ import { act, StrictMode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { panelwindow } from '@/core/backend-api/models';
+import { requireValue } from '@/test-utils/requireValue';
 
 const clearPanelStateMock = vi.fn();
 const handoffLayoutBeforeCloseMock = vi.fn();
@@ -214,6 +215,56 @@ describe('ObjectPanelStateContext', () => {
     });
 
     expect(stateRef.current?.pendingNativeOpenPanelIds.has(panelId)).toBe(false);
+  });
+
+  it('docks a group without changing other panels or their previously published state', async () => {
+    await renderProvider();
+    const currentState = () => requireValue(stateRef.current, 'expected panel state');
+    const ref = {
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      namespace: 'default',
+      name: 'existing',
+    };
+    let existingId = '';
+    let incomingId = '';
+    act(() => {
+      existingId = currentState().upsertOwnedPanel(ref, 'events', {
+        kind: 'docked',
+        edge: 'right',
+      });
+      incomingId = currentState().onRowClick(
+        { ...ref, name: 'incoming' },
+        { pendingNativeOpen: true }
+      );
+    });
+    const previous = currentState();
+    act(() => {
+      currentState().dockPanelWindow(
+        {
+          clusterId: 'cluster-a',
+          tabs: [
+            { panelId: incomingId, objectRef: { ...ref, name: 'incoming' }, activeView: 'yaml' },
+          ],
+        } as panelwindow.GroupSnapshot,
+        'bottom'
+      );
+    });
+    expect(currentState().panelIdsForCluster('cluster-a')).toEqual([existingId, incomingId]);
+    expect(currentState().getOwnedPanel('cluster-a', existingId)).toMatchObject({
+      activeView: 'events',
+      dockedEdge: 'right',
+    });
+    expect(currentState().getOwnedPanel('cluster-a', incomingId)).toMatchObject({
+      activeView: 'yaml',
+      dockedEdge: 'bottom',
+    });
+    expect(currentState().pendingNativeOpenPanelIds.has(incomingId)).toBe(false);
+    expect(previous.pendingNativeOpenPanelIds.has(incomingId)).toBe(true);
+    expect(previous.dockedEdges.has(incomingId)).toBe(false);
+    expect(resetScopedDomainMock).not.toHaveBeenCalled();
   });
 
   it('does not re-render state-only consumers when a panel tab changes', async () => {

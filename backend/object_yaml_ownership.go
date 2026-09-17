@@ -54,19 +54,10 @@ func (g *ResourceGateway) CheckObjectYamlOwnership(
 	ctx, cancel := g.mutationContext()
 	defer cancel()
 
-	mc, err := prepareMutationContextWithDependencies(ctx, deps, selectionKey, req)
+	mc, err := g.prepareAuthorizedYAMLMutation(ctx, deps, selectionKey, req)
 	if err != nil {
 		return nil, err
 	}
-	if err := g.requireResolvedResourcePermission(ctx, deps, mc.gvr, mc.isNamespaced, resourcePermissionCheck{
-		Kind:      req.Kind,
-		Namespace: req.Namespace,
-		Name:      req.Name,
-		Verb:      "patch",
-	}); err != nil {
-		return nil, err
-	}
-
 	noConflicts := &ObjectYAMLOwnershipCheckResponse{Conflicts: []ObjectYAMLOwnershipConflict{}}
 
 	if isEmptyPatchDocument(mc.patch) {

@@ -52,10 +52,29 @@ const PodsTab = lazy(() =>
 const ShellTab = lazy(() => import('@modules/object-panel/components/ObjectPanel/Shell/ShellTab'));
 const YamlTab = lazy(() => import('@modules/object-panel/components/ObjectPanel/Yaml/YamlTab'));
 
-const LazyTabContent = ({ name, children }: { name: string; children: ReactNode }) => (
-  <React.Suspense fallback={<LoadingSpinner message={`Loading ${name}...`} />}>
-    {children}
-  </React.Suspense>
+// Tab implementations share recovery/loading policy while retaining their own reset keys.
+const PanelTabBoundary = ({
+  scope,
+  resetKeys,
+  tabName,
+  loadingName,
+  children,
+}: {
+  scope: string;
+  resetKeys?: string[];
+  tabName: string;
+  loadingName: string;
+  children: ReactNode;
+}) => (
+  <ErrorBoundary
+    scope={scope}
+    resetKeys={resetKeys}
+    fallback={(_, reset) => <TabErrorFallback tabName={tabName} reset={reset} />}
+  >
+    <React.Suspense fallback={<LoadingSpinner message={`Loading ${loadingName}...`} />}>
+      {children}
+    </React.Suspense>
+  </ErrorBoundary>
 );
 
 const TabErrorFallback = ({ tabName, reset }: { tabName: string; reset: () => void }) => (
@@ -148,6 +167,9 @@ const RetainedLogsTab = ({
   }
 
   const isActive = isPanelOpen && isVisible;
+  const name = objectData?.name ?? '';
+  const namespace = objectData?.namespace ?? '';
+  const clusterId = objectData?.clusterId ?? null;
   return (
     <div
       className={`object-panel-retained-tab${isVisible ? '' : ' object-panel-retained-tab--inactive'}`}
@@ -155,80 +177,225 @@ const RetainedLogsTab = ({
       inert={!isVisible}
     >
       {objectKind !== 'node' ? (
-        <ErrorBoundary
+        <PanelTabBoundary
           scope="panel-logs"
-          resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
-          fallback={(_, reset) => <TabErrorFallback tabName="Logs" reset={reset} />}
+          resetKeys={[name, namespace].filter(Boolean)}
+          tabName="Logs"
+          loadingName="logs"
         >
-          <LazyTabContent name="logs">
-            <LogViewer
-              isActive={isActive}
-              resourceKind={objectKind || 'pod'}
-              containerLogsScope={containerLogsScope}
-              activePodNames={activePodNames}
-              clusterId={objectData?.clusterId ?? null}
-              panelId={panelId}
-            />
-          </LazyTabContent>
-        </ErrorBoundary>
+          <LogViewer
+            isActive={isActive}
+            resourceKind={objectKind || 'pod'}
+            containerLogsScope={containerLogsScope}
+            activePodNames={activePodNames}
+            clusterId={clusterId}
+            panelId={panelId}
+          />
+        </PanelTabBoundary>
       ) : (
-        <ErrorBoundary
+        <PanelTabBoundary
           scope="panel-node-logs"
-          resetKeys={[objectData?.name ?? '', objectData?.clusterId ?? ''].filter(Boolean)}
-          fallback={(_, reset) => <TabErrorFallback tabName="Logs" reset={reset} />}
+          resetKeys={[name, clusterId ?? ''].filter(Boolean)}
+          tabName="Logs"
+          loadingName="logs"
         >
-          <LazyTabContent name="logs">
-            <NodeLogsTab
-              panelId={panelId}
-              nodeName={objectData?.name || ''}
-              clusterId={objectData?.clusterId ?? null}
-              isActive={isActive}
-              availability={nodeLogsState}
-              sources={nodeLogSources}
-            />
-          </LazyTabContent>
-        </ErrorBoundary>
+          <NodeLogsTab
+            panelId={panelId}
+            nodeName={name}
+            clusterId={clusterId}
+            isActive={isActive}
+            availability={nodeLogsState}
+            sources={nodeLogSources}
+          />
+        </PanelTabBoundary>
       )}
     </div>
   );
 };
 
-export function ObjectPanelContent({
-  activeTab,
-  detailTabProps,
-  isPanelOpen,
-  capabilities,
-  capabilityReasons,
-  nodeLogsState,
-  nodeLogSources,
-  detailScope,
-  eventsScope,
-  containerLogsScope,
-  mapScope,
-  helmScope,
-  objectData,
-  objectKind,
-  resourceDeleted,
-  deletedResourceName,
-  onClosePanel,
-  panelId,
-}: Readonly<ObjectPanelContentProps>) {
-  const showDetails = activeTab === 'details' && detailTabProps;
+// Transient tabs unmount when their selection changes. Logs and YAML have separate
+// retention owners below; they must never be routed through this table.
+const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentProps>>([
+  [
+    'details',
+    ({ detailTabProps, detailScope }) => {
+      if (!detailTabProps) {
+        return null;
+      }
+      return (
+        <PanelTabBoundary
+          scope="panel-details"
+          resetKeys={detailScope ? [detailScope] : undefined}
+          tabName="Details"
+          loadingName="details"
+        >
+          <DetailsTab {...detailTabProps} />
+        </PanelTabBoundary>
+      );
+    },
+  ],
+  [
+    'shell',
+    ({ capabilities, objectData, detailTabProps, isPanelOpen, capabilityReasons }) => {
+      if (!capabilities.hasShell || !objectData) {
+        return null;
+      }
+      const availableContainers =
+        detailTabProps?.detailModel.availableContainers ?? EMPTY_CONTAINERS;
+      return (
+        <PanelTabBoundary
+          scope="panel-shell"
+          resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
+          tabName="Shell"
+          loadingName="shell"
+        >
+          <ShellTab
+            namespace={objectData?.namespace || ''}
+            resourceName={objectData?.name || ''}
+            isActive={isPanelOpen}
+            disabledReason={capabilityReasons.shell}
+            debugDisabledReason={capabilityReasons.debug}
+            availableContainers={availableContainers}
+            clusterId={objectData?.clusterId ?? null}
+          />
+        </PanelTabBoundary>
+      );
+    },
+  ],
+  [
+    'events',
+    ({ objectData, isPanelOpen, eventsScope, panelId }) => {
+      return (
+        <PanelTabBoundary
+          scope="panel-events"
+          resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
+          tabName="Events"
+          loadingName="events"
+        >
+          <EventsTab
+            objectData={objectData}
+            isActive={isPanelOpen}
+            eventsScope={eventsScope}
+            panelId={panelId}
+          />
+        </PanelTabBoundary>
+      );
+    },
+  ],
+  [
+    'pods',
+    ({ objectData, isPanelOpen }) => {
+      return (
+        <PanelTabBoundary
+          scope="panel-pods"
+          resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
+          tabName="Pods"
+          loadingName="pods"
+        >
+          <PodsTab isActive={isPanelOpen} />
+        </PanelTabBoundary>
+      );
+    },
+  ],
+  [
+    'jobs',
+    ({ objectData, isPanelOpen, detailTabProps }) => {
+      const cronJobDetails =
+        detailTabProps?.detailModel.objectKind === 'cronjob'
+          ? (detailTabProps.detailModel.activeDetail as { jobs?: types.JobSimpleInfo[] } | null)
+          : null;
+      return (
+        <PanelTabBoundary
+          scope="panel-jobs"
+          resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
+          tabName="Jobs"
+          loadingName="jobs"
+        >
+          <JobsTab
+            jobs={cronJobDetails?.jobs ?? EMPTY_JOBS}
+            loading={!cronJobDetails && !!detailTabProps?.detailsLoading}
+            isActive={isPanelOpen}
+            clusterId={objectData?.clusterId}
+            clusterName={objectData?.clusterName}
+          />
+        </PanelTabBoundary>
+      );
+    },
+  ],
+  [
+    'map',
+    ({ mapScope, objectData, isPanelOpen }) => {
+      return (
+        <PanelTabBoundary
+          scope="panel-map"
+          resetKeys={mapScope ? [mapScope] : undefined}
+          tabName="Map"
+          loadingName="map"
+        >
+          <MapTab objectData={objectData} isActive={isPanelOpen} mapScope={mapScope} />
+        </PanelTabBoundary>
+      );
+    },
+  ],
+  [
+    'manifest',
+    ({ helmScope, isPanelOpen }) => {
+      return (
+        <PanelTabBoundary
+          scope="panel-manifest"
+          resetKeys={helmScope ? [helmScope] : undefined}
+          tabName="Manifest"
+          loadingName="manifest"
+        >
+          <ManifestTab scope={helmScope} isActive={isPanelOpen} />
+        </PanelTabBoundary>
+      );
+    },
+  ],
+  [
+    'values',
+    ({ helmScope, isPanelOpen }) => {
+      return (
+        <PanelTabBoundary
+          scope="panel-values"
+          resetKeys={helmScope ? [helmScope] : undefined}
+          tabName="Values"
+          loadingName="values"
+        >
+          <ValuesTab scope={helmScope} isActive={isPanelOpen} />
+        </PanelTabBoundary>
+      );
+    },
+  ],
+]);
+
+export function ObjectPanelContent(props: Readonly<ObjectPanelContentProps>) {
+  const {
+    activeTab,
+    detailTabProps,
+    isPanelOpen,
+    capabilities,
+    capabilityReasons,
+    nodeLogsState,
+    nodeLogSources,
+    detailScope,
+    eventsScope,
+    containerLogsScope,
+    mapScope,
+    helmScope,
+    objectData,
+    objectKind,
+    resourceDeleted,
+    deletedResourceName,
+    onClosePanel,
+    panelId,
+  } = props;
   const logsAvailable = capabilities.hasObjPanelLogs && objectData !== null;
-  const showLogs = activeTab === 'logs' && logsAvailable;
-  const showShell = activeTab === 'shell' && capabilities.hasShell && objectData;
-  const showPods = activeTab === 'pods';
-  const showJobs = activeTab === 'jobs';
-  const showEvents = activeTab === 'events';
   const showYaml = activeTab === 'yaml';
   const hasRenderedYamlRef = React.useRef(false);
   if (showYaml) {
     hasRenderedYamlRef.current = true;
   }
-  const showMap = activeTab === 'map';
-  const showManifest = activeTab === 'manifest';
-  const showValues = activeTab === 'values';
-
   const scopedDomainCleanups = useMemo<readonly ObjectPanelScopedDomainRef[]>(
     () => [
       { domain: 'object-events', scope: eventsScope },
@@ -240,194 +407,65 @@ export function ObjectPanelContent({
     ],
     [containerLogsScope, detailScope, eventsScope, helmScope, mapScope]
   );
-
-  // Stops panel-owned scoped refresh domains during transient unmounts while
-  // preserving cached snapshots. Full eviction still belongs to panel close.
+  // Transient unmounts retain snapshots; committed panel removal owns full eviction.
   useObjectPanelScopedDomainCleanups(scopedDomainCleanups, isPanelOpen);
-
-  const activePodNames = detailTabProps?.detailModel.activePodNames ?? null;
-  const availableContainers = detailTabProps?.detailModel.availableContainers ?? EMPTY_CONTAINERS;
-  // For a CronJob the active detail DTO carries the child jobs (for the Jobs timeline tab).
-  const cronJobDetails =
-    detailTabProps?.detailModel.objectKind === 'cronjob'
-      ? (detailTabProps.detailModel.activeDetail as { jobs?: types.JobSimpleInfo[] } | null)
-      : null;
-
   if (resourceDeleted) {
-    return (
-      <div className="object-panel-content">
-        <div className="object-panel-empty-state">
-          <h3>Object not found</h3>
-          <p>{deletedResourceName || 'Resource'} is no longer available.</p>
-          {!!onClosePanel && (
-            <div>
-              <button type="button" className="button generic" onClick={onClosePanel}>
-                Close
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+    return <DeletedObjectContent name={deletedResourceName} onClose={onClosePanel} />;
   }
-
+  const ActiveTab = transientTabs.get(activeTab);
   return (
     <div className="object-panel-content">
-      {!!(showDetails && detailTabProps) && (
-        <ErrorBoundary
-          scope="panel-details"
-          resetKeys={detailScope ? [detailScope] : undefined}
-          fallback={(_, reset) => <TabErrorFallback tabName="Details" reset={reset} />}
-        >
-          <LazyTabContent name="details">
-            <DetailsTab {...detailTabProps} />
-          </LazyTabContent>
-        </ErrorBoundary>
-      )}
-
+      {!!ActiveTab && <ActiveTab key={activeTab} {...props} />}
       <RetainedLogsTab
-        isVisible={showLogs}
+        isVisible={activeTab === 'logs' && logsAvailable}
         isAvailable={logsAvailable}
         isPanelOpen={isPanelOpen}
         objectKind={objectKind}
         objectData={objectData}
         containerLogsScope={containerLogsScope}
-        activePodNames={activePodNames}
+        activePodNames={detailTabProps?.detailModel.activePodNames ?? null}
         panelId={panelId}
         nodeLogsState={nodeLogsState}
         nodeLogSources={nodeLogSources}
       />
-
-      {!!showShell && (
-        <ErrorBoundary
-          scope="panel-shell"
-          resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
-          fallback={(_, reset) => <TabErrorFallback tabName="Shell" reset={reset} />}
-        >
-          <LazyTabContent name="shell">
-            <ShellTab
-              namespace={objectData?.namespace || ''}
-              resourceName={objectData?.name || ''}
-              isActive={isPanelOpen && activeTab === 'shell'}
-              disabledReason={capabilityReasons.shell}
-              debugDisabledReason={capabilityReasons.debug}
-              availableContainers={availableContainers}
-              clusterId={objectData?.clusterId ?? null}
-            />
-          </LazyTabContent>
-        </ErrorBoundary>
-      )}
-
-      {showEvents && (
-        <ErrorBoundary
-          scope="panel-events"
-          resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
-          fallback={(_, reset) => <TabErrorFallback tabName="Events" reset={reset} />}
-        >
-          <LazyTabContent name="events">
-            <EventsTab
-              objectData={objectData}
-              isActive={isPanelOpen && activeTab === 'events'}
-              eventsScope={eventsScope}
-              panelId={panelId}
-            />
-          </LazyTabContent>
-        </ErrorBoundary>
-      )}
-
-      {showPods && (
-        <ErrorBoundary
-          scope="panel-pods"
-          resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
-          fallback={(_, reset) => <TabErrorFallback tabName="Pods" reset={reset} />}
-        >
-          <LazyTabContent name="pods">
-            <PodsTab isActive={isPanelOpen && activeTab === 'pods'} />
-          </LazyTabContent>
-        </ErrorBoundary>
-      )}
-
-      {showJobs && (
-        <ErrorBoundary
-          scope="panel-jobs"
-          resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
-          fallback={(_, reset) => <TabErrorFallback tabName="Jobs" reset={reset} />}
-        >
-          <LazyTabContent name="jobs">
-            <JobsTab
-              jobs={cronJobDetails?.jobs ?? EMPTY_JOBS}
-              loading={!cronJobDetails && !!detailTabProps?.detailsLoading}
-              isActive={isPanelOpen && activeTab === 'jobs'}
-              clusterId={objectData?.clusterId}
-              clusterName={objectData?.clusterName}
-            />
-          </LazyTabContent>
-        </ErrorBoundary>
-      )}
-
       {!!hasRenderedYamlRef.current && (
         <div
           className={`object-panel-retained-tab${showYaml ? '' : ' object-panel-retained-tab--inactive'}`}
           aria-hidden={!showYaml}
           inert={!showYaml}
         >
-          <ErrorBoundary
+          <PanelTabBoundary
             scope="panel-yaml"
             resetKeys={detailScope ? [detailScope] : undefined}
-            fallback={(_, reset) => <TabErrorFallback tabName="YAML" reset={reset} />}
+            tabName="YAML"
+            loadingName="YAML"
           >
-            <LazyTabContent name="YAML">
-              <YamlTab
-                scope={detailScope}
-                isActive={isPanelOpen && showYaml}
-                canEdit={capabilities.canEditYaml}
-                editDisabledReason={capabilityReasons.editYaml}
-                clusterId={objectData?.clusterId ?? null}
-              />
-            </LazyTabContent>
-          </ErrorBoundary>
-        </div>
-      )}
-
-      {showMap && (
-        <ErrorBoundary
-          scope="panel-map"
-          resetKeys={mapScope ? [mapScope] : undefined}
-          fallback={(_, reset) => <TabErrorFallback tabName="Map" reset={reset} />}
-        >
-          <LazyTabContent name="map">
-            <MapTab
-              objectData={objectData}
-              isActive={isPanelOpen && activeTab === 'map'}
-              mapScope={mapScope}
+            <YamlTab
+              scope={detailScope}
+              isActive={isPanelOpen && showYaml}
+              canEdit={capabilities.canEditYaml}
+              editDisabledReason={capabilityReasons.editYaml}
+              clusterId={objectData?.clusterId ?? null}
             />
-          </LazyTabContent>
-        </ErrorBoundary>
-      )}
-
-      {showManifest && (
-        <ErrorBoundary
-          scope="panel-manifest"
-          resetKeys={helmScope ? [helmScope] : undefined}
-          fallback={(_, reset) => <TabErrorFallback tabName="Manifest" reset={reset} />}
-        >
-          <LazyTabContent name="manifest">
-            <ManifestTab scope={helmScope} isActive={isPanelOpen && activeTab === 'manifest'} />
-          </LazyTabContent>
-        </ErrorBoundary>
-      )}
-
-      {showValues && (
-        <ErrorBoundary
-          scope="panel-values"
-          resetKeys={helmScope ? [helmScope] : undefined}
-          fallback={(_, reset) => <TabErrorFallback tabName="Values" reset={reset} />}
-        >
-          <LazyTabContent name="values">
-            <ValuesTab scope={helmScope} isActive={isPanelOpen && activeTab === 'values'} />
-          </LazyTabContent>
-        </ErrorBoundary>
+          </PanelTabBoundary>
+        </div>
       )}
     </div>
   );
 }
+
+const DeletedObjectContent = ({ name, onClose }: { name: string; onClose?: () => void }) => (
+  <div className="object-panel-content">
+    <div className="object-panel-empty-state">
+      <h3>Object not found</h3>
+      <p>{name || 'Resource'} is no longer available.</p>
+      {!!onClose && (
+        <div>
+          <button type="button" className="button generic" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      )}
+    </div>
+  </div>
+);

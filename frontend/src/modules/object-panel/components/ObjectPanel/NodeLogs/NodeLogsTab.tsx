@@ -25,14 +25,13 @@ import {
   useState,
 } from 'react';
 import { containsAnsi, stripAnsi } from '../Logs/ansi';
-import { buildCsv } from '../Logs/logExport';
 import { buildLogSearchRegex } from '../Logs/logSearch';
 import {
   getLogViewerScrollPosition,
   setLogViewerScrollPosition,
 } from '../Logs/logViewerPrefsCache';
 import type { ParsedLogEntry } from '../Logs/logViewerReducer';
-import { buildParsedLogDataColumns } from '../Logs/parsedLogColumns';
+import { buildParsedLogCsv, buildParsedLogDataColumns } from '../Logs/parsedLogColumns';
 import {
   deriveParsedLogFieldKeys,
   formatParsedValue,
@@ -913,12 +912,10 @@ const NodeLogsTab = ({
 
   const derivedFieldKeys = useMemo(() => deriveParsedLogFieldKeys(parsedLogs), [parsedLogs]);
 
-  const tableColumns = useMemo(() => {
-    if (derivedFieldKeys.length === 0) {
-      return [] as GridColumnDefinition<ParsedLogEntry>[];
-    }
-    return buildParsedLogDataColumns(derivedFieldKeys);
-  }, [derivedFieldKeys]);
+  const tableColumns = useMemo(
+    () => buildParsedLogDataColumns(derivedFieldKeys),
+    [derivedFieldKeys]
+  );
 
   const displayLines = useMemo(
     () =>
@@ -939,20 +936,15 @@ const NodeLogsTab = ({
     [displayLines, selectedSource?.path]
   );
 
-  const parsedCsv = useMemo(() => {
-    if (!isParsedView || parsedLogs.length === 0 || tableColumns.length === 0) {
-      return '';
-    }
-
-    const headerRow = tableColumns.map((column) =>
-      typeof column.header === 'string' ? column.header : column.key
-    );
-    const dataRows = parsedLogs.map((entry) =>
-      tableColumns.map((column) => formatParsedValue(entry.data[column.key]))
-    );
-
-    return buildCsv([headerRow, ...dataRows]);
-  }, [isParsedView, parsedLogs, tableColumns]);
+  const parsedCsv = useMemo(
+    () =>
+      isParsedView
+        ? buildParsedLogCsv(parsedLogs, tableColumns, (entry, key) =>
+            formatParsedValue(entry.data[key])
+          )
+        : '',
+    [isParsedView, parsedLogs, tableColumns]
+  );
 
   const displayedText = useMemo(
     () => (isParsedView ? parsedCsv : displayLines.join('\n')),

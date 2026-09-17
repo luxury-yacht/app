@@ -77,8 +77,8 @@ correctness-driven interruption and resume the rotation afterwards.
 | 2 | Catalog and resource projections | Object catalog; per-kind resources; kind/model contracts; Browse adapters | S002 query/facet/snapshot batch; remaining scope recorded |
 | 3 | Cluster/workspace/auth | Backend cluster/workspace owners and auth helpers; Kubernetes/cluster workspace contexts | S003 selection/hydration batch; remaining scope recorded |
 | 4 | Refresh and data access | Refresh APIs, stores, snapshots, ingestion, streams, metrics and governor; frontend refresh/data brokers | S004 state/demand/cadence/readiness batch; remaining scope recorded |
-| 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | S005 Helm content/read ownership batch; remaining scope recorded |
-| 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | Next: S006 |
+| 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | Expanded S005 batch and final gate passed; remaining scope recorded |
+| 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | After expanded S005 |
 | 7 | Object map | Backend graph producers and relationships; frontend graph, layout and renderer | Inventoried |
 | 8 | Permissions and mutations | Capability policy, permission caches, object actions/YAML; frontend availability gates | Inventoried |
 | 9 | Navigation and interaction | Sidebar, routing, shortcuts, command palette, modals, shared inputs and menus | Inventoried |
@@ -340,7 +340,142 @@ YAML transaction/merge/ownership internals, panel-state reconciliation, native
 transfer implementations, and detail enrichments. Their interfaces were inspected
 where needed; this pass does not close those responsibilities.
 
-## Next batch — S006 operations
+## S005 continuation — panel state, YAML, tab composition, and log presentation
+
+**Status: expanded batch implemented; affected checks and final gate passed.** The initial Helm
+batch left too much panel scope unexamined. This continuation revisits the domain
+before rotating to operations. The original S005 work is preserved in `28c2687a`;
+this record describes the subsequent worktree changes. Inventory counts remain
+at baseline: `containerLogColumns.tsx` replaces the deleted `Overview/registry.ts`
+in the production file count, and `object_yaml_admission_test.go` adds tests.
+
+Implemented responsibilities and evidence:
+
+- Panel placement/removal: `ObjectPanelStateContext.tsx` centralizes detached
+  copies of the five panel indexes, insertion, and removal. Group docking and
+  native upsert share placement reconciliation; close and ownership removal
+  share collection cleanup. Caller-specific admission and layout handoff remain
+  at their call sites. The new docking test checks published-map immutability,
+  tab order, pending handoff removal, and retention of previously owned panels.
+- YAML transaction: `yamlTransaction.ts` replaces three independently maintained
+  baseline fields with one identity/YAML pair; baseline resource version derives
+  from identity. Latest-live and merged identity resolution use one helper.
+  `isEditing` stays separate because reload can capture a baseline outside edit
+  mode. The manual override remains an object to retain effect-trigger identity.
+- YAML mutation admission: `prepareAuthorizedYAMLMutation` owns the existing
+  prepare-then-authorize sequence for validate, apply, and ownership checks.
+  Five unread fields leave the private mutation context. Dry-run/update/apply
+  options and post-apply invalidation remain with each operation. The new test
+  checks all three APIs reject missing cluster, malformed draft, and denied patch
+  permission before sending a PATCH; existing tests exercise admitted operations.
+- Tab composition: `ObjectPanelContent.tsx` shares the error/loading boundary and
+  routes transient tabs through a keyed renderer map. Logs and YAML retain their
+  separate lifetime owners. Tests check error recovery after changing tabs while
+  retaining mounted log/YAML nodes, plus unknown restored tab names. Scope cleanup
+  and YAML visitation still occur before the deleted-object guard.
+- Overview rendering: `OverviewRenderer.tsx` and `schema.ts` narrow the existing
+  union directly. `index.tsx` renders `GenericOverview` directly, removing the
+  single-component registry wrapper; the typed descriptor registry remains.
+  Gateway reference groups use one namespace grouper and Map insertion order.
+  Existing grouping/descriptor tests and a new raw-DTO/generic-fallback dispatch
+  test cover these paths. The owning component-structure doc follows the new call.
+- Log presentation: container metadata columns move out of `LogViewer.tsx` into
+  `containerLogColumns.tsx`; container and node logs share CSV headers, row order,
+  and escaping in `buildParsedLogCsv`. Each source retains its value policy:
+  container CSV reserves metadata keys even with hidden metadata columns, while
+  node CSV treats those keys as user fields. A proposed column-owned export policy
+  was rejected during review because it changed this distinction. New UI copy
+  tests cover both policies, false/zero/nested values, and CSV escaping.
+
+The boundary map is unchanged: panel state publishes cluster-indexed collections;
+committed removal triggers cache eviction; layout handoff precedes close cleanup;
+the native coordinator owns transfer admission. YAML parsing, mapping, live read,
+UID/field policy, and patch construction precede permission checks; ownership
+warnings stay advisory. Tab consumers retain their scope/reset keys and lazy
+loading. The log-column helpers depend on shared formatting/export utilities, not
+on the components or transport that call them, so they add no reverse imports.
+Regression evidence is in the focused tests listed below; no native interaction
+or transport behavior is inferred from those mocks.
+
+Investigation dispositions and remaining scope:
+
+- Read the complete panel-state provider, YAML transaction, capability descriptor
+  construction, and tab composition. Read affected backend YAML admission and
+  ownership functions plus mutation/merge seams; other mutation/merge internals
+  are not closed by this pass.
+- Read Overview schema/renderer/fallback, data/container sections, Gateway grouping,
+  workload helper excerpts, and selected operator sections. Keep existing workload
+  and per-kind descriptor helpers where presentation, actions, or object-reference
+  semantics differ. This is not a review of every descriptor/widget.
+- Keep capability policies distinct for logs, exec, ephemeral containers, and Helm.
+  Keep YAML apply, ownership dry-run, and reload/merge execution policies separate.
+  Native transfer implementation, detail enrichments, remaining Overview widgets,
+  and complete capability consumers remain open.
+- Shell start/status/attach excerpts expose repeated session/ref/status cleanup
+  and replay ordering worth reviewing with backend session producers. Its local
+  complexity signals include 17, 23, 26, 27, and 29; those are investigation signals,
+  not reviewed defects. S006 should start with session transitions, late-start
+  cancellation, attach replay, and native terminal ownership. Container/node log
+  transport and reconnect internals were not audited by this presentation pass.
+
+Validation evidence:
+
+- Before edits: panel/YAML/Overview tests passed 280 tests in 42 files; logs passed
+  197 in 16 files; focused backend YAML tests passed. Logs:
+  `/tmp/luxury-yacht-s005b-before-frontend.log`,
+  `/tmp/luxury-yacht-s005b-before-backend.log`,
+  `/tmp/luxury-yacht-s005b-logs-before.log`.
+- Original-code characterizations passed for group docking, transient-tab error
+  recovery, node CSV, and backend admission. The latter used a Go build overlay
+  after automatic review rejected temporary replacement of worktree files.
+  Reserved container-key CSV behavior also passed against the original LogViewer
+  through a read-only Vite loader. Logs:
+  `/tmp/luxury-yacht-s005b-characterization.log`,
+  `/tmp/luxury-yacht-s005b-routing-characterization.log`,
+  `/tmp/luxury-yacht-s005b-node-csv-characterization.log`,
+  `/tmp/luxury-yacht-s005b-yaml-admission-characterization.log`,
+  `/tmp/luxury-yacht-s005b-csv-original.log`.
+- Affected frontend coverage run passed 880 tests in 101 files at 84.69% statements
+  across the selected sources. Final routing tests passed 24 tests in two files:
+  content 90.14%, Overview wrapper 76.92%. The wrapper gap is in HPA and node
+  maintenance branches; the added dispatch test checks raw DTO and generic
+  fallback behavior. No presentation-only tests were added to inflate coverage.
+  Logs: `/tmp/luxury-yacht-s005b-frontend-coverage.log`,
+  `/tmp/luxury-yacht-s005b-routing-coverage.log`.
+- Final log presentation tests passed 199 tests in 16 files with 85.24% statement
+  coverage across the four changed log sources (83.04% LogViewer, 96.55% container
+  columns, 96.96% shared columns/CSV, 87.66% NodeLogsTab). Log:
+  `/tmp/luxury-yacht-s005b-logs-final.log`.
+- Backend coverage passed (`backend` 80.3%). With the new admission cases,
+  changed functions measure Validate 100%, Apply 92.3%, preparation/authorization
+  81.5%, and ownership 95.5%. The full backend profile under-reports the unchanged
+  `objectyaml` helper package when exercised through its consumers; a separate
+  `-coverpkg` run measured 74.5% from backend consumers. Coverage profiles/logs:
+  `/tmp/luxury-yacht-s005b-backend.out`,
+  `/tmp/luxury-yacht-s005b-yaml-final.out`,
+  `/tmp/luxury-yacht-s005b-field-policy-coverage.log`.
+- All 12 changed TypeScript production sources pass the local threshold-12
+  complexity check; changed Go functions score 3, 3, 6, and 9. Typecheck passed
+  on the final tree in the prerelease gate.
+  Logs: `/tmp/luxury-yacht-s005b-ts-complexity-final.log`,
+  `/tmp/luxury-yacht-s005b-go-complexity.json`,
+  `/tmp/luxury-yacht-s005b-typecheck-final.log`.
+  `gh pr view code-simplification` found no PR
+  (`/tmp/luxury-yacht-s005b-pr-status.log`); no remote Sonar closure is claimed.
+
+- One final `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease`
+  passed, including backend race tests, frontend checks and 4,779 tests in 512
+  files, Knip, and Trivy. Log: `/tmp/luxury-yacht-s005b-prerelease.log`.
+  Post-gate SHA-256 comparison found no formatter changes or additional paths
+  across the 23 changed files (`/tmp/luxury-yacht-s005b-post-gate.json`);
+  `git diff --check` passed. Only this ledger is finalized after the gate,
+  followed by `qc:docs` and another diff check.
+
+These are behavior-preserving refactors. Tests mock native calls and refresh
+transport; no native window, terminal interaction, or rendered-layout validation
+is claimed. Remaining domain responsibilities stay open for later batches.
+
+## Following batch — S006 operations
 
 Inspect shell/debug sessions, log readers and streams, port-forward, drain, and
 the runtime registry alongside their detail/event consumers. Collect related
@@ -589,7 +724,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/(root: logger)` | 1 | 371 | — / — | Inventoried |
 | `backend/(root: menu)` | 1 | 246 | — / — | Inventoried |
 | `backend/(root: node)` | 3 | 145 | — / — | Inventoried |
-| `backend/(root: object)` | 11 | 2243 | — / — | Partial S005: detail/provider seams and Helm content read ownership; remaining enrichments recorded |
+| `backend/(root: object)` | 11 | 2243 | — / — | Partial S005: detail/Helm read ownership and YAML mutation admission; other enrichments and mutation internals remain |
 | `backend/(root: operations)` | 2 | 323 | — / — | Inventoried |
 | `backend/(root: pod)` | 3 | 161 | — / — | Inventoried |
 | `backend/(root: portforward)` | 6 | 1133 | 2 / — | Inventoried |
@@ -747,7 +882,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/modules/kubernetes` | 1 | 856 | — / — | S003 provider inspected; adds selection model |
 | `frontend/src/modules/namespace` | 30 | 4701 | — / 1 | Inventoried |
 | `frontend/src/modules/object-map` | 38 | 8546 | — / 12 | Inventoried |
-| `frontend/src/modules/object-panel` | 141 | 32321 | — / 31 | Partial S005: composition/tab/lifecycle seams, Helm values model, open/close hook; remaining responsibilities recorded |
+| `frontend/src/modules/object-panel` | 141 | 32321 | — / 31 | Partial S005: panel reconciliation, tab composition, YAML baseline, Overview rendering, log presentation, Helm read model; remaining scope recorded |
 | `frontend/src/modules/port-forward` | 4 | 874 | — / 1 | Inventoried |
 | `frontend/src/modules/resource-grid` | 15 | 4107 | — / 1 | Inventoried |
 | `frontend/src/shared/actions` | 4 | 772 | — / — | Inventoried |

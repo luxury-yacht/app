@@ -14,8 +14,11 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { readWorkloadHPAManagedForRef, requestData } from '@/core/data-access';
 import { getOverviewDescriptor } from './descriptorRegistry';
+import {
+  type GenericOverviewProps as FallbackOverviewProps,
+  GenericOverview,
+} from './GenericOverview';
 import { OverviewRenderer } from './OverviewRenderer';
-import { overviewRegistry } from './registry';
 import '../../shared.css';
 
 // Generic props for resources - simplified without external type dependencies
@@ -123,13 +126,12 @@ const Overview: React.FC<OverviewProps> = (props) => {
           })
       : undefined;
 
-  // Use the factory pattern to render the appropriate component.
+  // Render the descriptor or generic fallback for this object.
   // Thread `hpaManaged` through so workload overviews can surface that
   // scaling is autonomous (e.g. in the Pods caption). Node overviews also
   // get the drain-in-progress signal so they can render the inline icon.
   const renderOverviewContent = () => {
-    // Descriptor-migrated kinds render from the raw active DTO; the rest fall back to the legacy
-    // per-kind component path.
+    // Registered kinds render from their raw DTO; other kinds use generic metadata.
     const descriptor = getOverviewDescriptor(props.kind, props.activeDetail);
     if (descriptor) {
       return (
@@ -150,7 +152,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
     // the panel's objectData (the source of truth) since there is no per-kind detail to read.
     const od = objectData as Record<string, unknown> | null;
     const meta = (od?.metadata as Record<string, unknown> | undefined) ?? undefined;
-    return overviewRegistry.renderComponent({
+    const genericProps = {
       ...props,
       group: od?.group,
       status: props.status ?? od?.status,
@@ -159,7 +161,8 @@ const Overview: React.FC<OverviewProps> = (props) => {
       hpaManaged: hpaManaged === true,
       drainInProgress: Boolean(activeDrainJob),
       onOpenDrain,
-    });
+    } as FallbackOverviewProps;
+    return <GenericOverview {...genericProps} />;
   };
 
   const handleCordon = isNode

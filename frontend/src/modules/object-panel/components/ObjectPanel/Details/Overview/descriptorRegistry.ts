@@ -4,7 +4,7 @@
  * Single source of truth mapping a Kubernetes kind to its Overview descriptor. Production dispatch
  * (index.tsx) and the runtime drift-check both read from here. Every built-in kind is registered;
  * kinds without a descriptor (custom resources and anything unregistered) fall back to the generic
- * overviewRegistry/GenericOverview path.
+ * GenericOverview path.
  */
 
 import { argoCDDescriptor, getArgoCDOverviewDescriptor } from './descriptors/argocd';

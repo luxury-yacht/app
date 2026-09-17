@@ -15,6 +15,7 @@ const hoistedRefs = vi.hoisted(() => ({
   logViewerProps: { current: null as unknown },
   logViewerError: { current: null as Error | null },
   eventsTabProps: { current: null as unknown },
+  eventsTabError: { current: null as Error | null },
   yamlTabProps: { current: null as unknown },
   manifestTabProps: { current: null as unknown },
   valuesTabProps: { current: null as unknown },
@@ -50,6 +51,9 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Logs/LogViewer', () => ({
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Events/EventsTab', () => ({
   default: (props: unknown) => {
+    if (hoistedRefs.eventsTabError.current) {
+      throw hoistedRefs.eventsTabError.current;
+    }
     hoistedRefs.eventsTabProps.current = props;
     return <div data-testid="events-tab" />;
   },
@@ -193,6 +197,42 @@ describe('ObjectPanelContent', () => {
       requireValue(baseProps.detailTabProps, 'expected test value in ObjectPanelContent.test.tsx')
     );
     expect(hoistedRefs.logViewerProps.current).toBeNull();
+  });
+
+  it.each(['constructor', 'toString'])('ignores unknown restored tab %s', async (tab) => {
+    await renderContent({
+      activeTab: tab as React.ComponentProps<typeof ObjectPanelContent>['activeTab'],
+    });
+    expect(container.querySelector('.object-panel-content')?.childElementCount).toBe(0);
+  });
+
+  it('resets a transient tab error after leaving it without discarding retained logs or YAML', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await renderContent({ activeTab: 'logs', objectData });
+      const logs = requireValue(
+        container.querySelector('[data-testid="logs-tab"]'),
+        'retained logs'
+      );
+      await renderContent({ activeTab: 'yaml', objectData });
+      const yaml = requireValue(
+        container.querySelector('[data-testid="yaml-tab"]'),
+        'retained YAML'
+      );
+      hoistedRefs.eventsTabError.current = new Error('events render failed');
+      await renderContent({ activeTab: 'events', objectData });
+      expect(container.querySelector('[data-testid="events-tab"]')).toBeNull();
+      expect(container.querySelector('button')?.textContent).toBe('Retry');
+      await renderContent({ activeTab: 'pods', objectData });
+      expect(container.querySelector('[data-testid="pods-tab"]')).not.toBeNull();
+      hoistedRefs.eventsTabError.current = null;
+      await renderContent({ activeTab: 'events', objectData });
+      expect(container.querySelector('[data-testid="events-tab"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="logs-tab"]')).toBe(logs);
+      expect(container.querySelector('[data-testid="yaml-tab"]')).toBe(yaml);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('renders logs viewer when logs tab is active and capability present', async () => {

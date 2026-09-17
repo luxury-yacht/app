@@ -93,21 +93,19 @@ const addCoverageKeys = (keys: Set<string>, additions: readonly string[] | undef
 };
 
 const addItemCoverageKeys = <T>(keys: Set<string>, item: OverviewItemSpec<T>): void => {
-  const itemKind = (item as { kind?: string }).kind;
-  if (itemKind === 'status') {
+  if (item.kind === 'status') {
     addCoverageKeys(keys, STATUS_FIELDS);
     return;
   }
-  if (itemKind === 'widget') {
-    addCoverageKeys(keys, (item as OverviewWidget<T>).consumes);
+  if (item.kind === 'widget') {
+    addCoverageKeys(keys, item.consumes);
     return;
   }
 
-  const field = item as OverviewField<T>;
-  if (field.field) {
-    keys.add(field.field);
+  if (item.field) {
+    keys.add(item.field);
   }
-  addCoverageKeys(keys, field.derivedFrom);
+  addCoverageKeys(keys, item.derivedFrom);
 };
 
 /**

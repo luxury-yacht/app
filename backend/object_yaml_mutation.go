@@ -71,15 +71,10 @@ type ObjectYAMLMutationResponse struct {
 }
 
 type mutationContext struct {
-	request      ObjectYAMLMutationRequest
-	base         *unstructured.Unstructured
-	desired      *unstructured.Unstructured
-	resource     dynamic.ResourceInterface
-	current      *unstructured.Unstructured
-	gvr          schema.GroupVersionResource
-	isNamespaced bool
-	patch        []byte
-	patchType    types.PatchType
+	desired   *unstructured.Unstructured
+	resource  dynamic.ResourceInterface
+	patch     []byte
+	patchType types.PatchType
 }
 
 func (g *ResourceGateway) mutationContext() (context.Context, context.CancelFunc) {
@@ -102,19 +97,10 @@ func (g *ResourceGateway) ValidateObjectYaml(clusterID string, req ObjectYAMLMut
 	ctx, cancel := g.mutationContext()
 	defer cancel()
 
-	mc, err := prepareMutationContextWithDependencies(ctx, deps, selectionKey, req)
+	mc, err := g.prepareAuthorizedYAMLMutation(ctx, deps, selectionKey, req)
 	if err != nil {
 		return nil, err
 	}
-	if err := g.requireResolvedResourcePermission(ctx, deps, mc.gvr, mc.isNamespaced, resourcePermissionCheck{
-		Kind:      req.Kind,
-		Namespace: req.Namespace,
-		Name:      req.Name,
-		Verb:      "patch",
-	}); err != nil {
-		return nil, err
-	}
-
 	result, err := mc.resource.Patch(
 		ctx,
 		req.Name,
@@ -145,19 +131,10 @@ func (g *ResourceGateway) ApplyObjectYaml(clusterID string, req ObjectYAMLMutati
 	ctx, cancel := g.mutationContext()
 	defer cancel()
 
-	mc, err := prepareMutationContextWithDependencies(ctx, deps, selectionKey, req)
+	mc, err := g.prepareAuthorizedYAMLMutation(ctx, deps, selectionKey, req)
 	if err != nil {
 		return nil, err
 	}
-	if err := g.requireResolvedResourcePermission(ctx, deps, mc.gvr, mc.isNamespaced, resourcePermissionCheck{
-		Kind:      req.Kind,
-		Namespace: req.Namespace,
-		Name:      req.Name,
-		Verb:      "patch",
-	}); err != nil {
-		return nil, err
-	}
-
 	result, err := mc.resource.Patch(
 		ctx,
 		req.Name,
@@ -178,7 +155,7 @@ func (g *ResourceGateway) ApplyObjectYaml(clusterID string, req ObjectYAMLMutati
 	}, nil
 }
 
-func prepareMutationContextWithDependencies(
+func (g *ResourceGateway) prepareAuthorizedYAMLMutation(
 	ctx context.Context,
 	deps common.Dependencies,
 	selectionKey string,
@@ -219,9 +196,13 @@ func prepareMutationContextWithDependencies(
 		return nil, err
 	}
 
+	if err := g.requireResolvedResourcePermission(ctx, deps, gvr, isNamespaced, resourcePermissionCheck{
+		Kind: req.Kind, Namespace: req.Namespace, Name: req.Name, Verb: "patch",
+	}); err != nil {
+		return nil, err
+	}
 	return &mutationContext{
-		request: req, base: base, desired: desired, resource: resource, current: current,
-		gvr: gvr, isNamespaced: isNamespaced, patch: patch, patchType: patchType,
+		desired: desired, resource: resource, patch: patch, patchType: patchType,
 	}, nil
 }
 

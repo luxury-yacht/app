@@ -260,43 +260,21 @@ const RouteRulesList: React.FC<{
   );
 };
 
-const groupFromByNamespace = (
-  from?: types.ReferenceGrantFromInfo[] | null
-): Array<{ namespace: string; entries: types.ReferenceGrantFromInfo[] }> => {
-  if (!from || from.length === 0) {
-    return [];
-  }
-  const order: string[] = [];
-  const map = new Map<string, types.ReferenceGrantFromInfo[]>();
-  for (const entry of from) {
-    const ns = entry.namespace;
-    if (!map.has(ns)) {
-      order.push(ns);
-      map.set(ns, []);
+const groupByNamespace = <T,>(
+  values: readonly T[] | null | undefined,
+  namespaceOf: (value: T) => string
+): Array<{ namespace: string; entries: T[] }> => {
+  const groups = new Map<string, T[]>();
+  for (const value of values ?? []) {
+    const namespace = namespaceOf(value);
+    const entries = groups.get(namespace);
+    if (entries) {
+      entries.push(value);
+    } else {
+      groups.set(namespace, [value]);
     }
-    map.get(ns)?.push(entry);
   }
-  return order.map((namespace) => ({ namespace, entries: map.get(namespace) ?? [] }));
-};
-
-const groupRefsByNamespace = (
-  refs?: Array<ObjectRef | types.RefOrDisplay> | null
-): Array<{ namespace: string; refs: Array<ObjectRef | types.RefOrDisplay> }> => {
-  if (!refs || refs.length === 0) {
-    return [];
-  }
-  const order: string[] = [];
-  const map = new Map<string, Array<ObjectRef | types.RefOrDisplay>>();
-  for (const ref of refs) {
-    const parts = getRefParts(ref);
-    const ns = parts.ref?.namespace ?? parts.display?.namespace ?? '';
-    if (!map.has(ns)) {
-      order.push(ns);
-      map.set(ns, []);
-    }
-    map.get(ns)?.push(ref);
-  }
-  return order.map((namespace) => ({ namespace, refs: map.get(namespace) ?? [] }));
+  return Array.from(groups, ([namespace, entries]) => ({ namespace, entries }));
 };
 
 const ReferenceGrantDiagram: React.FC<{
@@ -304,8 +282,11 @@ const ReferenceGrantDiagram: React.FC<{
   to?: Array<ObjectRef | types.RefOrDisplay> | null;
   clusterName?: string;
 }> = ({ from, to, clusterName }) => {
-  const fromGroups = groupFromByNamespace(from);
-  const toGroups = groupRefsByNamespace(to);
+  const fromGroups = groupByNamespace(from, (entry) => entry.namespace);
+  const toGroups = groupByNamespace(to, (ref) => {
+    const parts = getRefParts(ref);
+    return parts.ref?.namespace ?? parts.display?.namespace ?? '';
+  });
   if (fromGroups.length === 0 && toGroups.length === 0) {
     return null;
   }
@@ -334,7 +315,7 @@ const ReferenceGrantDiagram: React.FC<{
             {!!group.namespace && (
               <div className="reference-grant-namespace">{group.namespace}</div>
             )}
-            {withStableListKeys(group.refs, (ref) => JSON.stringify(ref)).map(
+            {withStableListKeys(group.entries, (ref) => JSON.stringify(ref)).map(
               ({ key: refKey, value: ref }) => (
                 <div key={refKey} className="reference-grant-item">
                   <RefLink value={ref} clusterName={clusterName} omitNamespace />
