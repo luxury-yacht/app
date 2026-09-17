@@ -5,7 +5,7 @@
  */
 
 import type { Graph } from '@antv/g6';
-import { CanvasEvent, EdgeEvent } from '@antv/g6';
+import { CanvasEvent, CommonEvent, EdgeEvent, NodeEvent } from '@antv/g6';
 import type { MutableRefObject } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
@@ -155,6 +155,24 @@ const bind = (selection: ObjectMapSelectionState = selectionState) => {
 };
 
 describe('object map G6 event bindings', () => {
+  it.each([CommonEvent.DRAG_END, CommonEvent.POINTER_UP])(
+    'ends a node gesture once when %s arrives before pointer release',
+    (endEvent) => {
+      const { cleanup, graph, handlers } = bind();
+      const event = { target: { id: 'pod' }, pointerId: 7, clientX: 80, clientY: 120 };
+      graph.emit(NodeEvent.POINTER_DOWN, event);
+      graph.emit(endEvent, event);
+      graph.emit(CommonEvent.POINTER_UP, event);
+
+      expect(handlers.onNodeDragStart).toHaveBeenCalledTimes(1);
+      expect(handlers.onNodeDragEnd).toHaveBeenCalledTimes(1);
+      expect(handlers.onNodeDragEnd).toHaveBeenCalledWith(
+        expect.objectContaining({ pointerId: 7, clientX: 80, clientY: 120 })
+      );
+      cleanup();
+    }
+  );
+
   it('emits connection hover state and tooltip payloads for edge hover', () => {
     const { cleanup, graph, handlers } = bind();
 

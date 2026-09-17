@@ -261,10 +261,7 @@ func (b *objectMapBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	if err != nil {
 		return nil, err
 	}
-	if opts.scopeKind == objectMapScopeNamespace {
-		return b.buildNamespace(ctx, scope, opts)
-	}
-	if opts.identity.GVK.Group == "" && opts.identity.GVK.Version == "" {
+	if opts.scopeKind == objectMapScopeObject && opts.identity.GVK.Group == "" && opts.identity.GVK.Version == "" {
 		return nil, fmt.Errorf("object-map scope for %s/%s is missing group/version", opts.identity.GVK.Kind, opts.identity.Name)
 	}
 
@@ -272,15 +269,10 @@ func (b *objectMapBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	if err != nil {
 		return nil, err
 	}
-	return assembler.buildObjectSnapshot(scope, opts)
-}
-
-func (b *objectMapBuilder) buildNamespace(ctx context.Context, scope string, opts objectMapOptions) (*refresh.Snapshot, error) {
-	assembler, err := b.newObjectMapAssembler(ctx)
-	if err != nil {
-		return nil, err
+	if opts.scopeKind == objectMapScopeNamespace {
+		return assembler.buildNamespaceSnapshot(scope, opts)
 	}
-	return assembler.buildNamespaceSnapshot(scope, opts)
+	return assembler.buildObjectSnapshot(scope, opts)
 }
 
 func (b *objectMapBuilder) catalog() *objectcatalog.Service {
@@ -413,17 +405,20 @@ func (idx *objectMapIndex) collectTypedCollector(src objectMapTypedSource, colle
 	return true
 }
 
+func objectMapRecordFromObject(identity resourcekind.Identity, obj metav1.Object) *objectMapRecord {
+	return &objectMapRecord{
+		ref:               refFromObject(obj, identity.Group, identity.Version, identity.Kind, identity.Resource, obj.GetNamespace()),
+		obj:               obj,
+		creationTimestamp: objectCreationTimestamp(obj),
+		owners:            obj.GetOwnerReferences(),
+		labels:            cloneStringMap(obj.GetLabels()),
+	}
+}
+
 func (idx *objectMapIndex) addTypedCollectorItems(collector objectmapnode.Collector, items []metav1.Object) {
-	identity := collector.Identity
 	for _, obj := range items {
-		record := &objectMapRecord{
-			ref:               refFromObject(obj, identity.Group, identity.Version, identity.Kind, identity.Resource, obj.GetNamespace()),
-			obj:               obj,
-			creationTimestamp: objectCreationTimestamp(obj),
-			owners:            obj.GetOwnerReferences(),
-			labels:            cloneStringMap(obj.GetLabels()),
-			status:            collector.Status(idx.meta.ClusterID, obj),
-		}
+		record := objectMapRecordFromObject(collector.Identity, obj)
+		record.status = collector.Status(idx.meta.ClusterID, obj)
 		if collector.ActionFacts != nil {
 			record.actionFacts = collector.ActionFacts(obj)
 		}
@@ -487,9 +482,8 @@ func (idx *objectMapIndex) collectGatewayTyped(
 	if idx == nil || factory == nil {
 		return
 	}
-	clusterID := idx.meta.ClusterID
 	for _, collector := range objectMapGatewayCollectors {
-		if idx.collectGatewayCollector(factory, presence, permissions, collector, clusterID) {
+		if idx.collectGatewayCollector(factory, presence, permissions, collector) {
 			return
 		}
 	}
@@ -500,7 +494,6 @@ func (idx *objectMapIndex) collectGatewayCollector(
 	presence objectMapGatewayPresenceChecker,
 	permissions objectMapPermissionChecker,
 	collector objectmapnode.GatewayCollector,
-	clusterID string,
 ) bool {
 	if !gatewayKindPresent(presence, collector.Identity.Kind) {
 		return false
@@ -513,7 +506,7 @@ func (idx *objectMapIndex) collectGatewayCollector(
 	if idx.skipListError(collector.Identity.Resource, err) {
 		return idx.hasListError()
 	}
-	idx.addGatewayCollectorItems(collector, clusterID, items)
+	idx.addGatewayCollectorItems(collector, items)
 	return false
 }
 
@@ -539,16 +532,11 @@ func (idx *objectMapIndex) listGatewayCollectorItems(factory gatewayinformers.Sh
 	return items, nil
 }
 
-func (idx *objectMapIndex) addGatewayCollectorItems(collector objectmapnode.GatewayCollector, clusterID string, items []metav1.Object) {
+func (idx *objectMapIndex) addGatewayCollectorItems(collector objectmapnode.GatewayCollector, items []metav1.Object) {
 	for _, obj := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(obj, collector.Identity.Group, collector.Identity.Version, collector.Identity.Kind, collector.Identity.Resource, obj.GetNamespace()),
-			obj:               obj,
-			creationTimestamp: objectCreationTimestamp(obj),
-			owners:            obj.GetOwnerReferences(),
-			labels:            cloneStringMap(obj.GetLabels()),
-			status:            collector.Status(clusterID, obj),
-		})
+		record := objectMapRecordFromObject(collector.Identity, obj)
+		record.status = collector.Status(idx.meta.ClusterID, obj)
+		idx.addRecord(record)
 	}
 }
 
@@ -581,14 +569,9 @@ func (idx *objectMapIndex) collectHPAs(shared informers.SharedInformerFactory) {
 		if !idx.namespaceAllowed(hpa.Namespace) {
 			continue
 		}
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&hpa.ObjectMeta, hpapkg.Identity.Group, hpapkg.Identity.Version, hpapkg.Identity.Kind, hpapkg.Identity.Resource, hpa.Namespace),
-			obj:               hpa,
-			creationTimestamp: objectCreationTimestamp(&hpa.ObjectMeta),
-			status:            hpapkg.ObjectMapStatus(idx.meta.ClusterID, hpa),
-			owners:            hpa.OwnerReferences,
-			labels:            cloneStringMap(hpa.Labels),
-		})
+		record := objectMapRecordFromObject(hpapkg.Identity, hpa)
+		record.status = hpapkg.ObjectMapStatus(idx.meta.ClusterID, hpa)
+		idx.addRecord(record)
 	}
 }
 func (idx *objectMapIndex) skipListError(resource string, err error) bool {
@@ -1343,16 +1326,9 @@ func (idx *objectMapIndex) matchingPods(namespace string, selector map[string]st
 	if len(selector) == 0 {
 		return nil
 	}
-	result := []*objectMapRecord{}
-	for _, record := range idx.records {
-		if record.ref.Kind != podres.Identity.Kind || record.ref.Namespace != namespace {
-			continue
-		}
-		if labelsMatch(selector, record.labels) {
-			result = append(result, record)
-		}
-	}
-	return result
+	return idx.matchingPodsWhere(namespace, func(podLabels map[string]string) bool {
+		return labelsMatch(selector, podLabels)
+	})
 }
 
 func (idx *objectMapIndex) matchingPodsByLabelSelector(namespace string, selector *metav1.LabelSelector) []*objectMapRecord {
@@ -1363,12 +1339,18 @@ func (idx *objectMapIndex) matchingPodsByLabelSelector(namespace string, selecto
 	if err != nil {
 		return nil
 	}
+	return idx.matchingPodsWhere(namespace, func(podLabels map[string]string) bool {
+		return parsed.Matches(labels.Set(podLabels))
+	})
+}
+
+func (idx *objectMapIndex) matchingPodsWhere(namespace string, matches func(map[string]string) bool) []*objectMapRecord {
 	result := []*objectMapRecord{}
 	for _, record := range idx.records {
 		if record.ref.Kind != podres.Identity.Kind || record.ref.Namespace != namespace {
 			continue
 		}
-		if parsed.Matches(labels.Set(record.labels)) {
+		if matches(record.labels) {
 			result = append(result, record)
 		}
 	}

@@ -586,16 +586,43 @@ const computeColumnStartX = (
   return columnStartX;
 };
 
-const computeLaneHeight = (laneNodes: ObjectMapNode[]): number => {
-  let totalHeight = 0;
-  laneNodes.forEach((node, index) => {
+const laneGapBefore = (laneNodes: ObjectMapNode[], index: number): number => {
+  if (index === 0) {
+    return 0;
+  }
+  return laneNodes[index - 1].ref.kind === laneNodes[index].ref.kind
+    ? OBJECT_MAP_ROW_GAP
+    : OBJECT_MAP_ROW_GAP + OBJECT_MAP_KIND_GROUP_GAP;
+};
+
+const positionLane = (
+  laneNodes: ObjectMapNode[],
+  x: number,
+  column: number,
+  seedId: string
+): PositionedNode[] => {
+  const totalHeight = laneNodes.reduce(
+    (height, _node, index) => height + laneGapBefore(laneNodes, index) + OBJECT_MAP_NODE_HEIGHT,
+    0
+  );
+  let y = -totalHeight / 2;
+  return laneNodes.map((node, index) => {
     if (index > 0) {
-      const sameKind = laneNodes[index - 1].ref.kind === node.ref.kind;
-      totalHeight += sameKind ? OBJECT_MAP_ROW_GAP : OBJECT_MAP_ROW_GAP + OBJECT_MAP_KIND_GROUP_GAP;
+      y += OBJECT_MAP_NODE_HEIGHT + laneGapBefore(laneNodes, index);
     }
-    totalHeight += OBJECT_MAP_NODE_HEIGHT;
+    return {
+      id: node.id,
+      x,
+      y,
+      width: OBJECT_MAP_NODE_WIDTH,
+      height: OBJECT_MAP_NODE_HEIGHT,
+      column,
+      isSeed: node.id === seedId,
+      ref: node.ref,
+      creationTimestamp: node.creationTimestamp,
+      status: node.status,
+    };
   });
-  return totalHeight;
 };
 
 export const computeObjectMapLayout = (
@@ -623,11 +650,7 @@ export const computeObjectMapLayout = (
   const adj = buildCrossColumnAdjacency(edges, columnOf);
   orderColumnsByBarycenter(columns, adj, columnOf, seedColumn);
 
-  const positioned = new Map<string, PositionedNode>();
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
+  const placements: PositionedNode[] = [];
 
   const sortedColumns = Array.from(columns.keys()).sort((a, b) => a - b);
   const columnLanes = new Map<number, ObjectMapNode[][]>();
@@ -654,41 +677,44 @@ export const computeObjectMapLayout = (
     for (let laneIndex = 0; laneIndex < lanes.length; laneIndex += 1) {
       const laneNodes = lanes[laneIndex];
       const laneX = columnX + laneIndex * COLUMN_STRIDE;
-      const totalHeight = computeLaneHeight(laneNodes);
-      let y = -totalHeight / 2;
-
-      laneNodes.forEach((node, index) => {
-        if (index > 0) {
-          const sameKind = laneNodes[index - 1].ref.kind === node.ref.kind;
-          const gap = sameKind
-            ? OBJECT_MAP_ROW_GAP
-            : OBJECT_MAP_ROW_GAP + OBJECT_MAP_KIND_GROUP_GAP;
-          y += OBJECT_MAP_NODE_HEIGHT + gap;
-        }
-        positioned.set(node.id, {
-          id: node.id,
-          x: laneX,
-          y,
-          width: OBJECT_MAP_NODE_WIDTH,
-          height: OBJECT_MAP_NODE_HEIGHT,
-          column,
-          isSeed: node.id === seedId,
-          ref: node.ref,
-          creationTimestamp: node.creationTimestamp,
-          status: node.status,
-        });
-        minX = Math.min(minX, laneX);
-        minY = Math.min(minY, y);
-        maxX = Math.max(maxX, laneX + OBJECT_MAP_NODE_WIDTH);
-        maxY = Math.max(maxY, y + OBJECT_MAP_NODE_HEIGHT);
-      });
+      placements.push(...positionLane(laneNodes, laneX, column, seedId));
     }
   });
 
+  const positioned = Array.from(new Map(placements.map((node) => [node.id, node])).values());
   return {
-    nodes: Array.from(positioned.values()),
-    edges: routeObjectMapEdges(Array.from(positioned.values()), edges),
-    bounds: minX === Infinity ? { minX: 0, minY: 0, maxX: 0, maxY: 0 } : { minX, minY, maxX, maxY },
+    nodes: positioned,
+    edges: routeObjectMapEdges(positioned, edges),
+    // Bounds include every placement, even if repeated IDs collapse in the node index.
+    bounds: computeObjectMapBounds(placements),
+  };
+};
+
+const routeEdgeGeometry = (
+  source: PositionedNode,
+  target: PositionedNode
+): Pick<PositionedEdge, 'd' | 'midX' | 'midY' | 'sameColumn'> => {
+  const sourceY = source.y + source.height / 2;
+  const targetY = target.y + target.height / 2;
+  const midY = (sourceY + targetY) / 2;
+  if (source.x === target.x) {
+    const anchorX = source.x + source.width;
+    const arcStretch = source.width * 1.5;
+    return {
+      d: buildSameColumnPath(anchorX, sourceY, targetY, arcStretch),
+      midX: anchorX + 0.75 * arcStretch,
+      midY,
+      sameColumn: true,
+    };
+  }
+  const sourceIsLeft = source.x <= target.x;
+  const sourceX = sourceIsLeft ? source.x + source.width : source.x;
+  const targetX = sourceIsLeft ? target.x : target.x + target.width;
+  return {
+    d: buildCrossColumnPath(sourceX, sourceY, targetX, targetY),
+    midX: (sourceX + targetX) / 2,
+    midY,
+    sameColumn: false,
   };
 };
 
@@ -704,34 +730,6 @@ export const routeObjectMapEdges = (
     if (!source || !target) {
       return;
     }
-    const sameColumn = source.x === target.x;
-    if (sameColumn) {
-      const anchorX = source.x + source.width;
-      const sourceY = source.y + source.height / 2;
-      const targetY = target.y + target.height / 2;
-      const arcStretch = source.width * 1.5;
-      const midX = anchorX + 0.75 * arcStretch;
-      const midY = (sourceY + targetY) / 2;
-      positionedEdges.push({
-        id: edge.id,
-        sourceId: edge.source,
-        targetId: edge.target,
-        type: edge.type,
-        label: edge.label,
-        tracedBy: edge.tracedBy,
-        filteredPath: edge.filteredPath,
-        d: buildSameColumnPath(anchorX, sourceY, targetY, arcStretch),
-        midX,
-        midY,
-        sameColumn: true,
-      });
-      return;
-    }
-    const sourceIsLeft = source.x <= target.x;
-    const sourceX = sourceIsLeft ? source.x + source.width : source.x;
-    const targetX = sourceIsLeft ? target.x : target.x + target.width;
-    const sourceY = source.y + source.height / 2;
-    const targetY = target.y + target.height / 2;
     positionedEdges.push({
       id: edge.id,
       sourceId: edge.source,
@@ -740,10 +738,7 @@ export const routeObjectMapEdges = (
       label: edge.label,
       tracedBy: edge.tracedBy,
       filteredPath: edge.filteredPath,
-      d: buildCrossColumnPath(sourceX, sourceY, targetX, targetY),
-      midX: (sourceX + targetX) / 2,
-      midY: (sourceY + targetY) / 2,
-      sameColumn: false,
+      ...routeEdgeGeometry(source, target),
     });
   });
   return positionedEdges;

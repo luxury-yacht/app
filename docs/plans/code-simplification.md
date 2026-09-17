@@ -208,7 +208,7 @@ correctness-driven interruption and resume the rotation afterwards.
 | 4 | Refresh and data access | Refresh APIs, stores, snapshots, ingestion, streams, metrics and governor; frontend refresh/data brokers | S004 catch-up: snapshot/store/mux/metrics reviewed; large lifecycle owners remain |
 | 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | Expanded S005 batch and final gate passed; remaining scope recorded |
 | 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | S006 owner/consumer review, batch implementation, coverage and final gate passed |
-| 7 | Object map | Backend graph producers and relationships; frontend graph, layout and renderer | Inventoried |
+| 7 | Object map | Backend graph producers and relationships; frontend graph, layout and renderer | S007 batch, coverage and final gate passed; limits recorded |
 | 8 | Permissions and mutations | Capability policy, permission caches, object actions/YAML; frontend availability gates | Inventoried |
 | 9 | Navigation and interaction | Sidebar, routing, shortcuts, command palette, modals, shared inputs and menus | Inventoried |
 | 10 | Preferences and persistence | Settings, favorites, UI state, import/export/reset; frontend state hydration | Inventoried |
@@ -746,6 +746,126 @@ S001 established an inefficient delivery size: a one-file production change paid
 for a full frontend coverage run and a full repository gate. Future batches
 follow the revised workflow's validation levels; S001 is not the throughput model.
 
+## S007 — object-map projection, traversal and rendering
+
+**Status: batch implemented; local checks and final gate passed.** Baseline: `8cbebce9`; initial
+`git status --short` was empty. This batch follows the graph from snapshot
+collection through directional filtering, kind contraction, layout, selection,
+and renderer updates. It does not close the entire snapshot or resources tree.
+
+Selected candidates:
+
+- Give directional filtering and selection one adjacency/reachability owner;
+  preserve each consumer's admission rules and whether its result includes the seed.
+- Separate hidden-path enumeration from path counting/canonical selection and
+  synthetic-edge projection. Preserve all simple paths, tie-breaking and order.
+- Share lane spacing and bounds calculation, and separate geometric routing from
+  edge metadata projection. Preserve lane packing, cycles, duplicate-ID behavior,
+  card dimensions and tooltip midpoints.
+- Share hover decoration between pointer updates and selection reapplication;
+  retain partial versus full graph patches. Make the apply queue's attribute
+  comparison allowlists explicit without broadening patch admission.
+- Centralize snapshot record metadata projection for typed, Gateway and HPA
+  collection; retain their permission, presence, namespace and status policies.
+  Share pod candidate iteration while preserving the two selector semantics.
+
+Boundary review: per-kind collectors and ingest projectors produce records for
+one cluster-owned index. Catalog records merge before typed/ingest enrichment;
+relationship resolution precedes graph traversal. The frontend model filters
+before layout; visible state and selection feed G6 data and event handlers.
+Helpers remain within the snapshot package or frontend object-map leaves, with
+no new provider, runtime owner, wire type or reverse import. Render readiness,
+latest-update admission, drag viewport preservation and delayed graph disposal
+remain in their existing owners. Existing snapshot, model, layout, apply-queue
+and component tests exercise these consumer contracts.
+
+Retained candidates: separate data/selection queues and graph lifecycle because
+readiness and disposal ordering differ; per-kind registry facets because kind
+ownership is established; mixed versus directional backend walks because their
+admission and depth policies differ; React controls and debug overlays because
+moving declarations alone would not reduce repeated policy. Per-kind status/lister
+wrappers retain their registry-owned shape. Tooltip/card
+text measurement retains its distinct fallback and truncation policies. Palette,
+viewport/app-zoom suppression, legend dragging, collapse/deduplication, debug
+publication and navigation retain their existing owners and ordering.
+
+Inspected scope:
+
+- Snapshot `object_map.go`, assembler, collector/edge registries and relationship
+  policies; neutral `objectmap` status/action facts, `objectmapnode` collector and
+  intake projection, and `objectmapspec/edge.go`. Inspected the implementation
+  bodies of every per-kind production `objectmap*.go` facet under
+  `backend/resources` (33 kind directories), including typed, Gateway, HPA
+  and ingest-owned producers. This does not close their model/detail/action packages.
+- Frontend map shell and G6 renderer; model, visible-state, directional filter,
+  selection, kind contraction, layout, collapse and deduplication; apply queue,
+  G6 data, event bindings, interactions, gesture state, graph lifecycle,
+  viewport helpers/hook, palette helpers/hook, card/path extensions, tooltip
+  layout/overlay, renderer options/types, constants/card style, edge registry,
+  legend dragging, scope/navigation/payload/loading helpers and debug store.
+  Styles, stories and performance-fixture generation were not refactored.
+- Consumer evidence includes snapshot recursive/namespace/Gateway/HPA/RBAC tests,
+  filtering/layout tests, pointer-event and selection-state tests, queue tests,
+  ObjectMap component tests and existing 500/1000-node performance checks.
+
+Implemented the five candidate groups above plus shared renderer node/edge
+lookups and one node-gesture completion handler for drag-end and pointer-up.
+Added `objectMapTraversal.ts`; original inventory counts remain baseline counts.
+The diff retains queue scheduling, provider lifecycle, kind semantics, payloads,
+CSS, dependencies and native window contracts.
+
+Validation:
+
+- Baseline snapshot `go test ./backend/refresh/snapshot -run ObjectMap` passed;
+  frontend object-map baseline passed 174 tests in 23 files. Cycle/dangling-edge/
+  hidden-path characterization passed before traversal and kind refactoring.
+  Incremental focused checks passed after each candidate group.
+- Combined object-map run passed **179 tests in 23 files**. Added event-binding
+  cases prove drag-end and pointer-up each finish a gesture once, including a
+  later duplicate pointer-up; existing modifier-navigation assertions survive.
+- External before/after comparison matched complete layout outputs on **500
+  deterministic graphs**, including cycles, missing endpoints/seed, duplicate
+  IDs, mixed kinds, metadata and split lanes. Script/baselines:
+  `/tmp/luxury-yacht-s007-layout-{parity.mjs,before.ts,after.ts}`. This proves data
+  parity for those fixtures, not native rendering or all possible inputs.
+- `test:frontend-coverage` passed **4,796 tests in 513 files**, **87.64%** repository
+  statement coverage. Changed production files combined: **852/933 (91.32%)**;
+  traversal/filter/selection 100%, kind filter 94.20%, layout 97.15%, data 91.26%,
+  queue 89.90%, interactions 89.28%. Event bindings remain **69.47%** for the whole
+  file; unexercised wheel/error/event paths are not claimed covered. No behavior
+  change or coverage-only test padding is included.
+- `test:backend-coverage` passed. Ten changed/new Go functions cover **56/67
+  statements (83.58%)**; metadata construction and typed/Gateway item projection
+  are 100%. Existing nil/list-error/selector-invalid branches leave `collectHPAs`
+  and map selector matching at 75%, label-selector matching at 71.43%.
+  Counts: `/tmp/luxury-yacht-s007-coverage-report.txt`.
+- Typecheck passed. Local complexity: **37 changed/new TypeScript functions**
+  have no Biome finding above 12; **10 changed/new Go functions** score 0–6 with
+  pinned gocognit v1.2.1. AST comparison confirms three retained Biome findings
+  are unchanged functions: selection/data queue runners (21/27) and node-data
+  projection callback (13). These are not Sonar closure claims.
+- PR #355 audit at published head `8cbebce958211cc0ec6b57274dbfb383d38b53a0`
+  reports three findings in earlier passes: S6759 `ShellConnectionControls.tsx:30`,
+  S7737 `useGridTableContextMenuItems.tsx:76`, S6478 `ObjectPanelContent.tsx:72`.
+  They are outside S007's diff and remain in the follow-up queue. The uncommitted
+  S007 work has no remote Sonar analysis. Logs:
+  `/tmp/luxury-yacht-s007-{sonar.log,pr.json}`.
+- Native Wails interaction was not run for this behavior-preserving batch.
+  Automated layout/state/interaction evidence does not claim native window or
+  canvas visual verification.
+
+Final `mise exec -- wails3 task qc:prerelease` passed (exit 0): docs, formatting,
+bindings, vet/staticcheck, full backend race suite, frontend checks/typecheck,
+4,796 frontend tests, Knip and Trivy. Log:
+`/tmp/luxury-yacht-s007-prerelease.log`. Before/after tracked and new-file hash
+comparison found **no gate modifications**; `git diff --check` passed. Manifest:
+`/tmp/luxury-yacht-s007-after-gate.json`. Final diff comprises **10 production
+files, five test files and this ledger**. Only this ledger changed afterwards;
+`qc:docs` and `git diff --check` were rerun for that update.
+
+Next scheduled domain: **S008 permissions and mutations**, with earlier-pass Sonar findings
+retained explicitly for follow-up. The repository-wide review remains in progress.
+
 ## S002 — catalog query, facets, and snapshot assembly
 
 **Status: selected batch implemented; affected checks and final gate passed.**
@@ -1044,7 +1164,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/refresh/querypage` | 10 | 3065 | 5 / — | Inventoried |
 | `backend/refresh/resourcestream` | 20 | 3531 | 2 / — | Inventoried |
 | `backend/refresh/ringbuffer` | 1 | 68 | — / — | Inventoried |
-| `backend/refresh/snapshot` | 77 | 20864 | 11 / — | Reviewing: S002 catalog snapshot; other domains remain |
+| `backend/refresh/snapshot` | 77 | 20864 | 11 / — | S002 catalog and S007 object-map assembly reviewed; other domains remain |
 | `backend/refresh/streammux` | 3 | 844 | 2 / — | Inventoried |
 | `backend/refresh/system` | 9 | 2505 | 1 / — | Partial: S004 ingest readiness hub |
 | `backend/refresh/telemetry` | 1 | 707 | — / — | Inventoried |
@@ -1139,7 +1259,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/modules/global` | 5 | 773 | — / 2 | Inventoried |
 | `frontend/src/modules/kubernetes` | 1 | 856 | — / — | S003 provider inspected; adds selection model |
 | `frontend/src/modules/namespace` | 30 | 4701 | — / 1 | Inventoried |
-| `frontend/src/modules/object-map` | 38 | 8546 | — / 12 | Inventoried |
+| `frontend/src/modules/object-map` | 38 | 8546 | — / 12 | S007 production owner/consumer review and batch; limits recorded |
 | `frontend/src/modules/object-panel` | 141 | 32321 | — / 31 | Partial S005: panel reconciliation, tab composition, YAML baseline, Overview rendering, log presentation, Helm read model; S006 shell/debug and node/container-log consumers reviewed; remaining scope recorded |
 | `frontend/src/modules/port-forward` | 4 | 874 | — / 1 | Inventoried |
 | `frontend/src/modules/resource-grid` | 15 | 4107 | — / 1 | Inventoried |

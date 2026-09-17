@@ -25,78 +25,32 @@
  */
 
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
+import {
+  appendDirectionalEdge,
+  collectDirectionalConnections,
+  type DirectionalAdjacency,
+} from './objectMapTraversal';
 
 export interface DirectionalFilterResult {
   nodes: ObjectMapNode[];
   edges: ObjectMapEdge[];
 }
 
-type DirectionalNeighbor = { edgeId: string; neighbor: string };
-
-type DirectionalAdjacency = {
-  outgoing: Map<string, DirectionalNeighbor[]>;
-  incoming: Map<string, DirectionalNeighbor[]>;
-};
-
-const appendDirectionalNeighbor = (
-  adjacency: Map<string, DirectionalNeighbor[]>,
-  nodeId: string,
-  neighbor: DirectionalNeighbor
-): void => {
-  const entries = adjacency.get(nodeId);
-  if (entries) {
-    entries.push(neighbor);
-    return;
-  }
-  adjacency.set(nodeId, [neighbor]);
-};
-
 const buildDirectionalAdjacency = (
   nodes: ObjectMapNode[],
   edges: ObjectMapEdge[]
 ): DirectionalAdjacency => {
   const validIds = new Set(nodes.map((node) => node.id));
-  const outgoing = new Map<string, DirectionalNeighbor[]>();
-  const incoming = new Map<string, DirectionalNeighbor[]>();
+  const adjacency: DirectionalAdjacency = { outgoing: new Map(), incoming: new Map() };
 
   edges.forEach((edge) => {
     if (!validIds.has(edge.source) || !validIds.has(edge.target) || edge.source === edge.target) {
       return;
     }
-    appendDirectionalNeighbor(outgoing, edge.source, {
-      edgeId: edge.id,
-      neighbor: edge.target,
-    });
-    appendDirectionalNeighbor(incoming, edge.target, {
-      edgeId: edge.id,
-      neighbor: edge.source,
-    });
+    appendDirectionalEdge(adjacency, edge.id, edge.source, edge.target);
   });
 
-  return { outgoing, incoming };
-};
-
-const collectDirectionalReachability = (
-  seedId: string,
-  adjacency: Map<string, DirectionalNeighbor[]>,
-  reachableNodes: Set<string>,
-  reachableEdges: Set<string>
-): void => {
-  const visited = new Set<string>([seedId]);
-  const queue: string[] = [seedId];
-  for (let head = 0; head < queue.length; head += 1) {
-    const nodeId = queue[head];
-    const neighbors = adjacency.get(nodeId) ?? [];
-    for (const { edgeId, neighbor } of neighbors) {
-      reachableEdges.add(edgeId);
-      if (visited.has(neighbor)) {
-        continue;
-      }
-      visited.add(neighbor);
-      reachableNodes.add(neighbor);
-      queue.push(neighbor);
-    }
-  }
+  return adjacency;
 };
 
 export const filterByDirectionalReachability = (
@@ -110,23 +64,12 @@ export const filterByDirectionalReachability = (
     return { nodes, edges };
   }
 
-  const { outgoing, incoming } = buildDirectionalAdjacency(nodes, edges);
-
-  const reachableNodes = new Set<string>([seedId]);
-  const reachableEdges = new Set<string>();
-
-  // Forward BFS — walk outgoing edges only. Nodes reached this way
-  // are the seed's descendants/dependencies; we only continue along
-  // their outgoing edges, never their incoming.
-  collectDirectionalReachability(seedId, outgoing, reachableNodes, reachableEdges);
-
-  // Backward BFS — walk incoming edges only. Nodes reached this way
-  // are the seed's ancestors/consumers; from each we only continue
-  // backward, never forward.
-  collectDirectionalReachability(seedId, incoming, reachableNodes, reachableEdges);
+  const adjacency = buildDirectionalAdjacency(nodes, edges);
+  const { connectedIds, connectedEdgeIds } = collectDirectionalConnections(seedId, adjacency);
+  connectedIds.add(seedId);
 
   return {
-    nodes: nodes.filter((n) => reachableNodes.has(n.id)),
-    edges: edges.filter((e) => reachableEdges.has(e.id)),
+    nodes: nodes.filter((n) => connectedIds.has(n.id)),
+    edges: edges.filter((e) => connectedEdgeIds.has(e.id)),
   };
 };

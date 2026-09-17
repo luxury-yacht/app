@@ -227,7 +227,8 @@ const objectMapG6SimpleEdgePath = (
 
 export const objectMapG6NodeState = (
   node: PositionedNode,
-  selectionState: ObjectMapSelectionState
+  selectionState: ObjectMapSelectionState,
+  hoveredEdge: PositionedEdge | null = null
 ): string[] => {
   const states: string[] = [];
   if (node.isSeed) {
@@ -238,17 +239,27 @@ export const objectMapG6NodeState = (
   } else if (selectionState.activeId !== null) {
     states.push(selectionState.connectedIds.has(node.id) ? 'connected' : 'dimmed');
   }
+  if (
+    hoveredEdge &&
+    !isObjectMapEdgeDimmedBySelection(selectionState, hoveredEdge.id) &&
+    (node.id === hoveredEdge.sourceId || node.id === hoveredEdge.targetId)
+  ) {
+    states.push('edgeHovered');
+  }
   return states;
 };
 
 export const objectMapG6EdgeState = (
   edge: PositionedEdge,
-  selectionState: ObjectMapSelectionState
+  selectionState: ObjectMapSelectionState,
+  hoveredEdgeId: string | null = null
 ): string[] => {
-  if (selectionState.activeId === null) {
-    return [];
+  const dimmed = isObjectMapEdgeDimmedBySelection(selectionState, edge.id);
+  const states = selectionState.activeId === null ? [] : [dimmed ? 'dimmed' : 'highlighted'];
+  if (edge.id === hoveredEdgeId && !dimmed) {
+    states.push('hovered');
   }
-  return [isObjectMapEdgeDimmedBySelection(selectionState, edge.id) ? 'dimmed' : 'highlighted'];
+  return states;
 };
 
 export interface ObjectMapG6DataOptions {

@@ -6,7 +6,8 @@
  */
 
 import type { ObjectMapReference } from '@core/refresh/types';
-import type { ObjectMapLayout, PositionedNode } from './objectMapLayout';
+import { findObjectMapG6Node } from './objectMapG6RendererOptions';
+import type { ObjectMapLayout } from './objectMapLayout';
 import {
   beginObjectMapNodeGesture,
   consumeObjectMapSuppressedClick,
@@ -98,9 +99,6 @@ export interface ObjectMapG6NodeInteractionContext {
   handlers: ObjectMapG6NodeInteractionHandlers;
   markNodeClickHandled: () => void;
 }
-
-const findObjectMapG6Node = (layout: ObjectMapLayout, id: string): PositionedNode | null =>
-  layout.nodes.find((node) => node.id === id) ?? null;
 
 const objectMapG6EventPointerId = (event: ObjectMapG6PointerInput): number =>
   event.pointerId ?? event.nativeEvent?.pointerId ?? 1;
@@ -286,17 +284,7 @@ export const handleObjectMapG6Drag = (
   }
 };
 
-export const handleObjectMapG6DragEnd = (
-  context: ObjectMapG6NodeInteractionContext,
-  event: ObjectMapG6ElementPointerEvent
-): void => {
-  const pointer = toObjectMapG6Pointer(event, context.graph);
-  if (endObjectMapNodeGesture(context.gestureState, pointer.pointerId)) {
-    context.handlers.onNodeDragEnd(pointer);
-  }
-};
-
-export const handleObjectMapG6PointerUp = (
+export const handleObjectMapG6NodeGestureEnd = (
   context: ObjectMapG6NodeInteractionContext,
   event: ObjectMapG6ElementPointerEvent
 ): void => {

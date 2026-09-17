@@ -76,6 +76,58 @@ const toFilteredPath = (
   };
 };
 
+interface KindFilterContext {
+  nodeById: Map<string, ObjectMapNode>;
+  visibleNodeIds: Set<string>;
+  outgoing: Map<string, ObjectMapLayoutEdge[]>;
+}
+
+const recordContractedPath = (
+  contracted: Map<string, ContractedPath>,
+  sourceId: string,
+  targetId: string,
+  path: CandidatePath
+): void => {
+  const key = `${sourceId}\0${targetId}`;
+  const existing = contracted.get(key);
+  if (!existing) {
+    contracted.set(key, { count: 1, path });
+    return;
+  }
+  existing.count += 1;
+  if (comparePath(path, existing.path) < 0) {
+    existing.path = path;
+  }
+};
+
+const collectHiddenPaths = (
+  sourceId: string,
+  firstEdge: ObjectMapLayoutEdge,
+  context: KindFilterContext,
+  contracted: Map<string, ContractedPath>
+): void => {
+  const queue: CandidatePath[] = [{ nodes: [sourceId, firstEdge.target], edges: [firstEdge] }];
+  for (let head = 0; head < queue.length; head += 1) {
+    const current = queue[head];
+    const currentNodeId = current.nodes[current.nodes.length - 1];
+    for (const edge of context.outgoing.get(currentNodeId) ?? []) {
+      if (!context.nodeById.has(edge.target) || current.nodes.includes(edge.target)) {
+        continue;
+      }
+      const nextPath = {
+        nodes: [...current.nodes, edge.target],
+        edges: [...current.edges, edge],
+      };
+      // A visible endpoint ends this path; only hidden nodes are traversed.
+      if (context.visibleNodeIds.has(edge.target)) {
+        recordContractedPath(contracted, sourceId, edge.target, nextPath);
+      } else {
+        queue.push(nextPath);
+      }
+    }
+  }
+};
+
 export const contractObjectMapKindFilter = (
   nodes: ObjectMapNode[],
   edges: ObjectMapLayoutEdge[],
@@ -104,59 +156,14 @@ export const contractObjectMapKindFilter = (
   );
   const contracted = new Map<string, ContractedPath>();
 
-  visibleNodes.forEach((source) => {
-    const firstEdges = outgoing.get(source.id) ?? [];
-    firstEdges.forEach((firstEdge) => {
-      if (visibleNodeIds.has(firstEdge.target)) {
-        return;
+  const context = { nodeById, visibleNodeIds, outgoing };
+  for (const source of visibleNodes) {
+    for (const firstEdge of outgoing.get(source.id) ?? []) {
+      if (!visibleNodeIds.has(firstEdge.target) && nodeById.has(firstEdge.target)) {
+        collectHiddenPaths(source.id, firstEdge, context, contracted);
       }
-      if (!nodeById.has(firstEdge.target)) {
-        return;
-      }
-
-      const queue: CandidatePath[] = [
-        {
-          nodes: [source.id, firstEdge.target],
-          edges: [firstEdge],
-        },
-      ];
-
-      for (let head = 0; head < queue.length; head += 1) {
-        const current = queue[head];
-        const currentNodeId = current.nodes[current.nodes.length - 1];
-        const nextEdges = outgoing.get(currentNodeId) ?? [];
-
-        nextEdges.forEach((edge) => {
-          if (!nodeById.has(edge.target)) {
-            return;
-          }
-          if (current.nodes.includes(edge.target)) {
-            return;
-          }
-          const nextPath: CandidatePath = {
-            nodes: [...current.nodes, edge.target],
-            edges: [...current.edges, edge],
-          };
-
-          if (visibleNodeIds.has(edge.target)) {
-            const key = `${source.id}\0${edge.target}`;
-            const existing = contracted.get(key);
-            if (!existing) {
-              contracted.set(key, { count: 1, path: nextPath });
-            } else {
-              existing.count += 1;
-              if (comparePath(nextPath, existing.path) < 0) {
-                existing.path = nextPath;
-              }
-            }
-            return;
-          }
-
-          queue.push(nextPath);
-        });
-      }
-    });
-  });
+    }
+  }
 
   contracted.forEach((entry, key) => {
     const [source, target] = key.split('\0');

@@ -23,6 +23,21 @@ const e = (id: string, source: string, target: string, type: string): ObjectMapE
 });
 
 describe('filterByDirectionalReachability', () => {
+  it('retains cycle connections but excludes self links and missing endpoints', () => {
+    const nodes = [node('a', 'Pod', 'a'), node('b', 'Pod', 'b')];
+    const edges = [
+      e('self', 'a', 'a', 'owner'),
+      e('ab', 'a', 'b', 'owner'),
+      e('ba', 'b', 'a', 'owner'),
+      e('missing', 'a', 'missing', 'uses'),
+    ];
+
+    const result = filterByDirectionalReachability(nodes, edges, 'a');
+
+    expect(result.nodes).toEqual(nodes);
+    expect(result.edges.map((edge) => edge.id)).toEqual(['ab', 'ba']);
+  });
+
   it("keeps the backward chain from a Node seed but drops the Pods' forward dependencies", () => {
     // The motivating case. Node seed has only incoming edges
     // (schedules from Pod, owner from NodeClaim). The BFS reaches

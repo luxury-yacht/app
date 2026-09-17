@@ -7,12 +7,9 @@
 
 import type { EdgeData, Graph, GraphData, NodeData } from '@antv/g6';
 import { objectMapG6EdgeState, objectMapG6NodeState } from './objectMapG6Data';
+import { findObjectMapG6Edge } from './objectMapG6RendererOptions';
 import type { ObjectMapLayout } from './objectMapLayout';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
-import { isObjectMapEdgeDimmedBySelection } from './objectMapSelection';
-
-const findEdge = (layout: ObjectMapLayout, id: string) =>
-  layout.edges.find((edge) => edge.id === id) ?? null;
 
 const graphNodes = (data: GraphData): NodeData[] => data.nodes ?? [];
 const graphEdges = (data: GraphData): EdgeData[] => data.edges ?? [];
@@ -83,6 +80,67 @@ const objectMapPathChanged = (previous?: unknown, next?: unknown): boolean => {
   });
 };
 
+const fieldsChanged = <T extends object>(
+  previous: T,
+  next: T,
+  fields: readonly (keyof T)[]
+): boolean => fields.some((field) => previous[field] !== next[field]);
+
+const NODE_STYLE_FIELDS = [
+  'x',
+  'y',
+  'fill',
+  'stroke',
+  'lineWidth',
+  'radius',
+  'opacity',
+  'cardDetailLevel',
+  'cardKindBadgeText',
+  'cardKindBadgeFill',
+  'cardKindBadgeTextFill',
+  'cardKindBadgeStroke',
+  'cardKindBadgeBorderWidth',
+  'cardKindBadgeRadius',
+  'cardKindBadgeFontSize',
+  'cardKindBadgeFontWeight',
+  'cardKindBadgeLetterSpacing',
+  'cardKindBadgePaddingX',
+  'cardKindBadgePaddingY',
+  'cardBackgroundOpacity',
+  'cardForegroundOpacity',
+  'cardCollapseBadgeText',
+  'cardCollapseBadgeFill',
+  'cardCollapseBadgeTextFill',
+  'cardCollapseBadgeStroke',
+  'cardNameText',
+  'cardNamespaceText',
+  'cardAgeText',
+  'cardStatusText',
+  'cardStatusReason',
+  'cardStatusFill',
+  'cardStatusStroke',
+  'cardFontFamily',
+  'cardNameFill',
+  'cardNamespaceFill',
+  'cardAgeFill',
+] as const satisfies readonly (keyof NonNullable<NodeData['style']>)[];
+
+const EDGE_STYLE_FIELDS = [
+  'stroke',
+  'lineWidth',
+  'opacity',
+  'objectMapEdgeDetailLevel',
+] as const satisfies readonly (keyof NonNullable<EdgeData['style']>)[];
+
+const EDGE_DATA_FIELDS = [
+  'label',
+  'type',
+  'tracedBy',
+  'midX',
+  'midY',
+  'path',
+] as const satisfies readonly (keyof NonNullable<EdgeData['data']>)[];
+
 const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
   const previousStyle = previous.style ?? {};
   const nextStyle = next.style ?? {};
@@ -94,43 +152,8 @@ const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
     (previousSize[0] !== nextSize[0] || previousSize[1] !== nextSize[1]);
   return (
     previous.type !== next.type ||
-    previousStyle.x !== nextStyle.x ||
-    previousStyle.y !== nextStyle.y ||
-    sizeChanged ||
-    previousStyle.fill !== nextStyle.fill ||
-    previousStyle.stroke !== nextStyle.stroke ||
-    previousStyle.lineWidth !== nextStyle.lineWidth ||
-    previousStyle.radius !== nextStyle.radius ||
-    previousStyle.opacity !== nextStyle.opacity ||
-    previousStyle.cardDetailLevel !== nextStyle.cardDetailLevel ||
-    previousStyle.cardKindBadgeText !== nextStyle.cardKindBadgeText ||
-    previousStyle.cardKindBadgeFill !== nextStyle.cardKindBadgeFill ||
-    previousStyle.cardKindBadgeTextFill !== nextStyle.cardKindBadgeTextFill ||
-    previousStyle.cardKindBadgeStroke !== nextStyle.cardKindBadgeStroke ||
-    previousStyle.cardKindBadgeBorderWidth !== nextStyle.cardKindBadgeBorderWidth ||
-    previousStyle.cardKindBadgeRadius !== nextStyle.cardKindBadgeRadius ||
-    previousStyle.cardKindBadgeFontSize !== nextStyle.cardKindBadgeFontSize ||
-    previousStyle.cardKindBadgeFontWeight !== nextStyle.cardKindBadgeFontWeight ||
-    previousStyle.cardKindBadgeLetterSpacing !== nextStyle.cardKindBadgeLetterSpacing ||
-    previousStyle.cardKindBadgePaddingX !== nextStyle.cardKindBadgePaddingX ||
-    previousStyle.cardKindBadgePaddingY !== nextStyle.cardKindBadgePaddingY ||
-    previousStyle.cardBackgroundOpacity !== nextStyle.cardBackgroundOpacity ||
-    previousStyle.cardForegroundOpacity !== nextStyle.cardForegroundOpacity ||
-    previousStyle.cardCollapseBadgeText !== nextStyle.cardCollapseBadgeText ||
-    previousStyle.cardCollapseBadgeFill !== nextStyle.cardCollapseBadgeFill ||
-    previousStyle.cardCollapseBadgeTextFill !== nextStyle.cardCollapseBadgeTextFill ||
-    previousStyle.cardCollapseBadgeStroke !== nextStyle.cardCollapseBadgeStroke ||
-    previousStyle.cardNameText !== nextStyle.cardNameText ||
-    previousStyle.cardNamespaceText !== nextStyle.cardNamespaceText ||
-    previousStyle.cardAgeText !== nextStyle.cardAgeText ||
-    previousStyle.cardStatusText !== nextStyle.cardStatusText ||
-    previousStyle.cardStatusReason !== nextStyle.cardStatusReason ||
-    previousStyle.cardStatusFill !== nextStyle.cardStatusFill ||
-    previousStyle.cardStatusStroke !== nextStyle.cardStatusStroke ||
-    previousStyle.cardFontFamily !== nextStyle.cardFontFamily ||
-    previousStyle.cardNameFill !== nextStyle.cardNameFill ||
-    previousStyle.cardNamespaceFill !== nextStyle.cardNamespaceFill ||
-    previousStyle.cardAgeFill !== nextStyle.cardAgeFill
+    fieldsChanged(previousStyle, nextStyle, NODE_STYLE_FIELDS) ||
+    sizeChanged
   );
 };
 
@@ -140,19 +163,11 @@ const edgeChanged = (previous: EdgeData, next: EdgeData): boolean => {
   return (
     previous.source !== next.source ||
     previous.target !== next.target ||
-    previousStyle.stroke !== nextStyle.stroke ||
-    previousStyle.lineWidth !== nextStyle.lineWidth ||
-    previousStyle.opacity !== nextStyle.opacity ||
-    previousStyle.objectMapEdgeDetailLevel !== nextStyle.objectMapEdgeDetailLevel ||
+    fieldsChanged(previousStyle, nextStyle, EDGE_STYLE_FIELDS) ||
     objectMapPathChanged(previousStyle.objectMapPath, nextStyle.objectMapPath) ||
     lineDashChanged(previousStyle.lineDash, nextStyle.lineDash) ||
-    previous.data?.label !== next.data?.label ||
-    previous.data?.type !== next.data?.type ||
-    previous.data?.tracedBy !== next.data?.tracedBy ||
-    JSON.stringify(previous.data?.filteredPath) !== JSON.stringify(next.data?.filteredPath) ||
-    previous.data?.midX !== next.data?.midX ||
-    previous.data?.midY !== next.data?.midY ||
-    previous.data?.path !== next.data?.path
+    fieldsChanged(previous.data ?? {}, next.data ?? {}, EDGE_DATA_FIELDS) ||
+    JSON.stringify(previous.data?.filteredPath) !== JSON.stringify(next.data?.filteredPath)
   );
 };
 
@@ -233,22 +248,12 @@ export const applySelectionState = async (
     return;
   }
   const states: Record<string, string[]> = {};
-  const hoveredEdge = hoveredEdgeId ? findEdge(layout, hoveredEdgeId) : null;
-  // A hovered edge the new selection dims loses its hover highlight; hover
-  // visuals and tooltips are reserved for paths related to the selection.
-  const showHover =
-    hoveredEdge !== null && !isObjectMapEdgeDimmedBySelection(selectionState, hoveredEdge.id);
-  const hoveredNodeIds = new Set(
-    showHover && hoveredEdge ? [hoveredEdge.sourceId, hoveredEdge.targetId] : []
-  );
+  const hoveredEdge = hoveredEdgeId ? findObjectMapG6Edge(layout, hoveredEdgeId) : null;
   layout.nodes.forEach((node) => {
-    const nodeStates = objectMapG6NodeState(node, selectionState);
-    states[node.id] = hoveredNodeIds.has(node.id) ? [...nodeStates, 'edgeHovered'] : nodeStates;
+    states[node.id] = objectMapG6NodeState(node, selectionState, hoveredEdge);
   });
   layout.edges.forEach((edge) => {
-    const edgeStates = objectMapG6EdgeState(edge, selectionState);
-    states[edge.id] =
-      edge.id === hoveredEdgeId && showHover ? [...edgeStates, 'hovered'] : edgeStates;
+    states[edge.id] = objectMapG6EdgeState(edge, selectionState, hoveredEdge?.id);
   });
   if (graph.destroyed) {
     return;

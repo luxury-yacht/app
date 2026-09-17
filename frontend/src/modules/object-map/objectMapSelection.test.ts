@@ -47,6 +47,16 @@ describe('computeObjectMapSelectionState', () => {
     expect(state.connectedIds.size).toBe(0);
     expect(state.connectedEdgeIds.size).toBe(0);
   });
+
+  it('keeps cycle edges without making the active node its own connected node', () => {
+    const state = computeObjectMapSelectionState(
+      [edge('self', 'a', 'a'), edge('ab', 'a', 'b'), edge('ba', 'b', 'a')],
+      'a'
+    );
+
+    expect(state.connectedIds).toEqual(new Set(['b']));
+    expect(state.connectedEdgeIds).toEqual(new Set(['self', 'ab', 'ba']));
+  });
 });
 
 describe('isObjectMapEdgeDimmedBySelection', () => {

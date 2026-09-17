@@ -13,11 +13,10 @@ import { objectMapG6EdgeState, objectMapG6NodeState } from './objectMapG6Data';
 import {
   handleObjectMapG6CanvasContextMenu,
   handleObjectMapG6Drag,
-  handleObjectMapG6DragEnd,
   handleObjectMapG6NodeClick,
   handleObjectMapG6NodeContextMenu,
+  handleObjectMapG6NodeGestureEnd,
   handleObjectMapG6NodePointerDown,
-  handleObjectMapG6PointerUp,
   type ObjectMapG6ElementPointerEvent,
   type ObjectMapG6NodeInteractionHandlers,
   objectMapG6TooltipPoint,
@@ -64,21 +63,15 @@ const setConnectionHoverState = (
   if (graph.destroyed) {
     return;
   }
-  // Edges dimmed by the active selection get no hover highlight (or tooltip);
-  // they stay background noise until the selection changes or clears.
-  const showHover = hovered && !isObjectMapEdgeDimmedBySelection(selectionState, edge.id);
+  const hoveredEdge = hovered ? edge : null;
   const states: Record<string, string[]> = {
-    [edge.id]: showHover
-      ? [...objectMapG6EdgeState(edge, selectionState), 'hovered']
-      : objectMapG6EdgeState(edge, selectionState),
+    [edge.id]: objectMapG6EdgeState(edge, selectionState, hoveredEdge?.id),
   };
   [edge.sourceId, edge.targetId].forEach((nodeId) => {
     const node = findObjectMapG6Node(layout, nodeId);
-    if (!node) {
-      return;
+    if (node) {
+      states[nodeId] = objectMapG6NodeState(node, selectionState, hoveredEdge);
     }
-    const nodeStates = objectMapG6NodeState(node, selectionState);
-    states[nodeId] = showHover ? [...nodeStates, 'edgeHovered'] : nodeStates;
   });
   void graph.setElementState(states, false).catch((error: unknown) => {
     if (!graph.destroyed) {
@@ -177,11 +170,14 @@ export const bindObjectMapG6Events = (options: ObjectMapG6EventBindingOptions): 
   });
 
   graph.on(CommonEvent.DRAG_END, (rawEvent) => {
-    handleObjectMapG6DragEnd(nodeInteractionContext(), rawEvent as ObjectMapG6ElementPointerEvent);
+    handleObjectMapG6NodeGestureEnd(
+      nodeInteractionContext(),
+      rawEvent as ObjectMapG6ElementPointerEvent
+    );
   });
 
   graph.on(CommonEvent.POINTER_UP, (rawEvent) => {
-    handleObjectMapG6PointerUp(
+    handleObjectMapG6NodeGestureEnd(
       nodeInteractionContext(),
       rawEvent as ObjectMapG6ElementPointerEvent
     );

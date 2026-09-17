@@ -9,11 +9,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   handleObjectMapG6CanvasContextMenu,
   handleObjectMapG6Drag,
-  handleObjectMapG6DragEnd,
   handleObjectMapG6NodeClick,
   handleObjectMapG6NodeContextMenu,
+  handleObjectMapG6NodeGestureEnd,
   handleObjectMapG6NodePointerDown,
-  handleObjectMapG6PointerUp,
   isObjectMapG6BadgeEvent,
   type ObjectMapG6NodeInteractionContext,
   objectMapG6TooltipPoint,
@@ -145,7 +144,7 @@ describe('object map G6 interactions', () => {
       clientX: 30,
       clientY: 10,
     });
-    handleObjectMapG6DragEnd(context, {
+    handleObjectMapG6NodeGestureEnd(context, {
       target: { id: 'deploy' },
       pointerId: 1,
       clientX: 30,
@@ -175,7 +174,7 @@ describe('object map G6 interactions', () => {
       clientX: 10,
       clientY: 10,
     });
-    handleObjectMapG6PointerUp(context, {
+    handleObjectMapG6NodeGestureEnd(context, {
       target: { id: 'deploy' },
       pointerId: 1,
       clientX: 10,
@@ -210,7 +209,7 @@ describe('object map G6 interactions', () => {
       clientX: 30,
       clientY: 10,
     });
-    handleObjectMapG6DragEnd(context, {
+    handleObjectMapG6NodeGestureEnd(context, {
       target: { id: 'deploy' },
       pointerId: 1,
       clientX: 30,

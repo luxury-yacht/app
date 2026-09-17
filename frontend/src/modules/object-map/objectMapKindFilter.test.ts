@@ -25,6 +25,40 @@ const node = (id: string, kind: string, name = id): ObjectMapNode => ({
 });
 
 describe('contractObjectMapKindFilter', () => {
+  it('counts hidden paths through cycles and breaks shortest-path ties deterministically', () => {
+    const nodes = [
+      node('source', 'Service'),
+      node('b', 'EndpointSlice'),
+      node('a', 'EndpointSlice'),
+      node('target', 'Pod'),
+      node('end', 'Pod'),
+    ];
+    const edges = [
+      ['sb', 'source', 'b'],
+      ['sa', 'source', 'a'],
+      ['bt', 'b', 'target'],
+      ['at', 'a', 'target'],
+      ['ab', 'a', 'b'],
+      ['ba', 'b', 'a'],
+      ['cycle', 'a', 'source'],
+      ['missing', 'a', 'missing'],
+      ['te', 'target', 'end'],
+    ].map(([id, source, target]) => ({ id, source, target, type: 'routes', label: 'routes to' }));
+
+    const result = contractObjectMapKindFilter(nodes, edges, new Set(['Service', 'Pod']));
+
+    expect(result.edges.map((edge) => [edge.source, edge.target])).toEqual([
+      ['target', 'end'],
+      ['source', 'target'],
+    ]);
+    expect(result.edges[1].filteredPath?.additionalPathCount).toBe(3);
+    expect(result.edges[1].filteredPath?.nodes.map((entry) => entry.id)).toEqual([
+      'source',
+      'a',
+      'target',
+    ]);
+  });
+
   it('contracts directed paths through nodes hidden by the Kinds filter', () => {
     const result = contractObjectMapKindFilter(
       [
