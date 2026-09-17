@@ -49,7 +49,7 @@ func toMetaObjects[T metav1.Object](items []T) []metav1.Object {
 }
 
 // listTargets returns the target namespaces for a descriptor.
-func listTargets(desc resourceDescriptor, namespaces []string) []string {
+func listTargets(desc Descriptor, namespaces []string) []string {
 	if desc.Namespaced {
 		if len(namespaces) > 0 {
 			return uniqueNamespaces(namespaces)
@@ -112,24 +112,12 @@ func uniqueNamespaces(namespaces []string) []string {
 	return result
 }
 
-// exportDescriptor converts an internal resourceDescriptor to an exported Descriptor.
-func exportDescriptor(in resourceDescriptor) Descriptor {
-	return Descriptor{
-		Group:      in.Group,
-		Version:    in.Version,
-		Resource:   in.Resource,
-		Kind:       in.Kind,
-		Scope:      in.Scope,
-		Namespaced: in.Namespaced,
-	}
-}
-
 // catalogKey generates a unique key for a catalog item.
-func catalogKey(desc resourceDescriptor, namespace, name string) string {
+func catalogKey(desc Descriptor, namespace, name string) string {
 	if desc.Namespaced {
-		return desc.GVR.String() + "/" + namespace + "/" + name
+		return desc.GVR().String() + "/" + namespace + "/" + name
 	}
-	return desc.GVR.String() + "//" + name
+	return desc.GVR().String() + "//" + name
 }
 
 // labelsDigest computes a hash digest of labels for change detection.
@@ -237,7 +225,7 @@ func clampQueryLimit(limit int) int {
 }
 
 // removeDisallowedEntries removes items from maps that are not in the allowed set.
-func removeDisallowedEntries(items map[string]Summary, seen map[string]time.Time, allowed map[string]resourceDescriptor) {
+func removeDisallowedEntries(items map[string]Summary, seen map[string]time.Time, allowed map[string]Descriptor) {
 	if len(items) == 0 {
 		return
 	}
@@ -261,25 +249,6 @@ func removeDescriptorEntries(items map[string]Summary, seen map[string]time.Time
 			delete(seen, key)
 		}
 	}
-}
-
-// toDescriptorSlice converts internal descriptors to exported slice.
-func toDescriptorSlice(resources []resourceDescriptor) []Descriptor {
-	if len(resources) == 0 {
-		return nil
-	}
-	result := make([]Descriptor, 0, len(resources))
-	for _, res := range resources {
-		result = append(result, Descriptor{
-			Group:      res.Group,
-			Version:    res.Version,
-			Resource:   res.Resource,
-			Kind:       res.Kind,
-			Scope:      res.Scope,
-			Namespaced: res.Namespaced,
-		})
-	}
-	return result
 }
 
 // descriptorKeyFromItemKey extracts the GVR portion from an item key.
@@ -350,7 +319,7 @@ func adjustedListWorkers() int {
 }
 
 // descriptorStreamingPriority returns the streaming priority for a resource descriptor.
-func descriptorStreamingPriority(desc resourceDescriptor) int {
+func descriptorStreamingPriority(desc Descriptor) int {
 	priority := 100
 	key := strings.ToLower(desc.Resource)
 	if value, ok := streamingResourcePriority[key]; ok {

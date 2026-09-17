@@ -124,16 +124,6 @@ type Service struct {
 	nextFinalizerSubID   int
 }
 
-type resourceDescriptor struct {
-	GVR        schema.GroupVersionResource
-	Namespaced bool
-	Kind       string
-	Group      string
-	Version    string
-	Resource   string
-	Scope      Scope
-}
-
 // summaryChunk holds one published batch of summaries. Chunks are IMMUTABLE
 // once published: items are never mutated in place — emit and cache rebuilds
 // always create fresh chunks. Snapshots therefore share chunk pointers.

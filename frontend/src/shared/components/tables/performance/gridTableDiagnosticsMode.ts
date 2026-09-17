@@ -19,6 +19,7 @@ export interface GridTableDiagnosticsModeContract {
   classifyReferenceChurn: (params: {
     inputReferenceChanges: number;
     updates: number;
+    replacementRatio: number;
   }) => GridTablePerformanceSignal | null;
 }
 
@@ -55,14 +56,7 @@ const GRID_TABLE_DIAGNOSTICS_MODE_CONTRACTS: Record<
       displayed:
         'Local table: Visible is the source row count after local filters run in GridTable.',
     },
-    classifyReferenceChurn: ({ inputReferenceChanges, updates }) => {
-      if (updates < 3) {
-        return null;
-      }
-      const replacementRatio = inputReferenceChanges / updates;
-      if (replacementRatio < 0.8) {
-        return null;
-      }
+    classifyReferenceChurn: ({ inputReferenceChanges, updates, replacementRatio }) => {
       return buildWarningBroadReplacementSignal(
         replacementRatio,
         inputReferenceChanges,
@@ -82,14 +76,7 @@ const GRID_TABLE_DIAGNOSTICS_MODE_CONTRACTS: Record<
       displayed:
         'Query-backed table: Visible is the source row count after any remaining local filters run in GridTable.',
     },
-    classifyReferenceChurn: ({ inputReferenceChanges, updates }) => {
-      if (updates < 3) {
-        return null;
-      }
-      const replacementRatio = inputReferenceChanges / updates;
-      if (replacementRatio < 0.8) {
-        return null;
-      }
+    classifyReferenceChurn: ({ inputReferenceChanges, updates, replacementRatio }) => {
       return buildWarningBroadReplacementSignal(
         replacementRatio,
         inputReferenceChanges,
@@ -110,14 +97,7 @@ const GRID_TABLE_DIAGNOSTICS_MODE_CONTRACTS: Record<
       displayed:
         'Live table: Visible is the source row count after local filters run in GridTable.',
     },
-    classifyReferenceChurn: ({ inputReferenceChanges, updates }) => {
-      if (updates < 3) {
-        return null;
-      }
-      const replacementRatio = inputReferenceChanges / updates;
-      if (replacementRatio < 0.8) {
-        return null;
-      }
+    classifyReferenceChurn: ({ inputReferenceChanges, updates, replacementRatio }) => {
       return {
         label: 'Live churn',
         severity: 'info',
@@ -147,8 +127,17 @@ export const getGridTableRowCountLabel = (kind: GridTableDiagnosticsRowCountKind
 
 export const buildGridTableReferenceChurnSignal = (
   row: Pick<GridTablePerformanceEntry, 'mode' | 'inputReferenceChanges' | 'updates'>
-): GridTablePerformanceSignal | null =>
-  getGridTableDiagnosticsModeContract(row.mode).classifyReferenceChurn({
+): GridTablePerformanceSignal | null => {
+  if (row.updates < 3) {
+    return null;
+  }
+  const replacementRatio = row.inputReferenceChanges / row.updates;
+  if (replacementRatio < 0.8) {
+    return null;
+  }
+  return getGridTableDiagnosticsModeContract(row.mode).classifyReferenceChurn({
     inputReferenceChanges: row.inputReferenceChanges,
     updates: row.updates,
+    replacementRatio,
   });
+};

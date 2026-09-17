@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func enrichCatalogActionFacts(items map[string]Summary, allowed map[string]resourceDescriptor, failed map[string]error) {
+func enrichCatalogActionFacts(items map[string]Summary, allowed map[string]Descriptor, failed map[string]error) {
 	hpaCoverageKnown := catalogHPACoverageKnown(allowed, failed)
 	managedTargets := catalogManagedTargets(items, hpaCoverageKnown)
 
@@ -52,7 +52,7 @@ func enrichScalableWorkloadActionFacts(item Summary, coverageKnown bool, managed
 	return item, true
 }
 
-func catalogHPACoverageKnown(allowed map[string]resourceDescriptor, failed map[string]error) bool {
+func catalogHPACoverageKnown(allowed map[string]Descriptor, failed map[string]error) bool {
 	for gvr, desc := range allowed {
 		if desc.Group != "autoscaling" || desc.Resource != "horizontalpodautoscalers" {
 			continue

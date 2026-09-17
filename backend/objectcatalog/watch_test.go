@@ -44,9 +44,9 @@ func newTestWatchService() *Service {
 	}
 }
 
-func testDeploymentDescriptor() resourceDescriptor {
-	return resourceDescriptor{
-		GVR:        schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+func testDeploymentDescriptor() Descriptor {
+	return Descriptor{
+
 		Namespaced: true,
 		Kind:       "Deployment",
 		Group:      "apps",
@@ -56,9 +56,9 @@ func testDeploymentDescriptor() resourceDescriptor {
 	}
 }
 
-func testNodeDescriptor() resourceDescriptor {
-	return resourceDescriptor{
-		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"},
+func testNodeDescriptor() Descriptor {
+	return Descriptor{
+
 		Namespaced: false,
 		Kind:       "Node",
 		Group:      "",
@@ -68,8 +68,8 @@ func testNodeDescriptor() resourceDescriptor {
 	}
 }
 
-func registerDesc(svc *Service, desc resourceDescriptor) {
-	svc.resources[desc.GVR.String()] = desc
+func registerDesc(svc *Service, desc Descriptor) {
+	svc.resources[desc.GVR().String()] = desc
 }
 
 func TestFlushAddEvent(t *testing.T) {
@@ -85,7 +85,7 @@ func TestFlushAddEvent(t *testing.T) {
 	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{
 		eventType: watchEventAdd,
-		gvr:       desc.GVR.String(),
+		gvr:       desc.GVR().String(),
 		key:       catalogKey(desc, "default", "my-deploy"),
 		obj:       obj,
 	}})
@@ -117,7 +117,7 @@ func TestFlushUpdateEvent(t *testing.T) {
 	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{
 		eventType: watchEventUpdate,
-		gvr:       desc.GVR.String(),
+		gvr:       desc.GVR().String(),
 		key:       key,
 		obj:       obj,
 	}})
@@ -144,7 +144,7 @@ func TestFlushDeleteEvent(t *testing.T) {
 	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{
 		eventType: watchEventDelete,
-		gvr:       desc.GVR.String(),
+		gvr:       desc.GVR().String(),
 		key:       key,
 	}})
 
@@ -181,7 +181,7 @@ func TestFlushSkipsDuringSyncInProgress(t *testing.T) {
 	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{
 		eventType: watchEventAdd,
-		gvr:       desc.GVR.String(),
+		gvr:       desc.GVR().String(),
 		key:       catalogKey(desc, "default", "blocked"),
 		obj:       obj,
 	}})
@@ -206,7 +206,7 @@ func TestFlushClusterScopedResource(t *testing.T) {
 	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{
 		eventType: watchEventAdd,
-		gvr:       desc.GVR.String(),
+		gvr:       desc.GVR().String(),
 		key:       catalogKey(desc, "", "node-1"),
 		obj:       obj,
 	}})
@@ -231,7 +231,7 @@ func TestFlushBroadcastsToSubscribers(t *testing.T) {
 	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{
 		eventType: watchEventAdd,
-		gvr:       desc.GVR.String(),
+		gvr:       desc.GVR().String(),
 		key:       catalogKey(desc, "default", "x"),
 		obj:       obj,
 	}})
@@ -263,7 +263,7 @@ func TestWatchNotifierDebouncesBatch(t *testing.T) {
 		}}
 		notifier.send(watchEvent{
 			eventType: watchEventAdd,
-			gvr:       desc.GVR.String(),
+			gvr:       desc.GVR().String(),
 			key:       catalogKey(desc, "default", name),
 			obj:       obj,
 		})
@@ -292,7 +292,7 @@ func TestWatchNotifierFlushesDuringContinuousEvents(t *testing.T) {
 		}}
 		notifier.send(watchEvent{
 			eventType: watchEventAdd,
-			gvr:       desc.GVR.String(),
+			gvr:       desc.GVR().String(),
 			key:       catalogKey(desc, "default", name),
 			obj:       obj,
 		})
@@ -426,7 +426,7 @@ func TestReactiveUpdateEndToEnd(t *testing.T) {
 	}}
 	notifier.send(watchEvent{
 		eventType: watchEventAdd,
-		gvr:       desc.GVR.String(),
+		gvr:       desc.GVR().String(),
 		key:       catalogKey(desc, "prod", "e2e-pod"),
 		obj:       obj,
 	})
@@ -439,7 +439,7 @@ func TestReactiveUpdateEndToEnd(t *testing.T) {
 
 	notifier.send(watchEvent{
 		eventType: watchEventDelete,
-		gvr:       desc.GVR.String(),
+		gvr:       desc.GVR().String(),
 		key:       catalogKey(desc, "prod", "e2e-pod"),
 	})
 

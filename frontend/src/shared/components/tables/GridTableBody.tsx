@@ -32,7 +32,6 @@ interface GridTableBodyProps<T> {
   tableClassName: string;
   useShortNames: boolean;
   hoverState: HoverState;
-  onWrapperContextMenu: (event: React.MouseEvent) => void;
   tableData: T[];
   keyExtractor: (item: T, index: number) => string;
   emptyMessage: string;
@@ -63,7 +62,6 @@ function GridTableBody<T>({
   tableClassName,
   useShortNames,
   hoverState,
-  onWrapperContextMenu,
   tableData,
   keyExtractor,
   emptyMessage,
@@ -234,7 +232,6 @@ function GridTableBody<T>({
       <AriaGrid
         ref={gridRef}
         className={`gridtable gridtable--body ${tableClassName} ${useShortNames ? 'short-names' : ''}`}
-        onContextMenu={onWrapperContextMenu}
         onFocus={onWrapperFocus}
         onBlur={onWrapperBlur}
         tabIndex={0}

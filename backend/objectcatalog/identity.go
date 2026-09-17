@@ -31,13 +31,13 @@ type resourceIdentityResolver struct {
 	mu        sync.RWMutex
 	deps      common.Dependencies
 	logger    Logger
-	resources map[resourceIdentityKey]resourceDescriptor
+	resources map[resourceIdentityKey]Descriptor
 }
 
 var builtinResourceCatalog = builtinResourceDescriptors()
 
-func builtinResourceDescriptors() []resourceDescriptor {
-	descriptors := make([]resourceDescriptor, 0, len(resourcecontract.BuiltinResources))
+func builtinResourceDescriptors() []Descriptor {
+	descriptors := make([]Descriptor, 0, len(resourcecontract.BuiltinResources))
 	for _, resource := range resourcecontract.BuiltinResources {
 		descriptors = append(descriptors, builtinDescriptor(
 			resource.Group,
@@ -50,17 +50,13 @@ func builtinResourceDescriptors() []resourceDescriptor {
 	return descriptors
 }
 
-func builtinDescriptor(group, version, kind, resource string, namespaced bool) resourceDescriptor {
+func builtinDescriptor(group, version, kind, resource string, namespaced bool) Descriptor {
 	scope := ScopeCluster
 	if namespaced {
 		scope = ScopeNamespace
 	}
-	return resourceDescriptor{
-		GVR: schema.GroupVersionResource{
-			Group:    group,
-			Version:  version,
-			Resource: resource,
-		},
+	return Descriptor{
+
 		Namespaced: namespaced,
 		Kind:       kind,
 		Group:      group,
@@ -82,7 +78,7 @@ func newResourceIdentityResolver(deps common.Dependencies, logger Logger) *resou
 	resolver := &resourceIdentityResolver{
 		deps:      deps,
 		logger:    logger,
-		resources: make(map[resourceIdentityKey]resourceDescriptor, len(builtinResourceCatalog)),
+		resources: make(map[resourceIdentityKey]Descriptor, len(builtinResourceCatalog)),
 	}
 	resolver.seedBuiltins()
 	return resolver
@@ -94,8 +90,8 @@ func (r *resourceIdentityResolver) seedBuiltins() {
 	}
 }
 
-func (r *resourceIdentityResolver) replaceDiscovered(descriptors []resourceDescriptor) {
-	next := make(map[resourceIdentityKey]resourceDescriptor, len(builtinResourceCatalog)+len(descriptors))
+func (r *resourceIdentityResolver) replaceDiscovered(descriptors []Descriptor) {
+	next := make(map[resourceIdentityKey]Descriptor, len(builtinResourceCatalog)+len(descriptors))
 	for _, desc := range builtinResourceCatalog {
 		next[identityKey(desc.Group, desc.Version, desc.Kind)] = desc
 	}
@@ -158,7 +154,7 @@ func (r *resourceIdentityResolver) hydrate(ctx context.Context, gvk schema.Group
 		return err
 	}
 	if ok {
-		r.mergeDiscovered([]resourceDescriptor{crdDescriptor})
+		r.mergeDiscovered([]Descriptor{crdDescriptor})
 		return nil
 	}
 	if discoveryErr != nil {
@@ -167,7 +163,7 @@ func (r *resourceIdentityResolver) hydrate(ctx context.Context, gvk schema.Group
 	return nil
 }
 
-func (r *resourceIdentityResolver) mergeDiscovered(descriptors []resourceDescriptor) {
+func (r *resourceIdentityResolver) mergeDiscovered(descriptors []Descriptor) {
 	if len(descriptors) == 0 {
 		return
 	}
@@ -178,14 +174,14 @@ func (r *resourceIdentityResolver) mergeDiscovered(descriptors []resourceDescrip
 	}
 }
 
-func (r *resourceIdentityResolver) resolveCRD(ctx context.Context, gvk schema.GroupVersionKind) (resourceDescriptor, bool, error) {
+func (r *resourceIdentityResolver) resolveCRD(ctx context.Context, gvk schema.GroupVersionKind) (Descriptor, bool, error) {
 	if r.deps.APIExtensionsClient == nil {
-		return resourceDescriptor{}, false, nil
+		return Descriptor{}, false, nil
 	}
 	crds, err := r.deps.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		applog.Debug(r.logger, fmt.Sprintf("catalog resource identity CRD fallback failed: %v", err), componentName)
-		return resourceDescriptor{}, false, err
+		return Descriptor{}, false, err
 	}
 	for _, crd := range crds.Items {
 		if crd.Spec.Group != strings.TrimSpace(gvk.Group) {
@@ -203,10 +199,10 @@ func (r *resourceIdentityResolver) resolveCRD(ctx context.Context, gvk schema.Gr
 			return builtinDescriptor(crd.Spec.Group, version.Name, crd.Spec.Names.Kind, crd.Spec.Names.Plural, namespaced), true, nil
 		}
 	}
-	return resourceDescriptor{}, false, nil
+	return Descriptor{}, false, nil
 }
 
-func hasDescriptorForGVK(descriptors []resourceDescriptor, gvk schema.GroupVersionKind) bool {
+func hasDescriptorForGVK(descriptors []Descriptor, gvk schema.GroupVersionKind) bool {
 	key := identityKey(gvk.Group, gvk.Version, gvk.Kind)
 	for _, desc := range descriptors {
 		if identityKey(desc.Group, desc.Version, desc.Kind) == key {
@@ -216,7 +212,7 @@ func hasDescriptorForGVK(descriptors []resourceDescriptor, gvk schema.GroupVersi
 	return false
 }
 
-func resolvedResourceFromDescriptor(desc resourceDescriptor) common.ResolvedResource {
+func resolvedResourceFromDescriptor(desc Descriptor) common.ResolvedResource {
 	return common.ResolvedResource{
 		Group:      desc.Group,
 		Version:    desc.Version,

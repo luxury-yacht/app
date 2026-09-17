@@ -51,7 +51,6 @@ describe('GridTableBody', () => {
       tableClassName: '',
       useShortNames: false,
       hoverState: { visible: false, selected: false, focused: false, top: 0, height: 0 },
-      onWrapperContextMenu: vi.fn(),
       tableData: [{ id: '1' }, { id: '2' }],
       keyExtractor: (item) => item.id,
       emptyMessage: 'No rows',
@@ -231,8 +230,7 @@ describe('GridTableBody', () => {
     getSelectionSpy.mockRestore();
   });
 
-  it('clears any active selection before opening the wrapper context menu for a cell', async () => {
-    const onWrapperContextMenu = vi.fn();
+  it('clears active selection when a cell receives a context menu event', async () => {
     const renderRowContent: RenderRowContentFn<TestRow> = (item) => (
       <div key={item.id} className="gridtable-row">
         <div className="grid-cell">
@@ -243,7 +241,6 @@ describe('GridTableBody', () => {
 
     const { container } = await renderTableBody({
       renderRowContent: renderRowContent as RenderRowContentFn<unknown>,
-      onWrapperContextMenu,
     });
 
     const cell = container.querySelector('.grid-cell') as HTMLDivElement | null;
@@ -264,7 +261,6 @@ describe('GridTableBody', () => {
     cell?.dispatchEvent(contextMenuEvent);
 
     expect(removeAllRanges).toHaveBeenCalledTimes(1);
-    expect(onWrapperContextMenu).toHaveBeenCalledTimes(1);
 
     getSelectionSpy.mockRestore();
   });

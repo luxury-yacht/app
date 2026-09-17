@@ -10,28 +10,19 @@ import type { GridColumnDefinition } from '@shared/components/tables/GridTable.t
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
 import { useCallback, useState } from 'react';
 
-// Encapsulates the bare context menu state/actions (open/close, position, source),
+// Encapsulates the bare context menu state/actions (open/close and position),
 // leaving item construction to callers. Used by GridTable context menu wiring.
-
-export type GridTableContextMenuSource = 'cell' | 'empty';
 
 export interface GridTableContextMenuState<T> {
   position: { x: number; y: number };
   columnKey: string;
   item: T | null;
-  source: GridTableContextMenuSource;
-  itemsOverride?: ContextMenuItem[];
 }
 
 interface UseGridTableContextMenuOptions<T> {
   enableContextMenu: boolean;
   columns: GridColumnDefinition<T>[];
   getCustomContextMenuItems?: (item: T, columnKey: string) => ContextMenuItem[] | null | undefined;
-  getContextMenuItems: (
-    columnKey: string,
-    item: T | null,
-    source: GridTableContextMenuSource
-  ) => ContextMenuItem[];
   onSort?: (columnKey: string, targetDirection?: 'asc' | 'desc' | null) => void;
 }
 
@@ -43,7 +34,6 @@ export interface GridTableContextMenuHandlers<T> {
     item: T | null,
     anchorElement?: HTMLElement | null
   ) => boolean;
-  openWrapperContextMenu: (event: React.MouseEvent) => boolean;
   closeContextMenu: () => void;
 }
 
@@ -51,7 +41,6 @@ export function useGridTableContextMenu<T>({
   enableContextMenu,
   columns,
   getCustomContextMenuItems,
-  getContextMenuItems,
   onSort,
 }: UseGridTableContextMenuOptions<T>): GridTableContextMenuHandlers<T> {
   const [contextMenu, setContextMenu] = useState<GridTableContextMenuState<T> | null>(null);
@@ -93,7 +82,6 @@ export function useGridTableContextMenu<T>({
         position: { x: event.clientX, y: event.clientY },
         columnKey,
         item,
-        source: 'cell',
       });
       return true;
     },
@@ -120,55 +108,16 @@ export function useGridTableContextMenu<T>({
         position,
         columnKey,
         item,
-        source: 'cell',
       });
       return true;
     },
     [canOpenCellContextMenu]
   );
 
-  const openWrapperContextMenu = useCallback(
-    (event: React.MouseEvent) => {
-      if (event.metaKey || event.ctrlKey || !enableContextMenu) {
-        return false;
-      }
-
-      const target = event.target as HTMLElement;
-      const isInRow = Boolean(target.closest('.gridtable-row'));
-      const isInCell = Boolean(target.closest('.grid-cell'));
-      const isWrapperArea =
-        target.classList.contains('gridtable-wrapper') ||
-        target.classList.contains('gridtable') ||
-        Boolean(target.closest('.gridtable-empty'));
-
-      if (isInRow || isInCell || !isWrapperArea) {
-        return false;
-      }
-
-      const items = getContextMenuItems('', null, 'empty');
-      if (items.length === 0) {
-        return false;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      setContextMenu({
-        position: { x: event.clientX, y: event.clientY },
-        columnKey: '',
-        item: null,
-        source: 'empty',
-        itemsOverride: items,
-      });
-      return true;
-    },
-    [enableContextMenu, getContextMenuItems]
-  );
-
   return {
     contextMenu,
     openCellContextMenu,
     openCellContextMenuFromKeyboard,
-    openWrapperContextMenu,
     closeContextMenu,
   };
 }

@@ -130,8 +130,8 @@ func BenchmarkCatalogQueryChurnDuringPagination(b *testing.B) {
 			if first.ContinueToken == "" {
 				b.Fatalf("expected continue token")
 			}
-			desc := resourceDescriptor{
-				GVR:        schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+			desc := Descriptor{
+
 				Namespaced: true,
 				Kind:       "Deployment",
 				Group:      "apps",
@@ -151,7 +151,7 @@ func BenchmarkCatalogQueryChurnDuringPagination(b *testing.B) {
 					CreationTimestamp: "2025-12-31T00:00:00Z",
 					Scope:             ScopeNamespace,
 				}
-				svc.catalogIndex.rebuildCacheFromItems(items, []Descriptor{exportDescriptor(desc)})
+				svc.catalogIndex.rebuildCacheFromItems(items, []Descriptor{desc})
 				b.StartTimer()
 				result := svc.Query(QueryOptions{Limit: 100, Continue: first.ContinueToken})
 				if result.CursorInvalid || len(result.Items) == 0 {
@@ -191,8 +191,8 @@ func measureCatalogIndexResidency(objectsPerCluster, clusterCount int) uint64 {
 			ClusterID: fmt.Sprintf("cluster-%d", clusterIdx),
 		}, nil)
 		items := make(map[string]Summary, objectsPerCluster)
-		desc := resourceDescriptor{
-			GVR:        schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+		desc := Descriptor{
+
 			Namespaced: true,
 			Kind:       "Deployment",
 			Group:      "apps",
@@ -210,7 +210,7 @@ func measureCatalogIndexResidency(objectsPerCluster, clusterCount int) uint64 {
 				Scope:             ScopeNamespace,
 			}
 		}
-		svc.catalogIndex.rebuildCacheFromItems(items, []Descriptor{exportDescriptor(desc)})
+		svc.catalogIndex.rebuildCacheFromItems(items, []Descriptor{desc})
 		services = append(services, svc)
 	}
 
@@ -243,7 +243,7 @@ func benchmarkCatalogServiceWithShape(objects int, shape benchmarkCatalogShape) 
 		ClusterID: "cluster-benchmark",
 	}, nil)
 	items := make(map[string]Summary, objects)
-	descriptorsByKey := make(map[string]resourceDescriptor)
+	descriptorsByKey := make(map[string]Descriptor)
 	for i := 0; i < objects; i++ {
 		desc := benchmarkDescriptorForObject(i, shape)
 		namespace := benchmarkNamespaceForObject(i, objects, shape)
@@ -254,11 +254,11 @@ func benchmarkCatalogServiceWithShape(objects int, shape benchmarkCatalogShape) 
 			CreationTimestamp: "2026-01-01T00:00:00Z",
 			Scope:             ScopeNamespace,
 		}
-		descriptorsByKey[desc.GVR.String()] = desc
+		descriptorsByKey[desc.GVR().String()] = desc
 	}
 	descriptors := make([]Descriptor, 0, len(descriptorsByKey))
 	for _, desc := range descriptorsByKey {
-		descriptors = append(descriptors, exportDescriptor(desc))
+		descriptors = append(descriptors, desc)
 	}
 	// Mirror the real sync flow (sync.go), which stores the item map AND
 	// rebuilds the cache. Benchmarks that clone svc.items rely on this.
@@ -267,13 +267,13 @@ func benchmarkCatalogServiceWithShape(objects int, shape benchmarkCatalogShape) 
 	return svc
 }
 
-func benchmarkDescriptorForObject(index int, shape benchmarkCatalogShape) resourceDescriptor {
+func benchmarkDescriptorForObject(index int, shape benchmarkCatalogShape) Descriptor {
 	if shape == benchmarkShapeManyKinds {
 		kindIndex := index % 100
 		kind := fmt.Sprintf("Widget%03d", kindIndex)
 		resource := fmt.Sprintf("widgets%03d", kindIndex)
-		return resourceDescriptor{
-			GVR:        schema.GroupVersionResource{Group: "example.io", Version: "v1", Resource: resource},
+		return Descriptor{
+
 			Namespaced: true,
 			Kind:       kind,
 			Group:      "example.io",
@@ -282,8 +282,8 @@ func benchmarkDescriptorForObject(index int, shape benchmarkCatalogShape) resour
 			Scope:      ScopeNamespace,
 		}
 	}
-	return resourceDescriptor{
-		GVR:        schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+	return Descriptor{
+
 		Namespaced: true,
 		Kind:       "Deployment",
 		Group:      "apps",

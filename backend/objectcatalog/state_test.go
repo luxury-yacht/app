@@ -12,7 +12,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func TestServiceNamespacesUsesCachedOrDerivedValues(t *testing.T) {
@@ -37,8 +36,8 @@ func TestServiceNamespacesUsesCachedOrDerivedValues(t *testing.T) {
 }
 
 func TestDescriptorsSortedCopy(t *testing.T) {
-	descA := resourceDescriptor{
-		GVR:        schema.GroupVersionResource{Group: "a.example.com", Version: "v1", Resource: "widgets"},
+	descA := Descriptor{
+
 		Namespaced: true,
 		Kind:       "Widget",
 		Group:      "a.example.com",
@@ -46,8 +45,8 @@ func TestDescriptorsSortedCopy(t *testing.T) {
 		Resource:   "widgets",
 		Scope:      ScopeNamespace,
 	}
-	descB := resourceDescriptor{
-		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+	descB := Descriptor{
+
 		Namespaced: true,
 		Kind:       "Pod",
 		Group:      "",
@@ -58,9 +57,9 @@ func TestDescriptorsSortedCopy(t *testing.T) {
 
 	svc := NewService(Dependencies{Common: common.Dependencies{}}, nil)
 	svc.mu.Lock()
-	svc.resources = map[string]resourceDescriptor{
-		descB.GVR.String(): descB,
-		descA.GVR.String(): descA,
+	svc.resources = map[string]Descriptor{
+		descB.GVR().String(): descB,
+		descA.GVR().String(): descA,
 	}
 	svc.mu.Unlock()
 
@@ -74,7 +73,7 @@ func TestDescriptorsSortedCopy(t *testing.T) {
 
 	descriptors[0].Kind = "Mutated"
 	svc.mu.RLock()
-	orig := svc.resources[descB.GVR.String()]
+	orig := svc.resources[descB.GVR().String()]
 	svc.mu.RUnlock()
 	if orig.Kind != "Pod" {
 		t.Fatalf("expected original descriptor to remain unchanged")

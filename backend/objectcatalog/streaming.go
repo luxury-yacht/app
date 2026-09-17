@@ -37,7 +37,7 @@ func newStreamingAggregator(s *Service) *streamingAggregator {
 }
 
 // emit adds a batch of summaries to the aggregator.
-func (a *streamingAggregator) emit(_ int, items []Summary) {
+func (a *streamingAggregator) emit(items []Summary) {
 	if a == nil || len(items) == 0 {
 		return
 	}
@@ -89,9 +89,9 @@ func (a *streamingAggregator) firstFlushLatency() time.Duration {
 }
 
 // emitSummaries adds a batch of summaries to the aggregator.
-func emitSummaries(index int, agg *streamingAggregator, summaries []Summary, err error, handled bool) ([]Summary, bool, error) {
+func emitSummaries(agg *streamingAggregator, summaries []Summary, err error, handled bool) ([]Summary, bool, error) {
 	if handled && agg != nil && err == nil && len(summaries) > 0 {
-		agg.emit(index, summaries)
+		agg.emit(summaries)
 	}
 	return summaries, handled, err
 }

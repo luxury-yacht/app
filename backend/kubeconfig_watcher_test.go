@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -304,4 +305,30 @@ func TestDeselectClusters_AbortsOnReconciliationFailure(t *testing.T) {
 	assert.True(t, aOK)
 	assert.True(t, bOK)
 	require.Len(t, app.Preferences.appSettings.SelectedKubeconfigs, 2)
+}
+
+func TestKubeconfigWatcherMergedSearchPathsPreserveFilenameAdmission(t *testing.T) {
+	for _, fullDirectoryFirst := range []bool{false, true} {
+		t.Run(fmt.Sprint(fullDirectoryFirst), func(t *testing.T) {
+			dir := t.TempDir()
+			first := filepath.Join(dir, "first")
+			second := filepath.Join(dir, "second.bak")
+			directories := make(map[string]*kubeconfigWatchDirectory)
+			if fullDirectoryFirst {
+				mergeKubeconfigWatchDirectory(directories, dir)
+			}
+			mergeKubeconfigWatchDirectory(directories, first)
+			mergeKubeconfigWatchDirectory(directories, second)
+			watcher := &kubeconfigWatcher{}
+			watcher.replaceWatchedPaths(mergeWatchedPaths(kubeconfigWatchedPaths(directories)))
+			require.True(t, watcher.acceptsEventPath(first))
+			require.Equal(t, !fullDirectoryFirst, watcher.acceptsEventPath(second), "explicit files bypass directory filename heuristics")
+			require.Equal(t, fullDirectoryFirst, watcher.acceptsEventPath(filepath.Join(dir, "third")))
+
+			mergeKubeconfigWatchDirectory(directories, dir)
+			watcher.replaceWatchedPaths(mergeWatchedPaths(kubeconfigWatchedPaths(directories)))
+			require.True(t, watcher.acceptsEventPath(filepath.Join(dir, "third")))
+			require.False(t, watcher.acceptsEventPath(second), "whole-directory watches retain filename heuristics")
+		})
+	}
 }

@@ -177,7 +177,7 @@ func TestSyncCancellationDoesNotPublishSuccess(t *testing.T) {
 
 func TestEvaluateDescriptorNilService(t *testing.T) {
 	svc := NewService(Dependencies{Common: common.Dependencies{}}, nil)
-	desc := resourceDescriptor{Kind: "Deployment"}
+	desc := Descriptor{Kind: "Deployment"}
 	allowed, err := svc.evaluateDescriptor(context.Background(), nil, desc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -221,7 +221,7 @@ func TestEvaluateDescriptorRespectsCapabilityResults(t *testing.T) {
 	svc := NewService(deps, nil)
 	capSvc := factory()
 
-	deployDesc := resourceDescriptor{Resource: "deployments", Group: "apps", Version: "v1", GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}}
+	deployDesc := Descriptor{Resource: "deployments", Group: "apps", Version: "v1"}
 	allowed, err := svc.evaluateDescriptor(context.Background(), capSvc, deployDesc)
 	if err != nil {
 		t.Fatalf("unexpected error evaluating deployments: %v", err)
@@ -230,7 +230,7 @@ func TestEvaluateDescriptorRespectsCapabilityResults(t *testing.T) {
 		t.Fatalf("expected deployments to be allowed")
 	}
 
-	statefulDesc := resourceDescriptor{Resource: "statefulsets", Group: "apps", Version: "v1", GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"}}
+	statefulDesc := Descriptor{Resource: "statefulsets", Group: "apps", Version: "v1"}
 	allowed, err = svc.evaluateDescriptor(context.Background(), capSvc, statefulDesc)
 	if err != nil {
 		t.Fatalf("unexpected error evaluating statefulsets: %v", err)
@@ -239,7 +239,7 @@ func TestEvaluateDescriptorRespectsCapabilityResults(t *testing.T) {
 		t.Fatalf("expected statefulsets to be denied")
 	}
 
-	batchAllowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []resourceDescriptor{deployDesc, statefulDesc})
+	batchAllowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{deployDesc, statefulDesc})
 	if err != nil {
 		t.Fatalf("batch evaluation failed: %v", err)
 	}
@@ -276,9 +276,9 @@ func TestEvaluateDescriptorPropagatesErrors(t *testing.T) {
 
 	svc := NewService(Dependencies{CapabilityFactory: factory}, nil)
 	capSvc := factory()
-	allowed, err := svc.evaluateDescriptor(context.Background(), capSvc, resourceDescriptor{
+	allowed, err := svc.evaluateDescriptor(context.Background(), capSvc, Descriptor{
 		Resource: "deployments",
-		GVR:      schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+		Group:    "apps", Version: "v1",
 	})
 	if err == nil {
 		t.Fatalf("expected evaluation error when SAR call fails")
@@ -287,8 +287,8 @@ func TestEvaluateDescriptorPropagatesErrors(t *testing.T) {
 		t.Fatalf("expected descriptor to be denied when SAR errors")
 	}
 
-	_, batchErrors, batchErr := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []resourceDescriptor{
-		{Resource: "deployments", GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}},
+	_, batchErrors, batchErr := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{
+		{Resource: "deployments", Group: "apps", Version: "v1"},
 	})
 	if batchErr == nil {
 		t.Fatalf("expected batch evaluation to return error when SAR fails")
@@ -306,7 +306,7 @@ func TestEvaluateDescriptorsBatchEmptyAndNilServiceContracts(t *testing.T) {
 	require.Empty(t, allowed)
 	require.Nil(t, batchErrors)
 
-	descriptors := []resourceDescriptor{
+	descriptors := []Descriptor{
 		{Resource: "deployments"},
 		{Resource: "nodes"},
 	}
@@ -350,10 +350,10 @@ func TestEvaluateDescriptorsBatchKeepsStableDescriptorIndexesAcrossNamespaceFano
 		Logger:            applog.Noop,
 		AllowedNamespaces: []string{"prod", "dev"},
 	}, nil)
-	descriptors := []resourceDescriptor{
-		{Resource: "deployments", Group: "apps", Version: "v1", Namespaced: true, GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}},
-		{Resource: "statefulsets", Group: "apps", Version: "v1", Namespaced: true, GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"}},
-		{Resource: "nodes", Version: "v1", GVR: schema.GroupVersionResource{Version: "v1", Resource: "nodes"}},
+	descriptors := []Descriptor{
+		{Resource: "deployments", Group: "apps", Version: "v1", Namespaced: true},
+		{Resource: "statefulsets", Group: "apps", Version: "v1", Namespaced: true},
+		{Resource: "nodes", Version: "v1"},
 	}
 
 	allowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, descriptors)
@@ -383,9 +383,9 @@ func TestEvaluateDescriptorsBatchReturnsAllowedPartialResultsWithWorkerFailure(t
 		Logger:            applog.Noop,
 		AllowedNamespaces: []string{"prod", "dev"},
 	}, nil)
-	descriptors := []resourceDescriptor{
-		{Resource: "deployments", Group: "apps", Version: "v1", Namespaced: true, GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}},
-		{Resource: "secrets", Version: "v1", Namespaced: true, GVR: schema.GroupVersionResource{Version: "v1", Resource: "secrets"}},
+	descriptors := []Descriptor{
+		{Resource: "deployments", Group: "apps", Version: "v1", Namespaced: true},
+		{Resource: "secrets", Version: "v1", Namespaced: true},
 	}
 
 	allowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, descriptors)
@@ -396,9 +396,8 @@ func TestEvaluateDescriptorsBatchReturnsAllowedPartialResultsWithWorkerFailure(t
 }
 
 func TestEvaluateDescriptorsBatchCancellationAndPermissionClientRecovery(t *testing.T) {
-	desc := resourceDescriptor{
+	desc := Descriptor{
 		Resource: "deployments", Group: "apps", Version: "v1",
-		GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
 	}
 
 	t.Run("cancellation", func(t *testing.T) {
@@ -414,7 +413,7 @@ func TestEvaluateDescriptorsBatchCancellationAndPermissionClientRecovery(t *test
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		_, _, err := svc.evaluateDescriptorsBatch(ctx, capSvc, []resourceDescriptor{desc})
+		_, _, err := svc.evaluateDescriptorsBatch(ctx, capSvc, []Descriptor{desc})
 		require.ErrorIs(t, err, context.Canceled)
 	})
 
@@ -439,10 +438,10 @@ func TestEvaluateDescriptorsBatchCancellationAndPermissionClientRecovery(t *test
 		}})
 		svc := NewService(Dependencies{}, nil)
 
-		_, _, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []resourceDescriptor{desc})
+		_, _, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{desc})
 		require.ErrorContains(t, err, "permission client unavailable")
 
-		allowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []resourceDescriptor{desc})
+		allowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{desc})
 		require.NoError(t, err)
 		require.Empty(t, batchErrors)
 		require.True(t, allowed[0])
@@ -458,17 +457,16 @@ func TestCatalogSyncCapabilityAndBatchDeniedSeams(t *testing.T) {
 		result.Status.Allowed = true
 		return true, result, nil
 	})
-	desc := resourceDescriptor{
+	desc := Descriptor{
 		Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments",
-		GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
 	}
 	svc := NewService(Dependencies{Logger: applog.Noop}, nil)
 	run := &catalogSync{
-		service: svc, descriptors: []resourceDescriptor{desc},
+		service: svc, descriptors: []Descriptor{desc},
 		capabilityService: capabilities.NewService(capabilities.Dependencies{
 			Common: common.Dependencies{KubernetesClient: client},
 		}),
-		allowedIndices: make(map[int]resourceDescriptor), allowedSet: make(map[string]resourceDescriptor),
+		allowedIndices: make(map[int]Descriptor), allowedSet: make(map[string]Descriptor),
 		failed: make(map[string]error), succeeded: make(map[string][]Summary),
 	}
 	run.evaluateCapabilities(context.Background())
@@ -481,7 +479,7 @@ func TestCatalogSyncCapabilityAndBatchDeniedSeams(t *testing.T) {
 	require.False(t, run.batchEvaluated)
 
 	run.batchEvaluated = true
-	run.allowedSet = make(map[string]resourceDescriptor)
+	run.allowedSet = make(map[string]Descriptor)
 	require.NoError(t, run.collectDescriptor(context.Background(), 0, desc))
 	require.Empty(t, run.succeeded)
 }
@@ -489,14 +487,14 @@ func TestCatalogSyncCapabilityAndBatchDeniedSeams(t *testing.T) {
 func TestSortResourceDescriptorsUsesEveryStableTieBreaker(t *testing.T) {
 	tests := []struct {
 		name  string
-		input []resourceDescriptor
+		input []Descriptor
 		want  string
 	}{
-		{"priority", []resourceDescriptor{{Resource: "widgets"}, {Resource: "pods"}}, "pods"},
-		{"kind", []resourceDescriptor{{Resource: "widgets", Kind: "Zulu"}, {Resource: "widgets", Kind: "Alpha"}}, "Alpha"},
-		{"group", []resourceDescriptor{{Resource: "widgets", Kind: "Widget", Group: "z.io"}, {Resource: "widgets", Kind: "Widget", Group: "a.io"}}, "a.io"},
-		{"version", []resourceDescriptor{{Resource: "widgets", Kind: "Widget", Group: "a.io", Version: "v2"}, {Resource: "widgets", Kind: "Widget", Group: "a.io", Version: "v1"}}, "v1"},
-		{"resource", []resourceDescriptor{{Resource: "zz", Kind: "Widget", Group: "a.io", Version: "v1"}, {Resource: "aa", Kind: "Widget", Group: "a.io", Version: "v1"}}, "aa"},
+		{"priority", []Descriptor{{Resource: "widgets"}, {Resource: "pods"}}, "pods"},
+		{"kind", []Descriptor{{Resource: "widgets", Kind: "Zulu"}, {Resource: "widgets", Kind: "Alpha"}}, "Alpha"},
+		{"group", []Descriptor{{Resource: "widgets", Kind: "Widget", Group: "z.io"}, {Resource: "widgets", Kind: "Widget", Group: "a.io"}}, "a.io"},
+		{"version", []Descriptor{{Resource: "widgets", Kind: "Widget", Group: "a.io", Version: "v2"}, {Resource: "widgets", Kind: "Widget", Group: "a.io", Version: "v1"}}, "v1"},
+		{"resource", []Descriptor{{Resource: "zz", Kind: "Widget", Group: "a.io", Version: "v1"}, {Resource: "aa", Kind: "Widget", Group: "a.io", Version: "v1"}}, "aa"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -517,14 +515,14 @@ func TestSortResourceDescriptorsUsesEveryStableTieBreaker(t *testing.T) {
 }
 
 func TestCatalogSyncRestoreFailedDescriptorsPreservesPriorTimestamps(t *testing.T) {
-	failedDesc := resourceDescriptor{GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}}
-	otherDesc := resourceDescriptor{GVR: schema.GroupVersionResource{Version: "v1", Resource: "nodes"}}
+	failedDesc := Descriptor{Group: "apps", Version: "v1", Resource: "deployments"}
+	otherDesc := Descriptor{Version: "v1", Resource: "nodes"}
 	failedKey := catalogKey(failedDesc, "default", "api")
 	otherKey := catalogKey(otherDesc, "", "node-a")
 	untimedKey := catalogKey(otherDesc, "", "node-b")
 	timestamp := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
 	run := &catalogSync{
-		failed:      map[string]error{failedDesc.GVR.String(): errors.New("list failed")},
+		failed:      map[string]error{failedDesc.GVR().String(): errors.New("list failed")},
 		newItems:    map[string]Summary{otherKey: {Ref: resourcemodel.ResourceRef{Name: "current"}}},
 		newLastSeen: map[string]time.Time{},
 		previousItems: map[string]Summary{
@@ -956,8 +954,8 @@ func TestCatalogIngestTimeoutWarningEmittedOncePerService(t *testing.T) {
 	svc, _ := newControlledIngestCatalogService(source, 5*time.Millisecond)
 	logger := &recordingWatchLogger{}
 	svc.deps.Logger = logger
-	descriptors := []resourceDescriptor{{
-		GVR: schema.GroupVersionResource{Version: "v1", Resource: "configmaps"},
+	descriptors := []Descriptor{{
+		Version: "v1", Resource: "configmaps",
 	}}
 
 	for range 2 {
@@ -1090,16 +1088,14 @@ func TestCatalogPreflightEvaluatesNamespacedKindsPerScopeNamespace(t *testing.T)
 	}, nil)
 	capSvc := factory()
 
-	deployDesc := resourceDescriptor{
+	deployDesc := Descriptor{
 		Resource: "deployments", Group: "apps", Version: "v1", Namespaced: true,
-		GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
 	}
-	nodesDesc := resourceDescriptor{
+	nodesDesc := Descriptor{
 		Resource: "nodes", Version: "v1", Namespaced: false,
-		GVR: schema.GroupVersionResource{Version: "v1", Resource: "nodes"},
 	}
 
-	batchAllowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []resourceDescriptor{deployDesc, nodesDesc})
+	batchAllowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{deployDesc, nodesDesc})
 	if err != nil || len(batchErrors) != 0 {
 		t.Fatalf("batch evaluation failed: err=%v batchErrors=%+v", err, batchErrors)
 	}

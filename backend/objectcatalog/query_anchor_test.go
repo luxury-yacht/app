@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
@@ -16,8 +14,8 @@ import (
 func seedAnchorService(t *testing.T, n int) *Service {
 	t.Helper()
 	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
-	podDesc := resourceDescriptor{
-		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+	podDesc := Descriptor{
+
 		Namespaced: true,
 		Kind:       "Pod",
 		Group:      "",
@@ -31,7 +29,7 @@ func seedAnchorService(t *testing.T, n int) *Service {
 		name := fmt.Sprintf("pod-%03d", i)
 		svc.items[catalogKey(podDesc, "default", name)] = Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: name, UID: fmt.Sprintf("uid-%03d", i)}, Scope: ScopeNamespace}
 	}
-	svc.resources = map[string]resourceDescriptor{podDesc.GVR.String(): podDesc}
+	svc.resources = map[string]Descriptor{podDesc.GVR().String(): podDesc}
 	svc.mu.Unlock()
 	return svc
 }

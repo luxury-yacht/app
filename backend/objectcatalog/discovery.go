@@ -26,7 +26,7 @@ import (
 // cache is invalidated first iff a CRD change marked discovery stale since the last
 // discover, so periodic re-discovers stay served from the cache while a newly-created or
 // deleted CRD forces a fresh fetch.
-func (s *Service) discoverResources(ctx context.Context) ([]resourceDescriptor, error) {
+func (s *Service) discoverResources(ctx context.Context) ([]Descriptor, error) {
 	s.ensureDiscovery()
 	if s.discoveryInvalidate != nil && s.discoveryStale.Swap(false) {
 		s.discoveryInvalidate()
@@ -96,7 +96,7 @@ func hashClusterIDForDiscovery(id string) string {
 // discoverResourceDescriptors discovers via a plain (uncached) client built from deps — the
 // path the identity resolver uses, kept for callers that have no Service to hold a cached
 // client.
-func discoverResourceDescriptors(ctx context.Context, deps common.Dependencies, logger Logger) ([]resourceDescriptor, error) {
+func discoverResourceDescriptors(ctx context.Context, deps common.Dependencies, logger Logger) ([]Descriptor, error) {
 	if deps.KubernetesClient == nil {
 		return nil, errors.New("discovery client not available")
 	}
@@ -116,7 +116,7 @@ func discoverResourceDescriptors(ctx context.Context, deps common.Dependencies, 
 // discoverFromClient runs aggregated discovery via discoveryClient and extracts the catalog
 // descriptors, falling back from ServerPreferredResources to ServerGroupsAndResources when a
 // fake/older client returns nothing from the former.
-func discoverFromClient(ctx context.Context, discoveryClient discovery.DiscoveryInterface) ([]resourceDescriptor, error) {
+func discoverFromClient(ctx context.Context, discoveryClient discovery.DiscoveryInterface) ([]Descriptor, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -142,29 +142,7 @@ func discoverFromClient(ctx context.Context, discoveryClient discovery.Discovery
 	default:
 	}
 
-	return extractResourceDescriptors(resourceLists), nil
-}
-
-func extractResourceDescriptors(resourceLists []*metav1.APIResourceList) []resourceDescriptor {
-	exported := ExtractDescriptors(resourceLists)
-	result := make([]resourceDescriptor, 0, len(exported))
-	for _, desc := range exported {
-		r := resourceDescriptor{
-			GVR: schema.GroupVersionResource{
-				Group:    desc.Group,
-				Version:  desc.Version,
-				Resource: desc.Resource,
-			},
-			Namespaced: desc.Namespaced,
-			Kind:       desc.Kind,
-			Group:      desc.Group,
-			Version:    desc.Version,
-			Resource:   desc.Resource,
-			Scope:      desc.Scope,
-		}
-		result = append(result, r)
-	}
-	return result
+	return ExtractDescriptors(resourceLists), nil
 }
 
 // ExtractDescriptors converts API resource discovery results into catalog descriptors.

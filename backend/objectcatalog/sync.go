@@ -28,7 +28,7 @@ import (
 // "" ask. The check's scope must match the collection's scope — a scoped
 // identity is typically denied cluster-wide but allowed per namespace, and a
 // cluster-wide-only preflight would skip collection for every kind.
-func (s *Service) preflightNamespaces(desc resourceDescriptor) []string {
+func (s *Service) preflightNamespaces(desc Descriptor) []string {
 	scope := s.scopeNamespaces()
 	if !desc.Namespaced || len(scope) == 0 {
 		return []string{""}
@@ -38,7 +38,7 @@ func (s *Service) preflightNamespaces(desc resourceDescriptor) []string {
 
 // evaluateDescriptor checks if the given descriptor is allowed by the
 // capabilities service: allowed in ANY of its preflight namespaces.
-func (s *Service) evaluateDescriptor(ctx context.Context, svc *capabilities.Service, desc resourceDescriptor) (bool, error) {
+func (s *Service) evaluateDescriptor(ctx context.Context, svc *capabilities.Service, desc Descriptor) (bool, error) {
 	if svc == nil {
 		return true, nil
 	}
@@ -50,11 +50,11 @@ func (s *Service) evaluateDescriptor(ctx context.Context, svc *capabilities.Serv
 	return summarizeDescriptorEvaluation(results)
 }
 
-func descriptorPreflightReviews(desc resourceDescriptor, namespaces []string) []capabilities.ReviewAttributes {
+func descriptorPreflightReviews(desc Descriptor, namespaces []string) []capabilities.ReviewAttributes {
 	reviews := make([]capabilities.ReviewAttributes, 0, len(namespaces))
 	for _, namespace := range namespaces {
 		reviews = append(reviews, capabilities.ReviewAttributes{
-			ID: desc.GVR.String() + "|" + namespace,
+			ID: desc.GVR().String() + "|" + namespace,
 			Attributes: &authorizationv1.ResourceAttributes{
 				Group:     desc.Group,
 				Version:   desc.Version,
@@ -97,7 +97,7 @@ func summarizeDescriptorEvaluation(results []capabilities.CheckResult) (bool, er
 }
 
 // evaluateDescriptorsBatch checks if the given descriptors are allowed by the capabilities service.
-func (s *Service) evaluateDescriptorsBatch(ctx context.Context, svc *capabilities.Service, descriptors []resourceDescriptor) (map[int]bool, map[int]error, error) {
+func (s *Service) evaluateDescriptorsBatch(ctx context.Context, svc *capabilities.Service, descriptors []Descriptor) (map[int]bool, map[int]error, error) {
 	allowed := make(map[int]bool, len(descriptors))
 	if len(descriptors) == 0 {
 		return allowed, nil, nil
@@ -133,7 +133,7 @@ type descriptorEvaluationBatchPlan struct {
 // descriptorEvaluationPlan creates one check per descriptor and preflight namespace.
 // The indexes preserve the association between the capability service's positional
 // results and the descriptors that supplied them.
-func (s *Service) descriptorEvaluationPlan(descriptors []resourceDescriptor) descriptorEvaluationBatchPlan {
+func (s *Service) descriptorEvaluationPlan(descriptors []Descriptor) descriptorEvaluationBatchPlan {
 	plan := descriptorEvaluationBatchPlan{
 		checks:  make([]capabilities.ReviewAttributes, 0, len(descriptors)),
 		indexes: make([]int, 0, len(descriptors)),
@@ -191,7 +191,7 @@ func recordBatchEvaluationResult(
 }
 
 func (s *Service) logDescriptorEvaluation(
-	descriptors []resourceDescriptor,
+	descriptors []Descriptor,
 	indexes []int,
 	allowed map[int]bool,
 	errorsByIndex map[int]error,
@@ -232,7 +232,7 @@ func countDescriptorEvaluationResults(indexes []int, allowed map[int]bool, error
 }
 
 func descriptorDeniedExamples(
-	descriptors []resourceDescriptor,
+	descriptors []Descriptor,
 	indexes []int,
 	allowed map[int]bool,
 	errorsByIndex map[int]error,
@@ -246,15 +246,15 @@ func descriptorDeniedExamples(
 		if _, hasErr := errorsByIndex[idx]; hasErr || allowed[idx] || idx >= len(descriptors) {
 			continue
 		}
-		examples = append(examples, descriptors[idx].GVR.String())
+		examples = append(examples, descriptors[idx].GVR().String())
 	}
 	return examples
 }
 
-func joinDescriptorEvaluationErrors(descriptors []resourceDescriptor, errorsByIndex map[int]error) error {
+func joinDescriptorEvaluationErrors(descriptors []Descriptor, errorsByIndex map[int]error) error {
 	errs := make([]error, 0, len(errorsByIndex))
 	for idx, errVal := range errorsByIndex {
-		errs = append(errs, fmt.Errorf("%s: %w", descriptors[idx].GVR.String(), errVal))
+		errs = append(errs, fmt.Errorf("%s: %w", descriptors[idx].GVR().String(), errVal))
 	}
 	return errors.Join(errs...)
 }
@@ -371,14 +371,14 @@ type catalogSync struct {
 	newLastSeen       map[string]time.Time
 	previousItems     map[string]Summary
 	previousLastSeen  map[string]time.Time
-	descriptors       []resourceDescriptor
+	descriptors       []Descriptor
 	aggregator        *streamingAggregator
 	capabilityService *capabilities.Service
 	resultsMu         sync.Mutex
 	succeeded         map[string][]Summary
 	failed            map[string]error
-	allowedIndices    map[int]resourceDescriptor
-	allowedSet        map[string]resourceDescriptor
+	allowedIndices    map[int]Descriptor
+	allowedSet        map[string]Descriptor
 	batchEvaluated    bool
 }
 
@@ -455,13 +455,13 @@ func (run *catalogSync) prepare(ctx context.Context) {
 	}
 	run.succeeded = make(map[string][]Summary, len(run.descriptors))
 	run.failed = make(map[string]error)
-	run.allowedIndices = make(map[int]resourceDescriptor)
-	run.allowedSet = make(map[string]resourceDescriptor)
+	run.allowedIndices = make(map[int]Descriptor)
+	run.allowedSet = make(map[string]Descriptor)
 	run.preparePublishedState()
 	run.evaluateCapabilities(ctx)
 }
 
-func sortResourceDescriptors(descriptors []resourceDescriptor) {
+func sortResourceDescriptors(descriptors []Descriptor) {
 	sort.SliceStable(descriptors, func(i, j int) bool {
 		left, right := descriptors[i], descriptors[j]
 		if comparison := descriptorStreamingPriority(left) - descriptorStreamingPriority(right); comparison != 0 {
@@ -562,18 +562,18 @@ func (run *catalogSync) waitForIngest(ctx context.Context) error {
 	}
 }
 
-func catalogStaticIngestGVRs(descriptors []resourceDescriptor) []schema.GroupVersionResource {
+func catalogStaticIngestGVRs(descriptors []Descriptor) []schema.GroupVersionResource {
 	gvrs := make([]schema.GroupVersionResource, 0, len(descriptors))
 	seen := make(map[schema.GroupVersionResource]struct{})
 	for _, desc := range descriptors {
-		if _, owned := catalogIngestOwnedGVRs[desc.GVR]; !owned {
+		if _, owned := catalogIngestOwnedGVRs[desc.GVR()]; !owned {
 			continue
 		}
-		if _, exists := seen[desc.GVR]; exists {
+		if _, exists := seen[desc.GVR()]; exists {
 			continue
 		}
-		seen[desc.GVR] = struct{}{}
-		gvrs = append(gvrs, desc.GVR)
+		seen[desc.GVR()] = struct{}{}
+		gvrs = append(gvrs, desc.GVR())
 	}
 	return gvrs
 }
@@ -596,7 +596,7 @@ func (run *catalogSync) collectionTasks() []func(context.Context) error {
 	return tasks
 }
 
-func (run *catalogSync) collectDescriptor(ctx context.Context, index int, desc resourceDescriptor) error {
+func (run *catalogSync) collectDescriptor(ctx context.Context, index int, desc Descriptor) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -615,7 +615,7 @@ func (run *catalogSync) collectDescriptor(ctx context.Context, index int, desc r
 	}
 
 	summaries, err := run.service.collectResource(
-		ctx, index, desc, run.service.scopeNamespaces(), run.aggregator,
+		ctx, desc, run.service.scopeNamespaces(), run.aggregator,
 	)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
@@ -625,37 +625,37 @@ func (run *catalogSync) collectDescriptor(ctx context.Context, index int, desc r
 	}
 	run.logCollected(desc, len(summaries))
 	run.resultsMu.Lock()
-	run.succeeded[desc.GVR.String()] = summaries
+	run.succeeded[desc.GVR().String()] = summaries
 	run.resultsMu.Unlock()
 	return nil
 }
 
-func (run *catalogSync) allow(index int, desc resourceDescriptor) {
+func (run *catalogSync) allow(index int, desc Descriptor) {
 	run.resultsMu.Lock()
 	defer run.resultsMu.Unlock()
 	run.allowedIndices[index] = desc
-	run.allowedSet[desc.GVR.String()] = desc
+	run.allowedSet[desc.GVR().String()] = desc
 }
 
-func (run *catalogSync) isAllowed(desc resourceDescriptor) bool {
+func (run *catalogSync) isAllowed(desc Descriptor) bool {
 	run.resultsMu.Lock()
 	defer run.resultsMu.Unlock()
-	_, ok := run.allowedSet[desc.GVR.String()]
+	_, ok := run.allowedSet[desc.GVR().String()]
 	return ok
 }
 
-func (run *catalogSync) recordFailure(desc resourceDescriptor, err error) {
+func (run *catalogSync) recordFailure(desc Descriptor, err error) {
 	run.resultsMu.Lock()
 	defer run.resultsMu.Unlock()
-	run.failed[desc.GVR.String()] = err
+	run.failed[desc.GVR().String()] = err
 }
 
-func (run *catalogSync) logCollected(desc resourceDescriptor, count int) {
+func (run *catalogSync) logCollected(desc Descriptor, count int) {
 	if count == 0 {
-		run.service.logDebug(fmt.Sprintf("catalog collected 0 objects for %s", desc.GVR.String()))
+		run.service.logDebug(fmt.Sprintf("catalog collected 0 objects for %s", desc.GVR().String()))
 		return
 	}
-	run.service.logDebug(fmt.Sprintf("catalog collected %d object(s) for %s", count, desc.GVR.String()))
+	run.service.logDebug(fmt.Sprintf("catalog collected %d object(s) for %s", count, desc.GVR().String()))
 }
 
 func (run *catalogSync) finish(runErr error) error {
@@ -686,11 +686,14 @@ func (run *catalogSync) applyCollectionResults() []Descriptor {
 	s.mu.Lock()
 	s.catalogIndex.replaceResources(run.allowedSet)
 	s.mu.Unlock()
-	return toDescriptorSlice(allowedDescriptors)
+	if len(allowedDescriptors) == 0 {
+		return nil
+	}
+	return allowedDescriptors
 }
 
-func (run *catalogSync) orderedAllowedDescriptors() []resourceDescriptor {
-	allowed := make([]resourceDescriptor, 0, len(run.allowedIndices))
+func (run *catalogSync) orderedAllowedDescriptors() []Descriptor {
+	allowed := make([]Descriptor, 0, len(run.allowedIndices))
 	for idx := range run.descriptors {
 		if desc, ok := run.allowedIndices[idx]; ok {
 			allowed = append(allowed, desc)

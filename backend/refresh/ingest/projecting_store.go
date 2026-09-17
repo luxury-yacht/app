@@ -543,57 +543,37 @@ func (s *ProjectingStore) List() []interface{} {
 // omitted. For a table-only projection (the stored value is not a Bundle) the
 // stored value itself is the table row.
 func (s *ProjectingStore) TableRows() []interface{} {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]interface{}, 0, len(s.rows))
-	for _, row := range s.rows {
-		if table := tableHalf(row); table != nil {
-			out = append(out, table)
-		}
-	}
-	return out
+	return s.projectedRows(tableHalf)
 }
 
 // CatalogRows returns a snapshot slice of the Catalog half of every stored
 // projection (the object-catalog Summary). Rows whose Catalog half is nil — kinds
 // with no catalog projector — are omitted.
 func (s *ProjectingStore) CatalogRows() []interface{} {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]interface{}, 0, len(s.rows))
-	for _, row := range s.rows {
-		if cat := catalogHalf(row); cat != nil {
-			out = append(out, cat)
-		}
-	}
-	return out
+	return s.projectedRows(catalogHalf)
 }
 
 // ObjectMapRows returns a snapshot slice of the ObjectMap half of every stored
 // projection (the object-map graph node). Rows whose ObjectMap half is nil — kinds
 // with no object-map projector — are omitted.
 func (s *ProjectingStore) ObjectMapRows() []interface{} {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]interface{}, 0, len(s.rows))
-	for _, row := range s.rows {
-		if node := objectMapHalf(row); node != nil {
-			out = append(out, node)
-		}
-	}
-	return out
+	return s.projectedRows(objectMapHalf)
 }
 
 // AggregateRows returns a snapshot slice of the Aggregate half of every stored
 // projection (a kind's bespoke aggregation row — the pod kind's PodAggregate). Rows
 // whose Aggregate half is nil — every kind but pods — are omitted.
 func (s *ProjectingStore) AggregateRows() []interface{} {
+	return s.projectedRows(aggregateHalf)
+}
+
+func (s *ProjectingStore) projectedRows(project func(interface{}) interface{}) []interface{} {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]interface{}, 0, len(s.rows))
 	for _, row := range s.rows {
-		if agg := aggregateHalf(row); agg != nil {
-			out = append(out, agg)
+		if value := project(row); value != nil {
+			out = append(out, value)
 		}
 	}
 	return out
@@ -608,24 +588,10 @@ func (s *ProjectingStore) RowsByIndex(indexName string, values []string) []inter
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	byValue := s.indexes[indexName]
-	if len(byValue) == 0 {
+	keys := indexedKeys(s.indexes[indexName], values)
+	if len(keys) == 0 {
 		return nil
 	}
-	keySet := make(map[string]struct{})
-	for _, value := range values {
-		for key := range byValue[value] {
-			keySet[key] = struct{}{}
-		}
-	}
-	if len(keySet) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(keySet))
-	for key := range keySet {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
 	out := make([]interface{}, 0, len(keys))
 	for _, key := range keys {
 		if row, ok := s.rows[key]; ok {
@@ -633,6 +599,23 @@ func (s *ProjectingStore) RowsByIndex(indexName string, values []string) []inter
 		}
 	}
 	return out
+}
+
+// indexedKeys snapshots the union before callers read or rewrite indexed rows.
+// The caller holds the store lock throughout selection and use of these keys.
+func indexedKeys(byValue map[string]map[string]struct{}, values []string) []string {
+	keySet := make(map[string]struct{})
+	for _, value := range values {
+		for key := range byValue[value] {
+			keySet[key] = struct{}{}
+		}
+	}
+	keys := make([]string, 0, len(keySet))
+	for key := range keySet {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // RewriteBundlesByIndex applies an out-of-band correction to stored Bundles — a
@@ -660,24 +643,10 @@ func (s *ProjectingStore) RewriteBundlesByIndex(
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	byValue := s.indexes[indexName]
-	if len(byValue) == 0 {
+	keys := indexedKeys(s.indexes[indexName], values)
+	if len(keys) == 0 {
 		return nil
 	}
-	keySet := make(map[string]struct{})
-	for _, value := range values {
-		for key := range byValue[value] {
-			keySet[key] = struct{}{}
-		}
-	}
-	if len(keySet) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(keySet))
-	for key := range keySet {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
 	rewritten := make([]Bundle, 0, len(keys))
 	for _, key := range keys {
 		stored, ok := s.rows[key].(Bundle)
@@ -784,8 +753,8 @@ func (s *ProjectingStore) feedSinksReplace(prev, next map[string]interface{}) {
 		s.emitDeleteToIncrementalSinks(stored)
 	}
 	tableRows, catalogRows, bundles := replaceRows(next)
-	s.emitReplaceTableRows(tableRows)
-	s.emitReplaceCatalogRows(catalogRows)
+	emitReplaceRows(s.sinks, tableRows)
+	emitReplaceRows(s.catalogSinks, catalogRows)
 	s.emitReplaceBundles(bundles)
 }
 
@@ -836,26 +805,8 @@ func replaceRows(next map[string]interface{}) ([]interface{}, []interface{}, []B
 	return tableRows, catalogRows, bundles
 }
 
-func (s *ProjectingStore) emitReplaceTableRows(rows []interface{}) {
-	if len(s.sinks) == 0 {
-		return
-	}
-	for _, sink := range s.sinks {
-		if bulk, ok := sink.(Replacer); ok {
-			bulk.Replace(rows)
-			continue
-		}
-		for _, row := range rows {
-			sink.Upsert(row)
-		}
-	}
-}
-
-func (s *ProjectingStore) emitReplaceCatalogRows(rows []interface{}) {
-	if len(s.catalogSinks) == 0 {
-		return
-	}
-	for _, sink := range s.catalogSinks {
+func emitReplaceRows(sinks []Sink, rows []interface{}) {
+	for _, sink := range sinks {
 		if bulk, ok := sink.(Replacer); ok {
 			bulk.Replace(rows)
 			continue

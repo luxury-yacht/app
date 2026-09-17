@@ -12,7 +12,7 @@ func TestColdSyncPublishesOneFinalSignalAfterReplacement(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
 	agg := newStreamingAggregator(svc)
 	ref := resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "karpenter.sh", Version: "v1", Kind: "NodePool", Resource: "nodepools", Name: "pool"}
-	agg.emit(0, []Summary{{Ref: ref, Scope: ScopeCluster}})
+	agg.emit([]Summary{{Ref: ref, Scope: ScopeCluster}})
 	updates, unsubscribe := svc.SubscribeStreaming()
 	defer unsubscribe()
 	<-updates

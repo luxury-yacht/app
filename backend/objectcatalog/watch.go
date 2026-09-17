@@ -369,7 +369,7 @@ func (s *Service) registerIngestCatalogSinks() {
 	s.broadcastStreaming(true)
 }
 
-func (s *Service) resolveGRToDescriptor(gr schema.GroupResource) (string, *resourceDescriptor) {
+func (s *Service) resolveGRToDescriptor(gr schema.GroupResource) (string, *Descriptor) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.catalogIndex.resourceForGroupResource(gr.Group, gr.Resource)

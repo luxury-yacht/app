@@ -46,7 +46,7 @@ func TestOperatorFamilyQueriesKeepScopeAndRejectKindCollisions(t *testing.T) {
 
 func TestDiscoveredFamilyScopesDoNotRequireResourceInstances(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
-	svc.identity.replaceDiscovered([]resourceDescriptor{
+	svc.identity.replaceDiscovered([]Descriptor{
 		builtinDescriptor("cert-manager.io", "v1", "ClusterIssuer", "clusterissuers", false),
 		builtinDescriptor("external-secrets.io", "v1", "SecretStore", "secretstores", true),
 		builtinDescriptor("monitoring.coreos.com", "v1", "Prometheus", "prometheuses", true),

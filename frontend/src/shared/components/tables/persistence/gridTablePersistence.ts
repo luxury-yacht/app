@@ -584,60 +584,53 @@ const assemblePersistedState = (parts: PersistedStateParts): GridTablePersistedS
   return state;
 };
 
+// Restored and newly saved preferences use the same column and filter policy.
+const normalizeStateForPersistence = <T>(
+  state: Pick<
+    GridTableSaveContext<T>,
+    | 'customColumns'
+    | 'columnVisibility'
+    | 'columnOrder'
+    | 'columnWidths'
+    | 'sort'
+    | 'filters'
+    | 'pageSize'
+  >,
+  context: GridTablePruneContext<T>
+): GridTablePersistedState | null => {
+  const customColumns = normalizeCustomMetadataColumnDefinitions(state.customColumns);
+  const columns: GridColumnDefinition<T>[] = [
+    ...context.columns,
+    ...customColumns.map((definition) => ({
+      key: definition.key,
+      header: definition.header,
+      sortable: false,
+      render: () => null,
+    })),
+  ];
+  const columnMap = buildColumnMap(columns);
+  return assemblePersistedState({
+    customColumns: customColumns.length > 0 ? customColumns : undefined,
+    columnVisibility: pruneColumnVisibility(state.columnVisibility, columnMap),
+    columnOrder: pruneColumnOrder(state.columnOrder, columns),
+    columnWidths: pruneColumnWidths(state.columnWidths, columnMap),
+    sort: pruneSort(state.sort, columnMap),
+    filters: pruneFilters(state.filters, context.filterOptions),
+    pageSize: prunePageSize(state.pageSize, context.pageSizeOptions),
+  });
+};
+
 export const prunePersistedState = <T>(
   persisted: GridTablePersistedInput | null | undefined,
   context: GridTablePruneContext<T>
 ): GridTablePersistedState | null => {
   const migrated = migratePersistedState(persisted);
-  if (!migrated) {
-    return null;
-  }
-  const customColumns = normalizeCustomMetadataColumnDefinitions(migrated.customColumns);
-  const columns: GridColumnDefinition<T>[] = [
-    ...context.columns,
-    ...customColumns.map((definition) => ({
-      key: definition.key,
-      header: definition.header,
-      sortable: false,
-      render: () => null,
-    })),
-  ];
-  const columnMap = buildColumnMap(columns);
-  return assemblePersistedState({
-    customColumns: customColumns.length > 0 ? customColumns : undefined,
-    columnVisibility: pruneColumnVisibility(migrated.columnVisibility, columnMap),
-    columnOrder: pruneColumnOrder(migrated.columnOrder, columns),
-    columnWidths: pruneColumnWidths(migrated.columnWidths, columnMap),
-    sort: pruneSort(migrated.sort, columnMap),
-    filters: pruneFilters(migrated.filters, context.filterOptions),
-    pageSize: prunePageSize(migrated.pageSize, context.pageSizeOptions),
-  });
+  return migrated ? normalizeStateForPersistence(migrated, context) : null;
 };
 
 export const buildPersistedStateForSave = <T>(
   context: GridTableSaveContext<T>
-): GridTablePersistedState | null => {
-  const customColumns = normalizeCustomMetadataColumnDefinitions(context.customColumns);
-  const columns: GridColumnDefinition<T>[] = [
-    ...context.columns,
-    ...customColumns.map((definition) => ({
-      key: definition.key,
-      header: definition.header,
-      sortable: false,
-      render: () => null,
-    })),
-  ];
-  const columnMap = buildColumnMap(columns);
-  return assemblePersistedState({
-    customColumns: customColumns.length > 0 ? customColumns : undefined,
-    columnVisibility: pruneColumnVisibility(context.columnVisibility, columnMap),
-    columnOrder: pruneColumnOrder(context.columnOrder, columns),
-    columnWidths: pruneColumnWidths(context.columnWidths, columnMap),
-    sort: pruneSort(context.sort, columnMap),
-    filters: pruneFilters(context.filters, context.filterOptions),
-    pageSize: prunePageSize(context.pageSize, context.pageSizeOptions),
-  });
-};
+): GridTablePersistedState | null => normalizeStateForPersistence(context, context);
 
 export const captureClusterTableState = async (
   clusterId: string

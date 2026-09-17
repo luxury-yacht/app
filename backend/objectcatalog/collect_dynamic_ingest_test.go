@@ -107,9 +107,9 @@ func (f *fakeDynamicIngestSource) AddCatalogSink(gvr schema.GroupVersionResource
 	return true
 }
 
-func widgetDesc() resourceDescriptor {
-	return resourceDescriptor{
-		GVR:        schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+func widgetDesc() Descriptor {
+	return Descriptor{
+
 		Namespaced: true,
 		Kind:       "Widget",
 		Group:      "example.com",
@@ -157,13 +157,13 @@ func TestCatalogDynamicCRDViaIngestMatchesListPath(t *testing.T) {
 		Common:    common.Dependencies{DynamicClient: widgetDynamicClient(w1, w2, w3)},
 		ClusterID: "c1",
 	}, &Options{ResyncInterval: time.Minute, PageSize: 200, ListWorkers: 2, InformerPromotionThreshold: 0})
-	listSummaries, err := listSvc.collectResource(ctx, 0, desc, nil, nil)
+	listSummaries, err := listSvc.collectResource(ctx, desc, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, listSummaries, 3)
 
 	// Ingest-backed Service: threshold 2, so 3 objects promote the kind to the ingest path.
 	fake := newFakeDynamicIngestSource()
-	fake.seed(desc.GVR, w1, w2, w3)
+	fake.seed(desc.GVR(), w1, w2, w3)
 	ingestSvc := NewService(Dependencies{
 		Common:       common.Dependencies{DynamicClient: widgetDynamicClient(w1, w2, w3)},
 		IngestSource: fake,
@@ -172,15 +172,15 @@ func TestCatalogDynamicCRDViaIngestMatchesListPath(t *testing.T) {
 
 	// First collect lists (the reflector is not yet registered) and crosses the threshold,
 	// which registers the on-demand dynamic reflector with the ingest source.
-	first, err := ingestSvc.collectResource(ctx, 0, desc, nil, nil)
+	first, err := ingestSvc.collectResource(ctx, desc, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, first, 3)
-	require.True(t, fake.registered(desc.GVR),
+	require.True(t, fake.registered(desc.GVR()),
 		"crossing the promotion threshold must register a dynamic reflector with the ingest source")
 
 	// Second collect serves from the ingest path (CatalogRows), and the Summaries must equal
 	// the pure-LIST path's.
-	second, err := ingestSvc.collectResource(ctx, 0, desc, nil, nil)
+	second, err := ingestSvc.collectResource(ctx, desc, nil, nil)
 	require.NoError(t, err)
 	require.ElementsMatch(t, listSummaries, second,
 		"ingest-served Summaries must equal the list-path Summaries")
@@ -196,16 +196,16 @@ func TestCatalogDynamicCRDPromotesOnlyAboveThreshold(t *testing.T) {
 	w1 := widgetObject("default", "w1", "100")
 
 	fake := newFakeDynamicIngestSource()
-	fake.seed(desc.GVR, w1)
+	fake.seed(desc.GVR(), w1)
 	svc := NewService(Dependencies{
 		Common:       common.Dependencies{DynamicClient: widgetDynamicClient(w1)},
 		IngestSource: fake,
 		ClusterID:    "c1",
 	}, &Options{ResyncInterval: time.Minute, PageSize: 200, ListWorkers: 2, InformerPromotionThreshold: 5})
 
-	summaries, err := svc.collectResource(ctx, 0, desc, nil, nil)
+	summaries, err := svc.collectResource(ctx, desc, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, summaries, 1)
-	require.False(t, fake.registered(desc.GVR),
+	require.False(t, fake.registered(desc.GVR()),
 		"a kind below the promotion threshold must NOT be promoted to the ingest path")
 }

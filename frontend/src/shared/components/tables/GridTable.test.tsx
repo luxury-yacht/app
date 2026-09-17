@@ -1877,15 +1877,16 @@ it('ignores wrapper context menus when no empty-area items are exposed', async (
   const wrapper = container.querySelector('.gridtable-wrapper');
   expect(wrapper).not.toBeNull();
 
-  act(() => {
-    requireValue(wrapper, 'expected test value in GridTable.test.tsx').dispatchEvent(
-      new MouseEvent('contextmenu', {
-        bubbles: true,
-        clientX: 50,
-        clientY: 50,
-      })
-    );
+  const event = new MouseEvent('contextmenu', {
+    bubbles: true,
+    cancelable: true,
+    clientX: 50,
+    clientY: 50,
   });
+  act(() => {
+    requireValue(wrapper, 'expected test value in GridTable.test.tsx').dispatchEvent(event);
+  });
+  expect(event.defaultPrevented).toBe(false);
 
   await flushAsync();
 

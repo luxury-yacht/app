@@ -63,7 +63,6 @@ interface GridTableInteractionWiring<T> {
     item: T | null,
     rowIndex: number
   ) => void;
-  handleWrapperContextMenu: (event: React.MouseEvent) => void;
   openFocusedRowContextMenu: () => boolean;
   isContextMenuVisible: boolean;
   handleRowMouseEnter: (element: HTMLDivElement) => void;
@@ -170,7 +169,6 @@ export function useGridTableInteractionWiring<T>({
   const {
     contextMenuNode,
     handleCellContextMenu,
-    handleWrapperContextMenu,
     openFocusedRowContextMenu,
     isContextMenuVisible,
   } = useGridTableContextMenuWiring<T>({
@@ -258,7 +256,6 @@ export function useGridTableInteractionWiring<T>({
     getRowClassNameWithFocus,
     contextMenuNode,
     handleCellContextMenu,
-    handleWrapperContextMenu,
     openFocusedRowContextMenu,
     isContextMenuVisible,
     handleRowMouseEnter: handleRowMouseEnterWithReset,

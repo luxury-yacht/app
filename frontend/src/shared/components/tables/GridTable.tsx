@@ -61,7 +61,6 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
     hoverState,
     contextMenuNode,
     headerContextMenuNode,
-    handleWrapperContextMenu,
     shouldVirtualize,
     virtualRows,
     virtualRange,
@@ -108,7 +107,6 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
       tableClassName={tableClassName}
       useShortNames={useShortNames}
       hoverState={hoverState}
-      onWrapperContextMenu={handleWrapperContextMenu}
       tableData={tableData}
       keyExtractor={keyExtractor}
       emptyMessage={emptyMessage}

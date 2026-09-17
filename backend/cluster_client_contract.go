@@ -123,18 +123,24 @@ func shutdownClusterAuthManagerIfOwned(manager *authstate.Manager, owned bool) {
 	}
 }
 
+// loadSelectionRESTConfig reads the selected file afresh; callers retain their
+// own transport, diagnostic, and timeout policies.
+func loadSelectionRESTConfig(selection kubeconfigSelection) (*rest.Config, error) {
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	loadingRules.ExplicitPath = selection.Path
+	overrides := &clientcmd.ConfigOverrides{}
+	if selection.Context != "" {
+		overrides.CurrentContext = selection.Context
+	}
+	clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
+	return clientConfig.ClientConfig()
+}
+
 // configureClusterRecoveryTest rebuilds credentials rather than probing with a
 // clientset that may still cache credentials from the failed request.
 func configureClusterRecoveryTest(manager *authstate.Manager, selection kubeconfigSelection) {
 	manager.SetRecoveryTest(func() error {
-		loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-		loadingRules.ExplicitPath = selection.Path
-		overrides := &clientcmd.ConfigOverrides{}
-		if selection.Context != "" {
-			overrides.CurrentContext = selection.Context
-		}
-		clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
-		freshConfig, err := clientConfig.ClientConfig()
+		freshConfig, err := loadSelectionRESTConfig(selection)
 		if err != nil {
 			return fmt.Errorf("failed to load kubeconfig: %w", err)
 		}
@@ -166,8 +172,6 @@ func classifyRecoveryError(err error) authstate.ErrorClass {
 	}
 }
 
-// buildRestConfigForSelection loads a REST config for the provided kubeconfig path/context.
-// The clusterAuthMgr parameter is the per-cluster auth manager that will be used to wrap
 // protobufRestConfig returns a COPY of base that negotiates Protobuf for built-in
 // kinds: the Accept header offers protobuf-then-JSON, so the server picks protobuf
 // where it can (every conformant apiserver serves it for built-ins — the control

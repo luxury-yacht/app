@@ -9,7 +9,6 @@
 package resourcestream
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -27,8 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	dynamicinformer "k8s.io/client-go/dynamic/dynamicinformer"
-	appslisters "k8s.io/client-go/listers/apps/v1"
-	batchlisters "k8s.io/client-go/listers/batch/v1"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
@@ -222,20 +219,9 @@ type Manager struct {
 
 	dynamicClient dynamic.Interface
 
-	// The workload listers (deployment/stateful/daemon/job/cronJob) are wired only
-	// by unit tests: lookupWorkloadRef prefers a wired lister (lookupWorkloadObject),
-	// else the ingest store. Production reads pods, the workload kinds, and nodes
-	// from the ingest store (all cut), so those typed informers are never
-	// instantiated; podIngest / workloadIngest / nodeIngest are the production
-	// sources.
-	podIngest        podBundleSource
-	workloadIngest   workloadBundleReader
-	nodeIngest       nodeBundleReader
-	deploymentLister appslisters.DeploymentLister
-	statefulLister   appslisters.StatefulSetLister
-	daemonLister     appslisters.DaemonSetLister
-	jobLister        batchlisters.JobLister
-	cronJobLister    batchlisters.CronJobLister
+	podIngest      podBundleSource
+	workloadIngest workloadBundleReader
+	nodeIngest     nodeBundleReader
 
 	// allowedNamespaces is the cluster's namespace scope
 	// (docs/architecture/namespace-scope.md); namespaced custom-resource informers
@@ -1301,42 +1287,6 @@ func (m *Manager) triggerResync(sub *subscription, update Update) bool {
 		return sub.markResyncing()
 	default:
 		return false
-	}
-}
-
-// lookupWorkloadObject resolves a workload object via a typed lister. Production wires no
-// workload listers (the kinds are cut to ingest), so this returns an error there and the
-// caller falls back to the ingest catalog half (see lookupWorkloadRef); only the unit tests
-// that drive the typed handlers wire these listers.
-func (m *Manager) lookupWorkloadObject(kind, namespace, name string) (metav1.Object, error) {
-	switch strings.ToLower(kind) {
-	case "deployment":
-		if m.deploymentLister == nil {
-			return nil, errors.New("deployment lister unavailable")
-		}
-		return m.deploymentLister.Deployments(namespace).Get(name)
-	case "statefulset":
-		if m.statefulLister == nil {
-			return nil, errors.New("statefulset lister unavailable")
-		}
-		return m.statefulLister.StatefulSets(namespace).Get(name)
-	case "daemonset":
-		if m.daemonLister == nil {
-			return nil, errors.New("daemonset lister unavailable")
-		}
-		return m.daemonLister.DaemonSets(namespace).Get(name)
-	case "job":
-		if m.jobLister == nil {
-			return nil, errors.New("job lister unavailable")
-		}
-		return m.jobLister.Jobs(namespace).Get(name)
-	case "cronjob":
-		if m.cronJobLister == nil {
-			return nil, errors.New("cronjob lister unavailable")
-		}
-		return m.cronJobLister.CronJobs(namespace).Get(name)
-	default:
-		return nil, fmt.Errorf("unsupported workload kind %q", kind)
 	}
 }
 

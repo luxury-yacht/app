@@ -62,6 +62,135 @@ scope for their owning review: generators and tooling include CI/build inputs;
 UI includes CSS/assets; each domain includes its docs/tests. Do not claim these
 companions have been audited from the numeric inventory.
 
+## Reopened review — S001 through S004
+
+The user requested a fresh review from the beginning after the earlier batches
+left substantial responsibilities unexamined. Baseline for this continuation:
+`0451eb93`; the worktree was clean. Preserve the earlier records as batch evidence,
+not subsystem completion. Revisit all four domains before resuming S006.
+
+**Catch-up batch: implementation, focused checks and prerelease gate passed.**
+The earlier pass records below describe their delivered changes, not an exhaustive
+review. This continuation revisits their unexamined responsibilities in order.
+
+### Review scope and disposition
+
+| Pass | Revisited responsibilities | Changes in this batch | Retained contracts and remaining work |
+| --- | --- | --- | --- |
+| S001 tables | All shared-table production files: persistence, filtering, menus/focus, export, rendering, row/column virtualization, widths/measurement, metadata columns, factories, pagination, diagnostics; resource-grid binding/query consumers | Share load/save normalization; share CSV action lifetime; share header/cell sort policy and combine header-menu state; remove the unreachable empty-area menu path through controller/body/wiring; resolve the visible column window once per render; centralize diagnostics churn eligibility | Keep independent controlled/local filter ownership, page-replacement versus dirty-cell measurement, virtual sizing/hysteresis, focus restoration, and cached cell content. C2 remains a separately identified behavior issue, not a refactor. Individual resource-view column definitions remain in their owning domains. |
+| S002 catalog | Discovery and descriptor construction; collection plans, API/informer/ingest collection; permission preflight, synchronization/publication; watch/stream delivery; identity/lookup/action enrichment; catalog indexes, query/facet/cursor mapping, health and finalizer consumers | Use the existing public Descriptor throughout and derive GVR from its canonical fields; remove descriptor conversion layers; remove the unused collection ordinal through the collection/emission chain; reuse namespace list targets; share catalog-row selection across collection/reconciliation/sink replacement | Preserve discovery identity versus permission-filtered published rows; retain the ordinal used to associate permission results; preserve cold progressive publication versus warm replacement, failed-resource retention, exact/UID lookup, and distinct snapshot/maintained facet policies. Per-kind projections outside objectcatalog remain a separate catalog-domain responsibility. |
+| S003 cluster/auth | Kubeconfig discovery and watcher delivery; selection/client pool and client construction; transport health, auth manager/transport, fresh-credential recovery and exec diagnostics; workspace hydration, event projection and kubeconfig provider | Share fresh REST-config loading for initial clients and recovery probes; use one watch-directory/filter accumulator and projection in discovery and watcher reconciliation | Keep path normalization, filesystem validation, locks, transport wrapping, diagnostic/error policies, retry ownership, and recovery timeouts at their existing boundaries. Visible/committed selection, read generations, activation counts, and publish-before-notify remain distinct. Operation-specific shutdown remains with the operations review. |
+| S004 refresh | Snapshot service/cache/generation flights; stream mux routing, ACK/replay/reset/cancellation/backpressure; resource-stream manager and HPA/pod-owner notifications; projecting reflector/store read, index, rewrite, relist, spill/restore paths; metric poller/demand/retry; governor assignment, permission registration/revalidation; frontend broker/lifecycle and stream connection/health consumers | Share terminal snapshot-flight completion; share projected-row reads, indexed-key selection and relist row delivery; retain normalized stream Config directly through handler/session; remove the test-only workload-lister fallback and migrate its tests onto real ingest projection; share node/pod metric retry policy | Preserve cancellation outside the flight lock, indexed-key snapshot before rewrites, sink order under the store lock, subscription replacement delivery locks, partial replay reset and independent metric source clocks. The full ingest manager/dynamic-reflector lifecycle, governor executor/cooling, and frontend stream protocol/orchestrator still need dedicated deeper reviews; this batch does not close those large owners from adjacent reads. |
+
+The changes consolidate existing ownership and representations; no new dependency,
+wire contract, permission policy, native interaction, commit, or PR is included.
+The catalog service continues to provide cluster scope for its local indexes;
+workload signals still carry the complete cluster/GVK/namespace/name/UID reference.
+The ingest manager and governor executor also received source inspection in this
+batch. Their distinct readiness, retained-data, cooling and lock responsibilities
+remain open for a deeper review of their consumers and lifecycle contracts.
+
+### Contract evidence
+
+- Tables: the original table/resource-grid selection passed **78 files / 660
+  tests**. New export pending/failure/cleanup and sticky-column-window cases passed
+  against the original implementations. The empty-area integration case proves no
+  menu opens and default handling remains untouched before removing its internal
+  plumbing. Existing pointer, keyboard, modifier, focus, sort and selection checks
+  survive. Logs: `/tmp/luxury-yacht-revisit-tables-before.log`,
+  `/tmp/luxury-yacht-revisit-export-characterization.log`,
+  `/tmp/luxury-yacht-revisit-row-characterization.log`,
+  `/tmp/luxury-yacht-revisit-menu-before.log`.
+- Catalog: the full original package passed, then the refactored package passed.
+  Descriptor fixture changes preserve the existing assertions while using the
+  canonical representation. Cold/warm publication, cursor/facet behavior, discovery,
+  ingest and lookup tests remain in that package. Logs:
+  `/tmp/luxury-yacht-revisit-catalog-before.log` and
+  `/tmp/luxury-yacht-revisit-catalog-after2.log`.
+- Cluster/auth: the original focused cluster/auth/credential selection passed.
+  The new watcher case passed before extraction and proves filename-filter union,
+  full-directory precedence in both input orders, and filename admission. The
+  initial-client and recovery loading statements were compared before extraction;
+  timeout/diagnostics/transport setup remain in their callers. Logs:
+  `/tmp/luxury-yacht-revisit-cluster-before.log`,
+  `/tmp/luxury-yacht-revisit-watch-characterization.log`,
+  `/tmp/luxury-yacht-revisit-cluster-catalog-after.log`.
+- Refresh: snapshot, streammux, ingest, resourcestream and system suites passed
+  before and after the batch. Existing flight tests cover independent waiter
+  cancellation and cancellation of a generation followed by a fresh build. Store
+  tests cover projected halves, relist delivery and owner-heal indexed rewrites.
+  Mux tests cover ACK, replay/reset, replacement, cancellation and backpressure.
+  Four HPA/pod-owner tests passed with the production projector/store before the
+  lister fallback was removed. Logs:
+  `/tmp/luxury-yacht-revisit-refresh-before.log`,
+  `/tmp/luxury-yacht-revisit-refresh-after.log`,
+  `/tmp/luxury-yacht-revisit-workload-characterization.log`.
+- Metrics: new node/pod recovery, exhaustion and unavailable-API cases passed on
+  the original retry implementations, including pod namespace routing. Existing
+  cancellation-without-failure-reporting tests remain. Logs:
+  `/tmp/luxury-yacht-revisit-metrics-before.log` and
+  `/tmp/luxury-yacht-revisit-metrics-after.log`.
+
+### Accumulated validation
+
+- Latest focused frontend selection: **108 files / 1,099 tests passed**, covering
+  tables, workspace/kubeconfig, refresh and data-access. Resource-grid consumers:
+  **18 files / 220 tests passed** separately. Typecheck passed. Logs:
+  `/tmp/luxury-yacht-revisit-frontend-coverage.log`,
+  `/tmp/luxury-yacht-revisit-resource-grid.log`,
+  `/tmp/luxury-yacht-revisit-typecheck2.log`.
+- Latest backend coverage selection passed all ten packages. Statement coverage:
+  backend **80.4%**, catalog **86.2%**, authstate **93.0%**, credentialerrors
+  **93.2%**, snapshot **82.6%**, streammux **76.4%**, ingest **83.4%**,
+  resourcestream **70.3%**, metrics **83.5%**, system **79.6%**. Package gaps are
+  recorded, not hidden by the refactor. New config-loading/watch helpers and
+  snapshot terminal completion are **100%** covered; projected-row/index helpers
+  **100%**; metrics retry **89.5%**, terminal classification **100%**. Workload
+  lookup is **78.6%**; mux subscription/error/connection branches retain gaps.
+  These are internal refactors, with no native-window validation claim. Logs:
+  `/tmp/luxury-yacht-revisit-backend-coverage.log` and
+  `/tmp/luxury-yacht-revisit-backend-functions.txt`.
+- Local complexity: pinned cached gocognit v1.2.1 and Biome threshold 12 scanned
+  changed production files. No changed function/helper exceeds 12. Eight Go
+  findings and three TypeScript findings are in unchanged functions within those
+  files (including catalog broadcast/run loop, watcher event loop, store index
+  removal, table body width/empty-row rendering and keyboard-menu targeting).
+  Logs: `/tmp/luxury-yacht-revisit-go-complexity.json` and
+  `/tmp/luxury-yacht-revisit-ts-complexity.log`. This is not remote Sonar evidence.
+- The matching before/after table/resource-grid selections passed 78 files / 660
+  tests on HEAD and 79 files / 663 tests in the worktree. Table statement coverage
+  moved from **3,621/4,041 (89.61%)** to **3,585/3,982 (90.03%)**. After removal
+  of the empty-area menu path and its internal tests, context-menu hook coverage
+  is **27/31 (87.09%)**, previously **42/47 (89.36%)**; menu items **37/37
+  (100%)**, previously **38/39 (97.43%)**; wiring **44/46 (95.65%)**, previously
+  **49/52 (94.23%)**; body remains **56/60 (93.33%)**. The integration assertion
+  for ignored empty-area context menus and selection/keyboard assertions remain.
+  Baseline ran from a read-only git archive with the same installed dependencies.
+  Its first attempt hit an out-of-tree Wails drag-module resolution error;
+  copying that installed package into the archive fixed the harness and the
+  unchanged 660-test baseline passed. Logs:
+  `/tmp/luxury-yacht-revisit-table-baseline-coverage2.log` and
+  `/tmp/luxury-yacht-revisit-tables-coverage.log`.
+- AST comparison identifies **120 changed Go function declarations**, maximum
+  local score **12**. The three flagged TypeScript function bodies match HEAD.
+  Evidence: `/tmp/luxury-yacht-revisit-complexity-disposition.log`.
+- `mise exec -- wails3 task qc:prerelease` passed on the accumulated batch:
+  documentation, formatting, generated bindings, vet, staticcheck, backend race
+  tests, frontend checks/typecheck, **513 frontend files / 4,782 tests**, Knip and
+  Trivy. The first invocation stopped at gofmt before the expensive suites;
+  formatting the import block in `query_anchor_test.go` resolved that failure.
+  Logs: `/tmp/luxury-yacht-revisit-prerelease.log` and
+  `/tmp/luxury-yacht-revisit-prerelease2.log`.
+- Post-gate SHA-256 comparison found the same **67 changed files**, with no
+  content changes from the gate; `git diff --check` passed. Of those files,
+  **38 are production source**. Evidence:
+  `/tmp/luxury-yacht-revisit-post-gate.log`. The subsequent ledger-only update
+  receives a separate documentation check. A passing gate does not close the
+  remaining large owners identified in the review table.
+- `gh pr view` reported no pull request for branch `code-simplification`, so
+  there is no current PR Sonar result to claim. Evidence:
+  `/tmp/luxury-yacht-revisit-pr-status2.log`.
+
 ## Rotation through review domains
 
 This is an investigation order, not a list of approved rewrites. Each visit
@@ -73,10 +202,10 @@ correctness-driven interruption and resume the rotation afterwards.
 
 | Order | Domain | Initial scope and required adjacent paths | Status |
 | --- | --- | --- | --- |
-| 1 | Shared tables | Shared table hooks/rendering; resource-grid adapters; snapshot/querypage consumers | S001 sizing/measurement inspected; remaining scope below |
-| 2 | Catalog and resource projections | Object catalog; per-kind resources; kind/model contracts; Browse adapters | S002 query/facet/snapshot batch; remaining scope recorded |
-| 3 | Cluster/workspace/auth | Backend cluster/workspace owners and auth helpers; Kubernetes/cluster workspace contexts | S003 selection/hydration batch; remaining scope recorded |
-| 4 | Refresh and data access | Refresh APIs, stores, snapshots, ingestion, streams, metrics and governor; frontend refresh/data brokers | S004 state/demand/cadence/readiness batch; remaining scope recorded |
+| 1 | Shared tables | Shared table hooks/rendering; resource-grid adapters; snapshot/querypage consumers | S001 catch-up: shared-table responsibilities revisited; C2 remains |
+| 2 | Catalog and resource projections | Object catalog; per-kind resources; kind/model contracts; Browse adapters | S002 catch-up: catalog lifecycle and descriptor model revisited; per-kind scope remains |
+| 3 | Cluster/workspace/auth | Backend cluster/workspace owners and auth helpers; Kubernetes/cluster workspace contexts | S003 catch-up: client/recovery and discovery/watch revisited |
+| 4 | Refresh and data access | Refresh APIs, stores, snapshots, ingestion, streams, metrics and governor; frontend refresh/data brokers | S004 catch-up: snapshot/store/mux/metrics reviewed; large lifecycle owners remain |
 | 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | Expanded S005 batch and final gate passed; remaining scope recorded |
 | 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | After expanded S005 |
 | 7 | Object map | Backend graph producers and relationships; frontend graph, layout and renderer | Inventoried |
@@ -898,7 +1027,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/shared/components/kubernetes` | 5 | 413 | — / — | Inventoried |
 | `frontend/src/shared/components/modals` | 14 | 2617 | — / — | Inventoried |
 | `frontend/src/shared/components/status` | 2 | 233 | — / — | Inventoried |
-| `frontend/src/shared/components/tables` | 79 | 14583 | — / 25 | Reviewing: S001 sizing 8 files inspected; 71 remain; C2 deferred |
+| `frontend/src/shared/components/tables` | 79 | 14583 | — / 25 | S001 catch-up: shared-table production responsibilities reviewed; C2 deferred |
 | `frontend/src/shared/components/tabs` | 9 | 1470 | — / — | Inventoried |
 | `frontend/src/shared/components/yaml` | 3 | 807 | — / 2 | Inventoried |
 | `frontend/src/shared/constants` | 2 | 139 | — / — | Inventoried |

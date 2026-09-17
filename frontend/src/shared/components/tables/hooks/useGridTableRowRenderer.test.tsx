@@ -34,6 +34,7 @@ const renderHook = <T,>(hook: () => T) => {
   return {
     get: () =>
       requireValue(result.current, 'expected test value in useGridTableRowRenderer.test.tsx'),
+    rerender: () => act(() => root.render(<TestComponent />)),
     cleanup: () => {
       act(() => {
         root.unmount();
@@ -129,6 +130,57 @@ describe('useGridTableRowRenderer', () => {
     expect(typeof rowProps.onClick).toBe('function');
 
     renderers.cleanup();
+  });
+
+  it('keeps sticky cells while updating the window and skips rendering excluded cells', () => {
+    const models = ['name', 'first', 'second', 'last'].map((key) => ({
+      ...baseColumns[0],
+      key,
+      column: { ...baseColumns[0].column, key },
+    }));
+    let range = { startIndex: 2, endIndex: 2 };
+    const getCachedCellContent = vi.fn((column, item: Row) => ({
+      content: `${column.key}-${item.name}`,
+      text: item.name,
+    }));
+    const renderer = renderHook(() =>
+      useGridTableRowRenderer({
+        keyExtractor: (row: Row) => row.name,
+        handleRowClick: vi.fn(),
+        handleRowMouseEnter: vi.fn(),
+        handleRowMouseLeave: vi.fn(),
+        columnRenderModels: models,
+        columnVirtualizationConfig: {
+          enabled: true,
+          overscanColumns: 0,
+          stickyStart: 1,
+          stickyEnd: 1,
+        },
+        columnWindowRange: range,
+        handleContextMenu: vi.fn(),
+        getCachedCellContent,
+        measureRowRef: vi.fn(),
+      })
+    );
+    try {
+      renderer.get()({ name: 'alpha' }, 0, false, 'alpha');
+      expect(getCachedCellContent.mock.calls.map(([column]) => column.key)).toEqual([
+        'name',
+        'second',
+        'last',
+      ]);
+      getCachedCellContent.mockClear();
+      range = { startIndex: 1, endIndex: 1 };
+      renderer.rerender();
+      renderer.get()({ name: 'beta' }, 1, false, 'beta');
+      expect(getCachedCellContent.mock.calls.map(([column]) => column.key)).toEqual([
+        'name',
+        'first',
+        'last',
+      ]);
+    } finally {
+      renderer.cleanup();
+    }
   });
 
   it('renders plain rows when virtualization disabled', () => {

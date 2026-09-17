@@ -22,7 +22,6 @@ const columns: GridColumnDefinition<Row>[] = [
 // Mock the inner hooks to isolate wiring behavior.
 const mockOpenCellContextMenuFromKeyboard = vi.fn(() => true);
 const mockOpenCellContextMenu = vi.fn(() => true);
-const mockOpenWrapperContextMenu = vi.fn(() => true);
 const mockCloseContextMenu = vi.fn();
 // Controls whether useGridTableContextMenu returns a non-null contextMenu
 // (needed for rendering <ContextMenu> and testing the onClose/focus-restore path).
@@ -37,7 +36,6 @@ vi.mock('@shared/components/tables/hooks/useGridTableContextMenu', () => ({
     contextMenu: mockContextMenuState,
     openCellContextMenu: mockOpenCellContextMenu,
     openCellContextMenuFromKeyboard: mockOpenCellContextMenuFromKeyboard,
-    openWrapperContextMenu: mockOpenWrapperContextMenu,
     closeContextMenu: mockCloseContextMenu,
   }),
 }));
@@ -80,7 +78,6 @@ describe('useGridTableContextMenuWiring', () => {
       item: Row | null,
       index: number
     ) => void;
-    handleWrapperContextMenu: (event: React.MouseEvent) => void;
     contextMenuActiveRef: { current: boolean };
     isContextMenuVisible: boolean;
     contextMenuNode: React.ReactNode;
@@ -189,7 +186,6 @@ describe('useGridTableContextMenuWiring', () => {
       columnKey,
       item: { id: rowKey, name: 'nginx' },
       position: { x: 100, y: 100 },
-      source: 'keyboard',
     };
 
     const result = renderHook({
@@ -238,13 +234,6 @@ describe('useGridTableContextMenuWiring', () => {
     expect(result.handleRowActivation).not.toHaveBeenCalled();
   });
 
-  it('handleWrapperContextMenu does nothing when context menu is disabled', () => {
-    const result = renderHook({ enableContextMenu: false });
-    const fakeEvent = { preventDefault: vi.fn() } as unknown as React.MouseEvent;
-    result.handleWrapperContextMenu(fakeEvent);
-    expect(mockOpenWrapperContextMenu).not.toHaveBeenCalled();
-  });
-
   it('sets contextMenuActiveRef to true when a context menu opens', () => {
     const result = renderHook({ focusedRowIndex: 0, focusedRowKey: '1' });
     expect(result.contextMenuActiveRef.current).toBe(false);
@@ -261,7 +250,6 @@ describe('useGridTableContextMenuWiring', () => {
       columnKey: 'name',
       item: { id: '1', name: 'Alice' },
       position: { x: 100, y: 100 },
-      source: 'keyboard',
     };
 
     const result = renderHook({ focusedRowIndex: 0, focusedRowKey: '1' });

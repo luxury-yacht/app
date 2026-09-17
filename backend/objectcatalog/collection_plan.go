@@ -19,8 +19,8 @@ type collectionSourcePlan struct {
 	promotable    bool
 }
 
-func planCollectionSource(desc resourceDescriptor) collectionSourcePlan {
-	return planCollectionSourceForGroupResource(desc.GVR.GroupResource())
+func planCollectionSource(desc Descriptor) collectionSourcePlan {
+	return planCollectionSourceForGroupResource(desc.GVR().GroupResource())
 }
 
 func planCollectionSourceForGroupResource(gr schema.GroupResource) collectionSourcePlan {

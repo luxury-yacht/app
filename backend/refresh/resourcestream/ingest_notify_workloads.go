@@ -61,24 +61,13 @@ func workloadIdentityForKind(kind string) (resourcekind.Identity, schema.GroupVe
 	}
 }
 
-// lookupWorkloadRef resolves the identity Ref of the workload kind/namespace/name. It
-// prefers a typed lister when one is wired (the unit-test path that drives the typed
-// handlers directly), and otherwise reads the workload's UID from the ingest store's
-// projected catalog half (the production path — the workload kinds are cut, so no typed
-// lister exists). It reports false when neither source has the workload, matching the typed
-// lister Get-error skip the callers already applied.
+// lookupWorkloadRef reads a workload's identity from its projected catalog row.
+// Missing kinds or objects do not emit a by-key workload notification.
 func (m *Manager) lookupWorkloadRef(kind, namespace, name string) (resourcemodel.ResourceRef, bool) {
 	identity, gvr, ok := workloadIdentityForKind(kind)
 	if !ok {
 		return resourcemodel.ResourceRef{}, false
 	}
-	// Test path: a wired typed lister resolves the object (and its UID) directly.
-	if obj, err := m.lookupWorkloadObject(kind, namespace, name); err == nil && obj != nil {
-		return resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: m.clusterMeta.ClusterID, Group: identity.Group, Version: identity.Version, Kind: identity.Kind, Resource: identity.Resource, Namespace: obj.GetNamespace(), Name: obj.GetName(), UID: string(obj.GetUID())}),
-
-			true
-	}
-	// Production path: read the projected catalog half (UID) from the ingest store.
 	if m.workloadIngest == nil {
 		return resourcemodel.ResourceRef{}, false
 	}

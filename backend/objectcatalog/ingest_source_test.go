@@ -54,12 +54,11 @@ func TestRegisterIngestCatalogSinksRebuildsCacheOnce(t *testing.T) {
 	// mask the per-kind cost this test pins).
 	svc.mu.Lock()
 	for gvr := range catalogIngestOwnedGVRs {
-		desc := resourceDescriptor{
+		desc := Descriptor{
 			Kind:     gvr.Resource, // any stable non-empty kind; matching matters, not naming
 			Group:    gvr.Group,
 			Version:  gvr.Version,
 			Resource: gvr.Resource,
-			GVR:      gvr,
 		}
 		svc.catalogIndex.setResource(gvr.String(), desc)
 		rows[gvr] = []interface{}{Summary{Ref: resourcemodel.ResourceRef{Group: desc.Group, Version: desc.Version, Kind: desc.Kind, Resource: desc.Resource, Namespace: "default", Name: "seed-" + desc.Resource}}}
@@ -96,10 +95,10 @@ func TestConcurrentIngestUpdatesBothReachCatalog(t *testing.T) {
 	rows := make(map[schema.GroupVersionResource][]interface{})
 	svc := NewService(Dependencies{IngestSource: replayIngestSource{rows: rows}}, nil)
 	gvr := schema.GroupVersionResource{Version: "v1", Resource: "pods"}
-	desc := resourceDescriptor{Kind: "Pod", Version: "v1", Resource: "pods", GVR: gvr, Namespaced: true}
+	desc := Descriptor{Kind: "Pod", Version: "v1", Resource: "pods", Group: gvr.Group, Namespaced: true}
 	svc.catalogIndex.setResource(gvr.String(), desc)
 	secondGVR := schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
-	secondDesc := resourceDescriptor{Kind: "ConfigMap", Version: "v1", Resource: "configmaps", GVR: secondGVR, Namespaced: true}
+	secondDesc := Descriptor{Kind: "ConfigMap", Version: "v1", Resource: "configmaps", Group: secondGVR.Group, Namespaced: true}
 	svc.catalogIndex.setResource(secondGVR.String(), secondDesc)
 	entered := make(chan struct{})
 	release := make(chan struct{})
@@ -149,7 +148,7 @@ func TestConcurrentIngestUpdatesBothReachCatalog(t *testing.T) {
 
 func TestContendedIngestReplaceReconcilesAuthoritativeRows(t *testing.T) {
 	gvr := schema.GroupVersionResource{Version: "v1", Resource: "pods"}
-	desc := resourceDescriptor{Kind: "Pod", Version: "v1", Resource: "pods", GVR: gvr, Namespaced: true}
+	desc := Descriptor{Kind: "Pod", Version: "v1", Resource: "pods", Group: gvr.Group, Namespaced: true}
 	row := Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "latest"}}
 	svc := NewService(Dependencies{IngestSource: replayIngestSource{rows: map[schema.GroupVersionResource][]interface{}{gvr: {row}}}}, nil)
 	svc.catalogIndex.setResource(gvr.String(), desc)

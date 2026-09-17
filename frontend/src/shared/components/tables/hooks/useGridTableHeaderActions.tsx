@@ -6,12 +6,12 @@
 
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ContextMenu from '@shared/components/ContextMenu';
-import { SortAscIcon, SortDescIcon } from '@shared/components/icons/SharedIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
 import type React from 'react';
 import type { MutableRefObject } from 'react';
 import { useCallback, useMemo, useState } from 'react';
+import { buildGridTableSortItems } from './useGridTableContextMenuItems';
 
 type SortDirection = 'asc' | 'desc' | null;
 type SortConfig = { key: string; direction: SortDirection };
@@ -27,6 +27,40 @@ type UseGridTableHeaderActionsOptions<T> = {
   contextMenuActiveRef: MutableRefObject<boolean>;
 };
 
+function buildHeaderContextMenuItems<T>(
+  column: GridColumnDefinition<T>,
+  {
+    lockedColumns,
+    onSort,
+    sortConfig,
+    applyVisibilityChanges,
+  }: Pick<
+    UseGridTableHeaderActionsOptions<T>,
+    'lockedColumns' | 'onSort' | 'sortConfig' | 'applyVisibilityChanges'
+  >
+): ContextMenuItem[] {
+  const items: ContextMenuItem[] = isSortableColumn(column)
+    ? buildGridTableSortItems(column.key, onSort, sortConfig)
+    : [];
+
+  if (lockedColumns.has(column.key)) {
+    return items.length ? items : [{ label: 'No Actions', disabled: true }];
+  }
+  if (items.length) {
+    items.push({ divider: true });
+  }
+  items.push({
+    label: 'Hide Column',
+    onClick: () =>
+      applyVisibilityChanges((next) => {
+        next[column.key] = false;
+        return true;
+      }),
+  });
+
+  return items;
+}
+
 export function useGridTableHeaderActions<T>({
   columns,
   lockedColumns,
@@ -35,11 +69,11 @@ export function useGridTableHeaderActions<T>({
   applyVisibilityChanges,
   contextMenuActiveRef,
 }: UseGridTableHeaderActionsOptions<T>) {
-  const [headerContextMenuPosition, setHeaderContextMenuPosition] = useState<{
-    x: number;
-    y: number;
+  const [headerContextMenu, setHeaderContextMenu] = useState<{
+    position: { x: number; y: number };
+    columnKey: string;
   } | null>(null);
-  const [headerContextMenuColumnKey, setHeaderContextMenuColumnKey] = useState<string | null>(null);
+  const headerContextMenuColumnKey = headerContextMenu?.columnKey;
 
   const renderSortIndicator = useCallback(
     (columnKey: string) => {
@@ -70,8 +104,7 @@ export function useGridTableHeaderActions<T>({
     (event: React.MouseEvent, columnKey: string) => {
       event.preventDefault();
       contextMenuActiveRef.current = true;
-      setHeaderContextMenuPosition({ x: event.clientX, y: event.clientY });
-      setHeaderContextMenuColumnKey(columnKey);
+      setHeaderContextMenu({ position: { x: event.clientX, y: event.clientY }, columnKey });
     },
     [contextMenuActiveRef]
   );
@@ -86,56 +119,12 @@ export function useGridTableHeaderActions<T>({
       return [];
     }
 
-    const isSortable = isSortableColumn(column);
-    const isHideable = !lockedColumns.has(column.key);
-
-    if (!isSortable && !isHideable) {
-      return [{ label: 'No Actions', disabled: true }];
-    }
-
-    const isCurrentlySorted = sortConfig?.key === column.key;
-    const currentDirection = isCurrentlySorted ? (sortConfig?.direction ?? null) : null;
-    const items: ContextMenuItem[] = [];
-
-    if (isSortable) {
-      items.push(
-        {
-          label: 'Sort Ascending',
-          icon: <SortAscIcon />,
-          onClick: () => onSort?.(column.key, 'asc'),
-          disabled: currentDirection === 'asc',
-        },
-        {
-          label: 'Sort Descending',
-          icon: <SortDescIcon />,
-          onClick: () => onSort?.(column.key, 'desc'),
-          disabled: currentDirection === 'desc',
-        },
-        {
-          label: 'Clear Sort',
-          icon: '×',
-          onClick: () => onSort?.(column.key, null),
-          disabled: !isCurrentlySorted,
-        }
-      );
-    }
-
-    if (isSortable && isHideable) {
-      items.push({ divider: true });
-    }
-
-    if (isHideable) {
-      items.push({
-        label: 'Hide Column',
-        onClick: () =>
-          applyVisibilityChanges((next) => {
-            next[column.key] = false;
-            return true;
-          }),
-      });
-    }
-
-    return items;
+    return buildHeaderContextMenuItems(column, {
+      lockedColumns,
+      onSort,
+      sortConfig,
+      applyVisibilityChanges,
+    });
   }, [
     applyVisibilityChanges,
     columns,
@@ -146,26 +135,20 @@ export function useGridTableHeaderActions<T>({
   ]);
 
   const headerContextMenuNode = useMemo(() => {
-    if (!headerContextMenuPosition || !headerContextMenuColumnKey) {
+    if (!headerContextMenu || !headerContextMenuColumnKey) {
       return null;
     }
     return (
       <ContextMenu
         items={headerContextMenuItems}
-        position={headerContextMenuPosition}
+        position={headerContextMenu.position}
         onClose={() => {
           contextMenuActiveRef.current = false;
-          setHeaderContextMenuPosition(null);
-          setHeaderContextMenuColumnKey(null);
+          setHeaderContextMenu(null);
         }}
       />
     );
-  }, [
-    contextMenuActiveRef,
-    headerContextMenuColumnKey,
-    headerContextMenuItems,
-    headerContextMenuPosition,
-  ]);
+  }, [contextMenuActiveRef, headerContextMenuColumnKey, headerContextMenuItems, headerContextMenu]);
 
   return {
     renderSortIndicator,

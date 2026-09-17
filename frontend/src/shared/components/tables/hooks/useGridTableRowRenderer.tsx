@@ -11,7 +11,7 @@ import { getStableRowId } from '@shared/components/tables/GridTable.utils';
 import type { ColumnRenderModel } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
 import type { MeasureRowRefFn } from '@shared/components/tables/hooks/useGridTableVirtualization';
 import type React from 'react';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
 // Returns row/cell render callbacks for GridTable, wiring hover handlers,
 // context menus, and slotting for virtualization measurements.
@@ -57,6 +57,40 @@ export interface UseGridTableRowRendererParams<T> {
   measureRowRef: MeasureRowRefFn;
 }
 
+function rowPresentation<T>(
+  item: T,
+  index: number,
+  virtualTop: number | undefined,
+  options: Pick<
+    UseGridTableRowRendererParams<T>,
+    'getRowClassName' | 'isRowSelected' | 'getRowStyle'
+  >
+) {
+  const { getRowClassName, isRowSelected, getRowStyle } = options;
+  const rowExtraClass = getRowClassName?.(item, index);
+  const selected = isRowSelected?.(item, index) ?? false;
+  const rowClassName = [
+    'gridtable-row',
+    selected ? 'gridtable-row--selected' : '',
+    rowExtraClass || '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const configuredRowStyle = getRowStyle ? getRowStyle(item, index) : undefined;
+  const rowInlineStyle =
+    virtualTop === undefined
+      ? configuredRowStyle
+      : {
+          ...configuredRowStyle,
+          position: 'absolute' as const,
+          transform: `translateY(${virtualTop}px)`,
+        };
+  const isSelected = selected;
+  const isFocused = rowClassName.includes('gridtable-row--focused');
+
+  return { rowClassName, rowInlineStyle, isSelected, isFocused };
+}
+
 export function useGridTableRowRenderer<T>({
   keyExtractor,
   getRowClassName,
@@ -72,6 +106,49 @@ export function useGridTableRowRenderer<T>({
   getCachedCellContent,
   measureRowRef,
 }: UseGridTableRowRendererParams<T>): RenderRowContentFn<T> {
+  // Every row renders the same column window. Resolve it once, retaining both sticky edges.
+  const visibleColumnModels = useMemo(() => {
+    if (!columnVirtualizationConfig.enabled) {
+      return columnRenderModels;
+    }
+    const total = columnRenderModels.length;
+    const stickyStart = Math.min(columnVirtualizationConfig.stickyStart, total);
+    const stickyEnd = Math.min(columnVirtualizationConfig.stickyEnd, total - stickyStart);
+    return columnRenderModels.filter(
+      (_model, index) =>
+        index < stickyStart ||
+        index >= total - stickyEnd ||
+        !(index < columnWindowRange.startIndex || index > columnWindowRange.endIndex)
+    );
+  }, [columnRenderModels, columnVirtualizationConfig, columnWindowRange]);
+
+  const renderCell = useCallback(
+    (model: ColumnRenderModel<T>, item: T, absoluteIndex: number) => {
+      const cell = getCachedCellContent(model.column, item);
+      const disableShortcuts =
+        typeof model.column.disableShortcuts === 'function'
+          ? model.column.disableShortcuts(item)
+          : model.column.disableShortcuts === true;
+
+      return (
+        <AriaGridCell
+          key={model.key}
+          className={`grid-cell ${model.className}`}
+          data-column={model.key}
+          data-align={model.column.alignData ?? 'left'}
+          data-has-context-menu="true"
+          onContextMenu={(e) => handleContextMenu(e, model.key, item, absoluteIndex)}
+          style={model.cellStyle}
+          data-gridtable-shortcut-optout={disableShortcuts ? 'true' : undefined}
+          data-gridtable-row-action={model.column.rowAction}
+        >
+          <span className="grid-cell-content">{cell.content}</span>
+        </AriaGridCell>
+      );
+    },
+    [getCachedCellContent, handleContextMenu]
+  );
+
   return useCallback(
     (
       item: T,
@@ -82,26 +159,12 @@ export function useGridTableRowRenderer<T>({
       virtualTop?: number
     ): React.ReactNode => {
       const rowKey = keyExtractor(item, absoluteIndex);
-      const rowExtraClass = getRowClassName?.(item, absoluteIndex);
-      const selected = isRowSelected?.(item, absoluteIndex) ?? false;
-      const rowClassName = [
-        'gridtable-row',
-        selected ? 'gridtable-row--selected' : '',
-        rowExtraClass || '',
-      ]
-        .filter(Boolean)
-        .join(' ');
-      const configuredRowStyle = getRowStyle ? getRowStyle(item, absoluteIndex) : undefined;
-      const rowInlineStyle =
-        virtualTop === undefined
-          ? configuredRowStyle
-          : {
-              ...configuredRowStyle,
-              position: 'absolute' as const,
-              transform: `translateY(${virtualTop}px)`,
-            };
-      const isSelected = selected;
-      const isFocused = rowClassName.includes('gridtable-row--focused');
+      const { rowClassName, rowInlineStyle, isSelected, isFocused } = rowPresentation(
+        item,
+        absoluteIndex,
+        virtualTop,
+        { getRowClassName, isRowSelected, getRowStyle }
+      );
 
       // When shouldMeasure is true (virtualized rows), attach a ref callback
       // that reports the row's height to the virtualizer for variable-height support.
@@ -128,43 +191,7 @@ export function useGridTableRowRenderer<T>({
           data-row-selected={isSelected ? 'true' : undefined}
           data-row-focused={isFocused ? 'true' : undefined}
         >
-          {columnRenderModels.map((model, columnIndex) => {
-            if (columnVirtualizationConfig.enabled) {
-              const total = columnRenderModels.length;
-              const stickyStart = Math.min(columnVirtualizationConfig.stickyStart, total);
-              const stickyEnd = Math.min(columnVirtualizationConfig.stickyEnd, total - stickyStart);
-              const isSticky = columnIndex < stickyStart || columnIndex >= total - stickyEnd;
-              if (!isSticky) {
-                if (
-                  columnIndex < columnWindowRange.startIndex ||
-                  columnIndex > columnWindowRange.endIndex
-                ) {
-                  return null;
-                }
-              }
-            }
-            const cell = getCachedCellContent(model.column, item);
-            const disableShortcuts =
-              typeof model.column.disableShortcuts === 'function'
-                ? model.column.disableShortcuts(item)
-                : model.column.disableShortcuts === true;
-
-            return (
-              <AriaGridCell
-                key={model.key}
-                className={`grid-cell ${model.className}`}
-                data-column={model.key}
-                data-align={model.column.alignData ?? 'left'}
-                data-has-context-menu="true"
-                onContextMenu={(e) => handleContextMenu(e, model.key, item, absoluteIndex)}
-                style={model.cellStyle}
-                data-gridtable-shortcut-optout={disableShortcuts ? 'true' : undefined}
-                data-gridtable-row-action={model.column.rowAction}
-              >
-                <span className="grid-cell-content">{cell.content}</span>
-              </AriaGridCell>
-            );
-          })}
+          {visibleColumnModels.map((model) => renderCell(model, item, absoluteIndex))}
         </AriaGridRow>
       );
     },
@@ -176,11 +203,8 @@ export function useGridTableRowRenderer<T>({
       handleRowClick,
       handleRowMouseEnter,
       handleRowMouseLeave,
-      columnRenderModels,
-      columnVirtualizationConfig,
-      columnWindowRange,
-      handleContextMenu,
-      getCachedCellContent,
+      visibleColumnModels,
+      renderCell,
       measureRowRef,
     ]
   );

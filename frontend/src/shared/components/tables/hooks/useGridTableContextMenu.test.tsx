@@ -5,7 +5,6 @@
  * Covers key behaviors and edge cases for useGridTableContextMenu.
  */
 
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import {
   type GridTableContextMenuState,
@@ -50,19 +49,16 @@ const buildMouseEvent = (
 interface HarnessHandle {
   openCellMenu: (opts?: { enable?: boolean }) => boolean;
   openCellMenuViaKeyboard: (element?: HTMLElement) => boolean;
-  openWrapperMenu: (opts?: { enable?: boolean; classList?: string[] }) => boolean;
   getContextMenu: () => GridTableContextMenuState<SampleRow> | null;
   close: () => void;
 }
 
 interface HarnessProps {
   enableContextMenu?: boolean;
-  wrapperItems?: ContextMenuItem[];
 }
 
 const Harness = ({
   enableContextMenu = true,
-  wrapperItems,
   ref,
 }: HarnessProps & { ref?: React.Ref<HarnessHandle> }) => {
   const contextMenu = useGridTableContextMenu<SampleRow>({
@@ -72,14 +68,6 @@ const Harness = ({
       { label: `Inspect ${columnKey}`, onClick: vi.fn() },
       { label: `Select ${item.name}`, onClick: vi.fn() },
     ],
-    getContextMenuItems: (columnKey, item, source) => {
-      if (source === 'empty') {
-        return wrapperItems ?? [];
-      }
-      return item
-        ? [{ label: `Sort ${columnKey}`, onClick: vi.fn() }]
-        : [{ label: 'noop', onClick: vi.fn() }];
-    },
     onSort: vi.fn(),
   });
 
@@ -96,20 +84,6 @@ const Harness = ({
           { id: '1', name: 'Row 1' },
           element
         );
-      },
-      openWrapperMenu(opts) {
-        const target = document.createElement('div');
-        target.classList.add('gridtable-wrapper');
-        opts?.classList?.forEach((cls) => {
-          target.classList.add(cls);
-        });
-        const event = buildMouseEvent({
-          ctrlKey: opts?.enable === false,
-          clientX: 16,
-          clientY: 18,
-          target,
-        });
-        return contextMenu.openWrapperContextMenu(event);
       },
       getContextMenu: () => contextMenu.contextMenu,
       close: () => contextMenu.closeContextMenu(),
@@ -166,9 +140,6 @@ describe('useGridTableContextMenu', () => {
     const menu = harness.getHandle().getContextMenu();
     expect(menu).not.toBeNull();
     expect(
-      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').source
-    ).toBe('cell');
-    expect(
       requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').columnKey
     ).toBe('name');
 
@@ -187,35 +158,6 @@ describe('useGridTableContextMenu', () => {
     });
 
     expect(harness.getHandle().getContextMenu()).toBeNull();
-    await harness.unmount();
-  });
-
-  it('does not open wrapper menu when no empty-area items are provided', async () => {
-    const harness = await renderHarness();
-    await act(async () => {
-      const opened = harness.getHandle().openWrapperMenu();
-      expect(opened).toBe(false);
-    });
-    expect(harness.getHandle().getContextMenu()).toBeNull();
-    await harness.unmount();
-  });
-
-  it('opens wrapper menu only when outside rows and returns override items', async () => {
-    const wrapperItems: ContextMenuItem[] = [{ label: 'Wrapper Action', onClick: vi.fn() }];
-    const harness = await renderHarness({ wrapperItems });
-    await act(async () => {
-      harness.getHandle().openWrapperMenu();
-    });
-
-    const menu = harness.getHandle().getContextMenu();
-    expect(menu).not.toBeNull();
-    expect(
-      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').source
-    ).toBe('empty');
-    expect(
-      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').itemsOverride
-    ).toEqual(wrapperItems);
-
     await harness.unmount();
   });
 

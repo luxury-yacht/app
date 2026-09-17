@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func buildSummaryActionFacts(desc resourceDescriptor, item metav1.Object) *ActionFacts {
+func buildSummaryActionFacts(desc Descriptor, item metav1.Object) *ActionFacts {
 	if item == nil {
 		return nil
 	}
@@ -59,7 +59,7 @@ var objectMapActionFactsByKind = func() map[schema.GroupKind]func(metav1.Object)
 
 // objectMapActionFacts runs the registry projection for desc's kind, or returns
 // nil when the kind has none.
-func objectMapActionFacts(desc resourceDescriptor, item metav1.Object) *objectmap.ActionFacts {
+func objectMapActionFacts(desc Descriptor, item metav1.Object) *objectmap.ActionFacts {
 	fn := objectMapActionFactsByKind[schema.GroupKind{Group: desc.Group, Kind: desc.Kind}]
 	if fn == nil {
 		return nil
@@ -83,7 +83,7 @@ func actionFactsFromObjectMap(f *objectmap.ActionFacts) *ActionFacts {
 	}
 }
 
-func buildUnstructuredSummaryActionFacts(desc resourceDescriptor, item *unstructuredv1.Unstructured) *ActionFacts {
+func buildUnstructuredSummaryActionFacts(desc Descriptor, item *unstructuredv1.Unstructured) *ActionFacts {
 	if item == nil {
 		return nil
 	}

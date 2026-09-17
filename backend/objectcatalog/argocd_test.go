@@ -8,7 +8,7 @@ import (
 
 func TestArgoCDDiscoveryAndQueryRemainNamespaced(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
-	svc.identity.replaceDiscovered([]resourceDescriptor{
+	svc.identity.replaceDiscovered([]Descriptor{
 		builtinDescriptor("argoproj.io", "v1alpha1", "Application", "applications", true),
 		builtinDescriptor("argoproj.io", "v1alpha1", "AppProject", "appprojects", true),
 		builtinDescriptor("argoproj.io", "v1alpha1", "ClusterWorkflowTemplate", "clusterworkflowtemplates", false),
@@ -40,6 +40,6 @@ func TestArgoCDDiscoveryAndQueryRemainNamespaced(t *testing.T) {
 	require.Equal(t, 3, svc.Query(opts).TotalItems)
 	opts.Scope = ScopeCluster
 	require.Empty(t, svc.Query(opts).Items)
-	svc.identity.replaceDiscovered([]resourceDescriptor{builtinDescriptor("argoproj.io", "v1alpha1", "Workflow", "workflows", true)})
+	svc.identity.replaceDiscovered([]Descriptor{builtinDescriptor("argoproj.io", "v1alpha1", "Workflow", "workflows", true)})
 	require.Empty(t, svc.DiscoveredResourceFamilies())
 }

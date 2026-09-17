@@ -17,7 +17,7 @@ import (
 type catalogIndex struct {
 	items     map[string]Summary
 	lastSeen  map[string]time.Time
-	resources map[string]resourceDescriptor
+	resources map[string]Descriptor
 
 	exact map[catalogObjectIdentity]string
 	uid   map[string]string
@@ -51,7 +51,7 @@ func newCatalogIndex() catalogIndex {
 	return catalogIndex{
 		items:     make(map[string]Summary),
 		lastSeen:  make(map[string]time.Time),
-		resources: make(map[string]resourceDescriptor),
+		resources: make(map[string]Descriptor),
 		exact:     make(map[catalogObjectIdentity]string),
 		uid:       make(map[string]string),
 	}
@@ -129,7 +129,7 @@ func (idx *catalogIndex) descriptorCount() int {
 func (idx *catalogIndex) descriptors() []Descriptor {
 	result := make([]Descriptor, 0, len(idx.resources))
 	for _, desc := range idx.resources {
-		result = append(result, exportDescriptor(desc))
+		result = append(result, desc)
 	}
 	sortDescriptors(result)
 	return result
@@ -152,23 +152,23 @@ func (idx *catalogIndex) namespaces() []string {
 	return snapshotSortedKeys(namespaceSet)
 }
 
-func (idx *catalogIndex) replaceResources(resources map[string]resourceDescriptor) {
+func (idx *catalogIndex) replaceResources(resources map[string]Descriptor) {
 	idx.resources = cloneResourceDescriptorMap(resources)
 }
 
-func (idx *catalogIndex) setResource(gvr string, desc resourceDescriptor) {
+func (idx *catalogIndex) setResource(gvr string, desc Descriptor) {
 	if idx.resources == nil {
-		idx.resources = make(map[string]resourceDescriptor)
+		idx.resources = make(map[string]Descriptor)
 	}
 	idx.resources[gvr] = desc
 }
 
-func (idx *catalogIndex) resource(gvr string) (resourceDescriptor, bool) {
+func (idx *catalogIndex) resource(gvr string) (Descriptor, bool) {
 	desc, ok := idx.resources[gvr]
 	return desc, ok
 }
 
-func (idx *catalogIndex) resourceForGroupResource(group, resource string) (string, *resourceDescriptor) {
+func (idx *catalogIndex) resourceForGroupResource(group, resource string) (string, *Descriptor) {
 	for gvr, desc := range idx.resources {
 		if desc.Group == group && desc.Resource == resource {
 			copy := desc
@@ -349,11 +349,11 @@ func sortDescriptors(result []Descriptor) {
 	})
 }
 
-func cloneResourceDescriptorMap(source map[string]resourceDescriptor) map[string]resourceDescriptor {
+func cloneResourceDescriptorMap(source map[string]Descriptor) map[string]Descriptor {
 	if len(source) == 0 {
-		return make(map[string]resourceDescriptor)
+		return make(map[string]Descriptor)
 	}
-	result := make(map[string]resourceDescriptor, len(source))
+	result := make(map[string]Descriptor, len(source))
 	for key, value := range source {
 		result[key] = value
 	}

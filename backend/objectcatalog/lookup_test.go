@@ -18,8 +18,8 @@ import (
 func TestFindExactMatchReturnsCanonicalItem(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
 
-	namespacedDesc := resourceDescriptor{
-		GVR:        schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+	namespacedDesc := Descriptor{
+
 		Namespaced: true,
 		Kind:       "Deployment",
 		Group:      "apps",
@@ -27,8 +27,8 @@ func TestFindExactMatchReturnsCanonicalItem(t *testing.T) {
 		Resource:   "deployments",
 		Scope:      ScopeNamespace,
 	}
-	clusterDesc := resourceDescriptor{
-		GVR:        schema.GroupVersionResource{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"},
+	clusterDesc := Descriptor{
+
 		Namespaced: false,
 		Kind:       "CustomResourceDefinition",
 		Group:      "apiextensions.k8s.io",
@@ -64,8 +64,8 @@ func TestFindExactMatchReturnsCanonicalItem(t *testing.T) {
 func TestFindExactMatchRejectsPartialMatches(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
 
-	desc := resourceDescriptor{
-		GVR:        schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+	desc := Descriptor{
+
 		Namespaced: true,
 		Kind:       "Deployment",
 		Group:      "apps",
@@ -93,8 +93,8 @@ func TestFindExactMatchRejectsPartialMatches(t *testing.T) {
 
 func TestResolveResourceForGVKUsesCatalogDescriptors(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
-	desc := resourceDescriptor{
-		GVR:        schema.GroupVersionResource{Group: "example.com", Version: "v1alpha1", Resource: "widgets"},
+	desc := Descriptor{
+
 		Namespaced: true,
 		Kind:       "Widget",
 		Group:      "example.com",
@@ -102,7 +102,7 @@ func TestResolveResourceForGVKUsesCatalogDescriptors(t *testing.T) {
 		Resource:   "widgets",
 		Scope:      ScopeNamespace,
 	}
-	svc.identity.replaceDiscovered([]resourceDescriptor{desc})
+	svc.identity.replaceDiscovered([]Descriptor{desc})
 
 	resolved, ok, err := svc.ResolveResourceForGVK(context.Background(), schema.GroupVersionKind{
 		Group:   "example.com",

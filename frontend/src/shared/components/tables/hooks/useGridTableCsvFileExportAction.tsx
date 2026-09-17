@@ -13,10 +13,8 @@ import { YamlSaveIcon } from '@shared/components/icons/YamlIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { buildCsvExportFilename, buildGridTableCsv } from '@shared/components/tables/gridTableCsv';
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { reportOperationalError } from '@/utils/errorHandler';
-
-const FEEDBACK_RESET_MS = 750;
+import { useMemo } from 'react';
+import { useGridTableExportAction } from './useGridTableExportAction';
 
 interface UseGridTableCsvFileExportActionOptions<T> {
   /** Fetch every matching row (all pages); Export always acts on the full set. */
@@ -39,48 +37,22 @@ export function useGridTableCsvFileExportAction<T>({
   defaultFilename,
   disabled = false,
 }: UseGridTableCsvFileExportActionOptions<T>): IconBarItem {
-  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [feedback, setFeedback] = useState<'success' | 'error' | null>(null);
-  const [exporting, setExporting] = useState(false);
-
-  const scheduleReset = useCallback(() => {
-    if (resetTimerRef.current) {
-      clearTimeout(resetTimerRef.current);
-    }
-    resetTimerRef.current = setTimeout(() => setFeedback(null), FEEDBACK_RESET_MS);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (resetTimerRef.current) {
-        clearTimeout(resetTimerRef.current);
-      }
-    };
-  }, []);
-
-  const handleExport = useCallback(async () => {
+  const operation = useMemo(() => {
     if (!columns?.length || !getTextContent) {
-      setFeedback('error');
-      scheduleReset();
-      return;
+      return null;
     }
-    setExporting(true);
-    try {
+    return async () => {
       const rows = await fetchAllRows();
       const csv = buildGridTableCsv(rows, columns, getTextContent);
-      // Stamp the name at export time so the timestamp is the moment of export.
+      // Stamp the name at export time, after acquiring every matching row.
       const result = await saveCsvFile(buildCsvExportFilename(defaultFilename, new Date()), csv);
-      setFeedback(result?.path ? 'success' : 'error');
-    } catch (error) {
-      // The backend rejects on a canceled save dialog too; surface a brief error
-      // rather than crashing.
-      reportOperationalError(error, { source: 'GridTable', action: 'exportCsvFile' });
-      setFeedback('error');
-    } finally {
-      setExporting(false);
-      scheduleReset();
-    }
-  }, [columns, defaultFilename, fetchAllRows, getTextContent, scheduleReset]);
+      return Boolean(result?.path);
+    };
+  }, [columns, defaultFilename, fetchAllRows, getTextContent]);
+  const { feedback, exporting, handleExport } = useGridTableExportAction(
+    'exportCsvFile',
+    operation
+  );
 
   const title = 'Export all matching rows to file';
 

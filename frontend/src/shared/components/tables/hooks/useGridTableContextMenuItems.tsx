@@ -12,10 +12,8 @@ import type { GridColumnDefinition } from '@shared/components/tables/GridTable.t
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
 import { useCallback } from 'react';
 
-// Builds context menu item lists for GridTable cells/headers/empty areas,
+// Builds context menu item lists for GridTable cells,
 // combining custom items with sort actions while avoiding duplicates.
-
-export type ContextMenuSource = 'cell' | 'header' | 'empty';
 
 export interface UseGridTableContextMenuItemsParams<T> {
   columns: GridColumnDefinition<T>[];
@@ -53,12 +51,11 @@ const insertNavigationDivider = (items: ContextMenuItem[]): void => {
 };
 
 function getCellItems<T>(
-  source: ContextMenuSource,
   item: T | null,
   columnKey: string,
   getCustomContextMenuItems: CustomContextMenuItems<T> | undefined
 ): ContextMenuItem[] {
-  if (source !== 'cell' || !getCustomContextMenuItems || !item) {
+  if (!getCustomContextMenuItems || !item) {
     return [];
   }
   const items = getCustomContextMenuItems(item, columnKey);
@@ -72,31 +69,31 @@ const appendSortDivider = (items: ContextMenuItem[]): void => {
   }
 };
 
-function buildSortItems(
-  columnHeader: string,
+export function buildGridTableSortItems(
   columnKey: string,
-  onSort: GridTableSortHandler,
-  sortConfig: GridTableSortConfig
+  onSort: GridTableSortHandler | undefined,
+  sortConfig: GridTableSortConfig,
+  labels = { ascending: 'Sort Ascending', descending: 'Sort Descending' }
 ): ContextMenuItem[] {
   const isCurrentlySorted = sortConfig?.key === columnKey;
   const currentDirection = isCurrentlySorted ? (sortConfig?.direction ?? null) : null;
   return [
     {
-      label: `Sort ${columnHeader} Asc`,
+      label: labels.ascending,
       icon: <SortAscIcon />,
-      onClick: () => onSort(columnKey, 'asc'),
+      onClick: () => onSort?.(columnKey, 'asc'),
       disabled: currentDirection === 'asc',
     },
     {
-      label: `Sort ${columnHeader} Desc`,
+      label: labels.descending,
       icon: <SortDescIcon />,
-      onClick: () => onSort(columnKey, 'desc'),
+      onClick: () => onSort?.(columnKey, 'desc'),
       disabled: currentDirection === 'desc',
     },
     {
       label: 'Clear Sort',
       icon: '×',
-      onClick: () => onSort(columnKey, null),
+      onClick: () => onSort?.(columnKey, null),
       disabled: !isCurrentlySorted,
     },
   ];
@@ -109,18 +106,20 @@ export function useGridTableContextMenuItems<T>({
   sortConfig,
 }: UseGridTableContextMenuItemsParams<T>) {
   return useCallback(
-    (columnKey: string, item: T | null, source: ContextMenuSource): ContextMenuItem[] => {
-      if (source === 'empty') {
-        return [];
-      }
-      const items = getCellItems(source, item, columnKey, getCustomContextMenuItems);
+    (columnKey: string, item: T | null): ContextMenuItem[] => {
+      const items = getCellItems(item, columnKey, getCustomContextMenuItems);
       const column = columns.find((col) => col.key === columnKey);
       if (!column || !isSortableColumn(column) || !onSort) {
         return items;
       }
       appendSortDivider(items);
       // Direct target directions avoid stale state cycling and timer cleanup.
-      items.push(...buildSortItems(column.header, columnKey, onSort, sortConfig));
+      items.push(
+        ...buildGridTableSortItems(columnKey, onSort, sortConfig, {
+          ascending: `Sort ${column.header} Asc`,
+          descending: `Sort ${column.header} Desc`,
+        })
+      );
       return items;
     },
     [columns, getCustomContextMenuItems, onSort, sortConfig]

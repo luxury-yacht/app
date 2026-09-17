@@ -26,17 +26,17 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-func (s *Service) collectResource(ctx context.Context, index int, desc resourceDescriptor, namespaces []string, agg *streamingAggregator) ([]Summary, error) {
+func (s *Service) collectResource(ctx context.Context, desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, error) {
 	// Ingest-owned (cut) kinds are no longer cached by the shared informer factory;
 	// their Summaries come from the ingest manager (projected at intake) instead of a
 	// shared/dynamic lister, for every namespace scope.
-	if summaries, handled, err := s.collectViaIngest(index, desc, namespaces, agg); handled {
+	if summaries, handled, err := s.collectViaIngest(desc, namespaces, agg); handled {
 		return summaries, err
 	}
-	if summaries, handled, err := s.collectViaSharedInformer(index, desc, namespaces, agg); handled {
+	if summaries, handled, err := s.collectViaSharedInformer(desc, namespaces, agg); handled {
 		return summaries, err
 	}
-	summaries, err := s.listResource(ctx, index, desc, namespaces, agg)
+	summaries, err := s.listResource(ctx, desc, namespaces, agg)
 	if err != nil {
 		return nil, err
 	}
@@ -46,77 +46,75 @@ func (s *Service) collectResource(ctx context.Context, index int, desc resourceD
 	return summaries, nil
 }
 
-func (s *Service) collectViaSharedInformer(index int, desc resourceDescriptor, namespaces []string, agg *streamingAggregator) ([]Summary, bool, error) {
+func (s *Service) collectViaSharedInformer(desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, bool, error) {
 	plan := planCollectionSource(desc)
 	switch plan.source {
 	case collectionSourceSkip:
 		return nil, true, nil
 	case collectionSourceAPIExtensionsInformer:
-		return s.collectViaAPIExtensionsInformer(index, desc, agg)
+		return s.collectViaAPIExtensionsInformer(desc, agg)
 	case collectionSourceSharedInformer:
-		return s.collectViaCoreSharedInformer(index, desc, namespaces, plan.groupResource, agg)
+		return s.collectViaCoreSharedInformer(desc, namespaces, plan.groupResource, agg)
 	case collectionSourceGatewayInformer:
-		return s.collectViaGatewayInformer(index, desc, namespaces, plan.groupResource, agg)
+		return s.collectViaGatewayInformer(desc, namespaces, plan.groupResource, agg)
 	default:
-		return emitSummaries(index, agg, nil, nil, false)
+		return emitSummaries(agg, nil, nil, false)
 	}
 }
 
-func (s *Service) collectViaAPIExtensionsInformer(index int, desc resourceDescriptor, agg *streamingAggregator) ([]Summary, bool, error) {
+func (s *Service) collectViaAPIExtensionsInformer(desc Descriptor, agg *streamingAggregator) ([]Summary, bool, error) {
 	if s.deps.APIExtensionsInformerFactory == nil {
-		return emitSummaries(index, agg, nil, nil, false)
+		return emitSummaries(agg, nil, nil, false)
 	}
 	lister := s.deps.APIExtensionsInformerFactory.Apiextensions().V1().CustomResourceDefinitions().Lister()
 	items, err := lister.List(labels.Everything())
 	if err != nil {
-		return emitSummaries(index, agg, nil, err, true)
+		return emitSummaries(agg, nil, err, true)
 	}
-	return emitSummaries(index, agg, s.summariesFromObjects(desc, toMetaObjects(items)), nil, true)
+	return emitSummaries(agg, s.summariesFromObjects(desc, toMetaObjects(items)), nil, true)
 }
 
 func (s *Service) collectViaCoreSharedInformer(
-	index int,
-	desc resourceDescriptor,
+	desc Descriptor,
 	namespaces []string,
 	gr schema.GroupResource,
 	agg *streamingAggregator,
 ) ([]Summary, bool, error) {
 	if s.deps.InformerFactory == nil {
-		return emitSummaries(index, agg, nil, nil, false)
+		return emitSummaries(agg, nil, nil, false)
 	}
 	// Check permissions before accessing shared informer listers to avoid triggering
 	// lazy informer creation for resources the user cannot list/watch.
 	if s.deps.PermissionChecker != nil && !s.deps.PermissionChecker.CanListWatch(gr.Group, gr.Resource) {
 		// No permission - fall back to listResource which handles 403 gracefully.
-		return emitSummaries(index, agg, nil, nil, false)
+		return emitSummaries(agg, nil, nil, false)
 	}
 	listFn := sharedInformerLister(s.deps.InformerFactory, sharedInformerGroupResources[gr])
 	if listFn == nil {
-		return emitSummaries(index, agg, nil, nil, false)
+		return emitSummaries(agg, nil, nil, false)
 	}
 	summaries, err := s.collectFromNamespacedLister(desc, namespaces, listFn)
-	return emitSummaries(index, agg, summaries, err, true)
+	return emitSummaries(agg, summaries, err, true)
 }
 
 func (s *Service) collectViaGatewayInformer(
-	index int,
-	desc resourceDescriptor,
+	desc Descriptor,
 	namespaces []string,
 	gr schema.GroupResource,
 	agg *streamingAggregator,
 ) ([]Summary, bool, error) {
 	if s.deps.GatewayInformerFactory == nil {
-		return emitSummaries(index, agg, nil, nil, false)
+		return emitSummaries(agg, nil, nil, false)
 	}
 	listFn := gatewayInformerLister(s.deps.GatewayInformerFactory, gatewayInformerGroupResources[gr])
 	if listFn == nil {
-		return emitSummaries(index, agg, nil, nil, false)
+		return emitSummaries(agg, nil, nil, false)
 	}
 	summaries, err := s.collectFromNamespacedLister(desc, namespaces, listFn)
-	return emitSummaries(index, agg, summaries, err, true)
+	return emitSummaries(agg, summaries, err, true)
 }
 
-func (s *Service) collectFromNamespacedLister(desc resourceDescriptor, namespaces []string, list func(namespace string) ([]metav1.Object, error)) ([]Summary, error) {
+func (s *Service) collectFromNamespacedLister(desc Descriptor, namespaces []string, list func(namespace string) ([]metav1.Object, error)) ([]Summary, error) {
 	targets := listTargets(desc, namespaces)
 	summaries := make([]Summary, 0)
 	for _, ns := range targets {
@@ -129,7 +127,7 @@ func (s *Service) collectFromNamespacedLister(desc resourceDescriptor, namespace
 	return summaries, nil
 }
 
-func (s *Service) summariesFromObjects(desc resourceDescriptor, objs []metav1.Object) []Summary {
+func (s *Service) summariesFromObjects(desc Descriptor, objs []metav1.Object) []Summary {
 	if len(objs) == 0 {
 		return nil
 	}
@@ -143,34 +141,24 @@ func (s *Service) summariesFromObjects(desc resourceDescriptor, objs []metav1.Ob
 	return result
 }
 
-func (s *Service) listResource(ctx context.Context, index int, desc resourceDescriptor, namespaces []string, agg *streamingAggregator) ([]Summary, error) {
+func (s *Service) listResource(ctx context.Context, desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, error) {
 	dynamicClient := s.deps.Common.DynamicClient
 	if dynamicClient == nil {
 		return nil, errors.New("dynamic client not available")
 	}
 
-	namespaceable := dynamicClient.Resource(desc.GVR)
-	var targets []string
-	if desc.Namespaced && len(namespaces) > 0 {
-		targets = uniqueNamespaces(namespaces)
-		if len(targets) == 0 {
-			return nil, nil
-		}
-	} else if desc.Namespaced {
-		targets = []string{metav1.NamespaceAll}
-	} else {
-		targets = []string{""}
-	}
+	namespaceable := dynamicClient.Resource(desc.GVR())
+	targets := listTargets(desc, namespaces)
 
 	if len(targets) == 0 {
 		return nil, nil
 	}
 
 	if desc.Namespaced && len(targets) > 1 && s.namespaceWorkerLimit(len(targets)) > 1 {
-		return s.listResourceNamespacedParallel(ctx, index, namespaceable, desc, targets, agg)
+		return s.listResourceNamespacedParallel(ctx, namespaceable, desc, targets, agg)
 	}
 
-	return s.listResourceSequential(ctx, index, namespaceable, desc, targets, agg)
+	return s.listResourceSequential(ctx, namespaceable, desc, targets, agg)
 }
 
 // scopeNamespaces returns the cluster's configured namespace scope for
@@ -192,7 +180,7 @@ func skipForbiddenNamespaceTarget(target string, err error) bool {
 	return target != "" && target != metav1.NamespaceAll && apierrors.IsForbidden(err)
 }
 
-func (s *Service) listResourceSequential(ctx context.Context, index int, namespaceable dynamic.NamespaceableResourceInterface, desc resourceDescriptor, targets []string, agg *streamingAggregator) ([]Summary, error) {
+func (s *Service) listResourceSequential(ctx context.Context, namespaceable dynamic.NamespaceableResourceInterface, desc Descriptor, targets []string, agg *streamingAggregator) ([]Summary, error) {
 	results := make([]Summary, 0)
 	for _, target := range targets {
 		select {
@@ -201,7 +189,7 @@ func (s *Service) listResourceSequential(ctx context.Context, index int, namespa
 		default:
 		}
 		resourceInterface := resourceInterfaceForTarget(namespaceable, desc.Namespaced, target)
-		items, err := s.listNamespaceItems(ctx, index, desc, resourceInterface, agg)
+		items, err := s.listNamespaceItems(ctx, desc, resourceInterface, agg)
 		if err != nil {
 			if skipForbiddenNamespaceTarget(target, err) {
 				continue
@@ -215,13 +203,13 @@ func (s *Service) listResourceSequential(ctx context.Context, index int, namespa
 	return results, nil
 }
 
-func (s *Service) listResourceNamespacedParallel(ctx context.Context, index int, namespaceable dynamic.NamespaceableResourceInterface, desc resourceDescriptor, targets []string, agg *streamingAggregator) ([]Summary, error) {
+func (s *Service) listResourceNamespacedParallel(ctx context.Context, namespaceable dynamic.NamespaceableResourceInterface, desc Descriptor, targets []string, agg *streamingAggregator) ([]Summary, error) {
 	results := make([]Summary, 0)
 	var mu sync.Mutex
 	limit := s.namespaceWorkerLimit(len(targets))
 	err := parallel.ForEach(ctx, targets, limit, func(taskCtx context.Context, target string) error {
 		resourceInterface := resourceInterfaceForTarget(namespaceable, true, target)
-		items, err := s.listNamespaceItems(taskCtx, index, desc, resourceInterface, agg)
+		items, err := s.listNamespaceItems(taskCtx, desc, resourceInterface, agg)
 		if err != nil {
 			if skipForbiddenNamespaceTarget(target, err) {
 				return nil
@@ -242,7 +230,7 @@ func (s *Service) listResourceNamespacedParallel(ctx context.Context, index int,
 	return results, nil
 }
 
-func (s *Service) listNamespaceItems(ctx context.Context, index int, desc resourceDescriptor, resourceInterface dynamic.ResourceInterface, agg *streamingAggregator) ([]Summary, error) {
+func (s *Service) listNamespaceItems(ctx context.Context, desc Descriptor, resourceInterface dynamic.ResourceInterface, agg *streamingAggregator) ([]Summary, error) {
 	batchSize := s.opts.PageSize
 	if s.opts.StreamingBatchSize > 0 && s.opts.StreamingBatchSize < batchSize {
 		batchSize = s.opts.StreamingBatchSize
@@ -261,7 +249,7 @@ func (s *Service) listNamespaceItems(ctx context.Context, index int, desc resour
 			return results, nil
 		}
 
-		results = appendCatalogSummaryPage(results, s.catalogSummaryPage(desc, list), index, agg)
+		results = appendCatalogSummaryPage(results, s.catalogSummaryPage(desc, list), agg)
 		if !advanceCatalogList(&options, list) {
 			break
 		}
@@ -271,7 +259,7 @@ func (s *Service) listNamespaceItems(ctx context.Context, index int, desc resour
 
 func (s *Service) listCatalogPageWithRetry(
 	ctx context.Context,
-	desc resourceDescriptor,
+	desc Descriptor,
 	resourceInterface dynamic.ResourceInterface,
 	options metav1.ListOptions,
 ) (*unstructuredv1.UnstructuredList, bool, error) {
@@ -285,14 +273,14 @@ func (s *Service) listCatalogPageWithRetry(
 		}
 		if apierrors.IsForbidden(err) {
 			s.recordDeniedResource(deniedResourceName(desc))
-			s.logDebug(fmt.Sprintf("permission denied listing %s, skipping", desc.GVR.String()))
+			s.logDebug(fmt.Sprintf("permission denied listing %s, skipping", desc.GVR().String()))
 			return nil, true, nil
 		}
 		if !shouldRetryList(err) || attempt == config.ObjectCatalogListRetryMaxAttempts-1 {
 			return nil, false, err
 		}
 		delay := listRetryBackoff(attempt)
-		s.logDebug(fmt.Sprintf("retrying list for %s after error: %v (backoff=%s)", desc.GVR.String(), err, delay))
+		s.logDebug(fmt.Sprintf("retrying list for %s after error: %v (backoff=%s)", desc.GVR().String(), err, delay))
 		if err := timeutil.SleepWithContext(ctx, delay); err != nil {
 			return nil, false, err
 		}
@@ -300,13 +288,13 @@ func (s *Service) listCatalogPageWithRetry(
 	return nil, false, nil
 }
 
-func appendCatalogSummaryPage(results, page []Summary, index int, agg *streamingAggregator) []Summary {
+func appendCatalogSummaryPage(results, page []Summary, agg *streamingAggregator) []Summary {
 	if len(page) == 0 {
 		return results
 	}
 	results = append(results, page...)
 	if agg != nil {
-		agg.emit(index, page)
+		agg.emit(page)
 	}
 	return results
 }
@@ -320,7 +308,7 @@ func advanceCatalogList(options *metav1.ListOptions, list *unstructuredv1.Unstru
 	return true
 }
 
-func (s *Service) catalogSummaryPage(desc resourceDescriptor, list *unstructuredv1.UnstructuredList) []Summary {
+func (s *Service) catalogSummaryPage(desc Descriptor, list *unstructuredv1.UnstructuredList) []Summary {
 	page := make([]Summary, 0, len(list.Items))
 	for index := range list.Items {
 		page = append(page, s.buildSummary(desc, &list.Items[index]))
@@ -330,7 +318,7 @@ func (s *Service) catalogSummaryPage(desc resourceDescriptor, list *unstructured
 
 // deniedResourceName renders a kubectl-style resource name (`resource[.group]`)
 // for permission diagnostics.
-func deniedResourceName(desc resourceDescriptor) string {
+func deniedResourceName(desc Descriptor) string {
 	if desc.Group != "" {
 		return desc.Resource + "." + desc.Group
 	}
@@ -359,7 +347,7 @@ func (s *Service) namespaceWorkerLimit(targetCount int) int {
 // threshold — or with no ingest source — the kind keeps being listed per collect, so a
 // reflector is only ever created on demand. The projection IS buildSummary, so the
 // ingest-served Summaries are byte-identical to the list path's.
-func (s *Service) maybePromote(desc resourceDescriptor, itemCount int) {
+func (s *Service) maybePromote(desc Descriptor, itemCount int) {
 	if s.opts.InformerPromotionThreshold <= 0 || itemCount < s.opts.InformerPromotionThreshold {
 		return
 	}
@@ -367,7 +355,7 @@ func (s *Service) maybePromote(desc resourceDescriptor, itemCount int) {
 	if source == nil {
 		return
 	}
-	gvr := desc.GVR
+	gvr := desc.GVR()
 	if s.isDynamicallyIngested(gvr) {
 		return
 	}
@@ -416,7 +404,7 @@ func (s *Service) stopDynamicReflectors() {
 	}
 }
 
-func (s *Service) buildSummary(desc resourceDescriptor, item metav1.Object) Summary {
+func (s *Service) buildSummary(desc Descriptor, item metav1.Object) Summary {
 	return summaryFromObject(s.clusterID, desc, item)
 }
 
@@ -426,7 +414,7 @@ func (s *Service) buildSummary(desc resourceDescriptor, item metav1.Object) Summ
 // live collect path and the ingest Catalog-half projector (SummaryProjector), which
 // runs before any Service exists. Keeping it one function guarantees the ingest
 // path's Summaries are byte-identical to the shared-informer collect path's.
-func summaryFromObject(clusterID string, desc resourceDescriptor, item metav1.Object) Summary {
+func summaryFromObject(clusterID string, desc Descriptor, item metav1.Object) Summary {
 	creationTimestamp := ""
 	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
 		creationTimestamp = ts.UTC().Format(time.RFC3339)
@@ -470,7 +458,7 @@ func catalogResourceMetadata(item metav1.Object) *resourcemodel.ResourceTableMet
 	}
 }
 
-func additionalObjectFinalizers(desc resourceDescriptor, item metav1.Object) []string {
+func additionalObjectFinalizers(desc Descriptor, item metav1.Object) []string {
 	if desc.Group != "" || desc.Version != "v1" || desc.Kind != "Namespace" {
 		return nil
 	}

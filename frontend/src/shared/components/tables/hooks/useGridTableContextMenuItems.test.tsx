@@ -8,7 +8,6 @@
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import {
-  type ContextMenuSource,
   type UseGridTableContextMenuItemsParams,
   useGridTableContextMenuItems,
 } from '@shared/components/tables/hooks/useGridTableContextMenuItems';
@@ -102,23 +101,8 @@ describe('useGridTableContextMenuItems', () => {
   const invoke = (
     getItems: ReturnType<typeof useGridTableContextMenuItems<Row>>,
     columnKey: string,
-    item: Row | null,
-    source: ContextMenuSource
-  ) => getItems(columnKey, item, source);
-
-  it('returns no items for empty-state context menus', async () => {
-    const customItems: ContextMenuItem[] = [
-      { label: 'Select All', onClick: vi.fn() },
-      { label: 'Clear Selection', onClick: vi.fn() },
-      { label: 'Refresh', onClick: vi.fn() },
-    ];
-    const params = buildParams({
-      getCustomContextMenuItems: vi.fn().mockReturnValue(customItems),
-    });
-    const { getItems } = await renderHook(params);
-
-    expect(invoke(getItems(), 'name', null, 'empty')).toEqual([]);
-  });
+    item: Row | null
+  ) => getItems(columnKey, item);
 
   it('returns cell-level custom items untouched', async () => {
     const cellItems: ContextMenuItem[] = [
@@ -130,7 +114,7 @@ describe('useGridTableContextMenuItems', () => {
     });
     const { getItems } = await renderHook(params);
 
-    const result = invoke(getItems(), 'name', rowSample, 'cell');
+    const result = invoke(getItems(), 'name', rowSample);
     expect(result).toEqual(cellItems);
   });
 
@@ -144,7 +128,7 @@ describe('useGridTableContextMenuItems', () => {
     });
     const { getItems } = await renderHook(params);
 
-    const result = invoke(getItems(), 'name', rowSample, 'cell');
+    const result = invoke(getItems(), 'name', rowSample);
     expect(result[0]).toMatchObject({ label: 'Open' });
     expect(result[1]).toMatchObject({ label: 'Diff' });
     expect(result[2]).toMatchObject({ divider: true });
@@ -162,7 +146,7 @@ describe('useGridTableContextMenuItems', () => {
     });
     const { getItems } = await renderHook(params);
 
-    const result = invoke(getItems(), 'name', rowSample, 'cell');
+    const result = invoke(getItems(), 'name', rowSample);
     const dividerIndexes = result
       .map((item, index) => (item.divider ? index : null))
       .filter((index): index is number => index !== null);
@@ -178,11 +162,11 @@ describe('useGridTableContextMenuItems', () => {
     });
     const { getItems } = await renderHook(params);
 
-    const headerItems = invoke(getItems(), 'name', null, 'header');
-    const clearSort = headerItems.find((item) => item.label === 'Clear Sort');
+    const cellItems = invoke(getItems(), 'name', rowSample);
+    const clearSort = cellItems.find((item) => item.label === 'Clear Sort');
     expect(clearSort?.disabled).toBe(true);
 
-    const sortDesc = headerItems.find((item) => item.label === 'Sort Name Desc');
+    const sortDesc = cellItems.find((item) => item.label === 'Sort Name Desc');
     sortDesc?.onClick?.();
     // Single call with explicit target direction — no setTimeout hack.
     expect(onSort).toHaveBeenCalledTimes(1);
@@ -197,10 +181,10 @@ describe('useGridTableContextMenuItems', () => {
     });
     const { getItems } = await renderHook(params);
 
-    const headerItems = invoke(getItems(), 'name', null, 'header');
-    const sortAsc = headerItems.find((item) => item.label === 'Sort Name Asc');
-    const sortDesc = headerItems.find((item) => item.label === 'Sort Name Desc');
-    const clearSort = headerItems.find((item) => item.label === 'Clear Sort');
+    const cellItems = invoke(getItems(), 'name', rowSample);
+    const sortAsc = cellItems.find((item) => item.label === 'Sort Name Asc');
+    const sortDesc = cellItems.find((item) => item.label === 'Sort Name Desc');
+    const clearSort = cellItems.find((item) => item.label === 'Clear Sort');
 
     expect(sortAsc?.disabled).toBe(true);
 
@@ -221,9 +205,9 @@ describe('useGridTableContextMenuItems', () => {
     });
     const { getItems } = await renderHook(params);
 
-    const headerItems = invoke(getItems(), 'name', null, 'header');
-    const sortDesc = headerItems.find((item) => item.label === 'Sort Name Desc');
-    const clearSort = headerItems.find((item) => item.label === 'Clear Sort');
+    const cellItems = invoke(getItems(), 'name', rowSample);
+    const sortDesc = cellItems.find((item) => item.label === 'Sort Name Desc');
+    const clearSort = cellItems.find((item) => item.label === 'Clear Sort');
 
     expect(sortDesc?.disabled).toBe(true);
 

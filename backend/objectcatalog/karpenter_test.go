@@ -46,7 +46,7 @@ func TestDiscoveredFamiliesDoNotDependOnObjectsOrListPermission(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
 	require.Empty(t, svc.DiscoveredResourceFamilies())
 	// Discovery identity is published before RBAC filtering and collection.
-	svc.identity.replaceDiscovered([]resourceDescriptor{
+	svc.identity.replaceDiscovered([]Descriptor{
 		builtinDescriptor("karpenter.sh", "v1", "NodePool", "nodepools", false),
 		builtinDescriptor("karpenter.azure.com", "v1beta1", "AKSNodeClass", "aksnodeclasses", false),
 		builtinDescriptor("other.io", "v1", "NodePool", "nodepools", false),

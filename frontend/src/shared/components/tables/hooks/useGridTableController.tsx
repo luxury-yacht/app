@@ -184,7 +184,6 @@ export interface GridTableControllerResult<T> {
   // Context menu
   contextMenuNode: ReactNode;
   headerContextMenuNode: ReactNode;
-  handleWrapperContextMenu: (e: React.MouseEvent) => void;
 
   // Virtualization
   shouldVirtualize: boolean;
@@ -416,7 +415,6 @@ export function useGridTableController<T>({
     getRowClassNameWithFocus,
     contextMenuNode,
     handleCellContextMenu,
-    handleWrapperContextMenu,
     openFocusedRowContextMenu,
     isContextMenuVisible,
     handleRowMouseEnter,
@@ -674,7 +672,6 @@ export function useGridTableController<T>({
     hoverState,
     contextMenuNode,
     headerContextMenuNode,
-    handleWrapperContextMenu,
     shouldVirtualize,
     virtualRows,
     virtualRange,

@@ -27,24 +27,24 @@ func (s *Service) ResolveRelatedResourceLink(link *resourcemodel.ResourceLink) *
 	return &resolved
 }
 
-func (r *resourceIdentityResolver) relatedResourceDescriptor(display resourcemodel.DisplayRef) (resourceDescriptor, bool) {
+func (r *resourceIdentityResolver) relatedResourceDescriptor(display resourcemodel.DisplayRef) (Descriptor, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	var match resourceDescriptor
+	var match Descriptor
 	found := false
 	for _, desc := range r.resources {
 		if !matchesRelatedResource(display, desc) {
 			continue
 		}
 		if found {
-			return resourceDescriptor{}, false
+			return Descriptor{}, false
 		}
 		match, found = desc, true
 	}
 	return match, found
 }
 
-func matchesRelatedResource(display resourcemodel.DisplayRef, desc resourceDescriptor) bool {
+func matchesRelatedResource(display resourcemodel.DisplayRef, desc Descriptor) bool {
 	return display.Group == desc.Group && strings.EqualFold(display.Kind, desc.Kind) &&
 		(display.Version == "" || display.Version == desc.Version) &&
 		(display.Resource == "" || display.Resource == desc.Resource) &&

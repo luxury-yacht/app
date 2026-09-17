@@ -10,13 +10,12 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func TestCollectFromNamespacedLister(t *testing.T) {
 	svc := &Service{now: time.Now}
-	desc := resourceDescriptor{
-		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"},
+	desc := Descriptor{
+
 		Namespaced: true,
 		Kind:       "ConfigMap",
 		Group:      "",
@@ -48,12 +47,12 @@ func TestCollectFromNamespacedLister(t *testing.T) {
 }
 
 func TestListTargets(t *testing.T) {
-	namespaced := listTargets(resourceDescriptor{Namespaced: true}, []string{})
+	namespaced := listTargets(Descriptor{Namespaced: true}, []string{})
 	if !reflect.DeepEqual(namespaced, []string{metav1.NamespaceAll}) {
 		t.Fatalf("expected NamespaceAll target, got %v", namespaced)
 	}
 
-	cluster := listTargets(resourceDescriptor{Namespaced: false}, []string{"ignored"})
+	cluster := listTargets(Descriptor{Namespaced: false}, []string{"ignored"})
 	if !reflect.DeepEqual(cluster, []string{""}) {
 		t.Fatalf("expected cluster target, got %v", cluster)
 	}
@@ -61,7 +60,7 @@ func TestListTargets(t *testing.T) {
 
 func TestSummariesFromObjects(t *testing.T) {
 	svc := &Service{now: time.Now}
-	desc := resourceDescriptor{
+	desc := Descriptor{
 		Kind:       "ConfigMap",
 		Group:      "",
 		Version:    "v1",

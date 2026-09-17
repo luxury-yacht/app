@@ -172,13 +172,7 @@ func selectionSetsEqual(left, right []string) bool {
 func mergeKubeconfigWatchDirectory(dirMap map[string]*kubeconfigWatchDirectory, resolved string) {
 	info, statErr := os.Stat(resolved)
 	if statErr == nil && info.IsDir() {
-		key := kubeconfigPathKey(resolved)
-		if existing := dirMap[key]; existing != nil {
-			existing.unfiltered = true
-			existing.filterFiles = nil
-			return
-		}
-		dirMap[key] = &kubeconfigWatchDirectory{dir: resolved, unfiltered: true}
+		addKubeconfigWatchDirectory(dirMap, kubeconfigPathKey(resolved), resolved, nil)
 		return
 	}
 
@@ -187,14 +181,35 @@ func mergeKubeconfigWatchDirectory(dirMap map[string]*kubeconfigWatchDirectory, 
 	if parentErr != nil || !parentInfo.IsDir() {
 		return
 	}
-	key := kubeconfigPathKey(parentDir)
-	entry := dirMap[key]
+	addKubeconfigWatchDirectory(dirMap, kubeconfigPathKey(parentDir), parentDir,
+		map[string]struct{}{filepath.Base(resolved): {}})
+}
+
+// Full-directory admission dominates filename filters in both discovery and
+// watcher retargeting. Callers retain their existing path-key normalization.
+func addKubeconfigWatchDirectory(entries map[string]*kubeconfigWatchDirectory, key, dir string, filters map[string]struct{}) {
+	entry := entries[key]
 	if entry == nil {
-		entry = &kubeconfigWatchDirectory{dir: parentDir, filterFiles: make(map[string]struct{})}
-		dirMap[key] = entry
+		entry = &kubeconfigWatchDirectory{dir: dir}
+		entries[key] = entry
 	}
-	if !entry.unfiltered {
-		entry.filterFiles[filepath.Base(resolved)] = struct{}{}
+	mergeWatchedPathFilters(entry, filters)
+}
+
+func mergeWatchedPathFilters(entry *kubeconfigWatchDirectory, filters map[string]struct{}) {
+	if len(filters) == 0 {
+		entry.unfiltered = true
+		entry.filterFiles = nil
+		return
+	}
+	if entry.unfiltered {
+		return
+	}
+	if entry.filterFiles == nil {
+		entry.filterFiles = make(map[string]struct{})
+	}
+	for name := range filters {
+		entry.filterFiles[name] = struct{}{}
 	}
 }
 

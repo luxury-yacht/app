@@ -73,12 +73,12 @@ func isIngestOwned(gr schema.GroupResource) bool {
 // dynamic cuts still fall through to LIST until their on-demand reflector syncs.
 // Summaries for a namespaced kind are filtered to the requested namespaces,
 // matching the lister path's per-namespace scope.
-func (s *Service) collectViaIngest(index int, desc resourceDescriptor, namespaces []string, agg *streamingAggregator) ([]Summary, bool, error) {
+func (s *Service) collectViaIngest(desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, bool, error) {
 	source := s.deps.IngestSource
 	if source == nil {
 		return nil, false, nil
 	}
-	gvr := desc.GVR
+	gvr := desc.GVR()
 	_, staticCut := catalogIngestOwnedGVRs[gvr]
 	dynamicCut := s.isDynamicallyIngested(gvr)
 	if !staticCut && !dynamicCut {
@@ -95,22 +95,26 @@ func (s *Service) collectViaIngest(index int, desc resourceDescriptor, namespace
 	if staticCut && !source.HasSyncedFor(gvr) {
 		return nil, true, fmt.Errorf("catalog ingest store for %s is not synced", gvr)
 	}
-	rows := source.CatalogRows(gvr)
-	allowed := requestedNamespaceSet(desc, namespaces)
+	summaries := catalogSummaries(source.CatalogRows(gvr), requestedNamespaceSet(desc, namespaces))
+	return emitSummaries(agg, summaries, nil, true)
+}
+
+// catalogSummaries keeps only catalog projections in the requested namespace set.
+// A nil set includes every namespace; an empty set includes none.
+func catalogSummaries(rows []interface{}, allowed map[string]struct{}) []Summary {
 	summaries := make([]Summary, 0, len(rows))
 	for _, row := range rows {
 		summary, ok := row.(Summary)
 		if !ok {
 			continue
 		}
-		if allowed != nil {
-			if _, ok := allowed[summary.Ref.Namespace]; !ok {
-				continue
-			}
+		_, included := allowed[summary.Ref.Namespace]
+		if allowed != nil && !included {
+			continue
 		}
 		summaries = append(summaries, summary)
 	}
-	return emitSummaries(index, agg, summaries, nil, true)
+	return summaries
 }
 
 // requestedNamespaceSet returns the set of namespaces a namespaced cut kind's
@@ -118,7 +122,7 @@ func (s *Service) collectViaIngest(index int, desc resourceDescriptor, namespace
 // cluster-scoped kind, or a namespaced request with no namespace filter — the
 // all-namespaces case). It mirrors listTargets' scoping so the ingest collect path
 // returns the same set the lister path would.
-func requestedNamespaceSet(desc resourceDescriptor, namespaces []string) map[string]struct{} {
+func requestedNamespaceSet(desc Descriptor, namespaces []string) map[string]struct{} {
 	if !desc.Namespaced || len(namespaces) == 0 {
 		return nil
 	}
@@ -231,7 +235,7 @@ func (s *Service) replaceIngestCatalogSummariesLocked(gvr schema.GroupVersionRes
 	s.broadcastStreaming(true)
 }
 
-func summaryMatchesDescriptor(summary Summary, desc resourceDescriptor) bool {
+func summaryMatchesDescriptor(summary Summary, desc Descriptor) bool {
 	return summary.Ref.Group == desc.Group &&
 		summary.Ref.Version == desc.Version &&
 		summary.Ref.Resource == desc.Resource &&
@@ -241,12 +245,12 @@ func summaryMatchesDescriptor(summary Summary, desc resourceDescriptor) bool {
 // resolveIngestDescriptor resolves a cut kind's GVR to its catalog descriptor from
 // the index, so an incremental sink update keys its summary the same way the collect
 // path does.
-func (s *Service) resolveIngestDescriptor(gvr schema.GroupVersionResource) (resourceDescriptor, bool) {
+func (s *Service) resolveIngestDescriptor(gvr schema.GroupVersionResource) (Descriptor, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	_, desc := s.catalogIndex.resourceForGroupResource(gvr.Group, gvr.Resource)
 	if desc == nil {
-		return resourceDescriptor{}, false
+		return Descriptor{}, false
 	}
 	return *desc, true
 }
@@ -277,15 +281,7 @@ func (s ingestCatalogSink) Delete(row interface{}) {
 }
 
 func (s ingestCatalogSink) Replace(rows []interface{}) {
-	summaries := make([]Summary, 0, len(rows))
-	for _, row := range rows {
-		summary, ok := row.(Summary)
-		if !ok {
-			continue
-		}
-		summaries = append(summaries, summary)
-	}
-	s.service.replaceIngestCatalogSummaries(s.gvr, summaries)
+	s.service.replaceIngestCatalogSummaries(s.gvr, catalogSummaries(rows, nil))
 }
 
 // Coalesce contention by kind, then reread its authoritative store after the
@@ -328,13 +324,7 @@ func (s *Service) drainIngestReconciliation(done chan struct{}) {
 
 		s.syncMu.Lock()
 		rows := s.deps.IngestSource.CatalogRows(gvr)
-		summaries := make([]Summary, 0, len(rows))
-		for _, row := range rows {
-			if summary, ok := row.(Summary); ok {
-				summaries = append(summaries, summary)
-			}
-		}
-		s.replaceIngestCatalogSummariesLocked(gvr, summaries)
+		s.replaceIngestCatalogSummariesLocked(gvr, catalogSummaries(rows, nil))
 		s.syncMu.Unlock()
 	}
 }

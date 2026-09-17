@@ -3,10 +3,8 @@ import { CopyIcon } from '@shared/components/icons/LogIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { buildGridTableCsv } from '@shared/components/tables/gridTableCsv';
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { reportOperationalError } from '@/utils/errorHandler';
-
-const COPY_FEEDBACK_RESET_MS = 750;
+import { useMemo } from 'react';
+import { useGridTableExportAction } from './useGridTableExportAction';
 
 interface UseGridTableCsvExportOptions<T> {
   data: T[];
@@ -29,58 +27,29 @@ export function useGridTableCsvExport<T>({
   fetchAllRows,
   hasAllLocalMatches = false,
 }: UseGridTableCsvExportOptions<T>): IconBarItem {
-  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState<'success' | 'error' | null>(null);
-  const [copying, setCopying] = useState(false);
-
   const canCopyToClipboard =
     typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function';
-  const visibleRowCount = data.length;
-  const hasCopyableContent = visibleRowCount > 0 && Boolean(columns?.length);
-
-  const scheduleCopyReset = useCallback(() => {
-    if (resetTimerRef.current) {
-      clearTimeout(resetTimerRef.current);
-    }
-    resetTimerRef.current = setTimeout(() => {
-      setCopyFeedback(null);
-    }, COPY_FEEDBACK_RESET_MS);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (resetTimerRef.current) {
-        clearTimeout(resetTimerRef.current);
-      }
-    };
-  }, []);
-
-  const handleCopyCsv = useCallback(async () => {
+  const hasCopyableContent = data.length > 0 && Boolean(columns?.length);
+  const operation = useMemo(() => {
     if (!canCopyToClipboard || !columns?.length || !getTextContent) {
-      setCopyFeedback('error');
-      scheduleCopyReset();
-      return;
+      return null;
     }
-    setCopying(true);
-    try {
-      // A fetcher supplies every backend match. Otherwise copy the provided local row set,
-      // which can contain all local matches even when presentation pagination is enabled.
+    return async () => {
+      // Backend fetches own all matching rows; local data already includes every local match.
       const rows = fetchAllRows ? await fetchAllRows() : data;
       const csvText = buildGridTableCsv(rows, columns, getTextContent);
       if (!csvText) {
-        setCopyFeedback('error');
-        return;
+        return false;
       }
       await navigator.clipboard.writeText(csvText);
-      setCopyFeedback('success');
-    } catch (error) {
-      reportOperationalError(error, { source: 'GridTable', action: 'copyCsv' });
-      setCopyFeedback('error');
-    } finally {
-      setCopying(false);
-      scheduleCopyReset();
-    }
-  }, [canCopyToClipboard, columns, data, fetchAllRows, getTextContent, scheduleCopyReset]);
+      return true;
+    };
+  }, [canCopyToClipboard, columns, data, fetchAllRows, getTextContent]);
+  const {
+    feedback: copyFeedback,
+    exporting: copying,
+    handleExport: handleCopyCsv,
+  } = useGridTableExportAction('copyCsv', operation);
 
   let title: string;
 

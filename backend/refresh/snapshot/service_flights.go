@@ -74,14 +74,8 @@ func (f *snapshotBuildFlights) leave(key string, flight *snapshotBuildFlight) {
 	if flight.waiters > 0 {
 		flight.waiters--
 	}
-	if flight.waiters == 0 && !flight.completed {
-		if f.flights[key] == flight {
-			delete(f.flights, key)
-		}
-		flight.completed = true
-		flight.err = context.Canceled
-		close(flight.done)
-		cancel = flight.cancel
+	if flight.waiters == 0 {
+		cancel = f.finishLocked(key, flight, nil, context.Canceled)
 	}
 	f.mu.Unlock()
 	if cancel != nil {
@@ -95,18 +89,8 @@ func (f *snapshotBuildFlights) complete(
 	snapshot *refresh.Snapshot,
 	err error,
 ) {
-	var cancel context.CancelFunc
 	f.mu.Lock()
-	if !flight.completed {
-		flight.completed = true
-		flight.snapshot = snapshot
-		flight.err = err
-		if f.flights[key] == flight {
-			delete(f.flights, key)
-		}
-		close(flight.done)
-		cancel = flight.cancel
-	}
+	cancel := f.finishLocked(key, flight, snapshot, err)
 	f.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -118,16 +102,33 @@ func (f *snapshotBuildFlights) cancelAll() {
 	f.mu.Lock()
 	for key, flight := range f.flights {
 		delete(f.flights, key)
-		if flight.completed {
-			continue
+		if cancel := f.finishLocked(key, flight, nil, context.Canceled); cancel != nil {
+			cancels = append(cancels, cancel)
 		}
-		flight.completed = true
-		flight.err = context.Canceled
-		close(flight.done)
-		cancels = append(cancels, flight.cancel)
 	}
 	f.mu.Unlock()
 	for _, cancel := range cancels {
 		cancel()
 	}
+}
+
+// finishLocked publishes one terminal result. The caller cancels the build after
+// releasing mu, so cancellation callbacks cannot re-enter the flight lock.
+func (f *snapshotBuildFlights) finishLocked(
+	key string,
+	flight *snapshotBuildFlight,
+	snapshot *refresh.Snapshot,
+	err error,
+) context.CancelFunc {
+	if flight.completed {
+		return nil
+	}
+	flight.completed = true
+	flight.snapshot = snapshot
+	flight.err = err
+	if f.flights[key] == flight {
+		delete(f.flights, key)
+	}
+	close(flight.done)
+	return flight.cancel
 }

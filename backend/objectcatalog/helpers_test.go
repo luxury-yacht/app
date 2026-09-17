@@ -28,8 +28,8 @@ func TestLabelsDigestAndContainsVerb(t *testing.T) {
 }
 
 func TestCatalogKey(t *testing.T) {
-	descNamespaced := resourceDescriptor{GVR: schema.GroupVersionResource{Group: "g", Version: "v1", Resource: "rs"}, Namespaced: true}
-	descCluster := resourceDescriptor{GVR: schema.GroupVersionResource{Group: "g", Version: "v1", Resource: "rs"}, Namespaced: false}
+	descNamespaced := Descriptor{Group: "g", Version: "v1", Resource: "rs", Namespaced: true}
+	descCluster := Descriptor{Group: "g", Version: "v1", Resource: "rs", Namespaced: false}
 
 	if got := catalogKey(descNamespaced, "ns", "name"); got != "g/v1, Resource=rs/ns/name" {
 		t.Fatalf("unexpected namespaced key: %s", got)
@@ -40,24 +40,24 @@ func TestCatalogKey(t *testing.T) {
 }
 
 func TestDescriptorStreamingPriority(t *testing.T) {
-	desc := resourceDescriptor{Resource: "pods", Scope: ScopeNamespace}
+	desc := Descriptor{Resource: "pods", Scope: ScopeNamespace}
 	if got := descriptorStreamingPriority(desc); got != 800+len("pods") {
 		t.Fatalf("unexpected priority for namespace pods: %d", got)
 	}
 
-	clusterDesc := resourceDescriptor{Resource: "pods", Scope: ScopeCluster}
+	clusterDesc := Descriptor{Resource: "pods", Scope: ScopeCluster}
 	if got := descriptorStreamingPriority(clusterDesc); got != 700+len("pods") {
 		t.Fatalf("unexpected priority for cluster pods: %d", got)
 	}
 
-	unknownDesc := resourceDescriptor{Resource: "widgets", Scope: ScopeCluster}
+	unknownDesc := Descriptor{Resource: "widgets", Scope: ScopeCluster}
 	if got := descriptorStreamingPriority(unknownDesc); got != 900+len("widgets") {
 		t.Fatalf("expected default priority baseline, got %d", got)
 	}
 }
 
 func TestBuildSummaryAndSort(t *testing.T) {
-	desc := resourceDescriptor{
+	desc := Descriptor{
 		Kind:       "Pod",
 		Group:      "",
 		Version:    "v1",
@@ -95,7 +95,7 @@ func TestBuildSummaryAndSort(t *testing.T) {
 }
 
 func TestBuildSummaryForNamespaceCanonicalIdentity(t *testing.T) {
-	desc := resourceDescriptor{
+	desc := Descriptor{
 		Kind:       "Namespace",
 		Group:      "",
 		Version:    "v1",
@@ -164,14 +164,14 @@ func TestBroadcastStreamingSendsReady(t *testing.T) {
 
 func TestCatalogKeyFormats(t *testing.T) {
 	nsGVR := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
-	descNamespace := resourceDescriptor{GVR: nsGVR, Namespaced: true}
+	descNamespace := Descriptor{Group: nsGVR.Group, Version: nsGVR.Version, Resource: nsGVR.Resource, Namespaced: true}
 	expectedNamespaced := nsGVR.String() + "/default/demo"
 	if key := catalogKey(descNamespace, "default", "demo"); key != expectedNamespaced {
 		t.Fatalf("unexpected namespaced key: %s", key)
 	}
 
 	clusterGVR := schema.GroupVersionResource{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"}
-	descCluster := resourceDescriptor{GVR: clusterGVR, Namespaced: false}
+	descCluster := Descriptor{Group: clusterGVR.Group, Version: clusterGVR.Version, Resource: clusterGVR.Resource, Namespaced: false}
 	expectedCluster := clusterGVR.String() + "//widgets.example.com"
 	if key := catalogKey(descCluster, "", "widgets.example.com"); key != expectedCluster {
 		t.Fatalf("unexpected cluster key: %s", key)

@@ -64,19 +64,13 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
     sortConfig,
   });
 
-  const {
-    contextMenu,
-    openCellContextMenu,
-    openCellContextMenuFromKeyboard,
-    openWrapperContextMenu,
-    closeContextMenu,
-  } = useGridTableContextMenu<T>({
-    enableContextMenu,
-    columns,
-    getCustomContextMenuItems,
-    getContextMenuItems,
-    onSort,
-  });
+  const { contextMenu, openCellContextMenu, openCellContextMenuFromKeyboard, closeContextMenu } =
+    useGridTableContextMenu<T>({
+      enableContextMenu,
+      columns,
+      getCustomContextMenuItems,
+      onSort,
+    });
 
   const beginContextMenuInteraction = useCallback(
     (fallbackTarget?: HTMLElement | null) => {
@@ -112,19 +106,6 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
       }
     },
     [beginContextMenuInteraction, enableContextMenu, focusRef, openCellContextMenu]
-  );
-
-  const handleWrapperContextMenu = useCallback(
-    (event: MouseEvent) => {
-      if (!enableContextMenu) {
-        return;
-      }
-      const opened = openWrapperContextMenu(event);
-      if (opened) {
-        beginContextMenuInteraction(focusRef.current);
-      }
-    },
-    [beginContextMenuInteraction, enableContextMenu, focusRef, openWrapperContextMenu]
   );
 
   const openFocusedRowContextMenu = useCallback(() => {
@@ -182,10 +163,7 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
     () =>
       contextMenu ? (
         <ContextMenu
-          items={
-            contextMenu.itemsOverride ??
-            getContextMenuItems(contextMenu.columnKey, contextMenu.item, contextMenu.source)
-          }
+          items={getContextMenuItems(contextMenu.columnKey, contextMenu.item)}
           position={contextMenu.position}
           onClose={handleCloseContextMenu}
         />
@@ -196,7 +174,6 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
   return {
     contextMenuNode,
     handleCellContextMenu,
-    handleWrapperContextMenu,
     openFocusedRowContextMenu,
     contextMenuActiveRef,
     isContextMenuVisible,

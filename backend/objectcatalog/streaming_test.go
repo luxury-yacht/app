@@ -40,7 +40,7 @@ func TestCatalogSyncPublishesState(t *testing.T) {
 	svc := newTestServiceForStreaming()
 	agg := newStreamingAggregator(svc)
 
-	agg.emit(0, []Summary{{Ref: resourcemodel.ResourceRef{Kind: "Pod", Namespace: "default", Name: "obj1"}}})
+	agg.emit([]Summary{{Ref: resourcemodel.ResourceRef{Kind: "Pod", Namespace: "default", Name: "obj1"}}})
 	if agg.start.IsZero() || agg.firstFlush.IsZero() {
 		t.Fatalf("expected aggregator to record timing on first emit")
 	}
@@ -79,7 +79,7 @@ func TestStreamingEmitsMaintainStoreIncrementally(t *testing.T) {
 	agg := newStreamingAggregator(svc)
 
 	emitPod := func(name string) {
-		agg.emit(0, []Summary{{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: name, UID: "uid-" + name}, Scope: ScopeNamespace}})
+		agg.emit([]Summary{{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: name, UID: "uid-" + name}, Scope: ScopeNamespace}})
 	}
 
 	emitPod("a")
@@ -108,7 +108,7 @@ func TestEmitSummariesRoutesToAggregator(t *testing.T) {
 	agg := newStreamingAggregator(newTestServiceForStreaming())
 	summaries := []Summary{{Ref: resourcemodel.ResourceRef{Name: "obj"}}}
 
-	result, handled, err := emitSummaries(0, agg, summaries, nil, true)
+	result, handled, err := emitSummaries(agg, summaries, nil, true)
 	if err != nil || !handled {
 		t.Fatalf("expected handled success, got handled=%v err=%v", handled, err)
 	}
@@ -150,7 +150,7 @@ func TestServiceStreamingSubscriptionReceivesUpdates(t *testing.T) {
 	}
 
 	agg := newStreamingAggregator(svc)
-	agg.emit(0, []Summary{{Ref: resourcemodel.ResourceRef{Kind: "Pod", Name: "p1"}}})
+	agg.emit([]Summary{{Ref: resourcemodel.ResourceRef{Kind: "Pod", Name: "p1"}}})
 
 	select {
 	case update := <-updates:
@@ -181,7 +181,7 @@ func TestStreamingAggregatorEmitsOutOfOrderBatches(t *testing.T) {
 		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Namespace", Resource: "namespaces", Namespace: "", Name: "default"}, Scope: ScopeCluster},
 	}
 
-	agg.emit(5, summaries)
+	agg.emit(summaries)
 
 	result := svc.Query(QueryOptions{Limit: 10})
 	if len(result.Items) != 1 {
@@ -201,7 +201,7 @@ func TestCatalogSyncReplacesStaleObjects(t *testing.T) {
 		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "survivor", UID: "uid-survivor"}, Scope: ScopeNamespace},
 		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "stale", UID: "uid-stale"}, Scope: ScopeNamespace},
 	}
-	agg.emit(0, rows)
+	agg.emit(rows)
 	publishTestSummaries(svc, rows, descriptors)
 
 	result := svc.Query(QueryOptions{Limit: 10})
@@ -211,7 +211,7 @@ func TestCatalogSyncReplacesStaleObjects(t *testing.T) {
 
 	agg = newStreamingAggregator(svc)
 	rows = rows[:1]
-	agg.emit(0, rows)
+	agg.emit(rows)
 	publishTestSummaries(svc, rows, descriptors)
 
 	result = svc.Query(QueryOptions{Limit: 10})

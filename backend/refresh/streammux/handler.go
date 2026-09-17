@@ -58,18 +58,10 @@ type Config struct {
 
 // Handler multiplexes subscriptions over a named Wails stream.
 type Handler struct {
-	adapter                    Adapter
-	logger                     containerlogsstream.Logger
-	telemetry                  *telemetry.Recorder
-	clusterID                  string
-	clusterName                string
-	streamName                 string
-	sendReset                  bool
-	allowClusterScopedRequests bool
-	resolveClusterName         func(clusterID string) string
-	sessionsMu                 sync.Mutex
-	sessions                   map[*session]struct{}
-	stopped                    bool
+	config     Config
+	sessionsMu sync.Mutex
+	sessions   map[*session]struct{}
+	stopped    bool
 }
 
 // NewHandler constructs a named-stream multiplexer handler.
@@ -85,16 +77,8 @@ func NewHandler(cfg Config) (*Handler, error) {
 		return nil, errors.New("stream name is required")
 	}
 	return &Handler{
-		adapter:                    cfg.Adapter,
-		logger:                     cfg.Logger,
-		telemetry:                  cfg.Telemetry,
-		clusterID:                  cfg.ClusterID,
-		clusterName:                cfg.ClusterName,
-		streamName:                 cfg.StreamName,
-		sendReset:                  cfg.SendReset,
-		allowClusterScopedRequests: cfg.AllowClusterScopedRequests,
-		resolveClusterName:         cfg.ResolveClusterName,
-		sessions:                   make(map[*session]struct{}),
+		config:   cfg,
+		sessions: make(map[*session]struct{}),
 	}, nil
 }
 
@@ -107,14 +91,13 @@ func (h *Handler) Handle(conn Conn, ctx context.Context) {
 		return
 	}
 
-	session := newSession(
-		conn, Config{Adapter: h.adapter, Logger: h.logger, Telemetry: h.telemetry, ClusterID: h.clusterID, ClusterName: h.clusterName, StreamName: h.streamName, SendReset: h.sendReset, AllowClusterScopedRequests: h.allowClusterScopedRequests, ResolveClusterName: h.resolveClusterName})
+	session := newSession(conn, h.config)
 	h.sessions[session] = struct{}{}
 	h.sessionsMu.Unlock()
 
-	if h.telemetry != nil {
-		h.telemetry.RecordStreamConnect(h.streamName)
-		defer h.telemetry.RecordStreamDisconnect(h.streamName)
+	if h.config.Telemetry != nil {
+		h.config.Telemetry.RecordStreamConnect(h.config.StreamName)
+		defer h.config.Telemetry.RecordStreamDisconnect(h.config.StreamName)
 	}
 	defer func() {
 		h.sessionsMu.Lock()
@@ -161,16 +144,8 @@ func (h *Handler) InvalidateClusterSubscriptions(clusterID string) {
 }
 
 type session struct {
-	conn                      Conn
-	adapter                   Adapter
-	logger                    containerlogsstream.Logger
-	telemetry                 *telemetry.Recorder
-	clusterID                 string
-	clusterName               string
-	streamName                string
-	sendReset                 bool
-	allowClusterScopedRequest bool
-	resolveClusterName        func(clusterID string) string
+	conn   Conn
+	config Config
 
 	deliveryMu sync.Mutex // Orders replacement ACKs after the old subscription's final delivery.
 	mu         sync.Mutex
@@ -190,19 +165,11 @@ type sessionSubscription struct {
 
 func newSession(conn Conn, cfg Config) *session {
 	return &session{
-		conn:                      conn,
-		adapter:                   cfg.Adapter,
-		logger:                    cfg.Logger,
-		telemetry:                 cfg.Telemetry,
-		clusterID:                 cfg.ClusterID,
-		clusterName:               cfg.ClusterName,
-		streamName:                cfg.StreamName,
-		sendReset:                 cfg.SendReset,
-		allowClusterScopedRequest: cfg.AllowClusterScopedRequests,
-		resolveClusterName:        cfg.ResolveClusterName,
-		subs:                      make(map[string]*sessionSubscription),
-		outgoing:                  make(chan ServerMessage, config.StreamMuxOutgoingBufferSize),
-		done:                      make(chan struct{}),
+		conn:     conn,
+		config:   cfg,
+		subs:     make(map[string]*sessionSubscription),
+		outgoing: make(chan ServerMessage, config.StreamMuxOutgoingBufferSize),
+		done:     make(chan struct{}),
 	}
 }
 
@@ -245,7 +212,7 @@ func (s *session) readLoop() {
 		var msg ClientMessage
 		if err := s.conn.ReceiveJSON(&msg); err != nil {
 			if s.doneError() == nil {
-				s.logger.Debug(fmt.Sprintf("stream mux connection closed: %v", err), logsources.StreamMux)
+				s.config.Logger.Debug(fmt.Sprintf("stream mux connection closed: %v", err), logsources.StreamMux)
 			}
 			return
 		}
@@ -283,14 +250,14 @@ func (s *session) handleSubscribe(msg ClientMessage) {
 	clusterName := s.clusterNameFor(clusterID)
 
 	_, trimmed := refresh.SplitClusterScope(msg.Scope)
-	selector, err := s.adapter.ParseSelector(clusterID, msg.Domain, trimmed)
+	selector, err := s.config.Adapter.ParseSelector(clusterID, msg.Domain, trimmed)
 	if err != nil {
 		s.sendError(clusterID, msg.Domain, msg.Scope, err)
 		return
 	}
 	normalized := selector.CanonicalScope()
 
-	sub, err := s.adapter.Subscribe(selector)
+	sub, err := s.config.Adapter.Subscribe(selector)
 	if err != nil {
 		s.sendError(clusterID, msg.Domain, msg.Scope, err)
 		return
@@ -309,7 +276,7 @@ func (s *session) handleSubscribe(msg ClientMessage) {
 	// scope before replaying anything, or reconnect would replay the same backlog
 	// and disconnect again. deliveryMu prevents competing subscription delivery;
 	// the writer may only increase the available capacity while we decide.
-	if s.sendReset && len(resume.updates) > cap(s.outgoing)-len(s.outgoing) {
+	if s.config.SendReset && len(resume.updates) > cap(s.outgoing)-len(s.outgoing) {
 		resume.ok = false
 		resume.updates = nil
 	}
@@ -343,26 +310,29 @@ type subscriptionResume struct {
 func (s *session) resumeSubscription(selector Selector, token, domain, scope string) subscriptionResume {
 	resumeToken := parseResumeToken(token)
 	result := subscriptionResume{}
-	if resumeToken > 0 {
-		result.updates, result.ok = s.adapter.Resume(selector, resumeToken)
-		if !result.ok {
-			s.logger.Warn(fmt.Sprintf("stream mux: resume token expired for %s/%s", domain, scope), logsources.StreamMux)
-		}
-		if result.ok && len(result.updates) > 0 {
-			// Track the highest buffered sequence to skip duplicates from live delivery.
-			result.highWater = resumeToken
-			for _, update := range result.updates {
-				if sequence, ok := parseSequence(update.Sequence); ok && sequence > result.highWater {
-					result.highWater = sequence
-				}
-			}
+	if resumeToken == 0 {
+		return result
+	}
+	result.updates, result.ok = s.config.Adapter.Resume(selector, resumeToken)
+	if !result.ok {
+		s.config.Logger.Warn(fmt.Sprintf("stream mux: resume token expired for %s/%s", domain, scope), logsources.StreamMux)
+		return result
+	}
+	if len(result.updates) == 0 {
+		return result
+	}
+	// Track the highest buffered sequence to skip duplicates from live delivery.
+	result.highWater = resumeToken
+	for _, update := range result.updates {
+		if sequence, ok := parseSequence(update.Sequence); ok && sequence > result.highWater {
+			result.highWater = sequence
 		}
 	}
 	return result
 }
 
 func (s *session) enqueueSubscriptionReset(domain, scope, clusterID, clusterName string, resumeOK bool) {
-	if s.sendReset && !resumeOK {
+	if s.config.SendReset && !resumeOK {
 		s.enqueue(ServerMessage{
 			Type:        MessageTypeReset,
 			Domain:      domain,
@@ -391,7 +361,7 @@ func (s *session) handleCancel(msg ClientMessage) {
 	}
 
 	_, trimmed := refresh.SplitClusterScope(msg.Scope)
-	selector, err := s.adapter.ParseSelector(clusterID, msg.Domain, trimmed)
+	selector, err := s.config.Adapter.ParseSelector(clusterID, msg.Domain, trimmed)
 	if err != nil {
 		s.sendError(clusterID, msg.Domain, msg.Scope, err)
 		return
@@ -533,12 +503,12 @@ func (s *session) handleBackpressure(msg ServerMessage) {
 	if msg.Type == MessageTypeHeartbeat {
 		return
 	}
-	if s.telemetry != nil {
-		s.telemetry.RecordStreamDelivery(s.streamName, 0, 1)
+	if s.config.Telemetry != nil {
+		s.config.Telemetry.RecordStreamDelivery(s.config.StreamName, 0, 1)
 	}
 	// A shared queue may contain another cluster's last signal. Disconnecting
 	// forces every subscription to resume or reset; dropping one frame cannot.
-	s.logger.Warn("stream mux: outgoing buffer full, reconnect required", logsources.StreamMux, s.clusterID, s.clusterName)
+	s.config.Logger.Warn("stream mux: outgoing buffer full, reconnect required", logsources.StreamMux, s.config.ClusterID, s.config.ClusterName)
 	s.shutdown()
 }
 
@@ -559,8 +529,8 @@ func (s *session) writeLoop(ctx context.Context) {
 		case <-heartbeat.C:
 			if err := s.writeMessage(ServerMessage{
 				Type:        MessageTypeHeartbeat,
-				ClusterID:   s.clusterID,
-				ClusterName: s.clusterName,
+				ClusterID:   s.config.ClusterID,
+				ClusterName: s.config.ClusterName,
 			}); err != nil {
 				return
 			}
@@ -574,7 +544,7 @@ func (s *session) writeMessage(msg ServerMessage) error {
 	// carry it identically.
 	msg = s.prepareOutgoingMessage(msg)
 	if err := s.conn.SendJSON(msg); err != nil {
-		s.logger.Debug(fmt.Sprintf("stream mux connection closed while sending: %v", err), logsources.StreamMux)
+		s.config.Logger.Debug(fmt.Sprintf("stream mux connection closed while sending: %v", err), logsources.StreamMux)
 		s.shutdown()
 		return err
 	}
@@ -592,14 +562,12 @@ func (s *session) resolveClusterID(msg ClientMessage) (string, error) {
 		scopeClusterID = scopeClusterIDs[0]
 	}
 
-	if !s.allowClusterScopedRequest {
-		if msg.ClusterID != "" && msg.ClusterID != s.clusterID {
+	if !s.config.AllowClusterScopedRequests {
+		if (msg.ClusterID != "" && msg.ClusterID != s.config.ClusterID) ||
+			(scopeClusterID != "" && scopeClusterID != s.config.ClusterID) {
 			return "", errors.New("cluster mismatch")
 		}
-		if scopeClusterID != "" && scopeClusterID != s.clusterID {
-			return "", errors.New("cluster mismatch")
-		}
-		return s.clusterID, nil
+		return s.config.ClusterID, nil
 	}
 	clusterID := strings.TrimSpace(msg.ClusterID)
 	if clusterID == "" {
@@ -617,15 +585,15 @@ func (s *session) resolveClusterID(msg ClientMessage) (string, error) {
 // clusterNameFor resolves a display name for the given cluster ID.
 func (s *session) clusterNameFor(clusterID string) string {
 	if clusterID == "" {
-		return s.clusterName
+		return s.config.ClusterName
 	}
-	if s.resolveClusterName != nil {
-		if resolved := s.resolveClusterName(clusterID); resolved != "" {
+	if s.config.ResolveClusterName != nil {
+		if resolved := s.config.ResolveClusterName(clusterID); resolved != "" {
 			return resolved
 		}
 	}
-	if clusterID == s.clusterID {
-		return s.clusterName
+	if clusterID == s.config.ClusterID {
+		return s.config.ClusterName
 	}
 	return ""
 }
@@ -647,7 +615,7 @@ func (s *session) sendError(clusterID, domain, scope string, err error) {
 	}
 	resolvedClusterID := strings.TrimSpace(clusterID)
 	if resolvedClusterID == "" {
-		resolvedClusterID = s.clusterID
+		resolvedClusterID = s.config.ClusterID
 	}
 	clusterName := s.clusterNameFor(resolvedClusterID)
 	msg := ServerMessage{

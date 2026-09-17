@@ -13,7 +13,7 @@ func TestRelatedLinksRequireUnambiguousClusterDiscovery(t *testing.T) {
 	require.Same(t, &link, svc.ResolveRelatedResourceLink(&link), "loading discovery must leave the source readable")
 
 	desc := builtinDescriptor("karpenter.k8s.aws", "v1beta1", "EC2NodeClass", "ec2nodeclasses", false)
-	svc.identity.replaceDiscovered([]resourceDescriptor{
+	svc.identity.replaceDiscovered([]Descriptor{
 		desc,
 		builtinDescriptor("another.provider", "v1", "EC2NodeClass", "classes", false),
 	})
@@ -38,7 +38,7 @@ func TestRelatedLinksRequireUnambiguousClusterDiscovery(t *testing.T) {
 		unresolved := &resourcemodel.ResourceLink{Display: &display}
 		require.Same(t, unresolved, svc.ResolveRelatedResourceLink(unresolved), "must not guess missing or conflicting identity: %+v", display)
 	}
-	svc.identity.replaceDiscovered([]resourceDescriptor{desc, builtinDescriptor(desc.Group, "v1", desc.Kind, desc.Resource, false)})
+	svc.identity.replaceDiscovered([]Descriptor{desc, builtinDescriptor(desc.Group, "v1", desc.Kind, desc.Resource, false)})
 	require.Same(t, &link, svc.ResolveRelatedResourceLink(&link), "multiple discovered versions must not depend on map iteration order")
 	svc.identity.replaceDiscovered(nil)
 	require.Same(t, &link, svc.ResolveRelatedResourceLink(&link), "CRD removal must remove discovery-based links")
