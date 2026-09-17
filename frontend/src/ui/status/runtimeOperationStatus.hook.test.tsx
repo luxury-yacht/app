@@ -145,6 +145,46 @@ describe('useRuntimeOperationStatus', () => {
     expect(rows?.portForwardSessions.map((session) => session.id)).toEqual(['pf-a']);
   });
 
+  it.each([
+    { resource: 'runtime-operations', read: runtime.listOperations },
+    { resource: 'shell-sessions', read: runtime.listShells },
+  ])('continues hydration after $resource fails', async ({ resource, read }) => {
+    const failure = new Error('initial read failed');
+    read.mockRejectedValueOnce(failure);
+
+    await render();
+
+    expect(onInitialReadError).toHaveBeenCalledWith(failure, resource);
+    expect(runtime.listOperations).toHaveBeenCalledTimes(1);
+    expect(runtime.listShells).toHaveBeenCalledTimes(1);
+    expect(runtime.listForwards).toHaveBeenCalledTimes(1);
+    expect(rows?.portForwardSessions.map((session) => session.id)).toEqual(['pf-a']);
+    expect(runtime.listOperations.mock.invocationCallOrder[0]).toBeLessThan(
+      runtime.listShells.mock.invocationCallOrder[0]
+    );
+    expect(runtime.listShells.mock.invocationCallOrder[0]).toBeLessThan(
+      runtime.listForwards.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('does not start port-forward hydration after unmounting during the shell read', async () => {
+    let resolveShells: ((sessions: never[]) => void) | undefined;
+    runtime.listShells.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveShells = resolve;
+        })
+    );
+    await render();
+    expect(runtime.listShells).toHaveBeenCalledTimes(1);
+    expect(runtime.listForwards).not.toHaveBeenCalled();
+
+    unmount();
+    await act(async () => requireValue(resolveShells, 'pending shell read')([]));
+
+    expect(runtime.listForwards).not.toHaveBeenCalled();
+  });
+
   it('unsubscribes and stops the initial read sequence when unmounted', async () => {
     let resolveOperations: ((operations: (typeof operation)[]) => void) | undefined;
     runtime.listOperations.mockImplementationOnce(

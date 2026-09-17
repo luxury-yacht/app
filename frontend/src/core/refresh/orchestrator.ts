@@ -209,35 +209,33 @@ class RefreshOrchestrator {
 
   private handleClusterBecameServiceable(clusterId: string): void {
     const pending = this.clusterRuntimes.get(clusterId)?.takeDeferredReadinessRequests() ?? [];
-    if (pending.length > 0) {
-      for (const request of pending) {
-        const { domain, scope } = request;
-        if (!this.configs.has(domain)) {
-          continue;
-        }
-        // The lease may have been released (view left, cluster pruned) while
-        // the cluster was warming up — held work dies with its demand.
-        if (!this.isScopedDomainEnabledInternal(domain, scope)) {
-          continue;
-        }
-        if (!this.isScopeClusterServiceable(scope)) {
-          // A multi-cluster scope with another cluster still warming.
-          this.recordPendingClusterReadiness(domain, scope, request);
-          continue;
-        }
-        void this.fetchScopedDomain(domain, scope, {
-          isManual: request.isManual,
-          ...(request.coalesce ? { coalesce: true } : {}),
-          streamSignal: request.streamSignal,
-          queryReconcile: request.queryReconcile,
-        }).catch((error) => {
-          logWarning(
-            `[refresh] deferred ${domain} fetch after cluster ${clusterId} became serviceable failed: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        });
+    for (const request of pending) {
+      const { domain, scope } = request;
+      if (!this.configs.has(domain)) {
+        continue;
       }
+      // The lease may have been released (view left, cluster pruned) while
+      // the cluster was warming up — held work dies with its demand.
+      if (!this.isScopedDomainEnabledInternal(domain, scope)) {
+        continue;
+      }
+      if (!this.isScopeClusterServiceable(scope)) {
+        // A multi-cluster scope with another cluster still warming.
+        this.recordPendingClusterReadiness(domain, scope, request);
+        continue;
+      }
+      void this.fetchScopedDomain(domain, scope, {
+        isManual: request.isManual,
+        ...(request.coalesce ? { coalesce: true } : {}),
+        streamSignal: request.streamSignal,
+        queryReconcile: request.queryReconcile,
+      }).catch((error) => {
+        logWarning(
+          `[refresh] deferred ${domain} fetch after cluster ${clusterId} became serviceable failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      });
     }
     // Snapshotless streams have no queued fetch to wake them. Re-evaluate all
     // retained streaming leases whenever the activation hold is released.
@@ -1674,9 +1672,18 @@ class RefreshOrchestrator {
       return;
     }
 
+    await this.executeFetch(domain, execution, options);
+  }
+
+  private async executeFetch<K extends RefreshDomain>(
+    domain: K,
+    execution: ScopedFetchExecution<K>,
+    options: DomainFetchOptions
+  ): Promise<void> {
+    const { scope, previousState } = execution;
     try {
       const result = await fetchSnapshot<DomainPayloadMap[K]>(domain, {
-        scope: normalizedScope,
+        scope,
         signal: execution.controller.signal,
         ifNoneMatch: previousState.sourceVersion ?? previousState.etag,
         manual: Boolean(options.isManual && !isResourceStreamDomain(domain)),

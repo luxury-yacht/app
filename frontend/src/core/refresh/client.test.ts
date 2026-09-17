@@ -35,6 +35,136 @@ afterEach(async () => {
 });
 
 describe('fetchSnapshot', () => {
+  test('retries transient network failures with backoff and preserves request context', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockRejectedValueOnce(new TypeError('Load failed'))
+      .mockResolvedValueOnce({ status: 304 });
+    globalThis.fetch = fetchMock;
+    const { fetchSnapshot } = await import('./client');
+    const controller = new AbortController();
+    const request = fetchSnapshot('catalog', {
+      scope: 'cluster-a|namespace:default',
+      signal: controller.signal,
+      ifNoneMatch: 'previous-version',
+      correlationId: 'broker-read-10',
+    });
+
+    await vi.advanceTimersByTimeAsync(199);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(399);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(request).resolves.toEqual({ notModified: true });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    for (const call of fetchMock.mock.calls) {
+      expect(call).toEqual([
+        '/api/v2/snapshots/catalog?scope=cluster-a%7Cnamespace%3Adefault',
+        {
+          signal: controller.signal,
+          headers: {
+            'X-Correlation-ID': 'broker-read-10',
+            'If-None-Match': 'previous-version',
+          },
+        },
+      ]);
+    }
+  });
+
+  test('stops after three network attempts and preserves the final failure', async () => {
+    vi.useFakeTimers();
+    const failure = new TypeError('Failed to fetch');
+    const fetchMock = vi.fn().mockRejectedValue(failure);
+    globalThis.fetch = fetchMock;
+    const { fetchSnapshot } = await import('./client');
+    const outcome = fetchSnapshot('catalog').catch((error: unknown) => error);
+
+    await vi.runAllTimersAsync();
+
+    expect(await outcome).toBe(failure);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test.each([
+    { failure: new DOMException('Cancelled', 'AbortError'), aborted: false },
+    { failure: new TypeError('Invalid request'), aborted: false },
+    { failure: new TypeError('Failed to fetch'), aborted: true },
+  ])('does not retry $failure when aborted=$aborted', async ({ failure, aborted }) => {
+    const controller = new AbortController();
+    if (aborted) {
+      controller.abort();
+    }
+    const fetchMock = vi.fn().mockRejectedValue(failure);
+    globalThis.fetch = fetchMock;
+    const { fetchSnapshot } = await import('./client');
+
+    await expect(fetchSnapshot('catalog', { signal: controller.signal })).rejects.toBe(failure);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('cancels manual job polling without reading a snapshot or leaving timers', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ jobId: 'job-1', state: 'running' }),
+    });
+    globalThis.fetch = fetchMock;
+    const { fetchSnapshot } = await import('./client');
+    const controller = new AbortController();
+    const outcome = fetchSnapshot('object-details', {
+      scope: 'cluster-a|object',
+      manual: true,
+      signal: controller.signal,
+      correlationId: 'broker-read-11',
+    }).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    controller.abort();
+
+    expect(await outcome).toMatchObject({ name: 'AbortError' });
+    expect(vi.getTimerCount()).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init.signal.aborted).toBe(true);
+      expect(init.headers['X-Correlation-ID']).toBe('broker-read-11');
+    }
+  });
+
+  test('manual refresh carries correlation through the job and ignores the previous etag', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ jobId: 'job-1', state: 'queued' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ jobId: 'job-1', state: 'succeeded' }),
+      })
+      .mockResolvedValueOnce({ status: 304 });
+    globalThis.fetch = fetchMock;
+    const { fetchSnapshot } = await import('./client');
+
+    await fetchSnapshot('object-details', {
+      scope: 'cluster-a|object',
+      manual: true,
+      correlationId: 'broker-read-12',
+      ifNoneMatch: 'old-version',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init.headers['X-Correlation-ID']).toBe('broker-read-12');
+      expect(init.headers['If-None-Match']).toBeUndefined();
+    }
+  });
+
   test('fetches snapshot data with scope and conditional headers', async () => {
     const responseBody = {
       domain: 'namespace-workloads',

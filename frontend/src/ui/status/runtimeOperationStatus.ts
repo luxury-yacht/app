@@ -48,52 +48,44 @@ export function useRuntimeOperationStatus(
       return;
     }
     let cancelled = false;
+    const readInitialList = async <T>(
+      resource: RuntimeOperationStatusReadResource,
+      read: () => Promise<T>,
+      receive: (value: T) => void
+    ): Promise<'cancelled' | 'settled'> => {
+      try {
+        const value = await requestAppState({ resource, adapter: 'runtime-read', read });
+        if (cancelled) {
+          return 'cancelled';
+        }
+        receive(value);
+      } catch (error) {
+        onInitialReadError?.(error, resource);
+        // Runtime events will repopulate the list if the initial read fails.
+      }
+      return 'settled';
+    };
     const load = async () => {
-      try {
-        const operations = await requestAppState({
-          resource: 'runtime-operations',
-          adapter: 'runtime-read',
-          read: () => readRuntimeOperations(),
-        });
-        if (cancelled) {
-          return;
-        }
-        dispatch({ type: 'runtime-operations:list', operations: operations || [] });
-      } catch (error) {
-        onInitialReadError?.(error, 'runtime-operations');
-        // Runtime events will repopulate the list if the initial read fails.
+      const operationsRead = await readInitialList(
+        'runtime-operations',
+        readRuntimeOperations,
+        (rows) => dispatch({ type: 'runtime-operations:list', operations: rows || [] })
+      );
+      if (operationsRead === 'cancelled') {
+        return;
       }
-      try {
-        const shellList = await requestAppState({
-          resource: 'shell-sessions',
-          adapter: 'runtime-read',
-          read: () => readShellSessions(),
-        });
-        if (cancelled) {
-          return;
-        }
-        dispatch({ type: 'object-shell:list', sessions: shellList || [] });
-      } catch (error) {
-        onInitialReadError?.(error, 'shell-sessions');
-        // Runtime events will repopulate the list if the initial read fails.
+      const shellsRead = await readInitialList('shell-sessions', readShellSessions, (rows) =>
+        dispatch({ type: 'object-shell:list', sessions: rows || [] })
+      );
+      if (shellsRead === 'cancelled') {
+        return;
       }
-      try {
-        const portForwardList = await requestAppState({
-          resource: 'port-forward-sessions',
-          adapter: 'runtime-read',
-          read: () => readPortForwardSessions(),
-        });
-        if (cancelled) {
-          return;
-        }
+      await readInitialList('port-forward-sessions', readPortForwardSessions, (rows) =>
         dispatch({
           type: 'portforward:list',
-          sessions: (portForwardList || []).map(normalizePortForwardSession),
-        });
-      } catch (error) {
-        onInitialReadError?.(error, 'port-forward-sessions');
-        // Runtime events will repopulate the list if the initial read fails.
-      }
+          sessions: (rows || []).map(normalizePortForwardSession),
+        })
+      );
     };
     void load();
     return () => {

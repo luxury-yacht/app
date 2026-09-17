@@ -886,11 +886,7 @@ export function recordBrokerRequestCompleted(
     status: outcome.status,
     durationMs: Math.max(0, outcome.durationMs),
   };
-  if (
-    outcome.error !== null &&
-    outcome.error !== undefined &&
-    (typeof outcome.error === 'object' || typeof outcome.error === 'function')
-  ) {
+  if (isWeakMapKey(outcome.error)) {
     requestByError.set(outcome.error, completed);
   }
   if (reportingInitialized && (outcome.status === 'error' || request.reason === 'user')) {
@@ -906,9 +902,15 @@ export function recordBrokerRequestCompleted(
   activeBrokerRequests.delete(request.id);
 }
 
+const userActionStatusLabels = {
+  started: 'Started',
+  completed: 'Completed',
+  failed: 'Failed',
+};
+
 const recordUserActionBreadcrumb = (
   userAction: UserActionContext,
-  status: 'started' | 'completed' | 'failed'
+  status: keyof typeof userActionStatusLabels
 ): void => {
   if (!reportingInitialized) {
     return;
@@ -917,7 +919,7 @@ const recordUserActionBreadcrumb = (
     type: 'user',
     category: `ui.action.${status}`,
     level: status === 'failed' ? 'error' : 'info',
-    message: `${status === 'started' ? 'Started' : status === 'failed' ? 'Failed' : 'Completed'} ${userAction.action}`,
+    message: `${userActionStatusLabels[status]} ${userAction.action}`,
     data: {
       operationId: userAction.id,
       action: userAction.action,
@@ -942,11 +944,7 @@ export async function runUserAction<T>(action: string, work: () => T | Promise<T
     recordUserActionBreadcrumb(userAction, 'completed');
     return result;
   } catch (error) {
-    if (
-      error !== null &&
-      error !== undefined &&
-      (typeof error === 'object' || typeof error === 'function')
-    ) {
+    if (isWeakMapKey(error)) {
       userActionByError.set(error, userAction);
     }
     recordUserActionBreadcrumb(userAction, 'failed');

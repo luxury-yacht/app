@@ -75,6 +75,28 @@ const parseManualRefreshJob = async (response: Response): Promise<ManualRefreshJ
   return job as ManualRefreshJob;
 };
 
+const pollManualRefreshJob = async (
+  initialJob: ManualRefreshJob,
+  signal: AbortSignal,
+  correlationId?: string
+): Promise<ManualRefreshJob> => {
+  let job = initialJob;
+  let pollDelayMs = INITIAL_MANUAL_JOB_POLL_MS;
+  while (job.state === 'queued' || job.state === 'running') {
+    job = await parseManualRefreshJob(
+      await fetch(`/api/v2/jobs/${job.jobId}`, {
+        signal,
+        ...(correlationId ? { headers: { 'X-Correlation-ID': correlationId } } : {}),
+      })
+    );
+    if (job.state === 'queued' || job.state === 'running') {
+      await abortableDelay(pollDelayMs, signal);
+      pollDelayMs = Math.min(MAX_MANUAL_JOB_POLL_MS, pollDelayMs * 2);
+    }
+  }
+  return job;
+};
+
 const waitForManualRefresh = async (
   domain: RefreshDomain,
   scope: string,
@@ -95,7 +117,7 @@ const waitForManualRefresh = async (
   }, MANUAL_REFRESH_TIMEOUT_MS);
 
   try {
-    let job = await parseManualRefreshJob(
+    const startedJob = await parseManualRefreshJob(
       await fetch(`/api/v2/refresh/${domain}`, {
         method: 'POST',
         headers: {
@@ -106,19 +128,7 @@ const waitForManualRefresh = async (
         signal: controller.signal,
       })
     );
-    let pollDelayMs = INITIAL_MANUAL_JOB_POLL_MS;
-    while (job.state === 'queued' || job.state === 'running') {
-      job = await parseManualRefreshJob(
-        await fetch(`/api/v2/jobs/${job.jobId}`, {
-          signal: controller.signal,
-          ...(correlationId ? { headers: { 'X-Correlation-ID': correlationId } } : {}),
-        })
-      );
-      if (job.state === 'queued' || job.state === 'running') {
-        await abortableDelay(pollDelayMs, controller.signal);
-        pollDelayMs = Math.min(MAX_MANUAL_JOB_POLL_MS, pollDelayMs * 2);
-      }
-    }
+    const job = await pollManualRefreshJob(startedJob, controller.signal, correlationId);
     if (job.state === 'failed' || job.state === 'cancelled') {
       throw new Error(job.error || `Manual refresh failed for ${domain}`);
     }
@@ -143,6 +153,68 @@ export function parseRefreshSnapshotValue<TPayload>(
   return value;
 }
 
+const requestSnapshot = async (
+  domain: RefreshDomain,
+  options: FetchSnapshotOptions
+): Promise<Response> => {
+  const params = new URLSearchParams();
+  if (options.scope) {
+    params.set('scope', options.scope);
+  }
+
+  const headers: Record<string, string> = {};
+  if (options.correlationId) {
+    headers['X-Correlation-ID'] = options.correlationId;
+  }
+  if (options.ifNoneMatch && !options.manual) {
+    headers['If-None-Match'] = options.ifNoneMatch;
+  }
+
+  const query = params.size > 0 ? `?${params.toString()}` : '';
+  return fetch(`/api/v2/snapshots/${domain}${query}`, {
+    signal: options.signal,
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
+  });
+};
+
+const isRetryableNetworkError = (error: unknown, signal?: AbortSignal): boolean => {
+  if (signal?.aborted) {
+    return false;
+  }
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return false;
+  }
+  if (error instanceof TypeError) {
+    const message = error.message.toLowerCase();
+    return message.includes('failed to fetch') || message.includes('load failed');
+  }
+  return false;
+};
+
+const requestSnapshotWithRetry = async (
+  domain: RefreshDomain,
+  options: FetchSnapshotOptions
+): Promise<Response> => {
+  const maxAttempts = 3;
+  let response: Response | undefined;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      response = await requestSnapshot(domain, options);
+      break;
+    } catch (error) {
+      if (!isRetryableNetworkError(error, options.signal) || attempt + 1 >= maxAttempts) {
+        throw error;
+      }
+      const delayMs = Math.min(1000, 200 * 2 ** attempt);
+      await delay(delayMs);
+    }
+  }
+  if (!response) {
+    throw new Error('Snapshot request failed');
+  }
+  return response;
+};
+
 export async function fetchSnapshot<TPayload>(
   domain: RefreshDomain,
   options: FetchSnapshotOptions = {}
@@ -153,59 +225,7 @@ export async function fetchSnapshot<TPayload>(
     }
     await waitForManualRefresh(domain, options.scope, options.signal, options.correlationId);
   }
-  const buildRequest = async () => {
-    const params = new URLSearchParams();
-
-    if (options.scope) {
-      params.set('scope', options.scope);
-    }
-
-    const headers: Record<string, string> = {};
-    if (options.correlationId) {
-      headers['X-Correlation-ID'] = options.correlationId;
-    }
-    if (options.ifNoneMatch && !options.manual) {
-      headers['If-None-Match'] = options.ifNoneMatch;
-    }
-
-    const query = params.size > 0 ? `?${params.toString()}` : '';
-    return fetch(`/api/v2/snapshots/${domain}${query}`, {
-      signal: options.signal,
-      headers: Object.keys(headers).length > 0 ? headers : undefined,
-    });
-  };
-
-  const isRetryableNetworkError = (error: unknown) => {
-    if (options.signal?.aborted) {
-      return false;
-    }
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      return false;
-    }
-    if (error instanceof TypeError) {
-      const message = error.message.toLowerCase();
-      return message.includes('failed to fetch') || message.includes('load failed');
-    }
-    return false;
-  };
-
-  const maxAttempts = 3;
-  let response: Response | undefined;
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    try {
-      response = await buildRequest();
-      break;
-    } catch (error) {
-      if (!isRetryableNetworkError(error) || attempt + 1 >= maxAttempts) {
-        throw error;
-      }
-      const delayMs = Math.min(1000, 200 * 2 ** attempt);
-      await delay(delayMs);
-    }
-  }
-  if (!response) {
-    throw new Error('Snapshot request failed');
-  }
+  const response = await requestSnapshotWithRetry(domain, options);
 
   if (response.status === 304) {
     return { notModified: true };
