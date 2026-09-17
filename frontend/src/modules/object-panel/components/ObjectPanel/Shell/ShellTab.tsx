@@ -5,7 +5,7 @@
 import * as XtermClipboard from '@xterm/addon-clipboard';
 import * as XtermFit from '@xterm/addon-fit';
 import * as Xterm from '@xterm/xterm';
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type WheelEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from 'react';
 import {
   readShellSessionBacklog,
   readShellSessions,
@@ -22,9 +22,7 @@ import {
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ContextMenu from '@shared/components/ContextMenu';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
-import Tooltip from '@shared/components/Tooltip';
 import { useVirtualScrollbar } from '@shared/scrollbars/useVirtualScrollbar';
 import { resolveTerminalTheme, toXtermThemeDefinition } from '@shared/terminal/terminalTheme';
 import { useDockablePanelState } from '@ui/dockable';
@@ -36,6 +34,7 @@ import {
   SendShellInput,
   StartShellSession,
 } from '@/core/backend-api';
+import ShellConnectionControls from './ShellConnectionControls';
 import './ShellTab.css';
 
 interface ShellTabProps {
@@ -46,6 +45,12 @@ interface ShellTabProps {
   isActive: boolean;
   availableContainers: string[];
   clusterId?: string | null;
+}
+
+interface ShellTarget {
+  clusterId: string;
+  namespace: string;
+  resourceName: string;
 }
 
 type ShellStatus = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
@@ -63,6 +68,131 @@ interface ShellContextMenuState {
 
 const ANSI_ESCAPE_SEQUENCE_PATTERN_SOURCE = '\\u001b\\[[0-9;]*[A-Za-z]';
 
+function deriveConnectionFailureReason(output: string, fallbackReason?: string): string {
+  const normalizedFallback = fallbackReason?.trim();
+  if (normalizedFallback) {
+    return normalizedFallback;
+  }
+
+  const normalizedOutput = output
+    .replace(new RegExp(ANSI_ESCAPE_SEQUENCE_PATTERN_SOURCE, 'g'), '')
+    .replace(/\r/g, '\n');
+  const lines = normalizedOutput
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length === 0) {
+    return 'Shell command failed to start in the selected container.';
+  }
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (
+      /not found|no such file|exec failed|executable file|permission denied|exit code/i.test(line)
+    ) {
+      return line;
+    }
+  }
+
+  return lines[lines.length - 1];
+}
+
+function trimBacklogOverlap(backlog: string, bufferedOutput: string): string {
+  if (!backlog || !bufferedOutput) {
+    return bufferedOutput;
+  }
+  const maxOverlap = Math.min(backlog.length, bufferedOutput.length);
+  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+    if (backlog.endsWith(bufferedOutput.slice(0, overlap))) {
+      return bufferedOutput.slice(overlap);
+    }
+  }
+  return bufferedOutput;
+}
+
+async function startTrackedShellSession(
+  clusterId: string,
+  request: Parameters<typeof StartShellSession>[1],
+  isCancelled: () => boolean
+): Promise<types.ShellSession | null> {
+  const session = await StartShellSession(clusterId, request);
+  if (!session) {
+    throw new Error('Shell session was not created');
+  }
+  if (isCancelled()) {
+    await CloseShellSession(session.sessionId);
+    return null;
+  }
+  return session;
+}
+
+async function createDebugShellContainer(
+  target: ShellTarget,
+  options: Parameters<typeof runCreateDebugContainer>[1]
+): Promise<types.DebugContainerResponse> {
+  const response = await runCreateDebugContainer(
+    buildObjectActionTarget(
+      {
+        clusterId: target.clusterId,
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: target.namespace,
+        name: target.resourceName,
+      },
+      'create debug container for'
+    ),
+    options
+  );
+  const debugContainer = response.debugContainer as types.DebugContainerResponse | undefined;
+  if (!debugContainer) {
+    throw new Error('Backend did not return debug container details');
+  }
+  return debugContainer;
+}
+
+type TrackedShellSession = Awaited<ReturnType<typeof readShellSessions>>[number];
+
+function attachedShellSession(session: TrackedShellSession): types.ShellSession {
+  return {
+    sessionId: session.sessionId,
+    namespace: session.namespace,
+    podName: session.podName,
+    container: session.container,
+    command: session.command ?? [],
+    containers: [],
+  } as types.ShellSession;
+}
+
+const resolveCustomOption = (selected: string, custom: string): string =>
+  selected === '__custom__' ? custom.trim() : selected;
+
+function handleShellClipboardKey(
+  event: KeyboardEvent,
+  terminal: Xterm.Terminal,
+  copySelection: () => boolean,
+  pasteClipboard: () => Promise<boolean>
+): boolean {
+  if (event.type !== 'keydown' || !(event.ctrlKey || event.metaKey)) {
+    return true;
+  }
+  const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+  const key = event.key.toLowerCase();
+  if (key === 'c' && clipboard?.writeText && terminal.hasSelection() && copySelection()) {
+    event.preventDefault();
+    event.stopPropagation();
+    return false;
+  }
+  if (key === 'v' && clipboard?.readText) {
+    event.preventDefault();
+    event.stopPropagation();
+    void pasteClipboard();
+    return false;
+  }
+  return true;
+}
+
 const ShellTab: React.FC<ShellTabProps> = ({
   namespace,
   resourceName,
@@ -72,8 +202,6 @@ const ShellTab: React.FC<ShellTabProps> = ({
   availableContainers,
   clusterId,
 }) => {
-  const elementIdPrefix = useId();
-  const shellDropdownMenuClassName = 'shell-tab__dropdown-menu';
   const panelState = useDockablePanelState('object-panel');
   const [session, setSession] = useState<types.ShellSession | null>(null);
   const [startDebugContainer, setStartDebugContainer] = useState(false);
@@ -81,7 +209,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const [containerOverride, setContainerOverride] = useState<string | null>(null);
   const [commandOverride, setCommandOverride] = useState<string>('/bin/sh');
   const [customShell, setCustomShell] = useState('');
-  const resolvedShell = commandOverride === '__custom__' ? customShell.trim() : commandOverride;
+  const resolvedShell = resolveCustomOption(commandOverride, customShell);
   const [debugImage, setDebugImage] = useState('busybox:latest');
   const [customImage, setCustomImage] = useState('');
   const [debugTarget, setDebugTarget] = useState<string | null>(null);
@@ -106,7 +234,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const sessionOutputBufferRef = useRef('');
   const skipNextResizeRef = useRef(false);
   const renderedSessionIdRef = useRef<string | null>(null);
-  const attachInFlightRef = useRef(false);
+  const attachInFlightRef = useRef<ShellTarget | null>(null);
   const [terminalReady, setTerminalReady] = useState(false);
   const resolvedClusterId = clusterId?.trim() ?? '';
   const writeToTerminal = useCallback((text: string) => {
@@ -125,6 +253,17 @@ const ShellTab: React.FC<ShellTabProps> = ({
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+
+  const setConnectionStatus = useCallback((nextStatus: ShellStatus) => {
+    statusRef.current = nextStatus;
+    setStatus(nextStatus);
+  }, []);
+
+  const clearSession = useCallback(() => {
+    sessionIdRef.current = null;
+    sessionOpenedAtRef.current = null;
+    setSession(null);
+  }, []);
 
   const resolveThemeColors = useCallback(() => {
     const container = terminalContainerRef.current;
@@ -312,42 +451,9 @@ const ShellTab: React.FC<ShellTabProps> = ({
     terminal.focus();
 
     // Provide standard OS copy/paste shortcuts when the terminal is focused.
-    terminal.attachCustomKeyEventHandler((event) => {
-      if (event.type !== 'keydown') {
-        return true;
-      }
-
-      const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
-      const isModifier = event.ctrlKey || event.metaKey;
-      if (!isModifier) {
-        return true;
-      }
-
-      const key = event.key.toLowerCase();
-      if (key === 'c') {
-        if (!clipboard?.writeText || !terminal.hasSelection()) {
-          return true;
-        }
-        if (!copyTerminalSelection()) {
-          return true;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        return false;
-      }
-
-      if (key === 'v') {
-        if (!clipboard?.readText) {
-          return true;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        void pasteClipboardToTerminal();
-        return false;
-      }
-
-      return true;
-    });
+    terminal.attachCustomKeyEventHandler((event) =>
+      handleShellClipboardKey(event, terminal, copyTerminalSelection, pasteClipboardToTerminal)
+    );
 
     terminalDataDisposableRef.current = terminal.onData((data) => {
       if (!sessionIdRef.current || statusRef.current !== 'open') {
@@ -463,49 +569,6 @@ const ShellTab: React.FC<ShellTabProps> = ({
     [writeToTerminal]
   );
 
-  const deriveConnectionFailureReason = useCallback((fallbackReason?: string) => {
-    const normalizedFallback = fallbackReason?.trim();
-    if (normalizedFallback) {
-      return normalizedFallback;
-    }
-
-    const normalizedOutput = sessionOutputBufferRef.current
-      .replace(new RegExp(ANSI_ESCAPE_SEQUENCE_PATTERN_SOURCE, 'g'), '')
-      .replace(/\r/g, '\n');
-    const lines = normalizedOutput
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-
-    if (lines.length === 0) {
-      return 'Shell command failed to start in the selected container.';
-    }
-
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-      const line = lines[index];
-      if (
-        /not found|no such file|exec failed|executable file|permission denied|exit code/i.test(line)
-      ) {
-        return line;
-      }
-    }
-
-    return lines[lines.length - 1];
-  }, []);
-
-  const trimBacklogOverlap = useCallback((backlog: string, bufferedOutput: string) => {
-    if (!backlog || !bufferedOutput) {
-      return bufferedOutput;
-    }
-    const maxOverlap = Math.min(backlog.length, bufferedOutput.length);
-    for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
-      if (backlog.endsWith(bufferedOutput.slice(0, overlap))) {
-        return bufferedOutput.slice(overlap);
-      }
-    }
-    return bufferedOutput;
-  }, []);
-
   const initiateConnection = useCallback(() => {
     pendingReplayRef.current = null;
     renderedSessionIdRef.current = null;
@@ -515,41 +578,52 @@ const ShellTab: React.FC<ShellTabProps> = ({
     setStatusReason(null);
     ensureTerminal();
     terminalRef.current?.reset();
-    statusRef.current = 'connecting';
-    setStatus('connecting');
+    setConnectionStatus('connecting');
     setReconnectToken((token) => token + 1);
-  }, [ensureTerminal]);
+  }, [ensureTerminal, setConnectionStatus]);
 
-  const lastTargetRef = useRef<{ namespace: string; resourceName: string } | null>(null);
+  const lastTargetRef = useRef<ShellTarget | null>(null);
 
-  useEffect(() => {
-    if (!namespace || !resourceName) {
+  useEffect(
+    () => () => {
       lastTargetRef.current = null;
       pendingReplayRef.current = null;
-      sessionIdRef.current = null;
-      sessionOpenedAtRef.current = null;
-      sessionOutputBufferRef.current = '';
-      setSession(null);
-      statusRef.current = 'idle';
-      setStatus('idle');
-      setStatusReason(null);
-      disposeTerminal();
+    },
+    []
+  );
+
+  const resetTargetSession = useCallback(() => {
+    pendingReplayRef.current = null;
+    sessionIdRef.current = null;
+    sessionOpenedAtRef.current = null;
+    sessionOutputBufferRef.current = '';
+    setSession(null);
+    setDiscoveredContainers([]);
+    setContainerOverride(null);
+    setDebugTarget(null);
+    setDebugCreating(false);
+    setConnectionStatus('idle');
+    setStatusReason(null);
+    disposeTerminal();
+  }, [disposeTerminal, setConnectionStatus]);
+
+  useEffect(() => {
+    if (!namespace || !resourceName || !resolvedClusterId) {
+      lastTargetRef.current = null;
+      resetTargetSession();
       return;
     }
     const previous = lastTargetRef.current;
-    if (previous && (previous.namespace !== namespace || previous.resourceName !== resourceName)) {
-      pendingReplayRef.current = null;
-      sessionIdRef.current = null;
-      sessionOpenedAtRef.current = null;
-      sessionOutputBufferRef.current = '';
-      setSession(null);
-      statusRef.current = 'idle';
-      setStatus('idle');
-      setStatusReason(null);
-      disposeTerminal();
+    if (
+      previous &&
+      (previous.clusterId !== resolvedClusterId ||
+        previous.namespace !== namespace ||
+        previous.resourceName !== resourceName)
+    ) {
+      resetTargetSession();
     }
-    lastTargetRef.current = { namespace, resourceName };
-  }, [disposeTerminal, namespace, resourceName]);
+    lastTargetRef.current = { clusterId: resolvedClusterId, namespace, resourceName };
+  }, [resetTargetSession, namespace, resourceName, resolvedClusterId]);
 
   useEffect(() => {
     void reconnectToken;
@@ -558,43 +632,40 @@ const ShellTab: React.FC<ShellTabProps> = ({
     }
 
     let cancelled = false;
+    const request = {
+      namespace,
+      podName: resourceName,
+      container: containerOverride ?? undefined,
+      command: resolvedShell ? [resolvedShell] : undefined,
+    };
     const start = async () => {
       try {
-        const shellSession = await StartShellSession(resolvedClusterId, {
-          namespace,
-          podName: resourceName,
-          container: containerOverride ?? undefined,
-          command: resolvedShell ? [resolvedShell] : undefined,
-        });
+        const shellSession = await startTrackedShellSession(
+          resolvedClusterId,
+          request,
+          () => cancelled
+        );
         if (!shellSession) {
-          throw new Error('Shell session was not created');
-        }
-        if (cancelled) {
-          // If a superseding connect was started before this one returned, clean up this session.
-          await CloseShellSession(shellSession.sessionId);
           return;
         }
         sessionIdRef.current = shellSession.sessionId;
         sessionOpenedAtRef.current = Date.now();
         setSession(shellSession);
-        statusRef.current = 'open';
-        setStatus('open');
+        setConnectionStatus('open');
         setStatusReason(null);
       } catch (error) {
-        if (!cancelled) {
-          const details = errorHandler.handleInline(error, {
-            action: 'startShellSession',
-            source: 'ShellTab',
-            clusterId: resolvedClusterId,
-          });
-          sessionIdRef.current = null;
-          sessionOpenedAtRef.current = null;
-          setSession(null);
-          statusRef.current = 'error';
-          setStatus('error');
-          setStatusReason(details.message);
-          disposeTerminal();
+        if (cancelled) {
+          return;
         }
+        const details = errorHandler.handleInline(error, {
+          action: 'startShellSession',
+          source: 'ShellTab',
+          clusterId: resolvedClusterId,
+        });
+        clearSession();
+        setConnectionStatus('error');
+        setStatusReason(details.message);
+        disposeTerminal();
       }
     };
 
@@ -605,6 +676,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
   }, [
     resolvedShell,
     containerOverride,
+    clearSession,
+    setConnectionStatus,
     disposeTerminal,
     isActive,
     namespace,
@@ -612,6 +685,39 @@ const ShellTab: React.FC<ShellTabProps> = ({
     resolvedClusterId,
     reconnectToken,
   ]);
+
+  const handleSessionClosed = useCallback(
+    (reason?: string) => {
+      pendingReplayRef.current = null;
+      const previousStatus = statusRef.current;
+      const closedTooSoon =
+        previousStatus === 'connecting' ||
+        (previousStatus === 'open' &&
+          sessionOpenedAtRef.current !== null &&
+          Date.now() - sessionOpenedAtRef.current < 1500);
+      clearSession();
+      disposeTerminal();
+      if (statusRef.current === 'error') {
+        return;
+      }
+      if (closedTooSoon) {
+        const details = errorHandler.handleInline(
+          new Error(deriveConnectionFailureReason(sessionOutputBufferRef.current, reason)),
+          {
+            action: 'runShellSession',
+            source: 'ShellTab',
+            clusterId: resolvedClusterId,
+          }
+        );
+        setConnectionStatus('error');
+        setStatusReason(details.message);
+        return;
+      }
+      setConnectionStatus('closed');
+      setStatusReason(reason || 'Session closed.');
+    },
+    [clearSession, disposeTerminal, resolvedClusterId, setConnectionStatus]
+  );
 
   useEffect(() => {
     const offOutput = onEvent('object-shell:output', (evt) => {
@@ -631,62 +737,35 @@ const ShellTab: React.FC<ShellTabProps> = ({
       if (!evt || !sessionIdRef.current || evt.sessionId !== sessionIdRef.current) {
         return;
       }
-      if (evt.status === 'error') {
-        const details = errorHandler.handleInline(
-          new Error(evt.reason || 'Shell session failed.'),
-          {
-            action: 'runShellSession',
-            source: 'ShellTab',
-            clusterId: resolvedClusterId,
-          }
-        );
-        pendingReplayRef.current = null;
-        sessionOpenedAtRef.current = null;
-        statusRef.current = 'error';
-        setStatus('error');
-        setStatusReason(details.message);
-        sessionIdRef.current = null;
-        setSession(null);
-        disposeTerminal();
-      } else if (evt.status === 'closed' || evt.status === 'timeout') {
-        pendingReplayRef.current = null;
-        const previousStatus = statusRef.current;
-        const closedTooSoon =
-          previousStatus === 'connecting' ||
-          (previousStatus === 'open' &&
-            sessionOpenedAtRef.current !== null &&
-            Date.now() - sessionOpenedAtRef.current < 1500);
-        sessionIdRef.current = null;
-        sessionOpenedAtRef.current = null;
-        setSession(null);
-        disposeTerminal();
-        if (statusRef.current === 'error') {
-          return;
-        }
-        if (closedTooSoon) {
+      switch (evt.status) {
+        case 'error': {
           const details = errorHandler.handleInline(
-            new Error(deriveConnectionFailureReason(evt.reason)),
+            new Error(evt.reason || 'Shell session failed.'),
             {
               action: 'runShellSession',
               source: 'ShellTab',
               clusterId: resolvedClusterId,
             }
           );
-          statusRef.current = 'error';
-          setStatus('error');
+          pendingReplayRef.current = null;
+          sessionOpenedAtRef.current = null;
+          setConnectionStatus('error');
           setStatusReason(details.message);
+          sessionIdRef.current = null;
+          setSession(null);
+          disposeTerminal();
           return;
         }
-        statusRef.current = 'closed';
-        setStatus('closed');
-        setStatusReason(evt.reason || 'Session closed.');
-      } else if (evt.status === 'open') {
-        sessionOpenedAtRef.current = Date.now();
-        ensureTerminal();
-        writeLine('\x1b[32mConnected\x1b[0m\r\n');
-        statusRef.current = 'open';
-        setStatus('open');
-        setStatusReason(null);
+        case 'closed':
+        case 'timeout':
+          handleSessionClosed(evt.reason);
+          return;
+        case 'open':
+          sessionOpenedAtRef.current = Date.now();
+          ensureTerminal();
+          writeLine('\x1b[32mConnected\x1b[0m\r\n');
+          setConnectionStatus('open');
+          setStatusReason(null);
       }
     });
 
@@ -696,7 +775,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
     };
   }, [
     appendOutput,
-    deriveConnectionFailureReason,
+    handleSessionClosed,
+    setConnectionStatus,
     disposeTerminal,
     ensureTerminal,
     resolvedClusterId,
@@ -716,7 +796,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
   }, [initiateConnection]);
 
   const refreshContainers = useCallback(async () => {
-    if (!namespace || !resourceName || !resolvedClusterId) {
+    const target = lastTargetRef.current;
+    if (!target) {
       setDiscoveredContainers([]);
       return;
     }
@@ -726,6 +807,9 @@ const ShellTab: React.FC<ShellTabProps> = ({
         reason: 'user',
         read: () => readPodContainers(resolvedClusterId, namespace, resourceName),
       });
+      if (lastTargetRef.current !== target) {
+        return;
+      }
       const containerNames = result.status === 'executed' ? (result.data ?? []) : [];
       const normalized = Array.from(
         new Set(
@@ -743,23 +827,91 @@ const ShellTab: React.FC<ShellTabProps> = ({
     }
   }, [namespace, resourceName, resolvedClusterId]);
 
+  const finishReplay = useCallback(
+    (replayState: PendingReplayState, backlog: string) => {
+      if (pendingReplayRef.current !== replayState) {
+        return;
+      }
+      const bufferedOutput = replayState.bufferedOutput.join('');
+      const replayRemainder = trimBacklogOverlap(backlog, bufferedOutput);
+      if (replayRemainder) {
+        renderedSessionIdRef.current = replayState.sessionId;
+        writeToTerminal(replayRemainder);
+      }
+      pendingReplayRef.current = null;
+    },
+    [writeToTerminal]
+  );
+
+  const replaySessionOutput = useCallback(
+    async (sessionId: string) => {
+      if (renderedSessionIdRef.current === sessionId && terminalRef.current) {
+        pendingReplayRef.current = null;
+        return;
+      }
+      const replayState: PendingReplayState = {
+        sessionId,
+        bufferedOutput: [],
+      };
+      pendingReplayRef.current = replayState;
+      let backlog = '';
+      try {
+        // Replay buffered output captured while this tab was detached.
+        backlog = await requestAppState({
+          resource: 'shell-session-backlog',
+          adapter: 'runtime-read',
+          read: () => readShellSessionBacklog(sessionId),
+        });
+        if (backlog && pendingReplayRef.current === replayState) {
+          renderedSessionIdRef.current = sessionId;
+          writeToTerminal(backlog);
+        }
+      } catch {
+        // Ignore replay failures; user can continue with live output.
+      } finally {
+        finishReplay(replayState, backlog);
+      }
+    },
+    [finishReplay, writeToTerminal]
+  );
+
+  const installTrackedSession = useCallback(
+    (tracked: TrackedShellSession) => {
+      sessionIdRef.current = tracked.sessionId;
+      // Reattach should not immediately send a resize event because many shells
+      // redraw the prompt, which duplicates the backlog tail prompt.
+      skipNextResizeRef.current = true;
+      setSession(attachedShellSession(tracked));
+      setContainerOverride(tracked.container || null);
+      setStatus('open');
+      setStatusReason(null);
+      ensureTerminal();
+    },
+    [ensureTerminal]
+  );
+
   const attachLatestTrackedSession = useCallback(async () => {
+    const target = lastTargetRef.current;
     if (
       !namespace ||
       !resourceName ||
       !resolvedClusterId ||
+      !target ||
       sessionIdRef.current ||
-      attachInFlightRef.current
+      attachInFlightRef.current === target
     ) {
       return;
     }
-    attachInFlightRef.current = true;
+    attachInFlightRef.current = target;
     try {
       const sessions = await requestAppState({
         resource: 'shell-sessions',
         adapter: 'runtime-read',
         read: () => readShellSessions(),
       });
+      if (lastTargetRef.current !== target) {
+        return;
+      }
       const matching = sessions.filter(
         (tracked) =>
           tracked.clusterId === resolvedClusterId &&
@@ -770,69 +922,16 @@ const ShellTab: React.FC<ShellTabProps> = ({
         return;
       }
       const latest = matching[matching.length - 1];
-      sessionIdRef.current = latest.sessionId;
-      // Reattach should not immediately send a resize event because many shells
-      // redraw the prompt, which duplicates the backlog tail prompt.
-      skipNextResizeRef.current = true;
-      setSession({
-        sessionId: latest.sessionId,
-        namespace: latest.namespace,
-        podName: latest.podName,
-        container: latest.container,
-        command: latest.command ?? [],
-        containers: [],
-      } as types.ShellSession);
-      setContainerOverride(latest.container || null);
-      setStatus('open');
-      setStatusReason(null);
-      ensureTerminal();
-      if (renderedSessionIdRef.current === latest.sessionId && terminalRef.current) {
-        pendingReplayRef.current = null;
-        return;
-      }
-      pendingReplayRef.current = {
-        sessionId: latest.sessionId,
-        bufferedOutput: [],
-      };
-      let backlog = '';
-      try {
-        // Replay buffered output captured while this tab was detached.
-        backlog = await requestAppState({
-          resource: 'shell-session-backlog',
-          adapter: 'runtime-read',
-          read: () => readShellSessionBacklog(latest.sessionId),
-        });
-        if (backlog) {
-          renderedSessionIdRef.current = latest.sessionId;
-          writeToTerminal(backlog);
-        }
-      } catch {
-        // Ignore replay failures; user can continue with live output.
-      } finally {
-        const replayState = pendingReplayRef.current;
-        if (replayState?.sessionId === latest.sessionId) {
-          const bufferedOutput = replayState.bufferedOutput.join('');
-          const replayRemainder = trimBacklogOverlap(backlog, bufferedOutput);
-          if (replayRemainder) {
-            renderedSessionIdRef.current = latest.sessionId;
-            writeToTerminal(replayRemainder);
-          }
-          pendingReplayRef.current = null;
-        }
-      }
+      installTrackedSession(latest);
+      await replaySessionOutput(latest.sessionId);
     } catch {
       // Ignore attach failures; user can still start a new session.
     } finally {
-      attachInFlightRef.current = false;
+      if (attachInFlightRef.current === target) {
+        attachInFlightRef.current = null;
+      }
     }
-  }, [
-    ensureTerminal,
-    namespace,
-    resourceName,
-    resolvedClusterId,
-    trimBacklogOverlap,
-    writeToTerminal,
-  ]);
+  }, [installTrackedSession, namespace, resourceName, resolvedClusterId, replaySessionOutput]);
 
   useEffect(() => {
     if (!isActive) {
@@ -872,24 +971,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
     }
   }, [containerOptions, containerOverride, status]);
 
-  const shellOptions = useMemo<DropdownOption[]>(
-    () => [
-      { value: '/bin/sh', label: '/bin/sh' },
-      { value: '/bin/bash', label: '/bin/bash' },
-      { value: '__custom__', label: 'Custom...' },
-    ],
-    []
-  );
-  const debugImageOptions = useMemo<DropdownOption[]>(
-    () => [
-      { value: 'busybox:latest', label: 'busybox:latest' },
-      { value: 'alpine:latest', label: 'alpine:latest' },
-      { value: 'nicolaka/netshoot:latest', label: 'netshoot:latest' },
-      { value: '__custom__', label: 'Custom...' },
-    ],
-    []
-  );
-  const resolvedDebugImage = debugImage === '__custom__' ? customImage.trim() : debugImage;
+  const resolvedDebugImage = resolveCustomOption(debugImage, customImage);
 
   const handleContainerChange = useCallback((value: string | string[]) => {
     const nextValue = Array.isArray(value) ? value[0] : value;
@@ -923,50 +1005,11 @@ const ShellTab: React.FC<ShellTabProps> = ({
     }
   }, [containerOptions, debugTarget]);
 
-  const handleDebug = useCallback(async () => {
-    if (
-      !resolvedDebugImage ||
-      !namespace ||
-      !resourceName ||
-      !resolvedClusterId ||
-      debugDisabledReason ||
-      disabledReason
-    ) {
-      return;
-    }
-
-    setDebugCreating(true);
-    setStatusReason(null);
-    try {
-      const response = await runCreateDebugContainer(
-        buildObjectActionTarget(
-          {
-            clusterId: resolvedClusterId,
-            group: '',
-            version: 'v1',
-            kind: 'Pod',
-            namespace,
-            name: resourceName,
-          },
-          'create debug container for'
-        ),
-        {
-          image: resolvedDebugImage,
-          targetContainer: debugTarget || containerOptions[0]?.value || '',
-        }
-      );
-      const debugContainer = response.debugContainer as types.DebugContainerResponse | undefined;
-      if (!debugContainer) {
-        throw new Error('Backend did not return debug container details');
+  const reportDebugFailure = useCallback(
+    (target: ShellTarget, error: unknown) => {
+      if (lastTargetRef.current !== target) {
+        return;
       }
-      // Revert to default shell controls, target the new container, and connect.
-      // The backend debug-container action polls until the ephemeral container
-      // is Running, so we can initiate the connection immediately.
-      setStartDebugContainer(false);
-      setContainerOverride(debugContainer.containerName);
-      void refreshContainers();
-      initiateConnection();
-    } catch (error) {
       const details = errorHandler.handleInline(error, {
         action: 'createDebugContainer',
         source: 'ShellTab',
@@ -978,24 +1021,50 @@ const ShellTab: React.FC<ShellTabProps> = ({
       writeLine(`\r\n\x1b[31mFailed to create debug container: ${reason}\x1b[0m`);
       setStatus('error');
       setStatusReason(reason);
+    },
+    [ensureTerminal, resolvedClusterId, writeLine]
+  );
+
+  const handleDebug = useCallback(async () => {
+    const target = lastTargetRef.current;
+    if (!resolvedDebugImage || !target || debugDisabledReason || disabledReason) {
+      return;
+    }
+
+    setDebugCreating(true);
+    setStatusReason(null);
+    try {
+      const debugContainer = await createDebugShellContainer(target, {
+        image: resolvedDebugImage,
+        targetContainer: debugTarget || containerOptions[0]?.value || '',
+      });
+      if (lastTargetRef.current !== target) {
+        return;
+      }
+      // Revert to default shell controls, target the new container, and connect.
+      // The backend debug-container action polls until the ephemeral container
+      // is Running, so we can initiate the connection immediately.
+      setStartDebugContainer(false);
+      setContainerOverride(debugContainer.containerName);
+      void refreshContainers();
+      initiateConnection();
+    } catch (error) {
+      reportDebugFailure(target, error);
     } finally {
-      setDebugCreating(false);
+      if (lastTargetRef.current === target) {
+        setDebugCreating(false);
+      }
     }
   }, [
     containerOptions,
     debugDisabledReason,
     debugTarget,
-    ensureTerminal,
     initiateConnection,
-    namespace,
-    resolvedClusterId,
     resolvedDebugImage,
-    resourceName,
     disabledReason,
     refreshContainers,
-    writeLine,
+    reportDebugFailure,
   ]);
-
   const hasActiveSession = status === 'open' || status === 'connecting';
   const connectionErrorMessage =
     status === 'error' ? statusReason || 'Shell session failed.' : null;
@@ -1060,159 +1129,32 @@ const ShellTab: React.FC<ShellTabProps> = ({
     },
   ];
 
-  let connectionButtonLabel = 'Connect';
-  if (startDebugContainer) {
-    connectionButtonLabel = debugCreating ? 'Creating...' : 'Start';
-  }
-
   return (
     <div className="object-panel-shell-tab">
       {!hasActiveSession && (
-        <div className="shell-tab__toolbar">
-          <div className="shell-tab__controls">
-            <label
-              className="shell-tab__debug-toggle"
-              htmlFor={`${elementIdPrefix}-shell-tab-debug-toggle`}
-            >
-              <input
-                id={`${elementIdPrefix}-shell-tab-debug-toggle`}
-                type="checkbox"
-                checked={startDebugContainer}
-                onChange={(event) => setStartDebugContainer(event.target.checked)}
-              />
-              <span>Start a debug container</span>
-              <Tooltip
-                content={
-                  <>
-                    Use a debug (ephemeral) container to troubleshoot a running pod when the
-                    existing containers have no shell.
-                    <br />
-                    <br />
-                    Debug containers persist for the lifetime of the pod and cannot be removed
-                    except by deleting the pod.
-                  </>
-                }
-                placement="bottom"
-              />
-            </label>
-            <div className="shell-tab__controls-grid">
-              {startDebugContainer ? (
-                <>
-                  <div className="shell-tab__control-label">Debug Image</div>
-                  <div className="shell-tab__control-input">
-                    <Dropdown
-                      options={debugImageOptions}
-                      value={debugImage}
-                      onChange={handleDebugImageChange}
-                      size="compact"
-                      dropdownClassName={shellDropdownMenuClassName}
-                      placeholder="Select image"
-                      ariaLabel="Debug container image"
-                    />
-                    {debugImage === '__custom__' && (
-                      <input
-                        className="shell-tab__custom-image-input"
-                        type="text"
-                        value={customImage}
-                        onChange={(event) => setCustomImage(event.target.value)}
-                        placeholder="image:tag"
-                        aria-label="Custom debug image"
-                      />
-                    )}
-                  </div>
-                  <div className="shell-tab__control-label">Target Container</div>
-                  <div className="shell-tab__control-input">
-                    <Dropdown
-                      options={containerOptions}
-                      value={debugTarget || containerOptions[0]?.value || ''}
-                      onChange={handleDebugTargetChange}
-                      size="compact"
-                      dropdownClassName={shellDropdownMenuClassName}
-                      placeholder="Target container"
-                      ariaLabel="Target container for process sharing"
-                    />
-                  </div>
-                  <div className="shell-tab__control-label">Shell</div>
-                  <div className="shell-tab__control-input">
-                    <Dropdown
-                      options={shellOptions}
-                      value={commandOverride}
-                      onChange={handleShellChange}
-                      size="compact"
-                      dropdownClassName={shellDropdownMenuClassName}
-                      placeholder="Select shell"
-                      ariaLabel="Shell command selector"
-                    />
-                    {commandOverride === '__custom__' && (
-                      <input
-                        className="shell-tab__custom-image-input"
-                        type="text"
-                        value={customShell}
-                        onChange={(event) => setCustomShell(event.target.value)}
-                        placeholder="/path/to/shell"
-                        aria-label="Custom shell path"
-                      />
-                    )}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="shell-tab__control-label">Container</div>
-                  <div className="shell-tab__control-input">
-                    <Dropdown
-                      options={containerOptions}
-                      value={activeContainer || containerOptions[0]?.value || ''}
-                      onChange={handleContainerChange}
-                      size="compact"
-                      dropdownClassName={shellDropdownMenuClassName}
-                      placeholder="Containers unavailable"
-                      ariaLabel="Shell container selector"
-                    />
-                  </div>
-                  <div className="shell-tab__control-label">Shell</div>
-                  <div className="shell-tab__control-input">
-                    <Dropdown
-                      options={shellOptions}
-                      value={commandOverride}
-                      onChange={handleShellChange}
-                      size="compact"
-                      dropdownClassName={shellDropdownMenuClassName}
-                      placeholder="Select shell"
-                      ariaLabel="Shell command selector"
-                    />
-                    {commandOverride === '__custom__' && (
-                      <input
-                        className="shell-tab__custom-image-input"
-                        type="text"
-                        value={customShell}
-                        onChange={(event) => setCustomShell(event.target.value)}
-                        placeholder="/path/to/shell"
-                        aria-label="Custom shell path"
-                      />
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-            <button
-              type="button"
-              className={`button generic ${
-                startDebugContainer ? 'shell-tab__debug-button' : 'shell-tab__button'
-              }`}
-              onClick={startDebugContainer ? handleDebug : handleReconnect}
-              disabled={
-                startDebugContainer
-                  ? debugCreating ||
-                    !resolvedDebugImage ||
-                    !!debugDisabledReason ||
-                    !!disabledReason
-                  : false
-              }
-            >
-              {connectionButtonLabel}
-            </button>
-          </div>
-        </div>
+        <ShellConnectionControls
+          startDebugContainer={startDebugContainer}
+          setStartDebugContainer={setStartDebugContainer}
+          debugImage={debugImage}
+          handleDebugImageChange={handleDebugImageChange}
+          customImage={customImage}
+          setCustomImage={setCustomImage}
+          containerOptions={containerOptions}
+          debugTarget={debugTarget}
+          handleDebugTargetChange={handleDebugTargetChange}
+          commandOverride={commandOverride}
+          handleShellChange={handleShellChange}
+          customShell={customShell}
+          setCustomShell={setCustomShell}
+          activeContainer={activeContainer}
+          handleContainerChange={handleContainerChange}
+          handleDebug={handleDebug}
+          handleReconnect={handleReconnect}
+          debugCreating={debugCreating}
+          resolvedDebugImage={resolvedDebugImage}
+          debugDisabledReason={debugDisabledReason}
+          disabledReason={disabledReason}
+        />
       )}
       {startDebugContainer && !hasActiveSession && debugDisabledReason && (
         <div className="shell-tab__debug-warning">

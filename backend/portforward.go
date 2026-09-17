@@ -163,17 +163,9 @@ func (o *OperationsCoordinator) runPortForwarder(ctx context.Context, session *p
 
 		err := o.executePortForward(ctx, session)
 
-		// Signal readyChan on first attempt (success or failure).
 		if isFirstAttempt {
 			isFirstAttempt = false
-			if err != nil {
-				// First attempt failed - signal the error.
-				select {
-				case session.readyChan <- err:
-				default:
-				}
-			}
-			// Success is signaled inside executePortForward after "active" status.
+			session.signalStartFailure(err)
 		}
 
 		if err == nil {
@@ -181,53 +173,63 @@ func (o *OperationsCoordinator) runPortForwarder(ctx context.Context, session *p
 			return
 		}
 
-		// Check if we should reconnect.
-		if !o.shouldReconnect(session) {
-			session.mu.Lock()
-			session.Status = PortForwardStatusError
-			session.StatusReason = err.Error()
-			session.mu.Unlock()
-			o.portForwardLifecycle().emitStatus(session)
+		attempt, retry := o.preparePortForwardReconnect(session, err)
+		if !retry {
 			return
 		}
 
-		// Attempt reconnection with exponential backoff.
-		session.mu.Lock()
-		session.reconnectAttempt++
-		attempt := session.reconnectAttempt
-		session.Status = PortForwardStatusReconnecting
-		session.StatusReason = fmt.Sprintf("attempt %d/%d: %s", attempt, config.PortForwardMaxReconnectAttempts, err.Error())
-		session.mu.Unlock()
-		o.portForwardLifecycle().emitStatus(session)
-
-		if attempt > config.PortForwardMaxReconnectAttempts {
-			session.mu.Lock()
-			session.Status = PortForwardStatusError
-			session.StatusReason = "max reconnect attempts exceeded"
-			session.mu.Unlock()
-			o.portForwardLifecycle().emitStatus(session)
+		if !o.waitForPortForwardReconnect(ctx, session, attempt) {
 			return
-		}
-
-		// Calculate backoff duration.
-		backoff := o.calculateBackoff(attempt)
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-session.stopChan:
-			return
-		case <-time.After(backoff):
-		}
-
-		// Re-resolve the pod (it may have changed for workloads/services).
-		if err := o.reresolvePod(ctx, session); err != nil {
-			if o.logger != nil {
-				o.logger.Warn(fmt.Sprintf("Failed to re-resolve pod for %s: %v", session.ID, err), logsources.PortForward)
-			}
-			continue
 		}
 	}
+}
+
+func (o *OperationsCoordinator) waitForPortForwardReconnect(ctx context.Context, session *portForwardSessionInternal, attempt int) bool {
+	// Calculate backoff duration.
+	backoff := o.calculateBackoff(attempt)
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-session.stopChan:
+		return false
+	case <-time.After(backoff):
+	}
+
+	// Re-resolve the pod (it may have changed for workloads/services).
+	if err := o.reresolvePod(ctx, session); err != nil {
+		if o.logger != nil {
+			o.logger.Warn(fmt.Sprintf("Failed to re-resolve pod for %s: %v", session.ID, err), logsources.PortForward)
+		}
+	}
+	return true
+}
+
+// preparePortForwardReconnect publishes failure/retry status before the caller
+// waits. Activation still owns resetting the attempt count and registry entry.
+func (o *OperationsCoordinator) preparePortForwardReconnect(session *portForwardSessionInternal, err error) (int, bool) {
+	// Check if we should reconnect.
+	if !o.shouldReconnect(session) {
+		session.setStatus(PortForwardStatusError, err.Error())
+		o.portForwardLifecycle().emitStatus(session)
+		return 0, false
+	}
+
+	// Attempt reconnection with exponential backoff.
+	session.mu.Lock()
+	session.reconnectAttempt++
+	attempt := session.reconnectAttempt
+	session.Status = PortForwardStatusReconnecting
+	session.StatusReason = fmt.Sprintf("attempt %d/%d: %s", attempt, config.PortForwardMaxReconnectAttempts, err.Error())
+	session.mu.Unlock()
+	o.portForwardLifecycle().emitStatus(session)
+
+	if attempt > config.PortForwardMaxReconnectAttempts {
+		session.setStatus(PortForwardStatusError, "max reconnect attempts exceeded")
+		o.portForwardLifecycle().emitStatus(session)
+		return 0, false
+	}
+	return attempt, true
 }
 
 // executePortForward runs the actual port forward connection.
@@ -240,17 +242,10 @@ func (o *OperationsCoordinator) executePortForward(ctx context.Context, session 
 		return fmt.Errorf("failed to resolve cluster: %w", err)
 	}
 
-	session.mu.Lock()
-	namespace := session.Namespace
-	localPort := session.LocalPort
-	target := portForwardTargetRef{
-		Namespace: namespace,
-		Kind:      session.TargetKind,
-		Group:     session.TargetGroup,
-		Version:   session.TargetVersion,
-		Name:      session.TargetName,
-	}
-	session.mu.Unlock()
+	snapshot := session.snapshot()
+	namespace := snapshot.Namespace
+	localPort := snapshot.LocalPort
+	target := snapshot.targetRef()
 
 	resolved, err := resolvePortForwardDestination(ctx, deps.KubernetesClient, target, session.ContainerPort)
 	if err != nil {
@@ -369,15 +364,7 @@ func (o *OperationsCoordinator) reresolvePod(ctx context.Context, session *portF
 		return err
 	}
 
-	session.mu.Lock()
-	target := portForwardTargetRef{
-		Namespace: session.Namespace,
-		Kind:      session.TargetKind,
-		Group:     session.TargetGroup,
-		Version:   session.TargetVersion,
-		Name:      session.TargetName,
-	}
-	session.mu.Unlock()
+	target := session.snapshot().targetRef()
 
 	podName, err := resolvePodForTarget(ctx, deps.KubernetesClient, target)
 	if err != nil {
@@ -394,29 +381,28 @@ func runtimeOperationFromPortForward(session *portForwardSessionInternal) Runtim
 	if session == nil {
 		return RuntimeOperation{}
 	}
-	session.mu.Lock()
-	defer session.mu.Unlock()
+	snapshot := session.snapshot()
 	return RuntimeOperation{
-		ID:          session.ID,
+		ID:          snapshot.ID,
 		Type:        RuntimeOperationPortForward,
-		ClusterID:   session.ClusterID,
-		ClusterName: session.ClusterName,
+		ClusterID:   snapshot.ClusterID,
+		ClusterName: snapshot.ClusterName,
 		Target: runtimeOperationTarget(
-			session.ClusterID,
-			session.TargetGroup,
-			session.TargetVersion,
-			session.TargetKind,
-			session.Namespace,
-			session.TargetName,
+			snapshot.ClusterID,
+			snapshot.TargetGroup,
+			snapshot.TargetVersion,
+			snapshot.TargetKind,
+			snapshot.Namespace,
+			snapshot.TargetName,
 		),
-		Status:       string(session.Status),
-		StatusReason: session.StatusReason,
-		StartedAt:    session.StartedAt,
-		DisplayName:  fmt.Sprintf("Port forward %s/%s", session.Namespace, session.TargetName),
+		Status:       string(snapshot.Status),
+		StatusReason: snapshot.StatusReason,
+		StartedAt:    snapshot.StartedAt,
+		DisplayName:  fmt.Sprintf("Port forward %s/%s", snapshot.Namespace, snapshot.TargetName),
 		Summary: map[string]string{
-			"podName":       session.PodName,
-			"containerPort": fmt.Sprintf("%d", session.ContainerPort),
-			"localPort":     fmt.Sprintf("%d", session.LocalPort),
+			"podName":       snapshot.PodName,
+			"containerPort": fmt.Sprintf("%d", snapshot.ContainerPort),
+			"localPort":     fmt.Sprintf("%d", snapshot.LocalPort),
 		},
 	}
 }

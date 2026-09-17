@@ -274,8 +274,7 @@ class ContainerLogsStreamConnection {
 
 export class ContainerLogsStreamManager {
   private readonly connections = new Map<string, ContainerLogsStreamConnection>();
-  private readonly buffers = new Map<string, ContainerLogsEntry[]>();
-  private readonly bufferMeta = new Map<string, { total: number; truncated: boolean }>();
+  private readonly buffers = new Map<string, ProjectedLogBuffer>();
   private readonly backendWarnings = new Map<string, string[]>();
   /** Monotonically increasing counter for stable entry keys across buffer truncations. */
   private seqCounter = 0;
@@ -329,17 +328,13 @@ export class ContainerLogsStreamManager {
       return;
     }
     this.maxBufferSize = size;
-    for (const [scope, entries] of this.buffers) {
+    for (const [scope, buffer] of this.buffers) {
+      const { entries } = buffer;
       if (entries.length <= size) {
         continue;
       }
       const trimmed = entries.slice(entries.length - size);
-      this.buffers.set(scope, trimmed);
-      const previousMeta = this.bufferMeta.get(scope);
-      this.bufferMeta.set(scope, {
-        total: previousMeta?.total ?? entries.length,
-        truncated: true,
-      });
+      this.buffers.set(scope, { entries: trimmed, total: buffer.total, truncated: true });
       const stats = this.buildStats(scope, trimmed.length);
       setScopedDomainState(DOMAIN_NAME, scope, (previous) => {
         const previousPayload = previous.data ?? DEFAULT_PAYLOAD;
@@ -372,7 +367,6 @@ export class ContainerLogsStreamManager {
     }
     if (reset) {
       this.buffers.delete(scope);
-      this.bufferMeta.delete(scope);
       this.backendWarnings.delete(scope);
       resetScopedDomainState(DOMAIN_NAME, scope);
     } else {
@@ -411,7 +405,6 @@ export class ContainerLogsStreamManager {
     });
     if (reset) {
       this.buffers.clear();
-      this.bufferMeta.clear();
     }
   }
 
@@ -478,14 +471,14 @@ export class ContainerLogsStreamManager {
     payload: StreamEventPayload,
     mode: StreamMode
   ): ProjectedLogBuffer {
-    const existing = this.buffers.get(scope) ?? [];
+    const previousBuffer = this.buffers.get(scope);
+    const existing = previousBuffer?.entries ?? [];
     const incoming = this.createIncomingEntries(payload);
-    const previousMeta = this.bufferMeta.get(scope);
     const shouldReplace = Boolean(payload.reset && incoming.length > 0);
-    const previousTotal = previousMeta?.total ?? existing.length;
+    const previousTotal = previousBuffer?.total ?? existing.length;
     let total = this.resolveBufferTotal(previousTotal, incoming.length, shouldReplace, mode);
     let entries = this.mergeBufferEntries(existing, incoming, payload.reset);
-    let truncated = previousMeta?.truncated ?? false;
+    let truncated = previousBuffer?.truncated ?? false;
     if (entries.length > this.maxBufferSize) {
       truncated = true;
       entries = entries.slice(entries.length - this.maxBufferSize);
@@ -565,8 +558,7 @@ export class ContainerLogsStreamManager {
     //   the client already had plenty of log history cached.
     // - reset=false → append, unchanged.
     const buffer = this.projectBuffer(scope, payload, mode);
-    this.buffers.set(scope, buffer.entries);
-    this.bufferMeta.set(scope, { total: buffer.total, truncated: buffer.truncated });
+    this.buffers.set(scope, buffer);
     const generatedAt = payload.generatedAt || Date.now();
     const errorMessage = resolvePermissionDeniedMessage(
       payload.error ?? null,
@@ -594,7 +586,7 @@ export class ContainerLogsStreamManager {
     setScopedDomainState(DOMAIN_NAME, scope, (previous) => ({
       ...previous,
       status: previous.status === 'ready' ? 'ready' : 'idle',
-      stats: this.buildStats(scope, (this.buffers.get(scope) ?? []).length),
+      stats: this.buildStats(scope, this.buffers.get(scope)?.entries.length ?? 0),
       scope,
     }));
     this.clearStreamError(scope);
@@ -605,7 +597,7 @@ export class ContainerLogsStreamManager {
       ...previous,
       status: previous.data ? 'updating' : 'loading',
       error: null,
-      stats: this.buildStats(scope, (this.buffers.get(scope) ?? []).length),
+      stats: this.buildStats(scope, this.buffers.get(scope)?.entries.length ?? 0),
       scope,
     }));
     this.clearStreamError(scope);
@@ -625,7 +617,7 @@ export class ContainerLogsStreamManager {
       status: previous.data ? 'updating' : 'loading',
       error: null,
       isManual,
-      stats: this.buildStats(scope, (this.buffers.get(scope) ?? []).length),
+      stats: this.buildStats(scope, this.buffers.get(scope)?.entries.length ?? 0),
       scope,
     }));
     this.clearStreamError(scope);
@@ -646,9 +638,9 @@ export class ContainerLogsStreamManager {
   }
 
   private buildStats(scope: string, count: number): SnapshotStats | null {
-    const meta = this.bufferMeta.get(scope);
-    const total = meta?.total ?? count;
-    const truncated = meta?.truncated ?? false;
+    const buffer = this.buffers.get(scope);
+    const total = buffer?.total ?? count;
+    const truncated = buffer?.truncated ?? false;
     const warnings = [...(this.backendWarnings.get(scope) ?? [])];
     if (truncated && total > count) {
       warnings.push(`Showing most recent ${count} of ${total} log entries`);

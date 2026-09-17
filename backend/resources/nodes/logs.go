@@ -136,12 +136,7 @@ func (s *Service) DiscoverLogs(ctx context.Context, nodeName string) restypes.No
 func (s *Service) FetchLogs(ctx context.Context, nodeName string, req restypes.NodeLogFetchRequest) restypes.NodeLogFetchResponse {
 	sourcePath := strings.TrimSpace(req.SourcePath)
 	tailBytes := normalizeNodeLogTailBytes(req.TailBytes)
-	source := restypes.NodeLogSource{
-		ID:    sourcePath,
-		Label: nodeLogSourceLabel(sourcePath),
-		Kind:  nodeLogSourceKind(sourcePath),
-		Path:  sourcePath,
-	}
+	source := newNodeLogSource(sourcePath)
 
 	if !isDisplayableNodeLogSource(sourcePath) {
 		return restypes.NodeLogFetchResponse{
@@ -265,12 +260,7 @@ func (s *Service) discoverWellKnownNodeLogServices(
 			continue
 		}
 
-		sources[sourcePath] = restypes.NodeLogSource{
-			ID:    sourcePath,
-			Label: nodeLogSourceLabel(sourcePath),
-			Kind:  nodeLogSourceKind(sourcePath),
-			Path:  sourcePath,
-		}
+		sources[sourcePath] = newNodeLogSource(sourcePath)
 	}
 }
 
@@ -349,12 +339,7 @@ func (s *nodeLogDiscoveryState) addSource(path string) {
 	if len(s.sources) >= maxNodeLogDiscoveryNodes {
 		return
 	}
-	s.sources[path] = restypes.NodeLogSource{
-		ID:    path,
-		Label: nodeLogSourceLabel(path),
-		Kind:  nodeLogSourceKind(path),
-		Path:  path,
-	}
+	s.sources[path] = newNodeLogSource(path)
 }
 
 func (s *Service) fetchNodeLogPath(ctx context.Context, nodeName, sourcePath, sinceTime string) ([]byte, error) {
@@ -396,32 +381,25 @@ func nodeLogProxyPathWithOptions(nodeName, sourcePath, sinceTime string, tailLin
 
 	if serviceName, ok := parseNodeLogServiceSource(sourcePath); ok {
 		query.Set("query", serviceName)
-		if trimmedSinceTime := strings.TrimSpace(sinceTime); trimmedSinceTime != "" {
-			query.Set("sinceTime", trimmedSinceTime)
-		}
-		if tailLines > 0 {
-			query.Set("tailLines", fmt.Sprintf("%d", tailLines))
-		}
-		return base + "?" + query.Encode()
+	} else {
+		base += strings.TrimLeft(strings.TrimSpace(sourcePath), "/")
 	}
-
-	trimmedPath := strings.TrimLeft(strings.TrimSpace(sourcePath), "/")
 	if trimmedSinceTime := strings.TrimSpace(sinceTime); trimmedSinceTime != "" {
 		query.Set("sinceTime", trimmedSinceTime)
 	}
 	if tailLines > 0 {
 		query.Set("tailLines", fmt.Sprintf("%d", tailLines))
 	}
-	if trimmedPath == "" {
-		if len(query) > 0 {
-			return base + "?" + query.Encode()
-		}
-		return base
-	}
 	if len(query) > 0 {
-		return base + trimmedPath + "?" + query.Encode()
+		return base + "?" + query.Encode()
 	}
-	return base + trimmedPath
+	return base
+}
+
+func newNodeLogSource(path string) restypes.NodeLogSource {
+	return restypes.NodeLogSource{
+		ID: path, Label: nodeLogSourceLabel(path), Kind: nodeLogSourceKind(path), Path: path,
+	}
 }
 
 func parseNodeLogServiceSource(sourcePath string) (string, bool) {

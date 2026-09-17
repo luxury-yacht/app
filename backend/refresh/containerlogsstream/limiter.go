@@ -135,8 +135,16 @@ func (l *GlobalTargetLimiter) allocateLocked() map[*TargetSession]int {
 	if len(demand.clusterIDs) == 0 {
 		return allocations
 	}
-	clusterBudgets := allocateClusterTargetBudgets(demand.clusterIDs, demand.clusterDemand, l.total)
-	allocateSessionTargetBudgets(allocations, demand.clusterIDs, demand.clusterSessions, clusterBudgets)
+	clusterBudgets := make(map[string]int, len(demand.clusterIDs))
+	distributeTargetBudget(clusterBudgets, demand.clusterIDs, func(clusterID string) int {
+		return demand.clusterDemand[clusterID]
+	}, l.total)
+	for _, clusterID := range demand.clusterIDs {
+		sessions := sortedTargetSessions(demand.clusterSessions[clusterID])
+		distributeTargetBudget(allocations, sessions, func(session *TargetSession) int {
+			return len(session.desiredKeys)
+		}, clusterBudgets[clusterID])
+	}
 	return allocations
 }
 
@@ -176,30 +184,24 @@ func targetSessionClusterID(session *TargetSession) string {
 	return session.clusterID
 }
 
-func allocateClusterTargetBudgets(clusterIDs []string, demand map[string]int, total int) map[string]int {
-	budgets := make(map[string]int, len(clusterIDs))
-	remaining := total
+// distributeTargetBudget applies the same ordered round-robin policy to clusters
+// and to sessions within each cluster. Unused capacity goes to remaining demand.
+func distributeTargetBudget[K comparable](allocations map[K]int, keys []K, demand func(K) int, budget int) {
+	remaining := budget
 	for remaining > 0 {
-		progressed := allocateClusterTargetBudgetRound(clusterIDs, demand, budgets, &remaining)
-		if !progressed {
-			break
+		if !allocateTargetBudgetRound(allocations, keys, demand, &remaining) {
+			return
 		}
 	}
-	return budgets
 }
 
-func allocateClusterTargetBudgetRound(
-	clusterIDs []string,
-	demand map[string]int,
-	budgets map[string]int,
-	remaining *int,
-) bool {
+func allocateTargetBudgetRound[K comparable](allocations map[K]int, keys []K, demand func(K) int, remaining *int) bool {
 	progressed := false
-	for _, clusterID := range clusterIDs {
-		if budgets[clusterID] >= demand[clusterID] {
+	for _, key := range keys {
+		if allocations[key] >= demand(key) {
 			continue
 		}
-		budgets[clusterID]++
+		allocations[key]++
 		*remaining--
 		progressed = true
 		if *remaining == 0 {
@@ -207,18 +209,6 @@ func allocateClusterTargetBudgetRound(
 		}
 	}
 	return progressed
-}
-
-func allocateSessionTargetBudgets(
-	allocations map[*TargetSession]int,
-	clusterIDs []string,
-	clusterSessions map[string][]*TargetSession,
-	clusterBudgets map[string]int,
-) {
-	for _, clusterID := range clusterIDs {
-		sessions := sortedTargetSessions(clusterSessions[clusterID])
-		allocateClusterSessions(allocations, sessions, clusterBudgets[clusterID])
-	}
 }
 
 func sortedTargetSessions(sessions []*TargetSession) []*TargetSession {
@@ -229,36 +219,6 @@ func sortedTargetSessions(sessions []*TargetSession) []*TargetSession {
 		return sessions[i].id < sessions[j].id
 	})
 	return sessions
-}
-
-func allocateClusterSessions(allocations map[*TargetSession]int, sessions []*TargetSession, budget int) {
-	remaining := budget
-	for remaining > 0 {
-		progressed := allocateSessionTargetBudgetRound(allocations, sessions, &remaining)
-		if !progressed {
-			return
-		}
-	}
-}
-
-func allocateSessionTargetBudgetRound(
-	allocations map[*TargetSession]int,
-	sessions []*TargetSession,
-	remaining *int,
-) bool {
-	progressed := false
-	for _, session := range sessions {
-		if allocations[session] >= len(session.desiredKeys) {
-			continue
-		}
-		allocations[session]++
-		*remaining--
-		progressed = true
-		if *remaining == 0 {
-			break
-		}
-	}
-	return progressed
 }
 
 func keysToSet(keys []string) map[string]struct{} {

@@ -584,6 +584,48 @@ describe('ShellTab', () => {
     expect(wailsMocks.StartShellSession).not.toHaveBeenCalled();
   });
 
+  it('closes a late start after the tab becomes inactive', async () => {
+    let finishStart!: (session: object) => void;
+    wailsMocks.StartShellSession.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishStart = resolve;
+      })
+    );
+    await renderShellTab();
+    clickConnectButton();
+    await renderShellTab({ isActive: false });
+    await act(async () => {
+      finishStart({ sessionId: 'late-session', container: 'app' });
+    });
+    expect(wailsMocks.CloseShellSession).toHaveBeenCalledWith('late-session');
+    expect(wailsMocks.SendShellInput).not.toHaveBeenCalled();
+  });
+
+  it('reattaches to the matching cluster when pod names overlap', async () => {
+    wailsMocks.ListShellSessions.mockResolvedValue([
+      {
+        sessionId: 'matching',
+        clusterId: 'alpha:ctx',
+        namespace: 'team-a',
+        podName: 'pod-1',
+        container: 'app',
+      },
+      {
+        sessionId: 'other-cluster',
+        clusterId: 'beta:ctx',
+        namespace: 'team-a',
+        podName: 'pod-1',
+        container: 'app',
+      },
+    ]);
+    await renderShellTab();
+    expect(wailsMocks.GetShellSessionBacklog).toHaveBeenCalledWith('matching');
+    expect(wailsMocks.GetShellSessionBacklog).not.toHaveBeenCalledWith('other-cluster');
+    getLatestTerminal()?.triggerData('pwd\n');
+    await flushAsync();
+    expect(wailsMocks.SendShellInput).toHaveBeenCalledWith('matching', 'pwd\n');
+  });
+
   it('replays buffered output when reattaching to a tracked session', async () => {
     wailsMocks.ListShellSessions.mockResolvedValue([
       {
@@ -605,6 +647,173 @@ describe('ShellTab', () => {
     const terminal = getLatestTerminal();
     expect(terminal?.write).toHaveBeenCalledWith('prior output\r\n$ ');
   });
+
+  it('detaches the old terminal and attaches the same pod in a different cluster', async () => {
+    wailsMocks.ListShellSessions.mockResolvedValue([
+      {
+        sessionId: 'alpha-session',
+        clusterId: 'alpha:ctx',
+        namespace: 'team-a',
+        podName: 'pod-1',
+        container: 'app',
+      },
+      {
+        sessionId: 'beta-session',
+        clusterId: 'beta:ctx',
+        namespace: 'team-a',
+        podName: 'pod-1',
+        container: 'app',
+      },
+    ]);
+    await renderShellTab();
+    const oldTerminal = getLatestTerminal();
+    await renderShellTab({ clusterId: 'beta:ctx' });
+    expect(oldTerminal?.dispose).toHaveBeenCalled();
+    expect(wailsMocks.GetShellSessionBacklog).toHaveBeenCalledWith('beta-session');
+    getLatestTerminal()?.triggerData('pwd\n');
+    await flushAsync();
+    expect(wailsMocks.SendShellInput).toHaveBeenLastCalledWith('beta-session', 'pwd\n');
+    expect(wailsMocks.CloseShellSession).not.toHaveBeenCalled();
+  });
+
+  it('ignores a late attachment lookup after switching clusters', async () => {
+    let finishLookup!: (sessions: object[]) => void;
+    wailsMocks.ListShellSessions.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishLookup = resolve;
+      })
+    ).mockResolvedValue([
+      {
+        sessionId: 'beta-session',
+        clusterId: 'beta:ctx',
+        namespace: 'team-a',
+        podName: 'pod-1',
+        container: 'app',
+      },
+    ]);
+    await renderShellTab();
+    await renderShellTab({ clusterId: 'beta:ctx' });
+    await act(async () => {
+      finishLookup([
+        {
+          sessionId: 'alpha-session',
+          clusterId: 'alpha:ctx',
+          namespace: 'team-a',
+          podName: 'pod-1',
+          container: 'app',
+        },
+      ]);
+    });
+    expect(wailsMocks.GetShellSessionBacklog).toHaveBeenCalledWith('beta-session');
+    expect(wailsMocks.GetShellSessionBacklog).not.toHaveBeenCalledWith('alpha-session');
+  });
+
+  it('does not replay an old cluster backlog into the new terminal', async () => {
+    let finishBacklog!: (text: string) => void;
+    wailsMocks.ListShellSessions.mockResolvedValue([
+      {
+        sessionId: 'alpha-session',
+        clusterId: 'alpha:ctx',
+        namespace: 'team-a',
+        podName: 'pod-1',
+        container: 'app',
+      },
+      {
+        sessionId: 'beta-session',
+        clusterId: 'beta:ctx',
+        namespace: 'team-a',
+        podName: 'pod-1',
+        container: 'app',
+      },
+    ]);
+    wailsMocks.GetShellSessionBacklog.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishBacklog = resolve;
+      })
+    ).mockResolvedValue('beta output');
+    await renderShellTab();
+    await renderShellTab({ clusterId: 'beta:ctx' });
+    await act(async () => {
+      finishBacklog('alpha output');
+    });
+    const terminal = getLatestTerminal();
+    expect(terminal?.write).toHaveBeenCalledWith('beta output');
+    expect(terminal?.write).not.toHaveBeenCalledWith('alpha output');
+  });
+
+  it('ignores container discovery from the previous cluster', async () => {
+    let finishDiscovery!: (containers: string[]) => void;
+    wailsMocks.GetPodContainers.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishDiscovery = resolve;
+      })
+    ).mockResolvedValue(['beta-container']);
+    await renderShellTab();
+    await renderShellTab({ clusterId: 'beta:ctx' });
+    await act(async () => finishDiscovery(['alpha-container']));
+    const selector = container.querySelector('select') as HTMLSelectElement;
+    expect(Array.from(selector.options, (option) => option.value)).toEqual(['beta-container']);
+  });
+
+  it('clears discovered containers and their selection when the cluster changes', async () => {
+    wailsMocks.GetPodContainers.mockResolvedValueOnce(['alpha-container']).mockResolvedValue([]);
+    await renderShellTab();
+    await renderShellTab({ clusterId: 'beta:ctx', availableContainers: ['beta-container'] });
+    clickConnectButton();
+    await flushAsync();
+    expect(wailsMocks.StartShellSession).toHaveBeenLastCalledWith(
+      'beta:ctx',
+      expect.objectContaining({ container: 'beta-container' })
+    );
+  });
+
+  it.each(['success', 'failure'] as const)(
+    'ignores late debug creation %s after switching clusters',
+    async (outcome) => {
+      let finishDebug!: (value: object) => void;
+      let failDebug!: (error: Error) => void;
+      wailsMocks.RunObjectAction.mockReturnValueOnce(
+        new Promise((resolve, reject) => {
+          finishDebug = resolve;
+          failDebug = reject;
+        })
+      );
+      await renderShellTab({ availableContainers: ['alpha-container'] });
+      setDebugContainerEnabled(true);
+      act(() => {
+        requireValue(
+          container.querySelector<HTMLButtonElement>('.shell-tab__debug-button'),
+          'expected debug action'
+        ).click();
+      });
+      await renderShellTab({ clusterId: 'beta:ctx', availableContainers: ['beta-container'] });
+      await act(async () => {
+        if (outcome === 'success') {
+          finishDebug({ debugContainer: { containerName: 'alpha-debug' } });
+        } else {
+          failDebug(new Error('alpha creation failed'));
+        }
+      });
+      expect(wailsMocks.StartShellSession).not.toHaveBeenCalled();
+      expect(handleInlineMock).not.toHaveBeenCalled();
+      const button = requireValue(
+        container.querySelector<HTMLButtonElement>('.shell-tab__debug-button'),
+        'expected new cluster debug action'
+      );
+      expect(button.disabled).toBe(false);
+      await act(async () => button.click());
+      expect(wailsMocks.RunObjectAction).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          target: expect.objectContaining({ clusterId: 'beta:ctx' }),
+          debugContainer: expect.objectContaining({ targetContainer: 'beta-container' }),
+        })
+      );
+      expect(wailsMocks.StartShellSession).toHaveBeenLastCalledWith(
+        'beta:ctx',
+        expect.objectContaining({ container: 'debug-abc12345' })
+      );
+    }
+  );
 
   it('deduplicates replay overlap when live output arrives during backlog replay', async () => {
     wailsMocks.ListShellSessions.mockResolvedValue([

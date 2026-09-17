@@ -52,6 +52,38 @@ type portForwardSessionInternal struct {
 	mu               sync.Mutex
 }
 
+// Activation signals success after publishing active status; only a failed
+// first attempt needs to report its error here.
+func (s *portForwardSessionInternal) signalStartFailure(err error) {
+	if err == nil {
+		return
+	}
+	select {
+	case s.readyChan <- err:
+	default:
+	}
+}
+
+func (s *portForwardSessionInternal) snapshot() PortForwardSession {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.PortForwardSession
+}
+
+func (s *portForwardSessionInternal) setStatus(status PortForwardStatus, reason string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Status = status
+	s.StatusReason = reason
+}
+
+func (s PortForwardSession) targetRef() portForwardTargetRef {
+	return portForwardTargetRef{
+		Namespace: s.Namespace, Kind: s.TargetKind, Group: s.TargetGroup,
+		Version: s.TargetVersion, Name: s.TargetName,
+	}
+}
+
 func (s *portForwardSessionInternal) close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

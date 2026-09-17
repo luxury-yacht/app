@@ -101,14 +101,7 @@ func (s *Service) setUnschedulable(ctx context.Context, nodeName string, unsched
 
 // Drain evicts or deletes pods on the node according to the provided options.
 func (s *Service) Drain(ctx context.Context, nodeName string, options restypes.DrainNodeOptions) (err error) {
-	if err := ValidateDrainOptions(options); err != nil {
-		return err
-	}
-	store, err := s.requireDrainStore()
-	if err != nil {
-		return err
-	}
-	job, err := store.StartDrainForClusterIfIdle(nodeName, options, s.deps.ClusterID, s.deps.ClusterName)
+	job, err := s.prepareDrainJob(nodeName, options)
 	if err != nil {
 		return err
 	}
@@ -118,17 +111,11 @@ func (s *Service) Drain(ctx context.Context, nodeName string, options restypes.D
 
 // StartDrainWithCompletion starts a drain job and invokes onComplete after the job exits.
 func (s *Service) StartDrainWithCompletion(ctx context.Context, nodeName string, options restypes.DrainNodeOptions, onComplete func(string)) (*nodemaintenance.DrainJob, error) {
-	if err := ValidateDrainOptions(options); err != nil {
-		return nil, err
-	}
-	store, err := s.requireDrainStore()
+	job, err := s.prepareDrainJob(nodeName, options)
 	if err != nil {
 		return nil, err
 	}
-	job, err := store.StartDrainForClusterIfIdle(nodeName, options, s.deps.ClusterID, s.deps.ClusterName)
-	if err != nil {
-		return nil, err
-	}
+	store := s.drainStore
 
 	ctx, cancel := context.WithCancel(ctx)
 	store.RegisterCancel(job.ID, cancel)
@@ -143,6 +130,17 @@ func (s *Service) StartDrainWithCompletion(ctx context.Context, nodeName string,
 	}()
 
 	return job, nil
+}
+
+func (s *Service) prepareDrainJob(nodeName string, options restypes.DrainNodeOptions) (*nodemaintenance.DrainJob, error) {
+	if err := ValidateDrainOptions(options); err != nil {
+		return nil, err
+	}
+	store, err := s.requireDrainStore()
+	if err != nil {
+		return nil, err
+	}
+	return store.StartDrainForClusterIfIdle(nodeName, options, s.deps.ClusterID, s.deps.ClusterName)
 }
 
 func (s *Service) requireDrainStore() (*nodemaintenance.Store, error) {

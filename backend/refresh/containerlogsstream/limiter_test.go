@@ -2,6 +2,35 @@ package containerlogsstream
 
 import "testing"
 
+func TestGlobalTargetLimiterRebalancesSameScopeSessionsAfterLimitAndRelease(t *testing.T) {
+	limiter := NewGlobalTargetLimiter(3)
+	older := limiter.StartSession("cluster-a", "same-scope")
+	newer := limiter.StartSession("cluster-a", "same-scope")
+	other := limiter.StartSession("cluster-b", "scope")
+	defer newer.Release()
+	defer other.Release()
+	older.UpdateDesired([]string{"old-1", "old-2"})
+	newer.UpdateDesired([]string{"new-1", "new-2"})
+	other.UpdateDesired([]string{"other-1", "other-2"})
+	limiter.SetLimit(2)
+	allowedOld, _ := older.UpdateDesired([]string{"old-1", "old-2"})
+	allowedNew, _ := newer.UpdateDesired([]string{"new-1", "new-2"})
+	if len(allowedOld) != 1 || len(allowedNew) != 0 {
+		t.Fatalf("same-scope tie must favor the older session: old=%v new=%v", allowedOld, allowedNew)
+	}
+	older.Release()
+	allowedNew, _ = newer.UpdateDesired([]string{"new-1", "new-2"})
+	if _, ok := allowedNew["new-1"]; !ok || len(allowedNew) != 1 {
+		t.Fatalf("released capacity must admit the next session's first target: %v", allowedNew)
+	}
+	limiter.SetLimit(8)
+	allowedNew, skipped := newer.UpdateDesired([]string{"new-1", "new-2"})
+	allowedOther, _ := other.UpdateDesired([]string{"other-1", "other-2"})
+	if len(allowedNew) != 2 || len(allowedOther) != 2 || skipped != 0 {
+		t.Fatalf("spare budget must stop at demand: new=%v other=%v skipped=%d", allowedNew, allowedOther, skipped)
+	}
+}
+
 func TestGlobalTargetLimiterSharesBudgetAcrossClusters(t *testing.T) {
 	limiter := NewGlobalTargetLimiter(4)
 

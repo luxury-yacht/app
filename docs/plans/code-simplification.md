@@ -207,7 +207,7 @@ correctness-driven interruption and resume the rotation afterwards.
 | 3 | Cluster/workspace/auth | Backend cluster/workspace owners and auth helpers; Kubernetes/cluster workspace contexts | S003 catch-up: client/recovery and discovery/watch revisited |
 | 4 | Refresh and data access | Refresh APIs, stores, snapshots, ingestion, streams, metrics and governor; frontend refresh/data brokers | S004 catch-up: snapshot/store/mux/metrics reviewed; large lifecycle owners remain |
 | 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | Expanded S005 batch and final gate passed; remaining scope recorded |
-| 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | After expanded S005 |
+| 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | S006 owner/consumer review, batch implementation, coverage and final gate passed |
 | 7 | Object map | Backend graph producers and relationships; frontend graph, layout and renderer | Inventoried |
 | 8 | Permissions and mutations | Capability policy, permission caches, object actions/YAML; frontend availability gates | Inventoried |
 | 9 | Navigation and interaction | Sidebar, routing, shortcuts, command palette, modals, shared inputs and menus | Inventoried |
@@ -604,14 +604,143 @@ These are behavior-preserving refactors. Tests mock native calls and refresh
 transport; no native window, terminal interaction, or rendered-layout validation
 is claimed. Remaining domain responsibilities stay open for later batches.
 
-## Following batch — S006 operations
+## S006 — operations
 
-Inspect shell/debug sessions, log readers and streams, port-forward, drain, and
-the runtime registry alongside their detail/event consumers. Collect related
-ownership, cleanup, error-policy, and representation simplifications before
-editing. Preserve cluster/object identity, cancellation, session lifetime, and
-terminal/log ordering; retain distinct cleanup policies where the contracts differ.
-Run focused checks during edits and one repository gate at the batch boundary.
+**Status: batch implemented; coverage and final prerelease gate passed.**
+Baseline `1d065d81`; the worktree was clean at the start of this batch. The
+focused baseline passed 393 frontend tests in 33 files and the backend operations,
+drain, pod/node and container-log selections. Logs:
+`/tmp/luxury-yacht-s006-frontend-before.log` and
+`/tmp/luxury-yacht-s006-backend-before.log`.
+
+### Inspected scope and candidate dispositions
+
+The reviewed owners and consumers are listed below; this does not close entire
+parent packages or the repository inventory. Changes span 14 production files.
+Two authored files join the baseline inventory: `backend/internal/containerlogs/errors.go`
+and `frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellConnectionControls.tsx`;
+the inventory table's numeric counts remain the original baseline counts.
+
+| Responsibility | Inspected implementation and consumers | Implemented simplification / retained policy |
+| --- | --- | --- |
+| Shell/debug | `backend/shell_sessions.go`, `shell_sessions_lifecycle.go`, `resources/pods/debug.go`; frontend `ShellTab.tsx`, shell app-state/data readers, ObjectPanelContent shell mounting and dockable-panel lifecycle contracts | Separate start admission, tracked-session installation, backlog replay/flush, terminal close handling, debug RPC/result validation and connection controls. Share shell-command fields across ordinary/debug forms. Keep configuration lifetime in ShellTab, terminal ownership, detach-without-stop, late-start closure, replay overlap and native input/resize behavior. |
+| Container logs | `backend/refresh/containerlogsstream/{handler,streamer,limiter,types}.go`, `resources/pods/logs.go`; frontend `containerLogsStreamManager.ts`, fallback manager/hook and LogViewer fallback request/projection consumers | Replace eight positional tail results with the existing named result; share initial/live target selection, cluster/session round-robin allocation and unavailable-container classification. Combine entries and their counters in one scoped buffer. Keep API-not-found handling, watch versus follow retries, timestamp-parser cutoffs, nil/empty filters and independently retained backend warnings. |
+| Node logs | `backend/resources/nodes/logs.go`; frontend `nodeLogsApi.ts`, `NodeLogsTab.tsx` | Share source metadata construction and query suffix assembly. Keep discovery/probing, path versus service validation, binary filtering, truncation, fetch/append and cache lifetimes. |
+| Port-forward | `backend/portforward.go`, `portforward_{types,lifecycle,resolve,targets,ports}.go`; frontend `PortForwardModal.tsx`, operation status hook/adapter and `SessionsStatus.tsx` | One locked session snapshot and target projection for execution, re-resolution, runtime records, lists and events; shared status assignment; separate retry policy/publication from cancellable backoff. Keep initial-ready versus activated registration, epoch rejection, direct-Pod versus workload reconnect, Service port resolution and modal request cancellation. |
+| Drain | `backend/nodemaintenance/store.go`, `resources/nodes/nodes.go`, `operations_drain_registration.go`, `resource_gateway_node_actions.go`, `refresh/snapshot/node_maintenance.go`; frontend `DrainNodeModal.tsx`, model/view, `drainProgress.ts`, `DrainProgressCard.tsx` | Share validation/store/idle admission and lifecycle terminal updates. Keep user cancellation's `canceling` transition, callbacks outside locks, one version advance per bulk cancellation, bounded per-cluster history, uncached snapshots and separate start/cancel permissions. |
+| Shared operation lifetime | `backend/operations_coordinator.go`, `runtime_operations.go`; shutdown and workspace close/prune/client-pool cleanup callers; frontend runtime-operation status envelope | Retain coordinator/registry ownership, remove-before-callback ordering, process/cluster epoch gates, detail-store ownership and authoritative frontend operation envelopes. Startup readiness and distinct shell/forward/drain cleanup policies do not justify another shared cleanup abstraction. |
+
+The recurring cost addressed here is duplicated policy and state: two log
+allocation loops, two target-selection paths, repeated log-error/source mapping,
+two log-buffer maps, repeated drain admission/cancellation and repeated locked
+port-forward projections. Shell orchestration also mixed UI controls, RPC
+admission, replay and terminal status handling in nested callbacks. These changes
+reuse their existing owners; the shared log classifier stays in the existing
+`backend/internal/containerlogs` dependency, and the shell view imports only shared
+UI components. Neither dependency points back at its consumer.
+
+### Required cluster-identity correction
+
+Tracing ShellTab found that its target lifetime used namespace/name but omitted
+cluster identity. Pending attachment, backlog, discovery and debug-creation
+responses could then update a different cluster's terminal or controls. The
+repository's touched-cluster contract required correcting that path during this
+batch. The target token now includes cluster/namespace/pod; target changes reset
+session/container state, obsolete completions are ignored, and unmount invalidates
+pending attachment/replay. Debug actions still carry complete Pod identity through
+the existing object-action boundary.
+
+Acceptance evidence:
+
+- **Passed:** switching between identically named pods detaches the old terminal
+  and attaches/input-routes to the matching cluster; late lookup/backlog results
+  cannot replace the new session/output. Three failures before the correction,
+  then 31 passing shell tests: `/tmp/luxury-yacht-s006-shell-identity-red.log` and
+  `/tmp/luxury-yacht-s006-shell-identity-green.log`.
+- **Passed:** late container discovery and debug success/failure cannot alter the
+  new target; discovered container selection resets and a new target can still
+  create/connect its own debug container. Four failures before correction, then
+  35 passing tests after refactoring: `/tmp/luxury-yacht-s006-shell-target-red.log`
+  and `/tmp/luxury-yacht-s006-shell-final.log`.
+- **Passed:** the same shell suite retains success/failure, capability denial,
+  detach/reattach, clipboard/input, replay-overlap and late-start cleanup checks.
+  Backend RPC, events, xterm and clipboard are mocked in these React tests.
+  They are not native terminal/window interaction evidence; native window
+  placement/destruction and terminal resource ownership were not changed.
+- **Passed against baseline:** new limiter redistribution and cleanup cases
+  characterize same-scope ordering, demand limits, release, bulk drain callback
+  re-entry/publication, port-forward retry exhaustion and cancellation during
+  backoff. Logs: `/tmp/luxury-yacht-s006-limiter-before.log` and
+  `/tmp/luxury-yacht-s006-cleanup-characterization.log` (original Go sources loaded
+  through a temporary overlay, with current tests). Existing assertions were
+  retained; no presentation-test pruning is included.
+
+### Batch validation
+
+- **Passed:** focused drain, node-log, container-stream/pod-log, port-forward and
+  frontend log-buffer checks during implementation. Logs:
+  `/tmp/luxury-yacht-s006-drain-after.log`,
+  `/tmp/luxury-yacht-s006-node-logs-after.log`,
+  `/tmp/luxury-yacht-s006-log-stream-after.log`,
+  `/tmp/luxury-yacht-s006-log-errors-after.log`,
+  `/tmp/luxury-yacht-s006-portforward-after2.log`,
+  `/tmp/luxury-yacht-s006-log-buffer-after.log`.
+- **Passed:** final frontend typecheck:
+  `/tmp/luxury-yacht-s006-typecheck-final.log`.
+- **Passed locally:** 35 changed/new Go functions score at most 12 using pinned
+  gocognit v1.2.1, including both new helpers and changed callers; all three changed
+  production TS/TSX files pass Biome at maximum 12. Logs:
+  `/tmp/luxury-yacht-s006-go-complexity-summary.txt` and
+  `/tmp/luxury-yacht-s006-ts-complexity6.log`. The all-rule audit of existing PR
+  #355 reports zero open/confirmed new-code issues, but the published head remains
+  baseline `1d065d81`, not this uncommitted batch. Logs:
+  `/tmp/luxury-yacht-s006-sonar-pr.log` and
+  `/tmp/luxury-yacht-s006-pr-context.log`. Local results do not establish remote
+  Sonar closure for these changes.
+- **Passed:** `mise exec -- wails3 task test:frontend-coverage`: 513 files / 4,791
+  tests. Changed-source statement coverage: ShellTab 85.09%, connection controls
+  85.71%, container-log stream manager 87.45%. Report:
+  `/tmp/luxury-yacht-s006-frontend-coverage.log`; HTML/JSON moved to
+  `/tmp/luxury-yacht-s006-frontend-coverage` before repository lint.
+- **Passed:** `mise exec -- wails3 task test:backend-coverage`. Package statement
+  coverage: backend 80.6%, node maintenance 89.2%, container-log streams 82.0%,
+  nodes 82.6%, pods 79.7%. Per-package tests report shared container logs at 63.9%;
+  instrumenting that package through pod/stream consumers measures 87.1%, with
+  the moved classifier at 100%. Logs:
+  `/tmp/luxury-yacht-s006-backend-coverage.log`,
+  `/tmp/luxury-yacht-s006-shared-log-coverage.log` and
+  `/tmp/luxury-yacht-s006-shared-log-coverage.out`.
+- Coverage limitations: the pod package remains below 80% while its changed
+  log-fetch function is 100%; port-forward execution includes unexercised live
+  SPDY transport paths (9.8% function coverage). These backend changes preserve
+  behavior; the changed shell behavior exceeds 80% statement coverage. No
+  low-value presentation or private-helper tests were added to raise percentages.
+  Function report: `/tmp/luxury-yacht-s006-function-coverage.txt`.
+- **Passed against baseline:** a further port-forward re-resolution case uses
+  identically named Services in two fake clusters to check the original target's
+  cluster/namespace/kind/name and retention of the last destination on failure.
+  `/tmp/luxury-yacht-s006-reconnect-before.log`. The fixture uses real EndpointSlice
+  and ready-Pod resolver paths; it does not establish a live SPDY connection.
+- **Passed in current code:** the port-forward lifecycle/re-resolution selection
+  with the added case. Re-resolution measures 84.6% and target projection 100%;
+  retry policy is 100% and the runner 83.3%. Evidence:
+  `/tmp/luxury-yacht-s006-forward-coverage.log` and
+  `/tmp/luxury-yacht-s006-forward-coverage.out`.
+- **Passed:** one final `GOCACHE=/tmp/luxury-yacht-go-build
+  STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease`:
+  docs, formatting, bindings, vet/staticcheck, all backend race tests, frontend
+  lint/typecheck, 513 files / 4,791 tests, Knip and Trivy. Log:
+  `/tmp/luxury-yacht-s006-prerelease.log`. The before/after path and SHA-256
+  comparison found no changes to the 20-file batch and no additional paths;
+  `git diff --check` passed. Comparison:
+  `/tmp/luxury-yacht-s006-after-gate.json`. Only this evidence record was updated
+  afterwards; `qc:docs` and `git diff --check` were rerun for that final update.
+  macOS linker deployment-target warnings in direct Go runs and jsdom's navigation
+  warning did not fail the suites.
+
+Next scheduled domain after this batch: S007 object-map relationships, layout and
+rendering. Operation behavior outside the explicitly inspected files above remains
+in its owning inventory unit; the full repository review is still in progress.
 
 S001 established an inefficient delivery size: a one-file production change paid
 for a full frontend coverage run and a full repository gate. Future batches
@@ -854,16 +983,16 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/(root: menu)` | 1 | 246 | — / — | Inventoried |
 | `backend/(root: node)` | 3 | 145 | — / — | Inventoried |
 | `backend/(root: object)` | 11 | 2243 | — / — | Partial S005: detail/Helm read ownership and YAML mutation admission; other enrichments and mutation internals remain |
-| `backend/(root: operations)` | 2 | 323 | — / — | Inventoried |
+| `backend/(root: operations)` | 2 | 323 | — / — | S006: coordinator and drain-registration ownership reviewed; distinct cleanup retained |
 | `backend/(root: pod)` | 3 | 161 | — / — | Inventoried |
-| `backend/(root: portforward)` | 6 | 1133 | 2 / — | Inventoried |
+| `backend/(root: portforward)` | 6 | 1133 | 2 / — | S006: target, port, session and lifecycle files reviewed; projections/retry handling simplified |
 | `backend/(root: preferences)` | 5 | 2301 | 2 / — | Inventoried |
 | `backend/(root: refresh)` | 18 | 4252 | 4 / — | Inventoried |
 | `backend/(root: resource)` | 6 | 1450 | — / — | Inventoried |
 | `backend/(root: response)` | 3 | 687 | — / — | Inventoried |
-| `backend/(root: runtime)` | 2 | 304 | 1 / — | Inventoried |
+| `backend/(root: runtime)` | 2 | 304 | 1 / — | Partial S006: operation registry reviewed; runtime setting policies remain |
 | `backend/(root: settings)` | 1 | 229 | — / — | Inventoried |
-| `backend/(root: shell)` | 2 | 765 | 1 / — | Inventoried |
+| `backend/(root: shell)` | 2 | 765 | 1 / — | S006: session/lifecycle owners reviewed; frontend orchestration simplified |
 | `backend/(root: static)` | 1 | 83 | — / — | Inventoried |
 | `backend/(root: theme)` | 1 | 132 | — / — | Inventoried |
 | `backend/(root: types)` | 1 | 82 | — / — | Inventoried |
@@ -878,7 +1007,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/internal/authstate` | 4 | 683 | — / — | Inventoried |
 | `backend/internal/cachekeys` | 1 | 18 | — / — | Inventoried |
 | `backend/internal/config` | 1 | 551 | — / — | Inventoried |
-| `backend/internal/containerlogs` | 5 | 495 | 1 / — | Inventoried |
+| `backend/internal/containerlogs` | 5 | 495 | 1 / — | Partial S006: shared unavailable classifier added; existing selection/target helpers inspected through consumers |
 | `backend/internal/credentialerrors` | 1 | 226 | — / — | Inventoried |
 | `backend/internal/errorcapture` | 4 | 589 | — / — | Inventoried |
 | `backend/internal/genappbindings` | 2 | 306 | — / — | Inventoried |
@@ -898,13 +1027,13 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/kind/objectmapspec` | 2 | 183 | — / — | Inventoried |
 | `backend/kind/streamrows` | 2 | 601 | — / — | Inventoried |
 | `backend/kind/streamspec` | 1 | 64 | — / — | Inventoried |
-| `backend/nodemaintenance` | 1 | 584 | — / — | Inventoried |
+| `backend/nodemaintenance` | 1 | 584 | — / — | S006: store/history/cancellation reviewed and shared terminal updates implemented |
 | `backend/objectaction` | 1 | 150 | — / — | Inventoried |
 | `backend/objectcatalog` | 25 | 5995 | 8 / — | Reviewing: S002 query/facets; other responsibilities remain |
 | `backend/objectyaml` | 1 | 130 | — / — | Inventoried |
 | `backend/refresh` | 6 | 804 | 2 / — | Inventoried |
 | `backend/refresh/api` | 1 | 304 | — / — | Inventoried |
-| `backend/refresh/containerlogsstream` | 4 | 2200 | 3 / — | Inventoried |
+| `backend/refresh/containerlogsstream` | 4 | 2200 | 3 / — | S006: handler/streamer/limiter reviewed and simplified; wire DTO unchanged |
 | `backend/refresh/domain` | 2 | 264 | — / — | Inventoried |
 | `backend/refresh/domainpermissions` | 2 | 754 | — / — | Inventoried |
 | `backend/refresh/eventstream` | 2 | 484 | — / — | Inventoried |
@@ -957,11 +1086,11 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/resources/listenerset` | 12 | 331 | — / — | Inventoried |
 | `backend/resources/namespaces` | 8 | 511 | — / — | Inventoried |
 | `backend/resources/networkpolicy` | 13 | 540 | — / — | Inventoried |
-| `backend/resources/nodes` | 10 | 1846 | — / — | Inventoried |
+| `backend/resources/nodes` | 10 | 1846 | — / — | Partial S006: node/drain and logs reviewed; other per-kind projection files remain |
 | `backend/resources/persistentvolume` | 12 | 632 | — / — | Inventoried |
 | `backend/resources/persistentvolumeclaim` | 12 | 516 | 1 / — | Inventoried |
 | `backend/resources/poddisruptionbudget` | 13 | 451 | — / — | Inventoried |
-| `backend/resources/pods` | 13 | 1954 | 5 / — | Inventoried |
+| `backend/resources/pods` | 13 | 1954 | 5 / — | Partial S006: debug, logs and forward-target reader reviewed; other pod projections remain |
 | `backend/resources/prometheus` | 1 | 181 | — / — | Inventoried |
 | `backend/resources/referencegrant` | 12 | 368 | — / — | Inventoried |
 | `backend/resources/replicaset` | 11 | 514 | 1 / — | Inventoried |
@@ -999,7 +1128,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/core/panel-windows` | 17 | 2600 | — / — | Inventoried |
 | `frontend/src/core/persistence` | 2 | 448 | — / — | Inventoried |
 | `frontend/src/core/read-diagnostics` | 2 | 312 | — / — | Inventoried |
-| `frontend/src/core/refresh` | 60 | 17381 | — / 9 | Partial: S004 store/runtime/scheduler and orchestrator seams |
+| `frontend/src/core/refresh` | 60 | 17381 | — / 9 | Partial: S004 store/runtime/scheduler and orchestrator seams; S006 container-log buffer/fallback paths reviewed |
 | `frontend/src/core/resource-metrics` | 6 | 726 | — / 2 | Inventoried |
 | `frontend/src/core/settings` | 4 | 1890 | — / — | Inventoried |
 | `frontend/src/core/telemetry` | 2 | 1175 | — / — | Inventoried |
@@ -1011,7 +1140,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/modules/kubernetes` | 1 | 856 | — / — | S003 provider inspected; adds selection model |
 | `frontend/src/modules/namespace` | 30 | 4701 | — / 1 | Inventoried |
 | `frontend/src/modules/object-map` | 38 | 8546 | — / 12 | Inventoried |
-| `frontend/src/modules/object-panel` | 141 | 32321 | — / 31 | Partial S005: panel reconciliation, tab composition, YAML baseline, Overview rendering, log presentation, Helm read model; remaining scope recorded |
+| `frontend/src/modules/object-panel` | 141 | 32321 | — / 31 | Partial S005: panel reconciliation, tab composition, YAML baseline, Overview rendering, log presentation, Helm read model; S006 shell/debug and node/container-log consumers reviewed; remaining scope recorded |
 | `frontend/src/modules/port-forward` | 4 | 874 | — / 1 | Inventoried |
 | `frontend/src/modules/resource-grid` | 15 | 4107 | — / 1 | Inventoried |
 | `frontend/src/shared/actions` | 4 | 772 | — / — | Inventoried |

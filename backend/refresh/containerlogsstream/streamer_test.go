@@ -108,13 +108,13 @@ func TestMatchNoneTailAndStreamDoNotTouchKubernetes(t *testing.T) {
 		MatchNone: true,
 	}
 
-	initial, states, pods, selector, warnings, _, _, err := streamer.tail(context.Background(), opts, nil)
+	initial, err := streamer.tail(context.Background(), opts, nil)
 	require.NoError(t, err)
-	require.Empty(t, initial)
-	require.Empty(t, states)
-	require.Empty(t, pods)
-	require.Empty(t, selector)
-	require.Empty(t, warnings)
+	require.Empty(t, initial.entries)
+	require.Empty(t, initial.states)
+	require.Empty(t, initial.pods)
+	require.Empty(t, initial.selector)
+	require.Empty(t, initial.warnings)
 	require.Empty(t, client.Actions())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -124,8 +124,8 @@ func TestMatchNoneTailAndStreamDoNotTouchKubernetes(t *testing.T) {
 		streamer.run(
 			ctx,
 
-			pods,
-			selector, containerLogRunConfig{opts: opts, states: states, limiterSession: nil, initialWarnings: warnings, entriesCh: make(chan Entry), warningsCh: make(chan []string), errCh: make(chan error), dropCh: make(chan int)})
+			initial.pods,
+			initial.selector, containerLogRunConfig{opts: opts, states: initial.states, limiterSession: nil, initialWarnings: initial.warnings, entriesCh: make(chan Entry), warningsCh: make(chan []string), errCh: make(chan error), dropCh: make(chan int)})
 
 	}()
 	cancel()
@@ -162,7 +162,7 @@ func TestTailSortsInitialEntriesByTimestampAcrossTargets(t *testing.T) {
 	}
 	streamer := NewStreamer(client, applog.Noop, nil)
 
-	entries, states, pods, selector, warnings, skipped, skipReason, err := streamer.tail(context.Background(), Options{
+	initial, err := streamer.tail(context.Background(), Options{
 		Namespace:        "default",
 		Kind:             "pod",
 		Name:             "demo",
@@ -173,15 +173,15 @@ func TestTailSortsInitialEntriesByTimestampAcrossTargets(t *testing.T) {
 	}, nil)
 
 	require.NoError(t, err)
-	require.Len(t, pods, 1)
-	require.Empty(t, selector)
-	require.Empty(t, warnings)
-	require.Zero(t, skipped)
-	require.Empty(t, skipReason)
-	require.Len(t, states, 2)
-	require.Len(t, entries, 2)
-	require.Equal(t, []string{"app early", "init late"}, []string{entries[0].Line, entries[1].Line})
-	require.Less(t, entries[0].Timestamp, entries[1].Timestamp)
+	require.Len(t, initial.pods, 1)
+	require.Empty(t, initial.selector)
+	require.Empty(t, initial.warnings)
+	require.Zero(t, initial.skippedTargets)
+	require.Empty(t, initial.skipReason)
+	require.Len(t, initial.states, 2)
+	require.Len(t, initial.entries, 2)
+	require.Equal(t, []string{"app early", "init late"}, []string{initial.entries[0].Line, initial.entries[1].Line})
+	require.Less(t, initial.entries[0].Timestamp, initial.entries[1].Timestamp)
 }
 
 func TestListPodsSelectorError(t *testing.T) {

@@ -72,27 +72,30 @@ func (t containerTarget) key() string {
 }
 
 // tail gathers the initial log history for the given options and prepares container state.
-func (s *Streamer) tail(ctx context.Context, opts Options, limiterSession *TargetSession) ([]Entry, map[string]*containerState, []*corev1.Pod, string, []string, int, string, error) {
+func (s *Streamer) tail(ctx context.Context, opts Options, limiterSession *TargetSession) (containerLogsInitial, error) {
 	pods, selector, err := s.listPods(ctx, opts)
 	if err != nil {
-		return nil, nil, nil, "", nil, 0, "", fmt.Errorf("containerlogsstream: tail %s/%s: %w", opts.Namespace, opts.Name, err)
+		return containerLogsInitial{}, fmt.Errorf("containerlogsstream: tail %s/%s: %w", opts.Namespace, opts.Name, err)
 	}
-	selection := selectInitialLogTargets(pods, opts, limiterSession, s.perScopeLimit)
+	selection := selectLogTargets(pods, opts, limiterSession, s.perScopeLimit)
 	entries, states := s.collectInitialLogEntries(ctx, selection.targets, opts)
 	sortInitialLogEntries(entries)
-	return entries, states, pods, selector, selection.warnings, selection.skipped, selection.skipReason, nil
+	return containerLogsInitial{
+		entries: entries, states: states, pods: pods, selector: selector,
+		warnings: selection.warnings, skippedTargets: selection.skipped, skipReason: selection.skipReason,
+	}, nil
 }
 
-type initialLogTargetSelection struct {
+type logTargetSelection struct {
 	targets    []containerTarget
 	warnings   []string
 	skipped    int
 	skipReason string
 }
 
-func selectInitialLogTargets(pods []*corev1.Pod, opts Options, limiterSession *TargetSession, limit int) initialLogTargetSelection {
+func selectLogTargets(pods []*corev1.Pod, opts Options, limiterSession *TargetSession, limit int) logTargetSelection {
 	targets, total := selectRuntimeTargets(pods, containerSelectionOptions(opts), limit)
-	selection := initialLogTargetSelection{
+	selection := logTargetSelection{
 		targets: targets, warnings: containerlogs.BuildTargetLimitWarnings(len(targets), total, limit),
 		skipped: total - len(targets),
 	}
@@ -112,7 +115,7 @@ func containerSelectionOptions(opts Options) containerlogs.ContainerSelectionOpt
 	}
 }
 
-func applyGlobalTargetLimit(selection *initialLogTargetSelection, session *TargetSession) {
+func applyGlobalTargetLimit(selection *logTargetSelection, session *TargetSession) {
 	before := len(selection.targets)
 	allowedKeys, globalSkipped := session.UpdateDesired(targetKeys(selection.targets))
 	selection.targets = filterTargetsByKeys(selection.targets, allowedKeys)
@@ -317,9 +320,9 @@ func (r *containerLogRun) stopTarget(key string) {
 
 func (r *containerLogRun) reconcileTargets(ctx context.Context) {
 	pods, activeKeys := r.snapshotInventory()
-	selectedTargets, warnings := selectActiveLogTargets(pods, r.opts, r.limiterSession, r.streamer.perScopeLimit)
-	desiredTargets := indexLogTargets(selectedTargets)
-	emitWarningsIfChanged(r.warningsCh, &r.currentWarnings, warnings)
+	selection := selectLogTargets(pods, r.opts, r.limiterSession, r.streamer.perScopeLimit)
+	desiredTargets := indexLogTargets(selection.targets)
+	emitWarningsIfChanged(r.warningsCh, &r.currentWarnings, selection.warnings)
 	r.stopUndesiredTargets(activeKeys, desiredTargets)
 	r.startDesiredTargets(ctx, activeKeys, desiredTargets)
 }
@@ -336,22 +339,6 @@ func (r *containerLogRun) snapshotInventory() ([]*corev1.Pod, map[string]struct{
 		activeKeys[key] = struct{}{}
 	}
 	return pods, activeKeys
-}
-
-func selectActiveLogTargets(pods []*corev1.Pod, opts Options, limiterSession *TargetSession, limit int) ([]containerTarget, []string) {
-	selectionOpts := containerSelectionOptions(opts)
-	selectedTargets, totalTargets := selectRuntimeTargets(pods, selectionOpts, limit)
-	perScopeCount := len(selectedTargets)
-	warnings := containerlogs.BuildTargetLimitWarnings(perScopeCount, totalTargets, limit)
-	if limiterSession == nil {
-		return selectedTargets, warnings
-	}
-	allowedKeys, _ := limiterSession.UpdateDesired(targetKeys(selectedTargets))
-	selectedTargets = filterTargetsByKeys(selectedTargets, allowedKeys)
-	warnings = append(warnings, buildGlobalTargetLimitWarnings(
-		len(selectedTargets), perScopeCount, targetSessionGlobalLimit(limiterSession),
-	)...)
-	return selectedTargets, warnings
 }
 
 func indexLogTargets(targets []containerTarget) map[string]containerTarget {
@@ -645,24 +632,13 @@ func (s *containerFollowSession) handleOpenFailure(ctx context.Context, err erro
 	if errors.Is(err, context.Canceled) {
 		return s.shouldContinue(ctx)
 	}
-	if !isTransientContainerLogError(err) {
+	if !apierrors.IsNotFound(err) && !containerlogs.IsUnavailable(err) {
 		s.reportOpenFailure(err)
 	}
 	if apierrors.IsNotFound(err) {
 		return false
 	}
 	return s.waitForRetry(ctx) && s.shouldContinue(ctx)
-}
-
-func isTransientContainerLogError(err error) bool {
-	errText := err.Error()
-	return apierrors.IsNotFound(err) ||
-		strings.Contains(errText, "waiting to start") ||
-		strings.Contains(errText, "container not found") ||
-		strings.Contains(errText, "is not valid for pod") ||
-		strings.Contains(errText, "ContainerCreating") ||
-		strings.Contains(errText, "PodInitializing") ||
-		(strings.Contains(errText, "previous terminated container") && strings.Contains(errText, "not found"))
 }
 
 func (s *containerFollowSession) reportOpenFailure(err error) {

@@ -207,20 +207,17 @@ type containerLogsInitial struct {
 }
 
 func (s *containerLogsStream) loadInitial(ctx context.Context, limiterSession *TargetSession) (containerLogsInitial, bool) {
-	entries, states, pods, selector, warnings, skipped, reason, err := s.handler.streamer.tail(
+	initial, err := s.handler.streamer.tail(
 		ctx, s.options, limiterSession,
 	)
 	if err != nil {
 		s.handleInitialError(err)
 		return containerLogsInitial{}, false
 	}
-	if s.handler.telemetry != nil && skipped > 0 {
-		s.handler.telemetry.RecordStreamSkippedTargets(s.stream, skipped, reason)
+	if s.handler.telemetry != nil && initial.skippedTargets > 0 {
+		s.handler.telemetry.RecordStreamSkippedTargets(s.stream, initial.skippedTargets, initial.skipReason)
 	}
-	return containerLogsInitial{
-		entries: entries, states: states, pods: pods, selector: selector,
-		warnings: warnings, skippedTargets: skipped, skipReason: reason,
-	}, true
+	return initial, true
 }
 
 func (s *containerLogsStream) handleInitialError(err error) {

@@ -221,6 +221,67 @@ func TestCancelDrainForClusterLifecycleCancelsOnlyRequestedJob(t *testing.T) {
 	}
 }
 
+func TestClusterLifecycleCancellationPublishesAllJobsBeforeCallbacks(t *testing.T) {
+	store := NewStore(5)
+	first := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
+	second := store.StartDrainForCluster("worker-2", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
+	other := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-b", "Cluster B")
+	finished := store.StartDrainForCluster("worker-3", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
+	finished.Complete(DrainStatusSucceeded, "done")
+	_, before := store.Snapshot("")
+
+	callbacks := make(chan Snapshot, 2)
+	for _, job := range []*DrainJob{first, second} {
+		store.RegisterCancel(job.ID, func() {
+			// Reading from cleanup must not deadlock on the store's write lock.
+			snapshot, _ := store.Snapshot("")
+			callbacks <- snapshot
+		})
+	}
+	result := make(chan int, 1)
+	go func() {
+		result <- store.CancelActiveDrainsForClusterLifecycle("cluster-a", "disconnected")
+	}()
+	select {
+	case count := <-result:
+		if count != 2 {
+			t.Fatalf("expected two active cluster-a drains cancelled, got %d", count)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("lifecycle cleanup blocked while cancellation callbacks read the store")
+	}
+	for range 2 {
+		snapshot := <-callbacks
+		for _, job := range snapshot.Drains {
+			switch job.ID {
+			case first.ID, second.ID:
+				if job.Status != DrainStatusCancelled || job.CompletedAt == 0 || len(job.Events) != 2 || job.Events[1].Phase != DrainPhaseCancelled {
+					t.Fatalf("callback observed incomplete cancellation: %+v", job)
+				}
+			case other.ID:
+				if job.Status != DrainStatusRunning {
+					t.Fatalf("other cluster changed: %+v", job)
+				}
+			case finished.ID:
+				if job.Status != DrainStatusSucceeded || len(job.Events) != 2 {
+					t.Fatalf("completed history changed: %+v", job)
+				}
+			}
+		}
+	}
+	_, after := store.Snapshot("")
+	if after != before+1 {
+		t.Fatalf("expected one batch version advance: before %d, after %d", before, after)
+	}
+	if count := store.CancelActiveDrainsForClusterLifecycle("cluster-a", "again"); count != 0 {
+		t.Fatalf("expected repeated cleanup to be a no-op, got %d", count)
+	}
+	_, repeated := store.Snapshot("")
+	if repeated != after || len(callbacks) != 0 {
+		t.Fatal("repeated cleanup published another version or invoked callbacks")
+	}
+}
+
 func TestParseScope(t *testing.T) {
 	tests := []struct {
 		scope string

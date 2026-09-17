@@ -263,21 +263,8 @@ func (s *Store) CancelActiveDrainsForClusterLifecycle(clusterID, message string)
 		if job == nil || strings.TrimSpace(job.ClusterID) != expectedCluster || !isActiveStatus(job.Status) {
 			continue
 		}
-		job.Status = DrainStatusCancelled
-		job.Message = message
-		if job.CompletedAt == 0 {
-			job.CompletedAt = now
-		}
-		job.Events = append(job.Events, DrainEvent{
-			ID:        uuid.NewString(),
-			Timestamp: job.CompletedAt,
-			Kind:      EventKindInfo,
-			Phase:     DrainPhaseCancelled,
-			Message:   message,
-		})
-		if cancel := s.cancels[job.ID]; cancel != nil {
+		if cancel := s.cancelJobForLifecycleLocked(job, message, now); cancel != nil {
 			cancels = append(cancels, cancel)
-			delete(s.cancels, job.ID)
 		}
 		cancelled++
 	}
@@ -313,23 +300,7 @@ func (s *Store) CancelDrainForClusterLifecycle(jobID, clusterID, message string)
 		s.mu.Unlock()
 		return false
 	}
-	now := time.Now().UnixMilli()
-	job.Status = DrainStatusCancelled
-	job.Message = message
-	if job.CompletedAt == 0 {
-		job.CompletedAt = now
-	}
-	job.Events = append(job.Events, DrainEvent{
-		ID:        uuid.NewString(),
-		Timestamp: job.CompletedAt,
-		Kind:      EventKindInfo,
-		Phase:     DrainPhaseCancelled,
-		Message:   message,
-	})
-	if storedCancel := s.cancels[job.ID]; storedCancel != nil {
-		cancel = storedCancel
-		delete(s.cancels, job.ID)
-	}
+	cancel = s.cancelJobForLifecycleLocked(job, message, time.Now().UnixMilli())
 	s.version++
 	s.mu.Unlock()
 
@@ -337,6 +308,25 @@ func (s *Store) CancelDrainForClusterLifecycle(jobID, clusterID, message string)
 		cancel()
 	}
 	return true
+}
+
+// cancelJobForLifecycleLocked records terminal cancellation while the store lock
+// is held. Callers invoke the returned callback only after releasing that lock.
+func (s *Store) cancelJobForLifecycleLocked(job *DrainJob, message string, now int64) context.CancelFunc {
+	job.Status = DrainStatusCancelled
+	job.Message = message
+	if job.CompletedAt == 0 {
+		job.CompletedAt = now
+	}
+	job.Events = append(job.Events, DrainEvent{
+		ID: uuid.NewString(), Timestamp: job.CompletedAt, Kind: EventKindInfo,
+		Phase: DrainPhaseCancelled, Message: message,
+	})
+	cancel := s.cancels[job.ID]
+	if cancel != nil {
+		delete(s.cancels, job.ID)
+	}
+	return cancel
 }
 
 // AddInfo records a descriptive event.

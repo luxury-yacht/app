@@ -166,10 +166,7 @@ func (l portForwardLifecycle) setStopped(session *portForwardSessionInternal, re
 	if session == nil {
 		return
 	}
-	session.mu.Lock()
-	session.Status = PortForwardStatusStopped
-	session.StatusReason = reason
-	session.mu.Unlock()
+	session.setStatus(PortForwardStatusStopped, reason)
 }
 
 func (l portForwardLifecycle) list() []PortForwardSession {
@@ -181,9 +178,7 @@ func (l portForwardLifecycle) list() []PortForwardSession {
 
 	sessions := make([]PortForwardSession, 0, len(l.coordinator.portForwardSessions))
 	for _, session := range l.coordinator.portForwardSessions {
-		session.mu.Lock()
-		sessions = append(sessions, session.PortForwardSession)
-		session.mu.Unlock()
+		sessions = append(sessions, session.snapshot())
 	}
 
 	sort.Slice(sessions, func(i, j int) bool {
@@ -214,16 +209,15 @@ func (l portForwardLifecycle) emitStatus(session *portForwardSessionInternal) {
 		return
 	}
 
-	session.mu.Lock()
+	snapshot := session.snapshot()
 	event := PortForwardStatusEvent{
-		SessionID:    session.ID,
-		ClusterID:    session.ClusterID,
-		Status:       session.Status,
-		StatusReason: session.StatusReason,
-		LocalPort:    session.LocalPort,
-		PodName:      session.PodName,
+		SessionID:    snapshot.ID,
+		ClusterID:    snapshot.ClusterID,
+		Status:       snapshot.Status,
+		StatusReason: snapshot.StatusReason,
+		LocalPort:    snapshot.LocalPort,
+		PodName:      snapshot.PodName,
 	}
-	session.mu.Unlock()
 
 	l.coordinator.publishEvent(portForwardStatusEventName, event)
 }

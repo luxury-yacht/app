@@ -6,7 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
+
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
@@ -425,41 +428,130 @@ func TestPortForwardLifecycleStopForRuntimeIsIdempotent(t *testing.T) {
 }
 
 func TestRunPortForwarderUnregistersRuntimeOperationOnTerminalError(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		kind          string
+		group         string
+		attempt       int
+		cancelOnRetry bool
+		statuses      []PortForwardStatus
+	}{
+		{name: "pod failure", kind: "Pod", statuses: []PortForwardStatus{PortForwardStatusError}},
+		{name: "exhausted workload retries", kind: "Deployment", group: "apps", attempt: config.PortForwardMaxReconnectAttempts, statuses: []PortForwardStatus{PortForwardStatusReconnecting, PortForwardStatusError}},
+		{name: "cancel during retry backoff", kind: "Deployment", group: "apps", cancelOnRetry: true, statuses: []PortForwardStatus{PortForwardStatusReconnecting}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			fixture := newOperationsCoordinatorFixture(t)
+			app := fixture.runtime
+			operations := fixture.coordinator
+			setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+			operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
+			app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var statuses []PortForwardStatus
+			app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+				if name != portForwardStatusEventName {
+					return
+				}
+				event := args[0].(PortForwardStatusEvent)
+				statuses = append(statuses, event.Status)
+				if tt.cancelOnRetry && event.Status == PortForwardStatusReconnecting {
+					cancel()
+				}
+			}
+
+			session := &portForwardSessionInternal{
+				PortForwardSession: PortForwardSession{
+					ID: "session-terminal-error", ClusterID: "missing-cluster",
+					Namespace: "default", PodName: "pod-1", ContainerPort: 8080, LocalPort: 9000,
+					TargetKind: tt.kind, TargetGroup: tt.group, TargetVersion: "v1", TargetName: "target-1",
+					Status: PortForwardStatusActive, StartedAt: time.Now().Format(time.RFC3339),
+				},
+				stopChan: make(chan struct{}), readyChan: make(chan error, 1), reconnectAttempt: tt.attempt,
+			}
+			operations.portForwardSessions[session.ID] = session
+			operations.registerRuntimeOperation(runtimeOperationFromPortForward(session), nil)
+
+			operations.runPortForwarder(ctx, session)
+
+			if operationList := operations.ListRuntimeOperations(); len(operationList) != 0 {
+				t.Fatalf("expected runtime operation to be removed, got %+v", operationList)
+			}
+			if _, exists := operations.portForwardSessions[session.ID]; exists {
+				t.Fatal("expected terminal port forward session to be removed")
+			}
+			if len(statuses) != len(tt.statuses) {
+				t.Fatalf("status transitions: got %v, want %v", statuses, tt.statuses)
+			}
+			for index, status := range statuses {
+				if status != tt.statuses[index] {
+					t.Fatalf("status transitions: got %v, want %v", statuses, tt.statuses)
+				}
+			}
+			select {
+			case err := <-session.readyChan:
+				if err == nil {
+					t.Fatal("failed first attempt must signal its startup error")
+				}
+			default:
+				t.Fatal("first attempt failed without notifying the start caller")
+			}
+		})
+	}
+}
+
+func TestPortForwardReconnectUsesOriginalClusterTarget(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
-	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
-	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
-	app.Lifecycle.signalState().eventEmitter = func(context.Context, string, ...interface{}) {}
-
+	ready := true
+	for _, clusterID := range []string{"cluster-a", "cluster-b"} {
+		client := fake.NewClientset(
+			&discoveryv1.EndpointSlice{
+				ObjectMeta:  metav1.ObjectMeta{Namespace: "team", Name: "web-endpoints", Labels: map[string]string{discoveryv1.LabelServiceName: "web"}},
+				AddressType: discoveryv1.AddressTypeIPv4,
+				Endpoints: []discoveryv1.Endpoint{{
+					Conditions: discoveryv1.EndpointConditions{Ready: &ready},
+					TargetRef:  &corev1.ObjectReference{Kind: "Pod", Namespace: "team", Name: clusterID + "-replacement"},
+				}},
+			},
+			&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "team", Name: clusterID + "-replacement", Labels: map[string]string{"app": "web"}},
+				Status:     corev1.PodStatus{Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}},
+			},
+		)
+		app.ClusterRuntime.clusterClients[clusterID] = &clusterClients{
+			meta:   ClusterMeta{ID: clusterID, Name: clusterID},
+			client: client, restConfig: &rest.Config{},
+		}
+	}
 	session := &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{
-			ID:            "session-terminal-error",
-			ClusterID:     "missing-cluster",
-			Namespace:     "default",
-			PodName:       "pod-1",
-			ContainerPort: 8080,
-			LocalPort:     9000,
-			TargetKind:    "Pod",
-			TargetVersion: "v1",
-			TargetName:    "pod-1",
-			Status:        "active",
-			StartedAt:     time.Now().Format(time.RFC3339),
+			ID: "reconnecting-forward", ClusterID: "cluster-b", Namespace: "team", PodName: "deleted-pod",
+			TargetKind: "Service", TargetGroup: "", TargetVersion: "v1", TargetName: "web",
 		},
-		stopChan:  make(chan struct{}),
-		readyChan: make(chan error, 1),
 	}
-	operations.portForwardSessions[session.ID] = session
-	operations.registerRuntimeOperation(runtimeOperationFromPortForward(session), nil)
-
-	operations.runPortForwarder(context.Background(), session)
-
-	if operationList := operations.ListRuntimeOperations(); len(operationList) != 0 {
-		t.Fatalf("expected runtime operation to be removed, got %+v", operationList)
+	if err := fixture.coordinator.reresolvePod(context.Background(), session); err != nil {
+		t.Fatalf("re-resolve original target: %v", err)
 	}
-	if _, exists := operations.portForwardSessions[session.ID]; exists {
-		t.Fatal("expected terminal port forward session to be removed")
+	if session.PodName != "cluster-b-replacement" {
+		t.Fatalf("reconnect selected another cluster's pod: %q", session.PodName)
+	}
+	if actions := app.ClusterRuntime.clusterClients["cluster-a"].client.(*fake.Clientset).Actions(); len(actions) != 0 {
+		t.Fatalf("reconnect read another cluster: %v", actions)
+	}
+	// Re-resolution must retain the last destination when the target disappears.
+	client := app.ClusterRuntime.clusterClients["cluster-b"].client
+	if err := client.DiscoveryV1().EndpointSlices("team").Delete(context.Background(), "web-endpoints", metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.coordinator.reresolvePod(context.Background(), session); err == nil {
+		t.Fatal("expected the missing target to fail re-resolution")
+	}
+	if session.PodName != "cluster-b-replacement" {
+		t.Fatalf("failed re-resolution replaced the destination: %q", session.PodName)
 	}
 }
 
