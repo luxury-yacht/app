@@ -51,8 +51,8 @@ func (s *Service) buildResourceQuotaDetails(rq *corev1.ResourceQuota) *ResourceQ
 		Name:           rq.Name,
 		Namespace:      rq.Namespace,
 		Details:        model.Status.Label,
-		Hard:           quantityMapStrings(facts.Hard),
-		Used:           quantityMapStrings(facts.Used),
+		Hard:           resourcemodel.QuantityMapStrings(facts.Hard),
+		Used:           resourcemodel.QuantityMapStrings(facts.Used),
 		Scopes:         append([]string(nil), facts.Scopes...),
 		ScopeSelector:  scopeSelectorFromFacts(facts.ScopeSelector),
 		UsedPercentage: copyIntMap(facts.UsedPercentage),
@@ -79,17 +79,6 @@ func scopeSelectorFromFacts(facts *ScopeSelectorFacts) *ScopeSelector {
 		})
 	}
 	return selector
-}
-
-func quantityMapStrings(values resourcemodel.ResourceQuantityMapFacts) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	result := make(map[string]string, len(values))
-	for key, value := range values {
-		result[key] = value.String()
-	}
-	return result
 }
 
 func copyIntMap(values map[string]int) map[string]int {

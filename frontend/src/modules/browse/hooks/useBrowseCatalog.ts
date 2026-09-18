@@ -34,7 +34,6 @@ import {
   buildBrowseCatalogPageScope,
   buildBrowseCatalogPlan,
   deriveBrowseFilterOptions,
-  emptyBrowseCatalogCollection,
   filterBrowseCatalogItems,
   namespacesChanged,
 } from './browseCatalogData';
@@ -347,7 +346,7 @@ export function useBrowseCatalog({
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
 
-  const collectionRef = useRef(emptyBrowseCatalogCollection());
+  const itemsRef = useRef<CatalogItem[]>([]);
   const hasLoadedOnceRef = useRef(false);
   const pageIndexRef = useRef(1);
   const currentPageTokenRef = useRef<string | null>(null);
@@ -498,7 +497,7 @@ export function useBrowseCatalog({
     // position. We still clear eagerly when the structural scope changes
     // (cluster/namespace mode) or before the first load.
     if (scopeIdentityChanged || !hasLoadedOnceRef.current) {
-      collectionRef.current = emptyBrowseCatalogCollection();
+      itemsRef.current = [];
       setItems([]);
     }
     if (scopeIdentityChanged) {
@@ -539,8 +538,8 @@ export function useBrowseCatalog({
     if (!isRenderableCatalogPayload(payload)) {
       return;
     }
-    const currentLength = collectionRef.current.items.length;
-    const next = applyCatalogBaseline(collectionRef.current, payload);
+    const currentLength = itemsRef.current.length;
+    const next = applyCatalogBaseline(itemsRef.current, payload);
     if (currentPageTokenRef.current) {
       setTotalCount(next.totalCount);
       setUnfilteredTotal(next.unfilteredTotal);
@@ -550,7 +549,7 @@ export function useBrowseCatalog({
       return;
     }
 
-    collectionRef.current = { items: next.items, indexByUid: next.indexByUid };
+    itemsRef.current = next.items;
     if (next.changed || currentLength === 0) {
       setItems(next.items);
     }
@@ -628,7 +627,7 @@ export function useBrowseCatalog({
         isSameScope: () => catalogScopeRef.current === baseScopeAtRequest,
         onPayload: (payload) => {
           if (payload.cursorInvalid) {
-            collectionRef.current = emptyBrowseCatalogCollection();
+            itemsRef.current = [];
             setItems([]);
             setContinueToken(null);
             setPreviousToken(null);
@@ -638,8 +637,8 @@ export function useBrowseCatalog({
             void refreshCatalogScope('user');
             return;
           }
-          const next = applyCatalogPage(collectionRef.current, payload);
-          collectionRef.current = { items: next.items, indexByUid: next.indexByUid };
+          const next = applyCatalogPage(payload);
+          itemsRef.current = next.items;
           setPageError(null);
           setItems(next.items);
           setContinueToken(next.continueToken);
@@ -876,7 +875,7 @@ export function useBrowseCatalog({
       if (!payload) {
         throw new Error(`Catalog export failed: page ${page + 1} returned no data`);
       }
-      const applied = applyCatalogPage(emptyBrowseCatalogCollection(), payload);
+      const applied = applyCatalogPage(payload);
       // The RAW per-source clock, never the scope-folded token (differs per
       // export page by construction) — see the walk's drift guard.
       const sourceVersion =

@@ -398,24 +398,15 @@ func cloneSnapshot(snapshot Snapshot) Snapshot {
 }
 
 func snapshotsEqual(left, right Snapshot) bool {
-	if left.Status != right.Status ||
-		left.CurrentVersion != right.CurrentVersion ||
-		left.AvailableVersion != right.AvailableVersion ||
-		left.ReleaseName != right.ReleaseName ||
-		left.PublishedAt != right.PublishedAt ||
-		left.ReleaseNotes != right.ReleaseNotes ||
-		left.CanCheck != right.CanCheck ||
-		left.CanInstall != right.CanInstall ||
-		left.Distribution != right.Distribution ||
-		left.EligibilityReason != right.EligibilityReason ||
-		left.RecoveryTarget != right.RecoveryTarget ||
-		left.Error != right.Error {
-		return false
+	if left.ProgressPercent != nil && right.ProgressPercent != nil {
+		if *left.ProgressPercent != *right.ProgressPercent {
+			return false
+		}
+		// Compare progress by value; compare all other snapshot fields directly.
+		left.ProgressPercent = nil
+		right.ProgressPercent = nil
 	}
-	if left.ProgressPercent == nil || right.ProgressPercent == nil {
-		return left.ProgressPercent == nil && right.ProgressPercent == nil
-	}
-	return *left.ProgressPercent == *right.ProgressPercent
+	return left == right
 }
 
 func (coordinator *Coordinator) publishIfChanged(previous, current Snapshot) {
@@ -664,17 +655,15 @@ func (coordinator *Coordinator) finishDownload(err error) (Snapshot, error) {
 	coordinator.mu.Lock()
 	previous := cloneSnapshot(coordinator.snapshot)
 	coordinator.inFlight = false
-	var result Snapshot
 	if err != nil {
 		coordinator.snapshot.Status = StatusPrepareError
 		coordinator.snapshot.Error = err.Error()
-		result = cloneSnapshot(coordinator.snapshot)
 	} else {
 		coordinator.preparedOwned = true
 		coordinator.snapshot.Status = StatusReady
 		coordinator.snapshot.Error = ""
-		result = cloneSnapshot(coordinator.snapshot)
 	}
+	result := cloneSnapshot(coordinator.snapshot)
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, result)
 	return result, err
@@ -735,14 +724,7 @@ func (coordinator *Coordinator) Skip(_ context.Context, version string) (Snapsho
 	coordinator.mu.Unlock()
 
 	if err := coordinator.updateState.SetSkippedVersion(version); err != nil {
-		coordinator.mu.Lock()
-		previous := cloneSnapshot(coordinator.snapshot)
-		coordinator.inFlight = false
-		coordinator.snapshot.Error = err.Error()
-		result := cloneSnapshot(coordinator.snapshot)
-		coordinator.mu.Unlock()
-		coordinator.publishIfChanged(previous, result)
-		return result, err
+		return coordinator.finishSkipError(err)
 	}
 	coordinator.client.SkipVersion(version)
 
@@ -777,14 +759,7 @@ func (coordinator *Coordinator) RemoveSkip(ctx context.Context) (Snapshot, error
 	coordinator.mu.Unlock()
 
 	if err := coordinator.updateState.SetSkippedVersion(""); err != nil {
-		coordinator.mu.Lock()
-		previous := cloneSnapshot(coordinator.snapshot)
-		coordinator.inFlight = false
-		coordinator.snapshot.Error = err.Error()
-		result := cloneSnapshot(coordinator.snapshot)
-		coordinator.mu.Unlock()
-		coordinator.publishIfChanged(previous, result)
-		return result, err
+		return coordinator.finishSkipError(err)
 	}
 	coordinator.client.SkipVersion("")
 
@@ -804,6 +779,17 @@ func (coordinator *Coordinator) RemoveSkip(ctx context.Context) (Snapshot, error
 		return result, nil
 	}
 	return coordinator.Check(ctx)
+}
+
+func (coordinator *Coordinator) finishSkipError(err error) (Snapshot, error) {
+	coordinator.mu.Lock()
+	previous := cloneSnapshot(coordinator.snapshot)
+	coordinator.inFlight = false
+	coordinator.snapshot.Error = err.Error()
+	result := cloneSnapshot(coordinator.snapshot)
+	coordinator.mu.Unlock()
+	coordinator.publishIfChanged(previous, result)
+	return result, err
 }
 
 func (coordinator *Coordinator) Restart(ctx context.Context) (Snapshot, error) {

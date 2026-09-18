@@ -202,20 +202,20 @@ correctness-driven interruption and resume the rotation afterwards.
 
 | Order | Domain | Initial scope and required adjacent paths | Status |
 | --- | --- | --- | --- |
-| 1 | Shared tables | Shared table hooks/rendering; resource-grid adapters; snapshot/querypage consumers | S001 catch-up: shared-table responsibilities revisited; C2 remains |
-| 2 | Catalog and resource projections | Object catalog; per-kind resources; kind/model contracts; Browse adapters | S002 catch-up: catalog lifecycle and descriptor model revisited; per-kind scope remains |
-| 3 | Cluster/workspace/auth | Backend cluster/workspace owners and auth helpers; Kubernetes/cluster workspace contexts | S003 catch-up: client/recovery and discovery/watch revisited |
-| 4 | Refresh and data access | Refresh APIs, stores, snapshots, ingestion, streams, metrics and governor; frontend refresh/data brokers | S004 catch-up: snapshot/store/mux/metrics reviewed; large lifecycle owners remain |
-| 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | Expanded S005 batch and final gate passed; remaining scope recorded |
-| 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | S006 owner/consumer review, batch implementation, coverage and final gate passed |
-| 7 | Object map | Backend graph producers and relationships; frontend graph, layout and renderer | S007 batch, coverage and final gate passed; limits recorded |
-| 8 | Permissions and mutations | Capability policy, permission caches, object actions/YAML; frontend availability gates | S008 query/store/hook batch, coverage and final gate passed; remaining scope recorded |
-| 9 | Navigation and interaction | Sidebar, routing, shortcuts, command palette, modals, shared inputs and menus | S009 keyboard/palette/global shortcut batch, coverage and final gate passed; remaining scope recorded |
-| 10 | Preferences and persistence | Settings, favorites, UI state, import/export/reset; frontend state hydration | S010 mutation/editor/theme/import batch, coverage and final gate passed; remaining scope recorded |
-| 11 | Errors and diagnostics | Error classification/reporting, logs, telemetry, request diagnostics | S011 policy/context/session/snapshot batch, coverage and final gate passed; remaining scope recorded |
-| 12 | Native lifecycle and windows | Bootstrap, app lifetime, desktop transport, peer windows, dockable ownership | Inventoried |
-| 13 | Updates and engineering tooling | Updater/installers; generators; project tasks; build/CI; lint rules and test infrastructure | Inventoried |
-| 14 | Shared primitives and remaining inventory | Utility/formatting/identity helpers, types, styles, root source, and unclaimed companion files | Inventoried |
+| 1 | Shared tables | Shared table hooks/rendering; resource-grid adapters; snapshot/querypage consumers | Reviewed in S001 and catch-up; C2 is deferred behavior work |
+| 2 | Catalog and resource projections | Object catalog; per-kind resources; kind/model contracts; Browse adapters | Catalog, per-kind detail/facts, Browse and projection follow-through recorded below |
+| 3 | Cluster/workspace/auth | Backend cluster/workspace owners and auth helpers; Kubernetes/cluster workspace contexts | Selection, workspace, client/auth recovery and discovery/watch review recorded |
+| 4 | Refresh and data access | Refresh APIs, stores, snapshots, ingestion, streams, metrics and governor; frontend refresh/data brokers | Lifecycle, ingest, governor, stream protocol, builders and notifier follow-through recorded below |
+| 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | Overview descriptors, YAML/actions and panel ownership follow-through recorded below |
+| 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | Operations owner/consumer review and validation recorded in S006 |
+| 7 | Object map | Backend graph producers and relationships; frontend graph, layout and renderer | Object-map owner/consumer review and validation recorded in S007 |
+| 8 | Permissions and mutations | Capability policy, permission caches, object actions/YAML; frontend availability gates | Permission, generation and mutation follow-through recorded below |
+| 9 | Navigation and interaction | Sidebar, routing, shortcuts, command palette, modals, shared inputs and menus | Keyboard/palette, native command and modal/input follow-through recorded below |
+| 10 | Preferences and persistence | Settings, favorites, UI state, import/export/reset; frontend state hydration | Settings, descriptor/schema and Favorites migration follow-through recorded below |
+| 11 | Errors and diagnostics | Error classification/reporting, logs, telemetry, request diagnostics | Diagnostics, operation schema and current Sonar follow-through recorded below |
+| 12 | Native lifecycle and windows | Bootstrap, app lifetime, desktop transport, peer windows, dockable ownership | Native registry, transfers, bootstrap and dockable review/implementation recorded below |
+| 13 | Updates and engineering tooling | Updater/installers; generators; project tasks; build/CI; lint rules and test infrastructure | Updater, installers, generators, project tasks and CI review/implementation recorded below |
+| 14 | Shared primitives and remaining inventory | Utility/formatting/identity helpers, types, styles, root source, and unclaimed companion files | Primitive and quiet-owner follow-through recorded below |
 
 The unit ledger below prevents this domain rotation from silently omitting a
 package. Assign each visited unit a primary domain in its pass record. Cross-layer
@@ -1071,249 +1071,251 @@ proof for a future worktree; rerun affected checks after new changes.
 
 ## Review-unit ledger
 
-Every row below starts **inventoried**. Counts refer only to the baseline source
-classification above. `Go / JS` counts functions above 12 separately; a dash
+Rows began **inventoried**. The review column now points to the inspected
+responsibilities recorded in the pass history and completion continuation; it is
+not a claim that every line, visual state or possible future refactor was audited.
+Counts refer only to the baseline source classification above. `Go / JS` counts functions above 12 separately; a dash
 means no signals in that language, not no review work. Update the last column
 with reviewed scope and a pass reference, or split the row before reviewing.
 
 | Review bucket | Files | Physical lines | Go / JS signals | Review |
 | --- | ---: | ---: | ---: | --- |
-| `.claude/hooks` | 1 | 86 | — / — | Inventoried |
-| `.github/actions` | 1 | 180 | — / — | Inventoried |
-| `backend/(root: app)` | 3 | 327 | — / — | Inventoried |
-| `backend/(root: application)` | 6 | 1084 | 1 / — | Inventoried |
-| `backend/(root: auth)` | 1 | 185 | — / — | Inventoried |
-| `backend/(root: autoscaling)` | 1 | 60 | — / — | Inventoried |
-| `backend/(root: cluster)` | 23 | 3451 | 1 / — | Reviewing: S003 selection resolution; remaining scope recorded |
-| `backend/(root: crd)` | 1 | 28 | — / — | Inventoried |
-| `backend/(root: data)` | 2 | 517 | 1 / — | Inventoried |
-| `backend/(root: desktop)` | 10 | 1689 | — / — | Inventoried |
-| `backend/(root: devmode)` | 2 | 10 | — / — | Inventoried |
-| `backend/(root: error)` | 2 | 253 | 1 / — | S011: reporting service inspected; consent and reset ownership retained |
-| `backend/(root: events)` | 1 | 149 | — / — | Inventoried |
-| `backend/(root: exec)` | 4 | 277 | — / — | Inventoried |
-| `backend/(root: favorites)` | 2 | 572 | — / — | Inventoried |
-| `backend/(root: fetch)` | 1 | 395 | — / — | Inventoried |
-| `backend/(root: generate)` | 1 | 17 | — / — | Inventoried |
-| `backend/(root: generic)` | 1 | 39 | — / — | Inventoried |
-| `backend/(root: helm)` | 2 | 104 | — / — | Inventoried |
-| `backend/(root: kubeconfig)` | 4 | 928 | 1 / — | Inventoried |
-| `backend/(root: kubernetes)` | 1 | 83 | — / — | Inventoried |
-| `backend/(root: logger)` | 1 | 371 | — / — | S011: logger capture/emission order reviewed and retained |
-| `backend/(root: menu)` | 1 | 246 | — / — | Inventoried |
-| `backend/(root: node)` | 3 | 145 | — / — | Inventoried |
-| `backend/(root: object)` | 11 | 2243 | — / — | Partial S005: detail/Helm read ownership and YAML mutation admission; other enrichments and mutation internals remain |
-| `backend/(root: operations)` | 2 | 323 | — / — | S006: coordinator and drain-registration ownership reviewed; distinct cleanup retained |
-| `backend/(root: pod)` | 3 | 161 | — / — | Inventoried |
-| `backend/(root: portforward)` | 6 | 1133 | 2 / — | S006: target, port, session and lifecycle files reviewed; projections/retry handling simplified |
-| `backend/(root: preferences)` | 5 | 2301 | 2 / — | Inventoried |
-| `backend/(root: refresh)` | 18 | 4252 | 4 / — | Inventoried |
-| `backend/(root: resource)` | 6 | 1450 | — / — | Partial S008: permission query preparation/fallback/diagnostics and mutation permission checks inspected |
-| `backend/(root: response)` | 3 | 687 | — / — | Partial S008: cached-response permission recheck inspected; cache lifetime remains |
-| `backend/(root: runtime)` | 2 | 304 | 1 / — | Partial S006: operation registry reviewed; runtime setting policies remain |
-| `backend/(root: settings)` | 1 | 229 | — / — | Inventoried |
-| `backend/(root: shell)` | 2 | 765 | 1 / — | S006: session/lifecycle owners reviewed; frontend orchestration simplified |
-| `backend/(root: static)` | 1 | 83 | — / — | Inventoried |
-| `backend/(root: theme)` | 1 | 132 | — / — | Inventoried |
-| `backend/(root: types)` | 1 | 82 | — / — | Inventoried |
-| `backend/(root: ui)` | 2 | 334 | — / — | Inventoried |
-| `backend/(root: update)` | 8 | 1186 | — / — | Inventoried |
-| `backend/(root: window)` | 1 | 112 | — / — | Inventoried |
-| `backend/(root: workload)` | 2 | 502 | 1 / — | Partial S008: mutation validation, HPA scale guard, permission/write/cache order inspected |
-| `backend/(root: workspace)` | 16 | 2130 | — / — | Reviewing: S003 selection/restore/prune; remaining scope recorded |
-| `backend/capabilities` | 4 | 866 | — / — | S008: SSAR worker and SSRR cache/rule matching reviewed; shared retry policy and singleflight error return |
-| `backend/internal/applog` | 6 | 323 | — / — | Partial S011: report_error adapter inspected; other adapters remain |
-| `backend/internal/appupdates` | 2 | 1125 | 1 / — | Inventoried |
-| `backend/internal/authstate` | 4 | 683 | — / — | Inventoried |
-| `backend/internal/cachekeys` | 1 | 18 | — / — | Inventoried |
-| `backend/internal/config` | 1 | 551 | — / — | Inventoried |
-| `backend/internal/containerlogs` | 5 | 495 | 1 / — | Partial S006: shared unavailable classifier added; existing selection/target helpers inspected through consumers |
-| `backend/internal/credentialerrors` | 1 | 226 | — / — | Inventoried |
-| `backend/internal/errorcapture` | 4 | 589 | — / — | S011: capture, expected-error policy and stderr assembly reviewed and retained |
-| `backend/internal/genappbindings` | 2 | 306 | — / — | Inventoried |
-| `backend/internal/genobjectactions` | 1 | 24 | — / — | Inventoried |
-| `backend/internal/genrefreshcontracts` | 5 | 856 | 1 / — | Inventoried |
-| `backend/internal/k8sretry` | 1 | 105 | 1 / — | Inventoried |
-| `backend/internal/lifecycle` | 1 | 42 | — / — | Inventoried |
-| `backend/internal/linescanner` | 1 | 20 | — / — | Inventoried |
-| `backend/internal/logclassify` | 1 | 74 | — / — | Inventoried |
-| `backend/internal/logsources` | 1 | 27 | — / — | Inventoried |
-| `backend/internal/parallel` | 1 | 71 | — / — | Inventoried |
-| `backend/internal/timeutil` | 2 | 107 | — / — | Inventoried |
-| `backend/kind/kindregistry` | 2 | 168 | — / — | Partial: S004 ingest-owned descriptor contract |
-| `backend/kind/kindspec` | 1 | 176 | — / — | Inventoried |
-| `backend/kind/objectmap` | 1 | 54 | — / — | Inventoried |
-| `backend/kind/objectmapnode` | 2 | 134 | — / — | Inventoried |
-| `backend/kind/objectmapspec` | 2 | 183 | — / — | Inventoried |
-| `backend/kind/streamrows` | 2 | 601 | — / — | Inventoried |
-| `backend/kind/streamspec` | 1 | 64 | — / — | Inventoried |
-| `backend/nodemaintenance` | 1 | 584 | — / — | S006: store/history/cancellation reviewed and shared terminal updates implemented |
-| `backend/objectaction` | 1 | 150 | — / — | Inventoried |
-| `backend/objectcatalog` | 25 | 5995 | 8 / — | Reviewing: S002 query/facets; other responsibilities remain |
-| `backend/objectyaml` | 1 | 130 | — / — | Inventoried |
-| `backend/refresh` | 6 | 804 | 2 / — | Inventoried |
-| `backend/refresh/api` | 1 | 304 | — / — | Inventoried |
-| `backend/refresh/containerlogsstream` | 4 | 2200 | 3 / — | S006: handler/streamer/limiter reviewed and simplified; wire DTO unchanged |
-| `backend/refresh/domain` | 2 | 264 | — / — | Inventoried |
-| `backend/refresh/domainpermissions` | 2 | 754 | — / — | Inventoried |
-| `backend/refresh/eventstream` | 2 | 484 | — / — | Inventoried |
-| `backend/refresh/informer` | 4 | 1065 | 1 / — | Inventoried |
-| `backend/refresh/ingest` | 6 | 2779 | 3 / — | Partial: S004 bundle queue and partition replacement |
-| `backend/refresh/metrics` | 4 | 999 | 2 / — | Inventoried |
-| `backend/refresh/permissions` | 2 | 457 | — / — | Inventoried |
-| `backend/refresh/querypage` | 10 | 3065 | 5 / — | Inventoried |
-| `backend/refresh/resourcestream` | 20 | 3531 | 2 / — | Inventoried |
-| `backend/refresh/ringbuffer` | 1 | 68 | — / — | Inventoried |
-| `backend/refresh/snapshot` | 77 | 20864 | 11 / — | S002 catalog and S007 object-map assembly reviewed; other domains remain |
-| `backend/refresh/streammux` | 3 | 844 | 2 / — | Inventoried |
-| `backend/refresh/system` | 9 | 2505 | 1 / — | Partial: S004 ingest readiness hub |
-| `backend/refresh/telemetry` | 1 | 707 | — / — | Inventoried |
-| `backend/resourcecontract` | 1 | 200 | — / — | Inventoried |
-| `backend/resourcekind` | 2 | 113 | — / — | Inventoried |
-| `backend/resourcemodel` | 15 | 1977 | 3 / — | Inventoried |
-| `backend/resources` | 1 | 12 | — / — | Inventoried |
-| `backend/resources/admission` | 12 | 775 | — / — | Inventoried |
-| `backend/resources/apiextensions` | 8 | 461 | 1 / — | Inventoried |
-| `backend/resources/appbinding` | 1 | 22 | — / — | Inventoried |
-| `backend/resources/argocd` | 3 | 497 | — / — | Inventoried |
-| `backend/resources/backendtlspolicy` | 12 | 303 | — / — | Inventoried |
-| `backend/resources/certmanager` | 1 | 224 | — / — | Inventoried |
-| `backend/resources/clusterrole` | 13 | 381 | — / — | Inventoried |
-| `backend/resources/clusterrolebinding` | 13 | 310 | — / — | Inventoried |
-| `backend/resources/common` | 11 | 764 | — / — | Inventoried |
-| `backend/resources/configmap` | 11 | 344 | — / — | Inventoried |
-| `backend/resources/crdfacts` | 3 | 199 | — / — | Inventoried |
-| `backend/resources/cronjob` | 11 | 746 | — / — | Inventoried |
-| `backend/resources/customresource` | 6 | 601 | 1 / — | Inventoried |
-| `backend/resources/daemonset` | 11 | 514 | — / — | Inventoried |
-| `backend/resources/deployment` | 11 | 723 | — / — | Inventoried |
-| `backend/resources/endpointslice` | 12 | 524 | — / — | Inventoried |
-| `backend/resources/events` | 7 | 436 | — / — | Inventoried |
-| `backend/resources/externalsecrets` | 1 | 182 | — / — | Inventoried |
-| `backend/resources/gateway` | 12 | 327 | — / — | Inventoried |
-| `backend/resources/gatewayapi` | 3 | 147 | — / — | Inventoried |
-| `backend/resources/gatewayclass` | 12 | 307 | — / — | Inventoried |
-| `backend/resources/generic` | 3 | 269 | 1 / — | Inventoried |
-| `backend/resources/grpcroute` | 11 | 262 | — / — | Inventoried |
-| `backend/resources/helm` | 5 | 750 | — / — | Partial S005: detail/manifest/values acquisition; other Helm operations remain |
-| `backend/resources/hpa` | 12 | 866 | — / — | Inventoried |
-| `backend/resources/httproute` | 11 | 257 | — / — | Inventoried |
-| `backend/resources/ingress` | 13 | 604 | 2 / — | Inventoried |
-| `backend/resources/ingressclass` | 11 | 340 | 1 / — | Inventoried |
-| `backend/resources/job` | 10 | 501 | — / — | Inventoried |
-| `backend/resources/karpenter` | 1 | 232 | — / — | Inventoried |
-| `backend/resources/limitrange` | 10 | 316 | — / — | Inventoried |
-| `backend/resources/listenerset` | 12 | 331 | — / — | Inventoried |
-| `backend/resources/namespaces` | 8 | 511 | — / — | Inventoried |
-| `backend/resources/networkpolicy` | 13 | 540 | — / — | Inventoried |
-| `backend/resources/nodes` | 10 | 1846 | — / — | Partial S006: node/drain and logs reviewed; other per-kind projection files remain |
-| `backend/resources/persistentvolume` | 12 | 632 | — / — | Inventoried |
-| `backend/resources/persistentvolumeclaim` | 12 | 516 | 1 / — | Inventoried |
-| `backend/resources/poddisruptionbudget` | 13 | 451 | — / — | Inventoried |
-| `backend/resources/pods` | 13 | 1954 | 5 / — | Partial S006: debug, logs and forward-target reader reviewed; other pod projections remain |
-| `backend/resources/prometheus` | 1 | 181 | — / — | Inventoried |
-| `backend/resources/referencegrant` | 12 | 368 | — / — | Inventoried |
-| `backend/resources/replicaset` | 11 | 514 | 1 / — | Inventoried |
-| `backend/resources/resourcequota` | 10 | 375 | — / — | Inventoried |
-| `backend/resources/role` | 12 | 310 | — / — | Inventoried |
-| `backend/resources/rolebinding` | 13 | 319 | — / — | Inventoried |
-| `backend/resources/secret` | 11 | 365 | — / — | Inventoried |
-| `backend/resources/service` | 13 | 674 | — / — | Inventoried |
-| `backend/resources/serviceaccount` | 12 | 377 | — / — | Inventoried |
-| `backend/resources/statefulset` | 11 | 631 | 1 / — | Inventoried |
-| `backend/resources/storageclass` | 11 | 447 | — / — | Inventoried |
-| `backend/resources/tlsroute` | 11 | 242 | — / — | Inventoried |
-| `backend/resources/types` | 9 | 1096 | — / — | Inventoried |
-| `backend/resources/workloads` | 2 | 308 | — / — | Inventoried |
-| `build/linux` | 7 | 403 | — / — | Inventoried |
-| `build/windows` | 4 | 552 | — / — | Inventoried |
-| `cmd/project` | 20 | 3081 | 5 / — | Inventoried |
-| `frontend` | 2 | 225 | — / — | Inventoried |
-| `frontend/.storybook` | 10 | 331 | — / 1 | Inventoried |
-| `frontend/biome-plugins` | 6 | 217 | — / — | Inventoried |
-| `frontend/scripts` | 3 | 1306 | — / 3 | Inventoried |
-| `frontend/src/(root)` | 7 | 1007 | — / — | Inventoried |
-| `frontend/src/core/app-state-access` | 4 | 75 | — / — | Inventoried |
-| `frontend/src/core/backend-api` | 2 | 166 | — / — | Inventoried |
-| `frontend/src/core/capabilities` | 11 | 2623 | — / 5 | S008: store/query/hook, feature/spec and identity responsibilities reviewed; shared state projection and obsolete catalog removal |
-| `frontend/src/core/cluster-workspace` | 2 | 755 | — / — | S003 store/hydration inspected and simplified |
-| `frontend/src/core/codemirror` | 3 | 640 | — / — | Inventoried |
-| `frontend/src/core/connection` | 1 | 237 | — / — | Inventoried |
-| `frontend/src/core/contexts` | 11 | 1875 | — / 1 | Inventoried |
-| `frontend/src/core/data-access` | 6 | 700 | — / — | Partial: S004 broker, leases, lifecycle/readers |
-| `frontend/src/core/desktop-runtime` | 1 | 81 | — / — | Inventoried |
-| `frontend/src/core/events` | 3 | 317 | — / — | Inventoried |
-| `frontend/src/core/logging` | 1 | 112 | — / — | S011: app-log client reviewed and retained |
-| `frontend/src/core/navigation` | 5 | 489 | — / — | Inventoried |
-| `frontend/src/core/panel-windows` | 17 | 2600 | — / — | Inventoried |
-| `frontend/src/core/persistence` | 2 | 448 | — / — | Inventoried |
-| `frontend/src/core/read-diagnostics` | 2 | 312 | — / — | Partial S011: request store lifecycle/correlation reviewed and retained |
-| `frontend/src/core/refresh` | 60 | 17381 | — / 9 | Partial: S004 store/runtime/scheduler and orchestrator seams; S006 container-log buffer/fallback paths reviewed |
-| `frontend/src/core/resource-metrics` | 6 | 726 | — / 2 | Inventoried |
-| `frontend/src/core/settings` | 4 | 1890 | — / — | Inventoried |
-| `frontend/src/core/telemetry` | 2 | 1175 | — / — | S011: telemetry/expected errors reviewed; context and alias projection shared |
-| `frontend/src/core/window-identity` | 1 | 9 | — / — | Inventoried |
-| `frontend/src/hooks` | 8 | 746 | — / 1 | Inventoried |
-| `frontend/src/modules/browse` | 13 | 3294 | — / 1 | Inventoried |
-| `frontend/src/modules/cluster` | 26 | 5362 | — / — | Inventoried |
-| `frontend/src/modules/global` | 5 | 773 | — / 2 | Inventoried |
-| `frontend/src/modules/kubernetes` | 1 | 856 | — / — | S003 provider inspected; adds selection model |
-| `frontend/src/modules/namespace` | 30 | 4701 | — / 1 | Inventoried |
-| `frontend/src/modules/object-map` | 38 | 8546 | — / 12 | S007 production owner/consumer review and batch; limits recorded |
-| `frontend/src/modules/object-panel` | 141 | 32321 | — / 31 | Partial S005: panel reconciliation, tab composition, YAML baseline, Overview rendering, log presentation, Helm read model; S006 shell/debug and node/container-log consumers reviewed; remaining scope recorded |
-| `frontend/src/modules/port-forward` | 4 | 874 | — / 1 | Inventoried |
-| `frontend/src/modules/resource-grid` | 15 | 4107 | — / 1 | Inventoried |
-| `frontend/src/shared/actions` | 4 | 772 | — / — | Partial S008: object action client, policy and generated kind lookup inspected; contract generation remains |
-| `frontend/src/shared/components` | 26 | 3064 | — / — | Inventoried |
-| `frontend/src/shared/components/aria` | 1 | 25 | — / — | Inventoried |
-| `frontend/src/shared/components/diff` | 6 | 1327 | — / 3 | Inventoried |
-| `frontend/src/shared/components/drain` | 3 | 784 | — / 4 | Inventoried |
-| `frontend/src/shared/components/dropdowns` | 9 | 2392 | — / — | Inventoried |
-| `frontend/src/shared/components/errors` | 9 | 1119 | — / — | Partial S011: ErrorBoundary, ErrorSurface and ErrorNotificationSystem reviewed; other surfaces remain |
-| `frontend/src/shared/components/IconBar` | 1 | 115 | — / — | Inventoried |
-| `frontend/src/shared/components/icons` | 9 | 2018 | — / — | Inventoried |
-| `frontend/src/shared/components/inputs` | 1 | 84 | — / — | Inventoried |
-| `frontend/src/shared/components/kubernetes` | 5 | 413 | — / — | Inventoried |
-| `frontend/src/shared/components/modals` | 14 | 2617 | — / — | Inventoried |
-| `frontend/src/shared/components/status` | 2 | 233 | — / — | Inventoried |
-| `frontend/src/shared/components/tables` | 79 | 14583 | — / 25 | S001 catch-up: shared-table production responsibilities reviewed; C2 deferred |
-| `frontend/src/shared/components/tabs` | 9 | 1470 | — / — | Inventoried |
-| `frontend/src/shared/components/yaml` | 3 | 807 | — / 2 | Inventoried |
-| `frontend/src/shared/constants` | 2 | 139 | — / — | Inventoried |
-| `frontend/src/shared/events` | 4 | 532 | — / — | Inventoried |
-| `frontend/src/shared/hooks` | 9 | 1969 | — / 1 | Partial S008: object action permission/navigation/default-handler composition inspected; other hooks remain |
-| `frontend/src/shared/resources` | 1 | 111 | — / — | Inventoried |
-| `frontend/src/shared/scrollbars` | 3 | 1685 | — / 3 | Inventoried |
-| `frontend/src/shared/terminal` | 1 | 211 | — / 1 | Inventoried |
-| `frontend/src/shared/utils` | 17 | 1401 | — / 1 | Inventoried |
-| `frontend/src/types` | 4 | 136 | — / — | Inventoried |
-| `frontend/src/types/navigation` | 1 | 63 | — / — | Inventoried |
-| `frontend/src/types/shortcuts` | 1 | 48 | — / — | Inventoried |
-| `frontend/src/ui/command-palette` | 3 | 2242 | — / — | Inventoried |
-| `frontend/src/ui/dockable` | 17 | 4616 | — / 4 | Inventoried |
-| `frontend/src/ui/errors` | 5 | 562 | — / — | Inventoried |
-| `frontend/src/ui/favorites` | 6 | 2351 | — / 5 | Inventoried |
-| `frontend/src/ui/layout` | 27 | 6864 | — / 2 | Inventoried |
-| `frontend/src/ui/modals` | 9 | 3171 | — / 1 | Inventoried |
-| `frontend/src/ui/navigation` | 2 | 30 | — / — | Inventoried |
-| `frontend/src/ui/overlays` | 2 | 183 | — / — | Inventoried |
-| `frontend/src/ui/panels` | 2 | 1250 | — / 2 | Inventoried |
-| `frontend/src/ui/settings` | 10 | 3639 | — / — | Inventoried |
-| `frontend/src/ui/shortcuts` | 20 | 2997 | — / 2 | Inventoried |
-| `frontend/src/ui/status` | 10 | 1811 | — / 2 | Inventoried |
-| `frontend/src/utils` | 14 | 1803 | — / 3 | Partial S011: errorHandler category presentation consolidated; other utilities remain |
-| `frontend/styles` | 29 | 5412 | — / — | Inventoried |
-| `internal/appstate` | 1 | 45 | — / — | Inventoried |
-| `internal/appwindow` | 19 | 3689 | — / — | Inventoried |
-| `internal/bootstrap` | 2 | 200 | — / — | Inventoried |
-| `internal/panelwindow` | 8 | 1009 | — / — | Inventoried |
-| `internal/sentry` | 6 | 1477 | 1 / — | Partial S011: reporter/privacy reviewed; session resets consolidated; operation schema remains |
-| `internal/updateconformance` | 3 | 286 | 2 / — | Inventoried |
-| `internal/updateidentity` | 8 | 686 | — / — | Inventoried |
-| `internal/updatestate` | 3 | 780 | 3 / — | Inventoried |
-| `internal/updatetemp` | 4 | 506 | 2 / — | Inventoried |
-| `internal/windowsinstall` | 3 | 104 | — / — | Inventoried |
-| `main.go` | 1 | 14 | — / — | Inventoried |
+| `.claude/hooks` | 1 | 86 | — / — | Reviewed scope: S014 impact-gate hook source; retained as Claude-specific tooling |
+| `.github/actions` | 1 | 180 | — / — | Reviewed scope: S013 shared CI action and release workflow companions |
+| `backend/(root: app)` | 3 | 327 | — / — | Reviewed scope: S012 process/window lifecycle, desktop bridge and native menu dispatch |
+| `backend/(root: application)` | 6 | 1084 | 1 / — | Reviewed scope: S012 process/window lifecycle, desktop bridge and native menu dispatch |
+| `backend/(root: auth)` | 1 | 185 | — / — | Reviewed scope: S003 cluster/auth/workspace selection, client lifetime and event projection |
+| `backend/(root: autoscaling)` | 1 | 60 | — / — | Reviewed scope: S005/S008 detail reads, YAML preparation and mutation admission |
+| `backend/(root: cluster)` | 23 | 3451 | 1 / — | Reviewed scope: S003 cluster/auth/workspace selection, client lifetime and event projection |
+| `backend/(root: crd)` | 1 | 28 | — / — | Reviewed scope: S005/S008 detail reads, YAML preparation and mutation admission |
+| `backend/(root: data)` | 2 | 517 | 1 / — | Reviewed scope: S010 persistence, schema migration, import/export/reset and runtime settings |
+| `backend/(root: desktop)` | 10 | 1689 | — / — | Reviewed scope: S012 process/window lifecycle, desktop bridge and native menu dispatch |
+| `backend/(root: devmode)` | 2 | 10 | — / — | Reviewed scope: S013 generated bindings, platform build and updater wiring |
+| `backend/(root: error)` | 2 | 253 | 1 / — | Reviewed scope: S011 error reporting and logger emission |
+| `backend/(root: events)` | 1 | 149 | — / — | Reviewed scope: S012 process/window lifecycle, desktop bridge and native menu dispatch |
+| `backend/(root: exec)` | 4 | 277 | — / — | Reviewed scope: S006 operation routing, session ownership and cleanup |
+| `backend/(root: favorites)` | 2 | 572 | — / — | Reviewed scope: S010 persistence, schema migration, import/export/reset and runtime settings |
+| `backend/(root: fetch)` | 1 | 395 | — / — | Reviewed scope: S005/S008 detail reads, YAML preparation and mutation admission |
+| `backend/(root: generate)` | 1 | 17 | — / — | Reviewed scope: S013 generated bindings, platform build and updater wiring |
+| `backend/(root: generic)` | 1 | 39 | — / — | Reviewed scope: S005/S008 detail reads, YAML preparation and mutation admission |
+| `backend/(root: helm)` | 2 | 104 | — / — | Reviewed scope: S005/S008 detail reads, YAML preparation and mutation admission |
+| `backend/(root: kubeconfig)` | 4 | 928 | 1 / — | Reviewed scope: S003 cluster/auth/workspace selection, client lifetime and event projection |
+| `backend/(root: kubernetes)` | 1 | 83 | — / — | Reviewed scope: S003 cluster/auth/workspace selection, client lifetime and event projection |
+| `backend/(root: logger)` | 1 | 371 | — / — | Reviewed scope: S011 error reporting and logger emission |
+| `backend/(root: menu)` | 1 | 246 | — / — | Reviewed scope: S012 process/window lifecycle, desktop bridge and native menu dispatch |
+| `backend/(root: node)` | 3 | 145 | — / — | Reviewed scope: S006 operation routing, session ownership and cleanup |
+| `backend/(root: object)` | 11 | 2243 | — / — | Reviewed scope: S005/S008 detail reads, YAML preparation and mutation admission |
+| `backend/(root: operations)` | 2 | 323 | — / — | Reviewed scope: S006 operation routing, session ownership and cleanup |
+| `backend/(root: pod)` | 3 | 161 | — / — | Reviewed scope: S006 operation routing, session ownership and cleanup |
+| `backend/(root: portforward)` | 6 | 1133 | 2 / — | Reviewed scope: S006 operation routing, session ownership and cleanup |
+| `backend/(root: preferences)` | 5 | 2301 | 2 / — | Reviewed scope: S010 persistence, schema migration, import/export/reset and runtime settings |
+| `backend/(root: refresh)` | 18 | 4252 | 4 / — | Reviewed scope: S004 domain registration, lifecycle, permissions and governor execution |
+| `backend/(root: resource)` | 6 | 1450 | — / — | Reviewed scope: S005/S008 detail reads, YAML preparation and mutation admission |
+| `backend/(root: response)` | 3 | 687 | — / — | Reviewed scope: S005/S008 detail reads, YAML preparation and mutation admission |
+| `backend/(root: runtime)` | 2 | 304 | 1 / — | Reviewed scope: S010 persistence, schema migration, import/export/reset and runtime settings |
+| `backend/(root: settings)` | 1 | 229 | — / — | Reviewed scope: S010 persistence, schema migration, import/export/reset and runtime settings |
+| `backend/(root: shell)` | 2 | 765 | 1 / — | Reviewed scope: S006 operation routing, session ownership and cleanup |
+| `backend/(root: static)` | 1 | 83 | — / — | Reviewed scope: S010 persistence, schema migration, import/export/reset and runtime settings |
+| `backend/(root: theme)` | 1 | 132 | — / — | Reviewed scope: S010 persistence, schema migration, import/export/reset and runtime settings |
+| `backend/(root: types)` | 1 | 82 | — / — | Reviewed scope: S014 app-level DTO aliases |
+| `backend/(root: ui)` | 2 | 334 | — / — | Reviewed scope: S010 persistence, schema migration, import/export/reset and runtime settings |
+| `backend/(root: update)` | 8 | 1186 | — / — | Reviewed scope: S013 generated bindings, platform build and updater wiring |
+| `backend/(root: window)` | 1 | 112 | — / — | Reviewed scope: S012 process/window lifecycle, desktop bridge and native menu dispatch |
+| `backend/(root: workload)` | 2 | 502 | 1 / — | Reviewed scope: S005/S008 detail reads, YAML preparation and mutation admission |
+| `backend/(root: workspace)` | 16 | 2130 | — / — | Reviewed scope: S003 cluster/auth/workspace selection, client lifetime and event projection |
+| `backend/capabilities` | 4 | 866 | — / — | Reviewed scope: S008 SSAR worker, SSRR cache and matching |
+| `backend/internal/applog` | 6 | 323 | — / — | Reviewed scope: S011/S014 reporting and scoped forwarding |
+| `backend/internal/appupdates` | 2 | 1125 | 1 / — | Reviewed scope: S013 coordinator, scheduler and event publication |
+| `backend/internal/authstate` | 4 | 683 | — / — | Reviewed scope: S003 manager and transport recovery |
+| `backend/internal/cachekeys` | 1 | 18 | — / — | Reviewed scope: S014 cachekeys leaf policies and consumers |
+| `backend/internal/config` | 1 | 551 | — / — | Reviewed scope: S014 config leaf policies and consumers |
+| `backend/internal/containerlogs` | 5 | 495 | 1 / — | Reviewed scope: S006 log target/selection/classification |
+| `backend/internal/credentialerrors` | 1 | 226 | — / — | Reviewed scope: S003/S011 classifier precedence |
+| `backend/internal/errorcapture` | 4 | 589 | — / — | Reviewed scope: S011 capture policy and stderr assembly |
+| `backend/internal/genappbindings` | 2 | 306 | — / — | Reviewed scope: S013 generator and registration inputs |
+| `backend/internal/genobjectactions` | 1 | 24 | — / — | Reviewed scope: S013 generator and registration inputs |
+| `backend/internal/genrefreshcontracts` | 5 | 856 | 1 / — | Reviewed scope: S013 generator and registration inputs |
+| `backend/internal/k8sretry` | 1 | 105 | 1 / — | Reviewed scope: S014 k8sretry leaf policies and consumers |
+| `backend/internal/lifecycle` | 1 | 42 | — / — | Reviewed scope: S014 lifecycle leaf policies and consumers |
+| `backend/internal/linescanner` | 1 | 20 | — / — | Reviewed scope: S014 linescanner leaf policies and consumers |
+| `backend/internal/logclassify` | 1 | 74 | — / — | Reviewed scope: S014 logclassify leaf policies and consumers |
+| `backend/internal/logsources` | 1 | 27 | — / — | Reviewed scope: S014 logsources leaf policies and consumers |
+| `backend/internal/parallel` | 1 | 71 | — / — | Reviewed scope: S014 parallel leaf policies and consumers |
+| `backend/internal/timeutil` | 2 | 107 | — / — | Reviewed scope: S014 timeutil leaf policies and consumers |
+| `backend/kind/kindregistry` | 2 | 168 | — / — | Reviewed scope: S002/S007 registry and per-kind model/table/map producer contracts |
+| `backend/kind/kindspec` | 1 | 176 | — / — | Reviewed scope: S002/S007 registry and per-kind model/table/map producer contracts |
+| `backend/kind/objectmap` | 1 | 54 | — / — | Reviewed scope: S002/S007 registry and per-kind model/table/map producer contracts |
+| `backend/kind/objectmapnode` | 2 | 134 | — / — | Reviewed scope: S002/S007 registry and per-kind model/table/map producer contracts |
+| `backend/kind/objectmapspec` | 2 | 183 | — / — | Reviewed scope: S002/S007 registry and per-kind model/table/map producer contracts |
+| `backend/kind/streamrows` | 2 | 601 | — / — | Reviewed scope: S002/S007 registry and per-kind model/table/map producer contracts |
+| `backend/kind/streamspec` | 1 | 64 | — / — | Reviewed scope: S002/S007 registry and per-kind model/table/map producer contracts |
+| `backend/nodemaintenance` | 1 | 584 | — / — | Reviewed scope: S006 store/history/cancellation and terminal updates |
+| `backend/objectaction` | 1 | 150 | — / — | Reviewed scope: S008 canonical action metadata and generated consumers |
+| `backend/objectcatalog` | 25 | 5995 | 8 / — | Reviewed scope: S002 discovery/collection/publication, query/facets, lookup and lifecycle |
+| `backend/objectyaml` | 1 | 130 | — / — | Reviewed scope: S008 merge projection and mutation field policy |
+| `backend/refresh` | 6 | 804 | 2 / — | Reviewed scope: S004 shared domain/scope/stream contracts |
+| `backend/refresh/api` | 1 | 304 | — / — | Reviewed scope: S004 api contract and lifecycle owners |
+| `backend/refresh/containerlogsstream` | 4 | 2200 | 3 / — | Reviewed scope: S006 handler, streamer, limiter and wire DTO |
+| `backend/refresh/domain` | 2 | 264 | — / — | Reviewed scope: S004 domain contract and lifecycle owners |
+| `backend/refresh/domainpermissions` | 2 | 754 | — / — | Reviewed scope: S004 domainpermissions contract and lifecycle owners |
+| `backend/refresh/eventstream` | 2 | 484 | — / — | Reviewed scope: S004 eventstream contract and lifecycle owners |
+| `backend/refresh/informer` | 4 | 1065 | 1 / — | Reviewed scope: S004 informer contract and lifecycle owners |
+| `backend/refresh/ingest` | 6 | 2779 | 3 / — | Reviewed scope: S004 store/reflector/manager/partition/resume lifetime |
+| `backend/refresh/metrics` | 4 | 999 | 2 / — | Reviewed scope: S004 poller/demand/retry and source clocks |
+| `backend/refresh/permissions` | 2 | 457 | — / — | Reviewed scope: S004 permissions contract and lifecycle owners |
+| `backend/refresh/querypage` | 10 | 3065 | 5 / — | Reviewed scope: S004 filter/sort/cursor/query execution |
+| `backend/refresh/resourcestream` | 20 | 3531 | 2 / — | Reviewed scope: S004 manager, delivery, notifiers and descriptor consumers |
+| `backend/refresh/ringbuffer` | 1 | 68 | — / — | Reviewed scope: S004 ringbuffer contract and lifecycle owners |
+| `backend/refresh/snapshot` | 77 | 20864 | 11 / — | Reviewed scope: S004 service/flights/query/maintained-store responsibilities; S002 catalog, S005 content, S006 maintenance, S007 map; completion follow-through adds overview/attention/workload/event/Helm/custom builders and namespace notifiers |
+| `backend/refresh/streammux` | 3 | 844 | 2 / — | Reviewed scope: S004 streammux contract and lifecycle owners |
+| `backend/refresh/system` | 9 | 2505 | 1 / — | Reviewed scope: S004 registration, readiness and generation lifetime |
+| `backend/refresh/telemetry` | 1 | 707 | — / — | Reviewed scope: S011 recorder/aggregate ownership and locking |
+| `backend/resourcecontract` | 1 | 200 | — / — | Reviewed scope: S002/S007 resource projection contracts and registry dependency direction |
+| `backend/resourcekind` | 2 | 113 | — / — | Reviewed scope: S002 canonical kind/family identity |
+| `backend/resourcemodel` | 15 | 1977 | 3 / — | Reviewed scope: S002/S014 metadata, status, relationships, facts and quantity maps |
+| `backend/resources` | 1 | 12 | — / — | Reviewed scope: S002 resource-package ownership declaration |
+| `backend/resources/admission` | 12 | 775 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/apiextensions` | 8 | 461 | 1 / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/appbinding` | 1 | 22 | — / — | Reviewed scope: S013 per-kind binding metadata contract |
+| `backend/resources/argocd` | 3 | 497 | — / — | Reviewed scope: S002/S005 facts, status, destinations and shared scalar readers |
+| `backend/resources/backendtlspolicy` | 12 | 303 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/certmanager` | 1 | 224 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/clusterrole` | 13 | 381 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/clusterrolebinding` | 13 | 310 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/common` | 11 | 764 | — / — | Reviewed scope: S002/S014 dependencies, copies, ports, identity, managed fields and discovery |
+| `backend/resources/configmap` | 11 | 344 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/crdfacts` | 3 | 199 | — / — | Reviewed scope: S002 scalar/condition/selector primitives; copy semantics retained |
+| `backend/resources/cronjob` | 11 | 746 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/customresource` | 6 | 601 | 1 / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/daemonset` | 11 | 514 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/deployment` | 11 | 723 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/endpointslice` | 12 | 524 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/events` | 7 | 436 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/externalsecrets` | 1 | 182 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/gateway` | 12 | 327 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/gatewayapi` | 3 | 147 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/gatewayclass` | 12 | 307 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/generic` | 3 | 269 | 1 / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/grpcroute` | 11 | 262 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/helm` | 5 | 750 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/hpa` | 12 | 866 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/httproute` | 11 | 257 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/ingress` | 13 | 604 | 2 / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/ingressclass` | 11 | 340 | 1 / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/job` | 10 | 501 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/karpenter` | 1 | 232 | — / — | Reviewed scope: S002/S005 facts, links, quantities and shared scalar readers |
+| `backend/resources/limitrange` | 10 | 316 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/listenerset` | 12 | 331 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/namespaces` | 8 | 511 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/networkpolicy` | 13 | 540 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/nodes` | 10 | 1846 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/persistentvolume` | 12 | 632 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/persistentvolumeclaim` | 12 | 516 | 1 / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/poddisruptionbudget` | 13 | 451 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/pods` | 13 | 1954 | 5 / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/prometheus` | 1 | 181 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/referencegrant` | 12 | 368 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/replicaset` | 11 | 514 | 1 / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/resourcequota` | 10 | 375 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/role` | 12 | 310 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/rolebinding` | 13 | 319 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/secret` | 11 | 365 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/service` | 13 | 674 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/serviceaccount` | 12 | 377 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/statefulset` | 11 | 631 | 1 / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/storageclass` | 11 | 447 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/tlsroute` | 11 | 242 | — / — | Reviewed scope: S002/S005 typed detail/facts and S007 registry/map projection review; per-kind policies retained |
+| `backend/resources/types` | 9 | 1096 | — / — | Reviewed scope: S002/S005/S006/S010 shared DTO contracts with their producers |
+| `backend/resources/workloads` | 2 | 308 | — / — | Reviewed scope: S002 workload and pod-aggregation helpers |
+| `build/linux` | 7 | 403 | — / — | Reviewed scope: S013 portable/AppImage packaging sources |
+| `build/windows` | 4 | 552 | — / — | Reviewed scope: S013 installer sources and installation/drill ownership |
+| `cmd/project` | 20 | 3081 | 5 / — | Reviewed scope: S013 all project task owners, generators and release preparation |
+| `frontend` | 2 | 225 | — / — | Reviewed scope: S013 Vite/test configuration and HTML entry |
+| `frontend/.storybook` | 10 | 331 | — / 1 | Reviewed scope: S013 Storybook setup and component fixtures |
+| `frontend/biome-plugins` | 6 | 217 | — / — | Reviewed scope: S013 repository lint plugins |
+| `frontend/scripts` | 3 | 1306 | — / 3 | Reviewed scope: S013 lint, error-boundary and Sonar audit scripts |
+| `frontend/src/(root)` | 7 | 1007 | — / — | Reviewed scope: S012 app roots, provider ordering and panel-window composition |
+| `frontend/src/core/app-state-access` | 4 | 75 | — / — | Reviewed scope: S011/S014 app-state request instrumentation and explicit generated-binding facades |
+| `frontend/src/core/backend-api` | 2 | 166 | — / — | Reviewed scope: S011/S014 app-state request instrumentation and explicit generated-binding facades |
+| `frontend/src/core/capabilities` | 11 | 2623 | — / 5 | Reviewed scope: S008 capability and action identity, availability and execution |
+| `frontend/src/core/cluster-workspace` | 2 | 755 | — / — | Reviewed scope: S003 workspace selection, connection and Kubernetes provider |
+| `frontend/src/core/codemirror` | 3 | 640 | — / — | Reviewed scope: S005/S014 YAML editor and CodeMirror search/theme/native adapters |
+| `frontend/src/core/connection` | 1 | 237 | — / — | Reviewed scope: S003 workspace selection, connection and Kubernetes provider |
+| `frontend/src/core/contexts` | 11 | 1875 | — / 1 | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/core/data-access` | 6 | 700 | — / — | Reviewed scope: S004 scoped refresh, broker/lease lifecycle and resource metrics |
+| `frontend/src/core/desktop-runtime` | 1 | 81 | — / — | Reviewed scope: S012 native window and dockable panel composition |
+| `frontend/src/core/events` | 3 | 317 | — / — | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/core/logging` | 1 | 112 | — / — | Reviewed scope: S011 error/reporting/telemetry and request diagnostics |
+| `frontend/src/core/navigation` | 5 | 489 | — / — | Reviewed scope: S009 navigation registry, sidebar, keyboard/menu dispatch and focus |
+| `frontend/src/core/panel-windows` | 17 | 2600 | — / — | Reviewed scope: S012 native window and dockable panel composition |
+| `frontend/src/core/persistence` | 2 | 448 | — / — | Reviewed scope: S010 settings, persistence, hydration and favorites |
+| `frontend/src/core/read-diagnostics` | 2 | 312 | — / — | Reviewed scope: S011 error/reporting/telemetry and request diagnostics |
+| `frontend/src/core/refresh` | 60 | 17381 | — / 9 | Reviewed scope: S004 scoped refresh, broker/lease lifecycle and resource metrics |
+| `frontend/src/core/resource-metrics` | 6 | 726 | — / 2 | Reviewed scope: S004 scoped refresh, broker/lease lifecycle and resource metrics |
+| `frontend/src/core/settings` | 4 | 1890 | — / — | Reviewed scope: S010 settings, persistence, hydration and favorites |
+| `frontend/src/core/telemetry` | 2 | 1175 | — / — | Reviewed scope: S011 error/reporting/telemetry and request diagnostics |
+| `frontend/src/core/window-identity` | 1 | 9 | — / — | Reviewed scope: S012 native window and dockable panel composition |
+| `frontend/src/hooks` | 8 | 746 | — / 1 | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/modules/browse` | 13 | 3294 | — / 1 | Reviewed scope: S001/S002 query/table binding and catalog-backed consumers |
+| `frontend/src/modules/cluster` | 26 | 5362 | — / — | Reviewed scope: S002/S004 resource view/column declarations and overview/attention consumers |
+| `frontend/src/modules/global` | 5 | 773 | — / 2 | Reviewed scope: S002/S004 resource view/column declarations and overview/attention consumers |
+| `frontend/src/modules/kubernetes` | 1 | 856 | — / — | Reviewed scope: S003 workspace selection, connection and Kubernetes provider |
+| `frontend/src/modules/namespace` | 30 | 4701 | — / 1 | Reviewed scope: S002/S004 resource view/column declarations and overview/attention consumers |
+| `frontend/src/modules/object-map` | 38 | 8546 | — / 12 | Reviewed scope: S007 graph projection, layout, navigation and rendering |
+| `frontend/src/modules/object-panel` | 141 | 32321 | — / 31 | Reviewed scope: S005/S006/S008/S012 panel reconciliation, every Overview descriptor, YAML/actions/logs/shell/debug and native consumers |
+| `frontend/src/modules/port-forward` | 4 | 874 | — / 1 | Reviewed scope: S006 operation UI and cleanup |
+| `frontend/src/modules/resource-grid` | 15 | 4107 | — / 1 | Reviewed scope: S001/S002 query/table binding and catalog-backed consumers |
+| `frontend/src/shared/actions` | 4 | 772 | — / — | Reviewed scope: S008 capability and action identity, availability and execution |
+| `frontend/src/shared/components` | 26 | 3064 | — / — | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/shared/components/aria` | 1 | 25 | — / — | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/shared/components/diff` | 6 | 1327 | — / 3 | Reviewed scope: S009 popup/input/focus policies; S008 action and S009 diff modal consumers |
+| `frontend/src/shared/components/drain` | 3 | 784 | — / 4 | Reviewed scope: S006 operation UI and cleanup |
+| `frontend/src/shared/components/dropdowns` | 9 | 2392 | — / — | Reviewed scope: S009 popup/input/focus policies; S008 action and S009 diff modal consumers |
+| `frontend/src/shared/components/errors` | 9 | 1119 | — / — | Reviewed scope: S011 error/reporting/telemetry and request diagnostics |
+| `frontend/src/shared/components/IconBar` | 1 | 115 | — / — | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/shared/components/icons` | 9 | 2018 | — / — | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/shared/components/inputs` | 1 | 84 | — / — | Reviewed scope: S009 popup/input/focus policies; S008 action and S009 diff modal consumers |
+| `frontend/src/shared/components/kubernetes` | 5 | 413 | — / — | Reviewed scope: S005 shared resource header/status/metadata/action presentation |
+| `frontend/src/shared/components/modals` | 14 | 2617 | — / — | Reviewed scope: S009 popup/input/focus policies; S008 action and S009 diff modal consumers |
+| `frontend/src/shared/components/status` | 2 | 233 | — / — | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/shared/components/tables` | 79 | 14583 | — / 25 | Reviewed scope: S001 shared-table production owners; dirty-width C2 remains deferred behavior work |
+| `frontend/src/shared/components/tabs` | 9 | 1470 | — / — | Reviewed scope: S014 tab drag/listener ownership and scrollbar geometry |
+| `frontend/src/shared/components/yaml` | 3 | 807 | — / 2 | Reviewed scope: S005/S014 YAML editor and CodeMirror search/theme/native adapters |
+| `frontend/src/shared/constants` | 2 | 139 | — / — | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/shared/events` | 4 | 532 | — / — | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/shared/hooks` | 9 | 1969 | — / 1 | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/shared/resources` | 1 | 111 | — / — | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/shared/scrollbars` | 3 | 1685 | — / 3 | Reviewed scope: S014 tab drag/listener ownership and scrollbar geometry |
+| `frontend/src/shared/terminal` | 1 | 211 | — / 1 | Reviewed scope: S006 operation UI and cleanup |
+| `frontend/src/shared/utils` | 17 | 1401 | — / 1 | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/types` | 4 | 136 | — / — | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/types/navigation` | 1 | 63 | — / — | Reviewed scope: S009 navigation registry, sidebar, keyboard/menu dispatch and focus |
+| `frontend/src/types/shortcuts` | 1 | 48 | — / — | Reviewed scope: S009 navigation registry, sidebar, keyboard/menu dispatch and focus |
+| `frontend/src/ui/command-palette` | 3 | 2242 | — / — | Reviewed scope: S009 navigation registry, sidebar, keyboard/menu dispatch and focus |
+| `frontend/src/ui/dockable` | 17 | 4616 | — / 4 | Reviewed scope: S012 native window and dockable panel composition |
+| `frontend/src/ui/errors` | 5 | 562 | — / — | Reviewed scope: S011 error/reporting/telemetry and request diagnostics |
+| `frontend/src/ui/favorites` | 6 | 2351 | — / 5 | Reviewed scope: S010 settings, persistence, hydration and favorites |
+| `frontend/src/ui/layout` | 27 | 6864 | — / 2 | Reviewed scope: S009 navigation registry, sidebar, keyboard/menu dispatch and focus |
+| `frontend/src/ui/modals` | 9 | 3171 | — / 1 | Reviewed scope: S009 popup/input/focus policies; S008 action and S009 diff modal consumers |
+| `frontend/src/ui/navigation` | 2 | 30 | — / — | Reviewed scope: S009 navigation registry, sidebar, keyboard/menu dispatch and focus |
+| `frontend/src/ui/overlays` | 2 | 183 | — / — | Reviewed scope: S009 popup/input/focus policies; S008 action and S009 diff modal consumers |
+| `frontend/src/ui/panels` | 2 | 1250 | — / 2 | Reviewed scope: S011 error/reporting/telemetry and request diagnostics |
+| `frontend/src/ui/settings` | 10 | 3639 | — / — | Reviewed scope: S010 settings, persistence, hydration and favorites |
+| `frontend/src/ui/shortcuts` | 20 | 2997 | — / 2 | Reviewed scope: S009 navigation registry, sidebar, keyboard/menu dispatch and focus |
+| `frontend/src/ui/status` | 10 | 1811 | — / 2 | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/src/utils` | 14 | 1803 | — / 3 | Reviewed scope: S014 quiet context/event/status and primitive follow-through |
+| `frontend/styles` | 29 | 5412 | — / — | Reviewed scope: S014 cascade entry, base/reset/layout, focus/motion and scrollbar tokens; appearance/component rules remain with their consumers |
+| `internal/appstate` | 1 | 45 | — / — | Reviewed scope: S010 persistent-state root manifest |
+| `internal/appwindow` | 19 | 3689 | — / — | Reviewed scope: S012 registry, native roles, geometry, close/quit and transfers |
+| `internal/bootstrap` | 2 | 200 | — / — | Reviewed scope: S012 startup composition and platform bootstrap |
+| `internal/panelwindow` | 8 | 1009 | — / — | Reviewed scope: S012 model, ownership, publication and transfers |
+| `internal/sentry` | 6 | 1477 | 1 / — | Reviewed scope: S011 reporter, privacy, operation schema and session lifecycle |
+| `internal/updateconformance` | 3 | 286 | 2 / — | Reviewed scope: S013 updateconformance validation, ownership and cleanup contracts |
+| `internal/updateidentity` | 8 | 686 | — / — | Reviewed scope: S013 updateidentity validation, ownership and cleanup contracts |
+| `internal/updatestate` | 3 | 780 | 3 / — | Reviewed scope: S013 updatestate validation, ownership and cleanup contracts |
+| `internal/updatetemp` | 4 | 506 | 2 / — | Reviewed scope: S013 updatetemp validation, ownership and cleanup contracts |
+| `internal/windowsinstall` | 3 | 104 | — / — | Reviewed scope: S013 windowsinstall validation, ownership and cleanup contracts |
+| `main.go` | 1 | 14 | — / — | Reviewed scope: S012 bootstrap delegation |
 
 ## S008 — permissions and mutations
 
@@ -1760,3 +1762,374 @@ The batch covers **four production files, four test files and this ledger**, wit
 **120 fewer production lines** (`git diff --numstat` against entry HEAD). Only
 this ledger changed after the gate; its final update is checked with `qc:docs`
 and `git diff --check`.
+
+
+## Completion continuation — remaining review and implementation
+
+The user requested completion of the remaining work. Entry `77d07a6f`, clean
+worktree (`git status --short`, `git log -3 --oneline`). Continue through open
+S011 responsibilities, S012–S014 and the earlier explicitly unreviewed units;
+do not treat another small delivery batch as completion of this request.
+
+### S011 diagnostics follow-through
+
+Read the full diagnostics panel, diagnostic row model and cluster-data row
+model, credential classifier, Sentry operation schema, native dump handlers,
+refresh telemetry recorder and aggregate. Keep credential predicate precedence,
+known-versus-fallback classification, bounded opt-in native dumps, recorder
+locking/retention and distinct socket/domain/scope/target counters. The full
+panel uses scoped-store hooks whose cached array identities drive subscriptions;
+the whole-store object is mutable, so it cannot replace those hooks unchanged.
+
+Implemented so far:
+
+- One diagnostics polling owner applies settled results with shared retained-data,
+  failure-report and recovery handling. The three reads still start together and
+  settle before publication; closing invalidates the cycle before any update.
+  Its panel consumer retains separate telemetry/selection/API summary policies.
+- Recorder batch projection now takes the existing SnapshotRecord directly,
+  removing its private duplicate representation. The snapshot service still
+  stamps cluster identity before recording; summaries keep existing copies and
+  scope keys.
+- Capability-batch telemetry creation and final sanitization use one serializer.
+  The boundary still parses only supported map/check/count types and revalidates
+  all structural strings, without retaining private request fields.
+
+Baseline passed: 5 frontend files / 64 tests and recorder, Sentry and credential
+packages (`/tmp/luxury-yacht-remaining-{diagnostics,reporting}-before.log`). Two
+new panel cases passed on the original implementation (3 files / 44 tests):
+retained data with independent source recovery, and late failure after close.
+The same selection passed after extraction; recorder/Sentry tests also passed
+(`/tmp/luxury-yacht-remaining-diagnostics-{characterization,polling}.log`,
+`/tmp/luxury-yacht-remaining-reporting-after.log`). No changed diagnostics
+TypeScript function exceeds local complexity 12
+(`/tmp/luxury-yacht-remaining-biome-complexity.json`). Completion-continuation coverage and final gate evidence are recorded below.
+
+### S012 — native lifecycle and panel ownership
+
+Inspected the complete native registry, application/panel roles, workspace and
+cluster/panel transfer paths, publication/close/quit protocols, desktop bridge,
+bootstrap and application lifecycle. Followed these through every frontend
+panel-window coordinator, root app composition, and all dockable TypeScript
+production owners (store, tab groups, provider, controls, layout, drag, resize,
+maximize and bounds). CSS remains companion review in S014.
+
+Consolidated authorization/close/failed-close cleanup and lock-held transfer
+removal; platform window defaults now have one owner with role-specific options
+left in the callers. Dockable state shares tab removal/active repair and geometry
+handoff. Removed the registered-but-never-invoked close callback map and its
+registration plumbing after tracing all references. Existing close/guard paths
+retain their controlled-sync suppression. Native docking/publication now use the
+existing complete tab serializer, and position controls share action descriptors.
+
+Retained reservation rechecks, distinct provisional/committed ownership,
+publication acknowledgements, cancellation outside locks, per-cluster activity,
+native sender validation, quit preflight, and resize/maximize timing. The local
+object-panel snapshot spread preserves extension fields and was not replaced.
+Combining pending-float structures was rejected because stale rejection handling
+could change; no lifecycle redesign is part of this refactor.
+
+Two characterization cases passed before editing: duplicate tab membership with
+active repair, and geometry handoff preserving destination ownership and copied
+sizes (51 tests). Native appwindow/panelwindow/bootstrap packages passed before
+and after. Frontend dockable and panel-window selections passed 24 files / 296
+tests after the batch; a subsequent control-flow edit receives another focused
+check. Logs: `/tmp/luxury-yacht-remaining-native-{before,after}.log`,
+`/tmp/luxury-yacht-remaining-dockable-{characterization,after2}.log`.
+Native window interaction has not been exercised; these are source and automated
+contract checks, not a native runtime validation claim.
+
+### S013 — updates and engineering tooling
+
+Read the update coordinator/scheduler and backend command/config/provider wiring,
+updateidentity, updatestate, updatetemp, updateconformance and Windows installation
+packages; project task implementation, frontend lint/Sonar/error-boundary scripts,
+Biome plugins, Storybook setup, bindings/refresh generators, Linux portable and
+AppImage tooling, NSIS source, and shared CI actions. Platform task definitions
+and release/drill workflows were subsequently read in the companion follow-through.
+
+Consolidated snapshot equality and progress copying without changing value versus
+pointer semantics; shared skip-persistence failure completion and staging-path
+cleanup; retained the explicit Wails DTO while using a type conversion instead
+of its repeated field projection. Release preparation now names input validation
+and artifact staging, and asset admission has one predicate. Signature/path/link
+validation, cleanup ownership, overwrite/exclusive-copy distinctions, separate
+Download/Restart consent, publication order and reset quiescence remain explicit.
+Generator optionality and canonical-reference rules were retained after tracing
+their differing policies. No release, installation or remote mutation was run.
+
+New characterization cases passed before production edits: progress value
+deduplication and detached publication; failed staging cleanup survives Reset and
+is retryable. Focused package checks passed before and after, including project
+release tooling. Evidence: `/tmp/luxury-yacht-remaining-updates-before.log`,
+`/tmp/luxury-yacht-remaining-update-characterization.log`,
+`/tmp/luxury-yacht-remaining-updates-after.log`, and
+`/tmp/luxury-yacht-remaining-tooling-after.log`.
+
+### S014 — shared primitives
+
+Read shared utility/identity/relationship/quantity helpers, stable selection,
+age clock, metrics banner and sorting hooks; application log adapters, parallel
+worker and Kubernetes retry primitives. Scoped logging now has one forwarding
+owner, with cluster and operation constructors supplying only their metadata
+slots. Explicit values, extra arguments, original caller slices, structured
+errors/panics and scope composition are retained. Node/table overcommit wrappers
+now use the existing shared calculation policy after their original parsers.
+
+Characterizations passed on the original implementation for caller metadata
+preservation and invalid/nonpositive capacity. After refactoring, the primitives,
+dockable and panel-window frontend selection passed **36 files / 416 tests**;
+Go applog/logclassify/parallel/k8sretry passed. Evidence:
+`/tmp/luxury-yacht-remaining-{scoped,resource}-characterization.log`,
+`/tmp/luxury-yacht-remaining-primitives-{go,ts}-after.log`.
+
+### S004 deeper lifecycle follow-through
+
+Read the full ingest manager, dynamic reflector, partition and resume paths;
+governor policy/executor/cooling/preparation; full resource-stream protocol and
+its message routing/effect consumers. Shared partition construction and existing
+leaf-lock store lookup replace repeated typed/dynamic/sink setup. Cooling now
+has one final catalog-stop/heap-reclaim/log sequence, with store installation
+and partial-failure ownership explicit. Modern and legacy stream messages use
+one canonical projection, and preserved-health handling is shared between
+resync and acknowledgement phases.
+
+Retain readiness versus settlement, on-demand reflector exclusion, per-partition
+resume versions, planned versus applied governor tiers, generation-local Cold
+preparation, cancellation outside locks, signal-clock validation, strict modern
+routing, acknowledgement health and ordered protocol effects. Baseline lifecycle
+checks passed (`/tmp/luxury-yacht-remaining-refresh-lifecycle-before.log`);
+post-edit checks and orchestrator follow-through passed as recorded below.
+
+### S008 mutation and S009/S005 interaction follow-through
+
+Read the complete YAML mutation, reload/merge, ownership, resolver and field-policy
+owners, response-cache invalidation and permission revalidation. Normalize/diff
+and merge preparation now share the existing sanitization policy; merge alone
+also strips resourceVersion. Removed the private resolver compatibility wrapper
+and its ignored selection-key plumbing. Cluster-scoped dependencies and the
+apply cache-invalidation key remain. Collision tests call the canonical resolver
+with the same fallback policy. Focused YAML/ownership/reload/identity checks
+passed before and after (`/tmp/luxury-yacht-remaining-yaml-{before,after}.log`).
+
+Read the full action controller, ObjectDiff modal selection/matching/rendering,
+Rollback modal and shared diff utilities. Confirmation handlers now use the
+existing action executor for error handling and final cleanup; delete preserves
+close-before-refresh callback order, and editable scale retains its retry/error
+state. Both object-diff sides share cascading selection resets; stale-match
+cancellation, selected-object retention and refresh effect order remain.
+Rollback/ObjectDiff share budget-warning selection, with their existing budget
+precedence. The timeline separates run positioning and tick construction and
+uses first-fit row lookup without its extra placed flag. The overlap/row-reuse
+characterization passed before production edits. Logs:
+`/tmp/luxury-yacht-remaining-{diff-before,diff-after,final-followthrough,actions-before,actions-after,diff-selection-after,timeline-characterization}.log`.
+
+### S010/S012/S013 companion follow-through
+
+Completed the previously listed reads of preferences schema normalization and
+migration, Favorites migration/pane/filter normalization, native geometry and
+application menu routing. Retain cache publication after atomic save,
+first-default-theme precedence, supported-schema migration, per-window geometry,
+role-authenticated menu routing and separate process/window commands. Settings
+repositories and descriptors already own their shared policies. No external
+editor launch implementation was found by the repository-wide editor search;
+the earlier shorthand referred to settings editing, not a separate launcher.
+
+Read the remaining platform task definitions, release-workflow sections,
+Windows package drill and refresh-contract registration table. Platform-specific
+build flags, signed-versus-development bundle paths, installer scope checks,
+release preparation/publication ordering and generator optionality are retained.
+This is source review; release, installation and native-dialog drills were not run.
+
+### S014 scrolling and tab follow-through
+
+Read all scrollbar activity, virtual scrollbar and token owners; shared tab base,
+drag provider/source/target and their contracts; CodeMirror search/theme/native
+adapters and SearchInput. Keep virtual versus DOM geometry/clamping distinct,
+hover/drag retention, ancestor clipping and native wheel routing. Consolidated
+DOM overlay construction, rectangle projection and overflow admission; removed
+a branch that returned the same boolean disjunction in both orders. Scrollbar
+focused checks passed before/after (`/tmp/luxury-yacht-remaining-scrollbars-{before,after}.log`).
+
+The drag provider's target map was only written/deleted; DOM drop listeners own
+all dispatch. Whole-repository reference inspection found no reader of that map.
+Removed the map, registration interface, target IDs and hook registration
+plumbing while retaining native listeners, MIME admission, current-drag refs,
+listener cleanup and tear-off handling. Tab/cluster/dockable focused checks are
+recorded in `/tmp/luxury-yacht-remaining-tabs-{before,after}.log`.
+
+The full refresh follow-through now passed: ingest/system/backend lifecycle
+checks and 44 frontend files / 615 tests, including orchestrator stop and blocked
+stream paths. Evidence: `/tmp/luxury-yacht-remaining-refresh-lifecycle-after.log`
+and `/tmp/luxury-yacht-remaining-orchestrator-after.log`. Coverage and final-gate results are tracked in the validation record below.
+
+
+### S002/S005 — resource and overview follow-through
+
+Inspected the per-kind detail services and their facts/model/identity consumers,
+including Pod/Node/workload enrichment, Gateway API, policy, storage, configuration,
+RBAC, custom resources and operators. Reused `crdfacts` scalar readers in Argo CD
+and Karpenter; retained Argo's no-copy generic decoder and Karpenter's differing
+quantity formatting. Quota and LimitRange detail maps now share
+`resourcemodel.QuantityMapStrings`, including their nil/empty and canonical
+quantity-string policy. Existing per-kind nil-client, error/warning, UID/owner,
+copy-versus-alias and PVC fallback policies remain explicit.
+
+Finished the Overview descriptor/widget reads: workload/job, pod/node, policy,
+storage, RBAC, config/secret/event, network, operator/Argo/Karpenter and the five
+operator section owners, alongside the previously reviewed Gateway/Helm/shared
+renderers. Deployment/StatefulSet/ReplicaSet replica-state and up-to-date displays
+share projections; rollout status/message share the completion predicate. Kept
+per-kind sections, optional fields, tooltip text, resource links and status
+precedence instead of introducing a generic detail framework.
+
+Operator checks passed before/after across Argo CD, Karpenter, cert-manager,
+External Secrets and Prometheus; workload/renderer/drift checks passed 3 files /
+54 tests. Quantity packages passed before/after. Logs:
+`/tmp/luxury-yacht-remaining-operators-{before,after}.log`,
+`/tmp/luxury-yacht-remaining-workload-{before,after}.log`,
+`/tmp/luxury-yacht-remaining-quantity-{before,after}.log`.
+
+### S002 — Browse page-state follow-through
+
+Read the full Browse catalog hook, query-plan/page projection, scope utilities,
+custom-row adapter, page/export hydration and cluster/namespace custom consumers;
+followed the catalog snapshot producer and its existing typed query boundary.
+Browse remains Query Backed Static: backend scopes own global filtering, sorting,
+counts, facets and cursor windows; the frontend retains the current row window.
+
+Whole-repository reference inspection found that the persisted UID-to-position
+map was rebuilt and forwarded but never read. Removed that map, its rebuilding
+helper, duplicate collection/result representation, empty-collection factory and
+ignored prior-collection page argument. The hook now retains only the row array;
+deduplication retains its operation-local index. Baseline structural sharing,
+last-duplicate replacement at the first position, missing-UID rows, page/export
+order, cursor invalidation, structural-scope reset and stale-request cleanup stay
+at their existing boundaries. No import dependency or provider order changed.
+
+Existing Browse/custom consumer checks passed before (13 files / 149 tests).
+A duplicate/missing-UID/order/nonmutation characterization passed on the original
+implementation. Afterward the same consumer selection passed 13 files / 150
+tests with coverage. Existing pagination assertions remain; one projection test
+no longer constructs the prior collection its callee never consumed. No tests
+were deleted. Evidence: `/tmp/luxury-yacht-remaining-browse-{before,
+characterization,after}.log` and
+`/tmp/luxury-yacht-remaining-browse-coverage/coverage-summary.json`.
+
+### Quiet-owner and retained-candidate dispositions
+
+- Read cluster/global/namespace view and column owners with their refresh and
+  catalog producers. Keep query-backed static versus dynamic membership, current
+  namespace readiness, per-cluster joins, exact/approximate count presentation,
+  per-view links/defaults and the established column factories. No second grid
+  framework or speculative generic per-kind service is warranted by these reads.
+- Read the complete cluster attention/overview, namespace workloads, Helm/custom
+  and event builders, typed domain wrappers and namespace/object-event notifiers.
+  Retain independent grace/readiness clocks, generation-stamped deadlines,
+  source-error policy, serve-time metric joins, grouped Helm revision selection,
+  custom-resource partial-result differences and notifier drain/stop ownership.
+  Similar-looking namespace/cluster custom accumulators have different error,
+  version and result policies, so merging them would obscure the contract.
+- Read quiet event/context/status/hooks and primitive owners: event bus/Wails
+  adapters, zoom/appearance/sidebar/modal contexts, app-state access and explicit
+  binding facades, global-view ownership, resource loading/status controls,
+  icon discovery and type vocabularies. Keep subscription ordering, once-listener
+  exception behavior, per-window zoom, focus ownership and generated-boundary
+  export lists. Their wrappers carry contracts, not duplicate policy.
+- Reviewed the style cascade entry, base/reset/layout, focus/motion utilities and
+  scrollbar tokens with the corresponding owners. Retain cascade/specificity,
+  zoom geometry, reduced-motion and native focus treatment. No CSS or icon asset
+  edits or rendered appearance claims are part of this batch.
+- Read the quiet backend adapters/configuration, app-state roots and cleanup,
+  kind/stream/model declaration leaves with their producers. Keep complete object
+  identity at boundaries and cluster-local cache ownership. Declarative per-kind
+  records and generated DTOs are not candidates merely because they repeat fields.
+
+The 236 baseline buckets now point to their inspected responsibilities rather
+than stale `Inventoried` labels. This is responsibility-level review coverage;
+it does not claim every source line or runtime/visual state was examined. The
+updated source inventory contains 1,845 implementation files / 297,236 physical
+lines, 111 generated files and 1,115 validation files in the same 236 buckets.
+Inventory: `/tmp/luxury-yacht-remaining-inventory.json`; baseline-to-worktree delta:
+`/tmp/luxury-yacht-remaining-inventory-delta.txt`. The new polling hook belongs to
+the existing refresh bucket. Earlier pass records remain historical evidence;
+the rotation table and this continuation supersede their next-domain pointers.
+
+### Completion-continuation validation
+
+- Full backend coverage task passed. Changed Go production functions cover
+  **693/787 statements (88.06%)** in the ordinary profile. A consumer-instrumented
+  quota/LimitRange run covers the shared quantity helper **6/6**, giving
+  **699/787 (88.82%)** across affected functions. Duplicate package coverage blocks
+  were merged by source location. The ordinary profile cannot count calls made
+  into an uninstrumented dependency. Evidence:
+  `/tmp/luxury-yacht-remaining-backend-coverage.log`,
+  `/tmp/luxury-yacht-remaining-quantity-coverage.log`,
+  `/tmp/luxury-yacht-remaining-go-coverage.json`.
+- Full frontend coverage passed **513 files / 4,845 tests**, **88.10% statement
+  coverage** before the final Browse refactor; its subsequent affected coverage
+  selection passed 150 tests, including the added characterization. Browse data
+  projection is **100%**, catalog hook **93.92%**, utilities **92.85%**. The complete
+  report is outside the tree so generated HTML/JS does not enter lint:
+  `/tmp/luxury-yacht-remaining-frontend-coverage/coverage-summary.json`.
+- The first full frontend coverage attempt timed out at the first YAML-tab test
+  (5 seconds), followed by 31 failures in that file. The isolated unchanged test
+  file passed all 34 tests; rerunning the full coverage task after backend coverage
+  finished passed all 4,845. No timeout, worker, assertion or production behavior
+  was changed to obtain the pass. Logs preserve both attempts:
+  `/tmp/luxury-yacht-remaining-frontend-coverage{,2}.log` and
+  `/tmp/luxury-yacht-remaining-yamltab-investigation.log`.
+- Directly touched frontend file coverage is above 80% except `RollbackModal.tsx`
+  (**78.12%**). Remaining Go function gaps include scoped structured-operation
+  forwarding, skip/error paths, YAML reload/merge, mmap cooling, controller
+  namespace lookup, updater preparation, native transfer commit and state-file
+  removal. These are measured gaps in this behavior-preserving batch, not claims
+  of complete error-path/native coverage. No presentation-only tests were added
+  to inflate coverage and no tests were pruned. Detailed file/function reports:
+  `/tmp/luxury-yacht-remaining-{ts,go}-coverage.json`.
+- Typecheck passed. Local complexity covers **76 changed Go functions** (maximum
+  **12**) and **115 changed/new TypeScript functions** (none above **12**). Four
+  unchanged TypeScript functions retain pre-existing findings. No thresholds,
+  suppressions or Sonar baseline changes. Evidence:
+  `/tmp/luxury-yacht-remaining-go-complexity-audit.json`,
+  `/tmp/luxury-yacht-remaining-complexity-audit.json`,
+  `/tmp/luxury-yacht-remaining-local-checks7.log`.
+- Read-only PR #355 Sonar audit at published head `77d07a6fb89e05c82d0b96f61155dba5781177f1`
+  reports three S6551 findings in the prior telemetry
+  pass, keys `AaCyYfpMyY0DVTevpCYD`, `AaCyYfpMyY0DVTevpCYE` and
+  `AaCyYfpMyY0DVTevpCYF`. The local producer now retains its inferred string fields
+  and the consumer derives its parameter from that producer, removing the
+  `Record<string, unknown>` type erasure without changing runtime coercion. All
+  81 telemetry tests passed before/after. Remote findings remain open until a
+  published revision is analyzed; no push was requested. Audit and tests:
+  `/tmp/luxury-yacht-remaining-sonar-online.log`,
+  `/tmp/luxury-yacht-remaining-sonar-{before,after}.log`.
+- Native window interaction, live Kubernetes transport, installation and release
+  drills were not run. Automated refactor checks do not substitute for those
+  runtime checks.
+
+All fourteen scheduled domains have a recorded disposition and the confirmed
+behavior-preserving candidates in this continuation are implemented. S001-C2
+remains a separately scoped behavior defect: the dirty-width notifier aliases
+its stored snapshot. Re-entry requires a failing workflow regression followed by
+a behavior fix; it was not silently folded into this refactor. Do not interpret
+this review cycle as a claim that the repository has no further simplification
+opportunities or that deferred behavior/runtime work is complete.
+
+
+Final `mise exec -- wails3 task qc:prerelease` **passed (exit 0)**: docs,
+formatting, generated bindings, vet/staticcheck, full backend race suite,
+frontend lint and typecheck, **513 frontend files / 4,846 tests**, Knip and
+Trivy (zero high/critical dependency findings). Log:
+`/tmp/luxury-yacht-remaining-prerelease.log`.
+
+The before/after SHA-256 comparison inspected **3,245 files**. Only this ledger
+changed during the gate, through the review-record update; no production,
+test or generated file changed. Manifest:
+`/tmp/luxury-yacht-remaining-after-gate.json`. `git diff --check` passed.
+The continuation changes **55 production files, 13 test files and this ledger**,
+with **630 fewer production lines**, including the new polling hook. These are
+entry-HEAD diff counts, not a measure of how much code was reviewed. No commit,
+push or PR mutation was made. Only the ledger was updated after the gate; its
+final update passed `qc:docs` and `git diff --check`
+(`/tmp/luxury-yacht-remaining-docs.log`).

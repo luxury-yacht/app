@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/crdfacts"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -76,9 +77,9 @@ func BuildFacts(clusterID string, object *unstructured.Unstructured) *Facts {
 	case "NodeClaim", "Machine":
 		buildClaimFacts(clusterID, object, spec, facts)
 	case "NodeOverlay":
-		facts.Weight = integer(spec, "weight")
+		facts.Weight = crdfacts.Number(spec, "weight")
 		facts.Requirements = decodeList[Requirement](spec, "requirements")
-		facts.PriceAdjustment = text(spec, "priceAdjustment")
+		facts.PriceAdjustment = crdfacts.Text(spec, "priceAdjustment")
 		facts.Capacity = quantities(spec, "capacity")
 	default:
 		buildClassFacts(object, spec, facts)
@@ -92,15 +93,15 @@ func buildPoolFacts(clusterID string, object *unstructured.Unstructured, spec ma
 		template = spec
 	}
 	facts.NodeClass = reference(clusterID, nestedMap(template, "nodeClassRef"))
-	facts.Weight = integer(spec, "weight")
-	facts.Replicas = integer(spec, "replicas")
+	facts.Weight = crdfacts.Number(spec, "weight")
+	facts.Replicas = crdfacts.Number(spec, "replicas")
 	facts.Limits = quantities(spec, "limits")
 	facts.Capacity = quantities(object.Object, "status", "resources")
-	facts.ConsolidationPolicy = text(spec, "disruption", "consolidationPolicy")
-	facts.ConsolidateAfter = text(spec, "disruption", "consolidateAfter")
+	facts.ConsolidationPolicy = crdfacts.Text(spec, "disruption", "consolidationPolicy")
+	facts.ConsolidateAfter = crdfacts.Text(spec, "disruption", "consolidateAfter")
 	facts.Budgets = decodeList[Budget](nestedMap(spec, "disruption"), "budgets")
-	facts.ExpireAfter = text(template, "expireAfter")
-	facts.TerminationGracePeriod = text(template, "terminationGracePeriod")
+	facts.ExpireAfter = crdfacts.Text(template, "expireAfter")
+	facts.TerminationGracePeriod = crdfacts.Text(template, "terminationGracePeriod")
 	facts.Requirements = decodeList[Requirement](template, "requirements")
 	facts.Taints = decodeList[Taint](template, "taints")
 	facts.StartupTaints = decodeList[Taint](template, "startupTaints")
@@ -109,16 +110,16 @@ func buildPoolFacts(clusterID string, object *unstructured.Unstructured, spec ma
 func buildClaimFacts(clusterID string, object *unstructured.Unstructured, spec map[string]any, facts *Facts) {
 	facts.NodeClass = reference(clusterID, nestedMap(spec, "nodeClassRef"))
 	facts.NodePool = poolReference(clusterID, object)
-	if name := text(object.Object, "status", "nodeName"); name != "" {
+	if name := crdfacts.Text(object.Object, "status", "nodeName"); name != "" {
 		link := resourcemodel.NewClusterResourceLink(clusterID, "", "v1", "Node", "nodes", name, "")
 		facts.Node = &link
 	}
-	facts.ProviderID = text(object.Object, "status", "providerID")
-	facts.ImageID = text(object.Object, "status", "imageID")
+	facts.ProviderID = crdfacts.Text(object.Object, "status", "providerID")
+	facts.ImageID = crdfacts.Text(object.Object, "status", "imageID")
 	facts.Capacity = quantities(object.Object, "status", "capacity")
 	facts.Allocatable = quantities(object.Object, "status", "allocatable")
-	facts.ExpireAfter = text(spec, "expireAfter")
-	facts.TerminationGracePeriod = text(spec, "terminationGracePeriod")
+	facts.ExpireAfter = crdfacts.Text(spec, "expireAfter")
+	facts.TerminationGracePeriod = crdfacts.Text(spec, "terminationGracePeriod")
 	facts.Requirements = decodeList[Requirement](spec, "requirements")
 	facts.Taints = decodeList[Taint](spec, "taints")
 	facts.StartupTaints = decodeList[Taint](spec, "startupTaints")
@@ -130,14 +131,14 @@ func buildClaimFacts(clusterID string, object *unstructured.Unstructured, spec m
 }
 
 func buildClassFacts(object *unstructured.Unstructured, spec map[string]any, facts *Facts) {
-	facts.Role = text(spec, "role")
-	facts.InstanceProfile = text(spec, "instanceProfile")
+	facts.Role = crdfacts.Text(spec, "role")
+	facts.InstanceProfile = crdfacts.Text(spec, "instanceProfile")
 	if facts.InstanceProfile == "" {
-		facts.InstanceProfile = text(object.Object, "status", "instanceProfile")
+		facts.InstanceProfile = crdfacts.Text(object.Object, "status", "instanceProfile")
 	}
-	facts.ImageFamily = text(spec, "amiFamily")
+	facts.ImageFamily = crdfacts.Text(spec, "amiFamily")
 	if facts.ImageFamily == "" {
-		facts.ImageFamily = text(spec, "imageFamily")
+		facts.ImageFamily = crdfacts.Text(spec, "imageFamily")
 	}
 	facts.Subnets = resolvedIDs(object.Object, "subnets")
 	facts.SecurityGroups = resolvedIDs(object.Object, "securityGroups")
@@ -146,12 +147,12 @@ func buildClassFacts(object *unstructured.Unstructured, spec map[string]any, fac
 }
 
 func reference(clusterID string, ref map[string]any) *resourcemodel.ResourceLink {
-	name, kind := text(ref, "name"), text(ref, "kind")
+	name, kind := crdfacts.Text(ref, "name"), crdfacts.Text(ref, "kind")
 	if name == "" || kind == "" {
 		return nil
 	}
-	group, version := text(ref, "group"), ""
-	if apiVersion := text(ref, "apiVersion"); apiVersion != "" {
+	group, version := crdfacts.Text(ref, "group"), ""
+	if apiVersion := crdfacts.Text(ref, "apiVersion"); apiVersion != "" {
 		if gv, err := schema.ParseGroupVersion(apiVersion); err == nil {
 			group, version = gv.Group, gv.Version
 		}
@@ -178,20 +179,9 @@ func poolReference(clusterID string, object *unstructured.Unstructured) *resourc
 	return nil
 }
 
-func text(object map[string]any, fields ...string) string {
-	value, _, _ := unstructured.NestedString(object, fields...)
-	return value
-}
 func nestedMap(object map[string]any, fields ...string) map[string]any {
 	value, _, _ := unstructured.NestedMap(object, fields...)
 	return value
-}
-func integer(object map[string]any, field string) *int64 {
-	value, found, _ := unstructured.NestedInt64(object, field)
-	if !found {
-		return nil
-	}
-	return &value
 }
 func quantities(object map[string]any, fields ...string) map[string]string {
 	result := make(map[string]string)
@@ -223,7 +213,7 @@ func resolvedIDs(object map[string]any, field string) []string {
 	var result []string
 	for _, entry := range entries {
 		if raw, ok := entry.(map[string]any); ok {
-			if id := text(raw, "id"); id != "" {
+			if id := crdfacts.Text(raw, "id"); id != "" {
 				result = append(result, id)
 			}
 		}

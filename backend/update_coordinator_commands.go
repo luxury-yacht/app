@@ -95,25 +95,12 @@ func (u *UpdateCoordinator) getUpdateInfo() *UpdateInfo {
 }
 
 func updateInfoFromSnapshot(snapshot appupdates.Snapshot) *UpdateInfo {
-	info := &UpdateInfo{
-		Status:            snapshot.Status,
-		CurrentVersion:    snapshot.CurrentVersion,
-		AvailableVersion:  snapshot.AvailableVersion,
-		ReleaseName:       snapshot.ReleaseName,
-		PublishedAt:       snapshot.PublishedAt,
-		ReleaseNotes:      snapshot.ReleaseNotes,
-		CanCheck:          snapshot.CanCheck,
-		CanInstall:        snapshot.CanInstall,
-		Distribution:      snapshot.Distribution,
-		EligibilityReason: snapshot.EligibilityReason,
-		RecoveryTarget:    snapshot.RecoveryTarget,
-		Error:             snapshot.Error,
-	}
+	info := UpdateInfo(snapshot)
 	if snapshot.ProgressPercent != nil {
 		progress := *snapshot.ProgressPercent
 		info.ProgressPercent = &progress
 	}
-	return info
+	return &info
 }
 
 // CheckForUpdates performs only release discovery. Download and restart remain

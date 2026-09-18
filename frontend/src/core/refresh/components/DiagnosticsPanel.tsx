@@ -7,7 +7,7 @@
  */
 
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './DiagnosticsPanel.css';
 import {
   resetGridTablePerformanceDiagnostics,
@@ -16,21 +16,13 @@ import {
 import { type TabDescriptor, Tabs } from '@shared/components/tabs';
 import { DockablePanel } from '@ui/dockable';
 import { useShortcut } from '@ui/shortcuts';
-import { errorHandler } from '@utils/errorHandler';
 import { useCapabilityDiagnostics, useUserPermissions } from '@/core/capabilities';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import { useBrokerReadDiagnostics } from '@/core/read-diagnostics';
 import { parseClusterScopeList, stripClusterScope } from '@/core/refresh/clusterScope';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
-import {
-  fetchKubernetesAPIClientDiagnostics,
-  fetchSelectionDiagnostics,
-  fetchTelemetrySummary,
-  type KubernetesAPIClientDiagnostics,
-  type NormalizedTelemetrySummary,
-  type SelectionDiagnostics,
-} from '../client';
+import type { NormalizedTelemetrySummary } from '../client';
 import { refreshOrchestrator } from '../orchestrator';
 import { refreshManager } from '../RefreshManager';
 import { isResourceStreamDomain as isResourceTableDomain } from '../resourceStreamViews';
@@ -92,6 +84,7 @@ import { ClusterDataTable } from './diagnostics/TableClusterData';
 import { ConnectionsTable } from './diagnostics/TableConnections';
 import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissions';
 import { KubernetesAPIClientsTable } from './diagnostics/TableKubernetesAPIClients';
+import { useDiagnosticsPolling } from './diagnostics/useDiagnosticsPolling';
 
 // Re-export for backwards compatibility
 export { resolveDomainNamespace } from './diagnostics';
@@ -1366,124 +1359,20 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const objectHelmManifestScopeEntries = useRefreshScopedDomainEntries('object-helm-manifest');
   const objectHelmValuesScopeEntries = useRefreshScopedDomainEntries('object-helm-values');
 
-  const [telemetrySummary, setTelemetrySummary] = useState<NormalizedTelemetrySummary | null>(null);
-  const [telemetryError, setTelemetryError] = useState<string | null>(null);
-  const [selectionDiagnostics, setSelectionDiagnostics] = useState<SelectionDiagnostics | null>(
-    null
-  );
-  const [selectionDiagnosticsError, setSelectionDiagnosticsError] = useState<string | null>(null);
-  const [kubernetesAPIDiagnostics, setKubernetesAPIDiagnostics] = useState<
-    KubernetesAPIClientDiagnostics[]
-  >([]);
-  const [kubernetesAPIDiagnosticsError, setKubernetesAPIDiagnosticsError] = useState<string | null>(
-    null
-  );
+  const {
+    telemetrySummary,
+    telemetryError,
+    selectionDiagnostics,
+    selectionDiagnosticsError,
+    kubernetesAPIDiagnostics,
+    kubernetesAPIDiagnosticsError,
+  } = useDiagnosticsPolling(isOpen);
   const permissionMap = useUserPermissions();
   const capabilityDiagnostics = useCapabilityDiagnostics();
   const { viewType, activeClusterTab, activeNamespaceTab } = useViewState();
   const { selectedNamespace } = useNamespace();
   const { selectedClusterId, getClusterMeta } = useKubeconfig();
   const [diagnosticsClock, setDiagnosticsClock] = useState(() => Date.now());
-  const reportedDiagnosticsFailuresRef = useRef(new Map<string, string>());
-
-  useEffect(() => {
-    if (!isOpen) {
-      reportedDiagnosticsFailuresRef.current.clear();
-      setTelemetrySummary(null);
-      setTelemetryError(null);
-      setSelectionDiagnostics(null);
-      setSelectionDiagnosticsError(null);
-      setKubernetesAPIDiagnostics([]);
-      setKubernetesAPIDiagnosticsError(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    const presentDiagnosticsFailure = (
-      key: string,
-      reason: unknown,
-      action: string,
-      fallbackMessage: string
-    ): string => {
-      const previouslyReportedMessage = reportedDiagnosticsFailuresRef.current.get(key);
-      if (previouslyReportedMessage !== undefined) {
-        return previouslyReportedMessage;
-      }
-      const error = reason instanceof Error ? reason : new Error(fallbackMessage);
-      const details = errorHandler.handleInline(error, {
-        action,
-        source: 'DiagnosticsPanel',
-      });
-      reportedDiagnosticsFailuresRef.current.set(key, details.message);
-      return details.message;
-    };
-
-    const loadDiagnostics = async () => {
-      const [telemetryResult, selectionResult, kubernetesAPIResult] = await Promise.allSettled([
-        fetchTelemetrySummary(),
-        fetchSelectionDiagnostics(),
-        fetchKubernetesAPIClientDiagnostics(),
-      ]);
-
-      if (cancelled) {
-        return;
-      }
-
-      if (telemetryResult.status === 'fulfilled') {
-        reportedDiagnosticsFailuresRef.current.delete('telemetry');
-        setTelemetrySummary(telemetryResult.value);
-        setTelemetryError(null);
-      } else {
-        setTelemetryError(
-          presentDiagnosticsFailure(
-            'telemetry',
-            telemetryResult.reason,
-            'loadTelemetryDiagnostics',
-            'Failed to load telemetry'
-          )
-        );
-      }
-
-      if (selectionResult.status === 'fulfilled') {
-        reportedDiagnosticsFailuresRef.current.delete('selection');
-        setSelectionDiagnostics(selectionResult.value);
-        setSelectionDiagnosticsError(null);
-      } else {
-        setSelectionDiagnosticsError(
-          presentDiagnosticsFailure(
-            'selection',
-            selectionResult.reason,
-            'loadSelectionDiagnostics',
-            'Failed to load selection diagnostics'
-          )
-        );
-      }
-
-      if (kubernetesAPIResult.status === 'fulfilled') {
-        reportedDiagnosticsFailuresRef.current.delete('kubernetes-api');
-        setKubernetesAPIDiagnostics(kubernetesAPIResult.value);
-        setKubernetesAPIDiagnosticsError(null);
-      } else {
-        setKubernetesAPIDiagnosticsError(
-          presentDiagnosticsFailure(
-            'kubernetes-api',
-            kubernetesAPIResult.reason,
-            'loadKubernetesAPIDiagnostics',
-            'Failed to load Kubernetes API client diagnostics'
-          )
-        );
-      }
-    };
-
-    void loadDiagnostics();
-    const intervalId = window.setInterval(loadDiagnostics, 5000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) {

@@ -145,21 +145,7 @@ function PanelWindowSurface({
             tabs: group.tabs.flatMap((panelId) => {
               const objectRef = openPanels.get(panelId);
               return objectRef
-                ? [
-                    {
-                      kind: 'object' as panelwindow.TabKind,
-                      panelId,
-                      objectRef: {
-                        clusterId: objectRef.clusterId,
-                        group: objectRef.group,
-                        version: objectRef.version,
-                        kind: objectRef.kind,
-                        namespace: objectRef.namespace ?? '',
-                        name: objectRef.name,
-                      },
-                      activeView: activeTabs.get(panelId) ?? 'details',
-                    },
-                  ]
+                ? [objectPanelTabSnapshot(panelId, objectRef, activeTabs.get(panelId) ?? 'details')]
                 : [];
             }),
             activePanelId: group.activeTab ?? group.tabs[0] ?? '',

@@ -551,46 +551,41 @@ func (a *RefreshCoordinator) coolClusterToMmapServing(clusterID string) {
 	// registered to serve cooled queries.
 	a.stopRefreshGenerationProducers(clusterID, subsystem)
 
-	// Swap the maintained stores to mmap. On error, safe-degrade to full teardown.
-	dir, err := a.clusterCooledMmapDir(clusterID)
-	if err == nil {
-		var closers []func() error
-		closers, err = subsystem.Registry.CoolMaintainedStoresToMmap(dir)
-		a.setCooledClosers(subsystem, closers)
-		if err == nil {
-			// The feeds are stopped, so the manager + informer factory are shut down and the
-			// original hub's HasSynced now reports false — install a cooled hub so the
-			// SnapshotBuilder serves the frozen, resident mmap stores without blocking on the
-			// (now-dead) sync gate.
-			if svc, ok := subsystem.SnapshotService.(*snapshot.Service); ok {
-				svc.SetInformerHub(system.NewCooledInformerHub())
-			}
-			subsystem.Cooled = true
-		}
-	}
-	if err != nil {
+	message := "Governor cooled cluster %s (serving from mmap, heap reclaimed)"
+	if err := a.installCooledStores(clusterID, subsystem); err != nil {
 		// Retire and spill any partially swapped stores before releasing their mappings.
 		if a.logger != nil {
 			a.logger.Warn(fmt.Sprintf("Governor cool failed for cluster %s, falling back to full teardown: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 		}
 		a.teardownClusterSubsystem(clusterID)
-		a.stopObjectCatalogForCluster(clusterID)
-		runtime.GC()
-		debug.FreeOSMemory()
-		if a.logger != nil {
-			a.logger.Info(fmt.Sprintf("Governor cooled cluster %s (heap reclaimed)", clusterID), logsources.Refresh, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
-		}
-		return
+		message = "Governor cooled cluster %s (heap reclaimed)"
 	}
 
-	// The cooled subsystem stays registered + serving; stop its object catalog like a teardown
-	// (the catalog is rebuilt on re-warm), then reclaim the heap the informers/metrics held.
+	// Both cooling and its full-teardown fallback stop the catalog before reclaiming heap.
 	a.stopObjectCatalogForCluster(clusterID)
 	runtime.GC()
 	debug.FreeOSMemory()
 	if a.logger != nil {
-		a.logger.Info(fmt.Sprintf("Governor cooled cluster %s (serving from mmap, heap reclaimed)", clusterID), logsources.Refresh, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
+		a.logger.Info(fmt.Sprintf(message, clusterID), logsources.Refresh, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 	}
+}
+
+func (a *RefreshCoordinator) installCooledStores(clusterID string, subsystem *system.Subsystem) error {
+	dir, err := a.clusterCooledMmapDir(clusterID)
+	if err != nil {
+		return err
+	}
+	closers, err := subsystem.Registry.CoolMaintainedStoresToMmap(dir)
+	a.setCooledClosers(subsystem, closers)
+	if err != nil {
+		return err
+	}
+	// Producers have stopped; the frozen stores must no longer wait on their old sync gate.
+	if svc, ok := subsystem.SnapshotService.(*snapshot.Service); ok {
+		svc.SetInformerHub(system.NewCooledInformerHub())
+	}
+	subsystem.Cooled = true
+	return nil
 }
 
 // seedGovernorFromOpenClusters initializes the MRU/visible/applied state from the

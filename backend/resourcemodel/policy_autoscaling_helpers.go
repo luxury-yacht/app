@@ -61,6 +61,18 @@ func QuantityMapFacts(values corev1.ResourceList) ResourceQuantityMapFacts {
 	return result
 }
 
+// QuantityMapStrings projects canonical quantities for detail DTOs. Empty maps stay nil.
+func QuantityMapStrings(values ResourceQuantityMapFacts) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(values))
+	for key, value := range values {
+		result[key] = value.String()
+	}
+	return result
+}
+
 func QuotaUsedPercentages(used, hard corev1.ResourceList) map[string]int {
 	if len(used) == 0 || len(hard) == 0 {
 		return nil

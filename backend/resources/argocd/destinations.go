@@ -3,6 +3,7 @@ package argocd
 import (
 	"context"
 	"encoding/base64"
+	"github.com/luxury-yacht/app/backend/resources/crdfacts"
 	"strings"
 	"sync"
 	"time"
@@ -79,7 +80,7 @@ func (r *DestinationResolver) EnrichFacts(ctx context.Context, object *unstructu
 }
 
 func controllerNamespace(object *unstructured.Unstructured) string {
-	if namespace := text(object.Object, "status", "controllerNamespace"); namespace != "" {
+	if namespace := crdfacts.Text(object.Object, "status", "controllerNamespace"); namespace != "" {
 		return namespace
 	}
 	// Same-namespace installations (including older Argo CD versions) need no
@@ -140,7 +141,7 @@ func (r *DestinationResolver) readNames(ctx context.Context, namespace string) m
 }
 
 func secretText(secret *unstructured.Unstructured, key string) string {
-	decoded, err := base64.StdEncoding.DecodeString(text(secret.Object, "data", key))
+	decoded, err := base64.StdEncoding.DecodeString(crdfacts.Text(secret.Object, "data", key))
 	if err != nil {
 		return ""
 	}

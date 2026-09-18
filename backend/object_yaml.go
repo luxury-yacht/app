@@ -12,6 +12,6 @@ package backend
 // cluster's injected resource resolver and fetch YAML via
 // ResourceGateway.GetObjectYAMLByGVK
 // (backend/object_yaml_by_gvk.go). The mutation path uses
-// getGVRForGVKWithDependencies (backend/object_yaml_mutation.go), which falls
+// resolveObjectYAMLGVR (backend/object_yaml_resolver.go), which falls
 // back to common.DiscoverGVRByKind only as a partial-discovery safety net and
 // validates the result against the requested GVK before accepting it.

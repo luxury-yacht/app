@@ -22,7 +22,7 @@ import { OBJECT_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
 import {
   countVisibleDiffRows,
   type DisplayDiffLine,
-  formatTooLargeDiffMessage,
+  getDiffTooLargeMessage,
   mergeDiffLines,
 } from '@shared/components/diff/diffUtils';
 import { computeBudgetedLineDiff, type LineDiffResult } from '@shared/components/diff/lineDiff';
@@ -999,6 +999,54 @@ const ObjectDiffViewerPanel = (props: ObjectDiffViewerPanelProps) => (
   </div>
 );
 
+interface CatalogSelectionHandlersOptions {
+  objectMap: Map<string | undefined, CatalogItem>;
+  cancelPendingMatches: () => void;
+  setClusterId: (value: string) => void;
+  setNamespace: (value: string) => void;
+  setKind: (value: string) => void;
+  setObjectUid: (value: string) => void;
+  setObjectSearch: (value: string) => void;
+  setSelectedObject: (value: CatalogItem | null) => void;
+}
+
+const catalogSelectionHandlers = (options: CatalogSelectionHandlersOptions) => {
+  const resetObjects = () => {
+    options.setObjectUid('');
+    options.setObjectSearch('');
+    options.setSelectedObject(null);
+  };
+  return {
+    onClusterChange: (value: string | string[]) => {
+      if (typeof value !== 'string') {
+        return;
+      }
+      options.cancelPendingMatches();
+      options.setClusterId(value);
+      options.setNamespace('');
+      options.setKind('');
+      resetObjects();
+    },
+    onNamespaceChange: (value: string | string[]) => {
+      options.cancelPendingMatches();
+      options.setNamespace(typeof value === 'string' ? value : '');
+      options.setKind('');
+      resetObjects();
+    },
+    onKindChange: (value: string | string[]) => {
+      options.cancelPendingMatches();
+      options.setKind(typeof value === 'string' ? value : '');
+      resetObjects();
+    },
+    onSelectionChange: (value: string | string[]) => {
+      options.cancelPendingMatches();
+      const uid = typeof value === 'string' ? value : '';
+      options.setObjectUid(uid);
+      options.setSelectedObject(uid ? (options.objectMap.get(uid) ?? null) : null);
+    },
+  };
+};
+
 const isMatchDisabled = (
   selection: CatalogItem | null,
   leftClusterId: string,
@@ -1246,18 +1294,16 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     [displayDiffLines, showDiffOnly]
   );
   const renderTooLarge = renderableRowCount > OBJECT_DIFF_BUDGETS.maxRenderableRows;
-  const diffTooLargeMessage = useMemo(() => {
-    if (renderTooLarge) {
-      return formatTooLargeDiffMessage(renderableRowCount, OBJECT_DIFF_BUDGETS.maxRenderableRows);
-    }
-    if (diffResult?.tooLargeReason === 'input') {
-      return formatTooLargeDiffMessage(
-        Math.max(diffResult.leftLineCount, diffResult.rightLineCount),
-        OBJECT_DIFF_BUDGETS.maxLinesPerSide
-      );
-    }
-    return OBJECT_DIFF_TOO_LARGE_MESSAGE;
-  }, [diffResult, renderTooLarge, renderableRowCount]);
+  const diffTooLargeMessage = useMemo(
+    () =>
+      getDiffTooLargeMessage(
+        diffResult,
+        renderableRowCount,
+        OBJECT_DIFF_BUDGETS,
+        OBJECT_DIFF_TOO_LARGE_MESSAGE
+      ),
+    [diffResult, renderableRowCount]
+  );
   const leftYamlError = leftYaml.state.error ?? null;
   const rightYamlError = rightYaml.state.error ?? null;
   const leftYamlInitialLoading =
@@ -1363,117 +1409,27 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     rightChecksumRef.current = checksum;
   }, [rightYaml.state.checksum]);
 
-  const handleLeftClusterChange = (value: string | string[]) => {
-    if (typeof value !== 'string') {
-      return;
-    }
-    cancelPendingMatches();
-    setLeftClusterId(value);
-    setLeftNamespace('');
-    setLeftKind('');
-    setLeftObjectUid('');
-    setLeftObjectSearch('');
-    setLeftSelectedObject(null);
-  };
+  const leftSelectionHandlers = catalogSelectionHandlers({
+    objectMap: leftCatalog.objectMap,
+    cancelPendingMatches,
+    setClusterId: setLeftClusterId,
+    setNamespace: setLeftNamespace,
+    setKind: setLeftKind,
+    setObjectUid: setLeftObjectUid,
+    setObjectSearch: setLeftObjectSearch,
+    setSelectedObject: setLeftSelectedObject,
+  });
 
-  const handleRightClusterChange = (value: string | string[]) => {
-    if (typeof value !== 'string') {
-      return;
-    }
-    cancelPendingMatches();
-    setRightClusterId(value);
-    setRightNamespace('');
-    setRightKind('');
-    setRightObjectUid('');
-    setRightObjectSearch('');
-    setRightSelectedObject(null);
-  };
-
-  const handleLeftNamespaceChange = (value: string | string[]) => {
-    cancelPendingMatches();
-    if (typeof value !== 'string' || !value) {
-      setLeftNamespace('');
-      setLeftKind('');
-      setLeftObjectUid('');
-      setLeftObjectSearch('');
-      setLeftSelectedObject(null);
-      return;
-    }
-    setLeftNamespace(value);
-    setLeftKind('');
-    setLeftObjectUid('');
-    setLeftObjectSearch('');
-    setLeftSelectedObject(null);
-  };
-
-  const handleRightNamespaceChange = (value: string | string[]) => {
-    cancelPendingMatches();
-    if (typeof value !== 'string' || !value) {
-      setRightNamespace('');
-      setRightKind('');
-      setRightObjectUid('');
-      setRightObjectSearch('');
-      setRightSelectedObject(null);
-      return;
-    }
-    setRightNamespace(value);
-    setRightKind('');
-    setRightObjectUid('');
-    setRightObjectSearch('');
-    setRightSelectedObject(null);
-  };
-
-  const handleLeftKindChange = (value: string | string[]) => {
-    cancelPendingMatches();
-    if (typeof value !== 'string' || !value) {
-      setLeftKind('');
-      setLeftObjectUid('');
-      setLeftObjectSearch('');
-      setLeftSelectedObject(null);
-      return;
-    }
-    setLeftKind(value);
-    setLeftObjectUid('');
-    setLeftObjectSearch('');
-    setLeftSelectedObject(null);
-  };
-
-  const handleRightKindChange = (value: string | string[]) => {
-    cancelPendingMatches();
-    if (typeof value !== 'string' || !value) {
-      setRightKind('');
-      setRightObjectUid('');
-      setRightObjectSearch('');
-      setRightSelectedObject(null);
-      return;
-    }
-    setRightKind(value);
-    setRightObjectUid('');
-    setRightObjectSearch('');
-    setRightSelectedObject(null);
-  };
-
-  const handleLeftSelectionChange = (value: string | string[]) => {
-    cancelPendingMatches();
-    if (typeof value !== 'string' || !value) {
-      setLeftObjectUid('');
-      setLeftSelectedObject(null);
-      return;
-    }
-    setLeftObjectUid(value);
-    setLeftSelectedObject(leftCatalog.objectMap.get(value) ?? null);
-  };
-
-  const handleRightSelectionChange = (value: string | string[]) => {
-    cancelPendingMatches();
-    if (typeof value !== 'string' || !value) {
-      setRightObjectUid('');
-      setRightSelectedObject(null);
-      return;
-    }
-    setRightObjectUid(value);
-    setRightSelectedObject(rightCatalog.objectMap.get(value) ?? null);
-  };
+  const rightSelectionHandlers = catalogSelectionHandlers({
+    objectMap: rightCatalog.objectMap,
+    cancelPendingMatches,
+    setClusterId: setRightClusterId,
+    setNamespace: setRightNamespace,
+    setKind: setRightKind,
+    setObjectUid: setRightObjectUid,
+    setObjectSearch: setRightObjectSearch,
+    setSelectedObject: setRightSelectedObject,
+  });
 
   const handleLeftMatch = async () => {
     if (!leftSelection || !leftClusterId || !rightClusterId) {
@@ -1573,10 +1529,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
               setLeftObjectUid('');
               setLeftSelectedObject(null);
             }}
-            onClusterChange={handleLeftClusterChange}
-            onNamespaceChange={handleLeftNamespaceChange}
-            onKindChange={handleLeftKindChange}
-            onSelectionChange={handleLeftSelectionChange}
+            {...leftSelectionHandlers}
             onObjectSearchChange={setLeftObjectSearch}
           />
           <ObjectDiffSelector
@@ -1612,10 +1565,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
               setRightObjectUid('');
               setRightSelectedObject(null);
             }}
-            onClusterChange={handleRightClusterChange}
-            onNamespaceChange={handleRightNamespaceChange}
-            onKindChange={handleRightKindChange}
-            onSelectionChange={handleRightSelectionChange}
+            {...rightSelectionHandlers}
             onObjectSearchChange={setRightObjectSearch}
           />
         </div>

@@ -487,28 +487,9 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
    *  New object panels should follow focus. If no valid focused group exists,
    *  default to right-docked placement. */
   const getLastFocusedPosition = useCallback((): DockPosition => {
-    // Helper: map a group key to a DockPosition.
-    const keyToPosition = (key: GroupKey): DockPosition => {
-      if (key === 'right') {
-        return 'right';
-      }
-      if (key === 'bottom') {
-        return 'bottom';
-      }
-      return 'floating';
-    };
-
-    const focusedGroupKey = lastFocusedGroupKeyRef.current;
-    if (focusedGroupKey) {
-      const group = getGroupTabs(tabGroups, focusedGroupKey);
-      if (group && group.tabs.length > 0) {
-        return keyToPosition(focusedGroupKey);
-      }
-    }
-
-    // No valid focused group — default to configured open fallback.
-    return keyToPosition(getPreferredOpenGroupKey('right'));
-  }, [tabGroups, getPreferredOpenGroupKey]);
+    const groupKey = getPreferredOpenGroupKey('right');
+    return groupKey === 'right' || groupKey === 'bottom' ? groupKey : 'floating';
+  }, [getPreferredOpenGroupKey]);
 
   // Keep the request here: opening a related object can unmount its launcher
   // before the new panel registers. Explicit cluster identity also survives
@@ -692,36 +673,31 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   // -----------------------------------------------------------------------
   const movePanelBetweenGroups = useCallback(
     (panelId: string, targetGroupKey: GroupKey, insertIndex?: number) => {
-      if (targetGroupKey === 'floating') {
-        if (!onGroupMoveRequest) {
-          return;
-        }
-        const sourceGroupKey = getGroupForPanel(activeStore.getTabGroups(), panelId);
-        const sourceGroup = sourceGroupKey
-          ? getGroupTabs(activeStore.getTabGroups(), sourceGroupKey)
-          : null;
-        if (sourceGroupKey && sourceGroup) {
-          onGroupMoveRequest(
-            {
-              groupKey: sourceGroupKey,
-              tabs: sourceGroup.tabs,
-              activeTab: sourceGroup.activeTab,
-            },
-            'floating'
-          );
-        }
+      if (targetGroupKey !== 'floating') {
+        activeStore.setTabGroups((prev) =>
+          movePanelToGroup(prev, panelId, targetGroupKey, insertIndex)
+        );
+        setLastFocusedGroupKey(targetGroupKey);
+        // Keep panel-state position aligned with tab-group destination.
+        const targetPosition: DockPosition =
+          targetGroupKey === 'right' || targetGroupKey === 'bottom' ? targetGroupKey : 'floating';
+        setPanelPositionById(panelId, targetPosition);
         return;
       }
-      activeStore.setTabGroups((prev) =>
-        movePanelToGroup(prev, panelId, targetGroupKey, insertIndex)
-      );
-
-      setLastFocusedGroupKey(targetGroupKey);
-
-      // Keep panel-state position aligned with tab-group destination.
-      const targetPosition: DockPosition =
-        targetGroupKey === 'right' || targetGroupKey === 'bottom' ? targetGroupKey : 'floating';
-      setPanelPositionById(panelId, targetPosition);
+      if (!onGroupMoveRequest) {
+        return;
+      }
+      const sourceGroupKey = getGroupForPanel(activeStore.getTabGroups(), panelId);
+      if (!sourceGroupKey) {
+        return;
+      }
+      const sourceGroup = getGroupTabs(activeStore.getTabGroups(), sourceGroupKey);
+      if (sourceGroup) {
+        onGroupMoveRequest(
+          { groupKey: sourceGroupKey, tabs: sourceGroup.tabs, activeTab: sourceGroup.activeTab },
+          'floating'
+        );
+      }
     },
     [activeStore, onGroupMoveRequest, setLastFocusedGroupKey]
   );

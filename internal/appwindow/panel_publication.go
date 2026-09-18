@@ -19,11 +19,7 @@ func (r *Registry) publishPanelGroups(windowName string, kind panelwindow.PanelL
 	}
 	requests := make([]panelwindow.TabTransferRequest, 0, len(committed))
 	for _, id := range committed {
-		transfer := r.pendingTabTransfers[id]
-		delete(r.pendingTabTransfers, id)
-		if transfer.timeout != nil {
-			transfer.timeout.Stop()
-		}
+		transfer := r.removePanelTabTransferLocked(id)
 		requests = append(requests, transfer.request)
 	}
 	r.tabTransferMu.Unlock()

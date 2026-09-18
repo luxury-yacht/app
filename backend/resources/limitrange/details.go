@@ -70,23 +70,12 @@ func limitRangeItemsFromFacts(facts []LimitRangeItemFacts) []LimitRangeItem {
 	for _, fact := range facts {
 		result = append(result, LimitRangeItem{
 			Kind:                 fact.Kind,
-			Max:                  quantityMapStrings(fact.Max),
-			Min:                  quantityMapStrings(fact.Min),
-			Default:              quantityMapStrings(fact.Default),
-			DefaultRequest:       quantityMapStrings(fact.DefaultRequest),
-			MaxLimitRequestRatio: quantityMapStrings(fact.MaxLimitRequestRatio),
+			Max:                  resourcemodel.QuantityMapStrings(fact.Max),
+			Min:                  resourcemodel.QuantityMapStrings(fact.Min),
+			Default:              resourcemodel.QuantityMapStrings(fact.Default),
+			DefaultRequest:       resourcemodel.QuantityMapStrings(fact.DefaultRequest),
+			MaxLimitRequestRatio: resourcemodel.QuantityMapStrings(fact.MaxLimitRequestRatio),
 		})
-	}
-	return result
-}
-
-func quantityMapStrings(values resourcemodel.ResourceQuantityMapFacts) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	result := make(map[string]string, len(values))
-	for key, value := range values {
-		result[key] = value.String()
 	}
 	return result
 }

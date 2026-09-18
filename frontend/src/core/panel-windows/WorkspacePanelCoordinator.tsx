@@ -47,16 +47,6 @@ import {
 const newIdentity = (prefix: string): string =>
   `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
 
-const objectSnapshot = (
-  panelId: string,
-  objectRef: ReturnType<typeof useObjectPanelState>['openPanels'] extends Map<string, infer Ref>
-    ? Ref
-    : never,
-  activeView: string
-): panelwindow.TabSnapshot => ({
-  ...objectPanelTabSnapshot(panelId, objectRef, activeView),
-});
-
 const initialWindowBounds = (panelIds: readonly string[]): panelwindow.WindowBounds | undefined => {
   if (panelIds.length === 0) {
     return undefined;
@@ -167,7 +157,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
           if (!objectRef || objectRef.clusterId !== firstRef.clusterId) {
             return [];
           }
-          return [objectSnapshot(panelId, objectRef, activeTabs.get(panelId) ?? 'details')];
+          return [objectPanelTabSnapshot(panelId, objectRef, activeTabs.get(panelId) ?? 'details')];
         }),
         activePanelId: group.activeTab ?? group.tabs[0] ?? '',
         initialBounds: initialWindowBounds(group.tabs),
@@ -207,7 +197,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     (panelId: string) => {
       const objectRef = openPanels.get(panelId);
       return objectRef
-        ? objectSnapshot(panelId, objectRef, activeTabs.get(panelId) ?? 'details')
+        ? objectPanelTabSnapshot(panelId, objectRef, activeTabs.get(panelId) ?? 'details')
         : undefined;
     },
     [activeTabs, openPanels]

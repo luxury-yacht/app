@@ -89,6 +89,22 @@ const canonicalSource = (
     ? source
     : undefined;
 
+const legacySignal = (type: WireMessage['type']): ResourceStreamSignal | undefined => {
+  switch (type) {
+    case 'ADDED':
+    case 'MODIFIED':
+    case 'DELETED':
+      return 'changed';
+    case 'RESET':
+    case 'COMPLETE':
+      return 'reset';
+    case 'ERROR':
+      return 'error';
+    default:
+      return undefined;
+  }
+};
+
 const canonicalMessage = (
   wire: WireMessage,
   domain: NormalizedResourceStreamProtocolMessage['domain'],
@@ -101,7 +117,7 @@ const canonicalMessage = (
   const errorReason =
     resolvePermissionDeniedMessage(wire.error, wire.errorDetails) || 'stream error';
 
-  const signal = modernSignal;
+  const signal = modernSignal ?? legacySignal(wire.type);
   if (signal === 'changed') {
     return { kind: 'changed', source, version, sequence, resourceVersion };
   }
@@ -126,24 +142,6 @@ const canonicalMessage = (
       return { kind: 'acknowledged' };
     case 'HEARTBEAT':
       return { kind: 'heartbeat' };
-    case 'ADDED':
-    case 'MODIFIED':
-    case 'DELETED':
-      return { kind: 'changed', source, version, sequence, resourceVersion };
-    case 'RESET':
-    case 'COMPLETE':
-      return {
-        kind: 'reset',
-        reason: wire.type === 'COMPLETE' ? 'complete' : 'reset',
-        source,
-        version,
-      };
-    case 'ERROR':
-      return {
-        kind: 'error',
-        reason: errorReason,
-        permissionDenied: isPermissionDeniedStatus(wire.errorDetails),
-      };
     default:
       return null;
   }
@@ -710,6 +708,21 @@ export const transitionResourceStreamProtocol = (
   }
 };
 
+const pendingProtocolHealth = (
+  phase: { errorReason?: string; preservedHealth?: ConfirmedStreamHealth },
+  waitingReason: string
+): { status: ResourceStreamHealthStatus; reason: string } => {
+  if (phase.preservedHealth) {
+    return {
+      status: 'healthy',
+      reason: phase.preservedHealth.delivered ? 'delivering' : 'synchronized',
+    };
+  }
+  return phase.errorReason
+    ? { status: 'unhealthy', reason: phase.errorReason }
+    : { status: 'degraded', reason: waitingReason };
+};
+
 export const computeResourceStreamProtocolHealth = (
   state: ResourceStreamProtocolState,
   connectionStatus: ResourceStreamConnectionStatus,
@@ -722,29 +735,10 @@ export const computeResourceStreamProtocolHealth = (
     case 'permission-blocked':
       return { status: 'unhealthy', reason: state.phase.reason };
     case 'resyncing':
-      if (state.phase.preservedHealth) {
-        return {
-          status: 'healthy',
-          reason: state.phase.preservedHealth.delivered ? 'delivering' : 'synchronized',
-        };
-      }
-      return state.phase.errorReason
-        ? { status: 'unhealthy', reason: state.phase.errorReason }
-        : { status: 'degraded', reason: 'resyncing' };
+      return pendingProtocolHealth(state.phase, 'resyncing');
     case 'awaiting-ack':
-      if (state.phase.preservedHealth) {
-        return {
-          status: 'healthy',
-          reason: state.phase.preservedHealth.delivered ? 'delivering' : 'synchronized',
-        };
-      }
-      return state.phase.errorReason
-        ? { status: 'unhealthy', reason: state.phase.errorReason }
-        : { status: 'degraded', reason: 'awaiting updates' };
     case 'connecting':
-      return state.phase.errorReason
-        ? { status: 'unhealthy', reason: state.phase.errorReason }
-        : { status: 'degraded', reason: 'awaiting updates' };
+      return pendingProtocolHealth(state.phase, 'awaiting updates');
     case 'synchronized':
       return {
         status: 'healthy',

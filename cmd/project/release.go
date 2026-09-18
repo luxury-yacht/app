@@ -128,20 +128,14 @@ func findReleaseAssets(cfg releaseConfig) ([]string, error) {
 		if d.IsDir() {
 			return nil
 		}
-		releaseable := d.Name() == updateManifestAssetName
-		for _, extension := range cfg.releaseAssets {
-			if strings.HasSuffix(d.Name(), extension) {
-				releaseable = true
-				break
-			}
+		if !isReleaseAsset(d.Name(), cfg.releaseAssets) {
+			return nil
 		}
-		if releaseable {
-			if previousPath, exists := assetPathsByName[d.Name()]; exists {
-				return fmt.Errorf("duplicate release asset name %q: %s and %s", d.Name(), previousPath, path)
-			}
-			assetPathsByName[d.Name()] = path
-			assets = append(assets, path)
+		if previousPath, exists := assetPathsByName[d.Name()]; exists {
+			return fmt.Errorf("duplicate release asset name %q: %s and %s", d.Name(), previousPath, path)
 		}
+		assetPathsByName[d.Name()] = path
+		assets = append(assets, path)
 		return nil
 	})
 
@@ -156,6 +150,18 @@ func findReleaseAssets(cfg releaseConfig) ([]string, error) {
 	}
 
 	return assets, nil
+}
+
+func isReleaseAsset(name string, extensions []string) bool {
+	if name == updateManifestAssetName {
+		return true
+	}
+	for _, extension := range extensions {
+		if strings.HasSuffix(name, extension) {
+			return true
+		}
+	}
+	return false
 }
 
 func selectUpdaterArtifact(inputs []string) (string, error) {

@@ -293,6 +293,7 @@ interface ActionExecutionOptions {
   action: string;
   execute: () => Promise<unknown>;
   onAfterAction: ObjectActionControllerOptions['onAfterAction'];
+  onSettled?: () => void;
 }
 
 const executeObjectAction = async ({
@@ -300,12 +301,15 @@ const executeObjectAction = async ({
   action,
   execute,
   onAfterAction,
+  onSettled,
 }: ActionExecutionOptions): Promise<void> => {
   try {
     await execute();
     onAfterAction?.(object, action);
   } catch (error) {
     errorHandler.handle(error, { action, kind: object.kind, name: object.name });
+  } finally {
+    onSettled?.();
   }
 };
 
@@ -565,14 +569,13 @@ export const useObjectActionController = ({
     if (!object) {
       return;
     }
-    try {
-      await executeMutation(() => runObjectRestart(actionTargetFor(object, 'restart')));
-      onAfterAction?.(object, 'restart');
-    } catch (error) {
-      errorHandler.handle(error, { action: 'restart', kind: object.kind, name: object.name });
-    } finally {
-      setRestartTarget(null);
-    }
+    await executeObjectAction({
+      object,
+      action: 'restart',
+      execute: () => executeMutation(() => runObjectRestart(actionTargetFor(object, 'restart'))),
+      onAfterAction,
+      onSettled: () => setRestartTarget(null),
+    });
   }, [executeMutation, onAfterAction, restartTarget]);
 
   const confirmDelete = useCallback(async () => {
@@ -580,15 +583,16 @@ export const useObjectActionController = ({
     if (!object) {
       return;
     }
-    try {
-      await executeMutation(() => runObjectDelete(actionTargetFor(object, 'delete')));
-      onAfterDelete?.(object);
-      onAfterAction?.(object, 'delete');
-    } catch (error) {
-      errorHandler.handle(error, { action: 'delete', kind: object.kind, name: object.name });
-    } finally {
-      setDeleteTarget(null);
-    }
+    await executeObjectAction({
+      object,
+      action: 'delete',
+      execute: () => executeMutation(() => runObjectDelete(actionTargetFor(object, 'delete'))),
+      onAfterAction: () => {
+        onAfterDelete?.(object);
+        onAfterAction?.(object, 'delete');
+      },
+      onSettled: () => setDeleteTarget(null),
+    });
   }, [deleteTarget, executeMutation, onAfterAction, onAfterDelete]);
 
   const confirmTrigger = useCallback(async () => {
@@ -596,14 +600,13 @@ export const useObjectActionController = ({
     if (!object) {
       return;
     }
-    try {
-      await executeMutation(() => runCronJobTrigger(actionTargetFor(object, 'trigger')));
-      onAfterAction?.(object, 'trigger');
-    } catch (error) {
-      errorHandler.handle(error, { action: 'trigger', kind: object.kind, name: object.name });
-    } finally {
-      setTriggerTarget(null);
-    }
+    await executeObjectAction({
+      object,
+      action: 'trigger',
+      execute: () => executeMutation(() => runCronJobTrigger(actionTargetFor(object, 'trigger'))),
+      onAfterAction,
+      onSettled: () => setTriggerTarget(null),
+    });
   }, [executeMutation, onAfterAction, triggerTarget]);
 
   const applyScaleValue = useCallback(
@@ -636,14 +639,14 @@ export const useObjectActionController = ({
       return;
     }
     const { object, replicas } = confirmation;
-    try {
-      await executeMutation(() => runObjectScale(actionTargetFor(object, 'scale'), replicas));
-      onAfterAction?.(object, 'scale');
-    } catch (error) {
-      errorHandler.handle(error, { action: 'scale', kind: object.kind, name: object.name });
-    } finally {
-      setScaleConfirmation(null);
-    }
+    await executeObjectAction({
+      object,
+      action: 'scale',
+      execute: () =>
+        executeMutation(() => runObjectScale(actionTargetFor(object, 'scale'), replicas)),
+      onAfterAction,
+      onSettled: () => setScaleConfirmation(null),
+    });
   }, [executeMutation, onAfterAction, scaleConfirmation]);
 
   const requestFinalizerRemoval = useCallback(
@@ -664,20 +667,16 @@ export const useObjectActionController = ({
       return;
     }
     const { object, finalizer, path } = target;
-    try {
-      await executeMutation(() =>
-        runObjectFinalizerRemoval(actionTargetFor(object, 'remove finalizer'), finalizer, path)
-      );
-      onAfterAction?.(object, 'removeFinalizer');
-    } catch (error) {
-      errorHandler.handle(error, {
-        action: 'removeFinalizer',
-        kind: object.kind,
-        name: object.name,
-      });
-    } finally {
-      setFinalizerRemovalTarget(null);
-    }
+    await executeObjectAction({
+      object,
+      action: 'removeFinalizer',
+      execute: () =>
+        executeMutation(() =>
+          runObjectFinalizerRemoval(actionTargetFor(object, 'remove finalizer'), finalizer, path)
+        ),
+      onAfterAction,
+      onSettled: () => setFinalizerRemovalTarget(null),
+    });
   }, [executeMutation, finalizerRemovalTarget, onAfterAction]);
 
   const confirmation = useMemo(() => {

@@ -1907,6 +1907,73 @@ describe('DiagnosticsPanel component', () => {
     await rendered.unmount();
   });
 
+  test('retains successful diagnostics and reports each failure only until that source recovers', async () => {
+    vi.useFakeTimers();
+    const summary = makeTelemetrySummary();
+    summary.metrics.successCount = 17;
+    fetchTelemetrySummaryMock.mockResolvedValue(summary);
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel);
+    await selectClusterDataTab(rendered.container);
+    expect(rendered.container.textContent).toContain('17 polls');
+
+    const failSources = () => {
+      fetchTelemetrySummaryMock.mockRejectedValue(new Error('telemetry unavailable'));
+      fetchSelectionDiagnosticsMock.mockRejectedValue(new Error('selection unavailable'));
+      fetchKubernetesAPIClientDiagnosticsMock.mockRejectedValue(
+        new Error('API diagnostics unavailable')
+      );
+    };
+    const poll = async () => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+    };
+    failSources();
+    await poll();
+    expect(handleInlineMock).toHaveBeenCalledTimes(3);
+    expect(rendered.container.textContent).toContain('17 polls');
+    await poll();
+    expect(handleInlineMock).toHaveBeenCalledTimes(3);
+
+    // Recovery is per source: telemetry can report its next failure while the
+    // two continuously failing sources retain their existing reports.
+    fetchTelemetrySummaryMock.mockResolvedValue(summary);
+    await poll();
+    failSources();
+    await poll();
+    expect(handleInlineMock).toHaveBeenCalledTimes(4);
+    expect(handleInlineMock).toHaveBeenLastCalledWith(expect.any(Error), {
+      action: 'loadTelemetryDiagnostics',
+      source: 'DiagnosticsPanel',
+    });
+    await rendered.unmount();
+  });
+
+  test('ignores diagnostics failures that arrive after the panel closes', async () => {
+    vi.useFakeTimers();
+    let rejectTelemetry!: (reason: Error) => void;
+    fetchTelemetrySummaryMock.mockReturnValue(
+      new Promise((_, reject) => {
+        rejectTelemetry = reject;
+      })
+    );
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel);
+    await rendered.rerender({ isOpen: false });
+    await act(async () => {
+      rejectTelemetry(new Error('late failure'));
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    expect(handleInlineMock).not.toHaveBeenCalled();
+    expect(fetchTelemetrySummaryMock).toHaveBeenCalledTimes(1);
+    fetchTelemetrySummaryMock.mockResolvedValue(makeTelemetrySummary());
+    await rendered.rerender({ isOpen: true });
+    expect(fetchTelemetrySummaryMock).toHaveBeenCalledTimes(2);
+    await rendered.unmount();
+  });
+
   test('shows warning summaries when telemetry fetch fails', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));

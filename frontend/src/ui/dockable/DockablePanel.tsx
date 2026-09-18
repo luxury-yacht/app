@@ -35,10 +35,7 @@ import {
   clearGroupLeader,
   copyPanelLayoutState,
   type DockPosition,
-  type PanelCloseReason,
-  registerPanelCloseHandler,
   setGroupLeader,
-  unregisterPanelCloseHandler,
   useDockablePanelState,
 } from './useDockablePanelState';
 import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
@@ -558,23 +555,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     }
   }, [isControlled, resolvedIsOpen, panelState]);
 
-  useEffect(() => {
-    const handleExternalClose = (reason: PanelCloseReason) => {
-      if (isControlled) {
-        skipNextControlledSyncRef.current = true;
-      }
-      panelState.setOpen(false);
-      if (reason === 'dock-conflict' || reason === 'external') {
-        onClose?.();
-      }
-    };
-
-    registerPanelCloseHandler(panelId, handleExternalClose);
-    return () => {
-      unregisterPanelCloseHandler(panelId, handleExternalClose);
-    };
-  }, [panelId, panelState, onClose, isControlled]);
-
   // Store registration props in a ref so the effect below can read current
   // values without re-running on every prop change. We only want to
   // re-register when panelId, isOpen, or position changes.
@@ -790,11 +770,9 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       return;
     }
     // Close every other tab in the group first.
-    if (groupInfo) {
-      for (const tabId of groupInfo.tabs) {
-        if (tabId !== panelId) {
-          closeTab(tabId);
-        }
+    for (const tabId of groupInfo?.tabs ?? []) {
+      if (tabId !== panelId) {
+        closeTab(tabId);
       }
     }
     // Close this panel (the leader / last remaining tab).

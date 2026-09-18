@@ -51,7 +51,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { type DropTargetRegistration, TabDragContext } from './TabDragProvider';
+import { TabDragContext } from './TabDragProvider';
 import {
   TAB_DRAG_DATA_TYPE,
   type TabDragPayload,
@@ -95,8 +95,6 @@ export interface UseTabDropTargetResult {
   dropInsertIndex: number | null;
 }
 
-let nextTargetId = 0;
-
 /**
  * Read the full payload from the DataTransfer store. Only valid at
  * `drop` time — during dragenter/dragover the store is in protected
@@ -128,11 +126,10 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
   opts: UseTabDropTargetOptions<K>
 ): UseTabDropTargetResult {
   const { accepts, scope, allowExternal = false, onDrop, onDragEnter, onDragLeave } = opts;
-  const { getCurrentDrag, registerTarget, unregisterTarget } = useContext(TabDragContext);
+  const { getCurrentDrag } = useContext(TabDragContext);
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropInsertIndex, setDropInsertIndex] = useState<number | null>(null);
   const elementRef = useRef<HTMLElement | null>(null);
-  const idRef = useRef<number>(nextTargetId++);
 
   const acceptsRef = useRef(accepts);
   const scopeRef = useRef(scope);
@@ -270,7 +267,6 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
         previous.removeEventListener('dragover', handleDragOver);
         previous.removeEventListener('dragleave', handleDragLeave);
         previous.removeEventListener('drop', handleDrop);
-        unregisterTarget(idRef.current);
       }
 
       elementRef.current = el;
@@ -279,23 +275,13 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
         el.addEventListener('dragover', handleDragOver);
         el.addEventListener('dragleave', handleDragLeave);
         el.addEventListener('drop', handleDrop);
-        registerTarget(idRef.current, {
-          element: el,
-          accepts: acceptsRef.current,
-          onDrop: onDropRef.current as DropTargetRegistration['onDrop'],
-          onDragEnter: onDragEnterRef.current as DropTargetRegistration['onDragEnter'],
-          onDragLeave: onDragLeaveRef.current,
-        });
       }
     },
-    [handleDragEnter, handleDragLeave, handleDragOver, handleDrop, registerTarget, unregisterTarget]
+    [handleDragEnter, handleDragLeave, handleDragOver, handleDrop]
   );
 
   // Cleanup on unmount.
   const cleanUpDropTarget = useEffectEvent(() => {
-    // Capture refs to locals so the cleanup function uses the values that
-    // existed when the effect ran, not whatever they happen to be at unmount.
-    const id = idRef.current;
     return () => {
       const el = elementRef.current;
       if (el) {
@@ -304,7 +290,6 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
         el.removeEventListener('dragleave', handleDragLeave);
         el.removeEventListener('drop', handleDrop);
       }
-      unregisterTarget(id);
     };
   });
   useEffect(() => cleanUpDropTarget(), []);

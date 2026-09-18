@@ -229,18 +229,7 @@ func (r *Recorder) RecordSnapshot(record SnapshotRecord) {
 	defer r.mu.Unlock()
 
 	entry := r.snapshotStatus(record.ClusterID, record.Domain, record.Scope)
-	updateSnapshotBatch(entry, snapshotBatchUpdate{
-		scope:        record.Scope,
-		clusterID:    record.ClusterID,
-		clusterName:  record.ClusterName,
-		duration:     record.Duration,
-		truncated:    record.Truncated,
-		totalItems:   record.TotalItems,
-		batchIndex:   record.BatchIndex,
-		totalBatches: record.TotalBatches,
-		batchSize:    record.BatchSize,
-		isFinal:      record.IsFinal,
-	})
+	updateSnapshotBatch(entry, record)
 	updateSnapshotTiming(entry, record.BatchIndex, record.TimeToFirstBatchMs, record.InformerSyncWaitMs)
 	updateSnapshotWarnings(entry, record.Warnings)
 	updateSnapshotResult(entry, record.Err)
@@ -275,33 +264,20 @@ func (r *Recorder) evictOldestSnapshotStatus() {
 	}
 }
 
-type snapshotBatchUpdate struct {
-	scope        string
-	clusterID    string
-	clusterName  string
-	duration     time.Duration
-	truncated    bool
-	totalItems   int
-	batchIndex   int
-	totalBatches int
-	batchSize    int
-	isFinal      bool
-}
-
-func updateSnapshotBatch(entry *SnapshotStatus, update snapshotBatchUpdate) {
-	entry.Scope = update.scope
+func updateSnapshotBatch(entry *SnapshotStatus, record SnapshotRecord) {
+	entry.Scope = record.Scope
 	// Use the provided cluster identifiers instead of instance fields to ensure
 	// correct attribution when the recorder is shared across clusters.
-	entry.ClusterID = update.clusterID
-	entry.ClusterName = update.clusterName
-	entry.LastDurationMs = update.duration.Milliseconds()
+	entry.ClusterID = record.ClusterID
+	entry.ClusterName = record.ClusterName
+	entry.LastDurationMs = record.Duration.Milliseconds()
 	entry.LastUpdated = time.Now().UnixMilli()
-	entry.Truncated = update.truncated
-	entry.TotalItems = update.totalItems
-	entry.LastBatchIndex = update.batchIndex
-	entry.TotalBatches = update.totalBatches
-	entry.LastBatchSize = update.batchSize
-	entry.IsFinalBatch = update.isFinal
+	entry.Truncated = record.Truncated
+	entry.TotalItems = record.TotalItems
+	entry.LastBatchIndex = record.BatchIndex
+	entry.TotalBatches = record.TotalBatches
+	entry.LastBatchSize = record.BatchSize
+	entry.IsFinalBatch = record.IsFinal
 }
 
 func updateSnapshotTiming(entry *SnapshotStatus, batchIndex int, timeToFirstBatchMs, informerSyncWaitMs int64) {

@@ -163,24 +163,28 @@ func (o Operation) telemetryContext() map[string]any {
 		result["type"] = "kubernetes.request"
 		return result
 	case operationKindKubernetesCapabilityBatch:
-		result := map[string]any{"type": kubernetesCapabilityBatchTelemetryType}
-		if o.failureCount > 0 {
-			result["failure_count"] = o.failureCount
-		}
-		if o.totalCount > 0 {
-			result["total_count"] = o.totalCount
-		}
-		checks := make([]map[string]any, 0, len(o.checks))
-		for _, check := range o.checks {
-			checks = append(checks, kubernetesRequestTelemetryContext(check))
-		}
-		if len(checks) > 0 {
-			result["failed_checks"] = checks
-		}
-		return result
+		return capabilityBatchTelemetryContext(o.failureCount, o.totalCount, o.checks)
 	default:
 		return nil
 	}
+}
+
+func capabilityBatchTelemetryContext(failureCount, totalCount int, requests []KubernetesRequest) map[string]any {
+	result := map[string]any{"type": kubernetesCapabilityBatchTelemetryType}
+	if failureCount > 0 {
+		result["failure_count"] = failureCount
+	}
+	if totalCount > 0 {
+		result["total_count"] = totalCount
+	}
+	checks := make([]map[string]any, 0, len(requests))
+	for _, check := range requests {
+		checks = append(checks, kubernetesRequestTelemetryContext(check))
+	}
+	if len(checks) > 0 {
+		result["failed_checks"] = checks
+	}
+	return result
 }
 
 func operationTelemetryString(values map[string]any, key string) string {
@@ -203,9 +207,9 @@ func sanitizeKubernetesRequestTelemetryContext(values map[string]any) map[string
 	return NewKubernetesRequestOperation(kubernetesRequestFromTelemetryContext(values)).telemetryContext()
 }
 
-func positiveOperationTelemetryInt(values map[string]any, key string) (int, bool) {
-	value, ok := values[key].(int)
-	return value, ok && value > 0
+func operationTelemetryInt(values map[string]any, key string) int {
+	value, _ := values[key].(int)
+	return value
 }
 
 func operationTelemetryCheckMaps(value any) []map[string]any {
@@ -226,23 +230,16 @@ func operationTelemetryCheckMaps(value any) []map[string]any {
 }
 
 func sanitizeCapabilityBatchTelemetryContext(values map[string]any) map[string]any {
-	result := map[string]any{"type": kubernetesCapabilityBatchTelemetryType}
-	if failureCount, ok := positiveOperationTelemetryInt(values, "failure_count"); ok {
-		result["failure_count"] = failureCount
-	}
-	if totalCount, ok := positiveOperationTelemetryInt(values, "total_count"); ok {
-		result["total_count"] = totalCount
-	}
-
 	rawChecks := operationTelemetryCheckMaps(values["failed_checks"])
-	checks := make([]map[string]any, 0, len(rawChecks))
+	checks := make([]KubernetesRequest, 0, len(rawChecks))
 	for _, rawCheck := range rawChecks {
-		checks = append(checks, kubernetesRequestTelemetryContext(kubernetesRequestFromTelemetryContext(rawCheck)))
+		checks = append(checks, kubernetesRequestFromTelemetryContext(rawCheck))
 	}
-	if len(checks) > 0 {
-		result["failed_checks"] = checks
-	}
-	return result
+	return capabilityBatchTelemetryContext(
+		operationTelemetryInt(values, "failure_count"),
+		operationTelemetryInt(values, "total_count"),
+		checks,
+	)
 }
 
 // sanitizeOperationTelemetryContext revalidates the serialized map at the

@@ -40,50 +40,30 @@ interface DockAction {
   renderIcon: () => React.ReactNode;
 }
 
-const dockActionsByPosition: Record<DockPosition, DockAction[]> = {
-  floating: [
-    {
-      target: 'bottom',
-      title: 'Dock to bottom',
-      ariaLabel: 'Dock panel to bottom',
-      renderIcon: () => <DockBottomIcon width={16} height={16} />,
-    },
-    {
-      target: 'right',
-      title: 'Dock to right',
-      ariaLabel: 'Dock panel to right side',
-      renderIcon: () => <DockRightIcon width={16} height={16} />,
-    },
-  ],
-  right: [
-    {
-      target: 'bottom',
-      title: 'Dock to bottom',
-      ariaLabel: 'Dock panel to bottom',
-      renderIcon: () => <DockBottomIcon width={16} height={16} />,
-    },
-    {
-      target: 'floating',
-      title: 'Float panel',
-      ariaLabel: 'Undock panel to floating window',
-      renderIcon: () => <FloatPanelIcon width={16} height={16} />,
-    },
-  ],
-  bottom: [
-    {
-      target: 'right',
-      title: 'Dock to right',
-      ariaLabel: 'Dock panel to right side',
-      renderIcon: () => <DockRightIcon width={16} height={16} />,
-    },
-    {
-      target: 'floating',
-      title: 'Float panel',
-      ariaLabel: 'Undock panel to floating window',
-      renderIcon: () => <FloatPanelIcon width={16} height={16} />,
-    },
-  ],
+const dockRightAction: DockAction = {
+  target: 'right',
+  title: 'Dock to right',
+  ariaLabel: 'Dock panel to right side',
+  renderIcon: () => <DockRightIcon width={16} height={16} />,
 };
+const dockBottomAction: DockAction = {
+  target: 'bottom',
+  title: 'Dock to bottom',
+  ariaLabel: 'Dock panel to bottom',
+  renderIcon: () => <DockBottomIcon width={16} height={16} />,
+};
+const floatAction: DockAction = {
+  target: 'floating',
+  title: 'Float panel',
+  ariaLabel: 'Undock panel to floating window',
+  renderIcon: () => <FloatPanelIcon width={16} height={16} />,
+};
+const dockActionsByPosition: Record<DockPosition, DockAction[]> = {
+  floating: [dockBottomAction, dockRightAction],
+  right: [dockBottomAction, floatAction],
+  bottom: [dockRightAction, floatAction],
+};
+const nativeDockActions = [dockRightAction, dockBottomAction];
 
 // Control buttons for docking, maximizing, and closing the panel.
 export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
@@ -95,22 +75,7 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
   onClose,
   nativeWindowMode = false,
 }) => {
-  const dockActions = nativeWindowMode
-    ? [
-        {
-          target: 'right' as const,
-          title: 'Dock to right',
-          ariaLabel: 'Dock panel to right side',
-          renderIcon: () => <DockRightIcon width={16} height={16} />,
-        },
-        {
-          target: 'bottom' as const,
-          title: 'Dock to bottom',
-          ariaLabel: 'Dock panel to bottom',
-          renderIcon: () => <DockBottomIcon width={16} height={16} />,
-        },
-      ]
-    : dockActionsByPosition[position];
+  const dockActions = nativeWindowMode ? nativeDockActions : dockActionsByPosition[position];
 
   return (
     <div className="dockable-panel__controls">

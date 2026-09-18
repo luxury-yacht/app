@@ -5,7 +5,8 @@
  * Contains types and functions for merging and comparing diff lines.
  */
 
-import type { DiffLine, DiffLineType } from '@shared/components/diff/lineDiff';
+import type { DiffLine, DiffLineType, LineDiffResult } from '@shared/components/diff/lineDiff';
+import type { LineDiffBudgets } from './diffBudgets';
 
 // Re-export DiffLineType for consumers of this module.
 export type { DiffLineType };
@@ -136,3 +137,23 @@ export const countVisibleDiffRows = (lines: DisplayDiffLine[], showDiffOnly: boo
 
 export const formatTooLargeDiffMessage = (actualLines: number, limit: number): string =>
   `The diff is too large to display in the current view (${actualLines.toLocaleString()} lines exceed the limit of ${limit.toLocaleString()}).`;
+
+// Rendering limits take precedence over input-size failures; compute exhaustion
+// uses the surface's fallback message.
+export const getDiffTooLargeMessage = (
+  result: Pick<LineDiffResult, 'tooLargeReason' | 'leftLineCount' | 'rightLineCount'> | null,
+  visibleRows: number,
+  budgets: LineDiffBudgets,
+  fallback: string
+): string => {
+  if (visibleRows > budgets.maxRenderableRows) {
+    return formatTooLargeDiffMessage(visibleRows, budgets.maxRenderableRows);
+  }
+  if (result?.tooLargeReason === 'input') {
+    return formatTooLargeDiffMessage(
+      Math.max(result.leftLineCount, result.rightLineCount),
+      budgets.maxLinesPerSide
+    );
+  }
+  return fallback;
+};

@@ -25,6 +25,20 @@ const makeItem = (overrides: CanonicalRowTestOverrides<CatalogItem>): CatalogIte
 };
 
 describe('reconcileByUID', () => {
+  it('keeps the last duplicate UID at its first position and retains rows without UIDs', () => {
+    const first = makeItem({ ref: { uid: 'uid-1', name: 'one' } });
+    const second = makeItem({ ref: { uid: 'uid-2', name: 'two' } });
+    const updated = makeItem({ ref: first.ref, resourceVersion: '2' });
+    const withoutUID = makeItem({ ref: { uid: '', name: 'pending' } });
+    const incoming = [first, withoutUID, second, updated, withoutUID];
+
+    const result = reconcileByUID([], incoming);
+
+    expect(result.nextItems).toEqual([updated, withoutUID, second, withoutUID]);
+    expect(result.changed).toBe(true);
+    expect(incoming).toEqual([first, withoutUID, second, updated, withoutUID]);
+  });
+
   it('reuses existing item references when resource versions are unchanged', () => {
     const current = [
       makeItem({ ref: { uid: 'uid-1', name: 'one' } }),

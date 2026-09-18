@@ -369,7 +369,7 @@ const getActiveNavigationContext = (): (ActiveViewContext & { namespace?: string
   };
 };
 
-const getPrivacyNavigationContext = (): Record<string, unknown> | null => {
+const getPrivacyNavigationContext = () => {
   const navigation = getActiveNavigationContext();
   if (!navigation) {
     return null;
@@ -386,7 +386,7 @@ const getPrivacyNavigationContext = (): Record<string, unknown> | null => {
 };
 
 const navigationTags = (
-  navigation: Record<string, unknown>
+  navigation: NonNullable<ReturnType<typeof getPrivacyNavigationContext>>
 ): Record<string, string | undefined> => ({
   'ui.view': String(navigation.view),
   'ui.tab': navigation.tab ? String(navigation.tab) : undefined,

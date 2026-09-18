@@ -1,8 +1,8 @@
 /**
  * frontend/src/shared/components/tabs/dragCoordinator/TabDragProvider.tsx
  *
- * Scopes a single tab drag operation. Holds the current payload and a
- * registry of drop targets. Built on HTML5 native drag events.
+ * Scopes a single tab drag operation and its current payload.
+ * Drop hooks own their native DOM listeners.
  *
  * `onTearOff` fires when an unconsumed drag ends outside the source
  * webview. Native panel consumers use the screen coordinates to request
@@ -11,14 +11,6 @@
 import { createContext, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 
 import type { TabDragPayload } from './types';
-
-export interface DropTargetRegistration {
-  element: HTMLElement;
-  accepts: ReadonlyArray<TabDragPayload['kind']>;
-  onDrop: (payload: TabDragPayload, event: DragEvent) => void;
-  onDragEnter?: (payload: TabDragPayload) => void;
-  onDragLeave?: () => void;
-}
 
 interface TabDragContextValue {
   currentDrag: TabDragPayload | null;
@@ -31,8 +23,6 @@ interface TabDragContextValue {
     screenY: number;
     dataTransfer: DataTransfer | null;
   }) => void;
-  registerTarget: (id: number, registration: DropTargetRegistration) => void;
-  unregisterTarget: (id: number) => void;
 }
 
 export const TabDragContext = createContext<TabDragContextValue>({
@@ -40,8 +30,6 @@ export const TabDragContext = createContext<TabDragContextValue>({
   getCurrentDrag: () => null,
   beginDrag: () => undefined,
   endDrag: () => undefined,
-  registerTarget: () => undefined,
-  unregisterTarget: () => undefined,
 });
 
 export interface TabDragProviderProps {
@@ -52,7 +40,6 @@ export interface TabDragProviderProps {
 
 export function TabDragProvider({ children, onTearOff }: Readonly<TabDragProviderProps>) {
   const [currentDrag, setCurrentDrag] = useState<TabDragPayload | null>(null);
-  const targetsRef = useRef<Map<number, DropTargetRegistration>>(new Map());
   const lastDragRef = useRef<TabDragPayload | null>(null);
   const getCurrentDrag = useCallback(() => lastDragRef.current, []);
 
@@ -90,24 +77,14 @@ export function TabDragProvider({ children, onTearOff }: Readonly<TabDragProvide
     [onTearOff]
   );
 
-  const registerTarget = useCallback((id: number, registration: DropTargetRegistration) => {
-    targetsRef.current.set(id, registration);
-  }, []);
-
-  const unregisterTarget = useCallback((id: number) => {
-    targetsRef.current.delete(id);
-  }, []);
-
   const value = useMemo<TabDragContextValue>(
     () => ({
       currentDrag,
       getCurrentDrag,
       beginDrag,
       endDrag,
-      registerTarget,
-      unregisterTarget,
     }),
-    [currentDrag, getCurrentDrag, beginDrag, endDrag, registerTarget, unregisterTarget]
+    [currentDrag, getCurrentDrag, beginDrag, endDrag]
   );
 
   return <TabDragContext.Provider value={value}>{children}</TabDragContext.Provider>;

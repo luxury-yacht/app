@@ -127,6 +127,31 @@ func TestUnrecognizedOrMalformedWailsEventsDoNotPublishUnchangedState(t *testing
 	require.Empty(t, published)
 }
 
+func TestProgressPublicationComparesValuesAndOwnsItsSnapshot(t *testing.T) {
+	t.Parallel()
+
+	var published []appupdates.Snapshot
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: &fakeUpdater{}, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: &fakeUpdateState{},
+		OnChange: func(snapshot appupdates.Snapshot) { published = append(published, snapshot) },
+	})
+	coordinator.HandleWailsEvent(updater.EventDownloadProgress, updater.Progress{Written: 25, Total: 100})
+	coordinator.HandleWailsEvent(updater.EventDownloadProgress, updater.Progress{Written: 50, Total: 200})
+	require.Len(t, published, 1, "equivalent progress must not publish a second update")
+	*published[0].ProgressPercent = 90
+	require.Equal(t, float64(25), *coordinator.Snapshot().ProgressPercent)
+
+	coordinator.HandleWailsEvent(updater.EventDownloadProgress, updater.Progress{Written: 50, Total: 100})
+	require.Len(t, published, 2)
+	require.Equal(t, float64(50), *published[1].ProgressPercent)
+	coordinator.HandleWailsEvent(updater.EventDownloadProgress, updater.Progress{Total: 0})
+	coordinator.HandleWailsEvent(updater.EventDownloadProgress, updater.Progress{Total: 0})
+	require.Len(t, published, 3, "unknown progress is a distinct state but repeats are ignored")
+	require.Nil(t, published[2].ProgressPercent)
+}
+
 func TestHandleWailsEventProjectsSemanticStateAndBoundedProgress(t *testing.T) {
 	t.Parallel()
 

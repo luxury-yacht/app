@@ -449,6 +449,40 @@ func TestResetRejectsActiveApplicationAttemptWithoutDeletingRecoveryState(t *tes
 	require.NotNil(t, document.Attempt)
 }
 
+func TestResetRetainsOnlyFailedCleanupForRetry(t *testing.T) {
+	failRemoval := true
+	store, root, _ := newStore(t, func(config *updatestate.Config) {
+		config.RemoveAll = func(path string) error {
+			if failRemoval && strings.HasSuffix(path, "busy") {
+				return errors.New("file busy")
+			}
+			return os.RemoveAll(path)
+		}
+	})
+	busy, _ := createStagedPayload(t, root, "wails-update-busy")
+	prepared, _ := createStagedPayload(t, root, "wails-update-prepared")
+	require.NoError(t, store.RecordPrepared(preparedRecord(busy)))
+	require.Error(t, store.CleanupPrepared())
+	require.NoError(t, store.RecordPrepared(preparedRecord(prepared)))
+	require.NoError(t, store.SetSkippedVersion("2.0.0"))
+
+	require.ErrorContains(t, store.Reset(), "file busy")
+	document, err := store.Load()
+	require.NoError(t, err)
+	require.Empty(t, document.SkippedVersion)
+	require.Nil(t, document.Prepared)
+	require.Equal(t, []string{busy}, document.Cleanup)
+	require.DirExists(t, busy)
+	require.NoDirExists(t, prepared)
+
+	failRemoval = false
+	require.NoError(t, store.RetryCleanup())
+	document, err = store.Load()
+	require.NoError(t, err)
+	require.Empty(t, document.Cleanup)
+	require.NoDirExists(t, busy)
+}
+
 func TestMalformedOrEscapingRecordsNeverDeletePaths(t *testing.T) {
 	store, root, statePath := newStore(t)
 	external := t.TempDir()

@@ -168,3 +168,15 @@ func TestOperationScopedForwardsEveryLogShape(t *testing.T) {
 	logger.Info("explicit", "Refresh", "cluster-a", "Alpha", "request-explicit")
 	require.Equal(t, []string{"Refresh", "cluster-a", "Alpha", "request-explicit"}, base.source)
 }
+
+func TestScopedLoggersPreserveCallerMetadataAndArguments(t *testing.T) {
+	base := &recordingLogger{}
+	logger := OperationScoped(ClusterScoped(base, " cluster-a ", " Alpha "), " request-7 ")
+	source := []string{"Refresh", " ", "Explicit cluster", " explicit-operation ", "extra"}
+	original := append([]string(nil), source...)
+
+	logger.Info("ready", source...)
+
+	require.Equal(t, []string{"Refresh", "cluster-a", "Explicit cluster", " explicit-operation ", "extra"}, base.source)
+	require.Equal(t, original, source)
+}

@@ -12,7 +12,6 @@ import {
   buildBrowseCatalogPageScope,
   buildBrowseCatalogPlan,
   deriveBrowseFilterOptions,
-  emptyBrowseCatalogCollection,
 } from './browseCatalogData';
 
 const makeItem = (overrides: CanonicalRowTestOverrides<CatalogItem>): CatalogItem => {
@@ -173,12 +172,12 @@ describe('browseCatalogData', () => {
     const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
     const second = makeItem({ ref: { uid: 'pod-b', name: 'pod-b' } });
     const existing = applyCatalogBaseline(
-      emptyBrowseCatalogCollection(),
+      [],
       makePayload({ items: [first, second], continue: '2', total: 2 })
     );
 
     const next = applyCatalogBaseline(
-      { items: existing.items, indexByUid: existing.indexByUid },
+      existing.items,
       makePayload({ items: [first], continue: '', total: 1 })
     );
 
@@ -188,17 +187,8 @@ describe('browseCatalogData', () => {
   });
 
   it('applies page snapshots as current-window replacement pagination', () => {
-    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
     const second = makeItem({ ref: { uid: 'pod-b', name: 'pod-b' } });
-    const existing = applyCatalogBaseline(
-      emptyBrowseCatalogCollection(),
-      makePayload({ items: [first], continue: '2', total: 2 })
-    );
-
-    const next = applyCatalogPage(
-      { items: existing.items, indexByUid: existing.indexByUid },
-      makePayload({ items: [second], continue: '', total: 2 })
-    );
+    const next = applyCatalogPage(makePayload({ items: [second], continue: '', total: 2 }));
 
     expect(next.items.map((item) => item.ref.name)).toEqual(['pod-b']);
     expect(next.continueToken).toBeNull();

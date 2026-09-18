@@ -37,33 +37,12 @@ export const splitClusterScope = (value: string): { prefix: string; scope: strin
 };
 
 /**
- * Rebuilds a UID-to-index map from an array of catalog items.
- */
-export const rebuildIndexByUID = (items: CatalogItem[]): Map<string, number> => {
-  const next = new Map<string, number>();
-  items.forEach((item, index) => {
-    if (item.ref.uid) {
-      next.set(item.ref.uid, index);
-    }
-  });
-  return next;
-};
-
-/**
- * Result of deduplication by UID.
- */
-export type DedupeResult = {
-  items: CatalogItem[];
-  indexByUid: Map<string, number>;
-};
-
-/**
  * Deduplicates catalog items by UID, keeping the last occurrence.
  * Items without a UID are kept as-is.
  */
-const dedupeByUID = (incoming: CatalogItem[]): DedupeResult => {
+const dedupeByUID = (incoming: CatalogItem[]): CatalogItem[] => {
   if (incoming.length === 0) {
-    return { items: [], indexByUid: new Map() };
+    return [];
   }
 
   const indexByUid = new Map<string, number>();
@@ -87,7 +66,7 @@ const dedupeByUID = (incoming: CatalogItem[]): DedupeResult => {
     items[existingIndex] = item;
   }
 
-  return { items, indexByUid };
+  return items;
 };
 
 /**
@@ -104,7 +83,7 @@ export type UpsertResult = {
  * while still reflecting additions, deletions, reordering, and updates.
  */
 export const reconcileByUID = (current: CatalogItem[], incoming: CatalogItem[]): UpsertResult => {
-  const { items: dedupedIncoming } = dedupeByUID(incoming);
+  const dedupedIncoming = dedupeByUID(incoming);
   if (dedupedIncoming.length === 0) {
     return current.length === 0
       ? { nextItems: current, changed: false }

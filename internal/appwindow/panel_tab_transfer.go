@@ -242,6 +242,10 @@ func (r *Registry) FailPanelTabTransfer(callerWindowName, transferID string) err
 func (r *Registry) removePanelTabTransfer(transferID string) *panelTabTransfer {
 	r.tabTransferMu.Lock()
 	defer r.tabTransferMu.Unlock()
+	return r.removePanelTabTransferLocked(transferID)
+}
+
+func (r *Registry) removePanelTabTransferLocked(transferID string) *panelTabTransfer {
 	transfer := r.pendingTabTransfers[transferID]
 	if transfer == nil {
 		return nil
@@ -270,10 +274,7 @@ func (r *Registry) commitPanelTabTransfer(transferID string) {
 		r.failPanelTabTransfer(transferID, err.Error())
 		return
 	}
-	delete(r.pendingTabTransfers, transferID)
-	if transfer.timeout != nil {
-		transfer.timeout.Stop()
-	}
+	r.removePanelTabTransferLocked(transferID)
 	r.tabTransferMu.Unlock()
 	r.emitPanelTabTransferEvent(request, panelwindow.TabTransferCommittedEventName, panelwindow.TabTransferCommittedEvent{Request: request}, true)
 }

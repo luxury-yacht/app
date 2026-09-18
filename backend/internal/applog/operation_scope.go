@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
-
-	"github.com/luxury-yacht/app/internal/sentry"
 )
 
 type operationContextKey struct{}
@@ -46,11 +44,6 @@ func OperationIDFromContext(ctx context.Context) string {
 	return id
 }
 
-type operationScopedLogger struct {
-	base        Logger
-	operationID string
-}
-
 // OperationScoped returns a logger that attaches one operation identity to all
 // calls while preserving an explicitly supplied identity.
 func OperationScoped(base Logger, operationID string) Logger {
@@ -61,49 +54,5 @@ func OperationScoped(base Logger, operationID string) Logger {
 	if id == "" {
 		return base
 	}
-	return operationScopedLogger{base: base, operationID: id}
-}
-
-func (l operationScopedLogger) Debug(message string, source ...string) {
-	l.base.Debug(message, l.withOperation(source)...)
-}
-
-func (l operationScopedLogger) Info(message string, source ...string) {
-	l.base.Info(message, l.withOperation(source)...)
-}
-
-func (l operationScopedLogger) Warn(message string, source ...string) {
-	l.base.Warn(message, l.withOperation(source)...)
-}
-
-func (l operationScopedLogger) Error(message string, source ...string) {
-	l.base.Error(message, l.withOperation(source)...)
-}
-
-func (l operationScopedLogger) ErrorWithCause(err error, message string, source ...string) {
-	ReportError(l.base, err, message, l.withOperation(source)...)
-}
-
-func (l operationScopedLogger) ErrorWithCauseAndOperation(
-	err error,
-	message string,
-	operation sentryreporting.Operation,
-	source ...string,
-) {
-	ReportErrorWithOperation(l.base, err, message, operation, l.withOperation(source)...)
-}
-
-func (l operationScopedLogger) Panic(recovered any, message string, source ...string) {
-	ReportPanic(l.base, recovered, message, l.withOperation(source)...)
-}
-
-func (l operationScopedLogger) withOperation(source []string) []string {
-	out := append([]string(nil), source...)
-	for len(out) < 4 {
-		out = append(out, "")
-	}
-	if strings.TrimSpace(out[3]) == "" {
-		out[3] = l.operationID
-	}
-	return out
+	return sourceScopedLogger{base: base, firstDefaultIndex: 3, defaults: []string{id}}
 }

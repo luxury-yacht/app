@@ -9,7 +9,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   type DockPosition,
   getActivePanelLayoutStore,
-  type PanelCloseReason,
   type PanelLayoutState,
 } from './panelLayoutStore';
 import { usePanelLayoutStoreContext } from './panelLayoutStoreContext';
@@ -20,7 +19,7 @@ interface InitializeOptions {
   isOpen?: boolean;
 }
 
-export type { DockPosition, PanelCloseReason };
+export type { DockPosition };
 
 /**
  * Bring a panel to the front by bumping its z-index.
@@ -68,20 +67,6 @@ export function setGroupLeader(groupKey: string, panelId: string) {
 
 export function clearGroupLeader(groupKey: string) {
   getActivePanelLayoutStore().clearGroupLeader(groupKey);
-}
-
-export function registerPanelCloseHandler(
-  panelId: string,
-  handler: (reason: PanelCloseReason) => void
-) {
-  getActivePanelLayoutStore().registerPanelCloseHandler(panelId, handler);
-}
-
-export function unregisterPanelCloseHandler(
-  panelId: string,
-  handler: (reason: PanelCloseReason) => void
-) {
-  getActivePanelLayoutStore().unregisterPanelCloseHandler(panelId, handler);
 }
 
 export function useDockablePanelState(panelId: string) {
@@ -167,8 +152,6 @@ export function useDockablePanelState(panelId: string) {
       const updates: Partial<PanelLayoutState> = {};
       switch (localState.position) {
         case 'floating':
-          updates.rightSize = { width: size.width, height: localState.rightSize.height };
-          break;
         case 'right':
           updates.rightSize = { width: size.width, height: localState.rightSize.height };
           break;
@@ -180,19 +163,6 @@ export function useDockablePanelState(panelId: string) {
     },
     [panelId, localState.position, localState.rightSize.height, localState.bottomSize.width, store]
   );
-
-  const getCurrentSize = useCallback(() => {
-    switch (localState.position) {
-      case 'floating':
-        return localState.rightSize;
-      case 'right':
-        return localState.rightSize;
-      case 'bottom':
-        return localState.bottomSize;
-      default:
-        return localState.rightSize;
-    }
-  }, [localState.position, localState.rightSize, localState.bottomSize]);
 
   const setOpen = useCallback(
     (isOpen: boolean) => {
@@ -231,7 +201,7 @@ export function useDockablePanelState(panelId: string) {
   return useMemo(
     () => ({
       position: localState.position,
-      size: getCurrentSize(),
+      size: localState.position === 'bottom' ? localState.bottomSize : localState.rightSize,
       rightSize: localState.rightSize,
       bottomSize: localState.bottomSize,
       isMaximized: localState.isMaximized,
@@ -247,18 +217,7 @@ export function useDockablePanelState(panelId: string) {
       focus,
       reset,
     }),
-    [
-      localState,
-      getCurrentSize,
-      initialize,
-      setPosition,
-      setSize,
-      setOpen,
-      setMaximized,
-      toggle,
-      focus,
-      reset,
-    ]
+    [localState, initialize, setPosition, setSize, setOpen, setMaximized, toggle, focus, reset]
   );
 }
 

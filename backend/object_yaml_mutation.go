@@ -89,7 +89,7 @@ func (g *ResourceGateway) mutationContext() (context.Context, context.CancelFunc
 
 // ValidateObjectYaml performs a dry-run kubectl-edit-style patch to ensure the YAML is valid and safe to apply.
 func (g *ResourceGateway) ValidateObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
-	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (g *ResourceGateway) ValidateObjectYaml(clusterID string, req ObjectYAMLMut
 	ctx, cancel := g.mutationContext()
 	defer cancel()
 
-	mc, err := g.prepareAuthorizedYAMLMutation(ctx, deps, selectionKey, req)
+	mc, err := g.prepareAuthorizedYAMLMutation(ctx, deps, req)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func (g *ResourceGateway) ApplyObjectYaml(clusterID string, req ObjectYAMLMutati
 	ctx, cancel := g.mutationContext()
 	defer cancel()
 
-	mc, err := g.prepareAuthorizedYAMLMutation(ctx, deps, selectionKey, req)
+	mc, err := g.prepareAuthorizedYAMLMutation(ctx, deps, req)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,6 @@ func (g *ResourceGateway) ApplyObjectYaml(clusterID string, req ObjectYAMLMutati
 func (g *ResourceGateway) prepareAuthorizedYAMLMutation(
 	ctx context.Context,
 	deps common.Dependencies,
-	selectionKey string,
 	req ObjectYAMLMutationRequest,
 ) (*mutationContext, error) {
 	ctx, err := objectMutationContext(ctx, deps)
@@ -171,7 +170,7 @@ func (g *ResourceGateway) prepareAuthorizedYAMLMutation(
 	}
 
 	gvk := schema.FromAPIVersionAndKind(req.APIVersion, req.Kind)
-	gvr, isNamespaced, err := getGVRForGVKWithDependencies(ctx, deps, selectionKey, gvk)
+	gvr, isNamespaced, err := resolveObjectYAMLGVR(ctx, deps, gvk, objectYAMLResolverMutationFallback)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve resource mapping for %s: %w", gvk.String(), err)
 	}
@@ -455,15 +454,7 @@ func namespaceLabel(value string) string {
 }
 
 func normalizeObjectYAML(obj *unstructured.Unstructured) (string, error) {
-	copyObj := obj.DeepCopy()
-	unstructured.RemoveNestedField(copyObj.Object, "metadata", "managedFields")
-	unstructured.RemoveNestedField(copyObj.Object, "metadata", "selfLink")
-	unstructured.RemoveNestedField(copyObj.Object, "metadata", "uid")
-	unstructured.RemoveNestedField(copyObj.Object, "metadata", "creationTimestamp")
-	unstructured.RemoveNestedField(copyObj.Object, "metadata", "deletionTimestamp")
-	unstructured.RemoveNestedField(copyObj.Object, "metadata", "deletionGracePeriodSeconds")
-	unstructured.RemoveNestedField(copyObj.Object, "metadata", "generation")
-	unstructured.RemoveNestedField(copyObj.Object, "status")
+	copyObj := sanitizeForUpdate(obj, "")
 
 	bytes, err := yaml.Marshal(copyObj.Object)
 	if err != nil {
@@ -565,17 +556,4 @@ func formatStatusCause(cause metav1.StatusCause) string {
 		builder.WriteString(fmt.Sprintf(" (%s)", cause.Type))
 	}
 	return builder.String()
-}
-
-// getGVRForGVKWithDependencies preserves the historical YAML mutation helper
-// signature while delegating the actual resolution policy to
-// resolveObjectYAMLGVR. The selectionKey parameter used to drive a retired
-// response-cache lookup and remains only for source compatibility.
-func getGVRForGVKWithDependencies(
-	ctx context.Context,
-	deps common.Dependencies,
-	_ string,
-	gvk schema.GroupVersionKind,
-) (schema.GroupVersionResource, bool, error) {
-	return resolveObjectYAMLGVR(ctx, deps, gvk, objectYAMLResolverMutationFallback)
 }

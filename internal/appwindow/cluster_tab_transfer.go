@@ -255,10 +255,7 @@ func (r *Registry) closeEmptyClusterTransferWindow(windowName string) {
 	if len(r.backend.WindowClusterIDs(windowName)) > 0 {
 		return
 	}
-	r.authorizeClose(windowName)
-	if !r.closeWindow(windowName) {
-		r.consumeAuthorizedClose(windowName)
-	}
+	r.closeAuthorizedWindow(windowName)
 }
 
 func (r *Registry) failClusterTransfersForWindow(windowName string) error {

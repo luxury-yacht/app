@@ -217,35 +217,11 @@ type updaterManifestConfig struct {
 type updaterCommandRunner func(string, ...string) error
 
 func prepareUpdaterManifest(config updaterManifestConfig, run updaterCommandRunner) error {
-	release, err := updateidentity.ParseReleaseVersion(config.Metadata.Info.Version)
+	release, err := validateUpdaterManifestInputs(config)
 	if err != nil {
-		return fmt.Errorf("parse updater release version: %w", err)
+		return err
 	}
 	channel := string(release.Channel)
-	if strings.TrimSpace(config.PrivateKeyPath) == "" {
-		return fmt.Errorf("updater private key path is required")
-	}
-	if strings.TrimSpace(config.PublicKey) == "" {
-		return fmt.Errorf("updater public key is required")
-	}
-	if strings.TrimSpace(config.NotesFile) == "" {
-		return fmt.Errorf("updater release notes file is required")
-	}
-	if strings.TrimSpace(config.OutputPath) == "" {
-		return fmt.Errorf("updater manifest output path is required")
-	}
-	for label, path := range map[string]string{
-		"private key":   config.PrivateKeyPath,
-		"release notes": config.NotesFile,
-	} {
-		info, statErr := os.Lstat(path)
-		if statErr != nil {
-			return fmt.Errorf("inspect updater %s: %w", label, statErr)
-		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-			return fmt.Errorf("updater %s must be a regular non-symlink file: %s", label, path)
-		}
-	}
 	artifacts, err := collectUpdaterArtifactsForTargets(config.Metadata, config.ArtifactsRoot, config.Targets)
 	if err != nil {
 		return err
@@ -259,13 +235,9 @@ func prepareUpdaterManifest(config updaterManifestConfig, run updaterCommandRunn
 		return fmt.Errorf("create updater manifest staging directory: %w", err)
 	}
 	defer os.RemoveAll(stagingDirectory)
-	stagedArtifacts := make([]string, 0, len(artifacts))
-	for _, source := range artifacts {
-		target := filepath.Join(stagingDirectory, filepath.Base(source))
-		if err := copyUpdaterArtifact(source, target); err != nil {
-			return err
-		}
-		stagedArtifacts = append(stagedArtifacts, target)
+	stagedArtifacts, err := stageUpdaterArtifacts(artifacts, stagingDirectory)
+	if err != nil {
+		return err
 	}
 
 	name := strings.TrimSpace(config.Metadata.Info.ProductName)
@@ -307,6 +279,51 @@ func prepareUpdaterManifest(config updaterManifestConfig, run updaterCommandRunn
 		return fmt.Errorf("verify updater manifest: %w", err)
 	}
 	return nil
+}
+
+func validateUpdaterManifestInputs(config updaterManifestConfig) (updateidentity.ReleaseVersion, error) {
+	release, err := updateidentity.ParseReleaseVersion(config.Metadata.Info.Version)
+	if err != nil {
+		return updateidentity.ReleaseVersion{}, fmt.Errorf("parse updater release version: %w", err)
+	}
+	if strings.TrimSpace(config.PrivateKeyPath) == "" {
+		return updateidentity.ReleaseVersion{}, fmt.Errorf("updater private key path is required")
+	}
+	if strings.TrimSpace(config.PublicKey) == "" {
+		return updateidentity.ReleaseVersion{}, fmt.Errorf("updater public key is required")
+	}
+	if strings.TrimSpace(config.NotesFile) == "" {
+		return updateidentity.ReleaseVersion{}, fmt.Errorf("updater release notes file is required")
+	}
+	if strings.TrimSpace(config.OutputPath) == "" {
+		return updateidentity.ReleaseVersion{}, fmt.Errorf("updater manifest output path is required")
+	}
+	for label, path := range map[string]string{
+		"private key":   config.PrivateKeyPath,
+		"release notes": config.NotesFile,
+	} {
+		info, statErr := os.Lstat(path)
+		if statErr != nil {
+			return updateidentity.ReleaseVersion{}, fmt.Errorf("inspect updater %s: %w", label, statErr)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return updateidentity.ReleaseVersion{}, fmt.Errorf("updater %s must be a regular non-symlink file: %s", label, path)
+		}
+	}
+	return release, nil
+}
+
+func stageUpdaterArtifacts(artifacts []string, stagingDirectory string) ([]string, error) {
+	stagedArtifacts := make([]string, 0, len(artifacts))
+	for _, source := range artifacts {
+		target := filepath.Join(stagingDirectory, filepath.Base(source))
+		if err := copyUpdaterArtifact(source, target); err != nil {
+			return nil, err
+		}
+		stagedArtifacts = append(stagedArtifacts, target)
+	}
+
+	return stagedArtifacts, nil
 }
 
 func copyUpdaterArtifact(source, target string) error {

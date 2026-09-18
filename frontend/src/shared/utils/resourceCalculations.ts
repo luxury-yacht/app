@@ -169,7 +169,7 @@ const percentageOfScale = (value: number, scale: number): number => {
   return Math.max(0, (value / scale) * 100);
 };
 
-const calculateOvercommit = (
+export const calculateResourceOvercommit = (
   limit: number,
   allocatable: number
 ): Pick<ResourceCalculations, 'overcommittedAmount' | 'overcommittedPercent'> => {
@@ -203,7 +203,10 @@ export const calculateResourceMetrics = (
   const consumption = request > 0 ? Math.round((usage / request) * 100) : null;
 
   // Calculate overcommitted resources (limit vs allocatable)
-  const { overcommittedAmount, overcommittedPercent } = calculateOvercommit(limit, allocatable);
+  const { overcommittedAmount, overcommittedPercent } = calculateResourceOvercommit(
+    limit,
+    allocatable
+  );
 
   // Check for configuration issues
   const hasConfigIssue = request > 0 && limit > 0 && request > limit;

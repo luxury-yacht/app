@@ -46,7 +46,7 @@ func (g *ResourceGateway) CheckObjectYamlOwnership(
 	clusterID string,
 	req ObjectYAMLMutationRequest,
 ) (*ObjectYAMLOwnershipCheckResponse, error) {
-	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (g *ResourceGateway) CheckObjectYamlOwnership(
 	ctx, cancel := g.mutationContext()
 	defer cancel()
 
-	mc, err := g.prepareAuthorizedYAMLMutation(ctx, deps, selectionKey, req)
+	mc, err := g.prepareAuthorizedYAMLMutation(ctx, deps, req)
 	if err != nil {
 		return nil, err
 	}

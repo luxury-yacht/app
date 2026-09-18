@@ -133,6 +133,25 @@ describe('JobTimeline', () => {
     expect(onJobClick).toHaveBeenCalledWith('job-a');
   });
 
+  it('stacks overlapping runs and reuses the first available row in start-time order', async () => {
+    await renderTimeline({
+      onJobClick: vi.fn(),
+      jobs: [
+        { name: 'later', startTime: '2024-06-15T11:00:00Z', durationSeconds: 600 },
+        { name: 'long', startTime: '2024-06-15T09:30:00Z', durationSeconds: 7200 },
+        { name: 'short', startTime: '2024-06-15T10:00:00Z', durationSeconds: 600 },
+      ],
+    });
+
+    const bars = Array.from(container.querySelectorAll<HTMLButtonElement>('.job-timeline-bar'));
+    expect(bars.map((bar) => bar.getAttribute('aria-label'))).toEqual([
+      'Open job long',
+      'Open job short',
+      'Open job later',
+    ]);
+    expect(bars.map((bar) => bar.style.top)).toEqual(['0px', '14px', '14px']);
+  });
+
   it('switches window via the chip buttons and re-filters', async () => {
     await renderTimeline({
       jobs: [

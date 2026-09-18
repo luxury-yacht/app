@@ -144,19 +144,9 @@ const stackRows = (runs: PositionedJob[]): { runs: PositionedJob[]; rowCount: nu
   const rowEnds: number[] = [];
   const sorted = [...runs].sort((a, b) => a.leftPct - b.leftPct);
   for (const r of sorted) {
-    let placed = false;
-    for (let i = 0; i < rowEnds.length; i++) {
-      if (rowEnds[i] <= r.leftPct + 0.001) {
-        r.row = i;
-        rowEnds[i] = r.leftPct + r.widthPct;
-        placed = true;
-        break;
-      }
-    }
-    if (!placed) {
-      r.row = rowEnds.length;
-      rowEnds.push(r.leftPct + r.widthPct);
-    }
+    const availableRow = rowEnds.findIndex((end) => end <= r.leftPct + 0.001);
+    r.row = availableRow === -1 ? rowEnds.length : availableRow;
+    rowEnds[r.row] = r.leftPct + r.widthPct;
   }
   return { runs: sorted, rowCount: Math.max(1, rowEnds.length) };
 };
@@ -171,6 +161,66 @@ const ROW_GAP = 2;
  *  gap. Sized for labels like "11:30 AM" which are ~55-60px wide; the
  *  rest is breathing room so adjacent labels don't visually touch. */
 const MIN_TICK_SPACING_PX = 60;
+
+const positionJob = (
+  job: JobLike,
+  nowMs: number,
+  windowMs: number,
+  cutoffMs: number
+): PositionedJob | null => {
+  const startMs = parseStart(job.startTime);
+  if (startMs === null) {
+    return null;
+  }
+  const dur = Math.max(0, (job.durationSeconds ?? 0) * 1000);
+  const endMs = isActiveStatus(job.status) ? nowMs : startMs + dur;
+  // Skip runs that ended before the window started.
+  if (endMs < cutoffMs) {
+    return null;
+  }
+
+  const clippedStart = startMs < cutoffMs;
+  const visibleStart = Math.max(startMs, cutoffMs);
+  const visibleEnd = Math.min(endMs, nowMs);
+  const leftPct = ((visibleStart - cutoffMs) / windowMs) * 100;
+  let widthPct = ((visibleEnd - visibleStart) / windowMs) * 100;
+  if (widthPct < MIN_BAR_WIDTH_PCT) {
+    widthPct = MIN_BAR_WIDTH_PCT;
+  }
+  // Don't run off the right edge.
+  if (leftPct + widthPct > 100) {
+    widthPct = Math.max(MIN_BAR_WIDTH_PCT, 100 - leftPct);
+  }
+
+  return { job, leftPct, widthPct, row: 0, clippedStart };
+};
+
+const buildTicks = (
+  windowOpt: WindowOption,
+  stripWidth: number,
+  nowMs: number,
+  windowMs: number,
+  cutoffMs: number
+) => {
+  // Tick positions, anchored to the right (now) and walking back.
+  // The window's `tickInterval` is the *baseline* density; if the
+  // strip is narrower than that allows, multiply the interval until
+  // adjacent labels have at least MIN_TICK_SPACING_PX between them.
+  let tickIntervalMs = windowOpt.tickInterval * 1000;
+  const baselineSpacingPx = (tickIntervalMs / windowMs) * stripWidth;
+  if (baselineSpacingPx > 0 && baselineSpacingPx < MIN_TICK_SPACING_PX) {
+    const factor = Math.ceil(MIN_TICK_SPACING_PX / baselineSpacingPx);
+    tickIntervalMs *= factor;
+  }
+  const tickList: { leftPct: number; label: string }[] = [];
+  // First tick is the most recent boundary at or before "now".
+  const firstTickMs = Math.floor(nowMs / tickIntervalMs) * tickIntervalMs;
+  for (let t = firstTickMs; t > cutoffMs; t -= tickIntervalMs) {
+    const leftPct = ((t - cutoffMs) / windowMs) * 100;
+    tickList.push({ leftPct, label: windowOpt.tickLabel(new Date(t)) });
+  }
+  return tickList;
+};
 
 export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs, onJobClick }) => {
   const [windowOpt, setWindowOpt] = useState<WindowOption>(DEFAULT_WINDOW);
@@ -213,59 +263,15 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs, onJobClick }) =>
     const windowMs = windowOpt.seconds * 1000;
     const cutoffMs = nowMs - windowMs;
 
-    const positioned: PositionedJob[] = [];
-    for (const job of jobs) {
-      const startMs = parseStart(job.startTime);
-      if (startMs === null) {
-        continue;
-      }
-      const dur = Math.max(0, (job.durationSeconds ?? 0) * 1000);
-      const endMs = isActiveStatus(job.status) ? nowMs : startMs + dur;
-      // Skip runs that ended before the window started.
-      if (endMs < cutoffMs) {
-        continue;
-      }
-
-      const clippedStart = startMs < cutoffMs;
-      const visibleStart = Math.max(startMs, cutoffMs);
-      const visibleEnd = Math.min(endMs, nowMs);
-      const leftPct = ((visibleStart - cutoffMs) / windowMs) * 100;
-      let widthPct = ((visibleEnd - visibleStart) / windowMs) * 100;
-      if (widthPct < MIN_BAR_WIDTH_PCT) {
-        widthPct = MIN_BAR_WIDTH_PCT;
-      }
-      // Don't run off the right edge.
-      if (leftPct + widthPct > 100) {
-        widthPct = Math.max(MIN_BAR_WIDTH_PCT, 100 - leftPct);
-      }
-
-      positioned.push({ job, leftPct, widthPct, row: 0, clippedStart });
-    }
-
+    const positioned = jobs
+      .map((job) => positionJob(job, nowMs, windowMs, cutoffMs))
+      .filter((run) => run !== null);
     const stacked = stackRows(positioned);
-
-    // Tick positions, anchored to the right (now) and walking back.
-    // The window's `tickInterval` is the *baseline* density; if the
-    // strip is narrower than that allows, multiply the interval until
-    // adjacent labels have at least MIN_TICK_SPACING_PX between them.
-    let tickIntervalMs = windowOpt.tickInterval * 1000;
-    const baselineSpacingPx = (tickIntervalMs / windowMs) * stripWidth;
-    if (baselineSpacingPx > 0 && baselineSpacingPx < MIN_TICK_SPACING_PX) {
-      const factor = Math.ceil(MIN_TICK_SPACING_PX / baselineSpacingPx);
-      tickIntervalMs *= factor;
-    }
-    const tickList: { leftPct: number; label: string }[] = [];
-    // First tick is the most recent boundary at or before "now".
-    const firstTickMs = Math.floor(nowMs / tickIntervalMs) * tickIntervalMs;
-    for (let t = firstTickMs; t > cutoffMs; t -= tickIntervalMs) {
-      const leftPct = ((t - cutoffMs) / windowMs) * 100;
-      tickList.push({ leftPct, label: windowOpt.tickLabel(new Date(t)) });
-    }
 
     return {
       runs: stacked.runs,
       rowCount: stacked.rowCount,
-      ticks: tickList,
+      ticks: buildTicks(windowOpt, stripWidth, nowMs, windowMs, cutoffMs),
       now: nowMs,
     };
   }, [jobs, windowOpt, stripWidth]);

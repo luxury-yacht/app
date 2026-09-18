@@ -1,6 +1,7 @@
 package argocd
 
 import (
+	"github.com/luxury-yacht/app/backend/resources/crdfacts"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"strings"
 )
@@ -35,7 +36,7 @@ func PrimaryStatus(object *unstructured.Unstructured) (state, label, presentatio
 	}
 	switch strings.ToLower(object.GetKind()) {
 	case "application":
-		state = statusOrUnknown(text(object.Object, "status", "health", "status"))
+		state = statusOrUnknown(crdfacts.Text(object.Object, "status", "health", "status"))
 	case "applicationset":
 		state = applicationSetHealth(conditions(object))
 	default:

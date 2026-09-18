@@ -53,60 +53,34 @@ export function createInitialTabGroupState(): TabGroupState {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+function stripPanelFromGroup(
+  group: TabGroupState['right'],
+  panelId: string
+): TabGroupState['right'] {
+  const tabs = group.tabs.filter((id) => id !== panelId);
+  const activeTab =
+    group.activeTab === panelId || !tabs.includes(group.activeTab ?? '')
+      ? (tabs[tabs.length - 1] ?? null)
+      : group.activeTab;
+  return { tabs, activeTab };
+}
+
 /**
  * Remove a panel from all groups, returning the new state.
  * This is the internal version that does NOT do adjacent-tab activation;
  * it simply strips the panelId out and cleans up empty floating groups.
  */
 function stripPanelFromAllGroups(state: TabGroupState, panelId: string): TabGroupState {
-  const rightTabs = state.right.tabs.filter((id) => id !== panelId);
-  const bottomTabs = state.bottom.tabs.filter((id) => id !== panelId);
-
-  // For docked groups, if the active tab was removed, pick the last tab or null.
-  let rightActive: string | null;
-
-  if (state.right.activeTab === panelId) {
-    rightActive = rightTabs[rightTabs.length - 1] ?? null;
-  } else if (rightTabs.includes(state.right.activeTab ?? '')) {
-    rightActive = state.right.activeTab;
-  } else {
-    rightActive = rightTabs[rightTabs.length - 1] ?? null;
-  }
-
-  let bottomActive: string | null;
-
-  if (state.bottom.activeTab === panelId) {
-    bottomActive = bottomTabs[bottomTabs.length - 1] ?? null;
-  } else if (bottomTabs.includes(state.bottom.activeTab ?? '')) {
-    bottomActive = state.bottom.activeTab;
-  } else {
-    bottomActive = bottomTabs[bottomTabs.length - 1] ?? null;
-  }
-
-  // For floating groups, remove the panel and destroy empty groups.
   const floating: FloatingTabGroup[] = [];
   for (const group of state.floating) {
-    const tabs = group.tabs.filter((id) => id !== panelId);
-    if (tabs.length === 0) {
-      // Destroy empty floating groups.
-      continue;
+    const remaining = stripPanelFromGroup(group, panelId);
+    if (remaining.tabs.length > 0) {
+      floating.push({ ...group, ...remaining });
     }
-    let activeTab: string | null;
-
-    if (group.activeTab === panelId) {
-      activeTab = tabs[tabs.length - 1] ?? null;
-    } else if (tabs.includes(group.activeTab ?? '')) {
-      activeTab = group.activeTab;
-    } else {
-      activeTab = tabs[tabs.length - 1] ?? null;
-    }
-
-    floating.push({ ...group, tabs, activeTab });
   }
-
   return {
-    right: { tabs: rightTabs, activeTab: rightActive },
-    bottom: { tabs: bottomTabs, activeTab: bottomActive },
+    right: stripPanelFromGroup(state.right, panelId),
+    bottom: stripPanelFromGroup(state.bottom, panelId),
     floating,
   };
 }
@@ -157,8 +131,8 @@ export function addPanelToGroup(
   // Strip from any existing location first.
   const cleaned = stripPanelFromAllGroups(state, panelId);
 
-  if (position === 'right') {
-    const tabs = [...cleaned.right.tabs];
+  if (position === 'right' || position === 'bottom') {
+    const tabs = [...cleaned[position].tabs];
     if (insertIndex !== undefined) {
       tabs.splice(insertIndex, 0, panelId);
     } else {
@@ -166,20 +140,7 @@ export function addPanelToGroup(
     }
     return {
       ...cleaned,
-      right: { tabs, activeTab: panelId },
-    };
-  }
-
-  if (position === 'bottom') {
-    const tabs = [...cleaned.bottom.tabs];
-    if (insertIndex !== undefined) {
-      tabs.splice(insertIndex, 0, panelId);
-    } else {
-      tabs.push(panelId);
-    }
-    return {
-      ...cleaned,
-      bottom: { tabs, activeTab: panelId },
+      [position]: { tabs, activeTab: panelId },
     };
   }
 

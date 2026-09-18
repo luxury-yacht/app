@@ -92,6 +92,31 @@ describe('addPanelToGroup', () => {
     expect(next.floating[0].tabs).toEqual(['a']);
   });
 
+  it('preserves surviving active tabs and repairs stale selections when a tab moves', () => {
+    const original: TabGroupState = {
+      right: { tabs: ['moving', 'right-last'], activeTab: 'moving' },
+      bottom: { tabs: ['bottom-first', 'bottom-last'], activeTab: 'bottom-first' },
+      floating: [
+        { groupId: 'floating-1', tabs: ['floating-first', 'floating-last'], activeTab: 'stale' },
+        { groupId: 'floating-2', tabs: ['moving'], activeTab: 'moving' },
+      ],
+    };
+
+    const next = addPanelToFloatingGroup(original, 'moving', 'floating-1', 1);
+
+    expect(next.right).toEqual({ tabs: ['right-last'], activeTab: 'right-last' });
+    expect(next.bottom).toEqual(original.bottom);
+    expect(next.floating).toEqual([
+      {
+        groupId: 'floating-1',
+        tabs: ['floating-first', 'moving', 'floating-last'],
+        activeTab: 'moving',
+      },
+    ]);
+    expect(original.right.tabs).toEqual(['moving', 'right-last']);
+    expect(original.floating).toHaveLength(2);
+  });
+
   // -- immutability ---------------------------------------------------------
   it('does not mutate the original state', () => {
     const original = createInitialTabGroupState();

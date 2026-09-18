@@ -938,7 +938,8 @@ class RefreshOrchestrator {
   private runStreamingCleanup(
     cleanup: (() => void) | undefined,
     domain: RefreshDomain,
-    scope: string
+    scope: string,
+    action = 'cleanupStreamingDomain'
   ): void {
     if (typeof cleanup !== 'function') {
       return;
@@ -948,7 +949,7 @@ class RefreshOrchestrator {
     } catch (error) {
       reportOperationalError(error, {
         source: 'RefreshOrchestrator',
-        action: 'cleanupStreamingDomain',
+        action,
         domain,
         scope,
       });
@@ -1021,18 +1022,7 @@ class RefreshOrchestrator {
           }
           runtime.failStreamingStart(domain, scope, pending);
           runtime.clearStreamingCancelled(domain, scope);
-          if (typeof streamingCleanup === 'function') {
-            try {
-              streamingCleanup();
-            } catch (error) {
-              reportOperationalError(error, {
-                source: 'RefreshOrchestrator',
-                action: 'stopPendingStreamingDomain',
-                domain,
-                scope,
-              });
-            }
-          }
+          this.runStreamingCleanup(streamingCleanup, domain, scope, 'stopPendingStreamingDomain');
         })
         .catch(() => {
           runtime.failStreamingStart(domain, scope, pending);
@@ -1042,16 +1032,7 @@ class RefreshOrchestrator {
 
     const cleanup = runtime.getStreamingCleanup(domain, scope);
     if (cleanup) {
-      try {
-        cleanup();
-      } catch (error) {
-        reportOperationalError(error, {
-          source: 'RefreshOrchestrator',
-          action: 'stopStreamingDomain',
-          domain,
-          scope,
-        });
-      }
+      this.runStreamingCleanup(cleanup, domain, scope, 'stopStreamingDomain');
       runtime.deleteStreamingCleanup(domain, scope);
     }
     runtime.clearStreamHealth(domain, scope);
@@ -1849,6 +1830,17 @@ class RefreshOrchestrator {
     }
   }
 
+  private blockStreamingScope(domain: RefreshDomain, scope: string): boolean {
+    if (!this.getRuntimeForScope(domain, scope).blockStreaming(domain, scope)) {
+      return false;
+    }
+    const streaming = this.configs.get(domain)?.streaming;
+    if (streaming) {
+      this.stopStreamingScope(domain, scope, streaming, false);
+    }
+    return true;
+  }
+
   private readonly handleResourceStreamPermissionDenied = (
     payload: AppEvents['refresh:resource-stream-permission-denied']
   ): void => {
@@ -1859,13 +1851,8 @@ class RefreshOrchestrator {
     // A settled denial: block the scope's streaming (cleared on scope change
     // or auth recovery) so it does not resync-loop against a 403 forever.
     const domain = payload.domain;
-    const runtime = this.getRuntimeForScope(domain, scope);
-    if (!runtime.blockStreaming(domain, scope)) {
+    if (!this.blockStreamingScope(domain, scope)) {
       return;
-    }
-    const config = this.configs.get(domain);
-    if (config?.streaming) {
-      this.stopStreamingScope(domain, scope, config.streaming, false);
     }
     logWarning(
       `[refresh] stream permission denied — streaming blocked domain=${domain} scope=${scope} reason=${payload.reason}`,
@@ -1889,14 +1876,8 @@ class RefreshOrchestrator {
     }
     // Disable streaming for drifted scopes so snapshots remain the source of truth.
     const domain = payload.domain;
-    const runtime = this.getRuntimeForScope(domain, scope);
-    if (!runtime.blockStreaming(domain, scope)) {
+    if (!this.blockStreamingScope(domain, scope)) {
       return;
-    }
-
-    const config = this.configs.get(domain);
-    if (config?.streaming) {
-      this.stopStreamingScope(domain, scope, config.streaming, false);
     }
 
     logWarning(

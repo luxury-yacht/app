@@ -97,10 +97,13 @@ const resolveOverlayContainer = (element: HTMLElement): HTMLElement => {
   return element.closest<HTMLElement>(OVERLAY_SCROLLBAR_OWNER_SELECTOR) ?? document.body;
 };
 
+const hasScrollableOverflow = (overflow: string): boolean =>
+  overflow === 'auto' || overflow === 'scroll' || overflow === 'overlay';
+
 const canScrollAxis = (element: HTMLElement, axis: 'horizontal' | 'vertical'): boolean => {
   const styles = getComputedStyle(element);
   const overflow = axis === 'horizontal' ? styles.overflowX : styles.overflowY;
-  const scrollableOverflow = overflow === 'auto' || overflow === 'scroll' || overflow === 'overlay';
+  const scrollableOverflow = hasScrollableOverflow(overflow);
 
   if (!scrollableOverflow) {
     return false;
@@ -121,17 +124,7 @@ const toOverlayCoordinateRect = (rect: DOMRect, container: HTMLElement): DOMRect
   const top = rect.top - containerRect.top + container.scrollTop;
   const width = rect.width;
   const height = rect.height;
-  return {
-    bottom: top + height,
-    height,
-    left,
-    right: left + width,
-    top,
-    width,
-    x: left,
-    y: top,
-    toJSON: () => undefined,
-  } as DOMRect;
+  return toClipRect({ top, left, width, height });
 };
 
 const applyOverlayClip = (element: HTMLElement, rect: DOMRect, clipRect: DOMRect): void => {
@@ -151,38 +144,31 @@ const getOverflowClipRect = (element: HTMLElement): DOMRect => {
   let bottom = Math.min(elementRect.bottom, viewportHeight);
   let left = Math.max(elementRect.left, 0);
 
-  let ancestor = element.parentElement;
-  while (ancestor && ancestor !== document.body && ancestor !== document.documentElement) {
+  for (
+    let ancestor = element.parentElement;
+    ancestor && ancestor !== document.body && ancestor !== document.documentElement;
+    ancestor = ancestor.parentElement
+  ) {
     const styles = getComputedStyle(ancestor);
     const clipsX = styles.overflowX !== 'visible';
     const clipsY = styles.overflowY !== 'visible';
-    if (clipsX || clipsY) {
-      const ancestorRect = ancestor.getBoundingClientRect();
-      if (clipsX) {
-        left = Math.max(left, ancestorRect.left);
-        right = Math.min(right, ancestorRect.right);
-      }
-      if (clipsY) {
-        top = Math.max(top, ancestorRect.top);
-        bottom = Math.min(bottom, ancestorRect.bottom);
-      }
+    if (!clipsX && !clipsY) {
+      continue;
     }
-    ancestor = ancestor.parentElement;
+    const ancestorRect = ancestor.getBoundingClientRect();
+    if (clipsX) {
+      left = Math.max(left, ancestorRect.left);
+      right = Math.min(right, ancestorRect.right);
+    }
+    if (clipsY) {
+      top = Math.max(top, ancestorRect.top);
+      bottom = Math.min(bottom, ancestorRect.bottom);
+    }
   }
 
   const width = Math.max(0, right - left);
   const height = Math.max(0, bottom - top);
-  return {
-    bottom: top + height,
-    height,
-    left,
-    right: left + width,
-    top,
-    width,
-    x: left,
-    y: top,
-    toJSON: () => undefined,
-  } as DOMRect;
+  return toClipRect({ top, left, width, height });
 };
 
 const scheduleOverlayGeometryUpdate = (element: Element): void => {
@@ -259,6 +245,18 @@ const setOverlayGeometryTransitions = (element: Element, disabled: boolean): voi
   }
 };
 
+const createOverlayAxis = (element: HTMLElement, axis: 'horizontal' | 'vertical') => {
+  const thumb = document.createElement('div');
+  thumb.className = `scrollbar-overlay-thumb scrollbar-overlay-thumb--${axis}`;
+  thumb.dataset.scrollbarAxis = axis;
+  const gutter = document.createElement('div');
+  gutter.className = `scrollbar-overlay-gutter scrollbar-overlay-gutter--${axis}`;
+  gutter.dataset.scrollbarAxis = axis;
+  thumb.addEventListener('pointerdown', (event) => startOverlayScrollbarDrag(event, element, axis));
+  gutter.addEventListener('pointerdown', (event) => pageOverlayScrollbar(event, element, axis));
+  return { thumb, gutter };
+};
+
 const ensureOverlayScrollbars = (element: Element) => {
   if (!isOverlayScrollbarElement(element)) {
     return undefined;
@@ -279,33 +277,10 @@ const ensureOverlayScrollbars = (element: Element) => {
     return existing;
   }
 
-  const verticalThumb = document.createElement('div');
-  verticalThumb.className = 'scrollbar-overlay-thumb scrollbar-overlay-thumb--vertical';
-  verticalThumb.dataset.scrollbarAxis = 'vertical';
-
-  const verticalGutter = document.createElement('div');
-  verticalGutter.className = 'scrollbar-overlay-gutter scrollbar-overlay-gutter--vertical';
-  verticalGutter.dataset.scrollbarAxis = 'vertical';
-
-  const horizontalThumb = document.createElement('div');
-  horizontalThumb.className = 'scrollbar-overlay-thumb scrollbar-overlay-thumb--horizontal';
-  horizontalThumb.dataset.scrollbarAxis = 'horizontal';
-
-  const horizontalGutter = document.createElement('div');
-  horizontalGutter.className = 'scrollbar-overlay-gutter scrollbar-overlay-gutter--horizontal';
-  horizontalGutter.dataset.scrollbarAxis = 'horizontal';
-
-  verticalThumb.addEventListener('pointerdown', (event) =>
-    startOverlayScrollbarDrag(event, element, 'vertical')
-  );
-  horizontalThumb.addEventListener('pointerdown', (event) =>
-    startOverlayScrollbarDrag(event, element, 'horizontal')
-  );
-  verticalGutter.addEventListener('pointerdown', (event) =>
-    pageOverlayScrollbar(event, element, 'vertical')
-  );
-  horizontalGutter.addEventListener('pointerdown', (event) =>
-    pageOverlayScrollbar(event, element, 'horizontal')
+  const { thumb: verticalThumb, gutter: verticalGutter } = createOverlayAxis(element, 'vertical');
+  const { thumb: horizontalThumb, gutter: horizontalGutter } = createOverlayAxis(
+    element,
+    'horizontal'
   );
 
   container.append(verticalGutter, horizontalGutter, verticalThumb, horizontalThumb);
@@ -932,12 +907,8 @@ const canScroll = (element: Element): boolean => {
   const styles = getComputedStyle(element);
   const overflowX = styles.overflowX;
   const overflowY = styles.overflowY;
-  const scrollsX =
-    (overflowX === 'auto' || overflowX === 'scroll' || overflowX === 'overlay') &&
-    element.scrollWidth > element.clientWidth;
-  const scrollsY =
-    (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') &&
-    element.scrollHeight > element.clientHeight;
+  const scrollsX = hasScrollableOverflow(overflowX) && element.scrollWidth > element.clientWidth;
+  const scrollsY = hasScrollableOverflow(overflowY) && element.scrollHeight > element.clientHeight;
   return scrollsX || scrollsY;
 };
 
@@ -948,15 +919,9 @@ const canScrollWithDelta = (element: Element, deltaX: number, deltaY: number): b
 
   const styles = getComputedStyle(element);
   const scrollsX =
-    (styles.overflowX === 'auto' ||
-      styles.overflowX === 'scroll' ||
-      styles.overflowX === 'overlay') &&
-    element.scrollWidth > element.clientWidth;
+    hasScrollableOverflow(styles.overflowX) && element.scrollWidth > element.clientWidth;
   const scrollsY =
-    (styles.overflowY === 'auto' ||
-      styles.overflowY === 'scroll' ||
-      styles.overflowY === 'overlay') &&
-    element.scrollHeight > element.clientHeight;
+    hasScrollableOverflow(styles.overflowY) && element.scrollHeight > element.clientHeight;
 
   const canMoveX =
     scrollsX &&
@@ -967,10 +932,7 @@ const canScrollWithDelta = (element: Element, deltaX: number, deltaY: number): b
     ((deltaY < 0 && element.scrollTop > 0) ||
       (deltaY > 0 && element.scrollTop + element.clientHeight < element.scrollHeight - 1));
 
-  if (Math.abs(deltaX) > Math.abs(deltaY)) {
-    return canMoveX || canMoveY;
-  }
-  return canMoveY || canMoveX;
+  return canMoveX || canMoveY;
 };
 
 const findScrollableAncestor = (target: EventTarget | null): Element | null => {

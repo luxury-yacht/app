@@ -520,14 +520,7 @@ func (store *Store) Reset() error {
 	if document.Prepared != nil {
 		owned = appendCleanup(owned, document.Prepared.StagingDir)
 	}
-	remaining := make([]string, 0, len(owned))
-	var failures []error
-	for _, path := range owned {
-		if removeErr := store.removeStaging(path); removeErr != nil {
-			remaining = append(remaining, path)
-			failures = append(failures, removeErr)
-		}
-	}
+	remaining, failures := store.removeStagingPaths(owned)
 	if _, sweepErr := updatetemp.SweepOrphans(store.tempRoot, remaining); sweepErr != nil {
 		failures = append(failures, sweepErr)
 	}
@@ -541,6 +534,10 @@ func (store *Store) Reset() error {
 		return errors.Join(failures...)
 	}
 
+	return store.removeStateFile()
+}
+
+func (store *Store) removeStateFile() error {
 	info, statErr := os.Lstat(store.statePath)
 	if statErr != nil {
 		if os.IsNotExist(statErr) {
@@ -558,14 +555,7 @@ func (store *Store) Reset() error {
 }
 
 func (store *Store) retryCleanupLocked(document Document) error {
-	remaining := make([]string, 0, len(document.Cleanup))
-	var failures []error
-	for _, path := range document.Cleanup {
-		if err := store.removeStaging(path); err != nil {
-			remaining = append(remaining, path)
-			failures = append(failures, err)
-		}
-	}
+	remaining, failures := store.removeStagingPaths(document.Cleanup)
 	if len(remaining) != len(document.Cleanup) {
 		document.Cleanup = remaining
 		if err := store.saveLocked(document); err != nil {
@@ -573,6 +563,18 @@ func (store *Store) retryCleanupLocked(document Document) error {
 		}
 	}
 	return errors.Join(failures...)
+}
+
+func (store *Store) removeStagingPaths(paths []string) ([]string, []error) {
+	remaining := make([]string, 0, len(paths))
+	var failures []error
+	for _, path := range paths {
+		if err := store.removeStaging(path); err != nil {
+			remaining = append(remaining, path)
+			failures = append(failures, err)
+		}
+	}
+	return remaining, failures
 }
 
 func (store *Store) removeStaging(path string) error {

@@ -57,7 +57,7 @@ func (g *ResourceGateway) MergeObjectYamlWithLatest(
 	clusterID string,
 	req ObjectYAMLReloadMergeRequest,
 ) (*ObjectYAMLReloadMergeResponse, error) {
-	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,6 @@ func (g *ResourceGateway) MergeObjectYamlWithLatest(
 	baseObj, draftObj, currentObj, err := prepareReloadMergeContext(
 		ctx,
 		deps,
-		selectionKey,
 		req,
 	)
 	if err != nil {
@@ -130,7 +129,6 @@ func (g *ResourceGateway) MergeObjectYamlWithLatest(
 func prepareReloadMergeContext(
 	ctx context.Context,
 	deps common.Dependencies,
-	selectionKey string,
 	req ObjectYAMLReloadMergeRequest,
 ) (
 	*unstructured.Unstructured,
@@ -148,7 +146,7 @@ func prepareReloadMergeContext(
 	}
 
 	gvk := schema.FromAPIVersionAndKind(req.APIVersion, req.Kind)
-	gvr, isNamespaced, err := getGVRForGVKWithDependencies(ctx, deps, selectionKey, gvk)
+	gvr, isNamespaced, err := resolveObjectYAMLGVR(ctx, deps, gvk, objectYAMLResolverMutationFallback)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to resolve resource mapping for %s: %w", gvk.String(), err)
 	}
@@ -250,11 +248,6 @@ func validateReloadMergeObject(
 
 func sanitizeForMerge(obj *unstructured.Unstructured) *unstructured.Unstructured {
 	sanitized := sanitizeForUpdate(obj, "")
-	unstructured.RemoveNestedField(sanitized.Object, "metadata", "uid")
-	unstructured.RemoveNestedField(sanitized.Object, "metadata", "creationTimestamp")
-	unstructured.RemoveNestedField(sanitized.Object, "metadata", "deletionTimestamp")
-	unstructured.RemoveNestedField(sanitized.Object, "metadata", "deletionGracePeriodSeconds")
-	unstructured.RemoveNestedField(sanitized.Object, "metadata", "generation")
 	unstructured.RemoveNestedField(sanitized.Object, "metadata", "resourceVersion")
 	return sanitized
 }

@@ -267,6 +267,39 @@ const renderPodStateWidget = (
   );
 };
 
+const renderReplicaPodState = (
+  data: DeploymentDetails | StatefulSetDetails | ReplicaSetDetails,
+  context: OverviewContext
+): React.ReactNode =>
+  renderPodStateWidget(
+    resolvePodStateCounts(
+      {
+        desiredCount: typeof data.desiredReplicas === 'number' ? data.desiredReplicas : null,
+        createdCount: parseLeadingCount(data.replicas),
+      },
+      data.ready,
+      data.available,
+      data.podMetricsSummary
+    ),
+    context
+  );
+
+const renderUpdatedReplicas = (
+  updated: number | undefined,
+  created: number | null | undefined
+): React.ReactNode => {
+  if (typeof updated === 'number' && typeof created === 'number' && updated < created) {
+    return `${updated} of ${created}`;
+  }
+  return null;
+};
+
+const isRolloutComplete = (data: DeploymentDetails): boolean =>
+  data.rolloutStatus === 'Complete' ||
+  data.rolloutStatus === 'complete' ||
+  (data.rolloutStatus === 'progressing' &&
+    !!data.rolloutMessage?.includes('successfully progressed'));
+
 // ---------------------------------------------------------------------------
 // Deployment condition parsing.
 // ---------------------------------------------------------------------------
@@ -369,9 +402,6 @@ const rolloutStatusVariant = (status: string): StatusChipVariant => {
   const s = status.toLowerCase();
   if (s.includes('fail') || s === 'replicafailure') {
     return 'unhealthy';
-  }
-  if (s.includes('progress')) {
-    return 'info';
   }
   return 'info';
 };
@@ -570,36 +600,14 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
   {
     kind: 'widget',
     consumes: ['replicas', 'desiredReplicas', 'ready', 'available', 'podMetricsSummary'],
-    render: (d, context) =>
-      renderPodStateWidget(
-        resolvePodStateCounts(
-          {
-            desiredCount: typeof d.desiredReplicas === 'number' ? d.desiredReplicas : null,
-            createdCount: parseLeadingCount(d.replicas),
-          },
-          d.ready,
-          d.available,
-          d.podMetricsSummary
-        ),
-        context
-      ),
+    render: renderReplicaPodState,
   },
   // Up-to-date — only surface when there's revision drift (rollout in progress).
   {
     field: 'upToDate',
     derivedFrom: ['replicas'],
     label: 'Up-to-date',
-    render: (d) => {
-      const createdCount = parseLeadingCount(d.replicas);
-      if (
-        typeof d.upToDate === 'number' &&
-        typeof createdCount === 'number' &&
-        d.upToDate < createdCount
-      ) {
-        return `${d.upToDate} of ${createdCount}`;
-      }
-      return null;
-    },
+    render: (d) => renderUpdatedReplicas(d.upToDate, parseLeadingCount(d.replicas)),
   },
   // Paused — important status indicator, shown only when no backend status is set.
   {
@@ -649,12 +657,7 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
     derivedFrom: ['rolloutMessage'],
     label: 'Rollout Status',
     render: (d) => {
-      const isActuallyComplete =
-        d.rolloutStatus === 'Complete' ||
-        d.rolloutStatus === 'complete' ||
-        (d.rolloutStatus === 'progressing' &&
-          d.rolloutMessage?.includes('successfully progressed'));
-      if (!d.rolloutStatus || isActuallyComplete) {
+      if (!d.rolloutStatus || isRolloutComplete(d)) {
         return null;
       }
       return (
@@ -666,12 +669,7 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
     field: 'rolloutMessage',
     label: 'Message',
     render: (d) => {
-      const isActuallyComplete =
-        d.rolloutStatus === 'Complete' ||
-        d.rolloutStatus === 'complete' ||
-        (d.rolloutStatus === 'progressing' &&
-          d.rolloutMessage?.includes('successfully progressed'));
-      if (!d.rolloutStatus || isActuallyComplete || !d.rolloutMessage) {
+      if (!d.rolloutStatus || isRolloutComplete(d) || !d.rolloutMessage) {
         return null;
       }
       return d.rolloutMessage;
@@ -803,16 +801,7 @@ const daemonSetItems: OverviewItemSpec<DaemonSetDetails>[] = [
     field: 'upToDate',
     derivedFrom: ['current'],
     label: 'Up-to-date',
-    render: (d) => {
-      if (
-        typeof d.upToDate === 'number' &&
-        typeof d.current === 'number' &&
-        d.upToDate < d.current
-      ) {
-        return `${d.upToDate} of ${d.current}`;
-      }
-      return null;
-    },
+    render: (d) => renderUpdatedReplicas(d.upToDate, d.current),
   },
   // Update strategy — chip + params.
   {
@@ -882,36 +871,14 @@ const statefulSetItems: OverviewItemSpec<StatefulSetDetails>[] = [
   {
     kind: 'widget',
     consumes: ['replicas', 'desiredReplicas', 'ready', 'available', 'podMetricsSummary'],
-    render: (d, context) =>
-      renderPodStateWidget(
-        resolvePodStateCounts(
-          {
-            desiredCount: typeof d.desiredReplicas === 'number' ? d.desiredReplicas : null,
-            createdCount: parseLeadingCount(d.replicas),
-          },
-          d.ready,
-          d.available,
-          d.podMetricsSummary
-        ),
-        context
-      ),
+    render: renderReplicaPodState,
   },
   // Up-to-date — only surface when there's revision drift.
   {
     field: 'upToDate',
     derivedFrom: ['replicas'],
     label: 'Up-to-date',
-    render: (d) => {
-      const createdCount = parseLeadingCount(d.replicas);
-      if (
-        typeof d.upToDate === 'number' &&
-        typeof createdCount === 'number' &&
-        d.upToDate < createdCount
-      ) {
-        return `${d.upToDate} of ${createdCount}`;
-      }
-      return null;
-    },
+    render: (d) => renderUpdatedReplicas(d.upToDate, parseLeadingCount(d.replicas)),
   },
   // Update strategy — chip + params. RollingUpdate has two independent params:
   // `partition` (ordinal cutoff) and `maxUnavailable` (alpha gate, default 1).
@@ -1089,19 +1056,7 @@ const replicaSetItems: OverviewItemSpec<ReplicaSetDetails>[] = [
   {
     kind: 'widget',
     consumes: ['replicas', 'desiredReplicas', 'ready', 'available', 'podMetricsSummary'],
-    render: (d, context) =>
-      renderPodStateWidget(
-        resolvePodStateCounts(
-          {
-            desiredCount: typeof d.desiredReplicas === 'number' ? d.desiredReplicas : null,
-            createdCount: parseLeadingCount(d.replicas),
-          },
-          d.ready,
-          d.available,
-          d.podMetricsSummary
-        ),
-        context
-      ),
+    render: renderReplicaPodState,
   },
   // Min-ready when configured.
   {

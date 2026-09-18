@@ -133,4 +133,43 @@ describe('createPanelLayoutStore — tabGroups slice', () => {
 
     expect(store.getState('panel-b')?.rightSize.width).toBe(640);
   });
+  it('hands off geometry without replacing the next tab’s placement or open state', () => {
+    const store = createPanelLayoutStore();
+    store.updateState('leader', {
+      position: 'right',
+      rightSize: { width: 640, height: 310 },
+      bottomSize: { width: 420, height: 520 },
+      isMaximized: true,
+      isOpen: false,
+      zIndex: 1010,
+    });
+    store.updateState('next', {
+      position: 'bottom',
+      isOpen: true,
+      isInitialized: true,
+      zIndex: 1020,
+    });
+    store.setTabGroups(() => ({
+      right: { tabs: ['leader', 'next'], activeTab: 'next' },
+      bottom: { tabs: [], activeTab: null },
+      floating: [],
+    }));
+    const listener = vi.fn();
+    store.subscribe('next', listener);
+
+    store.handoffLayoutBeforeClose('leader');
+
+    expect(store.getState('next')).toEqual({
+      position: 'bottom',
+      rightSize: { width: 640, height: 310 },
+      bottomSize: { width: 420, height: 520 },
+      isMaximized: true,
+      isOpen: true,
+      isInitialized: true,
+      zIndex: 1020,
+    });
+    expect(store.getState('next')?.rightSize).not.toBe(store.getState('leader')?.rightSize);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(store.getTabGroups().right.tabs).toEqual(['leader', 'next']);
+  });
 });

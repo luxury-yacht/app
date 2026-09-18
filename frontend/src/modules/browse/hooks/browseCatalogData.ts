@@ -4,7 +4,6 @@ import {
   filterNamespaceScopedItems,
   normalizeCatalogScope,
   parseContinueToken,
-  rebuildIndexByUID,
   reconcileByUID,
   splitClusterScope,
 } from '@modules/browse/utils/browseUtils';
@@ -58,12 +57,8 @@ export interface BrowseCatalogPlan {
   scopeIdentityKey: string;
 }
 
-export interface BrowseCatalogCollection {
+export interface BrowseCatalogApplyResult {
   items: CatalogItem[];
-  indexByUid: Map<string, number>;
-}
-
-export interface BrowseCatalogApplyResult extends BrowseCatalogCollection {
   changed: boolean;
   continueToken: string | null;
   previousToken: string | null;
@@ -71,11 +66,6 @@ export interface BrowseCatalogApplyResult extends BrowseCatalogCollection {
   unfilteredTotal: number;
   totalIsExact: boolean;
 }
-
-export const emptyBrowseCatalogCollection = (): BrowseCatalogCollection => ({
-  items: [],
-  indexByUid: new Map(),
-});
 
 const catalogNamespaces = (
   clusterScopedOnly: boolean,
@@ -234,13 +224,12 @@ export const acceptsCatalogSnapshotScope = (
 };
 
 export const applyCatalogBaseline = (
-  collection: BrowseCatalogCollection,
+  currentItems: CatalogItem[],
   payload: CatalogSnapshotPayload
 ): BrowseCatalogApplyResult => {
-  const { nextItems, changed } = reconcileByUID(collection.items, payload.items ?? []);
+  const { nextItems, changed } = reconcileByUID(currentItems, payload.items ?? []);
   return {
-    items: changed || collection.items.length === 0 ? nextItems : collection.items,
-    indexByUid: rebuildIndexByUID(nextItems),
+    items: changed || currentItems.length === 0 ? nextItems : currentItems,
     changed,
     continueToken: parseContinueToken(payload.continue),
     previousToken: parseContinueToken(payload.previous),
@@ -250,14 +239,10 @@ export const applyCatalogBaseline = (
   };
 };
 
-export const applyCatalogPage = (
-  _collection: BrowseCatalogCollection,
-  payload: CatalogSnapshotPayload
-): BrowseCatalogApplyResult => {
+export const applyCatalogPage = (payload: CatalogSnapshotPayload): BrowseCatalogApplyResult => {
   const nextItems = payload.items ?? [];
   return {
     items: nextItems,
-    indexByUid: rebuildIndexByUID(nextItems),
     changed: true,
     continueToken: parseContinueToken(payload.continue),
     previousToken: parseContinueToken(payload.previous),

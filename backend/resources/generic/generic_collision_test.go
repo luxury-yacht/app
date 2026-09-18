@@ -111,7 +111,7 @@ var (
 // Expected state after the fix lands (option (a) in plan step 5, the
 // recommended path): Service.DeleteByGVK is replaced by a real
 // implementation, or — equivalently — the `backend` caller resolves the
-// GVR via getGVRForGVKWithDependencies and calls a renamed primitive on
+// GVR via resolveObjectYAMLGVR and calls a renamed primitive on
 // Service. Whatever the final shape, this test's assertions describe the
 // user-visible behavior it has to deliver: given a GVK, the right object
 // (and only the right object) is deleted.

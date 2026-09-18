@@ -14,7 +14,7 @@ import { ROLLBACK_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
 import {
   countVisibleDiffRows,
   type DisplayDiffLine,
-  formatTooLargeDiffMessage,
+  getDiffTooLargeMessage,
   mergeDiffLines,
 } from '@shared/components/diff/diffUtils';
 import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
@@ -178,24 +178,12 @@ const RollbackModal = ({
       ROLLBACK_DIFF_BUDGETS
     );
 
-    if (raw.tooLarge) {
-      return {
-        lines: [],
-        leftText: currentEntry.podTemplate,
-        rightText: selectedEntry.podTemplate,
-        tooLarge: true,
-        tooLargeReason: raw.tooLargeReason,
-        leftLineCount: raw.leftLineCount,
-        rightLineCount: raw.rightLineCount,
-      } satisfies RollbackDiffState;
-    }
-
     return {
-      lines: mergeDiffLines(raw.lines),
+      lines: raw.tooLarge ? [] : mergeDiffLines(raw.lines),
       leftText: currentEntry.podTemplate,
       rightText: selectedEntry.podTemplate,
-      tooLarge: false,
-      tooLargeReason: null,
+      tooLarge: raw.tooLarge,
+      tooLargeReason: raw.tooLargeReason,
       leftLineCount: raw.leftLineCount,
       rightLineCount: raw.rightLineCount,
     } satisfies RollbackDiffState;
@@ -210,24 +198,16 @@ const RollbackModal = ({
     );
   }, [diffOnly, diffResult]);
 
-  const diffTooLargeMessage = useMemo(() => {
-    if (!diffResult) {
-      return ROLLBACK_DIFF_TOO_LARGE_MESSAGE;
-    }
-    if (renderTooLarge) {
-      return formatTooLargeDiffMessage(
-        countVisibleDiffRows(diffResult.lines, diffOnly),
-        ROLLBACK_DIFF_BUDGETS.maxRenderableRows
-      );
-    }
-    if (diffResult.tooLargeReason === 'input') {
-      return formatTooLargeDiffMessage(
-        Math.max(diffResult.leftLineCount, diffResult.rightLineCount),
-        ROLLBACK_DIFF_BUDGETS.maxLinesPerSide
-      );
-    }
-    return ROLLBACK_DIFF_TOO_LARGE_MESSAGE;
-  }, [diffOnly, diffResult, renderTooLarge]);
+  const diffTooLargeMessage = useMemo(
+    () =>
+      getDiffTooLargeMessage(
+        diffResult,
+        renderTooLarge && diffResult ? countVisibleDiffRows(diffResult.lines, diffOnly) : 0,
+        ROLLBACK_DIFF_BUDGETS,
+        ROLLBACK_DIFF_TOO_LARGE_MESSAGE
+      ),
+    [diffOnly, diffResult, renderTooLarge]
+  );
 
   // Handle rollback confirmation.
   const handleRollback = useCallback(() => {

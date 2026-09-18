@@ -5,7 +5,10 @@
  * Provides shared helper functions for the frontend.
  */
 
-import { parseResourceValue } from '@shared/utils/resourceCalculations';
+import {
+  calculateResourceOvercommit,
+  parseResourceValue,
+} from '@shared/utils/resourceCalculations';
 
 export const parseCpuToMillicores = (val: string | undefined): number =>
   parseResourceValue(val, 'cpu');
@@ -24,10 +27,7 @@ export const calculateCpuOvercommitted = (
 ): number => {
   const limitsValue = parseCpuToMillicores(limits);
   const allocatableValue = parseCpuToMillicores(allocatable);
-  if (allocatableValue > 0 && limitsValue > allocatableValue) {
-    return Math.round(((limitsValue - allocatableValue) / allocatableValue) * 100);
-  }
-  return 0;
+  return calculateResourceOvercommit(limitsValue, allocatableValue).overcommittedPercent;
 };
 
 /**
@@ -39,8 +39,5 @@ export const calculateMemoryOvercommitted = (
 ): number => {
   const limitsValue = parseMemToMB(limits);
   const allocatableValue = parseMemToMB(allocatable);
-  if (allocatableValue > 0 && limitsValue > allocatableValue) {
-    return Math.round(((limitsValue - allocatableValue) / allocatableValue) * 100);
-  }
-  return 0;
+  return calculateResourceOvercommit(limitsValue, allocatableValue).overcommittedPercent;
 };

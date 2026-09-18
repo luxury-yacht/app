@@ -180,13 +180,7 @@ func newCollidingDBInstanceCluster(t *testing.T, clusterID string) *resourceGate
 	return fixture
 }
 
-// TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs is a GREEN guardrail
-// regression test. It locks in that the existing getGVRForGVKWithDependencies
-// helper — the reference resolver we plan to route read/delete/capability
-// callers through — correctly disambiguates two CRDs that share a kind.
-//
-// This test should PASS immediately. If it ever starts failing, the exact-GVK
-// helper has regressed and the entire kind-only-objects fix is at risk.
+// Mutation resolution must distinguish CRDs with the same kind across API groups.
 func TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs(t *testing.T) {
 	const clusterID = "collision-gvk"
 	app := newCollidingDBInstanceCluster(t, clusterID)
@@ -197,9 +191,9 @@ func TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs(t *testing.T) {
 	}
 
 	t.Run("ACK DBInstance", func(t *testing.T) {
-		gvr, namespaced, err := getGVRForGVKWithDependencies(context.Background(), deps, clusterID, ackDBInstanceGVK)
+		gvr, namespaced, err := resolveObjectYAMLGVR(context.Background(), deps, ackDBInstanceGVK, objectYAMLResolverMutationFallback)
 		if err != nil {
-			t.Fatalf("getGVRForGVKWithDependencies returned error for ACK GVK: %v", err)
+			t.Fatalf("resolveObjectYAMLGVR returned error for ACK GVK: %v", err)
 		}
 		want := schema.GroupVersionResource{
 			Group: "rds.services.k8s.aws", Version: "v1alpha1", Resource: "dbinstances",
@@ -213,9 +207,9 @@ func TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs(t *testing.T) {
 	})
 
 	t.Run("db-operator DbInstance", func(t *testing.T) {
-		gvr, namespaced, err := getGVRForGVKWithDependencies(context.Background(), deps, clusterID, kindaRocksDBInstanceGVK)
+		gvr, namespaced, err := resolveObjectYAMLGVR(context.Background(), deps, kindaRocksDBInstanceGVK, objectYAMLResolverMutationFallback)
 		if err != nil {
-			t.Fatalf("getGVRForGVKWithDependencies returned error for kinda.rocks GVK: %v", err)
+			t.Fatalf("resolveObjectYAMLGVR returned error for kinda.rocks GVK: %v", err)
 		}
 		want := schema.GroupVersionResource{
 			Group: "kinda.rocks", Version: "v1beta1", Resource: "dbinstances",
