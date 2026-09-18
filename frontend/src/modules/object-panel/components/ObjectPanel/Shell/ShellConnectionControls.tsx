@@ -49,7 +49,7 @@ export default function ShellConnectionControls({
   resolvedDebugImage,
   debugDisabledReason,
   disabledReason,
-}: ShellConnectionControlsProps) {
+}: Readonly<ShellConnectionControlsProps>) {
   const elementIdPrefix = useId();
   const shellDropdownMenuClassName = 'shell-tab__dropdown-menu';
   const shellOptions = useMemo<DropdownOption[]>(

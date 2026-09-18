@@ -69,11 +69,13 @@ const appendSortDivider = (items: ContextMenuItem[]): void => {
   }
 };
 
+const defaultSortLabels = { ascending: 'Sort Ascending', descending: 'Sort Descending' };
+
 export function buildGridTableSortItems(
   columnKey: string,
   onSort: GridTableSortHandler | undefined,
   sortConfig: GridTableSortConfig,
-  labels = { ascending: 'Sort Ascending', descending: 'Sort Descending' }
+  labels = defaultSortLabels
 ): ContextMenuItem[] {
   const isCurrentlySorted = sortConfig?.key === columnKey;
   const currentDirection = isCurrentlySorted ? (sortConfig?.direction ?? null) : null;

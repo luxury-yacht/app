@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { getScopedFeaturesForView } from '@/core/refresh/components/diagnostics';
-import { requireValue } from '@/test-utils/requireValue';
-import { CLUSTER_CAPABILITIES } from './catalog';
 import { PERMISSION_FEATURE_LABELS } from './permissionFeatures';
 import { ALL_NAMESPACE_PERMISSIONS, CLUSTER_PERMISSIONS } from './permissionSpecs';
 
@@ -11,17 +9,6 @@ describe('permission feature contract', () => {
 
     for (const specList of specs) {
       expect(PERMISSION_FEATURE_LABELS[specList.feature]).toBeTruthy();
-    }
-  });
-
-  it('keeps cluster capability features in the same keyed catalog', () => {
-    for (const capability of CLUSTER_CAPABILITIES) {
-      expect(capability.feature).toBeTruthy();
-      expect(
-        PERMISSION_FEATURE_LABELS[
-          requireValue(capability.feature, 'expected test value in permissionFeatures.test.ts')
-        ]
-      ).toBeTruthy();
     }
   });
 

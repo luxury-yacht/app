@@ -5,7 +5,6 @@
  * SSRR-based permission store.
  */
 
-export { CLUSTER_CAPABILITIES } from './catalog';
 // Hooks.
 export {
   useCapabilities,

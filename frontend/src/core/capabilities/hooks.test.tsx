@@ -442,6 +442,88 @@ describe('useCapabilities', () => {
     restoreQueryPermissions();
   });
 
+  it('keeps named denials, review errors and transient activation failures distinct', async () => {
+    const descriptors: CapabilityDescriptor[] = ['allowed', 'denied', 'failed', 'inactive'].map(
+      (id) => ({
+        id,
+        clusterId: 'test-cluster',
+        group: '',
+        version: 'v1',
+        resourceKind: 'Pod',
+        verb: 'get',
+        namespace: 'default',
+        name: id,
+      })
+    );
+    const query = vi.fn().mockResolvedValue({
+      results: descriptors.map((descriptor) => ({
+        ...descriptor,
+        subresource: '',
+        allowed: descriptor.id === 'allowed',
+        source: ['failed', 'inactive'].includes(descriptor.id) ? 'error' : 'ssar',
+        reason: descriptor.id === 'denied' ? 'RBAC denied' : '',
+        error:
+          descriptor.id === 'inactive'
+            ? 'cluster test-cluster not active'
+            : descriptor.id === 'failed'
+              ? 'review failed'
+              : '',
+      })),
+    });
+    const restore = installQueryPermissions(query);
+    const hook = await renderCapabilitiesHook(descriptors);
+    expect(hook.current.getState('allowed')).toMatchObject({
+      allowed: true,
+      pending: false,
+      status: 'ready',
+    });
+    expect(hook.current.getState('denied')).toMatchObject({
+      allowed: false,
+      pending: false,
+      status: 'ready',
+      reason: 'RBAC denied',
+    });
+    expect(hook.current.getState('failed')).toMatchObject({
+      allowed: false,
+      pending: false,
+      status: 'error',
+      reason: 'review failed',
+    });
+    expect(hook.current.getState('inactive')).toMatchObject({
+      allowed: false,
+      pending: true,
+      status: 'loading',
+    });
+    expect(hook.current.loading).toBe(true);
+    expect(hook.current.ready).toBe(false);
+    await hook.unmount();
+    restore();
+  });
+
+  it.each([
+    ['cluster test-cluster not active', 'loading', true],
+    ['review transport failed', 'error', false],
+  ] as const)('publishes a rejected named query as %s', async (message, status, pending) => {
+    const restore = installQueryPermissions(vi.fn().mockRejectedValue(new Error(message)));
+    const hook = await renderCapabilitiesHook([
+      {
+        id: 'pod',
+        clusterId: 'test-cluster',
+        group: '',
+        version: 'v1',
+        resourceKind: 'Pod',
+        verb: 'get',
+        namespace: 'default',
+        name: 'pod',
+      },
+    ]);
+    expect(hook.current.getState('pod')).toMatchObject({ allowed: false, pending, status });
+    expect(hook.current.loading).toBe(pending);
+    expect(hook.current.ready).toBe(!pending);
+    await hook.unmount();
+    restore();
+  });
+
   it('requeries named-resource descriptors when refreshKey changes', async () => {
     const mockQueryPermissions = vi.fn().mockResolvedValue({ results: [] });
     const restoreQueryPermissions = installQueryPermissions(mockQueryPermissions);

@@ -209,7 +209,7 @@ correctness-driven interruption and resume the rotation afterwards.
 | 5 | Object details and panels | Object-panel overview/YAML/actions; detail gateway; panel-window ownership | Expanded S005 batch and final gate passed; remaining scope recorded |
 | 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | S006 owner/consumer review, batch implementation, coverage and final gate passed |
 | 7 | Object map | Backend graph producers and relationships; frontend graph, layout and renderer | S007 batch, coverage and final gate passed; limits recorded |
-| 8 | Permissions and mutations | Capability policy, permission caches, object actions/YAML; frontend availability gates | Inventoried |
+| 8 | Permissions and mutations | Capability policy, permission caches, object actions/YAML; frontend availability gates | S008 query/store/hook batch, coverage and final gate passed; remaining scope recorded |
 | 9 | Navigation and interaction | Sidebar, routing, shortcuts, command palette, modals, shared inputs and menus | Inventoried |
 | 10 | Preferences and persistence | Settings, favorites, UI state, import/export/reset; frontend state hydration | Inventoried |
 | 11 | Errors and diagnostics | Error classification/reporting, logs, telemetry, request diagnostics | Inventoried |
@@ -1108,8 +1108,8 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/(root: portforward)` | 6 | 1133 | 2 / — | S006: target, port, session and lifecycle files reviewed; projections/retry handling simplified |
 | `backend/(root: preferences)` | 5 | 2301 | 2 / — | Inventoried |
 | `backend/(root: refresh)` | 18 | 4252 | 4 / — | Inventoried |
-| `backend/(root: resource)` | 6 | 1450 | — / — | Inventoried |
-| `backend/(root: response)` | 3 | 687 | — / — | Inventoried |
+| `backend/(root: resource)` | 6 | 1450 | — / — | Partial S008: permission query preparation/fallback/diagnostics and mutation permission checks inspected |
+| `backend/(root: response)` | 3 | 687 | — / — | Partial S008: cached-response permission recheck inspected; cache lifetime remains |
 | `backend/(root: runtime)` | 2 | 304 | 1 / — | Partial S006: operation registry reviewed; runtime setting policies remain |
 | `backend/(root: settings)` | 1 | 229 | — / — | Inventoried |
 | `backend/(root: shell)` | 2 | 765 | 1 / — | S006: session/lifecycle owners reviewed; frontend orchestration simplified |
@@ -1119,9 +1119,9 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/(root: ui)` | 2 | 334 | — / — | Inventoried |
 | `backend/(root: update)` | 8 | 1186 | — / — | Inventoried |
 | `backend/(root: window)` | 1 | 112 | — / — | Inventoried |
-| `backend/(root: workload)` | 2 | 502 | 1 / — | Inventoried |
+| `backend/(root: workload)` | 2 | 502 | 1 / — | Partial S008: mutation validation, HPA scale guard, permission/write/cache order inspected |
 | `backend/(root: workspace)` | 16 | 2130 | — / — | Reviewing: S003 selection/restore/prune; remaining scope recorded |
-| `backend/capabilities` | 4 | 866 | — / — | Inventoried |
+| `backend/capabilities` | 4 | 866 | — / — | S008: SSAR worker and SSRR cache/rule matching reviewed; shared retry policy and singleflight error return |
 | `backend/internal/applog` | 6 | 323 | — / — | Inventoried |
 | `backend/internal/appupdates` | 2 | 1125 | 1 / — | Inventoried |
 | `backend/internal/authstate` | 4 | 683 | — / — | Inventoried |
@@ -1235,7 +1235,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/(root)` | 7 | 1007 | — / — | Inventoried |
 | `frontend/src/core/app-state-access` | 4 | 75 | — / — | Inventoried |
 | `frontend/src/core/backend-api` | 2 | 166 | — / — | Inventoried |
-| `frontend/src/core/capabilities` | 11 | 2623 | — / 5 | Inventoried |
+| `frontend/src/core/capabilities` | 11 | 2623 | — / 5 | S008: store/query/hook, feature/spec and identity responsibilities reviewed; shared state projection and obsolete catalog removal |
 | `frontend/src/core/cluster-workspace` | 2 | 755 | — / — | S003 store/hydration inspected and simplified |
 | `frontend/src/core/codemirror` | 3 | 640 | — / — | Inventoried |
 | `frontend/src/core/connection` | 1 | 237 | — / — | Inventoried |
@@ -1263,7 +1263,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/modules/object-panel` | 141 | 32321 | — / 31 | Partial S005: panel reconciliation, tab composition, YAML baseline, Overview rendering, log presentation, Helm read model; S006 shell/debug and node/container-log consumers reviewed; remaining scope recorded |
 | `frontend/src/modules/port-forward` | 4 | 874 | — / 1 | Inventoried |
 | `frontend/src/modules/resource-grid` | 15 | 4107 | — / 1 | Inventoried |
-| `frontend/src/shared/actions` | 4 | 772 | — / — | Inventoried |
+| `frontend/src/shared/actions` | 4 | 772 | — / — | Partial S008: object action client, policy and generated kind lookup inspected; contract generation remains |
 | `frontend/src/shared/components` | 26 | 3064 | — / — | Inventoried |
 | `frontend/src/shared/components/aria` | 1 | 25 | — / — | Inventoried |
 | `frontend/src/shared/components/diff` | 6 | 1327 | — / 3 | Inventoried |
@@ -1281,7 +1281,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/shared/components/yaml` | 3 | 807 | — / 2 | Inventoried |
 | `frontend/src/shared/constants` | 2 | 139 | — / — | Inventoried |
 | `frontend/src/shared/events` | 4 | 532 | — / — | Inventoried |
-| `frontend/src/shared/hooks` | 9 | 1969 | — / 1 | Inventoried |
+| `frontend/src/shared/hooks` | 9 | 1969 | — / 1 | Partial S008: object action permission/navigation/default-handler composition inspected; other hooks remain |
 | `frontend/src/shared/resources` | 1 | 111 | — / — | Inventoried |
 | `frontend/src/shared/scrollbars` | 3 | 1685 | — / 3 | Inventoried |
 | `frontend/src/shared/terminal` | 1 | 211 | — / 1 | Inventoried |
@@ -1314,3 +1314,110 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `internal/updatetemp` | 4 | 506 | 2 / — | Inventoried |
 | `internal/windowsinstall` | 3 | 104 | — / — | Inventoried |
 | `main.go` | 1 | 14 | — / — | Inventoried |
+
+## S008 — permissions and mutations
+
+**Status: selected batch implemented; focused, coverage and final gate passed.** Baseline `c9f56a24e72937040ee682b4e0002d790af13f3f`;
+worktree clean at entry. This batch follows the permission query from the backend
+review service/cache through the frontend store and named-object capability hook,
+then checks the action consumers. It also addresses the three recorded earlier-pass
+Sonar findings on PR #355 (audit of the baseline head, not of these local edits).
+
+### Responsibility review and selected changes
+
+| Responsibility inspected | Disposition |
+| --- | --- |
+| Frontend permission store: query keys/GVK, pending/materialized status, namespace chunking, cluster/kind queries, diagnostics, TTL refresh and lifecycle replay | Consolidate response/error projection, payload construction and successful diagnostic completion. Preserve the different namespace, cluster and lazy-kind freshness/error policies, asynchronous notification channels, and namespace interest replay. |
+| Capability hook: unnamed store lookup, named RPC, readiness wait, operational-event retry and result publication | Separate pure state derivation from synchronization; give copy/update/publication of named results one owner. Preserve effect order, retained named results, dropped missing-cluster requests, and transient errors remaining pending. |
+| Backend SSAR worker service, SSRR cache/rule matching, QueryPermissions preparation/fallback/diagnostics and mutation permission checks | Use singleflight's existing error return and one permission-review retry policy in the capabilities package. Keep distinct SSAR/SSRR/read-check caches, locks and cancellation ownership. Retain exact catalog resolution and the gateway's indexed parallel response assembly. |
+| Object action request dispatch, workload mutation validation/permission/write/cache ordering, frontend action target/client and controller handler construction | Retain generated action ownership and operation-specific validation/order. The shared action controller already owns navigation, permission lookup and confirmations; no new generic mutation executor or action matrix. |
+| Earlier-pass Sonar findings: shell connection controls, grid sort items, panel tab fallback | Read-only props, stable default labels, and module-level fallback renderer factory without changing the ErrorBoundary API. |
+
+Inspected scope includes `core/capabilities/{permissionStore,hooks,permissionRead,
+permissionTypes,permissionFeatures,permissionSpecs,catalog,utils,types}`, backend `capabilities/{service,
+rules,query}`, `resource_gateway_permissions.go`, `resource_permission.go`,
+`response_cache_permissions.go`, `object_actions.go`, `workload_actions.go`,
+`refresh/permissions/resource_requirement.go`, `refresh/snapshot/runtime_permissions.go`,
+`objectActionClient.ts`, and the permission/navigation/default-handler portions of
+`useObjectActionController.tsx`. The complete `objectActionPolicy.ts` and generated
+kind-capability lookup were read; panel-capability composition was partly inspected.
+YAML mutation internals, node/operation services, full action-controller modal
+execution, backend permission generation and refresh gate/revalidation
+are not closed by this batch.
+
+The producer chain stays Kubernetes reviews → QueryPermissions → permission read
+broker → store or hook-local named results → action/tab consumers. No wire types,
+provider order, readiness transitions or import direction change. State helpers
+import only permission types/transient-error classification; they do not import
+the store or hook. Readiness still blocks named-object queries while allowing
+cluster activation and operational-event retries. Existing readiness/recovery,
+namespace spec-set deduplication and notification tests provide regression coverage;
+seven characterization cases for mixed result/error states, diagnostic completion,
+custom-kind identity and retry intervals passed against the original implementations. Focused checks run per change; coverage, complexity and the
+prerelease gate run at the batch boundary.
+
+Follow-through inspection found the former `CLUSTER_CAPABILITIES` catalog has no
+repository runtime consumer: repository-wide symbol/path search finds its
+implementation, barrel export, one catalog-only test, and a stale spec comment.
+Dynamic capability imports are confined to existing tests and do not read that
+export. `permissionStore.ts` reads `CLUSTER_PERMISSIONS` directly. Removed the
+241-line duplicate catalog and export, retaining the runtime spec lists and their
+feature/diagnostics tests. The pre-removal coverage run and surviving consumer
+checks are recorded below. The permission catalog and spec source
+have now been inspected in full; backend generation remains outside this batch.
+
+
+### Validation and remaining scope
+
+- Focused baseline: 115 frontend tests and backend capability/query/action tests
+  passed. Seven new characterization cases passed before the corresponding
+  refactors (capabilities: 61 tests). Incremental store/hook/backend checks passed;
+  expanded object-panel/action consumer run passed **98 files / 858 tests**;
+  Sonar companion paths passed **5 files / 74 tests**. Catalog removal passed
+  surviving capability/diagnostics/namespace-context tests (**9 files / 106 tests**).
+  Logs: `/tmp/luxury-yacht-s008-{frontend-before,backend-before,characterization,
+  store-after,hooks-after,backend-after,sonar-fixes-after,catalog-after}.log`.
+- Both repository coverage tasks passed. Frontend: **513 files / 4,802 tests**,
+  87.74% aggregate statement coverage. Directly touched runtime owners:
+  `permissionStore.ts` **89.14%**, `hooks.ts` **92.85%**, `capabilityState.ts`
+  **100%**, `ObjectPanelContent.tsx` **90.41%**, `ShellConnectionControls.tsx`
+  **85.71%**, grid context-menu items **100%**. Report moved outside the tree
+  before lint: `/tmp/luxury-yacht-s008-frontend-coverage/coverage-summary.json`.
+  Go's two changed functions cover **18/18 statements (100%)** in
+  `build/coverage/backend.coverage.out`.
+- Pruning impact: removed one test that exercised only the deleted static catalog;
+  its pre-removal report contains **3/3 statements and 1/1 function**. No runtime
+  spec/diagnostics assertions were removed. Report:
+  `/tmp/luxury-yacht-s008-catalog-before-coverage/coverage-summary.json`.
+- Typecheck passed. Local complexity: **38 changed/new TypeScript functions**
+  have no Biome finding above 12; the two changed Go functions score **0 and 1**
+  with gocognit v1.2.1. AST comparison identifies two retained, unchanged store
+  functions: public-map rebuilding (13) and TTL refresh scheduling (14). Their
+  materialized-before-pending precedence and staggered refresh policies remain
+  explicit rather than being folded into the query-completion helpers. Evidence:
+  `/tmp/luxury-yacht-s008-{complexity-audit,go-functions,go-complexity}.json`.
+- PR #355 all-rule audit at published head
+  `c9f56a24e72937040ee682b4e0002d790af13f3f` reported S6759 in shell controls,
+  S7737 in grid sort defaults and S6478 in the panel tab boundary. Local edits
+  address each cause; remote Sonar closure requires analysis of a later published
+  revision. No push was requested. Audit: `/tmp/luxury-yacht-s008-sonar.log`.
+- Native Wails interaction was not run for this behavior-preserving batch.
+  The automated consumer tests do not establish native-window visual behavior.
+
+Next domain in the recorded rotation: **S009 navigation and interaction**
+(sidebar/routing, shortcuts, command palette, modal and shared-input/menu owners).
+The remaining S008 mutation/generation/refresh responsibilities above stay in the
+next-cycle inventory; this batch does not close the entire permissions domain.
+
+
+Final `mise exec -- wails3 task qc:prerelease` passed (exit 0): docs, formatting,
+generated bindings, vet/staticcheck, full backend race suite, frontend checks and
+typecheck, **4,802 frontend tests**, Knip and Trivy. Log:
+`/tmp/luxury-yacht-s008-prerelease.log`. The before/after file-hash comparison found
+**no gate modifications**; `git diff --check` passed. Manifest:
+`/tmp/luxury-yacht-s008-after-gate.json`. The diff covers **11 production files,
+three test files and this ledger**, with **329 fewer production lines** including
+the new `capabilityState.ts` and removed `catalog.ts`. Source inventory counts
+above remain baseline counts; these path replacements are recorded here. Only
+this ledger changed after the gate; its final update passed `qc:docs` and
+`git diff --check`.

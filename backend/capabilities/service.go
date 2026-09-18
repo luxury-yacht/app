@@ -192,7 +192,7 @@ func (b *capabilityEvaluationBatch) requestReview(ctx context.Context, attrs *au
 	}
 	start := b.now()
 	var response *authorizationv1.SelfSubjectAccessReview
-	err := k8sretry.Do(ctx, capabilityReviewRetryPolicy(), func(callCtx context.Context) error {
+	err := k8sretry.Do(ctx, permissionReviewRetryPolicy(), func(callCtx context.Context) error {
 		var err error
 		response, err = b.service.deps.Common.KubernetesClient.AuthorizationV1().
 			SelfSubjectAccessReviews().Create(callCtx, review, metav1.CreateOptions{})
@@ -281,14 +281,6 @@ func (b *capabilityEvaluationBatch) reportMetrics() {
 		snapshot[scopeType] = *metric
 	}
 	b.service.logScopeMetrics(snapshot)
-}
-
-func capabilityReviewRetryPolicy() k8sretry.Policy {
-	return k8sretry.Policy{
-		MaxAttempts:    config.PermissionReviewRetryMaxAttempts,
-		InitialBackoff: config.PermissionReviewRetryInitialBackoff,
-		MaxBackoff:     config.PermissionReviewRetryMaxBackoff,
-	}
 }
 
 func (s *Service) ensureClient() error {

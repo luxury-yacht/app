@@ -52,6 +52,10 @@ const PodsTab = lazy(() =>
 const ShellTab = lazy(() => import('@modules/object-panel/components/ObjectPanel/Shell/ShellTab'));
 const YamlTab = lazy(() => import('@modules/object-panel/components/ObjectPanel/Yaml/YamlTab'));
 
+const createTabErrorFallback = (tabName: string) => (_error: Error, reset: () => void) => (
+  <TabErrorFallback tabName={tabName} reset={reset} />
+);
+
 // Tab implementations share recovery/loading policy while retaining their own reset keys.
 const PanelTabBoundary = ({
   scope,
@@ -66,11 +70,7 @@ const PanelTabBoundary = ({
   loadingName: string;
   children: ReactNode;
 }) => (
-  <ErrorBoundary
-    scope={scope}
-    resetKeys={resetKeys}
-    fallback={(_, reset) => <TabErrorFallback tabName={tabName} reset={reset} />}
-  >
+  <ErrorBoundary scope={scope} resetKeys={resetKeys} fallback={createTabErrorFallback(tabName)}>
     <React.Suspense fallback={<LoadingSpinner message={`Loading ${loadingName}...`} />}>
       {children}
     </React.Suspense>

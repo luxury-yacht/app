@@ -288,16 +288,9 @@ const notify = (): void => {
 // QueryPermissions integration
 // ---------------------------------------------------------------------------
 
-interface QueryBatchItem {
-  id: string;
-  clusterId: string;
+interface QueryBatchItem extends QueryPayloadItem {
   group: string;
   version: string;
-  resourceKind: string;
-  verb: string;
-  namespace: string;
-  subresource: string;
-  name: string;
   feature: PermissionFeatureKey;
 }
 
@@ -406,34 +399,35 @@ const buildBatch = (
   return items;
 };
 
-/**
- * Maps backend response results into the permissionResults map.
- */
-const applyResults = (results: QueryResponseResult[], batchItems: QueryBatchItem[]): void => {
-  const featureByKey = new Map<string, PermissionFeatureKey>();
-  for (const item of batchItems) {
-    featureByKey.set(item.id, item.feature);
-  }
+const permissionDescriptor = (
+  item: QueryPayloadItem | QueryResponseResult
+): PermissionEntry['descriptor'] => ({
+  clusterId: item.clusterId,
+  group: item.group || null,
+  version: item.version || null,
+  resourceKind: item.resourceKind,
+  verb: item.verb,
+  namespace: item.namespace || null,
+  subresource: item.subresource || null,
+});
 
-  for (const r of results) {
-    const key = r.id;
-    const feature = featureByKey.get(key);
-    const entry: PermissionEntry = {
-      allowed: r.allowed,
-      source: r.source || 'error',
-      reason: r.reason || r.error || null,
-      descriptor: {
-        clusterId: r.clusterId,
-        group: r.group || null,
-        version: r.version || null,
-        resourceKind: r.resourceKind,
-        verb: r.verb,
-        namespace: r.namespace || null,
-        subresource: r.subresource || null,
-      },
-      feature,
-    };
-    permissionResults.set(key, entry);
+const recordPermissionResult = (
+  result: QueryResponseResult,
+  feature: PermissionFeatureKey | undefined
+): void => {
+  permissionResults.set(result.id, {
+    allowed: result.allowed,
+    source: result.source || 'error',
+    reason: result.reason || result.error || null,
+    descriptor: permissionDescriptor(result),
+    feature,
+  });
+};
+
+const applyResults = (results: QueryResponseResult[], batchItems: QueryBatchItem[]): void => {
+  const featureByKey = new Map(batchItems.map((item) => [item.id, item.feature]));
+  for (const result of results) {
+    recordPermissionResult(result, featureByKey.get(result.id));
   }
 };
 
@@ -550,23 +544,23 @@ const completeTransientNamespaceQuery = (
   });
 };
 
-const completeSuccessfulNamespaceQuery = (
-  target: NamespaceQueryTarget,
-  results: QueryResponseResult[],
-  response: Awaited<ReturnType<typeof queryPermissions>>
+const completeSuccessfulQuery = (
+  queryKey: string,
+  startTime: number,
+  response: Awaited<ReturnType<typeof queryPermissions>>,
+  completedCheckCount?: number
 ): void => {
-  applyResults(results, target.batch);
-  const diagnostics = response.diagnostics?.find((item) => item.key === target.diagnosticsKey);
+  const diagnostics = response.diagnostics?.find((item) => item.key === queryKey);
   completeQueryDiagnostics({
-    queryKey: target.diagnosticsKey,
+    queryKey,
     success: true,
     errorMessage: null,
-    startTime: target.startedAt,
+    startTime,
     ssarFallbackCount: diagnostics?.ssarFallbackCount,
     ssrrRuleCount: diagnostics?.ssrrRuleCount,
     ssrrIncomplete: diagnostics?.ssrrIncomplete,
     method: diagnostics?.method as 'ssrr' | 'ssar' | undefined,
-    completedCheckCount: target.batch.length,
+    completedCheckCount,
   });
 };
 
@@ -586,24 +580,17 @@ const applyNamespaceQueryResponse = (
       completeTransientNamespaceQuery(target, transientError);
       continue;
     }
-    completeSuccessfulNamespaceQuery(target, targetResults, response);
+    applyResults(targetResults, target.batch);
+    completeSuccessfulQuery(target.diagnosticsKey, target.startedAt, response, target.batch.length);
   }
 };
 
-const recordNamespaceQueryError = (item: QueryBatchItem, reason: string): void => {
+const recordQueryError = (item: QueryBatchItem, reason: string): void => {
   permissionResults.set(item.id, {
     allowed: false,
     source: 'error',
     reason,
-    descriptor: {
-      clusterId: item.clusterId,
-      group: item.group || null,
-      version: item.version || null,
-      resourceKind: item.resourceKind,
-      verb: item.verb,
-      namespace: item.namespace || null,
-      subresource: item.subresource || null,
-    },
+    descriptor: permissionDescriptor(item),
     feature: item.feature,
   });
 };
@@ -612,7 +599,7 @@ const applyNamespaceQueryFailure = (chunk: NamespaceQueryTarget[], error: unknow
   const reason = String(error);
   for (const target of chunk) {
     target.batch.forEach((item) => {
-      recordNamespaceQueryError(item, reason);
+      recordQueryError(item, reason);
     });
     completeQueryDiagnostics({
       queryKey: target.diagnosticsKey,
@@ -634,7 +621,7 @@ const finalizeNamespaceQuery = (
   // timestamp represents freshness and is valid only for definitive answers.
   recordNamespaceQueryMetadata(target);
   if (!transientTargets.has(target)) {
-    recordNamespaceQueryTimestamp(target);
+    recordQueryTimestamp(target.requestKey);
   }
 };
 
@@ -739,17 +726,7 @@ export const queryClusterPermissions = (clusterId: string): void => {
   // Cluster-scoped always routes to SSAR.
   beginQueryDiagnostics(queryKey, clusterId, null, 'ssar', batchSpecs, batch.length);
 
-  const payload: QueryPayloadItem[] = batch.map((item) => ({
-    id: item.id,
-    clusterId: item.clusterId,
-    group: item.group || undefined,
-    version: item.version || undefined,
-    resourceKind: item.resourceKind,
-    verb: item.verb,
-    namespace: item.namespace,
-    subresource: item.subresource,
-    name: item.name,
-  }));
+  const payload = batch.map(toQueryPayloadItem);
 
   let shouldRecordTimestamp = true;
 
@@ -768,36 +745,12 @@ export const queryClusterPermissions = (clusterId: string): void => {
       }
 
       applyResults(response.results, batch);
-      const nsDiag = response.diagnostics?.find((d) => d.key === queryKey);
-      completeQueryDiagnostics({
-        queryKey,
-        success: true,
-        errorMessage: null,
-        startTime,
-        ssarFallbackCount: nsDiag?.ssarFallbackCount,
-        ssrrRuleCount: nsDiag?.ssrrRuleCount,
-        ssrrIncomplete: nsDiag?.ssrrIncomplete,
-        method: nsDiag?.method as 'ssrr' | 'ssar' | undefined,
-      });
+      completeSuccessfulQuery(queryKey, startTime, response);
     })
     .catch((err) => {
       const queryError = String(err);
       for (const item of batch) {
-        permissionResults.set(item.id, {
-          allowed: false,
-          source: 'error',
-          reason: queryError,
-          descriptor: {
-            clusterId: item.clusterId,
-            group: item.group || null,
-            version: item.version || null,
-            resourceKind: item.resourceKind,
-            verb: item.verb,
-            namespace: null,
-            subresource: item.subresource || null,
-          },
-          feature: item.feature,
-        });
+        recordQueryError(item, queryError);
       }
       completeQueryDiagnostics({ queryKey, success: false, errorMessage: queryError, startTime });
     })
@@ -824,9 +777,8 @@ export const queryClusterPermissions = (clusterId: string): void => {
  *
  * `group` and `version` MUST be supplied by callers when known so the
  * backend can disambiguate colliding CRDs (e.g. two `DBInstance` kinds
- * from different operators). Without them, the backend falls back to its
- * legacy first-match-wins resolver and would silently check permission
- * against the wrong CRD.
+ * from different operators). Unknown kinds without an explicit version are
+ * rejected by the backend's GVK guard.
  */
 export const queryKindPermissions = (
   kind: string,
@@ -901,21 +853,7 @@ export const queryKindPermissions = (
   queryPermissions(payload)
     .then((response) => {
       for (const r of response.results) {
-        permissionResults.set(r.id, {
-          allowed: r.allowed,
-          source: r.source || 'error',
-          reason: r.reason || r.error || null,
-          descriptor: {
-            clusterId: r.clusterId,
-            group: r.group || null,
-            version: r.version || null,
-            resourceKind: r.resourceKind,
-            verb: r.verb,
-            namespace: r.namespace || null,
-            subresource: r.subresource || null,
-          },
-          feature,
-        });
+        recordPermissionResult(r, feature);
       }
     })
     .catch(() => {
@@ -1096,10 +1034,6 @@ const PERMISSION_REFRESH_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
  */
 const recordQueryTimestamp = (queryKey: string): void => {
   lastQueryTimestamps.set(queryKey, Date.now());
-};
-
-const recordNamespaceQueryTimestamp = (target: NamespaceQueryTarget): void => {
-  lastQueryTimestamps.set(target.requestKey, Date.now());
 };
 
 const recordNamespaceQueryMetadata = (target: NamespaceQueryTarget): void => {

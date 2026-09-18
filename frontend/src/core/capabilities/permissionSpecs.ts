@@ -155,7 +155,6 @@ export const ALL_NAMESPACE_PERMISSIONS: PermissionSpecList[] = [
 // ---------------------------------------------------------------------------
 
 /**
- * Cluster permissions mirror the verbs from CLUSTER_CAPABILITIES in catalog.ts.
  * Feature keys match CLUSTER_FEATURE_MAP in diagnosticsPanelConfig.ts.
  */
 export const CLUSTER_PERMISSIONS: PermissionSpecList[] = [
