@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -1164,6 +1165,27 @@ func (p *PreferencesService) ValidateThemeClusterPattern(pattern string) ThemeCl
 	return ThemeClusterPatternValidationResult{Valid: true}
 }
 
+// updateThemeLibrary publishes to the preferences cache only after the file is saved.
+func (p *PreferencesService) updateThemeLibrary(update func([]Theme) ([]Theme, error)) error {
+	p.settingsMu.Lock()
+	defer p.settingsMu.Unlock()
+
+	settings, err := p.loadSettingsFile()
+	if err != nil {
+		return fmt.Errorf("loading settings: %w", err)
+	}
+	themes, err := update(settings.Preferences.Themes)
+	if err != nil {
+		return err
+	}
+	settings.Preferences.Themes = normalizeThemes(themes, defaultTheme())
+	if err := p.saveSettingsFile(settings); err != nil {
+		return err
+	}
+	p.syncThemesCacheLocked(settings.Preferences.Themes)
+	return nil
+}
+
 // SaveTheme creates or updates a theme in the library. If a theme with the
 // same ID exists it is updated in place; otherwise the theme is appended.
 func (p *PreferencesService) SaveTheme(theme Theme) error {
@@ -1183,40 +1205,17 @@ func (p *PreferencesService) SaveTheme(theme Theme) error {
 		}
 	}
 
-	p.settingsMu.Lock()
-	defer p.settingsMu.Unlock()
-
-	settings, err := p.loadSettingsFile()
-	if err != nil {
-		return fmt.Errorf("loading settings: %w", err)
-	}
-
-	found := false
-	for i, t := range settings.Preferences.Themes {
-		if t.ID == theme.ID {
-			settings.Preferences.Themes[i] = theme
-			found = true
-			break
+	return p.updateThemeLibrary(func(themes []Theme) ([]Theme, error) {
+		if i := slices.IndexFunc(themes, func(saved Theme) bool { return saved.ID == theme.ID }); i >= 0 {
+			themes[i] = theme
+			return themes, nil
 		}
-	}
-	if !found {
 		if themeIsDefault {
-			settings.Preferences.Themes = append(settings.Preferences.Themes, theme)
-		} else {
-			defaultThemeValue := settings.Preferences.Themes[len(settings.Preferences.Themes)-1]
-			settings.Preferences.Themes = append(
-				append(settings.Preferences.Themes[:len(settings.Preferences.Themes)-1], theme),
-				defaultThemeValue,
-			)
+			return append(themes, theme), nil
 		}
-	}
-	settings.Preferences.Themes = normalizeThemes(settings.Preferences.Themes, defaultTheme())
-
-	if err := p.saveSettingsFile(settings); err != nil {
-		return err
-	}
-	p.syncThemesCacheLocked(settings.Preferences.Themes)
-	return nil
+		defaultThemeValue := themes[len(themes)-1]
+		return append(append(themes[:len(themes)-1], theme), defaultThemeValue), nil
+	})
 }
 
 // DeleteTheme removes a theme from the library by ID.
@@ -1224,77 +1223,41 @@ func (p *PreferencesService) DeleteTheme(id string) error {
 	if id == defaultThemeID {
 		return fmt.Errorf("default theme cannot be deleted")
 	}
-
-	p.settingsMu.Lock()
-	defer p.settingsMu.Unlock()
-
-	settings, err := p.loadSettingsFile()
-	if err != nil {
-		return fmt.Errorf("loading settings: %w", err)
-	}
-
-	idx := -1
-	for i, t := range settings.Preferences.Themes {
-		if t.ID == id {
-			idx = i
-			break
+	return p.updateThemeLibrary(func(themes []Theme) ([]Theme, error) {
+		for i, theme := range themes {
+			if theme.ID == id {
+				return append(themes[:i], themes[i+1:]...), nil
+			}
 		}
-	}
-	if idx == -1 {
-		return fmt.Errorf("theme not found: %s", id)
-	}
-
-	settings.Preferences.Themes = append(
-		settings.Preferences.Themes[:idx],
-		settings.Preferences.Themes[idx+1:]...,
-	)
-	settings.Preferences.Themes = normalizeThemes(settings.Preferences.Themes, defaultTheme())
-
-	if err := p.saveSettingsFile(settings); err != nil {
-		return err
-	}
-	p.syncThemesCacheLocked(settings.Preferences.Themes)
-	return nil
+		return nil, fmt.Errorf("theme not found: %s", id)
+	})
 }
 
 // ReorderThemes sets the theme ordering. The ids slice must contain exactly the
 // same IDs as the current theme list (first-match priority depends on order).
 func (p *PreferencesService) ReorderThemes(ids []string) error {
-	p.settingsMu.Lock()
-	defer p.settingsMu.Unlock()
-
-	settings, err := p.loadSettingsFile()
-	if err != nil {
-		return fmt.Errorf("loading settings: %w", err)
-	}
-
-	if len(ids) != len(settings.Preferences.Themes) {
-		return fmt.Errorf("id count mismatch: got %d, have %d themes", len(ids), len(settings.Preferences.Themes))
-	}
-	if len(ids) == 0 || ids[len(ids)-1] != defaultThemeID {
-		return fmt.Errorf("default theme must remain last")
-	}
-
-	byID := make(map[string]Theme, len(settings.Preferences.Themes))
-	for _, t := range settings.Preferences.Themes {
-		byID[t.ID] = t
-	}
-
-	reordered := make([]Theme, 0, len(ids))
-	for _, id := range ids {
-		t, ok := byID[id]
-		if !ok {
-			return fmt.Errorf("unknown theme ID: %s", id)
+	return p.updateThemeLibrary(func(themes []Theme) ([]Theme, error) {
+		if len(ids) != len(themes) {
+			return nil, fmt.Errorf("id count mismatch: got %d, have %d themes", len(ids), len(themes))
 		}
-		reordered = append(reordered, t)
-	}
+		if len(ids) == 0 || ids[len(ids)-1] != defaultThemeID {
+			return nil, fmt.Errorf("default theme must remain last")
+		}
 
-	settings.Preferences.Themes = normalizeThemes(reordered, defaultTheme())
-	if err := p.saveSettingsFile(settings); err != nil {
-		return err
-	}
-	p.syncThemesCacheLocked(settings.Preferences.Themes)
-	return nil
+		byID := make(map[string]Theme, len(themes))
+		for _, theme := range themes {
+			byID[theme.ID] = theme
+		}
+		reordered := make([]Theme, 0, len(ids))
+		for _, id := range ids {
+			theme, ok := byID[id]
+			if !ok {
+				return nil, fmt.Errorf("unknown theme ID: %s", id)
+			}
+			reordered = append(reordered, theme)
+		}
+		return reordered, nil
+	})
 }
 
 // ApplyTheme loads a saved theme by ID and copies its palette values into the

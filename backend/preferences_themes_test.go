@@ -1,6 +1,8 @@
 package backend
 
 import (
+	"errors"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -457,6 +459,60 @@ func TestMatchThemeForCluster_Wildcards(t *testing.T) {
 				require.NotNil(t, matched, "expected a match for %q", tc.contextName)
 				assert.Equal(t, tc.expectID, matched.ID)
 			}
+		})
+	}
+}
+
+// A failed theme write must not leak into the cache that later preference writes persist.
+func TestThemeLibraryMutationsPublishOnlyAfterPersistence(t *testing.T) {
+	for _, operation := range []string{"save", "delete", "reorder"} {
+		t.Run(operation, func(t *testing.T) {
+			setTestConfigEnv(t)
+			app := newSettingsEffectsTestFixture(t)
+			preferences := app.Preferences
+			require.NoError(t, preferences.SaveTheme(Theme{ID: "one", Name: "One"}))
+			require.NoError(t, preferences.SaveTheme(Theme{ID: "two", Name: "Two"}))
+			ensurePreferencesLoaded(t, preferences)
+			before, err := preferences.GetAppSettings()
+			require.NoError(t, err)
+			path, err := preferences.getSettingsFilePath()
+			require.NoError(t, err)
+			diskBefore, err := os.ReadFile(path)
+			require.NoError(t, err)
+			mutate := func() error {
+				switch operation {
+				case "save":
+					return preferences.SaveTheme(Theme{ID: "one", Name: "Updated"})
+				case "delete":
+					return preferences.DeleteTheme("one")
+				default:
+					return preferences.ReorderThemes([]string{"two", "one", "default"})
+				}
+			}
+			originalWrite := writeSettingsFileAtomic
+			t.Cleanup(func() { writeSettingsFileAtomic = originalWrite })
+			failure := errors.New("forced theme write failure")
+			writeSettingsFileAtomic = func(string, []byte, os.FileMode) error { return failure }
+			require.ErrorIs(t, mutate(), failure)
+			afterFailure, err := preferences.GetAppSettings()
+			require.NoError(t, err)
+			assert.Equal(t, before.Themes, afterFailure.Themes)
+			diskAfter, err := os.ReadFile(path)
+			require.NoError(t, err)
+			assert.Equal(t, diskBefore, diskAfter)
+
+			writeSettingsFileAtomic = originalWrite
+			require.NoError(t, mutate())
+			saved, err := preferences.GetThemes()
+			require.NoError(t, err)
+			assert.NotEqual(t, before.Themes, saved)
+			cached, err := preferences.GetAppSettings()
+			require.NoError(t, err)
+			assert.Equal(t, saved, cached.Themes)
+			require.NoError(t, updatePreference(preferences, appPreferenceAppearanceMode, "dark"))
+			afterPreferenceWrite, err := preferences.GetThemes()
+			require.NoError(t, err)
+			assert.Equal(t, saved, afterPreferenceWrite)
 		})
 	}
 }

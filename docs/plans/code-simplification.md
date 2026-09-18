@@ -211,7 +211,7 @@ correctness-driven interruption and resume the rotation afterwards.
 | 7 | Object map | Backend graph producers and relationships; frontend graph, layout and renderer | S007 batch, coverage and final gate passed; limits recorded |
 | 8 | Permissions and mutations | Capability policy, permission caches, object actions/YAML; frontend availability gates | S008 query/store/hook batch, coverage and final gate passed; remaining scope recorded |
 | 9 | Navigation and interaction | Sidebar, routing, shortcuts, command palette, modals, shared inputs and menus | S009 keyboard/palette/global shortcut batch, coverage and final gate passed; remaining scope recorded |
-| 10 | Preferences and persistence | Settings, favorites, UI state, import/export/reset; frontend state hydration | Inventoried |
+| 10 | Preferences and persistence | Settings, favorites, UI state, import/export/reset; frontend state hydration | S010 mutation/editor/theme/import batch, coverage and final gate passed; remaining scope recorded |
 | 11 | Errors and diagnostics | Error classification/reporting, logs, telemetry, request diagnostics | Inventoried |
 | 12 | Native lifecycle and windows | Bootstrap, app lifetime, desktop transport, peer windows, dockable ownership | Inventoried |
 | 13 | Updates and engineering tooling | Updater/installers; generators; project tasks; build/CI; lint rules and test infrastructure | Inventoried |
@@ -1528,3 +1528,138 @@ typecheck, **4,811 frontend tests**, Knip and Trivy. Log:
 three test files and this ledger**, with **223 fewer production lines**. Only this
 ledger changed after the gate; the final update is checked with `qc:docs` and
 `git diff --check`.
+
+## S010 — preferences and persistence
+
+**Status: selected batch implemented; affected checks and final gate passed.** Baseline `472fd284`; clean
+worktree at entry. Review settings from frontend metadata/cache and editor state
+through backend persistence, plus Favorites/UI-state and import/export/reset owners.
+
+| Responsibility | Selected disposition |
+| --- | --- |
+| `appPreferences.ts`: metadata, hydration, typed mutations, notifications, bootstrap mirrors and debounce workflows | One mutation representation drives both optimistic cache updates and the persisted change list. Remove the duplicate update map and forwarding layer; preserve change/event order, rollback, broadcast timing and normalization. Keep fallback/schema metadata and type-specific normalization explicit. |
+| Appearance controls and theme editing | Move hex draft/edit/validation into the existing color-control component; give palette field edits/resets one preview/persistence path. Keep accent/link runtime effects distinct and preserve draft cancellation, debounce and saved-theme behavior. |
+| Backend theme CRUD and cache synchronization | One theme-library transaction owns lock/load/normalize/save/cache synchronization. Keep validation before writes, default-theme protection, insertion/reorder rules and persistence-before-cache ordering. |
+| Import/export UI | One operation lifecycle owns busy/status/error/finally handling. Keep settings/favorites rehydration distinct and only run it after an uncanceled import. |
+| UI-state single/batch deletion | Delegate single-entry deletion to the existing batch owner, retaining empty-key no-op and missing-file behavior. |
+| Favorites cache/context, cluster-tab hydration, backend reset/import orchestration | Retain separate stores and lifetimes; do not introduce a generic persistence cache or merge leaf-owner locks. Favorites order and navigation semantics remain explicit. |
+
+Read in full: frontend `core/settings/appPreferences.ts`, `core/persistence/{favorites,
+clusterTabOrder}.ts`, `core/contexts/FavoritesContext.tsx`, `AppearanceSection.tsx`,
+`useThemes.ts`, `DataManagementSection.tsx`, `SettingsControls.tsx`; backend
+`data_management_{coordinator,import_export}.go`, `preferences_domain_repositories.go`,
+`ui_state_store_persistence.go`. Read PreferencesService lazy load/reset (through
+DispatchDefaults), theme normalization and settings file load/save/atomic writes, theme CRUD,
+preference batch preparation, and Favorites persistence CRUD/load/save. Backend
+metadata descriptors and full Favorites migration are not closed by this batch. The current baseline has Favorites migrations beyond the
+older documentation; they are preserved and are not candidates for removal.
+
+Producer/consumer chain: settings controls → typed preference workflows → optimistic
+cache/events/bootstrap mirrors → UpdateAppPreferences → backend validation/persistence
+→ runtime effects; theme library mutations persist before updating the preferences
+cache used by later settings writes. Color draft state has two independent component
+instances; its callbacks still enter the same parent preview and persistence path.
+No provider ordering, readiness, cluster/object identity, wire shape, or import
+boundary changes. The color component imports only React; it cannot cycle back into
+settings state. Theme mutations retain the existing preferences mutex and file owner.
+Existing rollback/event-order/debounce/schema, theme ordering/protection, import
+cancel/error and UI-state round-trip tests are the regression base; characterize
+missing editor and persistence-failure cases before edits. Focused checks follow each
+responsibility; coverage, complexity and prerelease run once at the batch boundary.
+
+### Implementation and follow-through
+
+- Preference mutations now carry only ordered changes and storage options. The
+  optimistic cache derives its patch from those same changes; scalar, palette
+  and layout builders no longer assemble duplicate payloads. The fire-and-forget
+  error boundary is owned directly by `commitPreferenceMutation`.
+- `AppearanceColorControl.tsx` owns each swatch's draft, normalization and
+  Enter/Escape/blur behavior. Appearance retains the accent/link preview effects,
+  immediate reset versus debounced edit commits, and cancellation on unmount.
+  Palette edits and resets share `updatePaletteField`, which retains the other
+  two current values; inline editing uses the same field path.
+- `updateThemeLibrary` owns the preferences lock, file load, normalization,
+  atomic save and cache publication for Save/Delete/Reorder. Validation order,
+  first-match replacement, default-theme ordering, and existing reorder input
+  semantics remain in their operations. ApplyTheme remains separate because it
+  updates active appearance fields as well as the library cache.
+- Data Management has one busy/status/error/finally lifecycle for four operation
+  descriptors. Canceled imports return before hydration; pending import hydration
+  continues disabling all four operation buttons. Telemetry retains its existing
+  previous-value rollback and error-report ordering.
+- Single GridTable deletion enters the batch deletion owner after its empty-key
+  guard. A focused regression also covers missing files and blank-key deletion
+  with an invalid persistence file, so that no-op cannot accidentally load/write.
+
+Read all four remaining settings sections during follow-through: `DisplaySection`,
+`ObjectPanelSection`, `AdvancedSection`, `KubeconfigsSection`. Retain the existing
+shared toggle/input owners and distinct draft-versus-committed layout values.
+Kubeconfig updates intentionally reload persisted paths before discovered configs;
+factory reset clears appearance before backend reset, then tables/storage before
+reload. These orderings are not interchangeable generic settings mutations.
+Kubeconfig native-dialog behavior and native layout application remain outside
+this batch's automated evidence. Backend descriptor generation and Favorites
+schema migrations remain on the next rotation's unreviewed list.
+
+Inventory delta from `6d93acb7` to entry HEAD was captured in
+`/tmp/luxury-yacht-s010-inventory-delta.txt`. This batch adds one production file,
+`AppearanceColorControl.tsx`, to the existing settings bucket; no production files
+are removed. Bulk changes were applied with temporary Python codemods under
+`/tmp/luxury-yacht-s010-*.py`.
+
+### Validation and remaining scope
+
+- Baseline: **28 frontend files / 227 tests**, plus the focused backend settings,
+  themes, favorites, import/export/reset and UI-state selection passed. Before
+  production edits, six new frontend cases passed with their owners (**71 tests**)
+  and three theme persistence-failure cases passed against the original code.
+  Logs: `/tmp/luxury-yacht-s010-{frontend,backend}-before.log` and
+  `/tmp/luxury-yacht-s010-characterization-{frontend,backend}.log`.
+- Incremental mutation, import/export and appearance checks passed. Expanded
+  frontend consumers passed **28 files / 233 tests**; focused backend regression
+  selection passed. Logs: `/tmp/luxury-yacht-s010-{preferences,data-management,
+  appearance,expanded,backend}.log`.
+- Full frontend coverage passed **513 files / 4,817 tests**, **87.97%** statements.
+  Changed owners: appPreferences **95.38%**, AppearanceColorControl **93.10%**,
+  DataManagementSection **93.18%**. AppearanceSection remains **55.61%** (223/401);
+  the larger saved-theme workflow is a coverage gap, not a claim of full UI
+  verification. This batch preserves behavior; unrelated theme tests were not
+  added just to raise the file percentage. Report:
+  `/tmp/luxury-yacht-s010-frontend-coverage/coverage-summary.json`.
+- Full backend coverage passed, **78.6%** aggregate. Changed theme functions:
+  updateThemeLibrary **92.3%**, SaveTheme **94.7%**, DeleteTheme and ReorderThemes
+  **100%**. The initial single-delete coverage was **75%**; after the added
+  missing/blank-key regression, focused theme/GridTable coverage measured
+  **100%** for that function. Logs/profiles:
+  `/tmp/luxury-yacht-s010-backend-coverage.log`,
+  `build/coverage/backend.coverage.out`, and
+  `/tmp/luxury-yacht-s010-targeted-backend.coverage.out`. No tests were deleted.
+- Typecheck and targeted Biome passed after correcting test helper arguments,
+  a computed-property inference issue, and an empty deferred-test initializer.
+  Local complexity covers **37 changed/new TypeScript functions** with no
+  findings above 12, and **five Go declarations including their closures** with
+  scores 1–12. Evidence: `/tmp/luxury-yacht-s010-{typecheck,format}.log`,
+  `/tmp/luxury-yacht-s010-complexity-audit.json` and
+  `/tmp/luxury-yacht-s010-go-complexity-audit.json`.
+- Published PR #355 at `472fd284f314881497c1987a217a685a1244f52a` has **zero
+  open/confirmed new-code Sonar findings**. This is entry-HEAD evidence; it does
+  not analyze these local edits. No push was requested. Evidence:
+  `/tmp/luxury-yacht-s010-pr-head.json`, `/tmp/luxury-yacht-s010-sonar.log`.
+- Native Wails interaction was not run for this behavior-preserving batch.
+  Automated editor tests establish callback and cancellation contracts, not
+  native-window visual behavior.
+
+Next rotation domain: **S011 errors and diagnostics** — classification, reporting,
+logging/telemetry and request diagnostics. Preferences descriptors and Favorites
+migration remain explicitly unreviewed responsibilities for a later rotation;
+this batch does not close every preferences-related file.
+
+Final `mise exec -- wails3 task qc:prerelease` passed (exit 0): docs, formatting,
+generated bindings, vet/staticcheck, full backend race suite, frontend lint and
+typecheck, **4,817 frontend tests**, Knip and Trivy. Log:
+`/tmp/luxury-yacht-s010-prerelease.log`. SHA-256 comparison of **3,244 files** found
+**no gate modifications**; `git diff --check` passed. Manifest:
+`/tmp/luxury-yacht-s010-after-gate.json`. The batch covers **six production files,
+five test files and this ledger**, with **195 fewer production lines** including
+the extracted color control. Only this ledger changed after the gate; its final
+update is checked with `qc:docs` and `git diff --check`.

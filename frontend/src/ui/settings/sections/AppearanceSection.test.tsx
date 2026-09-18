@@ -295,6 +295,85 @@ describe('AppearanceSection', () => {
     expect(container.textContent).toContain('There are unsaved changes. Save as default?');
   });
 
+  it.each([
+    ['accent', 0, appPreferenceMocks.setAccentColor, appPreferenceMocks.setLinkColor],
+    ['link', 1, appPreferenceMocks.setLinkColor, appPreferenceMocks.setAccentColor],
+  ] as const)(
+    'normalizes valid %s hex drafts and discards invalid or canceled drafts',
+    async (_name, index, persist, otherPersist) => {
+      const field = requireValue(
+        container.querySelectorAll('.palette-color-field')[index],
+        'expected color control'
+      );
+      const edit = async (draft: string) => {
+        await act(async () => {
+          requireValue(
+            field.querySelector<HTMLButtonElement>('.palette-hex-clickable'),
+            'expected hex edit button'
+          ).click();
+        });
+        const input = requireValue(
+          field.querySelector<HTMLInputElement>('.palette-hex-input'),
+          'expected hex input'
+        );
+        await act(async () => setInputValue(input, draft));
+        return input;
+      };
+      const submit = async (input: HTMLInputElement, key: string) => {
+        await act(async () => {
+          input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+        });
+      };
+
+      await submit(await edit('AbC'), 'Enter');
+      expect(persist).toHaveBeenLastCalledWith('light', '#aabbcc');
+      expect(otherPersist).not.toHaveBeenCalled();
+
+      await submit(await edit('xyz'), 'Enter');
+      await submit(await edit('#112233'), 'Escape');
+      const blurred = await edit('#445566');
+      await act(async () => {
+        blurred.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+      });
+      expect(persist).toHaveBeenCalledOnce();
+      expect(otherPersist).not.toHaveBeenCalled();
+      expect(field.querySelector('.palette-hex-input')).toBeNull();
+      expect(field.querySelector<HTMLInputElement>('input[type="color"]')?.value).toBe('#aabbcc');
+    }
+  );
+
+  it('preserves the other palette fields when editing and resetting tint', async () => {
+    const change = async (field: string, value: string) => {
+      await act(async () => {
+        setInputValue(
+          requireValue(
+            container.querySelector<HTMLInputElement>(`[id$="-palette-${field}"]`),
+            'expected palette slider'
+          ),
+          value
+        );
+      });
+    };
+    await change('hue', '120');
+    await change('saturation', '35');
+    await change('brightness', '-10');
+    expect(appPreferenceMocks.setPaletteTint).toHaveBeenLastCalledWith('light', 120, 35, -10);
+
+    for (const [field, expected] of [
+      ['Saturation', [120, 0, -10]],
+      ['Brightness', [120, 0, 0]],
+      ['Hue', [0, 0, 0]],
+    ] as const) {
+      await act(async () => {
+        requireValue(
+          container.querySelector<HTMLButtonElement>(`button[title="Reset ${field}"]`),
+          'expected palette reset'
+        ).click();
+      });
+      expect(appPreferenceMocks.setPaletteTint).toHaveBeenLastCalledWith('light', ...expected);
+    }
+  });
+
   it('shows invalid theme pattern errors inline instead of using the global error handler', async () => {
     appPreferenceMocks.validateThemeClusterPattern.mockResolvedValueOnce({
       valid: false,

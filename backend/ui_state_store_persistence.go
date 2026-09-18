@@ -235,24 +235,7 @@ func (s *UIStateStore) DeleteGridTablePersistence(key string) error {
 		return nil
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	_, exists, err := s.persistenceFileExists()
-	if err != nil || !exists {
-		return err
-	}
-
-	state, err := s.loadPersistenceFile()
-	if err != nil {
-		return err
-	}
-	entries := state.Tables.GridTable[gridTablePersistenceVersionKey]
-	if entries == nil {
-		return nil
-	}
-	delete(entries, trimmed)
-	return s.savePersistenceFile(state)
+	return s.DeleteGridTablePersistenceEntries([]string{trimmed})
 }
 
 // DeleteGridTablePersistenceEntries removes multiple GridTable persistence entries at once.

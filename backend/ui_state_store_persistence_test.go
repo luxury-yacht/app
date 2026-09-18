@@ -470,6 +470,23 @@ func TestAppGridTablePersistenceCRUD(t *testing.T) {
 	require.Len(t, entries, 0)
 }
 
+func TestDeleteGridTablePersistenceBlankKeyDoesNotAccessFile(t *testing.T) {
+	setTestConfigEnv(t)
+	store := NewUIStateStore()
+	path, err := store.getPersistenceFilePath()
+	require.NoError(t, err)
+	require.NoError(t, store.DeleteGridTablePersistence("missing"))
+	require.NoFileExists(t, path)
+
+	invalidFile := []byte("invalid persistence JSON")
+	writeTestFileWithParents(t, path, invalidFile, 0o644)
+	require.NoError(t, store.DeleteGridTablePersistence(" \t\n"))
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, invalidFile, after)
+	require.Error(t, store.DeleteGridTablePersistence("saved-view"))
+}
+
 func TestLoadPersistenceFileNormalizesDefaults(t *testing.T) {
 	// Ensure persistence file normalization restores required defaults.
 	setTestConfigEnv(t)

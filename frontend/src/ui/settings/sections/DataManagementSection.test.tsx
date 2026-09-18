@@ -167,6 +167,48 @@ describe('DataManagementSection', () => {
     expect(container.querySelector('[role="status"]')).toBeNull();
   });
 
+  it.each([
+    ['Settings', preferenceMocks.hydrateAppPreferences, 'importSettings'],
+    ['Favorites', favoritesMocks.hydrateFavorites, 'importFavorites'],
+  ] as const)(
+    'keeps operations blocked during %s rehydration and recovers after failure',
+    async (kind, hydrate, action) => {
+      let rejectHydration: ((error: Error) => void) | undefined;
+      hydrate.mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          rejectHydration = reject;
+        })
+      );
+      await act(async () => {
+        findButton(container, `Import ${kind}`).click();
+      });
+
+      const buttons = [
+        'Export Settings',
+        'Import Settings',
+        'Export Favorites',
+        'Import Favorites',
+      ].map((label) => findButton(container, label));
+      expect(buttons.every((button) => button.disabled)).toBe(true);
+      await act(async () => {
+        findButton(container, 'Export Settings').click();
+      });
+      expect(backendMocks.ExportSettings).not.toHaveBeenCalled();
+      expect(container.querySelector('[role="status"]')).toBeNull();
+
+      const error = new Error('rehydration failed');
+      await act(async () => {
+        requireValue(rejectHydration, 'expected pending hydration')(error);
+      });
+      expect(errorHandlerMocks.handle).toHaveBeenCalledWith(error, { action });
+      expect(buttons.every((button) => !button.disabled)).toBe(true);
+      await act(async () => {
+        findButton(container, 'Export Settings').click();
+      });
+      expect(backendMocks.ExportSettings).toHaveBeenCalledOnce();
+    }
+  );
+
   it('routes export errors through the shared error handler', async () => {
     const error = new Error('export failed');
     backendMocks.ExportSettings.mockRejectedValueOnce(error);

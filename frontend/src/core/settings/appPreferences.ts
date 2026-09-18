@@ -126,7 +126,6 @@ interface PreferenceMutationOptions {
 }
 
 interface PreferenceMutation {
-  updates: Partial<AppPreferences>;
   changes: PreferenceChange[];
   options?: PreferenceMutationOptions;
 }
@@ -936,16 +935,15 @@ const persistPreferenceChanges = async (changes: PreferenceChange[]): Promise<vo
   } as types.UpdateAppPreferencesRequest);
 };
 
-const optimisticPreferenceUpdate = async (
-  updates: Partial<AppPreferences>,
-  changes: PreferenceChange[],
-  options?: PreferenceMutationOptions
-): Promise<void> => {
+const optimisticPreferenceUpdate = async ({
+  changes,
+  options,
+}: PreferenceMutation): Promise<void> => {
   const previousPreferences = { ...preferenceCache };
   const previousStorage = captureLocalStorageSnapshot();
 
   hydrated = true;
-  updatePreferenceCache(updates);
+  updatePreferenceCache(Object.fromEntries(changes.map(({ key, value }) => [key, value])));
   if (options?.persistAppearanceMode) {
     persistAppearanceModeToLocalStorage(options.persistAppearanceMode);
   }
@@ -973,19 +971,10 @@ const optimisticPreferenceUpdate = async (
   }
 };
 
-const fireAndForgetPreferenceUpdate = (
-  label: string,
-  updates: Partial<AppPreferences>,
-  changes: PreferenceChange[],
-  options?: PreferenceMutationOptions
-): void => {
-  void optimisticPreferenceUpdate(updates, changes, options).catch((error) => {
+const commitPreferenceMutation = (label: string, mutation: PreferenceMutation): void => {
+  void optimisticPreferenceUpdate(mutation).catch((error) => {
     reportOperationalError(error, { source: 'AppPreferences', action: label });
   });
-};
-
-const commitPreferenceMutation = (label: string, mutation: PreferenceMutation): void => {
-  fireAndForgetPreferenceUpdate(label, mutation.updates, mutation.changes, mutation.options);
 };
 
 const singlePreferenceMutation = <K extends AppPreferenceKey>(
@@ -993,7 +982,6 @@ const singlePreferenceMutation = <K extends AppPreferenceKey>(
   value: AppPreferences[K],
   options?: PreferenceMutationOptions
 ): PreferenceMutation => ({
-  updates: { [key]: value } as Partial<AppPreferences>,
   changes: [{ key, value }],
   options,
 });
@@ -1417,7 +1405,7 @@ export const setAppearanceModePreference = async (mode: AppearanceMode): Promise
   const mutation = singlePreferenceMutation('appearanceMode', normalized, {
     persistAppearanceMode: normalized,
   });
-  await optimisticPreferenceUpdate(mutation.updates, mutation.changes, mutation.options);
+  await optimisticPreferenceUpdate(mutation);
   if (wailsRuntimeAvailable()) {
     try {
       await emitBroadcastEvent('settings:appearance-mode-changed', { mode: normalized });
@@ -1432,17 +1420,17 @@ export const setAppearanceModePreference = async (mode: AppearanceMode): Promise
 
 export const setUseShortResourceNames = async (useShort: boolean): Promise<void> => {
   const mutation = singlePreferenceMutation('useShortResourceNames', useShort);
-  await optimisticPreferenceUpdate(mutation.updates, mutation.changes, mutation.options);
+  await optimisticPreferenceUpdate(mutation);
 };
 
 export const setDimInactiveNamespaces = async (enabled: boolean): Promise<void> => {
   const mutation = singlePreferenceMutation('dimInactiveNamespaces', enabled);
-  await optimisticPreferenceUpdate(mutation.updates, mutation.changes, mutation.options);
+  await optimisticPreferenceUpdate(mutation);
 };
 
 export const setExclusiveNamespaces = async (enabled: boolean): Promise<void> => {
   const mutation = singlePreferenceMutation('exclusiveNamespaces', enabled);
-  await optimisticPreferenceUpdate(mutation.updates, mutation.changes, mutation.options);
+  await optimisticPreferenceUpdate(mutation);
 };
 
 export const setSidebarGroupExpanded = (
@@ -1458,7 +1446,7 @@ export const setSidebarGroupExpanded = (
 
 export const setErrorReportingEnabled = async (enabled: boolean): Promise<void> => {
   const mutation = singlePreferenceMutation('errorReportingEnabled', enabled);
-  await optimisticPreferenceUpdate(mutation.updates, mutation.changes, mutation.options);
+  await optimisticPreferenceUpdate(mutation);
 };
 
 export const setAutoRefreshEnabled = (enabled: boolean): void => {
@@ -1592,12 +1580,6 @@ export const setObjectPanelLayoutDefaults = (layout: ObjectPanelLayoutDefaults):
     ),
   };
   commitPreferenceMutation('Failed to persist object panel layout defaults:', {
-    updates: {
-      objectPanelDockedRightWidth: normalized.dockedRightWidth,
-      objectPanelDockedBottomHeight: normalized.dockedBottomHeight,
-      objectPanelFloatingWidth: normalized.floatingWidth,
-      objectPanelFloatingHeight: normalized.floatingHeight,
-    },
     changes: [
       { key: 'objectPanelDockedRightWidth', value: normalized.dockedRightWidth },
       { key: 'objectPanelDockedBottomHeight', value: normalized.dockedBottomHeight },
@@ -1625,18 +1607,6 @@ const buildPaletteTintMutation = ({
     mode === 'light' ? 'paletteBrightnessLight' : 'paletteBrightnessDark',
     brightness
   );
-  const updates =
-    mode === 'light'
-      ? {
-          paletteHueLight: normalizedHue,
-          paletteSaturationLight: normalizedSaturation,
-          paletteBrightnessLight: normalizedBrightness,
-        }
-      : {
-          paletteHueDark: normalizedHue,
-          paletteSaturationDark: normalizedSaturation,
-          paletteBrightnessDark: normalizedBrightness,
-        };
   const changes =
     mode === 'light'
       ? [
@@ -1650,7 +1620,6 @@ const buildPaletteTintMutation = ({
           { key: 'paletteBrightnessDark' as const, value: normalizedBrightness },
         ];
   return {
-    updates,
     changes,
     options: { persistAppearanceBootstrap: true },
   };

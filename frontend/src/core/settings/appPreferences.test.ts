@@ -977,6 +977,36 @@ describe('appPreferences', () => {
     expect(desktopRuntimeMocks.emitBroadcastEvent).not.toHaveBeenCalled();
   });
 
+  it('rolls back every palette field and its bootstrap mirror after a failed batch', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      appearanceMode: 'system',
+      paletteHueLight: 20,
+      paletteSaturationLight: 30,
+      paletteBrightnessLight: -5,
+      paletteHueDark: 210,
+    });
+    await hydrateAppPreferences({ force: true });
+    const bootstrap = localStorage.getItem('app-appearance-bootstrap-v1');
+    const observed: unknown[] = [];
+    const unsubscribe = eventBus.on('settings:palette-tint', (value) => observed.push(value));
+    try {
+      appMocks.UpdateAppPreferences.mockRejectedValueOnce(new Error('forced failure'));
+      setPaletteTint('light', 120, 60, 15);
+      expect(getPaletteTint('light')).toEqual({ hue: 120, saturation: 60, brightness: 15 });
+      await flushPromises();
+      expect(getPaletteTint('light')).toEqual({ hue: 20, saturation: 30, brightness: -5 });
+      expect(getPaletteTint('dark')).toEqual({ hue: 210, saturation: 0, brightness: 0 });
+      expect(localStorage.getItem('app-appearance-bootstrap-v1')).toBe(bootstrap);
+      expect(observed).toEqual([
+        { mode: 'light', hue: 120, saturation: 60, brightness: 15 },
+        { mode: 'light', hue: 20, saturation: 30, brightness: -5 },
+      ]);
+      expect(desktopRuntimeMocks.emitBroadcastEvent).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it('rejects invalid Object Panel Logs Tab API timestamp formats before persisting', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });

@@ -35,7 +35,6 @@ import {
   type ReactElement,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
-  type RefObject,
   type SetStateAction,
   useCallback,
   useEffect,
@@ -59,9 +58,12 @@ import {
   normalizeIntegerPreferenceValue,
 } from '@/core/settings/appPreferences';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
+import AppearanceColorControl from './AppearanceColorControl';
 import { useThemes } from './useThemes';
 
 const DEFAULT_THEME_ID = 'default';
+
+type PaletteField = 'hue' | 'saturation' | 'brightness';
 
 export function reorderThemeByOffset(
   ids: string[],
@@ -383,94 +385,6 @@ function PaletteControls({
             onClick={onBrightnessReset}
             disabled={paletteBrightness === 0}
             title="Reset Brightness"
-          >
-            ↺
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ColorControl({
-  title,
-  help,
-  value,
-  defaultColor,
-  isEditing,
-  inputRef,
-  draft,
-  onDraftChange,
-  onChange,
-  onHexClick,
-  onHexCommit,
-  onHexCancel,
-  onReset,
-}: Readonly<{
-  title: string;
-  help: string;
-  value: string;
-  defaultColor: string;
-  isEditing: boolean;
-  inputRef: RefObject<HTMLInputElement | null>;
-  draft: string;
-  onDraftChange: (value: string) => void;
-  onChange: (value: string) => void;
-  onHexClick: () => void;
-  onHexCommit: () => void;
-  onHexCancel: () => void;
-  onReset: () => void;
-}>) {
-  return (
-    <div className="settings-row">
-      <div className="settings-row-label">
-        <div className="settings-row-label-title">{title}</div>
-        <div className="settings-row-label-help">{help}</div>
-      </div>
-      <div className="settings-row-control">
-        <div className="palette-color-field">
-          <input
-            type="color"
-            className="palette-accent-swatch"
-            value={value || defaultColor}
-            onChange={(e) => onChange(e.target.value)}
-          />
-          {isEditing ? (
-            <input
-              ref={inputRef}
-              className="color-swatch-value palette-hex-input"
-              value={draft}
-              onChange={(e) => onDraftChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  onHexCommit();
-                } else if (e.key === 'Escape') {
-                  e.preventDefault();
-                  onHexCancel();
-                } else {
-                  e.stopPropagation();
-                }
-              }}
-              onBlur={onHexCancel}
-              maxLength={7}
-            />
-          ) : (
-            <button
-              type="button"
-              className="color-swatch-value palette-hex-clickable"
-              onClick={onHexClick}
-              title="Click to edit hex value"
-            >
-              {value || defaultColor}
-            </button>
-          )}
-          <button
-            type="button"
-            className="palette-row-reset"
-            onClick={onReset}
-            disabled={!value}
-            title={`Reset ${title}`}
           >
             ↺
           </button>
@@ -820,21 +734,13 @@ function AppearanceSection() {
   // Accent color state.
   const [accentColor, setAccentColorState] = useState('');
   const accentColorPreferenceWorkflow = useMemo(() => createAccentColorPreferenceWorkflow(), []);
-  const [isEditingAccentHex, setIsEditingAccentHex] = useState(false);
-  const [accentHexDraft, setAccentHexDraft] = useState('');
-  const accentHexInputRef = useRef<HTMLInputElement>(null);
 
   // Link color state.
   const [linkColor, setLinkColorState] = useState('');
   const linkColorPreferenceWorkflow = useMemo(() => createLinkColorPreferenceWorkflow(), []);
-  const [isEditingLinkHex, setIsEditingLinkHex] = useState(false);
-  const [linkHexDraft, setLinkHexDraft] = useState('');
-  const linkHexInputRef = useRef<HTMLInputElement>(null);
 
   // Inline editing for palette slider values.
-  const [editingPaletteField, setEditingPaletteField] = useState<
-    'hue' | 'saturation' | 'brightness' | null
-  >(null);
+  const [editingPaletteField, setEditingPaletteField] = useState<PaletteField | null>(null);
   const [paletteDraft, setPaletteDraft] = useState('');
   const paletteInputRef = useRef<HTMLInputElement>(null);
 
@@ -940,56 +846,35 @@ function AppearanceSection() {
     [palettePreferenceWorkflow, resolvedMode]
   );
 
-  const handlePaletteHueChange = (value: number) => {
-    const normalized = normalizeIntegerPreferenceValue(palettePreferenceKeys.hue, value);
-    flagUnsavedDefaultThemeChange();
-    setPaletteHue(normalized);
-    applyTintedPalette(normalized, paletteSaturation, paletteBrightness);
-    debouncePalettePersist(normalized, paletteSaturation, paletteBrightness);
+  const paletteValues = {
+    hue: paletteHue,
+    saturation: paletteSaturation,
+    brightness: paletteBrightness,
+  };
+  const paletteSetters = {
+    hue: setPaletteHue,
+    saturation: setPaletteSaturation,
+    brightness: setPaletteBrightness,
   };
 
-  const handlePaletteSaturationChange = (value: number) => {
-    const normalized = normalizeIntegerPreferenceValue(palettePreferenceKeys.saturation, value);
+  const updatePaletteField = (field: PaletteField, value: number) => {
     flagUnsavedDefaultThemeChange();
-    setPaletteSaturation(normalized);
-    applyTintedPalette(paletteHue, normalized, paletteBrightness);
-    debouncePalettePersist(paletteHue, normalized, paletteBrightness);
+    paletteSetters[field](value);
+    const nextPalette = { ...paletteValues, [field]: value };
+    const { hue, saturation, brightness } = nextPalette;
+    applyTintedPalette(hue, saturation, brightness);
+    debouncePalettePersist(hue, saturation, brightness);
   };
 
-  const handlePaletteBrightnessChange = (value: number) => {
-    const normalized = normalizeIntegerPreferenceValue(palettePreferenceKeys.brightness, value);
-    flagUnsavedDefaultThemeChange();
-    setPaletteBrightness(normalized);
-    applyTintedPalette(paletteHue, paletteSaturation, normalized);
-    debouncePalettePersist(paletteHue, paletteSaturation, normalized);
+  const handlePaletteChange = (field: PaletteField, value: number) => {
+    updatePaletteField(field, normalizeIntegerPreferenceValue(palettePreferenceKeys[field], value));
   };
 
-  const handleHueReset = () => {
-    const defaultValue = Number(getPreferenceMetadata(palettePreferenceKeys.hue).defaultValue);
-    flagUnsavedDefaultThemeChange();
-    setPaletteHue(defaultValue);
-    applyTintedPalette(defaultValue, paletteSaturation, paletteBrightness);
-    debouncePalettePersist(defaultValue, paletteSaturation, paletteBrightness);
-  };
-
-  const handleSaturationReset = () => {
-    const defaultValue = Number(
-      getPreferenceMetadata(palettePreferenceKeys.saturation).defaultValue
+  const handlePaletteReset = (field: PaletteField) => {
+    updatePaletteField(
+      field,
+      Number(getPreferenceMetadata(palettePreferenceKeys[field]).defaultValue)
     );
-    flagUnsavedDefaultThemeChange();
-    setPaletteSaturation(defaultValue);
-    applyTintedPalette(paletteHue, defaultValue, paletteBrightness);
-    debouncePalettePersist(paletteHue, defaultValue, paletteBrightness);
-  };
-
-  const handleBrightnessReset = () => {
-    const defaultValue = Number(
-      getPreferenceMetadata(palettePreferenceKeys.brightness).defaultValue
-    );
-    flagUnsavedDefaultThemeChange();
-    setPaletteBrightness(defaultValue);
-    applyTintedPalette(paletteHue, paletteSaturation, defaultValue);
-    debouncePalettePersist(paletteHue, paletteSaturation, defaultValue);
   };
 
   const debounceAccentPersist = useCallback(
@@ -1021,30 +906,7 @@ function AppearanceSection() {
     accentColorPreferenceWorkflow.commit({ mode: resolvedMode, color: '' });
   };
 
-  const validHexRe = /^#[0-9a-fA-F]{6}$/;
   const defaultAccent = resolvedMode === 'light' ? '#326ce5' : '#f59e0b';
-
-  const handleAccentHexClick = () => {
-    setAccentHexDraft(accentColor || defaultAccent);
-    setIsEditingAccentHex(true);
-    requestAnimationFrame(() => accentHexInputRef.current?.select());
-  };
-
-  const handleAccentHexCommit = () => {
-    let trimmed = accentHexDraft.trim().toLowerCase();
-    if (!trimmed.startsWith('#')) {
-      trimmed = `#${trimmed}`;
-    }
-    if (/^#[0-9a-f]{3}$/.test(trimmed)) {
-      trimmed = `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`;
-    }
-    if (validHexRe.test(trimmed)) {
-      handleAccentColorChange(trimmed);
-    }
-    setIsEditingAccentHex(false);
-  };
-
-  const handleAccentHexCancel = () => setIsEditingAccentHex(false);
 
   const debounceLinkPersist = useCallback(
     (color: string) => {
@@ -1069,40 +931,8 @@ function AppearanceSection() {
 
   const defaultLink = resolvedMode === 'light' ? '#525252' : '#aaaaaa';
 
-  const handleLinkHexClick = () => {
-    setLinkHexDraft(linkColor || defaultLink);
-    setIsEditingLinkHex(true);
-    requestAnimationFrame(() => linkHexInputRef.current?.select());
-  };
-
-  const handleLinkHexCommit = () => {
-    let trimmed = linkHexDraft.trim().toLowerCase();
-    if (!trimmed.startsWith('#')) {
-      trimmed = `#${trimmed}`;
-    }
-    if (/^#[0-9a-f]{3}$/.test(trimmed)) {
-      trimmed = `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`;
-    }
-    if (validHexRe.test(trimmed)) {
-      handleLinkColorChange(trimmed);
-    }
-    setIsEditingLinkHex(false);
-  };
-
-  const handleLinkHexCancel = () => setIsEditingLinkHex(false);
-
-  const handlePaletteValueClick = (field: 'hue' | 'saturation' | 'brightness') => {
-    let current: number;
-
-    if (field === 'hue') {
-      current = paletteHue;
-    } else if (field === 'saturation') {
-      current = paletteSaturation;
-    } else {
-      current = paletteBrightness;
-    }
-
-    setPaletteDraft(String(current));
+  const handlePaletteValueClick = (field: PaletteField) => {
+    setPaletteDraft(String(paletteValues[field]));
     setEditingPaletteField(field);
   };
 
@@ -1115,13 +945,7 @@ function AppearanceSection() {
       setEditingPaletteField(null);
       return;
     }
-    if (editingPaletteField === 'hue') {
-      handlePaletteHueChange(parsed);
-    } else if (editingPaletteField === 'saturation') {
-      handlePaletteSaturationChange(parsed);
-    } else if (editingPaletteField === 'brightness') {
-      handlePaletteBrightnessChange(parsed);
-    }
+    handlePaletteChange(editingPaletteField, parsed);
     setEditingPaletteField(null);
   };
 
@@ -1462,43 +1286,29 @@ function AppearanceSection() {
         brightnessSliderStyle={brightnessSliderStyle}
         paletteBounds={paletteBounds}
         renderEditableValue={renderEditableValue}
-        onHueChange={handlePaletteHueChange}
-        onSaturationChange={handlePaletteSaturationChange}
-        onBrightnessChange={handlePaletteBrightnessChange}
-        onHueReset={handleHueReset}
-        onSaturationReset={handleSaturationReset}
-        onBrightnessReset={handleBrightnessReset}
+        onHueChange={(value) => handlePaletteChange('hue', value)}
+        onSaturationChange={(value) => handlePaletteChange('saturation', value)}
+        onBrightnessChange={(value) => handlePaletteChange('brightness', value)}
+        onHueReset={() => handlePaletteReset('hue')}
+        onSaturationReset={() => handlePaletteReset('saturation')}
+        onBrightnessReset={() => handlePaletteReset('brightness')}
       />
 
-      <ColorControl
+      <AppearanceColorControl
         title="Accent color"
         help="Used for active states, focus, and other elements that require emphasis."
         value={accentColor}
         defaultColor={defaultAccent}
-        isEditing={isEditingAccentHex}
-        inputRef={accentHexInputRef}
-        draft={accentHexDraft}
-        onDraftChange={setAccentHexDraft}
         onChange={handleAccentColorChange}
-        onHexClick={handleAccentHexClick}
-        onHexCommit={handleAccentHexCommit}
-        onHexCancel={handleAccentHexCancel}
         onReset={handleAccentReset}
       />
 
-      <ColorControl
+      <AppearanceColorControl
         title="Link color"
         help="Color of inline links in throughout the app."
         value={linkColor}
         defaultColor={defaultLink}
-        isEditing={isEditingLinkHex}
-        inputRef={linkHexInputRef}
-        draft={linkHexDraft}
-        onDraftChange={setLinkHexDraft}
         onChange={handleLinkColorChange}
-        onHexClick={handleLinkHexClick}
-        onHexCommit={handleLinkHexCommit}
-        onHexCancel={handleLinkHexCancel}
         onReset={handleLinkReset}
       />
 

@@ -15,11 +15,30 @@ import {
 } from '@/core/settings/appPreferences';
 import { SettingRow } from './SettingsControls';
 
-type DataManagementOperation =
-  | 'export-settings'
-  | 'import-settings'
-  | 'export-favorites'
-  | 'import-favorites';
+const dataManagementOperations = {
+  'export-settings': {
+    run: ExportSettings,
+    action: 'exportSettings',
+    success: 'Settings exported.',
+  },
+  'import-settings': {
+    run: ImportSettings,
+    action: 'importSettings',
+    success: 'Settings imported.',
+  },
+  'export-favorites': {
+    run: ExportFavorites,
+    action: 'exportFavorites',
+    success: 'Favorites exported.',
+  },
+  'import-favorites': {
+    run: ImportFavorites,
+    action: 'importFavorites',
+    success: 'Favorites imported.',
+  },
+};
+
+type DataManagementOperation = keyof typeof dataManagementOperations;
 
 function DataManagementSection() {
   const elementIdPrefix = useId();
@@ -57,64 +76,24 @@ function DataManagementSection() {
     }
   };
 
-  const handleExportSettings = async () => {
+  const handleOperation = async (nextOperation: DataManagementOperation) => {
     setStatus(null);
-    setOperation('export-settings');
+    setOperation(nextOperation);
+    const { run, action, success } = dataManagementOperations[nextOperation];
     try {
-      const result = await ExportSettings();
-      if (!result.canceled) {
-        setStatus('Settings exported.');
+      const result = await run();
+      if (result.canceled) {
+        return;
       }
-    } catch (error) {
-      errorHandler.handle(error, { action: 'exportSettings' });
-    } finally {
-      setOperation(null);
-    }
-  };
-
-  const handleExportFavorites = async () => {
-    setStatus(null);
-    setOperation('export-favorites');
-    try {
-      const result = await ExportFavorites();
-      if (!result.canceled) {
-        setStatus('Favorites exported.');
-      }
-    } catch (error) {
-      errorHandler.handle(error, { action: 'exportFavorites' });
-    } finally {
-      setOperation(null);
-    }
-  };
-
-  const handleImportSettings = async () => {
-    setStatus(null);
-    setOperation('import-settings');
-    try {
-      const result = await ImportSettings();
-      if (!result.canceled) {
+      if (nextOperation === 'import-settings') {
         const preferences = await hydrateAppPreferences({ force: true });
         setErrorReportingState(preferences.errorReportingEnabled);
-        setStatus('Settings imported.');
-      }
-    } catch (error) {
-      errorHandler.handle(error, { action: 'importSettings' });
-    } finally {
-      setOperation(null);
-    }
-  };
-
-  const handleImportFavorites = async () => {
-    setStatus(null);
-    setOperation('import-favorites');
-    try {
-      const result = await ImportFavorites();
-      if (!result.canceled) {
+      } else if (nextOperation === 'import-favorites') {
         await hydrateFavorites({ force: true });
-        setStatus('Favorites imported.');
       }
+      setStatus(success);
     } catch (error) {
-      errorHandler.handle(error, { action: 'importFavorites' });
+      errorHandler.handle(error, { action });
     } finally {
       setOperation(null);
     }
@@ -133,7 +112,7 @@ function DataManagementSection() {
             type="button"
             className="button generic"
             disabled={operation !== null}
-            onClick={handleExportSettings}
+            onClick={() => handleOperation('export-settings')}
           >
             Export Settings
           </button>
@@ -141,7 +120,7 @@ function DataManagementSection() {
             type="button"
             className="button generic"
             disabled={operation !== null}
-            onClick={handleImportSettings}
+            onClick={() => handleOperation('import-settings')}
           >
             Import Settings
           </button>
@@ -154,7 +133,7 @@ function DataManagementSection() {
             type="button"
             className="button generic"
             disabled={operation !== null}
-            onClick={handleExportFavorites}
+            onClick={() => handleOperation('export-favorites')}
           >
             Export Favorites
           </button>
@@ -162,7 +141,7 @@ function DataManagementSection() {
             type="button"
             className="button generic"
             disabled={operation !== null}
-            onClick={handleImportFavorites}
+            onClick={() => handleOperation('import-favorites')}
           >
             Import Favorites
           </button>
