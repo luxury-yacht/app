@@ -833,3 +833,26 @@ func TestConfigFromEnvironmentUsesOnlyStandardizedBackendDSN(t *testing.T) {
 	require.Equal(t, "luxury-yacht@v1.2.3", config.Release)
 	require.Equal(t, "production", config.Environment)
 }
+
+func TestReporterSessionStateIsRetainedUntilDisabled(t *testing.T) {
+	transport := &recordingTransport{}
+	reporter, err := New(Config{DSN: "https://public@example.com/1", Transport: transport})
+	require.NoError(t, err)
+	reporter.CaptureLogError("first", Context{ClusterID: "cluster-a"})
+	reporter.CaptureLogError("second", Context{ClusterID: "cluster-b"})
+	operation := Context{ClusterID: "cluster-b", OperationID: "operation-1"}
+	reporter.AddBreadcrumb(Breadcrumb{Message: "in this session", OperationID: operation.OperationID})
+	require.NoError(t, reporter.SetEnabled(true))
+	reporter.CaptureLogError("same session", operation)
+	require.Equal(t, "cluster-2", transport.lastEvent().Tags["cluster.alias"])
+	require.Len(t, transport.lastEvent().Breadcrumbs, 1)
+
+	require.NoError(t, reporter.SetEnabled(false))
+	count := transport.eventCount()
+	reporter.CaptureLogError("disabled", Context{ClusterID: "cluster-c"})
+	require.Equal(t, count, transport.eventCount())
+	require.NoError(t, reporter.SetEnabled(true))
+	reporter.CaptureLogError("new session", operation)
+	require.Equal(t, "cluster-1", transport.lastEvent().Tags["cluster.alias"])
+	require.Empty(t, transport.lastEvent().Breadcrumbs)
+}

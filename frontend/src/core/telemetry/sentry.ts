@@ -73,8 +73,6 @@ let userActionByError = new WeakMap<object, UserActionContext>();
 let bootstrapPreferenceResolved = false;
 let bootstrapErrorSequence = 0;
 let pendingBootstrapErrors: PendingBootstrapError[] = [];
-let clusterAliasSequence = 0;
-let namespaceAliasSequence = 0;
 let clusterAliases = new Map<string, string>();
 let namespaceAliases = new Map<string, string>();
 
@@ -93,21 +91,31 @@ const privacyDataCollection = {
   frameContextLines: 5,
 };
 
+const navigationBreadcrumbFields = new Set([
+  'view',
+  'tab',
+  'cluster.alias',
+  'namespace.alias',
+  'objectPanelOpen',
+]);
+const workspaceBreadcrumbFields = [
+  'request.ids',
+  'ui.view',
+  'ui.tab',
+  'cluster.alias',
+  'namespace.alias',
+];
+const userActionBreadcrumbFields = new Set(['operationId', 'action', ...workspaceBreadcrumbFields]);
+const errorBreadcrumbFields = new Set([
+  'operationId',
+  'action',
+  'requestId',
+  ...workspaceBreadcrumbFields,
+]);
+
 const allowedBreadcrumbFields: Record<string, ReadonlySet<string>> = {
-  'navigation.workspace': new Set([
-    'view',
-    'tab',
-    'cluster.alias',
-    'namespace.alias',
-    'objectPanelOpen',
-  ]),
-  'navigation.namespace': new Set([
-    'view',
-    'tab',
-    'cluster.alias',
-    'namespace.alias',
-    'objectPanelOpen',
-  ]),
+  'navigation.workspace': navigationBreadcrumbFields,
+  'navigation.namespace': navigationBreadcrumbFields,
   'request.broker': new Set([
     'id',
     'broker',
@@ -116,59 +124,13 @@ const allowedBreadcrumbFields: Record<string, ReadonlySet<string>> = {
     'reason',
     'status',
     'durationMs',
-    'request.ids',
-    'ui.view',
-    'ui.tab',
-    'cluster.alias',
-    'namespace.alias',
+    ...workspaceBreadcrumbFields,
   ]),
-  'ui.action.started': new Set([
-    'operationId',
-    'action',
-    'request.ids',
-    'ui.view',
-    'ui.tab',
-    'cluster.alias',
-    'namespace.alias',
-  ]),
-  'ui.action.completed': new Set([
-    'operationId',
-    'action',
-    'request.ids',
-    'ui.view',
-    'ui.tab',
-    'cluster.alias',
-    'namespace.alias',
-  ]),
-  'ui.action.failed': new Set([
-    'operationId',
-    'action',
-    'request.ids',
-    'ui.view',
-    'ui.tab',
-    'cluster.alias',
-    'namespace.alias',
-  ]),
-  'ui.error.presented': new Set([
-    'operationId',
-    'action',
-    'requestId',
-    'request.ids',
-    'ui.view',
-    'ui.tab',
-    'cluster.alias',
-    'namespace.alias',
-  ]),
-  'ui.error.handled': new Set([
-    'operationId',
-    'action',
-    'requestId',
-    'request.ids',
-    'ui.view',
-    'ui.tab',
-    'cluster.alias',
-    'namespace.alias',
-  ]),
+  'ui.action.started': userActionBreadcrumbFields,
+  'ui.action.completed': userActionBreadcrumbFields,
+  'ui.action.failed': userActionBreadcrumbFields,
+  'ui.error.presented': errorBreadcrumbFields,
+  'ui.error.handled': errorBreadcrumbFields,
 };
 
 const privateTelemetryKeys = new Set([
@@ -199,35 +161,29 @@ const normalizeTelemetryKey = (key: string): string => key.toLowerCase().replace
 const isPrivateTelemetryKey = (key: string): boolean =>
   privateTelemetryKeys.has(normalizeTelemetryKey(key));
 
-const aliasForCluster = (clusterId?: string): string | undefined => {
-  const normalized = normalizeOptionalString(clusterId);
+const aliasForIdentifier = (
+  value: string | undefined,
+  aliases: Map<string, string>,
+  prefix: 'cluster' | 'namespace'
+): string | undefined => {
+  const normalized = normalizeOptionalString(value);
   if (!normalized) {
     return undefined;
   }
-  const existing = clusterAliases.get(normalized);
+  const existing = aliases.get(normalized);
   if (existing) {
     return existing;
   }
-  clusterAliasSequence += 1;
-  const alias = `cluster-${clusterAliasSequence}`;
-  clusterAliases.set(normalized, alias);
+  const alias = `${prefix}-${aliases.size + 1}`;
+  aliases.set(normalized, alias);
   return alias;
 };
 
-const aliasForNamespace = (namespace?: string): string | undefined => {
-  const normalized = normalizeOptionalString(namespace);
-  if (!normalized) {
-    return undefined;
-  }
-  const existing = namespaceAliases.get(normalized);
-  if (existing) {
-    return existing;
-  }
-  namespaceAliasSequence += 1;
-  const alias = `namespace-${namespaceAliasSequence}`;
-  namespaceAliases.set(normalized, alias);
-  return alias;
-};
+const aliasForCluster = (clusterId?: string): string | undefined =>
+  aliasForIdentifier(clusterId, clusterAliases, 'cluster');
+
+const aliasForNamespace = (namespace?: string): string | undefined =>
+  aliasForIdentifier(namespace, namespaceAliases, 'namespace');
 
 const replaceKnownIdentifiers = (value: string): string => {
   const replacements = [...clusterAliases.entries(), ...namespaceAliases.entries()].sort(
@@ -418,18 +374,27 @@ const getPrivacyNavigationContext = (): Record<string, unknown> | null => {
   if (!navigation) {
     return null;
   }
+  const clusterAlias = aliasForCluster(navigation.clusterId);
+  const namespaceAlias = aliasForNamespace(navigation.namespace);
   return {
     view: navigation.view,
     ...(navigation.tab ? { tab: navigation.tab } : {}),
-    ...(aliasForCluster(navigation.clusterId)
-      ? { 'cluster.alias': aliasForCluster(navigation.clusterId) }
-      : {}),
-    ...(aliasForNamespace(navigation.namespace)
-      ? { 'namespace.alias': aliasForNamespace(navigation.namespace) }
-      : {}),
+    ...(clusterAlias ? { 'cluster.alias': clusterAlias } : {}),
+    ...(namespaceAlias ? { 'namespace.alias': namespaceAlias } : {}),
     objectPanelOpen: navigation.objectPanelOpen,
   };
 };
+
+const navigationTags = (
+  navigation: Record<string, unknown>
+): Record<string, string | undefined> => ({
+  'ui.view': String(navigation.view),
+  'ui.tab': navigation.tab ? String(navigation.tab) : undefined,
+  'cluster.alias': navigation['cluster.alias'] ? String(navigation['cluster.alias']) : undefined,
+  'namespace.alias': navigation['namespace.alias']
+    ? String(navigation['namespace.alias'])
+    : undefined,
+});
 
 const applyActiveViewContext = (): void => {
   const navigation = getPrivacyNavigationContext();
@@ -437,38 +402,18 @@ const applyActiveViewContext = (): void => {
     return;
   }
   const scope = Sentry.getIsolationScope();
-  scope.setTag('ui.view', String(navigation.view));
-  if (navigation.tab) {
-    scope.setTag('ui.tab', String(navigation.tab));
-  } else {
-    scope.setTag('ui.tab', undefined);
-  }
-  if (navigation['cluster.alias']) {
-    scope.setTag('cluster.alias', String(navigation['cluster.alias']));
-  } else {
-    scope.setTag('cluster.alias', undefined);
-  }
-  if (navigation['namespace.alias']) {
-    scope.setTag('namespace.alias', String(navigation['namespace.alias']));
-  } else {
-    scope.setTag('namespace.alias', undefined);
+  // Clear absent values on the long-lived isolation scope when navigation changes.
+  for (const [key, value] of Object.entries(navigationTags(navigation))) {
+    scope.setTag(key, value);
   }
   scope.setContext('navigation', { ...navigation });
 };
 
 const breadcrumbWorkspaceData = (): Record<string, unknown> => {
   const navigation = getPrivacyNavigationContext();
+  const tags = navigation ? navigationTags(navigation) : {};
   return {
-    ...(navigation
-      ? {
-          'ui.view': navigation.view,
-          ...(navigation.tab ? { 'ui.tab': navigation.tab } : {}),
-          ...(navigation['cluster.alias'] ? { 'cluster.alias': navigation['cluster.alias'] } : {}),
-          ...(navigation['namespace.alias']
-            ? { 'namespace.alias': navigation['namespace.alias'] }
-            : {}),
-        }
-      : {}),
+    ...Object.fromEntries(Object.entries(tags).filter(([, value]) => value !== undefined)),
     ...(activeBrokerRequests.size === 1
       ? { 'request.ids': Array.from(activeBrokerRequests.keys()) }
       : {}),
@@ -784,8 +729,6 @@ export function resetErrorReportingForTesting(): void {
   bootstrapPreferenceResolved = false;
   bootstrapErrorSequence = 0;
   pendingBootstrapErrors = [];
-  clusterAliasSequence = 0;
-  namespaceAliasSequence = 0;
   clusterAliases = new Map<string, string>();
   namespaceAliases = new Map<string, string>();
   eventBus.setHandlerErrorReporter(null);
@@ -1029,15 +972,10 @@ const applyErrorNavigationContext = (
   if (!navigation) {
     return;
   }
-  scope.setTag('ui.view', String(navigation.view));
-  if (navigation.tab) {
-    scope.setTag('ui.tab', String(navigation.tab));
-  }
-  if (navigation['cluster.alias']) {
-    scope.setTag('cluster.alias', String(navigation['cluster.alias']));
-  }
-  if (navigation['namespace.alias']) {
-    scope.setTag('namespace.alias', String(navigation['namespace.alias']));
+  for (const [key, value] of Object.entries(navigationTags(navigation))) {
+    if (value !== undefined) {
+      scope.setTag(key, value);
+    }
   }
   scope.setContext('navigation', { ...navigation });
 };

@@ -812,6 +812,108 @@ describe('Sentry error reporting', () => {
     });
   });
 
+  it('keeps aliases stable across navigation and clears absent isolation tags', () => {
+    initializeErrorReporting({ enabled: true, dsn: 'https://public@example.com/1' });
+    const select = (clusterId: string, namespace: string) => {
+      setActiveNamespaceContext(namespace);
+      setActiveViewContext({ view: 'namespace', tab: 'pods', clusterId, objectPanelOpen: false });
+    };
+    select('cluster-a', 'alpha');
+    expect(scopeMocks.setContext).toHaveBeenLastCalledWith(
+      'navigation',
+      expect.objectContaining({
+        'cluster.alias': 'cluster-1',
+        'namespace.alias': 'namespace-1',
+      })
+    );
+    select('cluster-b', 'beta');
+    expect(scopeMocks.setContext).toHaveBeenLastCalledWith(
+      'navigation',
+      expect.objectContaining({
+        'cluster.alias': 'cluster-2',
+        'namespace.alias': 'namespace-2',
+      })
+    );
+    select(' cluster-a ', ' alpha ');
+    expect(scopeMocks.setContext).toHaveBeenLastCalledWith(
+      'navigation',
+      expect.objectContaining({
+        'cluster.alias': 'cluster-1',
+        'namespace.alias': 'namespace-1',
+      })
+    );
+
+    scopeMocks.setTag.mockClear();
+    setActiveViewContext({ view: 'global', objectPanelOpen: false });
+    expect(scopeMocks.setTag.mock.calls).toEqual([
+      ['ui.view', 'global'],
+      ['ui.tab', undefined],
+      ['cluster.alias', undefined],
+      ['namespace.alias', undefined],
+    ]);
+    scopeMocks.setTag.mockClear();
+    captureUserVisibleError(new Error('unexpected failure'), {
+      category: 'UNKNOWN',
+      severity: 'error',
+    });
+    expect(scopeMocks.setTag).not.toHaveBeenCalledWith('cluster.alias', expect.anything());
+    expect(scopeMocks.setTag).not.toHaveBeenCalledWith('namespace.alias', expect.anything());
+    expect(scopeMocks.setTag.mock.calls.every(([, value]) => value !== undefined)).toBe(true);
+  });
+
+  it.each([
+    ['navigation.workspace', { view: 'namespace', tab: 'pods', 'cluster.alias': 'cluster-1' }],
+    ['navigation.namespace', { view: 'namespace', tab: 'pods', 'cluster.alias': 'cluster-1' }],
+    ['request.broker', { id: 'broker-read-1', 'cluster.alias': 'cluster-1' }],
+    [
+      'ui.action.started',
+      { operationId: 'action-1', action: 'save', 'cluster.alias': 'cluster-1' },
+    ],
+    [
+      'ui.action.completed',
+      { operationId: 'action-1', action: 'save', 'cluster.alias': 'cluster-1' },
+    ],
+    ['ui.action.failed', { operationId: 'action-1', action: 'save', 'cluster.alias': 'cluster-1' }],
+    [
+      'ui.error.presented',
+      {
+        operationId: 'action-1',
+        action: 'save',
+        requestId: 'broker-read-1',
+        'cluster.alias': 'cluster-1',
+      },
+    ],
+    [
+      'ui.error.handled',
+      {
+        operationId: 'action-1',
+        action: 'save',
+        requestId: 'broker-read-1',
+        'cluster.alias': 'cluster-1',
+      },
+    ],
+  ])('limits %s breadcrumbs to that category’s diagnostic fields', (category, expected) => {
+    initializeErrorReporting({ enabled: true, dsn: 'https://public@example.com/1' });
+    const options = sentryMocks.init.mock.calls[0][0];
+    const breadcrumb = options.beforeBreadcrumb({
+      category,
+      data: {
+        view: 'namespace',
+        tab: 'pods',
+        'cluster.alias': 'cluster-1',
+        id: 'broker-read-1',
+        operationId: 'action-1',
+        action: 'save',
+        requestId: 'broker-read-1',
+        clusterId: 'private-cluster',
+        namespace: 'private-namespace',
+        label: 'private-label',
+        scope: 'private-scope',
+      },
+    });
+    expect(breadcrumb.data).toEqual(expected);
+  });
+
   it('carries one broker request instance from start through a displayed failure', () => {
     initializeErrorReporting({
       enabled: true,

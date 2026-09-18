@@ -134,3 +134,34 @@ func TestSelectionDiagnosticsTreatsDeadlineAsFailure(t *testing.T) {
 	require.Equal(t, uint64(1), diag.FailedMutations)
 	require.Zero(t, diag.CanceledMutations)
 }
+
+func TestSelectionDiagnosticsSnapshotPreservesPhaseValuesAndOutcomes(t *testing.T) {
+	workspace := newWorkspaceCoordinatorTestFixture(t).Workspace
+	for _, value := range []int64{0, -1, 1, 4, 2, 3} {
+		workspace.selectionDiagnosticsEnqueue()
+		workspace.selectionDiagnosticsFinalize(selectionMutationSample{
+			queueMs: value * 10, totalMs: value * 100, intentMs: value * 20,
+			commitMs: value * 30, clientSyncMs: value * 40, refreshMs: value * 50, catalogMs: value * 60,
+		})
+	}
+	snapshot, err := workspace.GetSelectionDiagnostics()
+	require.NoError(t, err)
+	require.Positive(t, snapshot.LastUpdatedMs)
+	require.Equal(t, &SelectionDiagnostics{
+		MaxQueueDepth: 1, SampleCount: 6, TotalMutations: 6, CompletedMutations: 6,
+		LastUpdatedMs: snapshot.LastUpdatedMs, LastQueueMs: 30, LastTotalMs: 300,
+		QueueP50Ms: 20, QueueP95Ms: 30, TotalP50Ms: 200, TotalP95Ms: 300,
+		IntentP50Ms: 40, IntentP95Ms: 60, CommitP50Ms: 60, CommitP95Ms: 90,
+		ClientSyncP50Ms: 80, ClientSyncP95Ms: 120, RefreshP50Ms: 100, RefreshP95Ms: 150,
+		CatalogP50Ms: 120, CatalogP95Ms: 180,
+	}, snapshot)
+	workspace.selectionDiagnosticsEnqueue()
+	workspace.selectionDiagnosticsFinalize(selectionMutationSample{failed: true, reason: "reconnect", errorText: "failed"})
+	next, err := workspace.GetSelectionDiagnostics()
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), next.FailedMutations)
+	require.Equal(t, "reconnect", next.LastReason)
+	require.Equal(t, "failed", next.LastError)
+	require.Equal(t, uint64(6), snapshot.TotalMutations)
+	require.Empty(t, snapshot.LastError)
+}

@@ -140,80 +140,49 @@ func (a *WorkspaceCoordinator) selectionDiagnosticsFinalize(sample selectionMuta
 
 // GetSelectionDiagnostics returns rolling selection mutation timing and outcome stats.
 func (a *WorkspaceCoordinator) GetSelectionDiagnostics() (*SelectionDiagnostics, error) {
-	diag := &SelectionDiagnostics{}
 	if a == nil {
-		return diag, nil
+		return &SelectionDiagnostics{}, nil
 	}
 
 	s := &a.selectionDiag
 	s.mu.Lock()
-	pending := s.pending
-	maxPending := s.maxPending
-	total := s.total
-	completed := s.completed
-	failed := s.failed
-	canceled := s.canceled
-	superseded := s.superseded
-	lastUpdatedMs := s.lastUpdatedMs
-	lastReason := s.lastReason
-	lastError := s.lastError
-	lastQueueMs := s.lastQueueMs
-	lastTotalMs := s.lastTotalMs
+	diag := &SelectionDiagnostics{
+		ActiveQueueDepth:    s.pending,
+		MaxQueueDepth:       s.maxPending,
+		SampleCount:         len(s.samples),
+		TotalMutations:      s.total,
+		CompletedMutations:  s.completed,
+		FailedMutations:     s.failed,
+		CanceledMutations:   s.canceled,
+		SupersededMutations: s.superseded,
+		LastUpdatedMs:       s.lastUpdatedMs,
+		LastReason:          s.lastReason,
+		LastError:           s.lastError,
+		LastQueueMs:         s.lastQueueMs,
+		LastTotalMs:         s.lastTotalMs,
+	}
 	samples := append([]selectionMutationSample(nil), s.samples...)
 	s.mu.Unlock()
 
-	diag.ActiveQueueDepth = pending
-	diag.MaxQueueDepth = maxPending
-	diag.SampleCount = len(samples)
-	diag.TotalMutations = total
-	diag.CompletedMutations = completed
-	diag.FailedMutations = failed
-	diag.CanceledMutations = canceled
-	diag.SupersededMutations = superseded
-	diag.LastUpdatedMs = lastUpdatedMs
-	diag.LastReason = lastReason
-	diag.LastError = lastError
-	diag.LastQueueMs = lastQueueMs
-	diag.LastTotalMs = lastTotalMs
-
-	queueVals := collectMs(samples, func(s selectionMutationSample) int64 { return s.queueMs })
-	totalVals := collectMs(samples, func(s selectionMutationSample) int64 { return s.totalMs })
-	intentVals := collectMs(samples, func(s selectionMutationSample) int64 { return s.intentMs })
-	commitVals := collectMs(samples, func(s selectionMutationSample) int64 { return s.commitMs })
-	clientVals := collectMs(samples, func(s selectionMutationSample) int64 { return s.clientSyncMs })
-	refreshVals := collectMs(samples, func(s selectionMutationSample) int64 { return s.refreshMs })
-	catalogVals := collectMs(samples, func(s selectionMutationSample) int64 { return s.catalogMs })
-
-	diag.QueueP50Ms, diag.QueueP95Ms = percentilePair(queueVals)
-	diag.TotalP50Ms, diag.TotalP95Ms = percentilePair(totalVals)
-	diag.IntentP50Ms, diag.IntentP95Ms = percentilePair(intentVals)
-	diag.CommitP50Ms, diag.CommitP95Ms = percentilePair(commitVals)
-	diag.ClientSyncP50Ms, diag.ClientSyncP95Ms = percentilePair(clientVals)
-	diag.RefreshP50Ms, diag.RefreshP95Ms = percentilePair(refreshVals)
-	diag.CatalogP50Ms, diag.CatalogP95Ms = percentilePair(catalogVals)
-
+	diag.QueueP50Ms, diag.QueueP95Ms = selectionPhasePercentiles(samples, func(s selectionMutationSample) int64 { return s.queueMs })
+	diag.TotalP50Ms, diag.TotalP95Ms = selectionPhasePercentiles(samples, func(s selectionMutationSample) int64 { return s.totalMs })
+	diag.IntentP50Ms, diag.IntentP95Ms = selectionPhasePercentiles(samples, func(s selectionMutationSample) int64 { return s.intentMs })
+	diag.CommitP50Ms, diag.CommitP95Ms = selectionPhasePercentiles(samples, func(s selectionMutationSample) int64 { return s.commitMs })
+	diag.ClientSyncP50Ms, diag.ClientSyncP95Ms = selectionPhasePercentiles(samples, func(s selectionMutationSample) int64 { return s.clientSyncMs })
+	diag.RefreshP50Ms, diag.RefreshP95Ms = selectionPhasePercentiles(samples, func(s selectionMutationSample) int64 { return s.refreshMs })
+	diag.CatalogP50Ms, diag.CatalogP95Ms = selectionPhasePercentiles(samples, func(s selectionMutationSample) int64 { return s.catalogMs })
 	return diag, nil
 }
 
-func collectMs(samples []selectionMutationSample, pick func(selectionMutationSample) int64) []int64 {
+func selectionPhasePercentiles(samples []selectionMutationSample, pick func(selectionMutationSample) int64) (int64, int64) {
 	values := make([]int64, 0, len(samples))
 	for _, sample := range samples {
-		value := pick(sample)
-		if value <= 0 {
-			continue
+		if value := pick(sample); value > 0 {
+			values = append(values, value)
 		}
-		values = append(values, value)
 	}
-	return values
-}
-
-func percentilePair(values []int64) (int64, int64) {
-	if len(values) == 0 {
-		return 0, 0
-	}
-	sorted := append([]int64(nil), values...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
-	return percentile(sorted, 50), percentile(sorted, 95)
+	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+	return percentile(values, 50), percentile(values, 95)
 }
 
 func percentile(sorted []int64, p int) int64 {

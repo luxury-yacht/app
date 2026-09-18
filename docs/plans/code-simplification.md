@@ -212,7 +212,7 @@ correctness-driven interruption and resume the rotation afterwards.
 | 8 | Permissions and mutations | Capability policy, permission caches, object actions/YAML; frontend availability gates | S008 query/store/hook batch, coverage and final gate passed; remaining scope recorded |
 | 9 | Navigation and interaction | Sidebar, routing, shortcuts, command palette, modals, shared inputs and menus | S009 keyboard/palette/global shortcut batch, coverage and final gate passed; remaining scope recorded |
 | 10 | Preferences and persistence | Settings, favorites, UI state, import/export/reset; frontend state hydration | S010 mutation/editor/theme/import batch, coverage and final gate passed; remaining scope recorded |
-| 11 | Errors and diagnostics | Error classification/reporting, logs, telemetry, request diagnostics | Inventoried |
+| 11 | Errors and diagnostics | Error classification/reporting, logs, telemetry, request diagnostics | S011 policy/context/session/snapshot batch, coverage and final gate passed; remaining scope recorded |
 | 12 | Native lifecycle and windows | Bootstrap, app lifetime, desktop transport, peer windows, dockable ownership | Inventoried |
 | 13 | Updates and engineering tooling | Updater/installers; generators; project tasks; build/CI; lint rules and test infrastructure | Inventoried |
 | 14 | Shared primitives and remaining inventory | Utility/formatting/identity helpers, types, styles, root source, and unclaimed companion files | Inventoried |
@@ -1089,7 +1089,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/(root: data)` | 2 | 517 | 1 / — | Inventoried |
 | `backend/(root: desktop)` | 10 | 1689 | — / — | Inventoried |
 | `backend/(root: devmode)` | 2 | 10 | — / — | Inventoried |
-| `backend/(root: error)` | 2 | 253 | 1 / — | Inventoried |
+| `backend/(root: error)` | 2 | 253 | 1 / — | S011: reporting service inspected; consent and reset ownership retained |
 | `backend/(root: events)` | 1 | 149 | — / — | Inventoried |
 | `backend/(root: exec)` | 4 | 277 | — / — | Inventoried |
 | `backend/(root: favorites)` | 2 | 572 | — / — | Inventoried |
@@ -1099,7 +1099,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/(root: helm)` | 2 | 104 | — / — | Inventoried |
 | `backend/(root: kubeconfig)` | 4 | 928 | 1 / — | Inventoried |
 | `backend/(root: kubernetes)` | 1 | 83 | — / — | Inventoried |
-| `backend/(root: logger)` | 1 | 371 | — / — | Inventoried |
+| `backend/(root: logger)` | 1 | 371 | — / — | S011: logger capture/emission order reviewed and retained |
 | `backend/(root: menu)` | 1 | 246 | — / — | Inventoried |
 | `backend/(root: node)` | 3 | 145 | — / — | Inventoried |
 | `backend/(root: object)` | 11 | 2243 | — / — | Partial S005: detail/Helm read ownership and YAML mutation admission; other enrichments and mutation internals remain |
@@ -1122,14 +1122,14 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `backend/(root: workload)` | 2 | 502 | 1 / — | Partial S008: mutation validation, HPA scale guard, permission/write/cache order inspected |
 | `backend/(root: workspace)` | 16 | 2130 | — / — | Reviewing: S003 selection/restore/prune; remaining scope recorded |
 | `backend/capabilities` | 4 | 866 | — / — | S008: SSAR worker and SSRR cache/rule matching reviewed; shared retry policy and singleflight error return |
-| `backend/internal/applog` | 6 | 323 | — / — | Inventoried |
+| `backend/internal/applog` | 6 | 323 | — / — | Partial S011: report_error adapter inspected; other adapters remain |
 | `backend/internal/appupdates` | 2 | 1125 | 1 / — | Inventoried |
 | `backend/internal/authstate` | 4 | 683 | — / — | Inventoried |
 | `backend/internal/cachekeys` | 1 | 18 | — / — | Inventoried |
 | `backend/internal/config` | 1 | 551 | — / — | Inventoried |
 | `backend/internal/containerlogs` | 5 | 495 | 1 / — | Partial S006: shared unavailable classifier added; existing selection/target helpers inspected through consumers |
 | `backend/internal/credentialerrors` | 1 | 226 | — / — | Inventoried |
-| `backend/internal/errorcapture` | 4 | 589 | — / — | Inventoried |
+| `backend/internal/errorcapture` | 4 | 589 | — / — | S011: capture, expected-error policy and stderr assembly reviewed and retained |
 | `backend/internal/genappbindings` | 2 | 306 | — / — | Inventoried |
 | `backend/internal/genobjectactions` | 1 | 24 | — / — | Inventoried |
 | `backend/internal/genrefreshcontracts` | 5 | 856 | 1 / — | Inventoried |
@@ -1243,15 +1243,15 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/core/data-access` | 6 | 700 | — / — | Partial: S004 broker, leases, lifecycle/readers |
 | `frontend/src/core/desktop-runtime` | 1 | 81 | — / — | Inventoried |
 | `frontend/src/core/events` | 3 | 317 | — / — | Inventoried |
-| `frontend/src/core/logging` | 1 | 112 | — / — | Inventoried |
+| `frontend/src/core/logging` | 1 | 112 | — / — | S011: app-log client reviewed and retained |
 | `frontend/src/core/navigation` | 5 | 489 | — / — | Inventoried |
 | `frontend/src/core/panel-windows` | 17 | 2600 | — / — | Inventoried |
 | `frontend/src/core/persistence` | 2 | 448 | — / — | Inventoried |
-| `frontend/src/core/read-diagnostics` | 2 | 312 | — / — | Inventoried |
+| `frontend/src/core/read-diagnostics` | 2 | 312 | — / — | Partial S011: request store lifecycle/correlation reviewed and retained |
 | `frontend/src/core/refresh` | 60 | 17381 | — / 9 | Partial: S004 store/runtime/scheduler and orchestrator seams; S006 container-log buffer/fallback paths reviewed |
 | `frontend/src/core/resource-metrics` | 6 | 726 | — / 2 | Inventoried |
 | `frontend/src/core/settings` | 4 | 1890 | — / — | Inventoried |
-| `frontend/src/core/telemetry` | 2 | 1175 | — / — | Inventoried |
+| `frontend/src/core/telemetry` | 2 | 1175 | — / — | S011: telemetry/expected errors reviewed; context and alias projection shared |
 | `frontend/src/core/window-identity` | 1 | 9 | — / — | Inventoried |
 | `frontend/src/hooks` | 8 | 746 | — / 1 | Inventoried |
 | `frontend/src/modules/browse` | 13 | 3294 | — / 1 | Inventoried |
@@ -1269,7 +1269,7 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/shared/components/diff` | 6 | 1327 | — / 3 | Inventoried |
 | `frontend/src/shared/components/drain` | 3 | 784 | — / 4 | Inventoried |
 | `frontend/src/shared/components/dropdowns` | 9 | 2392 | — / — | Inventoried |
-| `frontend/src/shared/components/errors` | 9 | 1119 | — / — | Inventoried |
+| `frontend/src/shared/components/errors` | 9 | 1119 | — / — | Partial S011: ErrorBoundary, ErrorSurface and ErrorNotificationSystem reviewed; other surfaces remain |
 | `frontend/src/shared/components/IconBar` | 1 | 115 | — / — | Inventoried |
 | `frontend/src/shared/components/icons` | 9 | 2018 | — / — | Inventoried |
 | `frontend/src/shared/components/inputs` | 1 | 84 | — / — | Inventoried |
@@ -1301,13 +1301,13 @@ with reviewed scope and a pass reference, or split the row before reviewing.
 | `frontend/src/ui/settings` | 10 | 3639 | — / — | Inventoried |
 | `frontend/src/ui/shortcuts` | 20 | 2997 | — / 2 | Inventoried |
 | `frontend/src/ui/status` | 10 | 1811 | — / 2 | Inventoried |
-| `frontend/src/utils` | 14 | 1803 | — / 3 | Inventoried |
+| `frontend/src/utils` | 14 | 1803 | — / 3 | Partial S011: errorHandler category presentation consolidated; other utilities remain |
 | `frontend/styles` | 29 | 5412 | — / — | Inventoried |
 | `internal/appstate` | 1 | 45 | — / — | Inventoried |
 | `internal/appwindow` | 19 | 3689 | — / — | Inventoried |
 | `internal/bootstrap` | 2 | 200 | — / — | Inventoried |
 | `internal/panelwindow` | 8 | 1009 | — / — | Inventoried |
-| `internal/sentry` | 6 | 1477 | 1 / — | Inventoried |
+| `internal/sentry` | 6 | 1477 | 1 / — | Partial S011: reporter/privacy reviewed; session resets consolidated; operation schema remains |
 | `internal/updateconformance` | 3 | 286 | 2 / — | Inventoried |
 | `internal/updateidentity` | 8 | 686 | — / — | Inventoried |
 | `internal/updatestate` | 3 | 780 | 3 / — | Inventoried |
@@ -1663,3 +1663,100 @@ typecheck, **4,817 frontend tests**, Knip and Trivy. Log:
 five test files and this ledger**, with **195 fewer production lines** including
 the extracted color control. Only this ledger changed after the gate; its final
 update is checked with `qc:docs` and `git diff --check`.
+
+## S011 — errors and diagnostics
+
+**Status: batch implementation, coverage and final prerelease gate passed.**
+Entry `ae9249cb`, clean worktree.
+Inventory delta: `/tmp/luxury-yacht-s011-inventory-delta.txt`.
+
+| Responsibility | Candidate disposition |
+| --- | --- |
+| Frontend error presentation | Consolidate category severity, retryability, message and recovery suggestions into one policy table. Keep classification precedence and distinct global/inline/operational reporting decisions. Return fresh suggestion arrays. |
+| Frontend telemetry context | Share breadcrumb field sets by category family, alias allocation and navigation-tag projection. Preserve independent cluster/namespace numbering, clearing absent isolation tags versus omitting absent per-error tags, closed field sets and correlation order. |
+| Backend reporter session | Give hub replacement one lock-held owner for clearing breadcrumbs and aliases. Derive alias numbering from the owning map. Preserve opt-out close without flush, shutdown flush, enable idempotence and capture locking. |
+| Selection diagnostic snapshots | Project counters directly into the snapshot while locked; calculate each phase's positive-value percentiles with one collection/sort helper after release. Preserve sample order, retention and percentile formula. |
+| Redaction, expected failures, notification timers, stderr capture | Retain the distinct privacy transforms and policy boundaries. Notification subscription and animation timers have different cleanup lifetimes. Stderr capture remains local and bounded. |
+
+Read in full: frontend `utils/errorHandler.ts`, telemetry `sentry.ts` and
+`expectedErrors.ts`, read-diagnostics store, ErrorContext, ErrorBoundary,
+ErrorSurface, ErrorNotificationSystem, appLogsClient; backend Logger,
+ErrorReportingService and installation telemetry, errorcapture package,
+app-log report_error adapter, API/exec/selection diagnostics; internal Sentry
+reporter and privacy boundary. Read ViewState/Namespace telemetry producers,
+selection mutation producer, desktop/client forwarding and diagnostics-panel
+polling/summary consumers. The full diagnostics panel/row model, credential
+classifier internals, operation schema, and native diagnostic dumps are not
+closed by this batch.
+
+Ordering: UI classification → describe → report → history/listeners → custom
+handler remains intact. Navigation aliases project into scope and breadcrumbs;
+request/action correlation and final redaction remain separate. Go reporter
+state changes stay under its existing mutex, transport close/flush outside it.
+Selection counters and samples are captured under the same lock, with percentile
+work after release. Public APIs, diagnostic DTOs, provider order, readiness and
+cluster identity do not change; new helpers stay inside their owning modules,
+so no import cycles are introduced. Characterize category defaults, alias/tag
+lifetimes, breadcrumb family allowlists, reporter re-enable and exact phase
+percentiles before production edits. Use incremental focused checks, then one
+coverage and prerelease boundary for the batch.
+
+### Validation and remaining scope
+
+- Baseline: **16 frontend files / 191 tests** and the Go reporter, errorcapture,
+  applog and backend package selection passed. Before production edits, all
+  **19 new frontend cases** passed with their owners (**2 files / 121 tests**),
+  and the two new backend characterization tests passed. Logs:
+  `/tmp/luxury-yacht-s011-{frontend,backend}-before.log` and
+  `/tmp/luxury-yacht-s011-characterization-{frontend,backend}.log`.
+- Incremental error policy checks passed **8 files / 76 tests**; telemetry and
+  adjacent consumer checks passed **6 files / 128 tests**. Go reporter and
+  selection diagnostics checks passed. Logs:
+  `/tmp/luxury-yacht-s011-error-policy.log`,
+  `/tmp/luxury-yacht-s011-telemetry-context.log` and
+  `/tmp/luxury-yacht-s011-backend-refactor.log`.
+- Full frontend coverage passed **513 files / 4,836 tests**, **87.98%** statements.
+  Changed owners: errorHandler **95.23%** and telemetry/sentry **96.69%**. Report:
+  `/tmp/luxury-yacht-s011-frontend-coverage/coverage-summary.json`; log:
+  `/tmp/luxury-yacht-s011-frontend-coverage.log`.
+- Full backend coverage passed, **78.6%** aggregate. Changed functions:
+  GetSelectionDiagnostics **95.5%**, selectionPhasePercentiles **100%**,
+  replaceHubLocked **100%**, SetEnabled **88.2%**, Shutdown **87.5%** and
+  aliasForCluster **100%**. No tests were deleted. Evidence:
+  `/tmp/luxury-yacht-s011-backend-coverage.log`,
+  `/tmp/luxury-yacht-s011-backend-function-coverage.txt` and
+  `/tmp/luxury-yacht-s011-backend.coverage.out`.
+- Targeted Biome and typecheck passed. Local complexity checked **12 changed/new
+  TypeScript functions** with no findings above 12, and **six Go declarations
+  including their closures**, scores **0–6**. The unchanged error classifier
+  retains its existing Biome score of **16**; explicit ordered predicates keep
+  permission/auth precedence, timeout/network exclusion and gateway/server
+  handling visible. This pass does not claim closure of that finding. Logs:
+  `/tmp/luxury-yacht-s011-{format,typecheck}.log`,
+  `/tmp/luxury-yacht-s011-complexity-audit.json` and
+  `/tmp/luxury-yacht-s011-go-complexity-audit.json`.
+- Published PR #355 at `ae9249cb1db48ff0e2206455822c126774bf5afe` has **zero
+  open/confirmed new-code Sonar findings**. This is entry-HEAD evidence, not
+  analysis of these local edits; no push was requested. Evidence:
+  `/tmp/luxury-yacht-s011-pr-head.json`, `/tmp/luxury-yacht-s011-sonar.log`.
+- Native Wails interaction and live Sentry transport were not exercised. The
+  automated checks cover diagnostic data, privacy, consent and capture contracts,
+  not native window behavior or production delivery to Sentry.
+
+Next rotation domain: **S012 native lifecycle and windows**, including the
+panel-window producer/consumer follow-through carried from S005 and S009. Full
+diagnostics-panel/row-model review, credential classifier internals, operation
+schema, native diagnostic dumps and refresh telemetry recording remain open for
+subsequent domain visits. No production files were added or removed in S011;
+bulk edits used temporary Python codemods under `/tmp/luxury-yacht-s011-*.py`.
+
+
+Final `mise exec -- wails3 task qc:prerelease` passed (exit 0): docs, formatting,
+generated bindings, vet/staticcheck, full backend race suite, frontend lint and
+typecheck, **4,836 frontend tests**, Knip and Trivy. Log:
+`/tmp/luxury-yacht-s011-prerelease.log`. SHA-256 comparison of **3,244 files** found
+**no gate modifications**; manifest: `/tmp/luxury-yacht-s011-after-gate.json`.
+The batch covers **four production files, four test files and this ledger**, with
+**120 fewer production lines** (`git diff --numstat` against entry HEAD). Only
+this ledger changed after the gate; its final update is checked with `qc:docs`
+and `git diff --check`.

@@ -59,6 +59,67 @@ export interface ErrorHandlerOptions {
   customHandlers?: Map<ErrorCategory, (error: ErrorDetails) => void>;
 }
 
+interface ErrorPresentation {
+  message: string;
+  severity?: ErrorSeverity;
+  retryable?: boolean;
+  suggestions?: readonly string[];
+}
+
+const categoryPresentation: Record<ErrorCategory, ErrorPresentation> = {
+  NETWORK: {
+    message: 'Unable to connect to the Kubernetes cluster. Please check your network connection.',
+    retryable: true,
+    suggestions: [
+      'Check your internet connection',
+      'Verify the Kubernetes API server is accessible',
+      'Check if you are behind a proxy or firewall',
+    ],
+  },
+  AUTHENTICATION: {
+    message: 'Authentication failed. Please check your kubeconfig credentials.',
+    severity: ErrorSeverity.ERROR,
+    suggestions: [
+      'Verify your kubeconfig file is valid',
+      'Check if your credentials have expired',
+      'Try selecting a different context',
+    ],
+  },
+  PERMISSION: {
+    message: 'You do not have permission to perform this operation.',
+    severity: ErrorSeverity.ERROR,
+    suggestions: [
+      'Contact your cluster administrator for access',
+      'Check your RBAC permissions',
+      'Try using a different service account',
+    ],
+  },
+  NOT_FOUND: {
+    message: 'The requested resource was not found.',
+    severity: ErrorSeverity.INFO,
+  },
+  VALIDATION: {
+    message: 'Invalid request. Please check your input and try again.',
+    severity: ErrorSeverity.WARNING,
+  },
+  TIMEOUT: {
+    message: 'The operation timed out. Please try again.',
+    retryable: true,
+    suggestions: ['Retry the operation', 'Check if the cluster is under heavy load'],
+  },
+  RATE_LIMIT: {
+    message: 'Too many requests. Please wait a moment before trying again.',
+    retryable: true,
+    suggestions: ['Wait a few seconds before retrying', 'Reduce the frequency of requests'],
+  },
+  SERVER_ERROR: {
+    message: 'The server encountered an error. Please try again later.',
+    severity: ErrorSeverity.CRITICAL,
+    retryable: true,
+  },
+  UNKNOWN: { message: 'An unexpected error occurred.' },
+};
+
 class ErrorHandler {
   private options: ErrorHandlerOptions;
   private readonly errorListeners: Set<(error: ErrorDetails) => void> = new Set();
@@ -159,78 +220,12 @@ class ErrorHandler {
     return ErrorCategory.UNKNOWN;
   }
 
-  /**
-   * Determines if an error is retryable based on its category
-   */
-  private isRetryable(category: ErrorCategory): boolean {
-    const retryableCategories: ErrorCategory[] = [
-      ErrorCategory.NETWORK,
-      ErrorCategory.TIMEOUT,
-      ErrorCategory.RATE_LIMIT,
-      ErrorCategory.SERVER_ERROR,
-    ];
-    return retryableCategories.includes(category);
-  }
-
-  /**
-   * Generates user-friendly message based on error category
-   */
   private getUserMessage(category: ErrorCategory, originalMessage: string): string {
-    switch (category) {
-      case ErrorCategory.NETWORK:
-        return 'Unable to connect to the Kubernetes cluster. Please check your network connection.';
-      case ErrorCategory.AUTHENTICATION:
-        // Use original message if it contains cluster info, otherwise use generic message
-        return (
-          originalMessage || 'Authentication failed. Please check your kubeconfig credentials.'
-        );
-      case ErrorCategory.PERMISSION:
-        return 'You do not have permission to perform this operation.';
-      case ErrorCategory.NOT_FOUND:
-        return 'The requested resource was not found.';
-      case ErrorCategory.VALIDATION:
-        return 'Invalid request. Please check your input and try again.';
-      case ErrorCategory.TIMEOUT:
-        return 'The operation timed out. Please try again.';
-      case ErrorCategory.RATE_LIMIT:
-        return 'Too many requests. Please wait a moment before trying again.';
-      case ErrorCategory.SERVER_ERROR:
-        return 'The server encountered an error. Please try again later.';
-      default:
-        return originalMessage || 'An unexpected error occurred.';
+    const { message } = categoryPresentation[category];
+    if (category === ErrorCategory.AUTHENTICATION || category === ErrorCategory.UNKNOWN) {
+      return originalMessage || message;
     }
-  }
-
-  /**
-   * Generates suggestions for error recovery
-   */
-  private getSuggestions(category: ErrorCategory): string[] {
-    switch (category) {
-      case ErrorCategory.NETWORK:
-        return [
-          'Check your internet connection',
-          'Verify the Kubernetes API server is accessible',
-          'Check if you are behind a proxy or firewall',
-        ];
-      case ErrorCategory.AUTHENTICATION:
-        return [
-          'Verify your kubeconfig file is valid',
-          'Check if your credentials have expired',
-          'Try selecting a different context',
-        ];
-      case ErrorCategory.PERMISSION:
-        return [
-          'Contact your cluster administrator for access',
-          'Check your RBAC permissions',
-          'Try using a different service account',
-        ];
-      case ErrorCategory.TIMEOUT:
-        return ['Retry the operation', 'Check if the cluster is under heavy load'];
-      case ErrorCategory.RATE_LIMIT:
-        return ['Wait a few seconds before retrying', 'Reduce the frequency of requests'];
-      default:
-        return [];
-    }
+    return message;
   }
 
   /**
@@ -249,25 +244,6 @@ class ErrorHandler {
     return String(error);
   }
 
-  /**
-   * Determines severity based on error category
-   */
-  private getSeverity(category: ErrorCategory): ErrorSeverity {
-    switch (category) {
-      case ErrorCategory.NOT_FOUND:
-        return ErrorSeverity.INFO;
-      case ErrorCategory.VALIDATION:
-        return ErrorSeverity.WARNING;
-      case ErrorCategory.AUTHENTICATION:
-      case ErrorCategory.PERMISSION:
-        return ErrorSeverity.ERROR;
-      case ErrorCategory.SERVER_ERROR:
-        return ErrorSeverity.CRITICAL;
-      default:
-        return this.options.defaultSeverity || ErrorSeverity.ERROR;
-    }
-  }
-
   public describe(
     error: unknown,
     context?: Record<string, unknown>,
@@ -276,7 +252,8 @@ class ErrorHandler {
     let errorContext = context;
     const errorString = this.getErrorString(error);
     const category = this.categorizeError(error);
-    const severity = this.getSeverity(category);
+    const presentation = categoryPresentation[category];
+    const severity = presentation.severity || this.options.defaultSeverity || ErrorSeverity.ERROR;
     let userMsg = customMessage || this.getUserMessage(category, errorString);
     let technicalMsg = errorString;
 
@@ -298,10 +275,10 @@ class ErrorHandler {
       originalError: error,
       context: errorContext,
       timestamp: new Date(),
-      retryable: this.isRetryable(category),
+      retryable: presentation.retryable ?? false,
       userMessage: userMsg,
       technicalMessage: technicalMsg,
-      suggestions: this.getSuggestions(category),
+      suggestions: [...(presentation.suggestions ?? [])],
     };
   }
 

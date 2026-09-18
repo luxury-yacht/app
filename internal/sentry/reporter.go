@@ -293,13 +293,12 @@ func (disabledReporter) AddBreadcrumb(Breadcrumb) {
 func (disabledReporter) Shutdown(time.Duration) bool { return true }
 
 type sentryReporter struct {
-	mu               sync.RWMutex
-	config           Config
-	hub              *sentry.Hub
-	breadcrumbs      []Breadcrumb
-	clusterAliases   map[string]string
-	nextClusterAlias uint64
-	operationID      atomic.Uint64
+	mu             sync.RWMutex
+	config         Config
+	hub            *sentry.Hub
+	breadcrumbs    []Breadcrumb
+	clusterAliases map[string]string
+	operationID    atomic.Uint64
 }
 
 const maxReporterBreadcrumbs = 100
@@ -308,6 +307,15 @@ func (r *sentryReporter) Enabled() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.hub != nil
+}
+
+// replaceHubLocked resets the diagnostic state owned by one reporting session.
+func (r *sentryReporter) replaceHubLocked(hub *sentry.Hub) *sentry.Hub {
+	previous := r.hub
+	r.hub = hub
+	r.breadcrumbs = nil
+	r.clusterAliases = nil
+	return previous
 }
 
 func (r *sentryReporter) SetEnabled(enabled bool) error {
@@ -322,19 +330,12 @@ func (r *sentryReporter) SetEnabled(enabled bool) error {
 			r.mu.Unlock()
 			return err
 		}
-		r.hub = hub
-		r.breadcrumbs = nil
-		r.clusterAliases = nil
-		r.nextClusterAlias = 0
+		r.replaceHubLocked(hub)
 		r.mu.Unlock()
 		return nil
 	}
 
-	hub := r.hub
-	r.hub = nil
-	r.breadcrumbs = nil
-	r.clusterAliases = nil
-	r.nextClusterAlias = 0
+	hub := r.replaceHubLocked(nil)
 	r.mu.Unlock()
 	if hub != nil {
 		// Opting out closes the transport without flushing buffered events.
@@ -509,11 +510,7 @@ func (r *sentryReporter) CaptureCountMetric(
 
 func (r *sentryReporter) Shutdown(timeout time.Duration) bool {
 	r.mu.Lock()
-	hub := r.hub
-	r.hub = nil
-	r.breadcrumbs = nil
-	r.clusterAliases = nil
-	r.nextClusterAlias = 0
+	hub := r.replaceHubLocked(nil)
 	r.mu.Unlock()
 	if hub == nil {
 		return true
@@ -644,8 +641,7 @@ func (r *sentryReporter) aliasForCluster(clusterID string) string {
 	if r.clusterAliases == nil {
 		r.clusterAliases = make(map[string]string)
 	}
-	r.nextClusterAlias++
-	alias := fmt.Sprintf("cluster-%d", r.nextClusterAlias)
+	alias := fmt.Sprintf("cluster-%d", len(r.clusterAliases)+1)
 	r.clusterAliases[clusterID] = alias
 	return alias
 }
