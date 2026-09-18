@@ -188,6 +188,45 @@ describe('GlobalShortcuts', () => {
     expect(latestHelpProps?.isOpen).toBe(false);
   });
 
+  it('allows help immediately after help or settings closes while blocking it during settings', async () => {
+    await renderComponent({});
+    act(() => findShortcut('?').handler());
+    expect(latestHelpProps?.isOpen).toBe(true);
+    act(() => findShortcut(KeyCodes.ESCAPE).handler());
+    expect(latestHelpProps?.isOpen).toBe(false);
+    act(() => findShortcut('?').handler());
+    expect(latestHelpProps?.isOpen).toBe(true);
+    act(() => latestHelpProps?.onClose());
+
+    await renderComponent({ isSettingsOpen: true });
+    act(() => findShortcut('?').handler());
+    expect(latestHelpProps?.isOpen).toBe(false);
+    await renderComponent({ isSettingsOpen: false });
+    act(() => findShortcut('?').handler());
+    expect(latestHelpProps?.isOpen).toBe(true);
+  });
+
+  it('uses the latest overlay state when Escape moves from settings to logs', async () => {
+    const toggleSettings = vi.fn();
+    const toggleAppLogsPanel = vi.fn();
+    const callbacks = {
+      onToggleSettings: toggleSettings,
+      onToggleAppLogsPanel: toggleAppLogsPanel,
+    };
+    await renderComponent({ ...callbacks, isSettingsOpen: true, isAppLogsPanelOpen: true });
+    act(() => findShortcut(KeyCodes.ESCAPE).handler());
+    expect(toggleSettings).toHaveBeenCalledOnce();
+    expect(toggleAppLogsPanel).not.toHaveBeenCalled();
+
+    await renderComponent({ ...callbacks, isSettingsOpen: false, isAppLogsPanelOpen: true });
+    act(() => findShortcut(KeyCodes.ESCAPE).handler());
+    expect(toggleSettings).toHaveBeenCalledOnce();
+    expect(toggleAppLogsPanel).toHaveBeenCalledOnce();
+    await renderComponent({ ...callbacks, isSettingsOpen: false, isAppLogsPanelOpen: false });
+    act(() => findShortcut(KeyCodes.ESCAPE).handler());
+    expect(toggleAppLogsPanel).toHaveBeenCalledOnce();
+  });
+
   it('prioritises settings modal when Escape shortcut fires', async () => {
     const toggleSettings = vi.fn();
     const toggleAppLogsPanel = vi.fn();

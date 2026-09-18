@@ -15,6 +15,7 @@ import {
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
+import { reportOperationalError } from '@/utils/errorHandler';
 import { type Command, useCommandPaletteCommands } from './CommandPaletteCommands';
 
 const { mocks } = vi.hoisted(() => ({
@@ -127,6 +128,8 @@ vi.mock('@core/desktop-runtime', () => ({
   closeWindow: (...args: unknown[]) => mocks.desktopRuntime.closeWindow(...args),
   desktopRuntimeAvailable: () => true,
 }));
+
+vi.mock('@/utils/errorHandler', () => ({ reportOperationalError: vi.fn() }));
 
 vi.mock('@/utils/appearanceMode', () => ({
   changeAppearanceMode: vi.fn(),
@@ -556,6 +559,35 @@ describe('CommandPaletteCommands', () => {
 
     unmount();
   });
+
+  it.each([
+    ['mode-system', 'setSystemAppearanceMode'],
+    ['mode-light', 'setLightAppearanceMode'],
+    ['mode-dark', 'setDarkAppearanceMode'],
+    ['toggle-exclusive-namespaces', 'toggleExclusiveNamespaces'],
+    ['toggle-dim-inactive-namespaces', 'toggleDimInactiveNamespaces'],
+    ['toggle-short-names', 'toggleShortResourceNames'],
+  ])(
+    'reports %s failures with the operation identity without rejecting the command',
+    async (id, action) => {
+      const error = new Error('settings unavailable');
+      vi.mocked(changeAppearanceMode).mockRejectedValueOnce(error);
+      mocks.appSettings.UpdateAppPreferences.mockRejectedValueOnce(error);
+      const { getCommands, unmount } = renderHook();
+      const command = getCommands().find((entry) => entry.id === id);
+      expect(command).toBeDefined();
+
+      await act(async () => {
+        await expect(command?.action()).resolves.toBeUndefined();
+      });
+      expect(reportOperationalError).toHaveBeenCalledExactlyOnceWith(error, {
+        source: 'CommandPalette',
+        action,
+      });
+      vi.mocked(changeAppearanceMode).mockReset();
+      unmount();
+    }
+  );
 
   it('routes namespace view and namespace selection commands through their navigation contracts', () => {
     mocks.viewState.sidebarSelection = { type: 'namespace', value: 'default' };

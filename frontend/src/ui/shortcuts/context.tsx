@@ -354,16 +354,15 @@ const dispatchShortcut = (event: KeyboardEvent, shortcut: RegisteredShortcut) =>
 };
 
 interface KeyboardEventRoutingContext {
-  getTargetSurface: (target: EventTarget | null) => RegisteredKeyboardSurface | null;
   getSurfaceCandidates: (target: EventTarget | null) => RegisteredKeyboardSurface[];
   shortcuts: ShortcutMap;
 }
 
-const routeEscapeKey = (event: KeyboardEvent, context: KeyboardEventRoutingContext): boolean => {
+const routeEscapeKey = (event: KeyboardEvent, surfaces: RegisteredKeyboardSurface[]): boolean => {
   if (event.key !== 'Escape') {
     return false;
   }
-  return dispatchEscapeThroughSurfaces(event, context.getSurfaceCandidates(event.target));
+  return dispatchEscapeThroughSurfaces(event, surfaces);
 };
 
 const routeTargetSurfaceKey = (
@@ -407,8 +406,9 @@ const routeKeyboardEvent = (event: KeyboardEvent, context: KeyboardEventRoutingC
   if (event.key === 'Tab') {
     return;
   }
-  const targetSurface = context.getTargetSurface(event.target);
-  if (routeEscapeKey(event, context)) {
+  const surfaces = context.getSurfaceCandidates(event.target);
+  const targetSurface = surfaces[0] ?? null;
+  if (routeEscapeKey(event, surfaces)) {
     return;
   }
   if (routeTargetSurfaceKey(event, targetSurface)) {
@@ -509,8 +509,8 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       });
   }, []);
 
-  const getTargetSurface = useCallback(
-    (target: EventTarget | null): RegisteredKeyboardSurface | null => {
+  const getSurfaceCandidates = useCallback(
+    (target: EventTarget | null): RegisteredKeyboardSurface[] => {
       const targetElement = resolveEventElement(target);
       const orderedSurfaces = getOrderedSurfaces();
 
@@ -527,40 +527,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
               return depthDiff;
             }
             return orderedSurfaces.indexOf(a) - orderedSurfaces.indexOf(b);
-          })[0];
-        }
-      }
-
-      return (
-        orderedSurfaces.find((surface) => surface.blocking) ??
-        orderedSurfaces.find((surface) => surface.captureWhenActive) ??
-        null
-      );
-    },
-    [getOrderedSurfaces]
-  );
-
-  const getSurfaceCandidates = useCallback(
-    (target: EventTarget | null): RegisteredKeyboardSurface[] => {
-      const targetElement = resolveEventElement(target);
-      const orderedSurfaces = getOrderedSurfaces();
-
-      if (targetElement) {
-        const containingSurfaces = orderedSurfaces.filter((surface) =>
-          surface.rootRef.current?.contains(targetElement)
-        );
-        if (containingSurfaces.length > 0) {
-          const sortedContainingSurfaces = containingSurfaces.sort((a, b) => {
-            const depthDiff =
-              getSurfaceContainmentDepth(targetElement, a.rootRef.current) -
-              getSurfaceContainmentDepth(targetElement, b.rootRef.current);
-            if (depthDiff !== 0) {
-              return depthDiff;
-            }
-            return orderedSurfaces.indexOf(a) - orderedSurfaces.indexOf(b);
           });
-
-          return sortedContainingSurfaces;
         }
       }
 
@@ -616,7 +583,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
 
   const dispatchNativeAction = useCallback(
     (action: KeyboardNativeAction, text?: string): boolean => {
-      const targetSurface = getTargetSurface(document.activeElement);
+      const targetSurface = getSurfaceCandidates(document.activeElement)[0];
       if (!targetSurface?.onNativeAction) {
         return false;
       }
@@ -630,7 +597,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
         }) === true
       );
     },
-    [getTargetSurface]
+    [getSurfaceCandidates]
   );
 
   const applyNativeCutFallback = useCallback((): boolean => {
@@ -662,15 +629,11 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     }
 
     const handleCapturedTabKeyDown = (event: KeyboardEvent) => {
-      routeTabKey(
-        event,
-        { getTargetSurface, getSurfaceCandidates, shortcuts },
-        hasActiveBlockingSurface()
-      );
+      routeTabKey(event, { getSurfaceCandidates, shortcuts }, hasActiveBlockingSurface());
     };
 
     const handleKeyDown = (event: KeyboardEvent) =>
-      routeKeyboardEvent(event, { getTargetSurface, getSurfaceCandidates, shortcuts });
+      routeKeyboardEvent(event, { getSurfaceCandidates, shortcuts });
 
     document.addEventListener('keydown', handleCapturedTabKeyDown, true);
     document.addEventListener('keydown', handleKeyDown);
@@ -678,14 +641,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       document.removeEventListener('keydown', handleCapturedTabKeyDown, true);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [
-    disabled,
-    getSurfaceCandidates,
-    getTargetSurface,
-    hasActiveBlockingSurface,
-    isEnabled,
-    shortcuts,
-  ]);
+  }, [disabled, getSurfaceCandidates, hasActiveBlockingSurface, isEnabled, shortcuts]);
 
   // Handle menu events from Wails
   useEffect(() => {

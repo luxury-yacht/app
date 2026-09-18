@@ -84,7 +84,6 @@ export function useShortcut(options: UseShortcutOptions) {
   } = options;
 
   const { registerShortcut, unregisterShortcut } = useKeyboardContext();
-  const shortcutIdRef = useRef<string | null>(null);
   const handlerRef = useRef(handler);
 
   // Update handler ref when it changes
@@ -97,12 +96,10 @@ export function useShortcut(options: UseShortcutOptions) {
   const alt = !!modifiers?.alt;
   const meta = !!modifiers?.meta;
 
-  const normalizedModifiers = useMemo<ShortcutModifiers | undefined>(() => {
-    if (!ctrl && !shift && !alt && !meta) {
-      return undefined;
-    }
-    return { ctrl, shift, alt, meta };
-  }, [ctrl, shift, alt, meta]);
+  const normalizedModifiers = useMemo(
+    () => normalizeModifiers({ ctrl, shift, alt, meta }),
+    [ctrl, shift, alt, meta]
+  );
 
   useEffect(() => {
     const id = registerShortcut({
@@ -119,14 +116,7 @@ export function useShortcut(options: UseShortcutOptions) {
       applicationMenuCommand,
     });
 
-    shortcutIdRef.current = id;
-
-    return () => {
-      if (shortcutIdRef.current) {
-        unregisterShortcut(shortcutIdRef.current);
-        shortcutIdRef.current = null;
-      }
-    };
+    return () => unregisterShortcut(id);
   }, [
     key,
     description,
@@ -161,13 +151,6 @@ export function useShortcuts(
   >
 ) {
   const { registerShortcut, unregisterShortcut } = useKeyboardContext();
-  const handlerRefs = useRef<Array<UseShortcutOptions['handler']>>([]);
-  const shortcutIdsRef = useRef<string[]>([]);
-
-  useEffect(() => {
-    handlerRefs.current = shortcuts.map((shortcut) => shortcut.handler);
-  }, [shortcuts]);
-
   const latestShortcutsRef = useRef(shortcuts);
   useEffect(() => {
     latestShortcutsRef.current = shortcuts;
@@ -179,12 +162,7 @@ export function useShortcuts(
   }, [commonOptions]);
 
   const structuralSignature = useMemo(
-    () =>
-      JSON.stringify(
-        shortcuts.map(({ handler: _handler, ...rest }) => ({
-          ...rest,
-        }))
-      ),
+    () => JSON.stringify(shortcuts.map(({ handler: _handler, ...rest }) => rest)),
     [shortcuts]
   );
 
@@ -209,7 +187,7 @@ export function useShortcuts(
         key: merged.key,
         modifiers: normalizedModifiers,
         priority: merged.priority,
-        handler: (event) => handlerRefs.current[index]?.(event),
+        handler: (event) => latestShortcutsRef.current[index]?.handler(event),
         description: merged.description || '',
         category: merged.category,
         helpOrder: merged.helpOrder,
@@ -220,13 +198,10 @@ export function useShortcuts(
       });
     });
 
-    shortcutIdsRef.current = registeredIds;
-
     return () => {
       registeredIds.forEach((id) => {
         unregisterShortcut(id);
       });
-      shortcutIdsRef.current = [];
     };
   }, [registerShortcut, unregisterShortcut, structuralSignature, commonSignature]);
 }

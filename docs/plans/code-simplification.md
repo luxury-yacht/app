@@ -210,7 +210,7 @@ correctness-driven interruption and resume the rotation afterwards.
 | 6 | Operations | Shell/debug, logs, port-forward, drain, runtime registry; detail/event consumers | S006 owner/consumer review, batch implementation, coverage and final gate passed |
 | 7 | Object map | Backend graph producers and relationships; frontend graph, layout and renderer | S007 batch, coverage and final gate passed; limits recorded |
 | 8 | Permissions and mutations | Capability policy, permission caches, object actions/YAML; frontend availability gates | S008 query/store/hook batch, coverage and final gate passed; remaining scope recorded |
-| 9 | Navigation and interaction | Sidebar, routing, shortcuts, command palette, modals, shared inputs and menus | Inventoried |
+| 9 | Navigation and interaction | Sidebar, routing, shortcuts, command palette, modals, shared inputs and menus | S009 keyboard/palette/global shortcut batch, coverage and final gate passed; remaining scope recorded |
 | 10 | Preferences and persistence | Settings, favorites, UI state, import/export/reset; frontend state hydration | Inventoried |
 | 11 | Errors and diagnostics | Error classification/reporting, logs, telemetry, request diagnostics | Inventoried |
 | 12 | Native lifecycle and windows | Bootstrap, app lifetime, desktop transport, peer windows, dockable ownership | Inventoried |
@@ -1420,4 +1420,111 @@ three test files and this ledger**, with **329 fewer production lines** includin
 the new `capabilityState.ts` and removed `catalog.ts`. Source inventory counts
 above remain baseline counts; these path replacements are recorded here. Only
 this ledger changed after the gate; its final update passed `qc:docs` and
+`git diff --check`.
+
+## S009 — navigation and interaction
+
+**Status: selected batch implemented; focused, coverage, complexity and final gate passed.**
+Baseline `a1b984d0`; worktree clean at entry. Follow keyboard dispatch from surface
+registration through ordinary keys, Escape and native actions, then simplify the
+command palette's result interactions, selection movement and action handling.
+
+| Responsibility inspected | Disposition |
+| --- | --- |
+| Keyboard provider surface ranking and dispatch; shortcut hook registration, publication and disposal | Use one ranked candidate list for keyboard/native dispatch; remove duplicate handler/registration refs while preserving effect publication before registration and local cleanup identity. |
+| Palette result rows, open/close state reset, six navigation keys and shortcut help registrations | Give shared row interaction, reset state and selection publication one owner; derive surface dispatch and help registration from the same local shortcut definitions. Preserve wrapping, clamping, mouse arming, delayed actions and mode-specific Escape. |
+| Palette navigation/settings/application commands | Consolidate the repeated asynchronous error-reporting policy while retaining each operation's action label and routing order. |
+| Sidebar route/group/namespace expansion, ViewStateContext and modal focus trap | Retain existing ownership and order: staged cluster routes, namespace selection, persistent disclosure, modal stack/inert state and portal-aware focus are different contracts. |
+| ContextMenu and Dropdown keyboard/state hooks | Retain their distinct disabled-row, focus restoration, Tab, selection and outside-click policies; no generic popup navigation abstraction. |
+
+Read in full: `CommandPalette.tsx`, `CommandPaletteCommands.tsx`, shortcut
+`context.tsx` and `hooks.ts`, `Sidebar.tsx`, `ViewStateContext.tsx`,
+`ContextMenu.tsx`, `useModalFocusTrap.ts`, Dropdown `useKeyboardNavigation.ts`
+and state hook. Test review includes shortcut provider/surfaces/hooks and palette
+interaction/command consumers. This is not a closure claim for all app-shell code:
+The follow-through review below covers Sidebar keyboard navigation and menu
+consumers. Settings, native command producers, dockable panels, Favorites and
+remaining shared input owners remain in inventory.
+
+Surface registration produces active roots and routing metadata; keyboard/native
+handlers consume the same ordering (containment depth, blocking/capture status,
+priority, then registration order). Escape/Tab may continue through candidates;
+ordinary keys/native actions select the first. Publication effects still precede
+registration; cleanup removes only that effect's registrations. No provider order,
+cluster/object identity, import direction or readiness gate changes. Existing
+nested-surface, capture/blocking fallback, native action, fresh-handler and focus
+restoration tests cover these contracts; add navigation boundary characterization
+before the corresponding refactor. Run focused checks per responsibility and
+coverage/complexity/prerelease once at the batch boundary.
+
+Follow-through review read `SidebarKeys.ts`, `applicationMenuCommands.ts` and
+`GlobalShortcuts.tsx` in full. Retain Sidebar's preview/pending/committed selection
+and focus listeners; retain application menu descriptors as the accelerator source.
+Add GlobalShortcuts to the batch: its ref-publication effect runs before both
+animation checks, so those checks compare the new state with itself. Remove that
+ineffective animation bookkeeping and use the shortcut hook's existing current
+handler publication for Escape; remove the object-panel prop whose only consumer
+is an empty branch. Two characterization cases cover immediate help reopen,
+settings exclusion and Escape state changes before this edit. Repository search
+locates the sole production GlobalShortcuts caller in `App.tsx`.
+
+PR #355 at published head `a1b984d07009fce6aa3ea27c927d79c8c23485be` reports one
+new-code issue, `typescript:S4138` / `AaCxPE6g7XSI2CXwtM4v`, in the earlier
+`objectMapTraversal.ts` pass. Replace its indexed queue iteration with `for-of`,
+which continues visiting appended entries in the same order. Both consumers
+(selection and directional filtering) were read; existing cycle and multi-hop
+chain tests characterize the traversal. No graph identity or direction policy changes.
+
+Also read `PanelWindowShortcuts.tsx`, `ApplicationMenuShortcuts.tsx` and
+`AppMenuBar.tsx` in full as keyboard consumers. Their current role-specific
+close/transfer guards, publication acknowledgements and menu focus restoration
+stay separate. Panel-window snapshot projection and repeated group selection
+are candidates for S012, where their lifecycle producers can be reviewed together;
+reading this consumer alone does not close native-window ownership. Application
+menu command descriptors remain the shared accelerator source, and menu invocation
+continues restoring prior content focus before dispatch.
+
+### Validation and remaining scope
+
+- Focused baseline: **41 files / 422 tests** passed. Seven palette characterization
+  cases passed before their refactors (**60 palette tests**); two GlobalShortcuts
+  characterization cases passed before that refactor (**24 tests** with graph
+  consumers). Incremental shortcut, palette row/reset, navigation and command
+  checks passed. Expanded consumers passed **44 files / 443 tests**. Logs:
+  `/tmp/luxury-yacht-s009-{before,characterization,shortcuts,palette-rows,
+  palette-navigation,palette-commands,follow-through-before,expanded}.log`.
+- Frontend coverage passed: **513 files / 4,811 tests**, **87.81%** aggregate
+  statement coverage. Changed implementation owners: palette **89.51%**, palette
+  commands **93.79%**, GlobalShortcuts **92.30%**, keyboard provider **90.71%**,
+  shortcut hooks **100%**, graph traversal **100%**. `App.tsx` remains **57.62%**
+  (34/59 statements); its sole edit removes a prop connected only to the removed
+  empty branch, with no executable statement change. No unrelated root-app tests
+  were added to inflate this file-level metric. Report:
+  `/tmp/luxury-yacht-s009-frontend-coverage/coverage-summary.json`.
+- Typecheck and targeted Biome check passed. Local complexity: **58 changed/new
+  TypeScript functions**, none above 12, with no retained findings in the checked
+  files. Evidence: `/tmp/luxury-yacht-s009-{typecheck,format}.log` and
+  `/tmp/luxury-yacht-s009-complexity-audit.json`. No tests were deleted.
+- The published PR audit reports only S4138 in graph traversal at baseline head
+  `a1b984d07009fce6aa3ea27c927d79c8c23485be`; the three S008 findings are absent
+  from that audit. The local loop change addresses S4138; remote closure requires
+  analysis after a later authorized push. No push was requested. Audit:
+  `/tmp/luxury-yacht-s009-sonar.log`.
+- Native Wails interaction was not run for this behavior-preserving batch.
+  Automated focus/keyboard tests do not establish native-window visual behavior.
+
+Next domain: **S010 preferences and persistence** — settings, favorites, UI-state
+hydration, import/export/reset and their persistence owners. Native panel-window
+producer/consumer follow-through remains assigned to S012. No files were added or
+removed from the source inventory by S009.
+
+
+Final `mise exec -- wails3 task qc:prerelease` passed (exit 0): docs, formatting,
+generated bindings, vet/staticcheck, full backend race suite, frontend checks and
+typecheck, **4,811 frontend tests**, Knip and Trivy. Log:
+`/tmp/luxury-yacht-s009-prerelease.log`. SHA-256 comparison of **3,243 files** found
+**no gate modifications**; `git diff --check` passed. Manifest:
+`/tmp/luxury-yacht-s009-after-gate.json`. The diff covers **seven production files,
+three test files and this ledger**, with **223 fewer production lines**. Only this
+ledger changed after the gate; the final update is checked with `qc:docs` and
 `git diff --check`.

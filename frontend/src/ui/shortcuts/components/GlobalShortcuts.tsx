@@ -13,7 +13,7 @@ import {
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { eventBus } from '@/core/events';
 import { closeActiveClusterOrWindow } from '@/ui/navigation/closeActiveClusterOrWindow';
 import { isMacPlatform } from '@/utils/platform';
@@ -26,7 +26,6 @@ interface GlobalShortcutsProps {
   onToggleSettings?: () => void;
   onRefresh?: () => void;
   isAppLogsPanelOpen?: boolean;
-  isObjectPanelOpen?: boolean;
   isSettingsOpen?: boolean;
 }
 
@@ -35,11 +34,9 @@ export function GlobalShortcuts({
   onToggleSettings,
   onRefresh,
   isAppLogsPanelOpen,
-  isObjectPanelOpen,
   isSettingsOpen,
 }: Readonly<GlobalShortcutsProps>) {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
-  const [isModalAnimating, setIsModalAnimating] = useState(false);
   const { selectedKubeconfig, selectedKubeconfigs, setActiveKubeconfig, closeKubeconfig } =
     useKubeconfig();
   const [clusterTabOrder, setClusterTabOrder] = useState<string[]>(() => getClusterTabOrder());
@@ -62,15 +59,14 @@ export function GlobalShortcuts({
     };
   }, []);
 
-  // Toggle help overlay - only if no other modal is open or animating
+  // Settings owns the foreground while open.
   const toggleHelp = useCallback(() => {
-    if (!isSettingsOpen && !isModalAnimating) {
+    if (!isSettingsOpen) {
       setIsHelpOpen((prev) => !prev);
     }
     return undefined;
-  }, [isSettingsOpen, isModalAnimating]);
+  }, [isSettingsOpen]);
 
-  // Memoize all handlers to prevent re-registration
   const handleRefresh = useCallback(
     (e?: KeyboardEvent) => {
       e?.preventDefault();
@@ -116,59 +112,17 @@ export function GlobalShortcuts({
 
   const macPlatform = isMacPlatform();
 
-  // Use refs to avoid stale closures in the Escape handler
-  const isHelpOpenRef = useRef(isHelpOpen);
-  const isSettingsOpenRef = useRef(isSettingsOpen);
-  const isAppLogsPanelOpenRef = useRef(isAppLogsPanelOpen);
-  const isObjectPanelOpenRef = useRef(isObjectPanelOpen);
-
-  useEffect(() => {
-    isHelpOpenRef.current = isHelpOpen;
-    isSettingsOpenRef.current = isSettingsOpen;
-    isAppLogsPanelOpenRef.current = isAppLogsPanelOpen;
-    isObjectPanelOpenRef.current = isObjectPanelOpen;
-  }, [isHelpOpen, isSettingsOpen, isAppLogsPanelOpen, isObjectPanelOpen]);
-
-  // Track when modals are animating to prevent opening others
-  useEffect(() => {
-    // When a modal starts closing, set animating flag
-    if (!isHelpOpen && isHelpOpenRef.current) {
-      setIsModalAnimating(true);
-      const timer = setTimeout(() => {
-        setIsModalAnimating(false);
-      }, 200); // Match animation duration
-      return () => clearTimeout(timer);
-    }
-  }, [isHelpOpen]);
-
-  useEffect(() => {
-    // When settings modal starts closing, set animating flag
-    if (!isSettingsOpen && isSettingsOpenRef.current) {
-      setIsModalAnimating(true);
-      const timer = setTimeout(() => {
-        setIsModalAnimating(false);
-      }, 200); // Match animation duration
-      return () => clearTimeout(timer);
-    }
-  }, [isSettingsOpen]);
-
   const handleEscape = useCallback(() => {
-    // Check refs for current state - priority order:
-    // 1. Help overlay
-    // 2. Settings modal
-    // 3. Application Logs Panel (closes before object panel when both are open)
-    // 4. Object panel
-    if (isHelpOpenRef.current) {
+    // Object panels own their Escape handling; global overlays take precedence.
+    if (isHelpOpen) {
       setIsHelpOpen(false);
-    } else if (isSettingsOpenRef.current && onToggleSettings) {
-      onToggleSettings(); // This will toggle it off
-    } else if (isAppLogsPanelOpenRef.current && onToggleAppLogsPanel) {
+    } else if (isSettingsOpen && onToggleSettings) {
+      onToggleSettings();
+    } else if (isAppLogsPanelOpen && onToggleAppLogsPanel) {
       onToggleAppLogsPanel();
-    } else if (isObjectPanelOpenRef.current) {
-      // Object panel has its own ESC handler now
     }
     return undefined;
-  }, [onToggleSettings, onToggleAppLogsPanel]);
+  }, [isHelpOpen, isSettingsOpen, isAppLogsPanelOpen, onToggleSettings, onToggleAppLogsPanel]);
 
   // Register all shortcuts individually to avoid hooks in loops
   useShortcut({
@@ -194,11 +148,7 @@ export function GlobalShortcuts({
   // Closes the active cluster tab, or the current peer window when it has no
   // cluster tabs left.
   useEffect(() => {
-    const handleMenuClose = () => {
-      handleCloseClusterTab();
-    };
-
-    return onEvent('menu:close', handleMenuClose);
+    return onEvent('menu:close', handleCloseClusterTab);
   }, [handleCloseClusterTab]);
 
   useEffect(

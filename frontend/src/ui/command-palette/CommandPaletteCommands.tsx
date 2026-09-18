@@ -129,6 +129,14 @@ const buildClusterViewCommands = (
     keywords: [...view.keywords],
   }));
 
+const runSettingsCommand = async (action: string, update: () => Promise<void>): Promise<void> => {
+  try {
+    await update();
+  } catch (error) {
+    reportOperationalError(error, { source: 'CommandPalette', action });
+  }
+};
+
 type KubeconfigContextValue = ReturnType<typeof useKubeconfig>;
 type KubeconfigEntry = KubeconfigContextValue['kubeconfigs'][number];
 
@@ -397,16 +405,8 @@ export function useCommandPaletteCommands() {
         icon: <AppearanceModeIcon width={16} height={16} />,
         description: currentModeDescription('Use system appearance mode', mode === 'system'),
         category: 'Settings',
-        action: async () => {
-          try {
-            await changeAppearanceMode('system');
-          } catch (error) {
-            reportOperationalError(error, {
-              source: 'CommandPalette',
-              action: 'setSystemAppearanceMode',
-            });
-          }
-        },
+        action: () =>
+          runSettingsCommand('setSystemAppearanceMode', () => changeAppearanceMode('system')),
         keywords: ['mode', 'system', 'auto', 'automatic', 'appearance', 'os'],
       },
       {
@@ -415,16 +415,8 @@ export function useCommandPaletteCommands() {
         icon: <LightModeIcon width={16} height={16} />,
         description: currentModeDescription('Switch to light mode', mode === 'light'),
         category: 'Settings',
-        action: async () => {
-          try {
-            await changeAppearanceMode('light');
-          } catch (error) {
-            reportOperationalError(error, {
-              source: 'CommandPalette',
-              action: 'setLightAppearanceMode',
-            });
-          }
-        },
+        action: () =>
+          runSettingsCommand('setLightAppearanceMode', () => changeAppearanceMode('light')),
         keywords: ['mode', 'light', 'bright', 'white', 'appearance'],
       },
       {
@@ -433,16 +425,8 @@ export function useCommandPaletteCommands() {
         icon: <DarkModeIcon width={16} height={16} />,
         description: currentModeDescription('Switch to dark mode', mode === 'dark'),
         category: 'Settings',
-        action: async () => {
-          try {
-            await changeAppearanceMode('dark');
-          } catch (error) {
-            reportOperationalError(error, {
-              source: 'CommandPalette',
-              action: 'setDarkAppearanceMode',
-            });
-          }
-        },
+        action: () =>
+          runSettingsCommand('setDarkAppearanceMode', () => changeAppearanceMode('dark')),
         keywords: ['mode', 'dark', 'night', 'black', 'appearance'],
       },
       {
@@ -456,18 +440,10 @@ export function useCommandPaletteCommands() {
         description:
           'When enabled, only one namespace at a time can be expanded in the Sidebar. Expanding a different namespace will collapse the currently expanded one.',
         category: 'Settings',
-        action: async () => {
-          const newState = !exclusiveNamespaces;
-
-          try {
-            await setExclusiveNamespaces(newState);
-          } catch (error) {
-            reportOperationalError(error, {
-              source: 'CommandPalette',
-              action: 'toggleExclusiveNamespaces',
-            });
-          }
-        },
+        action: () =>
+          runSettingsCommand('toggleExclusiveNamespaces', () =>
+            setExclusiveNamespaces(!exclusiveNamespaces)
+          ),
         keywords: ['exclusive', 'namespaces', 'sidebar', 'expand', 'collapse', 'toggle'],
       },
       {
@@ -480,18 +456,10 @@ export function useCommandPaletteCommands() {
         icon: <SidebarVisibilityIcon isVisible={viewState.isSidebarVisible} />,
         description: 'Dim namespaces in the Sidebar that have no Workloads.',
         category: 'Settings',
-        action: async () => {
-          const newState = !dimInactiveNamespaces;
-
-          try {
-            await setDimInactiveNamespaces(newState);
-          } catch (error) {
-            reportOperationalError(error, {
-              source: 'CommandPalette',
-              action: 'toggleDimInactiveNamespaces',
-            });
-          }
-        },
+        action: () =>
+          runSettingsCommand('toggleDimInactiveNamespaces', () =>
+            setDimInactiveNamespaces(!dimInactiveNamespaces)
+          ),
         keywords: ['dim', 'inactive', 'namespaces', 'sidebar', 'workloads', 'toggle'],
       },
       {
@@ -532,18 +500,10 @@ export function useCommandPaletteCommands() {
         icon: <SettingsIcon width={16} height={16} />,
         description: 'Toggle between short and full resource type names',
         category: 'Settings',
-        action: async () => {
-          const newState = !useShortResourceNames;
-
-          try {
-            await setUseShortResourceNames(newState);
-          } catch (error) {
-            reportOperationalError(error, {
-              source: 'CommandPalette',
-              action: 'toggleShortResourceNames',
-            });
-          }
-        },
+        action: () =>
+          runSettingsCommand('toggleShortResourceNames', () =>
+            setUseShortResourceNames(!useShortResourceNames)
+          ),
         keywords: ['short', 'names', 'abbreviations', 'types', 'resources', 'toggle'],
       },
 

@@ -789,6 +789,41 @@ describe('CommandPalette component behaviour', () => {
     expect(document.querySelector('.command-palette')).not.toBeNull();
   });
 
+  it('wraps arrows, clamps pages, and resets selection when reopened', async () => {
+    const commands: Command[] = Array.from({ length: 3 }, (_, index) => ({
+      id: `cmd-${index}`,
+      label: `Command ${index + 1}`,
+      category: 'Application',
+      action: vi.fn(),
+    }));
+    await renderPalette(commands);
+    await openPalette();
+    const selectedIndex = () =>
+      queryItems().findIndex((item) => item.getAttribute('aria-selected') === 'true');
+
+    for (const [key, expected] of [
+      ['ArrowUp', 2],
+      ['ArrowDown', 0],
+      ['ArrowDown', 1],
+      ['PageDown', 2],
+      ['PageDown', 2],
+      ['PageUp', 0],
+      ['PageUp', 0],
+      ['End', 2],
+      ['Home', 0],
+      ['End', 2],
+    ] as const) {
+      await triggerShortcut(key);
+      expect(selectedIndex(), key).toBe(expected);
+    }
+    await triggerShortcut('Escape');
+    await openPalette();
+    expect(selectedIndex()).toBe(0);
+    expect(document.querySelector('.command-palette')?.classList.contains('hide-cursor')).toBe(
+      false
+    );
+  });
+
   it('supports page navigation shortcuts and hides cursor until mouse movement', async () => {
     const commands: Command[] = Array.from({ length: 8 }).map((_, index) => ({
       id: `cmd-${index}`,

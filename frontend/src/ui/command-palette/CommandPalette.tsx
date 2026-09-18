@@ -49,6 +49,30 @@ const CATEGORY_ORDER = [
 const CATALOG_RESULT_LIMIT = 20;
 const CATALOG_SEARCH_DEBOUNCE_MS = 200;
 
+type PaletteNavigationKey = 'ArrowDown' | 'ArrowUp' | 'PageDown' | 'PageUp' | 'Home' | 'End';
+
+const getPaletteSelectionIndex = (
+  key: PaletteNavigationKey,
+  currentIndex: number,
+  lastIndex: number,
+  pageSize: number
+): number => {
+  switch (key) {
+    case 'ArrowDown':
+      return currentIndex < lastIndex ? currentIndex + 1 : 0;
+    case 'ArrowUp':
+      return currentIndex > 0 ? currentIndex - 1 : lastIndex;
+    case 'PageDown':
+      return Math.min(lastIndex, currentIndex + pageSize);
+    case 'PageUp':
+      return Math.max(0, currentIndex - pageSize);
+    case 'Home':
+      return 0;
+    case 'End':
+      return lastIndex;
+  }
+};
+
 const normalizeKindClass = (value: string) => getKindColorClass(value);
 
 export interface ParsedQueryTokens {
@@ -269,20 +293,22 @@ interface ResultRowInteractionProps {
   updateSelection: (index: number) => void;
 }
 
-interface CommandResultRowProps extends ResultRowInteractionProps {
-  command: Command;
+interface PaletteResultRowProps extends ResultRowInteractionProps {
+  item: PaletteItem;
   executePaletteItem: (item: PaletteItem) => void;
+  children: React.ReactNode;
 }
 
-const CommandResultRow = ({
-  command,
+const PaletteResultRow = ({
+  item,
   currentIndex,
   selectedIndex,
   itemRefs,
   mouseSelectionArmedRef,
   updateSelection,
   executePaletteItem,
-}: CommandResultRowProps) => {
+  children,
+}: Readonly<PaletteResultRowProps>) => {
   const isSelected = currentIndex === selectedIndex;
   return (
     <ListboxOptionButton
@@ -292,21 +318,32 @@ const CommandResultRow = ({
       className={`command-palette-item ${isSelected ? 'selected' : ''}`}
       id={`command-palette-option-${currentIndex}`}
       selected={isSelected}
-      onClick={() => executePaletteItem({ type: 'command', command })}
+      onClick={() => executePaletteItem(item)}
       onMouseEnter={() => {
         if (mouseSelectionArmedRef.current) {
           updateSelection(currentIndex);
         }
       }}
     >
-      <CommandResultIcon icon={command.icon} />
-      <div className="command-palette-item-content">
-        <div className="command-palette-item-label">{command.renderLabel ?? command.label}</div>
-      </div>
-      <CommandShortcut shortcut={command.shortcut} />
+      {children}
     </ListboxOptionButton>
   );
 };
+
+interface CommandResultRowProps extends ResultRowInteractionProps {
+  command: Command;
+  executePaletteItem: (item: PaletteItem) => void;
+}
+
+const CommandResultRow = ({ command, ...interaction }: Readonly<CommandResultRowProps>) => (
+  <PaletteResultRow {...interaction} item={{ type: 'command', command }}>
+    <CommandResultIcon icon={command.icon} />
+    <div className="command-palette-item-content">
+      <div className="command-palette-item-label">{command.renderLabel ?? command.label}</div>
+    </div>
+    <CommandShortcut shortcut={command.shortcut} />
+  </PaletteResultRow>
+);
 
 interface CommandGroupsProps extends Omit<ResultRowInteractionProps, 'currentIndex'> {
   groupedCommands: Array<[string, Command[]]>;
@@ -341,40 +378,16 @@ interface CatalogResultRowProps extends ResultRowInteractionProps {
   executePaletteItem: (item: PaletteItem) => void;
 }
 
-const CatalogResultRow = ({
-  entry,
-  currentIndex,
-  selectedIndex,
-  itemRefs,
-  mouseSelectionArmedRef,
-  updateSelection,
-  executePaletteItem,
-}: CatalogResultRowProps) => {
-  const isSelected = currentIndex === selectedIndex;
-  return (
-    <ListboxOptionButton
-      ref={(element) => {
-        itemRefs.current[currentIndex] = element;
-      }}
-      className={`command-palette-item ${isSelected ? 'selected' : ''}`}
-      id={`command-palette-option-${currentIndex}`}
-      selected={isSelected}
-      onClick={() => executePaletteItem({ type: 'catalog', item: entry.item })}
-      onMouseEnter={() => {
-        if (mouseSelectionArmedRef.current) {
-          updateSelection(currentIndex);
-        }
-      }}
-    >
-      <div className="command-palette-item-content">
-        <div className="command-palette-item-label catalog">
-          <span className={`kind-badge ${entry.kindClass}`}>{entry.kindLabel}</span>
-          <span className="command-palette-item-name">{entry.displayName}</span>
-        </div>
+const CatalogResultRow = ({ entry, ...interaction }: Readonly<CatalogResultRowProps>) => (
+  <PaletteResultRow {...interaction} item={{ type: 'catalog', item: entry.item }}>
+    <div className="command-palette-item-content">
+      <div className="command-palette-item-label catalog">
+        <span className={`kind-badge ${entry.kindClass}`}>{entry.kindLabel}</span>
+        <span className="command-palette-item-name">{entry.displayName}</span>
       </div>
-    </ListboxOptionButton>
-  );
-};
+    </div>
+  </PaletteResultRow>
+);
 
 interface CatalogGroupProps extends Omit<ResultRowInteractionProps, 'currentIndex'> {
   entries: CatalogDisplayEntry[];
@@ -717,9 +730,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   }, [groupedCommands]);
   const catalogBaseIndex = commandIndexMap.size;
 
-  // Reset state when opening
-  const open = useCallback(() => {
-    setIsOpen(true);
+  const resetPalette = useCallback(() => {
     setSearchQuery('');
     setSelectedIndex(0);
     selectedIndexRef.current = 0;
@@ -733,21 +744,15 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     setCatalogLoading(false);
   }, []);
 
-  // Close and reset
+  const open = useCallback(() => {
+    setIsOpen(true);
+    resetPalette();
+  }, [resetPalette]);
+
   const close = useCallback(() => {
     setIsOpen(false);
-    setSearchQuery('');
-    setSelectedIndex(0);
-    selectedIndexRef.current = 0;
-    mouseSelectionArmedRef.current = false;
-    setMouseSelectionArmed(false);
-    setSelectMode('none');
-    openedDirectlyRef.current = false;
-    setHideCursor(false);
-    setCatalogResults([]);
-    setCatalogStats(null);
-    setCatalogLoading(false);
-  }, []);
+    resetPalette();
+  }, [resetPalette]);
 
   // Switch the open palette into a selection sub-mode with a clean query and
   // selection.
@@ -811,67 +816,20 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     return 10;
   }, []);
 
-  const selectNext = useCallback(() => {
-    if (paletteItemCount === 0) {
-      return false;
-    }
-    markKeyboardNavigation();
-    const nextIndex =
-      selectedIndexRef.current < paletteItemCount - 1 ? selectedIndexRef.current + 1 : 0;
-    updateSelection(nextIndex);
-    return true;
-  }, [paletteItemCount, markKeyboardNavigation, updateSelection]);
-
-  const selectPrevious = useCallback(() => {
-    if (paletteItemCount === 0) {
-      return false;
-    }
-    markKeyboardNavigation();
-    const previousIndex =
-      selectedIndexRef.current > 0 ? selectedIndexRef.current - 1 : paletteItemCount - 1;
-    updateSelection(previousIndex);
-    return true;
-  }, [paletteItemCount, markKeyboardNavigation, updateSelection]);
-
-  const pageDown = useCallback(() => {
-    if (paletteItemCount === 0) {
-      return false;
-    }
-    markKeyboardNavigation();
-    const pageSize = getPageSize();
-    const nextIndex = Math.min(paletteItemCount - 1, selectedIndexRef.current + pageSize);
-    updateSelection(nextIndex);
-    return true;
-  }, [paletteItemCount, markKeyboardNavigation, getPageSize, updateSelection]);
-
-  const pageUp = useCallback(() => {
-    if (paletteItemCount === 0) {
-      return false;
-    }
-    markKeyboardNavigation();
-    const pageSize = getPageSize();
-    const nextIndex = Math.max(0, selectedIndexRef.current - pageSize);
-    updateSelection(nextIndex);
-    return true;
-  }, [paletteItemCount, markKeyboardNavigation, getPageSize, updateSelection]);
-
-  const goHome = useCallback(() => {
-    if (paletteItemCount === 0) {
-      return false;
-    }
-    markKeyboardNavigation();
-    updateSelection(0);
-    return true;
-  }, [paletteItemCount, markKeyboardNavigation, updateSelection]);
-
-  const goEnd = useCallback(() => {
-    if (paletteItemCount === 0) {
-      return false;
-    }
-    markKeyboardNavigation();
-    updateSelection(paletteItemCount - 1);
-    return true;
-  }, [paletteItemCount, markKeyboardNavigation, updateSelection]);
+  const moveSelection = useCallback(
+    (key: PaletteNavigationKey) => {
+      if (paletteItemCount === 0) {
+        return false;
+      }
+      markKeyboardNavigation();
+      const pageSize = key === 'PageDown' || key === 'PageUp' ? getPageSize() : 0;
+      updateSelection(
+        getPaletteSelectionIndex(key, selectedIndexRef.current, paletteItemCount - 1, pageSize)
+      );
+      return true;
+    },
+    [paletteItemCount, markKeyboardNavigation, getPageSize, updateSelection]
+  );
 
   const activateSelection = useCallback(() => {
     if (paletteItemCount === 0) {
@@ -907,6 +865,66 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     return true;
   }, [isOpen, selectMode, close, updateSelection]);
 
+  const paletteShortcuts = [
+    {
+      key: 'ArrowDown',
+      handler: () => moveSelection('ArrowDown'),
+      description: 'Highlight next result',
+      helpOrder: 30,
+      enabled: isOpen,
+    },
+    {
+      key: 'ArrowUp',
+      handler: () => moveSelection('ArrowUp'),
+      description: 'Highlight previous result',
+      helpOrder: 31,
+      enabled: isOpen,
+    },
+    {
+      key: 'PageDown',
+      handler: () => moveSelection('PageDown'),
+      description: 'Page down',
+      helpOrder: 50,
+      enabled: isOpen,
+    },
+    {
+      key: 'PageUp',
+      handler: () => moveSelection('PageUp'),
+      description: 'Page up',
+      helpOrder: 51,
+      enabled: isOpen,
+    },
+    {
+      key: 'Home',
+      handler: () => moveSelection('Home'),
+      description: 'Jump to first result',
+      helpOrder: 40,
+      enabled: isOpen,
+    },
+    {
+      key: 'End',
+      handler: () => moveSelection('End'),
+      description: 'Jump to last result',
+      helpOrder: 41,
+      enabled: isOpen,
+    },
+    {
+      key: 'Enter',
+      handler: activateSelection,
+      description: 'Execute selection',
+      helpOrder: 60,
+      enabled: isOpen,
+    },
+    {
+      key: 'Escape',
+      handler: handleEscapeShortcut,
+      description: 'Close command palette',
+      category: 'Windows & Panels',
+      helpOrder: 41,
+      enabled: isOpen,
+    },
+  ];
+
   useModalFocusTrap({
     ref: containerRef,
     disabled: !isOpen,
@@ -915,95 +933,15 @@ export const CommandPalette = memo(function CommandPaletteComponent({
       if (event.metaKey || event.ctrlKey || event.altKey) {
         return false;
       }
-
-      switch (event.key) {
-        case 'ArrowDown':
-          return selectNext();
-        case 'ArrowUp':
-          return selectPrevious();
-        case 'PageDown':
-          return pageDown();
-        case 'PageUp':
-          return pageUp();
-        case 'Home':
-          return goHome();
-        case 'End':
-          return goEnd();
-        case 'Enter':
-          return activateSelection();
-        case 'Escape':
-          return handleEscapeShortcut();
-        default:
-          return false;
-      }
+      const shortcut = paletteShortcuts.find((entry) => entry.key === event.key);
+      return shortcut?.handler() ?? false;
     },
   });
 
-  useShortcuts(
-    [
-      {
-        key: 'ArrowDown',
-        handler: selectNext,
-        description: 'Highlight next result',
-        helpOrder: 30,
-        enabled: isOpen,
-      },
-      {
-        key: 'ArrowUp',
-        handler: selectPrevious,
-        description: 'Highlight previous result',
-        helpOrder: 31,
-        enabled: isOpen,
-      },
-      {
-        key: 'PageDown',
-        handler: pageDown,
-        description: 'Page down',
-        helpOrder: 50,
-        enabled: isOpen,
-      },
-      {
-        key: 'PageUp',
-        handler: pageUp,
-        description: 'Page up',
-        helpOrder: 51,
-        enabled: isOpen,
-      },
-      {
-        key: 'Home',
-        handler: goHome,
-        description: 'Jump to first result',
-        helpOrder: 40,
-        enabled: isOpen,
-      },
-      {
-        key: 'End',
-        handler: goEnd,
-        description: 'Jump to last result',
-        helpOrder: 41,
-        enabled: isOpen,
-      },
-      {
-        key: 'Enter',
-        handler: activateSelection,
-        description: 'Execute selection',
-        helpOrder: 60,
-        enabled: isOpen,
-      },
-      {
-        key: 'Escape',
-        handler: handleEscapeShortcut,
-        description: 'Close command palette',
-        category: 'Windows & Panels',
-        helpOrder: 41,
-        enabled: isOpen,
-      },
-    ],
-    {
-      priority: KeyboardShortcutPriority.COMMAND_PALETTE,
-      category: 'Search',
-    }
-  );
+  useShortcuts(paletteShortcuts, {
+    priority: KeyboardShortcutPriority.COMMAND_PALETTE,
+    category: 'Search',
+  });
 
   const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {

@@ -41,8 +41,7 @@ const collectDirectionalReachability = (
 ): void => {
   const visited = new Set<string>([seedId]);
   const queue: string[] = [seedId];
-  for (let head = 0; head < queue.length; head += 1) {
-    const nodeId = queue[head];
+  for (const nodeId of queue) {
     const neighbors = adjacency.get(nodeId) ?? [];
     for (const { edgeId, neighbor } of neighbors) {
       reachableEdges.add(edgeId);

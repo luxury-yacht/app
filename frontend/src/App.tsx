@@ -215,7 +215,6 @@ function AppContent() {
         onToggleSettings={handleToggleSettings}
         onRefresh={handleManualRefresh}
         isAppLogsPanelOpen={viewState.showAppLogsPanel}
-        isObjectPanelOpen={viewState.showObjectPanel}
         isSettingsOpen={viewState.isSettingsOpen}
       />
       <TextContextMenu />
