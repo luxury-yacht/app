@@ -71,13 +71,17 @@ signaling completion.
 ## Watch-to-query ordering
 
 Custom-resource membership consumes the refresh subsystem's existing,
-permission-gated dynamic informers through `CustomResourceSource`. Subscribe
-before the initial catalog LIST so changes during collection cannot fall between
-the initial snapshot and change delivery. Notifications enqueue full object
-identity; after acquiring catalog publication ownership, resolve that identity
-against the current informer store. An old delete must not erase a replacement
-object. An unsynced, unauthorized, or retired source is not authoritative absence;
-retain membership and use the existing resync recovery path.
+permission-gated dynamic informers through `CustomResourceSource`. Keep this
+interface in the catalog package to avoid importing the stream manager that
+already consumes catalog signals. Deliver callbacks outside manager locks and
+limit them to enqueueing identities; publication later signals that same manager.
+
+Subscribe before the initial catalog LIST so changes during collection cannot
+fall between the initial snapshot and change delivery. Notifications enqueue
+full object identity; after acquiring catalog publication ownership, resolve
+that identity against the current informer store. An old delete must not erase
+a replacement object. An unsynced, unauthorized, or retired source is not
+authoritative absence; retain membership and use the existing resync recovery path.
 
 The informer may use a different served version than discovery prefers. Read the
 source using its original version, then resolve group/resource to the catalog's
@@ -94,9 +98,15 @@ query counts/facets, and finalizer findings before the catalog bridge invalidate
 snapshot caches and emits the catalog signal. Notifications on a different
 resource domain do not establish catalog freshness.
 
-Catalog retirement unsubscribes from custom-resource changes, removes its
-informer handlers, and joins the notifier before completing. It does not stop
-the subsystem's shared watch producers.
+`runLoop` owns the notifier lifetime. Register reactive handlers outside the
+resync loop's critical path so a blocked registration cannot prevent the fast
+retry after an incomplete initial sync. Notifier admission and the full-resync
+safety-net interval use the same reactive-mode condition, including catalogs
+whose only watch source is custom resources.
+
+Catalog retirement cancels the notifier before joining it, removes its informer
+handlers, and unsubscribes from custom-resource changes before completing. It
+does not stop the subsystem's shared watch producers.
 
 ## Layer Model
 
@@ -152,6 +162,14 @@ When touching catalog behavior:
 
 Run focused catalog/objectcatalog tests and the frontend browse tests affected
 by the change. For non-documentation work, finish with `wails3 task qc:prerelease`.
+
+Custom-resource watch changes must cover different served source/catalog versions
+and an initial replay larger than the payload queue. Prove that current membership
+reconciles without an extra dynamic LIST, that recreation uses the current UID,
+and that an unavailable source retains rows. Exercise startup deletion, blocked
+handler registration, cancellation and publication-before-signal through the
+real owners. Table consumption must meet the shared
+[freshness evidence requirements](data-freshness.md#required-evidence-for-resource-source-changes).
 
 ## Discovered resource families
 
