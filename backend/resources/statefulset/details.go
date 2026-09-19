@@ -67,7 +67,7 @@ func (s *Service) buildStatefulSetDetails(
 	facts := BuildFacts(statefulSet)
 	replicas, ready := workloads.WorkloadReplicaDisplay(facts.WorkloadCommonFacts)
 	podInfos := workloads.BuildPodSummaries(s.deps.ClusterID, "StatefulSet", statefulSet.Name, "apps/v1", podsList, podMetrics)
-	podSummary, _ := workloads.SummarizePodMetrics(podsList, podMetrics)
+	podSummary := workloads.SummarizePodMetrics(podsList, podMetrics)
 
 	// Intrinsic spec/status fields come from the model facts (single extraction).
 	// Complex sub-objects (PVC retention, volume claim templates) are navigated

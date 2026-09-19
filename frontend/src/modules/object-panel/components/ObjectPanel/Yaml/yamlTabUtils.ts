@@ -5,6 +5,7 @@
  * Provides shared helper functions for the object panel feature.
  */
 
+import type { backend } from '@core/backend-api/models';
 import * as YAML from 'yaml';
 import {
   ApplyObjectYaml,
@@ -16,18 +17,6 @@ import { YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
 import type { ObjectIdentity } from './yamlValidation';
 
 export { sanitizeYamlForSemanticCompare } from './yamlFieldPolicy';
-
-export const normalizeYamlString = (raw: string): string => {
-  try {
-    const doc = YAML.parseDocument(raw);
-    if (doc.errors.length > 0) {
-      throw doc.errors[0];
-    }
-    return doc.toString(YAML_STRINGIFY_OPTIONS);
-  } catch {
-    return raw;
-  }
-};
 
 export const prepareDraftYaml = (raw: string, includeManagedFields: boolean): string => {
   try {
@@ -46,6 +35,16 @@ export const prepareDraftYaml = (raw: string, includeManagedFields: boolean): st
     return raw;
   }
 };
+
+export const normalizeYamlString = (raw: string): string => prepareDraftYaml(raw, true);
+
+const yamlRequestIdentity = (identity: ObjectIdentity) => ({
+  kind: identity.kind,
+  apiVersion: identity.apiVersion,
+  namespace: identity.namespace ?? '',
+  name: identity.name,
+  uid: identity.uid ?? '',
+});
 
 export const applyResourceVersionToYaml = (yamlText: string, resourceVersion: string): string => {
   if (!resourceVersion) {
@@ -70,11 +69,7 @@ export const applyYamlOnServer = async (
   const response = await ApplyObjectYaml(clusterId, {
     baseYAML,
     yaml: yamlContent,
-    kind: identity.kind,
-    apiVersion: identity.apiVersion,
-    namespace: identity.namespace ?? '',
-    name: identity.name,
-    uid: identity.uid ?? '',
+    ...yamlRequestIdentity(identity),
     resourceVersion,
   });
   if (!response) {
@@ -83,15 +78,8 @@ export const applyYamlOnServer = async (
   return response;
 };
 
-export interface ObjectYamlOwnershipConflict {
-  field: string;
-  manager: string;
-  message: string;
-}
-
-export interface ObjectYamlOwnershipCheckResponse {
-  conflicts: ObjectYamlOwnershipConflict[] | null;
-}
+export type ObjectYamlOwnershipConflict = backend.ObjectYAMLOwnershipConflict;
+export type ObjectYamlOwnershipCheckResponse = backend.ObjectYAMLOwnershipCheckResponse;
 
 export const checkYamlOwnershipOnServer = async (
   clusterId: string,
@@ -103,11 +91,7 @@ export const checkYamlOwnershipOnServer = async (
   const response = await CheckObjectYamlOwnership(clusterId, {
     baseYAML,
     yaml: yamlContent,
-    kind: identity.kind,
-    apiVersion: identity.apiVersion,
-    namespace: identity.namespace ?? '',
-    name: identity.name,
-    uid: identity.uid ?? '',
+    ...yamlRequestIdentity(identity),
     resourceVersion,
   });
   if (!response) {
@@ -116,11 +100,7 @@ export const checkYamlOwnershipOnServer = async (
   return response;
 };
 
-export interface ObjectYamlReloadMergeResponse {
-  mergedYAML: string;
-  currentYAML: string;
-  resourceVersion: string;
-}
+export type ObjectYamlReloadMergeResponse = backend.ObjectYAMLReloadMergeResponse;
 
 export const mergeYamlWithLatestOnServer = async (
   clusterId: string,
@@ -131,11 +111,7 @@ export const mergeYamlWithLatestOnServer = async (
   const response = await MergeObjectYamlWithLatest(clusterId, {
     baseYAML,
     draftYAML,
-    kind: identity.kind,
-    apiVersion: identity.apiVersion,
-    namespace: identity.namespace ?? '',
-    name: identity.name,
-    uid: identity.uid ?? '',
+    ...yamlRequestIdentity(identity),
   });
   if (!response) {
     throw new Error('Object YAML merge returned no response');

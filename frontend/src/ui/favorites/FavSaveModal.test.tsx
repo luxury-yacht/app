@@ -442,6 +442,39 @@ describe('FavSaveModal', () => {
     expect(saved.panes.pods.tableState.sortColumn).toBe('node');
   });
 
+  it('retains and edits case-distinct saved cluster identities', async () => {
+    const onSave = vi.fn();
+    const values = ['config:Production', 'config:production'];
+    await renderComponent(
+      makeProps({
+        onSave,
+        panes: [
+          {
+            id: 'main',
+            label: 'Namespaces',
+            filters: { ...defaultFilters, clusters: { mode: 'some', values } },
+            tableState: defaultTableState,
+            filterOptions: { showClusterDropdown: true, clusters: [] },
+          },
+        ],
+      })
+    );
+    const clusters = requireValue(
+      container.querySelector<HTMLSelectElement>('[data-testid="dropdown-All clusters"]'),
+      'expected saved cluster filter'
+    );
+    expect(Array.from(clusters.options, (option) => option.value)).toEqual(values);
+    await act(async () => {
+      clusters.value = values[0];
+      clusters.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button.save')?.click();
+    });
+    const saved = onSave.mock.calls[0]?.[0] as Favorite;
+    expect(saved.panes.main.filters.clusters).toEqual({ mode: 'some', values: [values[0]] });
+  });
+
   it('saves Select all as a semantic all selection for provider facets', async () => {
     const onSave = vi.fn();
     await renderComponent(

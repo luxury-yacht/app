@@ -68,32 +68,44 @@ func descriptorPreflightReviews(desc Descriptor, namespaces []string) []capabili
 }
 
 func summarizeDescriptorEvaluation(results []capabilities.CheckResult) (bool, error) {
-	var firstErr error
-	answered := false
-	for _, res := range results {
-		switch {
-		case res.Error != "":
-			if firstErr == nil {
-				firstErr = errors.New(res.Error)
-			}
-		case res.EvaluationError != "":
-			if firstErr == nil {
-				firstErr = errors.New(res.EvaluationError)
-			}
-		default:
-			answered = true
-			if res.Allowed {
-				return true, nil
-			}
+	var evaluation descriptorEvaluation
+	for _, result := range results {
+		evaluation.record(result)
+		if evaluation.allowed {
+			return true, nil
 		}
 	}
-	if !answered {
-		if firstErr != nil {
-			return false, firstErr
-		}
-		return false, nil
+	return evaluation.result()
+}
+
+// Namespace grants are any-of. A definitive answer, including denial, takes
+// precedence over a sibling namespace's error in both batch and fallback checks.
+type descriptorEvaluation struct {
+	allowed  bool
+	answered bool
+	firstErr error
+}
+
+func (e *descriptorEvaluation) record(result capabilities.CheckResult) {
+	message := result.Error
+	if message == "" {
+		message = result.EvaluationError
 	}
-	return false, nil
+	if message != "" {
+		if e.firstErr == nil {
+			e.firstErr = errors.New(message)
+		}
+		return
+	}
+	e.answered = true
+	e.allowed = e.allowed || result.Allowed
+}
+
+func (e descriptorEvaluation) result() (bool, error) {
+	if e.answered {
+		return e.allowed, nil
+	}
+	return false, e.firstErr
 }
 
 // evaluateDescriptorsBatch checks if the given descriptors are allowed by the capabilities service.
@@ -152,42 +164,28 @@ func summarizeBatchEvaluation(
 	indexes []int,
 	descriptorCount int,
 ) (map[int]bool, map[int]error) {
-	allowed := make(map[int]bool, descriptorCount)
-	errorsByIndex := make(map[int]error)
-	answered := make(map[int]bool, descriptorCount)
+	evaluations := make(map[int]descriptorEvaluation, descriptorCount)
 	for i, result := range results {
 		if i >= len(indexes) {
 			break
 		}
-		recordBatchEvaluationResult(indexes[i], result, allowed, answered, errorsByIndex)
+		idx := indexes[i]
+		evaluation := evaluations[idx]
+		evaluation.record(result)
+		evaluations[idx] = evaluation
 	}
-	for idx := range answered {
-		delete(errorsByIndex, idx)
+	allowed := make(map[int]bool, descriptorCount)
+	errorsByIndex := make(map[int]error)
+	for idx, evaluation := range evaluations {
+		granted, err := evaluation.result()
+		if granted {
+			allowed[idx] = true
+		}
+		if err != nil {
+			errorsByIndex[idx] = err
+		}
 	}
 	return allowed, errorsByIndex
-}
-
-func recordBatchEvaluationResult(
-	idx int,
-	result capabilities.CheckResult,
-	allowed map[int]bool,
-	answered map[int]bool,
-	errorsByIndex map[int]error,
-) {
-	message := result.Error
-	if message == "" {
-		message = result.EvaluationError
-	}
-	if message != "" {
-		if _, exists := errorsByIndex[idx]; !exists {
-			errorsByIndex[idx] = errors.New(message)
-		}
-		return
-	}
-	answered[idx] = true
-	if result.Allowed {
-		allowed[idx] = true
-	}
 }
 
 func (s *Service) logDescriptorEvaluation(

@@ -62,8 +62,8 @@ vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
   ClusterLifecycleProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-vi.mock('@core/contexts/ViewStateContext', () => ({
-  useViewState: () => ({
+vi.mock('@core/contexts/ViewStateContext', () => {
+  const useViewState = () => ({
     viewType: mockViewType,
     activeNamespaceTab: mockActiveNamespaceTab,
     activeClusterTab: mockActiveClusterTab,
@@ -73,8 +73,9 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
     navigateToGlobal: mockNavigateToGlobal,
     setSidebarSelection: mockSetSidebarSelection,
     onNamespaceSelect: mockOnNamespaceSelect,
-  }),
-}));
+  });
+  return { useViewState, useOptionalViewState: useViewState };
+});
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   useNamespace: () => ({
@@ -86,7 +87,10 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
 
 // ---------- Import under test (after mocks) ----------
 
+import { useFavToggle } from '@/ui/favorites/FavToggle';
 import { FavoritesProvider, useFavorites } from './FavoritesContext';
+
+vi.mock('@/ui/favorites/FavSaveModal', () => ({ default: () => null }));
 
 // ---------- Helpers ----------
 
@@ -372,6 +376,79 @@ describe('FavoritesContext', () => {
     expect(mockSetViewType).toHaveBeenCalledWith('cluster');
     expect(mockSetActiveClusterView).toHaveBeenCalledWith('nodes');
   });
+
+  it.each(['cluster', 'lifecycle', 'namespace'])(
+    'keeps saved table state pending until %s readiness and navigation are applied',
+    async (blocked) => {
+      const order: string[] = [];
+      const restore = vi.fn(() => order.push('restore'));
+      mockSetActiveNamespaceTab.mockImplementation(() => order.push('navigate'));
+      if (blocked === 'cluster') {
+        mockSelectedClusterId = 'cluster-other';
+      }
+      if (blocked === 'lifecycle') {
+        mockClusterLifecycleState = 'connecting';
+      }
+      if (blocked === 'namespace') {
+        mockNamespaceReady = false;
+      }
+      const Table = () => {
+        useFavToggle({
+          filters: {
+            search: '',
+            kinds: { mode: 'all' },
+            namespaces: { mode: 'all' },
+            clusters: { mode: 'all' },
+            caseSensitive: false,
+            includeMetadata: false,
+          },
+          sortColumn: 'name',
+          sortDirection: 'asc',
+          columnVisibility: {},
+          hydrated: true,
+          setFilters: restore,
+        });
+        return null;
+      };
+      const render = async () =>
+        act(async () => {
+          root.render(
+            <FavoritesProvider>
+              <Harness />
+              <Table />
+            </FavoritesProvider>
+          );
+          await Promise.resolve();
+        });
+      await render();
+      const favorite = makeFavorite({
+        clusterId: 'cluster-1',
+        panes: {
+          main: {
+            filters: {
+              search: 'saved filter',
+              kinds: { mode: 'all' },
+              namespaces: { mode: 'all' },
+              clusters: { mode: 'all' },
+              caseSensitive: false,
+              includeMetadata: false,
+            },
+            tableState: { sortColumn: 'name', sortDirection: 'asc', columnVisibility: {} },
+          },
+        },
+      });
+      act(() => stateRef.current?.setPendingFavorite(favorite));
+      expect(restore).not.toHaveBeenCalled();
+      expect(stateRef.current?.pendingFavorite?.id).toBe(favorite.id);
+      mockSelectedClusterId = 'cluster-1';
+      mockClusterLifecycleState = 'ready';
+      mockNamespaceReady = true;
+      await render();
+      expect(restore).toHaveBeenCalledWith(favorite.panes.main.filters);
+      expect(order).toEqual(['navigate', 'restore']);
+      expect(stateRef.current?.pendingFavorite).toBeNull();
+    }
+  );
 
   it('expires a pending favorite only after 15 seconds without lifecycle progress', async () => {
     vi.useFakeTimers();

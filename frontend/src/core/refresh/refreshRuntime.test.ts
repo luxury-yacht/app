@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   ClusterRefreshRuntime,
-  makeInFlightKey,
   transitionClusterAuthState,
   transitionScopedActivationState,
   transitionScopedFetchState,
@@ -312,8 +311,8 @@ describe('ClusterRefreshRuntime', () => {
 
     runtime.beginStreamingStart('cluster-config', 'cluster-a|', startPromise);
     expect(runtime.isStreamingStartingOrActive('cluster-config', 'cluster-a|')).toBe(true);
-    expect(runtime.getStreamingLifecycleKeys()).toEqual([
-      makeInFlightKey('cluster-config', 'cluster-a|'),
+    expect(runtime.getStreamingScopes()).toEqual([
+      { domain: 'cluster-config', scope: 'cluster-a|' },
     ]);
 
     runtime.finishStreamingStart('cluster-config', 'cluster-a|', startPromise, await startPromise);

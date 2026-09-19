@@ -64,40 +64,25 @@ func (s *Service) listPersistentVolumes(ctx context.Context) *corev1.PersistentV
 // processStorageClassDetails processes a StorageClass object and returns its details.
 // It includes information about the storage class itself and lists persistent volumes using this storage class.
 func (s *Service) processStorageClassDetails(storageClass *storagev1.StorageClass, pvs *corev1.PersistentVolumeList) *StorageClassDetails {
-	model := BuildResourceModel(s.deps.ClusterID, storageClass)
 	facts := BuildFacts(storageClass)
 	details := &StorageClassDetails{
 		Kind:             "StorageClass",
 		Name:             storageClass.Name,
-		StatusProjection: restypes.NewStatusProjection(model.Status),
-		Provisioner:      storageClass.Provisioner,
+		StatusProjection: restypes.NewStatusProjection(statusPresentation(storageClass, facts)),
+		Provisioner:      facts.Provisioner,
 		Parameters:       storageClass.Parameters,
 		MountOptions:     storageClass.MountOptions,
 		Labels:           storageClass.Labels,
 		Annotations:      storageClass.Annotations,
 		IsDefault:        facts.DefaultClass,
 	}
-	details.ReclaimPolicy = storageClassReclaimPolicy(storageClass)
-	details.VolumeBindingMode = storageClassVolumeBindingMode(storageClass)
-	details.AllowVolumeExpansion = storageClass.AllowVolumeExpansion != nil && *storageClass.AllowVolumeExpansion
+	details.ReclaimPolicy = facts.ReclaimPolicy
+	details.VolumeBindingMode = facts.VolumeBindingMode
+	details.AllowVolumeExpansion = facts.AllowVolumeExpansion
 	details.AllowedTopologies = storageClassTopologySelectors(storageClass.AllowedTopologies)
 	details.PersistentVolumes = storageClassPersistentVolumeNames(storageClass.Name, pvs)
 	details.Details = storageClassSummary(details)
 	return details
-}
-
-func storageClassReclaimPolicy(storageClass *storagev1.StorageClass) string {
-	if storageClass.ReclaimPolicy == nil {
-		return "Delete"
-	}
-	return string(*storageClass.ReclaimPolicy)
-}
-
-func storageClassVolumeBindingMode(storageClass *storagev1.StorageClass) string {
-	if storageClass.VolumeBindingMode == nil {
-		return "Immediate"
-	}
-	return string(*storageClass.VolumeBindingMode)
 }
 
 func storageClassTopologySelectors(topologies []corev1.TopologySelectorTerm) []TopologySelector {

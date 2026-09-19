@@ -13,16 +13,13 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"k8s.io/utils/ptr"
 )
 
 // detailsSummary renders the HPA detail-view summary line.
 func detailsSummary(facts Facts) string {
 	kind, name := scaleTargetKindName(facts.ScaleTarget)
-	minReplicas := int32(1)
-	if facts.MinReplicas != nil {
-		minReplicas = *facts.MinReplicas
-	}
-	return fmt.Sprintf("Target: %s/%s, Replicas: %d/%d/%d", kind, name, minReplicas, facts.CurrentReplicas, facts.MaxReplicas)
+	return fmt.Sprintf("Target: %s/%s, Replicas: %d/%d/%d", kind, name, ptr.Deref(facts.MinReplicas, 1), facts.CurrentReplicas, facts.MaxReplicas)
 }
 
 func scaleTargetKindName(link resourcemodel.ResourceLink) (string, string) {

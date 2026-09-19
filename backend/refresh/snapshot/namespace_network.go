@@ -89,7 +89,7 @@ func namespaceNetworkQueryCapabilities() ResourceQueryCapabilities {
 // typed-table adapter (reusing the adapter's exact sort encoder + row key), so the
 // engine orders rows byte-identically to the live executor.
 func networkQuerypageSchema() querypage.Schema[NetworkSummary] {
-	return querypageSchemaFromAdapter(networkTableQueryAdapter(), []string{"name", "kind", "namespace", "context", "network", "age"})
+	return querypageSchemaFromAdapter(networkTableQueryAdapter(), namespaceNetworkQueryCapabilities().SortableFields)
 }
 
 // NetworkSummary lives in the streamrows leaf so the kind packages can build it;
@@ -203,9 +203,9 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 	descriptorSources := collectDescriptorSources(ctx, namespaceNetworkDomainName, b.collectIndexer)
 
 	// All own-rows come from the one Sink/informer-fed store: the four cut kinds' Table halves
-	// (gated by their per-request availability) plus the uncut Gateway-API rows (ungated at the
-	// row level — registerMaintainedHandlers only feeds kinds whose indexer was registered, so
-	// the store already holds only the permitted Gateway-API kinds). A nil store (a unit test
+	// (gated by their per-request availability) plus Gateway-API rows whose descriptor source
+	// still permits serving. Retained rows must follow current permission/readiness decisions,
+	// even when their informer was allowed at registration. A nil store (a unit test
 	// with no store wired) yields no own-rows — the SAME no-fallback contract nodes/workloads use;
 	// the network tests seed the store via the Sink (seedNetworkMaintained).
 	var ownRows []NetworkSummary
@@ -276,10 +276,7 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 }
 
 // servedKinds is the set of kinds whose own-rows this request serves from the maintained
-// store: each cut kind gated by its per-request availability, plus EVERY Gateway-API
-// descriptor kind (ungated at the row level — the store holds only the Gateway-API kinds
-// whose informer handler was registered, matching the prior gateway-store rowsInNamespace
-// read, while collectDescriptorSources still governs the published source availability).
+// store. Both cut kinds and Gateway-API kinds follow their current source availability.
 func (b *NamespaceNetworkBuilder) servedKinds(
 	servicesAvailable, endpointSlicesAvailable, ingressesAvailable, networkPoliciesAvailable bool,
 	descriptorSources []typedTableResourceSource,
@@ -290,17 +287,13 @@ func (b *NamespaceNetworkBuilder) servedKinds(
 		ingress.Identity.Kind:       ingressesAvailable,
 		networkpolicy.Identity.Kind: networkPoliciesAvailable,
 	}
-	// The descriptor sources include the cut kinds (Ingress/NetworkPolicy) too; the cut-kind
-	// entries above already set their availability, so only the Gateway-API kinds are added
-	// here (their cut-kind names are overwritten with the same gated value they already hold
-	// only if a future descriptor reorder collides, which it does not — the cut kinds are
-	// keyed by their own gated flags above and not re-set to true).
+	// Cut kinds have explicit availability above; descriptors supply the Gateway-API kinds.
 	for _, src := range descriptorSources {
 		switch src.Kind {
 		case service.Identity.Kind, endpointslice.Identity.Kind, ingress.Identity.Kind, networkpolicy.Identity.Kind:
 			// Cut kinds keep their per-request availability set above.
 		default:
-			allowed[src.Kind] = true
+			allowed[src.Kind] = src.State.servesRows()
 		}
 	}
 	return allowed

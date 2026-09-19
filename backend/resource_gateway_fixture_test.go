@@ -141,20 +141,19 @@ func (f *resourceGatewayFixture) resourceDependenciesForClusterID(clusterID stri
 		metrics = clients.metricsClient
 	}
 	deps := common.Dependencies{
-		Logger:                 applog.ClusterScoped(f.logger, clusterID, clients.meta.Name),
-		KubernetesClient:       clients.client,
-		GatewayClient:          clients.gatewayClient,
-		GatewayAPIPresence:     clients.gatewayAPIPresence,
-		GatewayVersionResolver: clients.gatewayVersionResolver,
-		MetricsClient:          metrics,
-		DynamicClient:          clients.dynamicClient,
-		APIExtensionsClient:    clients.apiextensionsClient,
-		RestConfig:             clients.restConfig,
-		SelectedKubeconfig:     clients.kubeconfigPath,
-		SelectedContext:        clients.kubeconfigContext,
-		ClusterID:              clusterID,
-		ClusterName:            clients.meta.Name,
-		ResourceResolver:       f.resourceResolver(clusterID),
+		Logger:              applog.ClusterScoped(f.logger, clusterID, clients.meta.Name),
+		KubernetesClient:    clients.client,
+		GatewayClient:       clients.gatewayClient,
+		GatewayAPIPresence:  clients.gatewayAPIPresence,
+		MetricsClient:       metrics,
+		DynamicClient:       clients.dynamicClient,
+		APIExtensionsClient: clients.apiextensionsClient,
+		RestConfig:          clients.restConfig,
+		SelectedKubeconfig:  clients.kubeconfigPath,
+		SelectedContext:     clients.kubeconfigContext,
+		ClusterID:           clusterID,
+		ClusterName:         clients.meta.Name,
+		ResourceResolver:    f.resourceResolver(clusterID),
 	}
 	deps.EnsureClient = func(resourceKind string) error {
 		if deps.KubernetesClient == nil {

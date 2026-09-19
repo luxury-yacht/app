@@ -21,14 +21,6 @@ type Service struct {
 	deps common.Dependencies
 }
 
-// Filter represents filtering options for events queries.
-type Filter struct {
-	Namespace    string
-	ObjectKind   string
-	ObjectName   string
-	ResourceKind string
-}
-
 // NewService constructs an event service with shared dependencies.
 func NewService(deps common.Dependencies) *Service {
 	return &Service{deps: deps}

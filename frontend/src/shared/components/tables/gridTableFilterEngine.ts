@@ -91,7 +91,10 @@ const collectClusterOptions = <T>(
     }
   } else {
     data.forEach((row) => {
-      addDropdownOption(map, getCluster?.(row), (value) => value);
+      const value = getCluster?.(row)?.trim();
+      if (value && !map.has(value)) {
+        map.set(value, { value, label: value });
+      }
     });
   }
   return Array.from(map.values()).sort((first, second) => first.label.localeCompare(second.label));

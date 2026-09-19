@@ -30,16 +30,6 @@ export function useQueryBackedTableState(defaultSort: SortConfig): {
   return { tableState, handleTableStateChange };
 }
 
-export function mergeQueryBackedFilterOptions(
-  base: Partial<GridTableFilterOptions> | undefined,
-  query: Partial<GridTableFilterOptions>
-): Partial<GridTableFilterOptions> {
-  return {
-    ...base,
-    ...query,
-  };
-}
-
 export function excludeQueryFacetsFromFilterOptions(
   options: Partial<GridTableFilterOptions>,
   excludedKeys: readonly string[] | undefined

@@ -36,7 +36,7 @@ type ClusterRBACBuilder struct {
 // REUSES the adapter's exact comparable sort-value encoder and row key, so the
 // querypage engine orders rows byte-identically to the live typed-table executor.
 func clusterRBACQuerypageSchema() querypage.Schema[ClusterRBACEntry] {
-	return querypageSchemaFromAdapter(clusterRBACTableQueryAdapter(), []string{"name", "kind", "details", "age"})
+	return querypageSchemaFromAdapter(clusterRBACTableQueryAdapter(), clusterRBACQueryCapabilities().SortableFields)
 }
 
 // ClusterRBACSnapshot is the payload returned to the frontend. It embeds the
@@ -70,7 +70,6 @@ func clusterRBACDomainSpec() typedTableDomainSpec[ClusterRBACEntry] {
 		adapter:      clusterRBACTableQueryAdapter(),
 		schema:       clusterRBACQuerypageSchema(),
 		capabilities: clusterRBACQueryCapabilities(),
-		kindOf:       func(entry ClusterRBACEntry) string { return entry.Ref.Kind },
 		sortRows:     sortClusterRBACEntries,
 	}
 }

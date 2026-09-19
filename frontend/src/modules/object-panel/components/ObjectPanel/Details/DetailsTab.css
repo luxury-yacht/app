@@ -64,24 +64,6 @@
   -webkit-user-select: text;
 }
 
-.overview-images {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
-.overview-image {
-  font-size: var(--font-size-normal);
-  color: var(--color-text);
-  padding: var(--spacing-xs) 0.5rem;
-  background: var(--color-bg-secondary);
-  border-radius: var(--border-radius-sm);
-  font-family: monospace;
-  word-break: break-all;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
 .overview-separator {
   width: 100%;
   display: block;

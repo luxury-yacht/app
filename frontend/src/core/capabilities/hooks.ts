@@ -86,6 +86,11 @@ export const useUserPermission = (
 // useCapabilities hook
 // ---------------------------------------------------------------------------
 
+// Descriptors are normalized with a fixed field order. Include the full identity
+// so a reused action ID cannot carry a previous object's permission state.
+const namedCapabilityKey = (descriptor: NormalizedCapabilityDescriptor): string =>
+  JSON.stringify(descriptor);
+
 // Missing cluster identity is a producer error; never send an unscoped query.
 const buildNamedPermissionPayload = (
   descriptors: NormalizedCapabilityDescriptor[]
@@ -165,12 +170,19 @@ export const useCapabilities = (
 
   const updateNamedResults = useCallback(
     (update: (results: Map<string, CapabilityState>) => void) => {
-      const next = new Map(namedResultsRef.current);
+      const next = new Map<string, CapabilityState>();
+      for (const descriptor of namedDescriptors) {
+        const key = namedCapabilityKey(descriptor);
+        const existing = namedResultsRef.current.get(key);
+        if (existing) {
+          next.set(key, existing);
+        }
+      }
       update(next);
       namedResultsRef.current = next;
       setNamedResultsVersion((version) => version + 1);
     },
-    []
+    [namedDescriptors]
   );
 
   useEffect(() => {
@@ -206,7 +218,7 @@ export const useCapabilities = (
 
     updateNamedResults((results) => {
       for (const descriptor of waitingForReadyNamedDescriptors) {
-        results.set(descriptor.id, {
+        results.set(namedCapabilityKey(descriptor), {
           allowed: false,
           pending: true,
           status: 'loading',
@@ -232,31 +244,47 @@ export const useCapabilities = (
     // Mark named descriptors as pending while the query is in-flight.
     updateNamedResults((results) => {
       for (const descriptor of queryableNamedDescriptors) {
-        const existing = results.get(descriptor.id);
+        const existing = results.get(namedCapabilityKey(descriptor));
         if (!existing || existing.status === 'idle') {
-          results.set(descriptor.id, { allowed: false, pending: true, status: 'loading' });
+          results.set(namedCapabilityKey(descriptor), {
+            allowed: false,
+            pending: true,
+            status: 'loading',
+          });
         }
       }
     });
 
+    let cancelled = false;
     queryPermissions(payload)
       .then((response) => {
+        if (cancelled) {
+          return;
+        }
+        const responseById = new Map(response.results.map((result) => [result.id, result]));
         updateNamedResults((results) => {
-          for (const result of response.results) {
-            if (result.name) {
-              results.set(result.id, capabilityStateFromResult(result));
+          for (const descriptor of queryableNamedDescriptors) {
+            const result = responseById.get(descriptor.id);
+            if (result?.name) {
+              results.set(namedCapabilityKey(descriptor), capabilityStateFromResult(result));
             }
           }
         });
       })
       .catch((error) => {
+        if (cancelled) {
+          return;
+        }
         const reason = String(error);
         updateNamedResults((results) => {
           for (const descriptor of queryableNamedDescriptors) {
-            results.set(descriptor.id, capabilityStateFromError(reason));
+            results.set(namedCapabilityKey(descriptor), capabilityStateFromError(reason));
           }
         });
       });
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, queryableNamedDescriptors, refreshKey, retryVersion, updateNamedResults]);
 
   // Build the unified state map from both sources.
@@ -270,7 +298,7 @@ export const useCapabilities = (
     // Process all descriptors, checking namedResultsRef first, then the global permission map.
     normalizedDescriptors.forEach((descriptor) => {
       // Check hook-local named results first.
-      const namedState = namedResultsRef.current.get(descriptor.id);
+      const namedState = namedResultsRef.current.get(namedCapabilityKey(descriptor));
       if (namedState) {
         map.set(descriptor.id, namedState);
         return;

@@ -14,6 +14,7 @@ import {
   buildInitialMeasuredColumnWidthPlan,
   clampAutoSizeColumnWidth,
   isUserOwnedColumnWidth,
+  selectColumnWidths,
 } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 import type { RefObject } from 'react';
@@ -194,7 +195,6 @@ export function useExternalWidthsSync<T>({
   externalColumnWidths,
   setColumnWidths,
   manuallyResizedColumnsRef,
-  lastAppliedExternalWidthsRef,
   isApplyingExternalUpdateRef,
   lastNotifiedWidthsRef,
 }: {
@@ -203,13 +203,13 @@ export function useExternalWidthsSync<T>({
   externalColumnWidths: Record<string, number> | null;
   setColumnWidths: (updater: React.SetStateAction<Record<string, number>>) => void;
   manuallyResizedColumnsRef: RefObject<Set<string>>;
-  lastAppliedExternalWidthsRef: RefObject<string>;
   isApplyingExternalUpdateRef: RefObject<boolean>;
   lastNotifiedWidthsRef: RefObject<string>;
 }) {
   // Tracks whether the external width sync actually changed any widths.
   // Using a ref instead of a local variable avoids a potential stale-closure
   // issue if React defers the state updater execution.
+  const lastAppliedExternalWidthsRef = useRef('');
   const didChangeRef = useRef(false);
 
   useEffect(() => {
@@ -218,13 +218,7 @@ export function useExternalWidthsSync<T>({
     }
 
     // Only apply widths for rendered columns and avoid churn by comparing signatures.
-    const payloadForColumns: Record<string, number> = {};
-    columnsRef.current.forEach((col) => {
-      const width = externalColumnWidths[col.key];
-      if (typeof width === 'number' && !Number.isNaN(width)) {
-        payloadForColumns[col.key] = width;
-      }
-    });
+    const payloadForColumns = selectColumnWidths(columnsRef.current, externalColumnWidths);
 
     const serializedPayload = JSON.stringify(payloadForColumns);
     if (serializedPayload === lastAppliedExternalWidthsRef.current) {
@@ -281,7 +275,6 @@ export function useExternalWidthsSync<T>({
     controlledColumnWidths,
     externalColumnWidths,
     isApplyingExternalUpdateRef,
-    lastAppliedExternalWidthsRef,
     lastNotifiedWidthsRef,
     manuallyResizedColumnsRef,
     setColumnWidths,
@@ -320,15 +313,10 @@ export function useWidthsChangeNotifier<T>({
 
     // Emit only when the width signature changes to avoid noisy callers.
     const payload: Record<string, ColumnWidthState> = {};
-    const widthSignaturePayload: Record<string, number> = {};
-
-    columnsRef.current.forEach((col) => {
-      const width = columnWidths[col.key];
-      if (typeof width === 'number' && !Number.isNaN(width)) {
-        widthSignaturePayload[col.key] = width;
-        payload[col.key] = buildColumnWidthState(col.key, width);
-      }
-    });
+    const widthSignaturePayload = selectColumnWidths(columnsRef.current, columnWidths);
+    for (const [key, width] of Object.entries(widthSignaturePayload)) {
+      payload[key] = buildColumnWidthState(key, width);
+    }
 
     const serialized = JSON.stringify(widthSignaturePayload);
     if (serialized === lastNotifiedWidthsRef.current) {
@@ -364,8 +352,6 @@ export function useGridTableAutoWidthMeasurement<T>({
   useShortNames,
   phaseRef,
   transitionPhase,
-  prevColumnsSignatureRef,
-  prevShortNamesRef,
   tableData,
 }: {
   tableRef: RefObject<HTMLElement | null>;
@@ -379,10 +365,10 @@ export function useGridTableAutoWidthMeasurement<T>({
   useShortNames: boolean;
   phaseRef: RefObject<ColumnWidthPhase>;
   transitionPhase: (to: ColumnWidthPhase) => void;
-  prevColumnsSignatureRef: RefObject<string | null>;
-  prevShortNamesRef: RefObject<boolean>;
   tableData: T[];
 }) {
+  const prevColumnsSignatureRef = useRef<string | null>(null);
+  const prevShortNamesRef = useRef(useShortNames);
   const lastMeasuredTableDataRef = useRef<T[] | null>(null);
   useEffect(() => {
     if (!tableRef.current || renderedColumns.length === 0) {
@@ -449,8 +435,6 @@ export function useGridTableAutoWidthMeasurement<T>({
     measureColumnWidth,
     naturalWidthsRef,
     phaseRef,
-    prevColumnsSignatureRef,
-    prevShortNamesRef,
     renderedColumns,
     setColumnWidths,
     tableData,

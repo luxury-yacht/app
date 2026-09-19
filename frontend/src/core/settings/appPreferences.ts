@@ -32,7 +32,7 @@ import type { SidebarViewGroupId, ViewScope } from '@/core/navigation/viewRegist
 import { captureBootstrapError } from '@/core/telemetry/sentry';
 import {
   APPEARANCE_BOOTSTRAP_STORAGE_KEY,
-  saveAppearanceBootstrapToLocalStorage,
+  buildAppearanceBootstrapPayload,
 } from '@/utils/appearanceBootstrap';
 import { reportOperationalError } from '@/utils/errorHandler';
 import {
@@ -154,51 +154,7 @@ export interface ColorPreferenceInput {
   color: string;
 }
 
-interface AppSettingsPayload {
-  sidebarClusterResourcesExpanded?: boolean;
-  sidebarClusterExtensionsExpanded?: boolean;
-  sidebarNamespaceResourcesExpanded?: boolean;
-  sidebarNamespaceExtensionsExpanded?: boolean;
-  anonymizedId?: string;
-  appearanceMode?: string;
-  useShortResourceNames?: boolean;
-  dimInactiveNamespaces?: boolean;
-  exclusiveNamespaces?: boolean;
-  errorReportingEnabled?: boolean;
-  autoRefreshEnabled?: boolean;
-  refreshBackgroundClustersEnabled?: boolean;
-  metricsRefreshIntervalMs?: number;
-  kubernetesClientQPS?: number;
-  kubernetesClientBurst?: number;
-  permissionSSRRFetchConcurrency?: number;
-  objPanelLogsBufferMaxSize?: number;
-  objPanelLogsApiTimestampFormat?: string;
-  objPanelLogsApiTimestampUseLocalTimeZone?: boolean;
-  objPanelLogsTargetPerScopeLimit?: number;
-  objPanelLogsTargetGlobalLimit?: number;
-  gridTablePersistenceMode?: string;
-  defaultTablePageSize?: number;
-  defaultObjectPanelPosition?: string;
-  objectPanelDockedRightWidth?: number;
-  objectPanelDockedBottomHeight?: number;
-  objectPanelFloatingWidth?: number;
-  objectPanelFloatingHeight?: number;
-  // Migration: old single-value fields.
-  paletteHue?: number;
-  paletteSaturation?: number;
-  paletteBrightness?: number;
-  // Per-mode palette fields.
-  paletteHueLight?: number;
-  paletteSaturationLight?: number;
-  paletteBrightnessLight?: number;
-  paletteHueDark?: number;
-  paletteSaturationDark?: number;
-  paletteBrightnessDark?: number;
-  accentColorLight?: string;
-  accentColorDark?: string;
-  linkColorLight?: string;
-  linkColorDark?: string;
-}
+type AppSettingsPayload = Partial<types.AppSettings>;
 
 const DEFAULT_METRICS_REFRESH_INTERVAL_MS = 5000;
 const OBJECT_PANEL_DOCKED_RIGHT_MIN_WIDTH = 500;
@@ -485,6 +441,11 @@ let preferenceCache: AppPreferences = { ...DEFAULT_PREFERENCES };
 let anonymizedIdCache = '';
 let hydrated = false;
 let preferenceSchemaByKey = new Map<AppPreferenceKey, AppPreferenceMetadata>();
+let confirmedPreferences = preferenceCache;
+let confirmedStorage: LocalStorageSnapshot;
+let pendingMutations: PendingPreferenceMutation[] = [];
+let preferenceRevision = 0;
+let hydrationPromise: Promise<HydratedAppPreferences> | null = null;
 
 const APPEARANCE_MODE_STORAGE_KEY = 'app-appearance-mode-preference';
 const OLD_APPEARANCE_MODE_STORAGE_KEY = 'app-theme-preference';
@@ -498,24 +459,25 @@ const persistAppearanceModeToLocalStorage = (mode: AppearanceMode): void => {
   }
 };
 
-const persistAppearanceBootstrapToLocalStorage = (): void => {
-  saveAppearanceBootstrapToLocalStorage({
-    light: {
-      paletteHue: preferenceCache.paletteHueLight,
-      paletteSaturation: preferenceCache.paletteSaturationLight,
-      paletteBrightness: preferenceCache.paletteBrightnessLight,
-      accentColor: preferenceCache.accentColorLight,
-      linkColor: preferenceCache.linkColorLight,
-    },
-    dark: {
-      paletteHue: preferenceCache.paletteHueDark,
-      paletteSaturation: preferenceCache.paletteSaturationDark,
-      paletteBrightness: preferenceCache.paletteBrightnessDark,
-      accentColor: preferenceCache.accentColorDark,
-      linkColor: preferenceCache.linkColorDark,
-    },
-  });
-};
+const appearanceBootstrap = (preferences: AppPreferences): string =>
+  JSON.stringify(
+    buildAppearanceBootstrapPayload({
+      light: {
+        paletteHue: preferences.paletteHueLight,
+        paletteSaturation: preferences.paletteSaturationLight,
+        paletteBrightness: preferences.paletteBrightnessLight,
+        accentColor: preferences.accentColorLight,
+        linkColor: preferences.linkColorLight,
+      },
+      dark: {
+        paletteHue: preferences.paletteHueDark,
+        paletteSaturation: preferences.paletteSaturationDark,
+        paletteBrightness: preferences.paletteBrightnessDark,
+        accentColor: preferences.accentColorDark,
+        linkColor: preferences.linkColorDark,
+      },
+    })
+  );
 
 const isPreferenceKey = (key: string): key is AppPreferenceKey => key in DEFAULT_PREFERENCES;
 
@@ -539,14 +501,12 @@ const schemaEntryToMetadata = (entry: types.AppPreferenceSchema): AppPreferenceM
   };
 };
 
-const preferenceMetadataForKey = <K extends AppPreferenceKey>(key: K): AppPreferenceMetadata<K> => {
+export const getPreferenceMetadata = <K extends AppPreferenceKey>(
+  key: K
+): AppPreferenceMetadata<K> => {
   return (preferenceSchemaByKey.get(key) ??
     FALLBACK_PREFERENCE_METADATA[key]) as AppPreferenceMetadata<K>;
 };
-
-export const getPreferenceMetadata = <K extends AppPreferenceKey>(
-  key: K
-): AppPreferenceMetadata<K> => preferenceMetadataForKey(key);
 
 export const getIntegerPreferenceMetadata = (
   key: AppPreferenceKey
@@ -556,7 +516,7 @@ export const getIntegerPreferenceMetadata = (
   defaultValue: number;
   currentValue: number;
 } => {
-  const metadata = preferenceMetadataForKey(key);
+  const metadata = getPreferenceMetadata(key);
   if (metadata.type !== 'integer') {
     throw new Error(`Preference ${key} is not an integer setting`);
   }
@@ -566,10 +526,6 @@ export const getIntegerPreferenceMetadata = (
     currentValue: Number(metadata.currentValue),
     min: metadata.min ?? Number.NEGATIVE_INFINITY,
   };
-};
-
-const numericPreferenceDefault = (key: AppPreferenceKey): number => {
-  return Number(preferenceMetadataForKey(key).defaultValue);
 };
 
 export const normalizeIntegerPreferenceValue = (
@@ -584,10 +540,10 @@ export const normalizeIntegerPreferenceValue = (
     Number.isNaN(value) ||
     (options?.defaultOnNonPositive && value <= 0)
   ) {
-    return numericPreferenceDefault(key);
+    return metadata.defaultValue;
   }
   const floored = Math.floor(value);
-  if (metadata.min !== null && metadata.min !== undefined && floored < metadata.min) {
+  if (floored < metadata.min) {
     return metadata.min;
   }
   if (metadata.max !== null && metadata.max !== undefined && floored > metadata.max) {
@@ -611,7 +567,7 @@ const normalizeEnumPreferenceValue = <T extends string>(
   key: AppPreferenceKey,
   value: string | undefined
 ): T => {
-  const metadata = preferenceMetadataForKey(key);
+  const metadata = getPreferenceMetadata(key);
   if (typeof value === 'string' && metadata.enumOptions?.includes(value)) {
     return value as T;
   }
@@ -621,7 +577,7 @@ const normalizeEnumPreferenceValue = <T extends string>(
 const normalizeBooleanPreferenceValue = (
   key: AppPreferenceKey,
   value: boolean | undefined
-): boolean => value ?? Boolean(preferenceMetadataForKey(key).defaultValue);
+): boolean => value ?? Boolean(getPreferenceMetadata(key).defaultValue);
 
 const validHexColorRe = /^#[0-9a-fA-F]{6}$/;
 
@@ -632,7 +588,7 @@ const normalizeColorPreferenceValue = (
   if (typeof value === 'string' && (value === '' || validHexColorRe.test(value))) {
     return value;
   }
-  return String(preferenceMetadataForKey(key).defaultValue);
+  return String(getPreferenceMetadata(key).defaultValue);
 };
 
 const normalizeAppearanceMode = (value: string | undefined): AppearanceMode =>
@@ -698,20 +654,32 @@ const emitSelectedPreferenceChange = <T>(
 
 type PaletteTint = AppEvents['settings:palette-tint'];
 
-const selectPaletteTint = (preferences: AppPreferences, mode: 'light' | 'dark'): PaletteTint =>
-  mode === 'light'
-    ? {
-        mode,
-        hue: preferences.paletteHueLight,
-        saturation: preferences.paletteSaturationLight,
-        brightness: preferences.paletteBrightnessLight,
-      }
-    : {
-        mode,
-        hue: preferences.paletteHueDark,
-        saturation: preferences.paletteSaturationDark,
-        brightness: preferences.paletteBrightnessDark,
-      };
+export const palettePreferenceKeys = {
+  light: {
+    hue: 'paletteHueLight',
+    saturation: 'paletteSaturationLight',
+    brightness: 'paletteBrightnessLight',
+  },
+  dark: {
+    hue: 'paletteHueDark',
+    saturation: 'paletteSaturationDark',
+    brightness: 'paletteBrightnessDark',
+  },
+} as const;
+
+const selectPaletteValues = (preferences: AppPreferences, mode: 'light' | 'dark') => {
+  const keys = palettePreferenceKeys[mode];
+  return {
+    hue: preferences[keys.hue],
+    saturation: preferences[keys.saturation],
+    brightness: preferences[keys.brightness],
+  };
+};
+
+const selectPaletteTint = (preferences: AppPreferences, mode: 'light' | 'dark'): PaletteTint => ({
+  mode,
+  ...selectPaletteValues(preferences, mode),
+});
 
 const paletteTintsEqual = (previous: PaletteTint, next: PaletteTint): boolean =>
   previous.hue === next.hue &&
@@ -882,17 +850,6 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   );
 };
 
-const updatePreferenceCache = (updates: Partial<AppPreferences>): void => {
-  const next = { ...preferenceCache, ...updates };
-  const previous = preferenceCache;
-  preferenceCache = next;
-  emitPreferenceChanges(previous, next);
-};
-
-const wailsRuntimeAvailable = (): boolean => {
-  return desktopRuntimeAvailable();
-};
-
 interface LocalStorageSnapshot {
   appearanceMode: string | null;
   appearanceBootstrap: string | null;
@@ -927,7 +884,7 @@ const restoreLocalStorageSnapshot = (snapshot: LocalStorageSnapshot): void => {
 };
 
 const persistPreferenceChanges = async (changes: PreferenceChange[]): Promise<void> => {
-  if (!wailsRuntimeAvailable()) {
+  if (!desktopRuntimeAvailable()) {
     return;
   }
   await UpdateAppPreferences({
@@ -935,44 +892,140 @@ const persistPreferenceChanges = async (changes: PreferenceChange[]): Promise<vo
   } as types.UpdateAppPreferencesRequest);
 };
 
-const optimisticPreferenceUpdate = async ({
-  changes,
-  options,
-}: PreferenceMutation): Promise<void> => {
-  const previousPreferences = { ...preferenceCache };
-  const previousStorage = captureLocalStorageSnapshot();
+interface PendingPreferenceMutation {
+  mutation: PreferenceMutation;
+  completion: Promise<void>;
+  resolve: () => void;
+  reject: (error: unknown) => void;
+}
 
-  hydrated = true;
-  updatePreferenceCache(Object.fromEntries(changes.map(({ key, value }) => [key, value])));
-  if (options?.persistAppearanceMode) {
-    persistAppearanceModeToLocalStorage(options.persistAppearanceMode);
-  }
-  if (options?.persistAppearanceBootstrap) {
-    persistAppearanceBootstrapToLocalStorage();
-  }
+const applyPreferenceChanges = (
+  preferences: AppPreferences,
+  changes: PreferenceChange[]
+): AppPreferences => ({
+  ...preferences,
+  ...Object.fromEntries(changes.map(({ key, value }) => [key, value])),
+});
 
+const projectAppearanceStorage = (
+  storage: LocalStorageSnapshot,
+  preferences: AppPreferences,
+  options?: PreferenceMutationOptions
+): LocalStorageSnapshot => ({
+  appearanceMode: options?.persistAppearanceMode ?? storage.appearanceMode,
+  appearanceBootstrap: options?.persistAppearanceBootstrap
+    ? appearanceBootstrap(preferences)
+    : storage.appearanceBootstrap,
+});
+
+// Cache, startup mirrors and subscribers observe the same confirmed base plus pending edits.
+const publishPreferences = (): void => {
+  let next = confirmedPreferences;
+  let storage = confirmedStorage;
+  for (const { mutation } of pendingMutations) {
+    next = applyPreferenceChanges(next, mutation.changes);
+    storage = projectAppearanceStorage(storage, next, mutation.options);
+  }
+  const previous = preferenceCache;
+  preferenceCache = next;
+  restoreLocalStorageSnapshot(storage);
+  emitPreferenceChanges(previous, next);
+};
+
+const persistNextPreferenceMutation = async (queue: PendingPreferenceMutation[]): Promise<void> => {
+  const entry = queue[0];
   try {
-    await persistPreferenceChanges(changes);
+    await persistPreferenceChanges(entry.mutation.changes);
   } catch (error) {
-    updatePreferenceCache(previousPreferences);
-    restoreLocalStorageSnapshot(previousStorage);
-    throw error;
+    finishPreferenceMutation(queue, entry, { error });
+    return;
   }
+  if (queue === pendingMutations) {
+    await broadcastPreferenceMutation(entry.mutation);
+  }
+  finishPreferenceMutation(queue, entry, null);
+};
 
-  if (wailsRuntimeAvailable()) {
-    try {
-      await emitBroadcastEvent('settings:preferences-changed', undefined);
-    } catch (error) {
-      reportOperationalError(error, {
-        source: 'AppPreferences',
-        action: 'broadcast-preference-change',
-      });
+const finishPreferenceMutation = (
+  queue: PendingPreferenceMutation[],
+  entry: PendingPreferenceMutation,
+  failure: { error: unknown } | null
+): void => {
+  // A test reset detaches the old queue; its callers still receive their result.
+  if (queue === pendingMutations) {
+    if (!failure) {
+      confirmedPreferences = applyPreferenceChanges(confirmedPreferences, entry.mutation.changes);
+      confirmedStorage = projectAppearanceStorage(
+        confirmedStorage,
+        confirmedPreferences,
+        entry.mutation.options
+      );
     }
+    queue.shift();
+    if (queue.length) {
+      void persistNextPreferenceMutation(queue);
+    }
+    publishPreferences();
+  }
+  if (failure) {
+    entry.reject(failure.error);
+  } else {
+    entry.resolve();
+  }
+};
+
+const enqueuePreferenceMutation = (mutation: PreferenceMutation): Promise<void> => {
+  if (!pendingMutations.length) {
+    confirmedStorage = captureLocalStorageSnapshot();
+  }
+  let resolve!: () => void;
+  let reject!: (error: unknown) => void;
+  const completion = new Promise<void>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  const entry = { mutation, completion, resolve, reject };
+  pendingMutations.push(entry);
+  preferenceRevision++;
+  hydrated = true;
+  if (mutation.options?.persistAppearanceMode) {
+    persistAppearanceModeToLocalStorage(mutation.options.persistAppearanceMode);
+  }
+  publishPreferences();
+  if (pendingMutations[0] === entry) {
+    void persistNextPreferenceMutation(pendingMutations);
+  }
+  return completion;
+};
+
+const broadcastPreferenceMutation = async (mutation: PreferenceMutation): Promise<void> => {
+  if (!desktopRuntimeAvailable()) {
+    return;
+  }
+  try {
+    await emitBroadcastEvent('settings:preferences-changed', undefined);
+  } catch (error) {
+    reportOperationalError(error, {
+      source: 'AppPreferences',
+      action: 'broadcast-preference-change',
+    });
+  }
+  const mode = mutation.options?.persistAppearanceMode;
+  if (!mode) {
+    return;
+  }
+  try {
+    await emitBroadcastEvent('settings:appearance-mode-changed', { mode });
+  } catch (error) {
+    reportOperationalError(error, {
+      source: 'AppPreferences',
+      action: 'broadcast-appearance-mode',
+    });
   }
 };
 
 const commitPreferenceMutation = (label: string, mutation: PreferenceMutation): void => {
-  void optimisticPreferenceUpdate(mutation).catch((error) => {
+  void enqueuePreferenceMutation(mutation).catch((error) => {
     reportOperationalError(error, { source: 'AppPreferences', action: label });
   });
 };
@@ -1021,73 +1074,63 @@ interface PreferenceFetchResult<T> {
   failed: boolean;
 }
 
-const fetchAppSettings = async (): Promise<PreferenceFetchResult<AppSettingsPayload>> => {
+const fetchPreferences = async <T>({
+  resource,
+  read,
+  action,
+}: {
+  resource: string;
+  read: () => Promise<T>;
+  action: string;
+}): Promise<PreferenceFetchResult<T>> => {
   try {
-    const settings = (await requestAppState({
-      resource: 'app-settings',
-      read: () => readAppSettings(),
-    })) as AppSettingsPayload | null;
-    return { value: settings ?? null, failed: false };
+    const value = await requestAppState({ resource, read });
+    return { value: value ?? null, failed: false };
   } catch (error) {
-    captureBootstrapError(error, { action: 'loadAppSettings' });
+    captureBootstrapError(error, { action });
     return { value: null, failed: true };
   }
 };
 
-const fetchAppSettingsSchema = async (): Promise<
-  PreferenceFetchResult<types.AppSettingsSchema>
-> => {
-  try {
-    const schema = (await requestAppState({
-      resource: 'app-settings-schema',
-      read: () => readAppSettingsSchema(),
-    })) as types.AppSettingsSchema | null;
-    return { value: schema ?? null, failed: false };
-  } catch (error) {
-    captureBootstrapError(error, { action: 'loadAppSettingsSchema' });
-    return { value: null, failed: true };
-  }
-};
-
-const schemaPayloadFromPreferences = (
-  schema: types.AppSettingsSchema | null
-): AppSettingsPayload | null => {
+const schemaPayloadFromPreferences = (schema: types.AppSettingsSchema | null) => {
+  const metadata = new Map<AppPreferenceKey, AppPreferenceMetadata>();
   if (!schema?.preferences) {
-    preferenceSchemaByKey = new Map();
-    return null;
+    return { metadata, settings: null };
   }
-  const nextSchema = new Map<AppPreferenceKey, AppPreferenceMetadata>();
-  const payload = schema.preferences.reduce<AppSettingsPayload>(
-    (nextPayload, entry) => {
-      const metadata = schemaEntryToMetadata(entry);
-      if (!metadata) {
-        return nextPayload;
-      }
-      nextSchema.set(metadata.key, metadata);
-      (nextPayload as Record<string, unknown>)[metadata.key] = metadata.currentValue;
-      return nextPayload;
-    },
-    { anonymizedId: schema.anonymizedId }
-  );
-  preferenceSchemaByKey = nextSchema;
-  return payload;
+  const settings: AppSettingsPayload = { anonymizedId: schema.anonymizedId };
+  for (const entry of schema.preferences) {
+    const value = schemaEntryToMetadata(entry);
+    if (!value) {
+      continue;
+    }
+    metadata.set(value.key, value);
+    (settings as Record<string, unknown>)[value.key] = value.currentValue;
+  }
+  return { metadata, settings };
 };
 
-export const hydrateAppPreferences = async (options?: {
-  force?: boolean;
-}): Promise<HydratedAppPreferences> => {
-  if (hydrated && !options?.force) {
-    return { ...preferenceCache, anonymizedId: anonymizedIdCache };
+const fetchPreferenceSnapshot = async () => {
+  const schema = await fetchPreferences({
+    resource: 'app-settings-schema',
+    read: readAppSettingsSchema,
+    action: 'loadAppSettingsSchema',
+  });
+  const { metadata, settings } = schemaPayloadFromPreferences(schema.value);
+  if (settings !== null) {
+    return { metadata, settings, failed: false };
   }
+  const fallback = await fetchPreferences({
+    resource: 'app-settings',
+    read: readAppSettings,
+    action: 'loadAppSettings',
+  });
+  return { metadata, settings: fallback.value, failed: fallback.failed };
+};
 
-  const backendSchema = await fetchAppSettingsSchema();
-  let backendSettings = schemaPayloadFromPreferences(backendSchema.value);
-  let settingsReadFailed = false;
-  if (backendSettings === null) {
-    const settingsResult = await fetchAppSettings();
-    backendSettings = settingsResult.value;
-    settingsReadFailed = settingsResult.failed;
-  }
+const normalizePreferences = (
+  backendSettings: AppSettingsPayload | null,
+  settingsReadFailed: boolean
+): AppPreferences => {
   const preferences: AppPreferences = {
     sidebarClusterResourcesExpanded: normalizeBooleanPreferenceValue(
       'sidebarClusterResourcesExpanded',
@@ -1220,13 +1263,52 @@ export const hydrateAppPreferences = async (options?: {
     linkColorDark: normalizeColorPreferenceValue('linkColorDark', backendSettings?.linkColorDark),
   };
 
-  anonymizedIdCache = backendSettings?.anonymizedId?.trim() ?? '';
-  hydrated = true;
-  updatePreferenceCache(preferences);
-  persistAppearanceModeToLocalStorage(preferences.appearanceMode);
-  persistAppearanceBootstrapToLocalStorage();
+  return preferences;
+};
 
-  return { ...preferenceCache, anonymizedId: anonymizedIdCache };
+const hydrateLatestPreferences = async (): Promise<HydratedAppPreferences> => {
+  while (true) {
+    while (pendingMutations.length) {
+      await pendingMutations[pendingMutations.length - 1].completion.catch(() => undefined);
+    }
+    const revision = preferenceRevision;
+    const snapshot = await fetchPreferenceSnapshot();
+    if (revision !== preferenceRevision) {
+      continue;
+    }
+    preferenceSchemaByKey = snapshot.metadata;
+    confirmedPreferences = normalizePreferences(snapshot.settings, snapshot.failed);
+    anonymizedIdCache = snapshot.settings?.anonymizedId?.trim() ?? '';
+    hydrated = true;
+    persistAppearanceModeToLocalStorage(confirmedPreferences.appearanceMode);
+    confirmedStorage = projectAppearanceStorage(
+      captureLocalStorageSnapshot(),
+      confirmedPreferences,
+      {
+        persistAppearanceMode: confirmedPreferences.appearanceMode,
+        persistAppearanceBootstrap: true,
+      }
+    );
+    publishPreferences();
+    return { ...preferenceCache, anonymizedId: anonymizedIdCache };
+  }
+};
+
+export const hydrateAppPreferences = async (options?: {
+  force?: boolean;
+}): Promise<HydratedAppPreferences> => {
+  if (hydrated && !options?.force) {
+    return { ...preferenceCache, anonymizedId: anonymizedIdCache };
+  }
+  if (options?.force) {
+    preferenceRevision++;
+  }
+  if (!hydrationPromise) {
+    hydrationPromise = hydrateLatestPreferences().finally(() => {
+      hydrationPromise = null;
+    });
+  }
+  return hydrationPromise;
 };
 
 export const getAppearanceModePreference = (): AppearanceMode => {
@@ -1237,8 +1319,12 @@ export const applyBroadcastAppearanceModePreference = (mode: string): void => {
   if (!isAppearanceMode(mode)) {
     return;
   }
-  updatePreferenceCache({ appearanceMode: mode });
+  preferenceRevision++;
+  confirmedPreferences = { ...confirmedPreferences, appearanceMode: mode };
+  const storage = pendingMutations.length ? confirmedStorage : captureLocalStorageSnapshot();
+  confirmedStorage = { ...storage, appearanceMode: mode };
   persistAppearanceModeToLocalStorage(mode);
+  publishPreferences();
 };
 
 export const getUseShortResourceNames = (): boolean => {
@@ -1329,22 +1415,8 @@ export const getObjectPanelLayoutDefaults = (): ObjectPanelLayoutDefaults => ({
 });
 
 // Returns palette tint values for the specified resolved appearance mode.
-export const getPaletteTint = (
-  mode: 'light' | 'dark'
-): { hue: number; saturation: number; brightness: number } => {
-  if (mode === 'light') {
-    return {
-      hue: preferenceCache.paletteHueLight,
-      saturation: preferenceCache.paletteSaturationLight,
-      brightness: preferenceCache.paletteBrightnessLight,
-    };
-  }
-  return {
-    hue: preferenceCache.paletteHueDark,
-    saturation: preferenceCache.paletteSaturationDark,
-    brightness: preferenceCache.paletteBrightnessDark,
-  };
-};
+export const getPaletteTint = (mode: 'light' | 'dark') =>
+  selectPaletteValues(preferenceCache, mode);
 
 // Returns the custom accent color hex for the specified resolved appearance mode (empty = default).
 export const getAccentColor = (mode: 'light' | 'dark'): string => {
@@ -1405,32 +1477,22 @@ export const setAppearanceModePreference = async (mode: AppearanceMode): Promise
   const mutation = singlePreferenceMutation('appearanceMode', normalized, {
     persistAppearanceMode: normalized,
   });
-  await optimisticPreferenceUpdate(mutation);
-  if (wailsRuntimeAvailable()) {
-    try {
-      await emitBroadcastEvent('settings:appearance-mode-changed', { mode: normalized });
-    } catch (error) {
-      reportOperationalError(error, {
-        source: 'AppPreferences',
-        action: 'broadcast-appearance-mode',
-      });
-    }
-  }
+  await enqueuePreferenceMutation(mutation);
 };
 
 export const setUseShortResourceNames = async (useShort: boolean): Promise<void> => {
   const mutation = singlePreferenceMutation('useShortResourceNames', useShort);
-  await optimisticPreferenceUpdate(mutation);
+  await enqueuePreferenceMutation(mutation);
 };
 
 export const setDimInactiveNamespaces = async (enabled: boolean): Promise<void> => {
   const mutation = singlePreferenceMutation('dimInactiveNamespaces', enabled);
-  await optimisticPreferenceUpdate(mutation);
+  await enqueuePreferenceMutation(mutation);
 };
 
 export const setExclusiveNamespaces = async (enabled: boolean): Promise<void> => {
   const mutation = singlePreferenceMutation('exclusiveNamespaces', enabled);
-  await optimisticPreferenceUpdate(mutation);
+  await enqueuePreferenceMutation(mutation);
 };
 
 export const setSidebarGroupExpanded = (
@@ -1446,7 +1508,7 @@ export const setSidebarGroupExpanded = (
 
 export const setErrorReportingEnabled = async (enabled: boolean): Promise<void> => {
   const mutation = singlePreferenceMutation('errorReportingEnabled', enabled);
-  await optimisticPreferenceUpdate(mutation);
+  await enqueuePreferenceMutation(mutation);
 };
 
 export const setAutoRefreshEnabled = (enabled: boolean): void => {
@@ -1595,32 +1657,13 @@ const buildPaletteTintMutation = ({
   saturation,
   brightness = 0,
 }: PaletteTintPreferenceInput): PreferenceMutation => {
-  const normalizedHue = normalizeIntegerPreferenceValue(
-    mode === 'light' ? 'paletteHueLight' : 'paletteHueDark',
-    hue
-  );
-  const normalizedSaturation = normalizeIntegerPreferenceValue(
-    mode === 'light' ? 'paletteSaturationLight' : 'paletteSaturationDark',
-    saturation
-  );
-  const normalizedBrightness = normalizeIntegerPreferenceValue(
-    mode === 'light' ? 'paletteBrightnessLight' : 'paletteBrightnessDark',
-    brightness
-  );
-  const changes =
-    mode === 'light'
-      ? [
-          { key: 'paletteHueLight' as const, value: normalizedHue },
-          { key: 'paletteSaturationLight' as const, value: normalizedSaturation },
-          { key: 'paletteBrightnessLight' as const, value: normalizedBrightness },
-        ]
-      : [
-          { key: 'paletteHueDark' as const, value: normalizedHue },
-          { key: 'paletteSaturationDark' as const, value: normalizedSaturation },
-          { key: 'paletteBrightnessDark' as const, value: normalizedBrightness },
-        ];
+  const keys = palettePreferenceKeys[mode];
   return {
-    changes,
+    changes: [
+      { key: keys.hue, value: normalizeIntegerPreferenceValue(keys.hue, hue) },
+      { key: keys.saturation, value: normalizeIntegerPreferenceValue(keys.saturation, saturation) },
+      { key: keys.brightness, value: normalizeIntegerPreferenceValue(keys.brightness, brightness) },
+    ],
     options: { persistAppearanceBootstrap: true },
   };
 };
@@ -1697,6 +1740,10 @@ export const matchThemeForCluster = async (contextName: string): Promise<types.T
 // Test helper to reset cached values between test runs.
 export const resetAppPreferencesCacheForTesting = (): void => {
   preferenceCache = { ...DEFAULT_PREFERENCES };
+  confirmedPreferences = preferenceCache;
+  pendingMutations = [];
+  hydrationPromise = null;
+  preferenceRevision++;
   anonymizedIdCache = '';
   preferenceSchemaByKey = new Map();
   hydrated = false;
@@ -1705,5 +1752,6 @@ export const resetAppPreferencesCacheForTesting = (): void => {
 // Test helper to set preferences directly for testing.
 export const setAppPreferencesForTesting = (prefs: Partial<AppPreferences>): void => {
   preferenceCache = { ...preferenceCache, ...prefs };
+  confirmedPreferences = preferenceCache;
   hydrated = true;
 };

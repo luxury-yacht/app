@@ -51,9 +51,12 @@ export interface RefresherState {
 
 export type RefreshCallback = (isManual: boolean, signal: AbortSignal) => void | Promise<void>;
 
-type RefreshCallbackOutcome =
-  | { status: 'fulfilled' }
-  | { status: 'rejected'; error: Error; timedOut: boolean };
+type RefreshCallbackOutcome = { status: 'fulfilled' } | { status: 'rejected'; error: Error };
+
+const rejectedRefreshCallback = (error: unknown): RefreshCallbackOutcome => ({
+  status: 'rejected',
+  error: error instanceof Error ? error : new Error(String(error)),
+});
 
 interface RefresherInstance {
   config: Refresher;
@@ -378,9 +381,7 @@ class RefreshManager {
 
     const foregroundTargets = this.getForegroundRefreshTargets(previousContext, this.context);
     // Treat namespace cluster changes as namespace changes so refreshers re-scope correctly.
-    const namespaceChanged =
-      previousContext.selectedNamespace !== this.context.selectedNamespace ||
-      previousContext.selectedNamespaceClusterId !== this.context.selectedNamespaceClusterId;
+    const namespaceChanged = namespaceScopeChanged(previousContext, this.context);
 
     if (foregroundTargets.length > 0) {
       if (namespaceChanged) {
@@ -448,16 +449,16 @@ class RefreshManager {
   }
 
   public async triggerManualRefreshMany(names: RefresherName[]): Promise<void> {
-    const uniqueNames = Array.from(new Set(names));
-    await Promise.allSettled(
-      uniqueNames.map((refresherName) => this.refreshSingle(refresherName, 'manual'))
-    );
+    await this.refreshMany(names, 'manual');
   }
 
   public async triggerForegroundRefreshMany(names: RefresherName[]): Promise<void> {
-    const uniqueNames = Array.from(new Set(names));
+    await this.refreshMany(names, 'foreground');
+  }
+
+  private async refreshMany(names: RefresherName[], invocation: RefreshInvocation): Promise<void> {
     await Promise.allSettled(
-      uniqueNames.map((refresherName) => this.refreshSingle(refresherName, 'foreground'))
+      Array.from(new Set(names)).map((name) => this.refreshSingle(name, invocation))
     );
   }
 
@@ -748,7 +749,7 @@ class RefreshManager {
       return;
     }
     if (summary.failures.length > 0 && summary.successCount === 0) {
-      throw summary.failures[0].error;
+      throw summary.failures[0];
     }
     this.transition(instance, { type: 'refresh-finished', executionId });
     instance.lastRefreshTime = new Date();
@@ -805,7 +806,7 @@ class RefreshManager {
     isManual: boolean,
     signal: AbortSignal,
     timeoutSeconds: number
-  ): Promise<{ successCount: number; failures: Array<{ error: Error; timedOut: boolean }> }> {
+  ): Promise<RefreshExecutionSummary> {
     if (callbacks.size === 0) {
       return { successCount: 0, failures: [] };
     }
@@ -820,13 +821,13 @@ class RefreshManager {
       throw this.createAbortError();
     }
 
-    const failures: Array<{ error: Error; timedOut: boolean }> = [];
+    const failures: Error[] = [];
     let successCount = 0;
     for (const result of results) {
       if (result.status === 'fulfilled') {
         successCount += 1;
       } else {
-        failures.push({ error: result.error, timedOut: result.timedOut });
+        failures.push(result.error);
       }
     }
 
@@ -840,7 +841,7 @@ class RefreshManager {
     timeoutSeconds: number
   ): Promise<RefreshCallbackOutcome> {
     if (signal.aborted) {
-      return { status: 'rejected', error: this.createAbortError(), timedOut: false };
+      return rejectedRefreshCallback(this.createAbortError());
     }
 
     const controller = new AbortController();
@@ -849,15 +850,19 @@ class RefreshManager {
 
     const timeoutMs = timeoutSeconds * 1000;
     let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const cleanup = () => {
+      if (timeoutId !== undefined) {
+        globalThis.clearTimeout(timeoutId);
+      }
+      signal.removeEventListener('abort', handleAbort);
+    };
     const timeoutPromise = new Promise<RefreshCallbackOutcome>((resolve) => {
       timeoutId = globalThis.setTimeout(() => {
         controller.abort();
         signal.removeEventListener('abort', handleAbort);
-        resolve({
-          status: 'rejected',
-          error: new Error(`Refresh timeout after ${timeoutSeconds} seconds`),
-          timedOut: true,
-        });
+        resolve(
+          rejectedRefreshCallback(new Error(`Refresh timeout after ${timeoutSeconds} seconds`))
+        );
       }, timeoutMs);
     });
 
@@ -865,30 +870,14 @@ class RefreshManager {
     try {
       callbackResult = callback(isManual, controller.signal);
     } catch (error) {
-      if (timeoutId !== undefined) {
-        globalThis.clearTimeout(timeoutId);
-      }
-      signal.removeEventListener('abort', handleAbort);
-      return {
-        status: 'rejected',
-        error: error instanceof Error ? error : new Error(String(error)),
-        timedOut: false,
-      };
+      cleanup();
+      return rejectedRefreshCallback(error);
     }
 
     const callbackPromise = Promise.resolve(callbackResult)
       .then(() => ({ status: 'fulfilled' as const }))
-      .catch((error) => ({
-        status: 'rejected' as const,
-        error: error instanceof Error ? error : new Error(String(error)),
-        timedOut: false,
-      }))
-      .finally(() => {
-        if (timeoutId !== undefined) {
-          globalThis.clearTimeout(timeoutId);
-        }
-        signal.removeEventListener('abort', handleAbort);
-      });
+      .catch(rejectedRefreshCallback)
+      .finally(cleanup);
 
     return Promise.race([callbackPromise, timeoutPromise]);
   }

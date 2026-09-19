@@ -42,5 +42,29 @@ describe('appStateAccess', () => {
     ).resolves.toEqual({ version: '1.0.0' });
 
     expect(read).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenCalledWith();
   });
+  it.each(['throw', 'reject'] as const)(
+    'settles failed reads before rethrowing the original %s',
+    async (failure) => {
+      resetBrokerReadDiagnosticsForTesting();
+      const error = new Error('read failed');
+      const read = vi.fn(() => {
+        expect(getBrokerReadDiagnosticsSnapshot()[0].inFlightCount).toBe(1);
+        if (failure === 'throw') {
+          throw error;
+        }
+        return Promise.reject(error);
+      });
+      await expect(requestAppState({ resource: 'pods', read })).rejects.toBe(error);
+      expect(getBrokerReadDiagnosticsSnapshot()).toEqual([
+        expect.objectContaining({
+          inFlightCount: 0,
+          errorCount: 1,
+          successCount: 0,
+          lastStatus: 'error',
+        }),
+      ]);
+    }
+  );
 });

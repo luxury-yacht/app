@@ -67,6 +67,9 @@ export function OperatorList({ values }: Readonly<{ values: readonly string[] }>
   );
 }
 
+export const operatorListValue = (values?: readonly string[]) =>
+  values?.length ? <OperatorList values={values} /> : undefined;
+
 export function OperatorValues({
   label,
   values,

@@ -19,8 +19,6 @@
 package snapshot
 
 import (
-	"strconv"
-
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -58,37 +56,4 @@ func nodeOverviewFactsFromIngest(source nodeIngestSource) []nodeOverviewFact {
 		out = append(out, fact)
 	}
 	return out
-}
-
-// nodeDomainIngestVersion is the NODES SNAPSHOT's version watermark: the max of
-// the node and pod store list/watch RVs (in place of the per-object RVs the cut
-// kinds can no longer read). Node rows join per-node POD aggregates at serve
-// (pod counts, requests/limits), so a pod add/delete changes served content and
-// must advance the validator — folding only the node RV made those rebuilds
-// answer 304 against the client's unchanged validator, silently keeping stale
-// pod counts (mirrors the workloads domain's two-store watermark).
-func nodeDomainIngestVersion(source nodeDomainIngestSource) uint64 {
-	nodeVersion := ingestStoreVersion(source, NodeGVR)
-	podVersion := ingestStoreVersion(source, PodGVR)
-	if podVersion > nodeVersion {
-		return podVersion
-	}
-	return nodeVersion
-}
-
-// ingestStoreVersion parses one store's latest list/watch resourceVersion as a
-// uint64 watermark. A nil source or an unparseable RV yields 0.
-func ingestStoreVersion(source nodeIngestSource, gvr schema.GroupVersionResource) uint64 {
-	if source == nil {
-		return 0
-	}
-	rv := source.StoreResourceVersion(gvr)
-	if rv == "" {
-		return 0
-	}
-	parsed, err := strconv.ParseUint(rv, 10, 64)
-	if err != nil {
-		return 0
-	}
-	return parsed
 }

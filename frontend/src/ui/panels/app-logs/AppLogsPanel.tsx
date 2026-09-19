@@ -153,6 +153,29 @@ const buildClusterOption = (log: LogEntry) => {
   };
 };
 
+const normalizeLogLevel = (level: string) => {
+  const normalized = level.toLowerCase();
+  return normalized === 'warning' ? 'warn' : normalized;
+};
+
+const renderLogFilterOption = (option: { value: string; label: string }, isSelected: boolean) => (
+  <DropdownFilterOption label={option.label} state={dropdownFilterOptionState(isSelected)} />
+);
+
+function matchesLogSearch(log: LogEntry, text: string, scope: string): boolean {
+  if (!text.trim()) {
+    return true;
+  }
+  const search = text.toLowerCase();
+  return (
+    log.message.toLowerCase().includes(search) ||
+    Boolean(log.source?.toLowerCase().includes(search)) ||
+    Boolean(log.clusterId?.toLowerCase().includes(search)) ||
+    Boolean(log.clusterName?.toLowerCase().includes(search)) ||
+    (scope === GLOBAL_LOG_SCOPE_VALUE && GLOBAL_LOG_SCOPE_LABEL.toLowerCase().includes(search))
+  );
+}
+
 interface AppLogsPanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -454,25 +477,11 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
     setIsAutoScroll((prev) => !prev);
   }, []);
 
-  const normalizeLevel = useCallback((level: string) => {
-    const normalized = level.toLowerCase();
-    return normalized === 'warning' ? 'warn' : normalized;
-  }, []);
-
   const handleLogLevelDropdownChange = useCallback((value: string | string[]) => {
     setLogLevelFilter(
       filterSelectionFromDropdownValues(normalizeDropdownValue(value), LOG_LEVEL_BASE_OPTIONS)
     );
   }, []);
-
-  const renderLogLevelOption = useCallback(
-    (option: { value: string; label: string }, isSelected: boolean) => {
-      return (
-        <DropdownFilterOption label={option.label} state={dropdownFilterOptionState(isSelected)} />
-      );
-    },
-    []
-  );
 
   const componentNames = useMemo(
     () =>
@@ -532,7 +541,7 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
   const handleClusterDropdownChange = useCallback(
     (value: string | string[]) => {
       setClusterFilter(
-        filterSelectionFromDropdownValues(normalizeDropdownValue(value), clusterOptions)
+        filterSelectionFromDropdownValues(normalizeDropdownValue(value), clusterOptions, 'exact')
       );
     },
     [clusterOptions]
@@ -540,18 +549,9 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
 
   useEffect(() => {
     setClusterFilter((prev) => {
-      return pruneFilterSelectionToOptions(prev, clusterOptions);
+      return pruneFilterSelectionToOptions(prev, clusterOptions, 'exact');
     });
   }, [clusterOptions]);
-
-  const renderComponentOption = useCallback(
-    (option: { value: string; label: string }, isSelected: boolean) => {
-      return (
-        <DropdownFilterOption label={option.label} state={dropdownFilterOptionState(isSelected)} />
-      );
-    },
-    []
-  );
 
   const renderClusterOption = useCallback(
     (
@@ -643,7 +643,7 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
     () =>
       logs.filter((log) => {
         // Filter by level
-        const level = normalizeLevel(log.level);
+        const level = normalizeLogLevel(log.level);
         if (!filterSelectionMatches(logLevelFilter, level)) {
           return false;
         }
@@ -653,32 +653,12 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
         }
         // Filter by cluster
         const clusterValue = getLogScopeValue(log);
-        if (!filterSelectionMatches(clusterFilter, clusterValue)) {
+        if (!filterSelectionMatches(clusterFilter, clusterValue, 'exact')) {
           return false;
         }
-        // Filter by text (case-insensitive search in message and source)
-        if (textFilter.trim()) {
-          const searchText = textFilter.toLowerCase();
-          const matchesMessage = log.message.toLowerCase().includes(searchText);
-          const matchesSource = log.source?.toLowerCase().includes(searchText) || false;
-          const matchesClusterId = log.clusterId?.toLowerCase().includes(searchText) || false;
-          const matchesClusterName = log.clusterName?.toLowerCase().includes(searchText) || false;
-          const matchesScope =
-            clusterValue === GLOBAL_LOG_SCOPE_VALUE &&
-            GLOBAL_LOG_SCOPE_LABEL.toLowerCase().includes(searchText);
-          if (
-            !matchesMessage &&
-            !matchesSource &&
-            !matchesClusterId &&
-            !matchesClusterName &&
-            !matchesScope
-          ) {
-            return false;
-          }
-        }
-        return true;
+        return matchesLogSearch(log, textFilter, clusterValue);
       }),
-    [clusterFilter, componentFilter, logLevelFilter, logs, normalizeLevel, textFilter]
+    [clusterFilter, componentFilter, logLevelFilter, logs, textFilter]
   );
 
   useEffect(() => {
@@ -852,7 +832,7 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
         <div className="app-logs-panel-controls">
           <Dropdown
             options={clusterOptions}
-            value={filterSelectionToDropdownValues(clusterFilter, clusterOptions)}
+            value={filterSelectionToDropdownValues(clusterFilter, clusterOptions, 'exact')}
             onChange={handleClusterDropdownChange}
             multiple
             size="small"
@@ -872,7 +852,7 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
             showBulkActions
             ariaLabel="Filter by component"
             dropdownClassName="dropdown-filter-menu"
-            renderOption={renderComponentOption}
+            renderOption={renderLogFilterOption}
             renderValue={() => 'Components'}
           />
 
@@ -885,7 +865,7 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
             showBulkActions
             ariaLabel="Filter by log level"
             dropdownClassName="dropdown-filter-menu"
-            renderOption={renderLogLevelOption}
+            renderOption={renderLogFilterOption}
             renderValue={() => 'Log Levels'}
           />
 

@@ -27,7 +27,7 @@ func TestOperatorFamilyQueriesKeepScopeAndRejectKindCollisions(t *testing.T) {
 			other := rows[0]
 			other.Ref.Group, other.Ref.UID = "unrelated.io", "collision"
 			rows = append(rows, other)
-			svc.publishStreamingState([]*summaryChunk{{items: rows}}, map[string]bool{test.kind: true}, map[string]struct{}{"team-a": {}, "team-b": {}}, nil, true)
+			svc.publishCatalogRowsForTest(rows, map[string]bool{test.kind: true}, map[string]struct{}{"team-a": {}, "team-b": {}}, nil, true)
 			opts := QueryOptions{ResourceFamily: test.family, Scope: ScopeNamespace, Limit: 1}
 			first := svc.Query(opts)
 			require.Equal(t, 2, first.TotalItems)

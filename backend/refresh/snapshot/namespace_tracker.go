@@ -59,17 +59,13 @@ type trackerSyncSource interface {
 	PermissionSkippedFor(gvr schema.GroupVersionResource) bool
 }
 
-func newNamespaceWorkloadTracker() *NamespaceWorkloadTracker {
-	return &NamespaceWorkloadTracker{}
-}
-
 // NewNamespaceWorkloadTracker wires the sync gate over the cut workload + pod ingest stores.
 // It waits ONLY on kinds the manager actually has an entry for (Tracks): a kind with no entry
 // reports RawHasSyncedFor=false forever (an unavailable client/scheme at registration), which
 // would otherwise wedge the wait-for-all-synced gate and leave every namespace not-yet-known.
 // ingestManager may be nil (a unit test), in which case the gate is immediately satisfied.
 func NewNamespaceWorkloadTracker(ingestManager trackerSyncSource) *NamespaceWorkloadTracker {
-	t := newNamespaceWorkloadTracker()
+	t := &NamespaceWorkloadTracker{}
 	if ingestManager == nil {
 		t.ready.Store(true)
 		return t
@@ -78,7 +74,6 @@ func NewNamespaceWorkloadTracker(ingestManager trackerSyncSource) *NamespaceWork
 		if !ingestManager.Tracks(gvr) {
 			continue
 		}
-		gvr := gvr
 		t.readinessFns = append(t.readinessFns, func() NamespaceWorkloadReadiness {
 			if ingestManager.RawHasSyncedFor(gvr) || ingestManager.PermissionSkippedFor(gvr) {
 				return NamespaceWorkloadReady
@@ -107,10 +102,6 @@ func (t *NamespaceWorkloadTracker) Readiness() NamespaceWorkloadReadiness {
 		return NamespaceWorkloadPending
 	}
 	if t.ready.Load() {
-		return NamespaceWorkloadReady
-	}
-	if len(t.readinessFns) == 0 {
-		t.ready.Store(true)
 		return NamespaceWorkloadReady
 	}
 	readiness := NamespaceWorkloadReady

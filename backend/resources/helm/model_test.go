@@ -38,14 +38,11 @@ func TestBuildResourceModelSyntheticIdentityAndFacts(t *testing.T) {
 		Chart:   &chart.Chart{Metadata: &chart.Metadata{Name: "orders-chart", Version: "1.2.2"}},
 		Info:    &release.Info{Status: release.StatusSuperseded, LastDeployed: first},
 	}}
-	resources := []resourcemodel.ResourceLink{
-		resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "", Namespace: "apps", Name: "orders", UID: ""}),
-	}
 	opts := resourcemodel.ResourceModelBuildOptions{
 		Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeRelationshipFacts | resourcemodel.MaterializeDetailFacts,
 	}
 
-	model := BuildResourceModel("cluster-a", rel, "", resources, history, opts)
+	model := BuildResourceModel("cluster-a", rel, "")
 	require.Equal(t, resourcemodel.ResourceSourceSynthetic, model.Source)
 	require.Equal(t, resourcemodel.ResourceRef{
 		ClusterID: "cluster-a",
@@ -60,7 +57,7 @@ func TestBuildResourceModelSyntheticIdentityAndFacts(t *testing.T) {
 	require.Equal(t, "ready", model.Status.Presentation)
 	require.Equal(t, map[string]string{"category": "backend"}, model.Metadata.Annotations)
 
-	facts := BuildFacts(rel, resources, history, opts)
+	facts := BuildFacts(rel, history, opts)
 	require.Equal(t, "orders-chart-1.2.3", facts.Chart)
 	require.Equal(t, "1.2.3", facts.Version)
 	require.Equal(t, "4.5.6", facts.AppVersion)
@@ -68,11 +65,6 @@ func TestBuildResourceModelSyntheticIdentityAndFacts(t *testing.T) {
 	require.Equal(t, "deployed", facts.RawStatus)
 	require.Equal(t, "Upgrade complete", facts.Description)
 	require.Equal(t, metav1.NewTime(last.Time), *facts.Updated)
-	require.Len(t, facts.Resources, 1)
-	require.Equal(t, "Deployment", facts.Resources[0].Ref.Kind)
-	require.Equal(t, "apps", facts.Resources[0].Ref.Group)
-	require.Equal(t, "v1", facts.Resources[0].Ref.Version)
-	require.Equal(t, "apps", facts.Resources[0].Ref.Namespace)
 	require.Len(t, facts.History, 1)
 	require.Equal(t, "superseded", facts.History[0].Status)
 }
@@ -90,15 +82,11 @@ func TestBuildFactsSummaryMaterializationOmitsDetailPayloads(t *testing.T) {
 		},
 	}
 	history := []*release.Release{{Version: 2, Info: &release.Info{Status: release.StatusSuperseded}}}
-	resources := []resourcemodel.ResourceLink{
-		resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "", Namespace: "apps", Name: "orders", UID: ""}),
-	}
 
-	facts := BuildFacts(rel, resources, history, resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts})
+	facts := BuildFacts(rel, history, resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts})
 	require.Equal(t, "orders-chart-1.2.3", facts.Chart)
 	require.Equal(t, "deployed", facts.RawStatus)
 	require.Equal(t, "Upgrade complete", facts.Description)
 	require.Empty(t, facts.Notes)
 	require.Empty(t, facts.History)
-	require.Empty(t, facts.Resources)
 }

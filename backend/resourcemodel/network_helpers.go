@@ -2,9 +2,9 @@ package resourcemodel
 
 import (
 	"strconv"
-	"strings"
 
 	discoveryv1 "k8s.io/api/discovery/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func ClusterResourceLink(clusterID, group, version, kind, resource, name, uid string) ResourceLink {
@@ -33,14 +33,11 @@ func EndpointReady(endpoint discoveryv1.Endpoint) bool {
 // EndpointSlice model and the Service detail's endpoint summarization.
 
 func SplitAPIVersion(apiVersion string) (string, string) {
-	if apiVersion == "" {
+	gv, err := schema.ParseGroupVersion(apiVersion)
+	if err != nil {
 		return "", ""
 	}
-	parts := strings.Split(apiVersion, "/")
-	if len(parts) == 1 {
-		return "", parts[0]
-	}
-	return parts[0], parts[1]
+	return gv.Group, gv.Version
 }
 
 func CountLabel(count int, singular, plural string) string {

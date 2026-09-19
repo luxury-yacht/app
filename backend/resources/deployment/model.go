@@ -109,7 +109,8 @@ func readySummary(common resourcemodel.WorkloadCommonFacts) string {
 func BuildStatusPresentation(deployment *appsv1.Deployment) resourcemodel.ResourceStatusPresentation {
 	facts := BuildFacts(deployment)
 	signals := resourcemodel.WorkloadReplicaSignals(facts.WorkloadCommonFacts)
-	signals = append(signals, statusSignals(deployment)...)
+	signals = append(signals, resourcemodel.ResourceStatusSignal{Type: resourcemodel.StatusSignalResourceState, Name: "spec.paused", Status: strconv.FormatBool(deployment.Spec.Paused)})
+	signals = append(signals, resourcemodel.ConditionSignals(facts.Conditions)...)
 	lifecycle := resourcemodel.ObjectLifecycle(deployment.ObjectMeta)
 
 	if status, ok := resourcemodel.DeletingObjectStatus(deployment.ObjectMeta, resourcemodel.ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
@@ -125,20 +126,6 @@ func BuildStatusPresentation(deployment *appsv1.Deployment) resourcemodel.Resour
 		return resourcemodel.ObjectSourceStatus("Paused", "true", "SpecPaused", "", "warning", signals, lifecycle)
 	}
 	return resourcemodel.ReplicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
-}
-
-func statusSignals(deployment *appsv1.Deployment) []resourcemodel.ResourceStatusSignal {
-	signals := []resourcemodel.ResourceStatusSignal{{Type: resourcemodel.StatusSignalResourceState, Name: "spec.paused", Status: strconv.FormatBool(deployment.Spec.Paused)}}
-	for _, condition := range deployment.Status.Conditions {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{
-			Type:    resourcemodel.StatusSignalCondition,
-			Name:    string(condition.Type),
-			Status:  string(condition.Status),
-			Reason:  condition.Reason,
-			Message: condition.Message,
-		})
-	}
-	return signals
 }
 
 func conditionFacts(conditions []appsv1.DeploymentCondition) []resourcemodel.ConditionFacts {

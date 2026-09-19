@@ -24,6 +24,20 @@ export type InitialMeasuredWidthPlan = {
 const isFiniteColumnWidth = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
+export const selectColumnWidths = (
+  columns: ReadonlyArray<{ key: string }>,
+  widths: Readonly<Record<string, number>>
+): Record<string, number> => {
+  const selected: Record<string, number> = {};
+  for (const { key } of columns) {
+    const width = widths[key];
+    if (typeof width === 'number' && !Number.isNaN(width)) {
+      selected[key] = width;
+    }
+  }
+  return selected;
+};
+
 export const isUserOwnedColumnWidth = <T>(
   state: ColumnWidthState,
   column: GridColumnDefinition<T>
@@ -54,25 +68,6 @@ export const clampAutoSizeColumnWidth = <T>(
 ): number =>
   Math.max(getColumnMinWidth(column), Math.min(getColumnAutoSizeMaxWidth(column), width));
 
-export const resolveColumnWidth = <T>({
-  column,
-  baseWidths,
-  naturalWidths,
-}: {
-  column: GridColumnDefinition<T>;
-  baseWidths: Record<string, number>;
-  naturalWidths: Record<string, number>;
-}): number => {
-  let width = parseWidthInputToNumber(column.width) ?? getColumnMinWidth(column);
-  if (isFiniteColumnWidth(naturalWidths[column.key])) {
-    width = naturalWidths[column.key];
-  }
-  if (isFiniteColumnWidth(baseWidths[column.key])) {
-    width = baseWidths[column.key];
-  }
-  return clampColumnWidth(column, width);
-};
-
 export const buildInitialMeasuredColumnWidthPlan = <T>({
   renderedColumns,
   columnWidths,
@@ -100,5 +95,5 @@ export const buildInitialMeasuredColumnWidthPlan = <T>({
       isFiniteColumnWidth(candidate) ? candidate : measureColumnWidth(column)
     );
   }
-  return { widths: naturalWidths, naturalWidths };
+  return { widths: { ...naturalWidths }, naturalWidths };
 };

@@ -6,7 +6,8 @@
  * information is available.
  */
 
-import type { DisplayRef, ResourceLink, ResourceRef } from '@core/refresh/types';
+import type { resourcemodel } from '@core/backend-api/models';
+import type { DisplayRef, ResourceRef } from '@core/refresh/types';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import {
   buildRequiredObjectReference,
@@ -17,6 +18,9 @@ import {
   readCatalogObjectMatchForRef,
   requestData,
 } from '@/core/data-access';
+
+// Wails permits null pointer fields; refresh payloads omit them. Accept both at this boundary.
+type ResourceLink = resourcemodel.ResourceLink;
 
 const normalizeOptional = (value: string | null | undefined): string | undefined => {
   const trimmed = value?.trim() ?? '';

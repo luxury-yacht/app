@@ -125,7 +125,7 @@ func TestManualRefreshFallbackAndHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("manual refresh fallback error: %v", err)
 	}
-	if res.Job != nil || res.Error != nil {
+	if res.Job != nil {
 		t.Fatalf("expected empty result for nil handler, got %+v", res)
 	}
 

@@ -165,7 +165,6 @@ export interface LogScrollPosition {
  * the snapshot trivially copyable.
  */
 export interface LogViewerPrefs {
-  selectedContainer: string;
   selectedFilters: MultiSelectFilterSelection;
   autoRefresh: boolean;
   timestampMode: LogTimestampMode;

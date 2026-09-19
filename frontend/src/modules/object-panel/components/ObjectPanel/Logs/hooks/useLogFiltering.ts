@@ -12,7 +12,11 @@ import {
 import { useMemo } from 'react';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
 import { stripAnsi } from '../ansi';
-import { logFilterSelectionMatchesNone } from '../logFilterSelection';
+import {
+  classifySelectedLogSources,
+  logFilterSelectionMatchesNone,
+  type SelectedLogSources,
+} from '../logFilterSelection';
 import { buildLogSearchRegex } from '../logSearch';
 import type { ParsedLogEntry } from '../logViewerReducer';
 import { tryParseJSONObject } from '../parsedLogUtils';
@@ -38,13 +42,6 @@ type TimestampedLogEntry = {
   index: number;
   timestamp: string;
   timestampMs: number | null;
-};
-
-type SelectedLogSources = {
-  pods: Set<string>;
-  initContainers: Set<string>;
-  containers: Set<string>;
-  debugContainers: Set<string>;
 };
 
 const timestampLogEntry = (entry: ContainerLogsEntry, index: number): TimestampedLogEntry => {
@@ -89,20 +86,6 @@ const orderLogEntries = (entries: ContainerLogsEntry[]): ContainerLogsEntry[] =>
     .sort(compareTimestampedLogEntries)
     .map(({ entry }) => entry);
 };
-
-const valuesForPrefix = (values: string[], prefix: string): Set<string> =>
-  new Set(
-    values
-      .filter((value) => value.startsWith(prefix))
-      .map((value) => value.substring(prefix.length))
-  );
-
-const classifySelectedLogSources = (values: string[]): SelectedLogSources => ({
-  pods: valuesForPrefix(values, 'pod:'),
-  initContainers: valuesForPrefix(values, 'init:'),
-  containers: valuesForPrefix(values, 'container:'),
-  debugContainers: valuesForPrefix(values, 'debug:'),
-});
 
 const matchesSelectedContainer = (
   entry: ContainerLogsEntry,

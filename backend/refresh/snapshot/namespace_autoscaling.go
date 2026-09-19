@@ -36,7 +36,7 @@ type NamespaceAutoscalingBuilder struct {
 // REUSES the adapter's exact comparable sort-value encoder and row key, so the
 // querypage engine orders rows byte-identically to the live typed-table executor.
 func autoscalingQuerypageSchema() querypage.Schema[AutoscalingSummary] {
-	return querypageSchemaFromAdapter(autoscalingTableQueryAdapter(), []string{"name", "kind", "namespace", "target", "min", "max", "current", "age"})
+	return querypageSchemaFromAdapter(autoscalingTableQueryAdapter(), namespaceAutoscalingQueryCapabilities().SortableFields)
 }
 
 // NamespaceAutoscalingSnapshot payload for autoscaling tab.
@@ -70,7 +70,6 @@ func namespaceAutoscalingDomainSpec() typedTableDomainSpec[AutoscalingSummary] {
 		adapter:          autoscalingTableQueryAdapter(),
 		schema:           autoscalingQuerypageSchema(),
 		capabilities:     namespaceAutoscalingQueryCapabilities(),
-		kindOf:           func(resource AutoscalingSummary) string { return resource.Ref.Kind },
 		sortRows:         sortAutoscalingSummaries,
 	}
 }

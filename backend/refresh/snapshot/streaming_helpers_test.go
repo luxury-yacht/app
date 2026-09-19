@@ -49,6 +49,7 @@ func TestBuildPodSummaryResolvesDeploymentOwner(t *testing.T) {
 			Namespace: "default",
 			OwnerReferences: []metav1.OwnerReference{{
 				Kind:       "Deployment",
+				APIVersion: "apps/v1",
 				Name:       "web",
 				Controller: ptrBool(true),
 			}},
@@ -66,6 +67,7 @@ func TestBuildPodSummaryResolvesDeploymentOwner(t *testing.T) {
 			Namespace: "default",
 			OwnerReferences: []metav1.OwnerReference{{
 				Kind:       "ReplicaSet",
+				APIVersion: "apps/v1",
 				Name:       "web-abc",
 				Controller: ptrBool(true),
 			}},

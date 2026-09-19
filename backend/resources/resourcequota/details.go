@@ -36,7 +36,7 @@ func (s *Service) ResourceQuota(ctx context.Context, namespace, name string) (*R
 
 	rq, err := client.CoreV1().ResourceQuotas(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		err = s.logError(err, fmt.Sprintf("Failed to get resource quota %s/%s", namespace, name))
+		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get resource quota %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get resource quota: %w", err)
 	}
 
@@ -60,10 +60,6 @@ func (s *Service) buildResourceQuotaDetails(rq *corev1.ResourceQuota) *ResourceQ
 		Annotations:    rq.Annotations,
 	}
 	return details
-}
-
-func (s *Service) logError(err error, msg string) error {
-	return s.deps.LogResourceRequestFailure(err, msg, "get", Identity, logsources.ResourceLoader)
 }
 
 func scopeSelectorFromFacts(facts *ScopeSelectorFacts) *ScopeSelector {

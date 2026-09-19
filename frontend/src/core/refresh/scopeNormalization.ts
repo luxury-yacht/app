@@ -15,10 +15,24 @@ export const normalizeRefreshDomainScope = ({
   selectedClusterId,
   allowEmpty = false,
 }: NormalizeRefreshDomainScopeOptions): string | undefined => {
-  if (isResourceStreamDomain(domain)) {
-    return normalizeResourceStreamScope(domain, value, selectedClusterId, allowEmpty);
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed && !allowEmpty) {
+    return undefined;
   }
-  return normalizeDefaultScope(value, selectedClusterId, allowEmpty);
+  const resourceStream = isResourceStreamDomain(domain);
+  const parsed = parseClusterScopeList(trimmed);
+  if (parsed.isMultiCluster) {
+    throw new Error(
+      resourceStream
+        ? `Resource stream domain "${domain}" requires a single cluster scope`
+        : 'Refresh domain scopes must target a single cluster'
+    );
+  }
+  // Explicit identity wins when selection changes between lease acquisition and release.
+  const clusterId = parsed.clusterIds[0] ?? selectedClusterId;
+  const scope = parsed.clusterIds.length > 0 ? parsed.scope : parsed.scope || trimmed;
+  const tail = resourceStream && scope.toLowerCase() === 'cluster' ? '' : scope;
+  return buildClusterScope(clusterId, tail) || undefined;
 };
 
 export const normalizeNamespaceScope = (
@@ -34,66 +48,4 @@ export const normalizeNamespaceScope = (
   }
   const namespaceScope = trimmed.startsWith('namespace:') ? trimmed : `namespace:${trimmed}`;
   return buildClusterScope(clusterId, namespaceScope) || null;
-};
-
-const normalizeDefaultScope = (
-  value: string | null | undefined,
-  selectedClusterId: string | undefined,
-  allowEmpty: boolean
-): string | undefined => {
-  if (!value) {
-    if (!allowEmpty) {
-      return undefined;
-    }
-    const clusterScope = buildClusterScope(selectedClusterId, '');
-    return clusterScope || undefined;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    if (!allowEmpty) {
-      return undefined;
-    }
-    const clusterScope = buildClusterScope(selectedClusterId, '');
-    return clusterScope || undefined;
-  }
-  const parsed = parseClusterScopeList(trimmed);
-  if (parsed.isMultiCluster) {
-    throw new Error('Refresh domain scopes must target a single cluster');
-  }
-  // Preserve explicit cluster-scoped inputs to avoid rewriting historical keys
-  // when the selected cluster changes between enable/disable calls.
-  if (parsed.clusterIds.length > 0) {
-    return buildClusterScope(parsed.clusterIds[0], parsed.scope);
-  }
-  return buildClusterScope(selectedClusterId, parsed.scope || trimmed) || undefined;
-};
-
-const normalizeResourceStreamScope = (
-  domain: RefreshDomain,
-  value: string | null | undefined,
-  selectedClusterId: string | undefined,
-  allowEmpty: boolean
-): string | undefined => {
-  const normalizeTail = (scope: string): string => {
-    const trimmed = scope.trim();
-    return trimmed.toLowerCase() === 'cluster' ? '' : trimmed;
-  };
-
-  if (!value?.trim()) {
-    if (!allowEmpty) {
-      return undefined;
-    }
-    return buildClusterScope(selectedClusterId, normalizeTail('')) || undefined;
-  }
-
-  const trimmed = value.trim();
-  const parsed = parseClusterScopeList(trimmed);
-  if (parsed.isMultiCluster) {
-    throw new Error(`Resource stream domain "${domain}" requires a single cluster scope`);
-  }
-  if (parsed.clusterIds.length > 0) {
-    return buildClusterScope(parsed.clusterIds[0], normalizeTail(parsed.scope));
-  }
-
-  return buildClusterScope(selectedClusterId, normalizeTail(parsed.scope || trimmed)) || undefined;
 };

@@ -37,7 +37,6 @@ const notificationStyles = readFileSync(
 
 const makeError = (overrides: Partial<ErrorNotification> = {}): ErrorNotification => ({
   id: 'error-1',
-  dismissed: false,
   message: 'raw error',
   category: ErrorCategory.NETWORK,
   severity: ErrorSeverity.ERROR,

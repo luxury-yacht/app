@@ -260,7 +260,7 @@ metadata:
 	}, resources)
 }
 
-func TestExtractResourcesFromManifestPreservesHooksDefaultsAndLinkIdentity(t *testing.T) {
+func TestExtractResourcesFromManifestPreservesHooksDefaultsAndResourceIdentity(t *testing.T) {
 	manifest := `
 ---
 this: [is invalid
@@ -296,16 +296,6 @@ items: not-a-list
 		{Kind: "Deployment", APIVersion: "apps/v1", Name: "application", Namespace: "release-ns", Scope: "namespaced"},
 	}, service.extractResourcesFromManifest(context.Background(), manifest, "release-ns"))
 
-	links := service.extractResourceLinksFromManifest(context.Background(), manifest, "release-ns")
-	require.Len(t, links, 2)
-	require.NotNil(t, links[0].Ref)
-	require.Equal(t, "cluster-a", links[0].Ref.ClusterID)
-	require.Equal(t, "", links[0].Ref.Group)
-	require.Equal(t, "v1", links[0].Ref.Version)
-	require.Equal(t, "ConfigMap", links[0].Ref.Kind)
-	require.Equal(t, "configmaps", links[0].Ref.Resource)
-	require.Equal(t, "release-ns", links[0].Ref.Namespace)
-	require.Equal(t, "pre-install-config", links[0].Ref.Name)
 }
 
 func TestExtractNameNamespaceSupportsInterfaceMap(t *testing.T) {

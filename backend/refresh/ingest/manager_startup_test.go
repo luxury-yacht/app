@@ -78,7 +78,7 @@ func blockingStartupEntry(
 		store: store,
 		parts: []*ingestPart{{
 			lw:        lw,
-			reflector: NewProjectingReflector(gvr.String(), lw, &corev1.ConfigMap{}, view, resyncDisabled),
+			reflector: cache.NewNamedReflector(gvr.String(), lw, &corev1.ConfigMap{}, view, resyncDisabled),
 			view:      view,
 		}},
 	}

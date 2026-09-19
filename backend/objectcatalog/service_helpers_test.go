@@ -134,3 +134,11 @@ func TestListRetryBackoff(t *testing.T) {
 		t.Fatalf("unexpected backoff for attempt 2: %v", backoff)
 	}
 }
+
+// Set up published query fixtures independently of the live item index. Sync
+// lifecycle tests exercise catalogSync.publish instead.
+func (s *Service) publishCatalogRowsForTest(rows []Summary, kinds map[string]bool, namespaces map[string]struct{}, descriptors []Descriptor, ready bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.catalogIndex.publishRows(rows, kinds, namespaces, descriptors, ready)
+}

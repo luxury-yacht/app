@@ -3,6 +3,8 @@ package customresource
 import (
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
+
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -50,40 +52,13 @@ func TestBuildResourceModelExtractsDynamicStatus(t *testing.T) {
 	require.Equal(t, "Reconciling", model.Status.State)
 	require.Equal(t, "progressing", model.Status.Presentation)
 
-	facts := BuildFacts("cluster-a", resource, gvr, "databases.databases.example.com", resourcemodel.ResourceModelBuildOptions{})
+	facts := BuildFacts(resource)
 	require.Equal(t, "Reconciling", facts.Phase)
 	require.False(t, *facts.Ready)
 	require.Equal(t, int64(3), *facts.ObservedGeneration)
 	require.Len(t, facts.Conditions, 1)
 	require.Equal(t, "Ready", facts.Conditions[0].Type)
 	require.Equal(t, "False", facts.Conditions[0].Status)
-	require.Equal(t, "CustomResourceDefinition", facts.CRD.Ref.Kind)
-	require.Equal(t, "databases.databases.example.com", facts.CRD.Ref.Name)
-}
-
-func TestBuildFactsMaterializationControlsRawStatus(t *testing.T) {
-	resource := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "databases.example.com/v1alpha1",
-		"kind":       "Database",
-		"metadata": map[string]any{
-			"name":      "orders",
-			"namespace": "apps",
-		},
-		"status": map[string]any{
-			"phase":   "Reconciling",
-			"message": "large provider-specific payload",
-		},
-	}}
-	gvr := schema.GroupVersionResource{Group: "databases.example.com", Version: "v1alpha1", Resource: "databases"}
-
-	summary := BuildFacts("cluster-a", resource, gvr, "", resourcemodel.ResourceModelBuildOptions{})
-	require.Equal(t, "Reconciling", summary.Phase)
-	require.Empty(t, summary.RawStatus)
-
-	detail := BuildFacts("cluster-a", resource, gvr, "", resourcemodel.ResourceModelBuildOptions{
-		Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeDetailFacts,
-	})
-	require.Equal(t, "large provider-specific payload", detail.RawStatus["message"])
 }
 
 func TestBuildResourceModelLeavesConfigOnlyMonitorsWithoutStatusUntilDeleted(t *testing.T) {
@@ -107,4 +82,61 @@ func TestBuildResourceModelLeavesConfigOnlyMonitorsWithoutStatusUntilDeleted(t *
 	model = BuildResourceModel("cluster-a", resource, descriptor, resourcemodel.ResourceScopeNamespaced, "")
 	require.Equal(t, "Terminating", model.Status.Label)
 	require.Equal(t, "terminating", model.Status.Presentation)
+}
+
+func TestDynamicReadinessAndConditionsReachDetailAndTable(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		ready     any
+		phase     string
+		state     string
+		condition any
+		wantLabel string
+		wantReady any
+	}{
+		{"boolean overrides condition", false, "", "", "True", "Not Ready", false},
+		{"string overrides condition", "TRUE", "", "", "False", "Ready", true},
+		{"condition supplies missing readiness", nil, "", "", true, "Ready", true},
+		{"unknown explicit readiness is not coerced", "unknown", "", "", "True", "True", nil},
+		{"unknown condition stays unknown", nil, "", "", "Unknown", "Unknown", nil},
+		{"phase takes precedence", true, "Reconciling", "Failed", "True", "Reconciling", true},
+		{"state takes precedence over readiness", true, "", "Failed", "True", "Failed", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			status := map[string]any{"phase": test.phase, "state": test.state, "conditions": []any{
+				"invalid", map[string]any{},
+				map[string]any{"type": "rEaDy", "status": test.condition, "reason": "ControllerState", "lastTransitionTime": "2026-09-01T12:00:00Z"},
+				map[string]any{"status": "Unknown", "lastTransitionTime": "invalid"},
+			}}
+			if test.ready != nil {
+				status["ready"] = test.ready
+			}
+			object := &unstructured.Unstructured{Object: map[string]any{
+				"apiVersion": "example.com/v1", "kind": "Widget",
+				"metadata": map[string]any{"name": "widget", "namespace": "apps", "labels": map[string]any{"team": "infra"}},
+				"status":   status,
+			}}
+			descriptor := NewDescriptor("example.com", "v1", "widgets", "Widget", "widgets.example.com")
+			detail := BuildDetails("cluster-a", object, descriptor, resourcemodel.ResourceScopeNamespaced)
+			row := BuildNamespaceStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, object, descriptor, "fallback")
+			require.Equal(t, detail.Ref, row.Ref)
+			require.Equal(t, "apps", row.Ref.Namespace)
+			require.Equal(t, test.wantLabel, detail.Status)
+			require.Equal(t, detail.Status, row.Status)
+			require.Equal(t, detail.Conditions, row.Conditions)
+			require.Len(t, detail.Conditions, 2)
+			require.Equal(t, "ControllerState", detail.Conditions[0].Reason)
+			require.False(t, detail.Conditions[0].LastTransitionTime.IsZero())
+			require.True(t, detail.Conditions[1].LastTransitionTime.IsZero())
+			if test.wantReady == nil {
+				require.Nil(t, row.Ready)
+			} else {
+				require.NotNil(t, row.Ready)
+				require.Equal(t, test.wantReady, *row.Ready)
+			}
+			detail.Labels["team"] = "changed"
+			require.Equal(t, "infra", row.Labels["team"])
+			require.Equal(t, "infra", object.GetLabels()["team"])
+		})
+	}
 }

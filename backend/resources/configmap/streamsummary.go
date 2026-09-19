@@ -19,12 +19,11 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, cm *corev1.ConfigMap) strea
 	if cm == nil {
 		return streamrows.ConfigSummary{}
 	}
-	facts := BuildFacts(cm, nil)
 	return streamrows.ConfigSummary{
 		Ref:          streamrows.NewResourceRef(meta, Identity, cm),
 		Metadata:     streamrows.NewResourceMetadata(cm),
 		TypeAlias:    "CM",
-		Data:         facts.DataCount,
+		Data:         len(cm.Data) + len(cm.BinaryData),
 		Age:          streamrows.FormatAge(cm.GetCreationTimestamp().Time),
 		AgeTimestamp: streamrows.CreationMillis(cm),
 	}

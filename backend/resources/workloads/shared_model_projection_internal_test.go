@@ -28,7 +28,7 @@ func TestWorkloadReplicaDisplay(t *testing.T) {
 }
 
 func TestWorkloadUtilization(t *testing.T) {
-	// Empty pods -> aggregatePodAverages returns nils -> common.Format* returns "-".
+	// Missing averages retain the display placeholder.
 	got := WorkloadUtilization(nil, nil)
 	if got.CPURequest != "-" || got.CPULimit != "-" || got.CPUUsage != "-" ||
 		got.MemRequest != "-" || got.MemLimit != "-" || got.MemUsage != "-" {

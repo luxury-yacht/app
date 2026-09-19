@@ -16,8 +16,8 @@ import (
 // it always transfers full state on initial sync — so the resume is a small custom watch
 // loop here, with a 410-Gone fallback to the reflector's full sync (which reconciles, stage 4).
 //
-// This component is intentionally standalone and not yet wired into IngestManager; a later
-// slice spills/restores the ingest stores with their RV and routes the reflector through it.
+// IngestManager restores per-partition versions before Start and routes each
+// reflector through runWithResume.
 
 // resumeOutcome reports how a resume watch ended.
 type resumeOutcome int

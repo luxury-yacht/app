@@ -14,9 +14,8 @@ import (
 
 // BuildResourceModel builds the shared resource model for a ListenerSet.
 func BuildResourceModel(clusterID string, listenerSet *gatewayv1.ListenerSet) resourcemodel.ResourceModel {
-	facts := BuildFacts(clusterID, listenerSet)
-	status := buildStatusPresentation(listenerSet, facts)
-	return resourcemodel.GatewayAPIResourceModel(clusterID, "ListenerSet", "listenersets", resourcemodel.ResourceScopeNamespaced, listenerSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	status := buildStatusPresentation(listenerSet)
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, listenerSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts projects a ListenerSet into its semantic facts.
@@ -30,10 +29,10 @@ func BuildFacts(clusterID string, listenerSet *gatewayv1.ListenerSet) Facts {
 	}
 }
 
-func buildStatusPresentation(listenerSet *gatewayv1.ListenerSet, facts Facts) resourcemodel.ResourceStatusPresentation {
-	state := resourcemodel.GatewayCountState(len(facts.Listeners))
-	label := resourcemodel.CountLabel(len(facts.Listeners), "listener", "listeners")
-	return resourcemodel.GatewayStatusFromConditions(listenerSet.ObjectMeta, state, label, facts.Conditions)
+func buildStatusPresentation(listenerSet *gatewayv1.ListenerSet) resourcemodel.ResourceStatusPresentation {
+	state := resourcemodel.GatewayCountState(len(listenerSet.Spec.Listeners))
+	label := resourcemodel.CountLabel(len(listenerSet.Spec.Listeners), "listener", "listeners")
+	return resourcemodel.GatewayStatusFromConditions(listenerSet.ObjectMeta, state, label, resourcemodel.GatewayConditionFacts(listenerSet.Status.Conditions))
 }
 
 func listenerFacts(spec []gatewayv1.ListenerEntry, status []gatewayv1.ListenerEntryStatus) []resourcemodel.GatewayListenerFacts {

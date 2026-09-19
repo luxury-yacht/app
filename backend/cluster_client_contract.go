@@ -30,7 +30,6 @@ type clusterClients struct {
 	gatewayClient          gatewayversioned.Interface
 	gatewayInformerFactory gatewayinformers.SharedInformerFactory
 	gatewayAPIPresence     common.GatewayAPIPresence
-	gatewayVersionResolver common.VersionResolver
 	apiextensionsClient    apiextensionsclientset.Interface
 	dynamicClient          dynamic.Interface
 	metricsClient          *metricsclient.Clientset

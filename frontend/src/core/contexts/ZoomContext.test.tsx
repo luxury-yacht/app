@@ -1,4 +1,4 @@
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAppZoomFactor } from '@/shared/utils/appZoom';
@@ -26,6 +26,16 @@ vi.mock('@/core/desktop-runtime', () => ({
 }));
 vi.mock('@/utils/errorHandler', () => ({ reportOperationalError: mocks.report }));
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('application zoom', () => {
   let root: Root;
   let host: HTMLDivElement;
@@ -39,9 +49,11 @@ describe('application zoom', () => {
   const render = async () => {
     await act(async () => {
       root.render(
-        <ZoomProvider>
-          <Probe />
-        </ZoomProvider>
+        <StrictMode>
+          <ZoomProvider>
+            <Probe />
+          </ZoomProvider>
+        </StrictMode>
       );
     });
     return requireValue(zoom, 'expected the zoom provider to render');
@@ -91,6 +103,51 @@ describe('application zoom', () => {
       expect(document.body.style.zoom).toBe(`${expected}%`);
       expect(mocks.persist).toHaveBeenLastCalledWith(expected);
     }
+  });
+
+  it('persists each menu action once, including several actions before a render', async () => {
+    await render();
+    mocks.persist.mockClear();
+    act(() => {
+      mocks.events.get('zoom-in')?.();
+      mocks.events.get('zoom-in')?.();
+      mocks.events.get('zoom-out')?.();
+    });
+    expect(zoom?.zoomLevel).toBe(110);
+    expect(document.body.style.zoom).toBe('110%');
+    expect(mocks.persist.mock.calls).toEqual([[110], [120], [110]]);
+  });
+
+  it.each(['resolve', 'reject'] as const)(
+    'preserves a menu action when the initial settings read later %ss',
+    async (outcome) => {
+      const load = deferred<number>();
+      mocks.read.mockReturnValue(load.promise);
+      await render();
+      act(() => mocks.events.get('zoom-in')?.());
+      await act(async () => {
+        if (outcome === 'resolve') {
+          load.resolve(150);
+        } else {
+          load.reject(new Error('delayed load failure'));
+        }
+      });
+      expect(zoom?.zoomLevel).toBe(110);
+      expect(document.body.style.zoom).toBe('110%');
+      expect(getAppZoomFactor()).toBe(1.1);
+    }
+  );
+
+  it('ignores settings reads belonging to an unmounted provider', async () => {
+    const load = deferred<number>();
+    mocks.read.mockReturnValue(load.promise);
+    await render();
+    act(() => root.render(null));
+    document.body.style.zoom = '130%';
+    document.documentElement.style.setProperty('--app-zoom-factor', '1.3');
+    await act(async () => load.resolve(150));
+    expect(document.body.style.zoom).toBe('130%');
+    expect(getAppZoomFactor()).toBe(1.3);
   });
 
   it.each([

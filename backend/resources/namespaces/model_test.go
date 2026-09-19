@@ -24,7 +24,7 @@ func TestBuildNamespaceResourceModelFactsAndStatus(t *testing.T) {
 	}
 	opts := resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeRelationshipFacts}
 
-	model := BuildResourceModel("cluster-a", ns, true, true, []string{"quota-a"}, []string{"limits-a"}, opts)
+	model := BuildResourceModel("cluster-a", ns, true, true)
 	require.Equal(t, resourcemodel.ResourceRef{
 		ClusterID: "cluster-a",
 		Group:     "",
@@ -73,7 +73,7 @@ func TestBuildNamespaceResourceModelTerminatingPreservesSourcePhase(t *testing.T
 		Status:     corev1.NamespaceStatus{Phase: corev1.NamespaceActive},
 	}
 
-	model := BuildResourceModel("cluster-a", ns, false, false, nil, nil)
+	model := BuildResourceModel("cluster-a", ns, false, false)
 	require.Equal(t, "Terminating", model.Status.Label)
 	require.Equal(t, "Active", model.Status.State)
 	require.Equal(t, "terminating", model.Status.Presentation)

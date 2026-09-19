@@ -12,6 +12,8 @@ import { useEffect, useEffectEvent, useState } from 'react';
 import { readKubeconfigSearchPaths, requestAppState } from '@/core/app-state-access';
 import { OpenKubeconfigSearchPathDialog, SetKubeconfigSearchPaths } from '@/core/backend-api';
 
+import { SettingRow } from './SettingsControls';
+
 function KubeconfigsSection() {
   const { loadKubeconfigs } = useKubeconfig();
   const [kubeconfigPaths, setKubeconfigPaths] = useState<string[]>([]);
@@ -88,63 +90,59 @@ function KubeconfigsSection() {
       <div className="settings-subgroup-label">Search paths</div>
       <hr className="settings-subgroup-divider" />
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Directories</div>
-          <div className="settings-row-label-help">
+      <SettingRow
+        title="Directories"
+        help={
+          <>
             The list of directories that the app will scan for kubeconfig files. If you store
             kubeconfigs in a custom location, add it here.
-          </div>
+          </>
+        }
+      >
+        <div className="settings-items kubeconfig-path-list">
+          {kubeconfigPathsLoading ? (
+            <div className="setting-item kubeconfig-path-status">Loading kubeconfig paths...</div>
+          ) : (
+            <>
+              {kubeconfigPaths.length === 0 && (
+                <div className="setting-item kubeconfig-path-empty">No kubeconfig paths set.</div>
+              )}
+              {kubeconfigPaths.map((path, index) => {
+                const canRemove = kubeconfigPaths.length > 1;
+                return (
+                  <div className="setting-item setting-item-surface kubeconfig-path-row" key={path}>
+                    <span className="kubeconfig-path-icon" aria-hidden="true">
+                      <KubeconfigFolderIcon width={16} height={16} />
+                    </span>
+                    <span className="kubeconfig-path-value">{path}</span>
+                    {canRemove && (
+                      <button
+                        type="button"
+                        className="kubeconfig-path-remove-button"
+                        onClick={() => handleRemoveKubeconfigPath(index)}
+                        disabled={kubeconfigPathsSaving}
+                        aria-label={`Remove kubeconfig path ${index + 1}`}
+                        title="Remove path"
+                      >
+                        <CloseIcon width={14} height={14} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
+          <button
+            type="button"
+            className="button generic settings-add-button kubeconfig-path-add"
+            onClick={handleAddKubeconfigPath}
+            disabled={kubeconfigPathsSaving || kubeconfigPathsLoading || kubeconfigPathsSelecting}
+          >
+            <PlusIcon width={12} height={12} />
+            Add path
+          </button>
         </div>
-        <div className="settings-row-control">
-          <div className="settings-items kubeconfig-path-list">
-            {kubeconfigPathsLoading ? (
-              <div className="setting-item kubeconfig-path-status">Loading kubeconfig paths...</div>
-            ) : (
-              <>
-                {kubeconfigPaths.length === 0 && (
-                  <div className="setting-item kubeconfig-path-empty">No kubeconfig paths set.</div>
-                )}
-                {kubeconfigPaths.map((path, index) => {
-                  const canRemove = kubeconfigPaths.length > 1;
-                  return (
-                    <div
-                      className="setting-item setting-item-surface kubeconfig-path-row"
-                      key={path}
-                    >
-                      <span className="kubeconfig-path-icon" aria-hidden="true">
-                        <KubeconfigFolderIcon width={16} height={16} />
-                      </span>
-                      <span className="kubeconfig-path-value">{path}</span>
-                      {canRemove && (
-                        <button
-                          type="button"
-                          className="kubeconfig-path-remove-button"
-                          onClick={() => handleRemoveKubeconfigPath(index)}
-                          disabled={kubeconfigPathsSaving}
-                          aria-label={`Remove kubeconfig path ${index + 1}`}
-                          title="Remove path"
-                        >
-                          <CloseIcon width={14} height={14} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </>
-            )}
-            <button
-              type="button"
-              className="button generic settings-add-button kubeconfig-path-add"
-              onClick={handleAddKubeconfigPath}
-              disabled={kubeconfigPathsSaving || kubeconfigPathsLoading || kubeconfigPathsSelecting}
-            >
-              <PlusIcon width={12} height={12} />
-              Add path
-            </button>
-          </div>
-        </div>
-      </div>
+      </SettingRow>
     </div>
   );
 }

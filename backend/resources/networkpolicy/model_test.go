@@ -2,6 +2,7 @@ package networkpolicy_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -59,4 +60,31 @@ func TestBuildResourceModelFactsAndStatus(t *testing.T) {
 	require.Equal(t, endPort, *facts.IngressRules[0].Ports[0].EndPort)
 	require.Equal(t, "10.0.0.0/8", facts.EgressRules[0].Peers[0].IPBlock.CIDR)
 	require.Equal(t, []string{"10.1.0.0/16"}, facts.EgressRules[0].Peers[0].IPBlock.Except)
+}
+
+func TestPolicyDefaultingAndDeletionRetainRuleCounts(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		types     []networkingv1.PolicyType
+		egress    []networkingv1.NetworkPolicyEgressRule
+		wantTypes []string
+		state     string
+	}{
+		{"empty defaults to ingress", nil, nil, []string{"Ingress"}, "0/0"},
+		{"egress also defaults ingress", nil, []networkingv1.NetworkPolicyEgressRule{{}}, []string{"Ingress", "Egress"}, "0/1"},
+		{"explicit types preserve order", []networkingv1.PolicyType{networkingv1.PolicyTypeEgress, networkingv1.PolicyTypeIngress}, nil, []string{"Egress", "Ingress"}, "0/0"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			policy := &networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "isolation", Namespace: "apps"}, Spec: networkingv1.NetworkPolicySpec{PolicyTypes: tt.types, Egress: tt.egress}}
+			require.Equal(t, tt.wantTypes, networkpolicy.BuildFacts(policy).PolicyTypes)
+			model := networkpolicy.BuildResourceModel("cluster-a", policy)
+			require.Equal(t, tt.state, model.Status.State)
+			require.Equal(t, "ready", model.Status.Presentation)
+			policy.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+			deleting := networkpolicy.BuildResourceModel("cluster-a", policy)
+			require.Len(t, deleting.Status.Signals, len(model.Status.Signals)+1)
+			require.Equal(t, model.Status.Signals, deleting.Status.Signals[:len(model.Status.Signals)])
+			require.Equal(t, "terminating", deleting.Status.Presentation)
+		})
+	}
 }

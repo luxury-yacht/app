@@ -10,5 +10,9 @@ import "fmt"
 
 // DescribeSummary formats the LimitRange streaming-row detail string from its facts.
 func DescribeSummary(facts Facts) string {
-	return fmt.Sprintf("Limits: %d", len(facts.Limits))
+	return describeCounts(len(facts.Limits))
+}
+
+func describeCounts(count int) string {
+	return fmt.Sprintf("Limits: %d", count)
 }

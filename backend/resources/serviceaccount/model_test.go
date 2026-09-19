@@ -3,6 +3,8 @@ package serviceaccount
 import (
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
+
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -44,12 +46,7 @@ func TestBuildServiceAccountResourceModelFactsStatusAndReverseUsage(t *testing.T
 		RoleBindings:        roleBindings,
 		ClusterRoleBindings: clusterRoleBindings,
 	})
-	model := BuildResourceModel(
-		"cluster-a",
-		sa,
-		relationships,
-		resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks},
-	)
+	model := BuildResourceModel("cluster-a", sa)
 	require.Equal(t, "ServiceAccount", model.Ref.Kind)
 	require.Equal(t, "serviceaccounts", model.Ref.Resource)
 	require.Equal(t, "Secrets: 1", model.Status.Label)
@@ -62,4 +59,26 @@ func TestBuildServiceAccountResourceModelFactsStatusAndReverseUsage(t *testing.T
 	require.Equal(t, []string{"explicit", "implicit"}, resourcemodel.ResourceLinkNames(facts.UsedByPods))
 	require.Equal(t, []string{"rb"}, resourcemodel.ResourceLinkNames(facts.RoleBindings))
 	require.Equal(t, []string{"crb"}, resourcemodel.ResourceLinkNames(facts.ClusterRoleBindings))
+}
+
+func TestServiceAccountMapAndListCountNamedTokenSecrets(t *testing.T) {
+	sa := &corev1.ServiceAccount{
+		ObjectMeta:       metav1.ObjectMeta{Name: "builder", Namespace: "team-a"},
+		Secrets:          []corev1.ObjectReference{{}, {Name: "token-a"}, {Name: "token-b"}},
+		ImagePullSecrets: []corev1.LocalObjectReference{{Name: "registry"}},
+	}
+	row := BuildStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, sa)
+	require.Equal(t, "Secrets: 2", row.Details)
+	require.Equal(t, "cluster-a", row.Ref.ClusterID)
+	status := ObjectMapStatus("cluster-a", *sa)
+	require.Equal(t, "2", status.State)
+	require.Equal(t, row.Details, status.Label)
+	require.Equal(t, "ready", status.Presentation)
+	deletion := metav1.Now()
+	sa.DeletionTimestamp = &deletion
+	status = ObjectMapStatus("cluster-a", *sa)
+	require.Equal(t, "2", status.State)
+	require.Equal(t, "terminating", status.Presentation)
+	require.Equal(t, "DeletionTimestamp", status.Reason)
+	require.Equal(t, row.Details, BuildStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, sa).Details)
 }

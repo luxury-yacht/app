@@ -3,9 +3,7 @@
  *
  * HelmRelease resource model: the single definition of a Helm release's intrinsic
  * fields + status presentation. HelmRelease is a synthetic kind (helm.sh/v3) built
- * from helm storage records. The manifest resource-link helpers (shared with the
- * snapshot object-content builder) stay in resourcemodel. Shared model primitives
- * come from resourcemodel.
+ * from Helm storage records. Shared model primitives come from resourcemodel.
  */
 
 package helm
@@ -26,13 +24,8 @@ func BuildResourceModel(
 	clusterID string,
 	rel *release.Release,
 	namespaceFallback string,
-	resources []resourcemodel.ResourceLink,
-	history []*release.Release,
-	options ...resourcemodel.ResourceModelBuildOptions,
 ) resourcemodel.ResourceModel {
-	buildOptions := resourcemodel.BuildOptions(options...)
-	facts := BuildFacts(rel, resources, history, buildOptions)
-	status := statusPresentation(facts)
+	state, description := "", ""
 	namespace := strings.TrimSpace(namespaceFallback)
 	name := ""
 	labels := map[string]string(nil)
@@ -47,8 +40,11 @@ func BuildResourceModel(
 		if rel.Chart != nil && rel.Chart.Metadata != nil {
 			annotations = resourcemodel.CopyStringMap(rel.Chart.Metadata.Annotations)
 		}
-		if rel.Info != nil && !rel.Info.FirstDeployed.IsZero() {
-			created = metav1.NewTime(rel.Info.FirstDeployed.Time)
+		if rel.Info != nil {
+			state, description = rel.Info.Status.String(), rel.Info.Description
+			if !rel.Info.FirstDeployed.IsZero() {
+				created = metav1.NewTime(rel.Info.FirstDeployed.Time)
+			}
 		}
 	}
 	return resourcemodel.ResourceModel{
@@ -68,18 +64,15 @@ func BuildResourceModel(
 			Annotations:       annotations,
 			CreationTimestamp: created,
 		},
-		Status: status,
+		Status: statusPresentation(state, description),
 		Facts:  resourcemodel.ResourceFacts{},
 	}
 }
 
-// BuildFacts extracts the HelmRelease facts. Resources/Notes/History materialize
-// only with the relationship/detail materialization flags.
-func BuildFacts(rel *release.Release, resources []resourcemodel.ResourceLink, history []*release.Release, options resourcemodel.ResourceModelBuildOptions) Facts {
+// BuildFacts extracts HelmRelease facts. Notes and history materialize only
+// with the detail materialization flag.
+func BuildFacts(rel *release.Release, history []*release.Release, options resourcemodel.ResourceModelBuildOptions) Facts {
 	facts := Facts{}
-	if options.Materialization.Has(resourcemodel.MaterializeRelationshipFacts) || options.Materialization.Has(resourcemodel.MaterializeDetailFacts) {
-		facts.Resources = append([]resourcemodel.ResourceLink(nil), resources...)
-	}
 	if rel == nil {
 		return facts
 	}
@@ -145,8 +138,8 @@ func helmRevisionFacts(revision *release.Release) HelmRevisionFacts {
 	return facts
 }
 
-func statusPresentation(facts Facts) resourcemodel.ResourceStatusPresentation {
-	state := strings.TrimSpace(facts.RawStatus)
+func statusPresentation(rawStatus, description string) resourcemodel.ResourceStatusPresentation {
+	state := strings.TrimSpace(rawStatus)
 	if state == "" {
 		state = "unknown"
 	}
@@ -160,7 +153,7 @@ func statusPresentation(facts Facts) resourcemodel.ResourceStatusPresentation {
 		State:        state,
 		Presentation: presentationForState(state),
 		Reason:       "info.status",
-		Message:      facts.Description,
+		Message:      description,
 		Signals:      signals,
 		Lifecycle:    resourcemodel.ResourceLifecycle{},
 	}

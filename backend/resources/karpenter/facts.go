@@ -167,7 +167,7 @@ func reference(clusterID string, ref map[string]any) *resourcemodel.ResourceLink
 func poolReference(clusterID string, object *unstructured.Unstructured) *resourcemodel.ResourceLink {
 	for _, owner := range object.GetOwnerReferences() {
 		gv, err := schema.ParseGroupVersion(owner.APIVersion)
-		if err == nil && gv.Group == "karpenter.sh" && (owner.Kind == "NodePool" || owner.Kind == "Provisioner") {
+		if err == nil && gv.Version != "" && owner.Name != "" && gv.Group == "karpenter.sh" && (owner.Kind == "NodePool" || owner.Kind == "Provisioner") {
 			link := resourcemodel.NewClusterResourceLink(clusterID, gv.Group, gv.Version, owner.Kind, "", owner.Name, string(owner.UID))
 			return &link
 		}

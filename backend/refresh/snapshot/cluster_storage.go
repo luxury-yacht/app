@@ -34,7 +34,7 @@ type ClusterStorageBuilder struct {
 // It REUSES the adapter's exact comparable sort-value encoder and row key, so the
 // querypage engine orders rows byte-identically to the live typed-table executor.
 func clusterStorageQuerypageSchema() querypage.Schema[ClusterStorageEntry] {
-	return querypageSchemaFromAdapter(clusterStorageTableQueryAdapter(), []string{"name", "kind", "storageClass", "capacity", "accessModes", "status", "claim", "age"})
+	return querypageSchemaFromAdapter(clusterStorageTableQueryAdapter(), clusterStorageQueryCapabilities().SortableFields)
 }
 
 // ClusterStorageSnapshot is the payload exposed to the frontend. It embeds the
@@ -71,7 +71,6 @@ func clusterStorageDomainSpec() typedTableDomainSpec[ClusterStorageEntry] {
 		adapter:         clusterStorageTableQueryAdapter(),
 		schema:          clusterStorageQuerypageSchema(),
 		capabilities:    clusterStorageQueryCapabilities(),
-		kindOf:          func(entry ClusterStorageEntry) string { return entry.Ref.Kind },
 		sortRows:        sortClusterStorageEntries,
 	}
 }

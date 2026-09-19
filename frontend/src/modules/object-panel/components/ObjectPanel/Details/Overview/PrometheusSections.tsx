@@ -14,6 +14,7 @@ import {
   OperatorMessage as Message,
   operatorBoolean,
   operatorEntries,
+  operatorListValue,
   operatorSelectorValues,
   OperatorSection as Section,
   OperatorSelector as Selector,
@@ -34,9 +35,6 @@ const namespaceValues = (selector: PrometheusNamespaceSelector, namespace?: stri
   }
   return [namespace ? `${namespace} (same namespace)` : 'Same namespace'];
 };
-
-const listOrNothing = (values?: string[]) =>
-  values?.length ? <List values={values} /> : undefined;
 
 // The card title is the port the endpoint names; when only a numeric target port or port number
 // is set, the API field name says where the number came from.
@@ -111,8 +109,8 @@ function Monitor({
             ['Job Label', facts.jobLabel],
             ['Sample Limit', facts.sampleLimit],
             ['Target Limit', facts.targetLimit],
-            ['Target Labels', listOrNothing(facts.targetLabels)],
-            ['Pod Target Labels', listOrNothing(facts.podTargetLabels)],
+            ['Target Labels', operatorListValue(facts.targetLabels)],
+            ['Pod Target Labels', operatorListValue(facts.podTargetLabels)],
           ]}
         />
       </Section>

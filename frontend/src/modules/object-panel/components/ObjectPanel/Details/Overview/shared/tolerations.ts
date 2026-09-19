@@ -15,7 +15,7 @@
 // signal. Filter only the timed variant — the un-timed form (added by the
 // DaemonSet controller) still surfaces, since it tells you the pod is a
 // DaemonSet.
-export const DEFAULT_TOLERATION_RE =
+const DEFAULT_TOLERATION_RE =
   /^node\.kubernetes\.io\/(not-ready|unreachable) Exists \(NoExecute\) for \d+s$/;
 
 export interface ParsedToleration {
@@ -121,3 +121,11 @@ export const parseToleration = (raw: string): ParsedToleration | null => {
 
   return { label, tooltip };
 };
+
+export const nonDefaultTolerations = (
+  tolerations: string[] | null | undefined
+): ParsedToleration[] =>
+  tolerations
+    ?.filter((toleration) => !DEFAULT_TOLERATION_RE.test(toleration))
+    .map(parseToleration)
+    .filter((toleration): toleration is ParsedToleration => toleration !== null) ?? [];

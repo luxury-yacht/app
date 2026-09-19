@@ -40,7 +40,7 @@ export default function AttentionIgnoredModal({
 }: Readonly<AttentionIgnoredModalProps>) {
   const modalRef = useRef<HTMLDivElement>(null);
   const [currentRules, setCurrentRules] = useState(rules);
-  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
   const labels = useMemo(
     () => new Map(findingTypes.map((definition) => [definition.id, definition.label])),
     [findingTypes]
@@ -51,7 +51,7 @@ export default function AttentionIgnoredModal({
     ref: modalRef,
     disabled: !isOpen,
     onEscape: () => {
-      if (busyKey) {
+      if (restoring) {
         return false;
       }
       onClose();
@@ -63,26 +63,12 @@ export default function AttentionIgnoredModal({
     return null;
   }
 
-  const restoreObjectFinding = async (ignore: AttentionObjectFindingIgnore) => {
-    const key = `object:${refKey(ignore.ref)}:${ignore.findingType}`;
-    setBusyKey(key);
+  const restore = async (action: () => Promise<AttentionIgnoreRules>) => {
+    setRestoring(true);
     try {
-      setCurrentRules(await onRestoreObjectFinding(ignore));
+      setCurrentRules(await action());
     } finally {
-      setBusyKey(null);
-    }
-  };
-  const restoreType = async (
-    scope: 'cluster' | 'global',
-    findingType: string,
-    restore: (findingType: string) => Promise<AttentionIgnoreRules>
-  ) => {
-    const key = `${scope}:${findingType}`;
-    setBusyKey(key);
-    try {
-      setCurrentRules(await restore(findingType));
-    } finally {
-      setBusyKey(null);
+      setRestoring(false);
     }
   };
 
@@ -105,7 +91,7 @@ export default function AttentionIgnoredModal({
         titleId="attention-ignored-title"
         icon={SettingsIcon}
         onClose={onClose}
-        closeDisabled={busyKey !== null}
+        closeDisabled={restoring}
       />
       <div className="attention-ignored-body">
         {!!empty && <p className="attention-ignored-empty">No findings are ignored.</p>}
@@ -122,8 +108,8 @@ export default function AttentionIgnoredModal({
                   <button
                     type="button"
                     className="button cancel"
-                    disabled={busyKey !== null}
-                    onClick={() => void restoreObjectFinding(ignore)}
+                    disabled={restoring}
+                    onClick={() => void restore(() => onRestoreObjectFinding(ignore))}
                   >
                     Restore
                   </button>
@@ -132,45 +118,30 @@ export default function AttentionIgnoredModal({
             </ul>
           </section>
         )}
-        {clusterTypes.length > 0 && (
-          <section className="attention-ignored-section">
-            <h3 className="attention-ignored-section-title">This Cluster</h3>
-            <ul>
-              {clusterTypes.map((findingType) => (
-                <li key={findingType}>
-                  <span>{labels.get(findingType) ?? findingType}</span>
-                  <button
-                    type="button"
-                    className="button cancel"
-                    disabled={busyKey !== null}
-                    onClick={() => void restoreType('cluster', findingType, onRestoreClusterType)}
-                  >
-                    Restore
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-        {globalTypes.length > 0 && (
-          <section className="attention-ignored-section">
-            <h3 className="attention-ignored-section-title">All Clusters</h3>
-            <ul>
-              {globalTypes.map((findingType) => (
-                <li key={findingType}>
-                  <span>{labels.get(findingType) ?? findingType}</span>
-                  <button
-                    type="button"
-                    className="button cancel"
-                    disabled={busyKey !== null}
-                    onClick={() => void restoreType('global', findingType, onRestoreGlobalType)}
-                  >
-                    Restore
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
+        {[
+          { title: 'This Cluster', types: clusterTypes, onRestore: onRestoreClusterType },
+          { title: 'All Clusters', types: globalTypes, onRestore: onRestoreGlobalType },
+        ].map(({ title, types, onRestore }) =>
+          types.length > 0 ? (
+            <section key={title} className="attention-ignored-section">
+              <h3 className="attention-ignored-section-title">{title}</h3>
+              <ul>
+                {types.map((findingType) => (
+                  <li key={findingType}>
+                    <span>{labels.get(findingType) ?? findingType}</span>
+                    <button
+                      type="button"
+                      className="button cancel"
+                      disabled={restoring}
+                      onClick={() => void restore(() => onRestore(findingType))}
+                    >
+                      Restore
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null
         )}
       </div>
       <div className="attention-ignored-footer">

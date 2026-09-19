@@ -17,6 +17,7 @@ import { requireValue } from '@/test-utils/requireValue';
 import { installWailsDragRuntime } from '@/test-utils/wailsDragRuntime.test.helpers';
 
 interface CapturedDropdownProps {
+  value: string | string[];
   options: DropdownOption[];
   onChange: (value: string | string[]) => void;
   renderOption?: (option: DropdownOption, isSelected: boolean) => ReactNode;
@@ -530,6 +531,54 @@ describe('AppLogsPanel', () => {
     expect(entries[0]?.textContent).toContain('[bravo]');
 
     cleanup();
+  });
+
+  it('keeps case-distinct cluster scopes separate while logs arrive', async () => {
+    vi.useFakeTimers();
+    const clusterIds = ['config:Production', 'config:production'];
+    const timestamp = '2024-01-01T00:00:00.000Z';
+    getAppLogsMock.mockResolvedValue([
+      ...clusterIds.map((clusterId, index) => ({
+        sequence: index + 1,
+        timestamp,
+        level: 'info',
+        message: clusterId,
+        clusterId,
+      })),
+      { sequence: 3, timestamp, level: 'info', message: 'Global message' },
+    ]);
+    const { container, cleanup } = await renderPanel();
+    try {
+      await flushInitialLoad();
+      expect(latestDropdown('Clusters')?.value).toEqual(expect.arrayContaining(clusterIds));
+
+      await act(async () => {
+        latestDropdown('Clusters')?.onChange([clusterIds[0]]);
+      });
+      expect(
+        Array.from(
+          container.querySelectorAll('.log-entry .log-message'),
+          (entry) => entry.textContent
+        )
+      ).toEqual([clusterIds[0]]);
+      expect(latestDropdown('Clusters')?.value).toEqual([clusterIds[0]]);
+
+      await act(async () => {
+        latestDropdown('Clusters')?.onChange(clusterIds);
+      });
+      expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+      getAppLogsSinceMock.mockResolvedValue([
+        { sequence: 4, timestamp, level: 'info', message: 'Another global message' },
+      ]);
+      await act(async () => {
+        runtimeEventHandlers.get('app-logs:added')?.({ sequence: 4 });
+        await Promise.resolve();
+      });
+      expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+      expect(latestDropdown('Clusters')?.value).toEqual(clusterIds);
+    } finally {
+      cleanup();
+    }
   });
 
   it('renders and filters app-global logs with an explicit scope', async () => {

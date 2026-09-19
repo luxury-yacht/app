@@ -7,6 +7,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
 
@@ -261,7 +262,7 @@ func TestObjectDetailsBuilderPropagatesProviderErrors(t *testing.T) {
 }
 
 func TestParseObjectScopeValidClusterScope(t *testing.T) {
-	identity, err := parseObjectScope("__cluster__:/v1:Node:n1")
+	identity, err := refresh.ParseObjectScope("__cluster__:/v1:Node:n1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -275,19 +276,19 @@ func TestParseObjectScopeValidClusterScope(t *testing.T) {
 }
 
 func TestParseObjectScopeRejectsEmptyKind(t *testing.T) {
-	if _, err := parseObjectScope("default:/v1::pod-1"); err == nil {
+	if _, err := refresh.ParseObjectScope("default:/v1::pod-1"); err == nil {
 		t.Fatal("expected error for empty kind")
 	}
 }
 
 func TestParseObjectScopeRejectsKindOnlyScope(t *testing.T) {
-	if _, err := parseObjectScope("default:Pod:demo"); err == nil {
+	if _, err := refresh.ParseObjectScope("default:Pod:demo"); err == nil {
 		t.Fatal("expected kind-only object scope to be rejected")
 	}
 }
 
 func TestParseObjectScopeGVKForm(t *testing.T) {
-	identity, err := parseObjectScope("default:rds.services.k8s.aws/v1alpha1:DBInstance:my-db")
+	identity, err := refresh.ParseObjectScope("default:rds.services.k8s.aws/v1alpha1:DBInstance:my-db")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -309,7 +310,7 @@ func TestParseObjectScopeGVKForm(t *testing.T) {
 }
 
 func TestParseObjectScopeGVKFormWithClusterScopedNamespace(t *testing.T) {
-	identity, err := parseObjectScope("__cluster__:rbac.authorization.k8s.io/v1:ClusterRole:admin")
+	identity, err := refresh.ParseObjectScope("__cluster__:rbac.authorization.k8s.io/v1:ClusterRole:admin")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -327,7 +328,7 @@ func TestParseObjectScopeGVKFormWithClusterScopedNamespace(t *testing.T) {
 func TestParseObjectScopeGVKFormCoreResource(t *testing.T) {
 	// Core resources have empty group. Encoded as leading slash so
 	// strings.SplitN still yields four segments.
-	identity, err := parseObjectScope("default:/v1:ConfigMap:app-cm")
+	identity, err := refresh.ParseObjectScope("default:/v1:ConfigMap:app-cm")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

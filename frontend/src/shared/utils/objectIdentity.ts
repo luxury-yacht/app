@@ -78,8 +78,10 @@ export const buildObjectReference = <TExtras extends object = Record<never, neve
   const kind = normalizeRequired(input.kind, 'kind');
   const name = normalizeRequired(input.name, 'name');
   const builtinGVK = resolveBuiltinGroupVersion(kind);
-  const group = normalizeOptional(input.group) ?? builtinGVK.group ?? '';
-  const version = normalizeOptional(input.version) ?? builtinGVK.version;
+  const group = input.group?.trim() ?? builtinGVK.group ?? '';
+  const version =
+    normalizeOptional(input.version) ??
+    (group === builtinGVK.group ? builtinGVK.version : undefined);
 
   if (!version) {
     throw new Error(
@@ -89,7 +91,7 @@ export const buildObjectReference = <TExtras extends object = Record<never, neve
     );
   }
 
-  if (!group && !builtinGVK.version) {
+  if (!group && (!builtinGVK.version || builtinGVK.group)) {
     throw new Error(
       `Object identity for ${kind}/${name} is missing group. ` +
         'Custom resources must thread group/version from discovery, catalog, events, ' +
@@ -139,41 +141,27 @@ export const buildRequiredObjectReference = <TExtras extends object = Record<nev
   ) as ClusterObjectReference & TExtras;
 };
 
+const resolveRelatedIdentity = (input: RelatedObjectReferenceInput): ObjectIdentityInput => {
+  const apiVersion = normalizeOptional(input.apiVersion);
+  const parsedApiVersion = apiVersion ? parseApiVersion(apiVersion) : undefined;
+  return {
+    ...input,
+    group: input.group?.trim() ?? parsedApiVersion?.group,
+    version: normalizeOptional(input.version) ?? parsedApiVersion?.version,
+  };
+};
+
 export const buildRelatedObjectReference = <TExtras extends object = Record<never, never>>(
   input: RelatedObjectReferenceInput,
   extras?: TExtras
-): ResolvedObjectReference & TExtras => {
-  const apiVersion = normalizeOptional(input.apiVersion);
-  const parsedApiVersion = apiVersion ? parseApiVersion(apiVersion) : undefined;
-
-  return buildObjectReference(
-    {
-      ...input,
-      group: normalizeOptional(input.group) ?? parsedApiVersion?.group,
-      version: normalizeOptional(input.version) ?? parsedApiVersion?.version,
-    },
-    extras
-  );
-};
+): ResolvedObjectReference & TExtras => buildObjectReference(resolveRelatedIdentity(input), extras);
 
 export const buildRequiredRelatedObjectReference = <TExtras extends object = Record<never, never>>(
   input: RelatedObjectReferenceInput,
   options?: RequiredObjectIdentityOptions,
   extras?: TExtras
-): ClusterObjectReference & TExtras => {
-  const apiVersion = normalizeOptional(input.apiVersion);
-  const parsedApiVersion = apiVersion ? parseApiVersion(apiVersion) : undefined;
-
-  return buildRequiredObjectReference(
-    {
-      ...input,
-      group: normalizeOptional(input.group) ?? parsedApiVersion?.group,
-      version: normalizeOptional(input.version) ?? parsedApiVersion?.version,
-    },
-    options,
-    extras
-  );
-};
+): ClusterObjectReference & TExtras =>
+  buildRequiredObjectReference(resolveRelatedIdentity(input), options, extras);
 
 const normalizeIdentityField = (value: string | null | undefined): string => value?.trim() ?? '';
 

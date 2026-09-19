@@ -3,7 +3,11 @@ package nodes
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -384,4 +388,174 @@ func TestFetchLogsTruncatesLargeResponses(t *testing.T) {
 	})
 	require.True(t, resp.Truncated)
 	require.Equal(t, "line-c\n", resp.Content)
+}
+
+func TestDiscoverLogsCompletesWhenEveryDirectoryBranches(t *testing.T) {
+	nodeName := "branching-node"
+	responses := map[string][]byte{}
+	var roots strings.Builder
+	for parent := range nodeLogDiscoveryWorkers {
+		fmt.Fprintf(&roots, `<a href="dir%d/">dir</a>`, parent)
+		var children strings.Builder
+		for child := range 3 {
+			fmt.Fprintf(&children, `<a href="child%d/">child</a>`, child)
+			path := fmt.Sprintf("dir%d/child%d/", parent, child)
+			responses[nodeLogProxyPath(nodeName, path)] = []byte(`<!doctype html><pre><a href="log">log</a></pre>`)
+			responses[nodeLogProxyPath(nodeName, path+"log")] = []byte("node log line")
+		}
+		responses[nodeLogProxyPath(nodeName, fmt.Sprintf("dir%d/", parent))] = []byte("<!doctype html><pre>" + children.String() + "</pre>")
+	}
+	responses[nodeLogProxyPath(nodeName, "")] = []byte("<!doctype html><pre>" + roots.String() + "</pre>")
+	stubNodeFetchLogs(t, responses)
+	fetch := nodeLogFetchRawFunc
+	var arrivals [2]atomic.Int32
+	barriers := [2]chan struct{}{make(chan struct{}), make(chan struct{})}
+	nodeLogFetchRawFunc = func(ctx context.Context, client rest.Interface, path string) ([]byte, error) {
+		for stage := range barriers {
+			if !strings.HasSuffix(path, fmt.Sprintf("/child%d/", stage)) {
+				continue
+			}
+			if arrivals[stage].Add(1) == nodeLogDiscoveryWorkers {
+				close(barriers[stage])
+			}
+			select {
+			case <-barriers[stage]:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		return fetch(ctx, client, path)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(fake.NewClientset())))
+	done := make(chan restypes.NodeLogDiscoveryResponse, 1)
+	go func() { done <- service.DiscoverLogs(ctx, nodeName) }()
+	select {
+	case response := <-done:
+		require.True(t, response.Supported, response.Reason)
+		require.Len(t, response.Sources, nodeLogDiscoveryWorkers*3)
+	case <-ctx.Done():
+		t.Fatal("node log discovery blocked while directory workers queued their children")
+	}
+}
+
+func TestDiscoverLogsKeepsSourceLimitAndDeduplicatesPaths(t *testing.T) {
+	nodeName := "limited-node"
+	responses := map[string][]byte{}
+	var root strings.Builder
+	root.WriteString(`<a href="deep/">deep</a><a href="deep/">duplicate</a>`)
+	for i := range maxNodeLogDiscoveryNodes + 10 {
+		path := fmt.Sprintf("log%d", i)
+		fmt.Fprintf(&root, `<a href="%s">log</a><a href="%s">duplicate</a>`, path, path)
+		responses[nodeLogProxyPath(nodeName, path)] = []byte("line")
+	}
+	responses[nodeLogProxyPath(nodeName, "")] = []byte("<!doctype html><pre>" + root.String() + "</pre>")
+	for depth := 1; depth <= maxNodeLogDiscoveryDepth; depth++ {
+		path := strings.Repeat("deep/", depth)
+		responses[nodeLogProxyPath(nodeName, path)] = []byte(`<!doctype html><pre><a href="deep/">deeper</a></pre>`)
+	}
+	stubNodeFetchLogs(t, responses)
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(fake.NewClientset())))
+	response := service.DiscoverLogs(context.Background(), nodeName)
+	require.True(t, response.Supported, response.Reason)
+	require.Len(t, response.Sources, maxNodeLogDiscoveryNodes)
+	seen := map[string]bool{}
+	for _, source := range response.Sources {
+		require.False(t, seen[source.Path], "duplicate source %s", source.Path)
+		seen[source.Path] = true
+	}
+}
+
+func TestDiscoverLogsStartsNestedReadsWhileRootStillLoading(t *testing.T) {
+	const nodeName = "streaming-node"
+	stubNodeFetchLogs(t, map[string][]byte{
+		nodeLogProxyPath(nodeName, ""):         []byte(`<!doctype html><pre><a href="fast/">fast</a><a href="slow/">slow</a></pre>`),
+		nodeLogProxyPath(nodeName, "fast/"):    []byte(`<!doctype html><pre><a href="log">log</a></pre>`),
+		nodeLogProxyPath(nodeName, "fast/log"): []byte("ready log"),
+		nodeLogProxyPath(nodeName, "slow/"):    []byte(`<!doctype html><pre></pre>`),
+	})
+	leafRead := make(chan struct{})
+	fetch, probe := nodeLogFetchRawFunc, nodeLogFetchProbeFunc
+	nodeLogFetchRawFunc = func(ctx context.Context, client rest.Interface, path string) ([]byte, error) {
+		if strings.HasSuffix(path, "/slow/") {
+			select {
+			case <-leafRead:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		return fetch(ctx, client, path)
+	}
+	nodeLogFetchProbeFunc = func(ctx context.Context, client rest.Interface, path string, maxBytes int) ([]byte, error) {
+		if strings.HasSuffix(path, "/fast/log") {
+			close(leafRead)
+		}
+		return probe(ctx, client, path, maxBytes)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(fake.NewClientset())))
+	response := service.DiscoverLogs(ctx, nodeName)
+	require.NoError(t, ctx.Err(), "one slow root entry must not stop already discovered directories")
+	require.True(t, response.Supported, response.Reason)
+	require.Len(t, response.Sources, 1)
+}
+
+func TestDiscoverLogsBoundsDirectoryDepthAndVisitsEachPathOnce(t *testing.T) {
+	const nodeName = "deep-node"
+	responses := map[string][]byte{}
+	for depth := 0; depth <= maxNodeLogDiscoveryDepth+1; depth++ {
+		path := strings.Repeat("deep/", depth)
+		responses[nodeLogProxyPath(nodeName, path)] = []byte(`<!doctype html><pre><a href="deep/">deep</a><a href="deep/">duplicate</a></pre>`)
+	}
+	stubNodeFetchLogs(t, responses)
+	fetch := nodeLogFetchRawFunc
+	var requests atomic.Int32
+	nodeLogFetchRawFunc = func(ctx context.Context, client rest.Interface, path string) ([]byte, error) {
+		requests.Add(1)
+		return fetch(ctx, client, path)
+	}
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(fake.NewClientset())))
+	response := service.DiscoverLogs(context.Background(), nodeName)
+	require.False(t, response.Supported)
+	require.EqualValues(t, maxNodeLogDiscoveryDepth+1, requests.Load())
+}
+
+func TestDiscoverLogsJoinsWorkersAfterRequestCancellation(t *testing.T) {
+	const nodeName = "cancelled-node"
+	stubNodeFetchLogs(t, map[string][]byte{
+		nodeLogProxyPath(nodeName, ""): []byte(`<!doctype html><pre><a href="journal/">journal</a></pre>`),
+	})
+	fetch := nodeLogFetchRawFunc
+	started := make(chan struct{})
+	var active atomic.Int32
+	nodeLogFetchRawFunc = func(ctx context.Context, client rest.Interface, path string) ([]byte, error) {
+		if !strings.HasSuffix(path, "/journal/") {
+			return fetch(ctx, client, path)
+		}
+		active.Add(1)
+		defer active.Add(-1)
+		close(started)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(fake.NewClientset())))
+	done := make(chan restypes.NodeLogDiscoveryResponse, 1)
+	go func() { done <- service.DiscoverLogs(ctx, nodeName) }()
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("discovery request never started")
+	}
+	cancel()
+	select {
+	case response := <-done:
+		require.False(t, response.Supported)
+		require.Zero(t, active.Load(), "response must not outlive a worker request")
+	case <-time.After(3 * time.Second):
+		t.Fatal("discovery did not finish after request cancellation")
+	}
 }

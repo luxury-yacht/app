@@ -108,6 +108,16 @@ vi.mock('./permissionStore', () => {
   };
 });
 
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+};
+
 const renderCapabilitiesHook = async (
   descriptors: CapabilityDescriptor[],
   options: UseCapabilitiesOptions = {}
@@ -415,6 +425,8 @@ describe('useCapabilities', () => {
       {
         id: 'named:pods:get:default:my-pod',
         clusterId: 'test-cluster',
+        group: '',
+        version: 'v1',
         resourceKind: 'Pod',
         verb: 'get',
         namespace: 'default',
@@ -428,7 +440,16 @@ describe('useCapabilities', () => {
       await Promise.resolve();
     });
 
-    expect(mockQueryPermissions).toHaveBeenCalledTimes(1);
+    expect(mockQueryPermissions).toHaveBeenCalledWith([
+      expect.objectContaining({
+        clusterId: 'test-cluster',
+        group: '',
+        version: 'v1',
+        resourceKind: 'Pod',
+        namespace: 'default',
+        name: 'my-pod',
+      }),
+    ]);
     expect(hook.current.isAllowed('named:pods:get:default:my-pod')).toBe(true);
     expect(hook.current.getState('named:pods:get:default:my-pod')).toMatchObject({
       allowed: true,
@@ -441,6 +462,80 @@ describe('useCapabilities', () => {
     // Clean up.
     restoreQueryPermissions();
   });
+
+  it.each(['clusterId', 'group', 'version', 'name'] as const)(
+    'does not reuse named permission results after %s changes',
+    async (field) => {
+      const descriptor: CapabilityDescriptor = {
+        id: 'edit-yaml',
+        clusterId: 'config:Production',
+        group: '',
+        version: 'v1',
+        resourceKind: 'Pod',
+        verb: 'patch',
+        namespace: 'default',
+        name: 'api',
+      };
+      const next = {
+        ...descriptor,
+        [field]: field === 'clusterId' ? 'config:production' : 'other',
+      };
+      const response = (allowed: boolean) => ({
+        results: [{ ...descriptor, allowed, source: 'ssar', reason: '', error: '' }],
+      });
+      const pending = deferred<ReturnType<typeof response>>();
+      const query = vi
+        .fn()
+        .mockResolvedValueOnce(response(true))
+        .mockReturnValueOnce(pending.promise);
+      const restore = installQueryPermissions(query);
+      const hook = await renderCapabilitiesHook([descriptor]);
+      expect(hook.current.isAllowed('edit-yaml')).toBe(true);
+      await hook.rerender({ descriptors: [next] });
+      expect(hook.current.getState('edit-yaml')).toMatchObject({ allowed: false, pending: true });
+      await act(async () => {
+        pending.resolve(response(false));
+      });
+      expect(hook.current.getState('edit-yaml')).toMatchObject({ allowed: false, pending: false });
+      await hook.unmount();
+      restore();
+    }
+  );
+
+  it.each(['resolve', 'reject'] as const)(
+    'ignores a previous object request that later %ss',
+    async (settlement) => {
+      const descriptor: CapabilityDescriptor = {
+        id: 'edit-yaml',
+        clusterId: 'cluster-a',
+        group: 'apps',
+        version: 'v1',
+        resourceKind: 'Deployment',
+        verb: 'patch',
+        namespace: 'default',
+        name: 'api',
+      };
+      const response = (allowed: boolean) => ({
+        results: [{ ...descriptor, allowed, source: 'ssar', reason: '', error: '' }],
+      });
+      const old = deferred<ReturnType<typeof response>>();
+      const query = vi.fn().mockReturnValueOnce(old.promise).mockResolvedValueOnce(response(false));
+      const restore = installQueryPermissions(query);
+      const hook = await renderCapabilitiesHook([descriptor]);
+      await hook.rerender({ descriptors: [{ ...descriptor, clusterId: 'cluster-b' }] });
+      expect(hook.current.getState('edit-yaml')).toMatchObject({ allowed: false, status: 'ready' });
+      await act(async () => {
+        if (settlement === 'resolve') {
+          old.resolve(response(true));
+        } else {
+          old.reject(new Error('previous cluster disconnected'));
+        }
+      });
+      expect(hook.current.getState('edit-yaml')).toMatchObject({ allowed: false, status: 'ready' });
+      await hook.unmount();
+      restore();
+    }
+  );
 
   it('keeps named denials, review errors and transient activation failures distinct', async () => {
     const descriptors: CapabilityDescriptor[] = ['allowed', 'denied', 'failed', 'inactive'].map(

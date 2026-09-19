@@ -9,6 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestParseStreamSelectorRequiresClusterIdentity(t *testing.T) {
+	for _, clusterID := range []string{"", " "} {
+		_, err := ParseStreamSelector(clusterID, domainPods, "namespace:default")
+		require.Error(t, err)
+	}
+}
+
 func TestParseStreamSelectorRoundTrips(t *testing.T) {
 	cases := []struct {
 		name   string

@@ -180,7 +180,7 @@ func migrateFavoriteFilterSelectionV1(values []string) FavoriteFilterSelection {
 	if len(values) == 0 {
 		return FavoriteFilterSelection{Mode: "all"}
 	}
-	return normalizeFavoriteFilterSelection(FavoriteFilterSelection{Mode: "some", Values: values})
+	return FavoriteFilterSelection{Mode: "some", Values: values}
 }
 
 func migrateFavoriteV1(raw json.RawMessage) (Favorite, error) {
@@ -240,7 +240,21 @@ func migrateFlatFavoritesFile(data []byte, migrate func(json.RawMessage) (Favori
 	return migrated
 }
 
-func normalizeFavoriteFilterSelection(selection FavoriteFilterSelection) FavoriteFilterSelection {
+type favoriteFilterComparison uint8
+
+const (
+	favoriteFilterCaseInsensitive favoriteFilterComparison = iota
+	favoriteFilterExact
+)
+
+func favoriteFilterValueKey(value string, comparison favoriteFilterComparison) string {
+	if comparison == favoriteFilterExact {
+		return value
+	}
+	return strings.ToLower(value)
+}
+
+func normalizeFavoriteFilterSelection(selection FavoriteFilterSelection, comparison favoriteFilterComparison) FavoriteFilterSelection {
 	if selection.Mode == "none" {
 		return FavoriteFilterSelection{Mode: "none"}
 	}
@@ -251,10 +265,7 @@ func normalizeFavoriteFilterSelection(selection FavoriteFilterSelection) Favorit
 	values := make([]string, 0, len(selection.Values))
 	for _, raw := range selection.Values {
 		value := strings.TrimSpace(raw)
-		key := "__empty__"
-		if value != "" {
-			key = strings.ToLower(value)
-		}
+		key := favoriteFilterValueKey(value, comparison)
 		if _, ok := seen[key]; ok {
 			continue
 		}
@@ -268,11 +279,11 @@ func normalizeFavoriteFilterSelection(selection FavoriteFilterSelection) Favorit
 }
 
 func normalizeFavoriteFilters(filters *FavoriteFilters) {
-	filters.Kinds = normalizeFavoriteFilterSelection(filters.Kinds)
-	filters.Namespaces = normalizeFavoriteFilterSelection(filters.Namespaces)
-	filters.Clusters = normalizeFavoriteFilterSelection(filters.Clusters)
+	filters.Kinds = normalizeFavoriteFilterSelection(filters.Kinds, favoriteFilterCaseInsensitive)
+	filters.Namespaces = normalizeFavoriteFilterSelection(filters.Namespaces, favoriteFilterCaseInsensitive)
+	filters.Clusters = normalizeFavoriteFilterSelection(filters.Clusters, favoriteFilterExact)
 	for key, selection := range filters.QueryFacets {
-		filters.QueryFacets[key] = normalizeFavoriteFilterSelection(selection)
+		filters.QueryFacets[key] = normalizeFavoriteFilterSelection(selection, favoriteFilterCaseInsensitive)
 	}
 }
 
@@ -508,16 +519,16 @@ func (s *FavoritesService) SetFavoriteOrder(ids []string) error {
 	}
 
 	reordered := make([]Favorite, 0, len(state.Favorites))
-	seen := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
 		if fav, ok := lookup[id]; ok {
-			seen[id] = struct{}{}
 			reordered = append(reordered, fav)
+			delete(lookup, id)
 		}
 	}
 	for _, fav := range state.Favorites {
-		if _, ok := seen[fav.ID]; !ok {
+		if _, ok := lookup[fav.ID]; ok {
 			reordered = append(reordered, fav)
+			delete(lookup, fav.ID)
 		}
 	}
 	for i := range reordered {

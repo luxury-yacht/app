@@ -27,7 +27,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, pvc *corev1.PersistentVolum
 		StatusState:        model.Status.State,
 		StatusPresentation: model.Status.Presentation,
 		StatusReason:       model.Status.Reason,
-		StorageClass:       streamStorageClassName(pvc),
+		StorageClass:       storageClassName(pvc),
 		Age:                streamrows.FormatAge(pvc.CreationTimestamp.Time),
 		AgeTimestamp:       streamrows.CreationMillis(pvc),
 	}
@@ -35,32 +35,8 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, pvc *corev1.PersistentVolum
 
 // streamCapacity is the PVC's storage capacity (status, else requested, else "-").
 func streamCapacity(pvc *corev1.PersistentVolumeClaim) string {
-	if pvc == nil {
-		return "-"
-	}
-	if qty, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
-		return qty.String()
-	}
-	if pvc.Spec.Resources.Requests != nil {
-		if qty, ok := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
-			return qty.String()
-		}
+	if quantity, ok := storageCapacity(pvc); ok {
+		return quantity.String()
 	}
 	return "-"
-}
-
-// streamStorageClassName resolves the PVC's storage class (spec, else beta annotation).
-func streamStorageClassName(pvc *corev1.PersistentVolumeClaim) string {
-	if pvc == nil {
-		return ""
-	}
-	if pvc.Spec.StorageClassName != nil {
-		return *pvc.Spec.StorageClassName
-	}
-	if pvc.Annotations != nil {
-		if value, ok := pvc.Annotations["volume.beta.kubernetes.io/storage-class"]; ok {
-			return value
-		}
-	}
-	return ""
 }

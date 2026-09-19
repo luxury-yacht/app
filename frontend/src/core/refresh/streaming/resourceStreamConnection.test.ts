@@ -61,8 +61,8 @@ describe('ResourceStreamConnection', () => {
     socket.onopen?.(new Event('open'));
     socket.onmessage?.({ data: { type: 'HEARTBEAT' } } as MessageEvent);
 
-    expect(delegate.handleConnectionOpen).toHaveBeenCalledWith('');
-    expect(delegate.handleMessage).toHaveBeenCalledWith('', { type: 'HEARTBEAT' });
+    expect(delegate.handleConnectionOpen).toHaveBeenCalledWith();
+    expect(delegate.handleMessage).toHaveBeenCalledWith({ type: 'HEARTBEAT' });
   });
 
   it('queues outbound messages until the socket is available', async () => {
@@ -108,7 +108,6 @@ describe('ResourceStreamConnection', () => {
     await Promise.resolve();
 
     expect(delegate.handleConnectionError).toHaveBeenCalledWith(
-      '',
       'Resource stream connection closed'
     );
 

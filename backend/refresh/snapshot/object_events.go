@@ -3,7 +3,6 @@ package snapshot
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -131,7 +130,7 @@ func configureObjectEventsInformer(factory informers.SharedInformerFactory, buil
 }
 
 func (b *ObjectEventsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	identity, err := parseObjectScope(scope)
+	identity, err := refresh.ParseObjectScope(scope)
 	if err != nil {
 		return nil, err
 	}
@@ -179,10 +178,6 @@ func (b *ObjectEventsBuilder) listEventsFromCache(namespace, apiVersion, kind, n
 }
 
 func (b *ObjectEventsBuilder) listEventsFromAPI(ctx context.Context, namespace, apiVersion, kind, name string) ([]*corev1.Event, uint64, error) {
-	eventNamespace := namespace
-	if namespace == "" {
-		eventNamespace = metav1.NamespaceAll
-	}
 	selectors := []fields.Selector{
 		fields.OneTermEqualSelector("involvedObject.name", name),
 	}
@@ -199,7 +194,7 @@ func (b *ObjectEventsBuilder) listEventsFromAPI(ctx context.Context, namespace, 
 	}
 	fieldSelector := fields.AndSelectors(selectors...).String()
 
-	list, err := b.client.CoreV1().Events(eventNamespace).List(
+	list, err := b.client.CoreV1().Events(namespace).List(
 		ctx,
 		metav1.ListOptions{
 			FieldSelector: fieldSelector,
@@ -213,7 +208,7 @@ func (b *ObjectEventsBuilder) listEventsFromAPI(ctx context.Context, namespace, 
 	for i := range list.Items {
 		events = append(events, &list.Items[i])
 	}
-	version := parseEventVersion(list.ResourceVersion)
+	version := parseSnapshotResourceVersion(list.ResourceVersion)
 	return events, version, nil
 }
 
@@ -316,16 +311,6 @@ func (b *ObjectEventsBuilder) buildSnapshot(meta ClusterMeta, scope string, even
 	}
 }
 
-func parseEventVersion(rv string) uint64 {
-	if rv == "" {
-		return 0
-	}
-	if v, err := strconv.ParseUint(rv, 10, 64); err == nil {
-		return v
-	}
-	return 0
-}
-
 func objectEventIndex(obj interface{}) ([]string, error) {
 	evt, ok := obj.(*corev1.Event)
 	if !ok || evt == nil {
@@ -385,11 +370,4 @@ func convertObjectEvent(meta ClusterMeta, evt corev1.Event) ObjectEventSummary {
 		InvolvedObjectAPIVersion: evt.InvolvedObject.APIVersion,
 		InvolvedObject:           facts.InvolvedObject,
 	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

@@ -149,14 +149,12 @@ func (m *ClusterRuntimeManager) runClusterOperationWithAdmission(ctx context.Con
 	opCtx, cancel := context.WithTimeout(ctx, config.ClusterOperationTimeout)
 	defer cancel()
 
+	var err error
 	if m == nil || m.clusterOps == nil {
-		err := fn(opCtx)
-		if errors.Is(err, context.Canceled) {
-			return nil
-		}
-		return err
+		err = fn(opCtx)
+	} else {
+		err = m.clusterOps.runWithAdmission(opCtx, clusterID, fn, admission)
 	}
-	err := m.clusterOps.runWithAdmission(opCtx, clusterID, fn, admission)
 	if errors.Is(err, context.Canceled) {
 		return nil
 	}

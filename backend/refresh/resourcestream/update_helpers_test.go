@@ -26,7 +26,7 @@ func TestManagerNewObjectUpdateCopiesClusterAndObjectMetadata(t *testing.T) {
 	}
 
 	ref := manager.resourceRefForObject(configMap, "", "v1", "ConfigMap", "configmaps")
-	update := manager.newObjectUpdate(MessageTypeModified, domainNamespaceConfig, configMap, ref)
+	update := manager.newObjectUpdate(MessageTypeModified, domainNamespaceConfig, configMap.ResourceVersion, ref)
 
 	require.Equal(t, MessageTypeModified, update.Type)
 	require.Equal(t, domainNamespaceConfig, update.Domain)
@@ -71,7 +71,7 @@ func TestManagerResourceRefForObjectValidationRejectsIncompleteIdentity(t *testi
 	require.Error(t, resourcemodel.ValidateResourceRef(manager.resourceRefForObject(configMap, "", "v1", "Deployment", "deployments")))
 }
 
-func TestManagerNewObjectRowUpdateCarriesMetadataFromResourceRef(t *testing.T) {
+func TestManagerNewObjectUpdateCarriesMetadataFromResourceRef(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-id", ClusterName: "cluster-name"},
 	}
@@ -97,17 +97,9 @@ func TestManagerNewObjectRowUpdateCarriesMetadataFromResourceRef(t *testing.T) {
 				UID:             "resource-uid",
 				ResourceVersion: "123",
 			}
-			row := map[string]string{
-				"clusterId": "cluster-id",
-				"kind":      tt.kind,
-				"name":      "resource-name",
-			}
-			if tt.namespace != "" {
-				row["namespace"] = tt.namespace
-			}
 
 			ref := manager.resourceRefForObject(object, tt.group, tt.version, tt.kind, tt.resource)
-			update := manager.newObjectRowUpdate(MessageTypeAdded, tt.domain, object, ref, row)
+			update := manager.newObjectUpdate(MessageTypeAdded, tt.domain, object.ResourceVersion, ref)
 
 			require.Equal(t, tt.domain, update.Domain)
 			require.Equal(t, "cluster-id", update.ClusterID)

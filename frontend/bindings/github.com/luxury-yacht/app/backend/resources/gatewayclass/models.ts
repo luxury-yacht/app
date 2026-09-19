@@ -16,7 +16,6 @@ export interface GatewayClassDetails {
     "conditions"?: types$0.ConditionState[] | null;
     "summary": types$0.ConditionsSummary;
     "parameters"?: types$0.RefOrDisplay | null;
-    "usedBy"?: types$0.ObjectRef[] | null;
     "labels"?: { [_ in string]?: string } | null;
     "annotations"?: { [_ in string]?: string } | null;
 }

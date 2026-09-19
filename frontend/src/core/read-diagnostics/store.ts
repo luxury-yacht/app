@@ -91,7 +91,7 @@ const clusterIdForRead = (scope?: string): string => {
 // rows under the cluster they read from instead of folding clusters together.
 const buildKey = (options: BeginBrokerReadOptions): string => {
   const { broker, resource, adapter, reason } = options;
-  return [broker, clusterIdForRead(options.scope), resource, adapter, reason ?? ''].join('::');
+  return JSON.stringify([broker, clusterIdForRead(options.scope), resource, adapter, reason ?? '']);
 };
 
 const getOrCreateEntry = (options: BeginBrokerReadOptions): BrokerReadDiagnosticsEntry => {
@@ -238,6 +238,23 @@ export const completeBrokerRead = ({
   );
 
   notify();
+};
+
+// Keep correlation active for the entire read, then settle diagnostics before
+// returning or rethrowing the original failure to the caller.
+export const runBrokerRead = async <T>(
+  options: BeginBrokerReadOptions,
+  read: (requestId: string) => Promise<T>
+): Promise<T> => {
+  const token = beginBrokerRead(options);
+  try {
+    const data = await read(token);
+    completeBrokerRead({ token, status: 'success' });
+    return data;
+  } catch (error) {
+    completeBrokerRead({ token, status: 'error', error });
+    throw error;
+  }
 };
 
 export const recordBlockedBrokerRead = (

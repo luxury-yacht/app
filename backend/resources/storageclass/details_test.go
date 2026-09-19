@@ -11,6 +11,9 @@ import (
 	"fmt"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
+
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -88,4 +91,28 @@ func TestServiceStorageClassDetailsHandlesPVListFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, detail)
 	require.Empty(t, detail.PersistentVolumes)
+}
+
+func TestStorageClassDetailDefaultsAndExplicitValues(t *testing.T) {
+	for _, tt := range []struct {
+		name                     string
+		reclaim                  *corev1.PersistentVolumeReclaimPolicy
+		binding                  *storagev1.VolumeBindingMode
+		expand                   *bool
+		wantReclaim, wantBinding string
+		wantExpand               bool
+	}{
+		{name: "defaults", wantReclaim: "Delete", wantBinding: "Immediate"},
+		{name: "overrides", reclaim: ptr.To(corev1.PersistentVolumeReclaimRetain), binding: ptr.To(storagev1.VolumeBindingWaitForFirstConsumer), expand: ptr.To(true), wantReclaim: "Retain", wantBinding: "WaitForFirstConsumer", wantExpand: true},
+		{name: "explicit empty", reclaim: ptr.To(corev1.PersistentVolumeReclaimPolicy("")), binding: ptr.To(storagev1.VolumeBindingMode("")), expand: ptr.To(false)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			sc := &storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "storage"}, ReclaimPolicy: tt.reclaim, VolumeBindingMode: tt.binding, AllowVolumeExpansion: tt.expand}
+			detail, err := newService(t, fake.NewClientset(sc)).StorageClass(context.Background(), sc.Name)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantReclaim, detail.ReclaimPolicy)
+			require.Equal(t, tt.wantBinding, detail.VolumeBindingMode)
+			require.Equal(t, tt.wantExpand, detail.AllowVolumeExpansion)
+		})
+	}
 }

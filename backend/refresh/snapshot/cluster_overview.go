@@ -288,33 +288,28 @@ func RegisterClusterOverviewDomainList(reg *domain.Registry, client kubernetes.I
 }
 
 func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	data := newClusterOverviewListData()
+	data := &clusterOverviewListData{recentEvents: make([]RecentEvent, 0)}
 	if err := parallel.RunLimited(ctx, 4, b.listTasks(data)...); err != nil {
 		return nil, err
 	}
-	data.normalizeForbiddenSources()
 	podAggregates, podVersion := projectClusterOverviewPods(data.pods, data.replicaSets)
 	nodeFacts := projectClusterOverviewNodes(data.nodes)
-	snapshot, err := buildClusterOverviewSnapshot(ctx, scope, clusterOverviewSnapshotInputs{
+	return buildClusterOverviewSnapshot(ctx, scope, clusterOverviewSnapshotInputs{
 		nodes: nodeFacts, podAggregates: podAggregates, podVersion: podVersion, namespaces: data.namespaces,
-		provider: b.metrics, versionFn: clusterOverviewVersionFunc(b.versionFn), serverHost: b.serverHost,
+		provider: b.metrics, versionFn: b.versionFn, serverHost: b.serverHost,
+		extras: clusterOverviewExtras{
+			totalDeployments:     data.deploymentCount,
+			totalStatefulSets:    data.statefulSetCount,
+			totalDaemonSets:      data.daemonSetCount,
+			totalCronJobs:        data.cronJobCount,
+			recentEvents:         data.recentEvents,
+			unavailableResources: clusterOverviewUnavailable(!data.nodesForbidden, !data.podsForbidden, !data.namespacesDenied),
+		},
 	})
-	if err != nil {
-		return nil, err
-	}
-	applyClusterOverviewExtras(snapshot, clusterOverviewExtras{
-		totalDeployments:     data.deploymentCount,
-		totalStatefulSets:    data.statefulSetCount,
-		totalDaemonSets:      data.daemonSetCount,
-		totalCronJobs:        data.cronJobCount,
-		recentEvents:         data.recentEvents,
-		unavailableResources: clusterOverviewUnavailable(!data.nodesForbidden, !data.podsForbidden, !data.namespacesDenied),
-	})
-	return snapshot, nil
 }
 
+// List tasks write separate fields; Build reads them after RunLimited returns.
 type clusterOverviewListData struct {
-	mu               sync.Mutex
 	nodes            []*corev1.Node
 	pods             []*corev1.Pod
 	namespaces       []*corev1.Namespace
@@ -327,10 +322,6 @@ type clusterOverviewListData struct {
 	nodesForbidden   bool
 	podsForbidden    bool
 	namespacesDenied bool
-}
-
-func newClusterOverviewListData() *clusterOverviewListData {
-	return &clusterOverviewListData{recentEvents: make([]RecentEvent, 0)}
 }
 
 func (b *ClusterOverviewListBuilder) listTasks(data *clusterOverviewListData) []func(context.Context) error {
@@ -351,13 +342,13 @@ func (d *clusterOverviewListData) listNodes(ctx context.Context, client kubernet
 	resp, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if apierrors.IsForbidden(err) {
 		klog.V(2).Info("cluster-overview fallback: node list forbidden; proceeding without node summary")
-		d.withLock(func() { d.nodesForbidden = true })
+		d.nodesForbidden = true
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	d.withLock(func() { d.nodes = parallel.CopyToPointers(resp.Items) })
+	d.nodes = parallel.CopyToPointers(resp.Items)
 	return nil
 }
 
@@ -365,13 +356,13 @@ func (d *clusterOverviewListData) listPods(ctx context.Context, client kubernete
 	resp, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if apierrors.IsForbidden(err) {
 		klog.V(2).Info("cluster-overview fallback: pod list forbidden; proceeding without pod metrics")
-		d.withLock(func() { d.podsForbidden = true })
+		d.podsForbidden = true
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	d.withLock(func() { d.pods = parallel.CopyToPointers(resp.Items) })
+	d.pods = parallel.CopyToPointers(resp.Items)
 	return nil
 }
 
@@ -379,13 +370,13 @@ func (d *clusterOverviewListData) listNamespaces(ctx context.Context, client kub
 	resp, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if apierrors.IsForbidden(err) {
 		klog.V(2).Info("cluster-overview fallback: namespace list forbidden; proceeding with empty namespace set")
-		d.withLock(func() { d.namespacesDenied = true })
+		d.namespacesDenied = true
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	d.withLock(func() { d.namespaces = parallel.CopyToPointers(resp.Items) })
+	d.namespaces = parallel.CopyToPointers(resp.Items)
 	return nil
 }
 
@@ -398,7 +389,7 @@ func (d *clusterOverviewListData) listDeployments(ctx context.Context, client ku
 	if err != nil {
 		return err
 	}
-	d.withLock(func() { d.deploymentCount = len(resp.Items) })
+	d.deploymentCount = len(resp.Items)
 	return nil
 }
 
@@ -411,7 +402,7 @@ func (d *clusterOverviewListData) listReplicaSets(ctx context.Context, client ku
 	if err != nil {
 		return err
 	}
-	d.withLock(func() { d.replicaSets = parallel.CopyToPointers(resp.Items) })
+	d.replicaSets = parallel.CopyToPointers(resp.Items)
 	return nil
 }
 
@@ -424,7 +415,7 @@ func (d *clusterOverviewListData) listStatefulSets(ctx context.Context, client k
 	if err != nil {
 		return err
 	}
-	d.withLock(func() { d.statefulSetCount = len(resp.Items) })
+	d.statefulSetCount = len(resp.Items)
 	return nil
 }
 
@@ -437,7 +428,7 @@ func (d *clusterOverviewListData) listDaemonSets(ctx context.Context, client kub
 	if err != nil {
 		return err
 	}
-	d.withLock(func() { d.daemonSetCount = len(resp.Items) })
+	d.daemonSetCount = len(resp.Items)
 	return nil
 }
 
@@ -450,7 +441,7 @@ func (d *clusterOverviewListData) listCronJobs(ctx context.Context, client kuber
 	if err != nil {
 		return err
 	}
-	d.withLock(func() { d.cronJobCount = len(resp.Items) })
+	d.cronJobCount = len(resp.Items)
 	return nil
 }
 
@@ -464,30 +455,8 @@ func (d *clusterOverviewListData) listEvents(ctx context.Context, client kuberne
 		return err
 	}
 	events := buildRecentEvents(parallel.CopyToPointers(resp.Items), ClusterMetaFromContext(ctx))
-	d.withLock(func() { d.recentEvents = events })
+	d.recentEvents = events
 	return nil
-}
-
-func (d *clusterOverviewListData) withLock(update func()) {
-	d.mu.Lock()
-	update()
-	d.mu.Unlock()
-}
-
-func (d *clusterOverviewListData) normalizeForbiddenSources() {
-	if d.podsForbidden {
-		d.pods = nil
-	}
-	if d.namespacesDenied {
-		d.namespaces = nil
-	}
-}
-
-func clusterOverviewVersionFunc(versionFn func(context.Context) string) func(context.Context) string {
-	if versionFn != nil {
-		return versionFn
-	}
-	return func(context.Context) string { return defaultClusterVersion("") }
 }
 
 func projectClusterOverviewPods(
@@ -534,11 +503,6 @@ func clusterOverviewUnavailable(nodesAllowed, podsAllowed, namespacesAllowed boo
 	return out
 }
 
-// Build assembles the cluster overview payload from cached resources and metrics.
-func (b *ClusterOverviewBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	return b.buildFromListers(ctx, scope)
-}
-
 type clusterOverviewSnapshotInputs struct {
 	nodes         []nodeOverviewFact
 	podAggregates []streamrows.PodAggregate
@@ -547,6 +511,7 @@ type clusterOverviewSnapshotInputs struct {
 	provider      metrics.Provider
 	versionFn     func(context.Context) string
 	serverHost    string
+	extras        clusterOverviewExtras
 }
 
 func buildClusterOverviewSnapshot(ctx context.Context, scope string, inputs clusterOverviewSnapshotInputs) (*refresh.Snapshot, error) {
@@ -558,7 +523,7 @@ func buildClusterOverviewSnapshot(ctx context.Context, scope string, inputs clus
 	accumulator.cpuUsageMilli = metricsResult.cpuUsageMilli
 	accumulator.memUsageBytes = metricsResult.memUsageBytes
 	accumulator.overview.WorkloadResourceUsage = buildWorkloadResourceUsage(inputs.podAggregates, metricsResult.podUsage)
-	accumulator.version = maxClusterOverviewVersion(accumulator.version, inputs.podVersion)
+	accumulator.version = max(accumulator.version, inputs.podVersion)
 	for _, agg := range inputs.podAggregates {
 		accumulator.addPod(agg)
 	}
@@ -566,6 +531,7 @@ func buildClusterOverviewSnapshot(ctx context.Context, scope string, inputs clus
 		accumulator.addNamespace(ns)
 	}
 	accumulator.finalize(ctx, inputs.versionFn, inputs.serverHost)
+	accumulator.applyExtras(inputs.extras)
 	return &refresh.Snapshot{
 		Domain:  clusterOverviewDomainName,
 		Scope:   scope,
@@ -598,7 +564,7 @@ type clusterOverviewAccumulator struct {
 
 func (a *clusterOverviewAccumulator) addNode(node nodeOverviewFact) {
 	a.overview.TotalNodes++
-	a.version = maxClusterOverviewVersion(a.version, node.Version)
+	a.version = max(a.version, node.Version)
 	a.cpuAllocatableMilli += node.AllocatableCPUMilli
 	a.memAllocatableBytes += node.AllocatableMemoryBytes
 	if node.Ready {
@@ -657,13 +623,6 @@ func (a *clusterOverviewAccumulator) addNamespace(namespace *corev1.Namespace) {
 	}
 	a.overview.TotalNamespaces++
 	a.version = maxSnapshotVersion(a.version, namespace)
-}
-
-func maxClusterOverviewVersion(current, candidate uint64) uint64 {
-	if candidate > current {
-		return candidate
-	}
-	return current
 }
 
 func (a *clusterOverviewAccumulator) finalize(
@@ -1002,28 +961,21 @@ type clusterOverviewListerInputs struct {
 	extras     clusterOverviewExtras
 }
 
-func applyClusterOverviewExtras(snapshot *refresh.Snapshot, extras clusterOverviewExtras) {
-	if snapshot == nil {
-		return
-	}
-	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
-	if !ok {
-		return
-	}
-	payload.Overview.TotalDeployments = extras.totalDeployments
-	payload.Overview.TotalStatefulSets = extras.totalStatefulSets
-	payload.Overview.TotalDaemonSets = extras.totalDaemonSets
-	payload.Overview.TotalCronJobs = extras.totalCronJobs
-	payload.Overview.RecentEvents = extras.recentEvents
-	payload.Overview.UnavailableResources = extras.unavailableResources
-	snapshot.Payload = payload
+func (a *clusterOverviewAccumulator) applyExtras(extras clusterOverviewExtras) {
+	a.overview.TotalDeployments = extras.totalDeployments
+	a.overview.TotalStatefulSets = extras.totalStatefulSets
+	a.overview.TotalDaemonSets = extras.totalDaemonSets
+	a.overview.TotalCronJobs = extras.totalCronJobs
+	a.overview.RecentEvents = extras.recentEvents
+	a.overview.UnavailableResources = extras.unavailableResources
 }
 
 func informerSynced(fn cache.InformerSynced) bool {
 	return fn == nil || fn()
 }
 
-func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+// Build assembles the overview from ready, permitted sources.
+func (b *ClusterOverviewBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	if err := b.waitForInformerSync(ctx); err != nil {
 		return nil, err
 	}
@@ -1041,16 +993,12 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context, scope str
 	// watermark. A runtime-denied source is dropped even when its store still holds rows.
 	nodeFacts := b.clusterOverviewNodeFacts(availability.nodes)
 	podAggregates, podVersion := b.clusterOverviewPodInputs(availability.pods)
-	snapshot, err := buildClusterOverviewSnapshot(ctx, scope, clusterOverviewSnapshotInputs{
+	inputs.extras.unavailableResources = clusterOverviewUnavailable(availability.nodes, availability.pods, availability.namespaces)
+	return buildClusterOverviewSnapshot(ctx, scope, clusterOverviewSnapshotInputs{
 		nodes: nodeFacts, podAggregates: podAggregates, podVersion: podVersion, namespaces: inputs.namespaces,
 		provider: b.metrics, versionFn: b.serverVersion, serverHost: b.serverHost,
+		extras: inputs.extras,
 	})
-	if err != nil {
-		return nil, err
-	}
-	inputs.extras.unavailableResources = clusterOverviewUnavailable(availability.nodes, availability.pods, availability.namespaces)
-	applyClusterOverviewExtras(snapshot, inputs.extras)
-	return snapshot, nil
 }
 
 func (b *ClusterOverviewBuilder) clusterOverviewAvailability(ctx context.Context) clusterOverviewAvailability {
@@ -1130,7 +1078,7 @@ func (b *ClusterOverviewBuilder) clusterOverviewPodInputs(allowed bool) ([]strea
 	if !allowed {
 		return nil, 0
 	}
-	return podAggregatesFromIngest(b.ingest), podIngestVersion(b.ingest)
+	return podAggregatesFromIngest(b.ingest), ingestStoreVersion(b.ingest, PodGVR)
 }
 
 // buildRecentEvents filters events down to recent warnings and packages the

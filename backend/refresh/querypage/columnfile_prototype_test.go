@@ -7,7 +7,7 @@ import (
 	"unsafe"
 )
 
-// columnfile.go is the Tier 2.6 mmap'd on-disk column format. It writes a kind's interned
+// This QPC1 format is retained only for the original column-query prototype. It writes a kind's interned
 // columns (int64 / uint32 / string sections) to a flat little-endian file and reads them back
 // through a memory mapping, so a Cold cluster's column data lives off the Go heap in
 // OS-reclaimable page cache (on unix; the other-platform fallback reads into heap).

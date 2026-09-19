@@ -290,7 +290,7 @@ describe('useGridTableFilters', () => {
 
     // Default: case-insensitive — "Frontend" matches "frontend".
     let result = getResult();
-    expect(result?.caseSensitive).toBe(false);
+    expect(result?.activeFilters.caseSensitive).toBe(false);
     expect(result?.tableData.map((r) => r.id)).toEqual(['1', '2']);
 
     // Toggle on case-sensitive search.
@@ -300,7 +300,7 @@ describe('useGridTableFilters', () => {
     });
 
     result = getResult();
-    expect(result?.caseSensitive).toBe(true);
+    expect(result?.activeFilters.caseSensitive).toBe(true);
     // "Frontend" (capital F) should NOT match "frontend" (lowercase f).
     expect(result?.tableData.map((r) => r.id)).toEqual([]);
 
@@ -311,7 +311,7 @@ describe('useGridTableFilters', () => {
     });
 
     result = getResult();
-    expect(result?.caseSensitive).toBe(false);
+    expect(result?.activeFilters.caseSensitive).toBe(false);
     expect(result?.tableData.map((r) => r.id)).toEqual(['1', '2']);
   });
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -15,8 +14,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
-
-type scopeObjectIdentity = refresh.ObjectScopeIdentity
 
 const (
 	objectDetailsDomain = "object-details"
@@ -111,7 +108,7 @@ func RegisterObjectDetailsDomain(
 }
 
 func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	identity, err := parseObjectScope(scope)
+	identity, err := refresh.ParseObjectScope(scope)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +120,7 @@ func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refres
 	if b.provider != nil {
 		if details, err := b.provider.FetchObjectDetails(ctx, gvk, namespace, name); err == nil {
 			meta := b.fetchHeaderMetadata(ctx, gvk, namespace, name)
-			return b.buildSnapshot(ctx, scope, details, meta), nil
+			return b.buildSnapshot(ctx, scope, details, meta, nil), nil
 		} else if !errors.Is(err, ErrObjectDetailNotImplemented) {
 			return nil, err
 		}
@@ -149,7 +146,7 @@ func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refres
 	}
 	meta := b.fetchHeaderMetadata(ctx, gvk, namespace, name)
 	resourceModel := genericObjectResourceModel(ClusterMetaFromContext(ctx), gvk, namespace, name)
-	return b.buildSnapshotWithModel(ctx, scope, details, meta, &resourceModel), nil
+	return b.buildSnapshot(ctx, scope, details, meta, &resourceModel), nil
 }
 
 // fetchHeaderMetadata resolves the object's header metadata (creation +
@@ -166,15 +163,11 @@ func (b *ObjectDetailsBuilder) fetchHeaderMetadata(ctx context.Context, gvk sche
 	return value
 }
 
-func (b *ObjectDetailsBuilder) buildSnapshot(ctx context.Context, scope string, details interface{}, meta ObjectHeaderMetadata) *refresh.Snapshot {
-	return b.buildSnapshotWithModel(ctx, scope, details, meta, nil)
-}
-
-func (b *ObjectDetailsBuilder) buildSnapshotWithModel(ctx context.Context, scope string, details interface{}, meta ObjectHeaderMetadata, resourceModel *resourcemodel.ResourceModel) *refresh.Snapshot {
+func (b *ObjectDetailsBuilder) buildSnapshot(ctx context.Context, scope string, details interface{}, meta ObjectHeaderMetadata, resourceModel *resourcemodel.ResourceModel) *refresh.Snapshot {
 	// The object's resourceVersion is the source clock: a change to the object
 	// (new image tag → new resourceVersion) changes the snapshot Version and thus
 	// the source-version ETag, so the panel refreshes instead of getting a 304.
-	version := parseVersion(meta.ResourceVersion)
+	version := parseSnapshotResourceVersion(meta.ResourceVersion)
 
 	return &refresh.Snapshot{
 		Domain:  objectDetailsDomain,
@@ -216,18 +209,4 @@ func genericObjectResourceModel(meta ClusterMeta, gvk schema.GroupVersionKind, n
 			Presentation: "unknown",
 		},
 	}
-}
-
-func parseObjectScope(scope string) (scopeObjectIdentity, error) {
-	return refresh.ParseObjectScope(scope)
-}
-
-func parseVersion(rv string) uint64 {
-	if rv == "" {
-		return 0
-	}
-	if v, err := strconv.ParseUint(rv, 10, 64); err == nil {
-		return v
-	}
-	return 0
 }

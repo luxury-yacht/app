@@ -514,7 +514,7 @@ func TestPortForwardReconnectUsesOriginalClusterTarget(t *testing.T) {
 				AddressType: discoveryv1.AddressTypeIPv4,
 				Endpoints: []discoveryv1.Endpoint{{
 					Conditions: discoveryv1.EndpointConditions{Ready: &ready},
-					TargetRef:  &corev1.ObjectReference{Kind: "Pod", Namespace: "team", Name: clusterID + "-replacement"},
+					TargetRef:  &corev1.ObjectReference{APIVersion: "v1", Kind: "Pod", Namespace: "team", Name: clusterID + "-replacement"},
 				}},
 			},
 			&corev1.Pod{

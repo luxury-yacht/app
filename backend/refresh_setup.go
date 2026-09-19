@@ -306,7 +306,6 @@ func (a *RefreshCoordinator) buildRefreshSubsystemForSelection(
 		return a.objectCatalogServiceForCluster(clusterMeta.ID)
 	}
 	cfg.ObjectCatalogNamespaces = a.catalogNamespaceGroups
-	cfg.ObjectCatalogEnabled = func() bool { return true }
 
 	subsystem, err := a.buildRefreshSubsystem(cfg)
 	if err != nil {
@@ -384,7 +383,7 @@ func (a *RefreshCoordinator) buildRefreshMux(
 			a.clusterRuntime.setClusterLifecycleState(clusterID, next)
 		}
 	}
-	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)
+	aggregateQueue := newAggregateManualQueue(subsystems)
 	aggregateContainerLogs := newAggregateContainerLogsStreamHandler(subsystems)
 	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.logger, sharedTelemetry)
 	if err != nil {
@@ -464,7 +463,7 @@ func (h *refreshAggregateHandlers) Update(clusterOrder []string, subsystems map[
 		h.snapshot.Update(clusterOrder, subsystems)
 	}
 	if h.manual != nil {
-		h.manual.UpdateConfig(clusterOrder, subsystems)
+		h.manual.UpdateConfig(subsystems)
 	}
 	if h.containerLogs != nil {
 		h.containerLogs.Update(subsystems)

@@ -3,7 +3,7 @@ export type RefresherTimer = number | ReturnType<typeof globalThis.setTimeout>;
 
 export type RefreshExecutionSummary = {
   successCount: number;
-  failures: Array<{ error: Error; timedOut: boolean }>;
+  failures: Error[];
 };
 
 export type RefresherExecution = {

@@ -64,3 +64,22 @@ func snapshotSortedKinds[T any](items []T, getKind func(T) string) []string {
 	}
 	return snapshotSortedUniqueStrings(values)
 }
+
+// parseSnapshotResourceVersion returns zero when the resource version is not numeric.
+func parseSnapshotResourceVersion(rv string) uint64 {
+	if version, err := strconv.ParseUint(rv, 10, 64); err == nil {
+		return version
+	}
+	return 0
+}
+
+func copyStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}

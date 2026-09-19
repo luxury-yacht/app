@@ -123,11 +123,9 @@ func TestCatalogEngineFacetsApplyDependentFiltersToMaintainedRows(t *testing.T) 
 func TestServiceQueryStreamsWithoutFullCache(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
 
-	chunk := &summaryChunk{
-		items: []Summary{
-			{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "demo-pod", UID: "uid-1"}, Scope: ScopeNamespace},
-			{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "kube-system", Name: "controller", UID: "uid-2"}, Scope: ScopeNamespace},
-		},
+	chunk := []Summary{
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "demo-pod", UID: "uid-1"}, Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "kube-system", Name: "controller", UID: "uid-2"}, Scope: ScopeNamespace},
 	}
 
 	kindSet := map[string]bool{"Pod": true} // true = namespaced
@@ -136,7 +134,7 @@ func TestServiceQueryStreamsWithoutFullCache(t *testing.T) {
 		{Group: "", Version: "v1", Resource: "pods", Kind: "Pod", Scope: ScopeNamespace, Namespaced: true},
 	}
 
-	svc.publishStreamingState([]*summaryChunk{chunk}, kindSet, namespaceSet, descriptors, false)
+	svc.publishCatalogRowsForTest(chunk, kindSet, namespaceSet, descriptors, false)
 
 	result := svc.Query(QueryOptions{Limit: 1})
 	if len(result.Items) != 1 {
@@ -172,8 +170,8 @@ func TestServiceQueryIndexRebuiltAfterLaterPublish(t *testing.T) {
 	kindSet := map[string]bool{"Pod": true}
 	namespaceSet := map[string]struct{}{"default": {}}
 
-	svc.publishStreamingState(
-		[]*summaryChunk{{items: []Summary{podSummary("alpha")}}},
+	svc.publishCatalogRowsForTest(
+		[]Summary{podSummary("alpha")},
 		kindSet, namespaceSet, nil, true,
 	)
 	first := svc.Query(QueryOptions{Limit: 10, Namespaces: []string{"default"}})
@@ -181,8 +179,8 @@ func TestServiceQueryIndexRebuiltAfterLaterPublish(t *testing.T) {
 		t.Fatalf("expected one item before the second publish, got %d", len(first.Items))
 	}
 
-	svc.publishStreamingState(
-		[]*summaryChunk{{items: []Summary{podSummary("alpha"), podSummary("beta")}}},
+	svc.publishCatalogRowsForTest(
+		[]Summary{podSummary("alpha"), podSummary("beta")},
 		kindSet, namespaceSet, nil, true,
 	)
 	second := svc.Query(QueryOptions{Limit: 10, Namespaces: []string{"default"}})
@@ -224,8 +222,8 @@ func TestQueryNoMatchKindFilterReturnsEmptyResult(t *testing.T) {
 			name: "published chunks",
 			svc: func() *Service {
 				svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
-				svc.publishStreamingState(
-					[]*summaryChunk{{items: []Summary{pod, service}}},
+				svc.publishCatalogRowsForTest(
+					[]Summary{pod, service},
 					map[string]bool{"Pod": true, "Service": true},
 					map[string]struct{}{"default": {}},
 					[]Descriptor{
@@ -292,8 +290,8 @@ func TestCatalogPreviousPageWithDeletedPredecessorsInvalidatesCursor(t *testing.
 		return Summary{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: name, UID: "uid-" + name}, Scope: ScopeNamespace}
 	}
 	publish := func(items []Summary) {
-		svc.publishStreamingState(
-			[]*summaryChunk{{items: items}},
+		svc.publishCatalogRowsForTest(
+			items,
 			map[string]bool{"Pod": true},
 			map[string]struct{}{"default": {}},
 			nil,
@@ -332,11 +330,11 @@ func TestCatalogAgeSortMatchesTypedTableConvention(t *testing.T) {
 	summary := func(name, created string) Summary {
 		return Summary{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: name, UID: "uid-" + name}, CreationTimestamp: created, Scope: ScopeNamespace}
 	}
-	svc.publishStreamingState(
-		[]*summaryChunk{{items: []Summary{
+	svc.publishCatalogRowsForTest(
+		[]Summary{
 			summary("old", "2020-01-01T00:00:00Z"),
 			summary("new", "2026-01-01T00:00:00Z"),
-		}}},
+		},
 		map[string]bool{"Pod": true},
 		map[string]struct{}{"default": {}},
 		nil,
@@ -356,19 +354,17 @@ func TestCatalogAgeSortMatchesTypedTableConvention(t *testing.T) {
 
 func TestQueryReportsUnfilteredScopeTotal(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
-	chunk := &summaryChunk{
-		items: []Summary{
-			{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "alpha", UID: "uid-1"}, Scope: ScopeNamespace},
-			{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "beta", UID: "uid-2"}, Scope: ScopeNamespace},
-			{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "kube-system", Name: "gamma", UID: "uid-3"}, Scope: ScopeNamespace},
-		},
+	chunk := []Summary{
+		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "alpha", UID: "uid-1"}, Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "beta", UID: "uid-2"}, Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "kube-system", Name: "gamma", UID: "uid-3"}, Scope: ScopeNamespace},
 	}
 	kindSet := map[string]bool{"Pod": true}
 	namespaceSet := map[string]struct{}{"default": {}, "kube-system": {}}
 	descriptors := []Descriptor{
 		{Group: "", Version: "v1", Resource: "pods", Kind: "Pod", Scope: ScopeNamespace, Namespaced: true},
 	}
-	svc.publishStreamingState([]*summaryChunk{chunk}, kindSet, namespaceSet, descriptors, false)
+	svc.publishCatalogRowsForTest(chunk, kindSet, namespaceSet, descriptors, false)
 
 	// A search narrows to 1 row, but the unfiltered scope total is all 3 ("of M").
 	filtered := svc.Query(QueryOptions{Limit: 10, Search: "alpha"})
@@ -388,14 +384,14 @@ func TestQueryReportsUnfilteredScopeTotal(t *testing.T) {
 
 func TestQueryUnfilteredTotalStaysInsideStructuralScope(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
-	chunk := &summaryChunk{items: []Summary{
+	chunk := []Summary{
 		{Ref: resourcemodel.ResourceRef{Group: "apiregistration.k8s.io", Version: "v1", Kind: "APIService", Resource: "apiservices", Name: "v1.apps", UID: "uid-1"}, Scope: ScopeCluster},
 		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Node", Resource: "nodes", Name: "node-a", UID: "uid-2"}, Scope: ScopeCluster},
 		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-a", UID: "uid-3"}, Scope: ScopeNamespace},
 		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "kube-system", Name: "pod-b", UID: "uid-4"}, Scope: ScopeNamespace},
-	}}
-	svc.publishStreamingState(
-		[]*summaryChunk{chunk},
+	}
+	svc.publishCatalogRowsForTest(
+		chunk,
 		map[string]bool{"APIService": true, "Node": true, "Pod": true},
 		map[string]struct{}{"default": {}, "kube-system": {}},
 		nil,
@@ -826,15 +822,13 @@ func TestQueryMarksTotalsAndFacetsApproximateAboveBudget(t *testing.T) {
 	})
 
 	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
-	chunk := &summaryChunk{
-		items: []Summary{
-			{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "a", UID: "uid-a"}, Scope: ScopeNamespace},
-			{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "b", UID: "uid-b"}, Scope: ScopeNamespace},
-			{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "c", UID: "uid-c"}, Scope: ScopeNamespace},
-		},
+	chunk := []Summary{
+		{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "a", UID: "uid-a"}, Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "b", UID: "uid-b"}, Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "c", UID: "uid-c"}, Scope: ScopeNamespace},
 	}
-	svc.publishStreamingState(
-		[]*summaryChunk{chunk},
+	svc.publishCatalogRowsForTest(
+		chunk,
 		map[string]bool{"Pod": true},
 		map[string]struct{}{"default": {}},
 		[]Descriptor{{Version: "v1", Resource: "pods", Kind: "Pod", Scope: ScopeNamespace, Namespaced: true}},

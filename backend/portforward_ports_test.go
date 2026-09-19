@@ -69,8 +69,9 @@ func TestResolvePortForwardDestination_ServiceMapsServicePortToPodTargetPort(t *
 					Ready: ptr.To(true),
 				},
 				TargetRef: &corev1.ObjectReference{
-					Kind: "Pod",
-					Name: "api-pod",
+					APIVersion: "v1",
+					Kind:       "Pod",
+					Name:       "api-pod",
 				},
 			}},
 		},

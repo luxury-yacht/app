@@ -70,8 +70,6 @@ function AdvancedSection() {
     };
   }, []);
 
-  const handleRefreshToggle = (enabled: boolean) => setAutoRefresh(enabled);
-
   const handlePersistenceModeToggle = (checked: boolean) => {
     const mode: GridTablePersistenceMode = checked ? 'namespaced' : 'shared';
     setPersistenceMode(mode);
@@ -155,7 +153,7 @@ function AdvancedSection() {
         <ToggleSwitch
           id={`${elementIdPrefix}-refresh-enabled`}
           checked={refreshEnabled}
-          onChange={handleRefreshToggle}
+          onChange={setAutoRefresh}
           ariaLabel="Auto-refresh"
         />
       </SettingRow>

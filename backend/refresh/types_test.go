@@ -2,13 +2,16 @@ package refresh_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResourceReadinessString(t *testing.T) {
@@ -128,6 +131,104 @@ func TestManagerProcessesManualRefreshJob(t *testing.T) {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
+	}
+}
+
+type finishingManualQueue struct {
+	*refresh.InMemoryQueue
+	finished chan refresh.ManualRefreshJob
+}
+
+func (q *finishingManualQueue) Update(job *refresh.ManualRefreshJob) {
+	q.InMemoryQueue.Update(job)
+	if job.State == refresh.JobStateFailed || job.State == refresh.JobStateSucceeded {
+		q.finished <- *job
+	}
+}
+
+type manualRegistry struct {
+	mockRegistry
+	result *refresh.ManualRefreshResult
+	err    error
+}
+
+func (r *manualRegistry) ManualRefresh(context.Context, string, string) (*refresh.ManualRefreshResult, error) {
+	return r.result, r.err
+}
+
+type manualSnapshotBuilder func(context.Context, string, string) (*refresh.Snapshot, error)
+
+func (f manualSnapshotBuilder) Build(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+	return f(ctx, domain, scope)
+}
+
+func TestManualRefreshPublishesVersionAndFailureFromItsExecution(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		manualError   bool
+		snapshotError bool
+		retrySnapshot bool
+		noSnapshot    bool
+		manualVersion uint64
+		wantVersion   uint64
+		wantState     refresh.JobState
+	}{
+		{name: "snapshot version", wantVersion: 42, wantState: refresh.JobStateSucceeded},
+		{name: "manual version takes precedence", manualVersion: 9, wantVersion: 9, wantState: refresh.JobStateSucceeded},
+		{name: "snapshot retry succeeds", retrySnapshot: true, wantVersion: 42, wantState: refresh.JobStateSucceeded},
+		{name: "manual error prevents snapshot", manualError: true, wantVersion: 7, wantState: refresh.JobStateFailed},
+		{name: "snapshot error retains prior version", snapshotError: true, wantVersion: 7, wantState: refresh.JobStateFailed},
+		{name: "no snapshot retains prior version", noSnapshot: true, wantVersion: 7, wantState: refresh.JobStateSucceeded},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				registry := &manualRegistry{result: &refresh.ManualRefreshResult{Job: &refresh.ManualRefreshJob{LatestVersion: tt.manualVersion}}}
+				if tt.manualError {
+					registry.err = errors.New("manual rejected")
+				}
+				calls := 0
+				bypassed := true
+				var operationID, seenScope string
+				var service refresh.SnapshotBuilder = manualSnapshotBuilder(func(ctx context.Context, _, scope string) (*refresh.Snapshot, error) {
+					calls++
+					bypassed = bypassed && refresh.HasCacheBypass(ctx)
+					operationID = applog.OperationIDFromContext(ctx)
+					seenScope = scope
+					if tt.snapshotError || tt.retrySnapshot && calls == 1 {
+						return nil, errors.New("snapshot unavailable")
+					}
+					return &refresh.Snapshot{Version: 42}, nil
+				})
+				if tt.noSnapshot {
+					service = nil
+				}
+				queue := &finishingManualQueue{refresh.NewInMemoryQueue(), make(chan refresh.ManualRefreshJob, 1)}
+				job, err := queue.Enqueue(applog.ContextWithOperationID(context.Background(), "manual-attempt"), "pods", "cluster-a|namespace:prod", "user")
+				require.NoError(t, err)
+				job.LatestVersion = 7
+				queue.Update(job)
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				manager := refresh.NewManager(registry, nil, service, nil, queue)
+				require.NoError(t, manager.Start(ctx))
+				finished := <-queue.finished
+				require.Equal(t, tt.wantState, finished.State)
+				require.Equal(t, tt.wantVersion, finished.LatestVersion)
+				if tt.wantState == refresh.JobStateFailed {
+					require.NotEmpty(t, finished.Error)
+				} else {
+					require.Empty(t, finished.Error)
+				}
+				if tt.manualError || tt.noSnapshot {
+					require.Zero(t, calls)
+				} else {
+					require.Positive(t, calls)
+					require.True(t, bypassed)
+					require.Equal(t, "manual-attempt", operationID)
+					require.Equal(t, job.Scope, seenScope)
+				}
+			})
+		})
 	}
 }
 

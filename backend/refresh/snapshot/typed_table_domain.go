@@ -9,7 +9,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
-	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
@@ -38,7 +37,6 @@ type typedTableDomainSpec[T any] struct {
 	adapter         typedTableQueryAdapter[T]
 	schema          querypage.Schema[T]
 	capabilities    ResourceQueryCapabilities
-	kindOf          func(T) string
 	sortRows        func([]T)
 }
 
@@ -51,19 +49,8 @@ func typedTableSources(
 	domainName string,
 	collectIndexer func(streamspec.Descriptor) cache.Indexer,
 ) ([]typedTableResourceSource, map[string]bool) {
-	descriptors := kindregistry.StreamDescriptorsForDomain(domainName)
-	sources := make([]typedTableResourceSource, 0, len(descriptors))
-	available := make(map[string]bool, len(descriptors))
-	for _, d := range descriptors {
-		ok := collectIndexer(d) != nil
-		sources = append(sources, typedTableResourceSource{
-			Kind:     d.Kind,
-			Group:    d.Group,
-			Resource: d.Resource,
-			State:    typedTableSourceState(ok),
-		})
-	}
-	sources = withTypedTableResourceReadiness(ctx, domainName, sources)
+	sources := collectDescriptorSources(ctx, domainName, collectIndexer)
+	available := make(map[string]bool, len(sources))
 	for _, source := range sources {
 		available[source.Kind] = source.State.servesRows()
 	}
@@ -121,7 +108,7 @@ func buildTypedTableSnapshot[T any](
 				capabilitiesWithAvailableKinds(spec.capabilities, sources),
 				spec.entryLimit,
 				spec.description,
-				spec.kindOf,
+				spec.adapter.Kind,
 				typedTableQueryResourceIssues(ctx, spec.domain, query, sources),
 			),
 		)
@@ -147,7 +134,7 @@ func buildTypedTableSnapshot[T any](
 				capabilitiesWithAvailableKinds(spec.capabilities, sources),
 				spec.entryLimit,
 				spec.description,
-				spec.kindOf,
+				spec.adapter.Kind,
 				typedTableQueryResourceIssues(ctx, spec.domain, query, sources),
 			),
 		)

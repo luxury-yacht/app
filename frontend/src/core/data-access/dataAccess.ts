@@ -5,11 +5,7 @@
  * get consistent diagnostics, loading accounting, and orchestrator access.
  */
 
-import {
-  beginBrokerRead,
-  completeBrokerRead,
-  recordBlockedBrokerRead,
-} from '@/core/read-diagnostics';
+import { recordBlockedBrokerRead, runBrokerRead } from '@/core/read-diagnostics';
 import { refreshOrchestrator } from '@/core/refresh';
 import type { RefreshDemand } from '@/core/refresh/refreshRuntime';
 import { getScopedDomainState } from '@/core/refresh/store';
@@ -63,26 +59,11 @@ export const requestData = async <T>({
     };
   }
 
-  const token = beginBrokerRead({
-    broker: 'data-access',
-    resource,
-    adapter,
-    reason,
-    label,
-    scope,
-  });
-
-  try {
-    const data = await read(token);
-    completeBrokerRead({ token, status: 'success' });
-    return {
-      status: 'executed',
-      data,
-    };
-  } catch (error) {
-    completeBrokerRead({ token, status: 'error', error });
-    throw error;
-  }
+  const data = await runBrokerRead(
+    { broker: 'data-access', resource, adapter, reason, label, scope },
+    read
+  );
+  return { status: 'executed', data };
 };
 
 const performRefreshDomainRequest = async (

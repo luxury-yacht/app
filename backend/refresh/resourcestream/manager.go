@@ -1,7 +1,7 @@
 /*
  * backend/refresh/resourcestream/manager.go
  *
- * Wires Kubernetes informer events into resource-stream row updates. This file
+ * Wires Kubernetes informer events into resource-stream change notifications. This file
  * owns the domain-specific translation from Kubernetes objects into refresh
  * updates, while subscription fan-out lives in stream_hub.go.
  */
@@ -39,9 +39,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	apiextensionspkg "github.com/luxury-yacht/app/backend/resources/apiextensions"
 	cronjobpkg "github.com/luxury-yacht/app/backend/resources/cronjob"
-	"github.com/luxury-yacht/app/backend/resources/customresource"
 	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
 	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
@@ -487,7 +485,7 @@ func (m *Manager) broadcastCustomDomainCompletes(oldCRD, newCRD *apiextensionsv1
 }
 
 func (m *Manager) broadcastCustomDomainComplete(domain, resourceVersion string, ref *resourcemodel.ResourceRef) {
-	scopes := m.activeScopesForDomain(domain)
+	scopes := m.subscribedScopes(domain)
 	if len(scopes) == 0 {
 		switch domain {
 		case domainClusterCustom:
@@ -509,17 +507,6 @@ func (m *Manager) broadcastCustomDomainComplete(domain, resourceVersion string, 
 		Ref:             ref,
 	}
 	m.broadcast(domain, scopes, update)
-}
-
-func (m *Manager) activeScopesForDomain(domain string) []string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	domainSubs := m.subscribers[domain]
-	scopes := make([]string, 0, len(domainSubs))
-	for scope := range domainSubs {
-		scopes = append(scopes, scope)
-	}
-	return scopes
 }
 
 func (m *Manager) ensureCustomInformer(crd *apiextensionsv1.CustomResourceDefinition) {
@@ -703,22 +690,7 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 		m.invalidateCustomResourceCache(ref)
 	}
 
-	var row interface{}
-	if updateType != MessageTypeDeleted {
-		// The CRD name is the canonical Kubernetes form `<plural>.<group>`,
-		// computable from the GVR we're already watching. Same derivation
-		// for both the cluster-scoped and namespace-scoped paths.
-		crdName := info.gvr.Resource + "." + info.gvr.Group
-		if domain == domainClusterCustom {
-			row = customresource.BuildClusterStreamSummary(m.clusterMeta, resource, customresource.NewDescriptor(info.gvr.Group, info.gvr.Version, info.gvr.Resource, info.kind, crdName))
-		} else {
-			// The streaming path has no parent scope concept — fall back
-			// to the resource's own namespace (which is almost always
-			// set for anything that reaches an informer).
-			row = customresource.BuildNamespaceStreamSummary(m.clusterMeta, resource, customresource.NewDescriptor(info.gvr.Group, info.gvr.Version, info.gvr.Resource, info.kind, crdName), resource.GetNamespace())
-		}
-	}
-	update := m.newObjectRowUpdate(updateType, domain, resource, ref, row)
+	update := m.newObjectUpdate(updateType, domain, resource.GetResourceVersion(), ref)
 
 	if domain == domainClusterCustom {
 		m.broadcast(domain, scopesForCluster(), update)
@@ -735,7 +707,7 @@ func (m *Manager) handleClusterCRD(obj interface{}, updateType MessageType) {
 	}
 
 	ref := m.resourceRefForObject(crd, customResourceDefinitionAPIGroup, "v1", "CustomResourceDefinition", "customresourcedefinitions")
-	update := m.newObjectRowUpdate(updateType, domainClusterCRDs, crd, ref, apiextensionspkg.BuildStreamSummary(m.clusterMeta, crd))
+	update := m.newObjectUpdate(updateType, domainClusterCRDs, crd.ResourceVersion, ref)
 
 	m.broadcast(domainClusterCRDs, scopesForCluster(), update)
 }
@@ -780,16 +752,6 @@ func customCRDDomain(crd *apiextensionsv1.CustomResourceDefinition) string {
 	default:
 		return ""
 	}
-}
-
-// SubscribeSelector registers a new subscriber for the supplied typed selector.
-func (m *Manager) SubscribeSelector(selector StreamSelector) (*Subscription, error) {
-	return m.streamHub().subscribe(selector)
-}
-
-// ResumeSelector returns buffered updates after the provided sequence token.
-func (m *Manager) ResumeSelector(selector StreamSelector, since uint64) ([]Update, bool) {
-	return m.streamHub().resume(selector, since)
 }
 
 // handleConfigMap and handleSecret fire the Helm-release refresh signal for one
@@ -920,7 +882,7 @@ func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
 	}
 
 	ref := m.resourceRefForObject(hpa, hpapkg.IdentityV1.Group, hpapkg.IdentityV1.Version, hpapkg.IdentityV1.Kind, hpapkg.IdentityV1.Resource)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceAutoscaling, hpa, ref, hpapkg.BuildStreamSummary(m.clusterMeta, hpa))
+	update := m.newObjectUpdate(updateType, domainNamespaceAutoscaling, hpa.ResourceVersion, ref)
 
 	m.broadcast(domainNamespaceAutoscaling, scopesForNamespace(hpa.Namespace), update)
 	m.handleWorkloadFromHPA(hpa)
@@ -1132,11 +1094,6 @@ func (m *Manager) subscribedScopes(domain string) []string {
 		scopes = append(scopes, scope)
 	}
 	return scopes
-}
-
-func (m *Manager) broadcast(domain string, scopes []string, update Update) {
-	m.invalidateSnapshotDomain(domain)
-	m.streamHub().broadcast(domain, scopes, update)
 }
 
 func (m *Manager) prepareBroadcast(domain, scope string, update Update) (Update, []struct {
@@ -1389,9 +1346,6 @@ func uniqueScopes(scopes []string) []string {
 	uniq := make([]string, 0, len(scopes))
 	for _, scope := range scopes {
 		key := strings.TrimSpace(scope)
-		if key == "" {
-			key = ""
-		}
 		if _, exists := seen[key]; exists {
 			continue
 		}

@@ -5,9 +5,10 @@
  * Ensures sidebar selection is scoped per cluster tab.
  */
 
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SetSidebarVisible } from '@/core/backend-api';
 
 import { SidebarStateProvider, useSidebarState } from './SidebarStateContext';
 
@@ -25,6 +26,8 @@ vi.mock('@core/backend-api', () => ({
   SetSidebarVisible: vi.fn(),
 }));
 
+vi.mock('@/core/desktop-runtime', () => ({ desktopRuntimeAvailable: () => true }));
+
 describe('SidebarStateContext', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -36,6 +39,7 @@ describe('SidebarStateContext', () => {
   };
 
   beforeEach(() => {
+    vi.clearAllMocks();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -54,13 +58,26 @@ describe('SidebarStateContext', () => {
   const renderProvider = async () => {
     await act(async () => {
       root.render(
-        <SidebarStateProvider>
-          <Harness />
-        </SidebarStateProvider>
+        <StrictMode>
+          <SidebarStateProvider>
+            <Harness />
+          </SidebarStateProvider>
+        </StrictMode>
       );
       await Promise.resolve();
     });
   };
+
+  it('publishes each committed visibility change to the native menu once', async () => {
+    await renderProvider();
+    vi.mocked(SetSidebarVisible).mockClear();
+    for (const visible of [false, true]) {
+      act(() => stateRef.current?.toggleSidebar());
+      expect(stateRef.current?.isSidebarVisible).toBe(visible);
+      expect(SetSidebarVisible).toHaveBeenCalledExactlyOnceWith(visible);
+      vi.mocked(SetSidebarVisible).mockClear();
+    }
+  });
 
   it('keeps sidebar selection isolated per cluster tab', async () => {
     await renderProvider();

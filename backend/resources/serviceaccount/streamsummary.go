@@ -19,6 +19,6 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, sa *corev1.ServiceAccount) 
 	if sa == nil {
 		return streamrows.RBACSummary{}
 	}
-	details := DescribeSummary(BuildFacts(meta.ClusterID, sa, nil, resourcemodel.ResourceModelBuildOptions{}))
+	details := resourcemodel.ServiceAccountSummary(namedSecretCount(sa))
 	return streamrows.NewRBACSummary(meta, Identity, sa, details)
 }

@@ -65,7 +65,6 @@ func namespaceConfigDomainSpec() typedTableDomainSpec[ConfigSummary] {
 		adapter:          configTableQueryAdapter(),
 		schema:           configQuerypageSchema(),
 		capabilities:     namespaceConfigQueryCapabilities(),
-		kindOf:           func(resource ConfigSummary) string { return resource.Ref.Kind },
 		sortRows:         sortConfigSummaries,
 	}
 }

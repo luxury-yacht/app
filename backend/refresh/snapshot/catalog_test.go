@@ -503,7 +503,7 @@ func TestCatalogSnapshotAndStreamUseSameCatalogQueryContract(t *testing.T) {
 
 }
 
-func TestCatalogRefreshAdapterBuildsSnapshotFromSharedAssembly(t *testing.T) {
+func TestCatalogBuildKeepsStatsAlignedWithPayloadAndNamespaceGroups(t *testing.T) {
 	summaries := []objectcatalog.Summary{
 		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "alpha", UID: "uid-alpha"}, ResourceVersion: "1",
 			Scope: objectcatalog.ScopeNamespace,
@@ -520,15 +520,15 @@ func TestCatalogRefreshAdapterBuildsSnapshotFromSharedAssembly(t *testing.T) {
 		ClusterMeta: meta,
 		Namespaces:  []string{"default", "kube-system"},
 	}}
-	adapter := newCatalogRefreshAdapter(svc, meta, func() []CatalogNamespaceGroup {
-		return groups
-	})
-	opts, err := parseBrowseScope("cluster-a|kind=Deployment&namespace=default&limit=1")
-	if err != nil {
-		t.Fatalf("parseBrowseScope returned error: %v", err)
+	builder := &catalogBuilder{
+		domain:          catalogDomain,
+		catalogService:  func() *objectcatalog.Service { return svc },
+		namespaceGroups: func() []CatalogNamespaceGroup { return groups },
 	}
-
-	snap := adapter.BuildSnapshot(catalogDomain, "cluster-a|kind=Deployment&namespace=default&limit=1", opts)
+	snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "cluster-a|kind=Deployment&namespace=default&limit=1")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
 	payload, ok := snap.Payload.(CatalogSnapshot)
 	if !ok {
 		t.Fatalf("unexpected payload type: %T", snap.Payload)

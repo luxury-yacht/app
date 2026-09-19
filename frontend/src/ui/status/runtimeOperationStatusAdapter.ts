@@ -77,6 +77,7 @@ export interface PortForwardSession {
 
 export interface PortForwardStatusEvent {
   sessionId: string;
+  clusterId: string;
   status: PortForwardStatus;
   statusReason?: string;
   localPort?: number;
@@ -137,12 +138,17 @@ export const initialRuntimeOperationStatusState: RuntimeOperationStatusState = {
   portForwardSessions: [],
 };
 
-const activeOperationIds = (
+const runtimeOperationKey = (clusterId: string, id: string): string =>
+  JSON.stringify([clusterId, id]);
+
+const activeOperationKeys = (
   operations: RuntimeOperation[],
   type: RuntimeOperationType
 ): Set<string> =>
   new Set(
-    operations.filter((operation) => operation.type === type).map((operation) => operation.id)
+    operations
+      .filter((operation) => operation.type === type)
+      .map((operation) => runtimeOperationKey(operation.clusterId, operation.id))
   );
 
 const isClusterMatch = (clusterId: string | undefined, selectedClusterId?: string | null) =>
@@ -156,8 +162,10 @@ const keepActiveShellSessions = (
   if (!operationsLoaded) {
     return sessions;
   }
-  const activeShellIds = activeOperationIds(operations, 'shell');
-  return sessions.filter((session) => activeShellIds.has(session.sessionId));
+  const activeShellKeys = activeOperationKeys(operations, 'shell');
+  return sessions.filter((session) =>
+    activeShellKeys.has(runtimeOperationKey(session.clusterId, session.sessionId))
+  );
 };
 
 const keepActivePortForwards = (
@@ -168,8 +176,10 @@ const keepActivePortForwards = (
   if (!operationsLoaded) {
     return sessions;
   }
-  const activePortForwardIds = activeOperationIds(operations, 'port-forward');
-  return sessions.filter((session) => activePortForwardIds.has(session.id));
+  const activePortForwardKeys = activeOperationKeys(operations, 'port-forward');
+  return sessions.filter((session) =>
+    activePortForwardKeys.has(runtimeOperationKey(session.clusterId, session.id))
+  );
 };
 
 export const runtimeOperationStatusReducer = (
@@ -211,7 +221,7 @@ export const runtimeOperationStatusReducer = (
       return {
         ...state,
         portForwardSessions: state.portForwardSessions.map((session) =>
-          session.id === action.event.sessionId
+          session.id === action.event.sessionId && session.clusterId === action.event.clusterId
             ? {
                 ...session,
                 status: action.event.status,
@@ -228,18 +238,12 @@ export const runtimeOperationStatusReducer = (
 };
 
 function parseTimestamp(value?: string | { time?: string }): number {
-  if (!value) {
+  const timestamp = typeof value === 'string' ? value : value?.time;
+  if (typeof timestamp !== 'string') {
     return 0;
   }
-  if (typeof value === 'string') {
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  }
-  if (typeof value.time === 'string') {
-    const parsed = Date.parse(value.time);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  }
-  return 0;
+  const parsed = Date.parse(timestamp);
+  return Number.isNaN(parsed) ? 0 : parsed;
 }
 
 function getPortForwardStatusPriority(status: PortForwardStatus): number {
@@ -270,25 +274,12 @@ export function selectRuntimeOperationRows(
     isClusterMatch(session.clusterId, selectedClusterId)
   );
 
-  if (!state.operationsLoaded) {
-    return {
-      shellSessions: sortShellSessions(clusterShellSessions),
-      portForwardSessions: sortPortForwardSessions(clusterPortForwards),
-    };
-  }
-
-  const filteredRuntimeOperations = state.operations.filter((operation) =>
-    isClusterMatch(operation.clusterId, selectedClusterId)
-  );
-  const runtimeShellIds = activeOperationIds(filteredRuntimeOperations, 'shell');
-  const runtimePortForwardIds = activeOperationIds(filteredRuntimeOperations, 'port-forward');
-
   return {
     shellSessions: sortShellSessions(
-      clusterShellSessions.filter((session) => runtimeShellIds.has(session.sessionId))
+      keepActiveShellSessions(clusterShellSessions, state.operations, state.operationsLoaded)
     ),
     portForwardSessions: sortPortForwardSessions(
-      clusterPortForwards.filter((session) => runtimePortForwardIds.has(session.id))
+      keepActivePortForwards(clusterPortForwards, state.operations, state.operationsLoaded)
     ),
   };
 }

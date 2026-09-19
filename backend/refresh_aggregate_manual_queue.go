@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -14,8 +13,7 @@ import (
 
 // aggregateManualQueue routes cluster-scoped manual refresh jobs to per-cluster queues.
 type aggregateManualQueue struct {
-	clusterOrder []string
-	queues       map[string]refresh.ManualQueue
+	queues map[string]refresh.ManualQueue
 
 	mu       sync.RWMutex
 	configMu sync.RWMutex
@@ -24,8 +22,9 @@ type aggregateManualQueue struct {
 
 // aggregateManualJob tracks the child job created for a cluster-scoped refresh.
 type aggregateManualJob struct {
-	job         *refresh.ManualRefreshJob
-	clusterJobs map[string]aggregateManualChildJob
+	job       *refresh.ManualRefreshJob
+	clusterID string
+	child     aggregateManualChildJob
 }
 
 // aggregateManualChildJob binds a child job to the queue that owns its status.
@@ -46,7 +45,7 @@ type aggregateManualJobMigration struct {
 	replacement    refresh.ManualQueue
 }
 
-func newAggregateManualQueue(clusterOrder []string, subsystems map[string]*system.Subsystem) *aggregateManualQueue {
+func newAggregateManualQueue(subsystems map[string]*system.Subsystem) *aggregateManualQueue {
 	queues := make(map[string]refresh.ManualQueue)
 	for id, subsystem := range subsystems {
 		if subsystem == nil || subsystem.ManualQueue == nil {
@@ -55,22 +54,9 @@ func newAggregateManualQueue(clusterOrder []string, subsystems map[string]*syste
 		queues[id] = subsystem.ManualQueue
 	}
 
-	ordered := make([]string, 0, len(clusterOrder))
-	for _, id := range clusterOrder {
-		if _, ok := queues[id]; ok {
-			ordered = append(ordered, id)
-		}
-	}
-	if len(ordered) == 0 {
-		for id := range queues {
-			ordered = append(ordered, id)
-		}
-		sort.Strings(ordered)
-	}
 	return &aggregateManualQueue{
-		clusterOrder: ordered,
-		queues:       queues,
-		jobs:         make(map[string]*aggregateManualJob),
+		queues: queues,
+		jobs:   make(map[string]*aggregateManualJob),
 	}
 }
 
@@ -94,10 +80,6 @@ func (q *aggregateManualQueue) Enqueue(ctx context.Context, domain, scope, reaso
 	if err != nil {
 		return nil, err
 	}
-	clusterJobs := map[string]aggregateManualChildJob{
-		target: {jobID: job.ID, queue: queue},
-	}
-
 	aggregateJob := &refresh.ManualRefreshJob{
 		ID:       generateAggregateJobID(),
 		Domain:   domain,
@@ -108,7 +90,11 @@ func (q *aggregateManualQueue) Enqueue(ctx context.Context, domain, scope, reaso
 	}
 
 	q.mu.Lock()
-	q.jobs[aggregateJob.ID] = &aggregateManualJob{job: aggregateJob, clusterJobs: clusterJobs}
+	q.jobs[aggregateJob.ID] = &aggregateManualJob{
+		job:       aggregateJob,
+		clusterID: target,
+		child:     aggregateManualChildJob{jobID: job.ID, queue: queue},
+	}
 	q.mu.Unlock()
 
 	return aggregateJob, nil
@@ -123,13 +109,10 @@ func (q *aggregateManualQueue) Status(jobID string) (*refresh.ManualRefreshJob, 
 		return nil, false
 	}
 	base := *agg.job
-	clusterJobs := make(map[string]aggregateManualChildJob, len(agg.clusterJobs))
-	for id, child := range agg.clusterJobs {
-		clusterJobs[id] = child
-	}
+	clusterID, child := agg.clusterID, agg.child
 	q.mu.RUnlock()
 
-	return buildAggregateStatus(&base, clusterJobs), true
+	return buildAggregateStatus(&base, clusterID, child), true
 }
 
 // Update stores the aggregated job when invoked directly.
@@ -171,94 +154,35 @@ func (q *aggregateManualQueue) resolveTarget(
 
 func buildAggregateStatus(
 	base *refresh.ManualRefreshJob,
-	clusterJobs map[string]aggregateManualChildJob,
+	clusterID string,
+	child aggregateManualChildJob,
 ) *refresh.ManualRefreshJob {
-	status := aggregateChildStatus{}
-	for clusterID, child := range clusterJobs {
-		status.recordChild(clusterID, child)
-	}
-
-	base.State = status.state()
-	base.Error = status.firstErr
-	base.LatestVersion = status.maxVersion
-	base.StartedAt = status.startedAt
-	base.FinishedAt = status.finishedAt
-	return base
-}
-
-type aggregateChildStatus struct {
-	hasQueued    bool
-	hasRunning   bool
-	hasFailed    bool
-	hasCancelled bool
-	firstErr     string
-	maxVersion   uint64
-	startedAt    int64
-	finishedAt   int64
-}
-
-func (s *aggregateChildStatus) recordChild(clusterID string, child aggregateManualChildJob) {
+	base.State = refresh.JobStateFailed
+	base.Error = fmt.Sprintf("cluster %s job missing", clusterID)
+	base.LatestVersion = 0
+	base.StartedAt = 0
+	base.FinishedAt = 0
 	if child.queue == nil {
-		s.recordMissing(clusterID)
-		return
+		return base
 	}
 	job, ok := child.queue.Status(child.jobID)
 	if !ok || job == nil {
-		s.recordMissing(clusterID)
-		return
+		return base
 	}
-	s.recordState(job.State)
-	s.recordJobTimes(job)
-	if job.Error != "" && s.firstErr == "" {
-		s.firstErr = fmt.Sprintf("%s: %s", clusterID, job.Error)
-	}
-}
-
-func (s *aggregateChildStatus) recordMissing(clusterID string) {
-	s.hasFailed = true
-	if s.firstErr == "" {
-		s.firstErr = fmt.Sprintf("cluster %s job missing", clusterID)
-	}
-}
-
-func (s *aggregateChildStatus) recordState(state refresh.JobState) {
-	switch state {
-	case refresh.JobStateQueued:
-		s.hasQueued = true
-	case refresh.JobStateRunning:
-		s.hasRunning = true
-	case refresh.JobStateFailed:
-		s.hasFailed = true
-	case refresh.JobStateCancelled:
-		s.hasCancelled = true
-	}
-}
-
-func (s *aggregateChildStatus) recordJobTimes(job *refresh.ManualRefreshJob) {
-	if job.LatestVersion > s.maxVersion {
-		s.maxVersion = job.LatestVersion
-	}
-	if job.StartedAt > 0 && (s.startedAt == 0 || job.StartedAt < s.startedAt) {
-		s.startedAt = job.StartedAt
-	}
-	if job.FinishedAt > s.finishedAt {
-		s.finishedAt = job.FinishedAt
-	}
-}
-
-func (s aggregateChildStatus) state() refresh.JobState {
-	switch {
-	case s.hasFailed:
-		return refresh.JobStateFailed
-	case s.hasCancelled:
-		return refresh.JobStateCancelled
-	case s.hasRunning:
-		return refresh.JobStateRunning
-	case s.hasQueued:
-		return refresh.JobStateQueued
+	switch job.State {
+	case refresh.JobStateQueued, refresh.JobStateRunning, refresh.JobStateFailed, refresh.JobStateCancelled:
+		base.State = job.State
 	default:
-		return refresh.JobStateSucceeded
+		base.State = refresh.JobStateSucceeded
 	}
+	base.Error = ""
+	if job.Error != "" {
+		base.Error = fmt.Sprintf("%s: %s", clusterID, job.Error)
+	}
+	base.LatestVersion = job.LatestVersion
+	base.StartedAt = max(0, job.StartedAt)
+	base.FinishedAt = max(0, job.FinishedAt)
+	return base
 }
 
 func (q *aggregateManualQueue) snapshotConfig() map[string]refresh.ManualQueue {
@@ -272,13 +196,12 @@ func (q *aggregateManualQueue) snapshotConfig() map[string]refresh.ManualQueue {
 }
 
 // UpdateConfig refreshes the aggregate manual queue wiring after selection changes.
-func (q *aggregateManualQueue) UpdateConfig(clusterOrder []string, subsystems map[string]*system.Subsystem) {
+func (q *aggregateManualQueue) UpdateConfig(subsystems map[string]*system.Subsystem) {
 	if q == nil {
 		return
 	}
-	next := newAggregateManualQueue(clusterOrder, subsystems)
+	next := newAggregateManualQueue(subsystems)
 	q.configMu.Lock()
-	q.clusterOrder = next.clusterOrder
 	q.queues = next.queues
 	q.configMu.Unlock()
 
@@ -303,34 +226,22 @@ func (q *aggregateManualQueue) unfinishedJobMigrations(queues map[string]refresh
 		if aggregateJob == nil || aggregateJob.job == nil {
 			continue
 		}
-		migrations = append(migrations, migrationsForAggregateJob(aggregateJobID, aggregateJob, queues)...)
-	}
-	return migrations
-}
-
-func migrationsForAggregateJob(
-	aggregateJobID string,
-	aggregateJob *aggregateManualJob,
-	queues map[string]refresh.ManualQueue,
-) []aggregateManualJobMigration {
-	result := make([]aggregateManualJobMigration, 0)
-	_, scopeValue := refresh.SplitClusterScopeList(aggregateJob.job.Scope)
-	for clusterID, child := range aggregateJob.clusterJobs {
-		replacement := queues[clusterID]
-		if !manualChildNeedsMigration(child, replacement) {
+		replacement := queues[aggregateJob.clusterID]
+		if !manualChildNeedsMigration(aggregateJob.child, replacement) {
 			continue
 		}
-		result = append(result, aggregateManualJobMigration{
+		_, scope := refresh.SplitClusterScopeList(aggregateJob.job.Scope)
+		migrations = append(migrations, aggregateManualJobMigration{
 			aggregateJobID: aggregateJobID,
-			clusterID:      clusterID,
+			clusterID:      aggregateJob.clusterID,
 			domain:         aggregateJob.job.Domain,
-			scope:          refresh.JoinClusterScope(clusterID, scopeValue),
+			scope:          refresh.JoinClusterScope(aggregateJob.clusterID, scope),
 			reason:         aggregateJob.job.Reason,
-			previous:       child,
+			previous:       aggregateJob.child,
 			replacement:    replacement,
 		})
 	}
-	return result
+	return migrations
 }
 
 func manualChildNeedsMigration(child aggregateManualChildJob, replacement refresh.ManualQueue) bool {
@@ -361,9 +272,9 @@ func (q *aggregateManualQueue) moveUnfinishedJob(migration aggregateManualJobMig
 	if aggregateJob == nil {
 		return
 	}
-	current, ok := aggregateJob.clusterJobs[migration.clusterID]
-	if ok && current.jobID == migration.previous.jobID && current.queue == migration.previous.queue {
-		aggregateJob.clusterJobs[migration.clusterID] = aggregateManualChildJob{
+	current := aggregateJob.child
+	if aggregateJob.clusterID == migration.clusterID && current == migration.previous {
+		aggregateJob.child = aggregateManualChildJob{
 			jobID: job.ID,
 			queue: migration.replacement,
 		}

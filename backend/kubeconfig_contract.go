@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"k8s.io/client-go/tools/clientcmd"
@@ -158,15 +159,7 @@ type selectionChangeIntent struct {
 }
 
 func selectionSetsEqual(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
+	return slices.Equal(left, right)
 }
 
 func mergeKubeconfigWatchDirectory(dirMap map[string]*kubeconfigWatchDirectory, resolved string) {

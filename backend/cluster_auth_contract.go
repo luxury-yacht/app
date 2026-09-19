@@ -52,19 +52,17 @@ func newClusterAuthStateCommand(
 	switch state {
 	case authstate.StateValid:
 		command.eventName = clusterAuthRecoveredEventName
-		command.eventPayload = authEventPayload(clusterID, clusterName, diag)
 		command.mutation = clusterAuthMutationRebuild
 	case authstate.StateRecovering:
 		command.eventName = clusterAuthRecoveringEventName
-		command.eventPayload = authEventPayload(clusterID, clusterName, diag)
 		command.mutation = clusterAuthMutationTeardown
 	case authstate.StateInvalid:
 		command.eventName = clusterAuthFailedEventName
-		command.eventPayload = authEventPayload(clusterID, clusterName, diag)
 		command.mutation = clusterAuthMutationNone
 	default:
 		return clusterAuthStateCommand{}, false
 	}
+	command.eventPayload = authEventPayload(clusterID, clusterName, diag)
 	return command, true
 }
 

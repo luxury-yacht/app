@@ -240,6 +240,7 @@ describe('useObjectPanelCapabilities', () => {
         id: 'remove-finalizer',
         clusterId: 'cluster-a',
         verb: 'patch',
+        group: '',
         version: 'v1',
         resourceKind: 'Namespace',
         name: 'terminating',
@@ -266,7 +267,14 @@ describe('useObjectPanelCapabilities', () => {
     mockUseUserPermission.mockReturnValue({ allowed: false, pending: false });
 
     const result = await renderHook({
-      objectData: { kind: 'Deployment', name: 'api', namespace: 'team-a' },
+      objectData: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+        group: 'apps',
+        version: 'v1',
+      },
       objectKind: 'deployment',
       detailScope: 'cluster-a|team-a:apps/v1:deployment:api',
       featureSupport: baseFeatureSupport,
@@ -274,6 +282,64 @@ describe('useObjectPanelCapabilities', () => {
 
     expect(result.capabilities.hasObjPanelLogs).toBe(false);
   });
+
+  it.each(['clusterId', 'group', 'version', 'kind', 'name'] as const)(
+    'withholds permission queries until the object carries %s',
+    async (missingField) => {
+      mockUseCapabilities.mockReturnValue({
+        getState: () => ({ allowed: true, pending: false }),
+      });
+      mockUseUserPermission.mockReturnValue(undefined);
+      const complete: PanelObjectData = {
+        clusterId: 'config:Production',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'team-a',
+        name: 'api',
+      };
+      const Harness = ({ objectData }: { objectData: PanelObjectData }) => {
+        resultRef.current = useObjectPanelCapabilities({
+          objectData,
+          objectKind: 'pod',
+          detailScope: null,
+          featureSupport: { ...baseFeatureSupport, shell: true },
+        });
+        return null;
+      };
+      await act(async () => {
+        root.render(<Harness objectData={{ ...complete, [missingField]: undefined }} />);
+      });
+      expect(mockUseCapabilities).toHaveBeenLastCalledWith(
+        [],
+        expect.objectContaining({ enabled: false })
+      );
+      expect(resultRef.current?.capabilities.canDelete).toBe(false);
+      expect(resultRef.current?.capabilities.hasShell).toBe(false);
+
+      await act(async () => {
+        root.render(<Harness objectData={complete} />);
+      });
+      const [descriptors, options] = requireValue(
+        mockUseCapabilities.mock.calls[mockUseCapabilities.mock.calls.length - 1],
+        'capability descriptors after identity becomes ready'
+      );
+      expect(options.enabled).toBe(true);
+      expect(descriptors).toContainEqual(
+        expect.objectContaining({
+          id: 'view-yaml',
+          clusterId: 'config:Production',
+          group: '',
+          version: 'v1',
+          resourceKind: 'Pod',
+          namespace: 'team-a',
+          name: 'api',
+        })
+      );
+      expect(resultRef.current?.capabilities.canDelete).toBe(true);
+      expect(resultRef.current?.capabilities.hasShell).toBe(true);
+    }
+  );
 
   it('returns default states when descriptors are unavailable', async () => {
     mockUseCapabilities.mockImplementation(() => ({
@@ -336,7 +402,14 @@ describe('useObjectPanelCapabilities', () => {
     mockUseUserPermission.mockReturnValue({ allowed: true, pending: false });
 
     const result = await renderHook({
-      objectData: { kind: 'Pod', name: 'api-123', namespace: 'team-a' },
+      objectData: {
+        kind: 'Pod',
+        name: 'api-123',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
       objectKind: 'pod',
       detailScope: 'cluster-a|team-a:/v1:pod:api-123',
       featureSupport: { ...baseFeatureSupport, shell: true },
@@ -364,7 +437,14 @@ describe('useObjectPanelCapabilities', () => {
     mockUseUserPermission.mockReturnValue({ allowed: true, pending: false });
 
     const result = await renderHook({
-      objectData: { kind: 'Pod', name: 'api-123', namespace: 'team-a', clusterId: 'c1' },
+      objectData: {
+        kind: 'Pod',
+        name: 'api-123',
+        namespace: 'team-a',
+        clusterId: 'c1',
+        group: '',
+        version: 'v1',
+      },
       objectKind: 'pod',
       detailScope: 'cluster-a|team-a:/v1:pod:api-123',
       featureSupport: { ...baseFeatureSupport, shell: true },
@@ -398,7 +478,14 @@ describe('useObjectPanelCapabilities', () => {
     mockUseUserPermission.mockReturnValue({ allowed: true, pending: false });
 
     const result = await renderHook({
-      objectData: { kind: 'Pod', name: 'api-123', namespace: 'team-a', clusterId: 'c1' },
+      objectData: {
+        kind: 'Pod',
+        name: 'api-123',
+        namespace: 'team-a',
+        clusterId: 'c1',
+        group: '',
+        version: 'v1',
+      },
       objectKind: 'pod',
       detailScope: 'cluster-a|team-a:/v1:pod:api-123',
       featureSupport: { ...baseFeatureSupport, shell: true },
@@ -426,7 +513,14 @@ describe('useObjectPanelCapabilities', () => {
     mockUseUserPermission.mockReturnValue(null);
 
     const result = await renderHook({
-      objectData: { kind: 'Pod', name: 'demo', namespace: 'team-a', clusterId: 'c1' },
+      objectData: {
+        kind: 'Pod',
+        name: 'demo',
+        namespace: 'team-a',
+        clusterId: 'c1',
+        group: '',
+        version: 'v1',
+      },
       objectKind: 'pod',
       detailScope: 'cluster-a|team-a:/v1:pod:demo',
       featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
@@ -447,7 +541,14 @@ describe('useObjectPanelCapabilities', () => {
     mockUseUserPermission.mockReturnValue(null);
 
     const result = await renderHook({
-      objectData: { kind: 'Pod', name: 'demo', namespace: 'team-a', clusterId: 'c1' },
+      objectData: {
+        kind: 'Pod',
+        name: 'demo',
+        namespace: 'team-a',
+        clusterId: 'c1',
+        group: '',
+        version: 'v1',
+      },
       objectKind: 'pod',
       detailScope: 'cluster-a|team-a:/v1:pod:demo',
       featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
@@ -475,7 +576,14 @@ describe('useObjectPanelCapabilities', () => {
     mockUseUserPermission.mockReturnValue(null);
 
     const result = await renderHook({
-      objectData: { kind: 'Pod', name: 'demo', namespace: 'team-a', clusterId: 'c1' },
+      objectData: {
+        kind: 'Pod',
+        name: 'demo',
+        namespace: 'team-a',
+        clusterId: 'c1',
+        group: '',
+        version: 'v1',
+      },
       objectKind: 'pod',
       detailScope: 'cluster-a|team-a:/v1:pod:demo',
       featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
@@ -503,7 +611,7 @@ describe('useObjectPanelCapabilities', () => {
     });
 
     const result = await renderHook({
-      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
+      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1', group: '', version: 'v1' },
       objectKind: 'node',
       detailScope: 'node:node-a',
       featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
@@ -541,7 +649,7 @@ describe('useObjectPanelCapabilities', () => {
     });
 
     const result = await renderHook({
-      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
+      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1', group: '', version: 'v1' },
       objectKind: 'node',
       detailScope: 'node:node-a',
       featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
@@ -587,7 +695,7 @@ describe('useObjectPanelCapabilities', () => {
     });
 
     const first = await renderHook({
-      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
+      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1', group: '', version: 'v1' },
       objectKind: 'node',
       detailScope: 'node:node-a:c1',
       featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
@@ -597,7 +705,7 @@ describe('useObjectPanelCapabilities', () => {
     expect(mockDiscoverNodeLogs).not.toHaveBeenCalled();
 
     const second = await renderHook({
-      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c2' },
+      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c2', group: '', version: 'v1' },
       objectKind: 'node',
       detailScope: 'node:node-a:c2',
       featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
@@ -620,7 +728,7 @@ describe('useObjectPanelCapabilities', () => {
     });
 
     const result = await renderHook({
-      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
+      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1', group: '', version: 'v1' },
       objectKind: 'node',
       detailScope: 'node:node-a',
       featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },

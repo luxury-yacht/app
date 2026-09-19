@@ -329,6 +329,46 @@ describe('JobsTab', () => {
     }
   });
 
+  it('navigates from a Job name and selects its namespace within the panel cluster', () => {
+    act(() =>
+      root.render(
+        <JobsTab
+          jobs={[makeJob({ name: 'nightly', namespace: 'ops' })]}
+          loading={false}
+          isActive={true}
+        />
+      )
+    );
+    const row = requireValue(getGridTableProps().data[0], 'expected job row');
+    const name = requireReactElement<{
+      onClick: (event: {
+        altKey: boolean;
+        preventDefault: () => void;
+        stopPropagation: () => void;
+      }) => void;
+    }>(getGridColumn('name').render(row), 'expected Job name link');
+    act(() =>
+      name.props.onClick({ altKey: true, preventDefault: vi.fn(), stopPropagation: vi.fn() })
+    );
+    expect(navigationMocks.navigateToView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: PANEL_CLUSTER_ID,
+        group: 'batch',
+        version: 'v1',
+        kind: 'Job',
+        name: 'nightly',
+        namespace: 'ops',
+      })
+    );
+    const namespace = requireReactElement<{ onClick: (event: { altKey: boolean }) => void }>(
+      getGridColumn('namespace').render(row),
+      'expected namespace link'
+    );
+    act(() => namespace.props.onClick({ altKey: false }));
+    expect(optionalViewState.current?.onNamespaceSelect).toHaveBeenCalledWith('ops');
+    expect(optionalViewState.current?.setActiveNamespaceTab).toHaveBeenCalledWith('workloads');
+  });
+
   it('opens the Map from the job context menu', () => {
     const job = makeJob({ name: 'nightly', namespace: 'ops' });
 

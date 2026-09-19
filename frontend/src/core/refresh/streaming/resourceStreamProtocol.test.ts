@@ -36,8 +36,8 @@ describe('normalizeResourceStreamProtocolMessage', () => {
     });
 
     expect(modern?.message).toEqual(legacy?.message);
-    expect(modern).toMatchObject({ routing: 'strict', domain: 'pods' });
-    expect(legacy).toMatchObject({ routing: 'compatible', domain: 'pods' });
+    expect(modern).toMatchObject({ clusterId: 'cluster-a', domain: 'pods' });
+    expect(legacy).toMatchObject({ clusterId: 'cluster-a', domain: 'pods' });
   });
 
   it('normalizes RESET/COMPLETE and signal reset into one canonical reset event', () => {
@@ -50,11 +50,13 @@ describe('normalizeResourceStreamProtocolMessage', () => {
       version: 'object:8',
     });
     const reset = normalizeResourceStreamProtocolMessage({
+      clusterId: 'cluster-a',
       type: 'RESET',
       domain: 'namespace-config',
       scope: 'namespace:default',
     });
     const complete = normalizeResourceStreamProtocolMessage({
+      clusterId: 'cluster-a',
       type: 'COMPLETE',
       domain: 'namespace-config',
       scope: 'namespace:default',

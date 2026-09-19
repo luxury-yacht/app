@@ -2,12 +2,10 @@ package system
 
 import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
-	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
-	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -17,8 +15,6 @@ import (
 type streamDeps struct {
 	informerFactory *informer.Factory
 	ingestManager   *ingest.IngestManager
-	snapshotService refresh.SnapshotBuilder
-	metricsProvider metrics.Provider
 	cfg             Config
 	telemetry       *telemetry.Recorder
 	clusterMeta     snapshot.ClusterMeta

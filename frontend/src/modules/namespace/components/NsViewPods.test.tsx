@@ -11,7 +11,7 @@ import type ConfirmationModal from '@shared/components/modals/ConfirmationModal'
 import type { GridTableFilterState, GridTableProps } from '@shared/components/tables/GridTable';
 import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import type React from 'react';
-import { act } from 'react';
+import { act, isValidElement } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
@@ -475,6 +475,76 @@ describe('NsViewPods', () => {
     });
     return effectiveData;
   };
+
+  it.each(['Deployment', 'Widget'])(
+    'preserves the API group and row cluster for a %s owner link',
+    async (ownerKind) => {
+      const pod = createPod({
+        ref: { clusterId: 'OwnerCluster:Case', namespace: 'team-a' },
+        ownerKind,
+        ownerName: 'custom-owner',
+        ownerApiVersion: 'operators.example.io/v1beta2',
+      });
+      await renderPods({ data: [pod] });
+      const cell = requireReactElement<{
+        onClick: (event: {
+          altKey: boolean;
+          preventDefault: () => void;
+          stopPropagation: () => void;
+        }) => void;
+      }>(
+        requireValue(
+          gridTablePropsRef.current.columns.find((column) => column.key === 'owner'),
+          'expected owner column'
+        ).render(pod),
+        'expected owner link'
+      );
+      act(() =>
+        cell.props.onClick({ altKey: false, preventDefault: vi.fn(), stopPropagation: vi.fn() })
+      );
+      expect(openWithObjectMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clusterId: 'OwnerCluster:Case',
+          namespace: 'team-a',
+          kind: ownerKind,
+          name: 'custom-owner',
+          group: 'operators.example.io',
+          version: 'v1beta2',
+        })
+      );
+      act(() =>
+        cell.props.onClick({ altKey: true, preventDefault: vi.fn(), stopPropagation: vi.fn() })
+      );
+      expect(navigateToViewMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clusterId: 'OwnerCluster:Case',
+          namespace: 'team-a',
+          kind: ownerKind,
+          name: 'custom-owner',
+          group: 'operators.example.io',
+          version: 'v1beta2',
+        })
+      );
+    }
+  );
+
+  it.each([
+    { ownerKind: 'None', ownerName: 'None' },
+    { ownerKind: 'Deployment', ownerName: 'missing-version' },
+    { ownerKind: 'Widget', ownerName: 'missing-version' },
+  ])('keeps incomplete owner identity display-only: $ownerKind/$ownerName', async (owner) => {
+    const pod = createPod({ ...owner, ownerApiVersion: undefined });
+    await renderPods({ data: [pod] });
+    const cell = requireValue(
+      gridTablePropsRef.current.columns.find((column) => column.key === 'owner'),
+      'expected owner column'
+    ).render(pod);
+    expect(
+      isValidElement<{ onClick?: unknown }>(cell) ? cell.props.onClick : undefined
+    ).toBeUndefined();
+    expect(openWithObjectMock).not.toHaveBeenCalled();
+    expect(navigateToViewMock).not.toHaveBeenCalled();
+  });
 
   const openDeleteConfirmation = () => {
     const deleteItem = gridTablePropsRef.current

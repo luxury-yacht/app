@@ -37,7 +37,7 @@ type NamespaceStorageBuilder struct {
 // adapter's exact comparable sort-value encoder and row key, so the querypage engine
 // orders rows byte-identically to the live typed-table executor.
 func storageQuerypageSchema() querypage.Schema[StorageSummary] {
-	return querypageSchemaFromAdapter(storageTableQueryAdapter(), []string{"name", "kind", "namespace", "capacity", "status", "storageClass", "age"})
+	return querypageSchemaFromAdapter(storageTableQueryAdapter(), namespaceStorageQueryCapabilities().SortableFields)
 }
 
 // NamespaceStorageSnapshot payload for storage tab.
@@ -71,7 +71,6 @@ func namespaceStorageDomainSpec() typedTableDomainSpec[StorageSummary] {
 		adapter:          storageTableQueryAdapter(),
 		schema:           storageQuerypageSchema(),
 		capabilities:     namespaceStorageQueryCapabilities(),
-		kindOf:           func(resource StorageSummary) string { return resource.Ref.Kind },
 		sortRows:         sortStorageSummaries,
 	}
 }

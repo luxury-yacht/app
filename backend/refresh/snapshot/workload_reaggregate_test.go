@@ -18,16 +18,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// TestReaggregateWorkloadSummaryMatchesTypedBuilder proves the serve-side re-join of a
-// projected workload-own row with the owner's pods + metrics reproduces, byte for byte,
-// the WorkloadSummary the typed buildXSummary builds directly from the typed object with
-// the same pods + metrics. This is the core byte-equivalence guarantee of the cut: the
-// own-fields come from the projection (built once at intake by the same builder with nil
-// pods/usage), and the pod-join Ready/Restarts/resources + metrics CPU/Mem are re-joined
-// at serve, so the post-cut row equals the pre-cut row.
-func TestReaggregateWorkloadSummaryMatchesTypedBuilder(t *testing.T) {
+// Projected own fields survive serving while pod readiness, reservations and usage
+// are joined. Expected values are explicit so removing the old combined builders
+// does not make the test compare two calls to the same implementation.
+func TestReaggregateWorkloadSummaryPreservesOwnFieldsAndJoinsPods(t *testing.T) {
 	clusterID := "c-1"
-	b := &NamespaceWorkloadsBuilder{}
 	replicas := int32(3)
 
 	deploy := &appsv1.Deployment{
@@ -94,24 +89,42 @@ func TestReaggregateWorkloadSummaryMatchesTypedBuilder(t *testing.T) {
 		"batch/import-x": {CPUUsageMilli: 5, MemoryUsageBytes: 2048},
 	}
 
+	// A completed pod must contribute neither readiness nor resources/restarts.
+	depPods = append(depPods, streamrows.PodAggregate{
+		Namespace: "team-a", Name: "finished", Phase: string(corev1.PodSucceeded),
+		ReadyContainers: 1, TotalContainers: 1, RestartCountFacts: 100,
+		CPURequestMilli: 9999, CPULimitMilli: 9999, MemRequestBytes: 9999, MemLimitBytes: 9999,
+	})
 	cases := []struct {
-		kind string
-		want WorkloadSummary
-		own  WorkloadSummary
-		pods []streamrows.PodAggregate
+		kind                           string
+		own                            WorkloadSummary
+		pods                           []streamrows.PodAggregate
+		ready                          string
+		restarts                       int32
+		cpuUsage, cpuRequest, cpuLimit string
+		memUsage, memRequest, memLimit string
 	}{
-		{kind: deployment.Identity.Kind, want: deploymentWantSummary(b, clusterID, deploy, depPods, usage), own: b.buildDeploymentSummary(clusterID, deploy, nil, nil), pods: depPods},
-		{kind: statefulset.Identity.Kind, want: b.buildStatefulSetSummary(clusterID, sts, nil, usage), own: b.buildStatefulSetSummary(clusterID, sts, nil, nil), pods: nil},
-		{kind: daemonset.Identity.Kind, want: b.buildDaemonSetSummary(clusterID, ds, nil, usage), own: b.buildDaemonSetSummary(clusterID, ds, nil, nil), pods: nil},
-		{kind: jobres.Identity.Kind, want: jobWantSummary(b, clusterID, job, jobPods, usage), own: b.buildJobSummary(clusterID, job, nil, nil), pods: jobPods},
-		{kind: cronjob.Identity.Kind, want: b.buildCronJobSummary(clusterID, cron, nil, usage), own: b.buildCronJobSummary(clusterID, cron, nil, nil), pods: nil},
+		{deployment.Identity.Kind, buildDeploymentOwnSummary(clusterID, deploy), depPods, "1/2", 3, "45m", "150m", "300m", "384Ki", "2Mi", "3Mi"},
+		{statefulset.Identity.Kind, buildStatefulSetOwnSummary(clusterID, sts), nil, "3/3", 0, "-", "-", "-", "-", "-", "-"},
+		{daemonset.Identity.Kind, buildDaemonSetOwnSummary(clusterID, ds), nil, "4/5", 0, "-", "-", "-", "-", "-", "-"},
+		{jobres.Identity.Kind, buildJobOwnSummary(clusterID, job), jobPods, "2/6", 3, "5m", "10m", "20m", "2Ki", "4Ki", "8Ki"},
+		{cronjob.Identity.Kind, buildCronJobOwnSummary(clusterID, cron), nil, "1", 0, "-", "-", "-", "-", "-", "-"},
 	}
 
 	for _, tc := range cases {
-		got := reaggregateWorkloadSummary(tc.own, tc.pods, usage)
-		if !reflect.DeepEqual(got, tc.want) {
-			t.Fatalf("%s re-aggregation mismatch:\n got=%#v\nwant=%#v", tc.kind, got, tc.want)
-		}
+		t.Run(tc.kind, func(t *testing.T) {
+			want := tc.own
+			want.Ready, want.Restarts = tc.ready, tc.restarts
+			want.CPUUsage, want.CPURequest, want.CPULimit = tc.cpuUsage, tc.cpuRequest, tc.cpuLimit
+			want.MemUsage, want.MemRequest, want.MemLimit = tc.memUsage, tc.memRequest, tc.memLimit
+			got := reaggregateWorkloadSummary(tc.own, tc.pods, usage)
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("re-aggregation mismatch:\n got=%#v\nwant=%#v", got, want)
+			}
+			if tc.own.Restarts != 0 || tc.own.CPUUsage != "-" || tc.own.MemRequest != "-" {
+				t.Fatalf("serve mutated the retained intake row: %#v", tc.own)
+			}
+		})
 	}
 }
 
@@ -122,14 +135,4 @@ func TestReaggregateWorkloadSummaryPreservesOutOfRangeReadyFallback(t *testing.T
 	if got.Ready != own.Ready {
 		t.Fatalf("ready fallback changed: got %q, want %q", got.Ready, own.Ready)
 	}
-}
-
-func deploymentWantSummary(b *NamespaceWorkloadsBuilder, clusterID string, deploy *appsv1.Deployment, pods []streamrows.PodAggregate, usage map[string]metrics.PodUsage) WorkloadSummary {
-	byOwner := map[string][]streamrows.PodAggregate{workloadOwnerKey(deployment.Identity.Kind, deploy.Namespace, deploy.Name): pods}
-	return b.buildDeploymentSummary(clusterID, deploy, byOwner, usage)
-}
-
-func jobWantSummary(b *NamespaceWorkloadsBuilder, clusterID string, job *batchv1.Job, pods []streamrows.PodAggregate, usage map[string]metrics.PodUsage) WorkloadSummary {
-	byOwner := map[string][]streamrows.PodAggregate{workloadOwnerKey(jobres.Identity.Kind, job.Namespace, job.Name): pods}
-	return b.buildJobSummary(clusterID, job, byOwner, usage)
 }

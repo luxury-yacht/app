@@ -28,22 +28,9 @@ func NewService(deps common.Dependencies) *Service {
 	return &Service{deps: deps}
 }
 
-func endpointSliceContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	base := ctx
-	if base == nil {
-		base = context.Background()
-	}
-	if _, hasDeadline := base.Deadline(); hasDeadline {
-		return base, func() {
-			// The caller owns the existing deadline; no derived context needs cancellation.
-		}
-	}
-	return context.WithTimeout(base, config.EndpointSliceLookupTimeout)
-}
-
 // EndpointSlice returns details for one concrete EndpointSlice object.
 func (s *Service) EndpointSlice(ctx context.Context, namespace, name string) (*EndpointSliceDetails, error) {
-	ctx, cancel := endpointSliceContext(ctx)
+	ctx, cancel := common.WithDefaultTimeout(ctx, config.EndpointSliceLookupTimeout)
 	defer cancel()
 	slice, err := s.deps.KubernetesClient.DiscoveryV1().EndpointSlices(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
@@ -92,19 +79,7 @@ func addressFactsToDetails(addresses []EndpointAddressFacts) []EndpointSliceAddr
 	}
 	details := make([]EndpointSliceAddress, 0, len(addresses))
 	for _, address := range addresses {
-		next := EndpointSliceAddress{
-			IP:       address.IP,
-			Hostname: address.Hostname,
-			NodeName: address.NodeName,
-		}
-		if address.TargetRef != nil {
-			if address.TargetRef.Ref != nil {
-				next.TargetRef = fmt.Sprintf("%s/%s", address.TargetRef.Ref.Kind, address.TargetRef.Ref.Name)
-			} else if address.TargetRef.Display != nil {
-				next.TargetRef = fmt.Sprintf("%s/%s", address.TargetRef.Display.Kind, address.TargetRef.Display.Name)
-			}
-		}
-		details = append(details, next)
+		details = append(details, EndpointSliceAddress(address))
 	}
 	return details
 }

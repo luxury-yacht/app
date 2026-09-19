@@ -31,7 +31,7 @@ type catalogIndex struct {
 
 	// queryEngineStore is the shared querypage engine view of the catalog. It is the
 	// authoritative query state: rebuilt wholesale from the published summaries in
-	// publishStreamingState and maintained for Browse/object-catalog queries via
+	// publishRows and maintained for Browse/object-catalog queries via
 	// queryViaEngine. (Named distinctly from the Service.queryStore Querier
 	// to avoid an embedded-field ambiguity.)
 	queryEngineStore *querypage.Store[Summary]
@@ -64,24 +64,6 @@ func (idx *catalogIndex) reset() {
 	// "no resources discovered" sync returns an empty page rather than rebuilding an
 	// ephemeral store from the (also empty) items snapshot.
 	idx.queryEngineStore = querypage.NewStore(newCatalogQueryStoreSchema())
-}
-
-// rebuildQueryStore replaces the maintained querypage store with one holding exactly
-// the items in the published chunks. A wholesale rebuild here keeps the engine view
-// equal to the published summary set at every publish. The store is keyed by the
-// catalog identity chain (schema UID), which is unique per published summary, so no
-// chunk item is dropped.
-func (idx *catalogIndex) rebuildQueryStore(chunks []*summaryChunk) {
-	store := querypage.NewStore(newCatalogQueryStoreSchema())
-	for _, chunk := range chunks {
-		if chunk == nil {
-			continue
-		}
-		for _, item := range chunk.items {
-			store.Upsert(item)
-		}
-	}
-	idx.queryEngineStore = store
 }
 
 // resetQueryStore replaces the maintained query store with a fresh empty one. The sync
@@ -239,16 +221,14 @@ func (idx *catalogIndex) deleteItem(key string) bool {
 	return true
 }
 
-func (idx *catalogIndex) publishStreamingState(
-	chunks []*summaryChunk,
+func (idx *catalogIndex) publishRows(
+	rows []Summary,
 	kindSet map[string]bool,
 	namespaceSet map[string]struct{},
 	descriptors []Descriptor,
 	ready bool,
 ) {
-	chunkSnapshot := make([]*summaryChunk, len(chunks))
-	copy(chunkSnapshot, chunks)
-	idx.rebuildQueryStore(chunkSnapshot)
+	idx.queryEngineStore = catalogQueryStoreFromRows(rows)
 	idx.cachedKinds = snapshotSortedKindInfos(kindSet)
 	idx.cachedNamespaces = snapshotSortedKeys(namespaceSet)
 	if descriptors != nil {
@@ -270,23 +250,17 @@ func catalogQueryNamespaceIndexKey(namespace string, scope Scope) string {
 func (idx *catalogIndex) rebuildCacheFromItems(items map[string]Summary, descriptors []Descriptor) {
 	kindSet := make(map[string]bool)
 	namespaceSet := make(map[string]struct{})
-	chunks := make([]*summaryChunk, 0, 1)
-
-	if len(items) > 0 {
-		summaries := make([]Summary, 0, len(items))
-		for _, summary := range items {
-			summaries = append(summaries, summary)
-			if summary.Ref.Kind != "" {
-				kindSet[summary.Ref.Kind] = summary.Scope == ScopeNamespace
-			}
-			if summary.Ref.Namespace != "" {
-				namespaceSet[summary.Ref.Namespace] = struct{}{}
-			}
+	summaries := make([]Summary, 0, len(items))
+	for _, summary := range items {
+		summaries = append(summaries, summary)
+		if summary.Ref.Kind != "" {
+			kindSet[summary.Ref.Kind] = summary.Scope == ScopeNamespace
 		}
-		chunks = append(chunks, &summaryChunk{items: summaries})
+		if summary.Ref.Namespace != "" {
+			namespaceSet[summary.Ref.Namespace] = struct{}{}
+		}
 	}
-
-	idx.publishStreamingState(chunks, kindSet, namespaceSet, descriptors, true)
+	idx.publishRows(summaries, kindSet, namespaceSet, descriptors, true)
 	idx.rebuildLookupIndexes()
 }
 

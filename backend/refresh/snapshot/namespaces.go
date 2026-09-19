@@ -344,9 +344,7 @@ func wireNamespaceIngestSinks(ingestManager namespacePodIngestSource, notifier *
 	if sinks, ok := ingestManager.(interface {
 		AddBundleSink(gvr schema.GroupVersionResource, sink ingest.BundleSink) bool
 	}); ok {
-		for _, gvr := range []schema.GroupVersionResource{
-			DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR, PodGVR,
-		} {
+		for _, gvr := range trackedWorkloadGVRs {
 			sinks.AddBundleSink(gvr, namespaceNotifierSink{notifier: notifier})
 		}
 		sinks.AddBundleSink(ResourceQuotaGVR, namespaceQuotaNotifierSink{notifier: notifier})
@@ -516,7 +514,7 @@ func (b *NamespaceBuilder) buildNamespaceSummaries(inputs namespaceBuildInputs) 
 		// genuinely unknown — reporting it as authoritative would dim every
 		// configured namespace. Unscoped behavior is unchanged.
 		workloadsKnown := hasWorkloads || (inputs.workloadReadiness == NamespaceWorkloadReady && (len(b.scope) == 0 || b.tracksAnyWorkloadKind()))
-		model := namespacepkg.BuildResourceModel(inputs.meta.ClusterID, ns, hasWorkloads, workloadsKnown, nil, nil)
+		model := namespacepkg.BuildResourceModel(inputs.meta.ClusterID, ns, hasWorkloads, workloadsKnown)
 		facts := namespacepkg.BuildFacts(inputs.meta.ClusterID, ns, hasWorkloads, workloadsKnown, nil, nil, resourcemodel.ResourceModelBuildOptions{})
 		items = append(items, NamespaceSummary{
 			Ref:                        model.Ref,
@@ -770,9 +768,7 @@ func (b *NamespaceBuilder) tracksAnyWorkloadKind() bool {
 	if b.ingest == nil {
 		return false
 	}
-	for _, gvr := range []schema.GroupVersionResource{
-		DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR, PodGVR,
-	} {
+	for _, gvr := range trackedWorkloadGVRs {
 		if b.ingest.Tracks(gvr) {
 			return true
 		}

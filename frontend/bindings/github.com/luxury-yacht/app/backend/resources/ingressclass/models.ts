@@ -10,7 +10,6 @@ export interface IngressClassDetails {
     "parameters"?: IngressClassParameters | null;
     "labels"?: { [_ in string]?: string } | null;
     "annotations"?: { [_ in string]?: string } | null;
-    "ingresses"?: string[] | null;
 }
 
 export interface IngressClassParameters {

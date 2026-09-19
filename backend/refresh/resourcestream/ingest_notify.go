@@ -6,7 +6,7 @@
  *
  * Every streamed table is query-backed: the live subscription exists only to learn
  * WHEN to refetch, so the broadcast ships only the change signal (Ref + ResourceVersion),
- * never the projected row (see newObjectRowUpdate). For most kinds that signal is
+ * never the projected row (see newObjectUpdate). For most kinds that signal is
  * driven by a shared-informer event handler (registerDescriptorStreams). For an
  * IngestOwned kind the shared factory no longer caches the typed object, so creating
  * that informer purely for the signal would defeat the per-kind memory win. Instead
@@ -80,7 +80,7 @@ func (s ingestNotifySink) Delete(row interface{}) {
 }
 
 // broadcastSignal emits the signal-only Update for one catalog Summary on the
-// descriptor's domain and scope, identically to streamObjectRowFromDescriptor's
+// descriptor's domain and scope, identically to broadcastObjectFromDescriptor's
 // broadcast: a Ref + ResourceVersion change signal with no Row, scoped to the object's
 // namespace (namespaced kinds) or the cluster (cluster-scoped kinds).
 func (s ingestNotifySink) broadcastSignal(row interface{}, updateType MessageType) {
@@ -91,14 +91,7 @@ func (s ingestNotifySink) broadcastSignal(row interface{}, updateType MessageTyp
 	d := s.desc
 	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: s.manager.clusterMeta.ClusterID, Group: d.Group, Version: d.Version, Kind: d.Kind, Resource: d.Resource, Namespace: summary.Ref.Namespace, Name: summary.Ref.Name, UID: summary.Ref.UID})
 
-	update := Update{
-		Type:            updateType,
-		Domain:          d.Domain,
-		ClusterID:       s.manager.clusterMeta.ClusterID,
-		ClusterName:     s.manager.clusterMeta.ClusterName,
-		ResourceVersion: summary.ResourceVersion,
-		Ref:             &ref,
-	}
+	update := s.manager.newObjectUpdate(updateType, d.Domain, summary.ResourceVersion, ref)
 	scopes := scopesForCluster()
 	if !d.ClusterScoped {
 		scopes = scopesForNamespace(summary.Ref.Namespace)

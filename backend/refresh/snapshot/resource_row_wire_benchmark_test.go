@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	podresource "github.com/luxury-yacht/app/backend/resources/pods"
@@ -114,12 +113,7 @@ func representativeResourceRowFixtures() []representativeRowFixture {
 					Status: appsv1.DeploymentStatus{ReadyReplicas: 2},
 				}
 				meta := metaFor(index)
-				row := (&NamespaceWorkloadsBuilder{}).buildDeploymentSummary(
-					meta.ClusterID,
-					deployment,
-					nil,
-					map[string]metrics.PodUsage{},
-				)
+				row := buildDeploymentOwnSummary(meta.ClusterID, deployment)
 				return row
 			},
 		},

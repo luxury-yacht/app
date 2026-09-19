@@ -16,13 +16,7 @@ func (m *ClusterRuntimeManager) initializeClusterLifecycle() {
 // anyClusterAuthInvalid returns true if any cluster has an auth state that is not Valid.
 // Used to suppress auth error logging when we know auth issues exist.
 func (a *ClusterRuntimeManager) anyClusterAuthInvalid() bool {
-	if a == nil {
-		return false
-	}
-	a.clusterClientsMu.Lock()
-	defer a.clusterClientsMu.Unlock()
-
-	for _, clients := range a.clusterClients {
+	for _, clients := range a.snapshotClusterClients() {
 		if clients == nil || clients.authManager == nil {
 			continue
 		}

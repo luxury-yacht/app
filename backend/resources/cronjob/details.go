@@ -232,7 +232,7 @@ func (s *Service) collectCronJobPods(ctx context.Context, namespace string, cron
 		podInfos = append(podInfos, pods.SummarizePod(s.deps.ClusterID, pod, metrics, ownerKind, ownerName, ownerAPIVersion))
 	}
 
-	podSummary, _ := workloads.SummarizePodMetrics(collected, metrics)
+	podSummary := workloads.SummarizePodMetrics(collected, metrics)
 	return podInfos, podSummary
 }
 

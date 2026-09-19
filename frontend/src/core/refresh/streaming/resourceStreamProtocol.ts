@@ -1,4 +1,4 @@
-import { stripClusterScope } from '../clusterScope';
+import { parseClusterScope } from '../clusterScope';
 import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
 import {
   RESOURCE_STREAM_MESSAGE_TYPES,
@@ -40,11 +40,10 @@ export type CanonicalResourceStreamMessage =
   | { kind: 'error'; reason: string; permissionDenied: boolean };
 
 export type NormalizedResourceStreamProtocolMessage = {
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   domain: import('./resourceStreamDomains').DoorbellDomain;
   scope: string;
-  routing: 'strict' | 'compatible';
   message: CanonicalResourceStreamMessage;
 };
 
@@ -57,11 +56,15 @@ const hasSignalType = (value: unknown): value is ResourceStreamSignal =>
 
 const normalizeScope = (
   domain: NormalizedResourceStreamProtocolMessage['domain'],
-  scope: unknown
+  scope: unknown,
+  clusterId: string
 ): string | null => {
   if (typeof scope === 'string') {
-    const normalized = stripClusterScope(scope.trim());
-    return normalized || isClusterScopedDomain(domain) ? normalized : null;
+    const parsed = parseClusterScope(scope);
+    if (parsed.isMultiCluster || (parsed.clusterId && parsed.clusterId !== clusterId)) {
+      return null;
+    }
+    return parsed.scope || isClusterScopedDomain(domain) ? parsed.scope : null;
   }
   return (scope === null || scope === undefined) && isClusterScopedDomain(domain) ? '' : null;
 };
@@ -104,6 +107,14 @@ const legacySignal = (type: WireMessage['type']): ResourceStreamSignal | undefin
       return undefined;
   }
 };
+
+const resolveModernSignal = (
+  wire: WireMessage,
+  domain: NormalizedResourceStreamProtocolMessage['domain']
+): ResourceStreamSignal | undefined =>
+  wire.version?.trim() && canonicalSource(domain, wire.source) && hasSignalType(wire.signal)
+    ? wire.signal
+    : undefined;
 
 const canonicalMessage = (
   wire: WireMessage,
@@ -153,8 +164,19 @@ export const normalizeResourceStreamProtocolMessage = (
   if (!isSupportedDomain(wire.domain)) {
     return null;
   }
+  const clusterId = typeof wire.clusterId === 'string' ? wire.clusterId.trim() : '';
+  if (!clusterId) {
+    return null;
+  }
+  if (
+    [wire.version, wire.clusterName].some(
+      (value) => value !== null && value !== undefined && typeof value !== 'string'
+    )
+  ) {
+    return null;
+  }
   const domain = wire.domain;
-  const scope = normalizeScope(domain, wire.scope);
+  const scope = normalizeScope(domain, wire.scope, clusterId);
   if (scope === null) {
     return null;
   }
@@ -162,16 +184,11 @@ export const normalizeResourceStreamProtocolMessage = (
     return null;
   }
 
-  const clusterId = wire.clusterId?.trim() || undefined;
-  const version = wire.version?.trim();
-  const modernSignal =
-    clusterId && version && canonicalSource(domain, wire.source) && hasSignalType(wire.signal)
-      ? wire.signal
-      : undefined;
-  if (!modernSignal && !hasMessageType(wire.type)) {
+  const signal = resolveModernSignal(wire, domain);
+  if (!signal && !hasMessageType(wire.type)) {
     return null;
   }
-  const message = canonicalMessage(wire, domain, modernSignal);
+  const message = canonicalMessage(wire, domain, signal);
   if (!message) {
     return null;
   }
@@ -180,7 +197,6 @@ export const normalizeResourceStreamProtocolMessage = (
     clusterName: wire.clusterName?.trim() || undefined,
     domain,
     scope,
-    routing: modernSignal ? 'strict' : 'compatible',
     message,
   };
 };

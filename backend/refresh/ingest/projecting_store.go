@@ -469,12 +469,16 @@ func (s *ProjectingStore) projectAndStore(obj interface{}) error {
 	}
 	projected, err := s.project(obj)
 	if err != nil {
-		if !s.projectErrLogged {
-			s.projectErrLogged = true
-			klog.V(2).Infof("ingest: projection failed for %q, skipping (logged once): %v", key, err)
-		}
+		s.logProjectionError(key, "", err)
 		return nil
 	}
+	s.storeProjectedRow(key, projected)
+	return nil
+}
+
+// Both watch updates and owner corrections deliver the full row before retention
+// strips its Table half. Callers hold the store's write lock throughout.
+func (s *ProjectingStore) storeProjectedRow(key string, projected interface{}) {
 	// Fan the FULL projected value (Table half present) to the sinks BEFORE dropping the
 	// Table half from the stored copy, so the maintained store is fed the row even though
 	// the store no longer keeps it.
@@ -487,7 +491,14 @@ func (s *ProjectingStore) projectAndStore(obj interface{}) error {
 	stored := s.storedValue(projected)
 	s.rows[key] = stored
 	s.addIndexesForKey(key, stored)
-	return nil
+}
+
+func (s *ProjectingStore) logProjectionError(key, operation string, err error) {
+	if s.projectErrLogged {
+		return
+	}
+	s.projectErrLogged = true
+	klog.V(2).Infof("ingest: projection failed for %q%s, skipping (logged once): %v", key, operation, err)
 }
 
 // Add projects obj and stores the projected row under its key. The source
@@ -657,13 +668,7 @@ func (s *ProjectingStore) RewriteBundlesByIndex(
 		if !changed {
 			continue
 		}
-		if s.hasSinks() {
-			s.emitUpsert(next)
-		}
-		s.removeIndexesForKey(key, stored)
-		nextStored := s.storedValue(next)
-		s.rows[key] = nextStored
-		s.addIndexesForKey(key, nextStored)
+		s.storeProjectedRow(key, next)
 		rewritten = append(rewritten, next)
 	}
 	return rewritten
@@ -705,23 +710,11 @@ func (s *ProjectingStore) GetByKey(key string) (item interface{}, exists bool, e
 // reflector resumes its watch from; it is recorded for
 // LastStoreSyncResourceVersion.
 func (s *ProjectingStore) Replace(list []interface{}, resourceVersion string) error {
-	next := make(map[string]interface{}, len(list))
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, obj := range list {
-		key, err := keyOf(obj)
-		if err != nil {
-			return cache.KeyError{Obj: obj, Err: err}
-		}
-		projected, err := s.project(obj)
-		if err != nil {
-			if !s.projectErrLogged {
-				s.projectErrLogged = true
-				klog.V(2).Infof("ingest: projection failed for %q during replace, skipping (logged once): %v", key, err)
-			}
-			continue
-		}
-		next[key] = projected
+	next, err := s.projectRows(list, " during replace")
+	if err != nil {
+		return err
 	}
 	prev := s.rows
 	s.rv = resourceVersion
@@ -739,6 +732,25 @@ func (s *ProjectingStore) Replace(list []interface{}, resourceVersion string) er
 	s.rows = next
 	s.rebuildIndexesLocked()
 	return nil
+}
+
+// Full and namespace relists share projection/error handling; their publication
+// paths keep the distinct bulk versus partition sink contracts. Call under s.mu.
+func (s *ProjectingStore) projectRows(list []interface{}, operation string) (map[string]interface{}, error) {
+	next := make(map[string]interface{}, len(list))
+	for _, obj := range list {
+		key, err := keyOf(obj)
+		if err != nil {
+			return nil, cache.KeyError{Obj: obj, Err: err}
+		}
+		projected, err := s.project(obj)
+		if err != nil {
+			s.logProjectionError(key, operation, err)
+			continue
+		}
+		next[key] = projected
+	}
+	return next, nil
 }
 
 // feedSinksReplace reconciles a relist against every sink: it deletes every key that

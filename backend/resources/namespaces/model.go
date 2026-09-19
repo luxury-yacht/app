@@ -18,11 +18,9 @@ import (
 
 // BuildResourceModel builds the Namespace resource model. Facts are owned by this
 // package (namespaces.Facts); callers needing facts use BuildFacts. Workload presence
-// + quota/limit names are supplied by the caller (they require list scans).
-func BuildResourceModel(clusterID string, namespace *corev1.Namespace, hasWorkloads, workloadsKnown bool, resourceQuotaNames, limitRangeNames []string, options ...resourcemodel.ResourceModelBuildOptions) resourcemodel.ResourceModel {
-	buildOptions := resourcemodel.BuildOptions(options...)
-	facts := BuildFacts(clusterID, namespace, hasWorkloads, workloadsKnown, resourceQuotaNames, limitRangeNames, buildOptions)
-	status := statusPresentation(namespace, facts)
+// is supplied by the caller (it requires permission-gated list scans).
+func BuildResourceModel(clusterID string, namespace *corev1.Namespace, hasWorkloads, workloadsKnown bool) resourcemodel.ResourceModel {
+	status := statusPresentation(namespace, hasWorkloads, workloadsKnown)
 	meta := metav1.ObjectMeta{}
 	if namespace != nil {
 		meta = namespace.ObjectMeta
@@ -40,10 +38,7 @@ func BuildFacts(clusterID string, namespace *corev1.Namespace, hasWorkloads, wor
 	}
 	if namespace != nil {
 		facts.RawPhase = string(namespace.Status.Phase)
-		facts.Finalizers = make([]string, 0, len(namespace.Spec.Finalizers))
-		for _, finalizer := range namespace.Spec.Finalizers {
-			facts.Finalizers = append(facts.Finalizers, string(finalizer))
-		}
+		facts.Finalizers = namespaceFinalizers(namespace)
 		facts.Conditions = namespaceConditionFacts(namespace.Status.Conditions)
 	}
 	if options.Materialization.Has(resourcemodel.MaterializeRelationshipFacts) || options.Materialization.Has(resourcemodel.MaterializeDetailFacts) {
@@ -55,6 +50,14 @@ func BuildFacts(clusterID string, namespace *corev1.Namespace, hasWorkloads, wor
 		facts.LimitRanges = namespacedNameLinks(clusterID, "", "v1", "LimitRange", "limitranges", namespaceName, limitRangeNames)
 	}
 	return facts
+}
+
+func namespaceFinalizers(namespace *corev1.Namespace) []string {
+	finalizers := make([]string, 0, len(namespace.Spec.Finalizers))
+	for _, finalizer := range namespace.Spec.Finalizers {
+		finalizers = append(finalizers, string(finalizer))
+	}
+	return finalizers
 }
 
 func namespaceConditionFacts(conditions []corev1.NamespaceCondition) []resourcemodel.ConditionFacts {
@@ -74,8 +77,11 @@ func namespaceConditionFacts(conditions []corev1.NamespaceCondition) []resourcem
 	return facts
 }
 
-func statusPresentation(namespace *corev1.Namespace, facts Facts) resourcemodel.ResourceStatusPresentation {
-	state := strings.TrimSpace(facts.RawPhase)
+func statusPresentation(namespace *corev1.Namespace, hasWorkloads, workloadsKnown bool) resourcemodel.ResourceStatusPresentation {
+	state := ""
+	if namespace != nil {
+		state = strings.TrimSpace(string(namespace.Status.Phase))
+	}
 	if state == "" {
 		state = "Unknown"
 	}
@@ -84,24 +90,16 @@ func statusPresentation(namespace *corev1.Namespace, facts Facts) resourcemodel.
 		Name:   "status.phase",
 		Status: state,
 	}}
-	if facts.WorkloadState != "" {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{
-			Type:   resourcemodel.StatusSignalResourceState,
-			Name:   "workloads",
-			Status: facts.WorkloadState,
-		})
-	}
+	signals = append(signals, resourcemodel.ResourceStatusSignal{
+		Type: resourcemodel.StatusSignalResourceState, Name: "workloads", Status: workloadState(hasWorkloads, workloadsKnown),
+	})
 	meta := metav1.ObjectMeta{}
 	if namespace != nil {
 		meta = namespace.ObjectMeta
 	}
 	lifecycle := resourcemodel.ObjectLifecycle(meta)
 	if namespace != nil {
-		finalizers := make([]string, 0, len(namespace.Spec.Finalizers))
-		for _, finalizer := range namespace.Spec.Finalizers {
-			finalizers = append(finalizers, string(finalizer))
-		}
-		lifecycle = resourcemodel.ObjectLifecycleWithFinalizers(meta, finalizers)
+		lifecycle = resourcemodel.ObjectLifecycleWithFinalizers(meta, namespaceFinalizers(namespace))
 		if status, ok := resourcemodel.DeletingObjectStatus(meta, state, signals, lifecycle); ok {
 			return status
 		}

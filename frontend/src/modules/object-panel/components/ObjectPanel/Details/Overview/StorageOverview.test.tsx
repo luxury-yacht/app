@@ -222,13 +222,47 @@ describe('StorageOverview', () => {
       statusPresentation: 'warning',
       capacity: '20Gi',
       accessModes: ['ReadWriteOnce'],
-      dataSource: { kind: 'VolumeSnapshot', name: 'nightly-2026-04-27' },
+      dataSource: {
+        display: {
+          clusterId: defaultClusterId,
+          group: 'snapshot.storage.k8s.io',
+          kind: 'VolumeSnapshot',
+          namespace: 'storage',
+          name: 'nightly-2026-04-27',
+        },
+      },
     });
 
     const dataSource = getValueForLabel(container, 'Data Source');
     expect(dataSource?.textContent).toBe('VolumeSnapshot/nightly-2026-04-27');
     const statusRow = getValueForLabel(container, 'Status');
     expect(statusRow?.querySelector('.status-text.warning')).toBeTruthy();
+  });
+
+  it('opens a cross-namespace clone source and keeps unresolved custom sources unlinked', async () => {
+    const ref = {
+      clusterId: 'Cluster-A',
+      group: '',
+      version: 'v1',
+      kind: 'PersistentVolumeClaim',
+      namespace: 'backups',
+      name: 'original',
+    };
+    await renderPvc({ name: 'clone', namespace: 'claims', dataSource: { ref } });
+    const link = getLinkByText(container, 'PersistentVolumeClaim/original');
+    expect(link).toBeDefined();
+    await act(async () => link?.click());
+    expect(openWithObjectMock).toHaveBeenCalledWith(expect.objectContaining(ref));
+
+    await renderPvc({
+      name: 'clone',
+      namespace: 'claims',
+      dataSource: { display: { ...ref, group: 'custom.example.com', version: '' } },
+    });
+    expect(getValueForLabel(container, 'Data Source')?.textContent).toBe(
+      'PersistentVolumeClaim/original'
+    );
+    expect(getLinkByText(container, 'PersistentVolumeClaim/original')).toBeUndefined();
   });
 
   it('renders PV-specific fields including claim reference', async () => {

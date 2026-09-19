@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -181,6 +182,64 @@ func TestCheckerStaleWhileRevalidate(t *testing.T) {
 	decision, err = checker.Can(context.Background(), "", "pods", "list")
 	require.NoError(t, err)
 	require.Equal(t, DecisionSourceCache, decision.Source)
+}
+
+func TestCheckerExpiredRequestJoinsBackgroundRefresh(t *testing.T) {
+	// Wait makes the review overlap deterministic without delaying the real test clock.
+	synctest.Test(t, func(t *testing.T) {
+		releaseReview := make(chan struct{})
+		calls := 0
+		checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) {
+			calls++
+			if calls == 1 {
+				return true, nil
+			}
+			<-releaseReview
+			return false, nil
+		})
+		now := time.Date(2024, 5, 1, 10, 0, 0, 0, time.UTC)
+		checker.now = func() time.Time { return now }
+		decision, err := checker.Can(context.Background(), "", "pods", "list")
+		require.NoError(t, err)
+		require.True(t, decision.Allowed)
+
+		now = now.Add(time.Minute + 15*time.Second)
+		decision, err = checker.Can(context.Background(), "", "pods", "list")
+		require.NoError(t, err)
+		require.Equal(t, DecisionSourceStale, decision.Source)
+		synctest.Wait()
+
+		// The stale grace expires while its background authorization review is pending.
+		now = now.Add(time.Minute)
+		type outcome struct {
+			decision Decision
+			err      error
+			panic    interface{}
+		}
+		result := make(chan outcome, 1)
+		go func() {
+			var got outcome
+			defer func() {
+				got.panic = recover()
+				result <- got
+			}()
+			got.decision, got.err = checker.Can(context.Background(), "", "pods", "list")
+		}()
+		synctest.Wait()
+		close(releaseReview)
+		synctest.Wait()
+
+		got := <-result
+		require.Nil(t, got.panic, "joining a background review must not panic")
+		require.NoError(t, got.err)
+		require.False(t, got.decision.Allowed, "the expired request must observe the new denial")
+		require.Equal(t, DecisionSourceFresh, got.decision.Source)
+		require.Equal(t, 2, calls, "both callers must share the pending authorization review")
+		cached, err := checker.Can(context.Background(), "", "pods", "list")
+		require.NoError(t, err)
+		require.False(t, cached.Allowed)
+		require.Equal(t, DecisionSourceCache, cached.Source)
+	})
 }
 
 func TestCheckerStaleRefreshPreservesContextValuesAndAddsDeadline(t *testing.T) {

@@ -100,7 +100,7 @@ type ObjectYAMLBuilder struct {
 }
 
 func (b *ObjectYAMLBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	identity, err := parseObjectScope(scope)
+	identity, err := refresh.ParseObjectScope(scope)
 	if err != nil {
 		return nil, err
 	}

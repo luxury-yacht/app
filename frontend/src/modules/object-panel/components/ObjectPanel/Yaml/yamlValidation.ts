@@ -51,26 +51,8 @@ const reportDocError = (doc: YAML.Document.Parsed) => {
   return `Invalid YAML at line ${location.line}, column ${location.column}: ${parseError.message}`;
 };
 
-const normalizeNamespace = (value: unknown): string | null => {
-  if (!ensureNonEmptyString(value)) {
-    return null;
-  }
-  return value;
-};
-
-const normalizeResourceVersion = (value: unknown): string | null => {
-  if (!ensureNonEmptyString(value)) {
-    return null;
-  }
-  return value;
-};
-
-const normalizeUID = (value: unknown): string | null => {
-  if (!ensureNonEmptyString(value)) {
-    return null;
-  }
-  return value;
-};
+const optionalIdentityField = (value: unknown): string | null =>
+  ensureNonEmptyString(value) ? value : null;
 
 export const parseObjectIdentity = (yamlContent: string): ObjectIdentity | null => {
   if (!ensureNonEmptyString(yamlContent)) {
@@ -98,9 +80,9 @@ export const parseObjectIdentity = (yamlContent: string): ObjectIdentity | null 
     | Record<string, unknown>
     | undefined;
   const name = metadata?.name;
-  const namespace = normalizeNamespace(metadata?.namespace);
-  const uid = normalizeUID(metadata?.uid);
-  const resourceVersion = normalizeResourceVersion(metadata?.resourceVersion);
+  const namespace = optionalIdentityField(metadata?.namespace);
+  const uid = optionalIdentityField(metadata?.uid);
+  const resourceVersion = optionalIdentityField(metadata?.resourceVersion);
 
   if (
     !ensureNonEmptyString(apiVersion) ||
@@ -156,16 +138,7 @@ const yamlMetadata = (record: Record<string, unknown>): Record<string, unknown> 
     : {};
 };
 
-type ValidatedDraftIdentity = {
-  apiVersion: string;
-  kind: string;
-  name: string;
-  namespace: string | null;
-  uid: string | null;
-  resourceVersion: string | null;
-};
-
-type DraftIdentityResult = { isValid: true; identity: ValidatedDraftIdentity } | ValidationFailure;
+type DraftIdentityResult = { isValid: true; identity: ObjectIdentity } | ValidationFailure;
 
 const extractDraftIdentity = (record: Record<string, unknown>): DraftIdentityResult => {
   const metadata = yamlMetadata(record);
@@ -192,15 +165,15 @@ const extractDraftIdentity = (record: Record<string, unknown>): DraftIdentityRes
       apiVersion,
       kind,
       name,
-      namespace: normalizeNamespace(metadata.namespace),
-      uid: normalizeUID(metadata.uid),
-      resourceVersion: normalizeResourceVersion(metadata.resourceVersion),
+      namespace: optionalIdentityField(metadata.namespace),
+      uid: optionalIdentityField(metadata.uid),
+      resourceVersion: optionalIdentityField(metadata.resourceVersion),
     },
   };
 };
 
 const validateExpectedIdentity = (
-  actual: ValidatedDraftIdentity,
+  actual: ObjectIdentity,
   expected: ObjectIdentity
 ): ValidationFailure | null => {
   if (expected.apiVersion !== actual.apiVersion) {
@@ -233,8 +206,7 @@ const validateExpectedIdentity = (
 
 export const validateYamlDraft = (
   draft: string,
-  expectedIdentity: ObjectIdentity | null,
-  _baselineResourceVersion: string | null
+  expectedIdentity: ObjectIdentity | null
 ): ValidationResult => {
   const parsedDocument = parseSingleYamlDocument(draft);
   if (!parsedDocument.isValid) {

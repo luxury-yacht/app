@@ -67,10 +67,7 @@ func TestTypedProviderBuildersEmitTheEnvelope(t *testing.T) {
 
 	t.Run("pods", func(t *testing.T) {
 		pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default"}}
-		builder := &PodBuilder{
-			podLister: testsupport.NewPodLister(t, pod),
-			rsLister:  testsupport.NewReplicaSetLister(t),
-		}
+		builder := newTestPodBuilder(t, ClusterMeta{ClusterID: "cluster-a"}, testsupport.NewPodLister(t, pod), testsupport.NewReplicaSetLister(t), nil)
 		snap, err := builder.Build(ctx, "namespace:all")
 		require.NoError(t, err)
 		payload, ok := snap.Payload.(PodSnapshot)

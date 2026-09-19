@@ -13,7 +13,7 @@ import {
   hydrateAppPreferences,
   setErrorReportingEnabled,
 } from '@/core/settings/appPreferences';
-import { SettingRow } from './SettingsControls';
+import { SettingRow, usePreferenceValue } from './SettingsControls';
 
 const dataManagementOperations = {
   'export-settings': {
@@ -42,36 +42,23 @@ type DataManagementOperation = keyof typeof dataManagementOperations;
 
 function DataManagementSection() {
   const elementIdPrefix = useId();
-  const [errorReportingEnabled, setErrorReportingState] = useState(() =>
-    getErrorReportingEnabled()
+  const errorReportingEnabled = usePreferenceValue(
+    getErrorReportingEnabled,
+    'settings:error-reporting'
   );
   const [operation, setOperation] = useState<DataManagementOperation | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const preferences = await hydrateAppPreferences({ force: true });
-        if (!cancelled) {
-          setErrorReportingState(preferences.errorReportingEnabled);
-        }
-      } catch (error) {
-        errorHandler.handle(error, { action: 'loadDataManagementSettings' });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    void hydrateAppPreferences({ force: true }).catch((error) => {
+      errorHandler.handle(error, { action: 'loadDataManagementSettings' });
+    });
   }, []);
 
   const handleErrorReportingToggle = async (enabled: boolean) => {
-    const previous = errorReportingEnabled;
-    setErrorReportingState(enabled);
     try {
       await setErrorReportingEnabled(enabled);
     } catch (error) {
-      setErrorReportingState(previous);
       errorHandler.handle(error, { action: 'updateErrorReporting' });
     }
   };
@@ -86,8 +73,7 @@ function DataManagementSection() {
         return;
       }
       if (nextOperation === 'import-settings') {
-        const preferences = await hydrateAppPreferences({ force: true });
-        setErrorReportingState(preferences.errorReportingEnabled);
+        await hydrateAppPreferences({ force: true });
       } else if (nextOperation === 'import-favorites') {
         await hydrateFavorites({ force: true });
       }

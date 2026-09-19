@@ -69,7 +69,7 @@ const resolvePermissionGVK = (
 /**
  * Builds the canonical permission key. Format:
  *   `${clusterId}|${group}/${version}|${resourceKind}|${verb}|${namespace_or_'cluster'}|${subresource_or_''}`
- * All fields lowercased except group (case-sensitive in Kubernetes).
+ * Cluster IDs and group/version retain their exact case.
  * Group/version segment is included so two CRDs sharing a Kind get
  * distinct keys and don't silently clobber each other in the permission
  * cache. Null namespace becomes literal string 'cluster'. Empty
@@ -84,7 +84,7 @@ export const getPermissionKey = (
   group?: string | null,
   version?: string | null
 ): PermissionKey => {
-  const cid = (clusterId || currentClusterId || '').toLowerCase();
+  const cid = clusterId || currentClusterId || '';
   // Auto-resolve built-in GVK when the caller didn't specify one, so
   // the key shape matches on both the spec-emit path (buildBatch) and
   // the lookup path (useUserPermission, getUserPermission) without
@@ -117,6 +117,9 @@ export interface NamespacePermissionTarget {
 }
 
 let currentClusterId = '';
+// Reset transfers ownership: earlier asynchronous work cannot publish or clear new state.
+let permissionStoreGeneration = 0;
+const namespaceRefreshTimers = new Set<ReturnType<typeof setTimeout>>();
 
 const permissionResults = new Map<string, PermissionEntry>();
 let permissionMap: PermissionMap = new Map();
@@ -403,7 +406,7 @@ const permissionDescriptor = (
   item: QueryPayloadItem | QueryResponseResult
 ): PermissionEntry['descriptor'] => ({
   clusterId: item.clusterId,
-  group: item.group || null,
+  group: item.group ?? null,
   version: item.version || null,
   resourceKind: item.resourceKind,
   verb: item.verb,
@@ -435,7 +438,7 @@ const toPermissionSpec = (item: QueryBatchItem): PermissionSpec => ({
   kind: item.resourceKind,
   verb: item.verb,
   subresource: item.subresource || undefined,
-  group: item.group || undefined,
+  group: item.group,
   version: item.version || undefined,
 });
 
@@ -522,7 +525,7 @@ const beginNamespaceQuery = (target: NamespaceQueryTarget): void => {
 const toQueryPayloadItem = (item: QueryBatchItem): QueryPayloadItem => ({
   id: item.id,
   clusterId: item.clusterId,
-  group: item.group || undefined,
+  group: item.group,
   version: item.version || undefined,
   resourceKind: item.resourceKind,
   verb: item.verb,
@@ -626,17 +629,24 @@ const finalizeNamespaceQuery = (
 };
 
 const queryNamespaceChunk = async (chunk: NamespaceQueryTarget[]): Promise<void> => {
+  const generation = permissionStoreGeneration;
   const payload = chunk.flatMap((target) => target.batch).map(toQueryPayloadItem);
   const transientTargets = new Set<NamespaceQueryTarget>();
   try {
     const response = await queryPermissions(payload);
-    applyNamespaceQueryResponse(chunk, response, transientTargets);
+    if (generation === permissionStoreGeneration) {
+      applyNamespaceQueryResponse(chunk, response, transientTargets);
+    }
   } catch (error) {
-    applyNamespaceQueryFailure(chunk, error);
+    if (generation === permissionStoreGeneration) {
+      applyNamespaceQueryFailure(chunk, error);
+    }
   } finally {
-    chunk.forEach((target) => {
-      finalizeNamespaceQuery(target, transientTargets);
-    });
+    if (generation === permissionStoreGeneration) {
+      chunk.forEach((target) => {
+        finalizeNamespaceQuery(target, transientTargets);
+      });
+    }
   }
 };
 
@@ -660,12 +670,15 @@ export const queryNamespacesPermissions = async (
     return;
   }
 
+  const generation = permissionStoreGeneration;
   queryTargets.forEach(beginNamespaceQuery);
   notify();
 
   await Promise.all(splitNamespaceTargets(queryTargets).map(queryNamespaceChunk));
 
-  notify();
+  if (generation === permissionStoreGeneration) {
+    notify();
+  }
 };
 
 /**
@@ -700,20 +713,11 @@ export const queryClusterPermissions = (clusterId: string): void => {
     return;
   }
 
-  const batchSpecs: PermissionSpec[] = batch.map((item) => ({
-    kind: item.resourceKind,
-    verb: item.verb,
-    subresource: item.subresource || undefined,
-  }));
-
+  const batchSpecs = batch.map(toPermissionSpec);
   pendingSpecs.set(
     queryKey,
     batch.map((item) => ({
-      spec: {
-        kind: item.resourceKind,
-        verb: item.verb,
-        subresource: item.subresource || undefined,
-      },
+      spec: toPermissionSpec(item),
       feature: item.feature,
       clusterId,
       namespace: null,
@@ -730,8 +734,12 @@ export const queryClusterPermissions = (clusterId: string): void => {
 
   let shouldRecordTimestamp = true;
 
+  const generation = permissionStoreGeneration;
   queryPermissions(payload)
     .then((response) => {
+      if (generation !== permissionStoreGeneration) {
+        return;
+      }
       const transientError = response.results.find(isTransientPermissionResultError);
       if (transientError) {
         shouldRecordTimestamp = false;
@@ -748,6 +756,9 @@ export const queryClusterPermissions = (clusterId: string): void => {
       completeSuccessfulQuery(queryKey, startTime, response);
     })
     .catch((err) => {
+      if (generation !== permissionStoreGeneration) {
+        return;
+      }
       const queryError = String(err);
       for (const item of batch) {
         recordQueryError(item, queryError);
@@ -755,6 +766,9 @@ export const queryClusterPermissions = (clusterId: string): void => {
       completeQueryDiagnostics({ queryKey, success: false, errorMessage: queryError, startTime });
     })
     .finally(() => {
+      if (generation !== permissionStoreGeneration) {
+        return;
+      }
       inFlightQueries.delete(queryKey);
       pendingSpecs.delete(queryKey);
       if (shouldRecordTimestamp) {
@@ -816,7 +830,7 @@ export const queryKindPermissions = (
   const payload: QueryPayloadItem[] = verbs.map((verb) => ({
     id: getPermissionKey(kind, verb, namespace, null, cid, groupVal, versionVal),
     clusterId: cid,
-    group: groupVal || undefined,
+    group: groupVal,
     version: versionVal || undefined,
     resourceKind: kind,
     verb,
@@ -838,7 +852,7 @@ export const queryKindPermissions = (
       spec: {
         kind,
         verb,
-        group: groupVal || undefined,
+        group: groupVal,
         version: versionVal || undefined,
       },
       feature,
@@ -850,8 +864,12 @@ export const queryKindPermissions = (
 
   inFlightQueries.add(queryKey);
 
+  const generation = permissionStoreGeneration;
   queryPermissions(payload)
     .then((response) => {
+      if (generation !== permissionStoreGeneration) {
+        return;
+      }
       for (const r of response.results) {
         recordPermissionResult(r, feature);
       }
@@ -860,6 +878,9 @@ export const queryKindPermissions = (
       // Silently fail — the permission just won't appear in the context menu.
     })
     .finally(() => {
+      if (generation !== permissionStoreGeneration) {
+        return;
+      }
       inFlightQueries.delete(queryKey);
       pendingSpecs.delete(queryKey);
       recordQueryTimestamp(queryKey);
@@ -1047,6 +1068,24 @@ const recordNamespaceQueryMetadata = (target: NamespaceQueryTarget): void => {
 /** Stagger interval between namespace refreshes in All Namespaces sessions. */
 const STAGGER_INTERVAL_MS = 500;
 
+const scheduleNamespaceRefreshes = (
+  targets: Array<{ clusterId: string; namespace: string; specLists: PermissionSpecList[] }>
+): void => {
+  targets.forEach(({ clusterId, namespace, specLists }, index) => {
+    const refresh = () =>
+      void queryNamespacesPermissions([{ namespace, clusterId }], { force: true, specLists });
+    if (index === 0) {
+      refresh();
+      return;
+    }
+    const timer = setTimeout(() => {
+      namespaceRefreshTimers.delete(timer);
+      refresh();
+    }, index * STAGGER_INTERVAL_MS);
+    namespaceRefreshTimers.add(timer);
+  });
+};
+
 /**
  * Periodic refresh loop. Re-queries any (clusterId|namespace) pair
  * whose last query is older than the refresh interval. Namespace
@@ -1091,19 +1130,7 @@ const refreshExpiredQueries = (): void => {
     queryClusterPermissions(clusterId);
   }
 
-  let staggerDelay = 0;
-  for (const { clusterId, namespace, specLists } of expiredNamespaces) {
-    if (staggerDelay === 0) {
-      void queryNamespacesPermissions([{ namespace, clusterId }], { force: true, specLists });
-    } else {
-      setTimeout(
-        () =>
-          void queryNamespacesPermissions([{ namespace, clusterId }], { force: true, specLists }),
-        staggerDelay
-      );
-    }
-    staggerDelay += STAGGER_INTERVAL_MS;
-  }
+  scheduleNamespaceRefreshes(expiredNamespaces);
 };
 
 const startRefreshTimer = (): void => {
@@ -1207,6 +1234,11 @@ export const setActivePermissionCluster = (
  * Clears all permission state, stops the refresh timer, and notifies listeners.
  */
 export const resetPermissionStore = (): void => {
+  permissionStoreGeneration += 1;
+  for (const timer of namespaceRefreshTimers) {
+    clearTimeout(timer);
+  }
+  namespaceRefreshTimers.clear();
   if (permissionNotifyHandle !== null && permissionNotifyHandle !== undefined) {
     clearTimeout(permissionNotifyHandle);
     permissionNotifyHandle = null;

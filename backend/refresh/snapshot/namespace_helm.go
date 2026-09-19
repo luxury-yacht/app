@@ -82,7 +82,7 @@ func namespaceHelmQueryCapabilities() ResourceQueryCapabilities {
 // camelCase ("appVersion"), so a verbatim key would miss and the engine would fall
 // back to name order.
 func helmQuerypageSchema() querypage.Schema[NamespaceHelmSummary] {
-	return querypageSchemaFromAdapter(helmTableQueryAdapter(), []string{"name", "kind", "namespace", "chart", "appversion", "status", "revision", "updated", "age"})
+	return querypageSchemaFromAdapter(helmTableQueryAdapter(), lowerTrimAll(namespaceHelmQueryCapabilities().SortableFields))
 }
 
 // HelmStorageSource supplies the full typed helm-release Secrets the namespace-helm
@@ -165,9 +165,8 @@ func (b *NamespaceHelmBuilder) reaggregateRelease(namespace, name string, source
 		b.maintained.deleteRow(NamespaceHelmSummary{Ref: resourcemodel.ResourceRef{Namespace: namespace, Name: name}})
 		return
 	}
-	summaries, _ := mapHelmReleases([]*release.Release{rls}, "", b.meta)
-	if len(summaries) == 1 {
-		b.maintained.upsertRow(summaries[0], source)
+	if summary, ok := mapHelmRelease(rls, "", b.meta); ok {
+		b.maintained.upsertRow(summary, source)
 	}
 }
 
@@ -452,8 +451,8 @@ func mapHelmRelease(release *release.Release, namespaceFilter string, meta Clust
 		return NamespaceHelmSummary{}, false
 	}
 	helmOpts := resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts}
-	model := helm.BuildResourceModel(meta.ClusterID, release, namespaceFilter, nil, nil, helmOpts)
-	facts := helm.BuildFacts(release, nil, nil, helmOpts)
+	model := helm.BuildResourceModel(meta.ClusterID, release, namespaceFilter)
+	facts := helm.BuildFacts(release, nil, helmOpts)
 	updated := ""
 	if facts.Updated != nil && !facts.Updated.IsZero() {
 		updated = facts.Updated.Time.Format(time.RFC3339)

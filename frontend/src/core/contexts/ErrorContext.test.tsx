@@ -2,7 +2,7 @@
  * frontend/src/core/contexts/ErrorContext.test.tsx
  *
  * Test suite for ErrorContext.
- * Validates timer cleanup on unmount (#3) and history replay runs once (#4).
+ * Validates notification retention, retry, auto-dismiss cleanup, and history replay.
  */
 
 import { ErrorCategory, type ErrorDetails, ErrorSeverity, errorHandler } from '@utils/errorHandler';
@@ -61,70 +61,62 @@ describe('ErrorContext', () => {
     });
   };
 
-  describe('#3 — animation timer cleanup on unmount', () => {
-    it('does not update state after provider unmounts during dismiss animation', async () => {
-      await renderProvider();
-
-      // Add an error
-      act(() => {
-        stateRef.current?.addError(makeError());
-      });
-
-      // Dismiss it — starts a 300ms animation timer
-      act(() => {
-        stateRef.current?.dismissError('error-1');
-      });
-
-      // Precondition: the dismiss really did leave a timer pending, so the
-      // assertion below is about cleanup and not about a timer never existing.
-      expect(vi.getTimerCount()).toBe(1);
-
-      // Unmount before the 300ms animation timer fires
-      act(() => {
-        root.unmount();
-      });
-
-      // The unmount cleanup cleared it. Without that cleanup the timer would
-      // still be pending here and would later call setErrors on an unmounted
-      // root — which React silently ignores, so only the timer count can
-      // detect the regression.
-      expect(vi.getTimerCount()).toBe(0);
-
-      act(() => {
-        vi.advanceTimersByTime(500);
-      });
-    });
-
-    it('does not update state after provider unmounts during dismissAll animation', async () => {
-      await renderProvider();
-
-      // Add errors
-      act(() => {
-        stateRef.current?.addError(makeError({ message: 'err1' }));
-        stateRef.current?.addError(makeError({ message: 'err2' }));
-      });
-
-      // Dismiss all — starts a 300ms animation timer
-      act(() => {
-        stateRef.current?.dismissAllErrors();
-      });
-
-      // Precondition: exactly one pending animation timer for the batch.
-      expect(vi.getTimerCount()).toBe(1);
-
-      // Unmount before the 300ms animation timer fires
-      act(() => {
-        root.unmount();
-      });
-
-      // The unmount cleanup cleared it.
-      expect(vi.getTimerCount()).toBe(0);
-
-      act(() => {
-        vi.advanceTimersByTime(500);
-      });
-    });
+  it('keeps errors arriving after dismiss-all', async () => {
+    await renderProvider();
+    act(() => stateRef.current?.addError(makeError({ message: 'old' })));
+    act(() => stateRef.current?.dismissAllErrors());
+    expect(stateRef.current?.errors).toEqual([]);
+    act(() => stateRef.current?.addError(makeError({ message: 'new' })));
+    act(() => vi.advanceTimersByTime(500));
+    expect(stateRef.current?.errors.map((error) => error.message)).toEqual(['new']);
   });
+
+  it('counts visible errors toward the capacity after dismissing a newer notification', async () => {
+    await renderProvider({ maxErrors: 2 });
+    act(() => {
+      stateRef.current?.addError(makeError({ message: 'old' }));
+      stateRef.current?.addError(makeError({ message: 'dismissed' }));
+    });
+    act(() => stateRef.current?.dismissError('error-2'));
+    act(() => stateRef.current?.addError(makeError({ message: 'new' })));
+    expect(stateRef.current?.errors.map((error) => error.message)).toEqual(['new', 'old']);
+  });
+
+  it('removes the retried error and reports a rejected retry through the live subscription', async () => {
+    await renderProvider();
+    act(() => stateRef.current?.addError(makeError({ message: 'retry me' })));
+    const failure = new Error('retry failed');
+    const retry = vi.fn().mockRejectedValue(failure);
+    await act(async () => stateRef.current?.retryError('error-1', retry));
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(stateRef.current?.errors.map((error) => error.originalError)).toEqual([failure]);
+    expect(errorHandler.getHistory()[0].originalError).toBe(failure);
+  });
+
+  it('clears pending auto-dismiss work on unmount', async () => {
+    await renderProvider();
+    act(() => stateRef.current?.addError(makeError({ severity: ErrorSeverity.INFO })));
+    expect(stateRef.current?.errors).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(1);
+    act(() => root.unmount());
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => vi.advanceTimersByTime(60000));
+  });
+
+  it.each(['dismissAllErrors', 'clearErrors'] as const)(
+    '%s cancels pending auto-dismiss and preserves later arrivals',
+    async (clear) => {
+      await renderProvider();
+      act(() => stateRef.current?.addError(makeError({ severity: ErrorSeverity.INFO })));
+      expect(vi.getTimerCount()).toBe(1);
+      act(() => stateRef.current?.[clear]());
+      expect(stateRef.current?.errors).toEqual([]);
+      expect(vi.getTimerCount()).toBe(0);
+      act(() => stateRef.current?.addError(makeError({ message: 'new' })));
+      act(() => vi.advanceTimersByTime(60000));
+      expect(stateRef.current?.errors.map((error) => error.message)).toEqual(['new']);
+    }
+  );
 
   describe('#4 — history replay runs once on mount', () => {
     it('replays error history exactly once on mount', async () => {
@@ -197,11 +189,11 @@ describe('ErrorContext', () => {
       act(() => {
         vi.advanceTimersByTime(3000);
       });
-      expect(stateRef.current?.errors.filter((e) => !e.dismissed)).toHaveLength(1);
+      expect(stateRef.current?.errors).toHaveLength(1);
 
-      // After the timeout (+ the 300ms dismiss animation) it is gone.
+      // At the timeout it is gone.
       act(() => {
-        vi.advanceTimersByTime(1000 + 300);
+        vi.advanceTimersByTime(1000);
       });
       expect(stateRef.current?.errors).toHaveLength(0);
     });

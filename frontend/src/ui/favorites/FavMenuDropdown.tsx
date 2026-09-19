@@ -20,15 +20,16 @@ import {
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { isClusterSpecificFavorite } from '@/core/navigation/favoriteRoute';
 import type { Favorite } from '@/core/persistence/favorites';
 import { navigateToFavorite } from './navigateToFavorite';
 import './FavMenuDropdown.css';
 
 /** Returns a dashed-circle for generic favorites or a pin for cluster-specific ones. */
-function TypeIcon({ clusterSelection }: Readonly<{ clusterSelection: string }>) {
+function TypeIcon({ pinned }: Readonly<{ pinned: boolean }>) {
   return (
     <span className="fav-dropdown-type-icon">
-      {clusterSelection ? (
+      {pinned ? (
         <FavoritePinIcon width={16} height={16} />
       ) : (
         <FavoriteGenericIcon width={16} height={16} />
@@ -94,35 +95,17 @@ const FavMenuDropdown: React.FC = () => {
   });
   // -- Reorder --
 
-  const moveUp = useCallback(
-    async (index: number) => {
-      if (index <= 0) {
+  const moveFavorite = useCallback(
+    async (index: number, offset: -1 | 1) => {
+      const target = index + offset;
+      if (target < 0 || target >= favorites.length) {
         return;
       }
-      const ids = favorites.map((f) => f.id);
-      [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]];
+      const ids = favorites.map((favorite) => favorite.id);
+      [ids[index], ids[target]] = [ids[target], ids[index]];
       await reorderFavorites(ids);
     },
     [favorites, reorderFavorites]
-  );
-
-  const moveDown = useCallback(
-    async (index: number) => {
-      if (index >= favorites.length - 1) {
-        return;
-      }
-      const ids = favorites.map((f) => f.id);
-      [ids[index], ids[index + 1]] = [ids[index + 1], ids[index]];
-      await reorderFavorites(ids);
-    },
-    [favorites, reorderFavorites]
-  );
-
-  const handleDelete = useCallback(
-    async (id: string) => {
-      await deleteFavorite(id);
-    },
-    [deleteFavorite]
   );
 
   // -- Navigate --
@@ -149,7 +132,7 @@ const FavMenuDropdown: React.FC = () => {
   // Generic favorites are disabled when their namespace isn't available.
   const isDisabled = useCallback(
     (fav: Favorite): boolean => {
-      if (fav.clusterSelection !== '') {
+      if (isClusterSpecificFavorite(fav)) {
         return false;
       }
       if (fav.viewType !== 'namespace' || !fav.namespace) {
@@ -218,7 +201,7 @@ const FavMenuDropdown: React.FC = () => {
                       }
                     }}
                   >
-                    <TypeIcon clusterSelection={fav.clusterSelection} />
+                    <TypeIcon pinned={isClusterSpecificFavorite(fav)} />
                     <span className="fav-dropdown-name">{fav.name}</span>
 
                     <span className="fav-dropdown-hover-actions">
@@ -228,9 +211,7 @@ const FavMenuDropdown: React.FC = () => {
                         title="Move up"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (idx > 0) {
-                            void moveUp(idx);
-                          }
+                          void moveFavorite(idx, -1);
                         }}
                       >
                         <ChevronUpIcon width={14} height={14} />
@@ -241,9 +222,7 @@ const FavMenuDropdown: React.FC = () => {
                         title="Move down"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (idx < favorites.length - 1) {
-                            void moveDown(idx);
-                          }
+                          void moveFavorite(idx, 1);
                         }}
                       >
                         <ChevronDownIcon width={14} height={14} />
@@ -254,7 +233,7 @@ const FavMenuDropdown: React.FC = () => {
                         title="Delete favorite"
                         onClick={(e) => {
                           e.stopPropagation();
-                          void handleDelete(fav.id);
+                          void deleteFavorite(fav.id);
                         }}
                       >
                         <DeleteIcon width={14} height={14} />

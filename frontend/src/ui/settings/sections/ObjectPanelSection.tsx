@@ -24,7 +24,7 @@ import {
 import { useDockablePanelContext } from '@ui/dockable';
 import { getContentBounds } from '@ui/dockable/dockablePanelLayout';
 import React, { type FC, useId, useMemo, useState } from 'react';
-import { SettingRow } from './SettingsControls';
+import { SettingRow, SettingsChoiceButtons } from './SettingsControls';
 
 const objectPanelPositionOptions = [
   { value: 'right', label: 'Right', icon: DockRightIcon },
@@ -182,24 +182,12 @@ function ObjectPanelSection() {
       <hr className="settings-subgroup-divider" />
 
       <SettingRow title="Position" help="Where the object detail panel opens by default.">
-        <fieldset className="settings-choice-buttons" aria-label="Default Object Panel position">
-          {objectPanelPositionOptions.map((option) => {
-            const Icon = option.icon;
-            const isSelected = objectPanelPosition === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                className={`settings-choice-button${isSelected ? ' settings-choice-button--active' : ''}`}
-                aria-pressed={isSelected}
-                onClick={() => handleObjectPanelPositionChange(option.value)}
-              >
-                <Icon width={18} height={18} />
-                <span>{option.label}</span>
-              </button>
-            );
-          })}
-        </fieldset>
+        <SettingsChoiceButtons
+          ariaLabel="Default Object Panel position"
+          value={objectPanelPosition}
+          options={objectPanelPositionOptions}
+          onChange={handleObjectPanelPositionChange}
+        />
       </SettingRow>
 
       {layoutRows.map((row) => (

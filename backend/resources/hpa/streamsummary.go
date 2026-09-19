@@ -2,7 +2,7 @@
  * backend/resources/hpa/streamsummary.go
  *
  * HorizontalPodAutoscaler's stream-summary builder, owned by the kind's package.
- * Produces the neutral streamrows.AutoscalingSummary row from the v1 facts. The
+ * Produces the neutral streamrows.AutoscalingSummary row from the v1 object. The
  * namespace-autoscaling domain streams HPA under v1. Returns a leaf type, so no
  * snapshot import.
  */
@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	"k8s.io/utils/ptr"
 )
 
 // BuildStreamSummary builds the namespace-autoscaling row for one HPA.
@@ -22,16 +23,16 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, hpa *autoscalingv1.Horizont
 	if hpa == nil {
 		return streamrows.AutoscalingSummary{Ref: streamrows.NewResourceRef(meta, Identity, nil)}
 	}
-	facts := BuildV1Facts(meta.ClusterID, hpa)
+	target := scaleTargetLink(meta.ClusterID, hpa.Namespace, hpa.Spec.ScaleTargetRef.APIVersion, hpa.Spec.ScaleTargetRef.Kind, hpa.Spec.ScaleTargetRef.Name)
 	return streamrows.AutoscalingSummary{
 		// The stream reads v1 objects, while navigation/details use the primary v2 API.
 		Ref:              streamrows.NewResourceRef(meta, Identity, hpa),
 		Metadata:         streamrows.NewResourceMetadata(hpa),
-		Target:           streamTargetLabel(facts.ScaleTarget),
-		TargetAPIVersion: streamTargetAPIVersion(facts.ScaleTarget),
-		Min:              streamMinReplicas(facts),
-		Max:              facts.MaxReplicas,
-		Current:          facts.CurrentReplicas,
+		Target:           streamTargetLabel(target),
+		TargetAPIVersion: scaleTargetAPIVersion(target),
+		Min:              ptr.Deref(hpa.Spec.MinReplicas, 1),
+		Max:              hpa.Spec.MaxReplicas,
+		Current:          hpa.Status.CurrentReplicas,
 		Age:              streamrows.FormatAge(hpa.CreationTimestamp.Time),
 		AgeTimestamp:     streamrows.CreationMillis(hpa),
 	}
@@ -39,36 +40,6 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, hpa *autoscalingv1.Horizont
 
 // streamTargetLabel is the "Kind/Name" target string shown in the table column.
 func streamTargetLabel(link resourcemodel.ResourceLink) string {
-	kind, name := "", ""
-	if link.Ref != nil {
-		kind, name = link.Ref.Kind, link.Ref.Name
-	} else if link.Display != nil {
-		kind, name = link.Display.Kind, link.Display.Name
-	}
+	kind, name := scaleTargetKindName(link)
 	return fmt.Sprintf("%s/%s", kind, name)
-}
-
-// streamMinReplicas returns the configured minimum, defaulting to 1 when unset.
-func streamMinReplicas(facts Facts) int32 {
-	if facts.MinReplicas == nil {
-		return 1
-	}
-	return *facts.MinReplicas
-}
-
-// streamTargetAPIVersion is the scale target's apiVersion (group/version).
-func streamTargetAPIVersion(link resourcemodel.ResourceLink) string {
-	if link.Ref != nil {
-		if link.Ref.Group == "" {
-			return link.Ref.Version
-		}
-		return link.Ref.Group + "/" + link.Ref.Version
-	}
-	if link.Display != nil {
-		if link.Display.Group == "" {
-			return link.Display.Version
-		}
-		return link.Display.Group + "/" + link.Display.Version
-	}
-	return ""
 }

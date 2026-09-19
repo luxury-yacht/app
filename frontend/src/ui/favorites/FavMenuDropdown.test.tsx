@@ -283,6 +283,24 @@ describe('FavMenuDropdown', () => {
   // 4. Clicking a favorite triggers navigation
   // -----------------------------------------------------------------------
 
+  it('allows a clusterId-only favorite even when its namespace is absent from the active cluster', async () => {
+    const favorite = makeFavorite({
+      clusterId: 'cluster-other:ctx',
+      clusterSelection: '',
+      namespace: 'other-team',
+    });
+    mockFavorites.push(favorite);
+    await renderComponent();
+    await clickButton();
+    const row = requireValue(
+      container.querySelector<HTMLElement>('[role="menuitem"]'),
+      'favorite row'
+    );
+    expect(row.getAttribute('aria-disabled')).toBe('false');
+    await act(async () => row.click());
+    expect(mockSetPendingFavorite).toHaveBeenCalledWith(favorite);
+  });
+
   it('clicking a favorite triggers navigation', async () => {
     mockFavorites.push(
       makeFavorite({

@@ -1,8 +1,7 @@
 /*
  * backend/resources/clusterrole/objectmap.go
  *
- * ClusterRole's object-map status projection, co-located with its model. The object
- * map does not materialize reverse links (nil relationships).
+ * ClusterRole's object-map status projection, co-located with its model.
  */
 
 package clusterrole
@@ -14,5 +13,5 @@ import (
 
 // ObjectMapStatus projects a ClusterRole into its object-map node status.
 func ObjectMapStatus(clusterID string, role rbacv1.ClusterRole) *objectmap.Status {
-	return objectmap.FromResourceModel(BuildResourceModel(clusterID, &role, nil))
+	return objectmap.FromResourceModel(BuildResourceModel(clusterID, &role))
 }

@@ -332,12 +332,12 @@ export const hpaDescriptor: OverviewDescriptor<HorizontalPodAutoscalerDetails> =
         field: 'currentReplicas',
         derivedFrom: ['minReplicas', 'maxReplicas', 'desiredReplicas'],
         label: 'Replicas',
-        render: (d) => renderReplicasSummary(d),
+        render: renderReplicasSummary,
       },
       {
         kind: 'widget',
         consumes: ['metrics', 'currentMetrics'],
-        render: (d) => renderMetricsWidget(d),
+        render: renderMetricsWidget,
       },
       {
         field: 'behavior',

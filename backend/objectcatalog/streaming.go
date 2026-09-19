@@ -183,22 +183,6 @@ func (s *Service) streamChunk(items []Summary, kindSet map[string]bool, namespac
 	s.catalogIndex.appendStreamingChunk(items, kindSet, namespaceSet)
 }
 
-// publishStreamingState updates the streaming state in the service.
-func (s *Service) publishStreamingState(
-	chunks []*summaryChunk,
-	kindSet map[string]bool,
-	namespaceSet map[string]struct{},
-	descriptors []Descriptor,
-	ready bool,
-) {
-	chunkSnapshot := make([]*summaryChunk, len(chunks))
-	copy(chunkSnapshot, chunks)
-
-	s.mu.Lock()
-	s.catalogIndex.publishStreamingState(chunkSnapshot, kindSet, namespaceSet, descriptors, ready)
-	s.mu.Unlock()
-}
-
 // setFirstBatchLatency records the time-to-first-batch measurement.
 func (s *Service) setFirstBatchLatency(latency time.Duration) {
 	s.mu.Lock()

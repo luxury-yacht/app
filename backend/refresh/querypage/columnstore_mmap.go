@@ -45,7 +45,7 @@ func (s *Store[R]) SpillInternedColumns(path string) error {
 	var w internedWriter
 	w.put(internedColumnMagic)
 	w.u32(uint32(arenaLen))
-	w.u32(uint32(cs.count))
+	w.u32(uint32(cs.len()))
 	w.u32(uint32(len(cs.codec.fields)))
 	for i := 0; i < arenaLen; i++ {
 		if cs.live[i] {
@@ -184,22 +184,7 @@ func OpenInternedColumnStore[R any](path string, schema Schema[R]) (*Store[R], f
 	}
 	cs.cloneStringsOnDecode = true
 
-	// Rebuild the arena bookkeeping + indexes + match cache from the aliased columns. The
-	// column DATA stays in the mapping; only these (smaller) derived structures are heap.
-	cs.live = make([]bool, arenaLen)
-	for i := 0; i < arenaLen; i++ {
-		if i < len(live) && live[i] == 1 {
-			cs.live[i] = true
-			cs.count++
-			row := cs.getByRowID(uint32(i))
-			uid := schema.UID(row)
-			cs.rowByUID[uid] = uint32(i)
-			s.match[uint32(i)] = extractMatchValues(schema, row)
-			s.reindex(uid, row)
-		} else {
-			cs.freeRows = append(cs.freeRows, uint32(i))
-		}
-	}
+	s.restoreInternedArena(live)
 	// A read-only (mmap-aliased, Cold) store holds no trigram index: it would put heap
 	// back on a store whose whole point is off-heap column data. The search path falls
 	// back to a linear scan (Cold is not the hot search path). NewStore built one above;
@@ -207,6 +192,26 @@ func OpenInternedColumnStore[R any](path string, schema Schema[R]) (*Store[R], f
 	s.tri = nil
 	s.readOnly = true
 	return s, mf.close, nil
+}
+
+// restoreInternedArena rebuilds heap indexes from the mapped columns. Free
+// slots stay outside the row map and indexes; decoded strings detach from mmap.
+func (s *Store[R]) restoreInternedArena(live []byte) {
+	cs := s.rows
+	cs.live = make([]bool, len(live))
+	for index, present := range live {
+		rowID := uint32(index)
+		if present != 1 {
+			cs.freeRows = append(cs.freeRows, rowID)
+			continue
+		}
+		cs.live[index] = true
+		row := cs.getByRowID(rowID)
+		uid := s.schema.UID(row)
+		cs.rowByUID[uid] = rowID
+		s.match[rowID] = extractMatchValues(s.schema, row)
+		s.reindex(uid, row)
+	}
 }
 
 // ReopenInternedColumnsInPlace spills this store's interned columns to path, then swaps the
@@ -227,15 +232,7 @@ func (s *Store[R]) ReopenInternedColumnsInPlace(path string) (func() error, erro
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.rows = repl.rows
-	s.match = repl.match
-	s.idx = repl.idx
-	s.facets = repl.facets
-	// Drop the (now-stale) heap trigram index: this store is going read-only / off-heap,
-	// and repl (from OpenInternedColumnStore) already holds none. Search falls back to the
-	// linear scan, matching a fresh OpenInternedColumnStore store.
-	s.tri = nil
-	s.readOnly = true
+	s.replaceDataLocked(repl)
 	return s.lockSafeCloser(closer), nil
 }
 

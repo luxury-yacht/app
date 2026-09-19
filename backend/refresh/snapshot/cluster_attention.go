@@ -400,9 +400,9 @@ func normalizeAttentionFindingTypes(rawTypes []string) []string {
 	return types
 }
 
-func (i *clusterAttentionIndex) filterIgnoredEvaluationLocked(evaluation attentionEvaluation) attentionEvaluation {
-	if evaluation.Finding == nil {
-		return evaluation
+func (i *clusterAttentionIndex) filterIgnoredFindingLocked(finding *AttentionFinding) *AttentionFinding {
+	if finding == nil {
+		return finding
 	}
 	ignoredTypes := make(map[string]struct{}, len(i.ignoreRules.ClusterFindingTypes)+len(i.ignoreRules.GlobalFindingTypes))
 	for _, findingType := range i.ignoreRules.ClusterFindingTypes {
@@ -411,23 +411,22 @@ func (i *clusterAttentionIndex) filterIgnoredEvaluationLocked(evaluation attenti
 	for _, findingType := range i.ignoreRules.GlobalFindingTypes {
 		ignoredTypes[strings.TrimSpace(findingType)] = struct{}{}
 	}
-	causes := make([]AttentionCause, 0, len(evaluation.Finding.Causes))
-	for _, cause := range evaluation.Finding.Causes {
+	causes := make([]AttentionCause, 0, len(finding.Causes))
+	for _, cause := range finding.Causes {
 		if _, ignored := ignoredTypes[cause.Type]; ignored {
 			continue
 		}
-		if i.objectFindingIgnoredLocked(evaluation.Finding.Ref, cause.Type) {
+		if i.objectFindingIgnoredLocked(finding.Ref, cause.Type) {
 			continue
 		}
 		causes = append(causes, cause)
 	}
 	if len(causes) == 0 {
-		evaluation.Finding = nil
-		return evaluation
+		return nil
 	}
-	evaluation.Finding.Causes = causes
-	evaluation.Finding.Severity = attentionCauseSeverity(causes)
-	return evaluation
+	finding.Causes = causes
+	finding.Severity = attentionCauseSeverity(causes)
+	return finding
 }
 
 func (i *clusterAttentionIndex) objectFindingIgnoredLocked(ref resourcemodel.ResourceRef, findingType string) bool {
@@ -519,7 +518,7 @@ func dedupeAttentionRefs(refs []resourcemodel.ResourceRef) []resourcemodel.Resou
 }
 
 func (i *clusterAttentionIndex) UpsertSource(owner string, record attentionSourceRecord) {
-	if i == nil || strings.TrimSpace(owner) == "" || !completeAttentionRef(record.Ref) {
+	if i == nil || strings.TrimSpace(owner) == "" || !attentionRefBelongsToCluster(record.Ref, i.meta.ClusterID) {
 		return
 	}
 	i.mu.Lock()
@@ -585,7 +584,7 @@ func (i *clusterAttentionIndex) upsertReplacementRecords(
 	replacement *attentionSourceReplacement,
 ) {
 	for _, record := range records {
-		if !completeAttentionRef(record.Ref) {
+		if !attentionRefBelongsToCluster(record.Ref, i.meta.ClusterID) {
 			continue
 		}
 		key := attentionRefKey(record.Ref)
@@ -688,6 +687,9 @@ func (i *clusterAttentionIndex) RestoreFrom(path string) error {
 		i.maintained.store.Delete(attentionRefKey(row.Ref))
 	}
 	for _, row := range rows {
+		if !attentionRefBelongsToCluster(row.Ref, i.meta.ClusterID) {
+			continue
+		}
 		key := attentionRefKey(row.Ref)
 		healthCauses, finalizerCauses := splitFinalizerCauses(row.Causes)
 		if len(healthCauses) > 0 {
@@ -798,11 +800,12 @@ func (i *clusterAttentionIndex) ReplaceFinalizerBlockers(blockers []objectcatalo
 	pruneAttentionRefs(pruner, pruned)
 }
 
+func attentionRefBelongsToCluster(ref resourcemodel.ResourceRef, clusterID string) bool {
+	return completeAttentionRef(ref) && ref.ClusterID == strings.TrimSpace(clusterID)
+}
+
 func finalizerFindingForCluster(clusterID string, blocker objectcatalog.FinalizerBlocker) (string, AttentionFinding, bool) {
-	if !completeAttentionRef(blocker.Ref) || blocker.DeletionTimestamp <= 0 {
-		return "", AttentionFinding{}, false
-	}
-	if clusterID != "" && blocker.Ref.ClusterID != clusterID {
+	if !attentionRefBelongsToCluster(blocker.Ref, clusterID) || blocker.DeletionTimestamp <= 0 {
 		return "", AttentionFinding{}, false
 	}
 	return attentionRefKey(blocker.Ref), finalizerAttentionFinding(blocker), true
@@ -917,7 +920,7 @@ func (i *clusterAttentionIndex) mergedFindingLocked(key string) *AttentionFindin
 	case hasHealth:
 		row = health
 	}
-	return i.filterIgnoredEvaluationLocked(attentionEvaluation{Finding: &row}).Finding
+	return i.filterIgnoredFindingLocked(&row)
 }
 
 func (i *clusterAttentionIndex) reprojectAllFindingsLocked() {
@@ -1095,7 +1098,7 @@ func attentionRefKey(ref resourcemodel.ResourceRef) string {
 func attentionQuerypageSchema() querypage.Schema[AttentionFinding] {
 	return querypageSchemaFromAdapter(
 		attentionTableQueryAdapter(),
-		[]string{"name", "kind", "namespace", "severity", "status", "reason", "age"},
+		clusterAttentionQueryCapabilities().SortableFields,
 	)
 }
 
@@ -1356,7 +1359,7 @@ func (s attentionBundleSink) DeleteBundle(bundle ingest.Bundle) {
 	if !ok {
 		return
 	}
-	s.index.DeleteSource(s.owner, resourceRefFromCatalog(catalog))
+	s.index.DeleteSource(s.owner, catalog.Ref)
 }
 
 func (s attentionBundleSink) ReplaceBundles(bundles []ingest.Bundle) {
@@ -1367,10 +1370,6 @@ func (s attentionBundleSink) ReplaceBundles(bundles []ingest.Bundle) {
 		}
 	}
 	s.index.ReplaceSource(s.owner, records)
-}
-
-func resourceRefFromCatalog(catalog objectcatalog.Summary) resourcemodel.ResourceRef {
-	return catalog.Ref
 }
 
 func (i *clusterAttentionIndex) upsertEvent(meta ClusterMeta, obj interface{}) {
@@ -1402,10 +1401,8 @@ func evaluateAttentionSource(record attentionSourceRecord, now time.Time) attent
 	}
 
 	switch record.Source {
-	case attentionSourcePod:
-		return evaluatePodAttention(record, now)
-	case attentionSourceWorkload:
-		return evaluateWorkloadAttention(record, now)
+	case attentionSourcePod, attentionSourceWorkload:
+		return evaluatePodOrWorkloadAttention(record, now)
 	case attentionSourceNode:
 		return evaluateNodeAttention(record)
 	case attentionSourceEvent:
@@ -1499,12 +1496,9 @@ func attentionRecordFromEvent(meta ClusterMeta, event *corev1.Event) (attentionS
 	return record, completeAttentionRef(record.Ref)
 }
 
-func evaluatePodAttention(record attentionSourceRecord, now time.Time) attentionEvaluation {
+func evaluatePodOrWorkloadAttention(record attentionSourceRecord, now time.Time) attentionEvaluation {
 	classification, statusNeedsAttention := classifyAttentionSource(record)
-	podNotReady := podReadyMismatch(record)
-	if !statusNeedsAttention && !podNotReady && record.Restarts == 0 {
-		return attentionEvaluation{}
-	}
+	readinessSignal := attentionReadinessSignal(record)
 
 	nextEvaluation := time.Time{}
 	graceDeadline, beforeGrace := warningGraceDeadline(record.AgeTimestamp, now)
@@ -1522,11 +1516,14 @@ func evaluatePodAttention(record attentionSourceRecord, now time.Time) attention
 			nextEvaluation = graceDeadline
 		}
 	}
-	if podNotReady {
-		policy := attentionPolicyForSignal(attentionSignalPodNotReady)
-		cause := signalCause(attentionSignalPodNotReady, policy, strings.TrimSpace(record.Ready)+" ready")
+	if readinessSignal != "" {
+		policy := attentionPolicyForSignal(readinessSignal)
+		cause := signalCause(readinessSignal, policy, strings.TrimSpace(record.Ready)+" ready")
 		var deferred bool
-		causes, deferred = appendGraceAwareCause(causes, cause, policy.Grace, policy.GraceSeverity, beforeGrace)
+		// Pod readiness stays informational during startup even when restarts
+		// contribute their own warning. Workload restarts bypass replica grace.
+		withinGrace := beforeGrace && (readinessSignal == attentionSignalPodNotReady || record.Restarts == 0)
+		causes, deferred = appendGraceAwareCause(causes, cause, policy.Grace, policy.GraceSeverity, withinGrace)
 		if deferred {
 			nextEvaluation = graceDeadline
 		}
@@ -1540,49 +1537,19 @@ func evaluatePodAttention(record attentionSourceRecord, now time.Time) attention
 	return evaluation
 }
 
-func podReadyMismatch(record attentionSourceRecord) bool {
-	ready, total, ok := parseReadyCounts(record.Ready)
-	return ok && podCountsAsNotReadySignal(record.StatusState, ready, total)
-}
-
-func evaluateWorkloadAttention(record attentionSourceRecord, now time.Time) attentionEvaluation {
-	classification, statusNeedsAttention := classifyAttentionSource(record)
-	replicaMismatch := readyReplicaMismatch(record.Ready)
-	if !statusNeedsAttention && !replicaMismatch && record.Restarts == 0 {
-		return attentionEvaluation{}
+func attentionReadinessSignal(record attentionSourceRecord) attentionSignal {
+	ready, total, ok := parseReadyPairInt32(record.Ready)
+	if !ok {
+		return ""
 	}
-	graceDeadline, beforeGrace := warningGraceDeadline(record.AgeTimestamp, now)
-	nextEvaluation := time.Time{}
-	causes := make([]AttentionCause, 0, 3)
-	if statusNeedsAttention {
-		var deferred bool
-		causes, deferred = appendGraceAwareCause(
-			causes,
-			classificationCause(classification, record),
-			classification.Grace,
-			classification.GraceSeverity,
-			record.Restarts == 0 && beforeGrace,
-		)
-		if deferred {
-			nextEvaluation = graceDeadline
+	if record.Source == attentionSourcePod {
+		if podCountsAsNotReadySignal(record.StatusState, ready, total) {
+			return attentionSignalPodNotReady
 		}
+	} else if total > 0 && ready < total {
+		return attentionSignalReplicaMismatch
 	}
-	if replicaMismatch {
-		policy := attentionPolicyForSignal(attentionSignalReplicaMismatch)
-		cause := signalCause(attentionSignalReplicaMismatch, policy, strings.TrimSpace(record.Ready)+" ready")
-		var deferred bool
-		causes, deferred = appendGraceAwareCause(causes, cause, policy.Grace, policy.GraceSeverity, record.Restarts == 0 && beforeGrace)
-		if deferred {
-			nextEvaluation = graceDeadline
-		}
-	}
-	if record.Restarts > 0 {
-		policy := attentionPolicyForSignal(attentionSignalRestarts)
-		causes = appendAttentionCause(causes, signalCause(attentionSignalRestarts, policy, fmt.Sprintf("%d restarts", record.Restarts)))
-	}
-	evaluation := findingEvaluation(record, causes)
-	evaluation.NextEvaluation = nextEvaluation
-	return evaluation
+	return ""
 }
 
 func appendGraceAwareCause(
@@ -1640,21 +1607,6 @@ func warningGraceDeadline(ageTimestamp int64, now time.Time) (time.Time, bool) {
 	}
 	deadline := time.UnixMilli(ageTimestamp).UTC().Add(attentionWarningGrace)
 	return deadline, now.Before(deadline)
-}
-
-func readyReplicaMismatch(ready string) bool {
-	available, desired, ok := parseReadyCounts(ready)
-	return ok && desired > 0 && available < desired
-}
-
-func parseReadyCounts(ready string) (int32, int32, bool) {
-	parts := strings.Split(strings.TrimSpace(ready), "/")
-	if len(parts) != 2 {
-		return 0, 0, false
-	}
-	available, availableErr := strconv.ParseInt(strings.TrimSpace(parts[0]), 10, 32)
-	desired, desiredErr := strconv.ParseInt(strings.TrimSpace(parts[1]), 10, 32)
-	return int32(available), int32(desired), availableErr == nil && desiredErr == nil
 }
 
 func findingEvaluation(record attentionSourceRecord, causes []AttentionCause) attentionEvaluation {

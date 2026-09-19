@@ -547,7 +547,11 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         searchable={control.searchable}
         showBulkActions={control.bulkActions}
         placeholder={control.placeholder}
-        value={filterSelectionToDropdownValues(control.selection, control.options)}
+        value={filterSelectionToDropdownValues(
+          control.selection,
+          control.options,
+          control.key === 'clusters' ? 'exact' : 'case-insensitive'
+        )}
         options={control.options}
         disabled={!control.options.length}
         onChange={control.onChange}

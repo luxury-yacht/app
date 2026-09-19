@@ -217,7 +217,7 @@ export class ResourceStreamManager {
     );
   }
 
-  private parseMessage(clusterId: string, raw: unknown): ServerMessage | null {
+  private parseMessage(raw: unknown): ServerMessage | null {
     if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
       return raw as ServerMessage;
     }
@@ -228,7 +228,6 @@ export class ResourceStreamManager {
         reportOperationalError(error, {
           source: 'ResourceStreamManager',
           action: 'parseResourceStreamPayload',
-          clusterId,
         });
         return null;
       }
@@ -236,40 +235,19 @@ export class ResourceStreamManager {
     reportOperationalError(new Error('Invalid resource stream payload structure'), {
       source: 'ResourceStreamManager',
       action: 'parseResourceStreamPayload',
-      clusterId,
     });
     return null;
   }
 
-  private resolveSubscriptionMessage(
-    clusterId: string,
-    parsed: ServerMessage
-  ): ResolvedSubscriptionMessage | null {
+  private resolveSubscriptionMessage(parsed: ServerMessage): ResolvedSubscriptionMessage | null {
     const normalized = normalizeResourceStreamProtocolMessage(parsed);
     if (!normalized) {
       return null;
     }
-    const messageClusterId = normalized.clusterId ?? clusterId;
-    if (!messageClusterId) {
-      return null;
-    }
-    const subscriptionKey = resourceStreamSubscriptionKey(
-      messageClusterId,
-      normalized.domain,
-      normalized.scope
+    const subscription = this.subscriptions.get(
+      resourceStreamSubscriptionKey(normalized.clusterId, normalized.domain, normalized.scope)
     );
-    let subscription = this.subscriptions.get(subscriptionKey);
-    if (!subscription) {
-      if (normalized.routing === 'strict') {
-        return null;
-      }
-      // Fall back when cluster IDs drift but the scope/domain pair is unique.
-      subscription = this.findSubscriptionByScope(normalized.domain, normalized.scope);
-      if (!subscription) {
-        return null;
-      }
-    }
-    return { normalized, subscription };
+    return subscription ? { normalized, subscription } : null;
   }
 
   private captureSubscriptionClusterName(
@@ -286,12 +264,12 @@ export class ResourceStreamManager {
     }
   }
 
-  handleMessage(clusterId: string, raw: unknown): void {
-    const parsed = this.parseMessage(clusterId, raw);
+  handleMessage(raw: unknown): void {
+    const parsed = this.parseMessage(raw);
     if (!parsed) {
       return;
     }
-    const resolved = this.resolveSubscriptionMessage(clusterId, parsed);
+    const resolved = this.resolveSubscriptionMessage(parsed);
     if (!resolved) {
       return;
     }
@@ -307,13 +285,6 @@ export class ResourceStreamManager {
       completeResync: isCompleteResyncStreamDomain(subscription.domain),
       maxPendingChanges: MAX_UPDATE_QUEUE,
     });
-  }
-
-  private findSubscriptionByScope(
-    domain: DoorbellDomain,
-    scope: string
-  ): StreamSubscription | undefined {
-    return this.subscriptions.findByScope(domain, scope);
   }
 
   private applyProtocolEvent(
@@ -372,23 +343,11 @@ export class ResourceStreamManager {
     }
   }
 
-  handleConnectionOpen(clusterId: string): void {
-    const targetClusterId = clusterId.trim();
-    // Log when the named stream is connected so it is clear streaming is active.
-    logInfo(
-      `[resource-stream] connection open clusterId=${targetClusterId || 'all'}`,
-      targetClusterId ? { clusterId: targetClusterId } : undefined
-    );
+  handleConnectionOpen(): void {
+    logInfo('[resource-stream] connection open clusterId=all');
     this.markConnectionOpen();
-    if (targetClusterId) {
-      this.clearStreamError(targetClusterId);
-    } else {
-      this.clearAllStreamErrors();
-    }
+    this.clearAllStreamErrors();
     this.subscriptions.forEach((subscription) => {
-      if (targetClusterId && subscription.clusterId !== targetClusterId) {
-        return;
-      }
       this.applyProtocolEvent(subscription, {
         type: 'connection-opened',
         epoch: this.connectionEpoch,
@@ -396,13 +355,9 @@ export class ResourceStreamManager {
     });
   }
 
-  handleConnectionError(clusterId: string, message: string): void {
-    const targetClusterId = clusterId.trim();
+  handleConnectionError(message: string): void {
     this.markConnectionError(message);
     this.subscriptions.forEach((subscription) => {
-      if (targetClusterId && subscription.clusterId !== targetClusterId) {
-        return;
-      }
       this.applyProtocolEvent(subscription, { type: 'connection-lost', reason: message });
     });
   }

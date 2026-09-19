@@ -2,6 +2,7 @@ package ingress
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -76,4 +77,31 @@ func TestSummarySegments(t *testing.T) {
 	require.Equal(t, []resourcemodel.DetailSegment{
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Rules", Value: "0"},
 	}, SummarySegments(Facts{}))
+}
+
+func TestIngressStatusUsesAdvertisedAddressesAndRoutingConfiguration(t *testing.T) {
+	for _, tt := range []struct {
+		name                string
+		spec                networkingv1.IngressSpec
+		addresses           []networkingv1.IngressLoadBalancerIngress
+		state, presentation string
+	}{
+		{"no configuration", networkingv1.IngressSpec{}, nil, "0", "unknown"},
+		{"empty address ignored", networkingv1.IngressSpec{}, []networkingv1.IngressLoadBalancerIngress{{}}, "0", "unknown"},
+		{"default backend pending", networkingv1.IngressSpec{DefaultBackend: &networkingv1.IngressBackend{}}, nil, "0", "warning"},
+		{"rule pending", networkingv1.IngressSpec{Rules: []networkingv1.IngressRule{{}}}, nil, "0", "warning"},
+		{"address counts preserve each entry", networkingv1.IngressSpec{}, []networkingv1.IngressLoadBalancerIngress{{IP: "1.2.3.4", Hostname: "same"}, {Hostname: "same"}, {}}, "2", "ready"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ingress := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "apps"}, Spec: tt.spec, Status: networkingv1.IngressStatus{LoadBalancer: networkingv1.IngressLoadBalancerStatus{Ingress: tt.addresses}}}
+			model := BuildResourceModel("cluster-a", ingress)
+			require.Equal(t, tt.state, model.Status.State)
+			require.Equal(t, tt.presentation, model.Status.Presentation)
+			ingress.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+			deleting := BuildResourceModel("cluster-a", ingress)
+			require.Len(t, deleting.Status.Signals, len(model.Status.Signals)+1)
+			require.Equal(t, model.Status.Signals, deleting.Status.Signals[:len(model.Status.Signals)])
+			require.Equal(t, "terminating", deleting.Status.Presentation)
+		})
+	}
 }

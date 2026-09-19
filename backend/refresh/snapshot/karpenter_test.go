@@ -31,12 +31,17 @@ func TestCatalogSnapshotPublishesDiscoveredKarpenterWithoutRows(t *testing.T) {
 	_, found, err := svc.ResolveResourceForGVK(context.Background(), schema.GroupVersionKind{Group: "karpenter.sh", Version: "v1", Kind: "NodePool"})
 	require.NoError(t, err)
 	require.True(t, found)
-	adapter := newCatalogRefreshAdapter(svc, ClusterMeta{ClusterID: "a"}, nil)
-	snap := adapter.BuildSnapshot("catalog", "limit=1", objectcatalog.QueryOptions{Limit: 1})
+	builder := &catalogBuilder{domain: catalogDomain, catalogService: func() *objectcatalog.Service { return svc }}
+	snap, err := builder.Build(WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "a"}), "limit=1")
+	require.NoError(t, err)
 	payload := snap.Payload.(CatalogSnapshot)
 	require.Equal(t, "a", payload.ClusterID)
 	require.Empty(t, payload.Items)
 	require.Equal(t, []string{"karpenter"}, payload.ResourceFamilies.Cluster)
-	other := newCatalogRefreshAdapter(objectcatalog.NewService(objectcatalog.Dependencies{}, nil), ClusterMeta{ClusterID: "b"}, nil)
-	require.Empty(t, other.BuildSnapshot("catalog", "limit=1", objectcatalog.QueryOptions{Limit: 1}).Payload.(CatalogSnapshot).ResourceFamilies)
+	other := &catalogBuilder{domain: catalogDomain, catalogService: func() *objectcatalog.Service {
+		return objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
+	}}
+	otherSnapshot, err := other.Build(WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "b"}), "limit=1")
+	require.NoError(t, err)
+	require.Empty(t, otherSnapshot.Payload.(CatalogSnapshot).ResourceFamilies)
 }

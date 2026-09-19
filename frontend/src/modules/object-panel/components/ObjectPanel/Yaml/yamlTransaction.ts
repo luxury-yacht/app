@@ -78,7 +78,6 @@ export interface UseYamlTransactionArgs {
   canEdit: boolean;
   clusterId: string | null | undefined;
   yamlContent: string;
-  showManagedFields: boolean;
   prepareVisibleDraftYaml: (rawYaml: string) => string;
 }
 
@@ -92,7 +91,6 @@ export interface UseYamlTransactionResult {
   setProtectedEditMessage: (message: string | null) => void;
   isSaving: boolean;
   effectiveYamlContent: string;
-  effectiveIdentity: ObjectIdentity | null;
   hasRemoteDrift: boolean;
   driftForced: boolean;
   backendDriftCurrentYaml: string | null;
@@ -397,7 +395,6 @@ const prepareSaveRequest = ({
   isSaving,
   effectiveIdentity,
   draftYaml,
-  baselineResourceVersion,
   baselineMergeYaml,
   sourceYaml,
   prepareVisibleDraftYaml,
@@ -406,7 +403,6 @@ const prepareSaveRequest = ({
   isSaving: boolean;
   effectiveIdentity: ObjectIdentity | null;
   draftYaml: string;
-  baselineResourceVersion: string | null;
   baselineMergeYaml: string;
   sourceYaml: string;
   prepareVisibleDraftYaml: (rawYaml: string) => string;
@@ -417,7 +413,7 @@ const prepareSaveRequest = ({
   if (!effectiveIdentity) {
     return { kind: 'identity-error' };
   }
-  const validation = validateYamlDraft(draftYaml, effectiveIdentity, baselineResourceVersion);
+  const validation = validateYamlDraft(draftYaml, effectiveIdentity);
   if (!validation.isValid) {
     return { kind: 'validation-error', message: validation.message };
   }
@@ -497,10 +493,10 @@ export const useYamlTransaction = ({
   canEdit,
   clusterId,
   yamlContent,
-  showManagedFields,
   prepareVisibleDraftYaml,
 }: UseYamlTransactionArgs): UseYamlTransactionResult => {
   const [isEditing, setIsEditing] = useState(false);
+  // Live snapshot adoption must not replace edits; only editor actions own the draft.
   const [draftYaml, setDraftYaml] = useState('');
   const [lintError, setLintError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -523,9 +519,6 @@ export const useYamlTransaction = ({
   const [hasServerYamlError, setHasServerYamlError] = useState(false);
 
   const recentVerifiedSemanticYamlsRef = useRef<RecentVerifiedSemanticEntry[]>([]);
-  const previousShowManagedRef = useRef(showManagedFields);
-  const previousOverrideYamlRef = useRef(manualYamlOverride?.yaml ?? null);
-  const skipNextOverrideDraftSyncRef = useRef(false);
   const previousScopeRef = useRef(scope);
 
   const resolvedClusterId = clusterId?.trim() ?? '';
@@ -674,34 +667,6 @@ export const useYamlTransaction = ({
 
   useEffect(() => {
     if (!isEditing) {
-      previousShowManagedRef.current = showManagedFields;
-      previousOverrideYamlRef.current = manualYamlOverride?.yaml ?? null;
-      return;
-    }
-    const showChanged = previousShowManagedRef.current !== showManagedFields;
-    const overrideYaml = manualYamlOverride?.yaml ?? null;
-    const overrideChanged = previousOverrideYamlRef.current !== overrideYaml;
-    previousShowManagedRef.current = showManagedFields;
-    previousOverrideYamlRef.current = overrideYaml;
-    if (skipNextOverrideDraftSyncRef.current && overrideChanged && !showChanged) {
-      skipNextOverrideDraftSyncRef.current = false;
-      return;
-    }
-    if (!overrideChanged) {
-      return;
-    }
-    const sourceYaml = manualYamlOverride?.yaml ?? effectiveYamlContent ?? '';
-    setDraftYaml(prepareVisibleDraftYaml(sourceYaml));
-  }, [
-    effectiveYamlContent,
-    isEditing,
-    manualYamlOverride,
-    prepareVisibleDraftYaml,
-    showManagedFields,
-  ]);
-
-  useEffect(() => {
-    if (!isEditing) {
       setHasRemoteDrift(false);
       setBackendDriftCurrentYaml(null);
       setDriftForced(false);
@@ -735,20 +700,12 @@ export const useYamlTransaction = ({
     const timeout = window.setTimeout(() => {
       const validation = validateYamlDraft(
         draftYaml,
-        baselineIdentity ?? latestObjectIdentity ?? objectIdentity ?? null,
-        baselineResourceVersion
+        baselineIdentity ?? latestObjectIdentity ?? objectIdentity ?? null
       );
       setLintError(validation.isValid ? null : validation.message);
     }, LINT_DEBOUNCE_MS);
     return () => window.clearTimeout(timeout);
-  }, [
-    baselineIdentity,
-    baselineResourceVersion,
-    draftYaml,
-    isEditing,
-    latestObjectIdentity,
-    objectIdentity,
-  ]);
+  }, [baselineIdentity, draftYaml, isEditing, latestObjectIdentity, objectIdentity]);
 
   const exitEditMode = useCallback(() => {
     setIsEditing(false);
@@ -891,7 +848,6 @@ export const useYamlTransaction = ({
           prepareVisibleDraftYaml,
         });
 
-      skipNextOverrideDraftSyncRef.current = true;
       setEditBaseline({ identity: latestIdentity, yaml: preparedLatestYaml });
       setDraftYaml(mergedDraftYaml);
       setLatestObjectIdentity(latestIdentity);
@@ -1051,7 +1007,6 @@ export const useYamlTransaction = ({
       isSaving,
       effectiveIdentity,
       draftYaml,
-      baselineResourceVersion,
       baselineMergeYaml,
       sourceYaml: manualYamlOverride?.yaml ?? yamlContent,
       prepareVisibleDraftYaml,
@@ -1129,7 +1084,6 @@ export const useYamlTransaction = ({
     setProtectedEditMessage,
     isSaving,
     effectiveYamlContent,
-    effectiveIdentity,
     hasRemoteDrift,
     driftForced,
     backendDriftCurrentYaml,

@@ -382,13 +382,7 @@ export const gatewayClassDescriptor: OverviewDescriptor<GatewayClassDetails> = {
         hidden: (d) => !d.parameters,
         render: (d, context) => <RefLink value={d.parameters} clusterName={context.clusterName} />,
       },
-      {
-        field: 'usedBy',
-        label: 'Used By',
-        fullWidth: true,
-        hidden: (d) => !d.usedBy?.length,
-        render: (d, context) => <RefList refs={d.usedBy} clusterName={context.clusterName} />,
-      },
+
       {
         field: 'conditions',
         label: 'Conditions',

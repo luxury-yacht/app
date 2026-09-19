@@ -275,118 +275,6 @@ type ShellStatusEvent struct {
 	Reason    string `json:"reason,omitempty"`
 }
 
-//
-// Cluster-scoped Resource Types
-// Order matches tab layout: Nodes, RBAC, Storage, Config, CRDs, Events
-//
-
-// ClsNodeInfo represents Kubernetes node information
-type ClsNodeInfo struct {
-	Kind       string `json:"kind"` // always "node"
-	Name       string `json:"name"`
-	Status     string `json:"status"`  // Ready, NotReady, Unknown
-	Roles      string `json:"roles"`   // worker, control-plane, etc.
-	Version    string `json:"version"` // Kubernetes version
-	OS         string `json:"os"`      // Operating system
-	InternalIP string `json:"internalIP"`
-	CPU        string `json:"cpu"`    // CPU capacity
-	Memory     string `json:"memory"` // Memory capacity
-	Pods       string `json:"pods"`   // Pod count/capacity
-	Age        string `json:"age"`
-}
-
-// ClsRBACInfo represents cluster-wide RBAC resource information (ClusterRoles, ClusterRoleBindings)
-type ClsRBACInfo struct {
-	Kind      string `json:"kind"`      // clusterrole, clusterrolebinding
-	TypeAlias string `json:"typeAlias"` // Short display name
-	Name      string `json:"name"`
-	Details   string `json:"details"`
-	Age       string `json:"age"`
-}
-
-// ClsStorageInfo represents cluster-wide storage resource information (PersistentVolumes)
-type ClsStorageInfo struct {
-	Kind         string `json:"kind"` // resource type (e.g. "PersistentVolume")
-	Name         string `json:"name"`
-	StorageClass string `json:"storageClass"` // storage class name (e.g. "gp3")
-	Capacity     string `json:"capacity"`
-	AccessModes  string `json:"accessModes"`
-	Status       string `json:"status"`
-	Claim        string `json:"claim"` // bound claim
-	Age          string `json:"age"`
-}
-
-// ClsConfigInfo represents cluster configuration resources (StorageClasses, IngressClasses, Webhooks)
-type ClsConfigInfo struct {
-	Kind      string `json:"kind"`      // "StorageClass", "IngressClass", "Validating", "Mutating"
-	TypeAlias string `json:"typeAlias"` // Short display name
-	Name      string `json:"name"`
-	Details   string `json:"details"`   // Provisioner/Controller/Webhooks count
-	IsDefault bool   `json:"isDefault"` // Whether this is the default resource
-	Age       string `json:"age"`
-}
-
-// ClsCRDInfo represents Custom Resource Definition information
-type ClsCRDInfo struct {
-	Kind      string `json:"kind"`      // always "customresourcedefinition"
-	TypeAlias string `json:"typeAlias"` // Short display name (e.g., "CRD")
-	Name      string `json:"name"`
-	Group     string `json:"group"`
-	Scope     string `json:"scope"`   // Namespaced or Cluster
-	Details   string `json:"details"` // versions, etc.
-	Age       string `json:"age"`
-}
-
-// ClsEventsInfo represents Kubernetes Event information for the cluster view
-type ClsEventsInfo struct {
-	Kind      string `json:"kind"`      // Resource type (always "Event")
-	Namespace string `json:"namespace"` // Namespace where the event occurred
-	Type      string `json:"type"`      // Event severity (Normal, Warning)
-	Source    string `json:"source"`    // Source that generated the event
-	Reason    string `json:"reason"`    // Short reason for the event
-	Object    string `json:"object"`    // Object kind and name (e.g., "Pod/my-pod")
-	Message   string `json:"message"`   // Human-readable message
-	Age       string `json:"age"`       // How long ago the event occurred
-}
-
-// Supporting types for Config tab resources
-
-// ClsAdmissionControlInfo represents webhook configurations
-type ClsAdmissionControlInfo struct {
-	Kind      string `json:"kind"`      // "Validating" or "Mutating"
-	TypeAlias string `json:"typeAlias"` // Short display name
-	Name      string `json:"name"`
-	Webhooks  int    `json:"webhooks"`  // Number of webhooks in the configuration
-	Namespace string `json:"namespace"` // Namespace selector or empty for all
-	Age       string `json:"age"`
-}
-
-// ClsStorageClassInfo represents Kubernetes StorageClass information
-type ClsStorageClassInfo struct {
-	Kind              string `json:"kind"` // always "StorageClass"
-	Name              string `json:"name"`
-	Provisioner       string `json:"provisioner"`
-	ReclaimPolicy     string `json:"reclaimPolicy"`
-	VolumeBindingMode string `json:"volumeBindingMode"`
-	AllowExpansion    bool   `json:"allowExpansion"`
-	IsDefault         bool   `json:"isDefault"`
-	Age               string `json:"age"`
-}
-
-// ClsIngressClassInfo represents Kubernetes IngressClass information
-type ClsIngressClassInfo struct {
-	Kind       string `json:"kind"` // always "IngressClass"
-	Name       string `json:"name"`
-	Controller string `json:"controller"`
-	IsDefault  bool   `json:"isDefault"`
-	Age        string `json:"age"`
-}
-
-//
-// Namespaced Resource Types
-// Order matches tab layout: Workloads, RBAC, Storage, Config, Network, Autoscaling, Quotas, Custom, Helm, Events
-//
-
 // PodSimpleInfo represents basic pod information for list views
 type PodSimpleInfo struct {
 	Kind      string `json:"kind"` // pod
@@ -412,80 +300,6 @@ type PodSimpleInfo struct {
 	// GVK. Required for Argo Rollouts, KubeVirt VMI, Tekton TaskRun,
 	// Spark SparkApplication, etc.
 	OwnerAPIVersion string `json:"ownerApiVersion,omitempty"`
-}
-
-// NsRBACInfo represents basic RBAC resource information (Roles, RoleBindings, ServiceAccounts)
-type NsRBACInfo struct {
-	Name      string `json:"name"`
-	Kind      string `json:"kind"` // role, rolebinding, serviceaccount
-	Namespace string `json:"namespace"`
-	Details   string `json:"details"` // type-specific details
-	Age       string `json:"age"`
-}
-
-// NsStorageInfo represents basic storage resource information
-type NsStorageInfo struct {
-	Kind         string `json:"kind"` // persistentvolumeclaim
-	Name         string `json:"name"`
-	Namespace    string `json:"namespace"`
-	Capacity     string `json:"capacity"`
-	Status       string `json:"status"`
-	StorageClass string `json:"storageClass"`
-	Age          string `json:"age"`
-}
-
-// NsConfigInfo represents basic config information (ConfigMaps and Secrets)
-type NsConfigInfo struct {
-	Kind      string `json:"kind"`      // configmap, secret
-	TypeAlias string `json:"typeAlias"` // Short display name
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Data      int    `json:"data"` // number of data items
-	Age       string `json:"age"`
-}
-
-// NsNetworkInfo represents basic network resource information
-type NsNetworkInfo struct {
-	Kind      string `json:"kind"` // service, ingress, networkpolicy, endpoint
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Details   string `json:"details"` // type-specific details (e.g., cluster IP, load balancer IP)
-	Age       string `json:"age"`
-}
-
-// NsAutoscalingInfo represents basic autoscaling resource information
-type NsAutoscalingInfo struct {
-	Kind      string `json:"kind"` // horizontalpodautoscaler, verticalpodautoscaler
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Target    string `json:"target"`  // target resource (e.g., Deployment/nginx)
-	Min       int32  `json:"min"`     // minimum replicas
-	Max       int32  `json:"max"`     // maximum replicas
-	Current   int32  `json:"current"` // current replicas
-	Age       string `json:"age"`
-}
-
-// NsQuotaInfo represents basic quota resource information
-type NsQuotaInfo struct {
-	Kind      string `json:"kind"` // resourcequota, limitrange
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Details   string `json:"details"` // quota details
-	Age       string `json:"age"`
-}
-
-// NsHelmInfo represents basic Helm chart information in a namespace
-type NsHelmInfo struct {
-	Kind       string `json:"kind"`      // always "helmrelease"
-	TypeAlias  string `json:"typeAlias"` // Short display name
-	Name       string `json:"name"`      // Release name
-	Namespace  string `json:"namespace"`
-	Chart      string `json:"chart"`      // Chart name and version
-	AppVersion string `json:"appVersion"` // Application version
-	Status     string `json:"status"`     // Deployed, Failed, etc.
-	Revision   int    `json:"revision"`   // Revision number
-	Updated    string `json:"updated"`    // Last update time
-	Age        string `json:"age"`        // First deployment time
 }
 
 // PodDetailInfoContainer represents detailed container information within a pod
@@ -559,16 +373,6 @@ type PodDetailInfo struct {
 	SecurityContext map[string]any           `json:"securityContext,omitempty"`
 }
 
-// ConfigMapDetails moved to resources/configmap and SecretDetails moved to
-// resources/secret (co-located with each kind's model + detail builder).
-
-// EndpointSliceDetails describes a single EndpointSlice resource. Address,
-// port, and address-type fields are flattened directly because each Object
-// Panel renders one EndpointSlice; aggregation across slices for a Service
-// uses a different model.
-// EndpointSliceDetails + EndpointSliceAddress/Port moved to resources/endpointslice
-// (co-located with the EndpointSlice model + detail builder).
-
 // ObjectRef is the shared openable Kubernetes object identity.
 type ObjectRef = resourcemodel.ResourceRef
 
@@ -636,12 +440,6 @@ type ReferenceGrantFromInfo struct {
 	Namespace string `json:"namespace"`
 }
 
-// IngressClassDetails + IngressClassParameters moved to resources/ingressclass
-// (co-located with the IngressClass model + detail builder).
-
-// NetworkPolicyDetails + NetworkPolicyRule/Peer/Port + IPBlock moved to
-// resources/networkpolicy (co-located with the NetworkPolicy model + builder).
-
 type PolicyRule struct {
 	APIGroups       []string `json:"apiGroups,omitempty"`
 	Resources       []string `json:"resources,omitempty"`
@@ -674,9 +472,6 @@ type PodMetricsSummary struct {
 	MemLimit   string `json:"memLimit,omitempty"`
 }
 
-// VolumeClaimTemplateSummary moved to resources/statefulset (co-located with the
-// StatefulSet DTO).
-
 type ReplicaSetSummary struct {
 	Name      string `json:"name"`
 	Revision  string `json:"revision"`
@@ -685,23 +480,6 @@ type ReplicaSetSummary struct {
 	Available string `json:"availableReplicas"`
 	Age       string `json:"age"`
 }
-
-// ReplicaSetDetails represents detailed ReplicaSet information for the object panel.
-// ReplicaSetDetails moved to resources/replicaset (co-located with its model +
-// detail builder).
-
-// DeploymentDetails moved to resources/deployment, and StatefulSetDetails +
-// VolumeClaimTemplateSummary moved to resources/statefulset — each co-located
-// with its kind's model + detail builder. ReplicaSetSummary stays here because
-// it is shared across kinds.
-
-// DaemonSetDetails moved to resources/daemonset (co-located with its model +
-// detail builder).
-
-// JobDetails moved to resources/job and CronJobDetails moved to resources/cronjob
-// (each co-located with its model + detail builder). JobReference, JobSimpleInfo,
-// and JobTemplateDetails stay here — they are shared sub-types CronJobDetails
-// references.
 
 type JobReference struct {
 	Name      string       `json:"name"`

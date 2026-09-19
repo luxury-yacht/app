@@ -52,8 +52,6 @@ const DEFAULT_SIDEBAR_SELECTION: SidebarSelectionType = {
   value: 'overview',
 };
 
-const canUpdateSidebarVisible = () => desktopRuntimeAvailable();
-
 export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ children }) => {
   const { selectedClusterId, selectedClusterIds } = useKubeconfig();
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
@@ -70,20 +68,14 @@ export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ chil
 
   // Sync sidebar state with backend on mount and changes
   useEffect(() => {
-    if (!canUpdateSidebarVisible()) {
+    if (!desktopRuntimeAvailable()) {
       return;
     }
     void SetSidebarVisible(isSidebarVisible);
   }, [isSidebarVisible]);
 
   const toggleSidebar = useCallback(() => {
-    setIsSidebarVisible((prev) => {
-      const newState = !prev;
-      if (canUpdateSidebarVisible()) {
-        void SetSidebarVisible(newState);
-      }
-      return newState;
-    });
+    setIsSidebarVisible((prev) => !prev);
   }, []);
 
   useEffect(() => {

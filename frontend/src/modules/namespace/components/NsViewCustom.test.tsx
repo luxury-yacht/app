@@ -792,41 +792,26 @@ describe('NsViewCustom', () => {
     expect(modalProps.current?.isOpen).toBe(false);
   });
 
-  // Characterization of the post-fix contract: after the kind-only-objects
-  // cleanup, CustomResourceData is required to carry group/version.
-  // A row that's missing version is a programming bug, and handleDelete
-  // must fail loud rather than silently fall back to first-match-wins
-  // discovery. The errorHandler should see the thrown error.
-  it('throws instead of falling back when group/version are missing', async () => {
+  it('rejects incomplete identity before offering custom resource actions', async () => {
     const missingGVK: CustomResourceData = {
       ...baseResource,
       ref: { ...baseResource.ref, group: '', version: '' },
     };
-
     await renderComponent({ showNamespaceColumn: true });
-
     const gridProps = gridTableMock.mock.calls[0][0];
-    const contextItems = gridProps.getCustomContextMenuItems(missingGVK, 'kind');
-    const deleteItem = contextItems.find(
-      (item: { label?: string; onClick?: () => void }) => item.label === 'Delete'
+
+    expect(() => gridProps.getCustomContextMenuItems(missingGVK, 'kind')).toThrow(
+      /missing version/
     );
-    await act(async () => {
-      deleteItem?.onClick?.();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      await modalProps.current.onConfirm();
-    });
-
     expect(runObjectActionMock).not.toHaveBeenCalled();
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('version missing') }),
-      { action: 'delete', kind: 'CronJob', name: 'nightly-cleanup' }
-    );
-
-    await flush();
     expect(modalProps.current?.isOpen).toBe(false);
+
+    const complete = {
+      ...missingGVK,
+      ref: { ...missingGVK.ref, group: 'batch', version: 'v1' },
+    };
+    const items = gridProps.getCustomContextMenuItems(complete, 'kind');
+    expect(items.some((item: { label?: string }) => item.label === 'Delete')).toBe(true);
   });
 
   it('handles delete failure with errorHandler and reverts modal state', async () => {

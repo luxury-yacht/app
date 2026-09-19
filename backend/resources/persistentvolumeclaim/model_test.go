@@ -3,6 +3,9 @@ package persistentvolumeclaim_test
 import (
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"k8s.io/utils/ptr"
+
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -75,4 +78,36 @@ func TestBuildResourceModelTerminatingStatus(t *testing.T) {
 	require.Equal(t, "terminating", model.Status.Presentation)
 	require.True(t, model.Status.Lifecycle.Deleting)
 	require.True(t, model.Status.Lifecycle.FinalizerBlocked)
+}
+
+func TestStorageClassFallbackMatchesListFactsAndStatus(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		spec        *string
+		annotations map[string]string
+		want        string
+	}{
+		{name: "unset"},
+		{name: "legacy", annotations: map[string]string{"volume.beta.kubernetes.io/storage-class": "legacy"}, want: "legacy"},
+		{name: "explicit", spec: ptr.To("fast"), annotations: map[string]string{"volume.beta.kubernetes.io/storage-class": "legacy"}, want: "fast"},
+		{name: "explicit empty", spec: ptr.To(""), annotations: map[string]string{"volume.beta.kubernetes.io/storage-class": "legacy"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			pvc := persistentVolumeClaimWithPhase(corev1.ClaimPending)
+			pvc.Spec.StorageClassName = tt.spec
+			pvc.Annotations = tt.annotations
+			row := persistentvolumeclaim.BuildStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, pvc)
+			facts := persistentvolumeclaim.BuildFacts(pvc, nil)
+			require.Equal(t, tt.want, row.StorageClass)
+			require.Equal(t, tt.want, facts.StorageClass)
+			model := persistentvolumeclaim.BuildResourceModel("cluster-a", pvc)
+			var signalClass string
+			for _, signal := range model.Status.Signals {
+				if signal.Name == "spec.storageClassName" {
+					signalClass = signal.Status
+				}
+			}
+			require.Equal(t, tt.want, signalClass)
+		})
+	}
 }

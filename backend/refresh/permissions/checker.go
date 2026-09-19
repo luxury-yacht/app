@@ -53,6 +53,15 @@ type cacheEntry struct {
 	expiresAt time.Time
 }
 
+func (e cacheEntry) decision(source DecisionSource) Decision {
+	return Decision{
+		Allowed:   e.allowed,
+		Source:    source,
+		CachedAt:  e.cachedAt,
+		ExpiresAt: e.expiresAt,
+	}
+}
+
 // Checker performs SSAR requests and caches the results per cluster selection.
 type Checker struct {
 	clusterID  string
@@ -251,55 +260,25 @@ func (c *Checker) canInNamespace(ctx context.Context, group, resource, verb, nam
 	now := c.now()
 	entry, ok := c.getEntry(key)
 	if ok && !now.After(entry.expiresAt) {
-		return Decision{
-			Allowed:   entry.allowed,
-			Source:    DecisionSourceCache,
-			CachedAt:  entry.cachedAt,
-			ExpiresAt: entry.expiresAt,
-		}, nil
+		return entry.decision(DecisionSourceCache), nil
 	}
 
 	// Stale-while-revalidate: if the entry is expired but within the grace window,
 	// return the stale value immediately and trigger a background refresh.
 	if ok && c.staleGrace > 0 && !now.After(entry.expiresAt.Add(c.staleGrace)) {
 		c.triggerBackgroundRefresh(ctx, key, group, resource, verb, namespace)
-		return Decision{
-			Allowed:   entry.allowed,
-			Source:    DecisionSourceStale,
-			CachedAt:  entry.cachedAt,
-			ExpiresAt: entry.expiresAt,
-		}, nil
+		return entry.decision(DecisionSourceStale), nil
 	}
 
-	// Use singleflight to deduplicate concurrent SSAR calls for the same cache key.
-	type sfResult struct {
-		allowed bool
-		err     error
-	}
-	val, _, _ := c.sfGroup.Do(key, func() (interface{}, error) {
-		allowed, err := c.review(ctx, strings.TrimSpace(group), strings.TrimSpace(resource), strings.TrimSpace(verb), strings.TrimSpace(namespace))
-		return sfResult{allowed: allowed, err: err}, nil
-	})
-	result := val.(sfResult)
-	allowed, err := result.allowed, result.err
+	allowed, err := c.reviewOnce(ctx, key, group, resource, verb, namespace)
 
 	if err == nil {
 		entry = c.storeEntry(key, allowed, now)
-		return Decision{
-			Allowed:   allowed,
-			Source:    DecisionSourceFresh,
-			CachedAt:  entry.cachedAt,
-			ExpiresAt: entry.expiresAt,
-		}, nil
+		return entry.decision(DecisionSourceFresh), nil
 	}
 
 	if ok && isTransientPermissionError(err) {
-		return Decision{
-			Allowed:   entry.allowed,
-			Source:    DecisionSourceFallback,
-			CachedAt:  entry.cachedAt,
-			ExpiresAt: entry.expiresAt,
-		}, nil
+		return entry.decision(DecisionSourceFallback), nil
 	}
 
 	return Decision{}, err
@@ -320,18 +299,18 @@ func (c *Checker) triggerBackgroundRefresh(ctx context.Context, key, group, reso
 
 // doBackgroundRefresh executes the SSAR call and stores the result via singleflight.
 func (c *Checker) doBackgroundRefresh(ctx context.Context, key, group, resource, verb, namespace string) {
-	type sfResult struct {
-		allowed bool
-		err     error
+	allowed, err := c.reviewOnce(ctx, key, group, resource, verb, namespace)
+	if err == nil {
+		c.storeEntry(key, allowed, c.now())
 	}
-	val, _, _ := c.sfGroup.Do(key, func() (interface{}, error) {
-		allowed, err := c.review(ctx, strings.TrimSpace(group), strings.TrimSpace(resource), strings.TrimSpace(verb), strings.TrimSpace(namespace))
-		return sfResult{allowed: allowed, err: err}, nil
+}
+
+// Foreground and background callers share both the flight and its result type.
+func (c *Checker) reviewOnce(ctx context.Context, key, group, resource, verb, namespace string) (bool, error) {
+	value, err, _ := c.sfGroup.Do(key, func() (interface{}, error) {
+		return c.review(ctx, strings.TrimSpace(group), strings.TrimSpace(resource), strings.TrimSpace(verb), strings.TrimSpace(namespace))
 	})
-	result := val.(sfResult)
-	if result.err == nil {
-		c.storeEntry(key, result.allowed, c.now())
-	}
+	return value.(bool), err
 }
 
 func (c *Checker) cacheKey(group, resource, verb, namespace string) (string, error) {

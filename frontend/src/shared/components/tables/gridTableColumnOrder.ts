@@ -69,6 +69,26 @@ export function orderColumns<T>(
   });
 }
 
+export function reorderColumnOrder(
+  order: readonly string[],
+  key: string,
+  targetIndex: number
+): string[] | null {
+  const currentIndex = order.indexOf(key);
+  if (
+    currentIndex < 0 ||
+    targetIndex < 0 ||
+    targetIndex >= order.length ||
+    currentIndex === targetIndex
+  ) {
+    return null;
+  }
+  const next = [...order];
+  const [movedKey] = next.splice(currentIndex, 1);
+  next.splice(targetIndex, 0, movedKey);
+  return next;
+}
+
 export function reorderVisibleColumnOrder(
   fullOrder: readonly string[],
   key: string,

@@ -21,7 +21,7 @@ func (m *Manager) helmReleaseRef(namespace, name string) resourcemodel.ResourceR
 
 }
 
-func (m *Manager) newObjectUpdate(updateType MessageType, domain string, obj metav1.Object, ref resourcemodel.ResourceRef) Update {
+func (m *Manager) newObjectUpdate(updateType MessageType, domain, resourceVersion string, ref resourcemodel.ResourceRef) Update {
 	if strings.TrimSpace(ref.ClusterID) == "" {
 		ref.ClusterID = m.clusterMeta.ClusterID
 	}
@@ -30,18 +30,7 @@ func (m *Manager) newObjectUpdate(updateType MessageType, domain string, obj met
 		Domain:          domain,
 		ClusterID:       m.clusterMeta.ClusterID,
 		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: obj.GetResourceVersion(),
+		ResourceVersion: resourceVersion,
 		Ref:             &ref,
 	}
-}
-
-func (m *Manager) newObjectRowUpdate(updateType MessageType, domain string, obj metav1.Object, ref resourcemodel.ResourceRef, row interface{}) Update {
-	// Every streamed table is query-backed: the visible page is fetched over HTTP
-	// and the live subscription exists only to learn WHEN to refetch. The stream
-	// therefore ships only the change signal (Ref + ResourceVersion); the projected
-	// row is never sent. The row argument is retained so the guardrail test can keep
-	// policing that callers pass a projector-derived value, and because some callers
-	// (e.g. pods) still build the projection for load-bearing broadcast scope.
-	_ = row
-	return m.newObjectUpdate(updateType, domain, obj, ref)
 }

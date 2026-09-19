@@ -1,17 +1,28 @@
 package resourcestream
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/informer"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
 // TestIngestNotifySinkBroadcastsNamespacedSignal proves the signal-only change signal
@@ -19,7 +30,7 @@ import (
 // ingest Catalog-half Sink: an Upsert of the kind's catalog Summary broadcasts a
 // MODIFIED change signal on the descriptor's domain + the object's namespace scope,
 // carrying Ref + ResourceVersion and NO Row — byte-equivalent to the shared-informer
-// path streamObjectRowFromDescriptor produced before the cutover.
+// path broadcastObjectFromDescriptor produced before the cutover.
 func TestIngestNotifySinkBroadcastsNamespacedSignal(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
@@ -70,26 +81,63 @@ func TestIngestNotifySinkBroadcastsClusterSignalAndDelete(t *testing.T) {
 	require.Equal(t, "", del.Scope)
 }
 
-// TestRegisterDescriptorStreamsSkipsIngestOwnedKinds is the memory proof for the notify
-// side: registerDescriptorStreams must NOT wire a typed informer for any IngestOwned
-// GVR — their notify signal comes from the ingest sink instead. It asserts that for
-// every IngestOwned descriptor the dispatch loop's guard short-circuits before
-// d.Informer(shared), so the factory never caches the cut kind purely for the signal.
-func TestRegisterDescriptorStreamsSkipsIngestOwnedKinds(t *testing.T) {
-	ingestOwned := kindregistry.IngestOwnedGVRs()
-	require.NotEmpty(t, ingestOwned, "expected IngestOwned kinds to exist")
+type gatewayStreamPresence struct{}
 
-	// Every IngestOwned descriptor that is a streamed descriptor must be excluded from
-	// the informer-driven dispatch. We assert the skip condition registerDescriptorStreams
-	// applies (the GVR is in the IngestOwned set) holds for each, so no d.Informer is called.
-	streamedIngestOwned := 0
-	for _, d := range kindregistry.StreamDescriptors() {
-		if _, owned := ingestOwned[d.GVR()]; !owned {
+func (gatewayStreamPresence) AnyPresent() bool     { return true }
+func (gatewayStreamPresence) Has(kind string) bool { return kind == "Gateway" }
+
+func TestDescriptorRegistrationStreamsGatewayWithoutRecreatingIngestWatches(t *testing.T) {
+	client := fake.NewClientset()
+	checker := permissions.NewCheckerWithReview("c1", time.Minute, func(context.Context, string, string, string, string) (bool, error) {
+		return true, nil
+	})
+	gatewayClient := gatewayfake.NewClientset()
+	gatewayClient.PrependReactor("list", "gateways", func(clienttesting.Action) (bool, runtime.Object, error) {
+		return true, &gatewayv1.GatewayList{Items: []gatewayv1.Gateway{{
+			ObjectMeta: metav1.ObjectMeta{Name: "edge", Namespace: "default", UID: "gateway-uid", ResourceVersion: "7"},
+		}}}, nil
+	})
+	factory := informer.New(client, nil, time.Minute, checker).WithGatewayFactory(
+		gatewayinformers.NewSharedInformerFactory(gatewayClient, time.Minute), gatewayStreamPresence{},
+	)
+	manager := NewManager(nil, nil, nil, snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, nil, nil)
+	t.Cleanup(manager.Stop)
+	manager.permissions = factory
+	require.True(t, factory.CanListWatch("gateway.networking.k8s.io", "gateways"))
+	manager.registerDescriptorStreams(factory)
+	sub, err := subscribeForTest(t, manager, domainNamespaceNetwork, "namespace:default")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, factory.Start(ctx))
+	for resource, synced := range factory.SharedInformerFactory().WaitForCacheSync(ctx.Done()) {
+		require.True(t, synced, "informer did not sync: %v", resource)
+	}
+	update := requireNextUpdate(t, sub)
+	require.Equal(t, domainNamespaceNetwork, update.Domain)
+	require.Equal(t, "namespace:default", update.Scope)
+	requireUpdateObjectMetadata(t, update, "7", "gateway-uid", "edge", "default", "Gateway")
+	require.Equal(t, "gateway.networking.k8s.io", update.Ref.Group)
+	require.Equal(t, "v1", update.Ref.Version)
+
+	owned := kindregistry.IngestOwnedGVRs()
+	for _, action := range client.Actions() {
+		if _, cut := owned[action.GetResource()]; !cut {
 			continue
 		}
-		streamedIngestOwned++
-		require.Contains(t, ingestOwned, d.GVR(),
-			"IngestOwned streamed descriptor %s must be skipped by registerDescriptorStreams", d.Kind)
+		// Full Helm release objects intentionally use a separate filtered source.
+		var selector string
+		switch action := action.(type) {
+		case clienttesting.ListAction:
+			selector = action.GetListRestrictions().Labels.String()
+		case clienttesting.WatchAction:
+			selector = action.GetWatchRestrictions().Labels.String()
+		default:
+			continue
+		}
+		require.Contains(t, []string{"secrets", "configmaps"}, action.GetResource().Resource,
+			"stream registration recreated an ingest-owned watch: %s", action.GetResource())
+		require.Equal(t, "owner=helm", selector)
 	}
-	require.Positive(t, streamedIngestOwned, "expected at least one streamed IngestOwned descriptor")
 }

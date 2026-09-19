@@ -30,7 +30,6 @@ import (
 func TestNewWorkloadIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "c-1", ClusterName: "prod"}
 	clusterID := meta.ClusterID
-	b := &NamespaceWorkloadsBuilder{}
 	replicas := int32(3)
 
 	deploy := &appsv1.Deployment{
@@ -72,11 +71,11 @@ func TestNewWorkloadIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 		project   ingest.ProjectFunc
 		wantOwn   WorkloadSummary
 	}{
-		{obj: deploy, collector: deployment.ObjectMapNode, project: NewDeploymentIngestProjector(meta), wantOwn: b.buildDeploymentSummary(clusterID, deploy, nil, nil)},
-		{obj: sts, collector: statefulset.ObjectMapNode, project: NewStatefulSetIngestProjector(meta), wantOwn: b.buildStatefulSetSummary(clusterID, sts, nil, nil)},
-		{obj: ds, collector: daemonset.ObjectMapNode, project: NewDaemonSetIngestProjector(meta), wantOwn: b.buildDaemonSetSummary(clusterID, ds, nil, nil)},
-		{obj: job, collector: jobres.ObjectMapNode, project: NewJobIngestProjector(meta), wantOwn: b.buildJobSummary(clusterID, job, nil, nil)},
-		{obj: cron, collector: cronjob.ObjectMapNode, project: NewCronJobIngestProjector(meta), wantOwn: b.buildCronJobSummary(clusterID, cron, nil, nil)},
+		{obj: deploy, collector: deployment.ObjectMapNode, project: NewDeploymentIngestProjector(meta), wantOwn: buildDeploymentOwnSummary(clusterID, deploy)},
+		{obj: sts, collector: statefulset.ObjectMapNode, project: NewStatefulSetIngestProjector(meta), wantOwn: buildStatefulSetOwnSummary(clusterID, sts)},
+		{obj: ds, collector: daemonset.ObjectMapNode, project: NewDaemonSetIngestProjector(meta), wantOwn: buildDaemonSetOwnSummary(clusterID, ds)},
+		{obj: job, collector: jobres.ObjectMapNode, project: NewJobIngestProjector(meta), wantOwn: buildJobOwnSummary(clusterID, job)},
+		{obj: cron, collector: cronjob.ObjectMapNode, project: NewCronJobIngestProjector(meta), wantOwn: buildCronJobOwnSummary(clusterID, cron)},
 	}
 
 	for _, tc := range cases {

@@ -25,6 +25,7 @@ import { errorHandler } from '@utils/errorHandler';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StopPortForward } from '@/core/backend-api';
 import { type ShellSessionInfo, useRuntimeOperationStatus } from './runtimeOperationStatus';
+import type { PortForwardSession } from './runtimeOperationStatusAdapter';
 import '@modules/port-forward/PortForwardsPanel.css';
 import './SessionsStatus.css';
 
@@ -57,6 +58,131 @@ function renderPortForwardStatusIcon(status: string) {
   }
 }
 
+interface SessionField {
+  label: string;
+  value: string;
+}
+
+const sessionIdentityFields = (
+  session: Pick<ShellSessionInfo, 'clusterName' | 'clusterId' | 'namespace' | 'podName'>
+): SessionField[] => [
+  { label: 'cluster', value: session.clusterName || session.clusterId || '-' },
+  { label: 'namespace', value: session.namespace || '-' },
+  { label: 'pod', value: session.podName || '-' },
+];
+
+const SessionFields = ({ fields, status }: { fields: SessionField[]; status: string }) => (
+  <>
+    {fields.map((field, index) => (
+      <div key={field.label} className="ss-field-row as-pf-field-row">
+        <span className="as-pf-status-slot" aria-hidden={index !== 0}>
+          {index === 0 ? renderPortForwardStatusIcon(status) : null}
+        </span>
+        <span className="ss-field-label">{field.label}:</span>
+        <span className="ss-field-value">{field.value}</span>
+      </div>
+    ))}
+  </>
+);
+
+const ShellSessionItem = ({
+  session,
+  jumpingShellSessionId,
+  onOpen,
+}: {
+  session: ShellSessionInfo;
+  jumpingShellSessionId: string | null;
+  onOpen: (session: ShellSessionInfo) => void;
+}) => {
+  const sessionStatus = session.status || 'active';
+  const fields = [
+    ...sessionIdentityFields(session),
+    { label: 'container', value: session.container || '-' },
+    { label: 'shell', value: session.command?.[0] || '/bin/sh' },
+  ];
+  return (
+    <button
+      type="button"
+      className="ss-session-item as-shell-session as-shell-session-jump"
+      onClick={() => onOpen(session)}
+      disabled={Boolean(jumpingShellSessionId)}
+      title="Click to open this shell session"
+      aria-label={`Open shell session tab for ${session.podName || 'pod'}`}
+    >
+      <div className="ss-session-main">
+        <div className="ss-session-fields as-pf-fields">
+          <SessionFields fields={fields} status={sessionStatus} />
+        </div>
+      </div>
+      <span className="as-shell-open-affordance" aria-hidden="true">
+        {jumpingShellSessionId === session.sessionId ? '…' : <OpenIcon width={14} height={14} />}
+      </span>
+    </button>
+  );
+};
+
+const PortForwardSessionItem = ({
+  session,
+  isStopping,
+  onStop,
+}: {
+  session: PortForwardSession;
+  isStopping: boolean;
+  onStop: (id: string) => Promise<void>;
+}) => {
+  const isError = session.status === 'error';
+  const fields = sessionIdentityFields(session);
+  let actionIcon: React.ReactNode = <StopSquareIcon />;
+  if (isStopping) {
+    actionIcon = '…';
+  } else if (isError) {
+    actionIcon = <CloseIcon width={14} height={14} />;
+  }
+  return (
+    <div className={`ss-session-item as-pf-session pf-session-${session.status}`}>
+      <div className="ss-session-main">
+        <div className="ss-session-fields as-pf-fields">
+          <SessionFields fields={fields} status={session.status} />
+          <div className="ss-field-row as-pf-field-row as-pf-local-row">
+            <span className="as-pf-status-slot" aria-hidden>
+              {null}
+            </span>
+            <span className="ss-field-label">ports:</span>
+            <span className="ss-field-value">
+              <span>{session.containerPort}</span>
+              <span className="pf-port-arrow">→</span>
+              <button
+                type="button"
+                className="pf-local-port pf-local-port-link"
+                onClick={() => openURL(`http://localhost:${session.localPort}`)}
+                title="Open in browser"
+                disabled={session.status !== 'active'}
+              >
+                localhost:{session.localPort}
+              </button>
+            </span>
+          </div>
+        </div>
+        {!!session.statusReason && (
+          <div className="pf-session-reason as-pf-reason">{session.statusReason}</div>
+        )}
+      </div>
+      <div className="ss-session-actions as-pf-actions">
+        <button
+          type="button"
+          className={`as-compact-icon-action ${isError ? 'as-danger' : 'as-warning'}`}
+          onClick={() => void onStop(session.id)}
+          disabled={isStopping}
+          title={isError ? undefined : 'Stop port forward'}
+          aria-label={isError ? 'Remove session' : 'Stop port forward'}
+        >
+          {actionIcon}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const SessionsStatus: React.FC = () => {
   const { openWithObject } = useObjectPanel();
   const { selectedClusterId, selectedKubeconfigs, getClusterMeta, setActiveKubeconfig } =
@@ -64,11 +190,11 @@ const SessionsStatus: React.FC = () => {
   const { shellSessions: filteredShellSessions, portForwardSessions: filteredPortForwards } =
     useRuntimeOperationStatus(selectedClusterId);
   const [stoppingPortForwardIds, setStoppingPortForwardIds] = useState<Set<string>>(new Set());
-  const [jumpingShellSessionId, setJumpingShellSessionId] = useState<string | null>(null);
   const [pendingShellJump, setPendingShellJump] = useState<{
     session: ShellSessionInfo;
     targetClusterId: string;
   } | null>(null);
+  const jumpingShellSessionId = pendingShellJump?.session.sessionId ?? null;
   const [statusPopoverCloseSignal, setStatusPopoverCloseSignal] = useState(0);
 
   const handleStopPortForward = useCallback(async (sessionId: string) => {
@@ -92,28 +218,35 @@ const SessionsStatus: React.FC = () => {
   }, []);
 
   const openShellSessionTab = useCallback(
-    (session: ShellSessionInfo): boolean => {
-      const targetRef = buildRequiredObjectReference({
-        kind: 'Pod',
-        name: session.podName,
-        namespace: session.namespace,
-        clusterId: session.clusterId?.trim() || selectedClusterId?.trim() || undefined,
-        clusterName: session.clusterName?.trim() || undefined,
-      });
-      const panelId = objectPanelId(targetRef);
-      openWithObject(targetRef);
-      requestObjectPanelTab(panelId, 'shell');
-      if (getRequestedObjectPanelTab(panelId) !== 'shell') {
-        throw new Error('Shell session tab request was not accepted.');
+    (session: ShellSessionInfo) => {
+      try {
+        const targetRef = buildRequiredObjectReference({
+          group: '',
+          version: 'v1',
+          kind: 'Pod',
+          name: session.podName,
+          namespace: session.namespace,
+          clusterId: session.clusterId,
+          clusterName: session.clusterName?.trim() || undefined,
+        });
+        const panelId = objectPanelId(targetRef);
+        openWithObject(targetRef);
+        requestObjectPanelTab(panelId, 'shell');
+        if (getRequestedObjectPanelTab(panelId) !== 'shell') {
+          throw new Error('Shell session tab request was not accepted.');
+        }
+        setStatusPopoverCloseSignal((signal) => signal + 1);
+      } catch (error) {
+        errorHandler.handle(error, {
+          action: 'jumpToShellSession',
+          sessionId: session.sessionId,
+          clusterId: session.clusterId?.trim() || '',
+          source: 'SessionsStatus',
+        });
       }
-      return true;
     },
-    [openWithObject, selectedClusterId]
+    [openWithObject]
   );
-
-  const closeStatusPopover = useCallback(() => {
-    setStatusPopoverCloseSignal((signal) => signal + 1);
-  }, []);
 
   const clusterSelectionById = useMemo(() => {
     const map = new Map<string, string>();
@@ -134,22 +267,9 @@ const SessionsStatus: React.FC = () => {
       }
 
       const targetClusterId = session.clusterId?.trim() || '';
-      setJumpingShellSessionId(session.sessionId);
 
       if (!targetClusterId || selectedClusterId === targetClusterId) {
-        try {
-          if (openShellSessionTab(session)) {
-            closeStatusPopover();
-          }
-        } catch (err) {
-          errorHandler.handle(err, {
-            action: 'jumpToShellSession',
-            sessionId: session.sessionId,
-            clusterId: targetClusterId,
-            source: 'SessionsStatus',
-          });
-        }
-        setJumpingShellSessionId(null);
+        openShellSessionTab(session);
         return;
       }
 
@@ -161,7 +281,6 @@ const SessionsStatus: React.FC = () => {
           clusterId: targetClusterId,
           source: 'SessionsStatus',
         });
-        setJumpingShellSessionId(null);
         return;
       }
 
@@ -169,7 +288,6 @@ const SessionsStatus: React.FC = () => {
       setActiveKubeconfig(targetSelection);
     },
     [
-      closeStatusPopover,
       clusterSelectionById,
       jumpingShellSessionId,
       openShellSessionTab,
@@ -189,32 +307,21 @@ const SessionsStatus: React.FC = () => {
     ) {
       return;
     }
-    try {
-      if (openShellSessionTab(pendingShellJump.session)) {
-        closeStatusPopover();
-      }
-    } catch (err) {
-      errorHandler.handle(err, {
-        action: 'jumpToShellSession',
-        sessionId: pendingShellJump.session.sessionId,
-        clusterId: pendingShellJump.targetClusterId,
-        source: 'SessionsStatus',
-      });
-    }
+    openShellSessionTab(pendingShellJump.session);
     setPendingShellJump(null);
-    setJumpingShellSessionId(null);
-  }, [closeStatusPopover, openShellSessionTab, pendingShellJump, selectedClusterId]);
+  }, [openShellSessionTab, pendingShellJump, selectedClusterId]);
 
   useEffect(() => {
     if (!pendingShellJump) {
       return;
     }
     const stillExists = filteredShellSessions.some(
-      (session) => session.sessionId === pendingShellJump.session.sessionId
+      (session) =>
+        session.sessionId === pendingShellJump.session.sessionId &&
+        session.clusterId === pendingShellJump.targetClusterId
     );
     if (!stillExists) {
       setPendingShellJump(null);
-      setJumpingShellSessionId(null);
     }
   }, [filteredShellSessions, pendingShellJump]);
 
@@ -259,54 +366,14 @@ const SessionsStatus: React.FC = () => {
                   {shellCount === 0 ? (
                     <div className="as-section-empty">No active shell sessions</div>
                   ) : (
-                    filteredShellSessions.map((session) => {
-                      const sessionStatus = session.status || 'active';
-                      const shellPath = session.command?.[0] || '/bin/sh';
-                      const fields = [
-                        {
-                          label: 'cluster',
-                          value: session.clusterName || session.clusterId || '-',
-                        },
-                        { label: 'namespace', value: session.namespace || '-' },
-                        { label: 'pod', value: session.podName || '-' },
-                        { label: 'container', value: session.container || '-' },
-                        { label: 'shell', value: shellPath },
-                      ];
-                      return (
-                        <button
-                          key={session.sessionId}
-                          type="button"
-                          className="ss-session-item as-shell-session as-shell-session-jump"
-                          onClick={() => handleJumpToShellSession(session)}
-                          disabled={Boolean(jumpingShellSessionId)}
-                          title="Click to open this shell session"
-                          aria-label={`Open shell session tab for ${session.podName || 'pod'}`}
-                        >
-                          <div className="ss-session-main">
-                            <div className="ss-session-fields as-pf-fields">
-                              {fields.map((field, index) => (
-                                <div key={field.label} className="ss-field-row as-pf-field-row">
-                                  <span className="as-pf-status-slot" aria-hidden={index !== 0}>
-                                    {index === 0
-                                      ? renderPortForwardStatusIcon(sessionStatus)
-                                      : null}
-                                  </span>
-                                  <span className="ss-field-label">{field.label}:</span>
-                                  <span className="ss-field-value">{field.value}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <span className="as-shell-open-affordance" aria-hidden="true">
-                            {jumpingShellSessionId === session.sessionId ? (
-                              '…'
-                            ) : (
-                              <OpenIcon width={14} height={14} />
-                            )}
-                          </span>
-                        </button>
-                      );
-                    })
+                    filteredShellSessions.map((session) => (
+                      <ShellSessionItem
+                        key={JSON.stringify([session.clusterId, session.sessionId])}
+                        session={session}
+                        jumpingShellSessionId={jumpingShellSessionId}
+                        onOpen={handleJumpToShellSession}
+                      />
+                    ))
                   )}
                 </div>
               </section>
@@ -320,82 +387,14 @@ const SessionsStatus: React.FC = () => {
                   {portForwardCount === 0 ? (
                     <div className="as-section-empty">No active port forwards</div>
                   ) : (
-                    filteredPortForwards.map((session) => {
-                      const isStopping = stoppingPortForwardIds.has(session.id);
-                      const isError = session.status === 'error';
-                      const fields = [
-                        {
-                          label: 'cluster',
-                          value: session.clusterName || session.clusterId || '-',
-                        },
-                        { label: 'namespace', value: session.namespace || '-' },
-                        { label: 'pod', value: session.podName || '-' },
-                      ];
-                      let actionIcon: React.ReactNode = <StopSquareIcon />;
-                      if (isStopping) {
-                        actionIcon = '…';
-                      } else if (isError) {
-                        actionIcon = <CloseIcon width={14} height={14} />;
-                      }
-                      return (
-                        <div
-                          key={session.id}
-                          className={`ss-session-item as-pf-session pf-session-${session.status}`}
-                        >
-                          <div className="ss-session-main">
-                            <div className="ss-session-fields as-pf-fields">
-                              {fields.map((field, index) => (
-                                <div key={field.label} className="ss-field-row as-pf-field-row">
-                                  <span className="as-pf-status-slot" aria-hidden={index !== 0}>
-                                    {index === 0
-                                      ? renderPortForwardStatusIcon(session.status)
-                                      : null}
-                                  </span>
-                                  <span className="ss-field-label">{field.label}:</span>
-                                  <span className="ss-field-value">{field.value}</span>
-                                </div>
-                              ))}
-                              <div className="ss-field-row as-pf-field-row as-pf-local-row">
-                                <span className="as-pf-status-slot" aria-hidden>
-                                  {null}
-                                </span>
-                                <span className="ss-field-label">ports:</span>
-                                <span className="ss-field-value">
-                                  <span>{session.containerPort}</span>
-                                  <span className="pf-port-arrow">→</span>
-                                  <button
-                                    type="button"
-                                    className="pf-local-port pf-local-port-link"
-                                    onClick={() => openURL(`http://localhost:${session.localPort}`)}
-                                    title="Open in browser"
-                                    disabled={session.status !== 'active'}
-                                  >
-                                    localhost:{session.localPort}
-                                  </button>
-                                </span>
-                              </div>
-                            </div>
-                            {!!session.statusReason && (
-                              <div className="pf-session-reason as-pf-reason">
-                                {session.statusReason}
-                              </div>
-                            )}
-                          </div>
-                          <div className="ss-session-actions as-pf-actions">
-                            <button
-                              type="button"
-                              className={`as-compact-icon-action ${isError ? 'as-danger' : 'as-warning'}`}
-                              onClick={() => void handleStopPortForward(session.id)}
-                              disabled={isStopping}
-                              title={isError ? undefined : 'Stop port forward'}
-                              aria-label={isError ? 'Remove session' : 'Stop port forward'}
-                            >
-                              {actionIcon}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
+                    filteredPortForwards.map((session) => (
+                      <PortForwardSessionItem
+                        key={JSON.stringify([session.clusterId, session.id])}
+                        session={session}
+                        isStopping={stoppingPortForwardIds.has(session.id)}
+                        onStop={handleStopPortForward}
+                      />
+                    ))
                   )}
                 </div>
               </section>

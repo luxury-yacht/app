@@ -10,5 +10,9 @@ import "fmt"
 
 // DescribeSummary formats the ResourceQuota streaming-row detail string from its facts.
 func DescribeSummary(facts Facts) string {
-	return fmt.Sprintf("Hard: %d, Used: %d", len(facts.Hard), len(facts.Used))
+	return describeCounts(len(facts.Hard), len(facts.Used))
+}
+
+func describeCounts(hard, used int) string {
+	return fmt.Sprintf("Hard: %d, Used: %d", hard, used)
 }

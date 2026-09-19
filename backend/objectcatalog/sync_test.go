@@ -362,6 +362,12 @@ func TestEvaluateDescriptorsBatchKeepsStableDescriptorIndexesAcrossNamespaceFano
 	require.True(t, allowed[0], "a later namespace answer must stay associated with deployments")
 	require.False(t, allowed[1], "a definitive denial must stay associated with statefulsets")
 	require.True(t, allowed[2], "the cluster-scoped answer must stay associated with nodes")
+
+	for index, desc := range descriptors {
+		singleAllowed, singleErr := svc.evaluateDescriptor(context.Background(), capSvc, desc)
+		require.NoError(t, singleErr, "an answered namespace must override its sibling's evaluation error")
+		require.Equal(t, allowed[index], singleAllowed, "batch and fallback preflight must make the same collection decision")
+	}
 }
 
 func TestEvaluateDescriptorsBatchReturnsAllowedPartialResultsWithWorkerFailure(t *testing.T) {

@@ -12,9 +12,9 @@ func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
 	if !ok {
 		return nil
 	}
-	facts := BuildFacts(clusterID, policy)
-	edges := make([]objectmapspec.Edge, 0, len(facts.TargetRefs))
-	for _, ref := range facts.TargetRefs {
+	targets := targetLinks(clusterID, policy)
+	edges := make([]objectmapspec.Edge, 0, len(targets))
+	for _, ref := range targets {
 		edges = append(edges, objectmapspec.Edge{Type: objectmapspec.EdgeUses, TracedBy: "spec.targetRefs", Link: ref})
 	}
 	return edges

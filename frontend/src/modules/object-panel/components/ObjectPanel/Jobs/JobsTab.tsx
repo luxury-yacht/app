@@ -24,34 +24,16 @@ import type React from 'react';
 import { useCallback, useMemo } from 'react';
 import '../shared.css';
 import { ObjectPanelResourceGridTableSurface } from '@modules/resource-grid/ObjectPanelResourceGridTableSurface';
+import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
 import { useObjectPanelResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import {
-  buildRequiredCanonicalObjectRowKey,
-  buildRequiredObjectReference,
-} from '@shared/utils/objectIdentity';
 
-// Row type for the jobs table, combining job info with cluster context.
-interface JobRow {
-  kind: string;
-  name: string;
-  namespace: string;
-  status: string;
-  statusState?: string;
-  statusPresentation?: string;
-  statusReason?: string;
-  completions: string;
-  succeeded: number;
-  failed: number;
-  active: number;
-  startTime?: unknown;
-  duration?: string;
-  age: string;
-  ageTimestamp?: number;
+// Rows carry the backend job summary plus the panel's cluster context.
+type JobRow = types.JobSimpleInfo & {
   clusterId?: string | null;
   clusterName?: string | null;
-}
+};
 
 interface JobsTabProps {
   jobs: types.JobSimpleInfo[];
@@ -94,37 +76,24 @@ export const JobsTab: React.FC<JobsTabProps> = ({
     [jobs, clusterId, clusterName, objectData?.clusterId, objectData?.clusterName]
   );
 
-  const keyExtractor = useCallback(
-    (job: JobRow) =>
-      buildRequiredCanonicalObjectRowKey(
-        {
-          kind: 'Job',
-          name: job.name,
-          namespace: job.namespace,
-          clusterId: job.clusterId,
-        },
-        { fallbackClusterId: objectData?.clusterId }
-      ),
-    [objectData?.clusterId]
+  const getJobIdentity = useCallback(
+    (job: JobRow) => ({
+      kind: 'Job',
+      name: job.name,
+      namespace: job.namespace,
+      clusterId: job.clusterId,
+      clusterName: job.clusterName,
+    }),
+    []
   );
-
-  const handleJobOpen = useCallback(
-    (job: JobRow) => {
-      openWithObject(
-        buildRequiredObjectReference(
-          {
-            kind: 'Job',
-            name: job.name,
-            namespace: job.namespace,
-            clusterId: job.clusterId,
-            clusterName: job.clusterName ?? undefined,
-          },
-          { fallbackClusterId: objectData?.clusterId }
-        )
-      );
-    },
-    [objectData?.clusterId, openWithObject]
-  );
+  const jobIdentity = useResourceGridObjectIdentity({
+    fallbackClusterId: objectData?.clusterId,
+    getObject: getJobIdentity,
+    openWithObject,
+    navigateToView,
+  });
+  const { open: handleJobOpen, key: keyExtractor, navigate } = jobIdentity;
+  const navigateJob = navigationAvailable ? navigate : undefined;
 
   const handleNamespaceSelect = useCallback(
     (job: JobRow) => {
@@ -143,40 +112,12 @@ export const JobsTab: React.FC<JobsTabProps> = ({
       createKindColumn<JobRow>({
         getKind: () => 'Job',
         onClick: handleJobOpen,
-        onAltClick: navigationAvailable
-          ? (job) =>
-              navigateToView(
-                buildRequiredObjectReference(
-                  {
-                    kind: 'Job',
-                    name: job.name,
-                    namespace: job.namespace,
-                    clusterId: job.clusterId,
-                    clusterName: job.clusterName,
-                  },
-                  { fallbackClusterId: objectData?.clusterId }
-                )
-              )
-          : undefined,
+        onAltClick: navigateJob,
         sortable: false,
       }),
       createResourceNameColumn<JobRow>({
         onClick: handleJobOpen,
-        onAltClick: navigationAvailable
-          ? (job) =>
-              navigateToView(
-                buildRequiredObjectReference(
-                  {
-                    kind: 'Job',
-                    name: job.name,
-                    namespace: job.namespace,
-                    clusterId: job.clusterId,
-                    clusterName: job.clusterName,
-                  },
-                  { fallbackClusterId: objectData?.clusterId }
-                )
-              )
-          : undefined,
+        onAltClick: navigateJob,
         getClassName: () => 'object-panel-link',
         getTitle: (job) => job.name,
       }),
@@ -197,23 +138,10 @@ export const JobsTab: React.FC<JobsTabProps> = ({
       getClassName: (job) => (job.namespace && viewState ? 'object-panel-link' : undefined),
     });
 
-    withNamespace.push(
-      createAgeColumn<JobRow & { age?: string }>(
-        'age',
-        'Age',
-        (job) => job.age ?? '\u2014'
-      ) as GridColumnDefinition<JobRow>
-    );
+    withNamespace.push(createAgeColumn<JobRow>('age', 'Age', (job) => job.age ?? '\u2014'));
 
     return withColumnSizing(withNamespace, COLUMN_SIZING);
-  }, [
-    handleJobOpen,
-    handleNamespaceSelect,
-    navigateToView,
-    navigationAvailable,
-    objectData?.clusterId,
-    viewState,
-  ]);
+  }, [handleJobOpen, handleNamespaceSelect, navigateJob, viewState]);
 
   const getSearchTokens = useCallback((job: JobRow) => {
     const tokens = [job.name, job.namespace, job.status];
@@ -260,20 +188,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
           diagnosticsLabel="Object Panel Jobs"
           onRowClick={handleJobOpen}
           enableContextMenu
-          getCustomContextMenuItems={(job) =>
-            objectActions.getMenuItems(
-              buildRequiredObjectReference(
-                {
-                  kind: 'Job',
-                  name: job.name,
-                  namespace: job.namespace,
-                  clusterId: job.clusterId,
-                  clusterName: job.clusterName ?? undefined,
-                },
-                { fallbackClusterId: objectData?.clusterId }
-              )
-            )
-          }
+          getCustomContextMenuItems={(job) => objectActions.getMenuItems(jobIdentity.ref(job))}
           tableClassName="gridtable-pods gridtable-pods--namespaced"
           loading={loading}
           spinnerMessage="Loading jobs..."

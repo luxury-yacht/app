@@ -95,41 +95,6 @@ const progressedAuthState = (
   };
 };
 
-const updateAuthMap = (
-  prev: Map<string, ClusterAuthState>,
-  payload: AuthEventPayload,
-  update: (existing: ClusterAuthState | undefined) => ClusterAuthState | undefined
-): Map<string, ClusterAuthState> => {
-  if (!payload.clusterId) {
-    return prev;
-  }
-  const state = update(prev.get(payload.clusterId));
-  if (!state) {
-    return prev;
-  }
-  const next = new Map(prev);
-  next.set(payload.clusterId, state);
-  return next;
-};
-
-export const applyAuthFailedEvent = (
-  prev: Map<string, ClusterAuthState>,
-  payload: AuthEventPayload
-): Map<string, ClusterAuthState> =>
-  updateAuthMap(prev, payload, (existing) => failedAuthState(existing, payload));
-
-export const applyAuthRecoveringEvent = (
-  prev: Map<string, ClusterAuthState>,
-  payload: AuthEventPayload
-): Map<string, ClusterAuthState> =>
-  updateAuthMap(prev, payload, (existing) => recoveringAuthState(existing, payload));
-
-export const applyAuthProgressEvent = (
-  prev: Map<string, ClusterAuthState>,
-  payload: AuthProgressPayload
-): Map<string, ClusterAuthState> =>
-  updateAuthMap(prev, payload, (existing) => progressedAuthState(existing, payload));
-
 type BackendWorkspaceState = Awaited<ReturnType<typeof GetClusterWorkspaceStateForWindow>>;
 type BackendWorkspaceClusters = NonNullable<BackendWorkspaceState['clusters']>;
 type BackendWorkspaceClusterState = NonNullable<BackendWorkspaceClusters[string]>;

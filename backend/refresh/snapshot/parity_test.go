@@ -284,10 +284,7 @@ func parityPodsCase(meta ClusterMeta, withMetrics bool) parityCase {
 			rsLister := testsupport.NewReplicaSetLister(t, rs)
 			podLister := testsupport.NewPodLister(t, podA, podB)
 
-			builder := &PodBuilder{
-				podLister: podLister,
-				rsLister:  rsLister,
-			}
+			builder := newTestPodBuilder(t, meta, podLister, rsLister, nil)
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
 			payload := snap.Payload.(PodSnapshot)

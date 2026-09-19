@@ -11,6 +11,7 @@ package resourcestream
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -18,17 +19,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
-// managerStreamHub owns subscription lifecycle and fan-out behavior for a Manager.
-type managerStreamHub struct {
-	manager *Manager
-}
-
-func (m *Manager) streamHub() managerStreamHub {
-	return managerStreamHub{manager: m}
-}
-
-func (h managerStreamHub) subscribe(selector StreamSelector) (*Subscription, error) {
-	m := h.manager
+// SubscribeSelector registers a new subscriber for the supplied typed selector.
+func (m *Manager) SubscribeSelector(selector StreamSelector) (*Subscription, error) {
 	if err := validateStreamSelector(m, selector); err != nil {
 		return nil, err
 	}
@@ -49,7 +41,7 @@ func (h managerStreamHub) subscribe(selector StreamSelector) (*Subscription, err
 		Scope:   normalized,
 		Updates: sub.ch,
 		Drops:   sub.drops,
-		Cancel:  func() { m.cancelSubscription(domain, normalized, id, sub) },
+		Cancel:  func() { m.dropSubscriber(domain, normalized, id, sub, DropReasonClosed) },
 	}, nil
 }
 
@@ -57,7 +49,10 @@ func validateStreamSelector(m *Manager, selector StreamSelector) error {
 	if m == nil {
 		return errors.New("resource stream not initialised")
 	}
-	if selector.ClusterID != "" && selector.ClusterID != m.clusterMeta.ClusterID {
+	if strings.TrimSpace(selector.ClusterID) == "" {
+		return errors.New("cluster id is required")
+	}
+	if selector.ClusterID != m.clusterMeta.ClusterID {
 		return errors.New("cluster mismatch")
 	}
 	return nil
@@ -92,33 +87,9 @@ func (m *Manager) addSubscriber(domain, scope string) (uint64, *subscription, er
 	return id, sub, nil
 }
 
-func (m *Manager) cancelSubscription(domain, scope string, id uint64, sub *subscription) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	domainSubscribers := m.subscribers[domain]
-	if domainSubscribers == nil {
-		return
-	}
-	scopeSubscribers := domainSubscribers[scope]
-	if current, exists := scopeSubscribers[id]; exists && current == sub {
-		delete(scopeSubscribers, id)
-		if len(scopeSubscribers) == 0 {
-			delete(domainSubscribers, scope)
-			m.clearScopeStateLocked(domain, scope)
-		}
-		sub.close(DropReasonClosed)
-	}
-	if len(domainSubscribers) == 0 {
-		delete(m.subscribers, domain)
-	}
-}
-
-func (h managerStreamHub) resume(selector StreamSelector, since uint64) ([]Update, bool) {
-	m := h.manager
-	if m == nil || since == 0 {
-		return nil, false
-	}
-	if selector.ClusterID != "" && selector.ClusterID != m.clusterMeta.ClusterID {
+// ResumeSelector returns buffered updates after the provided sequence token.
+func (m *Manager) ResumeSelector(selector StreamSelector, since uint64) ([]Update, bool) {
+	if validateStreamSelector(m, selector) != nil || since == 0 {
 		return nil, false
 	}
 	key := bufferKey(selector.Domain, selector.CanonicalScope())
@@ -140,8 +111,8 @@ func (h managerStreamHub) resume(selector StreamSelector, since uint64) ([]Updat
 	return results, true
 }
 
-func (h managerStreamHub) broadcast(domain string, scopes []string, update Update) {
-	m := h.manager
+func (m *Manager) broadcast(domain string, scopes []string, update Update) {
+	m.invalidateSnapshotDomain(domain)
 	if m == nil || len(scopes) == 0 {
 		return
 	}

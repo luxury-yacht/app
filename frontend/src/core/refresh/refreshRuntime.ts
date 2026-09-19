@@ -989,9 +989,11 @@ export class ClusterRefreshRuntime {
     return this.getScopeState(domain, scope).stream.connection.status !== 'inactive';
   }
 
-  getStreamingLifecycleKeys(): string[] {
-    return Array.from(this.scopedStates.entries()).flatMap(([key, state]) =>
-      state.stream.connection.status === 'inactive' ? [] : [key]
+  getStreamingScopes(): Array<{ domain: RefreshDomain; scope: string }> {
+    return Array.from(this.scopedStates.values()).flatMap((state) =>
+      state.stream.connection.status === 'inactive' || state.scope === undefined
+        ? []
+        : [{ domain: state.domain, scope: state.scope }]
     );
   }
 

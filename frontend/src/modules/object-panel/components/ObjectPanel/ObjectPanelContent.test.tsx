@@ -160,7 +160,6 @@ describe('ObjectPanelContent', () => {
     resourceDeleted: false,
     deletedResourceName: '',
     onClosePanel: vi.fn(),
-    onRefreshDetails: vi.fn(),
     panelId: 'obj:test:deployment:team-a:api',
   };
 

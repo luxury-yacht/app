@@ -4,49 +4,18 @@
  * Header info chip shown when an application update needs attention. It is a
  * label and nothing more: clicking opens the About dialog, which owns the whole
  * update workflow — versions, release notes, progress, failures, and recovery.
- * Owns the app-info fetch and the `app-update` runtime event.
+ * Uses the shared app-info and live update state hook.
  */
 
-import type { backend } from '@core/backend-api/models';
 import { useModalState } from '@core/contexts/ModalStateContext';
-import { onEvent } from '@core/desktop-runtime';
-import React, { useCallback, useEffect, useState } from 'react';
-import { readAppInfo, requestAppState } from '@/core/app-state-access';
+import { useAppInfo } from '@shared/hooks/useAppInfo';
+import React, { useCallback } from 'react';
 import { getUpdatePresentation } from './updatePresentation';
 import './UpdateStatus.css';
 
-type AppInfoWithUpdate = backend.AppInfo & {
-  update?: backend.UpdateInfo | null;
-};
-
 const UpdateStatus: React.FC = () => {
-  const [updateInfo, setUpdateInfo] = useState<backend.UpdateInfo | null>(null);
+  const { update: updateInfo } = useAppInfo();
   const { setIsAboutOpen } = useModalState();
-
-  useEffect(() => {
-    let active = true;
-    requestAppState({ resource: 'app-info', read: () => readAppInfo() })
-      .then((info) => {
-        if (active) {
-          setUpdateInfo((info as AppInfoWithUpdate).update ?? null);
-        }
-      })
-      .catch(() => {
-        // Update metadata is best-effort; stay silent if it can't be read.
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const handleUpdate = (payload: backend.UpdateInfo | null) => {
-      if (payload) {
-        setUpdateInfo(payload);
-      }
-    };
-    return onEvent('app-update', handleUpdate);
-  }, []);
 
   const handleClick = useCallback(() => {
     setIsAboutOpen(true);

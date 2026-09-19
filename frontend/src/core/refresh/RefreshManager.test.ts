@@ -92,6 +92,38 @@ describe('RefreshManager manual refresh flow', () => {
     expect(refreshManager.getState(TEST_REFRESHER)?.status).toBe('disabled');
   });
 
+  it.each([false, true])(
+    'settles timed-out subscribers without overwriting a successful sibling (%s)',
+    async (withSuccessfulSibling) => {
+      let finishLate!: () => void;
+      let callbackSignal!: AbortSignal;
+      callback.mockImplementationOnce((_isManual: boolean, signal: AbortSignal) => {
+        callbackSignal = signal;
+        return new Promise<void>((resolve) => {
+          finishLate = resolve;
+        });
+      });
+      if (withSuccessfulSibling) {
+        refreshManager.subscribe(TEST_REFRESHER, vi.fn());
+      }
+      const refresh = refreshManager.triggerManualRefresh(TEST_REFRESHER);
+      expect(callbackSignal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(2_000);
+      await refresh;
+
+      expect(callbackSignal.aborted).toBe(true);
+      const state = refreshManager.getState(TEST_REFRESHER);
+      expect(state?.consecutiveErrors).toBe(withSuccessfulSibling ? 0 : 1);
+      expect(state?.error?.message ?? null).toBe(
+        withSuccessfulSibling ? null : 'Refresh timeout after 2 seconds'
+      );
+      finishLate();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(refreshManager.getState(TEST_REFRESHER)).toEqual(state);
+    }
+  );
+
   it('cancels a manual cooldown when an already-disabled refresher is disabled again', async () => {
     await refreshManager.triggerManualRefresh(TEST_REFRESHER);
     expect(refreshManager.getState(TEST_REFRESHER)?.status).toBe('cooldown');

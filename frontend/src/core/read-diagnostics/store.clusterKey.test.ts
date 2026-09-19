@@ -39,6 +39,37 @@ describe('broker read cluster identity', () => {
     expect(byCluster).toEqual({ 'cluster-a': 2, 'cluster-b': 1 });
   });
 
+  it('keeps delimiter-containing cluster and resource identities separate', () => {
+    for (const [clusterId, resource] of [
+      ['alpha::operations', 'pods'],
+      ['alpha', 'operations::pods'],
+    ]) {
+      const token = beginBrokerRead({
+        broker: 'data-access',
+        resource,
+        adapter: 'rpc-read',
+        scope: `${clusterId}|default`,
+      });
+      completeBrokerRead({ token, status: 'success' });
+    }
+    const rows = getBrokerReadDiagnosticsSnapshot();
+    expect(rows).toHaveLength(2);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          clusterId: 'alpha::operations',
+          resource: 'pods',
+          totalRequests: 1,
+        }),
+        expect.objectContaining({
+          clusterId: 'alpha',
+          resource: 'operations::pods',
+          totalRequests: 1,
+        }),
+      ])
+    );
+  });
+
   it('leaves cluster empty for reads with no single owning cluster', () => {
     const token = beginBrokerRead({
       broker: 'app-state-access',

@@ -520,3 +520,50 @@ func TestSavePersistenceFileOverwritesExistingData(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"beta"}, loaded.ClusterTabs.Order)
 }
+
+func TestFavoriteOrderIgnoresRepeatedAndMissingIDs(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newPersistenceTestFixture()
+	var ids []string
+	for _, name := range []string{"A", "B", "C"} {
+		favorite, err := app.Favorites.AddFavorite(Favorite{Name: name, ViewType: "cluster", View: "nodes", Panes: map[string]FavoritePaneState{"main": {}}})
+		require.NoError(t, err)
+		ids = append(ids, favorite.ID)
+	}
+	require.NoError(t, app.Favorites.SetFavoriteOrder([]string{"missing", ids[2], ids[2], ids[0]}))
+	favorites, err := app.Favorites.GetFavorites()
+	require.NoError(t, err)
+	require.Len(t, favorites, 3)
+	for i, id := range []string{ids[2], ids[0], ids[1]} {
+		require.Equal(t, id, favorites[i].ID)
+		require.Equal(t, i, favorites[i].Order)
+	}
+}
+
+func TestFavoriteFiltersPreserveClusterIdentityAndEmptyValues(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newPersistenceTestFixture()
+	favorite := Favorite{Name: "Exact cluster filters", ViewType: "cluster", View: "nodes", Panes: map[string]FavoritePaneState{"main": {Filters: FavoriteFilters{
+		Clusters:    FavoriteFilterSelection{Mode: "some", Values: []string{"Prod:context", "prod:context", " Prod:context "}},
+		QueryFacets: map[string]FavoriteFilterSelection{"team": {Mode: "some", Values: []string{"", "__empty__", "__EMPTY__"}}},
+	}}}}
+	_, err := app.Favorites.AddFavorite(favorite)
+	require.NoError(t, err)
+	favorites, err := app.Favorites.GetFavorites()
+	require.NoError(t, err)
+	filters := favorites[0].Panes["main"].Filters
+	require.Equal(t, []string{"Prod:context", "prod:context"}, filters.Clusters.Values)
+	require.Equal(t, []string{"", "__empty__"}, filters.QueryFacets["team"].Values)
+}
+
+func TestFavoriteV1MigrationPreservesCaseDistinctClusters(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newPersistenceTestFixture()
+	path, err := app.Favorites.getFavoritesFilePath()
+	require.NoError(t, err)
+	writeTestFileWithParents(t, path, []byte(`{"schemaVersion":1,"favorites":[{"id":"nodes","name":"Nodes","viewType":"cluster","view":"nodes","filters":{"clusters":["Prod:context","prod:context"]},"tableState":{"sortColumn":"name"}}]}`), 0o644)
+	favorites, err := app.Favorites.GetFavorites()
+	require.NoError(t, err)
+	require.Len(t, favorites, 1)
+	require.Equal(t, []string{"Prod:context", "prod:context"}, favorites[0].Panes["main"].Filters.Clusters.Values)
+}

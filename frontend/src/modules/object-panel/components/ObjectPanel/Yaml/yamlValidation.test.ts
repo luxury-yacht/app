@@ -26,18 +26,18 @@ spec:
 
 describe('validateYamlDraft', () => {
   it('rejects empty and non-object YAML', () => {
-    expect(validateYamlDraft('   ', baseIdentity, '42')).toEqual({
+    expect(validateYamlDraft('   ', baseIdentity)).toEqual({
       isValid: false,
       message: 'YAML content is required.',
     });
-    expect(validateYamlDraft('- one\n- two\n', baseIdentity, '42')).toEqual({
+    expect(validateYamlDraft('- one\n- two\n', baseIdentity)).toEqual({
       isValid: false,
       message: 'YAML must evaluate to a Kubernetes object (mapping).',
     });
   });
 
   it('reports malformed YAML with its parse location', () => {
-    const result = validateYamlDraft('apiVersion: [broken', baseIdentity, '42');
+    const result = validateYamlDraft('apiVersion: [broken', baseIdentity);
     expect(result.isValid).toBe(false);
     if (!result.isValid) {
       expect(result.message).toMatch(/Invalid YAML at line/i);
@@ -49,7 +49,7 @@ describe('validateYamlDraft', () => {
     ['kind', baseYaml.replace('kind: Deployment\n', ''), /Missing kind/i],
     ['name', baseYaml.replace('  name: demo\n', ''), /Missing metadata.name/i],
   ])('rejects a draft missing %s', (_field, yaml, message) => {
-    const result = validateYamlDraft(yaml, baseIdentity, '42');
+    const result = validateYamlDraft(yaml, baseIdentity);
     expect(result.isValid).toBe(false);
     if (!result.isValid) {
       expect(result.message).toMatch(message);
@@ -58,7 +58,7 @@ describe('validateYamlDraft', () => {
 
   it('rejects Kubernetes List objects', () => {
     const yaml = baseYaml.replace('kind: Deployment', 'kind: List');
-    const result = validateYamlDraft(yaml, null, '42');
+    const result = validateYamlDraft(yaml, null);
     expect(result.isValid).toBe(false);
     if (!result.isValid) {
       expect(result.message).toMatch(/List objects are not editable/i);
@@ -66,7 +66,7 @@ describe('validateYamlDraft', () => {
   });
 
   it('accepts valid YAML matching identity', () => {
-    const result = validateYamlDraft(baseYaml, baseIdentity, '42');
+    const result = validateYamlDraft(baseYaml, baseIdentity);
     expect(result.isValid).toBe(true);
     if (result.isValid) {
       expect(result.resourceVersion).toBe('42');
@@ -74,7 +74,7 @@ describe('validateYamlDraft', () => {
   });
 
   it('rejects multi-document payloads', () => {
-    const result = validateYamlDraft(`${baseYaml}---\nkind: ConfigMap\n`, baseIdentity, '42');
+    const result = validateYamlDraft(`${baseYaml}---\nkind: ConfigMap\n`, baseIdentity);
     expect(result.isValid).toBe(false);
     if (!result.isValid) {
       expect(result.message).toMatch(/Multiple YAML documents/i);
@@ -83,7 +83,7 @@ describe('validateYamlDraft', () => {
 
   it('rejects mismatched kind', () => {
     const yaml = baseYaml.replace('Deployment', 'StatefulSet');
-    const result = validateYamlDraft(yaml, baseIdentity, '42');
+    const result = validateYamlDraft(yaml, baseIdentity);
     expect(result.isValid).toBe(false);
     if (!result.isValid) {
       expect(result.message).toMatch(/kind mismatch/i);
@@ -93,8 +93,7 @@ describe('validateYamlDraft', () => {
   it('rejects apiVersion and name drift', () => {
     const apiVersionResult = validateYamlDraft(
       baseYaml.replace('apps/v1', 'apps/v2'),
-      baseIdentity,
-      '42'
+      baseIdentity
     );
     expect(apiVersionResult.isValid).toBe(false);
     if (!apiVersionResult.isValid) {
@@ -103,8 +102,7 @@ describe('validateYamlDraft', () => {
 
     const nameResult = validateYamlDraft(
       baseYaml.replace('name: demo', 'name: renamed'),
-      baseIdentity,
-      '42'
+      baseIdentity
     );
     expect(nameResult.isValid).toBe(false);
     if (!nameResult.isValid) {
@@ -114,7 +112,7 @@ describe('validateYamlDraft', () => {
 
   it('rejects namespace drift', () => {
     const yaml = baseYaml.replace('namespace: default', 'namespace: other');
-    const result = validateYamlDraft(yaml, baseIdentity, '42');
+    const result = validateYamlDraft(yaml, baseIdentity);
     expect(result.isValid).toBe(false);
     if (!result.isValid) {
       expect(result.message).toMatch(/namespace mismatch/i);
@@ -123,7 +121,7 @@ describe('validateYamlDraft', () => {
 
   it('allows drafts without metadata.resourceVersion like kubectl edit', () => {
     const yaml = baseYaml.replace('resourceVersion: "42"', '');
-    const result = validateYamlDraft(yaml, baseIdentity, '42');
+    const result = validateYamlDraft(yaml, baseIdentity);
     expect(result.isValid).toBe(true);
     if (result.isValid) {
       expect(result.resourceVersion).toBeNull();
@@ -132,7 +130,7 @@ describe('validateYamlDraft', () => {
 
   it('allows edited metadata.resourceVersion and leaves validation to the server', () => {
     const yaml = baseYaml.replace('"42"', '"43"');
-    const result = validateYamlDraft(yaml, baseIdentity, '42');
+    const result = validateYamlDraft(yaml, baseIdentity);
     expect(result.isValid).toBe(true);
     if (result.isValid) {
       expect(result.resourceVersion).toBe('43');
@@ -154,7 +152,7 @@ metadata:
 spec:
   replicas: 1
 `;
-    const result = validateYamlDraft(yaml, identityWithUID, '42');
+    const result = validateYamlDraft(yaml, identityWithUID);
     expect(result.isValid).toBe(false);
     if (!result.isValid) {
       expect(result.message).toMatch(/uid mismatch/i);

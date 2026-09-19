@@ -7,10 +7,6 @@ import (
 	"testing"
 	"time"
 
-	appslisters "k8s.io/client-go/listers/apps/v1"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
-
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -23,20 +19,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
-
-// newPodBuilder wires a PodBuilder with the projection memo cache enabled —
-// the shape the pods domain registration builds in production.
-func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rsLister appslisters.ReplicaSetLister) *PodBuilder {
-	return &PodBuilder{
-		podLister:  podLister,
-		podIndexer: podIndexer,
-		rsLister:   rsLister,
-		projCache:  newPodProjectionCache(),
-	}
-}
 
 func TestPodBuilderDoesNotPublishAnUnsyncedStoreAsAuthoritativelyEmpty(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}
@@ -223,16 +207,13 @@ func TestPodBuilderNodeScope(t *testing.T) {
 		Spec: appsv1.ReplicaSetSpec{},
 	}
 
-	builder := &PodBuilder{
-		podLister: testsupport.NewPodLister(t, podA, podB),
-		rsLister:  testsupport.NewReplicaSetLister(t, rs),
-	}
+	builder := newTestPodBuilder(t, ClusterMeta{}, testsupport.NewPodLister(t, podA, podB), testsupport.NewReplicaSetLister(t, rs), nil)
 
 	snapshot, err := builder.Build(context.Background(), "node:node-1")
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "node:node-1", snapshot.Scope)
-	require.Equal(t, uint64(15), snapshot.Version)
+	require.Equal(t, uint64(2), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
@@ -285,14 +266,11 @@ func TestPodBuilderWorkloadScope(t *testing.T) {
 		},
 	}
 
-	builder := &PodBuilder{
-		podLister: testsupport.NewPodLister(t, pod),
-		rsLister:  testsupport.NewReplicaSetLister(t, rs),
-	}
+	builder := newTestPodBuilder(t, ClusterMeta{}, testsupport.NewPodLister(t, pod), testsupport.NewReplicaSetLister(t, rs), nil)
 
 	snapshot, err := builder.Build(context.Background(), "workload:prod:apps:v1:Deployment:orders")
 	require.NoError(t, err)
-	require.Equal(t, uint64(7), snapshot.Version)
+	require.Equal(t, uint64(1), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
@@ -377,16 +355,13 @@ func TestPodBuilderNamespaceScope(t *testing.T) {
 		},
 	}
 
-	builder := &PodBuilder{
-		podLister: testsupport.NewPodLister(t, podA, podB),
-		rsLister:  testsupport.NewReplicaSetLister(t),
-	}
+	builder := newTestPodBuilder(t, ClusterMeta{}, testsupport.NewPodLister(t, podA, podB), testsupport.NewReplicaSetLister(t), nil)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "namespace:team-a", snapshot.Scope)
-	require.Equal(t, uint64(101), snapshot.Version)
+	require.Equal(t, uint64(2), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
@@ -409,22 +384,18 @@ func TestPodBuilderSurfacesMetricMetadata(t *testing.T) {
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
-	builder := &PodBuilder{
-		podLister: testsupport.NewPodLister(t, pod),
-		rsLister:  testsupport.NewReplicaSetLister(t),
-		metrics: fakePodMetricsProvider{
-			usage: map[string]metrics.PodUsage{
-				"team-a/api": {CPUUsageMilli: 25, MemoryUsageBytes: 32 * 1024 * 1024},
-			},
-			metadata: metrics.Metadata{
-				CollectedAt:         collectedAt,
-				LastError:           "metrics API forbidden",
-				ConsecutiveFailures: 2,
-				SuccessCount:        3,
-				FailureCount:        5,
-			},
+	builder := newTestPodBuilder(t, ClusterMeta{}, testsupport.NewPodLister(t, pod), testsupport.NewReplicaSetLister(t), fakePodMetricsProvider{
+		usage: map[string]metrics.PodUsage{
+			"team-a/api": {CPUUsageMilli: 25, MemoryUsageBytes: 32 * 1024 * 1024},
 		},
-	}
+		metadata: metrics.Metadata{
+			CollectedAt:         collectedAt,
+			LastError:           "metrics API forbidden",
+			ConsecutiveFailures: 2,
+			SuccessCount:        3,
+			FailureCount:        5,
+		},
+	})
 
 	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
 	require.NoError(t, err)
@@ -477,14 +448,11 @@ func benchmarkPods(tb testing.TB, n int) ([]*corev1.Pod, map[string]metrics.PodU
 	return pods, usage, now
 }
 
-// BenchmarkPodBuilderBuildCold measures one full query build (project every pod)
-// for a large scope — the cold-open / cache-miss cost we'd target with an index.
+// BenchmarkPodBuilderBuildCold measures query-index construction over ingested rows.
 func BenchmarkPodBuilderBuildCold(b *testing.B) {
 	pods, _, _ := benchmarkPods(b, 10000)
-	builder := &PodBuilder{
-		podLister: testsupport.NewPodLister(b, pods...),
-		rsLister:  testsupport.NewReplicaSetLister(b),
-	}
+	builder := newTestPodBuilder(b, ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, testsupport.NewPodLister(b, pods...), testsupport.NewReplicaSetLister(b), nil)
+	builder.perBuild = nil
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "c1", ClusterName: "cluster"})
 	scope := "namespace:all?limit=50&sort=name&sortDirection=asc"
 	b.ReportAllocs()
@@ -496,11 +464,10 @@ func BenchmarkPodBuilderBuildCold(b *testing.B) {
 	}
 }
 
-// BenchmarkPodBuilderBuildWarm measures a refetch when nothing changed — the
-// memo cache should reuse projections (the busy-cluster steady state).
+// BenchmarkPodBuilderBuildWarm measures a refetch reusing the matched query store.
 func BenchmarkPodBuilderBuildWarm(b *testing.B) {
 	pods, _, _ := benchmarkPods(b, 10000)
-	builder := newPodBuilder(testsupport.NewPodLister(b, pods...), nil, testsupport.NewReplicaSetLister(b))
+	builder := newTestPodBuilder(b, ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, testsupport.NewPodLister(b, pods...), testsupport.NewReplicaSetLister(b), nil)
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "c1", ClusterName: "cluster"})
 	scope := "namespace:all?limit=50&sort=name&sortDirection=asc"
 	if _, err := builder.Build(ctx, scope); err != nil {
@@ -513,44 +480,6 @@ func BenchmarkPodBuilderBuildWarm(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
-}
-
-func TestPodBuilderReusesProjectionsAcrossBuilds(t *testing.T) {
-	now := time.Now()
-	mkPod := func(name string) *corev1.Pod {
-		return &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:              name,
-				Namespace:         "team-a",
-				UID:               types.UID(name + "-uid"),
-				ResourceVersion:   "1",
-				CreationTimestamp: metav1.NewTime(now),
-			},
-			Status: corev1.PodStatus{Phase: corev1.PodRunning},
-		}
-	}
-	builder := newPodBuilder(
-		testsupport.NewPodLister(t, mkPod("a"), mkPod("b")),
-		nil,
-		testsupport.NewReplicaSetLister(t),
-	)
-	projections := 0
-	builder.buildSummary = func(meta ClusterMeta, pod *corev1.Pod, cpu, mem int64, rsMap map[string]string) PodSummary {
-		projections++
-		return podres.BuildStreamSummaryFromRSMap(meta, pod, cpu, mem, rsMap)
-	}
-
-	first, err := builder.Build(context.Background(), "namespace:team-a")
-	require.NoError(t, err)
-	require.Equal(t, 2, projections, "cold build projects every pod once")
-
-	second, err := builder.Build(context.Background(), "namespace:team-a")
-	require.NoError(t, err)
-	// Unchanged pods + unchanged metrics revision → cached projections reused; the
-	// busy-cluster refetch no longer re-projects every pod.
-	require.Equal(t, 2, projections, "warm build reuses cached projections")
-
-	require.Equal(t, first.Payload.(PodSnapshot).Rows, second.Payload.(PodSnapshot).Rows)
 }
 
 func TestPodBuilderReportsScopeCounts(t *testing.T) {
@@ -579,10 +508,7 @@ func TestPodBuilderReportsScopeCounts(t *testing.T) {
 		Status: corev1.PodStatus{Phase: corev1.PodFailed, Reason: "Evicted"},
 	}
 
-	builder := &PodBuilder{
-		podLister: testsupport.NewPodLister(t, healthy("ok-1"), healthy("ok-2"), evicted),
-		rsLister:  testsupport.NewReplicaSetLister(t),
-	}
+	builder := newTestPodBuilder(t, ClusterMeta{}, testsupport.NewPodLister(t, healthy("ok-1"), healthy("ok-2"), evicted), testsupport.NewReplicaSetLister(t), nil)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
 	require.NoError(t, err)
@@ -616,16 +542,13 @@ func TestPodBuilderAllNamespacesScope(t *testing.T) {
 		},
 	}
 
-	builder := &PodBuilder{
-		podLister: testsupport.NewPodLister(t, podA, podB),
-		rsLister:  testsupport.NewReplicaSetLister(t),
-	}
+	builder := newTestPodBuilder(t, ClusterMeta{}, testsupport.NewPodLister(t, podA, podB), testsupport.NewReplicaSetLister(t), nil)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "namespace:all", snapshot.Scope)
-	require.Equal(t, uint64(25), snapshot.Version)
+	require.Equal(t, uint64(2), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
@@ -647,10 +570,7 @@ func TestPodBuilderWindowScopeOrdersRowsByNamespaceThenName(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "alpha", Namespace: "team-a", ResourceVersion: "5"}},
 	}
 
-	builder := &PodBuilder{
-		podLister: testsupport.NewPodLister(t, scrambled...),
-		rsLister:  testsupport.NewReplicaSetLister(t),
-	}
+	builder := newTestPodBuilder(t, ClusterMeta{}, testsupport.NewPodLister(t, scrambled...), testsupport.NewReplicaSetLister(t), nil)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
@@ -697,18 +617,14 @@ func TestPodBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T)
 		},
 	}
 
-	builder := &PodBuilder{
-		podLister: testsupport.NewPodLister(t, pods...),
-		rsLister:  testsupport.NewReplicaSetLister(t),
-		metrics: fakePodMetricsProvider{
-			usage: map[string]metrics.PodUsage{
-				"team-a/alpha":   {CPUUsageMilli: 25, Timestamp: now},
-				"team-b/bravo":   {CPUUsageMilli: 300, Timestamp: now},
-				"team-b/charlie": {CPUUsageMilli: 100, Timestamp: now},
-			},
-			metadata: metrics.Metadata{CollectedAt: now},
+	builder := newTestPodBuilder(t, ClusterMeta{}, testsupport.NewPodLister(t, pods...), testsupport.NewReplicaSetLister(t), fakePodMetricsProvider{
+		usage: map[string]metrics.PodUsage{
+			"team-a/alpha":   {CPUUsageMilli: 25, Timestamp: now},
+			"team-b/bravo":   {CPUUsageMilli: 300, Timestamp: now},
+			"team-b/charlie": {CPUUsageMilli: 100, Timestamp: now},
 		},
-	}
+		metadata: metrics.Metadata{CollectedAt: now},
+	})
 
 	snapshot, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=cpu&sortDirection=desc&limit=1")
 	require.NoError(t, err)
@@ -750,17 +666,13 @@ func TestPodBuilderAllNamespacesMetricCursorContinuesAcrossMetricsRefresh(t *tes
 		},
 	}
 
-	builder := &PodBuilder{
-		podLister: testsupport.NewPodLister(t, pods...),
-		rsLister:  testsupport.NewReplicaSetLister(t),
-		metrics: fakePodMetricsProvider{
-			usage: map[string]metrics.PodUsage{
-				"team-b/bravo":   {CPUUsageMilli: 300, Timestamp: now},
-				"team-b/charlie": {CPUUsageMilli: 100, Timestamp: now},
-			},
-			metadata: metrics.Metadata{CollectedAt: now},
+	builder := newTestPodBuilder(t, ClusterMeta{}, testsupport.NewPodLister(t, pods...), testsupport.NewReplicaSetLister(t), fakePodMetricsProvider{
+		usage: map[string]metrics.PodUsage{
+			"team-b/bravo":   {CPUUsageMilli: 300, Timestamp: now},
+			"team-b/charlie": {CPUUsageMilli: 100, Timestamp: now},
 		},
-	}
+		metadata: metrics.Metadata{CollectedAt: now},
+	})
 
 	first, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=cpu&sortDirection=desc&limit=1")
 	require.NoError(t, err)

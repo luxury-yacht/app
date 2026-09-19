@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"sort"
 	"strconv"
 	"strings"
@@ -69,12 +70,6 @@ type cacheEntry struct {
 }
 
 var sourceVersionEpochSerial uint64
-
-type BuildRequest struct {
-	Domain  string
-	Scope   string
-	Cluster ClusterMeta
-}
 
 // NewServiceWithPermissions returns a Service that validates runtime permissions per snapshot request.
 func NewServiceWithPermissions(
@@ -159,20 +154,12 @@ func (s *Service) WithDomainReadiness(readiness map[string][]string) *Service {
 
 // Build returns a snapshot for the requested domain/scope.
 func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh.Snapshot, error) {
-	return s.BuildRequest(ctx, BuildRequest{
-		Domain:  domainName,
-		Scope:   scope,
-		Cluster: s.cluster,
-	})
-}
-
-func (s *Service) BuildRequest(ctx context.Context, req BuildRequest) (*refresh.Snapshot, error) {
 	if s.retired.Load() {
 		return nil, errServiceRetired
 	}
 	ctx, cancel := s.withGenerationContext(ctx)
 	defer cancel()
-	ctx, plan, err := s.prepareBuildRequest(ctx, req)
+	ctx, plan, err := s.prepareBuildRequest(ctx, domainName, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -256,23 +243,23 @@ type snapshotBuildRequestPlan struct {
 	syncWait            time.Duration
 }
 
-func (s *Service) prepareBuildRequest(ctx context.Context, req BuildRequest) (context.Context, snapshotBuildRequestPlan, error) {
-	if err := req.Cluster.Validate(); err != nil {
+func (s *Service) prepareBuildRequest(ctx context.Context, domainName, scope string) (context.Context, snapshotBuildRequestPlan, error) {
+	if err := s.cluster.Validate(); err != nil {
 		return nil, snapshotBuildRequestPlan{}, err
 	}
-	ctx = WithClusterMeta(ctx, req.Cluster)
-	ctx, permissionCacheKey, err := s.ensurePermissions(ctx, req.Domain, req.Scope)
+	ctx = WithClusterMeta(ctx, s.cluster)
+	ctx, permissionCacheKey, err := s.ensurePermissions(ctx, domainName, scope)
 	if err != nil {
 		return nil, snapshotBuildRequestPlan{}, err
 	}
-	syncWait, err := s.waitForInformerSync(ctx, req.Domain)
+	syncWait, err := s.waitForInformerSync(ctx, domainName)
 	if err != nil {
-		s.recordInformerSyncFailure(req.Domain, req.Scope, syncWait, err)
+		s.recordInformerSyncFailure(domainName, scope, syncWait, err)
 		return nil, snapshotBuildRequestPlan{}, err
 	}
-	readiness := s.resourceReadiness(req.Domain)
+	readiness := s.resourceReadiness(domainName)
 	ctx = withResourceReadiness(ctx, readiness)
-	cacheKey := s.cacheKey(req.Domain, req.Scope)
+	cacheKey := fmt.Sprintf("%s:%s", domainName, scope)
 	if permissionCacheKey != "" {
 		cacheKey += ":permissions:" + permissionCacheKey
 	}
@@ -280,14 +267,14 @@ func (s *Service) prepareBuildRequest(ctx context.Context, req BuildRequest) (co
 		cacheKey += ":readiness:" + readinessKey
 	}
 	s.cacheMu.RLock()
-	invalidation := s.invalidations[req.Domain]
+	invalidation := s.invalidations[domainName]
 	s.cacheMu.RUnlock()
-	bypassSnapshotCache := s.shouldBypassSnapshotCache(req.Domain)
+	bypassSnapshotCache := domain.BypassesSnapshotCache(domainName)
 	return ctx, snapshotBuildRequestPlan{
-		domain:              req.Domain,
-		scope:               req.Scope,
+		domain:              domainName,
+		scope:               scope,
 		cacheKey:            cacheKey,
-		groupKey:            fmt.Sprintf("%s:invalidation:%d", s.snapshotBuildGroupKey(ctx, req.Domain, cacheKey), invalidation),
+		groupKey:            fmt.Sprintf("%s:invalidation:%d", s.snapshotBuildGroupKey(ctx, domainName, cacheKey), invalidation),
 		invalidation:        invalidation,
 		bypassSnapshotCache: bypassSnapshotCache,
 		skipCacheLoad:       refresh.HasCacheBypass(ctx) || bypassSnapshotCache,
@@ -314,7 +301,7 @@ func (s *Service) recordInformerSyncFailure(domainName, scope string, syncWait t
 }
 
 func (s *Service) snapshotBuildGroupKey(ctx context.Context, domainName, cacheKey string) string {
-	if s.shouldBypassSingleflight(domainName) {
+	if domain.BypassesSingleflight(domainName) {
 		return fmt.Sprintf("%s:live:%d", cacheKey, atomic.AddUint64(&s.requestSerial, 1))
 	}
 	if refresh.HasCacheBypass(ctx) {
@@ -469,20 +456,17 @@ func (s *Service) ensurePermissions(ctx context.Context, domainName, scope strin
 	if len(decision.AllowedResources) > 0 {
 		ctx = domainpermissions.WithAllowedResources(ctx, domainName, decision.AllowedResources)
 	}
+	if err == nil && !decision.Allowed {
+		err = refresh.NewPermissionDeniedError(domainName, decision.DeniedReason)
+	}
 	if err != nil {
 		duration := time.Since(start)
-		s.recordTelemetry(telemetry.SnapshotRecord{Domain: domainName, Scope: scope, Duration: duration, Err: err, Truncated: false, TotalItems: 0, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: duration.Milliseconds(), InformerSyncWaitMs: 0})
-
-		return ctx, permissionCacheKey, err
+		s.recordTelemetry(telemetry.SnapshotRecord{
+			Domain: domainName, Scope: scope, Duration: duration, Err: err,
+			IsFinal: true, TimeToFirstBatchMs: duration.Milliseconds(),
+		})
 	}
-	if decision.Allowed {
-		return ctx, permissionCacheKey, nil
-	}
-	denied := refresh.NewPermissionDeniedError(domainName, decision.DeniedReason)
-	duration := time.Since(start)
-	s.recordTelemetry(telemetry.SnapshotRecord{Domain: domainName, Scope: scope, Duration: duration, Err: denied, Truncated: false, TotalItems: 0, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: duration.Milliseconds(), InformerSyncWaitMs: 0})
-
-	return ctx, permissionCacheKey, denied
+	return ctx, permissionCacheKey, err
 }
 
 func (s *Service) recordTelemetry(record telemetry.SnapshotRecord) {
@@ -492,10 +476,6 @@ func (s *Service) recordTelemetry(record telemetry.SnapshotRecord) {
 	record.ClusterID = s.cluster.ClusterID
 	record.ClusterName = s.cluster.ClusterName
 	s.telemetry.RecordSnapshot(record)
-}
-
-func (s *Service) cacheKey(domainName, scope string) string {
-	return fmt.Sprintf("%s:%s", domainName, scope)
 }
 
 func (s *Service) loadCache(key string) *refresh.Snapshot {
@@ -580,14 +560,6 @@ func (s *Service) shouldCacheSnapshot(snap *refresh.Snapshot) bool {
 	return true
 }
 
-func (s *Service) shouldBypassSingleflight(domainName string) bool {
-	return domain.BypassesSingleflight(domainName)
-}
-
-func (s *Service) shouldBypassSnapshotCache(domainName string) bool {
-	return domain.BypassesSnapshotCache(domainName)
-}
-
 func newSourceVersionEpoch(meta ClusterMeta) string {
 	serial := atomic.AddUint64(&sourceVersionEpochSerial, 1)
 	return fmt.Sprintf("%s:%d:%d", meta.ClusterID, time.Now().UnixNano(), serial)
@@ -657,17 +629,7 @@ func (s *Service) sourceVersionToken(
 }
 
 func checksumBytes(data []byte) string {
-	sum := fnv1a32(data)
-	return fmt.Sprintf("%08x", sum)
-}
-
-func fnv1a32(data []byte) uint32 {
-	const offset32 = 2166136261
-	const prime32 = 16777619
-	hash := uint32(offset32)
-	for _, b := range data {
-		hash ^= uint32(b)
-		hash *= prime32
-	}
-	return hash
+	checksum := fnv.New32a()
+	_, _ = checksum.Write(data)
+	return fmt.Sprintf("%08x", checksum.Sum32())
 }

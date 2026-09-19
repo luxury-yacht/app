@@ -2,7 +2,6 @@ import type { GridColumnDefinition } from '@shared/components/tables/GridTable.t
 import {
   buildInitialMeasuredColumnWidthPlan,
   clampColumnWidth,
-  resolveColumnWidth,
 } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -16,15 +15,11 @@ const column = (key: string, config: Partial<GridColumnDefinition<Row>> = {}) =>
 });
 
 describe('gridTableColumnWidthMath', () => {
-  it('clamps and resolves widths from state, natural size, and column defaults', () => {
+  it('clamps widths to the column minimum and maximum', () => {
     const name = column('name', { minWidth: 100, maxWidth: 200, width: '180px' });
 
     expect(clampColumnWidth(name, 80)).toBe(100);
     expect(clampColumnWidth(name, 240)).toBe(200);
-    expect(resolveColumnWidth({ column: name, baseWidths: {}, naturalWidths: { name: 160 } })).toBe(
-      160
-    );
-    expect(resolveColumnWidth({ column: name, baseWidths: {}, naturalWidths: {} })).toBe(180);
   });
 
   it('builds initial widths from external, manual, auto, and declared sources', () => {

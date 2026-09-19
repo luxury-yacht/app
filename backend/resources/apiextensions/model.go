@@ -51,15 +51,7 @@ func statusPresentation(crd *apiextensionsv1.CustomResourceDefinition, facts Fac
 			Status: facts.StorageVersion,
 		})
 	}
-	for _, condition := range facts.Conditions {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{
-			Type:    resourcemodel.StatusSignalCondition,
-			Name:    condition.Type,
-			Status:  condition.Status,
-			Reason:  condition.Reason,
-			Message: condition.Message,
-		})
-	}
+	signals = append(signals, resourcemodel.ConditionSignals(facts.Conditions)...)
 
 	lifecycle := resourcemodel.ObjectLifecycle(crd.ObjectMeta)
 	if status, ok := resourcemodel.DeletingObjectStatus(crd.ObjectMeta, facts.StorageVersion, signals, lifecycle); ok {

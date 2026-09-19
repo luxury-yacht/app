@@ -134,6 +134,8 @@ export interface StreamResourceContractRecord {
 // dependency and doorbell source validation.
 export type RefreshSourceClock = GeneratedRefreshSourceClock;
 
+export type ResourceStreamDomain = keyof typeof refreshDomainContractJson.resourceStream.domains;
+
 export interface StreamDomainContractEntry {
   scopeKind: 'pod' | 'namespace' | 'cluster';
   completeIsScopeLevel: boolean;

@@ -670,3 +670,45 @@ func TestServiceScopeNamespacesComeFromDependencies(t *testing.T) {
 		t.Fatalf("unscoped service must report nil scope, got %#v", ns)
 	}
 }
+
+// Catalog action availability must agree for Service ports and container ports,
+// including malformed entries returned through dynamic discovery.
+func TestCatalogPortForwardFactsPreserveProtocolEligibility(t *testing.T) {
+	for _, kind := range []string{"Pod", "Service", "Deployment", "DaemonSet", "CronJob"} {
+		for _, test := range []struct {
+			name  string
+			ports []any
+			want  bool
+		}{
+			{name: "no ports"},
+			{name: "UDP only", ports: []any{map[string]any{"protocol": "UDP"}}},
+			{name: "malformed entry", ports: []any{"invalid"}},
+			{name: "TCP after invalid and UDP", ports: []any{"invalid", map[string]any{"protocol": "UDP"}, map[string]any{"protocol": "TCP"}}, want: true},
+			{name: "default protocol", ports: []any{map[string]any{}}, want: true},
+			{name: "case insensitive TCP", ports: []any{map[string]any{"protocol": "tcp"}}, want: true},
+		} {
+			t.Run(kind+"/"+test.name, func(t *testing.T) {
+				desc := Descriptor{Version: "v1", Kind: kind, Scope: ScopeNamespace, Namespaced: true}
+				portOwner := map[string]any{"ports": test.ports}
+				spec := map[string]any{"containers": []any{"invalid", portOwner}}
+				switch kind {
+				case "Service":
+					spec = portOwner
+				case "Deployment", "DaemonSet":
+					desc.Group = "apps"
+					spec = map[string]any{"template": map[string]any{"spec": spec}}
+				case "CronJob":
+					desc.Group = "batch"
+					spec = map[string]any{"jobTemplate": map[string]any{"spec": map[string]any{"template": map[string]any{"spec": spec}}}}
+				}
+				object := &unstructured.Unstructured{Object: map[string]any{"spec": spec}}
+				object.SetName("forwardable")
+				object.SetNamespace("team")
+				summary := summaryFromObject("cluster-a", desc, object)
+				require.NotNil(t, summary.ActionFacts)
+				require.NotNil(t, summary.ActionFacts.PortForwardAvailable)
+				require.Equal(t, test.want, *summary.ActionFacts.PortForwardAvailable)
+			})
+		}
+	}
+}

@@ -101,13 +101,6 @@ func (s nodeNotifyCatalogSink) broadcast(row interface{}, updateType MessageType
 	}
 	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: s.manager.clusterMeta.ClusterID, Group: nodespkg.Identity.Group, Version: nodespkg.Identity.Version, Kind: nodespkg.Identity.Kind, Resource: nodespkg.Identity.Resource, Namespace: "", Name: summary.Ref.Name, UID: summary.Ref.UID})
 
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNodes,
-		ClusterID:       s.manager.clusterMeta.ClusterID,
-		ClusterName:     s.manager.clusterMeta.ClusterName,
-		ResourceVersion: summary.ResourceVersion,
-		Ref:             &ref,
-	}
+	update := s.manager.newObjectUpdate(updateType, domainNodes, summary.ResourceVersion, ref)
 	s.manager.broadcast(domainNodes, []string{""}, update)
 }

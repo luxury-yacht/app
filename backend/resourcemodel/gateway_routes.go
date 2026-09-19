@@ -3,7 +3,6 @@ package resourcemodel
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -51,18 +50,8 @@ func GatewayRouteCommonFacts(
 // hostnames as a collapsed address list, and the rule count.
 func RouteSummarySegments(facts RouteCommonFacts) []DetailSegment {
 	segments := []DetailSegment{}
-	if len(facts.ParentRefs) > 0 {
-		if name := ResourceLinkName(facts.ParentRefs[0]); name != "" {
-			parent := DetailSegment{Slot: DetailSlotReference, Label: "Parent", Value: name, Link: &facts.ParentRefs[0]}
-			if len(facts.ParentRefs) > 1 {
-				names := make([]string, 0, len(facts.ParentRefs))
-				for _, ref := range facts.ParentRefs {
-					names = append(names, ResourceLinkName(ref))
-				}
-				parent.Search = strings.Join(names, ", ")
-			}
-			segments = append(segments, parent)
-		}
+	if parent := FirstLinkDetailSegment("Parent", facts.ParentRefs); parent.Value != "" {
+		segments = append(segments, parent)
 	}
 	if hosts := ListDetailSegment(DetailSlotAddress, "Hosts", facts.Hostnames); hosts.Value != "" {
 		segments = append(segments, hosts)

@@ -1,7 +1,7 @@
 /*
  * backend/refresh/resourcestream/derived_rows.go
  *
- * Builds derived resource stream rows from canonical Kubernetes objects.
+ * Emits related workload and node notifications from canonical Kubernetes objects.
  */
 
 package resourcestream
@@ -63,17 +63,7 @@ func (m *Manager) healPodsForReplicaSet(rs *appsv1.ReplicaSet) {
 // node's projected catalog half). The query-backed table refetches on the bare
 // signal and drift keys off Ref, so no NodeSummary is projected.
 func (m *Manager) broadcastNodeNotificationRef(ref resourcemodel.ResourceRef, resourceVersion string, updateType MessageType) {
-	if ref.ClusterID == "" {
-		ref.ClusterID = m.clusterMeta.ClusterID
-	}
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNodes,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: resourceVersion,
-		Ref:             &ref,
-	}
+	update := m.newObjectUpdate(updateType, domainNodes, resourceVersion, ref)
 	m.broadcast(domainNodes, []string{""}, update)
 }
 
@@ -105,17 +95,7 @@ func (m *Manager) broadcastStandalonePodWorkloadRow(namespace, name, resourceVer
 // table refetches on the bare signal and drift keys off Ref, so no WorkloadSummary
 // is projected.
 func (m *Manager) broadcastWorkloadNotificationRef(ref resourcemodel.ResourceRef, namespace, resourceVersion string, updateType MessageType) {
-	if ref.ClusterID == "" {
-		ref.ClusterID = m.clusterMeta.ClusterID
-	}
-	update := Update{
-		Type:            updateType,
-		Domain:          domainWorkloads,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: resourceVersion,
-		Ref:             &ref,
-	}
+	update := m.newObjectUpdate(updateType, domainWorkloads, resourceVersion, ref)
 	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
 }
 

@@ -7,7 +7,15 @@
  */
 
 import type React from 'react';
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { readZoomLevel, requestAppState } from '@/core/app-state-access';
 import { SetZoomLevel } from '@/core/backend-api';
 import { onEvent } from '@/core/desktop-runtime';
@@ -76,63 +84,69 @@ interface ZoomProviderProps {
 
 export const ZoomProvider: React.FC<ZoomProviderProps> = ({ children }) => {
   const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM);
+  // Menu commands can arrive before React renders the previous command.
+  const currentZoom = useRef({ level: DEFAULT_ZOOM, changedByUser: false });
 
   // Keep the root viewport unscaled: Wails compares its client dimensions with
   // mouse coordinates to distinguish resize edges from native scrollbars.
   // The body includes app content and portaled menus, dialogs, and panels.
   const applyZoom = useCallback((level: number) => {
+    currentZoom.current.level = level;
+    setZoomLevel(level);
     document.body.style.zoom = `${level}%`;
     document.documentElement.style.setProperty('--app-zoom-factor', `${level / 100}`);
   }, []);
 
-  // Persist zoom level to backend
-  const persistZoom = useCallback((level: number) => {
-    SetZoomLevel(level).catch((err) => {
-      reportOperationalError(err, { source: 'ZoomContext', action: 'persistZoomLevel' });
-    });
-  }, []);
+  const commitZoom = useCallback(
+    (level: number) => {
+      currentZoom.current.changedByUser = true;
+      applyZoom(level);
+      SetZoomLevel(level).catch((err) => {
+        reportOperationalError(err, { source: 'ZoomContext', action: 'persistZoomLevel' });
+      });
+    },
+    [applyZoom]
+  );
 
   // Load initial zoom level from backend
   useEffect(() => {
+    let active = true;
     requestAppState({
       resource: 'zoom-level',
       read: () => readZoomLevel(),
     })
       .then((level) => {
+        if (!active || currentZoom.current.changedByUser) {
+          return;
+        }
         const validLevel = level >= MIN_ZOOM && level <= MAX_ZOOM ? level : DEFAULT_ZOOM;
-        setZoomLevel(validLevel);
         applyZoom(validLevel);
       })
       .catch((err) => {
+        if (!active) {
+          return;
+        }
         reportOperationalError(err, { source: 'ZoomContext', action: 'loadZoomLevel' });
-        applyZoom(DEFAULT_ZOOM);
+        if (!currentZoom.current.changedByUser) {
+          applyZoom(DEFAULT_ZOOM);
+        }
       });
+    return () => {
+      active = false;
+    };
   }, [applyZoom]);
 
-  // Zoom actions
   const zoomIn = useCallback(() => {
-    setZoomLevel((prev) => {
-      const next = Math.min(prev + ZOOM_STEP, MAX_ZOOM);
-      applyZoom(next);
-      persistZoom(next);
-      return next;
-    });
-  }, [applyZoom, persistZoom]);
+    commitZoom(Math.min(currentZoom.current.level + ZOOM_STEP, MAX_ZOOM));
+  }, [commitZoom]);
 
   const zoomOut = useCallback(() => {
-    setZoomLevel((prev) => {
-      const next = Math.max(prev - ZOOM_STEP, MIN_ZOOM);
-      applyZoom(next);
-      persistZoom(next);
-      return next;
-    });
-  }, [applyZoom, persistZoom]);
+    commitZoom(Math.max(currentZoom.current.level - ZOOM_STEP, MIN_ZOOM));
+  }, [commitZoom]);
 
   const resetZoom = useCallback(() => {
-    setZoomLevel(DEFAULT_ZOOM);
-    applyZoom(DEFAULT_ZOOM);
-    persistZoom(DEFAULT_ZOOM);
-  }, [applyZoom, persistZoom]);
+    commitZoom(DEFAULT_ZOOM);
+  }, [commitZoom]);
 
   // Listen for zoom events from Wails menu
   useEffect(() => {

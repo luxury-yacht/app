@@ -26,8 +26,6 @@ const sampleColumns: GridColumnDefinition<Row>[] = [
   { key: 'age', header: 'Age', render: (row) => row.id },
 ];
 
-const sampleRows: Row[] = [{ id: 'row-1' }, { id: 'row-2' }, { id: 'row-3' }];
-
 const sampleWidthState: ColumnWidthState = {
   width: 200,
   unit: 'px',
@@ -74,7 +72,7 @@ describe('gridTablePersistence', () => {
     await expect(computeClusterHash('cluster-😀')).resolves.toBe('a3649d57d06a');
   });
 
-  it('prunes persisted state against current columns, filters, and rows', () => {
+  it('prunes persisted state against current columns and filters', () => {
     const pruned = prunePersistedState(
       {
         version: 1,
@@ -101,8 +99,6 @@ describe('gridTablePersistence', () => {
       },
       {
         columns: sampleColumns,
-        rows: sampleRows,
-        keyExtractor: (row) => row.id,
         filterOptions: {
           kinds: ['Pod'],
           namespaces: ['team-a'],
@@ -143,8 +139,6 @@ describe('gridTablePersistence', () => {
       },
       {
         columns: sampleColumns,
-        rows: sampleRows,
-        keyExtractor: (row) => row.id,
         pageSizeOptions: [25, 50, 100, 250],
       }
     );
@@ -160,8 +154,6 @@ describe('gridTablePersistence', () => {
       },
       {
         columns: sampleColumns,
-        rows: sampleRows,
-        keyExtractor: (row) => row.id,
       }
     );
 
@@ -176,8 +168,6 @@ describe('gridTablePersistence', () => {
       },
       {
         columns: sampleColumns,
-        rows: sampleRows,
-        keyExtractor: (row) => row.id,
       }
     );
 
@@ -185,8 +175,6 @@ describe('gridTablePersistence', () => {
 
     const state = buildPersistedStateForSave({
       columns: sampleColumns,
-      rows: sampleRows,
-      keyExtractor: (row) => row.id,
       sort: { key: 'status', direction: 'asc' },
     });
 
@@ -196,8 +184,6 @@ describe('gridTablePersistence', () => {
   it('builds a persisted state for saving with pruning and namespace filter stripping', () => {
     const state = buildPersistedStateForSave({
       columns: sampleColumns,
-      rows: sampleRows,
-      keyExtractor: (row) => row.id,
       columnVisibility: { status: false, extra: true },
       columnOrder: ['age', 'name', 'status'],
       columnWidths: { status: sampleWidthState, orphan: sampleWidthState },
@@ -245,8 +231,6 @@ describe('gridTablePersistence', () => {
 
     const state = buildPersistedStateForSave({
       columns: sampleColumns,
-      rows: sampleRows,
-      keyExtractor: (row) => row.id,
       filters,
       filterOptions: { isNamespaceScoped: false },
     });
@@ -263,13 +247,31 @@ describe('gridTablePersistence', () => {
       },
       {
         columns: sampleColumns,
-        rows: sampleRows,
-        keyExtractor: (row) => row.id,
         filterOptions: { isNamespaceScoped: false },
       }
     );
 
     expect(pruned?.filters).toEqual(filters);
+  });
+
+  it('preserves case-distinct cluster identities across save and restore', () => {
+    const filters = {
+      search: '',
+      kinds: { mode: 'all' as const },
+      namespaces: { mode: 'all' as const },
+      clusters: { mode: 'some' as const, values: ['config:Production', 'config:production'] },
+      caseSensitive: false,
+      includeMetadata: false,
+    };
+    const context = {
+      columns: sampleColumns,
+      filterOptions: { clusters: ['config:Production', 'config:production', 'config:other'] },
+    };
+    const saved = buildPersistedStateForSave({ ...context, filters });
+    expect(saved?.filters?.clusters).toEqual(filters.clusters);
+    expect(prunePersistedState({ version: 3, filters }, context)?.filters?.clusters).toEqual(
+      filters.clusters
+    );
   });
 
   it('reconciles persisted order with the current column declaration', () => {

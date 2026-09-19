@@ -31,8 +31,8 @@ type Details struct {
 }
 
 func BuildDetails(clusterID string, object *unstructured.Unstructured, descriptor Descriptor, scope resourcemodel.ResourceScope) *Details {
-	model := BuildResourceModel(clusterID, object, descriptor, scope, "")
-	facts := BuildFacts(clusterID, object, descriptor.GVR, descriptor.CRDName, resourcemodel.ResourceModelBuildOptions{})
+	facts := BuildFacts(object)
+	model := buildResourceModel(clusterID, object, descriptor, scope, "", facts)
 	return &Details{
 		CertManager:     certmanager.BuildFacts(clusterID, object),
 		ExternalSecrets: externalsecrets.BuildFacts(clusterID, object),

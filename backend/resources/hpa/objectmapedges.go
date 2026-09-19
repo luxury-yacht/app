@@ -8,12 +8,11 @@ import (
 
 // ObjectMapEdges returns this HPA's relationship-graph edges (it scales its target).
 func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
-	var edge objectmapspec.Edge
-	switch hpa := obj.(type) {
-	case *autoscalingv2.HorizontalPodAutoscaler:
-		edge = objectmapspec.Edge{Type: objectmapspec.EdgeScales, Link: BuildFacts(clusterID, hpa).ScaleTarget}
-	default:
+	hpa, ok := obj.(*autoscalingv2.HorizontalPodAutoscaler)
+	if !ok {
 		return nil
 	}
-	return []objectmapspec.Edge{edge}
+	target := hpa.Spec.ScaleTargetRef
+	link := scaleTargetLink(clusterID, hpa.Namespace, target.APIVersion, target.Kind, target.Name)
+	return []objectmapspec.Edge{{Type: objectmapspec.EdgeScales, Link: link}}
 }

@@ -21,8 +21,7 @@ import (
 // BuildResourceModel builds the Event resource model. Facts are owned by this
 // package (events.Facts); callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, event *corev1.Event) resourcemodel.ResourceModel {
-	facts := BuildFacts(clusterID, event)
-	status := statusPresentation(event, facts)
+	status := statusPresentation(event)
 	return resourcemodel.KubernetesResourceModel(clusterID, Identity, event.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
@@ -65,8 +64,9 @@ func BuildFacts(clusterID string, event *corev1.Event) Facts {
 	return facts
 }
 
-func statusPresentation(event *corev1.Event, facts Facts) resourcemodel.ResourceStatusPresentation {
-	state := strings.TrimSpace(facts.EventType)
+func statusPresentation(event *corev1.Event) resourcemodel.ResourceStatusPresentation {
+	state := strings.TrimSpace(event.Type)
+	reason := strings.TrimSpace(event.Reason)
 	if state == "" {
 		state = "Unknown"
 	}
@@ -74,7 +74,7 @@ func statusPresentation(event *corev1.Event, facts Facts) resourcemodel.Resource
 		Type:   resourcemodel.StatusSignalResourceState,
 		Name:   "type",
 		Status: state,
-		Reason: facts.Reason,
+		Reason: reason,
 	}}
 	lifecycle := resourcemodel.ResourceLifecycle{}
 	if event != nil {
@@ -83,7 +83,7 @@ func statusPresentation(event *corev1.Event, facts Facts) resourcemodel.Resource
 			return status
 		}
 	}
-	return resourcemodel.ObjectSourceStatus(state, state, facts.Reason, "", eventPresentation(state), signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(state, state, reason, "", eventPresentation(state), signals, lifecycle)
 }
 
 // EventTimestamp returns the most-recent timestamp for an event (last seen, falling

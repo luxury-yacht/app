@@ -10,6 +10,7 @@ package resourcequota
 
 import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -18,7 +19,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, quota *corev1.ResourceQuota
 	if quota == nil {
 		return streamrows.QuotaSummary{}
 	}
-	return streamrows.NewQuotaSummary(meta, Identity, quota, DescribeSummary(BuildFacts(quota)))
+	return streamrows.NewQuotaSummary(meta, Identity, quota, describeCounts(len(quota.Status.Hard), len(quota.Status.Used)))
 }
 
 // BuildAggregate projects the namespace and strongest quota utilization from
@@ -28,10 +29,8 @@ func BuildAggregate(quota *corev1.ResourceQuota) streamrows.ResourceQuotaAggrega
 		return streamrows.ResourceQuotaAggregate{}
 	}
 	highest := 0
-	for _, percentage := range BuildFacts(quota).UsedPercentage {
-		if percentage > highest {
-			highest = percentage
-		}
+	for _, percentage := range resourcemodel.QuotaUsedPercentages(quota.Status.Used, quota.Status.Hard) {
+		highest = max(highest, percentage)
 	}
 	return streamrows.ResourceQuotaAggregate{
 		Namespace:             quota.Namespace,

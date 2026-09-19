@@ -58,7 +58,7 @@ func (s *Service) Job(ctx context.Context, namespace, name string) (*JobDetails,
 }
 
 func buildJobDetails(clusterID string, job *batchv1.Job, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) *JobDetails {
-	podSummary, _ := workloads.SummarizePodMetrics(podsList, podMetrics)
+	podSummary := workloads.SummarizePodMetrics(podsList, podMetrics)
 	model := BuildResourceModel(clusterID, job)
 	facts := BuildFacts(job)
 

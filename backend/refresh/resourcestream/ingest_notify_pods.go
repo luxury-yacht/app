@@ -100,14 +100,7 @@ func (s podNotifyBundleSink) broadcastBundle(bundle ingest.Bundle, updateType Me
 	// own scopes (namespace/all-namespaces, node, owner-workload), exactly scopesForPod.
 	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: m.clusterMeta.ClusterID, Group: podres.Identity.Group, Version: podres.Identity.Version, Kind: podres.Identity.Kind, Resource: podres.Identity.Resource, Namespace: summary.Ref.Namespace, Name: summary.Ref.Name, UID: catalog.Ref.UID})
 
-	update := Update{
-		Type:            updateType,
-		Domain:          domainPods,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: catalog.ResourceVersion,
-		Ref:             &ref,
-	}
+	update := m.newObjectUpdate(updateType, domainPods, catalog.ResourceVersion, ref)
 	m.broadcast(domainPods, scopesForPod(summary), update)
 
 	// Derived owner-workload signal: a pod change means its owner workload's row may have

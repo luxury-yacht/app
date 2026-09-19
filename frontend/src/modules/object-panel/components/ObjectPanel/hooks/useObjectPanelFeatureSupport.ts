@@ -14,55 +14,21 @@ export const useObjectPanelFeatureSupport = (
   isHelmRelease = false
 ): FeatureSupport => {
   return useMemo<FeatureSupport>(() => {
-    if (!objectKind) {
-      return {
-        objPanelLogs: false,
-        nodeLogs: false,
-        manifest: false,
-        values: false,
-        delete: false,
-        restart: false,
-        scale: false,
-        edit: false,
-        shell: false,
-        debug: false,
-        trigger: false,
-        suspend: false,
-      };
-    }
-
-    const definition = resourceCapabilities[objectKind];
-
-    if (!definition) {
-      return {
-        objPanelLogs: false,
-        nodeLogs: false,
-        manifest: isHelmRelease,
-        values: isHelmRelease,
-        delete: true,
-        restart: false,
-        scale: false,
-        edit: true,
-        shell: false,
-        debug: false,
-        trigger: false,
-        suspend: false,
-      };
-    }
-
+    const definition = objectKind ? resourceCapabilities[objectKind] : undefined;
+    const hasKind = Boolean(objectKind);
     return {
-      objPanelLogs: Boolean(definition.objPanelLogs),
-      nodeLogs: Boolean(definition.nodeLogs),
-      manifest: isHelmRelease,
-      values: isHelmRelease,
-      delete: Boolean(definition.delete),
-      restart: Boolean(definition.restart),
-      scale: Boolean(definition.scale),
-      edit: definition.edit === undefined ? true : Boolean(definition.edit),
-      shell: Boolean(definition.shell),
-      debug: Boolean(definition.debug),
-      trigger: Boolean(definition.trigger),
-      suspend: Boolean(definition.suspend),
+      objPanelLogs: Boolean(definition?.objPanelLogs),
+      nodeLogs: Boolean(definition?.nodeLogs),
+      manifest: hasKind && isHelmRelease,
+      values: hasKind && isHelmRelease,
+      delete: hasKind && (definition ? Boolean(definition.delete) : true),
+      restart: Boolean(definition?.restart),
+      scale: Boolean(definition?.scale),
+      edit: hasKind && (definition?.edit === undefined || Boolean(definition.edit)),
+      shell: Boolean(definition?.shell),
+      debug: Boolean(definition?.debug),
+      trigger: Boolean(definition?.trigger),
+      suspend: Boolean(definition?.suspend),
     };
   }, [isHelmRelease, objectKind, resourceCapabilities]);
 };

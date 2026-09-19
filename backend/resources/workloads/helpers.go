@@ -9,8 +9,6 @@ package workloads
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
@@ -29,26 +27,6 @@ type podAverageAccumulator struct {
 type podMetricsAccumulator struct {
 	summary                                                        restypes.PodMetricsSummary
 	cpuRequest, cpuLimit, cpuUsage, memRequest, memLimit, memUsage resource.Quantity
-	restarts                                                       int32
-}
-
-func aggregatePodAverages(podSlice []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) (
-	*resource.Quantity,
-	*resource.Quantity,
-	*resource.Quantity,
-	*resource.Quantity,
-	*resource.Quantity,
-	*resource.Quantity,
-) {
-	if len(podSlice) == 0 {
-		return nil, nil, nil, nil, nil, nil
-	}
-
-	accumulator := newPodAverageAccumulator()
-	for _, pod := range podSlice {
-		accumulator.addPod(pod, podMetrics)
-	}
-	return accumulator.averages()
 }
 
 func newPodAverageAccumulator() podAverageAccumulator {
@@ -77,10 +55,15 @@ func addNonZeroQuantity(total *resource.Quantity, count *int, value *resource.Qu
 	}
 }
 
-func (a podAverageAccumulator) averages() (*resource.Quantity, *resource.Quantity, *resource.Quantity, *resource.Quantity, *resource.Quantity, *resource.Quantity) {
-	return averageCPU(a.cpuRequest, a.cpuReqCount), averageCPU(a.cpuLimit, a.cpuLimCount),
-		averageMemory(a.memRequest, a.memReqCount), averageMemory(a.memLimit, a.memLimCount),
-		averageCPU(a.cpuUsage, a.cpuUseCount), averageMemory(a.memUsage, a.memUseCount)
+func (a podAverageAccumulator) utilization() restypes.ResourceUtilization {
+	return restypes.ResourceUtilization{
+		CPURequest: common.FormatCPU(averageCPU(a.cpuRequest, a.cpuReqCount)),
+		CPULimit:   common.FormatCPU(averageCPU(a.cpuLimit, a.cpuLimCount)),
+		CPUUsage:   common.FormatCPU(averageCPU(a.cpuUsage, a.cpuUseCount)),
+		MemRequest: common.FormatMemory(averageMemory(a.memRequest, a.memReqCount)),
+		MemLimit:   common.FormatMemory(averageMemory(a.memLimit, a.memLimCount)),
+		MemUsage:   common.FormatMemory(averageMemory(a.memUsage, a.memUseCount)),
+	}
 }
 
 func averageCPU(total resource.Quantity, count int) *resource.Quantity {
@@ -97,7 +80,7 @@ func averageMemory(total resource.Quantity, count int) *resource.Quantity {
 	return resource.NewQuantity(total.Value()/int64(count), resource.BinarySI)
 }
 
-func SummarizePodMetrics(podSlice []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) (*restypes.PodMetricsSummary, int32) {
+func SummarizePodMetrics(podSlice []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) *restypes.PodMetricsSummary {
 	accumulator := newPodMetricsAccumulator()
 	for _, pod := range podSlice {
 		accumulator.addPod(pod, podMetrics)
@@ -118,11 +101,10 @@ func (a *podMetricsAccumulator) addPod(pod corev1.Pod, metrics map[string]*metri
 		return
 	}
 	a.summary.Pods++
-	ready, total := parseReadyStatus(pods.PodReadyStatus(pod))
-	if total > 0 && ready == total {
+	facts := pods.BuildFacts(&pod)
+	if facts.TotalContainers > 0 && facts.ReadyContainers == facts.TotalContainers {
 		a.summary.ReadyPods++
 	}
-	a.restarts += pods.PodRestartCount(pod)
 	cpuReq, cpuLim, memReq, memLim := pods.CalculatePodResources(pod)
 	addQuantity(&a.cpuRequest, cpuReq)
 	addQuantity(&a.cpuLimit, cpuLim)
@@ -139,30 +121,14 @@ func addQuantity(total, value *resource.Quantity) {
 	}
 }
 
-func (a *podMetricsAccumulator) result() (*restypes.PodMetricsSummary, int32) {
+func (a *podMetricsAccumulator) result() *restypes.PodMetricsSummary {
 	a.summary.CPURequest = common.FormatCPU(&a.cpuRequest)
 	a.summary.CPULimit = common.FormatCPU(&a.cpuLimit)
 	a.summary.CPUUsage = common.FormatCPU(&a.cpuUsage)
 	a.summary.MemRequest = common.FormatMemory(&a.memRequest)
 	a.summary.MemLimit = common.FormatMemory(&a.memLimit)
 	a.summary.MemUsage = common.FormatMemory(&a.memUsage)
-	return &a.summary, a.restarts
-}
-
-func parseReadyStatus(value string) (ready, total int) {
-	parts := strings.SplitN(value, "/", 2)
-	if len(parts) != 2 {
-		return 0, 0
-	}
-	readyVal, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return 0, 0
-	}
-	totalVal, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return 0, 0
-	}
-	return readyVal, totalVal
+	return &a.summary
 }
 
 // BuildPodSummaries builds pod summaries with a hardcoded owner kind/name/apiVersion

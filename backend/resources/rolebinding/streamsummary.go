@@ -9,6 +9,7 @@ package rolebinding
 
 import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
 
@@ -17,6 +18,6 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, binding *rbacv1.RoleBinding
 	if binding == nil {
 		return streamrows.RBACSummary{}
 	}
-	details := DescribeSummary(BuildFacts(meta.ClusterID, binding))
+	details := resourcemodel.RBACBindingSummary(binding.RoleRef.Name, len(binding.Subjects))
 	return streamrows.NewRBACSummary(meta, Identity, binding, details)
 }

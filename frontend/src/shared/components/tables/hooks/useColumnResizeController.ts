@@ -29,9 +29,21 @@ interface ResizeState {
 
 const KEYBOARD_RESIZE_STEP = 16;
 
+function draggedColumnWidth<T>(column: GridColumnDefinition<T>, width: number): number {
+  const minimum = getColumnMinWidth(column);
+  const maximum = getColumnMaxWidth(column);
+  let next = Math.round(width);
+  if (next < minimum) {
+    next = minimum;
+  }
+  if (next > maximum) {
+    next = maximum;
+  }
+  return next;
+}
+
 export interface ColumnResizeControllerOptions<T> {
   columns: GridColumnDefinition<T>[];
-  renderedColumns: GridColumnDefinition<T>[];
   columnWidths: Record<string, number>;
   setColumnWidths: (updater: React.SetStateAction<Record<string, number>>) => void;
   manuallyResizedColumnsRef: React.RefObject<Set<string>>;
@@ -52,7 +64,6 @@ export interface ColumnResizeController {
 
 export function useColumnResizeController<T>({
   columns,
-  renderedColumns,
   columnWidths,
   setColumnWidths,
   manuallyResizedColumnsRef,
@@ -65,8 +76,6 @@ export function useColumnResizeController<T>({
   const columnsRef = useRef(columns);
   columnsRef.current = columns;
 
-  const renderedColumnsRef = useRef(renderedColumns);
-  renderedColumnsRef.current = renderedColumns;
   const resizeRafRef = useRef<number | null>(null);
   const pendingResizeRef = useRef<number | null>(null);
 
@@ -158,6 +167,17 @@ export function useColumnResizeController<T>({
       return;
     }
 
+    const applyPendingResize = () => {
+      resizeRafRef.current = null;
+      const pending = pendingResizeRef.current;
+      if (pending === null || pending === undefined) {
+        return;
+      }
+      pendingResizeRef.current = null;
+      setColumnWidths((prev) => ({ ...prev, [resizing.leftKey]: pending }));
+      manuallyResizedColumnsRef.current.add(resizing.leftKey);
+    };
+
     const handleMouseMove = (event: MouseEvent) => {
       const leftColumn = columnsRef.current.find((col) => col.key === resizing.leftKey);
       const rightColumnExists = columnsRef.current.some((col) => col.key === resizing.rightKey);
@@ -166,39 +186,15 @@ export function useColumnResizeController<T>({
       }
 
       const diff = event.clientX - resizing.startX;
-      const leftMin = getColumnMinWidth(leftColumn);
-      const leftMax = getColumnMaxWidth(leftColumn);
+      pendingResizeRef.current = draggedColumnWidth(leftColumn, resizing.leftStartWidth + diff);
 
-      let nextLeft = Math.round(resizing.leftStartWidth + diff);
-      if (nextLeft < leftMin) {
-        nextLeft = leftMin;
+      if (typeof resizeRafRef.current === 'number') {
+        return;
       }
-      if (nextLeft > leftMax) {
-        nextLeft = leftMax;
-      }
-
-      pendingResizeRef.current = nextLeft;
-
-      if (resizeRafRef.current === null || resizeRafRef.current === undefined) {
-        const applyResize = () => {
-          resizeRafRef.current = null;
-          const pending = pendingResizeRef.current;
-          if (pending === null || pending === undefined) {
-            return;
-          }
-          pendingResizeRef.current = null;
-          setColumnWidths((prev) => ({
-            ...prev,
-            [resizing.leftKey]: pending,
-          }));
-          manuallyResizedColumnsRef.current.add(resizing.leftKey);
-        };
-
-        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-          resizeRafRef.current = window.requestAnimationFrame(applyResize);
-        } else {
-          applyResize();
-        }
+      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+        resizeRafRef.current = window.requestAnimationFrame(applyPendingResize);
+      } else {
+        applyPendingResize();
       }
     };
 
@@ -211,17 +207,7 @@ export function useColumnResizeController<T>({
         window.cancelAnimationFrame(resizeRafRef.current);
         resizeRafRef.current = null;
       }
-      const pending = pendingResizeRef.current;
-      if (pending !== null && pending !== undefined) {
-        pendingResizeRef.current = null;
-        setColumnWidths((prev) => ({
-          ...prev,
-          [resizing.leftKey]: pending,
-        }));
-        manuallyResizedColumnsRef.current.add(resizing.leftKey);
-      } else {
-        pendingResizeRef.current = null;
-      }
+      applyPendingResize();
       onManualResize?.({
         type: 'dragEnd',
         columns: [resizing.leftKey],

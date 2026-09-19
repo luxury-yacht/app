@@ -16,11 +16,10 @@ const ThrowOnRender: React.FC<{ error: Error }> = ({ error }) => {
 };
 
 // Component that throws an error in useEffect
-const ThrowInEffect: React.FC<{ error: Error; onError: () => void }> = ({ error, onError }) => {
+const ThrowInEffect: React.FC<{ error: Error }> = ({ error }) => {
   useEffect(() => {
-    onError();
     throw error;
-  }, [error, onError]);
+  }, [error]);
   return <div>Loading...</div>;
 };
 
@@ -53,14 +52,10 @@ interface TestErrorBoundaryProps {
 }
 
 const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false }) => {
-  const [errorType, setErrorType] = useState<string | null>(null);
-  const [showAsyncError, setShowAsyncError] = useState(false);
+  const [errorType, setErrorType] = useState<
+    'sync' | 'network' | 'chunk' | 'effect' | 'async' | null
+  >(null);
   const { addError } = useErrorContext();
-
-  const handleReset = () => {
-    setErrorType(null);
-    setShowAsyncError(false);
-  };
 
   // Fire a real notification at an explicit severity so the per-severity toast
   // styling (error=red, critical=deeper red, warning=amber, info=neutral) can
@@ -105,17 +100,10 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
   }
 
   if (errorType === 'effect') {
-    return (
-      <ThrowInEffect
-        error={new Error('Error in useEffect - should be caught!')}
-        onError={() => {
-          // keep hook symmetry without logging
-        }}
-      />
-    );
+    return <ThrowInEffect error={new Error('Error in useEffect - should be caught!')} />;
   }
 
-  if (showAsyncError) {
+  if (errorType === 'async') {
     return <AsyncErrorComponent />;
   }
 
@@ -217,7 +205,7 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
 
         <button
           type="button"
-          onClick={() => setShowAsyncError(true)}
+          onClick={() => setErrorType('async')}
           style={{
             padding: '4px 8px',
             background: '#ffcc44',
@@ -323,26 +311,6 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
             🔔 {label} Toast
           </button>
         ))}
-
-        {!!errorType && (
-          <button
-            type="button"
-            onClick={handleReset}
-            style={{
-              marginTop: '10px',
-              padding: '4px 8px',
-              background: '#44ff44',
-              color: 'black',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              fontSize: '11px',
-              fontWeight: 'bold',
-            }}
-          >
-            ✓ Reset Test State
-          </button>
-        )}
       </div>
 
       <div

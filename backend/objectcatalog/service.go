@@ -124,13 +124,6 @@ type Service struct {
 	nextFinalizerSubID   int
 }
 
-// summaryChunk holds one published batch of summaries. Chunks are IMMUTABLE
-// once published: items are never mutated in place — emit and cache rebuilds
-// always create fresh chunks. Snapshots therefore share chunk pointers.
-type summaryChunk struct {
-	items []Summary
-}
-
 // NewService constructs a catalog service with the provided dependencies and options.
 func NewService(deps Dependencies, opts *Options) *Service {
 	serviceOpts := defaultServiceOptions()

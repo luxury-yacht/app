@@ -244,6 +244,9 @@ export function useGridTablePersistence<T>({
       };
     }
 
+    // Preserve cancellation/retry on row and key changes while hydration is pending.
+    void data;
+    void keyExtractor;
     const loadPersisted = async () => {
       await hydrateGridTablePersistence();
       if (!active) {
@@ -252,8 +255,6 @@ export function useGridTablePersistence<T>({
       const persisted = loadPersistedState(storageKey);
       const pruned = prunePersistedState(persisted, {
         columns,
-        rows: data.length > 0 ? data : undefined,
-        keyExtractor: data.length > 0 ? keyExtractor : undefined,
         filterOptions: {
           ...filterOptions,
           isNamespaceScoped,
@@ -299,13 +300,14 @@ export function useGridTablePersistence<T>({
       return;
     }
 
+    // New rows still restart the existing save debounce.
+    void data;
+    void keyExtractor;
     const save = () => {
       saveTimerRef.current = null;
       const state = buildPersistedStateForSave({
         columns,
         customColumns,
-        rows: data,
-        keyExtractor,
         columnVisibility,
         columnOrder,
         columnWidths,

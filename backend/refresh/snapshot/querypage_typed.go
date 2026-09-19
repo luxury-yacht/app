@@ -190,33 +190,25 @@ func typedQueryPredicateSignatureParts(predicates []ResourceQueryPredicate) []st
 // one safely; two concurrent misses both build and the last put wins —
 // acceptable single-slot semantics.
 type perBuildStoreCache[T any] struct {
-	mu           sync.Mutex
-	key          string
-	store        *querypage.Store[T]
-	matchedTotal int
-	namespaces   []string
-	kinds        []string
-	facetValues  []ResourceQueryFacetValues
+	mu     sync.Mutex
+	key    string
+	result typedStoreResult[T]
 }
 
-func (c *perBuildStoreCache[T]) get(key string) (*querypage.Store[T], int, []string, []string, []ResourceQueryFacetValues, bool) {
+func (c *perBuildStoreCache[T]) get(key string) (typedStoreResult[T], bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.store == nil || c.key != key {
-		return nil, 0, nil, nil, nil, false
+	if c.result.store == nil || c.key != key {
+		return typedStoreResult[T]{}, false
 	}
-	return c.store, c.matchedTotal, c.namespaces, c.kinds, c.facetValues, true
+	return c.result, true
 }
 
-func (c *perBuildStoreCache[T]) put(key string, store *querypage.Store[T], matchedTotal int, namespaces, kinds []string, facetValues []ResourceQueryFacetValues) {
+func (c *perBuildStoreCache[T]) put(key string, result typedStoreResult[T]) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.key = key
-	c.store = store
-	c.matchedTotal = matchedTotal
-	c.namespaces = namespaces
-	c.kinds = kinds
-	c.facetValues = facetValues
+	c.result = result
 }
 
 // perBuildCacheKey identifies the matched set a per-Build store was built
@@ -308,7 +300,13 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 	cfg := typedServeOptions(opts)
 	storeResult := resolveTypedTableStore(items, query, adapter, schema, cfg)
 	engineQuery := typedEngineQuery(query, schema)
-	page, anchorResult := executeTypedEngineQuery(items, query, adapter, storeResult.store, engineQuery)
+	anchorKey := typedAnchorKey(adapter, query.Request.Anchor)
+	page, anchorResult := executeTypedEngineQuery(storeResult.store, engineQuery, query.Request, anchorKey)
+	// This store contains only matched rows. An absent anchor still present in
+	// the full input was filtered out; the maintained store resolves this itself.
+	if anchorResult != nil && !anchorResult.Found && typedItemsContainKey(items, adapter.Key, anchorKey) {
+		anchorResult.Reason = ResourceQueryAnchorFiltered
+	}
 	return typedTableQueryPage[T]{
 		Rows:            page.Rows,
 		Continue:        page.NextCursor,
@@ -351,14 +349,14 @@ func resolveTypedTableStore[T any](items []T, query typedTableQuery, adapter typ
 	if cfg.cache != nil {
 		cacheKey = perBuildCacheKey(query, cfg.versionToken)
 		var cached bool
-		result.store, result.matchedTotal, result.matchedNamespaces, result.matchedKinds, result.scopeFacetValues, cached = cfg.cache.get(cacheKey)
+		result, cached = cfg.cache.get(cacheKey)
 		if cached {
 			return result
 		}
 	}
 	result = buildTypedTableStore(items, query, adapter, schema)
 	if cfg.cache != nil {
-		cfg.cache.put(cacheKey, result.store, result.matchedTotal, result.matchedNamespaces, result.matchedKinds, result.scopeFacetValues)
+		cfg.cache.put(cacheKey, result)
 	}
 	return result
 }
@@ -400,9 +398,8 @@ func typedEngineQuery[T any](query typedTableQuery, schema querypage.Schema[T]) 
 	}
 	// Cursor decode/validate is owned by the engine: an invalid token restarts at
 	// page 1 and surfaces on page.CursorInvalid — no caller pre-validation.
-	// The store already holds only matched rows, so the engine query needs
-	// Sort/Direction/Limit/Cursor only — no Filters/Search (they were applied by
-	// the matcher).
+	// Per-build stores already contain matched rows. Maintained stores add
+	// their scope filters and search to this shared paging identity.
 	return querypage.Query{
 		ClusterID: query.Request.ClusterID,
 		Signature: typedQuerySignature(sortField, dir, query.Request.Limit, query.BaseScope, query.Request),
@@ -412,27 +409,20 @@ func typedEngineQuery[T any](query typedTableQuery, schema querypage.Schema[T]) 
 	}
 }
 
-func executeTypedEngineQuery[T any](items []T, query typedTableQuery, adapter typedTableQueryAdapter[T], store *querypage.Store[T], engineQuery querypage.Query) (querypage.Page[T], *ResourceQueryAnchorResult) {
+// executeTypedEngineQuery applies the shared anchor, page-rank and cursor precedence.
+func executeTypedEngineQuery[T any](store *querypage.Store[T], engineQuery querypage.Query, request ResourceQueryRequest, anchorKey string) (querypage.Page[T], *ResourceQueryAnchorResult) {
 	var page querypage.Page[T]
 	var anchorResult *ResourceQueryAnchorResult
 	switch {
-	case query.Request.Anchor != nil:
-		key := typedAnchorKey(adapter, query.Request.Anchor)
+	case request.Anchor != nil:
 		var outcome querypage.AnchorOutcome
-		page, outcome, _ = store.QueryAround(engineQuery, key)
-		// This store holds ONLY matched rows, so an anchor the engine cannot find
-		// is ambiguous: present in the full item list ⇒ excluded by the request's
-		// filters ("filtered"); absent ⇒ "not-found".
-		if !outcome.Found && typedItemsContainKey(items, adapter.Key, key) {
-			outcome.Filtered = true
-		}
+		page, outcome, _ = store.QueryAround(engineQuery, anchorKey)
 		anchorResult = anchorResultFromOutcome(outcome)
-	case query.Request.StartRank != nil:
-		// Numbered page jump: the engine clamps past-the-end starts to the last
-		// aligned page and reports the served rank on PageStartRank.
-		page, _ = store.QueryAt(engineQuery, *query.Request.StartRank)
+	case request.StartRank != nil:
+		// Numbered page jumps clamp to the last aligned page in the engine.
+		page, _ = store.QueryAt(engineQuery, *request.StartRank)
 	default:
-		engineQuery.Cursor = query.Request.Continue
+		engineQuery.Cursor = request.Continue
 		page, _ = store.Query(engineQuery)
 	}
 	return page, anchorResult
@@ -495,32 +485,31 @@ func pageStartRankPtr(rank int) *int {
 // matcher applies namespace AND kind. An intersection that is empty yields a filter
 // that matches nothing, mirroring the matcher rejecting every row.
 func maintainedScopeBase(availableKinds map[string]bool, namespace string, userKinds, userNamespaces []string, includeUser bool) map[string][]string {
-	base := map[string][]string{}
-
 	available := make([]string, 0, len(availableKinds))
 	for kind, ok := range availableKinds {
 		if ok {
 			available = append(available, strings.ToLower(strings.TrimSpace(kind)))
 		}
 	}
-	base["kind"] = available
-	if includeUser {
-		if uk := lowerTrimAll(userKinds); len(uk) > 0 {
-			base["kind"] = intersectLowered(available, uk)
-		}
-	}
-
+	base := map[string][]string{"kind": available}
 	if namespace != "" {
 		base["namespace"] = []string{strings.ToLower(strings.TrimSpace(namespace))}
-		if includeUser {
-			if un := lowerTrimAll(userNamespaces); len(un) > 0 {
-				base["namespace"] = intersectLowered(base["namespace"], un)
-			}
-		}
-	} else if includeUser {
-		if un := lowerTrimAll(userNamespaces); len(un) > 0 {
-			base["namespace"] = un
-		}
+	}
+	if !includeUser {
+		return base
+	}
+
+	if selected := lowerTrimAll(userKinds); len(selected) > 0 {
+		base["kind"] = intersectLowered(available, selected)
+	}
+	selectedNamespaces := lowerTrimAll(userNamespaces)
+	if len(selectedNamespaces) == 0 {
+		return base
+	}
+	if namespace == "" {
+		base["namespace"] = selectedNamespaces
+	} else {
+		base["namespace"] = intersectLowered(base["namespace"], selectedNamespaces)
 	}
 	return base
 }
@@ -623,18 +612,6 @@ func resolveMaintainedDirect[T any](store *querypage.Store[T], query typedTableQ
 		)
 	}
 
-	sortField := strings.ToLower(strings.TrimSpace(query.Request.SortField))
-	if _, ok := schema.SortKeys[sortField]; !ok {
-		sortField = "name"
-	}
-	dir := querypage.Ascending
-	if strings.EqualFold(query.Request.SortDirection, "desc") {
-		dir = querypage.Descending
-	}
-	limit := query.Request.Limit
-	sig := typedQuerySignature(sortField, dir, limit, query.BaseScope, query.Request)
-	searchLower := strings.ToLower(strings.TrimSpace(query.Request.Search))
-
 	// The page query honors the request's full visible scope (available ∩ user kinds,
 	// namespace ∩ user namespaces) plus search, walking the FULL sort index and
 	// skipping non-matching rows. Because the matched rows keep their relative order in
@@ -645,38 +622,18 @@ func resolveMaintainedDirect[T any](store *querypage.Store[T], query typedTableQ
 	for key, selected := range query.Request.Facets {
 		pageBase[key] = stableFacetSelection(selected)
 	}
-	engineQuery := querypage.Query{
-		ClusterID: query.Request.ClusterID,
-		Signature: sig,
-		Sort:      sortField,
-		Direction: dir,
-		Limit:     limit,
-		// Request.Search is already trimmed at parse time (resourceQueryRequestFromValues);
-		// Query lowercases internally, matching the live matcher's needle exactly.
-		Search:    query.Request.Search,
-		Filters:   pageBase,
-		MatchNone: query.Request.MatchNone,
-	}
-	var page querypage.Page[T]
-	var anchorResult *ResourceQueryAnchorResult
-	switch {
-	case query.Request.Anchor != nil:
-		// This store holds ALL rows (scope applied via engine filters), so the
-		// engine's own found/filtered/not-found outcome is authoritative.
-		var outcome querypage.AnchorOutcome
-		page, outcome, _ = store.QueryAround(engineQuery, typedAnchorKey(adapter, query.Request.Anchor))
-		anchorResult = anchorResultFromOutcome(outcome)
-	case query.Request.StartRank != nil:
-		page, _ = store.QueryAt(engineQuery, *query.Request.StartRank)
-	default:
-		engineQuery.Cursor = query.Request.Continue
-		page, _ = store.Query(engineQuery)
-	}
+	engineQuery := typedEngineQuery(query, schema)
+	// This store retains all rows, so the engine applies the request filters
+	// and owns the found/filtered/not-found anchor result.
+	engineQuery.Search = query.Request.Search
+	engineQuery.Filters = pageBase
+	engineQuery.MatchNone = query.Request.MatchNone
+	page, anchorResult := executeTypedEngineQuery(store, engineQuery, query.Request, typedAnchorKey(adapter, query.Request.Anchor))
 
 	// Facets + Total are over the user-matched set (page query's scope). UnfilteredTotal
 	// is over the scope-only set (available kinds + namespace, NO user filters/search) —
 	// the count of in-scope rows the list path passed in as `items`.
-	matchedFacets, matchedTotal := store.Scope(pageBase, searchLower)
+	matchedFacets, matchedTotal := store.Scope(pageBase, strings.ToLower(strings.TrimSpace(query.Request.Search)))
 	scopeOnlyBase := maintainedScopeBase(scope.availableKinds, scope.namespace, nil, nil, false)
 	scopeOnlyFacets, unfilteredTotal := store.Scope(scopeOnlyBase, "")
 	if query.Request.MatchNone {
@@ -883,17 +840,14 @@ func registerMaintainedInformerHandler[T any](
 	informer cache.SharedIndexInformer,
 	project func(obj interface{}) (row T, source metav1.Object, ok bool),
 ) error {
+	record := func(obj interface{}) {
+		if row, src, ok := project(obj); ok {
+			maintained.upsertRow(row, src)
+		}
+	}
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			if row, src, ok := project(obj); ok {
-				maintained.upsertRow(row, src)
-			}
-		},
-		UpdateFunc: func(_, newObj interface{}) {
-			if row, src, ok := project(newObj); ok {
-				maintained.upsertRow(row, src)
-			}
-		},
+		AddFunc:    record,
+		UpdateFunc: func(_, newObj interface{}) { record(newObj) },
 		DeleteFunc: func(obj interface{}) {
 			if row, _, ok := project(maintainedUnwrap(obj)); ok {
 				maintained.deleteRow(row)
@@ -962,10 +916,7 @@ func (m *typedMaintainedStore[T]) BundleSink() ingest.BundleSink {
 // descriptor, so one GVR relist cannot remove another kind's rows in a multi-kind
 // maintained store.
 func (m *typedMaintainedStore[T]) bundleSinkFor(desc streamspec.Descriptor) ingest.BundleSink {
-	return maintainedStoreSink[T]{
-		store: m,
-		owns:  func(row T) bool { return m.adapter.Kind(row) == desc.Kind },
-	}
+	return m.bundleSinkForKind(desc.Kind)
 }
 
 // bundleSinkForKind is the kind-string analogue of bundleSinkFor for a source whose kind has no
@@ -1030,12 +981,7 @@ func (s maintainedStoreSink[T]) Replace(tableRows []interface{}) {
 // at upsert (it is dropped from the STORED bundle only AFTER fanning to sinks), so a missing
 // or wrong-typed Table half means this bundle does not belong to this store and is ignored.
 func (s maintainedStoreSink[T]) UpsertBundle(bundle ingest.Bundle) {
-	row, ok := bundle.Table.(T)
-	if !ok {
-		return
-	}
-	s.store.store.Upsert(row)
-	s.store.bumpSinkVersion()
+	s.Upsert(bundle.Table)
 }
 
 func (s maintainedStoreSink[T]) ReplaceBundles(bundles []ingest.Bundle) {

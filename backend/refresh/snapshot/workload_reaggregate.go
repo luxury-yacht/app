@@ -1,13 +1,5 @@
-// backend/refresh/snapshot/workload_reaggregate.go
-//
-// The serve-side re-join for the cut workload kinds. Deployment/StatefulSet/DaemonSet/
-// Job/CronJob are projected at intake into a workload-OWN-fields WorkloadSummary (status,
-// name, namespace, age, port-forward, desired replicas, and the fallback Ready) by the
-// SAME buildXSummary the serve path calls — but with nil pods and nil usage, so the
-// pod-aggregate join + metrics are absent. At serve the workloads domain re-joins the
-// owner's pods + the fresh metrics sample onto the projected own-row, reproducing the
-// exact WorkloadSummary the typed buildXSummary would build with those pods + usage
-// (proven in workload_reaggregate_test.go).
+// Serving joins each retained workload row with its owner's current pod aggregates
+// and metrics. HPA ownership is applied by the snapshot assembler afterward.
 package snapshot
 
 import (
@@ -19,22 +11,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// reaggregateWorkloadSummary overlays the owner's pod-aggregate join + metrics onto a
-// projected workload-own row, returning the full WorkloadSummary the typed buildXSummary
-// would produce. The own-row supplies every field read from the typed object alone
-// (status/name/namespace/age/port-forward/desired-replicas + the fallback Ready); this
-// re-join overwrites only the pod-join fields (Restarts + cpu/mem request/limit), the
-// metrics usage (cpu/mem), and — for the pod-counted Ready kinds — the Ready string.
-//
-// Ready handling mirrors the per-kind builders exactly:
-//   - Deployment/StatefulSet/DaemonSet compute Ready via workloadPodReadyStatus(pods,
-//     fallbackReady, fallbackTotal); the fallback is the (ready,total) the projected
-//     own-row already encodes (it was built with nil pods, so its Ready IS the fallback).
-//   - Job and CronJob never pod-join Ready (it is completed/desired or the active count),
-//     so the projected own-row's Ready is final and carried through unchanged.
-//
-// HPAManaged is applied by the caller (appendSummary) after this re-join, exactly as in
-// the typed path, so it is intentionally untouched here.
+// reaggregateWorkloadSummary overlays only pod and metric fields on an intake row.
+// Deployment, StatefulSet and DaemonSet readiness uses pod counts when available;
+// Job completions and CronJob active counts remain the projected own value.
 func reaggregateWorkloadSummary(own WorkloadSummary, pods []streamrows.PodAggregate, usage map[string]metrics.PodUsage) WorkloadSummary {
 	resources := aggregateWorkloadPodResources(pods, usage)
 

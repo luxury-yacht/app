@@ -6,6 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import { requireValue } from '@/test-utils/requireValue';
 import {
   type AppPreferenceKey,
   applyBroadcastAppearanceModePreference,
@@ -101,6 +102,16 @@ const desktopRuntimeMocks = vi.hoisted(() => ({
 vi.mock('@/core/telemetry/sentry', () => telemetryMocks);
 
 const flushPromises = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
 
 const preferenceSchema = (overrides: Record<string, Partial<Record<string, unknown>>> = {}) => {
   const definitions: Array<{
@@ -729,6 +740,7 @@ describe('appPreferences', () => {
     setAutoRefreshEnabled(false);
     setBackgroundRefreshEnabled(false);
     setGridTablePersistenceMode('namespaced');
+    await flushPromises();
 
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'appearanceMode', value: 'dark' }],
@@ -960,6 +972,203 @@ describe('appPreferences', () => {
     }
   });
 
+  it('keeps a later preference edit when an earlier save fails and sends writes in order', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      useShortResourceNames: false,
+      dimInactiveNamespaces: true,
+    });
+    await hydrateAppPreferences({ force: true });
+    const first = deferred<unknown>();
+    const second = deferred<unknown>();
+    appMocks.UpdateAppPreferences.mockReturnValueOnce(first.promise).mockReturnValueOnce(
+      second.promise
+    );
+    const failed = setUseShortResourceNames(true).catch((error) => error);
+    const saved = setDimInactiveNamespaces(false);
+    const callsBeforeSettlement = appMocks.UpdateAppPreferences.mock.calls.length;
+    first.reject(new Error('first save failed'));
+    await failed;
+    const valueAfterFailure = getDimInactiveNamespaces();
+    second.resolve({});
+    await saved;
+
+    expect(valueAfterFailure).toBe(false);
+    expect(getUseShortResourceNames()).toBe(false);
+    expect(getDimInactiveNamespaces()).toBe(false);
+    expect(callsBeforeSettlement).toBe(1);
+    expect(
+      appMocks.UpdateAppPreferences.mock.calls.map(([request]) => request.changes[0].key)
+    ).toEqual(['useShortResourceNames', 'dimInactiveNamespaces']);
+  });
+
+  it('returns to confirmed state when two overlapping edits of the same preference both fail', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ useShortResourceNames: false });
+    await hydrateAppPreferences({ force: true });
+    const first = deferred<unknown>();
+    const second = deferred<unknown>();
+    appMocks.UpdateAppPreferences.mockReturnValueOnce(first.promise).mockReturnValueOnce(
+      second.promise
+    );
+    const failedFirst = setUseShortResourceNames(true).catch((error) => error);
+    const failedSecond = setUseShortResourceNames(false).catch((error) => error);
+    first.reject(new Error('first save failed'));
+    await failedFirst;
+    second.reject(new Error('second save failed'));
+    await failedSecond;
+    expect(getUseShortResourceNames()).toBe(false);
+  });
+
+  it('preserves a later color edit and its startup mirror when a mode save fails', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system', linkColorLight: '' });
+    await hydrateAppPreferences({ force: true });
+    const first = deferred<unknown>();
+    appMocks.UpdateAppPreferences.mockReturnValueOnce(first.promise);
+    const failed = setAppearanceModePreference('dark').catch((error) => error);
+    setLinkColor('light', '#326ce5');
+    first.reject(new Error('mode save failed'));
+    await failed;
+    await flushPromises();
+    expect(getAppearanceModePreference()).toBe('system');
+    expect(getLinkColor('light')).toBe('#326ce5');
+    expect(
+      JSON.parse(
+        requireValue(
+          localStorage.getItem('app-appearance-bootstrap-v1'),
+          'appearance bootstrap mirror'
+        )
+      ).light['--color-object-panel-link']
+    ).toBe('#326ce5');
+  });
+
+  it('waits for pending preference writes before reading a forced refresh', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ useShortResourceNames: false });
+    await hydrateAppPreferences({ force: true });
+    appMocks.GetAppSettingsSchema.mockClear();
+    const write = deferred<unknown>();
+    appMocks.UpdateAppPreferences.mockReturnValueOnce(write.promise);
+    const saved = setUseShortResourceNames(true);
+    const refreshed = hydrateAppPreferences({ force: true });
+    await flushPromises();
+    const readsBeforeSave = appMocks.GetAppSettingsSchema.mock.calls.length;
+    const visibleBeforeSave = getUseShortResourceNames();
+    appMocks.GetAppSettings.mockResolvedValue({ useShortResourceNames: true });
+    write.resolve({});
+    await saved;
+    const result = await refreshed;
+    expect(readsBeforeSave).toBe(0);
+    expect(visibleBeforeSave).toBe(true);
+    expect(result.useShortResourceNames).toBe(true);
+  });
+
+  it('retries a hydration snapshot invalidated by an edit while the read was in flight', async () => {
+    const stale = deferred<unknown>();
+    appMocks.GetAppSettings.mockReturnValueOnce(stale.promise).mockResolvedValue({
+      useShortResourceNames: true,
+    });
+    const loading = hydrateAppPreferences({ force: true });
+    await flushPromises();
+    await setUseShortResourceNames(true);
+    stale.resolve({ useShortResourceNames: false });
+    const result = await loading;
+    expect(result.useShortResourceNames).toBe(true);
+    expect(getUseShortResourceNames()).toBe(true);
+    expect(appMocks.GetAppSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes again when a peer requests hydration during an older read', async () => {
+    const stale = deferred<unknown>();
+    appMocks.GetAppSettings.mockReturnValueOnce(stale.promise).mockResolvedValue({
+      appearanceMode: 'dark',
+    });
+    const first = hydrateAppPreferences({ force: true });
+    await flushPromises();
+    const second = hydrateAppPreferences({ force: true });
+    await flushPromises();
+    stale.resolve({ appearanceMode: 'light' });
+    const results = await Promise.all([first, second]);
+    expect(results.map((result) => result.appearanceMode)).toEqual(['dark', 'dark']);
+    expect(getAppearanceModePreference()).toBe('dark');
+    expect(localStorage.getItem('app-appearance-mode-preference')).toBe('dark');
+  });
+
+  it('broadcasts persisted appearance changes in edit order when an earlier notification is delayed', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
+    await hydrateAppPreferences({ force: true });
+    const delayed = deferred<boolean>();
+    desktopRuntimeMocks.emitBroadcastEvent.mockReturnValueOnce(delayed.promise);
+    const first = setAppearanceModePreference('dark');
+    await flushPromises();
+    const second = setAppearanceModePreference('light');
+    await flushPromises();
+    delayed.resolve(false);
+    await Promise.all([first, second]);
+    expect(
+      desktopRuntimeMocks.emitBroadcastEvent.mock.calls
+        .filter(([event]) => event === 'settings:appearance-mode-changed')
+        .map(([, value]) => value.mode)
+    ).toEqual(['dark', 'light']);
+  });
+
+  it.each(['settings:preferences-changed', 'settings:appearance-mode-changed'])(
+    'keeps persisted state and continues queued writes when %s notification fails',
+    async (event) => {
+      appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
+      await hydrateAppPreferences({ force: true });
+      desktopRuntimeMocks.emitBroadcastEvent.mockImplementation(async (name) => {
+        if (name === event) {
+          throw new Error('notification failed');
+        }
+        return false;
+      });
+      await Promise.all([setAppearanceModePreference('dark'), setUseShortResourceNames(true)]);
+      expect(getAppearanceModePreference()).toBe('dark');
+      expect(localStorage.getItem('app-appearance-mode-preference')).toBe('dark');
+      expect(getUseShortResourceNames()).toBe(true);
+      expect(appMocks.UpdateAppPreferences).toHaveBeenCalledTimes(2);
+    }
+  );
+
+  it('finishes persistence when its broadcast triggers a hydration that waits for the write', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ useShortResourceNames: false });
+    await hydrateAppPreferences({ force: true });
+    let refresh: ReturnType<typeof hydrateAppPreferences> | undefined;
+    desktopRuntimeMocks.emitBroadcastEvent.mockImplementation(async () => {
+      refresh = hydrateAppPreferences({ force: true });
+      return false;
+    });
+    appMocks.UpdateAppPreferences.mockImplementation(async () => {
+      appMocks.GetAppSettings.mockResolvedValue({ useShortResourceNames: true });
+      return {};
+    });
+    await setUseShortResourceNames(true);
+    expect((await refresh)?.useShortResourceNames).toBe(true);
+    expect(getUseShortResourceNames()).toBe(true);
+  });
+
+  it('keeps startup appearance mirrors in sync when a preference subscriber makes another edit', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system', linkColorLight: '' });
+    await hydrateAppPreferences({ force: true });
+    const unsubscribe = eventBus.on('settings:appearance-mode', () =>
+      setLinkColor('light', '#326ce5')
+    );
+    try {
+      await setAppearanceModePreference('light');
+      await flushPromises();
+      expect(getLinkColor('light')).toBe('#326ce5');
+      expect(
+        JSON.parse(
+          requireValue(
+            localStorage.getItem('app-appearance-bootstrap-v1'),
+            'appearance bootstrap mirror'
+          )
+        ).light['--color-object-panel-link']
+      ).toBe('#326ce5');
+      expect(appMocks.UpdateAppPreferences).toHaveBeenCalledTimes(2);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it('rolls back appearance localStorage mirrors when persistence fails', async () => {
     localStorage.setItem('app-appearance-mode-preference', 'system');
     localStorage.setItem('app-appearance-bootstrap-v1', '{"light":{},"dark":{}}');
@@ -1046,6 +1255,7 @@ describe('appPreferences', () => {
     expect(getPaletteTint('dark')).toEqual({ hue: 300, saturation: 60, brightness: 20 });
     // Light mode should be unchanged.
     expect(getPaletteTint('light')).toEqual({ hue: 180, saturation: 75, brightness: -25 });
+    await flushPromises();
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [
         { key: 'paletteHueDark', value: 300 },
@@ -1131,6 +1341,7 @@ describe('appPreferences', () => {
     expect(getAccentColor('dark')).toBe('#f59e0b');
     // Light mode should be unchanged.
     expect(getAccentColor('light')).toBe('#326ce5');
+    await flushPromises();
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'accentColorDark', value: '#f59e0b' }],
     });

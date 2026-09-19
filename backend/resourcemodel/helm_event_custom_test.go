@@ -38,6 +38,18 @@ func TestBuildHelmManifestResourceLinkDoesNotGuessMissingAPIVersion(t *testing.T
 	require.Equal(t, "", link.Display.Version)
 }
 
+func TestBuildHelmManifestResourceLinkDoesNotTruncateMalformedAPIVersion(t *testing.T) {
+	link := BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(context.Background(), helmTestResolver, "cluster-a", HelmManifestResource{
+		APIVersion: "apps/v1/extra", Kind: "Deployment", Namespace: "apps", Name: "orders", NamespaceExplicit: true,
+	})
+	require.Nil(t, link.Ref, "a malformed identity must not open a different valid object")
+	require.NotNil(t, link.Display)
+	require.Equal(t, "cluster-a", link.Display.ClusterID)
+	require.Equal(t, "Deployment", link.Display.Kind)
+	require.Equal(t, "apps", link.Display.Namespace)
+	require.Equal(t, "orders", link.Display.Name)
+}
+
 func TestBuildHelmManifestResourceLinkRespectsBuiltinScope(t *testing.T) {
 	clusterRole := BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(
 		context.Background(),

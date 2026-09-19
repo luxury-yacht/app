@@ -155,6 +155,23 @@ describe('gridTableFilterEngine', () => {
     expect(caseVariantFiltered).toEqual([]);
   });
 
+  it('keeps case-distinct cluster identities when deriving local options', () => {
+    const options = buildGridTableFilterOptions({
+      filteringEnabled: true,
+      data: [
+        { ...rows[0], clusterId: 'config:Production' },
+        { ...rows[1], clusterId: 'config:production' },
+      ],
+      accessors: { ...accessors, getCluster: (row: Row) => row.clusterId },
+      defaultGetKind,
+      defaultGetNamespace,
+    });
+    expect(options.clusters?.map((option) => option.value).sort()).toEqual([
+      'config:Production',
+      'config:production',
+    ]);
+  });
+
   it('returns empty option lists when filtering is disabled', () => {
     const options = buildGridTableFilterOptions({
       filteringEnabled: false,

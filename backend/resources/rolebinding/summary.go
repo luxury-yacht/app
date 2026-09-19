@@ -13,16 +13,14 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/resources/types"
+
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 // DescribeSummary renders the terse one-line RoleBinding summary used by snapshot
 // RBAC summaries.
 func DescribeSummary(facts Facts) string {
-	role := types.RoleRefFromResourceLink(facts.RoleRef).Name
-	if role == "" {
-		role = "-"
-	}
-	return fmt.Sprintf("Role: %s, Subjects: %d", role, len(facts.Subjects))
+	return resourcemodel.RBACBindingSummary(types.RoleRefFromResourceLink(facts.RoleRef).Name, len(facts.Subjects))
 }
 
 // detailsSummary renders the richer RoleBinding detail-view summary.

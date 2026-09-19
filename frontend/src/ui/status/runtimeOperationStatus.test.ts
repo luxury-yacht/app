@@ -99,6 +99,7 @@ describe('runtimeOperationStatusReducer', () => {
       type: 'portforward:status',
       event: {
         sessionId: 'pf-1',
+        clusterId: 'cluster-a',
         status: 'reconnecting',
         statusReason: 'pod replaced',
         localPort: 18081,
@@ -113,6 +114,46 @@ describe('runtimeOperationStatusReducer', () => {
       localPort: 18081,
       podName: 'web-replacement',
     });
+  });
+
+  it('matches runtime presence by cluster and session identity', () => {
+    const state = {
+      ...initialRuntimeOperationStatusState,
+      operationsLoaded: true,
+      operations: [
+        {
+          id: portForwardSession.id,
+          type: 'port-forward',
+          clusterId: 'cluster-b',
+          status: 'active',
+          startedAt: portForwardSession.startedAt,
+        },
+      ],
+      portForwardSessions: [portForwardSession],
+    };
+    expect(selectRuntimeOperationRows(state).portForwardSessions).toEqual([]);
+    const next = runtimeOperationStatusReducer(state, {
+      type: 'runtime-operations:list',
+      operations: state.operations,
+    });
+    expect(next.portForwardSessions).toEqual([]);
+  });
+
+  it('ignores a port-forward status event from another cluster', () => {
+    const state = {
+      ...initialRuntimeOperationStatusState,
+      portForwardSessions: [portForwardSession],
+    };
+    const next = runtimeOperationStatusReducer(state, {
+      type: 'portforward:status',
+      event: {
+        sessionId: portForwardSession.id,
+        clusterId: 'cluster-b',
+        status: 'error',
+        podName: 'other-cluster-pod',
+      },
+    });
+    expect(next.portForwardSessions).toEqual([portForwardSession]);
   });
 
   it('does not resurrect missing port-forward details from status-only events', () => {
@@ -135,6 +176,7 @@ describe('runtimeOperationStatusReducer', () => {
       type: 'portforward:status',
       event: {
         sessionId: 'pf-1',
+        clusterId: 'cluster-a',
         status: 'active',
         localPort: 18080,
         podName: 'web',

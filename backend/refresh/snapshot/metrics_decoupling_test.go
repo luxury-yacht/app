@@ -30,10 +30,7 @@ func TestPodSnapshotWithoutProviderServesNoDataAndNoMetricClock(t *testing.T) {
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
-	builder := &PodBuilder{
-		podLister: testsupport.NewPodLister(t, pod),
-		rsLister:  testsupport.NewReplicaSetLister(t),
-	}
+	builder := newTestPodBuilder(t, ClusterMeta{}, testsupport.NewPodLister(t, pod), testsupport.NewReplicaSetLister(t), nil)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)

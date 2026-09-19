@@ -18,13 +18,13 @@ import {
   SkipApplicationUpdate,
 } from '@core/backend-api';
 import type { backend } from '@core/backend-api/models';
-import { onEvent, openURL } from '@core/desktop-runtime';
+import { openURL } from '@core/desktop-runtime';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { InfoIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { readAppInfo, requestAppState } from '@/core/app-state-access';
+import { useAppInfo } from '@shared/hooks/useAppInfo';
 import { reportOperationalError } from '@/utils/errorHandler';
 import {
   getUpdatePresentation,
@@ -50,11 +50,6 @@ const updateActionNames: Record<UpdateAction, string> = {
   'remove-skip': 'removeApplicationUpdateSkip',
   recovery: 'openApplicationUpdateRecovery',
 };
-
-const withUpdate = (
-  current: backend.AppInfo | null,
-  update: backend.UpdateInfo
-): backend.AppInfo | null => (current ? { ...current, update } : current);
 
 const progressPercentFor = (update: backend.UpdateInfo): number | null => {
   const progress = update.progressPercent;
@@ -112,7 +107,7 @@ const performUpdateAction = async (
 
 const useApplicationUpdateAction = (
   update: backend.UpdateInfo | null,
-  setAppInfo: React.Dispatch<React.SetStateAction<backend.AppInfo | null>>
+  setUpdate: (update: backend.UpdateInfo) => void
 ) => {
   const [updateAction, setUpdateAction] = useState<UpdateAction | null>(null);
 
@@ -128,7 +123,7 @@ const useApplicationUpdateAction = (
     try {
       const next = await performUpdateAction(action, update, url);
       if (next) {
-        setAppInfo((current) => withUpdate(current, next));
+        setUpdate(next);
       }
     } catch (error) {
       reportOperationalError(error, {
@@ -263,23 +258,12 @@ const ApplicationUpdateSection: React.FC<ApplicationUpdateSectionProps> = ({
 const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) => {
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
-  const [appInfo, setAppInfo] = useState<backend.AppInfo | null>(null);
+  const { appInfo, update, setUpdate } = useAppInfo(isOpen);
 
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
       setIsClosing(false);
-      // Fetch app info when modal opens
-      requestAppState({
-        resource: 'app-info',
-        read: () => readAppInfo(),
-      })
-        .then((info) => {
-          setAppInfo(info);
-        })
-        .catch(() => {
-          // Silent fallback for GetAppInfo errors
-        });
     } else if (shouldRender) {
       setIsClosing(true);
       const timer = setTimeout(() => {
@@ -289,17 +273,6 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
       return () => clearTimeout(timer);
     }
   }, [isOpen, shouldRender]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    return onEvent('app-update', (updateSnapshot) => {
-      if (updateSnapshot) {
-        setAppInfo((current) => withUpdate(current, updateSnapshot));
-      }
-    });
-  }, [isOpen]);
 
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : '';
@@ -322,8 +295,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
     },
   });
 
-  const update = appInfo?.update ?? null;
-  const { updateAction, runUpdateAction } = useApplicationUpdateAction(update, setAppInfo);
+  const { updateAction, runUpdateAction } = useApplicationUpdateAction(update, setUpdate);
 
   if (!shouldRender) {
     return null;

@@ -38,8 +38,7 @@ export function applyLinkColor(hex: string, resolvedMode: 'light' | 'dark'): voi
       generateLinkHoverColor(hex, resolvedMode)
     );
   } else {
-    root.style.removeProperty('--color-object-panel-link');
-    root.style.removeProperty('--color-object-panel-link-hover');
+    clearLinkColor();
   }
 }
 

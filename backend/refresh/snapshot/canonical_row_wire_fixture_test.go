@@ -228,7 +228,7 @@ func canonicalRowWireFixtures(t *testing.T) canonicalRowWireFixtureDocument {
 		Spec:       appsv1.DeploymentSpec{Replicas: &replicas, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "example/app:1"}}}}},
 		Status:     appsv1.DeploymentStatus{ReadyReplicas: 1},
 	}
-	workloadRow := (&NamespaceWorkloadsBuilder{}).buildDeploymentSummary(meta.ClusterID, deployment, nil, nil)
+	workloadRow := buildDeploymentOwnSummary(meta.ClusterID, deployment)
 
 	namespacedCustomObject := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "example.io/v1", "kind": "Widget",

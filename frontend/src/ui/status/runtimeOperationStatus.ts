@@ -16,6 +16,8 @@ import {
   initialRuntimeOperationStatusState,
   normalizePortForwardSession,
   normalizePortForwardStatusEvent,
+  type PortForwardStatusEvent,
+  type RuntimeOperationStatusAction,
   runtimeOperationStatusReducer,
   selectRuntimeOperationRows,
 } from './runtimeOperationStatusAdapter';
@@ -44,88 +46,106 @@ export function useRuntimeOperationStatus(
   const onInitialReadError = options?.onInitialReadError;
 
   useEffect(() => {
-    if (!readInitialState) {
-      return;
-    }
     let cancelled = false;
+    const receivedLists = new Set<RuntimeOperationStatusReadResource>();
+    let awaitingPortForwardList = readInitialState;
+    const pendingStatuses: PortForwardStatusEvent[] = [];
+    const receiveList = (
+      resource: RuntimeOperationStatusReadResource,
+      action: RuntimeOperationStatusAction
+    ) => {
+      receivedLists.add(resource);
+      dispatch(action);
+    };
+
+    // Subscribe before taking snapshots. Full event lists supersede bootstrap
+    // reads; status-only events wait for the details needed to identify a row.
+    const unsubscribers = [
+      onEvent('runtime-operations:list', (operations) =>
+        receiveList('runtime-operations', {
+          type: 'runtime-operations:list',
+          operations: operations ?? [],
+        })
+      ),
+      onEvent('object-shell:list', (sessions) =>
+        receiveList('shell-sessions', { type: 'object-shell:list', sessions: sessions ?? [] })
+      ),
+      onEvent('portforward:list', (sessions) => {
+        awaitingPortForwardList = false;
+        pendingStatuses.length = 0;
+        receiveList('port-forward-sessions', {
+          type: 'portforward:list',
+          sessions: (sessions ?? []).map(normalizePortForwardSession),
+        });
+      }),
+      onEvent('portforward:status', (raw) => {
+        if (!raw?.sessionId) {
+          return;
+        }
+        const event = normalizePortForwardStatusEvent(raw);
+        if (awaitingPortForwardList) {
+          pendingStatuses.push(event);
+        }
+        dispatch({ type: 'portforward:status', event });
+      }),
+    ];
+
     const readInitialList = async <T>(
       resource: RuntimeOperationStatusReadResource,
       read: () => Promise<T>,
       receive: (value: T) => void
-    ): Promise<'cancelled' | 'settled'> => {
+    ): Promise<boolean> => {
       try {
         const value = await requestAppState({ resource, adapter: 'runtime-read', read });
-        if (cancelled) {
-          return 'cancelled';
+        if (!cancelled && !receivedLists.has(resource)) {
+          receive(value);
         }
-        receive(value);
       } catch (error) {
-        onInitialReadError?.(error, resource);
-        // Runtime events will repopulate the list if the initial read fails.
+        if (!cancelled) {
+          onInitialReadError?.(error, resource);
+        }
+        // Runtime events can repopulate a list after its initial read fails.
       }
-      return 'settled';
+      return !cancelled;
     };
     const load = async () => {
-      const operationsRead = await readInitialList(
-        'runtime-operations',
-        readRuntimeOperations,
-        (rows) => dispatch({ type: 'runtime-operations:list', operations: rows || [] })
-      );
-      if (operationsRead === 'cancelled') {
+      if (
+        !(await readInitialList('runtime-operations', readRuntimeOperations, (rows) =>
+          dispatch({ type: 'runtime-operations:list', operations: rows || [] })
+        ))
+      ) {
         return;
       }
-      const shellsRead = await readInitialList('shell-sessions', readShellSessions, (rows) =>
-        dispatch({ type: 'object-shell:list', sessions: rows || [] })
-      );
-      if (shellsRead === 'cancelled') {
+      if (
+        !(await readInitialList('shell-sessions', readShellSessions, (rows) =>
+          dispatch({ type: 'object-shell:list', sessions: rows || [] })
+        ))
+      ) {
         return;
       }
-      await readInitialList('port-forward-sessions', readPortForwardSessions, (rows) =>
+      await readInitialList('port-forward-sessions', readPortForwardSessions, (rows) => {
         dispatch({
           type: 'portforward:list',
           sessions: (rows || []).map(normalizePortForwardSession),
-        })
-      );
+        });
+        for (const event of pendingStatuses) {
+          dispatch({ type: 'portforward:status', event });
+        }
+      });
+      awaitingPortForwardList = false;
+      pendingStatuses.length = 0;
     };
-    void load();
+    if (readInitialState) {
+      void load();
+    }
     return () => {
       cancelled = true;
+      pendingStatuses.length = 0;
+      for (const unsubscribe of unsubscribers) {
+        unsubscribe();
+      }
     };
   }, [onInitialReadError, readInitialState]);
-
-  useEffect(() => {
-    const cancelShellList = onEvent('object-shell:list', (sessions) =>
-      dispatch({ type: 'object-shell:list', sessions: sessions ?? [] })
-    );
-
-    const cancelPortForwardList = onEvent('portforward:list', (sessions) =>
-      dispatch({
-        type: 'portforward:list',
-        sessions: (sessions ?? []).map(normalizePortForwardSession),
-      })
-    );
-
-    const cancelRuntimeOperationsList = onEvent('runtime-operations:list', (operations) =>
-      dispatch({
-        type: 'runtime-operations:list',
-        operations: operations ?? [],
-      })
-    );
-
-    const cancelPortForwardStatus = onEvent('portforward:status', (raw) => {
-      if (!raw?.sessionId) {
-        return;
-      }
-      dispatch({ type: 'portforward:status', event: normalizePortForwardStatusEvent(raw) });
-    });
-
-    return () => {
-      cancelShellList();
-      cancelPortForwardList();
-      cancelRuntimeOperationsList();
-      cancelPortForwardStatus();
-    };
-  }, []);
 
   return useMemo(
     () => selectRuntimeOperationRows(state, selectedClusterId),

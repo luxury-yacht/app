@@ -3,19 +3,16 @@ package metrics
 import (
 	"context"
 	"time"
-
-	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
 // DisabledPoller is a no-op implementation used when metrics access is unavailable.
 type DisabledPoller struct {
-	recorder *telemetry.Recorder
-	reason   string
+	reason string
 }
 
 // NewDisabledPoller returns a provider that never collects metrics.
-func NewDisabledPoller(recorder *telemetry.Recorder, reason string) *DisabledPoller {
-	return &DisabledPoller{recorder: recorder, reason: reason}
+func NewDisabledPoller(reason string) *DisabledPoller {
+	return &DisabledPoller{reason: reason}
 }
 
 // Start satisfies the refresh.MetricsPoller interface.

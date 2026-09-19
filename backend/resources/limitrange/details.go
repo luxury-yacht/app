@@ -36,7 +36,7 @@ func (s *Service) LimitRange(ctx context.Context, namespace, name string) (*Limi
 
 	lr, err := client.CoreV1().LimitRanges(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		err = s.logError(err, fmt.Sprintf("Failed to get limit range %s/%s", namespace, name))
+		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get limit range %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get limit range: %w", err)
 	}
 
@@ -56,10 +56,6 @@ func (s *Service) buildLimitRangeDetails(lr *corev1.LimitRange) *LimitRangeDetai
 		Annotations: lr.Annotations,
 	}
 	return details
-}
-
-func (s *Service) logError(err error, msg string) error {
-	return s.deps.LogResourceRequestFailure(err, msg, "get", Identity, logsources.ResourceLoader)
 }
 
 func limitRangeItemsFromFacts(facts []LimitRangeItemFacts) []LimitRangeItem {

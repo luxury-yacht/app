@@ -94,26 +94,12 @@ func readySummary(statefulSet *appsv1.StatefulSet, common resourcemodel.Workload
 func BuildStatusPresentation(statefulSet *appsv1.StatefulSet) resourcemodel.ResourceStatusPresentation {
 	facts := BuildFacts(statefulSet)
 	signals := resourcemodel.WorkloadReplicaSignals(facts.WorkloadCommonFacts)
-	signals = append(signals, statusSignals(statefulSet)...)
+	signals = append(signals, resourcemodel.ConditionSignals(facts.Conditions)...)
 	lifecycle := resourcemodel.ObjectLifecycle(statefulSet.ObjectMeta)
 	if status, ok := resourcemodel.DeletingObjectStatus(statefulSet.ObjectMeta, resourcemodel.ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
 	}
 	return resourcemodel.ReplicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
-}
-
-func statusSignals(statefulSet *appsv1.StatefulSet) []resourcemodel.ResourceStatusSignal {
-	signals := make([]resourcemodel.ResourceStatusSignal, 0, len(statefulSet.Status.Conditions))
-	for _, condition := range statefulSet.Status.Conditions {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{
-			Type:    resourcemodel.StatusSignalCondition,
-			Name:    string(condition.Type),
-			Status:  string(condition.Status),
-			Reason:  condition.Reason,
-			Message: condition.Message,
-		})
-	}
-	return signals
 }
 
 func conditionFacts(conditions []appsv1.StatefulSetCondition) []resourcemodel.ConditionFacts {

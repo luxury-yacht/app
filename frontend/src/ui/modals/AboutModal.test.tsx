@@ -563,4 +563,60 @@ describe('AboutModal', () => {
     expect(document.querySelector('.about-modal')).toBeNull();
     await unmount();
   });
+  it('reads app info once per opening without refetching for the opening animation', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({ version: '1.0.0' });
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    try {
+      expect(appInfoMock.GetAppInfo).toHaveBeenCalledTimes(1);
+    } finally {
+      await modal.unmount();
+    }
+  });
+
+  it('retains an update event received before app metadata arrives', async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    const pending = new Promise((resolve) => {
+      finish = resolve;
+    });
+    appInfoMock.GetAppInfo.mockReturnValue(pending);
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    try {
+      const listener = runtimeMock.eventsOn.mock.calls
+        .slice()
+        .reverse()
+        .find(([name]) => name === 'app-update')?.[1];
+      expect(listener).toBeDefined();
+      await act(async () => listener?.({ status: 'ready', availableVersion: '2.0.0' }));
+      await act(async () =>
+        finish({ version: '1.0.0', update: { status: 'available', availableVersion: '2.0.0' } })
+      );
+      expect(document.body.textContent).toContain('Version 1.0.0');
+      expect(
+        Array.from(document.querySelectorAll('button')).some(
+          (button) => button.textContent === 'Restart & Apply'
+        )
+      ).toBe(true);
+    } finally {
+      await modal.unmount();
+    }
+  });
+
+  it('ignores the previous opening read after the modal closes and reopens', async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    const previous = new Promise((resolve) => {
+      finish = resolve;
+    });
+    appInfoMock.GetAppInfo.mockReturnValue(previous);
+    const onClose = vi.fn();
+    const modal = await renderModal({ isOpen: true, onClose });
+    try {
+      await modal.rerender({ isOpen: false, onClose });
+      appInfoMock.GetAppInfo.mockResolvedValue({ version: 'current-opening' });
+      await modal.rerender({ isOpen: true, onClose });
+      await act(async () => finish({ version: 'previous-opening' }));
+      expect(document.querySelector('.about-version')?.textContent).toBe('Version current-opening');
+    } finally {
+      await modal.unmount();
+    }
+  });
 });

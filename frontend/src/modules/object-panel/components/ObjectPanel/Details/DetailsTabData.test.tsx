@@ -85,6 +85,26 @@ describe('DetailsTabData', () => {
     cleanup();
   });
 
+  it('retains empty and non-Latin secret values when base64 cannot encode them', async () => {
+    const { container, cleanup } = await render(
+      <DataSection data={{ empty: '', unicode: '🔑秘密' }} isSecret />
+    );
+    expect(
+      Array.from(container.querySelectorAll('.data-value'), (button) => button.textContent)
+    ).toEqual(['', '🔑秘密']);
+    cleanup();
+  });
+
+  it('copies binary data unchanged when no text data is present', async () => {
+    const { container, cleanup } = await render(<DataSection binaryData={{ file: 'AAEC' }} />);
+    const button = requireValue(container.querySelector('.binary-data'), 'binary data control');
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(writeTextMock).toHaveBeenCalledWith('AAEC');
+    cleanup();
+  });
+
   it('copies values to clipboard and shows feedback', async () => {
     vi.useFakeTimers();
 

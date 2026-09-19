@@ -13,8 +13,7 @@ import (
 // columnstore_spill.go is the Tier 2.6 columnar on-disk format for a Store: it writes the
 // store's rows column-wise (one section per codec leaf field) to the mmap column file, and
 // restores them into an equivalent store. It is a faithful drop-in for the gob Spill/RestoreStore
-// — query-equivalent — but lays the rows out by column so scalar columns are flat (mmap/zero-copy
-// friendly, the foundation in columnfile.go) and only the irreducibly-dynamic "fallback" fields
+// — query-equivalent — but lays the rows out by column so scalar columns are flat (used by the heap-restore path) and only the irreducibly-dynamic "fallback" fields
 // (maps/slices/etc.) fall back to gob.
 //
 // It serializes RESOLVED field values (read via the codec's field index+kind), not the internal

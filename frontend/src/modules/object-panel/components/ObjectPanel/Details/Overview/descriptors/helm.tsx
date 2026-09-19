@@ -11,7 +11,7 @@ import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation'
 import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
-import type { OverviewDescriptor } from '../schema';
+import type { OverviewContext, OverviewDescriptor } from '../schema';
 import '../shared/LabelsAndAnnotations.css';
 import '../HelmOverview.css';
 
@@ -24,6 +24,25 @@ const hasResources = (d: HelmReleaseDetails) => (d.resources?.length ?? 0) > 0;
 const hasHistory = (d: HelmReleaseDetails) => (d.history?.length ?? 0) > 0;
 const hasNotes = (d: HelmReleaseDetails) => Boolean(d.notes);
 const hasExtraSections = (d: HelmReleaseDetails) => hasResources(d) || hasHistory(d) || hasNotes(d);
+
+const managedResourceReference = (resource: helm.HelmResource, context: OverviewContext) => {
+  const scope = (resource.scope ?? '').trim().toLowerCase();
+  if (scope !== 'cluster' && scope !== 'namespaced') {
+    return null;
+  }
+  try {
+    return buildRequiredRelatedObjectReference({
+      kind: resource.kind,
+      apiVersion: resource.apiVersion,
+      name: resource.name,
+      namespace: scope === 'namespaced' ? resource.namespace : undefined,
+      clusterId: context.clusterId,
+      clusterName: context.clusterName,
+    });
+  } catch {
+    return null;
+  }
+};
 
 /**
  * Managed resources, release history, and release notes. Rendered as a component (not a plain
@@ -53,25 +72,10 @@ const HelmExtraSections: React.FC<{ data: HelmReleaseDetails }> = ({ data }) => 
               ),
               (resource) => JSON.stringify(resource)
             ).map(({ key, value: resource }) => {
-              const resourceRef = (() => {
-                const scope = (resource.scope ?? '').trim().toLowerCase();
-                if (scope !== 'cluster' && scope !== 'namespaced') {
-                  return null;
-                }
-                try {
-                  return buildRequiredRelatedObjectReference({
-                    kind: resource.kind,
-                    // Prefer the manifest apiVersion so CRD-backed
-                    // managed resources keep their real GVK.
-                    apiVersion: resource.apiVersion,
-                    name: resource.name,
-                    namespace: scope === 'namespaced' ? resource.namespace : undefined,
-                    ...clusterMeta,
-                  });
-                } catch {
-                  return null;
-                }
-              })();
+              const resourceRef = managedResourceReference(resource, clusterMeta);
+              const label = resource.namespace
+                ? `${resource.namespace}/${resource.name}`
+                : resource.name;
 
               return (
                 <div key={key} className="metadata-pair">
@@ -82,16 +86,10 @@ const HelmExtraSections: React.FC<{ data: HelmReleaseDetails }> = ({ data }) => 
                       objectRef={resourceRef}
                       title={`Click to view ${resource.kind}: ${resource.name}`}
                     >
-                      {resource.namespace
-                        ? `${resource.namespace}/${resource.name}`
-                        : resource.name}
+                      {label}
                     </ObjectPanelLink>
                   ) : (
-                    <span className="metadata-value">
-                      {resource.namespace
-                        ? `${resource.namespace}/${resource.name}`
-                        : resource.name}
-                    </span>
+                    <span className="metadata-value">{label}</span>
                   )}
                 </div>
               );
@@ -161,11 +159,9 @@ export const helmReleaseDescriptor: OverviewDescriptor<HelmReleaseDetails> = {
       {
         field: 'revision',
         label: 'Revision',
-        // Mirror the legacy `displayRevision || revision` truthiness check: a falsy revision
-        // (0 or unset) was never surfaced. The renderer evaluates `render` before `hidden`, so the
-        // value access must itself tolerate the missing case.
+        // Zero or unset revisions stay hidden.
         hidden: (d) => !d.revision,
-        render: (d) => (d.revision ? d.revision.toString() : undefined),
+        render: (d) => d.revision.toString(),
       },
       { field: 'updated', label: 'Last Updated', hidden: (d) => !d.updated },
       { field: 'description', label: 'Description', hidden: (d) => !d.description },

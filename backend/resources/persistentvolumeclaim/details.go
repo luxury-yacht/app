@@ -16,6 +16,7 @@ import (
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 // Service provides detailed PersistentVolumeClaim views backed by shared dependencies.
@@ -69,20 +70,15 @@ func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolu
 		VolumeName:       pvc.Spec.VolumeName,
 		Labels:           pvc.Labels,
 		Annotations:      pvc.Annotations,
+		DataSource:       dataSourceLink(s.deps.ClusterID, pvc),
 	}
 
 	for _, mode := range pvc.Spec.AccessModes {
 		details.AccessModes = append(details.AccessModes, string(mode))
 	}
 
-	if pvc.Status.Capacity != nil {
-		if storage, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
-			details.Capacity = storage.String()
-		}
-	} else if pvc.Spec.Resources.Requests != nil {
-		if storage, ok := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
-			details.Capacity = storage.String()
-		}
+	if facts.Capacity.Storage != nil {
+		details.Capacity = facts.Capacity.Storage.String()
 	}
 
 	if pvc.Spec.VolumeMode != nil {
@@ -93,18 +89,6 @@ func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolu
 
 	if pvc.Spec.Selector != nil && pvc.Spec.Selector.MatchLabels != nil {
 		details.Selector = pvc.Spec.Selector.MatchLabels
-	}
-
-	if pvc.Spec.DataSource != nil {
-		details.DataSource = &DataSourceInfo{
-			Kind: pvc.Spec.DataSource.Kind,
-			Name: pvc.Spec.DataSource.Name,
-		}
-	} else if pvc.Spec.DataSourceRef != nil {
-		details.DataSource = &DataSourceInfo{
-			Kind: pvc.Spec.DataSourceRef.Kind,
-			Name: pvc.Spec.DataSourceRef.Name,
-		}
 	}
 
 	details.Conditions = restypes.FormatConditions(facts.Conditions)
@@ -123,4 +107,30 @@ func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolu
 	details.Details = fmt.Sprintf("%s, %s, %s%s", details.Status, details.Capacity, storageClassInfo, mountInfo)
 
 	return details
+}
+
+func dataSourceLink(clusterID string, pvc *corev1.PersistentVolumeClaim) *resourcemodel.ResourceLink {
+	source := pvc.Spec.DataSourceRef
+	if local := pvc.Spec.DataSource; local != nil {
+		source = &corev1.TypedObjectReference{APIGroup: local.APIGroup, Kind: local.Kind, Name: local.Name}
+	}
+	if source == nil {
+		return nil
+	}
+	group := ptr.Deref(source.APIGroup, "")
+	namespace := pvc.Namespace
+	if source.Namespace != nil && *source.Namespace != "" {
+		namespace = *source.Namespace
+	}
+	// A core PVC clone has a known GVK; custom data sources supply only group/kind.
+	// Keep those display-only until a source supplies their version.
+	if group == Identity.Group && source.Kind == Identity.Kind {
+		link := resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{
+			ClusterID: clusterID, Group: Identity.Group, Version: Identity.Version,
+			Kind: Identity.Kind, Resource: Identity.Resource, Namespace: namespace, Name: source.Name,
+		})
+		return &link
+	}
+	link := resourcemodel.NewDisplayResourceLink(clusterID, group, "", source.Kind, "", namespace, source.Name)
+	return &link
 }

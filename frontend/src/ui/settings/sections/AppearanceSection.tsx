@@ -32,9 +32,11 @@ import {
 import {
   type CSSProperties,
   type Dispatch,
+  Fragment,
   type ReactElement,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type Ref,
   type SetStateAction,
   useCallback,
   useEffect,
@@ -56,9 +58,11 @@ import {
   getPreferenceMetadata,
   hydrateAppPreferences,
   normalizeIntegerPreferenceValue,
+  palettePreferenceKeys,
 } from '@/core/settings/appPreferences';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
 import AppearanceColorControl from './AppearanceColorControl';
+import { SettingRow, SettingsChoiceButtons } from './SettingsControls';
 import { useThemes } from './useThemes';
 
 const DEFAULT_THEME_ID = 'default';
@@ -230,167 +234,61 @@ const getThemeSavePlan = (
   };
 };
 
-function AppearanceModeSelector({
-  mode,
-  options,
-  onChange,
-}: Readonly<{
-  mode: AppearanceMode;
-  options: ReadonlyArray<(typeof appearanceModeOptions)[number]>;
-  onChange: (mode: AppearanceMode) => void;
-}>) {
-  return (
-    <div className="settings-row">
-      <div className="settings-row-label">
-        <div className="settings-row-label-title">Mode</div>
-        <div className="settings-row-label-help">
-          Follow the system mode or choose light/dark mode.
-        </div>
-      </div>
-      <div className="settings-row-control">
-        <fieldset className="settings-choice-buttons" aria-label="Appearance mode">
-          {options.map((option) => {
-            const Icon = option.icon;
-            const isSelected = mode === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                className={`settings-choice-button${isSelected ? ' settings-choice-button--active' : ''}`}
-                aria-pressed={isSelected}
-                onClick={() => onChange(option.value)}
-              >
-                <Icon width={18} height={18} />
-                <span>{option.label}</span>
-              </button>
-            );
-          })}
-        </fieldset>
-      </div>
-    </div>
-  );
-}
+const paletteFields = [
+  { field: 'hue', label: 'Hue', suffix: '°' },
+  { field: 'saturation', label: 'Saturation', suffix: '%' },
+  { field: 'brightness', label: 'Brightness', suffix: '' },
+] as const;
 
 function PaletteControls({
-  paletteHue,
-  paletteSaturation,
-  paletteBrightness,
-  hueSliderStyle,
-  saturationSliderStyle,
-  brightnessSliderStyle,
-  paletteBounds,
+  values,
+  styles,
+  bounds,
   renderEditableValue,
-  onHueChange,
-  onSaturationChange,
-  onBrightnessChange,
-  onHueReset,
-  onSaturationReset,
-  onBrightnessReset,
+  onChange,
+  onReset,
 }: Readonly<{
-  paletteHue: number;
-  paletteSaturation: number;
-  paletteBrightness: number;
-  hueSliderStyle: PaletteSliderStyle;
-  saturationSliderStyle: PaletteSliderStyle;
-  brightnessSliderStyle: PaletteSliderStyle;
-  paletteBounds: {
-    hue: { min: number; max?: number };
-    saturation: { min: number; max?: number };
-    brightness: { min: number; max?: number };
-  };
-  renderEditableValue: (
-    field: 'hue' | 'saturation' | 'brightness',
-    value: number,
-    suffix: string
-  ) => ReactElement;
-  onHueChange: (value: number) => void;
-  onSaturationChange: (value: number) => void;
-  onBrightnessChange: (value: number) => void;
-  onHueReset: () => void;
-  onSaturationReset: () => void;
-  onBrightnessReset: () => void;
+  values: Record<PaletteField, number>;
+  styles: Record<PaletteField, PaletteSliderStyle>;
+  bounds: Record<PaletteField, { min: number; max?: number }>;
+  renderEditableValue: (field: PaletteField, value: number, suffix: string) => ReactElement;
+  onChange: (field: PaletteField, value: number) => void;
+  onReset: (field: PaletteField) => void;
 }>) {
   const elementIdPrefix = useId();
-
   return (
-    <div className="settings-row">
-      <div className="settings-row-label">
-        <div className="settings-row-label-title">Tint</div>
-        <div className="settings-row-label-help">
-          Overall tint in the UI. Hue sets the color, saturation increases the strength, and
-          brightness lightens or darkens.
-        </div>
+    <SettingRow
+      title="Tint"
+      help="Overall tint in the UI. Hue sets the color, saturation increases the strength, and brightness lightens or darkens."
+    >
+      <div className="palette-tint-controls">
+        {paletteFields.map(({ field, label, suffix }) => (
+          <Fragment key={field}>
+            <label htmlFor={`${elementIdPrefix}-palette-${field}`}>{label}</label>
+            <input
+              type="range"
+              id={`${elementIdPrefix}-palette-${field}`}
+              className={`palette-slider palette-slider-${field}`}
+              min={bounds[field].min}
+              max={bounds[field].max}
+              value={values[field]}
+              onChange={(e) => onChange(field, Number(e.target.value))}
+              style={styles[field]}
+            />
+            {renderEditableValue(field, values[field], suffix)}
+            <button
+              type="button"
+              className="palette-row-reset"
+              onClick={() => onReset(field)}
+              disabled={values[field] === 0}
+              title={`Reset ${label}`}
+            >
+              ↺
+            </button>
+          </Fragment>
+        ))}
       </div>
-      <div className="settings-row-control">
-        <div className="palette-tint-controls">
-          <label htmlFor={`${elementIdPrefix}-palette-hue`}>Hue</label>
-          <input
-            type="range"
-            id={`${elementIdPrefix}-palette-hue`}
-            className="palette-slider palette-slider-hue"
-            min={paletteBounds.hue.min}
-            max={paletteBounds.hue.max}
-            value={paletteHue}
-            onChange={(e) => onHueChange(Number(e.target.value))}
-            style={hueSliderStyle}
-          />
-          {renderEditableValue('hue', paletteHue, '°')}
-          <button
-            type="button"
-            className="palette-row-reset"
-            onClick={onHueReset}
-            disabled={paletteHue === 0}
-            title="Reset Hue"
-          >
-            ↺
-          </button>
-
-          <label htmlFor={`${elementIdPrefix}-palette-saturation`}>Saturation</label>
-          <input
-            type="range"
-            id={`${elementIdPrefix}-palette-saturation`}
-            className="palette-slider palette-slider-saturation"
-            min={paletteBounds.saturation.min}
-            max={paletteBounds.saturation.max}
-            value={paletteSaturation}
-            onChange={(e) => onSaturationChange(Number(e.target.value))}
-            style={saturationSliderStyle}
-          />
-          {renderEditableValue('saturation', paletteSaturation, '%')}
-          <button
-            type="button"
-            className="palette-row-reset"
-            onClick={onSaturationReset}
-            disabled={paletteSaturation === 0}
-            title="Reset Saturation"
-          >
-            ↺
-          </button>
-
-          <label htmlFor={`${elementIdPrefix}-palette-brightness`}>Brightness</label>
-          <input
-            type="range"
-            id={`${elementIdPrefix}-palette-brightness`}
-            className="palette-slider palette-slider-brightness"
-            min={paletteBounds.brightness.min}
-            max={paletteBounds.brightness.max}
-            value={paletteBrightness}
-            onChange={(e) => onBrightnessChange(Number(e.target.value))}
-            style={brightnessSliderStyle}
-          />
-          {renderEditableValue('brightness', paletteBrightness, '')}
-          <button
-            type="button"
-            className="palette-row-reset"
-            onClick={onBrightnessReset}
-            disabled={paletteBrightness === 0}
-            title="Reset Brightness"
-          >
-            ↺
-          </button>
-        </div>
-      </div>
-    </div>
+    </SettingRow>
   );
 }
 
@@ -508,18 +406,21 @@ const ThemeDragHandle = ({
   );
 };
 
-const ThemeRowFields = (props: ThemeRowSharedProps) => {
-  if (props.activeThemeId !== props.theme.id || props.isDefault) {
-    return (
-      <div className="theme-summary">
-        <span className="theme-name">{props.theme.name}</span>
-        <span className="theme-pattern">{props.theme.clusterPattern || '*'}</span>
-      </div>
-    );
-  }
+type ThemeEditorProps = Pick<
+  ThemeRowSharedProps,
+  | 'themeDraft'
+  | 'themePatternError'
+  | 'setThemeDraft'
+  | 'setThemePatternError'
+  | 'onSave'
+  | 'onCancel'
+> & { errorId: string; nameInputRef?: Ref<HTMLInputElement> };
+
+const ThemeEditor = (props: ThemeEditorProps) => {
   return (
     <div className="theme-fields">
       <input
+        ref={props.nameInputRef}
         className="theme-name-input"
         value={props.themeDraft.name}
         onChange={(event) =>
@@ -540,23 +441,28 @@ const ThemeRowFields = (props: ThemeRowSharedProps) => {
         }}
         placeholder="Pattern (optional)"
         aria-invalid={props.themePatternError ? 'true' : undefined}
-        aria-describedby={
-          props.themePatternError
-            ? `${props.elementIdPrefix}-theme-pattern-error-active`
-            : undefined
-        }
+        aria-describedby={props.themePatternError ? props.errorId : undefined}
         onKeyDown={(event) => handleThemeEditorKeyDown(event, props.onSave, props.onCancel)}
       />
       {props.themePatternError ? (
-        <div
-          id={`${props.elementIdPrefix}-theme-pattern-error-active`}
-          className="theme-pattern-error"
-        >
+        <div id={props.errorId} className="theme-pattern-error">
           <ErrorSurface kind="validation" message={props.themePatternError} />
         </div>
       ) : null}
     </div>
   );
+};
+
+const ThemeRowFields = (props: ThemeRowSharedProps) => {
+  if (props.activeThemeId !== props.theme.id || props.isDefault) {
+    return (
+      <div className="theme-summary">
+        <span className="theme-name">{props.theme.name}</span>
+        <span className="theme-pattern">{props.theme.clusterPattern || '*'}</span>
+      </div>
+    );
+  }
+  return <ThemeEditor {...props} errorId={`${props.elementIdPrefix}-theme-pattern-error-active`} />;
 };
 
 interface ThemeRowActionsProps {
@@ -754,7 +660,7 @@ function AppearanceSection() {
     applyThemeEntry,
   } = useThemes();
   const [activeThemeId, setActiveThemeId] = useState<string | null>(null);
-  const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
+  const [creatingTheme, setCreatingTheme] = useState(false);
   const [themeDraft, setThemeDraft] = useState({ name: '', clusterPattern: '' });
   const [draggingThemeId, setDraggingThemeId] = useState<string | null>(null);
   const [dropTargetThemeId, setDropTargetThemeId] = useState<string | null>(null);
@@ -768,22 +674,11 @@ function AppearanceSection() {
       !appearanceModeMetadata.enumOptions ||
       appearanceModeMetadata.enumOptions.includes(option.value)
   );
-  const palettePreferenceKeys =
-    resolvedMode === 'light'
-      ? {
-          hue: 'paletteHueLight' as const,
-          saturation: 'paletteSaturationLight' as const,
-          brightness: 'paletteBrightnessLight' as const,
-        }
-      : {
-          hue: 'paletteHueDark' as const,
-          saturation: 'paletteSaturationDark' as const,
-          brightness: 'paletteBrightnessDark' as const,
-        };
+  const modePaletteKeys = palettePreferenceKeys[resolvedMode];
   const paletteBounds = {
-    hue: getIntegerPreferenceMetadata(palettePreferenceKeys.hue),
-    saturation: getIntegerPreferenceMetadata(palettePreferenceKeys.saturation),
-    brightness: getIntegerPreferenceMetadata(palettePreferenceKeys.brightness),
+    hue: getIntegerPreferenceMetadata(modePaletteKeys.hue),
+    saturation: getIntegerPreferenceMetadata(modePaletteKeys.saturation),
+    brightness: getIntegerPreferenceMetadata(modePaletteKeys.brightness),
   };
 
   // Reload slider/accent/link values when the resolved appearance mode changes.
@@ -805,10 +700,10 @@ function AppearanceSection() {
   }, [editingPaletteField]);
 
   useEffect(() => {
-    if (editingThemeId === 'new') {
+    if (creatingTheme) {
       newThemeNameInputRef.current?.focus();
     }
-  }, [editingThemeId]);
+  }, [creatingTheme]);
 
   // Clean up pending preference commits on unmount.
   useEffect(() => {
@@ -867,14 +762,11 @@ function AppearanceSection() {
   };
 
   const handlePaletteChange = (field: PaletteField, value: number) => {
-    updatePaletteField(field, normalizeIntegerPreferenceValue(palettePreferenceKeys[field], value));
+    updatePaletteField(field, normalizeIntegerPreferenceValue(modePaletteKeys[field], value));
   };
 
   const handlePaletteReset = (field: PaletteField) => {
-    updatePaletteField(
-      field,
-      Number(getPreferenceMetadata(palettePreferenceKeys[field]).defaultValue)
-    );
+    updatePaletteField(field, Number(getPreferenceMetadata(modePaletteKeys[field]).defaultValue));
   };
 
   const debounceAccentPersist = useCallback(
@@ -963,7 +855,7 @@ function AppearanceSection() {
 
   const handleSaveCurrentAsTheme = () => {
     setThemePatternError(null);
-    setEditingThemeId('new');
+    setCreatingTheme(true);
     setThemeDraft({ name: '', clusterPattern: '' });
   };
 
@@ -1038,7 +930,7 @@ function AppearanceSection() {
         },
       });
       await saveThemeEntry(newTheme);
-      setEditingThemeId(null);
+      setCreatingTheme(false);
     } catch (error) {
       errorHandler.handle(error, { action: 'saveTheme' });
     }
@@ -1046,7 +938,7 @@ function AppearanceSection() {
 
   const handleThemeEditCancel = () => {
     setThemePatternError(null);
-    setEditingThemeId(null);
+    setCreatingTheme(false);
   };
 
   const handleDeleteThemeConfirm = async () => {
@@ -1262,11 +1154,14 @@ function AppearanceSection() {
       <div className="settings-subgroup-label">Mode</div>
       <hr className="settings-subgroup-divider" />
 
-      <AppearanceModeSelector
-        mode={mode}
-        options={enabledAppearanceModeOptions}
-        onChange={handleAppearanceModeChange}
-      />
+      <SettingRow title="Mode" help="Follow the system mode or choose light/dark mode.">
+        <SettingsChoiceButtons
+          ariaLabel="Appearance mode"
+          value={mode}
+          options={enabledAppearanceModeOptions}
+          onChange={handleAppearanceModeChange}
+        />
+      </SettingRow>
 
       <div className="settings-subgroup-label">Theme</div>
       <hr className="settings-subgroup-divider" />
@@ -1278,20 +1173,16 @@ function AppearanceSection() {
       </div>
 
       <PaletteControls
-        paletteHue={paletteHue}
-        paletteSaturation={paletteSaturation}
-        paletteBrightness={paletteBrightness}
-        hueSliderStyle={hueSliderStyle}
-        saturationSliderStyle={saturationSliderStyle}
-        brightnessSliderStyle={brightnessSliderStyle}
-        paletteBounds={paletteBounds}
+        values={paletteValues}
+        styles={{
+          hue: hueSliderStyle,
+          saturation: saturationSliderStyle,
+          brightness: brightnessSliderStyle,
+        }}
+        bounds={paletteBounds}
         renderEditableValue={renderEditableValue}
-        onHueChange={(value) => handlePaletteChange('hue', value)}
-        onSaturationChange={(value) => handlePaletteChange('saturation', value)}
-        onBrightnessChange={(value) => handlePaletteChange('brightness', value)}
-        onHueReset={() => handlePaletteReset('hue')}
-        onSaturationReset={() => handlePaletteReset('saturation')}
-        onBrightnessReset={() => handlePaletteReset('brightness')}
+        onChange={handlePaletteChange}
+        onReset={handlePaletteReset}
       />
 
       <AppearanceColorControl
@@ -1312,10 +1203,10 @@ function AppearanceSection() {
         onReset={handleLinkReset}
       />
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Saved themes</div>
-          <div className="settings-row-label-help">
+      <SettingRow
+        title="Saved themes"
+        help={
+          <>
             {}
             Themes can be automatically applied to clusters whose name matches the pattern.
             <ul className="themes-help-list">
@@ -1328,138 +1219,96 @@ function AppearanceSection() {
               <li>Default theme always resolves last, and matches any cluster name.</li>
             </ul>
             {}
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <div className="themes-section">
-            <ThemesTable loading={themesLoading}>
-              <UnsavedDefaultThemePrompt
-                hasChanges={hasUnsavedDefaultThemeChanges}
+          </>
+        }
+      >
+        <div className="themes-section">
+          <ThemesTable loading={themesLoading}>
+            <UnsavedDefaultThemePrompt
+              hasChanges={hasUnsavedDefaultThemeChanges}
+              activeThemeId={activeThemeId}
+              defaultTheme={defaultTheme}
+              onSave={() => {
+                void handleSaveDefaultThemeFromPrompt();
+              }}
+            />
+            {themes.map((theme) => (
+              <ThemeRow
+                key={theme.id}
+                elementIdPrefix={elementIdPrefix}
+                theme={theme}
+                isDefault={isDefaultTheme(theme)}
                 activeThemeId={activeThemeId}
-                defaultTheme={defaultTheme}
+                themeDraft={themeDraft}
+                themePatternError={themePatternError}
+                setThemeDraft={setThemeDraft}
+                setThemePatternError={setThemePatternError}
                 onSave={() => {
-                  void handleSaveDefaultThemeFromPrompt();
+                  void handleSaveActiveTheme();
                 }}
+                onCancel={() => {
+                  void handleCancelActiveTheme();
+                }}
+                draggingThemeId={draggingThemeId}
+                dropTargetThemeId={dropTargetThemeId}
+                setDraggingThemeId={setDraggingThemeId}
+                setDropTargetThemeId={setDropTargetThemeId}
+                onDrop={(themeId) => {
+                  void handleThemeDrop(themeId);
+                }}
+                onKeyboardReorder={(themeId, offset) => {
+                  void handleThemeKeyboardReorder(themeId, offset);
+                }}
+                currentMatches={themeMatchesCurrent(theme)}
+                onEdit={handleEnterEditMode}
+                onDelete={setDeleteConfirmThemeId}
               />
-              {themes.map((theme) => (
-                <ThemeRow
-                  key={theme.id}
-                  elementIdPrefix={elementIdPrefix}
-                  theme={theme}
-                  isDefault={isDefaultTheme(theme)}
-                  activeThemeId={activeThemeId}
+            ))}
+            {creatingTheme ? (
+              <div className="setting-item setting-item-surface themes-table-row themes-table-row--new">
+                <span className="themes-drag-handle themes-drag-handle--placeholder"></span>
+                <ThemeEditor
+                  nameInputRef={newThemeNameInputRef}
+                  errorId={`${elementIdPrefix}-theme-pattern-error-new`}
                   themeDraft={themeDraft}
                   themePatternError={themePatternError}
                   setThemeDraft={setThemeDraft}
                   setThemePatternError={setThemePatternError}
-                  onSave={() => {
-                    void handleSaveActiveTheme();
-                  }}
-                  onCancel={() => {
-                    void handleCancelActiveTheme();
-                  }}
-                  draggingThemeId={draggingThemeId}
-                  dropTargetThemeId={dropTargetThemeId}
-                  setDraggingThemeId={setDraggingThemeId}
-                  setDropTargetThemeId={setDropTargetThemeId}
-                  onDrop={(themeId) => {
-                    void handleThemeDrop(themeId);
-                  }}
-                  onKeyboardReorder={(themeId, offset) => {
-                    void handleThemeKeyboardReorder(themeId, offset);
-                  }}
-                  currentMatches={themeMatchesCurrent(theme)}
-                  onEdit={handleEnterEditMode}
-                  onDelete={setDeleteConfirmThemeId}
+                  onSave={handleThemeSave}
+                  onCancel={handleThemeEditCancel}
                 />
-              ))}
-              {editingThemeId === 'new' ? (
-                <div className="setting-item setting-item-surface themes-table-row themes-table-row--new">
-                  <span className="themes-drag-handle themes-drag-handle--placeholder"></span>
-                  <div className="theme-fields">
-                    <input
-                      ref={newThemeNameInputRef}
-                      className="theme-name-input"
-                      value={themeDraft.name}
-                      onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
-                      placeholder="Name"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleThemeSave();
-                        } else if (e.key === 'Escape') {
-                          handleThemeEditCancel();
-                        } else {
-                          e.stopPropagation();
-                        }
-                      }}
-                    />
-                    <input
-                      className="theme-pattern-input"
-                      value={themeDraft.clusterPattern}
-                      onChange={(e) => {
-                        setThemePatternError(null);
-                        setThemeDraft((d) => ({
-                          ...d,
-                          clusterPattern: e.target.value,
-                        }));
-                      }}
-                      placeholder="Pattern (optional)"
-                      aria-invalid={themePatternError ? 'true' : undefined}
-                      aria-describedby={
-                        themePatternError ? `${elementIdPrefix}-theme-pattern-error-new` : undefined
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleThemeSave();
-                        } else if (e.key === 'Escape') {
-                          handleThemeEditCancel();
-                        } else {
-                          e.stopPropagation();
-                        }
-                      }}
-                    />
-                    {!!themePatternError && (
-                      <div
-                        id={`${elementIdPrefix}-theme-pattern-error-new`}
-                        className="theme-pattern-error"
-                      >
-                        <ErrorSurface kind="validation" message={themePatternError} />
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="theme-action-button"
-                    onClick={handleThemeSave}
-                    aria-label="Save new theme"
-                    title="Save new theme"
-                  >
-                    <CheckIcon width={16} height={16} />
-                  </button>
-                  <button
-                    type="button"
-                    className="theme-action-button"
-                    onClick={handleThemeEditCancel}
-                    aria-label="Cancel"
-                    title="Cancel"
-                  >
-                    <CloseIcon width={14} height={14} />
-                  </button>
-                </div>
-              ) : (
                 <button
                   type="button"
-                  className="button generic settings-add-button themes-save-new-row"
-                  onClick={handleSaveCurrentAsTheme}
+                  className="theme-action-button"
+                  onClick={handleThemeSave}
+                  aria-label="Save new theme"
+                  title="Save new theme"
                 >
-                  <PlusIcon width={12} height={12} />
-                  Save new theme
+                  <CheckIcon width={16} height={16} />
                 </button>
-              )}
-            </ThemesTable>
-          </div>
+                <button
+                  type="button"
+                  className="theme-action-button"
+                  onClick={handleThemeEditCancel}
+                  aria-label="Cancel"
+                  title="Cancel"
+                >
+                  <CloseIcon width={14} height={14} />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="button generic settings-add-button themes-save-new-row"
+                onClick={handleSaveCurrentAsTheme}
+              >
+                <PlusIcon width={12} height={12} />
+                Save new theme
+              </button>
+            )}
+          </ThemesTable>
         </div>
-      </div>
+      </SettingRow>
 
       <ConfirmationModal
         isOpen={deleteConfirmThemeId !== null}

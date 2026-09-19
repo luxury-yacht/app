@@ -79,7 +79,6 @@ const Harness = ({
 
   const controller = useColumnResizeController<SampleRow>({
     columns,
-    renderedColumns: columns,
     columnWidths: widths,
     setColumnWidths: setWidths,
     manuallyResizedColumnsRef: manualRef,

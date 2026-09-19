@@ -151,30 +151,21 @@ export function generateAccentBg(
  * If a hex is empty, remove those overrides to restore CSS defaults.
  */
 export function applyAccentColor(lightHex: string, darkHex: string): void {
-  const root = document.documentElement;
+  applyAccentPalette(lightHex, 'light');
+  applyAccentPalette(darkHex, 'dark');
+}
 
-  // Light palette shades.
-  if (lightHex) {
-    const shades = generateAccentShades(lightHex, 'light');
-    for (const { token, value } of shades) {
-      root.style.setProperty(token, value);
+function applyAccentPalette(hex: string, mode: 'light' | 'dark'): void {
+  const style = document.documentElement.style;
+  if (hex) {
+    for (const { token, value } of generateAccentShades(hex, mode)) {
+      style.setProperty(token, value);
     }
-  } else {
-    for (const token of Object.keys(LIGHT_OFFSETS)) {
-      root.style.removeProperty(token);
-    }
+    return;
   }
-
-  // Dark palette shades.
-  if (darkHex) {
-    const shades = generateAccentShades(darkHex, 'dark');
-    for (const { token, value } of shades) {
-      root.style.setProperty(token, value);
-    }
-  } else {
-    for (const token of Object.keys(DARK_OFFSETS)) {
-      root.style.removeProperty(token);
-    }
+  const offsets = mode === 'light' ? LIGHT_OFFSETS : DARK_OFFSETS;
+  for (const token of Object.keys(offsets)) {
+    style.removeProperty(token);
   }
 }
 
@@ -196,12 +187,6 @@ export function applyAccentBg(hex: string, resolvedMode: 'light' | 'dark'): void
  * Remove all accent palette overrides and --color-accent-bg from inline styles.
  */
 export function clearAccentColor(): void {
-  const root = document.documentElement;
-  for (const token of Object.keys(LIGHT_OFFSETS)) {
-    root.style.removeProperty(token);
-  }
-  for (const token of Object.keys(DARK_OFFSETS)) {
-    root.style.removeProperty(token);
-  }
-  root.style.removeProperty('--color-accent-bg');
+  applyAccentColor('', '');
+  document.documentElement.style.removeProperty('--color-accent-bg');
 }

@@ -51,41 +51,38 @@ func TestBuildDeploymentSummaryCarriesCanonicalResourceRef(t *testing.T) {
 		UID:       "deployment-uid",
 	}}
 
-	row := (&NamespaceWorkloadsBuilder{}).buildDeploymentSummary(
+	row := buildDeploymentOwnSummary(
 		"cluster-a",
 		object,
-		nil,
-		nil,
 	)
 
 	require.Equal(t, deployment.BuildResourceModel("cluster-a", object).Ref, row.Ref)
 }
 
 func TestRemainingWorkloadSummariesCarryCanonicalResourceRefs(t *testing.T) {
-	builder := &NamespaceWorkloadsBuilder{}
 	meta := metav1.ObjectMeta{Name: "worker", Namespace: "team-a", UID: "object-uid"}
 
 	t.Run("StatefulSet", func(t *testing.T) {
 		object := &appsv1.StatefulSet{ObjectMeta: meta}
-		row := builder.buildStatefulSetSummary("cluster-a", object, nil, nil)
+		row := buildStatefulSetOwnSummary("cluster-a", object)
 		require.Equal(t, statefulset.BuildResourceModel("cluster-a", object).Ref, row.Ref)
 	})
 
 	t.Run("DaemonSet", func(t *testing.T) {
 		object := &appsv1.DaemonSet{ObjectMeta: meta}
-		row := builder.buildDaemonSetSummary("cluster-a", object, nil, nil)
+		row := buildDaemonSetOwnSummary("cluster-a", object)
 		require.Equal(t, daemonset.BuildResourceModel("cluster-a", object).Ref, row.Ref)
 	})
 
 	t.Run("Job", func(t *testing.T) {
 		object := &batchv1.Job{ObjectMeta: meta}
-		row := builder.buildJobSummary("cluster-a", object, nil, nil)
+		row := buildJobOwnSummary("cluster-a", object)
 		require.Equal(t, job.BuildResourceModel("cluster-a", object).Ref, row.Ref)
 	})
 
 	t.Run("CronJob", func(t *testing.T) {
 		object := &batchv1.CronJob{ObjectMeta: meta}
-		row := builder.buildCronJobSummary("cluster-a", object, nil, nil)
+		row := buildCronJobOwnSummary("cluster-a", object)
 		require.Equal(t, cronjob.BuildResourceModel("cluster-a", object).Ref, row.Ref)
 	})
 

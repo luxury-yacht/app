@@ -52,7 +52,6 @@ func (m *ClusterRuntimeManager) resourceDependenciesForSelection(selection kubec
 	deps.KubernetesClient = clients.client
 	deps.GatewayClient = clients.gatewayClient
 	deps.GatewayAPIPresence = clients.gatewayAPIPresence
-	deps.GatewayVersionResolver = clients.gatewayVersionResolver
 	deps.DynamicClient = clients.dynamicClient
 	deps.APIExtensionsClient = clients.apiextensionsClient
 	deps.RestConfig = clients.restConfig

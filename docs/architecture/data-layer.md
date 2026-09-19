@@ -68,8 +68,7 @@ the completed `v2` rewrite plan.
   `(sortValue, uid)` + signature (`querypage/cursor.go`). There is **no**
   order-statistics (Rank/At) augmentation — it was only needed by the unbuilt delta
   layer.
-- **On-disk format = the same SoA, mmap'd.** `querypage/columnfile.go` +
-  `columnstore_mmap.go` (zero-copy `unsafe.Slice`/`unsafe.String` over `syscall.Mmap`,
+- **On-disk format = the same SoA, mmap'd.** `querypage/columnstore_mmap.go` (zero-copy `unsafe.Slice`/`unsafe.String` over `syscall.Mmap`,
   portable heap fallback). This is what spill and Cold-serving use.
 - **Serve paths:** typed domains → `resolveMaintainedDirect` (query the persistent store
   in place) or `resolveTypedSnapshotPageViaStore` (rebuild a per-Build store for

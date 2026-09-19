@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -100,5 +103,33 @@ func TestApplicationOperationCarriesBackendPhasePresentation(t *testing.T) {
 		facts := BuildFacts("a", resource("Application", `{}`, `{"operationState":{"phase":"`+input.phase+`","startedAt":"2026-09-01T00:00:00Z"}}`))
 		require.Equal(t, input.phase, facts.Application.Operation.Phase)
 		require.Equal(t, input.presentation, facts.Application.Operation.PhasePresentation, input.phase)
+	}
+}
+
+func TestOwnerRelationshipSkipsIncompleteIdentity(t *testing.T) {
+	for _, invalid := range []metav1.OwnerReference{
+		{APIVersion: "argoproj.io/v1", Kind: "ApplicationSet"},
+		{APIVersion: "argoproj.io/", Kind: "ApplicationSet", Name: "incomplete"},
+		{APIVersion: "argoproj.io/v1/extra", Kind: "ApplicationSet", Name: "malformed"},
+		{APIVersion: "other.example/v1", Kind: "ApplicationSet", Name: "foreign"},
+		{APIVersion: "argoproj.io/v1", Kind: "OtherKind", Name: "other"},
+	} {
+		t.Run(invalid.APIVersion+"/"+invalid.Kind+"/"+invalid.Name, func(t *testing.T) {
+			object := &unstructured.Unstructured{Object: map[string]any{
+				"apiVersion": "argoproj.io/v1", "kind": "Application",
+				"metadata": map[string]any{"name": "child", "namespace": "team-a"},
+			}}
+			object.SetOwnerReferences([]metav1.OwnerReference{invalid})
+			require.Nil(t, BuildFacts("cluster-a", object).Application.ApplicationSet, "an incomplete owner must not become an openable relationship")
+			object.SetOwnerReferences([]metav1.OwnerReference{invalid,
+				{APIVersion: "argoproj.io/v1beta1", Kind: "ApplicationSet", Name: "first-valid", UID: "first-uid"},
+				{APIVersion: "argoproj.io/v1", Kind: "ApplicationSet", Name: "second-valid"},
+			})
+			link := BuildFacts("cluster-a", object).Application.ApplicationSet
+			require.NotNil(t, link)
+			require.NotNil(t, link.Ref)
+			require.NoError(t, resourcemodel.ValidateResourceRef(*link.Ref))
+			require.Equal(t, resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "argoproj.io", Version: "v1beta1", Kind: "ApplicationSet", Namespace: "team-a", Name: "first-valid", UID: "first-uid"}, *link.Ref)
+		})
 	}
 }

@@ -71,7 +71,7 @@ func newEquivalenceService(t *testing.T, items []Summary) *Service {
 		descriptors = append(descriptors, d)
 	}
 
-	svc.publishStreamingState([]*summaryChunk{{items: items}}, kindSet, namespaceSet, descriptors, true)
+	svc.publishCatalogRowsForTest(items, kindSet, namespaceSet, descriptors, true)
 	return svc
 }
 

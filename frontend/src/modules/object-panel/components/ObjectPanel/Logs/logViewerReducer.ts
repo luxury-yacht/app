@@ -11,9 +11,6 @@ import {
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { LogDisplayMode, LogTimestampMode, LogViewerPrefs } from '../types';
 
-// Empty string means "all containers" in both the backend API and the filter UI
-export const ALL_CONTAINERS = '';
-
 export interface ParsedLogEntry {
   /** User JSON fields — never collides with internal metadata */
   data: Record<string, unknown>;
@@ -53,11 +50,9 @@ const TIMESTAMP_MODE_ORDER: LogTimestampMode[] = ['hidden', 'default', 'short', 
 export interface LogViewerState {
   // Container state (for single pod view)
   containers: string[];
-  selectedContainer: string;
 
   // Pod and container state (for workload view)
   availablePods: string[];
-  availableContainers: string[];
   selectedFilters: MultiSelectFilterSelection;
 
   // UI settings (user preferences)
@@ -87,11 +82,9 @@ export interface LogViewerState {
 export type LogViewerAction =
   // Container actions
   | { type: 'SET_CONTAINERS'; payload: string[] }
-  | { type: 'SET_SELECTED_CONTAINER'; payload: string }
 
   // Workload filter actions
   | { type: 'SET_AVAILABLE_PODS'; payload: string[] }
-  | { type: 'SET_AVAILABLE_CONTAINERS'; payload: string[] }
   | { type: 'SET_SELECTED_FILTERS'; payload: MultiSelectFilterSelection }
 
   // UI settings actions
@@ -121,18 +114,16 @@ export type LogViewerAction =
   | { type: 'SET_IS_LOADING_PREVIOUS_LOGS'; payload: boolean }
 
   // Compound actions for common operations
-  | { type: 'RESET_FOR_NEW_SCOPE'; isWorkload: boolean }
+  | { type: 'RESET_FOR_NEW_SCOPE' }
   | { type: 'START_PREVIOUS_LOGS' }
   | { type: 'STOP_PREVIOUS_LOGS' };
 
 export const initialLogViewerState: LogViewerState = {
   // Container state
   containers: [],
-  selectedContainer: '',
 
   // Workload filter state
   availablePods: [],
-  availableContainers: [],
   selectedFilters: ALL_MULTISELECT_FILTER,
 
   // UI settings
@@ -163,7 +154,6 @@ export const initialLogViewerState: LogViewerState = {
  * inverts that on the way back in.
  */
 export const extractLogViewerPrefs = (state: LogViewerState): LogViewerPrefs => ({
-  selectedContainer: state.selectedContainer,
   selectedFilters: state.selectedFilters,
   autoRefresh: state.autoRefresh,
   timestampMode: state.timestampMode,
@@ -191,7 +181,6 @@ export const applyLogViewerPrefs = (
   prefs: LogViewerPrefs
 ): LogViewerState => ({
   ...base,
-  selectedContainer: prefs.selectedContainer,
   selectedFilters: prefs.selectedFilters ?? ALL_MULTISELECT_FILTER,
   autoRefresh: prefs.autoRefresh,
   timestampMode: prefs.timestampMode ?? (prefs.showTimestamps ? 'default' : 'hidden'),
@@ -208,11 +197,6 @@ export const applyLogViewerPrefs = (
   // mount); otherwise the default live mode.
   mode: prefs.showPreviousContainerLogs ? { kind: 'previous', loading: false } : LIVE_MODE,
 });
-
-type LogViewerActionReducer = (
-  state: LogViewerState,
-  action: LogViewerAction
-) => LogViewerState | null;
 
 const cycleTimestampMode = (state: LogViewerState): LogViewerState => {
   const currentIndex = TIMESTAMP_MODE_ORDER.indexOf(state.timestampMode);
@@ -288,10 +272,9 @@ const setPreviousLogsMode = (state: LogViewerState, visible: boolean): LogViewer
 const setPreviousLogsLoading = (state: LogViewerState, loading: boolean): LogViewerState =>
   state.mode.kind === 'previous' ? { ...state, mode: { kind: 'previous', loading } } : state;
 
-const resetForNewScope = (state: LogViewerState, isWorkload: boolean): LogViewerState => ({
+const resetForNewScope = (state: LogViewerState): LogViewerState => ({
   ...state,
   selectedFilters: ALL_MULTISELECT_FILTER,
-  selectedContainer: isWorkload ? state.selectedContainer : '',
   textFilter: '',
   highlightMatches: false,
   inverseMatches: false,
@@ -303,25 +286,14 @@ const resetForNewScope = (state: LogViewerState, isWorkload: boolean): LogViewer
   mode: LIVE_MODE,
 });
 
-const reduceContainerAndFilterAction: LogViewerActionReducer = (state, action) => {
+export function logViewerReducer(state: LogViewerState, action: LogViewerAction): LogViewerState {
   switch (action.type) {
     case 'SET_CONTAINERS':
       return { ...state, containers: action.payload };
-    case 'SET_SELECTED_CONTAINER':
-      return { ...state, selectedContainer: action.payload };
     case 'SET_AVAILABLE_PODS':
       return { ...state, availablePods: action.payload };
-    case 'SET_AVAILABLE_CONTAINERS':
-      return { ...state, availableContainers: action.payload };
     case 'SET_SELECTED_FILTERS':
       return { ...state, selectedFilters: action.payload };
-    default:
-      return null;
-  }
-};
-
-const reduceUiSettingsAction: LogViewerActionReducer = (state, action) => {
-  switch (action.type) {
     case 'TOGGLE_AUTO_REFRESH':
       return { ...state, autoRefresh: !state.autoRefresh };
     case 'CYCLE_TIMESTAMP_MODE':
@@ -342,13 +314,6 @@ const reduceUiSettingsAction: LogViewerActionReducer = (state, action) => {
       return toggleCaseSensitiveMatches(state);
     case 'TOGGLE_REGEX_MATCHES':
       return toggleRegexMatches(state);
-    default:
-      return null;
-  }
-};
-
-const reduceParsedViewAction: LogViewerActionReducer = (state, action) => {
-  switch (action.type) {
     case 'TOGGLE_PARSED_VIEW':
       return toggleParsedView(state);
     case 'SET_DISPLAY_MODE':
@@ -357,13 +322,6 @@ const reduceParsedViewAction: LogViewerActionReducer = (state, action) => {
       return { ...state, parsedContainerLogs: action.payload };
     case 'TOGGLE_ROW_EXPANSION':
       return toggleRowExpansion(state, action.payload);
-    default:
-      return null;
-  }
-};
-
-const reduceAsyncStatusAction: LogViewerActionReducer = (state, action) => {
-  switch (action.type) {
     case 'SET_COPY_FEEDBACK':
       return { ...state, copyFeedback: action.payload };
     case 'SET_FALLBACK_ACTIVE':
@@ -372,38 +330,13 @@ const reduceAsyncStatusAction: LogViewerActionReducer = (state, action) => {
       return setPreviousLogsMode(state, action.payload);
     case 'SET_IS_LOADING_PREVIOUS_LOGS':
       return setPreviousLogsLoading(state, action.payload);
-    default:
-      return null;
-  }
-};
-
-const reduceCompoundAction: LogViewerActionReducer = (state, action) => {
-  switch (action.type) {
     case 'RESET_FOR_NEW_SCOPE':
-      return resetForNewScope(state, action.isWorkload);
+      return resetForNewScope(state);
     case 'START_PREVIOUS_LOGS':
       return { ...state, mode: { kind: 'previous', loading: true } };
     case 'STOP_PREVIOUS_LOGS':
       return { ...state, mode: LIVE_MODE };
     default:
-      return null;
+      return state;
   }
-};
-
-const LOG_VIEWER_ACTION_REDUCERS: LogViewerActionReducer[] = [
-  reduceContainerAndFilterAction,
-  reduceUiSettingsAction,
-  reduceParsedViewAction,
-  reduceAsyncStatusAction,
-  reduceCompoundAction,
-];
-
-export function logViewerReducer(state: LogViewerState, action: LogViewerAction): LogViewerState {
-  for (const reducer of LOG_VIEWER_ACTION_REDUCERS) {
-    const nextState = reducer(state, action);
-    if (nextState) {
-      return nextState;
-    }
-  }
-  return state;
 }

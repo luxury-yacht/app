@@ -111,28 +111,22 @@ func (d Dependencies) LogDynamicResourceRequestFailure(
 	)
 }
 
-// VersionResolver returns the preferred served API version for a group/kind pair.
-type VersionResolver interface {
-	PreferredVersion(group, kind string) string
-}
-
 // Dependencies provides the common set of collaborators required by resource handlers.
 type Dependencies struct {
-	Logger                 Logger
-	KubernetesClient       kubernetes.Interface
-	GatewayClient          gatewayversioned.Interface
-	GatewayAPIPresence     GatewayAPIPresence
-	GatewayVersionResolver VersionResolver
-	MetricsClient          versioned.Interface
-	SetMetricsClient       func(versioned.Interface)
-	DynamicClient          dynamic.Interface
-	APIExtensionsClient    clientset.Interface
-	RestConfig             *rest.Config
-	ResourceResolver       ResourceResolver
-	EnsureClient           EnsureClientFunc
-	EnsureAPIExtensions    EnsureAPIExtensionsFunc
-	SelectedKubeconfig     string
-	SelectedContext        string
+	Logger              Logger
+	KubernetesClient    kubernetes.Interface
+	GatewayClient       gatewayversioned.Interface
+	GatewayAPIPresence  GatewayAPIPresence
+	MetricsClient       versioned.Interface
+	SetMetricsClient    func(versioned.Interface)
+	DynamicClient       dynamic.Interface
+	APIExtensionsClient clientset.Interface
+	RestConfig          *rest.Config
+	ResourceResolver    ResourceResolver
+	EnsureClient        EnsureClientFunc
+	EnsureAPIExtensions EnsureAPIExtensionsFunc
+	SelectedKubeconfig  string
+	SelectedContext     string
 	// ClusterID uniquely identifies the cluster these dependencies belong to.
 	// Used for multi-cluster isolation in resources like drain jobs.
 	ClusterID string

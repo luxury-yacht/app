@@ -72,6 +72,7 @@ vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
 const setActiveKubeconfigMock = vi.hoisted(() => vi.fn());
 const kubeconfigState = vi.hoisted(() => ({
   selectedClusterId: 'cluster-a',
+  listeners: new Set<() => void>(),
   selectedKubeconfigs: ['selection-a', 'selection-b'],
   getClusterMeta: (selection: string) => {
     if (selection === 'selection-a') {
@@ -84,14 +85,28 @@ const kubeconfigState = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedClusterId: kubeconfigState.selectedClusterId,
-    selectedKubeconfigs: kubeconfigState.selectedKubeconfigs,
-    getClusterMeta: kubeconfigState.getClusterMeta,
-    setActiveKubeconfig: setActiveKubeconfigMock,
-  }),
-}));
+vi.mock('@modules/kubernetes/config/KubeconfigContext', async () => {
+  const { useSyncExternalStore } = await import('react');
+  return {
+    useKubeconfig: () => {
+      const selectedClusterId = useSyncExternalStore(
+        (listener) => {
+          kubeconfigState.listeners.add(listener);
+          return () => {
+            kubeconfigState.listeners.delete(listener);
+          };
+        },
+        () => kubeconfigState.selectedClusterId
+      );
+      return {
+        selectedClusterId,
+        selectedKubeconfigs: kubeconfigState.selectedKubeconfigs,
+        getClusterMeta: kubeconfigState.getClusterMeta,
+        setActiveKubeconfig: setActiveKubeconfigMock,
+      };
+    },
+  };
+});
 
 const errorHandlerMock = vi.hoisted(() => ({
   handle: vi.fn(),
@@ -326,6 +341,24 @@ describe('SessionsStatus shell session jump action', () => {
 
     expect(setActiveKubeconfigMock).toHaveBeenCalledWith('selection-b');
     expect(openWithObjectMock).not.toHaveBeenCalled();
+    await act(async () => {
+      kubeconfigState.selectedClusterId = 'cluster-b';
+      kubeconfigState.listeners.forEach((listener) => {
+        listener();
+      });
+    });
+    expect(openWithObjectMock).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        clusterId: 'cluster-b',
+        namespace: 'default',
+        name: 'web-abc',
+        kind: 'Pod',
+        group: '',
+        version: 'v1',
+      })
+    );
+    expect(requestObjectPanelTabMock).toHaveBeenCalledWith('object-panel:pod:web-abc', 'shell');
+    expect(latestCloseSignal()).toBe(1);
   });
 
   it('does not render node drains in the shell and port-forward sessions panel', async () => {

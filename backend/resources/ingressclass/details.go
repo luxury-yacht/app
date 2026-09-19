@@ -34,10 +34,10 @@ func (s *Service) IngressClass(ctx context.Context, name string) (*IngressClassD
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get ingress class %s", name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get ingress class: %w", err)
 	}
-	return s.buildIngressClassDetails(ic, nil), nil
+	return s.buildIngressClassDetails(ic), nil
 }
 
-func (s *Service) buildIngressClassDetails(ic *networkingv1.IngressClass, ingresses []networkingv1.Ingress) *IngressClassDetails {
+func (s *Service) buildIngressClassDetails(ic *networkingv1.IngressClass) *IngressClassDetails {
 	facts := BuildFacts(ic)
 	details := &IngressClassDetails{
 		Kind:        "IngressClass",
@@ -66,18 +66,9 @@ func (s *Service) buildIngressClassDetails(ic *networkingv1.IngressClass, ingres
 		details.Parameters = params
 	}
 
-	for _, ingress := range ingresses {
-		if ingress.Spec.IngressClassName != nil && *ingress.Spec.IngressClassName == ic.Name {
-			details.Ingresses = append(details.Ingresses, fmt.Sprintf("%s/%s", ingress.Namespace, ingress.Name))
-		}
-	}
-
 	details.Details = fmt.Sprintf("Controller: %s", ic.Spec.Controller)
 	if details.IsDefault {
 		details.Details += " (default)"
-	}
-	if len(details.Ingresses) > 0 {
-		details.Details += fmt.Sprintf(", Used by %d ingress(es)", len(details.Ingresses))
 	}
 
 	return details

@@ -41,41 +41,39 @@ interface WindowOption {
 const HOUR = 3600;
 const DAY = 24 * HOUR;
 
+const timeTickLabel = (date: Date): string =>
+  date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+
 const WINDOWS: WindowOption[] = [
   {
     label: '1h',
     seconds: HOUR,
     tickInterval: 10 * 60,
-    tickLabel: (d) =>
-      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }),
+    tickLabel: timeTickLabel,
   },
   {
     label: '3h',
     seconds: 3 * HOUR,
     tickInterval: 30 * 60,
-    tickLabel: (d) =>
-      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }),
+    tickLabel: timeTickLabel,
   },
   {
     label: '6h',
     seconds: 6 * HOUR,
     tickInterval: HOUR,
-    tickLabel: (d) =>
-      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }),
+    tickLabel: timeTickLabel,
   },
   {
     label: '12h',
     seconds: 12 * HOUR,
     tickInterval: 2 * HOUR,
-    tickLabel: (d) =>
-      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }),
+    tickLabel: timeTickLabel,
   },
   {
     label: '1d',
     seconds: 24 * HOUR,
     tickInterval: 4 * HOUR,
-    tickLabel: (d) =>
-      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }),
+    tickLabel: timeTickLabel,
   },
   {
     label: '2d',

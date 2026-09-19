@@ -14,34 +14,10 @@ import type { GridTableFocusRequest } from '@shared/components/tables/hooks/grid
 import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import type { RefresherState } from '@/core/refresh/RefreshManager';
 
-type ResourceStreamDomain =
-  | 'pods'
-  | 'namespace-workloads'
-  | 'namespace-config'
-  | 'namespace-network'
-  | 'namespace-rbac'
-  | 'namespace-custom'
-  | 'namespace-helm'
-  | 'namespace-quotas'
-  | 'namespace-storage'
-  | 'namespace-autoscaling'
-  | 'cluster-rbac'
-  | 'cluster-storage'
-  | 'cluster-config'
-  | 'cluster-crds'
-  | 'cluster-custom'
-  | 'nodes';
-
-type DoorbellStreamDomain =
-  | ResourceStreamDomain
-  | 'catalog'
-  | 'cluster-events'
-  | 'namespace-events'
-  | 'namespaces'
-  | 'namespace-metrics'
-  | 'object-events'
-  | 'cluster-overview'
-  | 'cluster-attention';
+import type {
+  DoorbellDomain as DoorbellStreamDomain,
+  ResourceDomain as ResourceStreamDomain,
+} from '@/core/refresh/streaming/resourceStreamDomains';
 
 type ResourceStreamHealthStatus = 'healthy' | 'degraded' | 'unhealthy';
 type ResourceStreamConnectionStatus = 'connected' | 'disconnected';

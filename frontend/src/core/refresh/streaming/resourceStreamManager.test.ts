@@ -267,7 +267,6 @@ describe('ResourceStreamManager', () => {
     }));
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
         clusterId: 'cluster-a',
         type: 'MODIFIED',
@@ -294,6 +293,57 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.rows?.[0]?.status).toBe('Running');
     expect(state.data?.rows?.[0]?.cpuUsage).toBe('50m');
   });
+
+  test.each([
+    { label: 'ACK for another cluster', type: 'ACK', clusterId: 'cluster-b' },
+    { label: 'RESET for another cluster', type: 'RESET', clusterId: 'cluster-b' },
+    {
+      label: 'ERROR for another cluster',
+      type: 'ERROR',
+      clusterId: 'cluster-b',
+      error: 'other cluster failed',
+    },
+    { label: 'missing cluster identity', type: 'ACK' },
+    {
+      label: 'conflicting scope identity',
+      type: 'ACK',
+      clusterId: 'cluster-a',
+      scope: 'cluster-b|',
+    },
+    { label: 'malformed cluster identity', type: 'ACK', clusterId: 7 },
+    { label: 'malformed version', type: 'ACK', clusterId: 'cluster-a', version: 7 },
+    { label: 'malformed cluster name', type: 'ACK', clusterId: 'cluster-a', clusterName: {} },
+  ])(
+    'ignores $label on the shared connection while accepting the owning cluster ACK',
+    async ({ label: _label, ...frame }) => {
+      const manager = new ResourceStreamManager();
+      const scope = buildClusterScope('cluster-a', '');
+      await manager.start('cluster-config', scope);
+      await flushPromises();
+      const socket = createdSockets[0];
+      socket.onopen?.(new Event('open'));
+      await flushPromises();
+      const health = manager.getHealthSnapshot('cluster-config', scope);
+      const snapshot = getScopedDomainState('cluster-config', scope);
+
+      expect(() =>
+        socket.onmessage?.(
+          new MessageEvent('message', {
+            data: { domain: 'cluster-config', scope: '', ...frame },
+          })
+        )
+      ).not.toThrow();
+      expect(manager.getHealthSnapshot('cluster-config', scope)).toEqual(health);
+      expect(getScopedDomainState('cluster-config', scope)).toEqual(snapshot);
+
+      socket.onmessage?.(
+        new MessageEvent('message', {
+          data: { type: 'ACK', domain: 'cluster-config', scope: '', clusterId: 'cluster-a' },
+        })
+      );
+      expect(manager.getHealthStatus('cluster-config', scope)).toBe('healthy');
+    }
+  );
 
   // A QUIET domain (e.g. cluster-config, whose kinds rarely change) must count
   // as healthy once the SERVER CONFIRMS its subscription — deliveries prove
@@ -330,7 +380,6 @@ describe('ResourceStreamManager', () => {
     // The server confirms the subscribe; no change message ever arrives — the
     // domain is simply quiet.
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({ type: 'ACK', domain: 'cluster-config', scope: '', clusterId: 'cluster-a' })
     );
     expect(manager.getHealthStatus('cluster-config', storeScope)).toBe('healthy');
@@ -357,7 +406,6 @@ describe('ResourceStreamManager', () => {
 
     // Server rejects the domain (e.g. stale backend): unhealthy.
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
         type: 'ERROR',
         domain: 'namespaces',
@@ -371,7 +419,6 @@ describe('ResourceStreamManager', () => {
 
     // Server later confirms (backend restarted with the new selector): healthy.
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({ type: 'ACK', domain: 'namespaces', scope: '', clusterId: 'cluster-a' })
     );
     expect(manager.getHealthStatus('namespaces', storeScope)).toBe('healthy');
@@ -398,7 +445,6 @@ describe('ResourceStreamManager', () => {
         getScopedDomainState('namespaces', storeScope).streamRevision ?? 0;
 
       manager.handleMessage(
-        'cluster-a',
         JSON.stringify({
           type: 'ERROR',
           clusterId: 'cluster-a',
@@ -426,7 +472,6 @@ describe('ResourceStreamManager', () => {
       expect(manager.getHealthStatus('namespaces', storeScope)).toBe('unhealthy');
 
       manager.handleMessage(
-        'cluster-a',
         JSON.stringify({
           type: 'ACK',
           clusterId: 'cluster-a',
@@ -435,7 +480,6 @@ describe('ResourceStreamManager', () => {
         })
       );
       manager.handleMessage(
-        'cluster-a',
         JSON.stringify({
           type: 'MODIFIED',
           clusterId: 'cluster-a',
@@ -461,7 +505,6 @@ describe('ResourceStreamManager', () => {
 
       expect(requestCount()).toBeGreaterThan(requestsBeforeDenial);
       manager.handleMessage(
-        'cluster-a',
         JSON.stringify({
           type: 'ACK',
           clusterId: 'cluster-a',
@@ -491,7 +534,6 @@ describe('ResourceStreamManager', () => {
     // captures it so subscription-labeled logging matches the backend half
     // (which logs the name) instead of falling back to the raw composite ID.
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
         type: 'ACK',
         domain: 'namespaces',
@@ -502,7 +544,6 @@ describe('ResourceStreamManager', () => {
     );
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
         clusterId: 'cluster-a',
         type: 'MODIFIED',
@@ -561,8 +602,8 @@ describe('ResourceStreamManager', () => {
         signal: 'changed',
       });
 
-    manager.handleMessage('cluster-a', doorbell('pods'));
-    manager.handleMessage('cluster-a', doorbell('namespace-config'));
+    manager.handleMessage(doorbell('pods'));
+    manager.handleMessage(doorbell('namespace-config'));
     vi.advanceTimersByTime(200);
 
     const podsState = getScopedDomainState('pods', podsScope);
@@ -589,7 +630,6 @@ describe('ResourceStreamManager', () => {
     // (Ref/ResourceVersion) without a row. The frontend advances sourceVersion
     // so the query-backed table refetches and leaves the row list untouched.
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
         clusterId: 'cluster-a',
         type: 'MODIFIED',
@@ -635,7 +675,6 @@ describe('ResourceStreamManager', () => {
     ).ensureSubscriptions('catalog', metadataScope);
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
         clusterId: 'cluster-a',
         domain: 'catalog',
@@ -674,7 +713,6 @@ describe('ResourceStreamManager', () => {
     createdSockets[0].onopen?.(new Event('open'));
     await vi.advanceTimersByTimeAsync(1_100);
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({ type: 'ACK', domain: 'catalog', scope: '', clusterId: 'cluster-a' })
     );
     expect(manager.getHealthStatus('catalog', pageScope)).toBe('healthy');
@@ -707,7 +745,6 @@ describe('ResourceStreamManager', () => {
     }));
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
         clusterId: 'cluster-a',
         domain: 'pods',
@@ -734,7 +771,6 @@ describe('ResourceStreamManager', () => {
     ).ensureSubscriptions('namespace-config', storeScope);
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
         clusterId: 'cluster-a',
         domain: 'namespace-config',
@@ -762,7 +798,6 @@ describe('ResourceStreamManager', () => {
     ).ensureSubscriptions('pods', storeScope);
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
         clusterId: 'cluster-b',
         domain: 'pods',
@@ -812,6 +847,7 @@ describe('ResourceStreamManager', () => {
     };
     const updateMessage = (row: typeof configRow, resourceVersion: string) =>
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'MODIFIED',
         domain: 'namespace-config',
         scope: 'namespace:default',
@@ -823,7 +859,7 @@ describe('ResourceStreamManager', () => {
         row,
       });
 
-    manager.handleMessage('cluster-a', updateMessage(configRow, '3'));
+    manager.handleMessage(updateMessage(configRow, '3'));
     vi.advanceTimersByTime(200);
 
     const afterAdd = getScopedDomainState('namespace-config', storeScope);
@@ -834,16 +870,16 @@ describe('ResourceStreamManager', () => {
 
     // Notify-only ships no rows to compare, so each coalesced stream batch bumps the
     // revision (the resulting query refetch is debounced and visually silent).
-    manager.handleMessage('cluster-a', updateMessage({ ...configRow }, '4'));
+    manager.handleMessage(updateMessage({ ...configRow }, '4'));
     vi.advanceTimersByTime(200);
     expect(getScopedDomainState('namespace-config', storeScope).streamRevision).toBe(2);
 
-    manager.handleMessage('cluster-a', updateMessage({ ...configRow, data: 3 }, '5'));
+    manager.handleMessage(updateMessage({ ...configRow, data: 3 }, '5'));
     vi.advanceTimersByTime(200);
     expect(getScopedDomainState('namespace-config', storeScope).streamRevision).toBe(3);
   });
 
-  test('applies updates when cluster id mismatches but scope is unique', () => {
+  test('rejects a legacy update from another cluster even when the scope is unique', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
@@ -854,44 +890,44 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
-      data: makeNamespaceConfigSnapshotPayload({ rows: [], clusterId: 'test-cluster' }),
+      data: makeNamespaceConfigSnapshotPayload({ rows: [], clusterId: 'cluster-a' }),
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
       scope: storeScope,
     }));
 
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'namespace-config',
-        scope: 'namespace:default',
-        resourceVersion: '3',
+    const before = getScopedDomainState('namespace-config', storeScope);
+    const update = {
+      type: 'ADDED',
+      domain: 'namespace-config',
+      scope: 'namespace:default',
+      resourceVersion: '3',
+      name: 'config-a',
+      namespace: 'default',
+      kind: 'ConfigMap',
+      clusterId: 'cluster-a',
+      ref: resourceRef({ kind: 'ConfigMap', namespace: 'default', name: 'config-a' }),
+      row: {
+        clusterId: 'cluster-a',
+        clusterName: 'cluster-a',
+        kind: 'ConfigMap',
+        typeAlias: 'CM',
         name: 'config-a',
         namespace: 'default',
-        kind: 'ConfigMap',
-        clusterId: 'backend-id',
-        ref: resourceRef({ kind: 'ConfigMap', namespace: 'default', name: 'config-a' }),
-        row: {
-          clusterId: 'backend-id',
-          clusterName: 'backend-id',
-          kind: 'ConfigMap',
-          typeAlias: 'CM',
-          name: 'config-a',
-          namespace: 'default',
-          data: 2,
-          age: '1m',
-        },
-      })
-    );
+        data: 2,
+        age: '1m',
+      },
+    };
+
+    manager.handleMessage(JSON.stringify({ ...update, clusterId: 'backend-id' }));
 
     vi.advanceTimersByTime(200);
+    expect(getScopedDomainState('namespace-config', storeScope)).toEqual(before);
 
-    // The update routes to the matching subscription (unique scope despite the
-    // cluster-id mismatch) and, being signal-only, bumps the refetch signal.
-    const state = getScopedDomainState('namespace-config', storeScope);
-    expect(state.streamRevision).toBe(1);
+    manager.handleMessage(JSON.stringify(update));
+    vi.advanceTimersByTime(200);
+    expect(getScopedDomainState('namespace-config', storeScope).streamRevision).toBe(1);
   });
 
   test('applies updates when scope includes a cluster prefix', () => {
@@ -913,8 +949,8 @@ describe('ResourceStreamManager', () => {
     }));
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'ADDED',
         domain: 'namespace-config',
         scope: 'cluster-a|namespace:default',
@@ -988,8 +1024,8 @@ describe('ResourceStreamManager', () => {
     const previousRows = getScopedDomainState('namespace-autoscaling', storeScope).data?.rows;
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'MODIFIED',
         domain: 'namespace-autoscaling',
         scope: 'namespace:default',
@@ -1027,8 +1063,8 @@ describe('ResourceStreamManager', () => {
     ).ensureSubscriptions('cluster-rbac', storeScope);
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'DELETED',
         domain: 'cluster-rbac',
         resourceVersion: '11',
@@ -1056,8 +1092,8 @@ describe('ResourceStreamManager', () => {
     ).ensureSubscriptions('pods', storeScope);
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'ADDED',
         domain: 'pods',
         scope: 'namespace:default',
@@ -1072,8 +1108,8 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'MODIFIED',
         domain: 'pods',
         scope: 'namespace:default',
@@ -1108,8 +1144,8 @@ describe('ResourceStreamManager', () => {
     // A resourceVersion past the safe-integer limit is parsed via BigInt, so the
     // signal-only delta is still accepted and bumps the refetch signal.
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'ADDED',
         domain: 'cluster-rbac',
         scope: '',
@@ -1148,8 +1184,8 @@ describe('ResourceStreamManager', () => {
     });
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'RESET',
         domain: 'namespace-config',
         scope: 'namespace:default',
@@ -1185,7 +1221,7 @@ describe('ResourceStreamManager', () => {
       notModified: false,
     });
 
-    manager.handleConnectionError('cluster-a', 'connection lost');
+    manager.handleConnectionError('connection lost');
 
     await flushPromises();
 
@@ -1202,8 +1238,8 @@ describe('ResourceStreamManager', () => {
     ).ensureSubscriptions('namespace-config', storeScope);
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'ADDED',
         domain: 'namespace-config',
         scope: 'namespace:default',
@@ -1220,7 +1256,7 @@ describe('ResourceStreamManager', () => {
       })
     );
 
-    manager.handleConnectionError('cluster-a', 'connection lost');
+    manager.handleConnectionError('connection lost');
 
     await flushPromises();
 
@@ -1347,12 +1383,10 @@ describe('ResourceStreamManager', () => {
     expect(firstSocket).toBeDefined();
     firstSocket.onopen?.(new Event('open'));
     manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({ type: 'ACK', domain: 'namespaces', scope: '' })
+      JSON.stringify({ clusterId: 'cluster-a', type: 'ACK', domain: 'namespaces', scope: '' })
     );
     manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({ type: 'RESET', domain: 'namespaces', scope: '' })
+      JSON.stringify({ clusterId: 'cluster-a', type: 'RESET', domain: 'namespaces', scope: '' })
     );
     const versionBeforeGap = getScopedDomainState('namespaces', storeScope).signalVersions?.object;
 
@@ -1365,12 +1399,10 @@ describe('ResourceStreamManager', () => {
     expect(secondSocket).toBeDefined();
     secondSocket.onopen?.(new Event('open'));
     manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({ type: 'ACK', domain: 'namespaces', scope: '' })
+      JSON.stringify({ clusterId: 'cluster-a', type: 'ACK', domain: 'namespaces', scope: '' })
     );
     manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({ type: 'RESET', domain: 'namespaces', scope: '' })
+      JSON.stringify({ clusterId: 'cluster-a', type: 'RESET', domain: 'namespaces', scope: '' })
     );
 
     expect(getScopedDomainState('namespaces', storeScope).signalVersions?.object).not.toBe(
@@ -1395,8 +1427,12 @@ describe('ResourceStreamManager', () => {
     expect(socket).toBeDefined();
     socket.onopen?.(new Event('open'));
     manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({ type: 'RESET', domain: 'namespace-metrics', scope: '' })
+      JSON.stringify({
+        clusterId: 'cluster-a',
+        type: 'RESET',
+        domain: 'namespace-metrics',
+        scope: '',
+      })
     );
 
     expect(getScopedDomainState('namespace-metrics', storeScope).signalVersions?.metric).not.toBe(
@@ -1428,8 +1464,8 @@ describe('ResourceStreamManager', () => {
     await flushPromises();
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'RESET',
         domain: 'namespace-config',
         scope: 'namespace:default',
@@ -1447,8 +1483,8 @@ describe('ResourceStreamManager', () => {
       signalVersions: { object: 'object:before-reset' },
     }));
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'RESET',
         domain: 'namespace-config',
         scope: 'namespace:default',
@@ -1494,8 +1530,8 @@ describe('ResourceStreamManager', () => {
     }));
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'COMPLETE',
         domain: 'namespace-config',
         scope: 'namespace:default',
@@ -1511,8 +1547,8 @@ describe('ResourceStreamManager', () => {
     const sourceVersionAfterComplete = completeState.sourceVersion;
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'ERROR',
         domain: 'namespace-config',
         scope: 'namespace:default',
@@ -1616,8 +1652,8 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(1100);
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'MODIFIED',
         domain: 'pods',
         scope: 'namespace:default',
@@ -1633,8 +1669,8 @@ describe('ResourceStreamManager', () => {
     await flushPromises();
 
     manager.handleMessage(
-      'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'MODIFIED',
         domain: 'pods',
         scope: 'namespace:default',

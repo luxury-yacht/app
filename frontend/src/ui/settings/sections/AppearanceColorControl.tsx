@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { SettingRow } from './SettingsControls';
 
 export default function AppearanceColorControl({
   title,
@@ -42,60 +43,54 @@ export default function AppearanceColorControl({
   const cancelEditing = () => setIsEditing(false);
 
   return (
-    <div className="settings-row">
-      <div className="settings-row-label">
-        <div className="settings-row-label-title">{title}</div>
-        <div className="settings-row-label-help">{help}</div>
-      </div>
-      <div className="settings-row-control">
-        <div className="palette-color-field">
+    <SettingRow title={title} help={help}>
+      <div className="palette-color-field">
+        <input
+          type="color"
+          className="palette-accent-swatch"
+          value={value || defaultColor}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {isEditing ? (
           <input
-            type="color"
-            className="palette-accent-swatch"
-            value={value || defaultColor}
-            onChange={(e) => onChange(e.target.value)}
+            ref={inputRef}
+            className="color-swatch-value palette-hex-input"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commitDraft();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEditing();
+              } else {
+                e.stopPropagation();
+              }
+            }}
+            onBlur={cancelEditing}
+            maxLength={7}
           />
-          {isEditing ? (
-            <input
-              ref={inputRef}
-              className="color-swatch-value palette-hex-input"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  commitDraft();
-                } else if (e.key === 'Escape') {
-                  e.preventDefault();
-                  cancelEditing();
-                } else {
-                  e.stopPropagation();
-                }
-              }}
-              onBlur={cancelEditing}
-              maxLength={7}
-            />
-          ) : (
-            <button
-              type="button"
-              className="color-swatch-value palette-hex-clickable"
-              onClick={startEditing}
-              title="Click to edit hex value"
-            >
-              {value || defaultColor}
-            </button>
-          )}
+        ) : (
           <button
             type="button"
-            className="palette-row-reset"
-            onClick={onReset}
-            disabled={!value}
-            title={`Reset ${title}`}
+            className="color-swatch-value palette-hex-clickable"
+            onClick={startEditing}
+            title="Click to edit hex value"
           >
-            ↺
+            {value || defaultColor}
           </button>
-        </div>
+        )}
+        <button
+          type="button"
+          className="palette-row-reset"
+          onClick={onReset}
+          disabled={!value}
+          title={`Reset ${title}`}
+        >
+          ↺
+        </button>
       </div>
-    </div>
+    </SettingRow>
   );
 }

@@ -10,7 +10,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcekind"
@@ -25,7 +24,6 @@ const (
 type CatalogConfig struct {
 	CatalogService  func() *objectcatalog.Service
 	NamespaceGroups func() []CatalogNamespaceGroup
-	Logger          containerlogsstream.Logger
 }
 
 // CatalogSnapshot captures the browse payload returned to clients.
@@ -91,7 +89,6 @@ type catalogBuilder struct {
 	domain          string
 	catalogService  func() *objectcatalog.Service
 	namespaceGroups func() []CatalogNamespaceGroup
-	logger          containerlogsstream.Logger
 }
 
 // RegisterCatalogDomain registers the catalog browse domain with the registry.
@@ -116,7 +113,6 @@ func registerCatalogDomain(reg *domain.Registry, cfg CatalogConfig, name string)
 		domain:          name,
 		catalogService:  cfg.CatalogService,
 		namespaceGroups: cfg.NamespaceGroups,
-		logger:          cfg.Logger,
 	}
 
 	return reg.Register(refresh.DomainConfig{
@@ -142,8 +138,7 @@ func (b *catalogBuilder) Build(ctx context.Context, scope string) (*refresh.Snap
 	}
 
 	meta := ClusterMetaFromContext(ctx)
-	adapter := newCatalogRefreshAdapter(svc, meta, b.namespaceGroups)
-	return adapter.BuildSnapshot(b.domain, scope, opts), nil
+	return b.buildSnapshot(svc, meta, scope, opts), nil
 }
 
 // newCatalogCapabilities builds capabilities for the catalog browse provider.
@@ -341,13 +336,6 @@ func buildCatalogNamespaceGroups(
 		}
 	}
 	return groups
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func parseBrowseScope(scope string) (objectcatalog.QueryOptions, error) {

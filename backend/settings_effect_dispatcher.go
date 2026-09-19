@@ -75,7 +75,6 @@ func (b *clusterRateLimitBridge) bind(target KubernetesClientRateLimitsSetter) {
 type refreshSettingBridge struct {
 	mu          sync.Mutex
 	target      RefreshSettingSink
-	bound       bool
 	globalLimit int
 	metricsMs   int
 }
@@ -115,12 +114,11 @@ func (b *refreshSettingBridge) bind(target RefreshSettingSink) {
 		panic("refresh setting bridge requires a target")
 	}
 	b.mu.Lock()
-	if b.bound {
+	if b.target != nil {
 		b.mu.Unlock()
 		panic("refresh setting bridge already bound")
 	}
 	b.target = target
-	b.bound = true
 	globalLimit := b.globalLimit
 	metricsMs := b.metricsMs
 	b.mu.Unlock()

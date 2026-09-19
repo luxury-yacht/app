@@ -15,10 +15,7 @@ import (
 
 	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
 
-	"github.com/luxury-yacht/app/backend/resources/common"
-	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -28,7 +25,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
@@ -69,14 +65,13 @@ type NamespaceWorkloadsPermissions struct {
 type NamespaceWorkloadsBuilder struct {
 	podIngest           podWorkloadsIngestSource
 	includePods         bool
-	workloadIngest      workloadStoreVersionProvider
+	workloadIngest      ingestVersionSource
 	includeDeployments  bool
 	includeStatefulSets bool
 	includeDaemonSets   bool
 	includeJobs         bool
 	includeCronJobs     bool
 	hpaLister           autoscalinglisters.HorizontalPodAutoscalerLister
-	logger              containerlogsstream.Logger
 	// metrics supplies the poller usage joined onto the served rows AT SERVE — usage is
 	// never written to the maintained store, so a metric tick cannot re-project stored
 	// rows. nil (a unit test) serves the no-data marker.
@@ -187,7 +182,6 @@ func RegisterNamespaceWorkloadsDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	provider metrics.Provider,
-	logger containerlogsstream.Logger,
 	perms NamespaceWorkloadsPermissions,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
@@ -203,7 +197,6 @@ func RegisterNamespaceWorkloadsDomain(
 		// workloadIngest supplies only the workload stores' RVs for the version watermark; the
 		// own-rows come from the Sink-fed maintained store.
 		workloadIngest:      ingestManager,
-		logger:              logger,
 		workloadsMaintained: maintained,
 		metrics:             provider,
 		perBuild:            &perBuildStoreCache[WorkloadSummary]{},
@@ -272,14 +265,10 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	// coverage is unavailable, leave ownership unknown instead of emitting false.
 	hpas, hpaErr := b.listHPAs(namespace)
 
-	snapshot, err := b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), namespaceWorkloadSnapshotInputs{
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), namespaceWorkloadSnapshotInputs{
 		query: query, podAggregates: podAggregates, podSummaries: podSummaries, ownRows: ownRows,
 		hpas: hpas, hpaKnown: hpaErr == nil, podUsage: podUsage, metricsMetadata: metricsMetadata, issues: issues,
 	})
-	if err != nil {
-		return nil, err
-	}
-	return snapshot, nil
 }
 
 // workloadOwnRows returns the workload OWN-rows from the Sink-fed maintained store for the request
@@ -308,8 +297,8 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(meta ClusterMeta, scope string
 	items, version := assembleWorkloadRows(workloadRowInputs{
 		podAggregates: inputs.podAggregates, podSummaries: inputs.podSummaries, ownRows: inputs.ownRows,
 		hpas: inputs.hpas, hpaKnown: inputs.hpaKnown, podUsage: inputs.podUsage,
-		workloadIngestVersion: namespaceWorkloadIngestVersion(b.workloadIngest, DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR),
-		podIngestVersion:      namespacePodIngestVersion(b.podIngest),
+		workloadIngestVersion: maxIngestStoreVersion(b.workloadIngest, DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR),
+		podIngestVersion:      ingestStoreVersion(b.podIngest, PodGVR),
 	})
 	// Sort ONLY for the window branch, which truncates input order. The query
 	// branch re-sorts via the engine and ignores this order — sorting the full
@@ -448,23 +437,10 @@ func standaloneWorkloadPod(aggregate streamrows.PodAggregate) bool {
 // path's per-kind gating so the maintained Build shows the same kinds.
 func (b *NamespaceWorkloadsBuilder) allowedWorkloadKinds(ctx context.Context) map[string]bool {
 	allowed := map[string]bool{}
-	if b.includePods && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "", "pods") {
-		allowed[podres.Identity.Kind] = true
-	}
-	if b.includeDeployments && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "deployments") {
-		allowed[deployment.Identity.Kind] = true
-	}
-	if b.includeStatefulSets && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "statefulsets") {
-		allowed[statefulset.Identity.Kind] = true
-	}
-	if b.includeDaemonSets && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "daemonsets") {
-		allowed[daemonset.Identity.Kind] = true
-	}
-	if b.includeJobs && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "batch", "jobs") {
-		allowed[jobres.Identity.Kind] = true
-	}
-	if b.includeCronJobs && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "batch", "cronjobs") {
-		allowed[cronjob.Identity.Kind] = true
+	for _, source := range b.resourceSources() {
+		if source.State.servesRows() && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, source.Group, source.Resource) {
+			allowed[source.Kind] = true
+		}
 	}
 	return allowed
 }
@@ -518,7 +494,7 @@ func (b *NamespaceWorkloadsBuilder) queryIssues(ctx context.Context, query typed
 func workloadsQuerypageSchema() querypage.Schema[WorkloadSummary] {
 	return querypageSchemaFromAdapter(
 		workloadTableQueryAdapter(),
-		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "cpu", "memory", "age"},
+		namespaceWorkloadsQueryCapabilities().SortableFields,
 	)
 }
 
@@ -611,220 +587,6 @@ func isUnhealthyStatusPresentation(presentation string) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
-	clusterID string,
-	deploy *appsv1.Deployment,
-	podsByOwner map[string][]streamrows.PodAggregate,
-	usage map[string]metrics.PodUsage,
-) WorkloadSummary {
-	var pods []streamrows.PodAggregate
-	if deploy != nil {
-		key := workloadOwnerKey(deployment.Identity.Kind, deploy.Namespace, deploy.Name)
-		pods = podsByOwner[key]
-	}
-	resources := aggregateWorkloadPodResources(pods, usage)
-	desired := int32(0)
-	if deploy != nil && deploy.Spec.Replicas != nil {
-		desired = *deploy.Spec.Replicas
-	}
-	ready := int32(0)
-	if deploy != nil {
-		ready = deploy.Status.ReadyReplicas
-	}
-	readyStatus := workloadPodReadyStatus(pods, ready, desired)
-	model := deployment.BuildResourceModel(clusterID, deploy)
-
-	return WorkloadSummary{
-		Ref:                  model.Ref,
-		Metadata:             streamrows.NewResourceMetadata(deploy),
-		Ready:                readyStatus,
-		Status:               model.Status.Label,
-		StatusState:          model.Status.State,
-		StatusPresentation:   model.Status.Presentation,
-		StatusReason:         model.Status.Reason,
-		Restarts:             resources.Restarts,
-		Age:                  formatAge(deploy.CreationTimestamp.Time),
-		AgeTimestamp:         creationTimestampMillis(deploy),
-		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
-		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
-		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
-		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
-		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
-		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: common.HasForwardableContainerPorts(deploy.Spec.Template.Spec.Containers),
-		DesiredReplicas:      cloneInt32Ptr(deploy.Spec.Replicas),
-	}
-}
-
-func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
-	clusterID string,
-	stateful *appsv1.StatefulSet,
-	podsByOwner map[string][]streamrows.PodAggregate,
-	usage map[string]metrics.PodUsage,
-) WorkloadSummary {
-	var pods []streamrows.PodAggregate
-	if stateful != nil {
-		key := workloadOwnerKey(statefulset.Identity.Kind, stateful.Namespace, stateful.Name)
-		pods = podsByOwner[key]
-	}
-	resources := aggregateWorkloadPodResources(pods, usage)
-	desired := int32(0)
-	if stateful != nil && stateful.Spec.Replicas != nil {
-		desired = *stateful.Spec.Replicas
-	}
-	ready := int32(0)
-	if stateful != nil {
-		ready = stateful.Status.ReadyReplicas
-	}
-	readyStatus := workloadPodReadyStatus(pods, ready, desired)
-	model := statefulset.BuildResourceModel(clusterID, stateful)
-
-	return WorkloadSummary{
-		Ref:                  model.Ref,
-		Metadata:             streamrows.NewResourceMetadata(stateful),
-		Ready:                readyStatus,
-		Status:               model.Status.Label,
-		StatusState:          model.Status.State,
-		StatusPresentation:   model.Status.Presentation,
-		StatusReason:         model.Status.Reason,
-		Restarts:             resources.Restarts,
-		Age:                  formatAge(stateful.CreationTimestamp.Time),
-		AgeTimestamp:         creationTimestampMillis(stateful),
-		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
-		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
-		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
-		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
-		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
-		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: common.HasForwardableContainerPorts(stateful.Spec.Template.Spec.Containers),
-		DesiredReplicas:      cloneInt32Ptr(stateful.Spec.Replicas),
-	}
-}
-
-func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
-	clusterID string,
-	daemon *appsv1.DaemonSet,
-	podsByOwner map[string][]streamrows.PodAggregate,
-	usage map[string]metrics.PodUsage,
-) WorkloadSummary {
-	var pods []streamrows.PodAggregate
-	if daemon != nil {
-		key := workloadOwnerKey(daemonset.Identity.Kind, daemon.Namespace, daemon.Name)
-		pods = podsByOwner[key]
-	}
-	resources := aggregateWorkloadPodResources(pods, usage)
-	ready := int32(0)
-	desired := int32(0)
-	if daemon != nil {
-		ready = daemon.Status.NumberReady
-		desired = daemon.Status.DesiredNumberScheduled
-	}
-	readyStatus := workloadPodReadyStatus(pods, ready, desired)
-	model := daemonset.BuildResourceModel(clusterID, daemon)
-
-	return WorkloadSummary{
-		Ref:                  model.Ref,
-		Metadata:             streamrows.NewResourceMetadata(daemon),
-		Ready:                readyStatus,
-		Status:               model.Status.Label,
-		StatusState:          model.Status.State,
-		StatusPresentation:   model.Status.Presentation,
-		StatusReason:         model.Status.Reason,
-		Restarts:             resources.Restarts,
-		Age:                  formatAge(daemon.CreationTimestamp.Time),
-		AgeTimestamp:         creationTimestampMillis(daemon),
-		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
-		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
-		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
-		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
-		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
-		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: common.HasForwardableContainerPorts(daemon.Spec.Template.Spec.Containers),
-	}
-}
-
-func (b *NamespaceWorkloadsBuilder) buildJobSummary(
-	clusterID string,
-	job *batchv1.Job,
-	podsByOwner map[string][]streamrows.PodAggregate,
-	usage map[string]metrics.PodUsage,
-) WorkloadSummary {
-	var pods []streamrows.PodAggregate
-	if job != nil {
-		key := workloadOwnerKey(jobres.Identity.Kind, job.Namespace, job.Name)
-		pods = podsByOwner[key]
-	}
-	resources := aggregateWorkloadPodResources(pods, usage)
-	var desired int32 = 1
-	if job != nil && job.Spec.Completions != nil {
-		desired = *job.Spec.Completions
-	}
-	completed := int32(0)
-	if job != nil {
-		completed = job.Status.Succeeded
-	}
-	model := jobres.BuildResourceModel(clusterID, job)
-
-	return WorkloadSummary{
-		Ref:                  model.Ref,
-		Metadata:             streamrows.NewResourceMetadata(job),
-		Ready:                fmt.Sprintf("%d/%d", completed, desired),
-		Status:               model.Status.Label,
-		StatusState:          model.Status.State,
-		StatusPresentation:   model.Status.Presentation,
-		StatusReason:         model.Status.Reason,
-		Restarts:             resources.Restarts,
-		Age:                  formatAge(job.CreationTimestamp.Time),
-		AgeTimestamp:         creationTimestampMillis(job),
-		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
-		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
-		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
-		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
-		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
-		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: common.HasForwardableContainerPorts(job.Spec.Template.Spec.Containers),
-	}
-}
-
-func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
-	clusterID string,
-	cron *batchv1.CronJob,
-	podsByOwner map[string][]streamrows.PodAggregate,
-	usage map[string]metrics.PodUsage,
-) WorkloadSummary {
-	var pods []streamrows.PodAggregate
-	if cron != nil {
-		key := workloadOwnerKey(cronjob.Identity.Kind, cron.Namespace, cron.Name)
-		pods = podsByOwner[key]
-	}
-	resources := aggregateWorkloadPodResources(pods, usage)
-	active := 0
-	if cron != nil {
-		active = len(cron.Status.Active)
-	}
-	model := cronjob.BuildResourceModel(clusterID, cron)
-
-	return WorkloadSummary{
-		Ref:                  model.Ref,
-		Metadata:             streamrows.NewResourceMetadata(cron),
-		Ready:                fmt.Sprintf("%d", active),
-		Status:               model.Status.Label,
-		StatusState:          model.Status.State,
-		StatusPresentation:   model.Status.Presentation,
-		StatusReason:         model.Status.Reason,
-		Restarts:             resources.Restarts,
-		Age:                  formatAge(cron.CreationTimestamp.Time),
-		AgeTimestamp:         creationTimestampMillis(cron),
-		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
-		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
-		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
-		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
-		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
-		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: common.HasForwardableContainerPorts(cron.Spec.JobTemplate.Spec.Template.Spec.Containers),
 	}
 }
 
@@ -984,16 +746,8 @@ func buildHPATargetSet(hpas []*autoscalingv1.HorizontalPodAutoscaler) map[string
 }
 
 func workloadHPATargetKey(summary WorkloadSummary) string {
-	switch summary.Ref.Kind {
-	case deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind:
-		return hpaTargetKey("apps", "v1", summary.Ref.Kind, summary.Ref.Namespace, summary.Ref.Name)
-	case jobres.Identity.Kind, cronjob.Identity.Kind:
-		return hpaTargetKey("batch", "v1", summary.Ref.Kind, summary.Ref.Namespace, summary.Ref.Name)
-	case podres.Identity.Kind:
-		return hpaTargetKey("", "v1", summary.Ref.Kind, summary.Ref.Namespace, summary.Ref.Name)
-	default:
-		return hpaTargetKey("", "", summary.Ref.Kind, summary.Ref.Namespace, summary.Ref.Name)
-	}
+	ref := summary.Ref
+	return hpaTargetKey(ref.Group, ref.Version, ref.Kind, ref.Namespace, ref.Name)
 }
 
 func hpaTargetKey(group, version, kind, namespace, name string) string {

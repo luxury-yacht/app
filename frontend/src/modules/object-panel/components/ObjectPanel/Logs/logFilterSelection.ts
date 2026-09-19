@@ -6,6 +6,27 @@ import {
   normalizeMultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 
+export type SelectedLogSources = {
+  pods: Set<string>;
+  initContainers: Set<string>;
+  containers: Set<string>;
+  debugContainers: Set<string>;
+};
+
+const valuesForPrefix = (values: string[], prefix: string): Set<string> =>
+  new Set(
+    values
+      .filter((value) => value.startsWith(prefix))
+      .map((value) => value.substring(prefix.length))
+  );
+
+export const classifySelectedLogSources = (values: string[]): SelectedLogSources => ({
+  pods: valuesForPrefix(values, 'pod:'),
+  initContainers: valuesForPrefix(values, 'init:'),
+  containers: valuesForPrefix(values, 'container:'),
+  debugContainers: valuesForPrefix(values, 'debug:'),
+});
+
 const LOG_PODS_NONE_FILTER = '__log_pods_none__';
 const LOG_CONTAINERS_NONE_FILTER = '__log_containers_none__';
 

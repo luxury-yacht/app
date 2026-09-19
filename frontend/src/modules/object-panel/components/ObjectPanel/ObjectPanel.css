@@ -1,20 +1,4 @@
-/* Object Details Flyout Styles */
-
-.object-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background-color: var(--color-bg);
-  border-left: 1px solid var(--color-border);
-  z-index: var(--z-index-panel);
-  display: flex;
-  flex-direction: column;
-}
-
-.object-panel.opening {
-  animation: slideInFromRight 0.3s ease-out;
-}
+/* Dockable object-panel content and header styles. */
 
 .object-panel-header {
   display: flex;
@@ -25,57 +9,7 @@
   position: relative;
 }
 
-.object-panel-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-left: 120px;
-  flex: 1;
-}
-
-.object-panel-title .badge {
-  flex-shrink: 0;
-}
-
-.object-panel-title h2 {
-  margin: 0;
-  font-size: var(--font-size-title);
-  font-weight: var(--font-weight-bold);
-  padding-left: 0.5rem;
-  color: var(--color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.object-panel-close-button {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 30px;
-  height: 30px;
-  border: none;
-  background: none;
-  color: var(--color-text-secondary);
-  font-size: 24px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--border-radius-sm);
-  transition:
-    background-color 0.2s,
-    color 0.2s;
-}
-
-.object-panel-close-button:hover {
-  background-color: var(--color-bg-tertiary);
-  color: var(--color-text);
-}
-
 /* Tabs use the shared styles from styles/components/tabs.css */
-.object-panel .tab-item,
 .object-panel-body .tab-item {
   cursor: pointer;
 }
@@ -146,25 +80,8 @@
 }
 
 /* Closing animations */
-.object-panel.closing {
-  animation: slideOutToRight 0.3s ease-in forwards;
-}
-
 /* Table row hover effect for clickable rows */
-.table-container tbody tr:hover {
-  background-color: var(--color-bg-tertiary);
-  transition: background-color 0.2s;
-}
-
 /* Dockable Object Panel Header Styles */
-.object-panel-header-content {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  width: 100%;
-  padding: 0 10px;
-}
-
 .object-panel-info {
   display: flex;
   align-items: center;
@@ -180,11 +97,5 @@
   color: var(--color-text);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.object-namespace {
-  font-size: 12px;
-  color: var(--color-text-tertiary);
   white-space: nowrap;
 }

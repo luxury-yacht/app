@@ -8,14 +8,10 @@
 
 package clusterrole
 
-import "fmt"
+import "github.com/luxury-yacht/app/backend/resourcemodel"
 
 // DescribeSummary renders the one-line ClusterRole summary used by both snapshot
 // RBAC summaries and the detail view.
 func DescribeSummary(facts Facts) string {
-	summary := fmt.Sprintf("Rules: %d", len(facts.Rules))
-	if facts.AggregationRule != nil {
-		summary += " (aggregated)"
-	}
-	return summary
+	return resourcemodel.RBACRuleSummary(len(facts.Rules), facts.AggregationRule != nil)
 }

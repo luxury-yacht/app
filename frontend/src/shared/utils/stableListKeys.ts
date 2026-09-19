@@ -13,7 +13,7 @@ export const withStableListKeys = <T>(
     const occurrence = (occurrences.get(baseKey) ?? 0) + 1;
     occurrences.set(baseKey, occurrence);
     return {
-      key: occurrence === 1 ? baseKey : `${baseKey}#${occurrence}`,
+      key: JSON.stringify([baseKey, occurrence]),
       value,
     };
   });

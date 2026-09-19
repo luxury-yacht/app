@@ -96,12 +96,9 @@ export const readObjectYAMLForRef = (target: ObjectYAMLReadTarget) =>
     target.name
   );
 
-export const readCatalogObjectMatchForRef = (
-  target: ObjectReadTarget,
-  options?: { clusterId?: string | null }
-) =>
+export const readCatalogObjectMatchForRef = (target: ObjectReadTarget) =>
   FindCatalogObjectMatch(
-    options?.clusterId?.trim() || target.clusterId,
+    target.clusterId,
     namespaceOrEmpty(target.namespace),
     target.group,
     target.version,

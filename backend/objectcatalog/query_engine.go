@@ -129,6 +129,16 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 	}
 }
 
+// catalogQueryStoreFromRows builds the same query indexes for publication and
+// the pre-publication snapshot fallback.
+func catalogQueryStoreFromRows(rows []Summary) *querypage.Store[Summary] {
+	store := querypage.NewStore(newCatalogQueryStoreSchema())
+	for _, row := range rows {
+		store.Upsert(row)
+	}
+	return store
+}
+
 // catalogEngineUID encodes the catalog identity chain
 // (kind/namespace/name/group/version/resource/uid) as a single order-preserving
 // string. Its ascending lexical order equals compareCatalogIdentity.
@@ -366,10 +376,7 @@ func (s *Service) queryViaEngineFromSnapshot(opts QueryOptions, descriptors []De
 	if len(descriptors) == 0 {
 		descriptors = s.Descriptors()
 	}
-	store := querypage.NewStore(newCatalogQueryStoreSchema())
-	for _, row := range rows {
-		store.Upsert(row)
-	}
+	store := catalogQueryStoreFromRows(rows)
 	resolveFacets := func(metadataExact bool) ([]KindInfo, []string) {
 		return catalogEngineSnapshotFacets(rows, opts, metadataExact)
 	}

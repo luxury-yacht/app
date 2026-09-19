@@ -1,47 +1,12 @@
 import { stripClusterScope } from './clusterScope';
 import type { RefreshContext } from './RefreshManager';
+import { RESOURCE_STREAM_DOMAINS, type ResourceDomain } from './streaming/resourceStreamDomains';
 import type { RefreshDomain } from './types';
 
-export type ResourceStreamRefreshDomain =
-  | 'pods'
-  | 'namespace-workloads'
-  | 'namespace-config'
-  | 'namespace-network'
-  | 'namespace-rbac'
-  | 'namespace-custom'
-  | 'namespace-helm'
-  | 'namespace-autoscaling'
-  | 'namespace-quotas'
-  | 'namespace-storage'
-  | 'cluster-rbac'
-  | 'cluster-storage'
-  | 'cluster-config'
-  | 'cluster-crds'
-  | 'cluster-custom'
-  | 'nodes';
+const resourceStreamDomains = new Set<RefreshDomain>(RESOURCE_STREAM_DOMAINS);
 
-const RESOURCE_STREAM_DOMAINS = new Set<RefreshDomain>([
-  'pods',
-  'namespace-workloads',
-  'namespace-config',
-  'namespace-network',
-  'namespace-rbac',
-  'namespace-custom',
-  'namespace-helm',
-  'namespace-autoscaling',
-  'namespace-quotas',
-  'namespace-storage',
-  'cluster-rbac',
-  'cluster-storage',
-  'cluster-config',
-  'cluster-crds',
-  'cluster-custom',
-  'nodes',
-]);
-
-export const isResourceStreamDomain = (
-  domain: RefreshDomain
-): domain is ResourceStreamRefreshDomain => RESOURCE_STREAM_DOMAINS.has(domain);
+export const isResourceStreamDomain = (domain: RefreshDomain): domain is ResourceDomain =>
+  resourceStreamDomains.has(domain);
 
 // Focused Pod scopes are small leased windows used by the combined Workloads
 // view and object panels. Their owning component controls the lease lifetime,
@@ -52,7 +17,7 @@ const isFocusedPodsScope = (scope?: string): boolean => {
 };
 
 const NAMESPACE_VIEW_BY_DOMAIN: Partial<
-  Record<ResourceStreamRefreshDomain, NonNullable<RefreshContext['activeNamespaceView']>>
+  Record<ResourceDomain, NonNullable<RefreshContext['activeNamespaceView']>>
 > = {
   pods: 'workloads',
   'namespace-workloads': 'workloads',
@@ -67,7 +32,7 @@ const NAMESPACE_VIEW_BY_DOMAIN: Partial<
 };
 
 const CLUSTER_VIEW_BY_DOMAIN: Partial<
-  Record<ResourceStreamRefreshDomain, NonNullable<RefreshContext['activeClusterView']>>
+  Record<ResourceDomain, NonNullable<RefreshContext['activeClusterView']>>
 > = {
   nodes: 'nodes',
   'cluster-rbac': 'rbac',

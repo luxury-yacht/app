@@ -13,9 +13,8 @@ import (
 
 // BuildResourceModel builds the shared resource model for a BackendTLSPolicy.
 func BuildResourceModel(clusterID string, policy *gatewayv1.BackendTLSPolicy) resourcemodel.ResourceModel {
-	facts := BuildFacts(clusterID, policy)
-	status := buildStatusPresentation(policy, facts)
-	return resourcemodel.GatewayAPIResourceModel(clusterID, "BackendTLSPolicy", "backendtlspolicies", resourcemodel.ResourceScopeNamespaced, policy.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	status := buildStatusPresentation(policy)
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, policy.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts projects a BackendTLSPolicy into its semantic facts.
@@ -25,14 +24,20 @@ func BuildFacts(clusterID string, policy *gatewayv1.BackendTLSPolicy) Facts {
 		Conditions: conditions,
 		Summary:    resourcemodel.GatewayConditionsSummary(conditions),
 	}
-	for _, targetRef := range policy.Spec.TargetRefs {
-		facts.TargetRefs = append(facts.TargetRefs, resourcemodel.GatewayPolicyTargetRefLink(clusterID, policy.Namespace, targetRef))
-	}
+	facts.TargetRefs = targetLinks(clusterID, policy)
 	return facts
 }
 
-func buildStatusPresentation(policy *gatewayv1.BackendTLSPolicy, facts Facts) resourcemodel.ResourceStatusPresentation {
-	state := resourcemodel.GatewayCountState(len(facts.TargetRefs))
-	label := resourcemodel.CountLabel(len(facts.TargetRefs), "target", "targets")
-	return resourcemodel.GatewayStatusFromConditions(policy.ObjectMeta, state, label, facts.Conditions)
+func buildStatusPresentation(policy *gatewayv1.BackendTLSPolicy) resourcemodel.ResourceStatusPresentation {
+	state := resourcemodel.GatewayCountState(len(policy.Spec.TargetRefs))
+	label := resourcemodel.CountLabel(len(policy.Spec.TargetRefs), "target", "targets")
+	return resourcemodel.GatewayStatusFromConditions(policy.ObjectMeta, state, label, resourcemodel.GatewayConditionFacts(resourcemodel.GatewayBackendTLSConditions(policy.Status.Ancestors)))
+}
+
+func targetLinks(clusterID string, policy *gatewayv1.BackendTLSPolicy) []resourcemodel.ResourceLink {
+	var links []resourcemodel.ResourceLink
+	for _, targetRef := range policy.Spec.TargetRefs {
+		links = append(links, resourcemodel.GatewayPolicyTargetRefLink(clusterID, policy.Namespace, targetRef))
+	}
+	return links
 }

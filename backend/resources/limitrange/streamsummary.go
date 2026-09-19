@@ -17,5 +17,5 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, limit *corev1.LimitRange) s
 	if limit == nil {
 		return streamrows.QuotaSummary{}
 	}
-	return streamrows.NewQuotaSummary(meta, Identity, limit, DescribeSummary(BuildFacts(limit)))
+	return streamrows.NewQuotaSummary(meta, Identity, limit, describeCounts(len(limit.Spec.Limits)))
 }

@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"sync/atomic"
 )
@@ -134,16 +135,22 @@ func (m *ClusterRuntimeManager) stopAuthRecovery() {
 	if m == nil {
 		return
 	}
-	m.clusterClientsMu.Lock()
-	clients := make([]*clusterClients, 0, len(m.clusterClients))
-	for _, item := range m.clusterClients {
-		clients = append(clients, item)
-	}
-	m.clusterClientsMu.Unlock()
-	for _, item := range clients {
+	for _, item := range m.snapshotClusterClients() {
 		if item != nil && item.authManager != nil {
 			item.authManager.Shutdown()
 		}
 	}
 	m.execDiagnostics.close()
+}
+
+// Snapshot membership before calling client services. Auth callbacks hold the
+// auth-manager lock while looking up clients, so callers must release the
+// client-map lock before reading auth state, stopping recovery, or doing I/O.
+func (m *ClusterRuntimeManager) snapshotClusterClients() map[string]*clusterClients {
+	if m == nil {
+		return nil
+	}
+	m.clusterClientsMu.Lock()
+	defer m.clusterClientsMu.Unlock()
+	return maps.Clone(m.clusterClients)
 }

@@ -10,6 +10,7 @@ import {
   type MultiSelectFilterSelection,
   migrateLegacyExactMultiSelectFilterSelection,
   migrateLegacyMultiSelectFilterSelection,
+  normalizeExactMultiSelectFilterSelection,
   normalizeMultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import {
@@ -77,8 +78,6 @@ export interface GridTableFilterPersistenceOptions {
 
 export interface GridTablePruneContext<T> {
   columns: GridColumnDefinition<T>[];
-  rows?: T[];
-  keyExtractor?: (item: T, index: number) => string;
   filterOptions?: GridTableFilterPersistenceOptions;
   pageSizeOptions?: readonly number[];
 }
@@ -409,7 +408,9 @@ const pruneFilterSelection = (
   allowed: string[] | undefined,
   identitySensitive = false
 ): MultiSelectFilterSelection => {
-  const normalized = normalizeMultiSelectFilterSelection(selection);
+  const normalized = identitySensitive
+    ? normalizeExactMultiSelectFilterSelection(selection)
+    : normalizeMultiSelectFilterSelection(selection);
   if (normalized.mode !== 'some') {
     return normalized;
   }

@@ -54,7 +54,7 @@ func (s *Service) buildNamespaceDetails(ctx context.Context, namespace *corev1.N
 	opts := resourcemodel.ResourceModelBuildOptions{
 		Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeRelationshipFacts | resourcemodel.MaterializeDetailFacts,
 	}
-	model := BuildResourceModel(s.deps.ClusterID, namespace, hasWorkloads, !workloadsUnknown, quotas, limits, opts)
+	model := BuildResourceModel(s.deps.ClusterID, namespace, hasWorkloads, !workloadsUnknown)
 	facts := BuildFacts(s.deps.ClusterID, namespace, hasWorkloads, !workloadsUnknown, quotas, limits, opts)
 	details := &NamespaceDetails{
 		Kind:             model.Ref.Kind,

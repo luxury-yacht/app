@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/klog/v2"
 )
 
 // Namespace-partitioned ingestion (docs/architecture/namespace-scope.md): a scoped
@@ -50,7 +49,7 @@ func (s *ProjectingStore) ReplacePartition(namespace string, list []interface{},
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	next, err := s.projectPartitionRows(list)
+	next, err := s.projectRows(list, " during partition replace")
 	if err != nil {
 		return err
 	}
@@ -58,6 +57,7 @@ func (s *ProjectingStore) ReplacePartition(namespace string, list []interface{},
 	s.emitPartitionChanges(prefix, next)
 	s.replacePartitionRows(prefix, next)
 	s.recordPartitionVersion(namespace, resourceVersion)
+	s.markPartitionSyncedLocked(namespace)
 	s.rebuildIndexesLocked()
 	return nil
 }
@@ -70,26 +70,6 @@ func (s *ProjectingStore) replaceUnpartitioned(list []interface{}, resourceVersi
 	s.markPartitionSyncedLocked("")
 	s.mu.Unlock()
 	return nil
-}
-
-func (s *ProjectingStore) projectPartitionRows(list []interface{}) (map[string]interface{}, error) {
-	next := make(map[string]interface{}, len(list))
-	for _, obj := range list {
-		key, err := keyOf(obj)
-		if err != nil {
-			return nil, cache.KeyError{Obj: obj, Err: err}
-		}
-		projected, err := s.project(obj)
-		if err != nil {
-			if !s.projectErrLogged {
-				s.projectErrLogged = true
-				klog.V(2).Infof("ingest: projection failed for %q during partition replace, skipping (logged once): %v", key, err)
-			}
-			continue
-		}
-		next[key] = projected
-	}
-	return next, nil
 }
 
 func (s *ProjectingStore) emitPartitionChanges(prefix string, next map[string]interface{}) {
@@ -128,7 +108,6 @@ func (s *ProjectingStore) recordPartitionVersion(namespace, resourceVersion stri
 	}
 	s.partitionRVs[namespace] = resourceVersion
 	s.rv = resourceVersion
-	s.markPartitionSyncedLocked(namespace)
 }
 
 // MarkPartitionSynced is MarkSynced for one partition — the stage-3 resume
@@ -165,11 +144,7 @@ func (s *ProjectingStore) markPartitionSyncedLocked(namespace string) {
 func (s *ProjectingStore) BookmarkPartition(namespace, rv string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.partitionRVs == nil {
-		s.partitionRVs = make(map[string]string)
-	}
-	s.partitionRVs[namespace] = rv
-	s.rv = rv
+	s.recordPartitionVersion(namespace, rv)
 }
 
 // PartitionResourceVersions returns the latest per-partition resource

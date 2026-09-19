@@ -63,7 +63,7 @@ func (s *Service) buildDaemonSetDetails(
 	model := BuildResourceModel(s.deps.ClusterID, daemonSet)
 	facts := BuildFacts(daemonSet)
 	podInfos := workloads.BuildPodSummaries(s.deps.ClusterID, "DaemonSet", daemonSet.Name, "apps/v1", podsList, podMetrics)
-	podSummary, _ := workloads.SummarizePodMetrics(podsList, podMetrics)
+	podSummary := workloads.SummarizePodMetrics(podsList, podMetrics)
 
 	// All intrinsic spec/status fields come from the model facts (single extraction).
 	details := &DaemonSetDetails{

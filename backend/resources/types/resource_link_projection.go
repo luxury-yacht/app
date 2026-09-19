@@ -2,21 +2,13 @@ package types
 
 import "github.com/luxury-yacht/app/backend/resourcemodel"
 
-func ObjectRefFromResourceRef(ref resourcemodel.ResourceRef) ObjectRef {
-	return ref
-}
-
-func DisplayRefFromResourceDisplay(ref resourcemodel.DisplayRef) DisplayRef {
-	return ref
-}
-
 func RefOrDisplayFromResourceLink(link resourcemodel.ResourceLink) RefOrDisplay {
 	if link.Ref != nil {
-		ref := ObjectRefFromResourceRef(*link.Ref)
+		ref := *link.Ref
 		return RefOrDisplay{Ref: &ref}
 	}
 	if link.Display != nil {
-		display := DisplayRefFromResourceDisplay(*link.Display)
+		display := *link.Display
 		return RefOrDisplay{Display: &display}
 	}
 	return RefOrDisplay{}
@@ -42,7 +34,7 @@ func ObjectRefsFromResourceLinks(links []resourcemodel.ResourceLink) []ObjectRef
 		if link.Ref == nil {
 			continue
 		}
-		refs = append(refs, ObjectRefFromResourceRef(*link.Ref))
+		refs = append(refs, *link.Ref)
 	}
 	if len(refs) == 0 {
 		return nil

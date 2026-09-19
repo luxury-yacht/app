@@ -14,6 +14,59 @@ import {
 } from './objectIdentity';
 
 describe('objectIdentity', () => {
+  it.each([
+    buildObjectReference,
+    buildRequiredObjectReference,
+    buildRelatedObjectReference,
+    buildRequiredRelatedObjectReference,
+  ])('does not invent a built-in version for a custom group in %s', (build) => {
+    const input = {
+      kind: 'ConfigMap',
+      name: 'settings',
+      namespace: 'team-a',
+      clusterId: 'Alpha:ctx',
+      group: 'custom.example.com',
+    };
+    expect(() => build(input)).toThrow(/missing version/);
+    expect(build({ ...input, version: 'v1alpha2' })).toMatchObject({
+      ...input,
+      version: 'v1alpha2',
+    });
+  });
+
+  it.each([
+    buildObjectReference,
+    buildRequiredObjectReference,
+    buildRelatedObjectReference,
+    buildRequiredRelatedObjectReference,
+  ])('rejects a non-core kind explicitly assigned to the core group in %s', (build) => {
+    expect(() =>
+      build({
+        kind: 'Deployment',
+        name: 'api',
+        clusterId: 'Alpha:ctx',
+        group: '',
+        version: 'v1',
+      })
+    ).toThrow(/missing group/);
+  });
+
+  it.each([buildRelatedObjectReference, buildRequiredRelatedObjectReference])(
+    'preserves an explicit core group over apiVersion defaults in %s',
+    (build) => {
+      expect(
+        build({
+          kind: 'Pod',
+          name: 'api',
+          clusterId: 'Alpha:ctx',
+          group: '',
+          version: 'v1',
+          apiVersion: 'custom.example.com/v2',
+        })
+      ).toMatchObject({ group: '', version: 'v1', clusterId: 'Alpha:ctx' });
+    }
+  );
+
   it('builds a canonical object reference for built-in kinds', () => {
     expect(
       buildObjectReference({

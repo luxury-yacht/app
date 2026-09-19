@@ -588,6 +588,29 @@ func TestPollerRefreshCapturesSampleTimestamps(t *testing.T) {
 	require.Equal(t, podStamp, poller.LatestPodUsage()["default/api-0"].Timestamp)
 }
 
+func TestUsageProjectionPreservesSparseSamplesAndContainerTotals(t *testing.T) {
+	stamp := metav1.NewTime(time.Unix(1700000000, 0))
+	usage := corev1.ResourceList{
+		corev1.ResourceCPU:              resource.MustParse("125m"),
+		corev1.ResourceMemory:           resource.MustParse("2Mi"),
+		corev1.ResourceEphemeralStorage: resource.MustParse("1Gi"),
+	}
+	nodes := nodeUsageFromMetrics([]metricsv1beta1.NodeMetrics{
+		{ObjectMeta: metav1.ObjectMeta{Name: "empty"}, Timestamp: stamp},
+		{ObjectMeta: metav1.ObjectMeta{Name: "busy"}, Timestamp: stamp, Usage: usage},
+	})
+	require.Equal(t, NodeUsage{Timestamp: stamp.Time}, nodes["empty"])
+	require.Equal(t, NodeUsage{CPUUsageMilli: 125, MemoryUsageBytes: 2 * 1024 * 1024, Timestamp: stamp.Time}, nodes["busy"])
+	pods := podUsageFromMetrics([]metricsv1beta1.PodMetrics{{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "team", Name: "pod"},
+		Timestamp:  stamp,
+		Containers: []metricsv1beta1.ContainerMetrics{
+			{Usage: usage}, {}, {Usage: usage},
+		},
+	}})
+	require.Equal(t, PodUsage{CPUUsageMilli: 250, MemoryUsageBytes: 4 * 1024 * 1024, Timestamp: stamp.Time}, pods["team/pod"])
+}
+
 func TestJitterDurationHandlesNonPositiveFactor(t *testing.T) {
 	base := time.Second
 	if got := jitterDuration(base, 0); got != base {
@@ -617,8 +640,7 @@ func TestLatestUsageReturnsCopies(t *testing.T) {
 func TestDisabledPollerMetadata(t *testing.T) {
 	t.Helper()
 
-	recorder := telemetry.NewRecorder()
-	poller := NewDisabledPoller(recorder, "")
+	poller := NewDisabledPoller("")
 
 	require.NoError(t, poller.Start(context.Background()))
 	require.NoError(t, poller.Stop(context.Background()))
@@ -635,7 +657,7 @@ func TestDisabledPollerMetadata(t *testing.T) {
 	// serve-time grace period never clears LastError.
 	require.True(t, meta.Disabled)
 
-	custom := NewDisabledPoller(nil, "cluster has no metrics API")
+	custom := NewDisabledPoller("cluster has no metrics API")
 	require.Equal(t, "cluster has no metrics API", custom.Metadata().LastError)
 	require.True(t, custom.Metadata().Disabled)
 }

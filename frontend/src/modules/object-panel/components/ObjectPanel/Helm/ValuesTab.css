@@ -7,74 +7,8 @@
 }
 
 /* Floating control panel like YAML tab */
-.values-mode-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  margin-right: auto;
-}
-
-.values-content {
-  flex: 1;
-  overflow: auto;
-  border-radius: var(--border-radius-sm);
-  padding-top: 0.5rem;
-}
-
-.values-pre {
-  margin: 0;
-  padding: 0;
-  font-family:
-    "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
-  font-size: var(--font-size-mono);
-  line-height: 1.5;
-  overflow-x: auto;
-  min-height: 100%;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.values-pre > div {
-  display: flex;
-  padding-left: 0;
-  user-select: text;
-}
-
-.values-line-number {
-  display: inline-block;
-  width: 1rem;
-  padding-left: 0.5rem;
-  padding-right: 1rem;
-  text-align: right;
-  color: #858585;
-  user-select: none;
-  -webkit-user-select: none;
-  flex-shrink: 0;
-}
-
-.values-display-error,
-.values-display-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--color-text-secondary);
-}
-
-.values-display-error .error-message {
-  color: var(--color-error, #dc3545);
-  font-size: 14px;
-  padding: 20px;
-}
-
 /* Ensure proper scrolling */
 .object-panel-tab-content .values-display {
   height: 100%;
   min-height: 0;
-}
-
-/* Highlighting for overridden values */
-.values-line-overridden {
-  background-color: var(--helm-values-override-bg);
-  position: relative;
 }

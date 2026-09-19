@@ -6,12 +6,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { requireValue } from '@/test-utils/requireValue';
 import { resetLogViewerPrefsCacheForTesting } from '../Logs/logViewerPrefsCache';
 import NodeLogsTab from './NodeLogsTab';
+import type { fetchNodeLogs, NodeLogFetchResult } from './nodeLogsApi';
 
-const mockFetchNodeLogs = vi.fn();
+const mockFetchNodeLogs = vi.fn<typeof fetchNodeLogs>();
 const handleInlineMock = vi.hoisted(() => vi.fn());
 
 vi.mock('./nodeLogsApi', () => ({
-  fetchNodeLogs: (...args: unknown[]) => mockFetchNodeLogs(...args),
+  fetchNodeLogs: (...args: Parameters<typeof fetchNodeLogs>) => mockFetchNodeLogs(...args),
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -147,9 +148,12 @@ describe('NodeLogsTab', () => {
 
   it('shows a selection prompt instead of auto-loading the first source', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: 'line one\nline two',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'line one\nline two',
+      },
     });
 
     await renderTab();
@@ -163,9 +167,12 @@ describe('NodeLogsTab', () => {
 
   it('tabs into raw output and leaves its scrolling keys available', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: 'first\nsecond',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'first\nsecond',
+      },
     });
     await renderTab();
     await selectSource('kubelet');
@@ -212,9 +219,12 @@ describe('NodeLogsTab', () => {
   it('refetches when the selected source changes', async () => {
     mockFetchNodeLogs.mockImplementation(
       async (_clusterId: string, _nodeName: string, request: { sourcePath: string }) => ({
-        source: sources.find((source) => source.path === request.sourcePath) ?? sources[0],
-        sourcePath: request.sourcePath,
-        content: `content for ${request.sourcePath}`,
+        status: 'executed',
+        data: {
+          source: sources.find((source) => source.path === request.sourcePath) ?? sources[0],
+          sourcePath: request.sourcePath,
+          content: `content for ${request.sourcePath}`,
+        },
       })
     );
 
@@ -233,9 +243,12 @@ describe('NodeLogsTab', () => {
 
   it('renders node log sources as grouped tree-like dropdown options', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: 'line one',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'line one',
+      },
     });
 
     await renderTab({
@@ -287,9 +300,12 @@ describe('NodeLogsTab', () => {
 
   it('filters rendered log lines client-side', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: 'info boot complete\nerror failed to reconcile',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'info boot complete\nerror failed to reconcile',
+      },
     });
 
     await renderTab();
@@ -303,9 +319,12 @@ describe('NodeLogsTab', () => {
 
   it('can invert the filter from the icon bar', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: 'info boot complete\nerror failed to reconcile',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'info boot complete\nerror failed to reconcile',
+      },
     });
 
     await renderTab();
@@ -329,9 +348,12 @@ describe('NodeLogsTab', () => {
 
   it('can highlight matches from the icon bar', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: 'info boot complete\nerror failed to reconcile',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'info boot complete\nerror failed to reconcile',
+      },
     });
 
     await renderTab();
@@ -356,9 +378,12 @@ describe('NodeLogsTab', () => {
 
   it('highlights ANSI-colored node log text in the DOM renderer', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: '\u001b[31merror\u001b[0m failed to reconcile',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: '\u001b[31merror\u001b[0m failed to reconcile',
+      },
     });
 
     await renderTab();
@@ -385,9 +410,12 @@ describe('NodeLogsTab', () => {
 
   it('supports no-wrap for ANSI-colored node logs in the DOM renderer', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: '\u001b[31merror\u001b[0m failed to reconcile',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: '\u001b[31merror\u001b[0m failed to reconcile',
+      },
     });
 
     await renderTab();
@@ -410,9 +438,12 @@ describe('NodeLogsTab', () => {
 
   it('shows an error for invalid regex filters when regex mode is enabled', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: 'info boot complete\nerror failed to reconcile',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'info boot complete\nerror failed to reconcile',
+      },
     });
 
     await renderTab();
@@ -437,9 +468,12 @@ describe('NodeLogsTab', () => {
 
   it('can pretty-print JSON logs from the icon bar', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: '{"level":"info","message":"boot complete"}',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: '{"level":"info","message":"boot complete"}',
+      },
     });
 
     await renderTab();
@@ -467,9 +501,12 @@ describe('NodeLogsTab', () => {
 
   it('can render parseable JSON logs as a table from the icon bar', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: '{"level":"info","message":"boot complete"}',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: '{"level":"info","message":"boot complete"}',
+      },
     });
 
     await renderTab();
@@ -496,16 +533,19 @@ describe('NodeLogsTab', () => {
 
   it('exports parsed node columns as data, including metadata-like keys and nested values', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: JSON.stringify({
-        _pod: 'literal',
-        level: 'info',
-        count: 0,
-        enabled: false,
-        extra: { value: 'x' },
-        message: 'boot, complete',
-      }),
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: JSON.stringify({
+          _pod: 'literal',
+          level: 'info',
+          count: 0,
+          enabled: false,
+          extra: { value: 'x' },
+          message: 'boot, complete',
+        }),
+      },
     });
     await renderTab();
     await selectSource('kubelet');
@@ -528,9 +568,12 @@ describe('NodeLogsTab', () => {
 
   it('supports parsed-table row expansion and collapse like container logs', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: '{"level":"info","message":"boot complete"}',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: '{"level":"info","message":"boot complete"}',
+      },
     });
 
     await renderTab();
@@ -574,10 +617,13 @@ describe('NodeLogsTab', () => {
 
   it('shows a truncation notice when the backend returns a truncated response', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: 'recent log line',
-      truncated: true,
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'recent log line',
+        truncated: true,
+      },
     });
 
     await renderTab();
@@ -588,9 +634,12 @@ describe('NodeLogsTab', () => {
 
   it('reports a node-log failure displayed inline', async () => {
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      error: 'node log access denied',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        error: 'node log access denied',
+      },
     });
 
     await renderTab();
@@ -662,9 +711,12 @@ describe('NodeLogsTab', () => {
     });
 
     mockFetchNodeLogs.mockResolvedValue({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: 'line one\nline two\nline three',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'line one\nline two\nline three',
+      },
     });
 
     await renderTab();
@@ -711,9 +763,12 @@ describe('NodeLogsTab', () => {
 
     mockFetchNodeLogs.mockImplementation(
       async (_clusterId: string, _nodeName: string, request: { sourcePath: string }) => ({
-        source: sources.find((source) => source.path === request.sourcePath) ?? sources[0],
-        sourcePath: request.sourcePath,
-        content: `content for ${request.sourcePath}`,
+        status: 'executed',
+        data: {
+          source: sources.find((source) => source.path === request.sourcePath) ?? sources[0],
+          sourcePath: request.sourcePath,
+          content: `content for ${request.sourcePath}`,
+        },
       })
     );
 
@@ -753,12 +808,15 @@ describe('NodeLogsTab', () => {
   });
 
   it('clears the previous source logs and shows loading while a new source is fetching', async () => {
-    let secondSourceResolve: ((value: unknown) => void) | null = null;
+    let secondSourceResolve: ((value: NodeLogFetchResult) => void) | null = null;
     mockFetchNodeLogs
       .mockResolvedValueOnce({
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'content for journal/kubelet',
+        status: 'executed',
+        data: {
+          source: sources[0],
+          sourcePath: sources[0].path,
+          content: 'content for journal/kubelet',
+        },
       })
       .mockImplementationOnce(
         () =>
@@ -799,9 +857,12 @@ describe('NodeLogsTab', () => {
 
     await act(async () => {
       secondSourceResolve?.({
-        source: sources[1],
-        sourcePath: sources[1].path,
-        content: 'content for journal/containerd',
+        status: 'executed',
+        data: {
+          source: sources[1],
+          sourcePath: sources[1].path,
+          content: 'content for journal/containerd',
+        },
       });
       await Promise.resolve();
       await Promise.resolve();
@@ -814,12 +875,15 @@ describe('NodeLogsTab', () => {
 
   it('keeps existing log content mounted during refresh', async () => {
     vi.useFakeTimers();
-    let refreshResolve: ((value: unknown) => void) | null = null;
+    let refreshResolve: ((value: NodeLogFetchResult) => void) | null = null;
     mockFetchNodeLogs
       .mockResolvedValueOnce({
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'line one\nline two',
+        status: 'executed',
+        data: {
+          source: sources[0],
+          sourcePath: sources[0].path,
+          content: 'line one\nline two',
+        },
       })
       .mockImplementationOnce(
         () =>
@@ -842,9 +906,12 @@ describe('NodeLogsTab', () => {
 
       await act(async () => {
         refreshResolve?.({
-          source: sources[0],
-          sourcePath: sources[0].path,
-          content: 'line one\nline two\nline three',
+          status: 'executed',
+          data: {
+            source: sources[0],
+            sourcePath: sources[0].path,
+            content: 'line one\nline two\nline three',
+          },
         });
         await Promise.resolve();
         await Promise.resolve();
@@ -859,14 +926,20 @@ describe('NodeLogsTab', () => {
     vi.useFakeTimers();
     mockFetchNodeLogs
       .mockResolvedValueOnce({
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'line one\nline two',
+        status: 'executed',
+        data: {
+          source: sources[0],
+          sourcePath: sources[0].path,
+          content: 'line one\nline two',
+        },
       })
       .mockResolvedValueOnce({
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'line two\nline three',
+        status: 'executed',
+        data: {
+          source: sources[0],
+          sourcePath: sources[0].path,
+          content: 'line two\nline three',
+        },
       });
 
     try {
@@ -901,9 +974,12 @@ describe('NodeLogsTab', () => {
   it('keeps current node logs when a background refresh is blocked', async () => {
     vi.useFakeTimers();
     mockFetchNodeLogs.mockResolvedValueOnce({
-      source: sources[0],
-      sourcePath: sources[0].path,
-      content: 'line one\nline two',
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'line one\nline two',
+      },
     });
     mockFetchNodeLogs.mockResolvedValueOnce({
       status: 'blocked',

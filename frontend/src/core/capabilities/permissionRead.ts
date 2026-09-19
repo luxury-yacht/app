@@ -12,9 +12,8 @@ export interface QueryPayloadItem {
   id: string;
   clusterId: string;
   /**
-   * API group for the target kind. Optional: when present alongside
-   * `version`, the backend routes through the strict GVK resolver. When
-   * absent, the backend falls back to kind-only resolution.
+   * API group for the target kind; the empty string identifies core resources.
+   * The backend requires a version and resolves the exact GVK.
    */
   group?: string;
   /** API version paired with `group`. */

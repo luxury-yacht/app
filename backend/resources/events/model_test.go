@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -109,4 +110,19 @@ func TestBuildFactsOmitsMissingSeriesObservationTime(t *testing.T) {
 
 	require.NotNil(t, facts.SeriesCount)
 	require.Nil(t, facts.SeriesLastObservedTime)
+}
+
+func TestBuildFactsKeepsMalformedEventTargetsDisplayOnly(t *testing.T) {
+	ref := corev1.ObjectReference{APIVersion: "apps/v1/extra", Kind: "Deployment", Namespace: "apps", Name: "orders", UID: "target-uid"}
+	facts := BuildFacts("cluster-a", &corev1.Event{InvolvedObject: ref, Related: &ref})
+	for _, link := range []*resourcemodel.ResourceLink{facts.InvolvedObject, facts.RelatedObject} {
+		require.NotNil(t, link)
+		require.Nil(t, link.Ref, "a malformed event target must not open a different valid object")
+		require.NotNil(t, link.Display)
+		require.Equal(t, "cluster-a", link.Display.ClusterID)
+		require.Equal(t, "Deployment", link.Display.Kind)
+		require.Equal(t, "apps", link.Display.Namespace)
+		require.Equal(t, "orders", link.Display.Name)
+		require.Equal(t, "target-uid", link.Display.UID)
+	}
 }

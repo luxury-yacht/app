@@ -19,6 +19,6 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, r *rbacv1.Role) streamrows.
 	if r == nil {
 		return streamrows.RBACSummary{}
 	}
-	details := DescribeSummary(BuildFacts(r, nil, resourcemodel.ResourceModelBuildOptions{}))
+	details := resourcemodel.RBACRuleSummary(len(r.Rules), false)
 	return streamrows.NewRBACSummary(meta, Identity, r, details)
 }

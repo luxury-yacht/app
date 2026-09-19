@@ -127,7 +127,6 @@ class RefreshOrchestrator {
     METRICS_DEMAND_RETRY_INITIAL_MS
   );
 
-  private readonly suspendedDomains = new Map<RefreshDomain, boolean>();
   private contextVersion = 0;
   private context: RefreshContext = {
     currentView: 'namespace',
@@ -663,16 +662,21 @@ class RefreshOrchestrator {
     resetScopedDomainState(domain, normalizedScope);
   }
 
-  startStreamingDomain(domain: RefreshDomain, scope: string): void {
-    const config = this.getConfig(domain);
-    if (!config.streaming) {
+  private getStreamingTarget(domain: RefreshDomain, scope: string) {
+    const { streaming } = this.getConfig(domain);
+    if (!streaming) {
       throw new Error(`Domain "${domain}" is not registered as streaming`);
     }
     const normalizedScope = this.normalizeDomainScope(domain, scope);
     if (!normalizedScope) {
       throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
     }
-    this.startStreamingScope(domain, normalizedScope, config.streaming);
+    return { streaming, scope: normalizedScope };
+  }
+
+  startStreamingDomain(domain: RefreshDomain, scope: string): void {
+    const target = this.getStreamingTarget(domain, scope);
+    this.startStreamingScope(domain, target.scope, target.streaming);
   }
 
   stopStreamingDomain(
@@ -680,44 +684,23 @@ class RefreshOrchestrator {
     scope: string,
     options: { reset?: boolean } = {}
   ): void {
-    const config = this.getConfig(domain);
-    if (!config.streaming) {
-      throw new Error(`Domain "${domain}" is not registered as streaming`);
-    }
-    const normalizedScope = this.normalizeDomainScope(domain, scope);
-    if (!normalizedScope) {
-      throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
-    }
-    this.stopStreamingScope(domain, normalizedScope, config.streaming, options.reset ?? false);
+    const target = this.getStreamingTarget(domain, scope);
+    this.stopStreamingScope(domain, target.scope, target.streaming, options.reset ?? false);
   }
 
   async refreshStreamingDomainOnce(domain: RefreshDomain, scope: string): Promise<void> {
-    const config = this.getConfig(domain);
-    if (!config.streaming) {
-      throw new Error(`Domain "${domain}" is not registered as streaming`);
-    }
-    if (!config.streaming.refreshOnce) {
-      await this.restartStreamingDomain(domain, scope);
+    const target = this.getStreamingTarget(domain, scope);
+    if (target.streaming.refreshOnce) {
+      await target.streaming.refreshOnce(target.scope);
       return;
     }
-    const normalizedScope = this.normalizeDomainScope(domain, scope);
-    if (!normalizedScope) {
-      throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
-    }
-    await config.streaming.refreshOnce(normalizedScope);
+    await this.restartStreamingDomain(domain, target.scope);
   }
 
   async restartStreamingDomain(domain: RefreshDomain, scope: string): Promise<void> {
-    const config = this.getConfig(domain);
-    if (!config.streaming) {
-      throw new Error(`Domain "${domain}" is not registered as streaming`);
-    }
-    const normalizedScope = this.normalizeDomainScope(domain, scope);
-    if (!normalizedScope) {
-      throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
-    }
-    this.stopStreamingScope(domain, normalizedScope, config.streaming, false);
-    await this.startStreamingScope(domain, normalizedScope, config.streaming);
+    const target = this.getStreamingTarget(domain, scope);
+    this.stopStreamingScope(domain, target.scope, target.streaming, false);
+    await this.startStreamingScope(domain, target.scope, target.streaming);
   }
 
   getSelectedNamespace(): string | undefined {
@@ -855,11 +838,8 @@ class RefreshOrchestrator {
   }
 
   private stopRuntimeStreaming(runtime: ClusterRefreshRuntime, reset: boolean): void {
-    runtime.getStreamingLifecycleKeys().forEach((key) => {
-      const [domainPart, scopePart] = key.split('::');
-      const domain = domainPart as RefreshDomain;
-      const scope = scopePart === '*' ? '' : scopePart;
-      if (!scope) {
+    runtime.getStreamingScopes().forEach(({ domain, scope }) => {
+      if (!scope || scope === '*') {
         return;
       }
       const config = this.configs.get(domain);
@@ -1989,9 +1969,6 @@ class RefreshOrchestrator {
     this.clearAllBlockedStreaming();
     this.clearAllStreamHealth();
     this.configs.forEach((_config, domain) => {
-      const wasEnabled = this.hasEnabledScopedSources(domain);
-      this.suspendedDomains.set(domain, wasEnabled);
-
       this.setDomainEnabled(domain, false);
       this.resetDomain(domain);
 
@@ -2029,7 +2006,6 @@ class RefreshOrchestrator {
   private readonly handleKubeconfigChanged = () => {
     this.incrementContextVersion();
     this.errorNotifier.suppressNetworkErrors(6000);
-    this.suspendedDomains.clear();
     this.clearAllBlockedStreaming();
     this.clearAllStreamHealth();
   };

@@ -22,7 +22,11 @@ import {
   useState,
 } from 'react';
 import { isClusterOperationalState } from '@/core/contexts/clusterLifecycleState';
-import { resolveFavoriteRoute } from '@/core/navigation/favoriteRoute';
+import {
+  favoriteMatchesCluster,
+  isClusterSpecificFavorite,
+  resolveFavoriteRoute,
+} from '@/core/navigation/favoriteRoute';
 import type { Favorite } from '@/core/persistence/favorites';
 import {
   hydrateFavorites,
@@ -49,6 +53,8 @@ interface FavoritesContextType {
   /** Set by navigateToFavorite — the favorite being navigated to. Views read this
    *  on mount to restore saved filter/table state, then clear it. */
   pendingFavorite: Favorite | null;
+  /** Available only after navigation has been applied to a ready target. */
+  favoriteToRestore: Favorite | null;
   setPendingFavorite: (fav: Favorite | null) => void;
 }
 
@@ -91,24 +97,19 @@ interface FavoriteNavigationReadiness {
 
 const isFavoriteClusterOperational = ({
   favorite,
-  route,
   selectedKubeconfig,
   selectedClusterId,
   getClusterState,
 }: FavoriteNavigationReadiness): boolean => {
-  const favoriteClusterId = favorite.clusterId?.trim() ?? '';
-  const isClusterSpecific =
-    route.scope !== 'global' && (favorite.clusterSelection !== '' || favoriteClusterId !== '');
-  if (!isClusterSpecific) {
+  if (!favoriteMatchesCluster(favorite, { selectedClusterId, selectedKubeconfig })) {
+    return false;
+  }
+  if (!isClusterSpecificFavorite(favorite)) {
     return !selectedClusterId || isClusterOperationalState(getClusterState(selectedClusterId));
   }
-  if (favoriteClusterId && selectedClusterId !== favoriteClusterId) {
-    return false;
-  }
-  if (!favoriteClusterId && selectedKubeconfig !== favorite.clusterSelection) {
-    return false;
-  }
-  return isClusterOperationalState(getClusterState(favoriteClusterId || selectedClusterId));
+  return isClusterOperationalState(
+    getClusterState(favorite.clusterId?.trim() || selectedClusterId)
+  );
 };
 
 const canApplyFavoriteNavigation = (readiness: FavoriteNavigationReadiness): boolean =>
@@ -156,11 +157,13 @@ const applyFavoriteNavigation = (
 
 export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }) => {
   const [favorites, setFavorites] = useState<Favorite[]>([]);
-  const [pendingFavorite, setPendingFavoriteState] = useState<Favorite | null>(null);
-  const navigationAppliedRef = useRef(false);
+  const [pendingNavigation, setPendingNavigation] = useState<{
+    favorite: Favorite;
+    phase: 'waiting' | 'restoring';
+  } | null>(null);
+  const pendingFavorite = pendingNavigation?.favorite ?? null;
   const setPendingFavorite = useCallback((favorite: Favorite | null) => {
-    navigationAppliedRef.current = false;
-    setPendingFavoriteState(favorite);
+    setPendingNavigation(favorite ? { favorite, phase: 'waiting' } : null);
   }, []);
   const { selectedKubeconfig, selectedClusterId } = useKubeconfig();
   const { getClusterState } = useClusterLifecycle();
@@ -178,8 +181,8 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
     }
     pendingProgressRef.current = pendingProgressKey;
     const timer = window.setTimeout(() => {
-      setPendingFavoriteState((current) =>
-        current === pendingFavorite && pendingProgressRef.current === pendingProgressKey
+      setPendingNavigation((current) =>
+        current?.favorite === pendingFavorite && pendingProgressRef.current === pendingProgressKey
           ? null
           : current
       );
@@ -208,84 +211,50 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
     });
   }, []);
 
-  // Apply navigation state (view, namespace, sidebar) from a pending favorite
-  // once the correct cluster is operational. The lifecycle gate replaces
-  // the old queueMicrotask timing hack — the effect re-runs when cluster lifecycle
-  // state changes, so navigation applies once data services are usable.
+  const readyFavorite =
+    pendingFavorite &&
+    canApplyFavoriteNavigation({
+      favorite: pendingFavorite,
+      route: resolveFavoriteRoute(pendingFavorite.viewType, pendingFavorite.view),
+      selectedKubeconfig,
+      selectedClusterId,
+      namespaceReady,
+      getClusterState,
+    })
+      ? pendingFavorite
+      : null;
+  const favoriteToRestore = pendingNavigation?.phase === 'restoring' ? readyFavorite : null;
+
+  // The table consumer receives the favorite only after navigation has been applied.
   useEffect(() => {
-    if (!pendingFavorite) {
-      navigationAppliedRef.current = false;
+    if (!readyFavorite || pendingNavigation?.phase !== 'waiting') {
       return;
     }
-    if (navigationAppliedRef.current) {
-      return;
-    }
-
-    const route = resolveFavoriteRoute(pendingFavorite.viewType, pendingFavorite.view);
-    if (
-      !canApplyFavoriteNavigation({
-        favorite: pendingFavorite,
-        route,
-        selectedKubeconfig,
-        selectedClusterId,
-        namespaceReady,
-        getClusterState,
-      })
-    ) {
-      return;
-    }
-
-    navigationAppliedRef.current = true;
-    applyFavoriteNavigation(pendingFavorite, route, viewState, namespaceCtx);
-  }, [
-    pendingFavorite,
-    selectedKubeconfig,
-    selectedClusterId,
-    getClusterState,
-    namespaceReady,
-    viewState,
-    namespaceCtx,
-  ]);
-
-  // ---------- Mutation callbacks ----------
-
-  const handleAddFavorite = useCallback(async (fav: Favorite): Promise<Favorite> => {
-    return persistAddFavorite(fav);
-  }, []);
-
-  const handleUpdateFavorite = useCallback(async (fav: Favorite): Promise<void> => {
-    return persistUpdateFavorite(fav);
-  }, []);
-
-  const handleDeleteFavorite = useCallback(async (id: string): Promise<void> => {
-    return persistDeleteFavorite(id);
-  }, []);
-
-  const handleReorderFavorites = useCallback(async (ids: string[]): Promise<void> => {
-    return setFavoriteOrder(ids);
-  }, []);
+    applyFavoriteNavigation(
+      readyFavorite,
+      resolveFavoriteRoute(readyFavorite.viewType, readyFavorite.view),
+      viewState,
+      namespaceCtx
+    );
+    setPendingNavigation((current) =>
+      current === pendingNavigation ? { favorite: readyFavorite, phase: 'restoring' } : current
+    );
+  }, [readyFavorite, pendingNavigation, viewState, namespaceCtx]);
 
   // ---------- Context value ----------
 
   const value = useMemo<FavoritesContextType>(
     () => ({
       favorites,
-      addFavorite: handleAddFavorite,
-      updateFavorite: handleUpdateFavorite,
-      deleteFavorite: handleDeleteFavorite,
-      reorderFavorites: handleReorderFavorites,
+      addFavorite: persistAddFavorite,
+      updateFavorite: persistUpdateFavorite,
+      deleteFavorite: persistDeleteFavorite,
+      reorderFavorites: setFavoriteOrder,
       pendingFavorite,
+      favoriteToRestore,
       setPendingFavorite,
     }),
-    [
-      favorites,
-      handleAddFavorite,
-      handleUpdateFavorite,
-      handleDeleteFavorite,
-      handleReorderFavorites,
-      pendingFavorite,
-      setPendingFavorite,
-    ]
+    [favorites, pendingFavorite, favoriteToRestore, setPendingFavorite]
   );
 
   return <FavoritesContext.Provider value={value}>{children}</FavoritesContext.Provider>;

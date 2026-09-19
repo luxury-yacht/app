@@ -235,6 +235,42 @@ describe('favorites persistence', () => {
     expect(getFavorites()[0].name).toBe('New Name');
   });
 
+  it('keeps case-distinct cluster identities and empty facet values when hydrating a favorite', async () => {
+    const favorite = makeFavorite({
+      panes: {
+        main: {
+          filters: {
+            search: '',
+            kinds: { mode: 'all' },
+            namespaces: { mode: 'all' },
+            clusters: { mode: 'some', values: ['Prod:context', 'prod:context'] },
+            queryFacets: { team: { mode: 'some', values: ['', '__empty__'] } },
+            caseSensitive: false,
+            includeMetadata: false,
+          },
+          tableState: { sortColumn: 'name', sortDirection: 'asc', columnVisibility: {} },
+        },
+      },
+    });
+    mockApp.GetFavorites.mockResolvedValue([favorite]);
+    const [hydrated] = await hydrateFavorites();
+    expect(hydrated.panes.main.filters).toEqual(favorite.panes.main.filters);
+  });
+
+  it('reorders each favorite once with contiguous positions when IDs repeat or are missing', async () => {
+    mockApp.GetFavorites.mockResolvedValue(
+      ['a', 'b', 'c'].map((id, order) => makeFavorite({ id, order }))
+    );
+    await hydrateFavorites();
+    mockApp.SetFavoriteOrder.mockResolvedValue(undefined);
+    await setFavoriteOrder(['missing', 'c', 'c', 'a']);
+    expect(getFavorites().map((favorite) => [favorite.id, favorite.order])).toEqual([
+      ['c', 0],
+      ['a', 1],
+      ['b', 2],
+    ]);
+  });
+
   it('setFavoriteOrder reorders cache', async () => {
     const a = makeFavorite({ id: 'a', order: 0 });
     const b = makeFavorite({ id: 'b', order: 1 });

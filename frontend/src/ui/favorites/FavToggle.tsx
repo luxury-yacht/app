@@ -37,7 +37,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { resolveFavoriteRoute } from '@/core/navigation/favoriteRoute';
+import { favoriteMatchesCluster, resolveFavoriteRoute } from '@/core/navigation/favoriteRoute';
 import { getViewDescriptor, type ViewScope } from '@/core/navigation/viewRegistry';
 import type { Favorite, FavoritePaneState } from '@/core/persistence/favorites';
 import { compareUtf16Strings } from '@/shared/utils/sort';
@@ -50,6 +50,7 @@ const DISABLED_FAVORITES_CONTEXT = {
   deleteFavorite: () => Promise.resolve(),
   reorderFavorites: () => Promise.resolve(),
   pendingFavorite: null,
+  favoriteToRestore: null,
   setPendingFavorite: () => undefined,
 } satisfies NonNullable<ReturnType<typeof useOptionalFavorites>>;
 
@@ -237,16 +238,6 @@ interface FavoriteLocation {
   selectedNamespace: string | undefined;
 }
 
-const favoriteMatchesCluster = (favorite: Favorite, location: FavoriteLocation): boolean => {
-  const route = resolveFavoriteRoute(favorite.viewType, favorite.view);
-  if (route.scope === 'global' || favorite.clusterSelection === '') {
-    return true;
-  }
-  return favorite.clusterId
-    ? location.selectedClusterId === favorite.clusterId
-    : location.selectedKubeconfig === favorite.clusterSelection;
-};
-
 const favoriteMatchesLocation = (favorite: Favorite, location: FavoriteLocation): boolean => {
   const route = resolveFavoriteRoute(favorite.viewType, favorite.view);
   if (!favoriteMatchesCluster(favorite, location) || location.viewType !== route.scope) {
@@ -316,17 +307,6 @@ const getFavoritePanesToRestore = (
 const areFavoritePanesHydrated = (panes: Array<RestorableFavoritePane | undefined>): boolean =>
   panes.every((pane) => Boolean(pane?.state.hydrated));
 
-const pendingFavoriteTargetIsActive = (
-  favorite: Favorite,
-  location: Pick<FavoriteLocation, 'viewType' | 'activeViewTab' | 'selectedNamespace'>
-): boolean => {
-  const route = resolveFavoriteRoute(favorite.viewType, favorite.view);
-  if (route.scope !== location.viewType || favorite.view !== location.activeViewTab) {
-    return false;
-  }
-  return location.viewType !== 'namespace' || favorite.namespace === location.selectedNamespace;
-};
-
 const buildFavoritePaneRestoreEntries = (
   favorite: Favorite,
   panes: Array<RestorableFavoritePane | undefined>
@@ -359,6 +339,29 @@ const restoreFavoritePane = ({ pane, savedPane }: FavoritePaneRestoreEntry) => {
   pane.state.setColumnOrder?.(savedPane.tableState.columnOrder ?? []);
 };
 
+// Normalize the optional providers once; embedded surfaces can disable favorites.
+const useFavoriteViewContext = (enabled: boolean) => {
+  const favoritesContext = useOptionalFavorites();
+  const viewState = useOptionalViewState();
+  if (enabled && !favoritesContext) {
+    throw new Error('useFavorites must be used within FavoritesProvider');
+  }
+  if (enabled && !viewState) {
+    throw new Error('useViewState must be used within ViewStateProvider');
+  }
+  const viewType = viewState?.viewType ?? 'cluster';
+  return {
+    favoritesContext: favoritesContext ?? DISABLED_FAVORITES_CONTEXT,
+    viewType,
+    activeViewTab: getActiveViewTab(
+      viewType,
+      viewState?.activeGlobalTab ?? 'fleet',
+      viewState?.activeNamespaceTab ?? 'workloads',
+      viewState?.activeClusterTab ?? null
+    ),
+  };
+};
+
 /**
  * Returns an IconBarItem (toggle type) for the heart favorite button
  * in the GridTableFiltersBar's preActions slot.
@@ -368,27 +371,16 @@ export function useFavToggle(state: FavToggleState): {
   modal: React.JSX.Element | null;
 } {
   const enabled = state.enabled !== false;
-  const favoritesContext = useOptionalFavorites();
-  const viewState = useOptionalViewState();
-  if (enabled && !favoritesContext) {
-    throw new Error('useFavorites must be used within FavoritesProvider');
-  }
-  if (enabled && !viewState) {
-    throw new Error('useViewState must be used within ViewStateProvider');
-  }
+  const { favoritesContext, viewType, activeViewTab } = useFavoriteViewContext(enabled);
   const {
     favorites,
     addFavorite,
     updateFavorite,
     deleteFavorite,
-    pendingFavorite,
+    favoriteToRestore,
     setPendingFavorite,
-  } = favoritesContext ?? DISABLED_FAVORITES_CONTEXT;
+  } = favoritesContext;
   const { selectedKubeconfig, selectedClusterId, selectedClusterName } = useKubeconfig();
-  const viewType = viewState?.viewType ?? 'cluster';
-  const activeNamespaceTab = viewState?.activeNamespaceTab ?? 'workloads';
-  const activeClusterTab = viewState?.activeClusterTab ?? null;
-  const activeGlobalTab = viewState?.activeGlobalTab ?? 'fleet';
   const { selectedNamespace } = useNamespace();
   const paneGroup = useContext(FavoritePaneGroupContext);
   const paneId = state.paneId ?? 'main';
@@ -443,13 +435,6 @@ export function useFavToggle(state: FavToggleState): {
   const groupReady = !paneGroup || groupedPanes.length === paneGroup.expectedPaneIds.length;
   const isPrimaryPane = !paneGroup || paneId === paneGroup.primaryPaneId;
 
-  const activeViewTab = getActiveViewTab(
-    viewType,
-    activeGlobalTab,
-    activeNamespaceTab,
-    activeClusterTab
-  );
-
   // Match the current view + filter state against saved favorites.
   // Includes filter comparison so multiple favorites on the same view
   // with different filters are treated as distinct entries.
@@ -486,7 +471,7 @@ export function useFavToggle(state: FavToggleState): {
   // The FavoritesContext effect handles cluster switching and view navigation.
   // This effect waits for those to settle before applying filter/table state.
   useEffect(() => {
-    if (!pendingFavorite || !isPrimaryPane || !groupReady) {
+    if (!favoriteToRestore || !isPrimaryPane || !groupReady) {
       return;
     }
     const panesToRestore = getFavoritePanesToRestore(paneGroup, paneId, state);
@@ -495,7 +480,9 @@ export function useFavToggle(state: FavToggleState): {
     }
 
     if (
-      !pendingFavoriteTargetIsActive(pendingFavorite, {
+      !favoriteMatchesLocation(favoriteToRestore, {
+        selectedClusterId,
+        selectedKubeconfig,
         viewType,
         activeViewTab,
         selectedNamespace,
@@ -504,7 +491,7 @@ export function useFavToggle(state: FavToggleState): {
       return;
     }
 
-    const restorablePanes = buildFavoritePaneRestoreEntries(pendingFavorite, panesToRestore);
+    const restorablePanes = buildFavoritePaneRestoreEntries(favoriteToRestore, panesToRestore);
     if (!restorablePanes) {
       setPendingFavorite(null);
       return;
@@ -515,8 +502,10 @@ export function useFavToggle(state: FavToggleState): {
     }
     setPendingFavorite(null);
   }, [
-    pendingFavorite,
+    favoriteToRestore,
     setPendingFavorite,
+    selectedClusterId,
+    selectedKubeconfig,
     viewType,
     activeViewTab,
     selectedNamespace,
@@ -529,7 +518,7 @@ export function useFavToggle(state: FavToggleState): {
 
   const [modalOpen, setModalOpen] = useState(false);
 
-  const isFavorited = currentFavoriteMatch !== null && currentFavoriteMatch !== undefined;
+  const isFavorited = currentFavoriteMatch !== null;
 
   // Build a human-readable display label for the view tab.
   const viewLabel = useMemo(() => {
@@ -611,13 +600,6 @@ export function useFavToggle(state: FavToggleState): {
     [addFavorite, updateFavorite]
   );
 
-  const handleDelete = useCallback(
-    async (id: string) => {
-      await deleteFavorite(id);
-    },
-    [deleteFavorite]
-  );
-
   // Build the IconBarItem returned to the caller.
   const item = useMemo<IconBarItem | null>(() => {
     if (!enabled || !isPrimaryPane) {
@@ -660,7 +642,7 @@ export function useFavToggle(state: FavToggleState): {
           .filter((favorite) => favorite.id !== currentFavoriteMatch?.id)
           .map((favorite) => favorite.name)}
         onSave={handleSave}
-        onDelete={handleDelete}
+        onDelete={deleteFavorite}
       />
     ) : null,
   };

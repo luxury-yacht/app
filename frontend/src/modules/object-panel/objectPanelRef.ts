@@ -187,20 +187,20 @@ const buildClusterObjectScope = (
   return buildClusterScope(clusterId, objectScope);
 };
 
-const buildRequiredObjectScope = (args: {
-  namespace: string;
-  kind: string;
-  name: string;
-  group: string;
-  version: string;
-}): string =>
-  buildObjectScope({
-    namespace: args.namespace,
-    group: args.group,
-    version: args.version,
-    kind: args.kind,
-    name: args.name,
-  });
+const emptyObjectPanelScopes = (
+  objectData: KubernetesObjectReference | null
+): ObjectPanelScopes => ({
+  objectKind: objectData?.kind ? objectData.kind.toLowerCase() : null,
+  scopeNamespace: null,
+  detailScope: null,
+  eventsScope: null,
+  containerLogsScope: null,
+  mapScope: null,
+  helmScope: null,
+  podsScope: null,
+  isHelmRelease: false,
+  isEvent: objectData?.kind?.trim().toLowerCase() === 'event',
+});
 
 const isSyntheticHelmRelease = (ref: ResolvedObjectReference): boolean =>
   ref.kind.trim().toLowerCase() === 'helmrelease' &&
@@ -212,64 +212,30 @@ export const getObjectPanelScopes = (
   options: ObjectPanelRefOptions = {}
 ): ObjectPanelScopes => {
   if (!objectData?.kind || !objectData.name) {
-    return {
-      objectKind: objectData?.kind ? objectData.kind.toLowerCase() : null,
-      scopeNamespace: null,
-      detailScope: null,
-      eventsScope: null,
-      containerLogsScope: null,
-      mapScope: null,
-      helmScope: null,
-      podsScope: null,
-      isHelmRelease: false,
-      isEvent: objectData?.kind?.trim().toLowerCase() === 'event',
-    };
+    return emptyObjectPanelScopes(objectData);
   }
 
   const normalizedObjectData = normalizePanelInput(objectData);
-  const scopeClusterId =
+  const clusterId =
     normalizeOptional(normalizedObjectData.clusterId) ??
     normalizeOptional(options.fallbackClusterId);
-  if (!scopeClusterId || !hasExplicitScopeGVK(normalizedObjectData)) {
-    return {
-      objectKind: objectData.kind.toLowerCase(),
-      scopeNamespace: null,
-      detailScope: null,
-      eventsScope: null,
-      containerLogsScope: null,
-      mapScope: null,
-      helmScope: null,
-      podsScope: null,
-      isHelmRelease: false,
-      isEvent: objectData.kind.trim().toLowerCase() === 'event',
-    };
+  if (!clusterId || !hasExplicitScopeGVK(normalizedObjectData)) {
+    return emptyObjectPanelScopes(objectData);
   }
 
   let ref: ResolvedObjectReference;
   try {
     ref = buildObjectReference(normalizedObjectData);
   } catch {
-    return {
-      objectKind: objectData.kind.toLowerCase(),
-      scopeNamespace: null,
-      detailScope: null,
-      eventsScope: null,
-      containerLogsScope: null,
-      mapScope: null,
-      helmScope: null,
-      podsScope: null,
-      isHelmRelease: false,
-      isEvent: objectData.kind.trim().toLowerCase() === 'event',
-    };
+    return emptyObjectPanelScopes(objectData);
   }
 
   const objectKind = ref.kind.toLowerCase();
   const clusterScope = options.clusterScope ?? DEFAULT_CLUSTER_SCOPE;
   const scopeNamespace = ref.namespace || clusterScope;
-  const clusterId = ref.clusterId ?? scopeClusterId;
   const detailScope = buildClusterObjectScope(
     clusterId,
-    buildRequiredObjectScope({
+    buildObjectScope({
       namespace: scopeNamespace,
       group: ref.group,
       version: ref.version,
@@ -279,7 +245,7 @@ export const getObjectPanelScopes = (
   );
   const eventsScope = buildClusterObjectScope(
     clusterId,
-    buildRequiredObjectScope({
+    buildObjectScope({
       namespace: scopeNamespace,
       group: ref.group,
       version: ref.version,
@@ -288,18 +254,7 @@ export const getObjectPanelScopes = (
     })
   );
   const containerLogsScope = detailScope;
-  const mapScope = !hasCompleteObjectMapReference(objectData)
-    ? null
-    : buildClusterObjectScope(
-        clusterId,
-        buildRequiredObjectScope({
-          namespace: scopeNamespace,
-          group: ref.group,
-          version: ref.version,
-          kind: ref.kind,
-          name: ref.name,
-        })
-      );
+  const mapScope = hasCompleteObjectMapReference(objectData) ? eventsScope : null;
   const syntheticHelmRelease = isSyntheticHelmRelease(ref);
   const helmScope = syntheticHelmRelease
     ? buildClusterScope(clusterId, `${scopeNamespace}:${ref.name}`)
@@ -316,7 +271,7 @@ export const getObjectPanelScopes = (
     },
     ref.kind
   );
-  const podsScope = podsBaseScope && clusterId ? buildClusterScope(clusterId, podsBaseScope) : null;
+  const podsScope = podsBaseScope ? buildClusterScope(clusterId, podsBaseScope) : null;
 
   return {
     objectKind,

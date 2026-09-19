@@ -222,9 +222,9 @@ func effectiveAttentionIgnoreRules(section settingsClusterSection, global *setti
 	clusterRules := clusterAttentionIgnoreRulesFromSection(section)
 	globalRules := globalAttentionIgnoreRulesFromSettings(global)
 	return snapshot.AttentionIgnoreRules{
-		ObjectFindings:      append([]snapshot.AttentionObjectFindingIgnore(nil), clusterRules.ObjectFindings...),
-		ClusterFindingTypes: append([]string(nil), clusterRules.FindingTypes...),
-		GlobalFindingTypes:  append([]string(nil), globalRules.FindingTypes...),
+		ObjectFindings:      clusterRules.ObjectFindings,
+		ClusterFindingTypes: clusterRules.FindingTypes,
+		GlobalFindingTypes:  globalRules.FindingTypes,
 	}
 }
 

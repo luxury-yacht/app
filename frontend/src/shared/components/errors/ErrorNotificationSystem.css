@@ -56,10 +56,6 @@
   z-index: calc(100 - var(--notification-stack-index, 0));
 }
 
-.error-notification.dismissed {
-  display: none;
-}
-
 /* Severity accent: the card's header, dismiss control, count badge, and
    progress bar all read `--toast-accent`/`--toast-accent-on`/
    `--toast-accent-hover`. Each severity re-points that trio to its theme-aware

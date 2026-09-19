@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
-	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
@@ -478,7 +477,6 @@ func TestStreamOnlyDomainsHaveEndpointWiring(t *testing.T) {
 	informerFactory := informer.New(kubeClient, nil, 0, runtimePerms)
 	containerLogsHandler, _, resourceManager, err := registerStreamHandlers(streamDeps{
 		informerFactory: informerFactory,
-		snapshotService: streamHandlerSnapshotService{},
 		cfg: Config{
 			KubernetesClient: kubeClient,
 			ClusterID:        "cluster-a",
@@ -863,12 +861,6 @@ func requireSourcePathExists(t *testing.T, owner string) {
 }
 
 type fullObjectDetailProvider struct{}
-
-type streamHandlerSnapshotService struct{}
-
-func (streamHandlerSnapshotService) Build(context.Context, string, string) (*refresh.Snapshot, error) {
-	return &refresh.Snapshot{}, nil
-}
 
 func (fullObjectDetailProvider) FetchObjectDetails(context.Context, schema.GroupVersionKind, string, string) (interface{}, error) {
 	return nil, nil

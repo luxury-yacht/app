@@ -107,12 +107,10 @@ const DETAIL_KIND_CONFIG: Record<string, DetailKindConfig> = {
   namespace: { namespaceFinalization: true },
 };
 
-type DerivableContainer = DetailContainer & { ports?: string[] | null };
-
 /** Structural view of the active DTO for the derivations (each kind's DTO is a superset of this). */
 interface DerivableDetail {
-  containers?: DerivableContainer[];
-  initContainers?: DerivableContainer[];
+  containers?: DetailContainer[];
+  initContainers?: DetailContainer[];
   pods?: Array<{ name?: string | null }> | null;
   desiredReplicas?: number;
   suspend?: boolean;

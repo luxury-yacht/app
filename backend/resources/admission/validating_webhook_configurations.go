@@ -11,6 +11,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -32,13 +34,12 @@ func (s *Service) ValidatingWebhookConfiguration(ctx context.Context, name strin
 }
 
 func (s *Service) buildValidatingWebhookConfigurationDetails(config *admissionregistrationv1.ValidatingWebhookConfiguration) *ValidatingWebhookConfigurationDetails {
-	model := BuildValidatingResourceModel(s.deps.ClusterID, config)
 	facts := BuildValidatingFacts(s.deps.ClusterID, config)
 	details := &ValidatingWebhookConfigurationDetails{
 		Kind:        "ValidatingWebhookConfiguration",
 		Name:        config.Name,
-		Labels:      model.Metadata.Labels,
-		Annotations: model.Metadata.Annotations,
+		Labels:      resourcemodel.CopyStringMap(config.Labels),
+		Annotations: resourcemodel.CopyStringMap(config.Annotations),
 	}
 
 	details.Webhooks = validatingWebhookDetailsFromFacts(facts.Webhooks)

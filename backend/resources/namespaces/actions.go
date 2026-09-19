@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	corev1 "k8s.io/api/core/v1"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -33,7 +33,7 @@ func (s *Service) RemoveSpecFinalizer(ctx context.Context, name, finalizer strin
 	if namespace.DeletionTimestamp == nil {
 		return fmt.Errorf("namespace %s is not deleting", name)
 	}
-	remaining, removed := removeNamespaceFinalizer(namespace.Spec.Finalizers, finalizer)
+	remaining, removed := common.RemoveNamedFinalizer(namespace.Spec.Finalizers, finalizer)
 	if !removed {
 		return nil
 	}
@@ -44,17 +44,4 @@ func (s *Service) RemoveSpecFinalizer(ctx context.Context, name, finalizer strin
 		return fmt.Errorf("failed to finalize namespace: %w", err)
 	}
 	return nil
-}
-
-func removeNamespaceFinalizer(current []corev1.FinalizerName, target string) ([]corev1.FinalizerName, bool) {
-	remaining := make([]corev1.FinalizerName, 0, len(current))
-	removed := false
-	for _, value := range current {
-		if string(value) == target {
-			removed = true
-			continue
-		}
-		remaining = append(remaining, value)
-	}
-	return remaining, removed
 }

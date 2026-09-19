@@ -199,6 +199,7 @@ export const ingressClassDescriptor: OverviewDescriptor<IngressClassDetails> = {
           try {
             ref = buildRequiredObjectReference({
               kind: params.kind.toLowerCase(),
+              group: params.apiGroup ?? '',
               name: params.name,
               namespace: params.scope === 'Namespace' ? params.namespace : undefined,
               clusterId: context.clusterId,
@@ -208,15 +209,6 @@ export const ingressClassDescriptor: OverviewDescriptor<IngressClassDetails> = {
             ref = null;
           }
           return ref ? <ObjectPanelLink objectRef={ref}>{label}</ObjectPanelLink> : label;
-        },
-      },
-      {
-        field: 'ingresses',
-        label: 'Used by',
-        hidden: (d) => (d.ingresses?.length ?? 0) === 0,
-        render: (d) => {
-          const count = d.ingresses?.length ?? 0;
-          return count === 1 ? '1 Ingress' : `${count} Ingresses`;
         },
       },
     ],

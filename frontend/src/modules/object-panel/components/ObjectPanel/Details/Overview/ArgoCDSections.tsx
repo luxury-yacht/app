@@ -26,6 +26,7 @@ import {
   OperatorFields as Fields,
   OperatorList as List,
   OperatorMessage as Message,
+  operatorListValue,
   OperatorSection as Section,
 } from './shared/OperatorOverview';
 
@@ -67,9 +68,6 @@ function StatusNote({
     </div>
   );
 }
-
-const listOrNothing = (values?: string[]) =>
-  values?.length ? <List values={values} /> : undefined;
 
 const yesNo = (value: boolean) => (value ? 'Yes' : 'No');
 
@@ -227,7 +225,7 @@ function Sources({
         ))}
       </div>
       {/* Revisions stay a separate list: the facts do not say which source each one belongs to. */}
-      <Fields fields={[['Deployed Revisions', listOrNothing(revisions)]]} />
+      <Fields fields={[['Deployed Revisions', operatorListValue(revisions)]]} />
     </Section>
   );
 }
@@ -257,7 +255,7 @@ function SyncPolicy({
       <Fields
         fields={[
           ['Automated Sync', automationSummary(policy?.automated)],
-          ['Sync Options', listOrNothing(policy?.syncOptions)],
+          ['Sync Options', operatorListValue(policy?.syncOptions)],
         ]}
       />
     </Section>
@@ -365,8 +363,8 @@ function ResourcePolicy({
     <Card title={title}>
       <Fields
         fields={[
-          ['Allowed', listOrNothing(restrictionValues(allowed))],
-          ['Denied', listOrNothing(restrictionValues(denied))],
+          ['Allowed', operatorListValue(restrictionValues(allowed))],
+          ['Denied', operatorListValue(restrictionValues(denied))],
         ]}
       />
     </Card>
@@ -430,8 +428,8 @@ function ProjectRoles({ roles }: Readonly<{ roles?: ArgoCDProjectRole[] }>) {
             {!!value.description && <p className="operator-message">{value.description}</p>}
             <Fields
               fields={[
-                ['Groups', listOrNothing(value.groups)],
-                ['Policies', listOrNothing(value.policies)],
+                ['Groups', operatorListValue(value.groups)],
+                ['Policies', operatorListValue(value.policies)],
               ]}
             />
           </Card>
@@ -459,9 +457,9 @@ function ProjectSyncWindows({ windows }: Readonly<{ windows?: ArgoCDSyncWindow[]
               fields={[
                 ['Manual Sync', yesNo(value.manualSync)],
                 ['Selector Match', value.andOperator ? 'All' : 'Any'],
-                ['Applications', listOrNothing(value.applications)],
-                ['Namespaces', listOrNothing(value.namespaces)],
-                ['Clusters', listOrNothing(value.clusters)],
+                ['Applications', operatorListValue(value.applications)],
+                ['Namespaces', operatorListValue(value.namespaces)],
+                ['Clusters', operatorListValue(value.clusters)],
               ]}
             />
           </Card>
@@ -479,8 +477,8 @@ export function ArgoCDProject({ facts }: Readonly<{ facts: ArgoCDProjectFacts }>
         <Section title="Source Access">
           <Fields
             fields={[
-              ['Repositories', listOrNothing(facts.sourceRepos)],
-              ['Source Namespaces', listOrNothing(facts.sourceNamespaces)],
+              ['Repositories', operatorListValue(facts.sourceRepos)],
+              ['Source Namespaces', operatorListValue(facts.sourceNamespaces)],
             ]}
           />
         </Section>

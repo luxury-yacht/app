@@ -330,17 +330,12 @@ func (m *ClusterRuntimeManager) applyKubernetesClientRateLimits(qps, burst int) 
 	m.kubernetesBurst = burst
 	m.rateLimitMu.Unlock()
 
-	m.clusterClientsMu.Lock()
-	clients := make([]*clusterClients, 0, len(m.clusterClients))
-	for _, item := range m.clusterClients {
-		if item != nil {
-			clients = append(clients, item)
-		}
-	}
-	m.clusterClientsMu.Unlock()
-
+	clients := m.snapshotClusterClients()
 	registry := m.ensureKubernetesAPIMetricsRegistry()
 	for _, item := range clients {
+		if item == nil {
+			continue
+		}
 		if item.rateLimiter != nil {
 			item.rateLimiter.Set(qps, burst)
 		}
@@ -416,7 +411,6 @@ func (a *ClusterRuntimeManager) buildClusterClientsWithManager(
 		gatewayClient:          dependencies.gatewayClient,
 		gatewayInformerFactory: dependencies.gatewayInformerFactory,
 		gatewayAPIPresence:     dependencies.gatewayAPIPresence,
-		gatewayVersionResolver: dependencies.gatewayAPIPresence,
 		apiextensionsClient:    dependencies.apiextensionsClient,
 		dynamicClient:          dependencies.dynamicClient,
 		metricsClient:          dependencies.metricsClient,

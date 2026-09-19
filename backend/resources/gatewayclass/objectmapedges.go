@@ -12,9 +12,9 @@ func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
 	if !ok {
 		return nil
 	}
-	facts := BuildFacts(clusterID, gatewayClass)
-	if facts.Parameters == nil {
+	parameters := parameterLink(clusterID, gatewayClass.Spec.ParametersRef)
+	if parameters == nil {
 		return nil
 	}
-	return []objectmapspec.Edge{{Type: objectmapspec.EdgeUses, TracedBy: "spec.parametersRef", Link: *facts.Parameters}}
+	return []objectmapspec.Edge{{Type: objectmapspec.EdgeUses, TracedBy: "spec.parametersRef", Link: *parameters}}
 }

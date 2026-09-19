@@ -306,6 +306,8 @@ func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
 	if snap.Checksum == "" {
 		t.Fatalf("expected checksum to be set")
 	}
+	// Keep the wire checksum stable when changing its implementation.
+	require.Equal(t, "b5ccb6bb", snap.Checksum)
 	if snap.SourceVersion == "" {
 		t.Fatalf("expected sourceVersion to be set")
 	}

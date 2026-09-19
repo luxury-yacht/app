@@ -6,14 +6,16 @@
 
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import {
-  DEFAULT_TABLE_PAGE_SIZE,
   normalizeTablePageSize,
   TABLE_PAGE_SIZE_OPTIONS,
-  type TablePageSize,
 } from '@shared/components/tables/pageSizeOptions';
 import { errorHandler } from '@utils/errorHandler';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId } from 'react';
 import {
+  getDefaultTablePageSize,
+  getDimInactiveNamespaces,
+  getExclusiveNamespaces,
+  getUseShortResourceNames,
   hydrateAppPreferences,
   setDefaultTablePageSize as persistDefaultTablePageSize,
   setDimInactiveNamespaces as persistDimInactiveNamespaces,
@@ -21,7 +23,7 @@ import {
   setUseShortResourceNames as persistUseShortResourceNames,
 } from '@/core/settings/appPreferences';
 import ToggleSwitch from '@/shared/components/ToggleSwitch';
-import { SettingRow, useOptimisticPreferenceToggle } from './SettingsControls';
+import { SettingRow, usePreferenceToggle, usePreferenceValue } from './SettingsControls';
 
 // The same list every pagination footer renders — one source for both.
 const PAGE_SIZE_DROPDOWN_OPTIONS = TABLE_PAGE_SIZE_OPTIONS.map((value) => ({
@@ -31,57 +33,50 @@ const PAGE_SIZE_DROPDOWN_OPTIONS = TABLE_PAGE_SIZE_OPTIONS.map((value) => ({
 
 function DisplaySection() {
   const elementIdPrefix = useId();
-  const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
-  const [dimInactiveNamespaces, setDimInactiveNamespaces] = useState<boolean>(true);
-  const [exclusiveNamespaces, setExclusiveNamespaces] = useState<boolean>(true);
-  const [defaultTablePageSize, setDefaultTablePageSize] =
-    useState<TablePageSize>(DEFAULT_TABLE_PAGE_SIZE);
+  const useShortResourceNames = usePreferenceValue(
+    getUseShortResourceNames,
+    'settings:short-names'
+  );
+  const dimInactiveNamespaces = usePreferenceValue(
+    getDimInactiveNamespaces,
+    'settings:dim-inactive-namespaces'
+  );
+  const exclusiveNamespaces = usePreferenceValue(
+    getExclusiveNamespaces,
+    'settings:exclusive-namespaces'
+  );
+  const defaultTablePageSize = usePreferenceValue(
+    getDefaultTablePageSize,
+    'settings:default-table-page-size'
+  );
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const prefs = await hydrateAppPreferences({ force: true });
-        if (!cancelled) {
-          setUseShortResourceNames(prefs.useShortResourceNames);
-          setDimInactiveNamespaces(prefs.dimInactiveNamespaces);
-          setExclusiveNamespaces(prefs.exclusiveNamespaces);
-          setDefaultTablePageSize(normalizeTablePageSize(prefs.defaultTablePageSize));
-        }
-      } catch (error) {
-        errorHandler.handle(error, { action: 'loadDisplaySettings' });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    void hydrateAppPreferences({ force: true }).catch((error) => {
+      errorHandler.handle(error, { action: 'loadDisplaySettings' });
+    });
   }, []);
 
   const handleDefaultTablePageSizeChange = (value: string | string[]) => {
     const size = normalizeTablePageSize(Number(value));
-    setDefaultTablePageSize(size);
     persistDefaultTablePageSize(size);
   };
 
-  const handleShortNamesToggle = useOptimisticPreferenceToggle({
+  const handleShortNamesToggle = usePreferenceToggle({
     action: 'setUseShortResourceNames',
     valueKey: 'useShort',
     persist: persistUseShortResourceNames,
-    setState: setUseShortResourceNames,
   });
 
-  const handleDimInactiveNamespacesToggle = useOptimisticPreferenceToggle({
+  const handleDimInactiveNamespacesToggle = usePreferenceToggle({
     action: 'setDimInactiveNamespaces',
     valueKey: 'enabled',
     persist: persistDimInactiveNamespaces,
-    setState: setDimInactiveNamespaces,
   });
 
-  const handleExclusiveNamespacesToggle = useOptimisticPreferenceToggle({
+  const handleExclusiveNamespacesToggle = usePreferenceToggle({
     action: 'setExclusiveNamespaces',
     valueKey: 'enabled',
     persist: persistExclusiveNamespaces,
-    setState: setExclusiveNamespaces,
   });
 
   return (

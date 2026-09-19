@@ -34,6 +34,7 @@ vi.mock('@core/contexts/FavoritesContext', () => {
     deleteFavorite: mockDeleteFavorite,
     reorderFavorites: vi.fn().mockResolvedValue(undefined),
     pendingFavorite: mockPendingFavorite,
+    favoriteToRestore: mockPendingFavorite,
     setPendingFavorite: mockSetPendingFavorite,
   });
   return { useFavorites, useOptionalFavorites: useFavorites };
@@ -400,6 +401,14 @@ describe('useFavToggle', () => {
     expect(requireValue(btn, 'expected test value in FavToggle.test.tsx').title).toBe(
       'Edit favorite'
     );
+  });
+
+  it('does not match a clusterId-only favorite on another cluster', async () => {
+    mockFavorites = [makeFavorite({ clusterSelection: '', clusterId: 'other-cluster' })];
+    await renderHook();
+    expect(
+      container.querySelector('[data-testid="fav-toggle-button"]')?.getAttribute('data-active')
+    ).toBe('false');
   });
 
   it('matches cluster-specific favorites by clusterId when present', async () => {

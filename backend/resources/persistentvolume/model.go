@@ -41,29 +41,23 @@ func BuildFacts(pv *corev1.PersistentVolume) Facts {
 
 // BuildStatusPresentation derives the PersistentVolume status presentation.
 func BuildStatusPresentation(pv *corev1.PersistentVolume) resourcemodel.ResourceStatusPresentation {
-	facts := BuildFacts(pv)
 	state := persistentVolumeState(pv)
-	signals := persistentVolumeSignals(pv, facts)
+	signals := persistentVolumeSignals(pv)
 	lifecycle := resourcemodel.ObjectLifecycle(pv.ObjectMeta)
 	if status, ok := resourcemodel.DeletingObjectStatus(pv.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
 
 	switch pv.Status.Phase {
-	case corev1.VolumeBound:
+	case corev1.VolumeBound, corev1.VolumeAvailable:
 		return resourcemodel.ObjectSourceStatus(string(pv.Status.Phase), state, "", "", "ready", signals, lifecycle)
-	case corev1.VolumeAvailable:
-		return resourcemodel.ObjectSourceStatus(string(pv.Status.Phase), state, "", "", "ready", signals, lifecycle)
-	case corev1.VolumePending:
-		return resourcemodel.ObjectSourceStatus(string(pv.Status.Phase), state, "", "", "warning", signals, lifecycle)
-	case corev1.VolumeReleased:
+	case corev1.VolumePending, corev1.VolumeReleased:
 		return resourcemodel.ObjectSourceStatus(string(pv.Status.Phase), state, "", "", "warning", signals, lifecycle)
 	case corev1.VolumeFailed:
 		return resourcemodel.ObjectSourceStatus(string(pv.Status.Phase), state, pv.Status.Reason, pv.Status.Message, "error", signals, lifecycle)
+	case "":
+		return resourcemodel.ObjectSourceStatus("Unknown", state, "", "", "unknown", signals, lifecycle)
 	default:
-		if pv.Status.Phase == "" {
-			return resourcemodel.ObjectSourceStatus("Unknown", state, "", "", "unknown", signals, lifecycle)
-		}
 		return resourcemodel.ObjectSourceStatus(string(pv.Status.Phase), state, pv.Status.Reason, pv.Status.Message, "inactive", signals, lifecycle)
 	}
 }
@@ -75,7 +69,7 @@ func persistentVolumeState(pv *corev1.PersistentVolume) string {
 	return string(pv.Status.Phase)
 }
 
-func persistentVolumeSignals(pv *corev1.PersistentVolume, facts Facts) []resourcemodel.ResourceStatusSignal {
+func persistentVolumeSignals(pv *corev1.PersistentVolume) []resourcemodel.ResourceStatusSignal {
 	signals := []resourcemodel.ResourceStatusSignal{{
 		Type:    resourcemodel.StatusSignalPhase,
 		Name:    "status.phase",
@@ -83,14 +77,14 @@ func persistentVolumeSignals(pv *corev1.PersistentVolume, facts Facts) []resourc
 		Reason:  pv.Status.Reason,
 		Message: pv.Status.Message,
 	}}
-	if facts.StorageClass != "" {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{Type: resourcemodel.StatusSignalResourceState, Name: "spec.storageClassName", Status: facts.StorageClass})
+	if pv.Spec.StorageClassName != "" {
+		signals = append(signals, resourcemodel.ResourceStatusSignal{Type: resourcemodel.StatusSignalResourceState, Name: "spec.storageClassName", Status: pv.Spec.StorageClassName})
 	}
-	if facts.ReclaimPolicy != "" {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{Type: resourcemodel.StatusSignalResourceState, Name: "spec.persistentVolumeReclaimPolicy", Status: facts.ReclaimPolicy})
+	if string(pv.Spec.PersistentVolumeReclaimPolicy) != "" {
+		signals = append(signals, resourcemodel.ResourceStatusSignal{Type: resourcemodel.StatusSignalResourceState, Name: "spec.persistentVolumeReclaimPolicy", Status: string(pv.Spec.PersistentVolumeReclaimPolicy)})
 	}
-	if facts.ClaimName != "" {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{Type: resourcemodel.StatusSignalResourceState, Name: "spec.claimRef", Status: facts.ClaimNamespace + "/" + facts.ClaimName})
+	if claim := pv.Spec.ClaimRef; claim != nil && claim.Name != "" {
+		signals = append(signals, resourcemodel.ResourceStatusSignal{Type: resourcemodel.StatusSignalResourceState, Name: "spec.claimRef", Status: claim.Namespace + "/" + claim.Name})
 	}
 	return signals
 }

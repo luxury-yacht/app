@@ -1,8 +1,7 @@
 /*
  * backend/resources/serviceaccount/objectmap.go
  *
- * ServiceAccount's object-map status projection, co-located with its model. The
- * object map does not materialize reverse links (nil relationships).
+ * ServiceAccount's object-map status projection, co-located with its model.
  */
 
 package serviceaccount
@@ -14,5 +13,5 @@ import (
 
 // ObjectMapStatus projects a ServiceAccount into its object-map node status.
 func ObjectMapStatus(clusterID string, sa corev1.ServiceAccount) *objectmap.Status {
-	return objectmap.FromResourceModel(BuildResourceModel(clusterID, &sa, nil))
+	return objectmap.FromResourceModel(BuildResourceModel(clusterID, &sa))
 }

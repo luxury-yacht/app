@@ -10,6 +10,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -22,6 +23,67 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
 )
+
+func TestAuthFailureScanLeavesOtherClusterClientsAvailable(t *testing.T) {
+	authCallbackStarted := make(chan struct{})
+	releaseAuthCallback := make(chan struct{})
+	failureReported := make(chan struct{})
+	manager := authstate.New(authstate.Config{
+		OnStateChange: func(authstate.State, authstate.FailureDiagnostic) {
+			close(authCallbackStarted)
+			<-releaseAuthCallback
+		},
+	})
+	go func() {
+		manager.ReportFailure("credentials expired")
+		close(failureReported)
+	}()
+	<-authCallbackStarted
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() { close(releaseAuthCallback) })
+		<-failureReported
+	}
+	defer manager.Shutdown()
+	defer release()
+
+	healthyClients := &clusterClients{meta: ClusterMeta{ID: "healthy"}}
+	clusterRuntime := &ClusterRuntimeManager{clusterClients: map[string]*clusterClients{
+		"recovering": {authManager: manager},
+		"healthy":    healthyClients,
+	}}
+	scanStarted := make(chan struct{})
+	scanResult := make(chan bool, 1)
+	go func() {
+		close(scanStarted)
+		scanResult <- clusterRuntime.anyClusterAuthInvalid()
+	}()
+	<-scanStarted
+
+	// Keep serving another cluster while the auth callback is busy. Repeated
+	// lookups give the concurrent scan a chance to reach the blocked manager.
+	lookupsFinished := make(chan struct{})
+	go func() {
+		defer close(lookupsFinished)
+		until := time.Now().Add(50 * time.Millisecond)
+		for time.Now().Before(until) {
+			if clusterRuntime.clusterClientsForID("healthy") != healthyClients {
+				t.Error("another cluster lost its installed clients during auth failure")
+				return
+			}
+			runtime.Gosched()
+		}
+	}()
+	select {
+	case <-lookupsFinished:
+	case <-time.After(time.Second):
+		t.Error("auth failure scan blocked access to another cluster's clients")
+	}
+
+	release()
+	require.True(t, <-scanResult)
+	<-lookupsFinished
+}
 
 type recoveryStartInformerHub struct {
 	started chan struct{}

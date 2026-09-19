@@ -162,7 +162,7 @@ func TestCalculatePodResourcesAggregates(t *testing.T) {
 		},
 	}
 
-	cpuReq, cpuLim, memReq, memLim := calculatePodResources(pod)
+	cpuReq, cpuLim, memReq, memLim := CalculatePodResources(pod)
 	require.Equal(t, "250m", cpuReq.String())
 	require.Equal(t, "500m", cpuLim.String())
 	require.Equal(t, "256Mi", memReq.String())
@@ -210,7 +210,7 @@ func TestCalculatePodResourcesVariants(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cpuReq, cpuLim, memReq, memLim := calculatePodResources(tt.pod)
+			cpuReq, cpuLim, memReq, memLim := CalculatePodResources(tt.pod)
 			require.Equal(t, tt.want, [4]string{cpuReq.String(), cpuLim.String(), memReq.String(), memLim.String()})
 		})
 	}
@@ -237,6 +237,7 @@ func TestBuildReplicaSetToDeploymentMap(t *testing.T) {
 			Namespace: "team-a",
 			OwnerReferences: []metav1.OwnerReference{{
 				Kind:       "Deployment",
+				APIVersion: "apps/v1",
 				Name:       "demo-deploy",
 				Controller: &controller,
 			}},
@@ -248,7 +249,7 @@ func TestBuildReplicaSetToDeploymentMap(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	mapping := service.buildReplicaSetToDeploymentMap(context.Background(), "team-a")
+	mapping := service.BuildReplicaSetToDeploymentMap(context.Background(), "team-a")
 	require.Equal(t, "demo-deploy", mapping["demo-rs"])
 }
 
@@ -260,6 +261,7 @@ func TestBuildReplicaSetToDeploymentMapExported(t *testing.T) {
 			Namespace: "team-a",
 			OwnerReferences: []metav1.OwnerReference{{
 				Kind:       "Deployment",
+				APIVersion: "apps/v1",
 				Name:       "demo-deploy",
 				Controller: &controller,
 			}},
@@ -288,13 +290,13 @@ func TestGetPodOwnerWithMap(t *testing.T) {
 		}},
 	}}
 	mapping := map[string]string{"demo-rs": "demo-deploy"}
-	kind, name, apiVersion := getPodOwnerWithMap(pod, mapping)
+	kind, name, apiVersion := ResolveOwner(pod, mapping)
 	require.Equal(t, "Deployment", kind)
 	require.Equal(t, "demo-deploy", name)
 	require.Equal(t, "apps/v1", apiVersion, "ReplicaSet→Deployment collapse must produce apps/v1")
 
 	pod.ObjectMeta.OwnerReferences = []metav1.OwnerReference{{Kind: "Job", Name: "work", APIVersion: "batch/v1", Controller: &controller}}
-	kind, name, apiVersion = getPodOwnerWithMap(pod, mapping)
+	kind, name, apiVersion = ResolveOwner(pod, mapping)
 	require.Equal(t, "Job", kind)
 	require.Equal(t, "work", name)
 	require.Equal(t, "batch/v1", apiVersion, "non-collapsed owner must use owner.APIVersion verbatim")
@@ -308,7 +310,7 @@ func TestGetPodOwnerWithMap(t *testing.T) {
 		APIVersion: "argoproj.io/v1alpha1",
 		Controller: &controller,
 	}}
-	kind, name, apiVersion = getPodOwnerWithMap(pod, mapping)
+	kind, name, apiVersion = ResolveOwner(pod, mapping)
 	require.Equal(t, "Rollout", kind)
 	require.Equal(t, "canary", name)
 	require.Equal(t, "argoproj.io/v1alpha1", apiVersion, "CRD-as-Pod-owner must thread owner.APIVersion through")
@@ -367,7 +369,7 @@ func TestGetPodMetricsForPodsUsesIndividualFetchForSmallSets(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "team-a"},
 	}}
 
-	metrics := service.getPodMetricsForPods(ctx, "team-a", pods)
+	metrics := service.GetPodMetricsForPods(ctx, "team-a", pods)
 	require.Len(t, metrics, len(pods))
 
 	require.Equal(t, len(pods), getCalls)
@@ -399,7 +401,7 @@ func TestGetPodMetricsForPodsListsForLargeSets(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "pod-d", Namespace: "team-a"}},
 	}
 
-	metrics := service.getPodMetricsForPods(ctx, "team-a", pods)
+	metrics := service.GetPodMetricsForPods(ctx, "team-a", pods)
 	require.Len(t, metrics, len(pods))
 
 	require.Equal(t, 1, listCalls)
@@ -654,6 +656,7 @@ func TestGetPodReturnsDetailedInfo(t *testing.T) {
 			CreationTimestamp: metav1.NewTime(now.Add(-2 * time.Hour)),
 			OwnerReferences: []metav1.OwnerReference{{
 				Kind:       "ReplicaSet",
+				APIVersion: "apps/v1",
 				Name:       "demo-rs",
 				Controller: &controller,
 			}},
@@ -702,6 +705,7 @@ func TestGetPodReturnsDetailedInfo(t *testing.T) {
 			Namespace: "team-a",
 			OwnerReferences: []metav1.OwnerReference{{
 				Kind:       "Deployment",
+				APIVersion: "apps/v1",
 				Name:       "demo-deploy",
 				Controller: &controller,
 			}},
@@ -764,6 +768,7 @@ func TestSummarizePodUsesMetricsAndOwnership(t *testing.T) {
 				UID:        types.UID("rs-uid"),
 				Name:       "demo-rs",
 				Kind:       "ReplicaSet",
+				APIVersion: "apps/v1",
 				Controller: ptrBool(true),
 			}},
 		},

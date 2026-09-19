@@ -65,7 +65,7 @@ func readySummary(common resourcemodel.WorkloadCommonFacts) string {
 func BuildStatusPresentation(replicaSet *appsv1.ReplicaSet) resourcemodel.ResourceStatusPresentation {
 	facts := BuildFacts(replicaSet)
 	signals := resourcemodel.WorkloadReplicaSignals(facts.WorkloadCommonFacts)
-	signals = append(signals, statusSignals(replicaSet)...)
+	signals = append(signals, resourcemodel.ConditionSignals(facts.Conditions)...)
 	lifecycle := resourcemodel.ObjectLifecycle(replicaSet.ObjectMeta)
 	if status, ok := resourcemodel.DeletingObjectStatus(replicaSet.ObjectMeta, resourcemodel.ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
@@ -74,20 +74,6 @@ func BuildStatusPresentation(replicaSet *appsv1.ReplicaSet) resourcemodel.Resour
 		return resourcemodel.WorkloadConditionStatus(resourcemodel.ConditionFacts{Type: "ReplicaFailure", Status: string(failed.Status), Reason: failed.Reason, Message: failed.Message}, "Replica failure", "error", signals, lifecycle)
 	}
 	return resourcemodel.ReplicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
-}
-
-func statusSignals(replicaSet *appsv1.ReplicaSet) []resourcemodel.ResourceStatusSignal {
-	signals := make([]resourcemodel.ResourceStatusSignal, 0, len(replicaSet.Status.Conditions))
-	for _, condition := range replicaSet.Status.Conditions {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{
-			Type:    resourcemodel.StatusSignalCondition,
-			Name:    string(condition.Type),
-			Status:  string(condition.Status),
-			Reason:  condition.Reason,
-			Message: condition.Message,
-		})
-	}
-	return signals
 }
 
 func conditionFacts(conditions []appsv1.ReplicaSetCondition) []resourcemodel.ConditionFacts {

@@ -94,8 +94,7 @@ type fieldCodec struct {
 	fallback []reflect.Value
 }
 
-// rowCodec encodes/decodes a whole R into/out of column slices. It is built once
-// from R's type and is immutable thereafter.
+// rowCodec owns one store's field layout and mutable columns, built from R's type.
 type rowCodec[R any] struct {
 	typ    reflect.Type
 	fields []*fieldCodec // top-level leaf codecs (nested structs are flattened to leaves)
@@ -184,13 +183,13 @@ func buildFieldCodec(ft reflect.Type, idx []int) []*fieldCodec {
 
 // growTo ensures every column in the codec has length >= n (appending zero values).
 // Called when the arena grows by one row.
-func (c *rowCodec[R]) growTo(n int, dicts *codecDicts) {
+func (c *rowCodec[R]) growTo(n int) {
 	for _, fc := range c.fields {
-		fc.grow(n, dicts)
+		fc.grow(n)
 	}
 }
 
-func (fc *fieldCodec) grow(n int, _ *codecDicts) {
+func (fc *fieldCodec) grow(n int) {
 	switch fc.kind {
 	case fieldString:
 		fc.growString(n)
@@ -240,8 +239,7 @@ func (fc *fieldCodec) growPointerValue(n int) {
 	}
 }
 
-// codecDicts holds the per-field string dictionaries. They are owned by the column
-// store, not the (immutable) codec, so a fresh store starts with empty dicts.
+// codecDicts holds one column store's per-field string dictionaries.
 type codecDicts struct {
 	byField map[*fieldCodec]*stringDict
 }
@@ -542,7 +540,6 @@ type columnStore[R any] struct {
 	dicts                *codecDicts
 	rowByUID             map[string]uint32
 	freeRows             []uint32
-	count                int // live row count (== len(rowByUID))
 	live                 []bool
 	cloneStringsOnDecode bool
 }
@@ -564,7 +561,7 @@ func (cs *columnStore[R]) allocRow() uint32 {
 	}
 	id := uint32(len(cs.live))
 	cs.live = append(cs.live, false)
-	cs.codec.growTo(len(cs.live), cs.dicts)
+	cs.codec.growTo(len(cs.live))
 	return id
 }
 
@@ -576,7 +573,6 @@ func (cs *columnStore[R]) put(uid string, r R) uint32 {
 		rowID = cs.allocRow()
 		cs.rowByUID[uid] = rowID
 		cs.live[rowID] = true
-		cs.count++
 	}
 	// Encode from an addressable copy so the codec can read/copy unexported fields via
 	// their address (reflect cannot read an unexported field of a non-addressable value).
@@ -591,7 +587,7 @@ func (cs *columnStore[R]) put(uid string, r R) uint32 {
 	// prototype keeping its known-unique `name` column un-interned — recovering the
 	// memory win without per-kind knowledge. Promotion is one-way and value-preserving.
 	for _, fc := range cs.codec.fields {
-		if fc.shouldPromote(cs.dicts, cs.count) {
+		if fc.shouldPromote(cs.dicts, cs.len()) {
 			fc.promote(cs.dicts, len(cs.live))
 		}
 	}
@@ -628,7 +624,6 @@ func (cs *columnStore[R]) delete(uid string) (uint32, bool) {
 	}
 	delete(cs.rowByUID, uid)
 	cs.live[rowID] = false
-	cs.count--
 	cs.freeRows = append(cs.freeRows, rowID)
 	for _, fc := range cs.codec.fields {
 		if fc.kind == fieldFallback {
@@ -639,7 +634,7 @@ func (cs *columnStore[R]) delete(uid string) (uint32, bool) {
 }
 
 // len reports the number of live rows.
-func (cs *columnStore[R]) len() int { return cs.count }
+func (cs *columnStore[R]) len() int { return len(cs.rowByUID) }
 
 // rowID returns the arena rowId backing uid, and whether it is present. Query uses
 // it to reach a row's cached match values without reconstructing the row.
@@ -649,8 +644,7 @@ func (cs *columnStore[R]) rowID(uid string) (uint32, bool) {
 }
 
 // forEach reconstructs every live row and invokes fn; iteration stops early if fn
-// returns false. Order is by rowId, which is unspecified (Snapshot is documented as
-// unordered), matching the prior map iteration's lack of order guarantee.
+// returns false. Iteration follows the UID map; Snapshot is unordered.
 func (cs *columnStore[R]) forEach(fn func(uid string, r R) bool) {
 	for uid, rowID := range cs.rowByUID {
 		if !fn(uid, cs.getByRowID(rowID)) {

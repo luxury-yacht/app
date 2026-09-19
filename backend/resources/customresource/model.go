@@ -17,16 +17,13 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/argocd"
 	"github.com/luxury-yacht/app/backend/resources/certmanager"
+	"github.com/luxury-yacht/app/backend/resources/crdfacts"
 	"github.com/luxury-yacht/app/backend/resources/externalsecrets"
 	"github.com/luxury-yacht/app/backend/resources/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
-
-// apiextensionsAPIGroup is the API group of CustomResourceDefinitions, used to link
-// a custom resource back to its CRD.
-const apiextensionsAPIGroup = "apiextensions.k8s.io"
 
 // Descriptor is the discovery-backed identity shared by custom-resource model
 // and stream projections.
@@ -52,19 +49,17 @@ func BuildResourceModel(
 	descriptor Descriptor,
 	scope resourcemodel.ResourceScope,
 	namespaceFallback string,
-	options ...resourcemodel.ResourceModelBuildOptions,
 ) resourcemodel.ResourceModel {
+	return buildResourceModel(clusterID, resource, descriptor, scope, namespaceFallback, BuildFacts(resource))
+}
+
+func buildResourceModel(clusterID string, resource *unstructured.Unstructured, descriptor Descriptor, scope resourcemodel.ResourceScope, namespaceFallback string, facts Facts) resourcemodel.ResourceModel {
 	gvr := descriptor.GVR
-	buildOptions := resourcemodel.BuildOptions(options...)
-	facts := BuildFacts(clusterID, resource, gvr, descriptor.CRDName, buildOptions)
-	status := statusPresentation(resource, facts)
-	meta := metav1.ObjectMeta{}
-	if resource != nil {
-		meta = objectMetaFromUnstructured(resource)
-		if meta.Namespace == "" {
-			meta.Namespace = namespaceFallback
-		}
+	meta := objectMetaFromUnstructured(resource)
+	if resource != nil && meta.Namespace == "" {
+		meta.Namespace = namespaceFallback
 	}
+	status := statusPresentation(resource, meta, facts)
 	kind := resourceKind(resource, descriptor.KindFallback)
 	return resourcemodel.KubernetesResourceModel(clusterID, resourcekind.Identity{
 		Group: gvr.Group, Version: gvr.Version, Kind: kind, Resource: gvr.Resource,
@@ -72,37 +67,22 @@ func BuildResourceModel(
 	}, meta, status, resourcemodel.ResourceFacts{})
 }
 
-// BuildFacts extracts the CustomResource facts from the unstructured object. RawStatus
-// materializes only when the MaterializeDetailFacts flag is set.
-func BuildFacts(
-	clusterID string,
-	resource *unstructured.Unstructured,
-	gvr schema.GroupVersionResource,
-	crdName string,
-	options resourcemodel.ResourceModelBuildOptions,
-) Facts {
-	facts := Facts{}
-	if crdName != "" {
-		link := resourcemodel.ClusterResourceLink(clusterID, apiextensionsAPIGroup, "v1", "CustomResourceDefinition", "customresourcedefinitions", crdName, "")
-		facts.CRD = &link
-	}
+// BuildFacts extracts the status shared by custom-resource details and table rows.
+func BuildFacts(resource *unstructured.Unstructured) Facts {
 	if resource == nil {
-		return facts
+		return Facts{}
 	}
-	facts.Phase = nestedString(resource.Object, "status", "phase")
-	facts.State = nestedString(resource.Object, "status", "state")
-	facts.Ready = customResourceReady(resource.Object)
-	facts.ObservedGeneration = nestedInt64Ptr(resource.Object, "status", "observedGeneration")
-	facts.Conditions = customResourceConditions(resource.Object)
-	if options.Materialization.Has(resourcemodel.MaterializeDetailFacts) {
-		if rawStatus, ok, _ := unstructured.NestedMap(resource.Object, "status"); ok {
-			facts.RawStatus = rawStatus
-		}
+	conditions := customResourceConditions(resource.Object)
+	return Facts{
+		Phase:              crdfacts.Text(resource.Object, "status", "phase"),
+		State:              crdfacts.Text(resource.Object, "status", "state"),
+		Ready:              customResourceReady(resource.Object, conditions),
+		ObservedGeneration: crdfacts.Number(resource.Object, "status", "observedGeneration"),
+		Conditions:         conditions,
 	}
-	return facts
 }
 
-func statusPresentation(resource *unstructured.Unstructured, facts Facts) resourcemodel.ResourceStatusPresentation {
+func statusPresentation(resource *unstructured.Unstructured, meta metav1.ObjectMeta, facts Facts) resourcemodel.ResourceStatusPresentation {
 	signals := make([]resourcemodel.ResourceStatusSignal, 0, len(facts.Conditions)+3)
 	if facts.Phase != "" {
 		signals = append(signals, resourcemodel.ResourceStatusSignal{Type: resourcemodel.StatusSignalPhase, Name: "status.phase", Status: facts.Phase})
@@ -113,26 +93,12 @@ func statusPresentation(resource *unstructured.Unstructured, facts Facts) resour
 	if facts.Ready != nil {
 		signals = append(signals, resourcemodel.ResourceStatusSignal{Type: resourcemodel.StatusSignalReadiness, Name: "status.ready", Status: fmt.Sprintf("%t", *facts.Ready)})
 	}
-	for _, condition := range facts.Conditions {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{
-			Type:    resourcemodel.StatusSignalCondition,
-			Name:    condition.Type,
-			Status:  condition.Status,
-			Reason:  condition.Reason,
-			Message: condition.Message,
-		})
-	}
+	signals = append(signals, resourcemodel.ConditionSignals(facts.Conditions)...)
 
 	state, label, presentation := familyStatus(resource, facts)
-	meta := metav1.ObjectMeta{}
-	if resource != nil {
-		meta = objectMetaFromUnstructured(resource)
-	}
 	lifecycle := resourcemodel.ObjectLifecycle(meta)
-	if resource != nil {
-		if status, ok := resourcemodel.DeletingObjectStatus(meta, state, signals, lifecycle); ok {
-			return status
-		}
+	if status, ok := resourcemodel.DeletingObjectStatus(meta, state, signals, lifecycle); ok {
+		return status
 	}
 	return resourcemodel.ObjectSourceStatus(label, state, "", "", presentation, signals, lifecycle)
 }
@@ -197,14 +163,14 @@ func customResourceConditions(object map[string]any) []resourcemodel.ConditionFa
 	return facts
 }
 
-func customResourceReady(object map[string]any) *bool {
+func customResourceReady(object map[string]any, conditions []resourcemodel.ConditionFacts) *bool {
 	if ready, ok, _ := unstructured.NestedBool(object, "status", "ready"); ok {
 		return &ready
 	}
-	if readyString := nestedString(object, "status", "ready"); readyString != "" {
+	if readyString := crdfacts.Text(object, "status", "ready"); readyString != "" {
 		return readinessValue(readyString)
 	}
-	if condition := conditionByType(customResourceConditions(object), "Ready"); condition != nil {
+	if condition := conditionByType(conditions, "Ready"); condition != nil {
 		return readinessValue(condition.Status)
 	}
 	return nil
@@ -227,22 +193,6 @@ func conditionByType(conditions []resourcemodel.ConditionFacts, conditionType st
 		}
 	}
 	return nil
-}
-
-func nestedString(object map[string]any, fields ...string) string {
-	value, ok, _ := unstructured.NestedString(object, fields...)
-	if !ok {
-		return ""
-	}
-	return value
-}
-
-func nestedInt64Ptr(object map[string]any, fields ...string) *int64 {
-	value, ok, _ := unstructured.NestedInt64(object, fields...)
-	if !ok {
-		return nil
-	}
-	return &value
 }
 
 func stringValue(value any) string {
@@ -301,10 +251,10 @@ func objectMetaFromUnstructured(resource *unstructured.Unstructured) metav1.Obje
 		UID:               resource.GetUID(),
 		ResourceVersion:   resource.GetResourceVersion(),
 		Generation:        resource.GetGeneration(),
-		Labels:            resourcemodel.CopyStringMap(resource.GetLabels()),
-		Annotations:       resourcemodel.CopyStringMap(resource.GetAnnotations()),
+		Labels:            resource.GetLabels(),
+		Annotations:       resource.GetAnnotations(),
 		CreationTimestamp: resource.GetCreationTimestamp(),
 		DeletionTimestamp: resource.GetDeletionTimestamp(),
-		Finalizers:        append([]string(nil), resource.GetFinalizers()...),
+		Finalizers:        resource.GetFinalizers(),
 	}
 }

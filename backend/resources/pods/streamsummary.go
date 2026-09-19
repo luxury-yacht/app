@@ -20,6 +20,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 )
 
@@ -89,35 +90,33 @@ type podOwner struct {
 }
 
 func resolvePodOwner(pod *corev1.Pod, rsMap map[string]string, jobOwnerLookup JobControllerOwnerLookup) podOwner {
-	for _, owner := range pod.OwnerReferences {
-		if owner.Controller == nil || !*owner.Controller {
-			continue
-		}
-		resolved := podOwner{
-			kind:             owner.Kind,
-			name:             owner.Name,
-			apiVersion:       owner.APIVersion,
-			directKind:       owner.Kind,
-			directName:       owner.Name,
-			directAPIVersion: owner.APIVersion,
-		}
-		if owner.Kind == "ReplicaSet" {
-			if deployment, ok := rsMap[owner.Name]; ok {
-				resolved.kind = "Deployment"
-				resolved.name = deployment
-				resolved.apiVersion = "apps/v1"
-			}
-		}
-		if owner.Kind == "Job" && jobOwnerLookup != nil {
-			if apiVersion, kind, name, ok := jobOwnerLookup(pod.Namespace, owner.Name); ok {
-				resolved.kind = kind
-				resolved.name = name
-				resolved.apiVersion = apiVersion
-			}
-		}
-		return resolved
+	owner := metav1.GetControllerOf(pod)
+	if owner == nil {
+		return podOwner{kind: "None", name: "None"}
 	}
-	return podOwner{kind: "None", name: "None"}
+	resolved := podOwner{
+		kind:             owner.Kind,
+		name:             owner.Name,
+		apiVersion:       owner.APIVersion,
+		directKind:       owner.Kind,
+		directName:       owner.Name,
+		directAPIVersion: owner.APIVersion,
+	}
+	if owner.APIVersion == "apps/v1" && owner.Kind == "ReplicaSet" {
+		if deployment, ok := rsMap[owner.Name]; ok {
+			resolved.kind = "Deployment"
+			resolved.name = deployment
+			resolved.apiVersion = "apps/v1"
+		}
+	}
+	if owner.APIVersion == "batch/v1" && owner.Kind == "Job" && jobOwnerLookup != nil {
+		if apiVersion, kind, name, ok := jobOwnerLookup(pod.Namespace, owner.Name); ok {
+			resolved.kind = kind
+			resolved.name = name
+			resolved.apiVersion = apiVersion
+		}
+	}
+	return resolved
 }
 
 func computeResourceTotals(pod *corev1.Pod) (cpuReq, cpuLim, memReq, memLim int64) {
@@ -147,19 +146,29 @@ func buildReplicaSetDeploymentMapForPod(pod *corev1.Pod, rsLister appslisters.Re
 		return result
 	}
 	for _, owner := range pod.OwnerReferences {
-		if owner.Controller == nil || !*owner.Controller || owner.Kind != "ReplicaSet" {
+		if !isControllerKind(owner, "apps/v1", "ReplicaSet") {
 			continue
 		}
 		rs, err := rsLister.ReplicaSets(pod.Namespace).Get(owner.Name)
 		if err != nil {
 			continue
 		}
-		for _, rsOwner := range rs.OwnerReferences {
-			if rsOwner.Controller != nil && *rsOwner.Controller && rsOwner.Kind == "Deployment" {
-				result[owner.Name] = rsOwner.Name
-				break
-			}
+		if name, ok := deploymentControllerName(rs.OwnerReferences); ok {
+			result[owner.Name] = name
 		}
 	}
 	return result
+}
+
+func deploymentControllerName(owners []metav1.OwnerReference) (string, bool) {
+	for _, owner := range owners {
+		if isControllerKind(owner, "apps/v1", "Deployment") {
+			return owner.Name, true
+		}
+	}
+	return "", false
+}
+
+func isControllerKind(owner metav1.OwnerReference, apiVersion, kind string) bool {
+	return owner.Controller != nil && *owner.Controller && owner.APIVersion == apiVersion && owner.Kind == kind
 }

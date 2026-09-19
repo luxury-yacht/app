@@ -3,6 +3,8 @@ import type {
   ExternalSecretFacts,
   ExternalSecretStoreFacts,
   ExternalSecretsFacts,
+  ExternalsecretsDataSource,
+  ExternalsecretsRemoteRef,
 } from '@core/refresh/types';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import {
@@ -34,6 +36,56 @@ function SecretConfiguration({ facts }: Readonly<{ facts: ExternalSecretFacts }>
   );
 }
 
+function RemoteReferenceFields({
+  reference,
+  keyLabel,
+}: Readonly<{ reference: ExternalsecretsRemoteRef; keyLabel: string }>) {
+  return (
+    <Fields
+      fields={[
+        [keyLabel, reference.key],
+        ['Property', reference.property],
+        ['Version', reference.version],
+        ['Conversion', reference.conversionStrategy],
+        ['Decoding', reference.decodingStrategy],
+      ]}
+    />
+  );
+}
+
+function BulkSource({
+  source,
+  index,
+}: Readonly<{ source: ExternalsecretsDataSource; index: number }>) {
+  return (
+    <Card title={`Source ${index + 1}`}>
+      {!!source.extract && (
+        <RemoteReferenceFields reference={source.extract} keyLabel="Extract Key" />
+      )}
+      {!!source.find && (
+        <>
+          <Fields
+            fields={[
+              ['Find Path', source.find.path],
+              ['Name Pattern', source.find.name?.regexp],
+            ]}
+          />
+          <Values label="Tags" values={operatorEntries(source.find.tags)} />
+        </>
+      )}
+      {!!source.sourceRef?.generatorRef && (
+        <Fields
+          fields={[
+            ['Generator', source.sourceRef.generatorRef.name],
+            ['Kind', source.sourceRef.generatorRef.kind],
+            ['API Version', source.sourceRef.generatorRef.apiVersion],
+          ]}
+        />
+      )}
+    </Card>
+  );
+}
+
 function SecretData({ facts }: Readonly<{ facts: ExternalSecretFacts }>) {
   return (
     <>
@@ -43,15 +95,7 @@ function SecretData({ facts }: Readonly<{ facts: ExternalSecretFacts }>) {
             {withStableListKeys(facts.data, (mapping) => mapping.secretKey).map(
               ({ key, value }) => (
                 <Card key={key} title={value.secretKey}>
-                  <Fields
-                    fields={[
-                      ['Remote Key', value.remoteRef.key],
-                      ['Property', value.remoteRef.property],
-                      ['Version', value.remoteRef.version],
-                      ['Conversion', value.remoteRef.conversionStrategy],
-                      ['Decoding', value.remoteRef.decodingStrategy],
-                    ]}
-                  />
+                  <RemoteReferenceFields reference={value.remoteRef} keyLabel="Remote Key" />
                 </Card>
               )
             )}
@@ -63,39 +107,7 @@ function SecretData({ facts }: Readonly<{ facts: ExternalSecretFacts }>) {
           <div className="overview-card-list">
             {withStableListKeys(facts.dataFrom, (source) => JSON.stringify(source)).map(
               ({ key, value }, index) => (
-                <Card key={key} title={`Source ${index + 1}`}>
-                  {!!value.extract && (
-                    <Fields
-                      fields={[
-                        ['Extract Key', value.extract.key],
-                        ['Property', value.extract.property],
-                        ['Version', value.extract.version],
-                        ['Conversion', value.extract.conversionStrategy],
-                        ['Decoding', value.extract.decodingStrategy],
-                      ]}
-                    />
-                  )}
-                  {!!value.find && (
-                    <>
-                      <Fields
-                        fields={[
-                          ['Find Path', value.find.path],
-                          ['Name Pattern', value.find.name?.regexp],
-                        ]}
-                      />
-                      <Values label="Tags" values={operatorEntries(value.find.tags)} />
-                    </>
-                  )}
-                  {!!value.sourceRef?.generatorRef && (
-                    <Fields
-                      fields={[
-                        ['Generator', value.sourceRef.generatorRef.name],
-                        ['Kind', value.sourceRef.generatorRef.kind],
-                        ['API Version', value.sourceRef.generatorRef.apiVersion],
-                      ]}
-                    />
-                  )}
-                </Card>
+                <BulkSource key={key} source={value} index={index} />
               )
             )}
           </div>

@@ -23,7 +23,7 @@ func TestArgoCDDiscoveryAndQueryRemainNamespaced(t *testing.T) {
 	} {
 		rows = append(rows, Summary{Ref: resourcemodel.ResourceRef{ClusterID: "a", Group: input.group, Version: "v1alpha1", Kind: input.kind, Resource: input.kind + "s", Namespace: input.ns, Name: input.name, UID: input.ns + input.name}, Scope: ScopeNamespace})
 	}
-	svc.publishStreamingState([]*summaryChunk{{items: rows}}, map[string]bool{"Application": true, "AppProject": true, "Workflow": true}, map[string]struct{}{"team-a": {}, "team-b": {}}, nil, true)
+	svc.publishCatalogRowsForTest(rows, map[string]bool{"Application": true, "AppProject": true, "Workflow": true}, map[string]struct{}{"team-a": {}, "team-b": {}}, nil, true)
 	opts := QueryOptions{ResourceFamily: "argocd", Scope: ScopeNamespace, ScopeNamespaces: []string{"team-a"}, Limit: 1}
 	first := svc.Query(opts)
 	require.Equal(t, 2, first.TotalItems)

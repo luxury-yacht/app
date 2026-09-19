@@ -10,6 +10,7 @@ import {
   ALL_MULTISELECT_FILTER,
   type MultiSelectFilterSelection,
   NONE_MULTISELECT_FILTER,
+  normalizeExactMultiSelectFilterSelection,
   normalizeMultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
@@ -55,13 +56,14 @@ export interface Favorite {
 }
 
 const fromBackendSelection = (
-  selection: backend.FavoriteFilterSelection | undefined
+  selection: backend.FavoriteFilterSelection | undefined,
+  normalize = normalizeMultiSelectFilterSelection
 ): MultiSelectFilterSelection => {
   if (selection?.mode === 'none') {
     return NONE_MULTISELECT_FILTER;
   }
   if (selection?.mode === 'some') {
-    return normalizeMultiSelectFilterSelection({ mode: 'some', values: selection.values ?? [] });
+    return normalize({ mode: 'some', values: selection.values ?? [] });
   }
   return ALL_MULTISELECT_FILTER;
 };
@@ -76,7 +78,7 @@ const fromBackendFilters = (
     search: filters.search ?? '',
     kinds: fromBackendSelection(filters.kinds),
     namespaces: fromBackendSelection(filters.namespaces),
-    clusters: fromBackendSelection(filters.clusters),
+    clusters: fromBackendSelection(filters.clusters, normalizeExactMultiSelectFilterSelection),
     queryFacets: filters.queryFacets
       ? Object.fromEntries(
           Object.entries(filters.queryFacets).map(([key, selection]) => [
@@ -267,22 +269,14 @@ export const setFavoriteOrder = async (ids: string[]): Promise<void> => {
   // Reorder the cache to match the requested ID order.
   const lookup = new Map(cachedFavorites.map((fav) => [fav.id, fav]));
   const reordered: Favorite[] = [];
-  const seen = new Set<string>();
-
-  ids.forEach((id, idx) => {
-    const fav = lookup.get(id);
-    if (fav && !seen.has(id)) {
-      reordered.push({ ...fav, order: idx });
-      seen.add(id);
+  for (const id of [...ids, ...lookup.keys()]) {
+    const favorite = lookup.get(id);
+    if (!favorite) {
+      continue;
     }
-  });
-
-  // Append any favorites not in the provided list.
-  cachedFavorites.forEach((fav) => {
-    if (!seen.has(fav.id)) {
-      reordered.push({ ...fav, order: reordered.length });
-    }
-  });
+    lookup.delete(id);
+    reordered.push({ ...favorite, order: reordered.length });
+  }
 
   cachedFavorites = reordered;
   emitChanged();

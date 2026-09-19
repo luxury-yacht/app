@@ -7,7 +7,7 @@ import (
 // objectAs decodes an informer event payload to the requested type, unwrapping
 // delete tombstones. It is the generic replacement for the per-kind
 // <kind>FromObject decoders. Descriptor-driven streaming uses it via
-// streamObjectRowFromDescriptor (see stream_descriptor_dispatch.go).
+// broadcastObjectFromDescriptor (see stream_descriptor_dispatch.go).
 func objectAs[T any](obj interface{}) (T, bool) {
 	if typed, ok := obj.(T); ok {
 		return typed, true

@@ -2,9 +2,8 @@
  * backend/refresh/resourcestream/stream_descriptor_dispatch.go
  *
  * Generic descriptor-driven stream registration. The manager loops the stream
- * registry and wires each kind's informer to a single erased handler, so no kind
- * is named here. This replaces the per-kind handle* funcs + sharedStreamRegistrations
- * rows as kinds are migrated to streamspec.Descriptor.
+ * registry and wires each kind's informer to a shared notification handler.
+ * The descriptor supplies identity and scope; snapshots own row projection.
  */
 
 package resourcestream
@@ -28,14 +27,11 @@ func (m *Manager) registerDescriptorStreams(factory *informer.Factory) {
 		// Kinds with a bespoke streaming handler (HorizontalPodAutoscaler, via
 		// registerAutoscalingStreams) are registered there; their descriptor exists
 		// only for the snapshot side.
-		if d.CustomStreamHandler {
-			continue
-		}
 		// IngestOwned (cut) kinds have no typed informer in the factory; their
 		// signal-only change signal is driven from the ingest Catalog-half Sink
 		// (registerIngestNotifyStreams) so calling d.Informer(shared) here would
 		// re-create the very informer the cutover eliminated.
-		if _, owned := ingestOwned[d.GVR()]; owned {
+		if _, owned := ingestOwned[d.GVR()]; owned || d.CustomStreamHandler {
 			continue
 		}
 		if !m.canListWatch(d.Group, d.Resource) {
@@ -53,23 +49,20 @@ func (m *Manager) registerDescriptorStreams(factory *informer.Factory) {
 		}
 		desc := d
 		m.addResourceEventHandler(inf, func(mgr *Manager, obj interface{}, updateType MessageType) {
-			mgr.streamObjectRowFromDescriptor(obj, updateType, desc)
+			mgr.broadcastObjectFromDescriptor(obj, updateType, desc)
 		})
 	}
 }
 
-// streamObjectRowFromDescriptor is the erased twin of streamObjectRow: it decodes
-// the event to metav1.Object, projects the row via the descriptor's StreamRow
-// closure (which does the concrete type assertion), and broadcasts. Behaviour is
-// identical to a per-kind streamObjectRow call.
-func (m *Manager) streamObjectRowFromDescriptor(obj interface{}, updateType MessageType, d streamspec.Descriptor) {
+// broadcastObjectFromDescriptor emits object identity and resource version.
+// Query-backed tables own row projection; the stream only tells them to refetch.
+func (m *Manager) broadcastObjectFromDescriptor(obj interface{}, updateType MessageType, d streamspec.Descriptor) {
 	item, ok := objectAs[metav1.Object](obj)
 	if !ok {
 		return
 	}
 	ref := m.resourceRefForObject(item, d.Group, d.Version, d.Kind, d.Resource)
-	row := d.StreamRow(m.clusterMeta, item)
-	update := m.newObjectRowUpdate(updateType, d.Domain, item, ref, row)
+	update := m.newObjectUpdate(updateType, d.Domain, item.GetResourceVersion(), ref)
 	scopes := scopesForCluster()
 	if !d.ClusterScoped {
 		scopes = scopesForNamespace(item.GetNamespace())

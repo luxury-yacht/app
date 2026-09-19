@@ -1,37 +1,16 @@
-/*
- * backend/refresh/snapshot/workload_ingest_projector.go
- *
- * The workload kinds' owned-reflector ingest projectors. Deployment, StatefulSet,
- * DaemonSet, Job, and CronJob have NO streamspec.Descriptor (the workloads table is the
- * bespoke cross-kind WorkloadSummary, not the generic StreamRow dispatch), so the
- * IngestManager's StreamDescriptors loop never builds them. Each NewXIngestProjector is
- * the bespoke ProjectFunc the system wires onto the manager via RegisterReflector: it
- * projects each reflector-decoded workload into an ingest.Bundle so one intake
- * feeds every workload consumer, and the typed object is then dropped:
- *
- *   - Table     = the workload-OWN-fields WorkloadSummary the namespace-workloads builder
- *                 produces from the typed object alone (NO pods, NO metrics, NO HPA). The
- *                 builder is re-run at serve with the real pod-aggregate join + metrics
- *                 overlay + HPA, so those serve-side joins stay byte-identical;
- *   - Catalog   = the object-catalog Summary (objectcatalog.SummaryProjector);
- *   - ObjectMap = the object-map graph node (objectmapnode.NewNodeProjector from the
- *                 kind's collector status + action facts + edges).
- *
- * The Table half is built by the SAME buildXSummary the serve path calls, invoked with
- * nil pods and nil usage — so the own-fields the reflector projects and the own-fields the
- * serve path computes come from one function, guaranteeing byte-equivalence (proven in
- * workload_ingest_projector_test.go). The metrics + HPA + pod-aggregate join are NOT
- * projected; they are re-joined at serve from the already-cut pod store + LatestPodUsage +
- * the HPA lister, exactly as today.
- */
-
+// Workload intake projects immutable own fields, catalog metadata and graph nodes.
+// Pod readiness, resources, live metrics and HPA ownership are joined at serving.
 package snapshot
 
 import (
+	"fmt"
+
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
@@ -39,6 +18,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -95,10 +75,8 @@ func (e workloadProjectionError) Error() string { return string(e) }
 
 // NewDeploymentIngestProjector returns the ProjectFunc that projects a reflector-decoded
 // Deployment into the three-half Bundle every deployment consumer reads. The Table half is
-// the workload-own WorkloadSummary (buildDeploymentSummary with nil pods/usage), with the
-// builder's ClusterMeta stamped from meta.
+// workload own fields, with cluster identity stamped from meta.
 func NewDeploymentIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
-	builder := &NamespaceWorkloadsBuilder{}
 	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, deployment.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(deployment.ObjectMapNode.Status, deployment.ObjectMapNode.ActionFacts, deployment.ObjectMapEdges)
 	return func(obj interface{}) (interface{}, error) {
@@ -106,7 +84,7 @@ func NewDeploymentIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 		if !ok {
 			return nil, workloadProjectionError("ingest: deployment projector received a non-Deployment object")
 		}
-		summary := builder.buildDeploymentSummary(meta.ClusterID, deploy, nil, nil)
+		summary := buildDeploymentOwnSummary(meta.ClusterID, deploy)
 		var metaObj metav1.Object = deploy
 		return ingest.Bundle{
 			Table:     summary,
@@ -118,7 +96,6 @@ func NewDeploymentIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 
 // NewStatefulSetIngestProjector mirrors NewDeploymentIngestProjector for StatefulSet.
 func NewStatefulSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
-	builder := &NamespaceWorkloadsBuilder{}
 	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, statefulset.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(statefulset.ObjectMapNode.Status, statefulset.ObjectMapNode.ActionFacts, statefulset.ObjectMapEdges)
 	return func(obj interface{}) (interface{}, error) {
@@ -126,7 +103,7 @@ func NewStatefulSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 		if !ok {
 			return nil, workloadProjectionError("ingest: statefulset projector received a non-StatefulSet object")
 		}
-		summary := builder.buildStatefulSetSummary(meta.ClusterID, sts, nil, nil)
+		summary := buildStatefulSetOwnSummary(meta.ClusterID, sts)
 		var metaObj metav1.Object = sts
 		return ingest.Bundle{
 			Table:     summary,
@@ -138,7 +115,6 @@ func NewStatefulSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 
 // NewDaemonSetIngestProjector mirrors NewDeploymentIngestProjector for DaemonSet.
 func NewDaemonSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
-	builder := &NamespaceWorkloadsBuilder{}
 	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, daemonset.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(daemonset.ObjectMapNode.Status, daemonset.ObjectMapNode.ActionFacts, daemonset.ObjectMapEdges)
 	return func(obj interface{}) (interface{}, error) {
@@ -146,7 +122,7 @@ func NewDaemonSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 		if !ok {
 			return nil, workloadProjectionError("ingest: daemonset projector received a non-DaemonSet object")
 		}
-		summary := builder.buildDaemonSetSummary(meta.ClusterID, ds, nil, nil)
+		summary := buildDaemonSetOwnSummary(meta.ClusterID, ds)
 		var metaObj metav1.Object = ds
 		return ingest.Bundle{
 			Table:     summary,
@@ -158,7 +134,6 @@ func NewDaemonSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 
 // NewJobIngestProjector mirrors NewDeploymentIngestProjector for Job.
 func NewJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
-	builder := &NamespaceWorkloadsBuilder{}
 	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, jobres.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(jobres.ObjectMapNode.Status, jobres.ObjectMapNode.ActionFacts, jobres.ObjectMapEdges)
 	return func(obj interface{}) (interface{}, error) {
@@ -166,7 +141,7 @@ func NewJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 		if !ok {
 			return nil, workloadProjectionError("ingest: job projector received a non-Job object")
 		}
-		summary := builder.buildJobSummary(meta.ClusterID, job, nil, nil)
+		summary := buildJobOwnSummary(meta.ClusterID, job)
 		var metaObj metav1.Object = job
 		return ingest.Bundle{
 			Table:     summary,
@@ -179,7 +154,6 @@ func NewJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 
 // NewCronJobIngestProjector mirrors NewDeploymentIngestProjector for CronJob.
 func NewCronJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
-	builder := &NamespaceWorkloadsBuilder{}
 	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, cronjob.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(cronjob.ObjectMapNode.Status, cronjob.ObjectMapNode.ActionFacts, cronjob.ObjectMapEdges)
 	return func(obj interface{}) (interface{}, error) {
@@ -187,7 +161,7 @@ func NewCronJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 		if !ok {
 			return nil, workloadProjectionError("ingest: cronjob projector received a non-CronJob object")
 		}
-		summary := builder.buildCronJobSummary(meta.ClusterID, cron, nil, nil)
+		summary := buildCronJobOwnSummary(meta.ClusterID, cron)
 		var metaObj metav1.Object = cron
 		return ingest.Bundle{
 			Table:     summary,
@@ -195,4 +169,64 @@ func NewCronJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 			ObjectMap: nodeProject(meta.ClusterID, metaObj),
 		}, nil
 	}
+}
+
+func buildWorkloadOwnSummary(obj metav1.Object, model resourcemodel.ResourceModel, containers []corev1.Container) WorkloadSummary {
+	return WorkloadSummary{
+		Ref:                model.Ref,
+		Metadata:           streamrows.NewResourceMetadata(obj),
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		Age:                formatAge(obj.GetCreationTimestamp().Time),
+		AgeTimestamp:       creationTimestampMillis(obj),
+		CPUUsage:           "-", CPURequest: "-", CPULimit: "-",
+		MemUsage: "-", MemRequest: "-", MemLimit: "-",
+		PortForwardAvailable: common.HasForwardableContainerPorts(containers),
+	}
+}
+
+func buildDeploymentOwnSummary(clusterID string, deploy *appsv1.Deployment) WorkloadSummary {
+	summary := buildWorkloadOwnSummary(deploy, deployment.BuildResourceModel(clusterID, deploy), deploy.Spec.Template.Spec.Containers)
+	desired := int32(0)
+	if deploy.Spec.Replicas != nil {
+		desired = *deploy.Spec.Replicas
+	}
+	summary.Ready = workloadPodReadyStatus(nil, deploy.Status.ReadyReplicas, desired)
+	summary.DesiredReplicas = cloneInt32Ptr(deploy.Spec.Replicas)
+	return summary
+}
+
+func buildStatefulSetOwnSummary(clusterID string, stateful *appsv1.StatefulSet) WorkloadSummary {
+	summary := buildWorkloadOwnSummary(stateful, statefulset.BuildResourceModel(clusterID, stateful), stateful.Spec.Template.Spec.Containers)
+	desired := int32(0)
+	if stateful.Spec.Replicas != nil {
+		desired = *stateful.Spec.Replicas
+	}
+	summary.Ready = workloadPodReadyStatus(nil, stateful.Status.ReadyReplicas, desired)
+	summary.DesiredReplicas = cloneInt32Ptr(stateful.Spec.Replicas)
+	return summary
+}
+
+func buildDaemonSetOwnSummary(clusterID string, daemon *appsv1.DaemonSet) WorkloadSummary {
+	summary := buildWorkloadOwnSummary(daemon, daemonset.BuildResourceModel(clusterID, daemon), daemon.Spec.Template.Spec.Containers)
+	summary.Ready = workloadPodReadyStatus(nil, daemon.Status.NumberReady, daemon.Status.DesiredNumberScheduled)
+	return summary
+}
+
+func buildJobOwnSummary(clusterID string, job *batchv1.Job) WorkloadSummary {
+	summary := buildWorkloadOwnSummary(job, jobres.BuildResourceModel(clusterID, job), job.Spec.Template.Spec.Containers)
+	desired := int32(1)
+	if job.Spec.Completions != nil {
+		desired = *job.Spec.Completions
+	}
+	summary.Ready = fmt.Sprintf("%d/%d", job.Status.Succeeded, desired)
+	return summary
+}
+
+func buildCronJobOwnSummary(clusterID string, cron *batchv1.CronJob) WorkloadSummary {
+	summary := buildWorkloadOwnSummary(cron, cronjob.BuildResourceModel(clusterID, cron), cron.Spec.JobTemplate.Spec.Template.Spec.Containers)
+	summary.Ready = fmt.Sprintf("%d", len(cron.Status.Active))
+	return summary
 }

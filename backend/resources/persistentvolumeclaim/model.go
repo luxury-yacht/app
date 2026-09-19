@@ -10,6 +10,7 @@ package persistentvolumeclaim
 import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // BuildResourceModel builds the PVC resource model (status only; facts via BuildFacts).
@@ -31,21 +32,18 @@ func BuildFacts(pvc *corev1.PersistentVolumeClaim, relationships *resourcemodel.
 	if buildOptions.Materialization.Has(resourcemodel.MaterializeReverseLinks) && relationships != nil {
 		facts.MountedBy = relationships.PersistentVolumeClaimMountedBy(pvc.Namespace, pvc.Name)
 	}
-	if storage, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
-		qty := storage.DeepCopy()
-		facts.Capacity.Storage = &qty
-	} else if storage, ok := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
+	if storage, ok := storageCapacity(pvc); ok {
 		qty := storage.DeepCopy()
 		facts.Capacity.Storage = &qty
 	}
+
 	return facts
 }
 
 // BuildStatusPresentation derives the PVC status presentation.
 func BuildStatusPresentation(pvc *corev1.PersistentVolumeClaim) resourcemodel.ResourceStatusPresentation {
-	facts := BuildFacts(pvc, nil, resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts})
 	state := pvcState(pvc)
-	signals := pvcSignals(pvc, facts)
+	signals := pvcSignals(pvc)
 	lifecycle := resourcemodel.ObjectLifecycle(pvc.ObjectMeta)
 	if status, ok := resourcemodel.DeletingObjectStatus(pvc.ObjectMeta, state, signals, lifecycle); ok {
 		return status
@@ -58,10 +56,9 @@ func BuildStatusPresentation(pvc *corev1.PersistentVolumeClaim) resourcemodel.Re
 		return resourcemodel.ObjectSourceStatus(string(pvc.Status.Phase), state, "", "", "warning", signals, lifecycle)
 	case corev1.ClaimLost:
 		return resourcemodel.ObjectSourceStatus(string(pvc.Status.Phase), state, "", "", "error", signals, lifecycle)
+	case "":
+		return resourcemodel.ObjectSourceStatus("Unknown", state, "", "", "unknown", signals, lifecycle)
 	default:
-		if pvc.Status.Phase == "" {
-			return resourcemodel.ObjectSourceStatus("Unknown", state, "", "", "unknown", signals, lifecycle)
-		}
 		return resourcemodel.ObjectSourceStatus(string(pvc.Status.Phase), state, "", "", "inactive", signals, lifecycle)
 	}
 }
@@ -77,25 +74,20 @@ func storageClassName(pvc *corev1.PersistentVolumeClaim) string {
 	if pvc.Spec.StorageClassName != nil {
 		return *pvc.Spec.StorageClassName
 	}
-	if pvc.Annotations != nil {
-		if value, ok := pvc.Annotations["volume.beta.kubernetes.io/storage-class"]; ok {
-			return value
-		}
-	}
-	return ""
+	return pvc.Annotations["volume.beta.kubernetes.io/storage-class"]
 }
 
-func pvcSignals(pvc *corev1.PersistentVolumeClaim, facts Facts) []resourcemodel.ResourceStatusSignal {
+func pvcSignals(pvc *corev1.PersistentVolumeClaim) []resourcemodel.ResourceStatusSignal {
 	signals := []resourcemodel.ResourceStatusSignal{{
 		Type:   resourcemodel.StatusSignalPhase,
 		Name:   "status.phase",
 		Status: pvcState(pvc),
 	}}
-	if facts.StorageClass != "" {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{Type: resourcemodel.StatusSignalResourceState, Name: "spec.storageClassName", Status: facts.StorageClass})
+	if storageClass := storageClassName(pvc); storageClass != "" {
+		signals = append(signals, resourcemodel.ResourceStatusSignal{Type: resourcemodel.StatusSignalResourceState, Name: "spec.storageClassName", Status: storageClass})
 	}
-	if facts.VolumeName != "" {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{Type: resourcemodel.StatusSignalResourceState, Name: "spec.volumeName", Status: facts.VolumeName})
+	if pvc.Spec.VolumeName != "" {
+		signals = append(signals, resourcemodel.ResourceStatusSignal{Type: resourcemodel.StatusSignalResourceState, Name: "spec.volumeName", Status: pvc.Spec.VolumeName})
 	}
 	for _, condition := range pvc.Status.Conditions {
 		signals = append(signals, resourcemodel.ResourceStatusSignal{
@@ -121,4 +113,13 @@ func conditionFacts(conditions []corev1.PersistentVolumeClaimCondition) []resour
 		})
 	}
 	return facts
+}
+
+// storageCapacity uses the reported quantity when present, otherwise the request.
+func storageCapacity(pvc *corev1.PersistentVolumeClaim) (resource.Quantity, bool) {
+	if quantity, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
+		return quantity, true
+	}
+	quantity, ok := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+	return quantity, ok
 }

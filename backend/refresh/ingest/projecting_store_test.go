@@ -172,6 +172,15 @@ func TestProjectingStoreReplaceReprojectsWholeSetAndDropsRemoved(t *testing.T) {
 }
 
 func TestProjectingStoreReplaceSkipsProjectionErrorsKeepsRest(t *testing.T) {
+	for _, namespace := range []string{"", "default"} {
+		t.Run("partition="+namespace, func(t *testing.T) {
+			testReplaceSkipsProjectionErrors(t, namespace)
+		})
+	}
+}
+
+func testReplaceSkipsProjectionErrors(t *testing.T, namespace string) {
+	t.Helper()
 	// A projection that fails for one specific object, succeeds for the rest.
 	project := func(obj interface{}) (interface{}, error) {
 		cm := obj.(*corev1.ConfigMap)
@@ -182,7 +191,7 @@ func TestProjectingStoreReplaceSkipsProjectionErrorsKeepsRest(t *testing.T) {
 	}
 	store := NewProjectingStore(project)
 
-	if err := store.Replace([]interface{}{
+	if err := store.PartitionView(namespace).Replace([]interface{}{
 		configMap("default", "good1"),
 		configMap("default", "bad"),
 		configMap("default", "good2"),

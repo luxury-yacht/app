@@ -21,7 +21,7 @@ import (
 func BuildResourceModel(clusterID string, pdb *policyv1.PodDisruptionBudget) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, pdb)
 	status := statusPresentation(pdb, facts)
-	return resourcemodel.PolicyResourceModel(clusterID, Identity, pdb.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, pdb.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the PodDisruptionBudget facts from the raw object.
@@ -56,15 +56,7 @@ func statusPresentation(pdb *policyv1.PodDisruptionBudget, facts Facts) resource
 		{Type: resourcemodel.StatusSignalResourceState, Name: "status.currentHealthy", Status: stringInt32(facts.CurrentHealthy)},
 		{Type: resourcemodel.StatusSignalResourceState, Name: "status.desiredHealthy", Status: stringInt32(facts.DesiredHealthy)},
 	}
-	for _, condition := range facts.Conditions {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{
-			Type:    resourcemodel.StatusSignalCondition,
-			Name:    condition.Type,
-			Status:  condition.Status,
-			Reason:  condition.Reason,
-			Message: condition.Message,
-		})
-	}
+	signals = append(signals, resourcemodel.ConditionSignals(facts.Conditions)...)
 	lifecycle := resourcemodel.ObjectLifecycle(pdb.ObjectMeta)
 	if status, ok := resourcemodel.DeletingObjectStatus(pdb.ObjectMeta, state, signals, lifecycle); ok {
 		return status

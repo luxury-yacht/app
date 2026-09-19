@@ -73,7 +73,7 @@ func equalStrings(a, b []string) bool {
 func TestProjectingReflectorConvergesToProjectedRows(t *testing.T) {
 	client := fake.NewClientset(configMap("default", "seed"))
 	store := NewProjectingStore(projectConfigMap)
-	reflector := NewProjectingReflector(
+	reflector := cache.NewNamedReflector(
 		"configmaps-test",
 		configMapListWatch(client),
 		&corev1.ConfigMap{},
@@ -83,7 +83,7 @@ func TestProjectingReflectorConvergesToProjectedRows(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go reflector.Run(ctx)
+	go reflector.Run(ctx.Done())
 
 	// Initial list should populate the seed object as a projected row.
 	if got := waitForKeys(t, store, []string{"default/seed"}); !equalStrings(got, []string{"default/seed"}) {
@@ -124,7 +124,7 @@ func TestProjectingReflectorConvergesToProjectedRows(t *testing.T) {
 func TestProjectingReflectorStopsOnContextCancelNoLeak(t *testing.T) {
 	client := fake.NewClientset()
 	store := NewProjectingStore(projectConfigMap)
-	reflector := NewProjectingReflector(
+	reflector := cache.NewNamedReflector(
 		"configmaps-leak-test",
 		configMapListWatch(client),
 		&corev1.ConfigMap{},
@@ -136,7 +136,7 @@ func TestProjectingReflectorStopsOnContextCancelNoLeak(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		reflector.Run(ctx)
+		reflector.Run(ctx.Done())
 		close(done)
 	}()
 

@@ -18,8 +18,9 @@ import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSe
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
-import { useFavToggle } from '@ui/favorites/FavToggle';
+import { type FavToggleState, useFavToggle } from '@ui/favorites/FavToggle';
 import { useCallback, useEffect, useMemo } from 'react';
+import type { SortConfig } from '@/hooks/useTableSort';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import {
   normalizeQueryBackedNamespaceQueryFilters,
@@ -61,6 +62,52 @@ const buildFavoriteColumns = <T,>(
     sortable: false,
   })),
 ];
+
+interface ResourceGridFavoriteOptions<T extends ResourceGridTableRow>
+  extends Pick<
+      QueryResourceGridTableParams<T>,
+      'columns' | 'supportsCustomMetadataColumns' | 'persistence' | 'favoritePane'
+    >,
+    Pick<
+      FavToggleState,
+      'enabled' | 'availableKinds' | 'availableFilterNamespaces' | 'filterOptions'
+    > {
+  sortConfig: SortConfig | null;
+}
+
+function useResourceGridFavorite<T extends ResourceGridTableRow>({
+  columns,
+  supportsCustomMetadataColumns,
+  persistence,
+  sortConfig,
+  favoritePane,
+  ...options
+}: ResourceGridFavoriteOptions<T>) {
+  const favoriteColumns = useMemo(
+    () =>
+      buildFavoriteColumns(
+        columns,
+        supportsCustomMetadataColumns ? (persistence.customColumns ?? []) : []
+      ),
+    [columns, persistence.customColumns, supportsCustomMetadataColumns]
+  );
+  return useFavToggle({
+    ...options,
+    filters: persistence.filters,
+    sortColumn: sortConfig?.key ?? null,
+    sortDirection: sortConfig?.direction ?? 'asc',
+    columnVisibility: persistence.columnVisibility ?? {},
+    columnOrder: persistence.columnOrder ?? [],
+    columns: favoriteColumns,
+    setFilters: persistence.setFilters,
+    setSortConfig: persistence.setSortConfig,
+    setColumnVisibility: persistence.setColumnVisibility,
+    setColumnOrder: persistence.setColumnOrder,
+    hydrated: persistence.hydrated,
+    paneId: favoritePane?.id,
+    paneLabel: favoritePane?.label,
+  });
+}
 
 const useDefaultResourceGridKey = <T extends ResourceGridTableRow>(
   fallbackClusterId?: string | null
@@ -232,31 +279,14 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
     persistence,
     virtualization,
   });
-  const favoriteColumns = useMemo(
-    () =>
-      buildFavoriteColumns(
-        columns,
-        supportsCustomMetadataColumns ? (persistence.customColumns ?? []) : []
-      ),
-    [columns, persistence.customColumns, supportsCustomMetadataColumns]
-  );
-
-  const { item: favToggle, modal: favModal } = useFavToggle({
-    filters: persistence.filters,
-    sortColumn: binding.sortConfig?.key ?? null,
-    sortDirection: binding.sortConfig?.direction ?? 'asc',
-    columnVisibility: persistence.columnVisibility ?? {},
-    columnOrder: persistence.columnOrder ?? [],
-    columns: favoriteColumns,
-    setFilters: persistence.setFilters,
-    setSortConfig: persistence.setSortConfig,
-    setColumnVisibility: persistence.setColumnVisibility,
-    setColumnOrder: persistence.setColumnOrder,
-    hydrated: persistence.hydrated,
+  const { item: favToggle, modal: favModal } = useResourceGridFavorite({
+    columns,
+    supportsCustomMetadataColumns,
+    persistence,
+    sortConfig: binding.sortConfig,
+    favoritePane,
     availableKinds: filterOptions.kinds,
     availableFilterNamespaces: filterOptions.namespaces,
-    paneId: favoritePane?.id,
-    paneLabel: favoritePane?.label,
     filterOptions,
   });
 
@@ -459,31 +489,15 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
       showNamespaceFilters,
     ]
   );
-  const favoriteColumns = useMemo(
-    () =>
-      buildFavoriteColumns(
-        columns,
-        supportsCustomMetadataColumns ? (persistence.customColumns ?? []) : []
-      ),
-    [columns, persistence.customColumns, supportsCustomMetadataColumns]
-  );
-  const { item: favToggle, modal: favModal } = useFavToggle({
+  const { item: favToggle, modal: favModal } = useResourceGridFavorite({
+    columns,
+    supportsCustomMetadataColumns,
+    persistence,
+    sortConfig,
+    favoritePane,
     enabled: showFavoriteToggle,
-    filters: persistence.filters,
-    sortColumn: sortConfig?.key ?? null,
-    sortDirection: sortConfig?.direction ?? 'asc',
-    columnVisibility: persistence.columnVisibility ?? {},
-    columnOrder: persistence.columnOrder ?? [],
-    columns: favoriteColumns,
-    setFilters: persistence.setFilters,
-    setSortConfig: persistence.setSortConfig,
-    setColumnVisibility: persistence.setColumnVisibility,
-    setColumnOrder: persistence.setColumnOrder,
-    hydrated: persistence.hydrated,
     availableKinds,
     availableFilterNamespaces: showNamespaceFilters ? availableFilterNamespaces : undefined,
-    paneId: favoritePane?.id,
-    paneLabel: favoritePane?.label,
     filterOptions: favoriteFilterOptions,
   });
   const trailingFilterActions = useMemo(

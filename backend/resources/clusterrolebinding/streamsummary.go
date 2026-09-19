@@ -10,6 +10,7 @@ package clusterrolebinding
 
 import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
 
@@ -18,6 +19,6 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, binding *rbacv1.ClusterRole
 	if binding == nil {
 		return streamrows.ClusterRBACEntry{}
 	}
-	details := DescribeSummary(BuildFacts(meta.ClusterID, binding))
+	details := resourcemodel.RBACBindingSummary(binding.RoleRef.Name, len(binding.Subjects))
 	return streamrows.NewClusterRBACEntry(meta, Identity, binding, details, "CRB")
 }

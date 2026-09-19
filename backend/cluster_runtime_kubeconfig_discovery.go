@@ -22,7 +22,7 @@ func (m *ClusterRuntimeManager) discoverKubeconfigsLocked() error {
 	m.discoveryRepository.SetDiscoveredKubeconfigSearchPaths(nil)
 	m.kubeconfigDiscoveryState = KubeconfigDiscoveryStateNoKubeconfigs
 
-	searchPaths, err := m.loadKubeconfigSearchPaths()
+	searchPaths, err := m.discoveryRepository.KubeconfigSearchPaths()
 	if err != nil {
 		m.logger.ErrorWithCause(err, "Failed to load kubeconfig search paths", logsources.KubeconfigManager)
 		return err
@@ -121,7 +121,6 @@ func (m *ClusterRuntimeManager) appendKubeconfigFromFile(path string, name strin
 	}
 
 	isDefault := pathsEqual(cleanedPath, defaultConfigPath)
-	displayName := name
 
 	m.logger.Info(fmt.Sprintf("Found valid kubeconfig: %s (%d clusters, %d contexts)", cleanedPath, len(config.Clusters), len(config.Contexts)), logsources.KubeconfigManager)
 
@@ -137,7 +136,7 @@ func (m *ClusterRuntimeManager) appendKubeconfigFromFile(path string, name strin
 			invalidReason = err.Error()
 		}
 		m.availableKubeconfigs = append(m.availableKubeconfigs, KubeconfigInfo{
-			Name:             displayName,
+			Name:             name,
 			Path:             cleanedPath,
 			Context:          contextName,
 			IsDefault:        isDefault,
@@ -146,11 +145,6 @@ func (m *ClusterRuntimeManager) appendKubeconfigFromFile(path string, name strin
 			InvalidReason:    invalidReason,
 		})
 	}
-}
-
-// loadKubeconfigSearchPaths reads and normalizes the kubeconfig search paths.
-func (m *ClusterRuntimeManager) loadKubeconfigSearchPaths() ([]string, error) {
-	return m.discoveryRepository.KubeconfigSearchPaths()
 }
 
 func (m *ClusterRuntimeManager) refreshKubeconfigDiscoveryAndWatch() error {
@@ -228,7 +222,7 @@ func (m *ClusterRuntimeManager) stopKubeconfigWatcher() {
 
 // resolvedKubeconfigWatchPaths returns watchedPath entries for configured search paths.
 func (m *ClusterRuntimeManager) resolvedKubeconfigWatchPaths() []watchedPath {
-	searchPaths, err := m.loadKubeconfigSearchPaths()
+	searchPaths, err := m.discoveryRepository.KubeconfigSearchPaths()
 	if err != nil {
 		return nil
 	}

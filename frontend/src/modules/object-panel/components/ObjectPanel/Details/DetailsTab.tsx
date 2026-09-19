@@ -28,7 +28,37 @@ interface ActionDetail {
 
 export type { DetailsTabProps } from './detailsTabTypes';
 
-const DetailsTabContent: React.FC<DetailsTabProps> = ({
+const DetailOverview = ({
+  objectData,
+  detailModel: model,
+  onAfterDelete,
+  onAfterAction,
+}: Pick<DetailsTabProps, 'objectData' | 'detailModel' | 'onAfterDelete' | 'onAfterAction'>) => {
+  if (!objectData) {
+    return null;
+  }
+  const detail = (model.activeDetail ?? undefined) as ActionDetail | undefined;
+  return (
+    <Overview
+      kind={objectData.kind ?? ''}
+      name={objectData.name ?? ''}
+      namespace={objectData.namespace ?? undefined}
+      activeDetail={model.activeDetail}
+      status={detail?.status}
+      ready={detail?.ready}
+      replicas={detail?.replicas}
+      unschedulable={detail?.unschedulable}
+      suspend={model.cronJobSuspended}
+      desiredReplicas={model.desiredScaleReplicas}
+      objectKind={objectData.kind}
+      portForwardAvailable={model.portForwardAvailable}
+      onAfterDelete={onAfterDelete}
+      onAfterAction={onAfterAction}
+    />
+  );
+};
+
+const DetailsTab: React.FC<DetailsTabProps> = ({
   objectData,
   detailModel,
   detailsLoading,
@@ -49,10 +79,6 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
     objectData,
     detail: model.activeDetail,
   });
-
-  const portForwardAvailable = model.portForwardAvailable;
-  // Action-relevant fields come from the active DTO + the derived model (no per-kind flattening).
-  const detail = (model.activeDetail ?? undefined) as ActionDetail | undefined;
 
   return (
     <div className="object-panel-tab-content">
@@ -100,24 +126,12 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
           </div>
         )}
 
-        {!!objectData && (
-          <Overview
-            kind={objectData.kind ?? ''}
-            name={objectData.name ?? ''}
-            namespace={objectData.namespace ?? undefined}
-            activeDetail={model.activeDetail}
-            status={detail?.status}
-            ready={detail?.ready}
-            replicas={detail?.replicas}
-            unschedulable={detail?.unschedulable}
-            suspend={model.cronJobSuspended}
-            desiredReplicas={model.desiredScaleReplicas}
-            objectKind={objectData?.kind}
-            portForwardAvailable={portForwardAvailable}
-            onAfterDelete={onAfterDelete}
-            onAfterAction={onAfterAction}
-          />
-        )}
+        <DetailOverview
+          objectData={objectData}
+          detailModel={model}
+          onAfterDelete={onAfterDelete}
+          onAfterAction={onAfterAction}
+        />
 
         {(hasUtilization || objectData?.kind?.toLowerCase() === 'node') && utilizationData && (
           <div className="details-section-spaced">
@@ -133,34 +147,21 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
         )}
 
         {/* Containers Section - Only for Pods and core Workloads (not Jobs/CronJobs) */}
-        {(() => {
-          if (!model.containerSection) {
-            return null;
-          }
+        {!!model.containerSection && (
+          <div className="details-section-spaced">
+            <Containers
+              containers={model.containerSection.containers}
+              initContainers={model.containerSection.initContainers}
+            />
+          </div>
+        )}
 
-          return (
-            <div className="details-section-spaced">
-              <Containers
-                containers={model.containerSection.containers}
-                initContainers={model.containerSection.initContainers}
-              />
-            </div>
-          );
-        })()}
-
-        {/* Rules Section - For Roles and ClusterRoles. Sibling to Overview;
-            rules are the primary content of the resource. */}
-        {(() => {
-          const rules = model.roleRules;
-          if (!rules || rules.length === 0) {
-            return null;
-          }
-          return (
-            <div className="details-section-spaced">
-              <RBACRules policyRules={rules} />
-            </div>
-          );
-        })()}
+        {/* Rules are the primary content for Roles and ClusterRoles. */}
+        {!!model.roleRules?.length && (
+          <div className="details-section-spaced">
+            <RBACRules policyRules={model.roleRules} />
+          </div>
+        )}
 
         {!!dataInfo && (
           <div className="details-section-spaced">
@@ -174,10 +175,6 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
       </div>
     </div>
   );
-};
-
-const DetailsTab: React.FC<DetailsTabProps> = (props) => {
-  return <DetailsTabContent {...props} />;
 };
 
 export default DetailsTab;

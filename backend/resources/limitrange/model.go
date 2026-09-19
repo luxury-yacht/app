@@ -18,9 +18,8 @@ import (
 // BuildResourceModel builds the LimitRange resource model. Facts are owned by
 // this package; the shared ResourceModel carries identity + status.
 func BuildResourceModel(clusterID string, limitRange *corev1.LimitRange) resourcemodel.ResourceModel {
-	facts := BuildFacts(limitRange)
-	status := statusPresentation(limitRange, facts)
-	return resourcemodel.PolicyResourceModel(clusterID, Identity, limitRange.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	status := statusPresentation(limitRange)
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, limitRange.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the LimitRange facts from the raw object.
@@ -39,8 +38,8 @@ func BuildFacts(limitRange *corev1.LimitRange) Facts {
 	return facts
 }
 
-func statusPresentation(limitRange *corev1.LimitRange, facts Facts) resourcemodel.ResourceStatusPresentation {
-	state := strconv.Itoa(len(facts.Limits))
+func statusPresentation(limitRange *corev1.LimitRange) resourcemodel.ResourceStatusPresentation {
+	state := strconv.Itoa(len(limitRange.Spec.Limits))
 	signals := []resourcemodel.ResourceStatusSignal{{
 		Type:   resourcemodel.StatusSignalResourceState,
 		Name:   "spec.limits.count",
@@ -50,13 +49,13 @@ func statusPresentation(limitRange *corev1.LimitRange, facts Facts) resourcemode
 	if status, ok := resourcemodel.DeletingObjectStatus(limitRange.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
-	return resourcemodel.ObjectSourceStatus(summary(facts), state, "", "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(summary(limitRange.Spec.Limits), state, "", "", "ready", signals, lifecycle)
 }
 
-func summary(facts Facts) string {
-	out := fmt.Sprintf("%d limit(s)", len(facts.Limits))
-	if len(facts.Limits) > 0 {
-		out += fmt.Sprintf(" - Type: %s", facts.Limits[0].Kind)
+func summary(limits []corev1.LimitRangeItem) string {
+	out := fmt.Sprintf("%d limit(s)", len(limits))
+	if len(limits) > 0 {
+		out += fmt.Sprintf(" - Type: %s", limits[0].Type)
 	}
 	return out
 }

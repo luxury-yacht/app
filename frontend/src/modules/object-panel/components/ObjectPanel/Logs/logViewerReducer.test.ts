@@ -77,7 +77,7 @@ describe('logViewerReducer view mode', () => {
     const previous = logViewerReducer(base({ textFilter: 'boom' }), {
       type: 'START_PREVIOUS_LOGS',
     });
-    const reset = logViewerReducer(previous, { type: 'RESET_FOR_NEW_SCOPE', isWorkload: false });
+    const reset = logViewerReducer(previous, { type: 'RESET_FOR_NEW_SCOPE' });
     expect(reset.mode).toEqual(LIVE_MODE);
     expect(reset.textFilter).toBe('');
   });
@@ -103,18 +103,14 @@ describe('logViewerReducer state transitions', () => {
     const selectedFilters = { mode: 'some' as const, values: ['pod:api'] };
     const actions = [
       { type: 'SET_CONTAINERS' as const, payload: ['api', 'sidecar'] },
-      { type: 'SET_SELECTED_CONTAINER' as const, payload: 'api' },
       { type: 'SET_AVAILABLE_PODS' as const, payload: ['api-1'] },
-      { type: 'SET_AVAILABLE_CONTAINERS' as const, payload: ['api'] },
       { type: 'SET_SELECTED_FILTERS' as const, payload: selectedFilters },
     ];
     const result = actions.reduce(logViewerReducer, base());
 
     expect(result).toMatchObject({
       containers: ['api', 'sidecar'],
-      selectedContainer: 'api',
       availablePods: ['api-1'],
-      availableContainers: ['api'],
       selectedFilters,
     });
   });
@@ -167,16 +163,15 @@ describe('logViewerReducer state transitions', () => {
     expect(logViewerReducer(shown, { type: 'TOGGLE_PARSED_VIEW' }).parsedContainerLogs).toEqual([]);
   });
 
-  it('updates copy feedback and preserves the selected container on workload resets', () => {
+  it('updates copy feedback and clears filtering and display mode on scope resets', () => {
     const copied = logViewerReducer(base(), { type: 'SET_COPY_FEEDBACK', payload: 'copied' });
     const reset = logViewerReducer(
-      { ...copied, selectedContainer: 'api', textFilter: 'error', displayMode: 'parsed' },
-      { type: 'RESET_FOR_NEW_SCOPE', isWorkload: true }
+      { ...copied, textFilter: 'error', displayMode: 'parsed' },
+      { type: 'RESET_FOR_NEW_SCOPE' }
     );
 
     expect(copied.copyFeedback).toBe('copied');
     expect(reset).toMatchObject({
-      selectedContainer: 'api',
       textFilter: '',
       displayMode: 'raw',
       mode: LIVE_MODE,

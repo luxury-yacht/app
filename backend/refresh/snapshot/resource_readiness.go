@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,11 +20,7 @@ func withResourceReadiness(ctx context.Context, states map[string]refresh.Resour
 	if len(states) == 0 {
 		return ctx
 	}
-	copyStates := make(map[string]refresh.ResourceReadiness, len(states))
-	for key, state := range states {
-		copyStates[key] = state
-	}
-	return context.WithValue(ctx, resourceReadinessContextKey{}, copyStates)
+	return context.WithValue(ctx, resourceReadinessContextKey{}, maps.Clone(states))
 }
 
 func resourceReadinessFromContext(ctx context.Context, key string) refresh.ResourceReadiness {

@@ -19,12 +19,7 @@
   min-width: 6.5rem;
 }
 
-.policy-detail-label--narrow {
-  color: var(--color-text-secondary);
-  display: inline-block;
-  min-width: 4rem;
-}
-
+.policy-detail-label--narrow,
 .policy-detail-label--medium {
   color: var(--color-text-secondary);
   display: inline-block;

@@ -95,7 +95,7 @@ func namespaceEventsQuerypageSchema() querypage.Schema[EventSummary] {
 	// so "objecttype"/"objectname" still resolve to the right encoders.
 	return querypageSchemaFromAdapter(
 		namespacedEventTableQueryAdapter(),
-		[]string{"name", "kind", "namespace", "type", "source", "reason", "object", "objecttype", "objectname", "message", "age"},
+		lowerTrimAll(namespaceEventsQueryCapabilities().SortableFields),
 	)
 }
 

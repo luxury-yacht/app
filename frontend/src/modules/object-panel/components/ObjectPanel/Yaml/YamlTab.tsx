@@ -44,93 +44,73 @@ import {
   type YamlTransactionDiffResult,
 } from './yamlTransaction';
 
-const renderYamlDiffToggle = (
-  diff: YamlTransactionDiffResult,
+const buildYamlDiffView = (
+  diff: YamlTransactionDiffResult | null,
   keyPrefix: string,
   showFullDiff: boolean,
   onToggleFullDiff: (key: string) => void
 ) => {
-  if (diff.tooLarge) {
-    return null;
+  if (!diff || diff.tooLarge) {
+    return { toggle: null, content: null };
   }
-  if (diff.lines.length === 0) {
-    return null;
+  const visibleLines = showFullDiff
+    ? diff.lines
+    : diff.lines.filter((line) => line.type !== 'context');
+  if (visibleLines.length === 0) {
+    return { toggle: null, content: null };
   }
   const hasContextLines = diff.lines.some((line) => line.type === 'context');
-  const visibleLines = showFullDiff
-    ? diff.lines
-    : diff.lines.filter((line) => line.type !== 'context');
-  if (visibleLines.length === 0) {
-    return null;
-  }
-  return hasContextLines ? (
-    <button
-      className="button generic"
-      type="button"
-      aria-expanded={showFullDiff}
-      onClick={() => onToggleFullDiff(keyPrefix)}
-    >
-      {showFullDiff ? 'Show only changes' : 'Show full diff'}
-    </button>
-  ) : null;
-};
+  return {
+    toggle: hasContextLines ? (
+      <button
+        className="button generic"
+        type="button"
+        aria-expanded={showFullDiff}
+        onClick={() => onToggleFullDiff(keyPrefix)}
+      >
+        {showFullDiff ? 'Show only changes' : 'Show full diff'}
+      </button>
+    ) : null,
+    content: (
+      <div className="yaml-drift-diff" role="status" aria-live="polite">
+        <pre>
+          {visibleLines.map((line, index) => {
+            const lineKeyIndex = showFullDiff ? index : diff.lines.indexOf(line);
+            let prefix: string;
 
-const renderYamlDiff = (
-  diff: YamlTransactionDiffResult,
-  keyPrefix: string,
-  showFullDiff: boolean
-) => {
-  if (diff.tooLarge) {
-    return null;
-  }
-  if (diff.lines.length === 0) {
-    return null;
-  }
-  const visibleLines = showFullDiff
-    ? diff.lines
-    : diff.lines.filter((line) => line.type !== 'context');
-  if (visibleLines.length === 0) {
-    return null;
-  }
-  return (
-    <div className="yaml-drift-diff" role="status" aria-live="polite">
-      <pre>
-        {visibleLines.map((line, index) => {
-          const lineKeyIndex = showFullDiff ? index : diff.lines.indexOf(line);
-          let prefix: string;
+            if (line.type === 'added') {
+              prefix = '+';
+            } else if (line.type === 'removed') {
+              prefix = '-';
+            } else {
+              prefix = ' ';
+            }
 
-          if (line.type === 'added') {
-            prefix = '+';
-          } else if (line.type === 'removed') {
-            prefix = '-';
-          } else {
-            prefix = ' ';
-          }
-
-          const left =
-            line.leftLineNumber !== undefined && line.leftLineNumber !== null
-              ? line.leftLineNumber.toString().padStart(4, ' ')
-              : '    ';
-          const right =
-            line.rightLineNumber !== undefined && line.rightLineNumber !== null
-              ? line.rightLineNumber.toString().padStart(4, ' ')
-              : '    ';
-          return (
-            <span
-              key={`${keyPrefix}-${lineKeyIndex}`}
-              className={`yaml-drift-diff-line yaml-drift-diff-line-${line.type}`}
-            >
-              {left}
-              {' | '}
-              {right}
-              {' | '}
-              {prefix} {line.value}
-            </span>
-          );
-        })}
-      </pre>
-    </div>
-  );
+            const left =
+              line.leftLineNumber !== undefined && line.leftLineNumber !== null
+                ? line.leftLineNumber.toString().padStart(4, ' ')
+                : '    ';
+            const right =
+              line.rightLineNumber !== undefined && line.rightLineNumber !== null
+                ? line.rightLineNumber.toString().padStart(4, ' ')
+                : '    ';
+            return (
+              <span
+                key={`${keyPrefix}-${lineKeyIndex}`}
+                className={`yaml-drift-diff-line yaml-drift-diff-line-${line.type}`}
+              >
+                {left}
+                {' | '}
+                {right}
+                {' | '}
+                {prefix} {line.value}
+              </span>
+            );
+          })}
+        </pre>
+      </div>
+    ),
+  };
 };
 
 const getManagedFieldsLabels = (
@@ -258,7 +238,7 @@ const buildYamlToolbarItems = ({
 const isYamlSnapshotLoading = (status: string, yamlContent: string): boolean =>
   status === 'loading' || status === 'initialising' || (status === 'updating' && !yamlContent);
 
-const YamlBlockingState = ({
+const renderYamlBlockingState = ({
   loading,
   paused,
   error,
@@ -308,13 +288,6 @@ const YamlBlockingState = ({
   return null;
 };
 
-const shouldShowYamlBlockingState = (
-  loading: boolean,
-  paused: boolean,
-  error: string | null,
-  hasContent: boolean
-): boolean => loading || paused || Boolean(error) || !hasContent;
-
 type YamlNoticeDiffProps = {
   diff: YamlTransactionDiffResult | null;
   diffKey: string;
@@ -332,7 +305,12 @@ const YamlDriftConflictNotice = ({
   if (!show) {
     return null;
   }
-  const showFullDiff = Boolean(expandedDiffs[diffKey]);
+  const diffView = buildYamlDiffView(
+    diff,
+    diffKey,
+    Boolean(expandedDiffs[diffKey]),
+    toggleDiffExpansion
+  );
   return (
     <>
       <div className="yaml-notice-header">
@@ -341,9 +319,9 @@ const YamlDriftConflictNotice = ({
           unchanged. Save will still patch your edited fields onto the live object, like kubectl
           edit.
         </p>
-        {!!diff && renderYamlDiffToggle(diff, diffKey, showFullDiff, toggleDiffExpansion)}
+        {diffView.toggle}
       </div>
-      {!!diff && renderYamlDiff(diff, diffKey, showFullDiff)}
+      {diffView.content}
       {!!diff?.tooLarge && (
         <p className="yaml-drift-warning">
           {diff.tooLargeMessage ?? 'This diff is too large to display in the current view.'} Reload
@@ -416,7 +394,12 @@ const YamlPostApplyNoticeView = ({
   if (isEditing || !notice) {
     return null;
   }
-  const showFullDiff = Boolean(diffProps.expandedDiffs[diffProps.diffKey]);
+  const diffView = buildYamlDiffView(
+    notice.diff,
+    diffProps.diffKey,
+    Boolean(diffProps.expandedDiffs[diffProps.diffKey]),
+    diffProps.toggleDiffExpansion
+  );
   return (
     <div
       className={`yaml-post-apply-notice yaml-post-apply-notice-${notice.kind}`}
@@ -426,13 +409,7 @@ const YamlPostApplyNoticeView = ({
       <div className="yaml-notice-header">
         <p>{notice.message}</p>
         <div className="yaml-notice-actions">
-          {!!notice.diff &&
-            renderYamlDiffToggle(
-              notice.diff,
-              diffProps.diffKey,
-              showFullDiff,
-              diffProps.toggleDiffExpansion
-            )}
+          {diffView.toggle}
           <button
             className="yaml-notice-close"
             type="button"
@@ -443,7 +420,7 @@ const YamlPostApplyNoticeView = ({
           </button>
         </div>
       </div>
-      {!!notice.diff && renderYamlDiff(notice.diff, diffProps.diffKey, showFullDiff)}
+      {diffView.content}
       {!!notice.diff?.tooLarge && (
         <p className="yaml-drift-warning">
           {notice.diff.tooLargeMessage ??
@@ -494,7 +471,6 @@ const getYamlViewModel = ({
   const hasYamlError = Boolean(lintError) || hasServerYamlError;
   return {
     activeYaml,
-    editorValue: activeYaml,
     disableSave: isSaving || hasYamlError,
     showReloadMergeConflict: Boolean(backendDriftCurrentYaml) || driftForced,
     driftDiffKey: backendDriftCurrentYaml ? 'drift-backend' : 'drift-live',
@@ -668,7 +644,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
     canEdit,
     clusterId,
     yamlContent,
-    showManagedFields,
     prepareVisibleDraftYaml,
   });
 
@@ -851,17 +826,14 @@ const YamlTab: React.FC<YamlTabProps> = ({
     ]
   );
 
-  if (
-    shouldShowYamlBlockingState(yamlLoading, showPausedYamlState, yamlError, Boolean(yamlContent))
-  ) {
-    return (
-      <YamlBlockingState
-        loading={yamlLoading}
-        paused={showPausedYamlState}
-        error={yamlError}
-        hasContent={Boolean(yamlContent)}
-      />
-    );
+  const blockingState = renderYamlBlockingState({
+    loading: yamlLoading,
+    paused: showPausedYamlState,
+    error: yamlError,
+    hasContent: Boolean(yamlContent),
+  });
+  if (blockingState) {
+    return blockingState;
   }
 
   return (
@@ -889,7 +861,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
         />
         <YamlEditorSurface
           yamlEditorRef={yamlEditorRef}
-          value={yamlView.editorValue}
+          value={yamlView.activeYaml}
           onChange={handleEditorChange}
           isEditing={isEditing}
           isSaving={isSaving}

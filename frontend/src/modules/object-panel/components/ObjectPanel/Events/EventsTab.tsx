@@ -21,18 +21,17 @@ import GridTable, { type GridColumnDefinition } from '@shared/components/tables/
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { createEventTypeColumn } from '@shared/events/eventColumns';
 import {
-  eventGridCanOpenRelatedObject,
   eventGridRelatedObjectInput,
   objectPanelEventGridRow,
-  resolveEventGridRelatedObject,
 } from '@shared/events/eventGridModel';
 import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import {
   buildEventObjectReference,
+  canResolveEventObjectReference,
+  resolveEventObjectReference,
   splitEventObjectTarget,
 } from '@shared/utils/eventObjectIdentity';
-import type { ResolvedObjectReference } from '@shared/utils/objectIdentity';
 import { formatAge } from '@utils/ageFormatter';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
@@ -76,7 +75,6 @@ interface EventDisplay {
   message: string;
   age: string;
   ageTimestamp: Date;
-  firstTime: Date;
   lastTime: Date;
   objectKind: string;
   objectName: string;
@@ -84,7 +82,6 @@ interface EventDisplay {
   objectUid?: string;
   objectApiVersion?: string;
   involvedObject?: ObjectEventSummary['involvedObject'];
-  objectRef?: ResolvedObjectReference;
   // Per-event cluster identity from ObjectEventSummary (extends ClusterMeta).
   clusterId?: string;
   clusterName?: string;
@@ -194,8 +191,8 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
         | 'clusterId'
         | 'clusterName'
       >
-    ) => ({
-      ...eventGridRelatedObjectInput(
+    ) =>
+      eventGridRelatedObjectInput(
         objectPanelEventGridRow(
           {
             ...event,
@@ -210,7 +207,6 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           fallbackVersion: objectData?.version,
         }
       ),
-    }),
     [
       objectData?.clusterId,
       objectData?.clusterName,
@@ -220,56 +216,34 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     ]
   );
 
-  const events = useMemo<EventDisplay[]>(
-    () =>
-      rawEvents.map((event) => {
-        const lastTime = event.lastTimestamp ? new Date(event.lastTimestamp) : new Date();
-        const firstTime = event.firstTimestamp ? new Date(event.firstTimestamp) : new Date();
-        const fallbackKind = event.involvedObjectKind || objectData?.kind || 'Unknown';
-        const fallbackName = event.involvedObjectName || objectData?.name || 'Unknown';
-        const objectNamespace =
-          event.involvedObjectNamespace ?? objectData?.namespace ?? CLUSTER_SCOPE;
-        const eventClusterName =
+  const projectRelatedObject = useCallback(
+    (event: ObjectEventSummary) => {
+      const relatedObject = {
+        objectKind: event.involvedObjectKind || objectData?.kind || 'Unknown',
+        objectName: event.involvedObjectName || objectData?.name || 'Unknown',
+        objectNamespace: event.involvedObjectNamespace ?? objectData?.namespace ?? CLUSTER_SCOPE,
+        objectUid: event.involvedObjectUid,
+        objectApiVersion: event.involvedObjectApiVersion,
+        involvedObject: event.involvedObject,
+        clusterId: event.ref.clusterId,
+        clusterName:
           resolveClusterName(event.ref.clusterId) ??
           (event.ref.clusterId === objectData?.clusterId
             ? (objectData.clusterName ?? undefined)
-            : undefined);
-        const objectRef = buildEventObjectReference(
-          buildEventObjectRefInput({
-            objectKind: fallbackKind,
-            objectName: fallbackName,
-            objectNamespace,
-            objectUid: event.involvedObjectUid,
-            objectApiVersion: event.involvedObjectApiVersion,
-            involvedObject: event.involvedObject,
-            clusterId: event.ref.clusterId,
-            clusterName: eventClusterName,
-          })
-        );
-        const parsedObject = splitEventObjectTarget(`${fallbackKind}/${fallbackName}`);
-        return {
-          type: event.eventType || 'Normal',
-          source: normalizeEventSource(event.source),
-          reason: event.reason || '',
-          message: event.message || '',
-          age: formatAge(lastTime),
-          ageTimestamp: lastTime,
-          firstTime,
-          lastTime,
-          objectKind: objectRef?.kind ?? parsedObject.objectType,
-          objectName: objectRef?.name ?? parsedObject.objectName,
-          objectNamespace,
-          objectUid: event.involvedObjectUid,
-          objectApiVersion: event.involvedObjectApiVersion,
-          involvedObject: event.involvedObject,
-          objectRef,
-          clusterId: event.ref.clusterId,
-          clusterName: eventClusterName,
-        };
-      }),
+            : undefined),
+      };
+      const ref = buildEventObjectReference(buildEventObjectRefInput(relatedObject));
+      const parsed = splitEventObjectTarget(
+        `${relatedObject.objectKind}/${relatedObject.objectName}`
+      );
+      return {
+        ...relatedObject,
+        objectKind: ref?.kind ?? parsed.objectType,
+        objectName: ref?.name ?? parsed.objectName,
+      };
+    },
     [
       buildEventObjectRefInput,
-      rawEvents,
       objectData?.clusterId,
       objectData?.clusterName,
       objectData?.kind,
@@ -277,6 +251,25 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
       objectData?.namespace,
       resolveClusterName,
     ]
+  );
+
+  const events = useMemo<EventDisplay[]>(
+    () =>
+      rawEvents.map((event) => {
+        const lastTime = event.lastTimestamp ? new Date(event.lastTimestamp) : new Date();
+        const relatedObject = projectRelatedObject(event);
+        return {
+          type: event.eventType || 'Normal',
+          source: normalizeEventSource(event.source),
+          reason: event.reason || '',
+          message: event.message || '',
+          age: formatAge(lastTime),
+          ageTimestamp: lastTime,
+          lastTime,
+          ...relatedObject,
+        };
+      }),
+    [rawEvents, projectRelatedObject]
   );
 
   const eventsLoadingState = applyPassiveLoadingPolicy({
@@ -302,106 +295,28 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   }, []);
 
   const canOpenRelatedObject = useCallback(
-    (item: EventDisplay) =>
-      eventGridCanOpenRelatedObject(
-        objectPanelEventGridRow(
-          {
-            objectKind: item.objectKind,
-            objectName: item.objectName,
-            objectNamespace: item.objectNamespace,
-            objectUid: item.objectUid,
-            objectApiVersion: item.objectApiVersion,
-            involvedObject: item.involvedObject,
-            clusterId: item.clusterId ?? objectData?.clusterId,
-            clusterName: item.clusterName ?? objectData?.clusterName,
-          },
-          CLUSTER_SCOPE
-        ),
-        {
-          fallbackKind: objectData?.kind,
-          fallbackGroup: objectData?.group,
-          fallbackVersion: objectData?.version,
-        }
-      ),
-    [
-      objectData?.clusterId,
-      objectData?.clusterName,
-      objectData?.group,
-      objectData?.kind,
-      objectData?.version,
-    ]
+    (item: EventDisplay) => canResolveEventObjectReference(buildEventObjectRefInput(item)),
+    [buildEventObjectRefInput]
   );
 
   const openRelatedObject = useCallback(
     async (item: EventDisplay) => {
-      const ref = await resolveEventGridRelatedObject(
-        objectPanelEventGridRow(
-          {
-            objectKind: item.objectKind,
-            objectName: item.objectName,
-            objectNamespace: item.objectNamespace,
-            objectUid: item.objectUid,
-            objectApiVersion: item.objectApiVersion,
-            involvedObject: item.involvedObject,
-            clusterId: item.clusterId ?? objectData?.clusterId,
-            clusterName: item.clusterName ?? objectData?.clusterName,
-          },
-          CLUSTER_SCOPE
-        ),
-        {
-          fallbackKind: objectData?.kind,
-          fallbackGroup: objectData?.group,
-          fallbackVersion: objectData?.version,
-        }
-      );
+      const ref = await resolveEventObjectReference(buildEventObjectRefInput(item));
       if (ref) {
         openWithObjectRef.current(ref);
       }
     },
-    [
-      objectData?.clusterId,
-      objectData?.clusterName,
-      objectData?.group,
-      objectData?.kind,
-      objectData?.version,
-    ]
+    [buildEventObjectRefInput]
   );
 
-  // Alt+click: navigate to the related object's view and focus it.
   const navigateToRelatedObject = useCallback(
     async (item: EventDisplay) => {
-      const ref = await resolveEventGridRelatedObject(
-        objectPanelEventGridRow(
-          {
-            objectKind: item.objectKind,
-            objectName: item.objectName,
-            objectNamespace: item.objectNamespace,
-            objectUid: item.objectUid,
-            objectApiVersion: item.objectApiVersion,
-            involvedObject: item.involvedObject,
-            clusterId: item.clusterId ?? objectData?.clusterId,
-            clusterName: item.clusterName ?? objectData?.clusterName,
-          },
-          CLUSTER_SCOPE
-        ),
-        {
-          fallbackKind: objectData?.kind,
-          fallbackGroup: objectData?.group,
-          fallbackVersion: objectData?.version,
-        }
-      );
+      const ref = await resolveEventObjectReference(buildEventObjectRefInput(item));
       if (ref) {
         navigateToView(ref);
       }
     },
-    [
-      navigateToView,
-      objectData?.clusterId,
-      objectData?.clusterName,
-      objectData?.group,
-      objectData?.kind,
-      objectData?.version,
-    ]
+    [buildEventObjectRefInput, navigateToView]
   );
 
   const columns = useMemo<GridColumnDefinition<EventDisplay>[]>(() => {

@@ -117,7 +117,7 @@ func clusterEventsQuerypageSchema() querypage.Schema[ClusterEventEntry] {
 	// so "objecttype"/"objectname" still resolve to the right encoders.
 	return querypageSchemaFromAdapter(
 		clusterEventTableQueryAdapter(),
-		[]string{"name", "kind", "type", "source", "reason", "object", "objecttype", "objectname", "message", "age"},
+		lowerTrimAll(clusterEventsQueryCapabilities().SortableFields),
 	)
 }
 
@@ -179,11 +179,10 @@ func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedI
 func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterEventsDomainName, "")
+	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterEventsDomainName, "")
 	if err != nil {
 		return nil, err
 	}
-	_ = baseScope
 	// Wait out the informer's initial sync (bounded by the request context)
 	// instead of listing an unsynced cache: the first request after connect is
 	// slower, never wrong. A sync that cannot complete within the request

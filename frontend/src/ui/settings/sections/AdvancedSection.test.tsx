@@ -166,7 +166,7 @@ describe('AdvancedSection', () => {
     ).toBe(false);
   });
 
-  it('commits edited Kubernetes API preferences on blur', () => {
+  it.each(['blur', 'Enter'])('commits edited Kubernetes API preferences on %s', (commit) => {
     const inputs = [
       {
         suffix: 'settings-kubernetes-client-qps',
@@ -193,8 +193,14 @@ describe('AdvancedSection', () => {
 
       act(() => {
         input.focus();
-        input.value = value;
-        input.blur();
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        setter?.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        if (commit === 'Enter') {
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        } else {
+          input.blur();
+        }
       });
 
       expect(input.value).toBe(value);

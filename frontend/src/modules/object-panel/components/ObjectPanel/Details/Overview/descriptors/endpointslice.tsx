@@ -2,14 +2,14 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/endpointslice.tsx
  *
  * EndpointSlice Overview descriptor (X1 P3). Presentation ported verbatim from EndpointsOverview.tsx.
- * The address rows link to target pods and nodes; the active cluster identity used to build those
- * object references comes from the OverviewContext threaded by the renderer (clusterId/clusterName)
- * rather than from useObjectPanel — ObjectPanelLink itself still uses the hook for navigation.
+ * Target links retain the model's ResourceLink identity. Node links use the slice's cluster
+ * from OverviewContext; ObjectPanelLink owns navigation.
  */
 
 import type { endpointslice } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip } from '@shared/components/StatusChip';
+import { useResourceLinkReference } from '@shared/hooks/useResourceLinkReference';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
@@ -25,62 +25,35 @@ interface ClusterMeta {
   clusterName?: string;
 }
 
-const parseTargetRef = (targetRef: string): { kind: string; name: string } | null => {
-  if (!targetRef) {
+const TargetRefLink: React.FC<{
+  targetRef: endpointslice.EndpointSliceAddress['targetRef'];
+  clusterName?: string;
+}> = ({ targetRef, clusterName }) => {
+  const objectRef = useResourceLinkReference(targetRef, clusterName);
+  const target = targetRef?.ref ?? targetRef?.display;
+  if (!target) {
     return null;
   }
-  const parts = targetRef.split('/');
-  if (parts.length === 2) {
-    return { kind: parts[0], name: parts[1] };
-  }
-  return null;
-};
-
-const TargetRefLink: React.FC<{
-  targetRef: string;
-  namespace: string;
-  clusterMeta: ClusterMeta;
-}> = ({ targetRef, namespace, clusterMeta }) => {
-  const parsed = parseTargetRef(targetRef);
-  if (!parsed) {
-    return <span className="address-target">{targetRef}</span>;
-  }
-  let objectRef: ReturnType<typeof buildRequiredObjectReference> | null;
-  try {
-    objectRef = buildRequiredObjectReference({
-      kind: parsed.kind,
-      name: parsed.name,
-      namespace,
-      ...clusterMeta,
-    });
-  } catch {
-    objectRef = null;
-  }
-  if (!objectRef) {
-    return <span className="address-target">{targetRef}</span>;
-  }
-  return (
+  const label = `${target.kind}/${target.name}`;
+  return objectRef ? (
     <ObjectPanelLink className="address-target" objectRef={objectRef}>
-      {targetRef}
+      {label}
     </ObjectPanelLink>
+  ) : (
+    <span className="address-target">{label}</span>
   );
 };
 
 const AddressRow: React.FC<{
   address: endpointslice.EndpointSliceAddress;
-  namespace: string;
   clusterMeta: ClusterMeta;
-}> = ({ address, namespace, clusterMeta }) => (
+}> = ({ address, clusterMeta }) => (
   <div className="address-row">
     <span className="address-ip">{address.ip}</span>
     {!!address.targetRef && (
       <>
         <span className="address-arrow">→</span>
-        <TargetRefLink
-          targetRef={address.targetRef}
-          namespace={namespace}
-          clusterMeta={clusterMeta}
-        />
+        <TargetRefLink targetRef={address.targetRef} clusterName={clusterMeta.clusterName} />
       </>
     )}
     {!!address.nodeName && (
@@ -104,13 +77,12 @@ const AddressRow: React.FC<{
 const AddressList: React.FC<{
   addresses: endpointslice.EndpointSliceAddress[];
   limit: number;
-  namespace: string;
   clusterMeta: ClusterMeta;
-}> = ({ addresses, limit, namespace, clusterMeta }) => (
+}> = ({ addresses, limit, clusterMeta }) => (
   <div className="addresses-list">
     {withStableListKeys(addresses.slice(0, limit), (address) => address.ip).map(
       ({ key, value: addr }) => (
-        <AddressRow key={key} address={addr} namespace={namespace} clusterMeta={clusterMeta} />
+        <AddressRow key={key} address={addr} clusterMeta={clusterMeta} />
       )
     )}
     {addresses.length > limit && (
@@ -174,7 +146,6 @@ export const endpointSliceDescriptor: OverviewDescriptor<EndpointSliceDetails> =
           <AddressList
             addresses={readyList(d)}
             limit={10}
-            namespace={d.namespace}
             clusterMeta={clusterMetaFromContext(context)}
           />
         ),
@@ -188,7 +159,6 @@ export const endpointSliceDescriptor: OverviewDescriptor<EndpointSliceDetails> =
           <AddressList
             addresses={notReadyList(d)}
             limit={5}
-            namespace={d.namespace}
             clusterMeta={clusterMetaFromContext(context)}
           />
         ),

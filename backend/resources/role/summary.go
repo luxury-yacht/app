@@ -7,12 +7,16 @@
 
 package role
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+)
 
 // DescribeSummary renders the terse one-line Role summary used by snapshot RBAC
 // summaries.
 func DescribeSummary(facts Facts) string {
-	return fmt.Sprintf("Rules: %d", len(facts.Rules))
+	return resourcemodel.RBACRuleSummary(len(facts.Rules), false)
 }
 
 // detailsSummary renders the richer Role detail-view summary.
@@ -23,7 +27,7 @@ func detailsSummary(facts Facts) string {
 		resourceCount += len(rule.Resources)
 		verbCount += len(rule.Verbs)
 	}
-	summary := fmt.Sprintf("Rules: %d", len(facts.Rules))
+	summary := DescribeSummary(facts)
 	if resourceCount > 0 || verbCount > 0 {
 		summary += fmt.Sprintf(" (%d resources, %d verbs)", resourceCount, verbCount)
 	}

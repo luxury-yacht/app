@@ -71,44 +71,6 @@ const getProfilerOptions = (diagnosticsLabel: string | undefined): GridTableProf
   };
 };
 
-interface LocalPaginationResult<T> {
-  data: T[];
-  controls: ReactNode;
-  onPrevious?: () => void;
-  onNext?: () => void;
-  canPagePrevious: boolean;
-  canPageNext: boolean;
-}
-
-interface PaginationFallbacks {
-  controls: ReactNode;
-  onPrevious?: () => void;
-  onNext?: () => void;
-  canPagePrevious: boolean;
-  canPageNext: boolean;
-}
-
-interface ResolvedPagination<T> extends PaginationFallbacks {
-  data: T[];
-}
-
-function resolvePagination<T>(
-  localEnabled: boolean,
-  localPage: LocalPaginationResult<T>,
-  fallbacks: PaginationFallbacks
-): ResolvedPagination<T> {
-  return localEnabled
-    ? {
-        data: localPage.data,
-        controls: localPage.controls,
-        onPrevious: localPage.onPrevious,
-        onNext: localPage.onNext,
-        canPagePrevious: localPage.canPagePrevious,
-        canPageNext: localPage.canPageNext,
-      }
-    : { data: localPage.data, ...fallbacks };
-}
-
 interface LoadingOverlayState {
   show: boolean;
   message: string;
@@ -258,11 +220,11 @@ export function useGridTableController<T>({
   diagnosticsLabel,
   diagnosticsMode = 'local',
 }: GridTableProps<T>): GridTableControllerResult<T> {
-  const totalDataCount = Array.isArray(inputData) ? inputData.length : 0;
   const sourceData = useMemo<T[]>(
     () => (Array.isArray(inputData) ? inputData : ([] as T[])),
     [inputData]
   );
+  const totalDataCount = sourceData.length;
   const wrapperRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLTableElement>(null);
   const tableRef = useRef<HTMLTableSectionElement>(null);
@@ -363,13 +325,16 @@ export function useGridTableController<T>({
     onNext: resolvedPageNext,
     canPagePrevious: resolvedCanPagePrevious,
     canPageNext: resolvedCanPageNext,
-  } = resolvePagination(Boolean(localPagination), localPage, {
-    controls: externalPaginationControls,
-    onPrevious: onPagePrevious,
-    onNext: onPageNext,
-    canPagePrevious,
-    canPageNext,
-  });
+  } = localPagination
+    ? localPage
+    : {
+        data: localPage.data,
+        controls: externalPaginationControls,
+        onPrevious: onPagePrevious,
+        onNext: onPageNext,
+        canPagePrevious,
+        canPageNext,
+      };
 
   useEffect(() => {
     if (!diagnosticsLabel) {

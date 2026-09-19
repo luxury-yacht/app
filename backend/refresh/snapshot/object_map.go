@@ -166,7 +166,7 @@ const (
 
 type objectMapOptions struct {
 	scopeKind objectMapScopeKind
-	identity  scopeObjectIdentity
+	identity  refresh.ObjectScopeIdentity
 	namespace string
 	maxDepth  int
 	maxNodes  int
@@ -294,7 +294,7 @@ func parseObjectMapScope(scope string) (objectMapOptions, error) {
 		opts.scopeKind = objectMapScopeNamespace
 		opts.namespace = namespace
 	} else {
-		identity, err := parseObjectScope(objectScope)
+		identity, err := refresh.ParseObjectScope(objectScope)
 		if err != nil {
 			return objectMapOptions{}, err
 		}
@@ -411,7 +411,7 @@ func objectMapRecordFromObject(identity resourcekind.Identity, obj metav1.Object
 		obj:               obj,
 		creationTimestamp: objectCreationTimestamp(obj),
 		owners:            obj.GetOwnerReferences(),
-		labels:            cloneStringMap(obj.GetLabels()),
+		labels:            copyStringMap(obj.GetLabels()),
 	}
 }
 
@@ -447,7 +447,7 @@ func (idx *objectMapIndex) collectIngestNodes(identity resourcekind.Identity, so
 			status:            node.Status,
 			actionFacts:       node.ActionFacts,
 			owners:            node.Owners,
-			labels:            cloneStringMap(node.Labels),
+			labels:            copyStringMap(node.Labels),
 			ingestEdges:       node.Edges,
 			presented:         true,
 		})
@@ -691,14 +691,15 @@ func (idx *objectMapIndex) applyHPAManagedActionFacts(managedTargets map[string]
 		if record == nil || !isObjectMapScalableWorkload(record.ref) {
 			continue
 		}
-		managed := false
-		if _, ok := managedTargets[objectMapActionTargetKey(record.ref)]; ok {
-			managed = true
+		_, managed := managedTargets[objectMapActionTargetKey(record.ref)]
+		// Intake facts may be shared by concurrent graph builds. The HPA join
+		// belongs to this snapshot, including when no catalog record was merged.
+		facts := cloneObjectMapActionFacts(record.actionFacts)
+		if facts == nil {
+			facts = &ObjectMapActionFacts{}
 		}
-		if record.actionFacts == nil {
-			record.actionFacts = &ObjectMapActionFacts{}
-		}
-		record.actionFacts.HPAManaged = &managed
+		facts.HPAManaged = &managed
+		record.actionFacts = facts
 	}
 }
 
@@ -1514,15 +1515,4 @@ func sortedObjectMapEdges(edges map[string]ObjectMapEdge) []ObjectMapEdge {
 		return result[i].Target < result[j].Target
 	})
 	return result
-}
-
-func cloneStringMap(src map[string]string) map[string]string {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := make(map[string]string, len(src))
-	for key, value := range src {
-		dst[key] = value
-	}
-	return dst
 }

@@ -18,6 +18,6 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, role *rbacv1.ClusterRole) s
 	if role == nil {
 		return streamrows.ClusterRBACEntry{}
 	}
-	details := DescribeSummary(BuildFacts(role, nil, resourcemodel.ResourceModelBuildOptions{}))
+	details := resourcemodel.RBACRuleSummary(len(role.Rules), role.AggregationRule != nil)
 	return streamrows.NewClusterRBACEntry(meta, Identity, role, details, "CR")
 }

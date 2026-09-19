@@ -30,7 +30,6 @@ import type { QueryBackedTableState } from './queryBackedTableState';
 import {
   excludeQueryFacetsFromFilterOptions,
   excludeQueryFacetsFromTableState,
-  mergeQueryBackedFilterOptions,
   useQueryBackedTableState,
 } from './queryBackedTableState';
 import type {
@@ -325,11 +324,10 @@ function useTypedQueryLifecycle<
   });
 
   const effectiveFilterOptionOverrides = useMemo(
-    () =>
-      mergeQueryBackedFilterOptions(
-        filterOptionOverrides,
-        excludeQueryFacetsFromFilterOptions(query.filterOptions, excludedQueryFacetKeys)
-      ),
+    () => ({
+      ...filterOptionOverrides,
+      ...excludeQueryFacetsFromFilterOptions(query.filterOptions, excludedQueryFacetKeys),
+    }),
     [excludedQueryFacetKeys, filterOptionOverrides, query.filterOptions]
   );
 

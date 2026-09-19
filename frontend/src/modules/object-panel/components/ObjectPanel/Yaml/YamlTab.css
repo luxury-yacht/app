@@ -19,13 +19,6 @@
   background-color: var(--color-bg-secondary);
 }
 
-.yaml-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  margin-left: auto;
-}
-
 .yaml-search-controls {
   display: flex;
   align-items: center;
@@ -62,16 +55,6 @@
   opacity: 0.6;
 }
 
-.yaml-content {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  overflow: hidden;
-}
-
-.yaml-display-loading,
 .yaml-display-error,
 .yaml-display-empty {
   display: flex;
@@ -85,17 +68,11 @@
   color: var(--color-error, #dc3545);
 }
 
-/* Scoped to avoid conflicts with global LoadingSpinner component */
-.yaml-tab .loading-spinner {
-  font-size: 14px;
-}
-
 .error-message {
   font-size: 14px;
   padding: 20px;
 }
 
-/* Light mode - Edit button stays blue */
 /* Ensure proper scrolling */
 .object-panel-tab-content .yaml-display {
   height: 100%;
@@ -222,12 +199,6 @@
   color: inherit;
 }
 
-.yaml-diff-controls {
-  margin-top: 0.75rem;
-  display: flex;
-  justify-content: flex-end;
-}
-
 .yaml-drift-warning {
   margin-top: 0.75rem;
 }
@@ -241,11 +212,6 @@
 
 .yaml-error-details li {
   margin-bottom: 0.25rem;
-}
-
-.yaml-merge-actions {
-  margin-top: 0.5rem;
-  margin-bottom: 0.5rem;
 }
 
 /* Allow text selection in the CodeMirror editor (overrides the global

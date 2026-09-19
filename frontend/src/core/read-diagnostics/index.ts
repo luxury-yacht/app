@@ -1,9 +1,8 @@
 export type { BrokerReadDiagnosticsEntry } from './store';
 export {
-  beginBrokerRead,
-  completeBrokerRead,
   getBrokerReadDiagnosticsSnapshot,
   recordBlockedBrokerRead,
   resetBrokerReadDiagnosticsForTesting,
+  runBrokerRead,
   useBrokerReadDiagnostics,
 } from './store';

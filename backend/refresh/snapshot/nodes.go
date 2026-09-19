@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -95,7 +94,7 @@ func nodeQueryFacets() []typedTableQueryFacet[NodeSummary] {
 // engine orders rows byte-identically to the live executor. cpu/memory sort the
 // live usage joined at serve.
 func nodesQuerypageSchema() querypage.Schema[NodeSummary] {
-	return querypageSchemaFromAdapter(nodeTableQueryAdapter(), []string{"name", "kind", "status", "roles", "version", "cpu", "memory", "pods", "restarts", "age"})
+	return querypageSchemaFromAdapter(nodeTableQueryAdapter(), nodeQueryCapabilities().SortableFields)
 }
 
 // NodeMetricsInfo captures metadata about metrics collection.
@@ -172,7 +171,7 @@ func RegisterNodeDomainList(reg *domain.Registry, client kubernetes.Interface, p
 // metric source clock, never the object version.
 func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	nodeUsage, podUsage, metadata := latestNodeMetrics(b.metrics)
-	version := nodeDomainIngestVersion(b.ingest)
+	version := maxIngestStoreVersion(b.ingest, NodeGVR, PodGVR)
 	return buildNodeSnapshotFromIngestUsage(
 		ctx,
 		scope,
@@ -208,11 +207,10 @@ func (b *NodeBuilder) ownRows() []NodeSummary {
 
 // Build returns the node snapshot payload using direct list API calls.
 func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+	// Each list task owns its result; RunLimited joins both before these are read.
 	var (
-		nodes         []*corev1.Node
-		pods          []*corev1.Pod
-		podsForbidden bool
-		mu            sync.Mutex
+		nodes []*corev1.Node
+		pods  []*corev1.Pod
 	)
 
 	tasks := []func(context.Context) error{
@@ -221,24 +219,17 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 			if err != nil {
 				return err
 			}
-			mu.Lock()
 			nodes = parallel.CopyToPointers(resp.Items)
-			mu.Unlock()
 			return nil
 		},
 		func(ctx context.Context) error {
 			resp, err := b.client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 			switch {
 			case err == nil:
-				mu.Lock()
 				pods = parallel.CopyToPointers(resp.Items)
-				mu.Unlock()
 				return nil
 			case apierrors.IsForbidden(err):
 				klog.V(2).Info("nodes snapshot: pod list forbidden; rendering node data without pod-derived metrics")
-				mu.Lock()
-				podsForbidden = true
-				mu.Unlock()
 				return nil
 			default:
 				return err
@@ -250,9 +241,6 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 		return nil, err
 	}
 
-	if podsForbidden {
-		pods = nil
-	}
 	// The list fallback projects its typed pods to the same PodAggregate rows the
 	// informer path reads from ingest, so the shared aggregation stays byte-equivalent.
 	// WorkloadKind is unused by the nodes domain, so a nil RS lister is correct here.
@@ -303,31 +291,21 @@ type nodeSnapshotInputs struct {
 
 func buildNodeSnapshotFromUsage(ctx context.Context, scope string, inputs nodeSnapshotInputs) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	items := make([]NodeSummary, 0, len(inputs.nodes))
+	ownRows := make([]NodeSummary, 0, len(inputs.nodes))
 	version := inputs.podsVersion
-
-	podsByNode := podAggregatesByNode(inputs.podAggregates)
-
 	for _, node := range inputs.nodes {
 		if node == nil {
 			continue
 		}
-		// The OWN-fields row (everything read from the node object alone — status, roles,
-		// capacity/allocatable, addresses, version, labels, taints, pods-capacity) is built
-		// by the SAME builder the ingest projector calls at intake, so the cut path and this
-		// serve path produce identical own fields. reaggregateNodeSummary overlays the only
-		// serve-side additions — the pod-aggregate join + per-pod/node metrics — re-joined
-		// here exactly as before.
-		own := buildNodeOwnSummary(meta, node)
-		summary := reaggregateNodeSummary(own, podsByNode[node.Name], inputs.usage.pods, inputs.usage.nodes)
-
-		items = append(items, summary)
-		if v := parseNodeResourceVersion(node); v > version {
-			version = v
-		}
+		ownRows = append(ownRows, buildNodeOwnSummary(meta, node))
+		version = max(version, parseNodeResourceVersion(node))
 	}
-
-	return finishNodeSnapshot(ctx, scope, items, version, inputs.usage.metadata)
+	return buildNodeSnapshotFromIngestUsage(ctx, scope, nodeIngestSnapshotInputs{
+		ownRows:       ownRows,
+		storeVersion:  version,
+		podAggregates: inputs.podAggregates,
+		usage:         inputs.usage,
+	})
 }
 
 // buildNodeSnapshotFromIngestUsage assembles the node snapshot from the cut node kind's
@@ -446,14 +424,8 @@ func podUsageOrEmpty(m map[string]metrics.PodUsage) map[string]metrics.PodUsage 
 func extractRoles(labels map[string]string) []string {
 	roles := []string{}
 	for key := range labels {
-		if key == "node-role.kubernetes.io/control-plane" {
-			roles = append(roles, "control-plane")
-		} else if key == "node-role.kubernetes.io/master" {
-			roles = append(roles, "master")
-		} else if key == "node-role.kubernetes.io/worker" {
-			roles = append(roles, "worker")
-		} else if prefix := "node-role.kubernetes.io/"; len(key) > len(prefix) && key[:len(prefix)] == prefix {
-			roles = append(roles, key[len(prefix):])
+		if role, ok := strings.CutPrefix(key, "node-role.kubernetes.io/"); ok && role != "" {
+			roles = append(roles, role)
 		}
 	}
 	return roles
@@ -481,17 +453,6 @@ func findNodeAddress(node *corev1.Node, addressType corev1.NodeAddressType) stri
 		}
 	}
 	return ""
-}
-
-func copyStringMap(in map[string]string) map[string]string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
 }
 
 func formatRoles(roles []string) string {

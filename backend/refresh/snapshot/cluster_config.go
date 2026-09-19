@@ -39,7 +39,7 @@ type ClusterConfigBuilder struct {
 // It REUSES the adapter's exact comparable sort-value encoder and row key, so the
 // querypage engine orders rows byte-identically to the live typed-table executor.
 func clusterConfigQuerypageSchema() querypage.Schema[ClusterConfigEntry] {
-	return querypageSchemaFromAdapter(clusterConfigTableQueryAdapter(), []string{"name", "kind", "details", "age"})
+	return querypageSchemaFromAdapter(clusterConfigTableQueryAdapter(), clusterConfigQueryCapabilities().SortableFields)
 }
 
 // ClusterConfigSnapshot represents the payload exposed to the UI. It embeds the
@@ -73,7 +73,6 @@ func clusterConfigDomainSpec() typedTableDomainSpec[ClusterConfigEntry] {
 		adapter:      clusterConfigTableQueryAdapter(),
 		schema:       clusterConfigQuerypageSchema(),
 		capabilities: clusterConfigQueryCapabilities(),
-		kindOf:       func(entry ClusterConfigEntry) string { return entry.Ref.Kind },
 		sortRows:     sortClusterConfigEntries,
 	}
 }

@@ -2,7 +2,7 @@
  * backend/resources/gatewayclass/model.go
  *
  * GatewayClass resource model + facts + status presentation. Uses the exported
- * gateway-family helpers in resourcemodel (GatewayAPIResourceModel/Gateway* link +
+ * gateway-family helpers in resourcemodel (Gateway* link +
  * condition helpers); GatewayClass-specific fields live here.
  */
 
@@ -16,9 +16,8 @@ import (
 // BuildResourceModel builds the shared resource model for a GatewayClass. Facts
 // are produced separately via BuildFacts (the model carries an empty facts union).
 func BuildResourceModel(clusterID string, gatewayClass *gatewayv1.GatewayClass) resourcemodel.ResourceModel {
-	facts := BuildFacts(clusterID, gatewayClass)
-	status := buildStatusPresentation(gatewayClass, facts)
-	return resourcemodel.GatewayAPIResourceModel(clusterID, "GatewayClass", "gatewayclasses", resourcemodel.ResourceScopeCluster, gatewayClass.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	status := buildStatusPresentation(gatewayClass)
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, gatewayClass.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts projects a GatewayClass into its semantic facts.
@@ -29,23 +28,27 @@ func BuildFacts(clusterID string, gatewayClass *gatewayv1.GatewayClass) Facts {
 		Conditions:     conditions,
 		Summary:        resourcemodel.GatewayConditionsSummary(conditions),
 	}
-	if gatewayClass.Spec.ParametersRef != nil {
-		ref := gatewayClass.Spec.ParametersRef
-		namespace := ""
-		if ref.Namespace != nil {
-			namespace = string(*ref.Namespace)
-		}
-		link := resourcemodel.GatewayRefLink(clusterID, string(ref.Group), string(ref.Kind), namespace, string(ref.Name))
-		facts.Parameters = &link
-	}
+	facts.Parameters = parameterLink(clusterID, gatewayClass.Spec.ParametersRef)
 	return facts
 }
 
-func buildStatusPresentation(gatewayClass *gatewayv1.GatewayClass, facts Facts) resourcemodel.ResourceStatusPresentation {
+func buildStatusPresentation(gatewayClass *gatewayv1.GatewayClass) resourcemodel.ResourceStatusPresentation {
 	state := "0"
 	label := "No conditions"
-	if facts.ControllerName != "" {
-		label = facts.ControllerName
+	if string(gatewayClass.Spec.ControllerName) != "" {
+		label = string(gatewayClass.Spec.ControllerName)
 	}
-	return resourcemodel.GatewayStatusFromConditions(gatewayClass.ObjectMeta, state, label, facts.Conditions)
+	return resourcemodel.GatewayStatusFromConditions(gatewayClass.ObjectMeta, state, label, resourcemodel.GatewayConditionFacts(gatewayClass.Status.Conditions))
+}
+
+func parameterLink(clusterID string, ref *gatewayv1.ParametersReference) *resourcemodel.ResourceLink {
+	if ref == nil {
+		return nil
+	}
+	namespace := ""
+	if ref.Namespace != nil {
+		namespace = string(*ref.Namespace)
+	}
+	link := resourcemodel.GatewayRefLink(clusterID, string(ref.Group), string(ref.Kind), namespace, string(ref.Name))
+	return &link
 }

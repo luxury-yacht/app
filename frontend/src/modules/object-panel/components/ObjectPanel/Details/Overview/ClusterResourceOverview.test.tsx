@@ -254,8 +254,6 @@ describe('ClusterResourceOverview', () => {
       name: 'nginx',
       controller: 'k8s.io/ingress-nginx',
       isDefault: true,
-      // The "Used by" count is derived from the length of the ingresses list.
-      ingresses: Array.from({ length: 12 }, (_, i) => `ingress-${i}`),
       labels: { app: 'ingress' },
       annotations: { owner: 'platform' },
     });
@@ -264,7 +262,6 @@ describe('ClusterResourceOverview', () => {
     const defaultRow = getValueForLabel(container, 'Default');
     expect(defaultRow?.textContent).toBe('True');
     expect(defaultRow?.querySelector('.status-chip--healthy')).toBeTruthy();
-    expect(getValueForLabel(container, 'Used by')?.textContent).toMatch(/\b12\b/);
     expect(container.textContent).toContain('ingress');
     expect(container.textContent).toContain('platform');
   });
@@ -288,5 +285,24 @@ describe('ClusterResourceOverview', () => {
     const params = getValueForLabel(container, 'Parameters');
     expect(params?.textContent).toContain('nginx-config');
     expect(params?.querySelector('a')).toBeNull();
+  });
+
+  it('does not link custom IngressClass parameters to a same-kind built-in object', async () => {
+    for (const apiGroup of [undefined, 'custom.example.com']) {
+      await renderOverview(ingressClassDescriptor, {
+        kind: 'IngressClass',
+        name: 'nginx',
+        parameters: {
+          apiGroup,
+          kind: 'ConfigMap',
+          name: 'nginx-config',
+          scope: 'Namespace',
+          namespace: 'config',
+        },
+      });
+      const params = getValueForLabel(container, 'Parameters');
+      expect(params?.textContent).toBe('ConfigMap/nginx-config');
+      expect(Boolean(params?.querySelector('a'))).toBe(apiGroup === undefined);
+    }
   });
 });

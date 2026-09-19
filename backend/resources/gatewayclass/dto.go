@@ -18,7 +18,6 @@ type GatewayClassDetails struct {
 	Conditions  []types.ConditionState  `json:"conditions,omitempty"`
 	Summary     types.ConditionsSummary `json:"summary"`
 	Parameters  *types.RefOrDisplay     `json:"parameters,omitempty"`
-	UsedBy      []types.ObjectRef       `json:"usedBy,omitempty"`
 	Labels      map[string]string       `json:"labels,omitempty"`
 	Annotations map[string]string       `json:"annotations,omitempty"`
 }

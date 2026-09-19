@@ -178,7 +178,6 @@ export function useGridTableColumnLayout<T>({
   const { handleResizeStart, handleResizeKeyDown, autoSizeColumn, resetManualResizes } =
     useColumnResizeController<T>({
       columns,
-      renderedColumns,
       columnWidths,
       setColumnWidths,
       manuallyResizedColumnsRef,

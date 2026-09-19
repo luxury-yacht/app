@@ -38,9 +38,18 @@ updates, and runtime effects. App-state reads use `appStateAccess`; see
   they do not fetch schema directly or duplicate backend constants.
 - Fallback metadata is for first paint, Wails-unavailable tests, or schema-load
   failure. It is not a second settings contract.
-- Failed persistence rolls back every frontend-owned optimistic side effect:
-  preference cache values, preference change events, appearance mode
-  localStorage, and appearance bootstrap localStorage.
+- One confirmed base plus ordered pending edits owns optimistic state. Backend
+  writes and their success notifications run in edit order. Failure removes only
+  the failed edit; later edits remain visible, including edits of the same key.
+  Cache values, preference events, appearance mode localStorage, and appearance
+  bootstrap localStorage follow that same projection. Restore the exact prior
+  startup mirror when its owning edit fails.
+- Hydration waits for pending writes and publishes schema/settings only if no
+  edit or newer forced refresh invalidated the read. A native change callback
+  starts hydration without awaiting it, so notification delivery can finish the
+  write that hydration is waiting for.
+- Mounted preference controls subscribe to the owner and read its current value.
+  They must not apply a second component-local rollback after persistence fails.
 - Transient component state and state needed before Wails is available stay
   frontend-owned, including the last Settings tab and first-paint appearance
   caches. Do not move state to the backend merely because Settings displays it.

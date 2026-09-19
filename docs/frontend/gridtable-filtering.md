@@ -122,6 +122,8 @@ placement and zoom follow [interaction boundaries](gridtable-interaction.md#inte
   for every pane. The Workloads route owns `workloads` and `pods`; it exposes one
   favorite action, waits for both persistence stores to hydrate, then restores
   both panes before consuming the pending favorite.
-- Favorites schema v3 stores named panes exclusively. Loading an older schema
-  starts a new empty Favorites collection; no legacy top-level filter/table
-  compatibility path is maintained.
+- Favorites schema v3 stores named panes exclusively. The backend migrates v1
+  and v2 entries individually, retaining valid entries when another entry is
+  malformed. Legacy Workloads and Pods favorites become the combined Workloads
+  route with both named panes; the unrecorded pane receives its defaults. The
+  migrated collection is saved as v3. A newer, unsupported schema fails to load.

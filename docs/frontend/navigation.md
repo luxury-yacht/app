@@ -25,6 +25,27 @@ one retained workspace per open cluster.
 - Foreground-cluster blocking overlays must not cover Global views. Each Global
   row owns and presents its originating cluster's lifecycle/auth state.
 
+## Favorites
+
+`favoriteRoute.ts` owns persisted route and cluster-target interpretation. A
+non-Global favorite is pinned when it carries a `clusterId` or a saved kubeconfig
+selection; `clusterId` is authoritative when present. Matching, activation and
+menu availability share that interpretation. Cluster filter values retain exact
+case across persistence and migration. Empty facet values remain distinct from
+literal labels such as `__empty__`.
+
+`FavoritesContext` owns the navigation handoff as waiting/restoring phases. It
+waits for the target cluster to be operational and, for namespace routes, for
+namespace readiness. Only after applying navigation does it expose
+`favoriteToRestore`. Table consumers then wait for the matching route and every
+expected pane's persistence to hydrate before restoring state and consuming the
+request. A waiting request must remain available for the cluster/navigation work
+that makes it ready. Lifecycle progress extends the existing expiry window.
+
+Favorite reorder ignores repeated and unknown IDs, appends omitted favorites in
+their current relative order, and assigns contiguous positions. The backend and
+frontend cache follow the same rule.
+
 ## Cluster Sidebar Organization
 
 Overview, Attention, Browse, and Events are direct cluster links. The independently

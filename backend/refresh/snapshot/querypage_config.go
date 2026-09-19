@@ -10,5 +10,5 @@ import (
 // orders rows byte-identically to the live typed-table executor — the precondition
 // for an invisible cutover.
 func configQuerypageSchema() querypage.Schema[ConfigSummary] {
-	return querypageSchemaFromAdapter(configTableQueryAdapter(), []string{"name", "kind", "namespace", "data", "age"})
+	return querypageSchemaFromAdapter(configTableQueryAdapter(), namespaceConfigQueryCapabilities().SortableFields)
 }

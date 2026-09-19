@@ -4,6 +4,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"testing"
+
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestKarpenterFactsPreserveSourceValuesAndReferenceVersions(t *testing.T) {
@@ -85,4 +88,46 @@ func TestKarpenterProviderResolutionAndLabelOnlyRelationships(t *testing.T) {
 	require.Equal(t, "-10%", facts.PriceAdjustment)
 	require.Equal(t, "8", facts.Capacity["cpu"])
 	require.Nil(t, facts.Weight)
+}
+
+func TestOwnerRelationshipSkipsIncompleteIdentity(t *testing.T) {
+	for _, invalid := range []metav1.OwnerReference{
+		{APIVersion: "karpenter.sh/v1", Kind: "NodePool"},
+		{APIVersion: "karpenter.sh/", Kind: "NodePool", Name: "incomplete"},
+		{APIVersion: "karpenter.sh/v1/extra", Kind: "NodePool", Name: "malformed"},
+		{APIVersion: "other.example/v1", Kind: "NodePool", Name: "foreign"},
+		{APIVersion: "karpenter.sh/v1", Kind: "OtherKind", Name: "other"},
+	} {
+		t.Run(invalid.APIVersion+"/"+invalid.Kind+"/"+invalid.Name, func(t *testing.T) {
+			object := &unstructured.Unstructured{Object: map[string]any{
+				"apiVersion": "karpenter.sh/v1", "kind": "NodeClaim",
+				"metadata": map[string]any{"name": "child", "namespace": ""},
+			}}
+			object.SetOwnerReferences([]metav1.OwnerReference{invalid})
+			require.Nil(t, BuildFacts("cluster-a", object).NodePool, "an incomplete owner must not become an openable relationship")
+			object.SetOwnerReferences([]metav1.OwnerReference{invalid,
+				{APIVersion: "karpenter.sh/v1beta1", Kind: "NodePool", Name: "first-valid", UID: "first-uid"},
+				{APIVersion: "karpenter.sh/v1", Kind: "NodePool", Name: "second-valid"},
+			})
+			link := BuildFacts("cluster-a", object).NodePool
+			require.NotNil(t, link)
+			require.NotNil(t, link.Ref)
+			require.NoError(t, resourcemodel.ValidateResourceRef(*link.Ref))
+			require.Equal(t, resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "karpenter.sh", Version: "v1beta1", Kind: "NodePool", Namespace: "", Name: "first-valid", UID: "first-uid"}, *link.Ref)
+		})
+	}
+}
+
+func TestInvalidPoolOwnerRetainsLabelOnlyRelationship(t *testing.T) {
+	object := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "karpenter.sh/v1", "kind": "NodeClaim",
+		"metadata": map[string]any{"name": "claim", "labels": map[string]any{"karpenter.sh/nodepool": "label-pool"}},
+	}}
+	object.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: "karpenter.sh/", Kind: "NodePool", Name: "owner-pool"}})
+	link := BuildFacts("cluster-a", object).NodePool
+	require.NotNil(t, link)
+	require.Nil(t, link.Ref)
+	require.Equal(t, "label-pool", link.Display.Name)
+	require.Equal(t, "cluster-a", link.Display.ClusterID)
+	require.Empty(t, link.Display.Version)
 }

@@ -16,7 +16,6 @@ type IngressClassDetails struct {
 	Parameters  *IngressClassParameters `json:"parameters,omitempty"`
 	Labels      map[string]string       `json:"labels,omitempty"`
 	Annotations map[string]string       `json:"annotations,omitempty"`
-	Ingresses   []string                `json:"ingresses,omitempty"`
 }
 
 type IngressClassParameters struct {

@@ -1,11 +1,6 @@
 /* HelmOverview specific styles */
 
 /* Managed Resources */
-.helm-resource-link {
-  cursor: pointer;
-  color: var(--color-link);
-}
-
 /* Release History */
 .helm-history-item {
   flex-direction: column;

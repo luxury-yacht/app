@@ -25,13 +25,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, pdb *policyv1.PodDisruption
 		CurrentHealthy:     facts.CurrentHealthy,
 		DesiredHealthy:     facts.DesiredHealthy,
 	}
-	if facts.MinAvailable != nil {
-		value := facts.MinAvailable.Value
-		summary.MinAvailable = &value
-	}
-	if facts.MaxUnavailable != nil {
-		value := facts.MaxUnavailable.Value
-		summary.MaxUnavailable = &value
-	}
+	summary.MinAvailable = pdbIntOrStringValue(facts.MinAvailable)
+	summary.MaxUnavailable = pdbIntOrStringValue(facts.MaxUnavailable)
 	return summary
 }

@@ -32,9 +32,8 @@ func BuildNamespaceStreamSummary(meta streamrows.ClusterMeta, resource *unstruct
 			CRDName: descriptor.CRDName,
 		}
 	}
-	gvr := descriptor.GVR
-	model := BuildResourceModel(meta.ClusterID, resource, descriptor, resourcemodel.ResourceScopeNamespaced, defaultNamespace)
-	facts := BuildFacts(meta.ClusterID, resource, gvr, descriptor.CRDName, resourcemodel.ResourceModelBuildOptions{})
+	facts := BuildFacts(resource)
+	model := buildResourceModel(meta.ClusterID, resource, descriptor, resourcemodel.ResourceScopeNamespaced, defaultNamespace, facts)
 	return streamrows.NamespaceCustomSummary{
 		CertManager:        certManagerSummary(meta.ClusterID, resource),
 		ExternalSecrets:    externalSecretsSummary(meta.ClusterID, resource),
@@ -69,9 +68,8 @@ func BuildClusterStreamSummary(meta streamrows.ClusterMeta, resource *unstructur
 			CRDName: descriptor.CRDName,
 		}
 	}
-	gvr := descriptor.GVR
-	model := BuildResourceModel(meta.ClusterID, resource, descriptor, resourcemodel.ResourceScopeCluster, "")
-	facts := BuildFacts(meta.ClusterID, resource, gvr, descriptor.CRDName, resourcemodel.ResourceModelBuildOptions{})
+	facts := BuildFacts(resource)
+	model := buildResourceModel(meta.ClusterID, resource, descriptor, resourcemodel.ResourceScopeCluster, "", facts)
 	return streamrows.ClusterCustomSummary{
 		CertManager:        certManagerSummary(meta.ClusterID, resource),
 		ExternalSecrets:    externalSecretsSummary(meta.ClusterID, resource),

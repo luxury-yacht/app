@@ -61,6 +61,7 @@ describe('normalizePortForwardSession', () => {
 describe('normalizePortForwardStatusEvent', () => {
   const rawEvent = {
     sessionId: 'pf-1',
+    clusterId: 'cluster-a',
     status: 'reconnecting',
     statusReason: 'pod replaced',
     localPort: 18081,

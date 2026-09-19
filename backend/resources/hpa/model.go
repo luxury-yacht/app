@@ -2,8 +2,8 @@
  * backend/resources/hpa/model.go
  *
  * HorizontalPodAutoscaler resource model: the single definition of an HPA's
- * intrinsic fields + status presentation, for both the v2 (primary) and v1 APIs.
- * Detail/object-map projections use v2; the snapshot streaming summary uses v1.
+ * intrinsic fields + status presentation for the primary v2 API.
+ * The v1 stream projects only its target and replica counts.
  * Shared model helpers are reused from resourcemodel (exported network base).
  */
 
@@ -14,7 +14,6 @@ import (
 	"strconv"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -25,8 +24,7 @@ import (
 // BuildResourceModel builds the v2 HorizontalPodAutoscaler resource model. Facts are
 // owned by this package (hpa.Facts); callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, h *autoscalingv2.HorizontalPodAutoscaler) resourcemodel.ResourceModel {
-	facts := BuildFacts(clusterID, h)
-	status := statusPresentation(h.ObjectMeta, facts)
+	status := statusPresentation(h.ObjectMeta, h.Status)
 	return resourcemodel.KubernetesResourceModel(clusterID, Identity, h.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
@@ -46,38 +44,6 @@ func BuildFacts(clusterID string, h *autoscalingv2.HorizontalPodAutoscaler) Fact
 	}
 }
 
-// BuildV1Facts extracts the HPA facts from a v1 object. The v1 API only carries the
-// legacy single CPU-utilization target; it is projected into the same metric facts.
-func BuildV1Facts(clusterID string, h *autoscalingv1.HorizontalPodAutoscaler) Facts {
-	facts := Facts{
-		ScaleTarget:     scaleTargetLink(clusterID, h.Namespace, h.Spec.ScaleTargetRef.APIVersion, h.Spec.ScaleTargetRef.Kind, h.Spec.ScaleTargetRef.Name),
-		MinReplicas:     h.Spec.MinReplicas,
-		MaxReplicas:     h.Spec.MaxReplicas,
-		CurrentReplicas: h.Status.CurrentReplicas,
-		DesiredReplicas: h.Status.DesiredReplicas,
-		LastScaleTime:   h.Status.LastScaleTime,
-	}
-	if h.Spec.TargetCPUUtilizationPercentage != nil {
-		facts.Metrics = []MetricFacts{{
-			Kind: "Resource",
-			Target: map[string]string{
-				"resource":           "cpu",
-				"averageUtilization": fmt.Sprintf("%d%%", *h.Spec.TargetCPUUtilizationPercentage),
-			},
-		}}
-	}
-	if h.Status.CurrentCPUUtilizationPercentage != nil {
-		facts.CurrentMetrics = []MetricStatusFacts{{
-			Kind: "Resource",
-			Current: map[string]string{
-				"resource":           "cpu",
-				"averageUtilization": fmt.Sprintf("%d%%", *h.Status.CurrentCPUUtilizationPercentage),
-			},
-		}}
-	}
-	return facts
-}
-
 func scaleTargetLink(clusterID, namespace, apiVersion, kind, name string) resourcemodel.ResourceLink {
 	if kind == "" || name == "" {
 		return resourcemodel.NewDisplayResourceLink(clusterID, "", "", kind, "", namespace, name)
@@ -89,26 +55,19 @@ func scaleTargetLink(clusterID, namespace, apiVersion, kind, name string) resour
 	return resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: clusterID, Group: gv.Group, Version: gv.Version, Kind: kind, Resource: "", Namespace: namespace, Name: name, UID: ""})
 }
 
-func statusPresentation(meta metav1.ObjectMeta, facts Facts) resourcemodel.ResourceStatusPresentation {
+func statusPresentation(meta metav1.ObjectMeta, source autoscalingv2.HorizontalPodAutoscalerStatus) resourcemodel.ResourceStatusPresentation {
 	signals := []resourcemodel.ResourceStatusSignal{
-		{Type: resourcemodel.StatusSignalResourceState, Name: "status.currentReplicas", Status: strconv.Itoa(int(facts.CurrentReplicas))},
-		{Type: resourcemodel.StatusSignalResourceState, Name: "status.desiredReplicas", Status: strconv.Itoa(int(facts.DesiredReplicas))},
+		{Type: resourcemodel.StatusSignalResourceState, Name: "status.currentReplicas", Status: strconv.Itoa(int(source.CurrentReplicas))},
+		{Type: resourcemodel.StatusSignalResourceState, Name: "status.desiredReplicas", Status: strconv.Itoa(int(source.DesiredReplicas))},
 	}
-	for _, condition := range facts.Conditions {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{
-			Type:    resourcemodel.StatusSignalCondition,
-			Name:    condition.Type,
-			Status:  condition.Status,
-			Reason:  condition.Reason,
-			Message: condition.Message,
-		})
-	}
+	conditions := conditionFacts(source.Conditions)
+	signals = append(signals, resourcemodel.ConditionSignals(conditions)...)
 	lifecycle := resourcemodel.ObjectLifecycle(meta)
-	state := strconv.Itoa(int(facts.CurrentReplicas))
+	state := strconv.Itoa(int(source.CurrentReplicas))
 	if status, ok := resourcemodel.DeletingObjectStatus(meta, state, signals, lifecycle); ok {
 		return status
 	}
-	for _, condition := range facts.Conditions {
+	for _, condition := range conditions {
 		if condition.Status != string(corev1.ConditionFalse) {
 			continue
 		}
@@ -121,11 +80,11 @@ func statusPresentation(meta metav1.ObjectMeta, facts Facts) resourcemodel.Resou
 			return resourcemodel.ObjectSourceStatus(label, condition.Status, condition.Reason, "", "warning", signals, lifecycle)
 		}
 	}
-	if facts.DesiredReplicas != facts.CurrentReplicas {
-		state = fmt.Sprintf("%d/%d", facts.CurrentReplicas, facts.DesiredReplicas)
-		return resourcemodel.ObjectSourceStatus(fmt.Sprintf("%d/%d replicas", facts.CurrentReplicas, facts.DesiredReplicas), state, "", "", "warning", signals, lifecycle)
+	if source.DesiredReplicas != source.CurrentReplicas {
+		state = fmt.Sprintf("%d/%d", source.CurrentReplicas, source.DesiredReplicas)
+		return resourcemodel.ObjectSourceStatus(fmt.Sprintf("%d/%d replicas", source.CurrentReplicas, source.DesiredReplicas), state, "", "", "warning", signals, lifecycle)
 	}
-	return resourcemodel.ObjectSourceStatus(fmt.Sprintf("%d replicas", facts.CurrentReplicas), state, "", "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(fmt.Sprintf("%d replicas", source.CurrentReplicas), state, "", "", "ready", signals, lifecycle)
 }
 
 func metricFacts(metrics []autoscalingv2.MetricSpec) []MetricFacts {

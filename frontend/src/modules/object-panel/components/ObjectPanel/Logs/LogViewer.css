@@ -9,32 +9,6 @@
 
 /* Note: This component uses the Dropdown component with standard styles from Dropdown.css */
 
-/* Maximized view - takes full content-body area */
-.logs-viewer-display.maximized {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1000;
-  background-color: var(--log-surface-maximized-bg);
-  width: 100%;
-  height: 100%;
-}
-
-/* Placeholder shown when logs are maximized */
-.logs-viewer-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 200px;
-  color: var(--log-placeholder-text);
-  font-style: italic;
-  background-color: var(--log-placeholder-bg);
-  border: 1px dashed var(--log-placeholder-border);
-  border-radius: var(--border-radius);
-}
-
 .logs-viewer-controls {
   display: flex;
   align-items: center;
@@ -43,12 +17,6 @@
   border-bottom: 1px solid var(--log-controls-border);
   background-color: var(--log-controls-bg);
   box-shadow: var(--log-controls-shadow, none);
-}
-
-/* Enhance controls visibility in maximized mode */
-.logs-viewer-display.maximized .logs-viewer-controls {
-  background-color: var(--log-controls-maximized-bg);
-  box-shadow: var(--log-controls-maximized-shadow);
 }
 
 .logs-viewer-controls--with-active-filters {
@@ -102,22 +70,6 @@
   font-size: var(--font-size-normal);
   color: var(--color-text-secondary);
   white-space: nowrap;
-}
-
-/* Logs control select inherits from unified dropdown styles */
-.logs-viewer-control-select {
-  min-width: 80px;
-}
-
-.logs-viewer-control-checkbox {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  cursor: pointer;
-}
-
-.logs-viewer-control-checkbox input[type="checkbox"] {
-  cursor: pointer;
 }
 
 .logs-viewer-filter-group {
@@ -190,96 +142,6 @@
   outline: 1px solid currentColor;
   outline-offset: 2px;
   border-radius: 2px;
-}
-
-.logs-viewer-filter-toggle {
-  padding: 4px 10px;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-normal);
-  cursor: pointer;
-}
-
-.logs-viewer-filter-toggle:hover:not(:disabled) {
-  color: var(--color-text);
-  border-color: var(--color-accent);
-}
-
-.logs-viewer-filter-toggle.active {
-  background: var(--button-action-bg);
-  border-color: var(--button-action-bg);
-  color: var(--button-action-text);
-}
-
-.logs-viewer-filter-toggle:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.logs-viewer-control-btn {
-  padding: var(--spacing-xs) 0.75rem;
-  font-size: var(--font-size-normal);
-  border-radius: var(--border-radius-round);
-  cursor: pointer;
-  transition:
-    background-color 0.2s,
-    border-color 0.2s,
-    color 0.2s;
-  font-weight: 500;
-  border: 1px solid;
-}
-
-.logs-viewer-control-btn.refresh {
-  background-color: var(--button-action-bg);
-  color: var(--button-action-text);
-  border-color: var(--button-action-bg);
-}
-
-.logs-viewer-control-btn.refresh:hover:not(:disabled) {
-  background-color: var(--button-action-hover);
-  border-color: var(--button-action-hover);
-}
-
-.logs-viewer-control-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Maximize button styles */
-.logs-viewer-maximize-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--border-radius);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition:
-    background-color 0.2s,
-    border-color 0.2s,
-    color 0.2s;
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
-.logs-viewer-maximize-btn:hover {
-  background-color: var(--log-maximize-hover-bg);
-  color: var(--log-text-primary);
-}
-
-.logs-viewer-maximize-btn:active {
-  transform: scale(0.95);
-}
-
-.logs-viewer-maximize-btn svg {
-  width: 18px;
-  height: 18px;
 }
 
 .logs-viewer-content-frame {
@@ -424,16 +286,6 @@
   color: var(--log-metadata-text);
 }
 
-.logs-viewer-loading,
-.logs-viewer-error {
-  color: var(--color-text-secondary);
-  padding: var(--spacing-lg);
-}
-
-.logs-viewer-error {
-  color: var(--color-error, #dc3545);
-}
-
 .logs-viewer-display-loading,
 .logs-viewer-display-error {
   display: flex;
@@ -452,59 +304,10 @@
   height: 100%;
 }
 
-/* Override absolute positioning from tables.css for ANY table inside logs-viewer-content */
-.logs-viewer-content > .table-container {
-  position: relative;
-  top: auto;
-  left: auto;
-  right: auto;
-  bottom: auto;
-  height: 100%;
-  background-color: transparent;
-}
-
 /* Additional specificity for parsed-logs-table */
 .logs-viewer-content .parsed-logs-table {
   position: relative;
   height: 100%;
-}
-
-.parsed-logs-table .table-wrapper {
-  height: 100%;
-  max-height: 100%;
-  overflow: auto;
-}
-
-.parsed-logs-table table {
-  font-size: var(--font-size-small);
-  width: 100%;
-  border-collapse: collapse;
-  background-color: transparent;
-}
-
-.parsed-logs-table th {
-  background-color: var(--log-table-header-bg);
-  padding: var(--spacing-sm);
-  text-align: left;
-  font-size: var(--font-size-parsed-logs-header);
-  font-weight: var(--font-weight-parsed-logs-header);
-  border-bottom: 1px solid var(--log-table-header-border);
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  color: var(--log-text-primary);
-}
-
-.parsed-logs-table tbody tr {
-  border-bottom: 1px solid var(--log-table-row-border);
-}
-
-.parsed-logs-table tbody tr:hover {
-  background-color: var(--log-table-row-hover-bg);
-}
-
-.parsed-logs-table td {
-  color: var(--log-table-cell-text);
 }
 
 .gridtable-parsed-logs .grid-cell {
@@ -537,26 +340,6 @@
 
 .parsed-log-cell:active {
   background-color: var(--log-cell-active-bg);
-}
-
-/* Visual feedback when copied */
-.parsed-log-cell.copied {
-  background-color: var(--log-cell-copied-bg);
-  animation: copyFeedback 0.3s ease-out;
-}
-
-@keyframes copyFeedback {
-  0% {
-    background-color: rgba(76, 175, 80, 0.4);
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(0.98);
-  }
-  100% {
-    background-color: rgba(76, 175, 80, 0.2);
-    transform: scale(1);
-  }
 }
 
 /* Expanded parsed log rows — click to expand, click to collapse */
@@ -593,33 +376,6 @@
   cursor: pointer;
 }
 
-/* Viewport-aware tooltip */
-.parsed-log-tooltip {
-  background-color: var(--log-tooltip-bg);
-  color: var(--log-tooltip-text);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--log-tooltip-border);
-  border-radius: var(--border-radius);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: normal;
-  /* Dynamic sizing with constraints */
-  width: max-content;
-  max-width: min(600px, 80vw);
-  min-width: 150px;
-  /* Allow dynamic height but with a safety max */
-  max-height: min(500px, 80vh);
-  overflow-y: auto;
-  overflow-x: hidden;
-  box-shadow: var(--log-tooltip-shadow);
-  /* Match table cell font styling */
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-normal);
-  line-height: 1.5;
-  z-index: var(--z-tooltip, 9999);
-  pointer-events: none;
-}
-
 /* Dynamic pod color applied via --pod-color CSS custom property. */
 .pod-color-text {
   color: var(--pod-color);
@@ -643,5 +399,3 @@
   border-radius: 2px;
   padding: 0 1px;
 }
-
-/* Light mode adjustments for parsed table */

@@ -436,12 +436,11 @@ func nodePodFieldSelector(nodeName string) string {
 
 func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMetrics corev1.ResourceList) *NodeDetails {
 	model := BuildResourceModel(s.deps.ClusterID, node)
-	nodeFacts := BuildFacts(node)
 	podProjection := nodePodProjection{}
 	for _, pod := range pods {
 		podProjection.add(s.deps.ClusterID, pod)
 	}
-	details := newNodeDetails(node, model, nodeFacts, podProjection)
+	details := newNodeDetails(node, model, podProjection)
 	details.Conditions = projectNodeConditions(node.Status.Conditions)
 	details.Taints = projectNodeTaints(node.Spec.Taints)
 	details.Roles = deriveNodeRoles(node.Labels)
@@ -506,11 +505,11 @@ func addCPUAndMemory(resources corev1.ResourceList, cpuTotal, memoryTotal *int64
 	}
 }
 
-func newNodeDetails(node *corev1.Node, model resourcemodel.ResourceModel, nodeFacts Facts, pods nodePodProjection) *NodeDetails {
+func newNodeDetails(node *corev1.Node, model resourcemodel.ResourceModel, pods nodePodProjection) *NodeDetails {
 	return &NodeDetails{
 		Name:             node.Name,
 		StatusProjection: restypes.NewStatusProjection(model.Status),
-		Unschedulable:    nodeFacts.Unschedulable,
+		Unschedulable:    node.Spec.Unschedulable,
 		Architecture:     node.Status.NodeInfo.Architecture,
 		OS:               node.Status.NodeInfo.OperatingSystem,
 		OSImage:          node.Status.NodeInfo.OSImage,

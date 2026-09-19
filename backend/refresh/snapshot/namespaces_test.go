@@ -282,7 +282,7 @@ func TestNamespaceBuilderScopePayloadIdentityAndCatalogProjectionContract(t *tes
 }
 
 func TestNamespaceBuilderReportsWorkloadsFromSyncedIngestStore(t *testing.T) {
-	tracker := newNamespaceWorkloadTracker()
+	tracker := &NamespaceWorkloadTracker{}
 	tracker.ready.Store(true)
 
 	ns := &corev1.Namespace{
@@ -323,7 +323,7 @@ func TestNamespaceBuilderReportsWorkloadsFromSyncedIngestStore(t *testing.T) {
 }
 
 func TestNamespaceBuilderReportsUnhealthyWorkloadsWithoutDoubleCountingOwnedPods(t *testing.T) {
-	tracker := newNamespaceWorkloadTracker()
+	tracker := &NamespaceWorkloadTracker{}
 	tracker.ready.Store(true)
 
 	source := fakePodAggregateSource{
@@ -364,7 +364,7 @@ func TestNamespaceBuilderReportsUnhealthyWorkloadsWithoutDoubleCountingOwnedPods
 func TestNamespaceBuilderWorkloadHealthChangesSourceVersion(t *testing.T) {
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
 	buildVersion := func(presentation string) string {
-		tracker := newNamespaceWorkloadTracker()
+		tracker := &NamespaceWorkloadTracker{}
 		tracker.ready.Store(true)
 		builder := &NamespaceBuilder{
 			namespaces: testsupport.NewNamespaceLister(t, ns),
@@ -392,7 +392,7 @@ func TestNamespaceBuilderDoesNotDimWhenTrackerMissesButIngestHasWorkloads(t *tes
 	// map never recorded the namespace. The builder must read workload presence from the
 	// authoritative ingest store, so a tracker-map miss can never dim a namespace that has
 	// workloads.
-	tracker := newNamespaceWorkloadTracker()
+	tracker := &NamespaceWorkloadTracker{}
 	tracker.ready.Store(true) // synced, but no incremental map records "alpha"
 
 	ns := &corev1.Namespace{
@@ -535,7 +535,7 @@ func TestNamespaceBuilderWorkloadPresenceChangesSourceVersion(t *testing.T) {
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
 
 	workloadsSourceVersion := func(catalogCount int) string {
-		tracker := newNamespaceWorkloadTracker()
+		tracker := &NamespaceWorkloadTracker{}
 		tracker.ready.Store(true)
 		builder := &NamespaceBuilder{
 			namespaces: testsupport.NewNamespaceLister(t, ns),
@@ -651,7 +651,7 @@ func TestNamespaceBuilderScopedSynthesizesConfiguredNames(t *testing.T) {
 func TestNamespaceBuilderScopedReportsPresenceOnceIngestTracksWorkloads(t *testing.T) {
 	// Post-Phase-4 scoped cluster: ingest tracks workload kinds and has rows
 	// for one configured namespace. Presence becomes known for every row.
-	tracker := newNamespaceWorkloadTracker()
+	tracker := &NamespaceWorkloadTracker{}
 	tracker.ready.Store(true)
 
 	builder := &NamespaceBuilder{

@@ -7,106 +7,70 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 )
 
-type catalogRefreshAdapter struct {
-	service         *objectcatalog.Service
-	clusterMeta     ClusterMeta
-	namespaceGroups func() []CatalogNamespaceGroup
-}
-
-type catalogRefreshAssembly struct {
-	result    objectcatalog.QueryResult
-	payload   CatalogSnapshot
-	stats     refresh.SnapshotStats
-	truncated bool
-}
-
-func newCatalogRefreshAdapter(
+func (b *catalogBuilder) buildSnapshot(
 	service *objectcatalog.Service,
-	clusterMeta ClusterMeta,
-	namespaceGroups func() []CatalogNamespaceGroup,
-) catalogRefreshAdapter {
-	return catalogRefreshAdapter{
-		service:         service,
-		clusterMeta:     clusterMeta,
-		namespaceGroups: namespaceGroups,
-	}
-}
-
-func (a catalogRefreshAdapter) BuildSnapshot(
-	domainName string,
+	meta ClusterMeta,
 	scope string,
 	opts objectcatalog.QueryOptions,
 ) *refresh.Snapshot {
-	cachesReady := a.service.CachesReady()
-	assembly := a.assemble(opts, cachesReady)
-	if cachesReady && assembly.payload.Total > 0 {
+	cachesReady := service.CachesReady()
+	payload, truncated := b.buildPayload(service, meta, opts, cachesReady)
+	if cachesReady && payload.Total > 0 {
 		// Streaming caches are warm, but snapshot callers still page through
 		// explicitly limited scopes. Preserve the continue token and batch shape
 		// so Browse can keep requesting additional pages.
-		if assembly.payload.Continue == "" {
-			assembly.payload.IsFinal = true
-			if assembly.payload.TotalBatches == 0 {
-				assembly.payload.TotalBatches = 1
+		if payload.Continue == "" {
+			payload.IsFinal = true
+			if payload.TotalBatches == 0 {
+				payload.TotalBatches = 1
 			}
 		} else {
-			assembly.payload.IsFinal = false
+			payload.IsFinal = false
 		}
-		assembly.payload.BatchSize = len(assembly.payload.Items)
-		assembly.stats = buildCatalogSnapshotStats(
-			assembly.payload,
-			assembly.result.TotalItems,
-			assembly.truncated,
-		)
 	}
 
 	return &refresh.Snapshot{
-		Domain:  domainName,
+		Domain:  b.domain,
 		Scope:   scope,
 		Version: uint64(time.Now().UnixNano()),
-		Payload: assembly.payload,
-		Stats:   assembly.stats,
+		Payload: payload,
+		Stats:   buildCatalogSnapshotStats(payload, truncated),
 	}
 }
 
-func (a catalogRefreshAdapter) assemble(
+func (b *catalogBuilder) buildPayload(
+	service *objectcatalog.Service,
+	meta ClusterMeta,
 	opts objectcatalog.QueryOptions,
 	forceFinal bool,
-) catalogRefreshAssembly {
-	result := a.service.Query(opts)
-	health := a.service.Health()
-	cachesReady := a.service.CachesReady()
+) (CatalogSnapshot, bool) {
+	result := service.Query(opts)
+	health := service.Health()
+	cachesReady := service.CachesReady()
 
 	payload, truncated := buildCatalogSnapshot(result, opts, health, cachesReady, forceFinal)
-	payload.ClusterMeta = a.clusterMeta
-	payload.ResourceFamilies = a.service.DiscoveredResourceFamilies()
+	payload.ClusterMeta = meta
+	payload.ResourceFamilies = service.DiscoveredResourceFamilies()
 	payload.NamespaceGroups = buildCatalogNamespaceGroups(
-		a.service,
-		a.clusterMeta,
-		a.namespaceGroups,
+		service,
+		meta,
+		b.namespaceGroups,
 		opts.Namespaces,
 	)
-	if latency := a.service.FirstBatchLatency(); latency > 0 {
+	if latency := service.FirstBatchLatency(); latency > 0 {
 		payload.FirstBatchLatencyMs = latency.Milliseconds()
 	}
 
-	stats := buildCatalogSnapshotStats(payload, result.TotalItems, truncated)
-
-	return catalogRefreshAssembly{
-		result:    result,
-		payload:   payload,
-		stats:     stats,
-		truncated: truncated,
-	}
+	return payload, truncated
 }
 
 func buildCatalogSnapshotStats(
 	payload CatalogSnapshot,
-	totalItems int,
 	truncated bool,
 ) refresh.SnapshotStats {
 	stats := refresh.SnapshotStats{
 		ItemCount:    len(payload.Items),
-		TotalItems:   totalItems,
+		TotalItems:   payload.Total,
 		Truncated:    truncated,
 		BatchIndex:   payload.BatchIndex,
 		BatchSize:    payload.BatchSize,

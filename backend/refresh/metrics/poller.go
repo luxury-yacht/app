@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
@@ -82,16 +81,8 @@ type Sample struct {
 	Metadata  Metadata
 }
 
-func copyNodeUsage(source map[string]NodeUsage) map[string]NodeUsage {
-	out := make(map[string]NodeUsage, len(source))
-	for k, v := range source {
-		out[k] = v
-	}
-	return out
-}
-
-func copyPodUsage(source map[string]PodUsage) map[string]PodUsage {
-	out := make(map[string]PodUsage, len(source))
+func copyUsage[T any](source map[string]T) map[string]T {
+	out := make(map[string]T, len(source))
 	for k, v := range source {
 		out[k] = v
 	}
@@ -118,7 +109,6 @@ type Poller struct {
 	nodeUsage          map[string]NodeUsage
 	podUsage           map[string]PodUsage
 	lastCollected      time.Time
-	lastSuccess        time.Time
 	consecutiveFailure int
 	lastError          string
 	successCount       uint64
@@ -275,14 +265,14 @@ func (p *Poller) listPodMetricsScoped(ctx context.Context, client metricsclient.
 func (p *Poller) LatestNodeUsage() map[string]NodeUsage {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return copyNodeUsage(p.nodeUsage)
+	return copyUsage(p.nodeUsage)
 }
 
 // LatestPodUsage returns a copy of the most recent pod usage map keyed by namespace/name.
 func (p *Poller) LatestPodUsage() map[string]PodUsage {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return copyPodUsage(p.podUsage)
+	return copyUsage(p.podUsage)
 }
 
 // Metadata returns the most recent poller status.
@@ -309,8 +299,8 @@ func (p *Poller) Sample() Sample {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return Sample{
-		NodeUsage: copyNodeUsage(p.nodeUsage),
-		PodUsage:  copyPodUsage(p.podUsage),
+		NodeUsage: copyUsage(p.nodeUsage),
+		PodUsage:  copyUsage(p.podUsage),
 		Metadata:  p.metadataLocked(),
 	}
 }
@@ -399,7 +389,6 @@ func (p *Poller) refresh(ctx context.Context) error {
 	p.podUsage = podUsage
 	now := time.Now()
 	p.lastCollected = now
-	p.lastSuccess = now
 	p.consecutiveFailure = 0
 	p.lastError = ""
 	p.successCount++
@@ -407,7 +396,6 @@ func (p *Poller) refresh(ctx context.Context) error {
 	clear(p.warnedUnavailableAPIs)
 	p.mu.Unlock()
 
-	// log.Printf("[refresh:metrics] poll succeeded: nodeMetrics=%d podMetrics=%d totalSuccess=%d", len(nodeUsage), len(podUsage), p.successCount)
 	if p.telemetry != nil {
 		p.recordMetricsTelemetry(time.Since(start), now, nil, 0, true)
 	}
@@ -420,16 +408,11 @@ func (p *Poller) refresh(ctx context.Context) error {
 func nodeUsageFromMetrics(metrics []metricsv1beta1.NodeMetrics) map[string]NodeUsage {
 	result := make(map[string]NodeUsage, len(metrics))
 	for _, metric := range metrics {
-		usage := NodeUsage{Timestamp: metric.Timestamp.Time}
-		for resourceName, quantity := range metric.Usage {
-			switch resourceName {
-			case corev1.ResourceCPU:
-				usage.CPUUsageMilli = quantity.MilliValue()
-			case corev1.ResourceMemory:
-				usage.MemoryUsageBytes = quantity.Value()
-			}
+		result[metric.Name] = NodeUsage{
+			CPUUsageMilli:    metric.Usage.Cpu().MilliValue(),
+			MemoryUsageBytes: metric.Usage.Memory().Value(),
+			Timestamp:        metric.Timestamp.Time,
 		}
-		result[metric.Name] = usage
 	}
 	return result
 }
@@ -439,22 +422,12 @@ func podUsageFromMetrics(metrics []metricsv1beta1.PodMetrics) map[string]PodUsag
 	for _, metric := range metrics {
 		usage := PodUsage{Timestamp: metric.Timestamp.Time}
 		for _, container := range metric.Containers {
-			addContainerUsage(&usage, container.Usage)
+			usage.CPUUsageMilli += container.Usage.Cpu().MilliValue()
+			usage.MemoryUsageBytes += container.Usage.Memory().Value()
 		}
 		result[fmt.Sprintf("%s/%s", metric.Namespace, metric.Name)] = usage
 	}
 	return result
-}
-
-func addContainerUsage(usage *PodUsage, resources corev1.ResourceList) {
-	for resourceName, quantity := range resources {
-		switch resourceName {
-		case corev1.ResourceCPU:
-			usage.CPUUsageMilli += quantity.MilliValue()
-		case corev1.ResourceMemory:
-			usage.MemoryUsageBytes += quantity.Value()
-		}
-	}
 }
 
 func (p *Poller) listNodeMetricsWithRetry(ctx context.Context, client metricsclient.Interface) (*metricsv1beta1.NodeMetricsList, error) {

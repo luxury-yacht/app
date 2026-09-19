@@ -80,7 +80,7 @@ func readySummary(daemonSet *appsv1.DaemonSet) string {
 func BuildStatusPresentation(daemonSet *appsv1.DaemonSet) resourcemodel.ResourceStatusPresentation {
 	facts := BuildFacts(daemonSet)
 	signals := resourcemodel.WorkloadReplicaSignals(facts.WorkloadCommonFacts)
-	signals = append(signals, statusSignals(daemonSet)...)
+	signals = append(signals, resourcemodel.ConditionSignals(facts.Conditions)...)
 	lifecycle := resourcemodel.ObjectLifecycle(daemonSet.ObjectMeta)
 	if status, ok := resourcemodel.DeletingObjectStatus(daemonSet.ObjectMeta, resourcemodel.ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
@@ -91,20 +91,6 @@ func BuildStatusPresentation(daemonSet *appsv1.DaemonSet) resourcemodel.Resource
 		return resourcemodel.ObjectSourceStatus("No eligible nodes", resourcemodel.ReplicaState(facts.WorkloadCommonFacts), "NoEligibleNodes", "", "warning", signals, lifecycle)
 	}
 	return resourcemodel.ReplicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
-}
-
-func statusSignals(daemonSet *appsv1.DaemonSet) []resourcemodel.ResourceStatusSignal {
-	signals := make([]resourcemodel.ResourceStatusSignal, 0, len(daemonSet.Status.Conditions))
-	for _, condition := range daemonSet.Status.Conditions {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{
-			Type:    resourcemodel.StatusSignalCondition,
-			Name:    string(condition.Type),
-			Status:  string(condition.Status),
-			Reason:  condition.Reason,
-			Message: condition.Message,
-		})
-	}
-	return signals
 }
 
 func conditionFacts(conditions []appsv1.DaemonSetCondition) []resourcemodel.ConditionFacts {

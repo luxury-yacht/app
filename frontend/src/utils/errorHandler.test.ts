@@ -32,7 +32,6 @@ describe('ErrorHandler', () => {
     handler = new ErrorHandlerClass({
       enableLogging: true,
       logToConsole: true,
-      logToServer: false,
     });
     console.groupCollapsed = vi.fn();
     console.error = vi.fn();
@@ -277,22 +276,6 @@ describe('ErrorHandler', () => {
         surface: 'operational',
       })
     );
-  });
-
-  it('supports scoped handlers that merge context and custom message', () => {
-    const scoped = handler.createScoped('object-panel');
-    const details = scoped.handle(
-      'Operation timed out',
-      { object: 'deploy/web' },
-      'Fetch timed out'
-    );
-
-    expect(details.context).toMatchObject({
-      scope: 'object-panel',
-      object: 'deploy/web',
-    });
-    expect(details.userMessage).toBe('Fetch timed out');
-    expect(details.category).toBe(ErrorCategory.TIMEOUT);
   });
 
   it('does not treat token substrings in resource names as auth failures', () => {

@@ -44,8 +44,6 @@ const HEX_PATTERN = /^#([\da-f]{3,8})$/i;
 const RGB_PATTERN =
   /^rgba?\(\s*(\d{1,3})(?:\s*,\s*|\s+)(\d{1,3})(?:\s*,\s*|\s+)(\d{1,3})(?:(?:\s*,\s*|\s*\/\s*)([\d.]+))?\s*\)$/i;
 
-const cloneState = (state: ActiveAnsiState): ActiveAnsiState => ({ ...state });
-
 export const containsAnsi = (text: string): boolean => ANSI_TEST_PATTERN.test(text);
 
 export const stripAnsi = (text: string): string => text.replace(ANSI_PATTERN, '');
@@ -167,7 +165,7 @@ const applyExtendedColor = (
   codes: number[],
   index: number,
   state: ActiveAnsiState,
-  target: 'fg' | 'bg',
+  target: 'color' | 'backgroundColor',
   terminalTheme: Pick<TerminalThemeColors, 'ansi'>
 ): number => {
   const mode = codes[index + 1];
@@ -175,11 +173,7 @@ const applyExtendedColor = (
     const paletteIndex = codes[index + 2];
     if (typeof paletteIndex === 'number') {
       const color = resolveAnsi256Color(paletteIndex, terminalTheme.ansi);
-      if (target === 'fg') {
-        state.color = color;
-      } else {
-        state.backgroundColor = color;
-      }
+      state[target] = color;
     }
     return index + 2;
   }
@@ -189,11 +183,7 @@ const applyExtendedColor = (
     const blue = codes[index + 4];
     if ([red, green, blue].every((value) => typeof value === 'number')) {
       const color = `rgb(${red}, ${green}, ${blue})`;
-      if (target === 'fg') {
-        state.color = color;
-      } else {
-        state.backgroundColor = color;
-      }
+      state[target] = color;
     }
     return index + 4;
   }
@@ -205,7 +195,7 @@ const applySgrCodes = (
   currentState: ActiveAnsiState,
   terminalTheme: Pick<TerminalThemeColors, 'ansi'>
 ): ActiveAnsiState => {
-  const state = cloneState(currentState);
+  const state = { ...currentState };
   const normalizedCodes = codes.length > 0 ? codes : [0];
   let skipThroughIndex = -1;
 
@@ -258,17 +248,26 @@ const applySgrCodes = (
         state.backgroundColor = undefined;
         break;
       case 38:
-        skipThroughIndex = applyExtendedColor(normalizedCodes, index, state, 'fg', terminalTheme);
+        skipThroughIndex = applyExtendedColor(
+          normalizedCodes,
+          index,
+          state,
+          'color',
+          terminalTheme
+        );
         break;
       case 48:
-        skipThroughIndex = applyExtendedColor(normalizedCodes, index, state, 'bg', terminalTheme);
+        skipThroughIndex = applyExtendedColor(
+          normalizedCodes,
+          index,
+          state,
+          'backgroundColor',
+          terminalTheme
+        );
         break;
       default:
-        if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97)) {
-          setForeground(code, state, terminalTheme);
-        } else if ((code >= 40 && code <= 47) || (code >= 100 && code <= 107)) {
-          setBackground(code, state, terminalTheme);
-        }
+        setForeground(code, state, terminalTheme);
+        setBackground(code, state, terminalTheme);
         break;
     }
   }

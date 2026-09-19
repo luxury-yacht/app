@@ -5,6 +5,7 @@
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { parse as parseYaml } from 'yaml';
 
 type SnapshotStatus = 'idle' | 'loading' | 'ready' | 'updating' | 'initialising' | 'error';
 
@@ -1520,6 +1521,70 @@ describe('YamlTab', () => {
 
     await unmount();
   });
+
+  it.each(['before', 'after'] as const)(
+    'keeps merged edits when the matching live snapshot arrives %s the merge response',
+    async (snapshotTiming) => {
+      const base = YAML.replace('apiVersion: v1', 'apiVersion: example.com/v1alpha1')
+        .replace('kind: Pod', 'kind: Deployment')
+        .replace('  name: demo', '  uid: original-object\n  name: demo');
+      const draft = base.replace('image: demo:v1', 'image: demo:v2');
+      const current = base.replace('"123"', '"456"').replace('spec:', 'spec:\n  replicas: 3');
+      const merged = current.replace('image: demo:v1', 'image: demo:v2');
+      snapshotState.current = { status: 'ready', data: { yaml: base }, error: null };
+      wailsMocks.MergeObjectYamlWithLatest.mockResolvedValue({
+        currentYAML: current,
+        mergedYAML: merged,
+        resourceVersion: '456',
+      });
+      const { container, rerender, unmount } = await renderYamlTab({ clusterId: 'Cluster-A:ctx' });
+      await act(async () => {
+        getIconButton(container, 'Edit YAML')?.click();
+      });
+      await act(async () => {
+        codeMirrorState.latestProps.current.onChange(draft);
+      });
+      snapshotState.current = {
+        status: 'ready',
+        data: { yaml: snapshotTiming === 'before' ? current : current.replace('456', '400') },
+        error: null,
+      };
+      await rerender();
+      const reloadButton = Array.from(container.querySelectorAll('button')).find((button) =>
+        button.textContent?.includes('Reload & merge')
+      );
+      expect(reloadButton).toBeTruthy();
+      await act(async () => {
+        reloadButton?.click();
+      });
+      await waitForUpdates();
+
+      expect(wailsMocks.MergeObjectYamlWithLatest).toHaveBeenCalledTimes(1);
+      const [clusterId, request] = wailsMocks.MergeObjectYamlWithLatest.mock.calls[0];
+      expect(clusterId).toBe('Cluster-A:ctx');
+      expect(request).toMatchObject({
+        apiVersion: 'example.com/v1alpha1',
+        kind: 'Deployment',
+        namespace: 'default',
+        name: 'demo',
+        uid: 'original-object',
+      });
+      expect(parseYaml(request.baseYAML).metadata.resourceVersion).toBe('123');
+      expect(parseYaml(request.draftYAML).spec.containers[0].image).toBe('demo:v2');
+      if (snapshotTiming === 'after') {
+        snapshotState.current = { status: 'ready', data: { yaml: current }, error: null };
+        await rerender();
+        await waitForUpdates();
+      }
+      expect(parseYaml(codeMirrorState.value)).toMatchObject({
+        metadata: { resourceVersion: '456', uid: 'original-object' },
+        spec: { replicas: 3, containers: [{ name: 'demo', image: 'demo:v2' }] },
+      });
+      expect(getIconButton(container, 'Save YAML')?.disabled).toBe(false);
+      expect(wailsMocks.ApplyObjectYaml).not.toHaveBeenCalled();
+      await unmount();
+    }
+  );
 
   it('handles search shortcuts and navigation controls', async () => {
     const { container, unmount } = await renderYamlTab();

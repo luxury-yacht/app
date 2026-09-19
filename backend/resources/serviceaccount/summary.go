@@ -7,17 +7,21 @@
 
 package serviceaccount
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+)
 
 // DescribeSummary renders the terse one-line ServiceAccount summary used by snapshot
 // RBAC summaries.
 func DescribeSummary(facts Facts) string {
-	return fmt.Sprintf("Secrets: %d", len(facts.Secrets))
+	return resourcemodel.ServiceAccountSummary(len(facts.Secrets))
 }
 
 // detailsSummary renders the richer ServiceAccount detail-view summary.
 func detailsSummary(facts Facts) string {
-	summary := fmt.Sprintf("Secrets: %d", len(facts.Secrets))
+	summary := DescribeSummary(facts)
 	if len(facts.ImagePullSecrets) > 0 {
 		summary += fmt.Sprintf(", ImagePullSecrets: %d", len(facts.ImagePullSecrets))
 	}

@@ -123,7 +123,6 @@ interface ObjectPanelContentProps {
   resourceDeleted: boolean;
   deletedResourceName: string;
   onClosePanel?: () => void;
-  onRefreshDetails?: () => void;
   /**
    * Stable identifier for the owning ObjectPanel. Threaded down to
    * LogViewer so it can key its prefs cache by panel — see

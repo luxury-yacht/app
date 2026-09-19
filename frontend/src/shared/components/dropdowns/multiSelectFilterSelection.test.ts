@@ -71,6 +71,22 @@ describe('multiSelectFilterSelection', () => {
     });
   });
 
+  it('keeps the empty filter value distinct from a literal sentinel-like label', () => {
+    const selection = normalizeMultiSelectFilterSelection({
+      mode: 'some',
+      values: ['', '__empty__', '__EMPTY__'],
+    });
+    expect(selection).toEqual({ mode: 'some', values: ['', '__empty__'] });
+    expect(filterSelectionMatches(selection, '')).toBe(true);
+    expect(filterSelectionMatches(selection, '__empty__')).toBe(true);
+    expect(
+      filterSelectionToDropdownValues(ALL_MULTISELECT_FILTER, [
+        { value: '', label: 'No label' },
+        { value: '__empty__', label: '__empty__' },
+      ])
+    ).toEqual(['', '__empty__']);
+  });
+
   it('preserves case-distinct identity values for exact selections', () => {
     expect(
       normalizeExactMultiSelectFilterSelection({ mode: 'some', values: ['Cluster-A', 'cluster-a'] })

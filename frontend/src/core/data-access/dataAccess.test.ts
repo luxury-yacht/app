@@ -322,4 +322,27 @@ describe('dataAccess', () => {
 
     expect(hoisted.triggerManualRefreshForContext).not.toHaveBeenCalled();
   });
+  it.each(['throw', 'reject'] as const)(
+    'settles failed reads before rethrowing the original %s',
+    async (failure) => {
+      resetBrokerReadDiagnosticsForTesting();
+      const error = new Error('read failed');
+      const read = vi.fn(() => {
+        expect(getBrokerReadDiagnosticsSnapshot()[0].inFlightCount).toBe(1);
+        if (failure === 'throw') {
+          throw error;
+        }
+        return Promise.reject(error);
+      });
+      await expect(requestData({ resource: 'pods', reason: 'user', read })).rejects.toBe(error);
+      expect(getBrokerReadDiagnosticsSnapshot()).toEqual([
+        expect.objectContaining({
+          inFlightCount: 0,
+          errorCount: 1,
+          successCount: 0,
+          lastStatus: 'error',
+        }),
+      ]);
+    }
+  );
 });

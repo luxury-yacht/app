@@ -33,64 +33,60 @@ func (m *ClusterRuntimeManager) runHeartbeatIteration() {
 		return
 	}
 
-	// Take a snapshot of cluster clients under lock to avoid holding the lock during health checks
-	m.clusterClientsMu.Lock()
-	clients := make(map[string]*clusterClients, len(m.clusterClients))
-	for k, v := range m.clusterClients {
-		clients[k] = v
+	for clusterID, cc := range m.snapshotClusterClients() {
+		m.runClusterHeartbeat(clusterID, cc)
 	}
-	m.clusterClientsMu.Unlock()
+}
 
-	for clusterID, cc := range clients {
-		// Skip if cluster has no clients
-		if cc == nil {
-			continue
+func (m *ClusterRuntimeManager) runClusterHeartbeat(clusterID string, cc *clusterClients) {
+	// Skip if cluster has no clients
+	if cc == nil {
+		return
+	}
+
+	// Skip health checks while auth is not valid: requests through the
+	// cluster's transport are blocked in that state, and the auth
+	// manager's recovery loop keeps probing on its own cadence.
+	if cc.authManager != nil && !cc.authManager.IsValid() {
+		m.logger.Debug("Skipping heartbeat for cluster "+cc.meta.Name+" (auth invalid)", logsources.Heartbeat, clusterID, cc.meta.Name)
+		return
+	}
+
+	// Check health and distinguish failure type
+	status := m.checkClusterHealth(cc)
+
+	// Build event data with cluster info
+	eventData := ClusterHealthEvent{
+		ClusterID:   clusterID,
+		ClusterName: cc.meta.Name,
+	}
+
+	switch status {
+	case healthOK:
+		m.projection.setClusterHealth(clusterID, ClusterHealthHealthy)
+		m.emitEvent(clusterHealthHealthyEventName, eventData)
+
+		m.logger.Debug("Heartbeat healthy for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
+
+	case healthAuthFailure:
+		m.projection.setClusterHealth(clusterID, ClusterHealthDegraded)
+		eventData.Reason = "auth"
+		m.emitEvent(clusterHealthDegradedEventName, eventData)
+
+		m.logger.Warn("Heartbeat auth failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
+
+		// Only report to auth manager for genuine auth failures.
+		if cc.authManager != nil {
+			cc.authManager.ReportFailure("heartbeat auth failure")
 		}
 
-		// Skip health checks while auth is not valid: requests through the
-		// cluster's transport are blocked in that state, and the auth
-		// manager's recovery loop keeps probing on its own cadence.
-		if cc.authManager != nil && !cc.authManager.IsValid() {
-			m.logger.Debug("Skipping heartbeat for cluster "+cc.meta.Name+" (auth invalid)", logsources.Heartbeat, clusterID, cc.meta.Name)
-			continue
-		}
+	case healthConnectivityFailure:
+		m.projection.setClusterHealth(clusterID, ClusterHealthDegraded)
+		eventData.Reason = "connectivity"
+		m.emitEvent(clusterHealthDegradedEventName, eventData)
 
-		// Check health and distinguish failure type
-		status := m.checkClusterHealth(cc)
-
-		// Build event data with cluster info
-		eventData := ClusterHealthEvent{
-			ClusterID:   clusterID,
-			ClusterName: cc.meta.Name,
-		}
-
-		switch status {
-		case healthOK:
-			m.projection.setClusterHealth(clusterID, ClusterHealthHealthy)
-			m.emitEvent(clusterHealthHealthyEventName, eventData)
-
-			m.logger.Debug("Heartbeat healthy for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
-
-		case healthAuthFailure:
-			m.projection.setClusterHealth(clusterID, ClusterHealthDegraded)
-			eventData.Reason = "auth"
-			m.emitEvent(clusterHealthDegradedEventName, eventData)
-
-			m.logger.Warn("Heartbeat auth failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
-
-			// Only report to auth manager for genuine auth failures.
-			if cc.authManager != nil {
-				cc.authManager.ReportFailure("heartbeat auth failure")
-			}
-
-		case healthConnectivityFailure:
-			m.projection.setClusterHealth(clusterID, ClusterHealthDegraded)
-			eventData.Reason = "connectivity"
-			m.emitEvent(clusterHealthDegradedEventName, eventData)
-
-			m.logger.Warn("Heartbeat connectivity failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
-			// Do NOT report to auth manager — this is a network issue, not an auth issue.
-		}
+		m.logger.Warn("Heartbeat connectivity failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
+		// Do NOT report to auth manager — this is a network issue, not an auth issue.
 	}
 }
 

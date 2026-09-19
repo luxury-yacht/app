@@ -16,9 +16,8 @@ import (
 // BuildResourceModel builds the ClusterRoleBinding resource model. Facts are owned
 // by this package (clusterrolebinding.Facts); callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, binding *rbacv1.ClusterRoleBinding) resourcemodel.ResourceModel {
-	facts := BuildFacts(clusterID, binding)
-	status := resourcemodel.RBACBindingStatus(binding.ObjectMeta, binding.RoleRef.Name, len(facts.Subjects))
-	return resourcemodel.RBACResourceModel(clusterID, "ClusterRoleBinding", "clusterrolebindings", resourcemodel.ResourceScopeCluster, binding.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	status := resourcemodel.RBACBindingStatus(binding.ObjectMeta, binding.RoleRef.Name, len(binding.Subjects))
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, binding.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the ClusterRoleBinding facts from the raw object.

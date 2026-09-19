@@ -19,9 +19,8 @@ import (
 // BuildResourceModel builds the ResourceQuota resource model. Facts are owned by
 // this package; the shared ResourceModel carries identity + status.
 func BuildResourceModel(clusterID string, quota *corev1.ResourceQuota) resourcemodel.ResourceModel {
-	facts := BuildFacts(quota)
-	status := statusPresentation(quota, facts)
-	return resourcemodel.PolicyResourceModel(clusterID, Identity, quota.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	status := statusPresentation(quota)
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, quota.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the ResourceQuota facts from the raw object.
@@ -47,29 +46,29 @@ func BuildFacts(quota *corev1.ResourceQuota) Facts {
 	return facts
 }
 
-func statusPresentation(quota *corev1.ResourceQuota, facts Facts) resourcemodel.ResourceStatusPresentation {
-	state := strconv.Itoa(len(facts.Hard))
+func statusPresentation(quota *corev1.ResourceQuota) resourcemodel.ResourceStatusPresentation {
+	state := strconv.Itoa(len(quota.Status.Hard))
 	signals := []resourcemodel.ResourceStatusSignal{
 		{Type: resourcemodel.StatusSignalResourceState, Name: "status.hard.count", Status: state},
-		{Type: resourcemodel.StatusSignalResourceState, Name: "status.used.count", Status: strconv.Itoa(len(facts.Used))},
+		{Type: resourcemodel.StatusSignalResourceState, Name: "status.used.count", Status: strconv.Itoa(len(quota.Status.Used))},
 	}
 	lifecycle := resourcemodel.ObjectLifecycle(quota.ObjectMeta)
 	if status, ok := resourcemodel.DeletingObjectStatus(quota.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
-	return resourcemodel.ObjectSourceStatus(summary(facts), state, "", "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(summary(quota), state, "", "", "ready", signals, lifecycle)
 }
 
-func summary(facts Facts) string {
-	if len(facts.Hard) == 0 {
+func summary(quota *corev1.ResourceQuota) string {
+	if len(quota.Status.Hard) == 0 {
 		return "No limits"
 	}
-	out := fmt.Sprintf("Hard limits: %d", len(facts.Hard))
-	if len(facts.Used) > 0 {
-		out += fmt.Sprintf(", Used: %d", len(facts.Used))
+	out := fmt.Sprintf("Hard limits: %d", len(quota.Status.Hard))
+	if len(quota.Status.Used) > 0 {
+		out += fmt.Sprintf(", Used: %d", len(quota.Status.Used))
 	}
-	if len(facts.Scopes) > 0 {
-		out += fmt.Sprintf(", Scopes: %d", len(facts.Scopes))
+	if len(quota.Spec.Scopes) > 0 {
+		out += fmt.Sprintf(", Scopes: %d", len(quota.Spec.Scopes))
 	}
 	return out
 }

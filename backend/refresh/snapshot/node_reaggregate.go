@@ -33,11 +33,6 @@ import (
 // aggregation is NOT done here — it is the serve-side re-join.
 func buildNodeOwnSummary(meta ClusterMeta, node *corev1.Node) streamrows.NodeSummary {
 	model := nodepkg.BuildResourceModel(meta.ClusterID, node)
-	nodeFacts := nodepkg.BuildFacts(node)
-	ageTimestamp := int64(0)
-	if !node.CreationTimestamp.Time.IsZero() {
-		ageTimestamp = node.CreationTimestamp.Time.UnixMilli()
-	}
 	summary := streamrows.NodeSummary{
 		Ref:                model.Ref,
 		Status:             model.Status.Label,
@@ -46,19 +41,15 @@ func buildNodeOwnSummary(meta ClusterMeta, node *corev1.Node) streamrows.NodeSum
 		StatusReason:       model.Status.Reason,
 		Roles:              formatRoles(extractRoles(node.Labels)),
 		Age:                formatAge(node.CreationTimestamp.Time),
-		AgeTimestamp:       ageTimestamp,
+		AgeTimestamp:       creationTimestampMillis(node),
 		Version:            node.Status.NodeInfo.KubeletVersion,
 		Labels:             copyStringMap(node.Labels),
 		Annotations:        copyStringMap(node.Annotations),
-		Unschedulable:      nodeFacts.Unschedulable,
+		Unschedulable:      node.Spec.Unschedulable,
 	}
 
-	if ip := findNodeAddress(node, corev1.NodeInternalIP); ip != "" {
-		summary.InternalIP = ip
-	}
-	if ip := findNodeAddress(node, corev1.NodeExternalIP); ip != "" {
-		summary.ExternalIP = ip
-	}
+	summary.InternalIP = findNodeAddress(node, corev1.NodeInternalIP)
+	summary.ExternalIP = findNodeAddress(node, corev1.NodeExternalIP)
 
 	cpuCapacity := node.Status.Capacity[corev1.ResourceCPU]
 	cpuAlloc := node.Status.Allocatable[corev1.ResourceCPU]
@@ -104,29 +95,7 @@ func reaggregateNodeSummary(
 	summary.Restarts = restarts
 
 	if len(pods) > 0 {
-		podSummaries := make([]NodePodMetric, 0, len(pods))
-		for _, agg := range pods {
-			key := fmt.Sprintf("%s/%s", agg.Namespace, agg.Name)
-			usage, ok := podMetrics[key]
-			// PodAggregate carries no per-pod creationTimestamp, so a per-pod entry can
-			// only drop on a MISSING sample (stale-on-recreate is enforced at the node
-			// level and in the pods table where the row carries AgeTimestamp). A missing
-			// sample renders the no-data marker rather than "0m"/"0Mi".
-			cpu, mem := streamrows.MetricsNoData, streamrows.MetricsNoData
-			if ok {
-				cpu = formatCPUMilli(usage.CPUUsageMilli)
-				mem = formatMemoryBytes(usage.MemoryUsageBytes)
-			}
-			podSummaries = append(podSummaries, NodePodMetric{
-				Namespace:   agg.Namespace,
-				Name:        agg.Name,
-				CPUUsage:    cpu,
-				MemoryUsage: mem,
-			})
-		}
-		if len(podSummaries) > 0 {
-			summary.PodMetrics = podSummaries
-		}
+		summary.PodMetrics = nodePodMetrics(pods, podMetrics)
 	}
 	if capacity := nodePodsCapacityValue(own.PodsCapacity); capacity > 0 {
 		summary.Pods = fmt.Sprintf("%d/%d", len(pods), capacity)
@@ -175,4 +144,29 @@ func nodePodsCapacityValue(podsCapacity string) int64 {
 		return 0
 	}
 	return q.Value()
+}
+
+// nodePodMetrics formats the per-pod usage rows without mutating retained summaries.
+func nodePodMetrics(pods []streamrows.PodAggregate, podMetrics map[string]metrics.PodUsage) []NodePodMetric {
+	podSummaries := make([]NodePodMetric, 0, len(pods))
+	for _, agg := range pods {
+		key := fmt.Sprintf("%s/%s", agg.Namespace, agg.Name)
+		usage, ok := podMetrics[key]
+		// PodAggregate carries no per-pod creationTimestamp, so a per-pod entry can
+		// only drop on a MISSING sample (stale-on-recreate is enforced at the node
+		// level and in the pods table where the row carries AgeTimestamp). A missing
+		// sample renders the no-data marker rather than "0m"/"0Mi".
+		cpu, mem := streamrows.MetricsNoData, streamrows.MetricsNoData
+		if ok {
+			cpu = formatCPUMilli(usage.CPUUsageMilli)
+			mem = formatMemoryBytes(usage.MemoryUsageBytes)
+		}
+		podSummaries = append(podSummaries, NodePodMetric{
+			Namespace:   agg.Namespace,
+			Name:        agg.Name,
+			CPUUsage:    cpu,
+			MemoryUsage: mem,
+		})
+	}
+	return podSummaries
 }

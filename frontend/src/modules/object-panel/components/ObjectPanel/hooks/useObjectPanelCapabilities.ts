@@ -53,31 +53,15 @@ const createCapabilityState = (override?: Partial<CapabilityState>): CapabilityS
   ...override,
 });
 
-const createDefaultCapabilityStates = (): CapabilityStates => ({
-  viewYaml: createCapabilityState(),
-  editYaml: createCapabilityState(),
-  viewManifest: createCapabilityState(),
-  viewValues: createCapabilityState(),
-  delete: createCapabilityState(),
-  restart: createCapabilityState(),
-  scale: createCapabilityState(),
-  trigger: createCapabilityState(),
-  suspend: createCapabilityState(),
-  shell: createCapabilityState(),
-  debug: createCapabilityState(),
-  removeFinalizer: createCapabilityState(),
-  removeNamespaceFinalizer: createCapabilityState(),
-});
-
 type CapabilityIdMap = ReturnType<typeof createEmptyCapabilityIdMap>;
 
 type CapabilityDescriptorContext = {
+  clusterId: string;
+  group: string;
+  version: string;
   resourceKind: string;
   namespace: string | undefined;
-  resourceName: string | undefined;
-  objectGroup: string | undefined;
-  objectVersion: string | undefined;
-  clusterId: string | undefined;
+  name: string;
 };
 
 type CapabilityDescriptorAccumulator = {
@@ -99,26 +83,30 @@ const buildCapabilityDescriptorContext = (
     return null;
   }
   const resourceKind = normalizeOptionalIdentity(objectData.kind);
-  if (!resourceKind) {
+  const clusterId = normalizeOptionalIdentity(objectData.clusterId);
+  const version = normalizeOptionalIdentity(objectData.version);
+  const name = normalizeOptionalIdentity(objectData.name);
+  // The empty group identifies core resources; only an absent group is incomplete.
+  const group = objectData.group?.trim();
+  if (!resourceKind || !clusterId || !version || !name || group === undefined) {
     return null;
   }
   return {
     resourceKind,
+    clusterId,
+    group,
+    version,
+    name,
     namespace: normalizeOptionalIdentity(objectData.namespace),
-    resourceName: normalizeOptionalIdentity(objectData.name),
-    objectGroup: normalizeOptionalIdentity(objectData.group),
-    objectVersion: normalizeOptionalIdentity(objectData.version),
-    clusterId: normalizeOptionalIdentity(objectData.clusterId),
   };
 };
 
 const addCapabilityDescriptor = (
   accumulator: CapabilityDescriptorAccumulator,
-  descriptor: CapabilityDescriptor,
+  descriptor: Pick<CapabilityDescriptor, 'id' | 'verb'> & Partial<CapabilityDescriptor>,
   key?: keyof CapabilityIdMap
 ): void => {
-  const { clusterId } = accumulator.context;
-  accumulator.descriptors.push(clusterId ? { ...descriptor, clusterId } : descriptor);
+  accumulator.descriptors.push({ ...accumulator.context, ...descriptor });
   if (key) {
     accumulator.idMap[key] = descriptor.id;
   }
@@ -129,15 +117,9 @@ const addObjectActionCapability = (
   actionId: MutatingObjectActionId,
   key: keyof CapabilityIdMap
 ): void => {
-  const { clusterId, objectGroup, objectVersion, resourceKind, namespace, resourceName } =
-    accumulator.context;
   const descriptor = buildObjectActionCapabilityDescriptor(actionId, {
-    clusterId,
-    group: objectGroup,
-    version: objectVersion,
-    kind: resourceKind,
-    namespace,
-    name: resourceName,
+    ...accumulator.context,
+    kind: accumulator.context.resourceKind,
   });
   if (descriptor) {
     addCapabilityDescriptor(accumulator, descriptor, key);
@@ -145,33 +127,8 @@ const addObjectActionCapability = (
 };
 
 const addYamlCapabilityDescriptors = (accumulator: CapabilityDescriptorAccumulator): void => {
-  const { objectGroup, objectVersion, resourceKind, namespace, resourceName } = accumulator.context;
-  addCapabilityDescriptor(
-    accumulator,
-    {
-      id: 'view-yaml',
-      verb: 'get',
-      group: objectGroup,
-      version: objectVersion,
-      resourceKind,
-      namespace,
-      name: resourceName,
-    },
-    'viewYaml'
-  );
-  addCapabilityDescriptor(
-    accumulator,
-    {
-      id: 'edit-yaml',
-      verb: 'patch',
-      group: objectGroup,
-      version: objectVersion,
-      resourceKind,
-      namespace,
-      name: resourceName,
-    },
-    'editYaml'
-  );
+  addCapabilityDescriptor(accumulator, { id: 'view-yaml', verb: 'get' }, 'viewYaml');
+  addCapabilityDescriptor(accumulator, { id: 'edit-yaml', verb: 'patch' }, 'editYaml');
 };
 
 const addMutatingCapabilityDescriptors = (
@@ -200,9 +157,8 @@ const addFinalizerRemovalCapabilityDescriptors = (
 ): void => {
   addObjectActionCapability(accumulator, OBJECT_ACTION_IDS.removeFinalizer, 'removeFinalizer');
 
-  const { objectGroup, objectVersion, resourceKind } = accumulator.context;
-  const isCoreNamespace =
-    (objectGroup ?? '') === '' && objectVersion === 'v1' && resourceKind === 'Namespace';
+  const { group, version, resourceKind } = accumulator.context;
+  const isCoreNamespace = group === '' && version === 'v1' && resourceKind === 'Namespace';
   if (isCoreNamespace) {
     addObjectActionCapability(
       accumulator,
@@ -220,18 +176,16 @@ const addLogsCapabilityDescriptor = (
   if (!featureSupport.objPanelLogs) {
     return;
   }
-  const { objectGroup, objectVersion, resourceKind, namespace, resourceName } = accumulator.context;
   const isPod = objectKind === 'pod';
   addCapabilityDescriptor(
     accumulator,
     {
       id: 'view-logs',
       verb: 'get',
-      group: isPod ? objectGroup : '',
-      version: isPod ? objectVersion : 'v1',
-      resourceKind: isPod ? resourceKind : 'Pod',
-      namespace,
-      name: isPod ? resourceName : undefined,
+      group: isPod ? accumulator.context.group : '',
+      version: isPod ? accumulator.context.version : 'v1',
+      resourceKind: isPod ? accumulator.context.resourceKind : 'Pod',
+      name: isPod ? accumulator.context.name : undefined,
       subresource: 'log',
     },
     'viewObjPanelLogs'
@@ -245,18 +199,12 @@ const addShellCapabilityDescriptors = (
   if (!featureSupport.shell) {
     return;
   }
-  const { objectGroup, objectVersion, resourceKind, namespace, resourceName } = accumulator.context;
   (['get', 'create'] as const).forEach((verb) => {
     addCapabilityDescriptor(
       accumulator,
       {
         id: `shell-exec-${verb}`,
         verb,
-        group: objectGroup,
-        version: objectVersion,
-        resourceKind,
-        namespace,
-        name: resourceName,
         subresource: 'exec',
       },
       verb === 'get' ? 'shellExecGet' : 'shellExecCreate'
@@ -279,8 +227,6 @@ const addDebugCapabilityDescriptor = (
       group: '',
       version: 'v1',
       resourceKind: 'Pod',
-      namespace: accumulator.context.namespace,
-      name: accumulator.context.resourceName,
       subresource: 'ephemeralcontainers',
     },
     'debug'
@@ -291,18 +237,12 @@ const addHelmCapabilityDescriptors = (
   accumulator: CapabilityDescriptorAccumulator,
   featureSupport: FeatureSupport
 ): void => {
-  const { objectGroup, objectVersion, resourceKind, namespace, resourceName } = accumulator.context;
   const addRead = (id: string, key: keyof CapabilityIdMap): void => {
     addCapabilityDescriptor(
       accumulator,
       {
         id,
         verb: 'get',
-        group: objectGroup,
-        version: objectVersion,
-        resourceKind,
-        namespace,
-        name: resourceName,
       },
       key
     );
@@ -455,9 +395,6 @@ export const useObjectPanelCapabilities = ({
   );
 
   const capabilityStates = useMemo<CapabilityStates>(() => {
-    if (!capabilitiesEnabled) {
-      return createDefaultCapabilityStates();
-    }
     const shellExecGet = getCapabilityState(capabilityDescriptorInfo.idMap.shellExecGet);
     const shellExecCreate = getCapabilityState(capabilityDescriptorInfo.idMap.shellExecCreate);
     const shellAllowed = shellExecGet.allowed || shellExecCreate.allowed;
@@ -486,14 +423,16 @@ export const useObjectPanelCapabilities = ({
         capabilityDescriptorInfo.idMap.removeNamespaceFinalizer
       ),
     };
-  }, [capabilityDescriptorInfo.idMap, capabilitiesEnabled, getCapabilityState]);
+  }, [capabilityDescriptorInfo.idMap, getCapabilityState]);
 
   const viewObjPanelLogsPermission = useUserPermission(
     'Pod',
     'get',
     objectData?.namespace ?? null,
     'log',
-    objectData?.clusterId ?? null
+    objectData?.clusterId ?? null,
+    '',
+    'v1'
   );
 
   const nodeLogDiscoveryTarget = useMemo(

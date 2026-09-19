@@ -18,7 +18,7 @@ func ObjectRefFromResourceLink(link *resourcemodel.ResourceLink) ObjectRef {
 	if link == nil || link.Ref == nil {
 		return ObjectRef{}
 	}
-	return ObjectRefFromResourceRef(*link.Ref)
+	return *link.Ref
 }
 
 // ConditionStatesFromFacts projects condition facts into the wire condition list.
@@ -28,25 +28,21 @@ func ConditionStatesFromFacts(facts []resourcemodel.ConditionFacts) []ConditionS
 	}
 	states := make([]ConditionState, 0, len(facts))
 	for _, condition := range facts {
-		state := ConditionState{
-			Type:    condition.Type,
-			Status:  condition.Status,
-			Reason:  condition.Reason,
-			Message: condition.Message,
-		}
-		if !condition.LastTransitionTime.IsZero() {
-			state.LastTransitionTime = condition.LastTransitionTime.Time.Format("2006-01-02 15:04:05")
-		}
-		states = append(states, state)
+		states = append(states, conditionStateFromFacts(condition))
 	}
 	return states
 }
 
-// ConditionStatePointerFromFacts projects an optional condition fact pointer.
-func ConditionStatePointerFromFacts(facts *resourcemodel.ConditionFacts) *ConditionState {
+// conditionStatePointerFromFacts projects an optional condition fact pointer.
+func conditionStatePointerFromFacts(facts *resourcemodel.ConditionFacts) *ConditionState {
 	if facts == nil {
 		return nil
 	}
+	state := conditionStateFromFacts(*facts)
+	return &state
+}
+
+func conditionStateFromFacts(facts resourcemodel.ConditionFacts) ConditionState {
 	state := ConditionState{
 		Type:    facts.Type,
 		Status:  facts.Status,
@@ -56,16 +52,16 @@ func ConditionStatePointerFromFacts(facts *resourcemodel.ConditionFacts) *Condit
 	if !facts.LastTransitionTime.IsZero() {
 		state.LastTransitionTime = facts.LastTransitionTime.Time.Format("2006-01-02 15:04:05")
 	}
-	return &state
+	return state
 }
 
 // ConditionsSummaryFromFacts projects the Accepted/Programmed/Ready/Resolved summary.
 func ConditionsSummaryFromFacts(facts resourcemodel.ConditionsSummaryFacts) ConditionsSummary {
 	return ConditionsSummary{
-		Accepted:   ConditionStatePointerFromFacts(facts.Accepted),
-		Programmed: ConditionStatePointerFromFacts(facts.Programmed),
-		Ready:      ConditionStatePointerFromFacts(facts.Ready),
-		Resolved:   ConditionStatePointerFromFacts(facts.Resolved),
+		Accepted:   conditionStatePointerFromFacts(facts.Accepted),
+		Programmed: conditionStatePointerFromFacts(facts.Programmed),
+		Ready:      conditionStatePointerFromFacts(facts.Ready),
+		Resolved:   conditionStatePointerFromFacts(facts.Resolved),
 	}
 }
 

@@ -20,11 +20,7 @@ import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor, OverviewItemSpec } from '../schema';
 import { OverviewItem } from '../shared/OverviewItem';
-import {
-  DEFAULT_TOLERATION_RE,
-  type ParsedToleration,
-  parseToleration,
-} from '../shared/tolerations';
+import { nonDefaultTolerations } from '../shared/tolerations';
 import '../shared/OverviewBlocks.css';
 import '../WorkloadOverview.css';
 
@@ -436,7 +432,7 @@ const accessModeTooltip = (mode: string): string | undefined => {
 /** StatefulSet `podManagementPolicy` tooltips. The default `OrderedReady` is
  *  normally not surfaced (filtered at the call site), but we cover it so the
  *  helper is complete. */
-const podManagementTooltip = (policy: string): string | undefined => {
+const podManagementTooltip = (policy: string | undefined): string | undefined => {
   switch (policy) {
     case 'OrderedReady':
       return 'Pods are created and scaled one at a time, in order. The next pod only starts once the previous one is Ready, and pods are terminated in reverse order.';
@@ -447,7 +443,10 @@ const podManagementTooltip = (policy: string): string | undefined => {
   }
 };
 
-const strategyTooltip = (strategy: string, kind: StrategyKind): React.ReactNode | undefined => {
+const strategyTooltip = (
+  strategy: string | undefined,
+  kind: StrategyKind
+): React.ReactNode | undefined => {
   switch (strategy) {
     case 'RollingUpdate':
       if (kind === 'deployment') {
@@ -496,12 +495,6 @@ interface PodTemplate {
   tolerations?: string[] | null;
   namespace?: string;
 }
-
-const nonDefaultTolerations = (tolerations: string[] | null | undefined): ParsedToleration[] =>
-  tolerations
-    ?.filter((tol) => !DEFAULT_TOLERATION_RE.test(tol))
-    .map(parseToleration)
-    .filter((p): p is ParsedToleration => p !== null) ?? [];
 
 const renderPodTemplateGroup = (d: PodTemplate, context: OverviewContext): React.ReactNode => {
   const tolerations = nonDefaultTolerations(d.tolerations);
@@ -615,8 +608,7 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
     derivedFrom: ['status'],
     label: 'Status',
     hidden: (d) => !(d.paused && !d.status),
-    render: (d) =>
-      d.paused && !d.status ? <StatusChip variant="warning">Paused</StatusChip> : null,
+    render: () => <StatusChip variant="warning">Paused</StatusChip>,
   },
   // `Available=False` — no ready replicas at all.
   {
@@ -681,19 +673,18 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
     derivedFrom: ['maxSurge', 'maxUnavailable'],
     label: 'Strategy',
     hidden: (d) => !d.strategy,
-    render: (d) =>
-      !d.strategy ? null : (
-        <>
-          <StatusChip variant="info" tooltip={strategyTooltip(d.strategy, 'deployment')}>
-            {d.strategy}
-          </StatusChip>
-          {d.strategy === 'RollingUpdate' && (
-            <span className="overview-value" style={{ marginLeft: '0.5rem' }}>
-              surge {d.maxSurge || '25%'} / unavailable {d.maxUnavailable || '25%'}
-            </span>
-          )}
-        </>
-      ),
+    render: (d) => (
+      <>
+        <StatusChip variant="info" tooltip={strategyTooltip(d.strategy, 'deployment')}>
+          {d.strategy}
+        </StatusChip>
+        {d.strategy === 'RollingUpdate' && (
+          <span className="overview-value" style={{ marginLeft: '0.5rem' }}>
+            surge {d.maxSurge || '25%'} / unavailable {d.maxUnavailable || '25%'}
+          </span>
+        )}
+      </>
+    ),
   },
   // Current ReplicaSet — link to the active RS, with a rollback shortcut.
   {
@@ -702,56 +693,54 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
     label: 'ReplicaSet',
     fullWidth: true,
     hidden: (d) => !d.currentReplicaSet,
-    render: (d, context) =>
-      !d.currentReplicaSet ? null : (
-        <div className="workload-replicaset">
-          <ObjectPanelLink
-            objectRef={buildRequiredObjectReference({
-              kind: 'replicaset',
-              name: d.currentReplicaSet,
-              namespace: d.namespace,
-              ...clusterMeta(context),
-            })}
-          >
-            {d.currentReplicaSet}
-          </ObjectPanelLink>
-          {!!d.currentRevision && (
-            <span className="workload-replicaset-meta">
-              <span>Revision {d.currentRevision}</span>
-              {typeof d.revisionHistory === 'number' &&
-                d.revisionHistory > 0 &&
-                d.revisionHistory !== 10 && (
-                  <StatusChip
-                    variant="warning"
-                    tooltip="The maximum number of replicasets is set to a non-default value (default is 10)."
-                  >
-                    Limit {d.revisionHistory}
-                  </StatusChip>
-                )}
-            </span>
-          )}
-        </div>
-      ),
+    render: (d, context) => (
+      <div className="workload-replicaset">
+        <ObjectPanelLink
+          objectRef={buildRequiredObjectReference({
+            kind: 'replicaset',
+            name: d.currentReplicaSet,
+            namespace: d.namespace,
+            ...clusterMeta(context),
+          })}
+        >
+          {d.currentReplicaSet}
+        </ObjectPanelLink>
+        {!!d.currentRevision && (
+          <span className="workload-replicaset-meta">
+            <span>Revision {d.currentRevision}</span>
+            {typeof d.revisionHistory === 'number' &&
+              d.revisionHistory > 0 &&
+              d.revisionHistory !== 10 && (
+                <StatusChip
+                  variant="warning"
+                  tooltip="The maximum number of replicasets is set to a non-default value (default is 10)."
+                >
+                  Limit {d.revisionHistory}
+                </StatusChip>
+              )}
+          </span>
+        )}
+      </div>
+    ),
   },
   // Only show non-default configuration values.
   {
     field: 'minReadySeconds',
     label: 'Min Ready',
     hidden: (d) => !(d.minReadySeconds && d.minReadySeconds > 0),
-    render: (d) => (d.minReadySeconds && d.minReadySeconds > 0 ? `${d.minReadySeconds}s` : null),
+    render: (d) => `${d.minReadySeconds}s`,
   },
   {
     field: 'progressDeadline',
     label: 'Deadline',
     hidden: (d) => !(d.progressDeadline && d.progressDeadline !== 600),
-    render: (d) =>
-      d.progressDeadline && d.progressDeadline !== 600 ? `${d.progressDeadline}s` : null,
+    render: (d) => `${d.progressDeadline}s`,
   },
   // Pod-template group (SA / placement).
   {
     kind: 'widget',
     consumes: [...POD_TEMPLATE_CONSUMES],
-    render: (d, context) => renderPodTemplateGroup(d, context),
+    render: renderPodTemplateGroup,
   },
 ];
 
@@ -809,35 +798,31 @@ const daemonSetItems: OverviewItemSpec<DaemonSetDetails>[] = [
     derivedFrom: ['maxSurge', 'maxUnavailable'],
     label: 'Strategy',
     hidden: (d) => !d.updateStrategy,
-    render: (d) =>
-      !d.updateStrategy ? null : (
-        <>
-          <StatusChip variant="info" tooltip={strategyTooltip(d.updateStrategy, 'daemonset')}>
-            {d.updateStrategy}
-          </StatusChip>
-          {d.updateStrategy === 'RollingUpdate' && (
-            <span className="overview-value" style={{ marginLeft: '0.5rem' }}>
-              surge {d.maxSurge || '0'} / unavailable {d.maxUnavailable || '1'}
-            </span>
-          )}
-        </>
-      ),
+    render: (d) => (
+      <>
+        <StatusChip variant="info" tooltip={strategyTooltip(d.updateStrategy, 'daemonset')}>
+          {d.updateStrategy}
+        </StatusChip>
+        {d.updateStrategy === 'RollingUpdate' && (
+          <span className="overview-value" style={{ marginLeft: '0.5rem' }}>
+            surge {d.maxSurge || '0'} / unavailable {d.maxUnavailable || '1'}
+          </span>
+        )}
+      </>
+    ),
   },
   // Only show if there are issues.
   {
     field: 'numberMisscheduled',
     label: 'Misscheduled',
     hidden: (d) => !(d.numberMisscheduled !== undefined && d.numberMisscheduled > 0),
-    render: (d) =>
-      d.numberMisscheduled !== undefined && d.numberMisscheduled > 0 ? (
-        <StatusChip variant="warning">{d.numberMisscheduled}</StatusChip>
-      ) : null,
+    render: (d) => <StatusChip variant="warning">{d.numberMisscheduled}</StatusChip>,
   },
   // Pod-template group (SA / placement).
   {
     kind: 'widget',
     consumes: [...POD_TEMPLATE_CONSUMES],
-    render: (d, context) => renderPodTemplateGroup(d, context),
+    render: renderPodTemplateGroup,
   },
 ];
 
@@ -887,40 +872,36 @@ const statefulSetItems: OverviewItemSpec<StatefulSetDetails>[] = [
     derivedFrom: ['partition', 'maxUnavailable'],
     label: 'Strategy',
     hidden: (d) => !d.updateStrategy,
-    render: (d) =>
-      !d.updateStrategy ? null : (
-        <>
-          <StatusChip variant="info" tooltip={strategyTooltip(d.updateStrategy, 'statefulset')}>
-            {d.updateStrategy}
-          </StatusChip>
-          {d.updateStrategy === 'RollingUpdate' && (
-            <span style={{ marginLeft: '0.5rem' }}>
-              {typeof d.partition === 'number' && d.partition > 0 && (
-                <>partition {d.partition} / </>
-              )}
-              unavailable {d.maxUnavailable || '1'}
-            </span>
-          )}
-        </>
-      ),
+    render: (d) => (
+      <>
+        <StatusChip variant="info" tooltip={strategyTooltip(d.updateStrategy, 'statefulset')}>
+          {d.updateStrategy}
+        </StatusChip>
+        {d.updateStrategy === 'RollingUpdate' && (
+          <span style={{ marginLeft: '0.5rem' }}>
+            {typeof d.partition === 'number' && d.partition > 0 && <>partition {d.partition} / </>}
+            unavailable {d.maxUnavailable || '1'}
+          </span>
+        )}
+      </>
+    ),
   },
   // Only show if non-default.
   {
     field: 'podManagementPolicy',
     label: 'Pod Mgmt',
     hidden: (d) => !(d.podManagementPolicy && d.podManagementPolicy !== 'OrderedReady'),
-    render: (d) =>
-      d.podManagementPolicy && d.podManagementPolicy !== 'OrderedReady' ? (
-        <StatusChip variant="info" tooltip={podManagementTooltip(d.podManagementPolicy)}>
-          {d.podManagementPolicy}
-        </StatusChip>
-      ) : null,
+    render: (d) => (
+      <StatusChip variant="info" tooltip={podManagementTooltip(d.podManagementPolicy)}>
+        {d.podManagementPolicy}
+      </StatusChip>
+    ),
   },
   {
     field: 'minReadySeconds',
     label: 'Min Ready',
     hidden: (d) => !(d.minReadySeconds && d.minReadySeconds > 0),
-    render: (d) => (d.minReadySeconds && d.minReadySeconds > 0 ? `${d.minReadySeconds}s` : null),
+    render: (d) => `${d.minReadySeconds}s`,
   },
   // Volume claim templates + PVC retention. The leading separator is emitted by
   // the widget only when there's at least one volume-related row to render.
@@ -1018,7 +999,7 @@ const statefulSetItems: OverviewItemSpec<StatefulSetDetails>[] = [
   {
     kind: 'widget',
     consumes: [...POD_TEMPLATE_CONSUMES],
-    render: (d, context) => renderPodTemplateGroup(d, context),
+    render: renderPodTemplateGroup,
   },
 ];
 
@@ -1063,7 +1044,7 @@ const replicaSetItems: OverviewItemSpec<ReplicaSetDetails>[] = [
     field: 'minReadySeconds',
     label: 'Min Ready',
     hidden: (d) => !(d.minReadySeconds && d.minReadySeconds > 0),
-    render: (d) => (d.minReadySeconds && d.minReadySeconds > 0 ? `${d.minReadySeconds}s` : null),
+    render: (d) => `${d.minReadySeconds}s`,
   },
 ];
 

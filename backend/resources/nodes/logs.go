@@ -218,8 +218,9 @@ func (s *Service) discoverNodeLogSources(
 		sources: sources,
 	}
 
-	taskCh := make(chan nodeLogDiscoveryTask, nodeLogDiscoveryWorkers)
-	var taskWG sync.WaitGroup
+	taskCh := make(chan nodeLogDiscoveryTask)
+	discovered := make(chan nodeLogDiscoveryTask)
+	completed := make(chan struct{})
 	var workerWG sync.WaitGroup
 
 	for range nodeLogDiscoveryWorkers {
@@ -227,15 +228,33 @@ func (s *Service) discoverNodeLogSources(
 		go func() {
 			defer workerWG.Done()
 			for task := range taskCh {
-				s.processNodeLogDiscoveryTask(ctx, nodeName, task, state, &taskWG, taskCh)
-				taskWG.Done()
+				s.processNodeLogDiscoveryTask(ctx, nodeName, task, state, discovered)
+				completed <- struct{}{}
 			}
 		}()
 	}
 
-	taskWG.Add(1)
-	taskCh <- nodeLogDiscoveryTask{path: "", body: rootBody, depth: 0}
-	taskWG.Wait()
+	// Only this coordinator schedules work. Workers return discovered children
+	// so a full queue can never leave every worker waiting to enqueue.
+	pending := []nodeLogDiscoveryTask{{path: "", body: rootBody, depth: 0}}
+	active := 0
+	for len(pending) > 0 || active > 0 {
+		var ready chan nodeLogDiscoveryTask
+		var next nodeLogDiscoveryTask
+		if len(pending) > 0 {
+			ready = taskCh
+			next = pending[0]
+		}
+		select {
+		case ready <- next:
+			pending = pending[1:]
+			active++
+		case child := <-discovered:
+			pending = append(pending, child)
+		case <-completed:
+			active--
+		}
+	}
 	close(taskCh)
 	workerWG.Wait()
 }
@@ -269,18 +288,18 @@ func (s *Service) processNodeLogDiscoveryTask(
 	nodeName string,
 	task nodeLogDiscoveryTask,
 	state *nodeLogDiscoveryState,
-	taskWG *sync.WaitGroup,
-	taskCh chan<- nodeLogDiscoveryTask,
+	discovered chan<- nodeLogDiscoveryTask,
 ) {
 	if task.depth >= maxNodeLogDiscoveryDepth || state.hasReachedSourceLimit() {
 		return
 	}
-
 	for _, entry := range parseNodeLogDirectoryListing(task.body) {
 		if state.hasReachedSourceLimit() {
-			return
+			break
 		}
-		s.processNodeLogDiscoveryEntry(ctx, nodeName, task, entry, state, taskWG, taskCh)
+		if child := s.processNodeLogDiscoveryEntry(ctx, nodeName, task, entry, state); child != nil {
+			discovered <- *child
+		}
 	}
 }
 
@@ -290,31 +309,28 @@ func (s *Service) processNodeLogDiscoveryEntry(
 	task nodeLogDiscoveryTask,
 	entry nodeLogListingEntry,
 	state *nodeLogDiscoveryState,
-	taskWG *sync.WaitGroup,
-	taskCh chan<- nodeLogDiscoveryTask,
-) {
+) *nodeLogDiscoveryTask {
 	nextPath, ok := joinNodeLogPath(task.path, entry.Href)
 	if !ok || !state.markVisited(nextPath) || shouldSkipNodeLogDiscoveryPath(nextPath) {
-		return
+		return nil
 	}
 	childBody, err := s.fetchNodeLogDiscoveryPath(ctx, nodeName, nextPath)
 	if err != nil {
-		return
+		return nil
 	}
 	switch probeNodeLogPath(nextPath, childBody) {
 	case nodeLogProbeDirectory:
 		if task.depth+1 >= maxNodeLogDiscoveryDepth {
-			return
+			return nil
 		}
-		taskWG.Add(1)
-		taskCh <- nodeLogDiscoveryTask{path: nextPath, body: childBody, depth: task.depth + 1}
-		return
+		return &nodeLogDiscoveryTask{path: nextPath, body: childBody, depth: task.depth + 1}
 	case nodeLogProbeBinary:
-		return
+		return nil
 	}
 	if isSupportedNodeLogSource(nextPath) {
 		state.addSource(nextPath)
 	}
+	return nil
 }
 
 func (s *nodeLogDiscoveryState) hasReachedSourceLimit() bool {

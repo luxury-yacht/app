@@ -14,11 +14,7 @@ import {
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
-import {
-  DEFAULT_TOLERATION_RE,
-  type ParsedToleration,
-  parseToleration,
-} from '../shared/tolerations';
+import { nonDefaultTolerations } from '../shared/tolerations';
 import '../shared/OverviewBlocks.css';
 
 type PodDetailInfo = types.PodDetailInfo;
@@ -59,11 +55,6 @@ const hasOwner = (d: PodDetailInfo): boolean =>
 // apiVersion when present so CRD-backed owners (Argo Rollout, KubeVirt VMI, Tekton
 // TaskRun, etc.) keep their real GVK.
 const renderOwner = (d: PodDetailInfo, context: OverviewContext): React.ReactNode => {
-  // The renderer evaluates `render` before honoring `hidden`, so guard the
-  // no-owner case here too.
-  if (!hasOwner(d)) {
-    return null;
-  }
   let ownerRef: ReturnType<typeof buildRequiredRelatedObjectReference> | null = null;
   try {
     ownerRef = buildRequiredRelatedObjectReference({
@@ -79,12 +70,6 @@ const renderOwner = (d: PodDetailInfo, context: OverviewContext): React.ReactNod
   const label = `${d.ownerKind}/${d.ownerName}`;
   return ownerRef ? <ObjectPanelLink objectRef={ownerRef}>{label}</ObjectPanelLink> : label;
 };
-
-const parsedTolerations = (d: PodDetailInfo): ParsedToleration[] =>
-  d.tolerations
-    ?.filter((tol) => !DEFAULT_TOLERATION_RE.test(tol))
-    .map(parseToleration)
-    .filter((p): p is ParsedToleration => p !== null) ?? [];
 
 // Whether the runtime/security group (QoS / Priority / Restart Policy / Service
 // Account / Host) has any row to show.
@@ -112,10 +97,6 @@ export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {
         label: 'Ready',
         hidden: (d) => !d.ready,
         render: (d) => {
-          // `render` runs before `hidden` is honored, so guard the empty case.
-          if (!d.ready) {
-            return null;
-          }
           const parts = d.ready.split('/');
           if (parts.length === 2) {
             const readyCount = Number.parseInt(parts[0], 10);
@@ -164,30 +145,29 @@ export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {
         field: 'node',
         label: 'Node',
         hidden: (d) => !d.node,
-        render: (d, context) =>
-          !d.node ? null : (
-            <ObjectPanelLink
-              objectRef={buildRequiredObjectReference({
-                kind: 'node',
-                name: d.node,
-                ...clusterMeta(context),
-              })}
-              title="Click to view node"
-            >
-              {d.node}
-            </ObjectPanelLink>
-          ),
+        render: (d, context) => (
+          <ObjectPanelLink
+            objectRef={buildRequiredObjectReference({
+              kind: 'node',
+              name: d.node,
+              ...clusterMeta(context),
+            })}
+            title="Click to view node"
+          >
+            {d.node}
+          </ObjectPanelLink>
+        ),
       },
       { field: 'nodeIP', label: 'Node IP', hidden: (d) => !d.nodeIP },
       { field: 'podIP', label: 'Pod IP', hidden: (d) => !d.podIP },
       {
         field: 'tolerations',
         label: 'Tolerations',
-        hidden: (d) => parsedTolerations(d).length === 0,
+        hidden: (d) => nonDefaultTolerations(d.tolerations).length === 0,
         render: (d) => (
           <div className="overview-condition-list">
             {withStableListKeys(
-              parsedTolerations(d),
+              nonDefaultTolerations(d.tolerations),
               (item) => `${item.label}:${item.tooltip}`
             ).map(({ key, value: p }) => (
               <StatusChip key={key} variant="info" tooltip={p.tooltip}>
@@ -224,20 +204,19 @@ export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {
         field: 'serviceAccount',
         label: 'Service Account',
         hidden: (d) => !(d.serviceAccount && d.serviceAccount !== 'default'),
-        render: (d, context) =>
-          !d.serviceAccount ? null : (
-            <ObjectPanelLink
-              objectRef={buildRequiredObjectReference({
-                kind: 'serviceaccount',
-                name: d.serviceAccount,
-                namespace: d.namespace,
-                ...clusterMeta(context),
-              })}
-              title="Click to view service account"
-            >
-              {d.serviceAccount}
-            </ObjectPanelLink>
-          ),
+        render: (d, context) => (
+          <ObjectPanelLink
+            objectRef={buildRequiredObjectReference({
+              kind: 'serviceaccount',
+              name: d.serviceAccount,
+              namespace: d.namespace,
+              ...clusterMeta(context),
+            })}
+            title="Click to view service account"
+          >
+            {d.serviceAccount}
+          </ObjectPanelLink>
+        ),
       },
       {
         field: 'hostNetwork',

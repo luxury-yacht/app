@@ -26,7 +26,7 @@ func (s *Service) CustomResourceDefinition(ctx context.Context, name string) (*C
 	client := s.deps.APIExtensionsClient
 	crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		err = s.logError(err, fmt.Sprintf("Failed to get CRD %s", name))
+		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get CRD %s", name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get CRD: %w", err)
 	}
 
@@ -34,13 +34,12 @@ func (s *Service) CustomResourceDefinition(ctx context.Context, name string) (*C
 }
 
 func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition) *CustomResourceDefinitionDetails {
-	model := BuildResourceModel(s.deps.ClusterID, crd)
 	facts := BuildFacts(crd)
 	details := &CustomResourceDefinitionDetails{
 		Kind:        "CustomResourceDefinition",
 		Name:        crd.Name,
-		Labels:      model.Metadata.Labels,
-		Annotations: model.Metadata.Annotations,
+		Labels:      resourcemodel.CopyStringMap(crd.Labels),
+		Annotations: resourcemodel.CopyStringMap(crd.Annotations),
 	}
 
 	details.Group = facts.Group
@@ -113,8 +112,4 @@ func (s *Service) ensureAPIExtensions(resource string) error {
 		return fmt.Errorf("apiextensions client not initialized")
 	}
 	return nil
-}
-
-func (s *Service) logError(err error, msg string) error {
-	return s.deps.LogResourceRequestFailure(err, msg, "get", Identity, logsources.ResourceLoader)
 }

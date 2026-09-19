@@ -226,6 +226,34 @@ describe('GridTableFiltersBar', () => {
     expect(onClustersChange).toHaveBeenCalledWith(['cluster-b']);
   });
 
+  it.each(['all', 'some'] as const)(
+    'shows case-distinct clusters selected in %s mode',
+    async (mode) => {
+      const values = ['config:Production', 'config:production'];
+      await renderFilters({
+        showClusterDropdown: true,
+        activeFilters: {
+          search: '',
+          kinds: { mode: 'all' },
+          namespaces: { mode: 'all' },
+          clusters: mode === 'some' ? { mode, values } : { mode },
+          caseSensitive: false,
+          includeMetadata: false,
+        },
+        resolvedFilterOptions: {
+          kinds: [],
+          namespaces: [],
+          clusters: values.map((value) => ({ value, label: value })),
+        },
+        renderOption: (option, isSelected) => (
+          <input type="checkbox" aria-label={option.label} checked={isSelected} readOnly />
+        ),
+      });
+      const selected = container.querySelectorAll('input[type="checkbox"]:checked');
+      expect(Array.from(selected, (input) => input.getAttribute('aria-label'))).toEqual(values);
+    }
+  );
+
   it('renders backend query facet dropdowns and propagates keyed changes', async () => {
     const onQueryFacetChange = vi.fn();
 

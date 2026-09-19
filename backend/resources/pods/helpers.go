@@ -36,7 +36,7 @@ func (s *Service) fetchSinglePodFull(ctx context.Context, namespace, name string
 
 	// Get metrics and owner info
 	podMetrics := s.getPodMetrics(ctx, namespace)
-	rsToDeployment := s.buildReplicaSetToDeploymentMap(ctx, namespace)
+	rsToDeployment := s.BuildReplicaSetToDeploymentMap(ctx, namespace)
 
 	// Build full details
 	details := s.buildPodDetailInfo(*pod, podMetrics, rsToDeployment)
@@ -69,8 +69,8 @@ func (s *Service) fetchSinglePodFull(ctx context.Context, namespace, name string
 
 // Helper functions for simplified pod handling
 
-// buildReplicaSetToDeploymentMap builds a map of ReplicaSet names to Deployment names.
-func (s *Service) buildReplicaSetToDeploymentMap(ctx context.Context, namespace string) map[string]string {
+// BuildReplicaSetToDeploymentMap builds a map of ReplicaSet names to Deployment names.
+func (s *Service) BuildReplicaSetToDeploymentMap(ctx context.Context, namespace string) map[string]string {
 	rsToDeployment := make(map[string]string)
 
 	rsList, err := s.deps.KubernetesClient.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{})
@@ -79,37 +79,12 @@ func (s *Service) buildReplicaSetToDeploymentMap(ctx context.Context, namespace 
 	}
 
 	for _, rs := range rsList.Items {
-		for _, owner := range rs.OwnerReferences {
-			if owner.Controller != nil && *owner.Controller && owner.Kind == "Deployment" {
-				rsToDeployment[rs.Name] = owner.Name
-				break
-			}
+		if name, ok := deploymentControllerName(rs.OwnerReferences); ok {
+			rsToDeployment[rs.Name] = name
 		}
 	}
 
 	return rsToDeployment
-}
-
-// getPodOwnerWithMap gets pod owner using pre-fetched ReplicaSet map.
-// Returns (kind, name, apiVersion). When the controlling owner is a
-// ReplicaSet that maps to a Deployment, the result is collapsed to the
-// Deployment with apiVersion "apps/v1" (Deployments are always apps/v1).
-// For all other owners apiVersion comes from owner.APIVersion verbatim,
-// which is what lets the panel open CRD-as-Pod-owner targets like
-// argoproj.io Rollout or kubevirt.io VirtualMachineInstance with a
-// fully-qualified GVK.
-func getPodOwnerWithMap(pod corev1.Pod, rsToDeployment map[string]string) (string, string, string) {
-	for _, owner := range pod.OwnerReferences {
-		if owner.Controller != nil && *owner.Controller {
-			if owner.Kind == "ReplicaSet" {
-				if deploymentName, ok := rsToDeployment[owner.Name]; ok {
-					return "Deployment", deploymentName, "apps/v1"
-				}
-			}
-			return owner.Kind, owner.Name, owner.APIVersion
-		}
-	}
-	return "None", "None", ""
 }
 
 // getNodeIP retrieves the internal IP address for the given node, returning an empty
@@ -138,13 +113,13 @@ func (s *Service) getNodeIP(ctx context.Context, nodeName string) string {
 // buildPodDetailInfo creates comprehensive PodDetailInfo from a pod
 func (s *Service) buildPodDetailInfo(pod corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics, rsToDeployment map[string]string) *types.PodDetailInfo {
 	// Calculate resources
-	cpuRequest, cpuLimit, memRequest, memLimit := calculatePodResources(pod)
+	cpuRequest, cpuLimit, memRequest, memLimit := CalculatePodResources(pod)
 
 	// Get metrics
-	cpuUsage, memUsage := getPodUsageFromMetrics(pod.Name, podMetrics)
+	cpuUsage, memUsage := PodUsageFromMetrics(pod.Name, podMetrics)
 
 	// Get owner
-	ownerKind, ownerName, ownerAPIVersion := getPodOwnerWithMap(pod, rsToDeployment)
+	ownerKind, ownerName, ownerAPIVersion := ResolveOwner(pod, rsToDeployment)
 
 	model := BuildResourceModel(s.deps.ClusterID, &pod)
 	podFacts := BuildFacts(&pod)
@@ -257,9 +232,9 @@ func (totals *podResourceTotals) quantities() (*resource.Quantity, *resource.Qua
 	return &totals.cpuRequest, &totals.cpuLimit, &totals.memoryRequest, &totals.memoryLimit
 }
 
-// calculatePodResources sums regular-container resources, then takes the
+// CalculatePodResources sums regular-container resources, then takes the
 // per-dimension maximum against the sequential init-container requirements.
-func calculatePodResources(pod corev1.Pod) (*resource.Quantity, *resource.Quantity, *resource.Quantity, *resource.Quantity) {
+func CalculatePodResources(pod corev1.Pod) (*resource.Quantity, *resource.Quantity, *resource.Quantity, *resource.Quantity) {
 	totals := newPodResourceTotals()
 	for _, container := range pod.Spec.Containers {
 		totals.add(container.Resources)
@@ -312,8 +287,8 @@ func (s *Service) getPodMetrics(ctx context.Context, namespace string) map[strin
 	return metrics
 }
 
-// getPodMetricsForPods fetches metrics only for specific pods
-func (s *Service) getPodMetricsForPods(ctx context.Context, namespace string, pods []corev1.Pod) map[string]*metricsv1beta1.PodMetrics {
+// GetPodMetricsForPods fetches metrics only for specific pods
+func (s *Service) GetPodMetricsForPods(ctx context.Context, namespace string, pods []corev1.Pod) map[string]*metricsv1beta1.PodMetrics {
 	metrics := make(map[string]*metricsv1beta1.PodMetrics)
 	if len(pods) == 0 {
 		return metrics
@@ -378,8 +353,8 @@ func (s *Service) fetchListedPodMetrics(ctx context.Context, client metricsclien
 	return metrics
 }
 
-// getPodUsageFromMetrics extracts current CPU and memory usage from metrics
-func getPodUsageFromMetrics(podName string, metrics map[string]*metricsv1beta1.PodMetrics) (cpuUsage, memUsage *resource.Quantity) {
+// PodUsageFromMetrics extracts current CPU and memory usage from metrics
+func PodUsageFromMetrics(podName string, metrics map[string]*metricsv1beta1.PodMetrics) (cpuUsage, memUsage *resource.Quantity) {
 	cpuUse := resource.NewQuantity(0, resource.DecimalSI)
 	memUse := resource.NewQuantity(0, resource.BinarySI)
 
@@ -401,20 +376,8 @@ func getPodUsageFromMetrics(podName string, metrics map[string]*metricsv1beta1.P
 	return cpuUse, memUse
 }
 
-// getNsPodReadyStatus calculates ready/total containers
-func getNsPodReadyStatus(pod corev1.Pod) string {
-	facts := BuildFacts(&pod)
-	return formatPodFactsReady(facts)
-}
-
 func formatPodFactsReady(facts Facts) string {
 	return fmt.Sprintf("%d/%d", facts.ReadyContainers, facts.TotalContainers)
-}
-
-// getPodRestartCount calculates the total restart count across all containers
-func getPodRestartCount(pod corev1.Pod) int32 {
-	facts := BuildFacts(&pod)
-	return facts.RestartCount
 }
 
 // formatPodVolumes formats pod volumes for display
@@ -627,36 +590,6 @@ func applyContainerState(detail *types.PodDetailInfoContainer, state corev1.Cont
 	}
 }
 
-// CalculatePodResources aggregates CPU and memory metrics for a pod.
-func CalculatePodResources(pod corev1.Pod) (*resource.Quantity, *resource.Quantity, *resource.Quantity, *resource.Quantity) {
-	return calculatePodResources(pod)
-}
-
-// PodUsageFromMetrics extracts CPU and memory usage for a pod from metrics data.
-func PodUsageFromMetrics(podName string, metrics map[string]*metricsv1beta1.PodMetrics) (*resource.Quantity, *resource.Quantity) {
-	return getPodUsageFromMetrics(podName, metrics)
-}
-
-// PodReadyStatus formats the ready container status for list views.
-func PodReadyStatus(pod corev1.Pod) string {
-	return getNsPodReadyStatus(pod)
-}
-
-// PodRestartCount returns total restart count across containers.
-func PodRestartCount(pod corev1.Pod) int32 {
-	return getPodRestartCount(pod)
-}
-
-// GetPodMetricsForPods exposes selective pod metrics fetching for other packages.
-func (s *Service) GetPodMetricsForPods(ctx context.Context, namespace string, pods []corev1.Pod) map[string]*metricsv1beta1.PodMetrics {
-	return s.getPodMetricsForPods(ctx, namespace, pods)
-}
-
-// BuildReplicaSetToDeploymentMap exposes replica set ownership lookups.
-func (s *Service) BuildReplicaSetToDeploymentMap(ctx context.Context, namespace string) map[string]string {
-	return s.buildReplicaSetToDeploymentMap(ctx, namespace)
-}
-
 // SummarizePod converts a pod object and optional metrics into a PodSimpleInfo for list views.
 func SummarizePod(clusterID string, pod corev1.Pod, metrics map[string]*metricsv1beta1.PodMetrics, ownerKind, ownerName, ownerAPIVersion string) types.PodSimpleInfo {
 	cpuRequest, cpuLimit, memRequest, memLimit := CalculatePodResources(pod)
@@ -690,17 +623,8 @@ func SummarizePod(clusterID string, pod corev1.Pod, metrics map[string]*metricsv
 // owner.APIVersion verbatim otherwise — required so the panel can open
 // CRD-as-Pod-owner targets correctly.
 func ResolveOwner(pod corev1.Pod, rsToDeployment map[string]string) (string, string, string) {
-	for _, owner := range pod.OwnerReferences {
-		if owner.Controller != nil && *owner.Controller {
-			if owner.Kind == "ReplicaSet" {
-				if deploymentName, ok := rsToDeployment[owner.Name]; ok {
-					return "Deployment", deploymentName, "apps/v1"
-				}
-			}
-			return owner.Kind, owner.Name, owner.APIVersion
-		}
-	}
-	return "None", "None", ""
+	owner := resolvePodOwner(&pod, rsToDeployment, nil)
+	return owner.kind, owner.name, owner.apiVersion
 }
 
 func formatCPUQuantity(q *resource.Quantity) string {

@@ -32,6 +32,7 @@ vi.mock('@core/contexts/ModalStateContext', () => ({
   useModalState: () => ({ setIsAboutOpen: setIsAboutOpenMock }),
 }));
 
+import { onEvent } from '@core/desktop-runtime';
 import UpdateStatus from './UpdateStatus';
 
 describe('UpdateStatus', () => {
@@ -138,4 +139,25 @@ describe('UpdateStatus', () => {
       expect(container.querySelector('[data-testid="update-status-chip"]')).toBeNull();
     }
   );
+  it('retains a ready update event when the initial app-info snapshot resolves later', async () => {
+    let finish: (info: unknown) => void = () => undefined;
+    readAppInfoMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    await renderAndSettle();
+    const listener = vi
+      .mocked(onEvent)
+      .mock.calls.slice()
+      .reverse()
+      .find(([name]) => name === 'app-update')?.[1];
+    expect(listener).toBeDefined();
+    await act(async () => listener?.({ status: 'ready', availableVersion: '2.0.0' } as never));
+    await act(async () => finish({ update: { status: 'available', availableVersion: '2.0.0' } }));
+    expect(container.querySelector('[data-testid="update-status-chip"]')?.textContent).toContain(
+      'Restart to update'
+    );
+  });
 });

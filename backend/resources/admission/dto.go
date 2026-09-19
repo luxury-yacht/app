@@ -8,8 +8,6 @@
 
 package admission
 
-import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 // MutatingWebhookConfigurationDetails captures detailed mutating webhook configuration information.
 type MutatingWebhookConfigurationDetails struct {
 	Kind        string            `json:"kind"`
@@ -79,13 +77,4 @@ type WebhookSelectorExpression struct {
 	Key      string   `json:"key"`
 	Operator string   `json:"operator"`
 	Values   []string `json:"values,omitempty"`
-}
-
-// WebhookCondition summarises webhook condition text.
-type WebhookCondition struct {
-	Type    string       `json:"type"`
-	Status  string       `json:"status"`
-	Reason  string       `json:"reason,omitempty"`
-	Message string       `json:"message,omitempty"`
-	Time    *metav1.Time `json:"time,omitempty"`
 }

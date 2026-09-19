@@ -8,21 +8,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
-	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
 
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	appslisters "k8s.io/client-go/listers/apps/v1"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
@@ -33,120 +24,20 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 )
 
-// PodBuilder constructs pod snapshots scoped by node or workload.
+// PodBuilder serves pod rows projected at intake, scoped by namespace, node or workload.
+// Each builder and its stores belong to one cluster.
 type PodBuilder struct {
-	podLister  corelisters.PodLister
-	podIndexer cache.Indexer
-	rsLister   appslisters.ReplicaSetLister
-	// buildSummary projects a pod into its row. It is a field so tests can count
-	// or inject projections; nil defaults to podres.BuildStreamSummaryFromRSMap.
-	buildSummary func(ClusterMeta, *corev1.Pod, int64, int64, map[string]string) PodSummary
-	// projCache memoizes projected rows so the frequent refetches a busy cluster
-	// drives reuse work instead of re-projecting every pod each request. nil for
-	// ad-hoc/test builders (projection runs directly).
-	projCache *podProjectionCache
-	// maintained, when set, is an informer-fed store of pod rows. Namespace,
-	// node, and workload scopes serve rows straight from it; nil falls back to
-	// the list path used by older unit tests.
 	maintained *typedMaintainedStore[PodSummary]
-	// metrics supplies the poller usage joined onto the served rows AT SERVE — usage
-	// is never written to the maintained store or the projection cache, so a metric
-	// tick cannot re-project stored rows. nil (a unit test) serves the no-data marker.
+	// Usage is joined onto served copies, never stored in the maintained rows.
 	metrics metrics.Provider
-	// perBuild reuses the per-Build engine store across page turns/sort flips
-	// while the object version + metric tick are unchanged (plan P6). Per-cluster
-	// (owned by this builder), dropped with it on teardown.
+	// Query indexes are reused while the object version and metric revision match.
 	perBuild *perBuildStoreCache[PodSummary]
-}
-
-func (b *PodBuilder) projectPod(meta ClusterMeta, pod *corev1.Pod, rsMap map[string]string) PodSummary {
-	build := func() PodSummary {
-		project := b.buildSummary
-		if project == nil {
-			project = podres.BuildStreamSummaryFromRSMap
-		}
-		return project(meta, pod, 0, 0, rsMap)
-	}
-	var summary PodSummary
-	if b.projCache == nil {
-		summary = build()
-	} else {
-		summary = b.projCache.summaryFor(string(pod.UID), pod.ResourceVersion, build)
-	}
-	return podSummaryWithoutMetrics(summary)
 }
 
 func podSummaryWithoutMetrics(summary PodSummary) PodSummary {
 	summary.CPUUsage = streamrows.MetricsNoData
 	summary.MemUsage = streamrows.MetricsNoData
 	return summary
-}
-
-// podProjectionCacheTTL bounds the memo cache: entries for pods not seen within
-// the window (e.g. deleted pods) are evicted, so it stays bounded without any
-// informer-event wiring.
-const podProjectionCacheTTL = 2 * time.Minute
-
-type podProjectionEntry struct {
-	resourceVersion string
-	summary         PodSummary
-	lastAccess      time.Time
-}
-
-// podProjectionCache memoizes pod OBJECT row projections keyed by pod UID. A
-// summary is reused while the pod's resourceVersion is unchanged: a pod change
-// bumps RV, and the RS->Deployment owner is immutable in practice, so RV fully
-// determines the object projection.
-type podProjectionCache struct {
-	mu        sync.Mutex
-	entries   map[string]podProjectionEntry
-	lastPrune time.Time
-}
-
-func newPodProjectionCache() *podProjectionCache {
-	return &podProjectionCache{entries: make(map[string]podProjectionEntry)}
-}
-
-// summaryFor returns the cached object projection on a resourceVersion hit,
-// otherwise builds, stores, and returns a fresh one. build() runs outside the
-// lock so concurrent scope builds don't serialize on projection; a concurrent
-// miss re-projects once (identical result, last write wins).
-func (c *podProjectionCache) summaryFor(uid, resourceVersion string, build func() PodSummary) PodSummary {
-	now := time.Now()
-	c.mu.Lock()
-	if entry, ok := c.entries[uid]; ok && entry.resourceVersion == resourceVersion {
-		entry.lastAccess = now
-		c.entries[uid] = entry
-		c.mu.Unlock()
-		return entry.summary
-	}
-	c.mu.Unlock()
-
-	summary := build()
-
-	c.mu.Lock()
-	c.entries[uid] = podProjectionEntry{
-		resourceVersion: resourceVersion,
-		summary:         summary,
-		lastAccess:      now,
-	}
-	c.mu.Unlock()
-	return summary
-}
-
-// prune evicts entries not accessed within the TTL, at most once per window.
-func (c *podProjectionCache) prune(now time.Time) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if now.Sub(c.lastPrune) < podProjectionCacheTTL {
-		return
-	}
-	c.lastPrune = now
-	for uid, entry := range c.entries {
-		if now.Sub(entry.lastAccess) > podProjectionCacheTTL {
-			delete(c.entries, uid)
-		}
-	}
 }
 
 // PodSnapshot is the payload for the pods domain. Rows carry live usage joined at
@@ -265,7 +156,7 @@ func podOwnerFacetLabel(value string) string {
 func podQuerypageSchema() querypage.Schema[PodSummary] {
 	return querypageSchemaFromAdapter(
 		podTableQueryAdapter(),
-		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "cpu", "memory", "age"},
+		podQueryCapabilities().SortableFields,
 	)
 }
 
@@ -293,7 +184,6 @@ const (
 	objectScopeKey    = "object"
 	nodeScopeKey      = "node"
 	namespaceScopeKey = "namespace"
-	podNodeIndexName  = "pods:node"
 )
 
 // RegisterPodDomain registers the pods snapshot domain.
@@ -318,7 +208,6 @@ func RegisterPodDomain(reg *domain.Registry, provider metrics.Provider, clusterM
 	}
 
 	builder := &PodBuilder{
-		projCache:  newPodProjectionCache(),
 		maintained: maintained,
 		metrics:    provider,
 		perBuild:   &perBuildStoreCache[PodSummary]{},
@@ -346,7 +235,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		return nil, err
 	}
 
-	summaries, version, err := b.collectSummaries(meta, baseScope)
+	summaries, version, err := b.collectSummariesFromStore(baseScope)
 	if err != nil {
 		return nil, err
 	}
@@ -356,16 +245,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 	overlayPodMetrics(summaries, podUsage)
 
 	adapter := podTableQueryAdapter()
-	totalCount := 0
-	healthCounts := map[string]int{}
-	for _, summary := range summaries {
-		totalCount++
-		for _, mode := range podHealthFilterModes {
-			if adapter.Predicate(summary, "health", mode) {
-				healthCounts[mode]++
-			}
-		}
-	}
+	healthCounts := podHealthCounts(summaries, adapter)
 
 	// Pre-sort by (namespace, name) ONLY for the window branch, which truncates
 	// input order. The query branch re-sorts via the engine and ignores this
@@ -412,7 +292,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 			ResourceQueryEnvelope: resolved.Envelope,
 			Rows:                  resolved.Rows,
 			Metrics:               podMetricsInfoFromMetadata(metricsMetadata),
-			TotalCount:            totalCount,
+			TotalCount:            len(summaries),
 			HealthCounts:          healthCounts,
 		},
 		Stats: resolved.Stats,
@@ -421,50 +301,21 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 	return snapshot, nil
 }
 
-// collectSummaries returns the in-scope pod rows and the snapshot version. When the
-// builder has no typed pod lister (the production, ingest-fed path) every scope —
-// namespace, node, and workload — is served straight from the maintained store. The
-// store rows carry the resolved Node and owner the node/workload scopes filter by.
-func (b *PodBuilder) collectSummaries(meta ClusterMeta, baseScope string) ([]PodSummary, uint64, error) {
-	if b.podLister == nil && b.maintained != nil {
-		return b.collectSummariesFromStore(baseScope)
-	}
-	if namespace, ok := podStoreServableNamespace(baseScope); ok && b.maintained != nil {
-		rows := b.maintained.rows(namespace, map[string]bool{podres.Identity.Kind: true})
-		return rows, b.maintained.snapshotVersion(), nil
-	}
-
-	pods, err := b.collectPods(baseScope)
-	if err != nil {
-		return nil, 0, err
-	}
-	if b.projCache != nil {
-		b.projCache.prune(time.Now())
-	}
-	rsMap, err := b.replicasetDeploymentMap(pods)
-	if err != nil {
-		return nil, 0, err
-	}
-	summaries := make([]PodSummary, 0, len(pods))
-	var version uint64
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
-		summaries = append(summaries, b.projectPod(meta, pod, rsMap))
-		if v := parsePodResourceVersion(pod); v > version {
-			version = v
+// Count through the table predicate so badges and their filters use the same policy.
+func podHealthCounts(rows []PodSummary, adapter typedTableQueryAdapter[PodSummary]) map[string]int {
+	counts := map[string]int{}
+	for _, row := range rows {
+		for _, mode := range podHealthFilterModes {
+			if adapter.Predicate(row, "health", mode) {
+				counts[mode]++
+			}
 		}
 	}
-	return summaries, version, nil
+	return counts
 }
 
-// collectSummariesFromStore serves any pod scope from the maintained store's rows
-// (the ingest-fed, no-typed-lister production path). It filters the stored rows by
-// the scope (namespace / node / workload) and returns the store's monotonic snapshot
-// version. The filters read only the resolved fields the rows already carry — Node for
-// the node scope, the RS->Deployment-resolved owner for the workload scope — so the
-// result matches the typed-lister list path.
+// collectSummariesFromStore filters intake-projected rows by the requested scope.
+// The store's version changes on intake updates, independently of metrics.
 func (b *PodBuilder) collectSummariesFromStore(baseScope string) ([]PodSummary, uint64, error) {
 	all := b.maintained.rows("", map[string]bool{podres.Identity.Kind: true})
 	rows, err := filterPodRowsByScope(all, baseScope)
@@ -474,11 +325,8 @@ func (b *PodBuilder) collectSummariesFromStore(baseScope string) ([]PodSummary, 
 	return rows, b.maintained.snapshotVersion(), nil
 }
 
-// filterPodRowsByScope returns the subset of store rows in the requested scope. It
-// mirrors collectPods' scope parsing, but matches against the rows' already-resolved
-// fields instead of a typed pod: the node scope filters by Node, the workload scope by
-// the resolved owner GVK+name, and the namespace scope by Namespace (all/* = every
-// namespace).
+// filterPodRowsByScope matches node and namespace scopes against projected rows,
+// and workload scopes against their resolved and direct owner identities.
 func filterPodRowsByScope(rows []PodSummary, scope string) ([]PodSummary, error) {
 	parts := strings.SplitN(scope, ":", 2)
 	if len(parts) != 2 {
@@ -529,13 +377,8 @@ func filterPodRows(rows []PodSummary, keep func(PodSummary) bool) []PodSummary {
 	return out
 }
 
-// podRowMatchesWorkload reports whether a stored pod row belongs to the workload
-// scope, mirroring matchesWorkload exactly: the scope matches the row's DIRECT
-// controlling owner (DirectOwner* — the ownerRef as written on the pod, which is
-// what a ReplicaSet-scoped Pods window names) or its COLLAPSED owner (Owner* —
-// ReplicaSet resolved to its Deployment by BuildStreamSummary, which is what a
-// Deployment-scoped window names). Matching only the collapsed owner left every
-// ReplicaSet-scoped window empty: the collapse erases the RS identity.
+// podRowMatchesWorkload accepts either the direct controller or resolved owner.
+// ReplicaSet panels need the direct owner even after resolution to a Deployment.
 func podRowMatchesWorkload(row PodSummary, scope workloadScope) bool {
 	if row.Ref.Namespace != scope.namespace {
 		return false
@@ -544,8 +387,7 @@ func podRowMatchesWorkload(row PodSummary, scope workloadScope) bool {
 		ownerTripleMatchesScope(row.OwnerAPIVersion, row.OwnerKind, row.OwnerName, scope)
 }
 
-// ownerTripleMatchesScope compares one stored owner identity against the scope's
-// full group/version/kind/name (the row-side twin of ownerMatchesWorkloadScope).
+// ownerTripleMatchesScope compares the complete owner identity with the scope.
 func ownerTripleMatchesScope(apiVersion, kind, name string, scope workloadScope) bool {
 	gv, err := schema.ParseGroupVersion(apiVersion)
 	if err != nil {
@@ -604,26 +446,6 @@ func overlayPodMetrics(rows []PodSummary, podUsage map[string]metrics.PodUsage) 
 		rows[i].CPUUsage = formatPodMetricCPU(usage, ok, rows[i].AgeTimestamp)
 		rows[i].MemUsage = formatPodMetricMemory(usage, ok, rows[i].AgeTimestamp)
 	}
-}
-
-// podStoreServableNamespace reports whether baseScope is a namespace scope the
-// maintained store can serve, returning the namespace to filter by ("" for all
-// namespaces). Node and workload scopes are not store-servable. It remains for the
-// builder that has BOTH a typed lister and a store (no longer the production wiring,
-// but kept so a mixed builder still serves namespace scopes from RAM).
-func podStoreServableNamespace(baseScope string) (string, bool) {
-	value, ok := strings.CutPrefix(baseScope, namespaceScopeKey+":")
-	if !ok {
-		return "", false
-	}
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "", false
-	}
-	if value == "all" || value == "*" {
-		return "", true
-	}
-	return value, true
 }
 
 func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
@@ -742,73 +564,6 @@ func parseReadyPairInt32(value string) (int32, int32, bool) {
 	return int32(ready), int32(total), true
 }
 
-func (b *PodBuilder) collectPods(scope string) ([]*corev1.Pod, error) {
-	parts := strings.SplitN(scope, ":", 2)
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid pods scope: %s", scope)
-	}
-
-	scopeKey := parts[0]
-	value := parts[1]
-
-	switch scopeKey {
-	case nodeScopeKey:
-		return b.listPodsByNode(value)
-	case workloadScopeKey:
-		return b.collectWorkloadPods(value)
-	case objectScopeKey:
-		return b.collectObjectPod(value)
-	case namespaceScopeKey:
-		return b.collectNamespacePods(scope, value)
-	default:
-		return nil, fmt.Errorf("unsupported pods scope: %s", scope)
-	}
-}
-
-func (b *PodBuilder) collectWorkloadPods(value string) ([]*corev1.Pod, error) {
-	parsed, err := parseWorkloadScope(value)
-	if err != nil {
-		return nil, err
-	}
-	pods, err := b.listPodsByNamespace(parsed.namespace)
-	if err != nil {
-		return nil, err
-	}
-	filtered := make([]*corev1.Pod, 0, len(pods))
-	for _, pod := range pods {
-		if matchesWorkload(pod, parsed, b.rsLister) {
-			filtered = append(filtered, pod)
-		}
-	}
-	return filtered, nil
-}
-
-func (b *PodBuilder) collectObjectPod(value string) ([]*corev1.Pod, error) {
-	parsed, err := parsePodObjectScope(value)
-	if err != nil {
-		return nil, err
-	}
-	pod, err := b.podLister.Pods(parsed.namespace).Get(parsed.name)
-	if apierrors.IsNotFound(err) {
-		return []*corev1.Pod{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return []*corev1.Pod{pod}, nil
-}
-
-func (b *PodBuilder) collectNamespacePods(scope, value string) ([]*corev1.Pod, error) {
-	namespace := strings.TrimSpace(value)
-	if namespace == "" {
-		return nil, fmt.Errorf("invalid namespace scope: %s", scope)
-	}
-	if namespace == "all" || namespace == "*" {
-		return b.listAllPods()
-	}
-	return b.listPodsByNamespace(namespace)
-}
-
 type workloadScope struct {
 	namespace string
 	group     string
@@ -864,152 +619,6 @@ func parseWorkloadScope(value string) (workloadScope, error) {
 		kind:      kind,
 		name:      name,
 	}, nil
-}
-
-func matchesWorkload(pod *corev1.Pod, scope workloadScope, rsLister appslisters.ReplicaSetLister) bool {
-	for _, owner := range pod.OwnerReferences {
-		if owner.Controller == nil || !*owner.Controller {
-			continue
-		}
-		if ownerMatchesWorkloadScope(owner.APIVersion, owner.Kind, owner.Name, scope) {
-			return true
-		}
-		if owner.Kind == replicasetpkg.Identity.Kind &&
-			scope.kind == deploymentpkg.Identity.Kind &&
-			replicaSetMatchesWorkload(pod.Namespace, owner.Name, scope, rsLister) {
-			return true
-		}
-	}
-	return false
-}
-
-func replicaSetMatchesWorkload(namespace, replicaSetName string, scope workloadScope, rsLister appslisters.ReplicaSetLister) bool {
-	if rsLister == nil {
-		return false
-	}
-	replicaSet, err := rsLister.ReplicaSets(namespace).Get(replicaSetName)
-	if err != nil {
-		return false
-	}
-	for _, owner := range replicaSet.OwnerReferences {
-		if owner.Controller != nil && *owner.Controller && ownerMatchesWorkloadScope(owner.APIVersion, owner.Kind, owner.Name, scope) {
-			return true
-		}
-	}
-	return false
-}
-
-func ownerMatchesWorkloadScope(apiVersion, kind, name string, scope workloadScope) bool {
-	gv, err := schema.ParseGroupVersion(apiVersion)
-	if err != nil {
-		return false
-	}
-	return gv.Group == scope.group &&
-		gv.Version == scope.version &&
-		kind == scope.kind &&
-		name == scope.name
-}
-
-func (b *PodBuilder) replicasetDeploymentMap(pods []*corev1.Pod) (map[string]string, error) {
-	if b.rsLister == nil {
-		return nil, nil
-	}
-	result := make(map[string]string)
-	for _, pod := range pods {
-		owner, ok := replicaSetControllerOwner(pod)
-		if !ok {
-			continue
-		}
-		if _, exists := result[owner.Name]; exists {
-			continue
-		}
-		deploymentName, err := b.deploymentForReplicaSet(pod.Namespace, owner.Name)
-		if err != nil {
-			return nil, err
-		}
-		if deploymentName != "" {
-			result[owner.Name] = deploymentName
-		}
-	}
-	return result, nil
-}
-
-func replicaSetControllerOwner(pod *corev1.Pod) (metav1.OwnerReference, bool) {
-	if pod == nil {
-		return metav1.OwnerReference{}, false
-	}
-	for _, owner := range pod.OwnerReferences {
-		if owner.Controller != nil && *owner.Controller && owner.Kind == replicasetpkg.Identity.Kind {
-			return owner, true
-		}
-	}
-	return metav1.OwnerReference{}, false
-}
-
-func (b *PodBuilder) deploymentForReplicaSet(namespace, name string) (string, error) {
-	replicaSet, err := b.rsLister.ReplicaSets(namespace).Get(name)
-	if apierrors.IsNotFound(err) {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	for _, owner := range replicaSet.OwnerReferences {
-		if owner.Controller != nil && *owner.Controller && owner.Kind == deploymentpkg.Identity.Kind {
-			return owner.Name, nil
-		}
-	}
-	return "", nil
-}
-
-func (b *PodBuilder) listPodsByNamespace(namespace string) ([]*corev1.Pod, error) {
-	if b.podIndexer != nil {
-		items, err := b.podIndexer.ByIndex(cache.NamespaceIndex, namespace)
-		if err == nil {
-			return convertPodIndexerItems(items), nil
-		}
-	}
-	return b.podLister.Pods(namespace).List(labels.Everything())
-}
-
-func (b *PodBuilder) listAllPods() ([]*corev1.Pod, error) {
-	return b.podLister.List(labels.Everything())
-}
-
-func (b *PodBuilder) listPodsByNode(node string) ([]*corev1.Pod, error) {
-	if node == "" {
-		return []*corev1.Pod{}, nil
-	}
-	if b.podIndexer != nil {
-		items, err := b.podIndexer.ByIndex(podNodeIndexName, node)
-		if err == nil {
-			return convertPodIndexerItems(items), nil
-		}
-	}
-	allPods, err := b.podLister.List(labels.Everything())
-	if err != nil {
-		return nil, err
-	}
-	result := make([]*corev1.Pod, 0)
-	for _, pod := range allPods {
-		if pod.Spec.NodeName == node {
-			result = append(result, pod)
-		}
-	}
-	return result, nil
-}
-
-func convertPodIndexerItems(items []interface{}) []*corev1.Pod {
-	if len(items) == 0 {
-		return []*corev1.Pod{}
-	}
-	result := make([]*corev1.Pod, 0, len(items))
-	for _, item := range items {
-		if pod, ok := item.(*corev1.Pod); ok && pod != nil {
-			result = append(result, pod)
-		}
-	}
-	return result
 }
 
 func parsePodResourceVersion(pod *corev1.Pod) uint64 {

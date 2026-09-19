@@ -3,21 +3,10 @@ package resourcemodel
 import (
 	"math"
 
-	"github.com/luxury-yacht/app/backend/resourcekind"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
-
-func PolicyResourceModel(
-	clusterID string,
-	identity resourcekind.Identity,
-	meta metav1.ObjectMeta,
-	status ResourceStatusPresentation,
-	facts ResourceFacts,
-) ResourceModel {
-	return KubernetesResourceModel(clusterID, identity, meta, status, facts)
-}
 
 func NewIntOrStringFacts(value intstr.IntOrString) IntOrStringFacts {
 	facts := IntOrStringFacts{

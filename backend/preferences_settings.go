@@ -688,33 +688,7 @@ func (p *PreferencesService) LoadWindowSettings() (*WindowSettings, error) {
 }
 
 func getDefaultAppSettings() *AppSettings {
-	return &AppSettings{
-		AppearanceMode:                           "system",
-		SelectedKubeconfigs:                      nil,
-		UseShortResourceNames:                    false,
-		DimInactiveNamespaces:                    true,
-		ExclusiveNamespaces:                      true,
-		ErrorReportingEnabled:                    true,
-		AutoRefreshEnabled:                       true,
-		RefreshBackgroundClustersEnabled:         true,
-		MetricsRefreshIntervalMs:                 defaultMetricsIntervalMs(),
-		KubernetesClientQPS:                      defaultKubernetesClientQPS,
-		KubernetesClientBurst:                    defaultKubernetesClientBurst,
-		PermissionSSRRFetchConcurrency:           defaultPermissionSSRRFetchConcurrency,
-		ObjPanelLogsBufferMaxSize:                defaultObjPanelLogsBufferMaxSize,
-		ObjPanelLogsTargetPerScopeLimit:          defaultObjPanelLogsTargetPerScopeLimit,
-		ObjPanelLogsTargetGlobalLimit:            defaultObjPanelLogsTargetGlobalLimit,
-		ObjPanelLogsAPITimestampFormat:           defaultObjPanelLogsAPITimestampFormat,
-		ObjPanelLogsAPITimestampUseLocalTimeZone: false,
-		GridTablePersistenceMode:                 "shared",
-		DefaultTablePageSize:                     defaultTablePageSize,
-		DefaultObjectPanelPosition:               defaultObjectPanelPosition,
-		ObjectPanelDockedRightWidth:              defaultObjectPanelDockedRightWidth,
-		ObjectPanelDockedBottomHeight:            defaultObjectPanelDockedBottomHeight,
-		ObjectPanelFloatingWidth:                 defaultObjectPanelFloatingWidth,
-		ObjectPanelFloatingHeight:                defaultObjectPanelFloatingHeight,
-		Themes:                                   []Theme{defaultTheme()},
-	}
+	return appSettingsFromFile(defaultSettingsFile())
 }
 
 func (p *PreferencesService) loadAppSettingsSnapshot() (*AppSettings, error) {
@@ -736,32 +710,32 @@ func (p *PreferencesService) loadAppSettingsSnapshot() (*AppSettings, error) {
 
 func appSettingsFromFile(settings *settingsFile) *AppSettings {
 	settings = normalizeSettingsFile(settings)
-	logSettings := resolveObjPanelLogSettings(settings.Preferences.ObjPanelLogs)
-	kubernetesAPISettings := resolveKubernetesAPISettings(settings.Preferences.KubernetesAPI)
+	logSettings := settings.Preferences.ObjPanelLogs
+	kubernetesAPISettings := settings.Preferences.KubernetesAPI
 
 	return &AppSettings{
 		AnonymizedID:                             settings.Telemetry.AnonymizedID,
 		AppearanceMode:                           settings.Preferences.AppearanceMode,
 		SelectedKubeconfigs:                      append([]string(nil), settings.Kubeconfig.Selected...),
 		UseShortResourceNames:                    settings.Preferences.UseShortResourceNames,
-		DimInactiveNamespaces:                    boolPreferenceOrDefault(settings.Preferences.DimInactiveNamespaces, true),
+		DimInactiveNamespaces:                    *settings.Preferences.DimInactiveNamespaces,
 		SidebarClusterResourcesExpanded:          settings.Preferences.SidebarClusterResourcesExpanded,
 		SidebarClusterExtensionsExpanded:         settings.Preferences.SidebarClusterExtensionsExpanded,
 		SidebarNamespaceResourcesExpanded:        settings.Preferences.SidebarNamespaceResourcesExpanded,
 		SidebarNamespaceExtensionsExpanded:       settings.Preferences.SidebarNamespaceExtensionsExpanded,
-		ExclusiveNamespaces:                      boolPreferenceOrDefault(settings.Preferences.ExclusiveNamespaces, true),
-		ErrorReportingEnabled:                    boolPreferenceOrDefault(settings.Preferences.ErrorReportingEnabled, true),
+		ExclusiveNamespaces:                      *settings.Preferences.ExclusiveNamespaces,
+		ErrorReportingEnabled:                    *settings.Preferences.ErrorReportingEnabled,
 		AutoRefreshEnabled:                       settings.Preferences.Refresh.Auto,
 		RefreshBackgroundClustersEnabled:         settings.Preferences.Refresh.Background,
 		MetricsRefreshIntervalMs:                 settings.Preferences.Refresh.MetricsIntervalMs,
-		KubernetesClientQPS:                      kubernetesAPISettings.clientQPS,
-		KubernetesClientBurst:                    kubernetesAPISettings.clientBurst,
-		PermissionSSRRFetchConcurrency:           kubernetesAPISettings.permissionSSRRFetchConcurrency,
-		ObjPanelLogsBufferMaxSize:                logSettings.bufferMaxSize,
-		ObjPanelLogsTargetPerScopeLimit:          logSettings.targetPerScopeLimit,
-		ObjPanelLogsTargetGlobalLimit:            logSettings.targetGlobalLimit,
-		ObjPanelLogsAPITimestampFormat:           logSettings.apiTimestampFormat,
-		ObjPanelLogsAPITimestampUseLocalTimeZone: logSettings.useLocalTimeZone,
+		KubernetesClientQPS:                      kubernetesAPISettings.ClientQPS,
+		KubernetesClientBurst:                    kubernetesAPISettings.ClientBurst,
+		PermissionSSRRFetchConcurrency:           kubernetesAPISettings.PermissionSSRRFetchConcurrency,
+		ObjPanelLogsBufferMaxSize:                logSettings.BufferMaxSize,
+		ObjPanelLogsTargetPerScopeLimit:          logSettings.TargetPerScopeLimit,
+		ObjPanelLogsTargetGlobalLimit:            logSettings.TargetGlobalLimit,
+		ObjPanelLogsAPITimestampFormat:           logSettings.APITimestampFormat,
+		ObjPanelLogsAPITimestampUseLocalTimeZone: logSettings.UseLocalTimeZone,
 		GridTablePersistenceMode:                 settings.Preferences.GridTablePersistenceMode,
 		DefaultTablePageSize:                     settings.Preferences.DefaultTablePageSize,
 		DefaultObjectPanelPosition:               settings.Preferences.DefaultObjectPanelPosition,
@@ -781,74 +755,6 @@ func appSettingsFromFile(settings *settingsFile) *AppSettings {
 		LinkColorDark:                            settings.Preferences.LinkColorDark,
 		Themes:                                   settings.Preferences.Themes,
 	}
-}
-
-type resolvedObjPanelLogSettings struct {
-	bufferMaxSize       int
-	targetPerScopeLimit int
-	targetGlobalLimit   int
-	apiTimestampFormat  string
-	useLocalTimeZone    bool
-}
-
-func resolveObjPanelLogSettings(settings *settingsObjPanelLogs) resolvedObjPanelLogSettings {
-	resolved := resolvedObjPanelLogSettings{
-		bufferMaxSize:       defaultObjPanelLogsBufferMaxSize,
-		targetPerScopeLimit: defaultObjPanelLogsTargetPerScopeLimit,
-		targetGlobalLimit:   defaultObjPanelLogsTargetGlobalLimit,
-		apiTimestampFormat:  defaultObjPanelLogsAPITimestampFormat,
-	}
-	if settings == nil {
-		return resolved
-	}
-	if settings.BufferMaxSize > 0 {
-		resolved.bufferMaxSize = clampObjPanelLogsBufferMaxSize(settings.BufferMaxSize)
-	}
-	if settings.TargetPerScopeLimit > 0 {
-		resolved.targetPerScopeLimit = clampObjPanelLogsTargetPerScopeLimit(settings.TargetPerScopeLimit)
-	}
-	if settings.TargetGlobalLimit > 0 {
-		resolved.targetGlobalLimit = clampObjPanelLogsTargetGlobalLimit(settings.TargetGlobalLimit)
-	}
-	if settings.APITimestampFormat != "" {
-		resolved.apiTimestampFormat = settings.APITimestampFormat
-	}
-	resolved.useLocalTimeZone = settings.UseLocalTimeZone
-	return resolved
-}
-
-type resolvedKubernetesAPISettings struct {
-	clientQPS                      int
-	clientBurst                    int
-	permissionSSRRFetchConcurrency int
-}
-
-func resolveKubernetesAPISettings(settings *settingsKubernetesAPI) resolvedKubernetesAPISettings {
-	resolved := resolvedKubernetesAPISettings{
-		clientQPS:                      defaultKubernetesClientQPS,
-		clientBurst:                    defaultKubernetesClientBurst,
-		permissionSSRRFetchConcurrency: defaultPermissionSSRRFetchConcurrency,
-	}
-	if settings == nil {
-		return resolved
-	}
-	if settings.ClientQPS > 0 {
-		resolved.clientQPS = clampKubernetesClientQPS(settings.ClientQPS)
-	}
-	if settings.ClientBurst > 0 {
-		resolved.clientBurst = clampKubernetesClientBurst(settings.ClientBurst)
-	}
-	if settings.PermissionSSRRFetchConcurrency > 0 {
-		resolved.permissionSSRRFetchConcurrency = clampPermissionSSRRFetchConcurrency(settings.PermissionSSRRFetchConcurrency)
-	}
-	return resolved
-}
-
-func boolPreferenceOrDefault(value *bool, fallback bool) bool {
-	if value == nil {
-		return fallback
-	}
-	return *value
 }
 
 func (p *PreferencesService) saveAppSettings() error {

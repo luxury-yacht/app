@@ -25,6 +25,7 @@ import {
   useState,
 } from 'react';
 import { containsAnsi, stripAnsi } from '../Logs/ansi';
+import { findLogOverlap } from '../Logs/logOverlap';
 import { buildLogSearchRegex } from '../Logs/logSearch';
 import {
   getLogViewerScrollPosition,
@@ -93,22 +94,7 @@ const appendNodeLogContent = (existingContent: string, incomingContent: string):
 
   const existingLines = existingContent.split('\n');
   const incomingLines = incomingContent.split('\n');
-  const maxOverlap = Math.min(existingLines.length, incomingLines.length);
-
-  let overlap = 0;
-  for (let candidate = maxOverlap; candidate > 0; candidate -= 1) {
-    let matches = true;
-    for (let index = 0; index < candidate; index += 1) {
-      if (existingLines[existingLines.length - candidate + index] !== incomingLines[index]) {
-        matches = false;
-        break;
-      }
-    }
-    if (matches) {
-      overlap = candidate;
-      break;
-    }
-  }
+  const overlap = findLogOverlap(existingLines, incomingLines, (line) => line);
 
   const remainingLines = incomingLines.slice(overlap);
   if (remainingLines.length === 0) {
@@ -123,13 +109,8 @@ const appendNodeLogContent = (existingContent: string, incomingContent: string):
 };
 
 const getExecutedNodeLogResponse = (
-  result: Awaited<ReturnType<typeof fetchNodeLogs>> | NodeLogFetchResponse
-): NodeLogFetchResponse | null => {
-  if ('status' in result) {
-    return result.status === 'executed' ? (result.data ?? null) : null;
-  }
-  return result;
-};
+  result: Awaited<ReturnType<typeof fetchNodeLogs>>
+): NodeLogFetchResponse | null => (result.status === 'executed' ? (result.data ?? null) : null);
 
 const buildNodeLogSourceOptions = (sources: NodeLogSource[]): DropdownOption[] => {
   const grouped = new Map<string, NodeLogSource[]>();

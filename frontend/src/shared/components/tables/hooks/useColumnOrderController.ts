@@ -3,6 +3,7 @@ import {
   areColumnOrdersEqual,
   orderColumns,
   reconcileColumnOrder,
+  reorderColumnOrder,
   reorderVisibleColumnOrder,
 } from '@shared/components/tables/gridTableColumnOrder';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -74,18 +75,10 @@ export function useColumnOrderController<T>({
 
   const reorderColumn = useCallback(
     (key: string, targetIndex: number) => {
-      const currentIndex = effectiveColumnOrder.indexOf(key);
-      if (
-        currentIndex < 0 ||
-        targetIndex < 0 ||
-        targetIndex >= effectiveColumnOrder.length ||
-        currentIndex === targetIndex
-      ) {
+      const next = reorderColumnOrder(effectiveColumnOrder, key, targetIndex);
+      if (!next) {
         return;
       }
-      const next = [...effectiveColumnOrder];
-      const [movedKey] = next.splice(currentIndex, 1);
-      next.splice(targetIndex, 0, movedKey);
       applyColumnOrder(next);
     },
     [applyColumnOrder, effectiveColumnOrder]

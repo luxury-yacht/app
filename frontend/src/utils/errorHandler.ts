@@ -54,7 +54,6 @@ export interface ErrorDetails {
 export interface ErrorHandlerOptions {
   enableLogging?: boolean;
   logToConsole?: boolean;
-  logToServer?: boolean;
   defaultSeverity?: ErrorSeverity;
   customHandlers?: Map<ErrorCategory, (error: ErrorDetails) => void>;
 }
@@ -130,7 +129,6 @@ class ErrorHandler {
     this.options = {
       enableLogging: true,
       logToConsole: true,
-      logToServer: false,
       defaultSeverity: ErrorSeverity.ERROR,
       ...options,
     };
@@ -416,11 +414,6 @@ class ErrorHandler {
       }
       console.groupEnd();
     }
-
-    if (this.options.logToServer) {
-      // Implement server logging here if needed
-      // This could send errors to a logging service
-    }
   }
 
   private getConsoleStyle(severity: ErrorSeverity): string {
@@ -521,37 +514,6 @@ class ErrorHandler {
    */
   public updateOptions(options: Partial<ErrorHandlerOptions>): void {
     this.options = { ...this.options, ...options };
-  }
-
-  /**
-   * Create a scoped error handler for specific contexts
-   */
-  public createScoped(contextName: string): ScopedErrorHandler {
-    return new ScopedErrorHandler(this, contextName);
-  }
-}
-
-/**
- * Scoped error handler for specific contexts
- */
-class ScopedErrorHandler {
-  private readonly parent: ErrorHandler;
-  private readonly contextName: string;
-
-  constructor(parent: ErrorHandler, contextName: string) {
-    this.parent = parent;
-    this.contextName = contextName;
-  }
-
-  handle(error: unknown, additionalContext?: Record<string, unknown>, customMessage?: string) {
-    return this.parent.handle(
-      error,
-      {
-        scope: this.contextName,
-        ...additionalContext,
-      },
-      customMessage
-    );
   }
 }
 

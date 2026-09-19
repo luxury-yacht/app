@@ -100,21 +100,17 @@ func buildUnstructuredSummaryActionFacts(desc Descriptor, item *unstructuredv1.U
 		available := unstructuredHasForwardableContainerPorts(item.Object, "spec", "containers")
 		return &ActionFacts{PortForwardAvailable: &available}
 	case schema.GroupVersionKind{Group: servicepkg.Identity.Group, Version: servicepkg.Identity.Version, Kind: servicepkg.Identity.Kind}:
-		available := unstructuredServiceHasForwardablePorts(item.Object)
+		available := unstructuredHasForwardablePorts(item.Object, "spec", "ports")
 		return &ActionFacts{PortForwardAvailable: &available}
 	case schema.GroupVersionKind{Group: nodespkg.Identity.Group, Version: nodespkg.Identity.Version, Kind: nodespkg.Identity.Kind}:
 		unschedulable, _, _ := unstructuredv1.NestedBool(item.Object, "spec", "unschedulable")
 		return &ActionFacts{Unschedulable: &unschedulable}
-	case schema.GroupVersionKind{Group: deploymentpkg.Identity.Group, Version: deploymentpkg.Identity.Version, Kind: deploymentpkg.Identity.Kind}:
+	case schema.GroupVersionKind{Group: deploymentpkg.Identity.Group, Version: deploymentpkg.Identity.Version, Kind: deploymentpkg.Identity.Kind},
+		schema.GroupVersionKind{Group: statefulsetpkg.Identity.Group, Version: statefulsetpkg.Identity.Version, Kind: statefulsetpkg.Identity.Kind},
+		schema.GroupVersionKind{Group: replicasetpkg.Identity.Group, Version: replicasetpkg.Identity.Version, Kind: replicasetpkg.Identity.Kind}:
 		return unstructuredScalableWorkloadFacts(item, "spec", "template", "spec", "containers")
-	case schema.GroupVersionKind{Group: statefulsetpkg.Identity.Group, Version: statefulsetpkg.Identity.Version, Kind: statefulsetpkg.Identity.Kind}:
-		return unstructuredScalableWorkloadFacts(item, "spec", "template", "spec", "containers")
-	case schema.GroupVersionKind{Group: replicasetpkg.Identity.Group, Version: replicasetpkg.Identity.Version, Kind: replicasetpkg.Identity.Kind}:
-		return unstructuredScalableWorkloadFacts(item, "spec", "template", "spec", "containers")
-	case schema.GroupVersionKind{Group: daemonsetpkg.Identity.Group, Version: daemonsetpkg.Identity.Version, Kind: daemonsetpkg.Identity.Kind}:
-		available := unstructuredHasForwardableContainerPorts(item.Object, "spec", "template", "spec", "containers")
-		return &ActionFacts{PortForwardAvailable: &available}
-	case schema.GroupVersionKind{Group: jobpkg.Identity.Group, Version: jobpkg.Identity.Version, Kind: jobpkg.Identity.Kind}:
+	case schema.GroupVersionKind{Group: daemonsetpkg.Identity.Group, Version: daemonsetpkg.Identity.Version, Kind: daemonsetpkg.Identity.Kind},
+		schema.GroupVersionKind{Group: jobpkg.Identity.Group, Version: jobpkg.Identity.Version, Kind: jobpkg.Identity.Kind}:
 		available := unstructuredHasForwardableContainerPorts(item.Object, "spec", "template", "spec", "containers")
 		return &ActionFacts{PortForwardAvailable: &available}
 	case schema.GroupVersionKind{Group: cronjobpkg.Identity.Group, Version: cronjobpkg.Identity.Version, Kind: cronjobpkg.Identity.Kind}:
@@ -148,26 +144,15 @@ func unstructuredHasForwardableContainerPorts(obj map[string]any, fields ...stri
 		if !ok {
 			continue
 		}
-		ports, found, _ := unstructuredv1.NestedSlice(container, "ports")
-		if !found {
-			continue
-		}
-		for _, portValue := range ports {
-			port, ok := portValue.(map[string]any)
-			if !ok {
-				continue
-			}
-			protocol, _, _ := unstructuredv1.NestedString(port, "protocol")
-			if protocol == "" || strings.EqualFold(protocol, string(corev1.ProtocolTCP)) {
-				return true
-			}
+		if unstructuredHasForwardablePorts(container, "ports") {
+			return true
 		}
 	}
 	return false
 }
 
-func unstructuredServiceHasForwardablePorts(obj map[string]any) bool {
-	ports, found, _ := unstructuredv1.NestedSlice(obj, "spec", "ports")
+func unstructuredHasForwardablePorts(obj map[string]any, fields ...string) bool {
+	ports, found, _ := unstructuredv1.NestedSlice(obj, fields...)
 	if !found {
 		return false
 	}

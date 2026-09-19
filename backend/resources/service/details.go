@@ -42,7 +42,7 @@ func (s *Service) GetService(ctx context.Context, namespace, name string) (*Serv
 		return nil, fmt.Errorf("failed to get service: %w", err)
 	}
 
-	ctx, cancel := serviceLookupContext(ctx)
+	ctx, cancel := common.WithDefaultTimeout(ctx, config.EndpointSliceLookupTimeout)
 	defer cancel()
 	slices, err := s.listEndpointSlices(ctx, namespace, name)
 	if err != nil {
@@ -50,19 +50,6 @@ func (s *Service) GetService(ctx context.Context, namespace, name string) (*Serv
 	}
 
 	return s.buildServiceDetails(svc, slices), nil
-}
-
-func serviceLookupContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	base := ctx
-	if base == nil {
-		base = context.Background()
-	}
-	if _, hasDeadline := base.Deadline(); hasDeadline {
-		return base, func() {
-			// The caller owns the existing deadline; no derived context needs cancellation.
-		}
-	}
-	return context.WithTimeout(base, config.EndpointSliceLookupTimeout)
 }
 
 // listEndpointSlices lists the EndpointSlices for a service (filtered by the
@@ -87,13 +74,12 @@ func (s *Service) listEndpointSlices(ctx context.Context, namespace, serviceName
 }
 
 func (s *Service) buildServiceDetails(svc *corev1.Service, slices []*discoveryv1.EndpointSlice) *ServiceDetails {
-	model := BuildResourceModel(s.deps.ClusterID, svc, slices)
 	facts := BuildFacts(svc, slices)
 	details := &ServiceDetails{
 		Kind:             "Service",
 		Name:             svc.Name,
 		Namespace:        svc.Namespace,
-		StatusProjection: restypes.NewStatusProjection(model.Status),
+		StatusProjection: restypes.NewStatusProjection(statusPresentation(svc, facts)),
 		ServiceType:      facts.Type,
 		ClusterIP:        facts.ClusterIP,
 		ClusterIPs:       facts.ClusterIPs,

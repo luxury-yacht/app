@@ -17,7 +17,6 @@ package snapshot
 
 import (
 	"sort"
-	"strconv"
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
@@ -53,24 +52,9 @@ func namespacePodRowsFromIngest(source podWorkloadsIngestSource, namespace strin
 	if source == nil {
 		return nil, nil
 	}
-	bundles := source.Rows(PodGVR)
-	aggregates := make([]streamrows.PodAggregate, 0, len(bundles))
-	summaries := make(map[string]streamrows.PodSummary, len(bundles))
-	for _, raw := range bundles {
-		bundle, ok := raw.(ingest.Bundle)
-		if !ok {
-			continue
-		}
-		agg, ok := bundle.Aggregate.(streamrows.PodAggregate)
-		if !ok || agg.Namespace != namespace {
-			continue
-		}
-		aggregates = append(aggregates, agg)
-		if summary, ok := bundle.Table.(streamrows.PodSummary); ok {
-			summaries[summary.Ref.Namespace+"/"+summary.Ref.Name] = summary
-		}
-	}
-	return aggregates, summaries
+	return podRowsFromBundles(source.Rows(PodGVR), func(aggregate streamrows.PodAggregate) bool {
+		return aggregate.Namespace == namespace
+	})
 }
 
 // workloadOwnerPodRowsFromIngest reads projected pod bundles whose owner keys match the emitted
@@ -96,14 +80,20 @@ func workloadOwnerPodRowsFromIngest(source podWorkloadsIngestSource, ownRows []W
 		ownerKeys = append(ownerKeys, owner)
 	}
 	sort.Strings(ownerKeys)
+	var bundles []interface{}
 	if indexed, ok := source.(podWorkloadsIndexReader); ok {
-		bundles := indexed.RowsByIndex(PodGVR, podOwnerKeyIndexName, ownerKeys)
-		return workloadOwnerPodRowsFromBundles(bundles, owners)
+		bundles = indexed.RowsByIndex(PodGVR, podOwnerKeyIndexName, ownerKeys)
+	} else {
+		bundles = source.Rows(PodGVR)
 	}
-	return workloadOwnerPodRowsFromBundles(source.Rows(PodGVR), owners)
+	return podRowsFromBundles(bundles, func(aggregate streamrows.PodAggregate) bool {
+		_, included := owners[aggregate.OwnerKey]
+		return included
+	})
 }
 
-func workloadOwnerPodRowsFromBundles(bundles []interface{}, owners map[string]struct{}) ([]streamrows.PodAggregate, map[string]streamrows.PodSummary) {
+// podRowsFromBundles keeps the table and aggregate halves paired from one store read.
+func podRowsFromBundles(bundles []interface{}, include func(streamrows.PodAggregate) bool) ([]streamrows.PodAggregate, map[string]streamrows.PodSummary) {
 	aggregates := make([]streamrows.PodAggregate, 0, len(bundles))
 	summaries := make(map[string]streamrows.PodSummary, len(bundles))
 	for _, raw := range bundles {
@@ -112,10 +102,7 @@ func workloadOwnerPodRowsFromBundles(bundles []interface{}, owners map[string]st
 			continue
 		}
 		agg, ok := bundle.Aggregate.(streamrows.PodAggregate)
-		if !ok {
-			continue
-		}
-		if _, ok := owners[agg.OwnerKey]; !ok {
+		if !ok || !include(agg) {
 			continue
 		}
 		aggregates = append(aggregates, agg)
@@ -124,42 +111,6 @@ func workloadOwnerPodRowsFromBundles(bundles []interface{}, owners map[string]st
 		}
 	}
 	return aggregates, summaries
-}
-
-// namespacePodIngestVersion returns the pod store's latest list/watch RV as the version
-// watermark for a domain that reads pods through the workloads ingest source.
-func namespacePodIngestVersion(source podWorkloadsIngestSource) uint64 {
-	if source == nil {
-		return 0
-	}
-	rv := source.StoreResourceVersion(PodGVR)
-	if rv == "" {
-		return 0
-	}
-	parsed, err := strconv.ParseUint(rv, 10, 64)
-	if err != nil {
-		return 0
-	}
-	return parsed
-}
-
-// podIngestVersion returns the pod store's latest list/watch resourceVersion as the
-// uint64 watermark a snapshot domain folds into its version (in place of the per-pod
-// RV it can no longer read). A nil source or an unparseable RV yields 0, so a domain
-// with no ingest wired (a unit test) simply contributes no pod watermark.
-func podIngestVersion(source podAggregateIngestSource) uint64 {
-	if source == nil {
-		return 0
-	}
-	rv := source.StoreResourceVersion(PodGVR)
-	if rv == "" {
-		return 0
-	}
-	parsed, err := strconv.ParseUint(rv, 10, 64)
-	if err != nil {
-		return 0
-	}
-	return parsed
 }
 
 // podAggregatesFromIngest reads the pod kind's projected PodAggregate rows from the

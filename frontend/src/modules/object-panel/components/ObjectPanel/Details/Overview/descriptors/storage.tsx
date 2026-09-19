@@ -15,6 +15,7 @@ import type {
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { resourceLinkToObjectReference } from '@shared/utils/resourceLinkIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
@@ -174,29 +175,17 @@ export const pvcDescriptor: OverviewDescriptor<PersistentVolumeClaimDetails> = {
       {
         // Data Source — set when the PVC was created from a clone
         // (kind=PersistentVolumeClaim) or a snapshot restore (kind=VolumeSnapshot).
-        // Linkable when we can resolve the kind.
+        // The producer supplies a canonical link or an unresolved display reference.
         field: 'dataSource',
         label: 'Data Source',
         hidden: (d) => !d.dataSource,
         render: (d, context) => {
-          const ds = d.dataSource;
-          if (!ds) {
+          const source = d.dataSource?.ref ?? d.dataSource?.display;
+          if (!source) {
             return undefined;
           }
-          const label = `${ds.kind}/${ds.name}`;
-          let ref: ReturnType<typeof buildRequiredObjectReference> | null;
-          try {
-            ref = buildRequiredObjectReference({
-              kind: ds.kind.toLowerCase(),
-              name: ds.name,
-              // PVC clones are namespaced (same namespace as this PVC);
-              // VolumeSnapshots are also namespaced.
-              namespace: d.namespace,
-              ...clusterMeta(context),
-            });
-          } catch {
-            ref = null;
-          }
+          const label = `${source.kind}/${source.name}`;
+          const ref = resourceLinkToObjectReference(d.dataSource, context.clusterName);
           return ref ? <ObjectPanelLink objectRef={ref}>{label}</ObjectPanelLink> : label;
         },
       },

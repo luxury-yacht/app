@@ -120,6 +120,27 @@ func ListDetailSegment(slot, label string, values []string) DetailSegment {
 	}
 }
 
+// FirstLinkDetailSegment displays the first reference and keeps the remaining
+// names searchable. An absent or nameless first reference yields a zero segment.
+func FirstLinkDetailSegment(label string, links []ResourceLink) DetailSegment {
+	if len(links) == 0 {
+		return DetailSegment{}
+	}
+	name := ResourceLinkName(links[0])
+	if name == "" {
+		return DetailSegment{}
+	}
+	segment := DetailSegment{Slot: DetailSlotReference, Label: label, Value: name, Link: &links[0]}
+	if len(links) > 1 {
+		names := make([]string, 0, len(links))
+		for _, link := range links {
+			names = append(names, ResourceLinkName(link))
+		}
+		segment.Search = strings.Join(names, ", ")
+	}
+	return segment
+}
+
 // PortProtocol is one port/protocol pair for FormatPortsSummary.
 type PortProtocol struct {
 	Port     int32

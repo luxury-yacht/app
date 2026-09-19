@@ -21,8 +21,7 @@ import (
 // this package (networkpolicy.Facts); the shared ResourceModel carries identity +
 // status, and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, policy *networkingv1.NetworkPolicy) resourcemodel.ResourceModel {
-	facts := BuildFacts(policy)
-	status := statusPresentation(policy, facts)
+	status := statusPresentation(policy)
 	return resourcemodel.KubernetesResourceModel(clusterID, Identity, policy.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
@@ -30,37 +29,29 @@ func BuildResourceModel(clusterID string, policy *networkingv1.NetworkPolicy) re
 func BuildFacts(policy *networkingv1.NetworkPolicy) Facts {
 	facts := Facts{
 		PodSelector: resourcemodel.CopyStringMap(policy.Spec.PodSelector.MatchLabels),
-	}
-	for _, policyType := range policy.Spec.PolicyTypes {
-		facts.PolicyTypes = append(facts.PolicyTypes, string(policyType))
+		PolicyTypes: policyTypes(policy.Spec),
 	}
 	for _, ingress := range policy.Spec.Ingress {
-		facts.IngressRules = append(facts.IngressRules, ingressRuleFacts(ingress))
+		facts.IngressRules = append(facts.IngressRules, ruleFacts(ingress.From, ingress.Ports))
 	}
 	for _, egress := range policy.Spec.Egress {
-		facts.EgressRules = append(facts.EgressRules, egressRuleFacts(egress))
-	}
-	if len(facts.PolicyTypes) == 0 {
-		facts.PolicyTypes = defaultPolicyTypes(facts)
+		facts.EgressRules = append(facts.EgressRules, ruleFacts(egress.To, egress.Ports))
 	}
 	return facts
 }
 
-func statusPresentation(policy *networkingv1.NetworkPolicy, facts Facts) resourcemodel.ResourceStatusPresentation {
-	state := fmt.Sprintf("%d/%d", len(facts.IngressRules), len(facts.EgressRules))
+func statusPresentation(policy *networkingv1.NetworkPolicy) resourcemodel.ResourceStatusPresentation {
+	state := fmt.Sprintf("%d/%d", len(policy.Spec.Ingress), len(policy.Spec.Egress))
 	signals := []resourcemodel.ResourceStatusSignal{
-		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.ingress", Status: strconv.Itoa(len(facts.IngressRules))},
-		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.egress", Status: strconv.Itoa(len(facts.EgressRules))},
+		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.ingress", Status: strconv.Itoa(len(policy.Spec.Ingress))},
+		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.egress", Status: strconv.Itoa(len(policy.Spec.Egress))},
 	}
 	lifecycle := resourcemodel.ObjectLifecycle(policy.ObjectMeta)
 	if status, ok := resourcemodel.DeletingObjectStatus(policy.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
-	return resourcemodel.ObjectSourceStatus(policyLabel(facts), state, "", "", "ready", signals, lifecycle)
-}
-
-func policyLabel(facts Facts) string {
-	return fmt.Sprintf("%s, %d ingress, %d egress", policyTypesLabel(facts.PolicyTypes), len(facts.IngressRules), len(facts.EgressRules))
+	label := fmt.Sprintf("%s, %d ingress, %d egress", policyTypesLabel(policyTypes(policy.Spec)), len(policy.Spec.Ingress), len(policy.Spec.Egress))
+	return resourcemodel.ObjectSourceStatus(label, state, "", "", "ready", signals, lifecycle)
 }
 
 func policyTypesLabel(policyTypes []string) string {
@@ -73,31 +64,27 @@ func policyTypesLabel(policyTypes []string) string {
 	return strings.Join(policyTypes, ",")
 }
 
-func defaultPolicyTypes(facts Facts) []string {
-	policyTypes := []string{string(networkingv1.PolicyTypeIngress)}
-	if len(facts.EgressRules) > 0 {
-		policyTypes = append(policyTypes, string(networkingv1.PolicyTypeEgress))
+func policyTypes(spec networkingv1.NetworkPolicySpec) []string {
+	if len(spec.PolicyTypes) > 0 {
+		types := make([]string, 0, len(spec.PolicyTypes))
+		for _, policyType := range spec.PolicyTypes {
+			types = append(types, string(policyType))
+		}
+		return types
 	}
-	return policyTypes
+	types := []string{string(networkingv1.PolicyTypeIngress)}
+	if len(spec.Egress) > 0 {
+		types = append(types, string(networkingv1.PolicyTypeEgress))
+	}
+	return types
 }
 
-func ingressRuleFacts(rule networkingv1.NetworkPolicyIngressRule) RuleFacts {
+func ruleFacts(peers []networkingv1.NetworkPolicyPeer, ports []networkingv1.NetworkPolicyPort) RuleFacts {
 	facts := RuleFacts{}
-	for _, peer := range rule.From {
+	for _, peer := range peers {
 		facts.Peers = append(facts.Peers, peerFacts(peer))
 	}
-	for _, port := range rule.Ports {
-		facts.Ports = append(facts.Ports, portFacts(port))
-	}
-	return facts
-}
-
-func egressRuleFacts(rule networkingv1.NetworkPolicyEgressRule) RuleFacts {
-	facts := RuleFacts{}
-	for _, peer := range rule.To {
-		facts.Peers = append(facts.Peers, peerFacts(peer))
-	}
-	for _, port := range rule.Ports {
+	for _, port := range ports {
 		facts.Ports = append(facts.Ports, portFacts(port))
 	}
 	return facts

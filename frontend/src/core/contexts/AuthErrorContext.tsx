@@ -8,12 +8,7 @@ import {
 import { useClusterWorkspaceSnapshot } from '@/core/cluster-workspace/useClusterWorkspace';
 import { reportOperationalError } from '@/utils/errorHandler';
 
-export {
-  applyAuthFailedEvent,
-  applyAuthProgressEvent,
-  applyAuthRecoveringEvent,
-  isConfirmedAuthFailure,
-} from '@/core/cluster-workspace/clusterWorkspaceStore';
+export { isConfirmedAuthFailure } from '@/core/cluster-workspace/clusterWorkspaceStore';
 export type { ClusterAuthState };
 
 export interface AuthErrorContextValue {

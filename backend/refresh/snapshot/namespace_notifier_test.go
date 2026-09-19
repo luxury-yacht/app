@@ -3,6 +3,7 @@ package snapshot
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -511,6 +512,11 @@ func TestNamespaceNotifierIdlePendingRearmChecksReadinessWithoutRescanningWorklo
 	recorder := &broadcastRecorder{}
 	notifier := newNotifierForTest(ingest, recorder)
 	defer notifier.Stop()
+	var broadcastRollupReads atomic.Int64
+	notifier.SetBroadcast(func(version, reason string) {
+		broadcastRollupReads.Store(int64(ingest.workloadReadCount()))
+		recorder.record(version, reason)
+	})
 
 	notifier.WorkloadChanged()
 	waitForBroadcasts(t, recorder, 1)
@@ -525,12 +531,18 @@ func TestNamespaceNotifierIdlePendingRearmChecksReadinessWithoutRescanningWorklo
 	// A deadline settlement and a later real sync are readiness edges. Each edge
 	// must produce one fresh rollup so the degraded and ready snapshots are built.
 	ingest.setReadiness(true, false)
-	waitForBroadcasts(t, recorder, 2)
+	// Quota readiness may broadcast between the workload readiness check and
+	// the next rollup. Wait for a broadcast that includes the fresh rollup.
+	require.Eventually(t, func() bool {
+		return broadcastRollupReads.Load() > int64(readsAfterBaseline)
+	}, 2*time.Second, 5*time.Millisecond)
 	readsAfterDegraded := ingest.workloadReadCount()
 	require.Greater(t, readsAfterDegraded, readsAfterBaseline)
 
 	ingest.setReadiness(true, true)
-	waitForBroadcasts(t, recorder, 3)
+	require.Eventually(t, func() bool {
+		return broadcastRollupReads.Load() > int64(readsAfterDegraded)
+	}, 2*time.Second, 5*time.Millisecond)
 	require.Greater(t, ingest.workloadReadCount(), readsAfterDegraded)
 }
 

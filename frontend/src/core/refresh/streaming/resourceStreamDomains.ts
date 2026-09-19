@@ -4,16 +4,20 @@
  * Domain descriptors for resource named streams.
  */
 
-import type { AppEvents } from '@/core/events';
-import { type RefreshSourceClock, refreshDomainContract } from '../domainRegistry';
+import {
+  type RefreshSourceClock,
+  type ResourceStreamDomain,
+  refreshDomainContract,
+} from '../domainRegistry';
+import type { RefreshDomain } from '../types';
 
-export type ResourceDomain = AppEvents['refresh:resource-stream-drift']['domain'];
-export type DoorbellDomain = AppEvents['refresh:resource-stream-health']['domain'];
+export type ResourceDomain = ResourceStreamDomain;
+export type DoorbellDomain = (typeof doorbellDomainDescriptors)[number]['domain'];
 
 export type ResourceStreamScopeKind = 'pod' | 'namespace' | 'cluster' | 'object';
 
 export type ResourceStreamDomainDescriptor = {
-  domain: DoorbellDomain;
+  domain: RefreshDomain;
   scopeKind: ResourceStreamScopeKind;
   isClusterScoped: boolean;
   // The doorbell AUGMENTS polling instead of replacing it: a healthy stream
@@ -96,92 +100,14 @@ const normalizePodScope = (scope: string): string => {
   throw new Error(`unsupported pods scope ${scope}`);
 };
 
-export const resourceStreamDomainDescriptors = [
-  {
-    domain: 'pods',
-    scopeKind: 'pod',
-    isClusterScoped: false,
-  },
-  {
-    domain: 'namespace-workloads',
-    scopeKind: 'namespace',
-    isClusterScoped: false,
-  },
-  {
-    domain: 'namespace-config',
-    scopeKind: 'namespace',
-    isClusterScoped: false,
-  },
-  {
-    domain: 'namespace-network',
-    scopeKind: 'namespace',
-    isClusterScoped: false,
-  },
-  {
-    domain: 'namespace-rbac',
-    scopeKind: 'namespace',
-    isClusterScoped: false,
-  },
-  {
-    domain: 'namespace-custom',
-    scopeKind: 'namespace',
-    isClusterScoped: false,
-  },
-  {
-    domain: 'namespace-helm',
-    scopeKind: 'namespace',
-    isClusterScoped: false,
-  },
-  {
-    domain: 'namespace-autoscaling',
-    scopeKind: 'namespace',
-    isClusterScoped: false,
-  },
-  {
-    domain: 'namespace-quotas',
-    scopeKind: 'namespace',
-    isClusterScoped: false,
-  },
-  {
-    domain: 'namespace-storage',
-    scopeKind: 'namespace',
-    isClusterScoped: false,
-  },
-  {
-    domain: 'cluster-rbac',
-    scopeKind: 'cluster',
-    isClusterScoped: true,
-  },
-  {
-    domain: 'cluster-storage',
-    scopeKind: 'cluster',
-    isClusterScoped: true,
-  },
-  {
-    domain: 'cluster-config',
-    scopeKind: 'cluster',
-    isClusterScoped: true,
-  },
-  {
-    domain: 'cluster-crds',
-    scopeKind: 'cluster',
-    isClusterScoped: true,
-  },
-  {
-    domain: 'cluster-custom',
-    scopeKind: 'cluster',
-    isClusterScoped: true,
-  },
-  {
-    domain: 'nodes',
-    scopeKind: 'cluster',
-    isClusterScoped: true,
-  },
-] satisfies ResourceStreamDomainDescriptor[];
-
-export const RESOURCE_STREAM_DOMAINS = resourceStreamDomainDescriptors.map(
-  (descriptor) => descriptor.domain
+export const RESOURCE_STREAM_DOMAINS = Object.keys(
+  refreshDomainContract.resourceStream.domains
 ) as ResourceDomain[];
+
+export const resourceStreamDomainDescriptors = RESOURCE_STREAM_DOMAINS.map((domain) => {
+  const { scopeKind } = refreshDomainContract.resourceStream.domains[domain];
+  return { domain, scopeKind, isClusterScoped: scopeKind === 'cluster' };
+});
 
 const doorbellDomainDescriptors = [
   ...resourceStreamDomainDescriptors,

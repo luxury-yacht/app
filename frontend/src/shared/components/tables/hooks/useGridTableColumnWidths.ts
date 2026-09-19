@@ -14,7 +14,10 @@ import {
   detectWidthUnit,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
-import { isUserOwnedColumnWidth } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
+import {
+  isUserOwnedColumnWidth,
+  selectColumnWidths,
+} from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 import {
   type ManualResizeEvent,
   useDirtyQueue,
@@ -67,7 +70,6 @@ interface ColumnWidthsResult<T> {
   columnsRef: RefObject<GridColumnDefinition<T>[]>;
   manuallyResizedColumnsRef: RefObject<Set<string>>;
   buildColumnWidthState: (key: string, width: number) => ColumnWidthState;
-  updateNaturalWidth: (key: string, width: number) => void;
   markColumnsDirty: (keys: Iterable<string>) => void;
   markAllAutoColumnsDirty: () => void;
   handleManualResizeEvent: (event: ManualResizeEvent) => void;
@@ -180,7 +182,6 @@ export function useGridTableColumnWidths<T>(
 
   const columnsRef = useRef(renderedColumns);
   const manuallyResizedColumnsRef = useRef<Set<string>>(new Set());
-  const lastAppliedExternalWidthsRef = useRef<string>('');
   const isApplyingExternalUpdateRef = useRef(false);
   const lastNotifiedWidthsRef = useRef<string>('');
   const naturalWidthsRef = useRef<Record<string, number>>({});
@@ -214,16 +215,6 @@ export function useGridTableColumnWidths<T>(
     naturalWidthsRef,
     manuallyResizedColumnsRef,
   });
-
-  const updateNaturalWidth = useCallback((key: string, width: number) => {
-    if (!Number.isFinite(width)) {
-      return;
-    }
-    naturalWidthsRef.current = {
-      ...naturalWidthsRef.current,
-      [key]: width,
-    };
-  }, []);
 
   const {
     markColumnsDirty,
@@ -331,13 +322,7 @@ export function useGridTableColumnWidths<T>(
           ? createColumnWidthState(column.key, width, false)
           : buildColumnWidthState(column.key, width);
       });
-      const widthSignature: Record<string, number> = {};
-      renderedColumns.forEach((column) => {
-        const width = nextWidths[column.key];
-        if (typeof width === 'number' && !Number.isNaN(width)) {
-          widthSignature[column.key] = width;
-        }
-      });
+      const widthSignature = selectColumnWidths(renderedColumns, nextWidths);
       lastNotifiedWidthsRef.current = JSON.stringify(widthSignature);
       onColumnWidthsChange(payload);
     }
@@ -359,7 +344,6 @@ export function useGridTableColumnWidths<T>(
     externalColumnWidths,
     setColumnWidths,
     manuallyResizedColumnsRef,
-    lastAppliedExternalWidthsRef,
     isApplyingExternalUpdateRef,
     lastNotifiedWidthsRef,
   });
@@ -375,9 +359,6 @@ export function useGridTableColumnWidths<T>(
     lastNotifiedWidthsRef,
   });
 
-  const prevColumnsSignatureRef = useRef<string | null>(null);
-  const prevShortNamesRef = useRef(useShortNames);
-
   useGridTableAutoWidthMeasurement({
     tableRef,
     renderedColumns,
@@ -390,8 +371,6 @@ export function useGridTableColumnWidths<T>(
     useShortNames,
     phaseRef,
     transitionPhase,
-    prevColumnsSignatureRef,
-    prevShortNamesRef,
     tableData,
   });
 
@@ -401,7 +380,6 @@ export function useGridTableColumnWidths<T>(
     columnsRef,
     manuallyResizedColumnsRef,
     buildColumnWidthState,
-    updateNaturalWidth,
     markColumnsDirty,
     markAllAutoColumnsDirty,
     handleManualResizeEvent,

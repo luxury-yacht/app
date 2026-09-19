@@ -139,8 +139,7 @@ type ManualRefreshJob struct {
 
 // ManualRefreshResult summarises a manual refresh execution.
 type ManualRefreshResult struct {
-	Job   *ManualRefreshJob
-	Error error
+	Job *ManualRefreshJob
 }
 
 // JobState enumerates manual refresh job lifecycle states.
@@ -338,29 +337,13 @@ func (m *Manager) processManualJob(parent context.Context, job *ManualRefreshJob
 	ctx, cancel := context.WithTimeout(operationContext, config.RefreshRequestTimeout)
 	defer cancel()
 
-	result, manualErr := retryManualOperation(ctx, config.ManualJobMaxAttempts, config.ManualJobRetryDelay, func(callCtx context.Context) (*ManualRefreshResult, error) {
-		return m.registry.ManualRefresh(callCtx, job.Domain, job.Scope)
-	})
-	if manualErr != nil {
+	version, err := m.executeManualRefresh(ctx, job)
+	if err != nil {
 		job.State = JobStateFailed
-		job.Error = manualErr.Error()
-	} else if m.snapshotService != nil {
-		snapshot, snapErr := retryManualOperation(ctx, config.ManualJobMaxAttempts, config.ManualJobRetryDelay, func(callCtx context.Context) (*Snapshot, error) {
-			// Manual refreshes should bypass snapshot caching so UI receives fresh data.
-			return m.snapshotService.Build(WithCacheBypass(callCtx), job.Domain, job.Scope)
-		})
-		if snapErr != nil {
-			job.State = JobStateFailed
-			job.Error = snapErr.Error()
-		} else {
-			job.State = JobStateSucceeded
-			job.LatestVersion = snapshot.Version
-			if result != nil && result.Job != nil && result.Job.LatestVersion > 0 {
-				job.LatestVersion = result.Job.LatestVersion
-			}
-		}
+		job.Error = err.Error()
 	} else {
 		job.State = JobStateSucceeded
+		job.LatestVersion = version
 	}
 
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) && job.State != JobStateSucceeded {
@@ -372,6 +355,31 @@ func (m *Manager) processManualJob(parent context.Context, job *ManualRefreshJob
 
 	job.FinishedAt = time.Now().UnixMilli()
 	m.manualQueue.Update(job)
+}
+
+// Run the domain action before rebuilding its snapshot. Publishing job state stays
+// in processManualJob so retries never expose a partially completed result.
+func (m *Manager) executeManualRefresh(ctx context.Context, job *ManualRefreshJob) (uint64, error) {
+	result, err := retryManualOperation(ctx, config.ManualJobMaxAttempts, config.ManualJobRetryDelay, func(callCtx context.Context) (*ManualRefreshResult, error) {
+		return m.registry.ManualRefresh(callCtx, job.Domain, job.Scope)
+	})
+	if err != nil {
+		return 0, err
+	}
+	if m.snapshotService == nil {
+		return job.LatestVersion, nil
+	}
+	snapshot, err := retryManualOperation(ctx, config.ManualJobMaxAttempts, config.ManualJobRetryDelay, func(callCtx context.Context) (*Snapshot, error) {
+		return m.snapshotService.Build(WithCacheBypass(callCtx), job.Domain, job.Scope)
+	})
+	if err != nil {
+		return 0, err
+	}
+	version := snapshot.Version
+	if result != nil && result.Job != nil && result.Job.LatestVersion > 0 {
+		version = result.Job.LatestVersion
+	}
+	return version, nil
 }
 
 func retryManualOperation[T any](ctx context.Context, attempts int, baseDelay time.Duration, fn func(context.Context) (T, error)) (T, error) {

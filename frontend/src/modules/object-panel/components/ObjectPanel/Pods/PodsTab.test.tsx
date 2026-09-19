@@ -7,9 +7,10 @@
  */
 
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type ResourceBar from '@shared/components/ResourceBar';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { getTextContent } from '@shared/components/tables/GridTable.utils';
-import React, { act } from 'react';
+import React, { act, isValidElement } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanonicalRowTestOverrides, PodSnapshotEntry } from '@/core/refresh/types';
@@ -18,6 +19,7 @@ import { requireValue } from '@/test-utils/requireValue';
 
 const {
   gridTablePropsRef,
+  setSelectedNamespaceMock,
   mockOpenWithObject,
   objectPanelRef,
   navigationAvailable,
@@ -31,6 +33,7 @@ const {
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as GridTableProps<PodSnapshotEntry> | null },
   mockOpenWithObject: vi.fn(),
+  setSelectedNamespaceMock: vi.fn(),
   objectPanelRef: { current: null as unknown },
   navigationAvailable: { current: true },
   optionalViewState: {
@@ -85,7 +88,7 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   // useNamespaceFilterOptions, so it must be a real context.
   NamespaceContext: React.createContext({ namespaces: [] }),
   useNamespace: () => ({
-    setSelectedNamespace: vi.fn(),
+    setSelectedNamespace: setSelectedNamespaceMock,
   }),
 }));
 
@@ -274,6 +277,7 @@ describe('PodsTab (query-backed)', () => {
       setActiveNamespaceTab: vi.fn(),
     };
     mockOpenWithObject.mockReset();
+    setSelectedNamespaceMock.mockReset();
     navigateToViewMock.mockReset();
     requestRefreshDomainStateMock.mockReset();
     useTableSortMock.mockReset();
@@ -319,6 +323,69 @@ describe('PodsTab (query-backed)', () => {
       await Promise.resolve();
     });
   };
+
+  it.each(['Deployment', 'Widget'])(
+    'preserves the API group and row cluster for a %s owner link',
+    async (ownerKind) => {
+      const pod = createPod({
+        ref: { clusterId: 'OwnerCluster:Case', namespace: 'team-a' },
+        ownerKind,
+        ownerName: 'custom-owner',
+        ownerApiVersion: 'operators.example.io/v1beta2',
+      });
+      mockQueryRows([pod]);
+      await renderPods();
+      const cell = requireReactElement<{
+        onClick: (event: {
+          altKey: boolean;
+          preventDefault: () => void;
+          stopPropagation: () => void;
+        }) => void;
+      }>(getGridColumn('owner').render(pod), 'expected owner link');
+      act(() =>
+        cell.props.onClick({ altKey: false, preventDefault: vi.fn(), stopPropagation: vi.fn() })
+      );
+      expect(mockOpenWithObject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clusterId: 'OwnerCluster:Case',
+          namespace: 'team-a',
+          kind: ownerKind,
+          name: 'custom-owner',
+          group: 'operators.example.io',
+          version: 'v1beta2',
+        })
+      );
+      act(() =>
+        cell.props.onClick({ altKey: true, preventDefault: vi.fn(), stopPropagation: vi.fn() })
+      );
+      expect(navigateToViewMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clusterId: 'OwnerCluster:Case',
+          namespace: 'team-a',
+          kind: ownerKind,
+          name: 'custom-owner',
+          group: 'operators.example.io',
+          version: 'v1beta2',
+        })
+      );
+    }
+  );
+
+  it.each([
+    { ownerKind: 'None', ownerName: 'None' },
+    { ownerKind: 'Deployment', ownerName: 'missing-version' },
+    { ownerKind: 'Widget', ownerName: 'missing-version' },
+  ])('keeps incomplete owner identity display-only: $ownerKind/$ownerName', async (owner) => {
+    const pod = createPod({ ...owner, ownerApiVersion: undefined });
+    mockQueryRows([pod]);
+    await renderPods();
+    const cell = getGridColumn('owner').render(pod);
+    expect(
+      isValidElement<{ onClick?: unknown }>(cell) ? cell.props.onClick : undefined
+    ).toBeUndefined();
+    expect(mockOpenWithObject).not.toHaveBeenCalled();
+    expect(navigateToViewMock).not.toHaveBeenCalled();
+  });
 
   it('renders a workload-scoped page in a native panel without workspace favorites providers', async () => {
     mockQueryRows([createPod({ ref: { name: 'query-pod' } })]);
@@ -569,6 +636,93 @@ describe('PodsTab (query-backed)', () => {
       [{ namespace: 'team-a', clusterId: PANEL_CLUSTER_ID }],
       { specLists: [POD_PERMISSIONS_SENTINEL] }
     );
+  });
+
+  it('routes node and namespace links using the Pod row cluster', async () => {
+    const pod = createPod({
+      ref: { clusterId: 'RowCluster:Case', namespace: 'team-b' },
+      node: 'worker-b',
+    });
+    mockQueryRows([pod]);
+    await renderPods();
+    const node = requireReactElement<{ onClick: (event: { altKey: boolean }) => void }>(
+      getGridColumn('node').render(pod),
+      'expected node link'
+    );
+    act(() => node.props.onClick({ altKey: false }));
+    expect(mockOpenWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: 'RowCluster:Case',
+        group: '',
+        version: 'v1',
+        kind: 'Node',
+        name: 'worker-b',
+      })
+    );
+    const namespace = requireReactElement<{ onClick: (event: { altKey: boolean }) => void }>(
+      getGridColumn('namespace').render(pod),
+      'expected namespace link'
+    );
+    act(() => namespace.props.onClick({ altKey: false }));
+    expect(setSelectedNamespaceMock).toHaveBeenCalledWith('team-b', 'RowCluster:Case');
+    expect(optionalViewState.current?.onNamespaceSelect).toHaveBeenCalledWith('team-b');
+    expect(optionalViewState.current?.setActiveNamespaceTab).toHaveBeenCalledWith('workloads');
+  });
+
+  it('projects CPU and memory values and freshness from the panel-scoped query into metric cells', async () => {
+    const pod = createPod({
+      cpuUsage: '250m',
+      cpuRequest: '500m',
+      cpuLimit: '1',
+      memUsage: '64Mi',
+      memRequest: '128Mi',
+      memLimit: '256Mi',
+    });
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [pod],
+          total: 1,
+          totalIsExact: true,
+          metrics: {
+            stale: true,
+            lastError: 'panel metrics unavailable',
+            successCount: 1,
+            failureCount: 1,
+            collectedAt: 1700000000,
+          },
+        },
+      },
+    });
+    await renderPods();
+    const cpu = requireReactElement<React.ComponentProps<typeof ResourceBar>>(
+      getGridColumn('cpu').render(pod),
+      'expected CPU cell'
+    );
+    const memory = requireReactElement<React.ComponentProps<typeof ResourceBar>>(
+      getGridColumn('memory').render(pod),
+      'expected memory cell'
+    );
+    expect(cpu.props).toMatchObject({
+      type: 'cpu',
+      usage: '250m',
+      request: '500m',
+      limit: '1',
+      metricsStale: true,
+      metricsError: 'panel metrics unavailable',
+      'data-gridtable-export-text': '—',
+    });
+    expect(memory.props).toMatchObject({
+      type: 'memory',
+      usage: '64Mi',
+      request: '128Mi',
+      limit: '256Mi',
+      metricsStale: true,
+      metricsError: 'panel metrics unavailable',
+      'data-gridtable-export-text': '—',
+    });
   });
 
   it('keeps metrics availability out of the object-panel Pods table surface', async () => {

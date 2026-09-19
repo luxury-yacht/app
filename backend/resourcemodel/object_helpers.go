@@ -9,8 +9,7 @@ import (
 
 // KubernetesResourceModel builds the canonical ResourceModel for a Kubernetes
 // object: full Ref identity, copied metadata, and the supplied status/facts.
-// Every kind package builds its model through this one constructor (directly or
-// via a group-baking adapter like RBACResourceModel).
+// Every kind package builds its model through this constructor and its Identity.
 func KubernetesResourceModel(
 	clusterID string,
 	identity resourcekind.Identity,
@@ -94,4 +93,19 @@ func ObjectLifecycleWithFinalizers(meta metav1.ObjectMeta, additionalFinalizers 
 		Deleting:         meta.DeletionTimestamp != nil,
 		FinalizerBlocked: meta.DeletionTimestamp != nil && (len(meta.Finalizers) > 0 || len(additionalFinalizers) > 0),
 	}
+}
+
+// ConditionSignals projects canonical condition facts into status signals.
+func ConditionSignals(conditions []ConditionFacts) []ResourceStatusSignal {
+	signals := make([]ResourceStatusSignal, 0, len(conditions))
+	for _, condition := range conditions {
+		signals = append(signals, ResourceStatusSignal{
+			Type:    StatusSignalCondition,
+			Name:    condition.Type,
+			Status:  condition.Status,
+			Reason:  condition.Reason,
+			Message: condition.Message,
+		})
+	}
+	return signals
 }

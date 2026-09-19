@@ -38,7 +38,7 @@ func (s *Service) PodDisruptionBudget(ctx context.Context, namespace, name strin
 
 	pdb, err := client.PolicyV1().PodDisruptionBudgets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		err = s.logError(err, fmt.Sprintf("Failed to get pod disruption budget %s/%s", namespace, name))
+		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get pod disruption budget %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get pod disruption budget: %w", err)
 	}
 
@@ -66,10 +66,6 @@ func (s *Service) buildPodDisruptionBudgetDetails(pdb *policyv1.PodDisruptionBud
 		Annotations:        pdb.Annotations,
 	}
 	return details
-}
-
-func (s *Service) logError(err error, msg string) error {
-	return s.deps.LogResourceRequestFailure(err, msg, "get", Identity, logsources.ResourceLoader)
 }
 
 func pdbIntOrStringValue(facts *resourcemodel.IntOrStringFacts) *string {

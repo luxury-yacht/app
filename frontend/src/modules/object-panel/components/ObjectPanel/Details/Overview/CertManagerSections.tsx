@@ -1,5 +1,4 @@
 import type { CertManagerCertificate, CertManagerFacts } from '@core/refresh/types';
-import { withStableListKeys } from '@shared/utils/stableListKeys';
 import {
   OperatorFields as Fields,
   OperatorMessage as Message,
@@ -40,8 +39,8 @@ export function CertManagerSections({ facts }: Readonly<{ facts: CertManagerFact
         fields={[
           ['Issuer', operatorLink(facts.issuer)],
           ['Secret', operatorLink(facts.secret)],
-          ...withStableListKeys(facts.owners ?? [], (link) => link.ref?.name ?? '').map(
-            ({ value }) => [value.ref?.kind ?? 'Owner', operatorLink(value)] as const
+          ...(facts.owners ?? []).map(
+            (link) => [link.ref?.kind ?? 'Owner', operatorLink(link)] as const
           ),
         ]}
       />

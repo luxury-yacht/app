@@ -659,6 +659,50 @@ describe('ObjectPanel tab availability', () => {
     expect(mockQueryNamespacePermissions).not.toHaveBeenCalled();
   });
 
+  it('evaluates the same namespace independently after the panel changes clusters', async () => {
+    await renderObjectPanel({
+      kind: 'Pod',
+      name: 'api',
+      namespace: 'team-a',
+      clusterId: 'config:Prod',
+    });
+    mockQueryNamespacePermissions.mockClear();
+
+    await renderObjectPanel({
+      kind: 'Pod',
+      name: 'api',
+      namespace: 'team-a',
+      clusterId: 'config:prod',
+    });
+
+    expect(mockQueryNamespacePermissions).toHaveBeenCalledWith('team-a', 'config:prod');
+  });
+
+  it.each([
+    { clusterId: 'config:prod', group: 'example.com', version: 'v1' },
+    { clusterId: 'config:Prod', group: 'another.example.com', version: 'v1' },
+    { clusterId: 'config:Prod', group: 'example.com', version: 'v2' },
+  ])('does not retain a deleted marker for a different complete identity: %j', async (identity) => {
+    const object = { kind: 'Widget', name: 'api', namespace: 'team-a' };
+    await renderObjectPanel({
+      ...object,
+      clusterId: 'config:Prod',
+      group: 'example.com',
+      version: 'v1',
+      scopedDomain: { data: null, status: 'error', error: 'Widget api not found' },
+    });
+    expect(ctx.container.querySelector('.object-panel-empty-state')).not.toBeNull();
+
+    await renderObjectPanel({
+      ...object,
+      ...identity,
+      scopedDomain: { data: { details: { status: 'Ready' } }, status: 'ready', error: null },
+    });
+
+    expect(ctx.container.querySelector('.object-panel-empty-state')).toBeNull();
+    expect(getDetailsTabProps().detailModel.activeDetail).toEqual({ status: 'Ready' });
+  });
+
   it('passes the received detail payload to the Details tab', async () => {
     const detailsPayload = { data: { key: 'value' } };
     await renderObjectPanel({

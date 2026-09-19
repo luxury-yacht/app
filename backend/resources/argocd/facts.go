@@ -9,7 +9,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // Facts contains only display data; repository credentials, Helm values, and
@@ -170,14 +169,11 @@ func applicationFacts(clusterID string, object *unstructured.Unstructured) *Appl
 }
 
 func applicationSetOwner(clusterID string, object *unstructured.Unstructured) *resourcemodel.ResourceLink {
-	for _, owner := range object.GetOwnerReferences() {
-		gvk := schema.FromAPIVersionAndKind(owner.APIVersion, owner.Kind)
-		if gvk.Group == "argoproj.io" && gvk.Kind == "ApplicationSet" && gvk.Version != "" {
-			link := resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: clusterID, Group: gvk.Group, Version: gvk.Version, Kind: gvk.Kind, Namespace: object.GetNamespace(), Name: owner.Name, UID: string(owner.UID)})
-			return &link
-		}
+	links := crdfacts.Owners(clusterID, object, "argoproj.io", "ApplicationSet")
+	if len(links) == 0 {
+		return nil
 	}
-	return nil
+	return &links[0]
 }
 
 func applicationSetFacts(object *unstructured.Unstructured) *ApplicationSetFacts {

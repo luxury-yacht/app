@@ -558,7 +558,10 @@ describe('useGridTableColumnWidths', () => {
   };
 
   it('retries unrendered cells and skips unchanged visible content', async () => {
-    const { read, measureColumnWidth, showCells } = await setupQueuedMeasurement(false);
+    const { read, measureColumnWidth, showCells, onColumnWidthsChange } =
+      await setupQueuedMeasurement(false);
+    const previousWidths = read().columnWidths;
+    onColumnWidthsChange.mockClear();
     measureColumnWidth.mockClear().mockReturnValue(220);
 
     await act(async () => {
@@ -572,6 +575,11 @@ describe('useGridTableColumnWidths', () => {
       vi.advanceTimersByTime(200);
     });
     expect(read().columnWidths.name).toBe(220);
+    expect(previousWidths.name).toBe(100);
+    expect(onColumnWidthsChange).toHaveBeenLastCalledWith({
+      name: expect.objectContaining({ width: 220, source: 'auto' }),
+      kind: expect.objectContaining({ width: 220, source: 'auto' }),
+    });
 
     measureColumnWidth.mockClear();
     await act(async () => {

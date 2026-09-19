@@ -4,36 +4,11 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/luxury-yacht/app/backend/resourcekind"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const rbacAPIGroup = "rbac.authorization.k8s.io"
-
-func RBACResourceModel(
-	clusterID, kind, resource string,
-	scope ResourceScope,
-	meta metav1.ObjectMeta,
-	status ResourceStatusPresentation,
-	facts ResourceFacts,
-) ResourceModel {
-	return KubernetesResourceModel(clusterID, resourcekind.Identity{
-		Group: rbacAPIGroup, Version: "v1", Kind: kind, Resource: resource,
-		Namespaced: scope == ResourceScopeNamespaced,
-	}, meta, status, facts)
-}
-
-func ServiceAccountResourceModel(
-	clusterID string,
-	meta metav1.ObjectMeta,
-	status ResourceStatusPresentation,
-	facts ResourceFacts,
-) ResourceModel {
-	return KubernetesResourceModel(clusterID, resourcekind.Identity{
-		Version: "v1", Kind: "ServiceAccount", Resource: "serviceaccounts", Namespaced: true,
-	}, meta, status, facts)
-}
 
 func CopyPolicyRuleFacts(rules []rbacv1.PolicyRule) []PolicyRuleFacts {
 	if len(rules) == 0 {
@@ -52,12 +27,31 @@ func CopyPolicyRuleFacts(rules []rbacv1.PolicyRule) []PolicyRuleFacts {
 	return facts
 }
 
-func RBACRuleCountStatus(meta metav1.ObjectMeta, ruleCount int, aggregated bool) ResourceStatusPresentation {
-	state := strconv.Itoa(ruleCount)
+// RBACRuleSummary describes intrinsic rules independently of deletion status.
+func RBACRuleSummary(ruleCount int, aggregated bool) string {
 	label := fmt.Sprintf("Rules: %d", ruleCount)
 	if aggregated {
 		label += " (aggregated)"
 	}
+	return label
+}
+
+// RBACBindingSummary is the terse role/subject summary shared by lists and maps.
+func RBACBindingSummary(roleName string, subjectCount int) string {
+	if roleName == "" {
+		roleName = "-"
+	}
+	return fmt.Sprintf("Role: %s, Subjects: %d", roleName, subjectCount)
+}
+
+// ServiceAccountSummary describes named token secrets, excluding image-pull secrets.
+func ServiceAccountSummary(secretCount int) string {
+	return fmt.Sprintf("Secrets: %d", secretCount)
+}
+
+func RBACRuleCountStatus(meta metav1.ObjectMeta, ruleCount int, aggregated bool) ResourceStatusPresentation {
+	state := strconv.Itoa(ruleCount)
+	label := RBACRuleSummary(ruleCount, aggregated)
 	signals := []ResourceStatusSignal{{
 		Type:   StatusSignalResourceState,
 		Name:   "rules.count",
@@ -75,7 +69,7 @@ func RBACBindingStatus(meta metav1.ObjectMeta, roleName string, subjectCount int
 	if roleName == "" {
 		roleName = "-"
 	}
-	label := fmt.Sprintf("Role: %s, Subjects: %d", roleName, subjectCount)
+	label := RBACBindingSummary(roleName, subjectCount)
 	signals := []ResourceStatusSignal{
 		{Type: StatusSignalResourceState, Name: "roleRef.name", Status: roleName},
 		{Type: StatusSignalResourceState, Name: "subjects.count", Status: state},
@@ -89,7 +83,7 @@ func RBACBindingStatus(meta metav1.ObjectMeta, roleName string, subjectCount int
 
 func ServiceAccountStatus(meta metav1.ObjectMeta, secretCount int) ResourceStatusPresentation {
 	state := strconv.Itoa(secretCount)
-	label := fmt.Sprintf("Secrets: %d", secretCount)
+	label := ServiceAccountSummary(secretCount)
 	signals := []ResourceStatusSignal{{
 		Type:   StatusSignalResourceState,
 		Name:   "secrets.count",

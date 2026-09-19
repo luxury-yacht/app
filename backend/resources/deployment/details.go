@@ -68,7 +68,7 @@ func (s *Service) buildDeploymentDetails(
 	facts := BuildFacts(deployment)
 	replicas, ready := workloads.WorkloadReplicaDisplay(facts.WorkloadCommonFacts)
 	podInfos := workloads.BuildPodSummaries(s.deps.ClusterID, "Deployment", deployment.Name, "apps/v1", podsList, podMetrics)
-	podSummary, _ := workloads.SummarizePodMetrics(podsList, podMetrics)
+	podSummary := workloads.SummarizePodMetrics(podsList, podMetrics)
 
 	// Live aggregation (not part of the resource's intrinsic definition).
 	rsNames, currentRevision, currentRSName := summarizeReplicaSets(deployment, replicaSets)
@@ -149,7 +149,7 @@ func summarizeReplicaSets(deployment *appsv1.Deployment, replicaSets *appsv1.Rep
 	deploymentRevision := deployment.Annotations["deployment.kubernetes.io/revision"]
 
 	for _, rs := range replicaSets.Items {
-		if !replicaSetOwnedByDeployment(rs, deployment.UID) {
+		if !common.IsOwnedBy(rs.OwnerReferences, deployment.UID) {
 			continue
 		}
 		names = append(names, rs.Name)
@@ -161,15 +161,6 @@ func summarizeReplicaSets(deployment *appsv1.Deployment, replicaSets *appsv1.Rep
 
 	sort.Strings(names)
 	return names, currentRevision, currentRSName
-}
-
-func replicaSetOwnedByDeployment(replicaSet appsv1.ReplicaSet, deploymentUID k8stypes.UID) bool {
-	for _, owner := range replicaSet.OwnerReferences {
-		if owner.UID == deploymentUID {
-			return true
-		}
-	}
-	return false
 }
 
 func filterPodsForDeployment(

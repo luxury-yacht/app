@@ -57,7 +57,7 @@ func clusterCRDQueryCapabilities() ResourceQueryCapabilities {
 // typed-table adapter (reusing the adapter's exact sort encoder + row key), so the
 // engine orders rows byte-identically to the live executor.
 func crdsQuerypageSchema() querypage.Schema[ClusterCRDEntry] {
-	return querypageSchemaFromAdapter(clusterCRDTableQueryAdapter(), []string{"name", "kind", "group", "scope", "details", "version", "age"})
+	return querypageSchemaFromAdapter(clusterCRDTableQueryAdapter(), lowerTrimAll(clusterCRDQueryCapabilities().SortableFields))
 }
 
 // ClusterCRDEntry represents an individual CRD in the table.

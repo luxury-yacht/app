@@ -42,10 +42,8 @@ import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/u
 import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import {
-  buildRequiredObjectReference,
-  buildRequiredRelatedObjectReference,
-} from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { podNamespacePermissionTargets, podOwnerReference } from '@shared/utils/podTableModel';
 import { usePanelWindowRole } from '@/core/panel-windows/PanelWindowRoleContext';
 import { buildObjectPanelPodsScope } from './objectPanelPodsScope';
 
@@ -91,10 +89,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
 
   const getPodIdentity = useCallback(
     (pod: PodSnapshotEntry) => ({
-      kind: 'Pod',
-      name: pod.ref.name,
-      namespace: pod.ref.namespace,
-      clusterId: pod.ref.clusterId,
+      ...pod.ref,
       clusterName: objectData?.clusterName,
     }),
     [objectData?.clusterName]
@@ -107,15 +102,10 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   });
   const { open: openPod, navigate: navigatePodForWorkspace } = podIdentity;
   const navigatePod = navigationAvailable ? navigatePodForWorkspace : undefined;
-  // Ensure pod navigation keeps the active cluster context for object detail scopes.
-  const getPodClusterMeta = useCallback(
-    (pod: PodSnapshotEntry) => ({
-      clusterId: pod.ref.clusterId ?? undefined,
-      clusterName: objectData?.clusterName,
-    }),
+  const getOwnerReference = useCallback(
+    (pod: PodSnapshotEntry) => podOwnerReference(pod, objectData?.clusterName),
     [objectData?.clusterName]
   );
-  const handlePodOpen = openPod;
   const handleNamespaceSelect = useCallback(
     (pod: PodSnapshotEntry) => {
       if (!pod.ref.namespace || !viewState) {
@@ -151,12 +141,12 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     const base: GridColumnDefinition<PodSnapshotEntry>[] = [
       createKindColumn<PodSnapshotEntry>({
         getKind: () => 'Pod',
-        onClick: handlePodOpen,
+        onClick: openPod,
         onAltClick: navigatePod,
         sortable: false,
       }),
       createResourceNameColumn<PodSnapshotEntry>((pod) => pod.ref.name, {
-        onClick: handlePodOpen,
+        onClick: openPod,
         onAltClick: navigatePod,
         getClassName: () => 'object-panel-link',
         getTitle: (pod) => pod.ref.name,
@@ -175,25 +165,13 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
           alignData: 'right',
           sortValue: (pod) => pod.restarts ?? 0,
           getTitle: (pod) => `${pod.restarts ?? 0} restarts`,
-          getClassName: (pod) => getRestartsClassName(pod),
+          getClassName: getRestartsClassName,
         }
       ),
-      createTextColumn<PodSnapshotEntry>('owner', 'Owner', (pod) => workloadNameFromOwner(pod), {
-        ...objectLink((pod) =>
-          pod.ownerKind && pod.ownerName
-            ? buildRequiredRelatedObjectReference(
-                {
-                  kind: pod.ownerKind,
-                  name: pod.ownerName,
-                  namespace: pod.ref.namespace,
-                  ...getPodClusterMeta(pod),
-                },
-                { fallbackClusterId: objectData?.clusterId }
-              )
-            : undefined
-        ),
-        isInteractive: (pod) => Boolean(pod.ownerKind && pod.ownerName),
-        getClassName: (pod) => (pod.ownerKind && pod.ownerName ? 'object-panel-link' : undefined),
+      createTextColumn<PodSnapshotEntry>('owner', 'Owner', workloadNameFromOwner, {
+        ...objectLink(getOwnerReference),
+        isInteractive: (pod) => Boolean(getOwnerReference(pod)),
+        getClassName: (pod) => (getOwnerReference(pod) ? 'object-panel-link' : undefined),
       }),
       createTextColumn<PodSnapshotEntry>('node', 'Node', (pod) => pod.node || '—', {
         ...objectLink((pod) =>
@@ -249,21 +227,17 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:memory`,
         getShowEmptyState: () => true,
       }),
-      createAgeColumn<PodSnapshotEntry & { age?: string }>(
-        'age',
-        'Age',
-        (pod) => pod.age ?? '—'
-      ) as GridColumnDefinition<PodSnapshotEntry>
+      createAgeColumn<PodSnapshotEntry>('age', 'Age', (pod) => pod.age ?? '—')
     );
 
     return withColumnSizing(withNamespace, COLUMN_SIZING);
   }, [
     handleNamespaceSelect,
-    handlePodOpen,
+    openPod,
     objectData?.clusterId,
     objectData?.clusterName,
     objectLink,
-    getPodClusterMeta,
+    getOwnerReference,
     navigatePod,
     viewState,
   ]);
@@ -301,24 +275,10 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   // query never covers. Keyed off the visible rows so permissions also
   // self-heal after a permission-store reset; the store's TTL and in-flight
   // dedup keep repeat calls cheap.
-  const visiblePermissionTargets = useMemo(() => {
-    const seen = new Set<string>();
-    const targets: Array<{ namespace: string; clusterId: string }> = [];
-    source.rows.forEach((pod) => {
-      const podNamespace = pod.ref.namespace?.trim();
-      const podClusterId = pod.ref.clusterId?.trim() || objectData?.clusterId?.trim();
-      if (!podNamespace || !podClusterId) {
-        return;
-      }
-      const key = `${podClusterId}|${podNamespace.toLowerCase()}`;
-      if (seen.has(key)) {
-        return;
-      }
-      seen.add(key);
-      targets.push({ namespace: podNamespace, clusterId: podClusterId });
-    });
-    return targets;
-  }, [source.rows, objectData?.clusterId]);
+  const visiblePermissionTargets = useMemo(
+    () => podNamespacePermissionTargets(source.rows, objectData?.clusterId),
+    [source.rows, objectData?.clusterId]
+  );
 
   useEffect(() => {
     if (visiblePermissionTargets.length === 0) {
@@ -358,7 +318,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
           columns={columns}
           diagnosticsLabel="Object Panel Pods"
           diagnosticsMode="live"
-          onRowClick={handlePodOpen}
+          onRowClick={openPod}
           enableContextMenu
           getCustomContextMenuItems={getContextMenuItems}
           tableClassName="gridtable-pods gridtable-pods--namespaced"

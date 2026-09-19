@@ -92,21 +92,7 @@ export function useGridTableFilterModel<T>({
   const filtersContainerRef = useRef<HTMLDivElement | null>(null);
   const filterFocusIndexRef = useRef<number | null>(null);
 
-  const {
-    filteringEnabled,
-    tableData,
-    activeFilters,
-    filterSignature,
-    resolvedFilterOptions,
-    handleFilterSearchChange,
-    handleFilterKindsChange,
-    handleFilterNamespacesChange,
-    handleFilterClustersChange,
-    handleFilterQueryFacetChange,
-    handleFiltersChange,
-    handleFilterReset,
-    toggleCaseSensitive,
-  } = useGridTableFilters({
+  const model = useGridTableFilters({
     data,
     filters,
     diagnosticsLabel,
@@ -116,28 +102,12 @@ export function useGridTableFilterModel<T>({
   });
 
   useEffect(() => {
-    if (!filteringEnabled) {
+    if (!model.filteringEnabled) {
       filterFocusIndexRef.current = null;
     }
-  }, [filteringEnabled]);
+  }, [model.filteringEnabled]);
 
-  return {
-    filteringEnabled,
-    tableData,
-    activeFilters,
-    filterSignature,
-    resolvedFilterOptions,
-    filtersContainerRef,
-    filterFocusIndexRef,
-    handleFilterSearchChange,
-    handleFilterKindsChange,
-    handleFilterNamespacesChange,
-    handleFilterClustersChange,
-    handleFilterQueryFacetChange,
-    handleFiltersChange,
-    handleFilterReset,
-    toggleCaseSensitive,
-  };
+  return { ...model, filtersContainerRef, filterFocusIndexRef };
 }
 
 export function useGridTableFiltersPresentation<T>({

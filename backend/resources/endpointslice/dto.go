@@ -7,6 +7,8 @@
 
 package endpointslice
 
+import "github.com/luxury-yacht/app/backend/resourcemodel"
+
 type EndpointSliceDetails struct {
 	Kind              string                 `json:"kind"`
 	Name              string                 `json:"name"`
@@ -21,10 +23,10 @@ type EndpointSliceDetails struct {
 }
 
 type EndpointSliceAddress struct {
-	IP        string `json:"ip"`
-	Hostname  string `json:"hostname,omitempty"`
-	NodeName  string `json:"nodeName,omitempty"`
-	TargetRef string `json:"targetRef,omitempty"`
+	IP        string                      `json:"ip"`
+	Hostname  string                      `json:"hostname,omitempty"`
+	NodeName  string                      `json:"nodeName,omitempty"`
+	TargetRef *resourcemodel.ResourceLink `json:"targetRef,omitempty"`
 }
 
 type EndpointSlicePort struct {

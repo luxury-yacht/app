@@ -11,40 +11,26 @@ import { IconBarSeparatorIcon } from '@shared/components/icons/SharedIcons';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 
-/** A toggle button that switches between on and off states. */
-export interface IconBarToggle {
-  type: 'toggle';
+interface IconBarButton {
   /** Unique key for React rendering. */
   id: string;
-  /** The icon element to render. */
   icon: React.ReactNode;
-  /** Whether the toggle is currently on. */
-  active: boolean;
-  /** Called when the button is clicked. */
   onClick: () => void;
-  /** Tooltip text shown on hover. */
   title: string;
   /** Accessible label for screen readers; defaults to title when omitted. */
   ariaLabel?: string;
-  /** When true, the button is dimmed and non-interactive. */
   disabled?: boolean;
 }
 
+/** A toggle button that switches between on and off states. */
+export interface IconBarToggle extends IconBarButton {
+  type: 'toggle';
+  active: boolean;
+}
+
 /** An action button that fires once and optionally shows feedback. */
-export interface IconBarAction {
+export interface IconBarAction extends IconBarButton {
   type: 'action';
-  /** Unique key for React rendering. */
-  id: string;
-  /** The icon element to render. */
-  icon: React.ReactNode;
-  /** Called when the button is clicked. */
-  onClick: () => void;
-  /** Tooltip text shown on hover. */
-  title: string;
-  /** Accessible label for screen readers; defaults to title when omitted. */
-  ariaLabel?: string;
-  /** When true, the button is dimmed and non-interactive. */
-  disabled?: boolean;
   /** Brief feedback state: 'success' or 'error'. Omit or null for default. */
   feedback?: 'success' | 'error' | null;
 }
@@ -67,47 +53,36 @@ const IconBar: React.FC<IconBarProps> = ({ items, className }) => {
 
   return (
     <div className={wrapperClass}>
-      {withStableListKeys(items, (item) => (item.type === 'separator' ? 'separator' : item.id)).map(
-        ({ key, value: item }) => {
-          if (item.type === 'separator') {
-            return <IconBarSeparatorIcon key={key} />;
-          }
-
-          if (item.type === 'toggle') {
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`icon-bar-button${item.active ? ' active' : ''}`}
-                onClick={item.onClick}
-                disabled={item.disabled}
-                title={item.title}
-                aria-label={item.ariaLabel ?? item.title}
-                aria-pressed={item.active}
-              >
-                {item.icon}
-              </button>
-            );
-          }
-
-          // Action button
-          const feedbackClass = item.feedback ? ` feedback-${item.feedback}` : '';
-
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className={`icon-bar-button${feedbackClass}`}
-              onClick={item.onClick}
-              disabled={item.disabled}
-              title={item.title}
-              aria-label={item.ariaLabel ?? item.title}
-            >
-              {item.icon}
-            </button>
-          );
+      {withStableListKeys(items, (item) =>
+        item.type === 'separator' ? 'separator' : `button:${item.id}`
+      ).map(({ key, value: item }) => {
+        if (item.type === 'separator') {
+          return <IconBarSeparatorIcon key={key} />;
         }
-      )}
+
+        let buttonClass = 'icon-bar-button';
+        if (item.type === 'toggle' && item.active) {
+          buttonClass += ' active';
+        }
+        if (item.type === 'action' && item.feedback) {
+          buttonClass += ` feedback-${item.feedback}`;
+        }
+
+        return (
+          <button
+            key={key}
+            type="button"
+            className={buttonClass}
+            onClick={item.onClick}
+            disabled={item.disabled}
+            title={item.title}
+            aria-label={item.ariaLabel ?? item.title}
+            aria-pressed={item.type === 'toggle' ? item.active : undefined}
+          >
+            {item.icon}
+          </button>
+        );
+      })}
     </div>
   );
 };

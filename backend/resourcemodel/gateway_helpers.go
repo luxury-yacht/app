@@ -4,25 +4,11 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/luxury-yacht/app/backend/resourcekind"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 const gatewayAPIGroup = "gateway.networking.k8s.io"
-
-func GatewayAPIResourceModel(
-	clusterID, kind, resource string,
-	scope ResourceScope,
-	meta metav1.ObjectMeta,
-	status ResourceStatusPresentation,
-	facts ResourceFacts,
-) ResourceModel {
-	return KubernetesResourceModel(clusterID, resourcekind.Identity{
-		Group: gatewayAPIGroup, Version: "v1", Kind: kind, Resource: resource,
-		Namespaced: scope == ResourceScopeNamespaced,
-	}, meta, status, facts)
-}
 
 func GatewayConditionFacts(conditions []metav1.Condition) []ConditionFacts {
 	facts := make([]ConditionFacts, 0, len(conditions))
@@ -57,7 +43,7 @@ func GatewayConditionsSummary(conditions []ConditionFacts) ConditionsSummaryFact
 }
 
 func GatewayStatusFromConditions(meta metav1.ObjectMeta, fallbackState, fallbackLabel string, conditions []ConditionFacts) ResourceStatusPresentation {
-	signals := gatewayConditionSignals(conditions)
+	signals := ConditionSignals(conditions)
 	lifecycle := ObjectLifecycle(meta)
 	if status, ok := DeletingObjectStatus(meta, fallbackState, signals, lifecycle); ok {
 		return status
@@ -94,20 +80,6 @@ func gatewayConditionStatus(condition ConditionFacts, presentation string, signa
 	return ObjectSourceStatus(label, condition.Status, condition.Reason, "", presentation, signals, lifecycle)
 }
 
-func gatewayConditionSignals(conditions []ConditionFacts) []ResourceStatusSignal {
-	signals := make([]ResourceStatusSignal, 0, len(conditions))
-	for _, condition := range conditions {
-		signals = append(signals, ResourceStatusSignal{
-			Type:    StatusSignalCondition,
-			Name:    condition.Type,
-			Status:  condition.Status,
-			Reason:  condition.Reason,
-			Message: condition.Message,
-		})
-	}
-	return signals
-}
-
 func findConditionFacts(conditions []ConditionFacts, conditionType string) (ConditionFacts, bool) {
 	for _, condition := range conditions {
 		if condition.Type == conditionType {
@@ -136,21 +108,10 @@ func ResourceLinkName(link ResourceLink) string {
 
 func GatewayRefLink(clusterID, group, kind, namespace, name string) ResourceLink {
 	resource := gatewayResourceName(group, kind)
-	if version := gatewayRefVersion(group, kind); version != "" && name != "" {
-		return NewNamespacedResourceLink(ResourceRef{ClusterID: clusterID, Group: group, Version: version, Kind: kind, Resource: resource, Namespace: namespace, Name: name, UID: ""})
+	if resource != "" && name != "" {
+		return NewNamespacedResourceLink(ResourceRef{ClusterID: clusterID, Group: group, Version: "v1", Kind: kind, Resource: resource, Namespace: namespace, Name: name, UID: ""})
 	}
 	return displayResourceLink(clusterID, group, "", kind, resource, namespace, name)
-}
-
-func gatewayRefVersion(group, kind string) string {
-	switch group {
-	case "":
-		return "v1"
-	case gatewayAPIGroup:
-		return "v1"
-	default:
-		return ""
-	}
 }
 
 func gatewayResourceName(group, kind string) string {

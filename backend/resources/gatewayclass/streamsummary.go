@@ -17,6 +17,6 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, gc *gatewayv1.GatewayClass)
 	if gc == nil {
 		return streamrows.ClusterConfigEntry{}
 	}
-	details := BuildFacts(meta.ClusterID, gc).ControllerName
+	details := string(gc.Spec.ControllerName)
 	return streamrows.NewClusterConfigEntry(meta, Identity, gc, details, false)
 }

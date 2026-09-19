@@ -3,6 +3,8 @@ package clusterrole
 import (
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
+
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -37,12 +39,7 @@ func TestBuildClusterRoleResourceModelFactsStatusAndReverseBindings(t *testing.T
 		RoleBindings:        roleBindings,
 		ClusterRoleBindings: clusterRoleBindings,
 	})
-	model := BuildResourceModel(
-		"cluster-a",
-		role,
-		relationships,
-		resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks},
-	)
+	model := BuildResourceModel("cluster-a", role)
 	require.Equal(t, "ClusterRole", model.Ref.Kind)
 	require.Equal(t, "clusterroles", model.Ref.Resource)
 	require.Equal(t, resourcemodel.ResourceScopeCluster, model.Scope)
@@ -57,4 +54,17 @@ func TestBuildClusterRoleResourceModelFactsStatusAndReverseBindings(t *testing.T
 	require.Len(t, facts.RoleBindings, 1)
 	require.Equal(t, "team-a", facts.RoleBindings[0].Ref.Namespace)
 	require.Equal(t, "view-team", facts.RoleBindings[0].Ref.Name)
+}
+
+func TestClusterRoleMapAndListRetainAggregationAndDeletion(t *testing.T) {
+	role := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "view"}, AggregationRule: &rbacv1.AggregationRule{}}
+	row := BuildStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, role)
+	require.Equal(t, "Rules: 0 (aggregated)", row.Details)
+	require.Equal(t, row.Details, ObjectMapStatus("cluster-a", *role).Label)
+	deletion := metav1.Now()
+	role.DeletionTimestamp = &deletion
+	status := ObjectMapStatus("cluster-a", *role)
+	require.Equal(t, "0", status.State)
+	require.Equal(t, "terminating", status.Presentation)
+	require.Equal(t, row.Details, BuildStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, role).Details)
 }

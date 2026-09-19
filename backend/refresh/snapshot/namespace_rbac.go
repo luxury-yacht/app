@@ -38,7 +38,7 @@ type NamespaceRBACBuilder struct {
 // adapter's exact comparable sort-value encoder and row key, so the querypage engine
 // orders rows byte-identically to the live typed-table executor.
 func rbacQuerypageSchema() querypage.Schema[RBACSummary] {
-	return querypageSchemaFromAdapter(rbacTableQueryAdapter(), []string{"name", "kind", "namespace", "details", "age"})
+	return querypageSchemaFromAdapter(rbacTableQueryAdapter(), namespaceRBACQueryCapabilities().SortableFields)
 }
 
 // NamespaceRBACSnapshot payload for RBAC view.
@@ -71,7 +71,6 @@ func namespaceRBACDomainSpec() typedTableDomainSpec[RBACSummary] {
 		adapter:          rbacTableQueryAdapter(),
 		schema:           rbacQuerypageSchema(),
 		capabilities:     namespaceRBACQueryCapabilities(),
-		kindOf:           func(resource RBACSummary) string { return resource.Ref.Kind },
 		sortRows:         sortRBACSummaries,
 	}
 }

@@ -16,11 +16,9 @@ import (
 
 // BuildResourceModel builds the ClusterRole resource model. Facts are owned by
 // this package (clusterrole.Facts); callers needing facts use BuildFacts.
-func BuildResourceModel(clusterID string, role *rbacv1.ClusterRole, relationships *resourcemodel.ResourceRelationshipIndex, options ...resourcemodel.ResourceModelBuildOptions) resourcemodel.ResourceModel {
-	buildOptions := resourcemodel.BuildOptions(options...)
-	facts := BuildFacts(role, relationships, buildOptions)
-	status := resourcemodel.RBACRuleCountStatus(role.ObjectMeta, len(facts.Rules), facts.AggregationRule != nil)
-	return resourcemodel.RBACResourceModel(clusterID, "ClusterRole", "clusterroles", resourcemodel.ResourceScopeCluster, role.ObjectMeta, status, resourcemodel.ResourceFacts{})
+func BuildResourceModel(clusterID string, role *rbacv1.ClusterRole) resourcemodel.ResourceModel {
+	status := resourcemodel.RBACRuleCountStatus(role.ObjectMeta, len(role.Rules), role.AggregationRule != nil)
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, role.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the ClusterRole facts. Reverse links materialize only when

@@ -129,7 +129,7 @@ func TestBuildNodeResourceModelStatus(t *testing.T) {
 	}
 }
 
-func TestBuildNodeResourceModelCopiesMetadataAndFacts(t *testing.T) {
+func TestBuildNodeResourceModelCopiesMetadata(t *testing.T) {
 	node := nodeWithReadyCondition(corev1.ConditionTrue, "KubeletReady")
 	node.UID = types.UID("uid-1")
 	node.Labels = map[string]string{
@@ -143,11 +143,6 @@ func TestBuildNodeResourceModelCopiesMetadataAndFacts(t *testing.T) {
 	require.Equal(t, "uid-1", model.Ref.UID)
 	require.Equal(t, map[string]string{"node-role.kubernetes.io/worker": "", "app": "node"}, model.Metadata.Labels)
 	require.Equal(t, map[string]string{"example": "annotation"}, model.Metadata.Annotations)
-
-	facts := BuildFacts(node)
-	require.Equal(t, []string{"worker"}, facts.Roles)
-	require.False(t, facts.Unschedulable)
-	require.False(t, facts.Cordoned)
 
 	node.Labels["app"] = "changed"
 	require.Equal(t, "node", model.Metadata.Labels["app"])
@@ -164,4 +159,24 @@ func nodeWithReadyCondition(status corev1.ConditionStatus, reason string) *corev
 			}},
 		},
 	}
+}
+
+func TestNodeStatusRetainsFirstTaintAndSpecPrecedence(t *testing.T) {
+	node := nodeWithReadyCondition(corev1.ConditionTrue, "Ready")
+	node.Spec.Taints = []corev1.Taint{
+		{Key: corev1.TaintNodeUnschedulable, Effect: corev1.TaintEffectPreferNoSchedule},
+		{Key: corev1.TaintNodeUnschedulable, Effect: corev1.TaintEffectNoSchedule},
+	}
+	status := BuildResourceModel("cluster-a", node).Status
+	require.Equal(t, "PreferNoSchedule", status.Badges[0].Status)
+	require.Equal(t, "PreferNoSchedule", status.Signals[1].Status)
+	node.Spec.Unschedulable = true
+	status = BuildResourceModel("cluster-a", node).Status
+	require.Equal(t, "true", status.Badges[0].Status)
+	require.Equal(t, "spec.unschedulable", status.Signals[1].Name)
+	node.Status.Conditions = nil
+	status = BuildResourceModel("cluster-a", node).Status
+	require.Equal(t, "Unknown", status.Label)
+	require.Empty(t, status.Badges)
+	require.Equal(t, "spec.unschedulable", status.Signals[0].Name)
 }

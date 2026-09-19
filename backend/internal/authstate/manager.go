@@ -147,24 +147,13 @@ type Manager struct {
 // If MaxAttempts is 0, automatic recovery is disabled.
 // If BackoffSchedule is nil and MaxAttempts > 0, DefaultBackoffSchedule is used.
 func New(cfg Config) *Manager {
-	backoff := cfg.BackoffSchedule
-	if backoff == nil && cfg.MaxAttempts > 0 {
-		backoff = DefaultBackoffSchedule
+	if cfg.BackoffSchedule == nil && cfg.MaxAttempts > 0 {
+		cfg.BackoffSchedule = DefaultBackoffSchedule
 	}
 
 	return &Manager{
-		state: StateValid,
-		config: Config{
-			MaxAttempts:               cfg.MaxAttempts,
-			BackoffSchedule:           backoff,
-			SteadyRetryInterval:       cfg.SteadyRetryInterval,
-			OnStateChange:             cfg.OnStateChange,
-			OnRecoveryProgress:        cfg.OnRecoveryProgress,
-			OnSnapshotChange:          cfg.OnSnapshotChange,
-			RecoveryTest:              cfg.RecoveryTest,
-			ClassifyError:             cfg.ClassifyError,
-			ConnectivityRetryInterval: cfg.ConnectivityRetryInterval,
-		},
+		state:  StateValid,
+		config: cfg,
 	}
 }
 
@@ -292,11 +281,7 @@ func (m *Manager) setState(newState State, diag FailureDiagnostic) {
 }
 
 func equalFailureDiagnostic(left, right FailureDiagnostic) bool {
-	return left.Reason == right.Reason &&
-		left.Class == right.Class &&
-		left.Kind == right.Kind &&
-		left.Summary == right.Summary &&
-		left.ExecCommand == right.ExecCommand
+	return left == right
 }
 
 func (m *Manager) markSnapshotChangeLocked() {

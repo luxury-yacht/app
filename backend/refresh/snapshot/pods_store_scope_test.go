@@ -9,16 +9,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
-// TestPodBuilderStoreServedScopesMatchListPath proves the store-served node and
-// workload scopes (production, no typed lister) return rows byte-identical to the
-// typed-lister list path. The store builder is fed the SAME no-data-metrics PodSummary
-// rows the pod reflector projects; the list builder reads the typed lister. Both serve
-// the same scope and must produce identical rows.
-func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
+// Ingested pod rows must remain scoped by node, complete owner identity and namespace.
+func TestPodBuilderIngestedScopesPreserveObjectAndOwnerIdentity(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "c-1", ClusterName: "prod"}
 	ptr := func(b bool) *bool { return &b }
 
@@ -57,48 +52,28 @@ func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
 	pods := []*corev1.Pod{podOnNode, podOtherNode, otherNamespacePod}
 	rsLister := testsupport.NewReplicaSetLister(t, rs, otherNamespaceRS)
 
-	// List builder: typed lister path (unit-test path).
-	listBuilder := &PodBuilder{
-		podLister: testsupport.NewPodLister(t, pods...),
-		rsLister:  rsLister,
-		projCache: newPodProjectionCache(),
+	storeBuilder := newTestPodBuilder(t, meta, testsupport.NewPodLister(t, pods...), rsLister, nil)
+	scopes := map[string][]string{
+		"node:node-1": {"prod/orders-7d9c8b6f5-abcde", "staging/orders-7d9c8b6f5-other"},
+		"workload:prod:apps:v1:Deployment:orders":           {"prod/orders-7d9c8b6f5-abcde"},
+		"workload:prod:apps:v1:ReplicaSet:orders-7d9c8b6f5": {"prod/orders-7d9c8b6f5-abcde"},
+		"object:prod::v1:Pod:lonely":                        {"prod/lonely"},
+		"namespace:prod":                                    {"prod/orders-7d9c8b6f5-abcde", "prod/lonely"},
 	}
-
-	// Store builder: production path. Feed the maintained store the SAME no-data-metrics
-	// PodSummary rows the pod reflector projects (Sink carries the Table half).
-	maintained := newTypedMaintainedStore(meta, podQuerypageSchema(), podTableQueryAdapter())
-	streamMeta := meta // ClusterMeta is a type alias of streamrows.ClusterMeta
-	sink := maintained.Sink()
-	for _, pod := range pods {
-		sink.Upsert(podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister, nil)))
-	}
-	storeBuilder := &PodBuilder{
-		maintained: maintained,
-	}
-
-	scopes := []string{
-		"node:node-1",
-		"workload:prod:apps:v1:Deployment:orders",
-		// The ReplicaSet panel's Pods tab scope: the list path matches the pod's
-		// DIRECT controlling owner; the store path must match it identically even
-		// though the row's collapsed owner is the Deployment.
-		"workload:prod:apps:v1:ReplicaSet:orders-7d9c8b6f5",
-		// A standalone Pod row in the upper Workloads table scopes the lower
-		// table to that exact object. The empty core API group is intentional.
-		"object:prod::v1:Pod:lonely",
-		"namespace:prod",
-	}
-	for _, scope := range scopes {
+	for scope, want := range scopes {
 		t.Run(scope, func(t *testing.T) {
 			ctx := WithClusterMeta(context.Background(), meta)
-			listSnap, err := listBuilder.Build(ctx, scope)
+			snapshot, err := storeBuilder.Build(ctx, scope)
 			require.NoError(t, err)
-			storeSnap, err := storeBuilder.Build(ctx, scope)
-			require.NoError(t, err)
-
-			listRows := listSnap.Payload.(PodSnapshot).Rows
-			storeRows := storeSnap.Payload.(PodSnapshot).Rows
-			require.ElementsMatch(t, listRows, storeRows, "store-served rows must match list-path rows for scope %s", scope)
+			var got []string
+			for _, row := range snapshot.Payload.(PodSnapshot).Rows {
+				require.Equal(t, meta.ClusterID, row.Ref.ClusterID)
+				require.Empty(t, row.Ref.Group)
+				require.Equal(t, "v1", row.Ref.Version)
+				require.Equal(t, "Pod", row.Ref.Kind)
+				got = append(got, row.Ref.Namespace+"/"+row.Ref.Name)
+			}
+			require.ElementsMatch(t, want, got)
 		})
 	}
 

@@ -18,7 +18,7 @@ import (
 func BuildResourceModel(clusterID string, route *gatewayv1.GRPCRoute) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, route)
 	status := resourcemodel.BuildGatewayRouteStatusPresentation(route.ObjectMeta, facts.RouteCommonFacts)
-	return resourcemodel.GatewayAPIResourceModel(clusterID, "GRPCRoute", "grpcroutes", resourcemodel.ResourceScopeNamespaced, route.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, route.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts projects a GRPCRoute into its semantic facts.

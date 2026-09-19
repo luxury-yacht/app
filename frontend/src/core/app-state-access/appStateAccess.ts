@@ -1,4 +1,4 @@
-import { beginBrokerRead, completeBrokerRead } from '@/core/read-diagnostics';
+import { runBrokerRead } from '@/core/read-diagnostics';
 import type { AppStateRequest } from './types';
 
 export const requestAppState = async <T>({
@@ -8,20 +8,7 @@ export const requestAppState = async <T>({
   scope,
   read,
 }: AppStateRequest<T>): Promise<T> => {
-  const token = beginBrokerRead({
-    broker: 'app-state-access',
-    resource,
-    adapter,
-    label,
-    scope,
-  });
-
-  try {
-    const data = await read();
-    completeBrokerRead({ token, status: 'success' });
-    return data;
-  } catch (error) {
-    completeBrokerRead({ token, status: 'error', error });
-    throw error;
-  }
+  return runBrokerRead({ broker: 'app-state-access', resource, adapter, label, scope }, () =>
+    read()
+  );
 };

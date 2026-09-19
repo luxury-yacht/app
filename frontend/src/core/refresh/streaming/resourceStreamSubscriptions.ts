@@ -152,20 +152,6 @@ export class ResourceStreamSubscriptionStore {
       });
   }
 
-  findByScope(domain: DoorbellDomain, scope: string): StreamSubscription | undefined {
-    let match: StreamSubscription | undefined;
-    for (const subscription of this.subscriptions.values()) {
-      if (subscription.domain !== domain || subscription.normalizedScope !== scope) {
-        continue;
-      }
-      if (match) {
-        return undefined;
-      }
-      match = subscription;
-    }
-    return match;
-  }
-
   hasPendingUnsubscribe(subscription: StreamSubscription): boolean {
     return this.pendingUnsubscribes.has(subscription.key);
   }

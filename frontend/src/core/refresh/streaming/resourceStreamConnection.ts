@@ -17,9 +17,9 @@ export type ResourceStreamClientMessage = Omit<
 };
 
 export type ResourceStreamConnectionDelegate = {
-  handleConnectionOpen(clusterId: string): void;
-  handleMessage(clusterId: string, message: unknown): void;
-  handleConnectionError(clusterId: string, message: string): void;
+  handleConnectionOpen(): void;
+  handleMessage(message: unknown): void;
+  handleConnectionError(message: string): void;
 };
 
 export class ResourceStreamConnection {
@@ -40,15 +40,12 @@ export class ResourceStreamConnection {
       return;
     }
     try {
-      if (this.closed || this.paused) {
-        return;
-      }
       const socket = JSONStream(RESOURCE_STREAM_NAME);
       this.socket = socket;
       socket.onopen = () => this.handleOpen();
-      socket.onmessage = (event) => this.handleMessage(event);
+      socket.onmessage = (event) => this.delegate.handleMessage(event.data);
       socket.onerror = () => this.handleError('Resource stream connection error');
-      socket.onclose = () => this.handleClose('Resource stream connection closed');
+      socket.onclose = () => this.handleError('Resource stream connection closed');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to open resource stream';
       this.handleError(message);
@@ -93,7 +90,7 @@ export class ResourceStreamConnection {
 
   private handleOpen(): void {
     this.attempt = 0;
-    this.delegate.handleConnectionOpen('');
+    this.delegate.handleConnectionOpen();
     const pending = [...this.pendingMessages];
     this.pendingMessages = [];
     pending.forEach((message) => {
@@ -101,23 +98,11 @@ export class ResourceStreamConnection {
     });
   }
 
-  private handleMessage(event: MessageEvent): void {
-    this.delegate.handleMessage('', event.data);
-  }
-
   private handleError(message: string): void {
     if (this.closed || this.paused) {
       return;
     }
-    this.delegate.handleConnectionError('', message);
-    this.scheduleReconnect();
-  }
-
-  private handleClose(message: string): void {
-    if (this.closed || this.paused) {
-      return;
-    }
-    this.delegate.handleConnectionError('', message);
+    this.delegate.handleConnectionError(message);
     this.scheduleReconnect();
   }
 

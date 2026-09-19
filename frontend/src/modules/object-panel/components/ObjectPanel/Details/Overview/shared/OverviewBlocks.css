@@ -239,13 +239,3 @@
   color: var(--color-text-secondary);
   flex-shrink: 0;
 }
-
-/* ---------- Status accents (Ready / NotReady, etc.) ---------- */
-
-.overview-status-ready {
-  color: var(--color-success);
-}
-
-.overview-status-not-ready {
-  color: var(--color-warning);
-}

@@ -36,6 +36,8 @@ func TestBuildResourceModelStatus(t *testing.T) {
 		wantPresentation string
 		wantReason       string
 	}{
+		{name: "empty", wantState: "Unknown", wantLabel: "Unknown", wantPresentation: "unknown"},
+		{name: "unrecognized", phase: "Other", reason: "ExternalState", wantState: "Other", wantLabel: "Other", wantPresentation: "inactive", wantReason: "ExternalState"},
 		{name: "bound", phase: corev1.VolumeBound, wantState: "Bound", wantLabel: "Bound", wantPresentation: "ready"},
 		{name: "available", phase: corev1.VolumeAvailable, wantState: "Available", wantLabel: "Available", wantPresentation: "ready"},
 		{name: "pending", phase: corev1.VolumePending, wantState: "Pending", wantLabel: "Pending", wantPresentation: "warning"},

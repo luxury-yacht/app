@@ -7,7 +7,7 @@
  * its own row and that join input), so the generic registerIngestNotifyStreams does not cover
  * them — exactly like pods and the workload kinds. namespace-network is signal-only: the
  * broadcast ships only the change signal (Ref + ResourceVersion), never the projected row
- * (newObjectRowUpdate drops it), so the projected catalog Summary — which carries the
+ * — the projected catalog Summary carries the
  * kind/identity/namespace/name/uid/resourceVersion — is all the signal needs.
  *
  * Both kinds broadcast on the SAME domain (namespace-network) and the SAME namespace scope,
@@ -75,13 +75,6 @@ func (s networkNotifyCatalogSink) broadcast(row interface{}, updateType MessageT
 	}
 	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: s.manager.clusterMeta.ClusterID, Group: s.identity.Group, Version: s.identity.Version, Kind: s.identity.Kind, Resource: s.identity.Resource, Namespace: summary.Ref.Namespace, Name: summary.Ref.Name, UID: summary.Ref.UID})
 
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceNetwork,
-		ClusterID:       s.manager.clusterMeta.ClusterID,
-		ClusterName:     s.manager.clusterMeta.ClusterName,
-		ResourceVersion: summary.ResourceVersion,
-		Ref:             &ref,
-	}
+	update := s.manager.newObjectUpdate(updateType, domainNamespaceNetwork, summary.ResourceVersion, ref)
 	s.manager.broadcast(domainNamespaceNetwork, scopesForNamespace(summary.Ref.Namespace), update)
 }

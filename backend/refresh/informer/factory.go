@@ -395,10 +395,7 @@ func (f *Factory) waitForCachesToSettle(ctx context.Context) bool {
 }
 
 func (f *Factory) cachesSettled() bool {
-	f.syncStatesMu.Lock()
-	states := make([]*informerSyncState, len(f.syncStates))
-	copy(states, f.syncStates)
-	f.syncStatesMu.Unlock()
+	states, _ := f.syncStateSnapshot()
 	for _, state := range states {
 		if state.factoryGateExempt {
 			// Waited on per-resource (ResourcesSettled) by the domains that declare
@@ -410,6 +407,13 @@ func (f *Factory) cachesSettled() bool {
 		}
 	}
 	return true
+}
+
+// Copy registrations with shutdown state under one lock, then evaluate outside it.
+func (f *Factory) syncStateSnapshot() ([]*informerSyncState, bool) {
+	f.syncStatesMu.Lock()
+	defer f.syncStatesMu.Unlock()
+	return append([]*informerSyncState(nil), f.syncStates...), f.shutdown
 }
 
 // stateSettled reports whether one informer has stopped gating readiness: it has
@@ -492,11 +496,7 @@ func (f *Factory) ResourcesSettled(keys []string) bool {
 	if f == nil {
 		return false
 	}
-	f.syncStatesMu.Lock()
-	shutdown := f.shutdown
-	states := make([]*informerSyncState, len(f.syncStates))
-	copy(states, f.syncStates)
-	f.syncStatesMu.Unlock()
+	states, shutdown := f.syncStateSnapshot()
 	if shutdown {
 		return false
 	}
@@ -527,35 +527,26 @@ func (f *Factory) ResourceReadiness(keys []string) map[string]refresh.ResourceRe
 	if f == nil {
 		return result
 	}
-	f.syncStatesMu.Lock()
-	shutdown := f.shutdown
-	states := make([]*informerSyncState, len(f.syncStates))
-	copy(states, f.syncStates)
-	f.syncStatesMu.Unlock()
-
-	wanted := make(map[string]struct{}, len(keys))
+	states, shutdown := f.syncStateSnapshot()
 	for _, key := range keys {
-		wanted[key] = struct{}{}
 		result[key] = refresh.ResourceReadinessUnknown
-	}
-	if shutdown {
-		for key := range wanted {
+		if shutdown {
 			result[key] = refresh.ResourceReadinessPending
 		}
+	}
+	if shutdown {
 		return result
 	}
 
-	found := make(map[string]bool, len(keys))
 	for _, state := range states {
-		if _, ok := wanted[state.key]; !ok {
+		current, requested := result[state.key]
+		if !requested {
 			continue
 		}
-		found[state.key] = true
-		readiness := f.stateReadiness(state)
-		result[state.key] = mergeResourceReadiness(result[state.key], readiness)
+		result[state.key] = mergeResourceReadiness(current, f.stateReadiness(state))
 	}
-	for key := range wanted {
-		if !found[key] {
+	for key, readiness := range result {
+		if readiness == refresh.ResourceReadinessUnknown {
 			result[key] = refresh.ResourceReadinessUnavailable
 		}
 	}
@@ -703,26 +694,7 @@ func (f *Factory) processPendingClusterInformers() {
 		return
 	}
 
-	requestsMap := make(map[string]PermissionRequest, len(f.pendingClusterInformers)*2)
-	for _, pending := range f.pendingClusterInformers {
-		if pending.group == "" && pending.resource == "" {
-			continue
-		}
-		keyList := fmt.Sprintf("list:%s/%s", pending.group, pending.resource)
-		requestsMap[keyList] = PermissionRequest{Group: pending.group, Resource: pending.resource, Verb: "list"}
-		keyWatch := fmt.Sprintf("watch:%s/%s", pending.group, pending.resource)
-		requestsMap[keyWatch] = PermissionRequest{Group: pending.group, Resource: pending.resource, Verb: "watch"}
-	}
-
-	if len(requestsMap) > 0 {
-		requests := make([]PermissionRequest, 0, len(requestsMap))
-		for _, req := range requestsMap {
-			requests = append(requests, req)
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), config.PermissionPrimeTimeout)
-		_ = f.PrimePermissions(ctx, requests)
-		cancel()
-	}
+	f.primePendingClusterPermissions()
 
 	for _, pending := range f.pendingClusterInformers {
 		listAllowed, listErr := f.CanListResource(pending.group, pending.resource)
@@ -739,6 +711,26 @@ func (f *Factory) processPendingClusterInformers() {
 	}
 
 	f.pendingClusterInformers = nil
+}
+
+func (f *Factory) primePendingClusterPermissions() {
+	requests := make([]PermissionRequest, 0, len(f.pendingClusterInformers)*2)
+	for _, pending := range f.pendingClusterInformers {
+		if pending.group == "" && pending.resource == "" {
+			continue
+		}
+		requests = append(requests,
+			PermissionRequest{Group: pending.group, Resource: pending.resource, Verb: "list"},
+			PermissionRequest{Group: pending.group, Resource: pending.resource, Verb: "watch"},
+		)
+	}
+
+	if len(requests) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), config.PermissionPrimeTimeout)
+		_ = f.PrimePermissions(ctx, requests)
+		cancel()
+	}
+
 }
 
 func (f *Factory) checkResourceVerb(group, resource, verb string) (bool, error) {
@@ -793,16 +785,14 @@ func (f *Factory) PrimePermissions(ctx context.Context, requests []PermissionReq
 	if len(requests) == 0 {
 		return nil
 	}
-	unique := make(map[string]PermissionRequest, len(requests))
+	unique := make(map[PermissionRequest]struct{}, len(requests))
 	for _, req := range requests {
-		key := fmt.Sprintf("%s/%s/%s", req.Group, req.Resource, req.Verb)
-		unique[key] = req
+		unique[req] = struct{}{}
 	}
 
 	g, _ := errgroup.WithContext(ctx)
 	g.SetLimit(16)
-	for _, req := range unique {
-		req := req
+	for req := range unique {
 		g.Go(func() error {
 			_, err := f.checkResourceVerb(req.Group, req.Resource, req.Verb)
 			return err

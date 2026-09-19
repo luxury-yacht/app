@@ -362,18 +362,14 @@ export const jobDescriptor: OverviewDescriptor<JobDetails> = {
         label: 'Active Deadline',
         hidden: (d) =>
           !(typeof d.activeDeadlineSeconds === 'number' && d.activeDeadlineSeconds > 0),
-        render: (d) =>
-          typeof d.activeDeadlineSeconds === 'number' ? `${d.activeDeadlineSeconds}s` : undefined,
+        render: (d) => `${d.activeDeadlineSeconds}s`,
       },
       {
         field: 'ttlSecondsAfterFinished',
         label: 'TTL Seconds',
         hidden: (d) =>
           !(typeof d.ttlSecondsAfterFinished === 'number' && d.ttlSecondsAfterFinished >= 0),
-        render: (d) =>
-          typeof d.ttlSecondsAfterFinished === 'number'
-            ? `${d.ttlSecondsAfterFinished}s`
-            : undefined,
+        render: (d) => `${d.ttlSecondsAfterFinished}s`,
       },
     ],
   },
@@ -403,7 +399,7 @@ export const cronJobDescriptor: OverviewDescriptor<CronJobDetails> = {
         field: 'suspend',
         label: 'Status',
         hidden: (d) => !d.suspend,
-        render: (d) => (d.suspend ? <StatusChip variant="warning">Suspended</StatusChip> : null),
+        render: () => <StatusChip variant="warning">Suspended</StatusChip>,
       },
       {
         field: 'schedule',

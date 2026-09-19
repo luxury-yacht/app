@@ -3,15 +3,10 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as resourcemodel$0 from "../../resourcemodel/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
-
-/**
- * DataSourceInfo represents the data source of a PVC.
- */
-export interface DataSourceInfo {
-    "kind": string;
-    "name": string;
-}
 
 export interface PersistentVolumeClaimDetails {
     "kind": string;
@@ -28,7 +23,7 @@ export interface PersistentVolumeClaimDetails {
     "capacity": string;
     "volumeMode": string;
     "selector"?: { [_ in string]?: string } | null;
-    "dataSource"?: DataSourceInfo | null;
+    "dataSource"?: resourcemodel$0.ResourceLink | null;
     "conditions"?: string[] | null;
     "labels"?: { [_ in string]?: string } | null;
     "annotations"?: { [_ in string]?: string } | null;

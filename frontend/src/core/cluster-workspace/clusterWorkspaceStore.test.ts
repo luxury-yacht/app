@@ -1,7 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import { createWailsRuntimeHarness } from '@/test-utils/wailsRuntimeHarness';
-import { ClusterWorkspaceStore, type ClusterWorkspaceWireState } from './clusterWorkspaceStore';
+import {
+  ClusterWorkspaceStore,
+  type ClusterWorkspaceWireState,
+  isConfirmedAuthFailure,
+} from './clusterWorkspaceStore';
 
 const emptyState = (): ClusterWorkspaceWireState => ({
   selectedKubeconfigs: [],
@@ -527,4 +531,172 @@ it('keeps a confirmed cluster-view close ahead of an older workspace read', asyn
   } finally {
     release();
   }
+});
+
+/**
+ * The per-cluster error class (verdict) must be sticky — set by terminal
+ * failures and probe results, never cleared by a recovering transition alone —
+ * so the failure surface stays stable across automatic retries.
+ */
+describe('auth error state transitions', () => {
+  let runtime: ReturnType<typeof createWailsRuntimeHarness>;
+  let store: ClusterWorkspaceStore;
+  let release: () => void;
+
+  beforeEach(async () => {
+    runtime = createWailsRuntimeHarness();
+    store = new ClusterWorkspaceStore({ read: async () => emptyState(), onEvent: runtime.onEvent });
+    release = store.acquire();
+    await store.hydrate();
+  });
+
+  afterEach(() => release());
+
+  const requireClusterState = () => store.getAuth('c1');
+
+  it('marks a terminal failure as a confirmed auth verdict', () => {
+    runtime.emit('cluster:auth:failed', {
+      clusterId: 'c1',
+      clusterName: 'alpha',
+      reason: 'token expired',
+    });
+
+    const state = requireClusterState();
+    expect(state.hasError).toBe(true);
+    expect(state.errorClass).toBe('auth');
+    expect(isConfirmedAuthFailure(state)).toBe(true);
+  });
+
+  it('does not confirm a fresh recovering cluster before any probe verdict', () => {
+    runtime.emit('cluster:auth:recovering', {
+      clusterId: 'c1',
+      clusterName: 'alpha',
+      reason: '401 Unauthorized',
+    });
+
+    const state = requireClusterState();
+    expect(state.hasError).toBe(true);
+    expect(state.isRecovering).toBe(true);
+    expect(state.errorClass).toBe('');
+    expect(isConfirmedAuthFailure(state)).toBe(false);
+  });
+
+  it('keeps a connectivity verdict unconfirmed (cluster unreachable, waiting)', () => {
+    runtime.emit('cluster:auth:recovering', { clusterId: 'c1', reason: '401' });
+    runtime.emit('cluster:auth:progress', {
+      clusterId: 'c1',
+      secondsUntilRetry: 15,
+      errorClass: 'connectivity',
+    });
+
+    const state = requireClusterState();
+    expect(state.errorClass).toBe('connectivity');
+    expect(isConfirmedAuthFailure(state)).toBe(false);
+  });
+
+  it('confirms an auth verdict reported by a probe', () => {
+    runtime.emit('cluster:auth:recovering', { clusterId: 'c1', reason: '401' });
+    runtime.emit('cluster:auth:progress', {
+      clusterId: 'c1',
+      secondsUntilRetry: 5,
+      errorClass: 'auth',
+    });
+
+    expect(isConfirmedAuthFailure(requireClusterState())).toBe(true);
+  });
+
+  it('carries the exec command, kind, and summary from a failed event', () => {
+    runtime.emit('cluster:auth:failed', {
+      clusterId: 'c1',
+      reason: 'exec: executable gke-gcloud-auth-plugin not found',
+      kind: 'missing-helper',
+      summary: "The kubeconfig's credential helper could not be found.",
+      execCommand: 'gke-gcloud-auth-plugin',
+    });
+
+    const state = requireClusterState();
+    expect(state.execCommand).toBe('gke-gcloud-auth-plugin');
+    expect(state.diagnosticKind).toBe('missing-helper');
+    expect(state.diagnosticSummary).toBe("The kubeconfig's credential helper could not be found.");
+  });
+
+  it('carries the exec command from a recovering event', () => {
+    runtime.emit('cluster:auth:recovering', {
+      clusterId: 'c1',
+      reason: 'exec: executable aws not found',
+      execCommand: 'aws',
+    });
+
+    expect(requireClusterState().execCommand).toBe('aws');
+  });
+
+  it('keeps the exec command sticky across a progress event without one', () => {
+    runtime.emit('cluster:auth:recovering', {
+      clusterId: 'c1',
+      reason: 'missing helper',
+      execCommand: 'gke-gcloud-auth-plugin',
+    });
+    runtime.emit('cluster:auth:progress', { clusterId: 'c1', secondsUntilRetry: 5 });
+
+    expect(requireClusterState().execCommand).toBe('gke-gcloud-auth-plugin');
+  });
+
+  it('adopts the exec command from a progress event that carries one', () => {
+    runtime.emit('cluster:auth:recovering', { clusterId: 'c1', reason: 'x' });
+    runtime.emit('cluster:auth:progress', {
+      clusterId: 'c1',
+      secondsUntilRetry: 5,
+      execCommand: 'aws',
+    });
+
+    expect(requireClusterState().execCommand).toBe('aws');
+  });
+
+  it('keeps the previous verdict when a progress event has no verdict yet', () => {
+    runtime.emit('cluster:auth:failed', { clusterId: 'c1', reason: 'expired' });
+    runtime.emit('cluster:auth:recovering', { clusterId: 'c1' });
+    runtime.emit('cluster:auth:progress', {
+      clusterId: 'c1',
+      secondsUntilRetry: 0,
+      errorClass: '',
+    });
+
+    const state = requireClusterState();
+    expect(state.errorClass).toBe('auth');
+    expect(isConfirmedAuthFailure(state)).toBe(true);
+  });
+
+  it('keeps the auth verdict across an automatic retry (no overlay flicker)', () => {
+    runtime.emit('cluster:auth:failed', { clusterId: 'c1', reason: 'expired' });
+    runtime.emit('cluster:auth:recovering', { clusterId: 'c1', reason: 'expired' });
+
+    const state = requireClusterState();
+    expect(state.isRecovering).toBe(true);
+    expect(state.errorClass).toBe('auth');
+    expect(isConfirmedAuthFailure(state)).toBe(true);
+  });
+
+  it('lets a connectivity probe verdict supersede an auth verdict', () => {
+    // Credentials were bad, then the cluster became unreachable before they
+    // were fixed: unreachable is a waiting state, not a confirmed failure.
+    runtime.emit('cluster:auth:failed', { clusterId: 'c1', reason: 'expired' });
+    runtime.emit('cluster:auth:recovering', { clusterId: 'c1' });
+    runtime.emit('cluster:auth:progress', {
+      clusterId: 'c1',
+      secondsUntilRetry: 15,
+      errorClass: 'connectivity',
+    });
+
+    expect(isConfirmedAuthFailure(requireClusterState())).toBe(false);
+  });
+
+  it('ignores progress for clusters without an active error', () => {
+    runtime.emit('cluster:auth:progress', {
+      clusterId: 'c1',
+      secondsUntilRetry: 0,
+      errorClass: 'auth',
+    });
+
+    expect(store.getSnapshot().clusters.size).toBe(0);
+  });
 });

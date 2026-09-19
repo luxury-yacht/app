@@ -2,7 +2,6 @@ package backend
 
 import (
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
-	"github.com/luxury-yacht/app/backend/resources/events"
 	"github.com/luxury-yacht/app/backend/resources/helm"
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
@@ -42,24 +41,7 @@ type (
 	DebugContainerResponse              = types.DebugContainerResponse
 	ShellOutputEvent                    = types.ShellOutputEvent
 	ShellStatusEvent                    = types.ShellStatusEvent
-	ClsNodeInfo                         = types.ClsNodeInfo
-	ClsRBACInfo                         = types.ClsRBACInfo
-	ClsStorageInfo                      = types.ClsStorageInfo
-	ClsConfigInfo                       = types.ClsConfigInfo
-	ClsCRDInfo                          = types.ClsCRDInfo
-	ClsEventsInfo                       = types.ClsEventsInfo
-	Event                               = events.Event
-	ClsAdmissionControlInfo             = types.ClsAdmissionControlInfo
-	ClsStorageClassInfo                 = types.ClsStorageClassInfo
-	ClsIngressClassInfo                 = types.ClsIngressClassInfo
 	PodSimpleInfo                       = types.PodSimpleInfo
-	NsRBACInfo                          = types.NsRBACInfo
-	NsStorageInfo                       = types.NsStorageInfo
-	NsConfigInfo                        = types.NsConfigInfo
-	NsNetworkInfo                       = types.NsNetworkInfo
-	NsAutoscalingInfo                   = types.NsAutoscalingInfo
-	NsQuotaInfo                         = types.NsQuotaInfo
-	NsHelmInfo                          = types.NsHelmInfo
 	HelmReleaseDetails                  = helm.HelmReleaseDetails
 	PodDetailInfoContainer              = types.PodDetailInfoContainer
 	PodDetailInfo                       = types.PodDetailInfo

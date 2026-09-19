@@ -24,9 +24,6 @@ import {
 
 export interface ErrorNotification extends ErrorDetails {
   id: string;
-  dismissed: boolean;
-  autoDismiss?: boolean;
-  autoDismissTimeout?: number;
 }
 
 interface ErrorContextValue {
@@ -49,6 +46,28 @@ interface ErrorProviderProps {
   autoDismissWarningTimeout?: number;
 }
 
+interface AutoDismissPolicy {
+  autoDismiss: boolean;
+  autoDismissTimeout: number;
+}
+
+const resolveAutoDismiss = (
+  error: ErrorDetails,
+  defaults: Record<'info' | 'warning', AutoDismissPolicy>
+): AutoDismissPolicy => {
+  const fallback = error.severity === ErrorSeverity.INFO ? defaults.info : defaults.warning;
+  if (error.autoDismiss !== undefined) {
+    return {
+      autoDismiss: error.autoDismiss,
+      autoDismissTimeout: error.autoDismissTimeout ?? fallback.autoDismissTimeout,
+    };
+  }
+  const autoDismiss =
+    (error.severity === ErrorSeverity.INFO || error.severity === ErrorSeverity.WARNING) &&
+    fallback.autoDismiss;
+  return { autoDismiss, autoDismissTimeout: autoDismiss ? fallback.autoDismissTimeout : 0 };
+};
+
 export const ErrorProvider: React.FC<ErrorProviderProps> = ({
   children,
   maxErrors = 5,
@@ -60,13 +79,9 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
   const [errors, setErrors] = useState<ErrorNotification[]>([]);
   const errorIdCounter = useRef(0);
   const dismissTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  // Tracks the 300ms animation-delay timers used by dismissError/dismissAllErrors
-  const animationTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   const dismissError = useCallback((id: string) => {
-    setErrors((prev) =>
-      prev.map((error) => (error.id === id ? { ...error, dismissed: true } : error))
-    );
+    setErrors((prev) => prev.filter((error) => error.id !== id));
 
     // Clear any associated timer
     const timer = dismissTimers.current.get(id);
@@ -74,13 +89,6 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
       clearTimeout(timer);
       dismissTimers.current.delete(id);
     }
-
-    // Remove dismissed error after animation
-    const animTimer = setTimeout(() => {
-      setErrors((prev) => prev.filter((error) => error.id !== id));
-      animationTimers.current.delete(animTimer);
-    }, 300);
-    animationTimers.current.add(animTimer);
   }, []);
 
   const addError = useCallback(
@@ -90,37 +98,19 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
       // Determine auto-dismiss settings. An explicit per-notification request
       // (error.autoDismiss) wins over the severity-based defaults, so a single
       // advisory can auto-dismiss without flipping the global severity flags.
-      let autoDismiss = false;
-      let autoDismissTimeout = 0;
-
-      if (error.autoDismiss !== undefined) {
-        autoDismiss = error.autoDismiss;
-        autoDismissTimeout =
-          error.autoDismissTimeout ??
-          (error.severity === ErrorSeverity.INFO
-            ? autoDismissInfoTimeout
-            : autoDismissWarningTimeout);
-      } else if (error.severity === ErrorSeverity.INFO && autoDismissInfo) {
-        autoDismiss = true;
-        autoDismissTimeout = autoDismissInfoTimeout;
-      } else if (error.severity === ErrorSeverity.WARNING && autoDismissWarning) {
-        autoDismiss = true;
-        autoDismissTimeout = autoDismissWarningTimeout;
-      }
+      const { autoDismiss, autoDismissTimeout } = resolveAutoDismiss(error, {
+        info: { autoDismiss: autoDismissInfo, autoDismissTimeout: autoDismissInfoTimeout },
+        warning: { autoDismiss: autoDismissWarning, autoDismissTimeout: autoDismissWarningTimeout },
+      });
 
       const notification: ErrorNotification = {
         ...error,
         id,
-        dismissed: false,
         autoDismiss,
         autoDismissTimeout,
       };
 
-      setErrors((prev) => {
-        // Keep only the most recent errors up to maxErrors
-        const newErrors = [notification, ...prev].slice(0, maxErrors);
-        return newErrors;
-      });
+      setErrors((prev) => [notification, ...prev].slice(0, maxErrors));
 
       // Set up auto-dismiss timer if needed
       if (autoDismiss && autoDismissTimeout > 0) {
@@ -166,35 +156,6 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
     };
   }, [addError]);
 
-  // Clear in-flight animation timers on unmount only — kept separate so that
-  // addError identity changes (from provider prop updates) don't cancel pending
-  // 300ms dismiss animations and leave errors stuck in internal state.
-  useEffect(() => {
-    const animTimers = animationTimers.current;
-    return () => {
-      animTimers.forEach((timer) => {
-        clearTimeout(timer);
-      });
-    };
-  }, []);
-
-  const dismissAllErrors = useCallback(() => {
-    setErrors((prev) => prev.map((error) => ({ ...error, dismissed: true })));
-
-    // Clear all timers
-    dismissTimers.current.forEach((timer) => {
-      clearTimeout(timer);
-    });
-    dismissTimers.current.clear();
-
-    // Remove all errors after animation
-    const animTimer = setTimeout(() => {
-      setErrors([]);
-      animationTimers.current.delete(animTimer);
-    }, 300);
-    animationTimers.current.add(animTimer);
-  }, []);
-
   const clearErrors = useCallback(() => {
     // Clear all timers
     dismissTimers.current.forEach((timer) => {
@@ -220,10 +181,10 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
   );
 
   const value: ErrorContextValue = {
-    errors: errors.filter((e) => !e.dismissed),
+    errors,
     addError,
     dismissError,
-    dismissAllErrors,
+    dismissAllErrors: clearErrors,
     clearErrors,
     retryError,
   };

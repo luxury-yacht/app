@@ -22,30 +22,23 @@ var supportedKinds = map[string]struct{}{
 }
 
 type Presence struct {
-	versionsByKind map[string]string
+	kinds map[string]struct{}
 }
 
 func EmptyPresence() *Presence {
-	return &Presence{versionsByKind: map[string]string{}}
+	return &Presence{kinds: map[string]struct{}{}}
 }
 
 func (p *Presence) AnyPresent() bool {
-	return p != nil && len(p.versionsByKind) > 0
+	return p != nil && len(p.kinds) > 0
 }
 
 func (p *Presence) Has(kind string) bool {
 	if p == nil {
 		return false
 	}
-	_, ok := p.versionsByKind[strings.TrimSpace(kind)]
+	_, ok := p.kinds[strings.TrimSpace(kind)]
 	return ok
-}
-
-func (p *Presence) PreferredVersion(group, kind string) string {
-	if group != Group || p == nil {
-		return ""
-	}
-	return p.versionsByKind[strings.TrimSpace(kind)]
 }
 
 func DiscoverViaDiscovery(ctx context.Context, discoveryClient discovery.DiscoveryInterface) (*Presence, error) {
@@ -79,9 +72,7 @@ func recordGatewayAPIResources(presence *Presence, list *metav1.APIResourceList)
 		if _, ok := supportedKinds[resource.Kind]; !ok {
 			continue
 		}
-		if existing := presence.versionsByKind[resource.Kind]; existing == "" || version == "v1" {
-			presence.versionsByKind[resource.Kind] = version
-		}
+		presence.kinds[resource.Kind] = struct{}{}
 	}
 }
 

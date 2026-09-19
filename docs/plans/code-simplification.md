@@ -4,6 +4,17 @@ Baseline: `6d93acb773ab245e79b9e5c932fc2e87e9d5a8c0` (2026-09-16).
 Scope: the repository, including quiet code; recency does not restrict selection.
 Follow the [systematic workflow](../workflows/code-simplification.md).
 
+## Current status: reopened for thorough review
+
+The earlier domain dispositions do not establish exhaustive implementation-file
+coverage. The user's correction reopens this effort. The [file review manifest](code-simplification-review.json)
+now records the implementation inventory separately from inspected source hashes,
+candidate decisions, consumer traces, and validation. An inventory path absent
+from its review records is pending; historical domain labels below do not close it.
+Review records and passing tests establish different things. No repository-wide
+completion claim is warranted until the pending inventory and required checks
+are resolved.
+
 ## Target and non-goals
 
 Reduce the number of independently understood policies, representations, state
@@ -2133,3 +2144,1049 @@ entry-HEAD diff counts, not a measure of how much code was reviewed. No commit,
 push or PR mutation was made. Only the ledger was updated after the gate; its
 final update passed `qc:docs` and `git diff --check`
 (`/tmp/luxury-yacht-remaining-docs.log`).
+
+## D001/D002 — review restarted from source, September 18
+
+The reopened inventory begins at `616adb20`. The file manifest records full
+inspection of 98 frontend table/resource-grid/selection/Favorites/AppLogs files
+and all 25 production files in `backend/objectcatalog`: 123 of 1,845 authored
+implementation paths. The other 1,722 paths remain pending in this restarted
+review, including files with earlier historical dispositions. External consumer
+reads and passing suites do not count as full file review.
+
+Implemented work:
+
+- Shared table width projection, resize flushing and column reorder policy;
+  moved synchronization bookkeeping to its owning hooks; removed the unused
+  resize input, width callback and definition-only width resolver. Preserved
+  filter hydration and save-debounce effect dependencies.
+- Consolidated multiselect normalization with explicit comparison policy,
+  Favorites draft construction/footer rendering, and resource-grid Favorites
+  integration. Removed pagination/filter forwarding copies and a single-use
+  query filter wrapper.
+- Corrected two contracts discovered on those paths: published width snapshots
+  shared the mutable measurement cache, and cluster selections folded distinct
+  IDs by case. Existing/new workflow tests failed before each correction. Exact
+  cluster comparison now covers table options, persistence, Favorites and
+  Application Logs, including pruning after new log entries.
+- Removed catalog `summaryChunk` publication scaffolding and the production
+  wrapper used only by query fixtures. Row publication and pre-publication
+  snapshot fallback share query-store construction. Fixture migration used a
+  Go AST codemod; query assertions were retained.
+- Unified single/batched catalog permission-result policy and unstructured port
+  eligibility. Existing namespace fan-out tests now also check the single-check
+  fallback; protocol characterization covers Pod, Service and workload paths.
+
+Rejected consolidations and retained complexity are recorded per candidate in
+the manifest. In particular, body-column rendering and width measurement use
+non-equivalent comparisons for invalid bounds; that proposed consolidation was
+reverted. Catalog cold incremental publication, warm replacement, source
+readiness/fallback paths, namespace facets, and ingest/watch contention recovery
+retain their distinct contracts.
+
+### Validation record for this worktree
+
+Logs are temporary local artifacts under `/tmp/luxury-yacht-deep-*`:
+
+- Width mutation regression: `width-red.log` then `width-green.log`.
+- Case-distinct cluster IDs: `cluster-red.log`/`cluster-green.log`,
+  `favorite-red.log`/`selection-after.log`, and
+  `applogs-red.log`/`applogs-green2.log` (25 tests in the latter).
+- Frontend coverage task: `frontend-coverage-final.log`, 513 files / 4,852 tests,
+  88.16% statements (37,177/42,166). Changed behavior paths exceed 80%; the
+  lowest changed frontend file before the column-window rollback was filter
+  wiring at 80.82%. After rollback, the focused three-file window suite passed
+  10 tests (`window-retained.log`); its subset coverage is not full-suite
+  coverage of the restored layout function.
+- Width helper assertion pruning: 41/42 statements before, 35/35 after;
+  surviving helper tests pass (`width-coverage-before.log`,
+  `width-coverage-after.log`). Removed assertions belonged to a resolver with
+  no production references in the captured repository search.
+- Catalog characterization passed before edits (`catalog-before.log`). Full
+  catalog tests passed after publication refactoring
+  (`catalog-publication-escalated.log`). The first default-sandbox attempt was
+  blocked by the localhost `httptest` listener, not an assertion failure.
+  Permission and action-fact focused checks passed
+  (`catalog-permissions.log`, `catalog-action-facts.log`).
+- Local complexity: 75 changed/new TypeScript functions have no Biome findings
+  above 12 (`complexity-audit.log`); seven unchanged function findings remain.
+  The 11 changed/new Go functions score 1–9 with gocognit v1.2.1
+  (`catalog-complexity.json`). These are local signals, not Sonar closure.
+- The read-only PR #355 Sonar audit reports zero open/confirmed new-code issues
+  (`sonar-escalated.log`). It analyzes the published revision, not these
+  uncommitted changes.
+- Backend coverage task passed (`backend-coverage.log`): 78.23% statements
+  repository-wide (33,791/43,194). The catalog publication/query construction
+  functions and permission-result policy have 100% statement coverage;
+  batched permission evaluation has 94.1%. `action_facts.go` has 69.41%, with
+  unchanged HPA helpers contributing to the gap; the changed port helpers have
+  90.9% and 100%. These catalog changes preserve behavior.
+- The full `qc:prerelease` gate passed (exit 0, `prerelease.log`): docs,
+  formatting, bindings, vet/staticcheck, backend race tests, frontend lint,
+  typecheck and 4,852 tests, Knip, and Trivy. This validates the D001/D002
+  worktree; it does not close the pending repository review.
+
+Native Wails observations: Nodes displayed a loading state and then three
+rows. A temporary unmatched text filter displayed zero rows; clearing it
+restored the rows. The Favorites draft displayed the current table settings,
+and keyboard column reordering moved Version before Name. Cancel closed the
+unsaved draft and the live table retained its order. A pointer-drag attempt did
+not visibly reorder and is not counted as passing. The standalone browser URL
+served Vite but lacked `/wails/runtime`; it is not native interaction evidence.
+Case-distinct cluster selection and the width mutation are covered by automated
+workflow regressions; those exact states were not available in the connected
+native cluster.
+
+Native Browse also displayed its loading state, then 678 objects with rows
+1–250 on page 1/3. Next displayed rows 251–500 on page 2/3, and Previous returned
+to rows 1–250. Navigation was restored to Overview before stopping the owned
+development process and running the prerelease gate. No resource or Favorites
+mutation was saved during these interaction checks.
+
+## Reopened deep review: D003 and D004
+
+The manifest now records 237 fully inspected implementation paths and 1,608
+pending paths. This is an in-progress repository review, not a completion claim.
+File hashes, consumer paths, retained alternatives and candidate decisions are
+in `code-simplification-review.json`. Passing tests do not count as inspection
+of the remaining source.
+
+### D003: cluster, auth and workspace ownership
+
+Inspected 63 implementation files covering runtime clients, lifecycle,
+heartbeats, auth recovery, selection/close/transfer, kubeconfig discovery,
+exec-provider diagnostics and frontend workspace/context ownership.
+
+- Centralized the snapshot of cluster clients under the map lock. Auth state
+  checks, heartbeat work, recovery shutdown and rate-limit updates now operate
+  on that snapshot after releasing the map lock. The new concurrency regression
+  first reproduced a healthy-cluster lookup blocked by another cluster's auth
+  callback (`auth-lock-red2.log`), then passed (`auth-lock-green.log`).
+- Split per-cluster heartbeat work from batch iteration while retaining the
+  state publication → event → log → auth report ordering.
+- Removed forwarding helpers and repeated selection copies; retained ordered
+  selection equality, non-null empty selection results and exact cluster IDs.
+- Removed test-only frontend auth transition exports. All twelve existing
+  scenarios now exercise the workspace store's production event adapters.
+- Retained distinct close/recovery phases, selection versus committed selection,
+  authoritative generations and hydration field guards; their ownership and
+  ordering differ and are documented per candidate in the manifest.
+
+Focused backend workspace/auth tests passed (`workspace-batch.log`), as did
+six frontend suites with 78 tests (`auth-workflows-after.log`). The backend
+coverage task passed (`backend-coverage-d003.log`): 78.22% overall statements,
+with the changed auth scan at 83.3% and client snapshot at 80.0%. Repository-wide
+coverage is not a claim that every backend path reaches the target. The local
+Go token/AST comparison and gocognit audit covered 33 changed/new functions,
+all at or below 12 (`go-complexity-audit.json`).
+
+The first D003 frontend coverage attempt failed on a 5-second YAML test timeout
+(`frontend-coverage-d003.log`). The unchanged 34-test YAML suite passed separately
+(`yaml-timeout-check.log`). The cause of the timeout was not established. The
+later full D004 coverage run passed that test and all other tests.
+
+### D004: panel identity, permission projection and details
+
+Inspected 51 additional implementation paths, including panel state/lazy
+modules, scope construction, tab/refresh/capability hooks, detail derivation,
+rendering infrastructure and the shared capability owner. The remaining tabs
+and descriptor families are still pending; this does not close object-panel
+review.
+
+- Shared invalid-scope projection and removed redundant scope construction,
+  constant state, duplicate callbacks and an unused refresh prop.
+- Fixed deletion markers crossing cluster-case/group/version identities and
+  namespace permission deduplication ignoring cluster changes. Four regressions
+  failed before the fix (`panel-identity-red.log`) and passed afterward
+  (`panel-core-green.log`).
+- Shared descriptor identity validation and projection across YAML, shell,
+  debug, logs, generated actions and Helm reads. Explicit core API group survives
+  normalization. Five cases prove missing identity blocks checks and subsequent
+  complete identity enables them (`panel-permissions-red.log`,
+  `panel-permissions-green.log`).
+- Named capability results now carry complete descriptor identity and reject
+  superseded success/error responses. Six regression cases cover reused action
+  IDs and out-of-order replies (`permission-isolation-red.log`,
+  `permission-and-data-before.log`). Shared map keys retain exact cluster case;
+  the batch/lookup regression preserves opposite grants for case-distinct
+  clusters (`permission-store-red2.log`).
+- Permission-store reset now invalidates earlier namespace, cluster and lazy-kind
+  requests, including their cleanup, and cancels staggered refresh timers. Four
+  failing reset regressions passed after the fix (`permission-reset-red2.log`,
+  `permission-reset-green.log`). Fresh queries after reset remain permitted.
+- Shared text/binary data item rendering, removed repeated entry enumeration and
+  isolated secret encoding fallback. Characterization retains empty/Unicode
+  fallback values, binary clipboard values, decode toggles and copy feedback.
+- Retained descriptor visibility-before-render, ordering, generic fallback,
+  finalizer permission distinctions, node discovery cancellation and independent
+  refresh leases. The possible cross-object HPA-state issue was rejected for
+  the inspected production mount: `AppLayout.tsx` keys the parent boundary by
+  the canonical full-identity panel ID. No behavior change was made there.
+
+Validation logs use the `/tmp/luxury-yacht-deep-` prefix. The broader panel and
+permission suite passed 97 files / 852 tests (`panel-batch.log`). Typecheck passed
+(`typecheck-d004-final.log`). The first full D004 coverage run passed 513 files /
+4,870 tests at 88.19% statements (`frontend-coverage-d004.log`); all changed
+frontend files exceeded 80%, including panel capabilities at 94.66%, named hooks
+at 93.79% and permission store at 89.12%. That run preceded the reset fix. The fresh coverage task passed 513 files /
+4,874 tests at 88.25% statements (`frontend-coverage-d004-final.log`). The local
+complexity audit reports 142 changed/new TypeScript functions and 33 Go functions
+at or below 12; unchanged findings remain explicitly recorded. Native observations are recorded below. The first prerelease attempt passed
+backend race tests and then failed on 18 frontend lint errors (required braces
+and one JSX guard). Those lint errors were corrected. The fresh full prerelease gate passed
+(exit 0, `prerelease-d004-final.log`): docs/format/bindings, vet/staticcheck,
+backend race, frontend lint/typecheck and 4,874 tests, Knip and Trivy (zero
+reported high/critical vulnerabilities). The post-gate worktree was inspected. Earlier D001/D002 native
+observations do not prove the D004 panel changes.
+
+D004 native observations (2026-09-18): the Wails app showed Nodes loading and
+then three rows. Opening a Node displayed its populated Details and utilization
+sections; YAML showed a loading state and then content with an Edit control;
+Events displayed the object's event row. A ConfigMap opened in a second panel
+with its metadata and data value. The rendered data card was inspected in a
+native screenshot. Both verification panels were closed together and the
+cluster Overview was restored. No object mutation was performed. Case-distinct
+clusters, invalid refs, permission reset races and deletion-state changes were
+validated by automated regressions, not reproduced against this live cluster.
+
+The directly registered Playwright server reached the emitted Vite URL but
+reported `/wails/runtime` 404 and unavailable backend calls. Its browser preview
+is not counted as native evidence; the interaction observations above came
+from native accessibility and screenshot tools. The browser evidence is in
+`.playwright-mcp/console-2026-09-18T16-32-25-946Z.log` (temporary, ignored).
+
+Final diff review retained the original secret conversion assignment semantics
+instead of the proposed `Object.fromEntries` shortcut, whose treatment of special
+object keys differs. Focused surviving data-section tests pass with 87.5%
+statement coverage on the latest file (`data-final.log`, 42/48). The subsequent
+frontend lint/error-boundary/suppression checks pass (`frontend-lint-d004-final.log`).
+
+## Reopened deep review: D005 and D006
+
+The manifest records 282 of 1,845 baseline implementation paths inspected, with
+1,563 pending, plus the new resource-link hook. These batches cover detail
+descriptor families, operator sections, their identity producers and consumers.
+They do not close the remaining panel tabs or repository review.
+
+### Changes and retained contracts
+
+- Removed descriptor guards already enforced by hidden-before-render admission;
+  shared Pod/workload toleration filtering and Helm reference construction.
+  Retained family-specific rollout, metric, pressure, policy and list semantics.
+- Centralized related-object identity projection. Built-in version inference now
+  requires the matching group, and explicit core group survives normalization.
+  IngressClass parameter links carry their actual API group. Eleven failing
+  identity regressions passed after correction.
+- EndpointSlice and PVC detail DTOs now use the established ResourceLink boundary.
+  EndpointSlice projection retains target cluster, GVK, namespace and UID instead
+  of flattening to Kind/name. PVC sources preserve source precedence and namespace;
+  custom sources without a known version remain display-only. Generated Wails
+  bindings were regenerated. Existing PVC status tests remain intact.
+- Native inspection exposed an additional case: live EndpointSlice targets omitted
+  API version. The new resource-link hook resolves their exact cluster/UID through
+  the existing catalog owner. Pending/missing entries remain display-only; stale
+  resolutions cannot publish across target or case-distinct cluster changes.
+- Shared ArgoCD/Prometheus absent-list projection, CertManager owner tuple mapping,
+  ExternalSecrets remote-reference fields and JobTimeline time tick formatting.
+  Retained section accessibility/wrappers, capacity/progress semantics and greedy
+  timeline placement because those contracts differ.
+- The stricter identity boundary rejects incomplete custom-resource references
+  before offering actions. Updated regression asserts no action, no modal and
+  subsequent admission with complete identity; no fallback identity was added.
+
+### Validation and limits
+
+Logs below have prefix `/tmp/luxury-yacht-deep-`. Identity and wire/UI regressions
+failed before fixes and passed afterward: `identity-d005-{red,green}.log`,
+`endpoints-d005-{red,green}.log`, `endpoints-ui-d005-{red,green}.log`,
+`pvc-d005-{red,green}.log`, `pvc-ui-d005-{red,green}.log`, and
+`target-resolution-{red,green}.log`. The final pair covers pending-to-openable
+identity and late replies after a target/cluster change.
+
+The backend coverage task passed (`backend-coverage-d005.log`), with 78.8% overall
+statements. Changed EndpointSlice projection has 100%, PVC processing 88.5% and
+source identity construction 100%. The initial frontend coverage run failed on
+the moved custom-resource admission boundary; the corrected regression and both
+custom-grid suites passed 46 tests (`custom-grid-d005.log`). The subsequent full
+frontend coverage run passed 513 files / 4,887 tests at 88.26% statements
+(`frontend-coverage-d005-final.log`). Changed identity files exceeded 80%.
+That full run preceded the new UID hook and D006 edits.
+
+The later overview-focused coverage run passed 32 files / 183 tests
+(`overview-d006.log`), with the new hook at 94.73% statements. This subset does
+not establish whole-suite coverage of operator sections. Two additional
+ExternalSecrets mapping tests passed (`operator-mapping-d006.log`), preserving
+remote/extract fields and find/generator data. Typecheck passed
+(`typecheck-d006-final.log`). Local complexity reports 207 changed/new TypeScript
+functions and 36 changed/new Go functions at or below 12
+(`complexity-audit-d006.log`, `go-complexity-d005.log`); unchanged findings remain,
+and these checks do not establish pushed Sonar closure.
+
+Native Wails observations: kube-system Network loaded four rows. Opening the
+metrics-server EndpointSlice displayed two ready addresses; after catalog
+resolution both Pod target buttons appeared. A target opened the expected
+populated Pod, and its owner link opened the Deployment showing 2/2 ready and
+rolling-update configuration. The Node link also opened populated details.
+Verification tabs were closed and cluster Overview restored before stopping
+the owned development process. No resources were mutated. PVC custom/cross-
+namespace cases were exercised by automated fixtures, not live resources.
+
+The first combined D005/D006 prerelease gate passed backend race tests, then
+failed on one shadowed-variable lint error in the new hook
+(`prerelease-d006.log`). The variable was renamed; subsequent targeted lint
+and typecheck passed. Final combined validation is pending with D007.
+
+## Reopened deep review: D007
+
+The manifest now records 316 baseline implementation paths inspected and 1,529
+pending, plus two newly authored helpers. This batch reads the entire container
+and node log source families, their styles, fallback manager, and three Helm
+read-tab files. Shell, YAML transactions, other panel tabs and the remaining
+repository inventory still require review.
+
+Implemented simplifications:
+
+- Removed unconsumed selected-container and available-container reducer slots,
+  their actions, and the obsolete preference field. Repository-wide production
+  references are captured in `log-state-consumers.txt`. Multi-source selection
+  remains owned by selectedFilters.
+- Replaced the five-reducer chain/registry with one action switch, keeping the
+  existing mode-transition helpers and unknown-action behavior.
+- Shared source-prefix classification and workload pod-name projection. Kept
+  inventory effect timing and palette snapshots. One blocking-state renderer
+  now determines loading/paused/error precedence, and RawLogViewer owns the
+  existing virtualization defaults.
+- Shared log overlap matching between Node incremental fetch and anchored
+  container history, preserving each source's identity and newline policy.
+  Container sequences remain excluded from content comparison.
+- Simplified ANSI extended-color target assignment and removed duplicate color
+  range admission. Parameter consumption, resets, dim/inverse behavior remain.
+- Removed production acceptance of the bare Node-log response shape supplied
+  only by tests. Migrated 25 response fixtures to the actual executed/data
+  envelope and typed the mock from the real adapter.
+- Removed legacy maximize, placeholder, control, copied-cell animation, tooltip
+  and old HTML-table styles after tracing their source consumers. Current
+  IconBar/Dropdown, GridTable and raw-log selectors remain.
+
+Retained policies are recorded per candidate. Node/container transports, search
+whitespace, CSV metadata reservation, ANSI wrapper markup, stream recovery phases,
+parsed snapshot publication, gesture-driven tail-following and layout settling
+have distinct contracts. The duplicate-looking fallback update may publish
+refresh state while paused; it was retained after inspecting enable/disable.
+Log settings restore the current value for invalid numeric input, whereas the
+shared integer commit helper persists a default; no unification changed that
+policy. Helm defaults, overrides and merged recursion also retain their distinct
+key/absence rules.
+
+Validation logs below use `/tmp/luxury-yacht-deep-`. The baseline log suite passed
+16 files / 199 tests (`logs-d007-before.log`). After refactoring, the first run
+failed one error-reporting assertion because the fixture codemod also wrapped
+an expected error-context object; the original assertion was restored. The
+next run passed all 199 tests (`logs-d007-final.log`), with 84.89% focused
+statements. Removing assertions only for the removed reducer fields leaves
+reducer coverage at 67/67 statements versus 89/89 before. LogViewer has 83.01%,
+NodeLogsTab 87.22%, filtering 95.06% and the shared overlap helper 82.75%. ANSI
+has 75.3% in this subset; this refactor preserves behavior and the existing
+foreground/background, indexed/truecolor, reset and dim/inverse tests passed.
+This is focused coverage, not coverage of every inspected file.
+
+Typecheck passed (`typecheck-d007-final.log`). Local complexity found no scores
+above 12 in 234 changed/new TypeScript functions (`complexity-audit-d007.log`);
+unchanged findings remain. An additional temporary comparison tested 132,496
+pairs of sequences over a/b/empty-string, lengths 0–5: shared overlap agreed
+with descending exact suffix/prefix matching for every pair. That is data-
+contract evidence, not a system throughput measurement.
+
+Native Wails checks observed namespace loading and populated workload logs.
+An unmatched text filter produced zero matching rows; clearing it restored logs.
+A Pod metadata click selected one Pod with 24 matching rows. Operator JSON logs
+switched to a populated parsed table and then Pretty JSON; screenshots were
+inspected after the stylesheet removal. Closed all verification panels, cleared
+the workload selection, collapsed namespace navigation and restored Overview.
+Node fetch/append and ANSI cases remain automated-fixture evidence in this batch.
+The full frontend coverage task then passed 514 files / 4,891 tests, with
+88.3% statements (37,187/42,112; `frontend-coverage-d007.log`). The final
+combined prerelease gate remains pending.
+
+## Reopened deep review: D008
+
+The file manifest records 332 baseline files inspected, 1,513 pending, and three
+new helpers. Reviewed panel Pods/Jobs/Events/Map, namespace Pods, their identity
+and event helpers, Pod row/ingest producers, and Shell UI/lifecycle/styles.
+YAML and the remaining inventory are still pending.
+
+- Jobs now uses the existing resource-grid identity adapter and backend summary
+  type. Events builds related-object input once for display, admission, open and
+  navigation; occurrence fields and related-object projection have separate
+  responsibilities. Removed two unconsumed EventDisplay fields.
+- Both Pod tables share owner identity and namespace-permission target
+  projection. Owner links preserve producer-supplied API version; incomplete
+  identity stays display-only. Namespace Pods reuses the row identity adapter
+  and declares sorting at column creation instead of finding/patching columns.
+- Retained metric-column differences, Map destination callbacks, Event age sort
+  semantics, refresh ordering, and Shell replay/attach/disposal distinctions.
+  The manifest records the rejected consolidations and their reasons.
+
+Logs use `/tmp/luxury-yacht-deep-`. Ten owner-link regressions failed before the
+fix (`owner-d008-red.log`); 48 Pod tests passed afterward. Added three workflow
+checks for node/namespace routing, CPU/memory values and freshness, and Job
+navigation. The final focused run passed eight files / 133 tests at 85.03%
+statements (`navigation-coverage-d008-final.log`): panel Pods 93.18%, namespace
+Pods 81.2%, Events 82.17%, new shared helper 93.75%, Jobs 79.59%. Jobs is a
+behavior-preserving adapter refactor; its remaining coverage gap is recorded,
+not filled with presentation tests. Typecheck and lint passed. An initial local
+complexity check flagged the changed Event projection at 16; separating its
+related-object projection also removed duplicate field mapping. The subsequent
+check found no scores above 12 in 270 changed/new TypeScript functions
+(`complexity-audit-d008-final.log`); this is not pushed Sonar analysis.
+
+D007 final validation is still open. The first combined gate scanned generated
+coverage HTML and failed; the report was moved outside frontend. The next gate
+passed backend race, lint, typecheck and all 4,891 frontend tests, then failed
+Knip on a leftover DEFAULT_TOLERATION_RE export. Removed the export. The next
+combined gate will include D008. No repository completion claim is warranted.
+
+Direct Playwright navigation to the emitted development URL returned HTTP 200,
+but the browser lacked `/wails/runtime` (404), so its empty workspace does not
+prove app behavior. Native Wails checks opened a Deployment from its namespace Pod owner link,
+loaded two workload-scoped panel Pods, followed a Node link to populated details,
+and showed two Node Event rows with related-object activation. Node-scoped Pods
+showed three namespaces; a namespace link selected the corresponding populated
+Workloads view. Closed verification tabs, collapsed namespace navigation and
+restored Overview before stopping the owned dev process. Custom owner-kind
+collisions, missing-version admission and Jobs remain automated fixture evidence.
+
+## Reopened deep review: D009
+
+The manifest now records 350 inspected baseline implementation files, 1,495
+pending, and three new helpers. Read all YAML tab implementation/styles and its
+backend read, mutation, ownership, reload/merge, resolver and field-policy paths.
+
+Consolidated request identity and generated response types across apply,
+ownership and reload/merge; reused comment-preserving draft preparation; removed
+an unused validator argument through both production and tests; unified diff
+admission/rendering and blocking-state selection. Retained different parsing,
+field-preservation, patch/merge, snapshot-adoption and verification contracts.
+
+The new merge workflow test found that clearing a manual read override could
+replace the merged draft with unedited live YAML. Both timing cases (matching
+snapshot before or after the merge response) failed before the correction.
+Removed the competing synchronization effect and three coordination refs;
+editor actions own the draft while snapshot adoption continues to own read-mode
+YAML. Tests also assert exact cluster/GVK/UID, original baseline resourceVersion,
+merged fields, continued editability and no apply operation during merge.
+
+Logs use `/tmp/luxury-yacht-deep-`. `yaml-merge-timing-d009-red.log` records two
+new failures; `yaml-coverage-d009-final.log` then passed eight files / 73 tests,
+with 88.86% statement coverage (734/826), transaction 87.76%, utils 86.84%, and
+validation 95.09%. Existing save, ownership-warning, validation, clipboard,
+protected-field, stale-snapshot and UID-recreation tests passed. Typecheck and
+lint passed. Local complexity reports no score above 12 in 292 changed/new
+TypeScript functions (`complexity-audit-d009-final.log`); this is not pushed
+Sonar analysis.
+
+Native validation remains open: the computer-use tool reported the Mac locked
+and automatic unlock unavailable. Requested the user unlock it; stopped the
+owned development process while continuing automated checks and source review.
+Full frontend coverage and the combined prerelease gate are pending. No YAML
+resource writes were performed during this batch.
+
+D009 full frontend coverage passed 514 files / 4,908 tests at 88.51% statements
+(37,202/42,027; `frontend-coverage-d009.log`). The generated report was moved to
+`/tmp/luxury-yacht-deep-full-coverage-d009` before the formatter gate.
+
+## Reopened deep review: D010
+
+Read the 21 remaining object-panel stylesheets and traced their selector
+producers, including dynamically assembled Karpenter lifecycle states. The
+manifest now records 371 inspected baseline files and 1,474 pending. Object-panel
+source coverage does not close its outstanding native checks or the repository.
+
+Removed styles for the former flyout header/close/animation and plain-pre Helm
+Values UI, unused overview selectors and the old scale-input.small variant.
+Current producers use DockablePanel, YamlEditor and the shared controls. Kept
+live header/content/retained-tab styles, descendant selection overrides, link
+specificity, dynamic state suffixes and distinct card layouts. Adjacent identical
+policy-label rules now share their declarations. Consumer-search evidence is in
+`/tmp/luxury-yacht-deep-panel-style-consumers-d010.txt` and
+`/tmp/luxury-yacht-deep-panel-shell-style-consumers-d010.txt`.
+
+Combined automated gate and native visual checks remain open; native checks
+still require the Mac to be unlocked. The stylesheet review is source evidence,
+not a claim about rendered appearance.
+
+The combined `qc:prerelease` gate passed after D010
+(`/tmp/luxury-yacht-deep-prerelease-d010.log`): docs, formatting, generated
+bindings, vet/staticcheck, backend race, frontend lint/typecheck, 514 files /
+4,908 frontend tests, Knip and Trivy. Inspected the worktree afterward;
+`git diff --check` passed and recorded source hashes were unchanged. This closes
+the automated gate for D005–D010; D009/D010 native checks remain open.
+
+## Reopened deep review: D011–D013
+
+Read the refresh scheduler, per-cluster runtime, orchestrator, registration and
+scope policies, complete resource-stream receiver, domain/event/view projections,
+snapshot store and client. The manifest records 397 inspected baseline files and
+1,448 pending; this batch does not close the repository review.
+
+Consolidated streaming admission, scope normalization, callback settlement and
+cleanup; removed write-only suspended-domain state and unconsumed outcome data.
+Runtime teardown now uses stored domain/scope pairs. A failing auth-event test
+proved that decoding keys truncated a cluster ID containing `::`; the corrected
+path stops the owning scope and leaves another cluster running.
+
+Removed the receiver's unique-scope fallback, which could route foreign-cluster
+control frames into the only local subscription. Seven new socket-boundary cases
+failed before correction. Cluster identity and scope prefixes are checked before
+subscription lookup; subsequent valid owning-cluster ACKs still progress. Removed
+obsolete per-cluster arguments from the one shared connection, and consolidated
+its close/error recovery. Legacy frame interpretation, tokenless resets, resume
+sequence, ACK trust, retained data and independent clocks remain.
+
+Resource-domain membership and scope descriptors now derive from the existing
+backend-authored contract; event types and view gates share that owner. Existing
+order, domain scope tests, view admission and metric polling exceptions remain.
+No runtime cycle was added: the event bus imports only descriptor types and the
+descriptor module no longer imports the event bus.
+
+Evidence uses `/tmp/luxury-yacht-deep-`: `refresh-d011-red.log` records the
+teardown regression; `stream-routing-d012-red.log` records seven stream boundary
+failures. `refresh-coverage-d012-final.log` passed 42 files / 611 tests with 91%
+changed-file statements; scheduler 97.08%, runtime 97.23%, orchestrator 84.98%,
+connection 84.61%, manager 91.75%, protocol 92.38%, subscriptions 90.8%. The
+wrapper-only refresherConfig change remains 75% due to its unregistered-name
+error branch. `refresh-d013.log` passed 43 files / 612 tests after descriptor
+consolidation. Initial checks caught stale delegate expectations, an unused
+import, optional-text comparison, a helper-name collision and an over-narrow
+contract indexing type; corrected before the combined gate.
+
+`frontend-coverage-d013.log` passed full frontend coverage at 88.6% statements
+(37,172/41,954). Report moved outside frontend before formatting. Local complexity
+found no score above 12 in 333 changed/new TypeScript functions
+(`complexity-audit-d013.log`); unchanged findings and pushed Sonar remain separate.
+Combined prerelease pending. D009/D010 native checks still require Mac unlock.
+
+The combined `qc:prerelease` gate passed after D013
+(`/tmp/luxury-yacht-deep-prerelease-d013.log`), including backend race, frontend
+lint/typecheck/full tests, generated bindings, docs, Knip and Trivy. Inspected
+the worktree afterward: `git diff --check` passed and recorded production hashes
+differed only in resourceStreamDomains import ordering. Inspected that formatter
+change and refreshed its recorded hash. Native D009/D010 checks remain open.
+
+## Reopened deep review: D014
+
+Read the complete backend resource-stream implementation, mux, ringbuffer and
+related descriptor/projection producers. Removed discarded row projections and
+the stateless subscription wrapper; Manager now owns the subscription path
+directly. Snapshot invalidation still precedes delivery, and Pod projection
+remains for owner/node scope fanout. Subscription and resume now reject missing
+or foreign cluster identity; two regression tests failed before that correction.
+
+Removed an AST guard requiring the discarded row argument. Replaced a registry
+membership assertion with real informer registration against fake clients,
+Gateway delivery and LIST/WATCH selector checks for duplicate ingest watches.
+Race tests passed for resourcestream, streammux and system
+(`/tmp/luxury-yacht-deep-stream-d014-after-final.log`). Resource-stream statement
+coverage increased from 70.2% to 73.0%; the changed identity paths range from
+81.2% to 100%. Package coverage remains below 80%. The full backend coverage
+run passed at 78.9% (`backend-coverage-d014.log`, same temporary log prefix).
+Local complexity found no score above 12 in 55 changed/new Go functions
+(`go-audit-d014.log`). Combined prerelease remains pending.
+
+Retained mux ordering, bounded queues, replay, independent clocks, dynamic
+topology lookup, custom informer permission partitions and relationship fanout.
+The manifest records the inspected files and candidate decisions. Remaining
+files and D009/D010 native validation are still open.
+
+D014 combined prerelease passed (`/tmp/luxury-yacht-deep-prerelease-d014.log`).
+Post-gate inspection found no changes to recorded source hashes, and
+`git diff --check` passed. The manifest now records 429 inspected baseline
+files and 1,416 pending. Native D009/D010 validation remains open.
+
+## Reopened deep review: D015
+
+Read the informer, ingestion and permission packages, composite readiness hub
+and projector registration. Consolidated relist projection/error handling,
+full-row sink/index updates, manager and factory snapshots, permission priming
+and readiness bookkeeping. Removed the pass-through reflector wrapper while
+retaining its convergence/cancellation tests against the same client-go API.
+Partition publication, bulk publication, async cross-store sinks, readiness
+versus settlement, permission scopes and resume clocks remain distinct.
+
+The permission review uncovered two different local result types sharing a
+singleflight key. A deterministic foreground/background overlap reproduced a
+TypeAssertionError (`/tmp/luxury-yacht-deep-permissions-d015-red.log`); one shared
+review result contract fixes that path, and the permission race suite passed
+(`permissions-d015-green.log`, same prefix). The regression asserts the new
+denial reaches the waiting caller and cache with only one authorization review.
+
+Focused race suites passed for ingestion, informer, permissions, system and
+resource streams (`ingest-d015-after.log`). The three changed packages measured
+83.5%, 83.1% and 83.2% statement coverage respectively. Local complexity is <=12
+for 85 changed/new Go functions (`go-audit-d015.log`). Full backend coverage
+is running after the last preflight/decision cleanup; combined prerelease and
+D009/D010 native checks remain open.
+
+D015 full backend coverage passed after final cleanup at 78.8% statements
+(`/tmp/luxury-yacht-deep-backend-coverage-d015.log`). The shared permission-review
+helper is 100%; its foreground caller is 94.1%.
+
+## Reopened deep review: D016–D017
+
+Read subsystem registration, domain policies, maintained-store ownership, root
+setup, manual queues/execution and their HTTP contracts. Removed unused
+dependency plumbing, the catalog-enabled callback, pass-through registration
+wrappers and the one-use CRD metadata abstraction. Registration order,
+permission gates/fallbacks, source scope and notifier attachment remain explicit.
+System/domain permission/domain race suites passed (`registration-d016.log`,
+under `/tmp/luxury-yacht-deep-`); registration-source coverage is 84.45%.
+
+Manual enqueue already requires one cluster. Replaced the multi-child status
+model with one explicit cluster and owning child queue/job, removing reduction
+flags and unread cluster-order state. Queue replacement retains terminal jobs
+and migrates unfinished jobs with compare-before-install protection. Expanded
+characterizations passed before refactoring, then race checks passed afterward
+(`manual-d017-before.log`, `manual-d017-after.log`). The queue file measured
+86.21% statements. A late older migration cannot replace the newer child in
+the exercised concurrent test.
+
+Separated manual execution from status publication and removed the unconsumed
+result Error field. Six workflow cases cover snapshot version, action-version
+precedence, retry success, action failure, snapshot failure and absent snapshot
+service; they passed before extraction and afterward under race detection
+(`manual-execution-d017-before.log`, `manual-execution-d017-after.log`). Cache
+bypass, operation identity, cluster scope and previous-version retention are
+asserted. Local complexity is <=12 for 104 changed/new Go functions
+(`go-audit-d017.log`). Combined prerelease remains pending with D015; native
+D009/D010 validation is still open.
+
+The manifest now records 463 inspected baseline files and 1,382 pending.
+Manual execution is 100% covered and job-state publication 81.0%; the unchanged
+retry helper is 68.0%. These checks do not close uninspected source or native
+validation.
+
+D015–D017 combined prerelease passed
+(`/tmp/luxury-yacht-deep-prerelease-d017-final.log`). The first attempt stopped
+at an obsolete registry-test reference to the removed result Error field;
+the surviving returned-error assertion and refresh/domain/API race suites passed
+after removal (`manual-d017-surviving.log`, same prefix). Post-gate inspection
+found no changes to recorded source hashes, and `git diff --check` passed.
+The reopened review inventory uses baseline
+`616adb20abc55707f28ad41b7a4d3c1d8f48f025`; the earlier baseline above describes
+the historical pass. Native D009/D010 checks remain pending.
+
+## Reopened deep review: D018–D022
+
+Read the metrics/telemetry producers, snapshot service/lifecycle, catalog assembly,
+eight typed table domains and query/descriptor contracts, plus the network
+snapshot/ingest/join path. The manifest now records 500 inspected baseline files
+and 1,345 pending; review remains in progress.
+
+Metrics projection uses Kubernetes CPU/memory accessors and one copying helper;
+removed unused poller timestamp and disabled-recorder plumbing. Sparse samples,
+container sums and timestamps passed before/after checks. Metrics/telemetry/system
+race suites passed (`/tmp/luxury-yacht-deep-metrics-d018-after.log`); metrics
+coverage is 83.0%. Snapshot service now uses its owning cluster directly, domain
+cache policies directly, one permission-error publication path and standard FNV-1a.
+Service/cancellation/readiness/cache regressions passed (`service-d019-after.log`,
+same prefix); service file coverage is 90.66% and the fixed wire checksum passed
+before replacement.
+
+Catalog builder owns assembly directly; removed the stateless adapter, assembly
+wrapper, duplicate stats computation and unused logger dependency. The initial
+focused run found remaining test calls to the removed adapter; migrated them to
+the public builder path with assertions retained. Catalog/system race cases then
+passed (`catalog-d020-final.log`), with catalog/assembly file coverage 83.2%/87.0%.
+Nine schemas now derive sortable fields from published capabilities; eight domain
+specs reuse adapter kind accessors, and shared descriptor-source collection owns
+permission/readiness projection. Focused typed-table checks passed
+(`tables-d021-final.log`); broader registration coverage is still pending.
+
+A network regression reproduced cached HTTPRoute rows still served after runtime
+permission denial in both table modes (`network-d022-red.log`). Gateway rows now
+use the existing source state for admission. Tests cover denial, unavailable
+readiness and restored access without rebuilding retained stores; network/service/
+endpoint race checks and query/sort equivalence passed (`network-d022-green.log`,
+`network-d022-refactor.log`). Local complexity is <=12 for 145 changed/new Go
+functions (`go-audit-d022.log`). Full backend coverage and combined prerelease
+remain pending. Native access became available again; D009/D010 interaction
+checks are being resumed against a freshly started development build.
+
+D009/D010 native access was restored. Fresh-build CUA observations covered YAML
+loading/read mode, managed-field visibility, mutable draft editing, protected-name
+rejection, cancellation and maximization, plus populated NodePool overview in
+right/bottom docks. The original cluster selection was restored and the owned
+dev process stopped. Native Save/conflict/error paths and populated Helm Values
+remain unrun (both inspected Helm lists were empty). Exact observations and
+limits: `/tmp/luxury-yacht-deep-native-validation-d022.md`.
+
+D018–D022 combined prerelease passed
+(`/tmp/luxury-yacht-deep-prerelease-d022.log`); 503 recorded source hashes were
+unchanged after the gate and `git diff --check` passed. Full backend coverage
+also passed (`backend-coverage-d022.log`, same prefix); Go reports 78.9% total.
+The changed network admission function is 100% covered and Build is 94.1%;
+the network file is 75% because registration is unexercised. Typed-domain
+registration files remain at 46.67–57.89%; those workflow gaps remain explicit.
+
+## Reopened deep review: D023–D025
+
+Object details/events share canonical scope and numeric-version parsing; removed
+alias/wrapper indirection and the custom min. Event/Helm/CRD schemas derive sort
+fields from capabilities; single Helm reaggregation uses the single-row mapper.
+Object/map/events/Helm/CRD race checks passed (`object-d023-after.log`, under
+`/tmp/luxury-yacht-deep-`). Custom-resource builders were read fully and retained:
+namespace fanout and partial-error policies differ from cluster behavior.
+
+Query cache entries now use the existing typed result instead of parallel fields
+and positional tuples. Query paths share sort/signature construction and paging
+dispatch, preserving their different filtered-anchor checks. Scope intersections
+are flatter; informer and ingest upserts reuse their existing publication owners.
+Cache/anchor/rank/cursor/facet/maintained-store race checks passed
+(`query-d025-after.log`); 168 changed/new Go functions have local complexity <=12
+(`go-audit-d025.log`). Adjacent event/CRD/Helm checks and combined gate are pending.
+
+## Reopened deep review: D026 pod serving
+
+Removed the bypassed Pod lister/indexer/ReplicaSet fallback and its projection
+memo, TTL, callback and duplicate scope/owner logic. Registration already fed the
+maintained store without a typed lister. Migrated workflow tests through the
+production projector and sink first; row, identity, metric and scope checks passed
+before removal and afterward. Version assertions now cover the intake counter.
+Replaced old memo-only tests with real refetch/update/delete and invalid/valid-scope
+workflows; benchmarks separate query-index construction from query-cache reuse.
+
+The initial new delete test failed because its source omitted production's
+`retainTable=true`; correcting that fixture made the characterization pass before
+production changes (`pods-d026-before-final.log`, under `/tmp/luxury-yacht-deep-`).
+No application bug is claimed for that failure. Snapshot and pod-stream race
+checks passed (`pods-d026-final.log`); the focused system package had no matches.
+An initial local complexity result of 13 for Build prompted separation of health
+counting. All 172 changed/new Go functions are now <=12 (`go-audit-d026-final.log`).
+Coverage/pruning impact and the combined D023–D026 gate remain pending.
+
+D023–D026 combined prerelease passed
+(`/tmp/luxury-yacht-deep-prerelease-d026.log`), including 514 frontend files and
+4,924 tests. Recorded source hashes were unchanged after the gate (one recorded
+deletion excluded); `git diff --check` passed. Adjacent query consumers passed
+(`query-d025-adjacent.log`). Full backend coverage passed (`backend-coverage-d026.log`);
+Go reports 78.9% total. After retiring the lister/cache implementation and its tests,
+pod-file coverage is 184/213 statements (86.38%) versus 319/391 (81.59%) before;
+served Build is 96.2% and store collection 100%. Query-file coverage is 83.59%.
+These results close this automated batch gate, not the remaining repository/native
+review.
+
+## Reopened deep review: D027–D031
+
+Read namespace signals/lifecycle, workload intake and joins, node direct-list and
+ingest serving, cluster overview, and object-map collection/merge/traversal.
+The manifest records file-level inspection and retained alternatives. Namespace
+readiness/notifier policies remain separate because throttling, re-arm and stop
+contracts differ; tracked GVR metadata now has one owner.
+
+Removed the five workload builders' unused serve joins and builder instances;
+intake projects own fields, then one serving path joins pods/metrics/HPA. Tests
+use explicit resource/readiness expectations established before removal. Removed
+unused logger plumbing. Nodes now share one aggregation path after list/intake
+projection. Snapshot domains share version parsing and paired pod-bundle reads.
+Overview builds its typed payload once, without a post-build assertion/mutation;
+independent list tasks use their existing join barrier rather than callback locks.
+
+Two regressions were reproduced and fixed: workload HPA matching guessed GVK,
+and graph HPA enrichment mutated retained ingest facts when catalog publication
+had not provided a merge target. Tests cover correct/mismatched identities and
+HPA visibility loss without contaminating the stored facts or prior payload.
+Graph traversal, catalog merge and relationship policies were retained; removed
+unread relationship type copies and duplicate map cloning.
+
+Focused race checks passed (`namespace-d027-after.log`, `workload-d028-final.log`,
+`node-d029-after.log`, `overview-d030-after.log`, `aggregation-d031-after.log`, all
+under `/tmp/luxury-yacht-deep-`). Ownership regressions are red/green in
+`join-ownership-red.log` / `join-ownership-green.log`. Workload compile checks first
+found a guessed helper name and unused benchmark import; both were corrected.
+All 225 changed/new Go functions are <=12 local complexity (`go-audit-d031.log`).
+Full backend coverage and combined gate remain pending.
+
+D027–D031 combined prerelease passed (`/tmp/luxury-yacht-deep-prerelease-d031.log`),
+including all 514 frontend files / 4,924 tests. Recorded source hashes were unchanged
+after the gate. Full backend coverage passed (`backend-coverage-d031.log` under
+`/tmp/luxury-yacht-deep-`), total 78.9%; directly corrected HPA identity matching is
+100% and graph HPA enrichment 88.9% (`backend-coverage-functions-d031.txt`).
+The repository-wide review and prior native verification gaps remain open.
+
+### D032–D033: Attention and query engine
+
+Full inspected-file hashes and candidate dispositions are in the review manifest.
+Attention now enforces index cluster ownership and shares pod/workload evaluation;
+its ignored-items modal shares restore state and type sections. Query paging shares
+one prepared matcher and one owned-data replacement path; the QPC1 prototype now
+lives with its tests. Focused backend race and 13 Attention UI tests passed.
+The catalog listener check required an escalated retry, which passed.
+Affected coverage, native Attention interaction and the combined gate remain open.
+Runtime optional-kind permission loss versus retained Attention rows remains an
+explicit investigation, not a completion claim.
+
+### D034–D035: Workload resources and kind contracts
+
+Reviewed all six workload kind packages, common/workload helpers and the named pod
+responsibilities in the manifest. Removed discarded metrics work and intermediate
+conversions, unified pod ownership resolution, reused canonical model constructors
+and condition signal projection. Custom same-kind owners are no longer collapsed
+into built-in ancestry (red/green regressions recorded). Focused and adjacent race
+checks passed after built-in test fixtures gained their required API versions.
+All 296 changed/new Go functions score <=12 locally. Coverage and combined gate
+remain pending. Kind registry/DTO/graph leaves were retained for explicit ownership,
+type safety and dependency direction; no generic framework was introduced.
+
+### D032–D035 combined validation
+
+The D034 combined prerelease rerun passed: 514 frontend test files / 4,924 tests,
+backend race, vet/staticcheck, docs, generated bindings, lint, typecheck, knip
+and Trivy (`/tmp/luxury-yacht-deep-prerelease-d034-final.log`). The first run
+failed on generated coverage-report files under `frontend/coverage`; moving
+that owned output to `/tmp` resolved the lint input problem. Recorded-source
+hash audit found zero mismatches across 699 paths.
+
+Full backend coverage passed at 79.0%. Cross-package workload coverage measured
+ConditionSignals and owner resolution at 100% through actual resource/snapshot
+consumers. Query-page prototype relocation changed its measured coverage from
+86.62% to 86.34%, with prototype assertions retained. Attention modal measured
+89.18% across 13 passing tests. An existing notifier test confused a quota
+broadcast with a workload broadcast; it now observes the workload-read count
+at broadcast time and passed 30 repeated race runs before the full gate.
+
+Native YAML Save/conflict/reload/failed-load, populated Helm Values, and Attention
+ignored-modal interactions remain outstanding. D032 optional-kind permission
+loss is still an investigation. Passing validation does not close uninspected
+repository files.
+
+### D036–D038 broker, notification and shell ownership
+
+Inspected the complete read brokers, diagnostic owner, frontend telemetry/error
+family, and named shell contexts/navigation/persistence files in the manifest.
+Consolidated request bookkeeping while preserving paused-read admission and
+original-error correlation. A red regression proved diagnostic cluster/resource
+key collisions; keys now encode tuples. Catalog object-match reads take one
+complete identity without an unused override channel.
+
+Notification state now contains visible notifications only. Two regressions
+proved delayed dismissal could erase new arrivals or evict visible errors. The
+hidden state, delayed cleanup owner and duplicate clear-all implementation are
+removed; auto-dismiss policy, retry, history and cleanup are exercised. Removed
+error-handler scaffolding with no production consumer in repository search.
+The development harness has one typed scenario state and no unreachable reset.
+
+Sidebar native-menu publication has one effect owner; a Strict Mode regression
+reproduced three calls per toggle before the fix. Favorites context delegates
+to its existing async persistence owner without four wrapper callbacks. Zoom
+updater side effects remain an explicit investigation, not silently closed.
+
+Focused/adjacent checks: broker134 tests, errors/telemetry150, shell92; combined
+coverage210 tests across17 files. ErrorHandler pruning changed statement
+coverage92.85%→94.21%; ErrorContext79.77%→98.33% after replacing animation-only
+assertions with lifecycle regressions and separating dismissal policy.
+Favorites95.55%, Sidebar85.71%, dataAccess85.71%, diagnostic store88.57%.
+Fresh local audit:366 changed/new TypeScript functions<=12; unchanged findings
+remain recorded separately from Sonar. Combined gate and rendered checks pending.
+
+
+### D039 preference ownership and zoom follow-up
+
+Settings projection now consumes normalized file fields; default app settings
+use the same projection. Frontend metadata, bootstrap reads and palette key
+selection each have one owner, using the generated settings payload type.
+Focused backend race checks and 89 frontend preference/context tests pass;
+typecheck passes (D039 normalization/effects/typecheck logs in `/tmp`).
+The refresh settings bridge uses its bound target as the binding state, matching
+the rate-limit bridge; existing tests cover early values and duplicate binding.
+Favorite migration documentation now describes the tested v1/v2 migration.
+
+Zoom acceptance criteria before implementation: one persistence call per menu
+command even under Strict Mode; rapid commands use the latest level; a late
+initial read or read failure cannot overwrite a user command; unmounted reads
+cannot write DOM; valid/invalid saved levels, bounds, reset and reporting remain
+covered. Provider tests mock native reads/events/writes, so native menu checks
+remain a distinct required check. The subsequent D040 validation records their red/green and native results.
+
+
+### D040 settings UI ownership and D039–D040 validation
+
+Inspected every settings section, its shared controls and stylesheet, plus the
+backend theme pattern parser and shared ToggleSwitch. Palette controls use one
+field-driven renderer and the preference owner's mode-specific key map. New and
+existing theme editors share field updates, validation accessibility and keyboard
+handling. Appearance and Object Panel choice groups use one typed component;
+remaining settings rows use the existing SettingRow. Theme lifecycle, default-last
+priority, draft-versus-saved dimensions and section-specific read ordering remain.
+
+Four zoom regressions failed before the lifecycle fix, then all14 passed. Settings
+keyboard characterization passed before extraction. Final focused checks pass
+118tests10files and typecheck; the unsupported Promise.withResolvers test helper
+was replaced with the repository's existing deferred-promise pattern. Coverage:
+Appearance82.75%, color93.10%, sharedControls100%, themeHook83.33%, Advanced93.22%,
+ObjectPanel83.33%, preferences94.15%, Zoom100%. Full backend coverage79.0%; changed
+settings projection/default functions100% and refresh binding91.7%. Local audits
+report413 changed/new TypeScript and299 Go functions<=12, distinct from Sonar.
+
+Native checks exercised zoom110/120/reset100, System/Dark/System appearance,
+Right/Bottom/Right panel placement, invalid theme-pattern validation/cancel and
+kubeconfig row rendering. Restored the original workspace and settings tab; no
+temporary theme remained. Browser DOM checks separately verified slider labels,
+bounds and equal widths. Evidence: `/tmp/luxury-yacht-deep-native-validation-d040.md`.
+The combined prerelease gate passed (D040 log): backend race, docs, bindings,
+vet/staticcheck, lint, typecheck, 514 frontend files/4943 tests, Knip and Trivy.
+Post-gate existing-source hash audit found zero mismatches. Older YAML/Helm/Attention restoration
+runtime checks and preference/favorite concurrency/identity investigations remain
+open. Manifest coverage is736/1845 baseline files, with1109 not yet fully inspected.
+
+
+### D041-D042 RBAC and config resources (in progress)
+
+Full-source inspection covers the five RBAC packages and both ConfigMap/Secret
+packages. Candidate dispositions and contracts are in the manifest. Count-only
+status/list projections currently build discarded rules, links and sorted keys;
+the batch will retain rich detail facts while sharing count projections. The
+RBAC baseline race checks passed; characterization precedes implementation.
+
+
+### D041-D045 resource projection ownership
+
+Full-source review now covers RBAC, ConfigMap/Secret, storage, quota/PDB and HPA
+packages. Count-only models and stream rows use their required source fields
+without building discarded rule copies, subject links, quantity maps or metrics.
+Shared summary/status/default/target helpers replace duplicate owners; rich
+facts remain with detail consumers. Removed RBAC, ServiceAccount and policy
+model adapters after tracing every caller to the canonical Identity constructor.
+
+A PVC regression showed details omitted requested capacity when status had a
+nonnil map without storage; two cases failed before the fix, then passed using
+the canonical status-entry/request fallback. Storage-class explicit-empty and
+legacy annotation precedence, RBAC blank names/aggregation/deletion, and PDB
+health/conditions/deletion are characterized. HPA version assertions now exercise
+the actual stream and preserve its primary v2 identity and custom target version.
+
+Affected package/race checks and adjacent RBAC snapshot/stream checks pass.
+Local Go audit:361 changed/new functions<=12. Full backend coverage passed at
+79.2% overall; changed PVC detail87.0%, capacity helpers100%, shared RBAC summary
+helpers100%, HPA status and edge100% in cross-package instrumentation. Combined
+prerelease passed (exit0): `/tmp/luxury-yacht-deep-prerelease-d045.log`. Native YAML/Helm/Attention gaps and the previously
+recorded concurrency/permission investigations remain open.
+
+### D046-D049 networking, admission and Gateway projections
+
+Inspected the complete Service, EndpointSlice, Ingress, IngressClass,
+NetworkPolicy, admission, APIExtensions, shared DTO and eight Gateway kind
+packages. Count/status/graph paths now avoid building unrelated detail facts;
+canonical kind identity, condition projection and first-link summary policy have
+one owner. Removed unpopulated IngressClass/GatewayClass usage fields, obsolete
+list DTOs and their backend aliases, and the unused Gateway version-resolver
+pipeline. Discovery still records installed kinds independently of typed v1
+client selection; partial discovery retains its usable kinds.
+
+Regressions reproduced malformed API versions becoming openable Event,
+EndpointSlice and Helm links; Service forwarding accepting incomplete or
+cross-namespace endpoint targets; and unknown Gateway/core kinds receiving a
+guessed v1. Those cases now pass with display-only unresolved links and complete
+same-namespace Pod selection. Timeout characterization preserves caller deadline
+and cancellation ownership. Positive forwarding, reconnect, list, detail and
+snapshot cases remain exercised; fake clients do not prove a live tunnel.
+
+The first D048 full backend build caught a consumer-search mistake: excluding
+all files named types.go hid backend aliases. The corrected search and alias
+removal passed the backend retry. Full frontend coverage passed514 files/4943
+tests at88.93%; focused surviving overview tests14/14 with Gateway81.67% and
+clusterresource92.30%. No test cases were removed with the unused usage fields.
+Latest cross-package race coverage passed at92.5% for the instrumented shared
+model/common/Service/types/Gateway availability packages; changed parser,
+condition projection, discovery and link helpers100%, forwarding90.0%/90.9%.
+The separate full backend run measured79.4% overall before the final Gateway
+follow-up. Local complexity:430 changed/new Go functions and413 TypeScript
+functions<=12 (not a Sonar closure claim). Combined prerelease pending.
+Evidence and remaining investigations are recorded in the file manifest.
+
+### D050–D051 — resource projections and operation scheduling
+
+Node status now reads its source object directly, with one cordon signal policy
+shared by signals and badges. Removed the redundant Node fact representation;
+Node details and snapshot intake read the existing unschedulable source field.
+Namespace status no longer builds relationship/detail facts, Event status avoids
+rich detail construction, and generic/Namespace finalizer selection shares one
+helper while retaining their distinct patch/finalize operations.
+
+A branching Node log tree reproduced a worker-queue deadlock. A coordinator now
+owns pending tasks; workers stream discovered children independently of task
+completion. Tests cover branching, slow root entries, cancellation, depth,
+deduplication and source limits. An initial coordinator implementation delayed
+nested work; its failing regression drove streaming child delivery. These are
+recorded behavior fixes, not claims of exact preservation of the broken path.
+
+Helm detail no longer parses and resolves a manifest a second time to create
+unused resource-link facts. Synthetic status reads release status directly;
+summary/detail Notes and History policy remains explicit. Custom-resource facts
+now contain the status consumed by details and rows, with conditions parsed once.
+Removed unused CRD-link/raw-status materialization and duplicated scalar helpers.
+Generic custom-condition coercion remains separate from operator condition policy.
+Argo and Karpenter owner tests reproduced incomplete openable references; the
+producers now reject those owners while retaining first-valid selection and
+Karpenter label fallback.
+
+Focused race checks pass. D050 discovery scheduler coverage is 100%, processing
+85.7%/92.9%, Node status/cordon/model 100%, Namespace status 91.3%, Event status 81.8%,
+shared finalizer selection 100%. D051 combined coverage 90.7%: Helm 91.2%, custom
+resources 84.1%, Argo 93.1%, Karpenter 98.1%, shared CRD facts 89.4%; both changed owner
+functions 100%. One obsolete raw-status materialization test was removed; custom
+package coverage changed from 86.3% to 84.1% with production statements decreasing from 205 to 176. No tests
+were added solely to restore the percentage. The local Go audit covers 467
+changed/new functions, all at or below 12; this is not pushed-revision Sonar evidence.
+
+The D049 prerelease attempt failed at lint because a generated coverage HTML
+report was inside the frontend tree (3075 parse errors). The report was moved
+to `/tmp/luxury-yacht-full-frontend-coverage-d048-report`. The combined gate then passed against D050–D051 (`/tmp/luxury-yacht-deep-prerelease-d051.log`):
+514 frontend files / 4943 tests, backend race, docs, formatting/bindings, lint,
+typecheck, Knip and Trivy. Detailed commands, logs, candidates and retained policies
+are in the file review manifest. Repository review and older native verification
+gaps remain open.
+
+
+### D052–D054 — frontend identity, status and preference ownership
+
+D052 inspected the remaining utility modules and status toolbar files, retaining
+quantity parsing, timestamp scanners, selection policies and structural sharing
+where their consumers require distinct behavior. Stable list keys now encode base
+value and occurrence as a tuple, including every IconBar branch. Red regressions
+proved collisions and actual button remounts when removing a neighboring separator.
+IconBar shares its action/toggle button rendering; accent palette apply/clear share
+one path. Focused validation: 105 tests across nine files.
+
+D053 traced status snapshot/event producers and consumers. Header/About share one
+app-info lifecycle hook; live update state survives older metadata reads and modal
+opening generations. Runtime status subscribes before reading, preserves newer
+full lists, replays early incremental port-forward status and stops after cleanup.
+Registry presence, status patches and React keys include cluster/session identity.
+Sessions rendering shares identity fields and one shell-open/verify path, with one
+pending-jump state. Eight lifecycle regressions plus two cluster-identity cases
+failed before the fix; 115 focused tests then passed. Native interaction is still
+pending; these tests do not stand in for it.
+
+D054 closes the overlapping-write investigations from D039/D040. One confirmed
+preference base plus pending edits now owns cache/events/startup storage. Persistence
+and success notifications run in edit order. Hydration waits for writes and retries
+invalidated snapshots before publishing metadata or settings. Display/Data Management
+controls subscribe to this owner; their separate optimistic rollback state is gone.
+Six owner regressions, four control integration regressions and a delayed-notification
+ordering regression failed before their respective fixes. Notification failures,
+self-triggered hydration and reentrant subscriber edits are also exercised.
+
+The repository frontend coverage task passed 4,970 tests across 516 files:
+88.98% statement coverage overall; preference owner 95.83%, settings controls 100%,
+Display 94.11%, Data Management 96.87%. It also covers the latest nullable app-info
+follow-up: useAppInfo 100%, About 91.13%, Sessions 89.09%, runtime hook 96.22%,
+adapter 90.76%, UpdateStatus 100%, stable keys/IconBar/link-color 100%.
+Evidence: `/tmp/luxury-yacht-frontend-coverage-d054.log` and
+`/tmp/luxury-yacht-frontend-coverage-d054-report/coverage-summary.json`.
+The generated report was moved outside frontend before subsequent lint.
+Typecheck passes and all 506 changed/new TypeScript functions score at most 12
+locally (`/tmp/luxury-yacht-settings-d054-typecheck-final.log`,
+`/tmp/luxury-yacht-deep-complexity-audit-d054.log`). The combined prerelease result
+still predates these batches, and native gaps remain explicit. Review inventory
+stands at 1,175/1,845 baseline files fully inspected; the remaining files are not
+counted by passing tests.

@@ -14,7 +14,6 @@ import {
 } from './logViewerPrefsCache';
 
 const samplePrefs = (overrides: Partial<LogViewerPrefs> = {}): LogViewerPrefs => ({
-  selectedContainer: 'app',
   selectedFilters: { mode: 'all' },
   autoRefresh: true,
   timestampMode: 'default',

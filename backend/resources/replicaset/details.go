@@ -65,7 +65,7 @@ func (s *Service) buildReplicaSetDetails(
 	facts := BuildFacts(replicaSet)
 	replicas, ready := workloads.WorkloadReplicaDisplay(facts.WorkloadCommonFacts)
 	podInfos := workloads.BuildPodSummaries(s.deps.ClusterID, "ReplicaSet", replicaSet.Name, "apps/v1", podsList, podMetrics)
-	podSummary, _ := workloads.SummarizePodMetrics(podsList, podMetrics)
+	podSummary := workloads.SummarizePodMetrics(podsList, podMetrics)
 
 	details := &ReplicaSetDetails{
 		Kind:                "ReplicaSet",

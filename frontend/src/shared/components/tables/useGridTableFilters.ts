@@ -51,8 +51,6 @@ export interface UseGridTableFiltersResult<T> {
   handleFilterQueryFacetChange: (key: string, values: string[]) => void;
   handleFiltersChange: (changes: Partial<GridTableFilterState>) => void;
   handleFilterReset: () => void;
-  /** Whether the built-in case-sensitive search toggle is active. */
-  caseSensitive: boolean;
   /** Toggle the built-in case-sensitive search state. */
   toggleCaseSensitive: () => void;
 }
@@ -316,7 +314,6 @@ export function useGridTableFilters<T>({
     handleFilterQueryFacetChange,
     handleFiltersChange: updateFilters,
     handleFilterReset,
-    caseSensitive: activeFilters.caseSensitive,
     toggleCaseSensitive,
   };
 }

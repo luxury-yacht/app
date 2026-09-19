@@ -42,14 +42,14 @@ func TestPerBuildCacheReusesStoreAcrossPageTurnsAndSorts(t *testing.T) {
 
 	page1 := applyTypedTableQueryViaStore(items, perBuildQuery("name", "asc", ""), adapter, schema,
 		withPerBuildCache(cache, "v1"))
-	if cache.store == nil {
+	if cache.result.store == nil {
 		t.Fatal("miss did not publish the built store")
 	}
-	built := cache.store
+	built := cache.result.store
 
 	page2 := applyTypedTableQueryViaStore(items, perBuildQuery("name", "asc", page1.Continue), adapter, schema,
 		withPerBuildCache(cache, "v1"))
-	if cache.store != built {
+	if cache.result.store != built {
 		t.Fatal("page turn rebuilt the store (cache miss)")
 	}
 	if len(page2.Rows) != 20 || page2.Rows[0].Ref.Name != "cfg-020" {
@@ -62,7 +62,7 @@ func TestPerBuildCacheReusesStoreAcrossPageTurnsAndSorts(t *testing.T) {
 	// Sort flip: same matched set → hit.
 	desc := applyTypedTableQueryViaStore(items, perBuildQuery("name", "desc", ""), adapter, schema,
 		withPerBuildCache(cache, "v1"))
-	if cache.store != built {
+	if cache.result.store != built {
 		t.Fatal("sort change rebuilt the store; the key must exclude sort/direction")
 	}
 	if desc.Rows[0].Ref.Name != "cfg-094" {
@@ -79,31 +79,31 @@ func TestPerBuildCacheInvalidates(t *testing.T) {
 
 	applyTypedTableQueryViaStore(items, perBuildQuery("name", "asc", ""), adapter, schema,
 		withPerBuildCache(cache, "v1"))
-	built := cache.store
+	built := cache.result.store
 
 	// Source version bump → rebuild.
 	applyTypedTableQueryViaStore(items, perBuildQuery("name", "asc", ""), adapter, schema,
 		withPerBuildCache(cache, "v2"))
-	if cache.store == built {
+	if cache.result.store == built {
 		t.Fatal("version bump did not invalidate")
 	}
-	built = cache.store
+	built = cache.result.store
 
 	// Metric tick (DynamicRevision) → rebuild: overlaid metric values feed the
 	// sort indexes, so a stale store would freeze metric sort order.
 	tick := perBuildQuery("name", "asc", "")
 	tick.DynamicRevision = "metrics-2"
 	applyTypedTableQueryViaStore(items, tick, adapter, schema, withPerBuildCache(cache, "v2"))
-	if cache.store == built {
+	if cache.result.store == built {
 		t.Fatal("metric revision did not invalidate")
 	}
-	built = cache.store
+	built = cache.result.store
 
 	// Filter change → different matched set → rebuild.
 	filtered := perBuildQuery("name", "asc", "")
 	filtered.Request.Kinds = []string{"Secret"}
 	page := applyTypedTableQueryViaStore(items, filtered, adapter, schema, withPerBuildCache(cache, "v2"))
-	if cache.store == built {
+	if cache.result.store == built {
 		t.Fatal("kind filter did not invalidate")
 	}
 	if page.Total != 10 {

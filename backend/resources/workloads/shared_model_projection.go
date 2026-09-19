@@ -12,7 +12,6 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	"github.com/luxury-yacht/app/backend/resources/common"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
@@ -32,13 +31,9 @@ func WorkloadReplicaDisplay(f resourcemodel.WorkloadCommonFacts) (replicas, read
 // utilization shared by all workload detail builders, centralizing the
 // aggregate + format step instead of repeating it per builder.
 func WorkloadUtilization(podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) restypes.ResourceUtilization {
-	avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage := aggregatePodAverages(podsList, podMetrics)
-	return restypes.ResourceUtilization{
-		CPURequest: common.FormatCPU(avgCPURequest),
-		CPULimit:   common.FormatCPU(avgCPULimit),
-		CPUUsage:   common.FormatCPU(avgCPUUsage),
-		MemRequest: common.FormatMemory(avgMemRequest),
-		MemLimit:   common.FormatMemory(avgMemLimit),
-		MemUsage:   common.FormatMemory(avgMemUsage),
+	accumulator := newPodAverageAccumulator()
+	for _, pod := range podsList {
+		accumulator.addPod(pod, podMetrics)
 	}
+	return accumulator.utilization()
 }

@@ -16,7 +16,10 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/service"
 )
@@ -62,6 +65,47 @@ func seedNetworkMaintained(b *NamespaceNetworkBuilder, meta ClusterMeta) {
 		for _, obj := range indexer.List() {
 			b.maintained.ingest(d, obj)
 		}
+	}
+}
+
+func TestNamespaceNetworkMaintainedGatewayRowsRespectCurrentAccess(t *testing.T) {
+	meta := testClusterMeta()
+	svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"}}
+	route := &gatewayv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: "route", Namespace: "default"}}
+	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
+	require.NoError(t, indexer.Add(route))
+	builder := &NamespaceNetworkBuilder{
+		networkIngest:   newFakeNetworkIngestSource(meta, svc),
+		includeServices: true,
+		collectIndexer:  networkCollectIndexer(networkIndexers{httproute: indexer}),
+	}
+	seedNetworkMaintained(builder, meta)
+	routeKey := permissions.ResourceKey("gateway.networking.k8s.io", "httproutes")
+	allowed := domainpermissions.AllowedResources{permissions.ResourceKey("", "services"): true, routeKey: true}
+	ctx := domainpermissions.WithAllowedResources(WithClusterMeta(context.Background(), meta), namespaceNetworkDomainName, allowed)
+	for _, suffix := range []string{"", "?sort=name"} {
+		t.Run("scope"+suffix, func(t *testing.T) {
+			scope := meta.ClusterID + "|namespace:default" + suffix
+			read := func(ctx context.Context) NamespaceNetworkSnapshot {
+				snap, err := builder.Build(ctx, scope)
+				require.NoError(t, err)
+				return snap.Payload.(NamespaceNetworkSnapshot)
+			}
+			require.Len(t, read(ctx).Rows, 2)
+			denied := domainpermissions.WithAllowedResources(ctx, namespaceNetworkDomainName, domainpermissions.AllowedResources{
+				permissions.ResourceKey("", "services"): true, routeKey: false,
+			})
+			unavailable := withResourceReadiness(ctx, map[string]refresh.ResourceReadiness{routeKey: refresh.ResourceReadinessUnavailable})
+			for _, blocked := range []context.Context{denied, unavailable} {
+				payload := read(blocked)
+				require.Len(t, payload.Rows, 1, "retained route rows must obey the current source access")
+				require.Equal(t, "Service", payload.Rows[0].Ref.Kind)
+				require.Equal(t, meta.ClusterID, payload.Rows[0].Ref.ClusterID)
+				require.NotContains(t, payload.Capabilities.KindVocabulary, "HTTPRoute")
+			}
+			// Access recovery can serve the retained route without rebuilding its store.
+			require.Len(t, read(ctx).Rows, 2)
+		})
 	}
 }
 

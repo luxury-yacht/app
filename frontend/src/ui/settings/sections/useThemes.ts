@@ -82,18 +82,13 @@ export function useThemes() {
     [reloadThemes]
   );
 
-  const applyThemeEntry = useCallback(async (id: string) => {
-    await applyThemeApi(id);
-  }, []);
-
   return {
     themes,
     themesLoading,
-    reloadThemes,
     validateThemePattern,
     saveThemeEntry,
     deleteThemeEntry,
     reorderThemeEntries,
-    applyThemeEntry,
+    applyThemeEntry: applyThemeApi,
   };
 }

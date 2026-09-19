@@ -16,11 +16,9 @@ import (
 
 // BuildResourceModel builds the ServiceAccount resource model. Facts are owned by
 // this package (serviceaccount.Facts); callers needing facts use BuildFacts.
-func BuildResourceModel(clusterID string, sa *corev1.ServiceAccount, relationships *resourcemodel.ResourceRelationshipIndex, options ...resourcemodel.ResourceModelBuildOptions) resourcemodel.ResourceModel {
-	buildOptions := resourcemodel.BuildOptions(options...)
-	facts := BuildFacts(clusterID, sa, relationships, buildOptions)
-	status := resourcemodel.ServiceAccountStatus(sa.ObjectMeta, len(facts.Secrets))
-	return resourcemodel.ServiceAccountResourceModel(clusterID, sa.ObjectMeta, status, resourcemodel.ResourceFacts{})
+func BuildResourceModel(clusterID string, sa *corev1.ServiceAccount) resourcemodel.ResourceModel {
+	status := resourcemodel.ServiceAccountStatus(sa.ObjectMeta, namedSecretCount(sa))
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, sa.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the ServiceAccount facts. Reverse links materialize only when
@@ -45,4 +43,15 @@ func BuildFacts(clusterID string, sa *corev1.ServiceAccount, relationships *reso
 		facts.ClusterRoleBindings = relationships.ServiceAccountClusterRoleBindings(sa.Namespace, sa.Name)
 	}
 	return facts
+}
+
+// namedSecretCount matches the token-secret links exposed by BuildFacts.
+func namedSecretCount(sa *corev1.ServiceAccount) int {
+	count := 0
+	for _, secret := range sa.Secrets {
+		if secret.Name != "" {
+			count++
+		}
+	}
+	return count
 }

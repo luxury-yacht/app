@@ -21,8 +21,7 @@ import (
 // package (ingress.Facts); the shared ResourceModel carries identity + status,
 // and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, ingress *networkingv1.Ingress) resourcemodel.ResourceModel {
-	facts := BuildFacts(clusterID, ingress)
-	status := statusPresentation(ingress, facts)
+	status := statusPresentation(ingress)
 	return resourcemodel.KubernetesResourceModel(clusterID, Identity, ingress.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
@@ -92,20 +91,21 @@ func buildIngressRuleFacts(clusterID, namespace string, rule networkingv1.Ingres
 	return facts, backendRefs
 }
 
-func statusPresentation(ingress *networkingv1.Ingress, facts Facts) resourcemodel.ResourceStatusPresentation {
-	state := strconv.Itoa(len(facts.Addresses))
+func statusPresentation(ingress *networkingv1.Ingress) resourcemodel.ResourceStatusPresentation {
+	addressCount := len(loadBalancerAddresses(ingress.Status.LoadBalancer.Ingress))
+	state := strconv.Itoa(addressCount)
 	signals := []resourcemodel.ResourceStatusSignal{
 		{Type: resourcemodel.StatusSignalResourceState, Name: "status.loadBalancer.ingress", Status: state},
-		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.rules", Status: strconv.Itoa(len(facts.Rules))},
+		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.rules", Status: strconv.Itoa(len(ingress.Spec.Rules))},
 	}
 	lifecycle := resourcemodel.ObjectLifecycle(ingress.ObjectMeta)
 	if status, ok := resourcemodel.DeletingObjectStatus(ingress.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
-	if len(facts.Addresses) > 0 {
+	if addressCount > 0 {
 		return resourcemodel.ObjectSourceStatus("Address assigned", state, "", "", "ready", signals, lifecycle)
 	}
-	if len(facts.Rules) == 0 && facts.DefaultBackend == nil {
+	if len(ingress.Spec.Rules) == 0 && ingress.Spec.DefaultBackend == nil {
 		return resourcemodel.ObjectSourceStatus("No rules", state, "", "", "unknown", signals, lifecycle)
 	}
 	return resourcemodel.ObjectSourceStatus("Address pending", state, "", "", "warning", signals, lifecycle)

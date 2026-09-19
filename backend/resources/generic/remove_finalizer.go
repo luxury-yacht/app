@@ -50,7 +50,7 @@ func (s *Service) RemoveMetadataFinalizerByGVK(
 		return fmt.Errorf("%s %s is not deleting", gvk.String(), name)
 	}
 	current := object.GetFinalizers()
-	remaining, removed := removeNamedFinalizer(current, finalizer)
+	remaining, removed := common.RemoveNamedFinalizer(current, finalizer)
 	if !removed {
 		return nil
 	}
@@ -119,17 +119,4 @@ func (s *Service) finalizerRequestError(
 		"GenericResource",
 	)
 	return fmt.Errorf("failed to %s finalizers for %s %s: %w", action, gvk.String(), name, err)
-}
-
-func removeNamedFinalizer[T ~string](current []T, target string) ([]T, bool) {
-	remaining := make([]T, 0, len(current))
-	removed := false
-	for _, value := range current {
-		if string(value) == target {
-			removed = true
-			continue
-		}
-		remaining = append(remaining, value)
-	}
-	return remaining, removed
 }

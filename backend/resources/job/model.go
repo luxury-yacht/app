@@ -77,7 +77,7 @@ func jobState(facts Facts) string {
 // BuildStatusPresentation derives the Job status presentation.
 func BuildStatusPresentation(job *batchv1.Job) resourcemodel.ResourceStatusPresentation {
 	facts := BuildFacts(job)
-	signals := jobSignals(job, facts)
+	signals := jobSignals(facts)
 	lifecycle := resourcemodel.ObjectLifecycle(job.ObjectMeta)
 	if status, ok := resourcemodel.DeletingObjectStatus(job.ObjectMeta, jobState(facts), signals, lifecycle); ok {
 		return status
@@ -103,7 +103,7 @@ func BuildStatusPresentation(job *batchv1.Job) resourcemodel.ResourceStatusPrese
 	return resourcemodel.ObjectSourceStatus("Pending", strconv.FormatInt(int64(facts.Active), 10), "", "", "warning", signals, lifecycle)
 }
 
-func jobSignals(job *batchv1.Job, facts Facts) []resourcemodel.ResourceStatusSignal {
+func jobSignals(facts Facts) []resourcemodel.ResourceStatusSignal {
 	signals := []resourcemodel.ResourceStatusSignal{
 		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.completions", Status: strconv.FormatInt(int64(facts.DesiredReplicas), 10)},
 		{Type: resourcemodel.StatusSignalResourceState, Name: "status.succeeded", Status: strconv.FormatInt(int64(facts.Succeeded), 10)},
@@ -111,16 +111,7 @@ func jobSignals(job *batchv1.Job, facts Facts) []resourcemodel.ResourceStatusSig
 		{Type: resourcemodel.StatusSignalResourceState, Name: "status.active", Status: strconv.FormatInt(int64(facts.Active), 10)},
 		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.suspend", Status: strconv.FormatBool(facts.Suspended)},
 	}
-	for _, condition := range job.Status.Conditions {
-		signals = append(signals, resourcemodel.ResourceStatusSignal{
-			Type:    resourcemodel.StatusSignalCondition,
-			Name:    string(condition.Type),
-			Status:  string(condition.Status),
-			Reason:  condition.Reason,
-			Message: condition.Message,
-		})
-	}
-	return signals
+	return append(signals, resourcemodel.ConditionSignals(facts.Conditions)...)
 }
 
 func conditionFacts(conditions []batchv1.JobCondition) []resourcemodel.ConditionFacts {

@@ -90,7 +90,6 @@ type RefreshOrchestratorInternals = {
   registeredRefreshers: Set<string>;
   coordinatorRuntime: TestClusterRefreshRuntime;
   clusterRuntimes: Map<string, TestClusterRefreshRuntime>;
-  suspendedDomains: Map<RefreshDomain, boolean>;
   lastNotifiedErrors: Map<string, unknown>;
   contextVersion: number;
   metricsDemandState:
@@ -246,7 +245,6 @@ describe('refreshOrchestrator', () => {
     orchestratorInternals.registeredRefreshers?.clear?.();
     orchestratorInternals.coordinatorRuntime?.resetAllState?.();
     orchestratorInternals.clusterRuntimes?.clear?.();
-    orchestratorInternals.suspendedDomains?.clear?.();
     orchestratorInternals.lastNotifiedErrors?.clear?.();
     orchestratorInternals.contextVersion = 0;
     if (orchestratorInternals.metricsDemandState.status === 'waiting-retry') {
@@ -1851,7 +1849,7 @@ describe('refreshOrchestrator', () => {
     disableSpy.mockRestore();
   });
 
-  it('clears suspended scoped enablement when kubeconfig changes', async () => {
+  it('discards old scoped enablement across kubeconfig changes', async () => {
     refreshOrchestrator.registerDomain({
       domain: 'namespace-events',
       refresherName: NAMESPACE_REFRESHERS.events,
@@ -1871,10 +1869,9 @@ describe('refreshOrchestrator', () => {
 
     orchestratorInternals.handleKubeconfigChanging();
     expect(orchestratorInternals.coordinatorRuntime.getKnownScopes('namespace-events')).toEqual([]);
-    expect(orchestratorInternals.suspendedDomains.get('namespace-events')).toBe(true);
 
     orchestratorInternals.handleKubeconfigChanged();
-    expect(orchestratorInternals.suspendedDomains.size).toBe(0);
+    expect(orchestratorInternals.coordinatorRuntime.getKnownScopes('namespace-events')).toEqual([]);
   });
 
   it('retains existing data when the backend responds with not-modified', async () => {
@@ -3456,6 +3453,31 @@ describe('refreshOrchestrator', () => {
     ).toBe(false);
   });
 
+  it('stops only the owning cluster stream when its identity contains the runtime key delimiter', async () => {
+    const clusterId = 'config::blue';
+    const scopeA = buildClusterScope(clusterId, '');
+    const scopeB = buildClusterScope('cluster-b', '');
+    const cleanupA = vi.fn();
+    const cleanupB = vi.fn();
+    eventBus.emit('cluster:lifecycle', { clusterId, state: 'ready' });
+    registerStreamingClusterConfigDomain();
+    clientMocks.fetchSnapshotMock.mockResolvedValue({ notModified: true });
+    resourceStreamMocks.start.mockImplementation((scope: string) =>
+      scope === scopeA ? cleanupA : cleanupB
+    );
+    refreshOrchestrator.startStreamingDomain('cluster-config', scopeA);
+    refreshOrchestrator.startStreamingDomain('cluster-config', scopeB);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    eventBus.emit('cluster:auth:failed', { clusterId });
+
+    expect(resourceStreamMocks.stop).toHaveBeenCalledWith(scopeA, { reset: false });
+    expect(cleanupA).toHaveBeenCalledTimes(1);
+    expect(cleanupB).not.toHaveBeenCalled();
+    expect(resourceStreamMocks.stop).not.toHaveBeenCalledWith(scopeB, expect.anything());
+  });
+
   it('clears cluster runtime transient state on auth failure and restarts after recovery', async () => {
     registerStreamingClusterConfigDomain();
     refreshOrchestrator.updateContext({
@@ -3793,10 +3815,18 @@ describe('refreshOrchestrator', () => {
     refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
 
     orchestratorInternals.handleKubeconfigChanging();
-    expect(orchestratorInternals.suspendedDomains.get('cluster-config')).toBe(true);
+    expect(
+      orchestratorInternals
+        .getRuntimeForScope('cluster-config', scope)
+        .getKnownScopes('cluster-config')
+    ).toEqual([]);
 
     orchestratorInternals.handleKubeconfigChanged();
-    expect(orchestratorInternals.suspendedDomains.size).toBe(0);
+    expect(
+      orchestratorInternals
+        .getRuntimeForScope('cluster-config', scope)
+        .getKnownScopes('cluster-config')
+    ).toEqual([]);
 
     stopAllSpy.mockRestore();
     teardownSpy.mockRestore();

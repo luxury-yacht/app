@@ -39,7 +39,7 @@ type NamespaceQuotasBuilder struct {
 // adapter's exact comparable sort-value encoder and row key, so the querypage engine
 // orders rows byte-identically to the live typed-table executor.
 func quotasQuerypageSchema() querypage.Schema[QuotaSummary] {
-	return querypageSchemaFromAdapter(quotaTableQueryAdapter(), []string{"name", "kind", "namespace", "details", "age"})
+	return querypageSchemaFromAdapter(quotaTableQueryAdapter(), namespaceQuotasQueryCapabilities().SortableFields)
 }
 
 // NamespaceQuotasSnapshot payload for quotas tab.
@@ -75,7 +75,6 @@ func namespaceQuotasDomainSpec() typedTableDomainSpec[QuotaSummary] {
 		adapter:          quotaTableQueryAdapter(),
 		schema:           quotasQuerypageSchema(),
 		capabilities:     namespaceQuotasQueryCapabilities(),
-		kindOf:           func(resource QuotaSummary) string { return resource.Ref.Kind },
 		sortRows:         sortQuotaSummaries,
 	}
 }

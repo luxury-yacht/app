@@ -12,7 +12,7 @@ package types
 // resources/persistentvolume (co-located with the PV model + detail builder).
 
 // PersistentVolumeClaimDetails represents comprehensive PVC information.
-// PersistentVolumeClaimDetails + DataSourceInfo moved to resources/persistentvolumeclaim
+// PersistentVolumeClaimDetails moved to resources/persistentvolumeclaim
 // (co-located with the PVC model + detail builder).
 
 // StorageClassDetails represents comprehensive storage class information.

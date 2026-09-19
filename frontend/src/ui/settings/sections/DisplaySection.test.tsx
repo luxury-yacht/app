@@ -7,10 +7,17 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eventBus } from '@/core/events';
 import { requireValue } from '@/test-utils/requireValue';
 import DisplaySection from './DisplaySection';
 
 const appPreferenceMocks = vi.hoisted(() => ({
+  values: {
+    useShortResourceNames: false,
+    dimInactiveNamespaces: true,
+    exclusiveNamespaces: true,
+    defaultTablePageSize: 50,
+  },
   hydrateAppPreferences: vi.fn(),
   setUseShortResourceNames: vi.fn(),
   setDimInactiveNamespaces: vi.fn(),
@@ -19,6 +26,10 @@ const appPreferenceMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/core/settings/appPreferences', () => ({
+  getUseShortResourceNames: () => appPreferenceMocks.values.useShortResourceNames,
+  getDimInactiveNamespaces: () => appPreferenceMocks.values.dimInactiveNamespaces,
+  getExclusiveNamespaces: () => appPreferenceMocks.values.exclusiveNamespaces,
+  getDefaultTablePageSize: () => appPreferenceMocks.values.defaultTablePageSize,
   hydrateAppPreferences: (...args: unknown[]) => appPreferenceMocks.hydrateAppPreferences(...args),
   setUseShortResourceNames: (...args: unknown[]) =>
     appPreferenceMocks.setUseShortResourceNames(...args),
@@ -69,6 +80,12 @@ describe('DisplaySection', () => {
   let root: ReactDOM.Root;
 
   beforeEach(async () => {
+    appPreferenceMocks.values = {
+      useShortResourceNames: false,
+      dimInactiveNamespaces: true,
+      exclusiveNamespaces: true,
+      defaultTablePageSize: 50,
+    };
     appPreferenceMocks.hydrateAppPreferences.mockReset();
     appPreferenceMocks.setUseShortResourceNames.mockReset();
     appPreferenceMocks.setDimInactiveNamespaces.mockReset();
@@ -79,9 +96,18 @@ describe('DisplaySection', () => {
       exclusiveNamespaces: true,
       defaultTablePageSize: 50,
     });
-    appPreferenceMocks.setUseShortResourceNames.mockResolvedValue(undefined);
-    appPreferenceMocks.setDimInactiveNamespaces.mockResolvedValue(undefined);
-    appPreferenceMocks.setExclusiveNamespaces.mockResolvedValue(undefined);
+    appPreferenceMocks.setUseShortResourceNames.mockImplementation(async (value: boolean) => {
+      appPreferenceMocks.values.useShortResourceNames = value;
+      eventBus.emit('settings:short-names', value);
+    });
+    appPreferenceMocks.setDimInactiveNamespaces.mockImplementation(async (value: boolean) => {
+      appPreferenceMocks.values.dimInactiveNamespaces = value;
+      eventBus.emit('settings:dim-inactive-namespaces', value);
+    });
+    appPreferenceMocks.setExclusiveNamespaces.mockImplementation(async (value: boolean) => {
+      appPreferenceMocks.values.exclusiveNamespaces = value;
+      eventBus.emit('settings:exclusive-namespaces', value);
+    });
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -99,6 +125,20 @@ describe('DisplaySection', () => {
     });
     container.remove();
     document.body.innerHTML = '';
+  });
+
+  it('restores the displayed preference when a toggle fails to persist', async () => {
+    appPreferenceMocks.setUseShortResourceNames.mockRejectedValueOnce(
+      new Error('persistence failed')
+    );
+    const toggle = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Short resource names"]'),
+      'expected short-name toggle'
+    );
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    await act(async () => toggle.click());
+    expect(appPreferenceMocks.setUseShortResourceNames).toHaveBeenCalledWith(true);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
   });
 
   it('persists exclusive namespaces changes', async () => {

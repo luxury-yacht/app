@@ -114,7 +114,7 @@ func (n *watchNotifier) flush(events []watchEvent) {
 
 	// Descriptors() acquires s.mu.RLock — must call after Unlock.
 	descriptors := s.Descriptors()
-	// rebuildCacheFromItems calls publishStreamingState which acquires s.mu.Lock.
+	// rebuildCacheFromItems acquires s.mu.Lock.
 	s.rebuildCacheFromItems(itemsCopy, descriptors)
 	s.broadcastStreaming(true)
 }

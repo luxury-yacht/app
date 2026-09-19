@@ -13,6 +13,7 @@ import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Drop
 import { normalizeDropdownValue } from '@shared/components/dropdowns/dropdownValue';
 import {
   ALL_MULTISELECT_FILTER,
+  type FilterValueComparison,
   filterSelectionFromDropdownValues,
   filterSelectionToDropdownValues,
   filterSelectionValues,
@@ -26,6 +27,7 @@ import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import Tooltip from '@shared/components/Tooltip';
 import type { GridTableFilterOptions } from '@shared/components/tables/GridTable.types';
+import { reorderColumnOrder } from '@shared/components/tables/gridTableColumnOrder';
 import { areGridTableFilterStatesEqual } from '@shared/components/tables/gridTableFilterState';
 import { useGridTableColumnOptionRows } from '@shared/components/tables/hooks/useGridTableColumnOptionRows';
 import { errorHandler } from '@utils/errorHandler';
@@ -83,12 +85,13 @@ const buildViewValue = (scope: string, view: string): string => `${scope}:${view
 
 const mergeSavedOptions = (
   options: DropdownOption[],
-  selection: MultiSelectFilterSelection
+  selection: MultiSelectFilterSelection,
+  comparison: FilterValueComparison
 ): DropdownOption[] => {
   const values = new Set(options.map((option) => option.value));
   return [
     ...options,
-    ...filterSelectionValues(selection)
+    ...filterSelectionValues(selection, comparison)
       .filter((value) => !values.has(value))
       .map((value) => ({ value, label: value })),
   ];
@@ -178,7 +181,8 @@ const FavoritePaneFilters: React.FC<FavoritePaneFiltersProps> = ({
           const selection = queryKey
             ? (state.filters.queryFacets?.[queryKey] ?? ALL_MULTISELECT_FILTER)
             : state.filters[definition.key as 'kinds' | 'namespaces' | 'clusters'];
-          const options = mergeSavedOptions(definition.options, selection);
+          const comparison = definition.key === 'clusters' ? 'exact' : 'case-insensitive';
+          const options = mergeSavedOptions(definition.options, selection, comparison);
           return (
             <div
               className="modal-form-field modal-form-field-inline fav-save-inline-row"
@@ -191,12 +195,13 @@ const FavoritePaneFilters: React.FC<FavoritePaneFiltersProps> = ({
                 id={`${elementIdPrefix}-${pane.id}-${definition.key}`}
                 dropdownClassName="fav-save-dropdown-menu"
                 options={options}
-                value={filterSelectionToDropdownValues(selection, options)}
+                value={filterSelectionToDropdownValues(selection, options, comparison)}
                 displayValue={semanticSelectionDisplayValue(selection)}
                 onChange={(value) => {
                   const next = filterSelectionFromDropdownValues(
                     normalizeDropdownValue(value),
-                    options
+                    options,
+                    comparison
                   );
                   if (queryKey) {
                     onChange({
@@ -338,18 +343,14 @@ const FavoritePaneTableState: React.FC<FavoritePaneTableStateProps> = ({
   };
 
   const reorderColumn = (key: string, targetIndex: number) => {
-    const currentIndex = orderedColumns.findIndex((column) => column.key === key);
-    if (
-      currentIndex < 0 ||
-      targetIndex < 0 ||
-      targetIndex >= orderedColumns.length ||
-      currentIndex === targetIndex
-    ) {
+    const nextOrder = reorderColumnOrder(
+      orderedColumns.map((column) => column.key),
+      key,
+      targetIndex
+    );
+    if (!nextOrder) {
       return;
     }
-    const nextOrder = orderedColumns.map((column) => column.key);
-    const [movedKey] = nextOrder.splice(currentIndex, 1);
-    nextOrder.splice(targetIndex, 0, movedKey);
     onChange({ ...state.tableState, columnOrder: nextOrder });
   };
 
@@ -583,9 +584,103 @@ const hasFormChanges = (
   return false;
 };
 
+type FavoriteDraftInput = Pick<
+  FavSaveModalProps,
+  | 'existingFavorite'
+  | 'defaultName'
+  | 'kubeconfigSelection'
+  | 'viewType'
+  | 'viewLabel'
+  | 'namespace'
+> & { panes: FavoriteModalPane[] };
+
+function createFavoriteDraft({
+  existingFavorite,
+  defaultName,
+  kubeconfigSelection,
+  viewType,
+  viewLabel,
+  namespace,
+  panes,
+}: FavoriteDraftInput): FavoriteFormState {
+  if (existingFavorite) {
+    const route = resolveFavoriteRoute(existingFavorite.viewType, existingFavorite.view);
+    return {
+      name: existingFavorite.name,
+      clusterSpecific: route.scope !== 'global' && existingFavorite.clusterSelection !== '',
+      clusterSelection: existingFavorite.clusterSelection || kubeconfigSelection,
+      scope: route.scope,
+      view: route.view,
+      namespace: existingFavorite.namespace || ALL_NAMESPACES_SCOPE,
+      panes: existingFavorite.panes,
+    };
+  }
+  const route = resolveFavoriteRoute(viewType, resolveViewId(viewLabel, viewType));
+  return {
+    name: defaultName,
+    clusterSpecific: route.scope !== 'global',
+    clusterSelection: kubeconfigSelection,
+    scope: route.scope,
+    view: route.view,
+    namespace: namespace || ALL_NAMESPACES_SCOPE,
+    panes: Object.fromEntries(
+      panes.map((pane) => [pane.id, { filters: pane.filters, tableState: pane.tableState }])
+    ),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
+
+interface FavoriteSaveFooterProps {
+  isEditing: boolean;
+  saving: boolean;
+  nameCollision: boolean;
+  changesDetected: boolean;
+  saveError: string;
+  onDelete: () => void;
+  onClose: () => void;
+  onSave: () => Promise<void>;
+}
+
+function FavoriteSaveFooter({
+  isEditing,
+  saving,
+  nameCollision,
+  changesDetected,
+  saveError,
+  onDelete,
+  onClose,
+  onSave,
+}: FavoriteSaveFooterProps) {
+  return (
+    <div className="modal-footer">
+      {!!isEditing && (
+        <button type="button" className="button danger" onClick={onDelete}>
+          Delete
+        </button>
+      )}
+      {saveError ? (
+        <div className="fav-save-error" role="alert">
+          <ErrorSurface kind="reported" message={saveError} />
+        </div>
+      ) : null}
+      <div className="fav-save-footer-spacer" />
+      <button type="button" className="button cancel" onClick={onClose} disabled={saving}>
+        Cancel
+      </button>
+      <button
+        type="button"
+        className="button save"
+        onClick={onSave}
+        disabled={saving || nameCollision || (isEditing && !changesDetected)}
+      >
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+    </div>
+  );
+}
 
 const FavSaveModal: React.FC<FavSaveModalProps> = ({
   isOpen,
@@ -626,34 +721,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
-  // ----- Initialize form when modal opens -----
-  useEffect(() => {
-    if (!isOpen) {
-      draftOpenRef.current = false;
-      return;
-    }
-    if (draftOpenRef.current) {
-      return;
-    }
-    draftOpenRef.current = true;
-    if (existingFavorite) {
-      const existingRoute = resolveFavoriteRoute(existingFavorite.viewType, existingFavorite.view);
-      setName(existingFavorite.name);
-      setClusterSpecific(
-        existingRoute.scope !== 'global' && existingFavorite.clusterSelection !== ''
-      );
-      setClusterSelection(existingFavorite.clusterSelection || kubeconfigSelection);
-      setSelectedView(buildViewValue(existingRoute.scope, existingRoute.view));
-      setSelectedNamespace(existingFavorite.namespace || ALL_NAMESPACES_SCOPE);
-      setPaneStates(existingFavorite.panes);
-    } else {
-      const initialRoute = resolveFavoriteRoute(viewType, resolveViewId(viewLabel, viewType));
-      setName(defaultName);
-      setClusterSpecific(initialRoute.scope !== 'global');
-      setClusterSelection(kubeconfigSelection);
-      setSelectedView(buildViewValue(initialRoute.scope, initialRoute.view));
-      setSelectedNamespace(namespace || ALL_NAMESPACES_SCOPE);
-      const configuredPanes = panes ?? [
+  const modalPanes = useMemo<FavoriteModalPane[]>(
+    () =>
+      panes ?? [
         {
           id: 'main',
           label: viewLabel,
@@ -666,16 +736,43 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
             showNamespaceDropdown: Boolean(availableFilterNamespaces?.length),
           },
         },
-      ];
-      setPaneStates(
-        Object.fromEntries(
-          configuredPanes.map((pane) => [
-            pane.id,
-            { filters: pane.filters, tableState: pane.tableState },
-          ])
-        )
-      );
+      ],
+    [
+      availableFilterNamespaces,
+      availableKinds,
+      filters,
+      includeMetadata,
+      panes,
+      tableState,
+      viewLabel,
+    ]
+  );
+
+  // ----- Initialize form when modal opens -----
+  useEffect(() => {
+    if (!isOpen) {
+      draftOpenRef.current = false;
+      return;
     }
+    if (draftOpenRef.current) {
+      return;
+    }
+    draftOpenRef.current = true;
+    const draft = createFavoriteDraft({
+      existingFavorite,
+      defaultName,
+      kubeconfigSelection,
+      viewType,
+      viewLabel,
+      namespace,
+      panes: modalPanes,
+    });
+    setName(draft.name);
+    setClusterSpecific(draft.clusterSpecific);
+    setClusterSelection(draft.clusterSelection);
+    setSelectedView(buildViewValue(draft.scope, draft.view));
+    setSelectedNamespace(draft.namespace);
+    setPaneStates(draft.panes);
     setShowDeleteConfirm(false);
     setSaving(false);
     setSaveError('');
@@ -687,12 +784,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     viewType,
     viewLabel,
     namespace,
-    filters,
-    includeMetadata,
-    panes,
-    tableState,
-    availableKinds,
-    availableFilterNamespaces,
+    modalPanes,
   ]);
 
   useModalFocusTrap({
@@ -744,33 +836,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     return opts;
   }, [namespaces]);
 
-  const modalPanes = useMemo<FavoriteModalPane[]>(
-    () =>
-      panes ?? [
-        {
-          id: 'main',
-          label: viewLabel,
-          filters: { ...filters, includeMetadata },
-          tableState,
-          filterOptions: {
-            kinds: availableKinds,
-            namespaces: availableFilterNamespaces,
-            showKindDropdown: Boolean(availableKinds?.length),
-            showNamespaceDropdown: Boolean(availableFilterNamespaces?.length),
-          },
-        },
-      ],
-    [
-      availableFilterNamespaces,
-      availableKinds,
-      filters,
-      includeMetadata,
-      panes,
-      tableState,
-      viewLabel,
-    ]
-  );
-
   const updatePaneFilters = (
     paneId: string,
     update: (current: FavoriteFilters) => FavoriteFilters
@@ -809,18 +874,17 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   }, [isGlobalScope]);
 
   // Detect whether Save should be enabled when editing.
-  const changesDetected =
-    isEditing && existingFavorite
-      ? hasFormChanges(existingFavorite, {
-          name: name.trim() || defaultName,
-          clusterSpecific,
-          clusterSelection,
-          scope,
-          view: activeView,
-          namespace: selectedNamespace,
-          panes: paneStates,
-        })
-      : true;
+  const changesDetected = existingFavorite
+    ? hasFormChanges(existingFavorite, {
+        name: name.trim() || defaultName,
+        clusterSpecific,
+        clusterSelection,
+        scope,
+        view: activeView,
+        namespace: selectedNamespace,
+        panes: paneStates,
+      })
+    : true;
   const resolvedName = name.trim() || defaultName.trim();
   const nameCollision = unavailableNames.some(
     (unavailableName) => unavailableName.trim() === resolvedName
@@ -1052,30 +1116,16 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
           })}
         </div>
 
-        <div className="modal-footer">
-          {isEditing && (
-            <button type="button" className="button danger" onClick={handleDelete}>
-              Delete
-            </button>
-          )}
-          {saveError ? (
-            <div className="fav-save-error" role="alert">
-              <ErrorSurface kind="reported" message={saveError} />
-            </div>
-          ) : null}
-          <div className="fav-save-footer-spacer" />
-          <button type="button" className="button cancel" onClick={onClose} disabled={saving}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="button save"
-            onClick={handleSave}
-            disabled={saving || nameCollision || (isEditing && !changesDetected)}
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        </div>
+        <FavoriteSaveFooter
+          isEditing={isEditing}
+          saving={saving}
+          nameCollision={nameCollision}
+          changesDetected={changesDetected}
+          saveError={saveError}
+          onDelete={handleDelete}
+          onClose={onClose}
+          onSave={handleSave}
+        />
       </ModalSurface>
 
       <ConfirmationModal

@@ -434,8 +434,6 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 	}
 
 	builder := &PodBuilder{
-		// No podLister: the namespace scope must be served entirely from the store.
-		rsLister:   rs,
 		maintained: maintained,
 		metrics: fakePodMetricsProvider{
 			usage: map[string]metrics.PodUsage{

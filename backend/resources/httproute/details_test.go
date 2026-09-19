@@ -45,3 +45,36 @@ func TestBuildDetailsUseSharedFactsAndDisplayOnlyRefs(t *testing.T) {
 	require.Equal(t, "backend", detail.BackendRefs[0].Display.Name)
 	require.NotNil(t, detail.Rules[0].BackendRefs[0].Display)
 }
+
+func TestBuildDetailsDoesNotInventVersionsForUnknownGatewayTargets(t *testing.T) {
+	for _, group := range []gatewayv1.Group{"", "gateway.networking.k8s.io", "example.com"} {
+		t.Run(string(group), func(t *testing.T) {
+			kind := gatewayv1.Kind("UnknownBackend")
+			route := &gatewayv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "apps"},
+				Spec: gatewayv1.HTTPRouteSpec{
+					CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: []gatewayv1.ParentReference{{
+						Group: &group, Kind: &kind, Name: "edge",
+					}}},
+					Rules: []gatewayv1.HTTPRouteRule{{BackendRefs: []gatewayv1.HTTPBackendRef{{
+						BackendRef: gatewayv1.BackendRef{BackendObjectReference: gatewayv1.BackendObjectReference{
+							Group: &group, Kind: &kind, Name: "backend",
+						}},
+					}}}},
+				},
+			}
+			detail := NewService(common.Dependencies{ClusterID: "cluster-a"}).buildDetails(route)
+			require.Nil(t, detail.ParentRefs[0].Ref)
+			require.Nil(t, detail.BackendRefs[0].Ref)
+			require.Nil(t, detail.Rules[0].BackendRefs[0].Ref)
+			display := detail.BackendRefs[0].Display
+			require.NotNil(t, display)
+			require.Equal(t, "cluster-a", display.ClusterID)
+			require.Equal(t, string(group), display.Group)
+			require.Empty(t, display.Version)
+			require.Equal(t, "UnknownBackend", display.Kind)
+			require.Equal(t, "apps", display.Namespace)
+			require.Equal(t, "backend", display.Name)
+		})
+	}
+}
