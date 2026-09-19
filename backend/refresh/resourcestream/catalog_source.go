@@ -11,7 +11,9 @@ func (m *Manager) SubscribeCustomResourceChanges(listener func(resourcemodel.Res
 	m.customChangeMu.Lock()
 	defer m.customChangeMu.Unlock()
 	if m.stopped.Load() || listener == nil {
-		return func() {}
+		return func() {
+			// Stopped managers and absent listeners do not create subscriptions.
+		}
 	}
 	if m.customChangeSubscribers == nil {
 		m.customChangeSubscribers = make(map[uint64]func(resourcemodel.ResourceRef))

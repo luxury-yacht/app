@@ -317,25 +317,29 @@ func (s *Service) runLoop(ctx context.Context) error {
 	// below must fire promptly. Registration racing a sync is safe by design: the
 	// contended ingest callbacks queue a trailing authoritative read, including
 	// changes arriving after the full sync already collected their kind.
-	stopNotifier := s.startWatchNotifier(ctx, notifier)
-	defer stopNotifier()
+	watchCtx, cancelWatch := context.WithCancel(ctx)
+	waitForNotifier := s.startWatchNotifier(watchCtx, notifier)
+	// Defers run in reverse order: cancel before joining the notifier.
+	defer waitForNotifier()
+	defer cancelWatch()
 	return s.runResyncLoop(ctx, initialSyncErr)
 }
 
 func (s *Service) startWatchNotifier(ctx context.Context, notifier *watchNotifier) func() {
 	if !s.opts.EnableReactiveUpdates {
-		return func() {}
+		return func() {
+			// Reactive updates are disabled, so there is no notifier to join.
+		}
 	}
-	watchCtx, cancelWatch := context.WithCancel(ctx)
 	watchDone := make(chan struct{})
 	go func() {
 		defer close(watchDone)
 		defer notifier.removeHandlers()
 		registerWatchHandlers(s.deps.InformerFactory, s.deps.APIExtensionsInformerFactory, notifier, s)
 		s.logInfo("catalog reactive updates enabled")
-		notifier.run(watchCtx)
+		notifier.run(ctx)
 	}()
-	return func() { cancelWatch(); <-watchDone }
+	return func() { <-watchDone }
 }
 
 func (s *Service) runResyncLoop(ctx context.Context, initialSyncErr error) error {

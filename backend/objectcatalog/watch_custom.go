@@ -10,7 +10,9 @@ import (
 func (n *watchNotifier) subscribeCustomResources(ctx context.Context) func() {
 	source := n.service.deps.CustomResourceSource
 	if source == nil {
-		return func() {}
+		return func() {
+			// Without a custom-resource source there is no subscription to remove.
+		}
 	}
 	return source.SubscribeCustomResourceChanges(func(ref resourcemodel.ResourceRef) {
 		if ctx.Err() == nil && ref.ClusterID == n.service.clusterID {

@@ -54,3 +54,29 @@ Durable acceptance requirements now live in
 [data freshness](../architecture/data-freshness.md#required-evidence-for-resource-source-changes),
 with entry points in the table-change checklist and testing standard. Those
 requirements guide future changes; documentation alone cannot enforce them.
+
+## PR 356 Sonar remediation
+
+The all-rule PR audit on revision `61e44b3d0d534d3fdcc668d8a432cae14a9b8186`
+reported four findings (none were cognitive-complexity findings):
+
+| Sonar key | Rule | Local remediation |
+| --- | --- | --- |
+| `AaC7DovoMe4CmcK0j-G-` | `go:S1186` | Explain the empty join callback when reactive updates are disabled |
+| `AaC7DovoMe4CmcK0j-G_` | `godre:S8188` | Move notifier cancellation into `runLoop`, with deferred cancellation ordered before joining the worker |
+| `AaC7DovUMe4CmcK0j-G9` | `go:S1186` | Explain the empty unsubscribe callback when no custom-resource source exists |
+| `AaC7DosSMe4CmcK0j-G8` | `go:S1186` | Explain the empty unsubscribe callback when the manager is stopped or the listener is absent |
+
+`runLoop` owns the notifier lifetime. The worker still registers handlers
+asynchronously, reconciles catalog changes, removes its handlers and completes
+before catalog retirement. The existing custom-source and catalog consumers do
+not change, and no dependency is added. Characterization tests for live catalog
+updates, startup deletion, parent cancellation, blocked registration and source
+retirement passed before the refactor.
+
+| Remediation evidence | Status | Evidence |
+| --- | --- | --- |
+| Focused tests after ownership refactor | pending | Rerun the existing characterization cases |
+| Affected coverage and local complexity | pending | Measure the changed production functions |
+| Final repository gate | pending | Run `qc:prerelease` and inspect the worktree |
+| Sonar closure on the corrected revision | pending | Requires an explicitly authorized push and a completed analysis of that revision; the current remote analysis still describes `61e44b3d` |
