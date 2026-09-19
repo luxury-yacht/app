@@ -27,14 +27,25 @@ import (
 // Exercise the production composition, replacing only Kubernetes API clients.
 // A custom-domain signal alone cannot satisfy a catalog-backed table query.
 func TestCatalogCustomResourceWatchReconcilesTableMembership(t *testing.T) {
+	for _, version := range []string{"v1", "v1beta1"} {
+		t.Run(version, func(t *testing.T) {
+			testCatalogCustomResourceWatchReconcilesTableMembership(t, version)
+		})
+	}
+}
+
+func testCatalogCustomResourceWatchReconcilesTableMembership(t *testing.T, watchVersion string) {
+	t.Helper()
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
 	clients := app.ClusterRuntime.clusterClientsForID(target.meta.ID)
 	kube := clients.client.(*kubefake.Clientset)
 	allowSelfSubjectAccessReviews(kube)
-	gvr := schema.GroupVersionResource{Group: "external-secrets.io", Version: "v1", Resource: "externalsecrets"}
+	gvr := schema.GroupVersionResource{Group: "external-secrets.io", Version: watchVersion, Resource: "externalsecrets"}
+	catalogGVR := gvr
+	catalogGVR.Version = "v1"
 	kube.Discovery().(*fakediscovery.FakeDiscovery).Resources = []*metav1.APIResourceList{{
-		GroupVersion: gvr.GroupVersion().String(),
+		GroupVersion: catalogGVR.GroupVersion().String(),
 		APIResources: []metav1.APIResource{{Name: gvr.Resource, Kind: "ExternalSecret", Namespaced: true, Verbs: []string{"list", "watch"}}},
 	}}
 	resource := &unstructured.Unstructured{}
@@ -46,16 +57,29 @@ func TestCatalogCustomResourceWatchReconcilesTableMembership(t *testing.T) {
 	other := resource.DeepCopy()
 	other.SetNamespace("other")
 	other.SetUID("other-uid")
-	dynamic := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gvr: "ExternalSecretList"}, resource, other)
+	dynamic := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gvr: "ExternalSecretList", catalogGVR: "ExternalSecretList"}, resource, other)
+	// The fake tracker stores one version; the API server serves the same
+	// objects through every served version. Catalog projection only reads metadata.
+	dynamic.PrependReactor("list", gvr.Resource, func(action clienttesting.Action) (bool, runtime.Object, error) {
+		if action.GetResource() != catalogGVR || catalogGVR == gvr {
+			return false, nil, nil
+		}
+		list, err := dynamic.Tracker().List(gvr, resource.GroupVersionKind(), action.GetNamespace())
+		return true, list, err
+	})
 	clients.dynamicClient = dynamic
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
+	versions := []apiextensionsv1.CustomResourceDefinitionVersion{{Name: gvr.Version, Served: true, Storage: true}}
+	if catalogGVR != gvr {
+		versions = append(versions, apiextensionsv1.CustomResourceDefinitionVersion{Name: catalogGVR.Version, Served: true})
+	}
 	_, err := clients.apiextensionsClient.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: "externalsecrets.external-secrets.io"},
 		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
 			Group: gvr.Group, Names: apiextensionsv1.CustomResourceDefinitionNames{Plural: gvr.Resource, Kind: "ExternalSecret"},
 			Scope:    apiextensionsv1.NamespaceScoped,
-			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{Name: gvr.Version, Served: true, Storage: true}},
+			Versions: versions,
 		},
 	}, metav1.CreateOptions{})
 	require.NoError(t, err)
@@ -71,8 +95,17 @@ func TestCatalogCustomResourceWatchReconcilesTableMembership(t *testing.T) {
 	require.NoError(t, app.Refresh.startObjectCatalogForTarget(target))
 	service := app.Refresh.objectCatalogServiceForCluster(target.meta.ID)
 	query := objectcatalog.QueryOptions{Namespaces: []string{"argocd"}}
-	require.Eventually(t, func() bool { return len(service.Query(query).Items) == 1 }, 3*time.Second, 10*time.Millisecond)
 	require.Eventually(t, func() bool {
+		return service.Health().Status == objectcatalog.HealthStateOK && len(service.Query(query).Items) == 1
+	}, 3*time.Second, 10*time.Millisecond)
+	watchRef := service.Query(query).Items[0].Ref
+	require.Equal(t, catalogGVR.Version, watchRef.Version)
+	watchRef.Version = watchVersion
+	require.Eventually(t, func() bool {
+		object, ready := subsystem.ResourceStream.WatchedCustomResource(watchRef)
+		if !ready || object == nil {
+			return false
+		}
 		for _, action := range dynamic.Actions() {
 			if action.GetVerb() == "watch" && action.GetResource() == gvr {
 				return true
@@ -84,6 +117,7 @@ func TestCatalogCustomResourceWatchReconcilesTableMembership(t *testing.T) {
 	for len(sub.Updates) > 0 {
 		<-sub.Updates
 	}
+	dynamic.ClearActions()
 	updated := resource.DeepCopy()
 	updated.SetResourceVersion("2")
 	updated.SetFinalizers([]string{"external-secrets.io/cleanup"})
@@ -103,6 +137,10 @@ func TestCatalogCustomResourceWatchReconcilesTableMembership(t *testing.T) {
 	require.Len(t, remaining, 1)
 	require.Equal(t, "other", remaining[0].Ref.Namespace)
 	require.Equal(t, target.meta.ID, remaining[0].Ref.ClusterID)
+	require.Equal(t, catalogGVR.Version, remaining[0].Ref.Version)
+	for _, action := range dynamic.Actions() {
+		require.NotEqual(t, "list", action.GetVerb(), "watch-driven catalog updates must not perform another dynamic LIST")
+	}
 
 	// Restart the catalog against the same live producer. Delete an object after
 	// its initial LIST has captured it, before that LIST returns to the catalog.
@@ -114,6 +152,7 @@ func TestCatalogCustomResourceWatchReconcilesTableMembership(t *testing.T) {
 	require.NoError(t, err)
 	ref := remaining[0].Ref
 	ref.Namespace = "argocd"
+	ref.Version = watchVersion
 	require.Eventually(t, func() bool {
 		object, ready := subsystem.ResourceStream.WatchedCustomResource(ref)
 		return ready && object != nil && object.GetUID() == recreated.GetUID()

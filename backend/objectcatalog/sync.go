@@ -380,7 +380,7 @@ func (s *Service) runResyncLoop(ctx context.Context, initialSyncErr error) error
 
 func (s *Service) fullResyncInterval() time.Duration {
 	interval := s.opts.ResyncInterval
-	if s.opts.EnableReactiveUpdates && s.deps.InformerFactory != nil && interval < config.ObjectCatalogReactiveMinResyncInterval {
+	if s.opts.EnableReactiveUpdates && interval < config.ObjectCatalogReactiveMinResyncInterval {
 		// With reactive updates the full resync is a consistency safety net.
 		return config.ObjectCatalogReactiveMinResyncInterval
 	}

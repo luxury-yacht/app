@@ -16,6 +16,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -32,6 +33,27 @@ import (
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
+
+func TestCatalogReactiveResyncCadenceWithoutSharedFactory(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		reactive bool
+		interval time.Duration
+		want     time.Duration
+	}{
+		{name: "polling", interval: time.Second, want: time.Second},
+		{name: "custom watches", reactive: true, interval: time.Second, want: config.ObjectCatalogReactiveMinResyncInterval},
+		{name: "longer safety net", reactive: true, interval: time.Hour, want: time.Hour},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			svc := newTestWatchService()
+			svc.opts.EnableReactiveUpdates = test.reactive
+			svc.opts.ResyncInterval = test.interval
+			svc.deps.CustomResourceSource = &catalogWatchSourceStub{}
+			require.Equal(t, test.want, svc.fullResyncInterval(), "custom-only reactive catalogs use the same safety-net cadence")
+		})
+	}
+}
 
 type recordingTelemetryEntry struct {
 	enabled       bool

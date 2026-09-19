@@ -48,6 +48,9 @@ var watchInformerGroupResources = catalogGroupResources(kindspec.CatalogShared)
 type watchNotifier struct {
 	service            *Service
 	pending            chan watchEvent
+	customMu           sync.Mutex
+	customPending      map[resourcemodel.ResourceRef]struct{}
+	customChanged      chan struct{}
 	recoveryMu         sync.Mutex
 	fullSyncRequested  bool
 	coalescedDropCount int
@@ -82,8 +85,9 @@ type watchBatch struct {
 
 func newWatchNotifier(svc *Service) *watchNotifier {
 	return &watchNotifier{
-		service: svc,
-		pending: make(chan watchEvent, config.ObjectCatalogWatchPendingBufferSize),
+		service:       svc,
+		pending:       make(chan watchEvent, config.ObjectCatalogWatchPendingBufferSize),
+		customChanged: make(chan struct{}, 1),
 	}
 }
 
@@ -157,6 +161,8 @@ func (n *watchNotifier) run(ctx context.Context) {
 		case <-ctx.Done():
 			n.finishWatchBatch(ctx, &batch, false)
 			return
+		case <-n.customChanged:
+			batch.startTimer()
 		case evt, ok := <-n.pending:
 			if !ok {
 				n.finishWatchBatch(ctx, &batch, false)
@@ -173,16 +179,21 @@ func (n *watchNotifier) run(ctx context.Context) {
 
 func (b *watchBatch) add(event watchEvent) bool {
 	b.events = append(b.events, event)
+	b.startTimer()
+	return len(b.events) >= config.ObjectCatalogWatchPendingBufferSize
+}
+
+func (b *watchBatch) startTimer() {
 	if b.timer == nil {
 		b.timer = time.NewTimer(config.ObjectCatalogWatchDebounceInterval)
 		b.timerChannel = b.timer.C
 	}
-	return len(b.events) >= config.ObjectCatalogWatchPendingBufferSize
 }
 
 func (n *watchNotifier) finishWatchBatch(ctx context.Context, batch *watchBatch, runRecovery bool) {
-	if len(batch.events) > 0 {
-		n.flush(batch.events)
+	events := append(batch.events, n.takeCustomResourceEvents()...)
+	if len(events) > 0 {
+		n.flush(events)
 	}
 	if runRecovery {
 		n.runRecoverySync(ctx)

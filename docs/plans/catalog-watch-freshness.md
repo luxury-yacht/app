@@ -1,5 +1,10 @@
 # Catalog watch freshness
 
+Status: review follow-up implementation and local validation passed. Merge
+verification remains open for Sonar analysis of the next pushed revision. Gate
+and Sonar results below the original fix are historical; current evidence is
+in the review follow-up section.
+
 Restore catalog-backed table freshness after Kubernetes custom-resource changes,
 including deletion with finalizers, and cover the application wiring that allowed
 an unrelated healthy stream to conceal stale catalog membership.
@@ -17,7 +22,7 @@ tables, the diff object chooser, catalog-backed map identities, and finalizer
 Attention findings. Gateway informer-backed catalog rows now have incremental
 handlers. Dedicated resource domains keep their existing notifications.
 
-## Completion evidence
+## Completion evidence for the original freshness fix
 
 | Criterion | Status | Evidence |
 | --- | --- | --- |
@@ -80,3 +85,30 @@ retirement passed before the refactor.
 | Affected coverage and local complexity | passed | `test:backend-coverage` passed; `runLoop`, `startWatchNotifier`, `subscribeCustomResources` and `SubscribeCustomResourceChanges` each have 100% statement coverage. Pinned gocognit 1.2.1 reports scores 3, 1, 4 and 3 respectively |
 | Final repository gate | passed | `mise exec -- wails3 task qc:prerelease` exited 0, including backend race tests and 524 frontend files / 5,049 tests. The subsequent worktree inspection showed only this evidence record modified; `git diff --check` passed |
 | Sonar closure on the corrected revision | passed | PR #356's Sonar analysis completed successfully for `6a47f58ab7f182a945b2a3a5985f93ee502b0d38` at 2026-09-19 19:12:25 UTC. The subsequent `npm run sonar:audit --prefix frontend -- --pull-request 356` reports zero open/confirmed new-code issues across all rules |
+
+## Review follow-up to 8e7ab41e
+
+The stream manager remains the producer; the catalog notifier, query index and
+catalog signal bridge remain the consumers. Source reads keep the informer's
+version; published keys use discovery's descriptor. Custom notifications retain
+one pending ref per identity before initial LIST completion, and resolve after
+acquiring sync ownership. This preserves subscription-before-LIST, authoritative
+replacement/absence, publication-before-signal and cancellation ordering without
+adding a callback dependency or another watch.
+
+| Review criterion | Status | Evidence |
+| --- | --- | --- |
+| Different served watch/catalog versions remain incremental | passed | The `v1beta1` case of `TestQueuedCustomChangeUsesCurrentIdentityAndRecoversUnreadySource` failed with zero rows before descriptor resolution changed. Both versions now pass, including replacement, deletion and no recovery request. The coordinator test runs both versions and rejects any dynamic LIST during update/delete; restoring exact-version lookup with a temporary Go overlay fails its no-LIST assertion |
+| Startup replay exceeds the payload buffer without recovery LIST | passed | `TestCustomResourceStartupBurstCoalescesWithoutFullSync` first failed because replay requested a full sync. It now reconciles 8,193 objects plus an absent identity, despite repeated recreation notifications, with one source read per identity |
+| Custom-only reactive mode uses the safety-net interval | passed | `TestCatalogReactiveResyncCadenceWithoutSharedFactory` first returned 1s instead of 5m; the condition now matches notifier admission, while nonreactive and longer intervals are preserved |
+| Adjacent startup, cancellation, readiness and source retirement | passed | Focused backend, objectcatalog and resourcestream tests passed; only Kubernetes clients or the custom-source boundary are replaced |
+| Coverage and local complexity | passed | `test:backend-coverage` exited 0. Changed production functions cover 57/61 statements (93.4%); eight functions have 100%, notifier `run` has 75% and current-source resolution has 90%. Pinned gocognit 1.2.1 reports a maximum of 9 across changed functions and new helpers |
+| Existing frontend suite includes the real-view regression | passed | `npx vitest list --filesOnly` includes `src/modules/browse/hooks/catalogFreshness.integration.test.tsx` using the default project configuration; the existing release workflow invokes `test:frontend` before build jobs |
+| Final repository gate and worktree inspection | passed | On 2026-09-19, `GOCACHE=/tmp/luxury-yacht-go-build STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck mise exec -- wails3 task qc:prerelease` exited 0, including backend race tests, 524 frontend files / 5,049 tests, lint/typecheck, knip and Trivy. Post-gate inspection shows only the nine follow-up files changed; `git diff --check` passed |
+| Sonar analysis of follow-up revision | pending | The current PR head is still `8e7ab41e2207930df5b62b705465fe9d90b76074`; its completed Sonar analysis and all-rule audit report zero open/confirmed new-code issues. These local follow-up changes require a new pushed revision and analysis |
+
+Durable version/coalescing guidance lives in the existing
+[catalog contract](../architecture/catalog.md#watch-to-query-ordering). The
+existing release workflow remains the test owner. Commit-history editing is
+outside this work; the root instructions require explicit authorization for
+state-modifying git commands.

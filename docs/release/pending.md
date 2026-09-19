@@ -13,6 +13,6 @@
 - Object-panel permission checks finish even while another cluster reports authentication recovery progress.
 - Table preferences save while resource rows continue refreshing.
 - Custom-resource menus report invalid resource data without interrupting the table.
-- Custom-resource tables, including Argo CD views, now update promptly after resource changes and completed deletions; Browse also stays current for custom and Gateway API resources.
+- Custom-resource tables, including Argo CD views, now update promptly after resource changes and completed deletions; Browse also stays current for custom and Gateway API resources. CRD version migrations and large startup replays no longer trigger unnecessary full catalog refreshes.
 - Closing an object panel no longer lets a pending render recreate its removed layout.
 - Closed diagnostics panels stop observing refresh writes and scanning resource-stream telemetry.

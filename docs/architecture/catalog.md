@@ -79,6 +79,15 @@ against the current informer store. An old delete must not erase a replacement
 object. An unsynced, unauthorized, or retired source is not authoritative absence;
 retain membership and use the existing resync recovery path.
 
+The informer may use a different served version than discovery prefers. Read the
+source using its original version, then resolve group/resource to the catalog's
+descriptor for publication and deletion keys. Version drift alone must not
+trigger a full catalog LIST. Coalesce identity-only notifications before the
+bounded payload queue: startup replay retains one pending read per distinct
+identity, including across UID replacement. Pending memory scales with distinct
+identities awaiting reconciliation, not the number of notifications; draining
+releases that batch before resolving current source state.
+
 Gateway API collection and incremental handlers derive from the same resource
 registry and reuse the Gateway informer factory. Publish catalog membership,
 query counts/facets, and finalizer findings before the catalog bridge invalidates
