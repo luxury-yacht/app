@@ -68,6 +68,27 @@ incremental changes and whole-kind replacement, including changes arriving after
 a full sync collected that kind. Catalog shutdown drains this worker before
 signaling completion.
 
+## Watch-to-query ordering
+
+Custom-resource membership consumes the refresh subsystem's existing,
+permission-gated dynamic informers through `CustomResourceSource`. Subscribe
+before the initial catalog LIST so changes during collection cannot fall between
+the initial snapshot and change delivery. Notifications enqueue full object
+identity; after acquiring catalog publication ownership, resolve that identity
+against the current informer store. An old delete must not erase a replacement
+object. An unsynced, unauthorized, or retired source is not authoritative absence;
+retain membership and use the existing resync recovery path.
+
+Gateway API collection and incremental handlers derive from the same resource
+registry and reuse the Gateway informer factory. Publish catalog membership,
+query counts/facets, and finalizer findings before the catalog bridge invalidates
+snapshot caches and emits the catalog signal. Notifications on a different
+resource domain do not establish catalog freshness.
+
+Catalog retirement unsubscribes from custom-resource changes, removes its
+informer handlers, and joins the notifier before completing. It does not stop
+the subsystem's shared watch producers.
+
 ## Layer Model
 
 | Layer | Owns |

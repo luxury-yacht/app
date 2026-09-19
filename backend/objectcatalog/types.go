@@ -20,6 +20,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	informers "k8s.io/client-go/informers"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
@@ -141,6 +142,7 @@ type Dependencies struct {
 	GatewayInformerFactory       gatewayinformers.SharedInformerFactory // Gateway API informer factory
 	PermissionChecker            permissions.ListWatchChecker           // optional; if nil, assumes all permissions granted
 	IngestSource                 IngestSource                           // optional; supplies catalog rows for ingest-owned kinds
+	CustomResourceSource         CustomResourceSource                   // optional; reuses the cluster's existing custom-resource watches
 	ClusterID                    string                                 // stable identifier for the source cluster
 	// WaitForCaches blocks until the informer caches the collect reads from are
 	// synced. sync() calls it between the RBAC preflight and the collect fan-out, so
@@ -153,6 +155,16 @@ type Dependencies struct {
 	// cluster-wide, and a namespace the identity cannot list is skipped
 	// without blanking the others. Empty means cluster-wide (today).
 	AllowedNamespaces []string
+}
+
+// CustomResourceSource owns permission-gated custom-resource watches for one
+// cluster. Notifications carry full identity; reads return current informer state
+// so a delayed event cannot overwrite a newer list or a recreated object.
+type CustomResourceSource interface {
+	SubscribeCustomResourceChanges(func(resourcemodel.ResourceRef)) func()
+	// A nil object with ready=true is an authoritative deletion. ready=false
+	// means the watch does not cover this identity or has not finished its list.
+	WatchedCustomResource(resourcemodel.ResourceRef) (metav1.Object, bool)
 }
 
 // IngestSource supplies the object-catalog Summaries for ingest-owned (cut) kinds,

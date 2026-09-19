@@ -297,6 +297,13 @@ func (s *Service) runLoop(ctx context.Context) error {
 	defer close(s.doneCh)
 	defer s.stopDynamicReflectors()
 	defer s.stopIngestReconciliation()
+	notifier := newWatchNotifier(s)
+	if s.opts.EnableReactiveUpdates {
+		// Subscribe before LIST: a deletion during initial collection must not
+		// disappear into the gap between collection and watch registration.
+		unsubscribe := notifier.subscribeCustomResources(ctx)
+		defer unsubscribe()
+	}
 
 	// Initial sync.
 	initialSyncErr := s.sync(ctx)
@@ -310,27 +317,34 @@ func (s *Service) runLoop(ctx context.Context) error {
 	// below must fire promptly. Registration racing a sync is safe by design: the
 	// contended ingest callbacks queue a trailing authoritative read, including
 	// changes arriving after the full sync already collected their kind.
-	if s.opts.EnableReactiveUpdates && s.deps.InformerFactory != nil {
-		notifier := newWatchNotifier(s)
-		go func() {
-			registerWatchHandlers(s.deps.InformerFactory, s.deps.APIExtensionsInformerFactory, notifier, s)
-			go notifier.run(ctx)
-			s.logInfo("catalog reactive updates enabled")
-		}()
-	}
+	stopNotifier := s.startWatchNotifier(ctx, notifier)
+	defer stopNotifier()
+	return s.runResyncLoop(ctx, initialSyncErr)
+}
 
+func (s *Service) startWatchNotifier(ctx context.Context, notifier *watchNotifier) func() {
+	if !s.opts.EnableReactiveUpdates {
+		return func() {}
+	}
+	watchCtx, cancelWatch := context.WithCancel(ctx)
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		defer notifier.removeHandlers()
+		registerWatchHandlers(s.deps.InformerFactory, s.deps.APIExtensionsInformerFactory, notifier, s)
+		s.logInfo("catalog reactive updates enabled")
+		notifier.run(watchCtx)
+	}()
+	return func() { cancelWatch(); <-watchDone }
+}
+
+func (s *Service) runResyncLoop(ctx context.Context, initialSyncErr error) error {
 	if s.opts.ResyncInterval <= 0 {
 		<-ctx.Done()
 		return ctx.Err()
 	}
 
-	resyncInterval := s.opts.ResyncInterval
-	if s.opts.EnableReactiveUpdates && s.deps.InformerFactory != nil {
-		// With reactive updates the full resync is a consistency safety net.
-		if resyncInterval < config.ObjectCatalogReactiveMinResyncInterval {
-			resyncInterval = config.ObjectCatalogReactiveMinResyncInterval
-		}
-	}
+	resyncInterval := s.fullResyncInterval()
 	// After a failed/incomplete sync (e.g. a startup race where ingest stores are
 	// not yet synced), retry on a short interval that backs off toward the normal
 	// cadence, so the catalog recovers in seconds instead of staying degraded until
@@ -358,6 +372,15 @@ func (s *Service) runLoop(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func (s *Service) fullResyncInterval() time.Duration {
+	interval := s.opts.ResyncInterval
+	if s.opts.EnableReactiveUpdates && s.deps.InformerFactory != nil && interval < config.ObjectCatalogReactiveMinResyncInterval {
+		// With reactive updates the full resync is a consistency safety net.
+		return config.ObjectCatalogReactiveMinResyncInterval
+	}
+	return interval
 }
 
 type catalogSync struct {

@@ -21,6 +21,11 @@ test of a mock's own output or a duplicate of the implementation is not evidence
 of app behavior. Add parameterized cases only for distinct failure modes or
 boundary values, not every spelling of equivalent copy.
 
+Resource collection, table-source, watch, cache, and signal changes must meet the
+[freshness acceptance checks](../architecture/data-freshness.md#required-evidence-for-resource-source-changes).
+Treat production wiring as a data contract; isolated producer and consumer tests
+do not prove that the application connects them.
+
 Avoid repeating a shared component or hook's contract in every consumer suite.
 Keep consumer tests for distinct wiring, identity, permissions, or outcomes;
 remove repetitions that only feed fixed props through a stub. A mock setter that

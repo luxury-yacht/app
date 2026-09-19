@@ -129,6 +129,12 @@ application transport between them.
 - Signal versions are opaque equality tokens. Sequence and Kubernetes
   `resourceVersion` are transport/object metadata, not global ordering clocks.
 - Stream messages do not carry table rows, query state, positions, or cursors.
+- A healthy transport is not evidence that every collection supplies changes.
+  A table's declared source must carry Kubernetes changes through the actual
+  snapshot owner to the signal consumed by that table, regardless of object
+  count. Tests for collection-source changes or table-source migrations must
+  exercise that composition with real state owners; separate mocked producer
+  and consumer tests cannot establish the connection.
 - A source must advance only the payload it owns. In particular, a metric tick
   must not advance an object clock or make an object snapshot appear changed.
 - A signal producer invalidates the affected snapshot/query cache before it
@@ -232,6 +238,35 @@ application transport between them.
   `frontend/src/modules/namespace/contexts/NamespaceContext.tsx`
 
 ## Change checklist
+
+### Required evidence for resource-source changes
+
+Adding a resource collection or table, changing its source, or changing watch,
+cache, or signal wiring requires freshness evidence even when the visible table
+and transport are unchanged. Completion requires:
+
+- Trace Kubernetes change delivery through the authoritative state owner,
+  snapshot/cache invalidation, declared signal, and the consuming table adapter.
+  Exercise production registrations and bindings at the affected seams; a test
+  that manually connects a replacement source cannot prove production wiring.
+- Exercise create, update, and completed deletion with the view open and a
+  healthy stream, using a small collection below any watch-promotion threshold.
+  Assert changed rows and affected counts/facets before periodic resync can run,
+  without manual refresh, navigation, or an optimistic action result. An
+  external cluster mutation must converge through the same path.
+- Distinguish deletion requested from deletion completed when finalizers apply.
+  Exercise relevant startup/reconnect races and scope isolation; retained or
+  unauthorized data must not become authoritative absence.
+- Show that the regression test detects the missing connection: it fails before
+  the fix, or with that connection deliberately removed in an isolated test
+  build, and passes with the production connection restored.
+
+Record which seams automated tests exercise and which require native interaction
+evidence. A hook harness does not establish the view's binding, a healthy stream
+does not establish source coverage, and a local pass does not establish required
+merge checks. Leave missing evidence explicit in the completion record.
+
+### Shared freshness checks
 
 For a freshness change, test the contract at the producer/consumer seam:
 

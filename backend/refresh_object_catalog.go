@@ -140,6 +140,16 @@ func (a *RefreshCoordinator) ensureObjectCatalogForCluster(clusterID string) err
 	return nil
 }
 
+func (a *RefreshCoordinator) catalogTelemetryRecorder(subsystem *system.Subsystem) objectcatalog.TelemetryRecorder {
+	if subsystem.Telemetry != nil {
+		return subsystem.Telemetry
+	}
+	if recorder := a.currentTelemetryRecorder(); recorder != nil {
+		return recorder
+	}
+	return nil
+}
+
 func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) error {
 	if target.meta.ID == "" {
 		return fmt.Errorf("cluster identifier missing")
@@ -162,13 +172,7 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 	}
 
 	commonDeps := a.clusterRuntime.resourceDependenciesForSelection(target.selection, clients, target.meta.ID)
-	telemetryRecorder := objectcatalog.TelemetryRecorder(nil)
-	if subsystem.Telemetry != nil {
-		telemetryRecorder = subsystem.Telemetry
-	} else if recorder := a.currentTelemetryRecorder(); recorder != nil {
-		telemetryRecorder = recorder
-	}
-
+	telemetryRecorder := a.catalogTelemetryRecorder(subsystem)
 	deps := objectcatalog.Dependencies{
 		Common:                       commonDeps,
 		Logger:                       applog.ClusterScoped(a.logger, target.meta.ID, target.meta.Name),
@@ -197,6 +201,9 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 		WaitForCaches: func(waitCtx context.Context) error {
 			return a.waitForCatalogInformerCaches(waitCtx, subsystem.InformerFactory)
 		},
+	}
+	if subsystem.ResourceStream != nil {
+		deps.CustomResourceSource = subsystem.ResourceStream
 	}
 
 	svc := objectcatalog.NewService(deps, nil)

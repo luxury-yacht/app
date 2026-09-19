@@ -18,6 +18,7 @@ sections. Trace related consumers before expanding to another table contract.
 | Search, filters, facets, filter chips, navigation or favorites | [Filtering](gridtable-filtering.md) |
 | Pagination, loading/empty/partial states, source adapters or adding a resource table | [Resource tables](gridtable-resource-tables.md) |
 | Backend queries, completeness or scale | [Large data](../architecture/large-data.md) |
+| New resource tables, source migrations, watch coverage or stale rows | [Required freshness evidence](../architecture/data-freshness.md#required-evidence-for-resource-source-changes) |
 
 ## Agent Contract
 
@@ -54,7 +55,9 @@ When changing table behavior:
    mode.
 4. Verify partial/degraded copy and action limits for Local Partial tables.
 5. Keep shared behavior in focused table hooks rather than feature components.
-6. Add tests with enough rows and columns to exercise the shared path.
+6. Add tests with enough rows and columns to exercise the shared path. New
+   resource tables and changes to sources, watches, caches, or signals must also
+   satisfy the [freshness acceptance checks](../architecture/data-freshness.md#required-evidence-for-resource-source-changes).
 7. For filter or footer changes, add interaction tests for focus retention,
    dropdown opening, and button disabled/loading behavior.
 

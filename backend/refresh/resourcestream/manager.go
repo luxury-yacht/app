@@ -226,8 +226,11 @@ type Manager struct {
 	// fan out over it instead of watching cluster-wide.
 	allowedNamespaces []string
 
-	customInformerMu sync.Mutex
-	customInformers  map[string]*customResourceInformer
+	customInformerMu        sync.Mutex
+	customInformers         map[string]*customResourceInformer
+	customChangeMu          sync.Mutex
+	customChangeSubscribers map[uint64]func(resourcemodel.ResourceRef)
+	nextCustomChangeID      uint64
 	// stopped is set once Stop() runs. It is terminal: a torn-down manager is
 	// discarded and replaced by a fresh one. It gates ensureCustomInformer so a
 	// CRD event arriving after teardown (the shared CRD informer can still fire,
@@ -322,6 +325,9 @@ func (m *Manager) Stop() {
 		m.jobPodOwnerHealSink.Stop()
 	}
 	m.stopped.Store(true)
+	m.customChangeMu.Lock()
+	clear(m.customChangeSubscribers)
+	m.customChangeMu.Unlock()
 	m.mu.Lock()
 	for domain, scopes := range m.subscribers {
 		for scope, subscribers := range scopes {
@@ -685,6 +691,7 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 		domain = domainNamespaceCustom
 	}
 	ref := m.resourceRefForObject(resource, info.gvr.Group, info.gvr.Version, kind, info.gvr.Resource)
+	m.notifyCustomResourceChange(ref)
 	if ref.Kind != "" && ref.Name != "" {
 		// Invalidate cached YAML/details on custom resource updates.
 		m.invalidateCustomResourceCache(ref)

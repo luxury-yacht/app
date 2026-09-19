@@ -15,6 +15,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/kindspec"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -35,6 +36,7 @@ type watchEvent struct {
 	gvr       string
 	key       string
 	obj       metav1.Object
+	ref       *resourcemodel.ResourceRef
 }
 
 // watchInformerGroupResources is the set of built-in resources the catalog watches
@@ -50,6 +52,26 @@ type watchNotifier struct {
 	fullSyncRequested  bool
 	coalescedDropCount int
 	lastOverflowWarn   time.Time
+	registrations      []catalogWatchRegistration
+}
+
+type catalogWatchRegistration struct {
+	informer cache.SharedIndexInformer
+	handler  cache.ResourceEventHandlerRegistration
+}
+
+func (n *watchNotifier) addHandler(informer cache.SharedIndexInformer, handler cache.ResourceEventHandler) {
+	registration, err := informer.AddEventHandler(handler)
+	if err == nil {
+		n.registrations = append(n.registrations, catalogWatchRegistration{informer, registration})
+	}
+}
+
+func (n *watchNotifier) removeHandlers() {
+	for _, registration := range n.registrations {
+		_ = registration.informer.RemoveEventHandler(registration.handler)
+	}
+	n.registrations = nil
 }
 
 type watchBatch struct {
@@ -86,23 +108,11 @@ func (n *watchNotifier) flush(events []watchEvent) {
 
 	changed := false
 
+	events = n.resolveCustomResourceEvents(events)
 	s.mu.Lock()
 	for _, evt := range events {
-		desc, ok := s.catalogIndex.resource(evt.gvr)
-		if !ok {
-			continue
-		}
-		switch evt.eventType {
-		case watchEventAdd, watchEventUpdate:
-			if evt.obj == nil {
-				continue
-			}
-			s.catalogIndex.setItem(evt.key, s.buildSummary(desc, evt.obj), s.now())
+		if s.applyWatchEvent(evt) {
 			changed = true
-		case watchEventDelete:
-			if s.catalogIndex.deleteItem(evt.key) {
-				changed = true
-			}
 		}
 	}
 	if !changed {
@@ -117,6 +127,26 @@ func (n *watchNotifier) flush(events []watchEvent) {
 	// rebuildCacheFromItems acquires s.mu.Lock.
 	s.rebuildCacheFromItems(itemsCopy, descriptors)
 	s.broadcastStreaming(true)
+}
+
+// applyWatchEvent runs under the catalog publication lock.
+func (s *Service) applyWatchEvent(event watchEvent) bool {
+	desc, ok := s.catalogIndex.resource(event.gvr)
+	if !ok {
+		return false
+	}
+	switch event.eventType {
+	case watchEventAdd, watchEventUpdate:
+		if event.obj == nil {
+			return false
+		}
+		s.catalogIndex.setItem(event.key, s.buildSummary(desc, event.obj), s.now())
+		return true
+	case watchEventDelete:
+		return s.catalogIndex.deleteItem(event.key)
+	default:
+		return false
+	}
 }
 
 // run collects events and flushes in debounced batches.
@@ -281,6 +311,7 @@ func registerWatchHandlers(
 	svc *Service,
 ) {
 	svc.registerIngestCatalogSinks()
+	registerGatewayWatchHandlers(notifier, svc)
 	if factory == nil {
 		return
 	}
@@ -294,7 +325,7 @@ func registerWatchHandlers(
 		if err != nil {
 			continue
 		}
-		generic.Informer().AddEventHandler(makeHandler(gr, notifier, svc))
+		notifier.addHandler(generic.Informer(), makeHandler(gr, notifier, svc))
 	}
 	if apiextFactory != nil {
 		crdInformer := apiextFactory.Apiextensions().V1().CustomResourceDefinitions().Informer()
@@ -302,7 +333,26 @@ func registerWatchHandlers(
 		// Wrap the CRD handler so a CRD add/delete also marks discovery stale: the next
 		// discover invalidates the disk-cached discovery document, so a newly-created CRD's
 		// kind is discovered promptly rather than waiting out the cache TTL.
-		crdInformer.AddEventHandler(svc.crdWatchHandler(makeHandler(gr, notifier, svc)))
+		notifier.addHandler(crdInformer, svc.crdWatchHandler(makeHandler(gr, notifier, svc)))
+	}
+}
+
+// Collection and change handlers use the same registry and shared factory. This
+// attaches listeners to existing informers, without starting another watch.
+func registerGatewayWatchHandlers(notifier *watchNotifier, svc *Service) {
+	factory := svc.deps.GatewayInformerFactory
+	if factory == nil {
+		return
+	}
+	for gr, gvr := range gatewayInformerGroupResources {
+		if checker := svc.deps.PermissionChecker; checker != nil && !checker.CanListWatch(gr.Group, gr.Resource) {
+			continue
+		}
+		generic, err := factory.ForResource(gvr)
+		if err != nil {
+			continue
+		}
+		notifier.addHandler(generic.Informer(), makeHandler(gr, notifier, svc))
 	}
 }
 

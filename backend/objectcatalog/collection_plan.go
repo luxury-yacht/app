@@ -47,6 +47,7 @@ func planCollectionSourceForGroupResource(gr schema.GroupResource) collectionSou
 		}
 		if _, ok := gatewayInformerGroupResources[gr]; ok {
 			plan.source = collectionSourceGatewayInformer
+			plan.watchable = true
 			plan.promotable = false
 			return plan
 		}
