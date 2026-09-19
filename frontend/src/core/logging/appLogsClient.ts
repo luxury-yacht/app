@@ -27,19 +27,12 @@ export type AppLogsAddedEvent = DesktopEventPayload<'app-logs:added'>;
 
 export type AppLogsAddedHandler = (event?: AppLogsAddedEvent) => void;
 
-const normalizeLevel = (level: AppLogsLevel): AppLogsLevel => {
-  if (level === 'warn') {
-    return 'warn';
-  }
-  return level;
-};
-
-const logToAppLogs = (
+const logToAppLogs = async (
   level: AppLogsLevel,
   message: string,
   source?: string,
   cluster?: AppLogsClusterMeta
-): void => {
+): Promise<void> => {
   if (!desktopRuntimeAvailable()) {
     return;
   }
@@ -52,16 +45,10 @@ const logToAppLogs = (
   const clusterName = cluster?.clusterName?.trim() ?? '';
   try {
     if (clusterId || clusterName) {
-      void LogAppLogsFromFrontendWithCluster(
-        normalizeLevel(level),
-        trimmed,
-        safeSource,
-        clusterId,
-        clusterName
-      );
+      await LogAppLogsFromFrontendWithCluster(level, trimmed, safeSource, clusterId, clusterName);
       return;
     }
-    void LogAppLogsFromFrontend(normalizeLevel(level), trimmed, safeSource);
+    await LogAppLogsFromFrontend(level, trimmed, safeSource);
   } catch (_err) {
     // Ignore logging failures to avoid cascading errors.
   }
@@ -72,7 +59,7 @@ export const logAppLogsDebug = (
   source?: string,
   cluster?: AppLogsClusterMeta
 ): void => {
-  logToAppLogs('debug', message, source, cluster);
+  void logToAppLogs('debug', message, source, cluster);
 };
 
 export const logAppLogsInfo = (
@@ -80,7 +67,7 @@ export const logAppLogsInfo = (
   source?: string,
   cluster?: AppLogsClusterMeta
 ): void => {
-  logToAppLogs('info', message, source, cluster);
+  void logToAppLogs('info', message, source, cluster);
 };
 
 export const logAppLogsWarn = (
@@ -88,7 +75,7 @@ export const logAppLogsWarn = (
   source?: string,
   cluster?: AppLogsClusterMeta
 ): void => {
-  logToAppLogs('warn', message, source, cluster);
+  void logToAppLogs('warn', message, source, cluster);
 };
 
 export const logAppLogsError = (
@@ -96,7 +83,7 @@ export const logAppLogsError = (
   source?: string,
   cluster?: AppLogsClusterMeta
 ): void => {
-  logToAppLogs('error', message, source, cluster);
+  void logToAppLogs('error', message, source, cluster);
 };
 
 export const subscribeAppLogsAdded = (handler: AppLogsAddedHandler): (() => void) => {

@@ -110,16 +110,21 @@ func TestClearAppLogsWhenNil(t *testing.T) {
 }
 
 func TestLogAppLogsFromFrontendNormalizesLevelAndSource(t *testing.T) {
-	logsService := newTestAppLogService()
-
-	err := logsService.LogAppLogsFromFrontend("warning", "  frontend warning  ", "  UI  ")
-	require.NoError(t, err)
-
-	logs := logsService.GetAppLogs()
-	require.Len(t, logs, 1)
-	require.Equal(t, "WARN", logs[0].Level)
-	require.Equal(t, "frontend warning", logs[0].Message)
-	require.Equal(t, "UI", logs[0].Source)
+	for _, test := range []struct{ input, want string }{
+		{"debug", "DEBUG"}, {"info", "INFO"}, {"warn", "WARN"},
+		{" WARNING ", "WARN"}, {"ERROR", "ERROR"}, {"unknown", "INFO"},
+	} {
+		t.Run(test.input, func(t *testing.T) {
+			logsService := newTestAppLogService()
+			err := logsService.LogAppLogsFromFrontend(test.input, "  frontend message  ", "  UI  ")
+			require.NoError(t, err)
+			logs := logsService.GetAppLogs()
+			require.Len(t, logs, 1)
+			require.Equal(t, test.want, logs[0].Level)
+			require.Equal(t, "frontend message", logs[0].Message)
+			require.Equal(t, "UI", logs[0].Source)
+		})
+	}
 }
 
 func TestLogAppLogsFromFrontendWithClusterAddsMetadata(t *testing.T) {

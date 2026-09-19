@@ -10,19 +10,13 @@
  */
 import { createContext, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 
-import type { TabDragPayload } from './types';
+import type { TabDragEndEvent, TabDragPayload } from './types';
 
 interface TabDragContextValue {
   currentDrag: TabDragPayload | null;
   getCurrentDrag: () => TabDragPayload | null;
   beginDrag: (payload: TabDragPayload) => void;
-  endDrag: (event?: {
-    clientX: number;
-    clientY: number;
-    screenX: number;
-    screenY: number;
-    dataTransfer: DataTransfer | null;
-  }) => void;
+  endDrag: (event?: TabDragEndEvent) => void;
 }
 
 export const TabDragContext = createContext<TabDragContextValue>({
@@ -49,13 +43,7 @@ export function TabDragProvider({ children, onTearOff }: Readonly<TabDragProvide
   }, []);
 
   const endDrag = useCallback(
-    (event?: {
-      clientX: number;
-      clientY: number;
-      screenX: number;
-      screenY: number;
-      dataTransfer: DataTransfer | null;
-    }) => {
+    (event?: TabDragEndEvent) => {
       const payload = lastDragRef.current;
       if (payload && event && onTearOff && event.dataTransfer?.dropEffect === 'none') {
         const outsideClientBounds =

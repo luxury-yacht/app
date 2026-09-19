@@ -101,9 +101,7 @@ type Coordinator struct {
 	stopped                     bool
 	inFlight                    bool
 	resetting                   bool
-	activeOperation             string
-	activeCancel                context.CancelFunc
-	activeDone                  chan struct{}
+	activeOperation             *updateOperation
 	checkIncludesSkippedVersion bool
 	restartRequested            bool
 	preparedOwned               bool
@@ -488,14 +486,14 @@ func (coordinator *Coordinator) check(ctx context.Context, includeSkippedVersion
 		return snapshot, nil
 	}
 	coordinator.inFlight = true
-	operationContext, operationDone := coordinator.beginOperationLocked(ctx, "check")
+	operationContext, operation := coordinator.beginOperationLocked(ctx, "check")
 	coordinator.checkIncludesSkippedVersion = includeSkippedVersion
 	skippedVersion := coordinator.skippedVersion
 	previous := cloneSnapshot(coordinator.snapshot)
 	coordinator.snapshot = coordinator.baseSnapshot(StatusChecking)
 	checking := cloneSnapshot(coordinator.snapshot)
 	coordinator.mu.Unlock()
-	defer coordinator.endOperation(operationDone)
+	defer coordinator.endOperation(operation)
 	coordinator.publishIfChanged(previous, checking)
 
 	release, err := coordinator.checkClient(operationContext, includeSkippedVersion, skippedVersion)
@@ -548,11 +546,11 @@ func (coordinator *Coordinator) checkClient(
 	skippedVersion string,
 ) (*updater.Release, error) {
 	if !includeSkippedVersion || skippedVersion == "" {
-		return runCoordinatorOperation(coordinator, ctx, coordinator.client.Check)
+		return coordinator.client.Check(ctx)
 	}
 	coordinator.client.SkipVersion("")
 	defer coordinator.client.SkipVersion(skippedVersion)
-	return runCoordinatorOperation(coordinator, ctx, coordinator.client.Check)
+	return coordinator.client.Check(ctx)
 }
 
 func (coordinator *Coordinator) Download(ctx context.Context, version string) (Snapshot, error) {
@@ -560,10 +558,10 @@ func (coordinator *Coordinator) Download(ctx context.Context, version string) (S
 	if !start.started {
 		return start.snapshot, err
 	}
-	defer coordinator.endOperation(start.operationDone)
+	defer coordinator.endOperation(start.operation)
 	coordinator.publishIfChanged(start.previous, start.snapshot)
 
-	err = runCoordinatorOperationError(coordinator, operationContext, coordinator.client.DownloadAndInstall)
+	err = coordinator.client.DownloadAndInstall(operationContext)
 	if err == nil {
 		err = coordinator.recordPreparedUpdate(start.pending)
 	}
@@ -571,11 +569,11 @@ func (coordinator *Coordinator) Download(ctx context.Context, version string) (S
 }
 
 type downloadStart struct {
-	pending       updater.Release
-	previous      Snapshot
-	snapshot      Snapshot
-	started       bool
-	operationDone chan struct{}
+	pending   updater.Release
+	previous  Snapshot
+	snapshot  Snapshot
+	started   bool
+	operation *updateOperation
 }
 
 func (coordinator *Coordinator) beginDownload(ctx context.Context, version string) (downloadStart, context.Context, error) {
@@ -612,7 +610,7 @@ func (coordinator *Coordinator) beginDownload(ctx context.Context, version strin
 	}
 
 	coordinator.inFlight = true
-	operationContext, operationDone := coordinator.beginOperationLocked(ctx, "download")
+	operationContext, operation := coordinator.beginOperationLocked(ctx, "download")
 	coordinator.preparedOwned = false
 	pending := *coordinator.pending
 	previous := cloneSnapshot(coordinator.snapshot)
@@ -622,7 +620,7 @@ func (coordinator *Coordinator) beginDownload(ctx context.Context, version strin
 	downloading := cloneSnapshot(coordinator.snapshot)
 	return downloadStart{
 		pending: pending, previous: previous, snapshot: downloading, started: true,
-		operationDone: operationDone,
+		operation: operation,
 	}, operationContext, nil
 }
 
@@ -816,9 +814,9 @@ func (coordinator *Coordinator) Restart(ctx context.Context) (Snapshot, error) {
 		return snapshot, fmt.Errorf("application update restart requires a ready update")
 	}
 	coordinator.inFlight = true
-	operationContext, operationDone := coordinator.beginOperationLocked(ctx, "restart")
+	operationContext, operation := coordinator.beginOperationLocked(ctx, "restart")
 	coordinator.mu.Unlock()
-	defer coordinator.endOperation(operationDone)
+	defer coordinator.endOperation(operation)
 
 	_, err := coordinator.updateState.BeginAttempt(updatestate.AttemptMetadata{
 		SourceVersion: coordinator.eligibility.Release.Version,
@@ -840,7 +838,7 @@ func (coordinator *Coordinator) Restart(ctx context.Context) (Snapshot, error) {
 	coordinator.restartRequested = true
 	coordinator.mu.Unlock()
 
-	err = runCoordinatorOperationError(coordinator, operationContext, coordinator.client.Restart)
+	err = coordinator.client.Restart(operationContext)
 	if err != nil {
 		err = errors.Join(err, coordinator.updateState.RestorePrepared())
 	}
@@ -875,50 +873,23 @@ func (coordinator *Coordinator) finishRestartError(err error) (Snapshot, error) 
 	return result, err
 }
 
-func runCoordinatorOperation[T any](
-	coordinator *Coordinator,
-	parent context.Context,
-	operation func(context.Context) (T, error),
-) (T, error) {
-	if parent == nil {
-		parent = context.Background()
-	}
-	ctx, cancel := context.WithCancel(parent)
-	defer cancel()
-	go func() {
-		select {
-		case <-coordinator.lifecycleDone:
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-	return operation(ctx)
-}
-
-func runCoordinatorOperationError(
-	coordinator *Coordinator,
-	parent context.Context,
-	operation func(context.Context) error,
-) error {
-	_, err := runCoordinatorOperation(coordinator, parent, func(ctx context.Context) (struct{}, error) {
-		return struct{}{}, operation(ctx)
-	})
-	return err
-}
-
 type updateStateResetter interface {
 	Reset() error
 }
 
-func (coordinator *Coordinator) beginOperationLocked(parent context.Context, kind string) (context.Context, chan struct{}) {
+type updateOperation struct {
+	kind   string
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+func (coordinator *Coordinator) beginOperationLocked(parent context.Context, kind string) (context.Context, *updateOperation) {
 	if parent == nil {
 		parent = context.Background()
 	}
 	ctx, cancel := context.WithCancel(parent)
-	done := make(chan struct{})
-	coordinator.activeOperation = kind
-	coordinator.activeCancel = cancel
-	coordinator.activeDone = done
+	operation := &updateOperation{kind: kind, cancel: cancel, done: make(chan struct{})}
+	coordinator.activeOperation = operation
 	go func() {
 		select {
 		case <-coordinator.lifecycleDone:
@@ -926,18 +897,35 @@ func (coordinator *Coordinator) beginOperationLocked(parent context.Context, kin
 		case <-ctx.Done():
 		}
 	}()
-	return ctx, done
+	return ctx, operation
 }
 
-func (coordinator *Coordinator) endOperation(done chan struct{}) {
+func (coordinator *Coordinator) endOperation(operation *updateOperation) {
 	coordinator.mu.Lock()
-	if coordinator.activeDone == done {
-		coordinator.activeOperation = ""
-		coordinator.activeCancel = nil
-		coordinator.activeDone = nil
-		close(done)
+	// Publication may already have admitted another operation. Each operation
+	// still owns its cancellation and completion, regardless of which is active.
+	if coordinator.activeOperation == operation {
+		coordinator.activeOperation = nil
 	}
 	coordinator.mu.Unlock()
+	operation.cancel()
+	close(operation.done)
+}
+
+func (operation *updateOperation) cancelAndWait(ctx context.Context) error {
+	if operation == nil {
+		return nil
+	}
+	operation.cancel()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-operation.done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("quiesce application update operation: %w", ctx.Err())
+	}
 }
 
 // Reset quiesces cancellable updater work before clearing durable and
@@ -949,34 +937,23 @@ func (coordinator *Coordinator) Reset(ctx context.Context) error {
 		coordinator.mu.Unlock()
 		return fmt.Errorf("application update reset is already in progress")
 	}
-	if coordinator.restartRequested || coordinator.activeOperation == "restart" {
+	if coordinator.restartRequested || (coordinator.activeOperation != nil && coordinator.activeOperation.kind == "restart") {
 		coordinator.mu.Unlock()
 		return fmt.Errorf("refuse application update reset during an application/restart attempt")
 	}
-	if coordinator.inFlight && coordinator.activeOperation == "" {
+	if coordinator.inFlight && coordinator.activeOperation == nil {
 		coordinator.mu.Unlock()
 		return fmt.Errorf("refuse application update reset during a durable state mutation")
 	}
 	coordinator.resetting = true
-	cancel := coordinator.activeCancel
-	done := coordinator.activeDone
+	operation := coordinator.activeOperation
 	coordinator.mu.Unlock()
 
-	if cancel != nil {
-		cancel()
-	}
-	if done != nil {
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		select {
-		case <-done:
-		case <-ctx.Done():
-			coordinator.mu.Lock()
-			coordinator.resetting = false
-			coordinator.mu.Unlock()
-			return fmt.Errorf("quiesce application update operation: %w", ctx.Err())
-		}
+	if err := operation.cancelAndWait(ctx); err != nil {
+		coordinator.mu.Lock()
+		coordinator.resetting = false
+		coordinator.mu.Unlock()
+		return err
 	}
 
 	var err error
@@ -986,24 +963,29 @@ func (coordinator *Coordinator) Reset(ctx context.Context) error {
 	coordinator.mu.Lock()
 	previous := cloneSnapshot(coordinator.snapshot)
 	if err == nil {
-		if coordinator.client != nil {
-			coordinator.client.SkipVersion("")
-		}
-		coordinator.pending = nil
-		coordinator.preparedOwned = false
-		coordinator.skippedVersion = ""
-		coordinator.checkIncludesSkippedVersion = false
-		status := StatusIdle
-		if previous.Status == StatusDisabled {
-			status = StatusDisabled
-		}
-		coordinator.snapshot = coordinator.baseSnapshot(status)
+		coordinator.clearReleaseLocked()
 	}
 	coordinator.resetting = false
 	current := cloneSnapshot(coordinator.snapshot)
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, current)
 	return err
+}
+
+// clearReleaseLocked resets the published release only after durable reset succeeds.
+func (coordinator *Coordinator) clearReleaseLocked() {
+	if coordinator.client != nil {
+		coordinator.client.SkipVersion("")
+	}
+	coordinator.pending = nil
+	coordinator.preparedOwned = false
+	coordinator.skippedVersion = ""
+	coordinator.checkIncludesSkippedVersion = false
+	status := StatusIdle
+	if coordinator.snapshot.Status == StatusDisabled {
+		status = StatusDisabled
+	}
+	coordinator.snapshot = coordinator.baseSnapshot(status)
 }
 
 func (coordinator *Coordinator) validateRelease(release *updater.Release) error {

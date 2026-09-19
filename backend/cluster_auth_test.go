@@ -269,8 +269,7 @@ func TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness(t *te
 		}, nil
 	}}
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{clusterID},
-		services:     map[string]refresh.SnapshotBuilder{clusterID: service},
+		services: map[string]refresh.SnapshotBuilder{clusterID: service},
 		onNamespaceSnapshot: func(id string, readiness snapshot.NamespaceWorkloadReadiness) {
 			if readiness != snapshot.NamespaceWorkloadReady {
 				return

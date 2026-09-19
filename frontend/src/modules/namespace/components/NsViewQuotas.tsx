@@ -7,12 +7,12 @@
 
 import {
   type AggregatedResourceGridViewSpec,
+  createAggregatedIdentityColumns,
   NamespaceAggregatedResourceGridView,
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
 import type { NamespaceQuotaSummary, NamespaceQuotasSnapshotPayload } from '@/core/refresh/types';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 export type QuotaData = NamespaceQuotaSummary & { kindAlias?: string };
 
@@ -37,19 +37,7 @@ const quotasSpec: AggregatedResourceGridViewSpec<QuotaData> = {
   namespaceLinkTab: 'quotas',
   // Keep the quotas table focused on core identity fields.
   buildColumns: ({ identity, useShortResourceNames }) => [
-    cf.createKindColumn<QuotaData>({
-      key: 'kind',
-      getKind: (resource) => resource.ref.kind,
-      getAlias: (resource) => resource.kindAlias,
-      getDisplayText: (resource) => getDisplayKind(resource.ref.kind, useShortResourceNames),
-      onClick: identity.open,
-      onAltClick: identity.navigate,
-    }),
-    cf.createResourceNameColumn<QuotaData>((resource) => resource.ref.name, {
-      onClick: identity.open,
-      onAltClick: identity.navigate,
-      getClassName: () => 'object-panel-link',
-    }),
+    ...createAggregatedIdentityColumns<QuotaData>({ identity, useShortResourceNames }),
     cf.createAgeColumn(),
   ],
 };

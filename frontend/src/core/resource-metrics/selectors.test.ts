@@ -18,6 +18,32 @@ import { selectNodeMetrics, selectPodMetrics, selectWorkloadMetrics } from './se
 // carries the poller freshness block for that joined usage.
 
 describe('resource metric selectors', () => {
+  it.each([
+    ['group', 'example.io'],
+    ['version', 'v2'],
+    ['kind', 'OtherKind'],
+    ['namespace', 'other-namespace'],
+  ])('does not join metrics across different %s identity', (field, value) => {
+    const pod = makePodSnapshotEntry();
+    const workload = makeNamespaceWorkloadSummary();
+    const node = makeClusterNodeSnapshotEntry();
+    expect(
+      selectPodMetrics(makePodSnapshotPayload({ rows: [pod] }), { ...pod.ref, [field]: value })
+    ).toBeNull();
+    expect(
+      selectWorkloadMetrics(makeNamespaceWorkloadSnapshotPayload({ rows: [workload] }), {
+        ...workload.ref,
+        [field]: value,
+      })
+    ).toBeNull();
+    expect(
+      selectNodeMetrics(makeClusterNodeSnapshotPayload({ rows: [node] }), {
+        ...node.ref,
+        [field]: value,
+      })
+    ).toBeNull();
+  });
+
   it('selects a Pod row by full cluster/namespace/name identity', () => {
     const payload: PodSnapshotPayload = makePodSnapshotPayload({
       rows: [

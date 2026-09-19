@@ -16,7 +16,7 @@ import (
 func BuildResourceModel(clusterID string, route *gatewayv1.TLSRoute) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, route)
 	status := resourcemodel.BuildGatewayRouteStatusPresentation(route.ObjectMeta, facts.RouteCommonFacts)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, route.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, route.ObjectMeta, status)
 }
 
 // BuildFacts projects a TLSRoute into its semantic facts.

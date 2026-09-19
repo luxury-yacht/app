@@ -252,12 +252,17 @@ func TestCheckForUpdatesFromMenuOpensAboutBeforeStartingCheck(t *testing.T) {
 	app := newUpdateCoordinatorTestFixture(t)
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	app.Updates.coordinator = coordinator
-	events := make(chan string, 1)
+	events := make(chan string, 2)
 	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events <- name
 	}
+	app.DesktopShell.checkForUpdates = func() error {
+		events <- "check-started"
+		_, err := app.Updates.CheckForUpdates()
+		return err
+	}
 
-	app.Updates.showAboutAndCheckForUpdates()
+	require.NoError(t, app.DesktopShell.ExecuteApplicationMenuCommand("", ApplicationMenuCommandCheckForUpdates))
 
 	select {
 	case event := <-events:

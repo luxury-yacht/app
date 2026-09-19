@@ -33,6 +33,7 @@ import {
   type BrowseFilters,
   buildBrowseCatalogPageScope,
   buildBrowseCatalogPlan,
+  catalogSortScope,
   deriveBrowseFilterOptions,
   filterBrowseCatalogItems,
   namespacesChanged,
@@ -41,17 +42,6 @@ import {
 export type { BrowseFilterOptions, BrowseFilters } from './browseCatalogData';
 
 const BROWSE_SEARCH_DEBOUNCE_MS = 250;
-
-const browseCatalogSortDescriptor = (
-  sort?: { key: string; direction: 'asc' | 'desc' | null } | null
-): { sortField: string; sortDirection: string } => {
-  const key = sort?.key?.trim();
-  const direction = sort?.direction;
-  if (!key || !direction || (key === 'kind' && direction === 'asc')) {
-    return { sortField: '', sortDirection: '' };
-  }
-  return { sortField: key, sortDirection: direction };
-};
 
 const normalizeInitialPageLimit = (value: number, fallback: TablePageSize): number => {
   if (!Number.isFinite(value)) {
@@ -430,7 +420,7 @@ export function useBrowseCatalog({
     setAvailableNamespaces([]);
     setDebouncedSearch(search);
   }
-  const activeSort = browseCatalogSortDescriptor(sort);
+  const activeSort = catalogSortScope(sort);
   const queryPending = search !== debouncedSearch;
   const queryDescriptor = useMemo<BrowseCatalogQueryDescriptor>(
     () => ({
@@ -440,13 +430,13 @@ export function useBrowseCatalog({
       kinds: queryFilters.kinds ?? [],
       apiGroups: queryFilters.apiGroups ?? [],
       search: queryFilters.search ?? '',
-      sortField: activeSort.sortField,
-      sortDirection: activeSort.sortDirection,
+      sortField: activeSort.sort ?? '',
+      sortDirection: activeSort.sortDirection ?? '',
       scope: catalogScope,
       customOnly,
     }),
     [
-      activeSort.sortField,
+      activeSort.sort,
       activeSort.sortDirection,
       catalogScope,
       clusterId,

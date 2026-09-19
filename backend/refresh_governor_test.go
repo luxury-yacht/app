@@ -339,10 +339,7 @@ func TestColdPreparationUsesAggregateLifecycleBeforeCooling(t *testing.T) {
 		SnapshotService: service,
 	}
 	app.Refresh.setRefreshSubsystem("cluster-a", subsystem)
-	aggregate := newAggregateSnapshotService(
-		[]string{"cluster-a"},
-		map[string]*system.Subsystem{"cluster-a": subsystem},
-	)
+	aggregate := newAggregateSnapshotService(map[string]*system.Subsystem{"cluster-a": subsystem})
 	aggregate.onNamespaceSnapshot = func(clusterID string, readiness snapshot.NamespaceWorkloadReadiness) {
 		if readiness != snapshot.NamespaceWorkloadReady {
 			return
@@ -864,7 +861,7 @@ func TestCooledMappingsOutliveSnapshotRouting(t *testing.T) {
 			subsystem := &system.Subsystem{Cooled: true, SnapshotService: old, Registry: domain.New()}
 			app.Refresh.spillRoot = t.TempDir()
 			app.Refresh.setRefreshSubsystem("cluster-a", subsystem)
-			aggregate := newAggregateSnapshotService([]string{"cluster-a"}, map[string]*system.Subsystem{"cluster-a": subsystem})
+			aggregate := newAggregateSnapshotService(map[string]*system.Subsystem{"cluster-a": subsystem})
 			app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
 			closed, closedWhileRouted := false, false
 			app.Refresh.setCooledClosers(subsystem, []func() error{func() error {

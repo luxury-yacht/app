@@ -19,9 +19,7 @@ import (
 // what that same adapter resolves — a rebuilt mux with a fresh map would leave
 // every existing session rejecting late-connecting clusters forever.
 type aggregateResourceStreamHandler struct {
-	mux      *streammux.Handler
-	logger   containerlogsstream.Logger
-	recorder *telemetry.Recorder
+	mux *streammux.Handler
 
 	topologyMu   sync.RWMutex
 	managers     map[string]*resourcestream.Manager
@@ -83,10 +81,7 @@ func newAggregateResourceStreamHandler(
 		logger = applog.Noop
 	}
 
-	handler := &aggregateResourceStreamHandler{
-		logger:   logger,
-		recorder: recorder,
-	}
+	handler := &aggregateResourceStreamHandler{}
 	handler.setTopology(subsystems)
 
 	mux, err := streammux.NewHandler(streammux.Config{

@@ -51,6 +51,15 @@ func (l *GlobalTargetLimiter) SetLimit(limit int) {
 	l.recomputeLocked()
 }
 
+func (l *GlobalTargetLimiter) limit() int {
+	if l == nil {
+		return config.ContainerLogsStreamGlobalTargetLimit
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.total
+}
+
 func (l *GlobalTargetLimiter) StartSession(clusterID, scope string) *TargetSession {
 	if l == nil {
 		return nil

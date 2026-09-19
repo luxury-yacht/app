@@ -136,15 +136,9 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         getClassName: () => 'object-panel-link',
         isInteractive: () => true,
       }),
-      (() => {
-        const column = cf.createTextColumn<ClusterNodeRow>(
-          'version',
-          'Version',
-          (row) => row.version || '—'
-        );
-        column.sortValue = (row) => (row.version || '').toLowerCase();
-        return column;
-      })(),
+      cf.createTextColumn<ClusterNodeRow>('version', 'Version', (row) => row.version || '—', {
+        sortValue: (row) => (row.version || '').toLowerCase(),
+      }),
       {
         key: 'status',
         header: 'Status',
@@ -184,20 +178,17 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         alignData: 'center',
         sortValue: (row) => parseNodePodsUsed(row.pods),
       }),
-      (() => {
-        const column = cf.createTextColumn<ClusterNodeRow>(
-          'restarts',
-          'Restarts',
-          (row) => resolveNodeRestarts(row).text,
-          {
-            alignHeader: 'center',
-            alignData: 'center',
-            getClassName: (row) => resolveNodeRestarts(row).className,
-          }
-        );
-        column.sortValue = (row) => row.restarts ?? 0;
-        return column;
-      })(),
+      cf.createTextColumn<ClusterNodeRow>(
+        'restarts',
+        'Restarts',
+        (row) => resolveNodeRestarts(row).text,
+        {
+          alignHeader: 'center',
+          alignData: 'center',
+          getClassName: (row) => resolveNodeRestarts(row).className,
+          sortValue: (row) => row.restarts ?? 0,
+        }
+      ),
       cf.createResourceBarColumn<ClusterNodeRow>({
         key: 'cpu',
         header: 'CPU',
@@ -213,7 +204,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         getMetricsStale: () => Boolean(metricsInfo?.stale),
         getMetricsError: () => metricsInfo?.lastError ?? undefined,
         getVariant: () => 'compact',
-        getAnimationKey: (row) => `node:${row.ref.name}:cpu`,
+        getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:cpu`,
         sortable: true,
         sortValue: (row) => parseCpuToMillicores(row.cpuUsage),
       }),
@@ -232,7 +223,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         getMetricsStale: () => Boolean(metricsInfo?.stale),
         getMetricsError: () => metricsInfo?.lastError ?? undefined,
         getVariant: () => 'compact',
-        getAnimationKey: (row) => `node:${row.ref.name}:memory`,
+        getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:memory`,
         sortable: true,
         sortValue: (row) => parseMemToMB(row.memoryUsage),
       }),

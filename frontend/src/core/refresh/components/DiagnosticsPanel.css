@@ -20,27 +20,6 @@
   flex-shrink: 0;
 }
 
-.diagnostics-header-content {
-  color: var(--color-text);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.diagnostics-header-info {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.diagnostics-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
 .diagnostics-summary {
   background: var(--color-bg);
   border-bottom: 1px solid var(--color-border);
@@ -207,18 +186,6 @@
   width: 12rem;
 }
 
-.diagnostics-streams {
-  border-top: 1px solid var(--color-border);
-}
-
-.diagnostics-streams-filter {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-}
-
 .diagnostics-empty td {
   padding: 1.5rem 0.5rem;
   text-align: center;
@@ -234,11 +201,6 @@
   color: var(--color-text-secondary);
   background: var(--color-bg-secondary);
   padding: 0.4rem 0.45rem;
-}
-
-.diagnostics-stale-cell {
-  color: var(--color-warning, #ffb74d);
-  font-weight: 600;
 }
 
 .diagnostics-count-warning {
@@ -634,10 +596,6 @@
 .diagnostics-stream-name {
   font-weight: 600;
 }
-.diagnostics-stream-socket {
-  font-weight: 400;
-  color: var(--color-text-secondary);
-}
 /* Connections indents its non-domain leaves (event scopes, log targets) under
    their socket. This is its OWN class: sharing .diagnostics-domain-name with
    Cluster Data put two equal-specificity padding rules on the same cell, and
@@ -669,11 +627,6 @@
 .diagnostics-section-header--toolbar .diagnostics-permissions-actions {
   margin-left: auto;
   justify-content: flex-end;
-}
-
-.diagnostics-table-batches th,
-.diagnostics-table-batches td {
-  white-space: nowrap;
 }
 
 .diagnostics-table-wrapper {
@@ -783,10 +736,6 @@
   line-height: 1rem;
 }
 
-.diagnostics-descriptor-resource {
-  color: var(--color-text);
-}
-
 .diagnostics-permission-denied {
   background: color-mix(in srgb, var(--color-error) 12%, transparent);
 }
@@ -803,4 +752,8 @@ tr.diagnostics-row-expanded .diagnostics-permission-reason {
   word-wrap: break-word;
   overflow: visible;
   text-overflow: unset;
+}
+
+.diagnostics-row-interactive {
+  cursor: pointer;
 }

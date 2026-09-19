@@ -5,7 +5,6 @@
  * dimensions before the SVG overlay renders them.
  */
 
-import type { ObjectMapReference } from '@core/refresh/types';
 import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -105,11 +104,56 @@ export type ObjectMapKindBadgeStyleResolver = (
   element: HTMLElement | null
 ) => KindBadgeVisualStyle;
 
-const endpointFromRef = (
-  ref: ObjectMapReference,
-  filtered: boolean,
-  endpoint: (name: string, kind: string, filtered?: boolean) => ObjectMapTooltipEndpoint
-) => endpoint(ref.name, ref.kind, filtered);
+const buildObjectMapTooltipRows = (
+  hoverEdge: ObjectMapHoverEdge,
+  endpoint: (name: string, kind: string, filtered?: boolean) => ObjectMapTooltipEndpoint,
+  relationshipRow: (text: string, edgeType: string) => ObjectMapTooltipRow
+): ObjectMapTooltipRow[] => {
+  const rows: ObjectMapTooltipRow[] = [];
+  const filteredPath = hoverEdge.filteredPath;
+  if (filteredPath) {
+    const pathNodes = filteredPath.nodes.slice(0, MAX_FILTERED_TOOLTIP_OBJECTS);
+    pathNodes.forEach((node, index) => {
+      rows.push({
+        type: 'object',
+        endpoint: endpoint(node.ref.name, node.ref.kind, node.filtered),
+      });
+      if (index < pathNodes.length - 1) {
+        const relationship = filteredPath.relationships[index];
+        rows.push(relationshipRow(relationship?.label ?? '', relationship?.type ?? hoverEdge.type));
+      }
+    });
+    const hiddenStepCount = Math.max(0, filteredPath.nodes.length - pathNodes.length);
+    if (hiddenStepCount > 0) {
+      rows.push(
+        relationshipRow(
+          `+${hiddenStepCount} hidden step${hiddenStepCount === 1 ? '' : 's'}`,
+          hoverEdge.type
+        )
+      );
+    }
+    if (filteredPath.additionalPathCount > 0) {
+      const count = filteredPath.additionalPathCount;
+      rows.push(
+        relationshipRow(`+${count} more hidden path${count === 1 ? '' : 's'}`, hoverEdge.type)
+      );
+    }
+  } else {
+    rows.push(
+      {
+        type: 'object',
+        endpoint: endpoint(hoverEdge.sourceLabel, hoverEdge.sourceKind),
+      },
+      relationshipRow(hoverEdge.label, hoverEdge.type),
+      {
+        type: 'object',
+        endpoint: endpoint(hoverEdge.targetLabel, hoverEdge.targetKind),
+      }
+    );
+  }
+
+  return rows;
+};
 
 export const computeObjectMapTooltipLayout = ({
   hoverEdge,
@@ -200,45 +244,7 @@ export const computeObjectMapTooltipLayout = ({
   const rowGap = Math.max(1, palette.tooltipRelationshipY - palette.tooltipSourceY);
   const defaultBottomPadding = Math.max(0, palette.tooltipHeight - (firstRowOffset + rowGap * 2));
 
-  const rows: ObjectMapTooltipRow[] = [];
-  const filteredPath = hoverEdge.filteredPath;
-  if (filteredPath) {
-    const pathNodes = filteredPath.nodes.slice(0, MAX_FILTERED_TOOLTIP_OBJECTS);
-    pathNodes.forEach((node, index) => {
-      rows.push({ type: 'object', endpoint: endpointFromRef(node.ref, node.filtered, endpoint) });
-      if (index < pathNodes.length - 1) {
-        const relationship = filteredPath.relationships[index];
-        rows.push(relationshipRow(relationship?.label ?? '', relationship?.type ?? hoverEdge.type));
-      }
-    });
-    const hiddenStepCount = Math.max(0, filteredPath.nodes.length - pathNodes.length);
-    if (hiddenStepCount > 0) {
-      rows.push(
-        relationshipRow(
-          `+${hiddenStepCount} hidden step${hiddenStepCount === 1 ? '' : 's'}`,
-          hoverEdge.type
-        )
-      );
-    }
-    if (filteredPath.additionalPathCount > 0) {
-      const count = filteredPath.additionalPathCount;
-      rows.push(
-        relationshipRow(`+${count} more hidden path${count === 1 ? '' : 's'}`, hoverEdge.type)
-      );
-    }
-  } else {
-    rows.push(
-      {
-        type: 'object',
-        endpoint: endpoint(hoverEdge.sourceLabel, hoverEdge.sourceKind),
-      },
-      relationshipRow(hoverEdge.label, hoverEdge.type),
-      {
-        type: 'object',
-        endpoint: endpoint(hoverEdge.targetLabel, hoverEdge.targetKind),
-      }
-    );
-  }
+  const rows = buildObjectMapTooltipRows(hoverEdge, endpoint, relationshipRow);
 
   const widestRow = rows.reduce((max, row) => {
     if (row.type === 'object') {

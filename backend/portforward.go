@@ -113,20 +113,7 @@ func (o *OperationsCoordinator) startPortForwardAction(targetRef ObjectActionTar
 
 	// Start the forwarder in a goroutine.
 	go o.runPortForwarder(sessionCtx, session)
-
-	// Wait for initial connection to succeed or fail.
-	select {
-	case err := <-session.readyChan:
-		if err != nil {
-			lifecycle.finishStartFailure(sessionID)
-			return "", fmt.Errorf("failed to start port forward: %w", err)
-		}
-	case <-time.After(config.PortForwardConnectTimeout):
-		lifecycle.finishStartTimeout(sessionID)
-		return "", fmt.Errorf("timeout waiting for port forward to connect")
-	}
-
-	return sessionID, nil
+	return lifecycle.awaitStart(session)
 }
 
 // StopPortForward terminates a specific port forwarding session.

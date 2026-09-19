@@ -6,7 +6,6 @@
 
 import type { Meta, StoryObj } from '@storybook/react';
 import '@styles/components/gridtables.css';
-import './BrowseView.css';
 import CatalogPaginationFooter, {
   catalogPaginationPageKeyProps,
 } from '@modules/browse/components/CatalogPaginationFooter';

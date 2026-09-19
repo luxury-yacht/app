@@ -93,8 +93,8 @@ const refresherNameToDomain = (
 export class BackgroundClusterRefresher {
   private intervalTimer: ReturnType<typeof setInterval> | null = null;
   private backgroundClusterIds: string[] = [];
-  private getNavigationState: NavigationStateGetter;
-  private getNamespace: NamespaceGetter;
+  private readonly getNavigationState: NavigationStateGetter;
+  private readonly getNamespace: NamespaceGetter;
 
   constructor(getNavigationState: NavigationStateGetter, getNamespace: NamespaceGetter) {
     this.getNavigationState = getNavigationState;
@@ -124,17 +124,6 @@ export class BackgroundClusterRefresher {
       this.intervalTimer = null;
       logAppLogsInfo('[background-refresh] stopped', APP_LOG_SOURCES.BackgroundClusterRefresher);
     }
-  }
-
-  /** True when the refresh loop is active. */
-  get running(): boolean {
-    return this.intervalTimer !== null;
-  }
-
-  /** Update the callback references (e.g. when React re-renders). */
-  updateCallbacks(getNavigationState: NavigationStateGetter, getNamespace: NamespaceGetter): void {
-    this.getNavigationState = getNavigationState;
-    this.getNamespace = getNamespace;
   }
 
   /** Single tick: refresh every background cluster's last-viewed domain. */

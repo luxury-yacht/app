@@ -192,20 +192,10 @@ func matchAnyPattern(lower string, patterns []*regexp.Regexp) bool {
 	return false
 }
 
-// parseKlogSeverity extracts klog severity for lines starting with the standard prefix.
-func parseKlogSeverity(line string) (byte, bool) {
-	return logclassify.ParseKlogSeverity(line)
-}
-
-// isErrorSeverity reports whether a klog severity should be treated as an error.
-func isErrorSeverity(sev byte) bool {
-	return logclassify.IsErrorSeverity(sev)
-}
-
 // isFallbackErrorLine matches the broader error scan used in capturedError.
 func isFallbackErrorLine(line string) bool {
-	if sev, ok := parseKlogSeverity(line); ok {
-		return isErrorSeverity(sev)
+	if sev, ok := logclassify.ParseKlogSeverity(line); ok {
+		return logclassify.IsErrorSeverity(sev)
 	}
 	return matchAnyPattern(strings.ToLower(line), fallbackErrorPatterns)
 }
@@ -248,7 +238,7 @@ func tailString(data []byte, max int) string {
 // "Interesting" errors are those related to authentication or token issues, as defined by `isAuthRelated`.
 func (c *Capture) captureIfInteresting(output string) {
 	forEachTrimmedLine(output, func(msg string) {
-		if sev, ok := parseKlogSeverity(msg); ok && !isErrorSeverity(sev) {
+		if sev, ok := logclassify.ParseKlogSeverity(msg); ok && !logclassify.IsErrorSeverity(sev) {
 			return
 		}
 		lower := strings.ToLower(msg)

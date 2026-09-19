@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -473,7 +474,7 @@ func (d *containerLogsDelivery) handleDrop(drop int) bool {
 
 func (d *containerLogsDelivery) emitWarningUpdate() bool {
 	nextWarnings := composeStreamWarnings(d.selectionWarnings, d.transportDropObserved)
-	if stringSlicesEqual(d.emittedWarnings, nextWarnings) {
+	if slices.Equal(d.emittedWarnings, nextWarnings) {
 		return false
 	}
 	if d.request.writePayload(EventPayload{Warnings: warningPayload(nextWarnings, true)}) != nil {
@@ -572,6 +573,9 @@ func parseRequest(request Request) (Options, error) {
 	if identity.Namespace == "" {
 		return Options{}, errors.New("log scope must reference a namespaced object")
 	}
+	if err := containerlogs.ValidateTargetGVK(identity.GVK); err != nil {
+		return Options{}, err
+	}
 	podFilter := strings.TrimSpace(request.Pod)
 	podInclude := strings.TrimSpace(request.PodInclude)
 	podExclude := strings.TrimSpace(request.PodExclude)
@@ -605,12 +609,7 @@ func parseRequest(request Request) (Options, error) {
 	}
 	selection := containerlogs.ParseScopeSelection(selectedFilters)
 	return Options{
-		ClusterID: func() string {
-			if len(clusterIDs) == 1 {
-				return clusterIDs[0]
-			}
-			return ""
-		}(),
+		ClusterID:        clusterIDs[0],
 		Namespace:        identity.Namespace,
 		Group:            strings.TrimSpace(identity.GVK.Group),
 		Version:          strings.TrimSpace(identity.GVK.Version),

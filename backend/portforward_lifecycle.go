@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
+
+	"github.com/luxury-yacht/app/backend/internal/config"
 )
 
 type portForwardLifecycle struct {
@@ -94,20 +97,6 @@ func (l portForwardLifecycle) finishTerminal(sessionID string) bool {
 	if l.coordinator == nil {
 		return false
 	}
-	_, removed := l.remove(sessionID)
-	if !removed {
-		return false
-	}
-	l.coordinator.unregisterRuntimeOperation(sessionID)
-	l.emitList()
-	return true
-}
-
-func (l portForwardLifecycle) finishStartFailure(sessionID string) bool {
-	return l.finishTerminal(sessionID)
-}
-
-func (l portForwardLifecycle) finishStartTimeout(sessionID string) bool {
 	session, removed := l.remove(sessionID)
 	if !removed {
 		return false
@@ -118,10 +107,31 @@ func (l portForwardLifecycle) finishStartTimeout(sessionID string) bool {
 	return true
 }
 
-func (l portForwardLifecycle) stopByUser(sessionID string) error {
-	if err := l.stop(sessionID, "user stopped", true, true, true); err != nil {
-		return err
+// awaitStart publishes the result of the first connection attempt and owns its
+// failure/timeout cleanup after registration and forwarder startup.
+func (l portForwardLifecycle) awaitStart(session *portForwardSessionInternal) (string, error) {
+	select {
+	case err := <-session.readyChan:
+		if err != nil {
+			l.finishTerminal(session.ID)
+			return "", fmt.Errorf("failed to start port forward: %w", err)
+		}
+	case <-time.After(config.PortForwardConnectTimeout):
+		l.finishTerminal(session.ID)
+		return "", fmt.Errorf("timeout waiting for port forward to connect")
 	}
+	return session.ID, nil
+}
+
+func (l portForwardLifecycle) stopByUser(sessionID string) error {
+	if l.coordinator == nil {
+		return nil
+	}
+	if !l.stop(sessionID, "user stopped") {
+		return fmt.Errorf("port forward session %q not found", sessionID)
+	}
+	l.emitList()
+	l.coordinator.unregisterRuntimeOperation(sessionID)
 	return nil
 }
 
@@ -130,43 +140,19 @@ func (l portForwardLifecycle) stopForRuntime(sessionID, reason string) error {
 	if reason == "" {
 		reason = "cluster disconnected"
 	}
-	return l.stop(sessionID, reason, false, false, false)
-}
-
-func (l portForwardLifecycle) stop(
-	sessionID string,
-	reason string,
-	notFoundIsError bool,
-	unregisterRuntime bool,
-	emitList bool,
-) error {
-	if l.coordinator == nil {
-		return nil
-	}
-	session, removed := l.remove(sessionID)
-	if !removed {
-		if notFoundIsError {
-			return fmt.Errorf("port forward session %q not found", sessionID)
-		}
-		return nil
-	}
-	session.close()
-	l.setStopped(session, reason)
-	l.emitStatus(session)
-	if emitList {
-		l.emitList()
-	}
-	if unregisterRuntime {
-		l.coordinator.unregisterRuntimeOperation(sessionID)
-	}
+	l.stop(sessionID, reason)
 	return nil
 }
 
-func (l portForwardLifecycle) setStopped(session *portForwardSessionInternal, reason string) {
-	if session == nil {
-		return
+func (l portForwardLifecycle) stop(sessionID, reason string) bool {
+	session, removed := l.remove(sessionID)
+	if !removed {
+		return false
 	}
+	session.close()
 	session.setStatus(PortForwardStatusStopped, reason)
+	l.emitStatus(session)
+	return true
 }
 
 func (l portForwardLifecycle) list() []PortForwardSession {

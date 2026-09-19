@@ -119,7 +119,6 @@ describe('GridTablePerformance', () => {
     const markup = renderToStaticMarkup(
       <GridTablePerformance
         onReset={() => undefined}
-        summary="Rolling GridTable measurements for the instrumented large-data views."
         rows={[
           createRow({
             label: 'Namespace Config',
@@ -209,7 +208,6 @@ describe('GridTablePerformance', () => {
       root.render(
         <GridTablePerformance
           onReset={() => undefined}
-          summary="Rolling GridTable measurements for the instrumented large-data views."
           rows={[
             createRow({
               label: 'Namespace Config',

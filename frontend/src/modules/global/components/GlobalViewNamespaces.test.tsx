@@ -1,5 +1,5 @@
 import type * as React from 'react';
-import { act, isValidElement, type ReactNode } from 'react';
+import { act, isValidElement, StrictMode, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   openWithObject: vi.fn(),
   requestRefreshDomain: vi.fn(() => Promise.resolve()),
   setRefreshDomainEnabled: vi.fn(),
+  enabledScopes: new Set<string>(),
+  leases: new Map<string, number>(),
   requestGridTableFilters: vi.fn(),
   selectedKubeconfigs: [
     '/kube/config:alpha',
@@ -23,9 +25,35 @@ const mocks = vi.hoisted(() => ({
   ] as string[],
 }));
 
-vi.mock('@/core/data-access', () => ({
+vi.mock('@/core/data-access/dataAccess', () => ({
   requestRefreshDomain: mocks.requestRefreshDomain,
   setRefreshDomainEnabled: mocks.setRefreshDomainEnabled,
+  acquireRefreshDomainLease: ({
+    domain,
+    scope,
+    preserveState,
+  }: {
+    domain: string;
+    scope: string;
+    preserveState: boolean;
+  }) => {
+    const count = mocks.leases.get(scope) ?? 0;
+    mocks.leases.set(scope, count + 1);
+    if (!count) mocks.setRefreshDomainEnabled({ domain, scope, enabled: true, preserveState });
+  },
+  releaseRefreshDomainLease: ({
+    domain,
+    scope,
+    preserveState,
+  }: {
+    domain: string;
+    scope: string;
+    preserveState: boolean;
+  }) => {
+    const count = Math.max(0, (mocks.leases.get(scope) ?? 0) - 1);
+    mocks.leases.set(scope, count);
+    if (!count) mocks.setRefreshDomainEnabled({ domain, scope, enabled: false, preserveState });
+  },
 }));
 
 vi.mock('@/core/cluster-workspace/useClusterWorkspace', () => ({
@@ -253,7 +281,7 @@ vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
   },
 }));
 
-const renderView = async () => {
+const renderView = async (strict = false) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
@@ -263,7 +291,8 @@ const renderView = async () => {
     const TestableGlobalViewNamespaces = GlobalViewNamespaces as React.ComponentType<{
       renderVersion: number;
     }>;
-    root.render(<TestableGlobalViewNamespaces renderVersion={renderVersion} />);
+    const view = <TestableGlobalViewNamespaces renderVersion={renderVersion} />;
+    root.render(strict ? <StrictMode>{view}</StrictMode> : view);
   };
   await act(async () => {
     await render();
@@ -287,6 +316,12 @@ const renderView = async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.enabledScopes.clear();
+  mocks.leases.clear();
+  mocks.setRefreshDomainEnabled.mockImplementation(({ scope, enabled }) => {
+    if (enabled) mocks.enabledScopes.add(scope);
+    else if (!(mocks.leases.get(scope) ?? 0)) mocks.enabledScopes.delete(scope);
+  });
   mocks.selectedKubeconfigs = ['/kube/config:alpha', '/kube/config:beta', '/kube/config:gamma'];
   mocks.tableProps = null;
   mocks.resourceGridParams = null;
@@ -322,6 +357,24 @@ const getPersistenceParams = (): Record<string, unknown> => {
 };
 
 describe('GlobalViewNamespaces', () => {
+  it('keeps metrics enabled through Strict Mode effect replay', async () => {
+    const { unmount } = await renderView(true);
+    const remaining = [...mocks.enabledScopes].sort();
+    await unmount();
+    expect(remaining).toEqual(['cluster-a|', 'cluster-b|']);
+    expect(mocks.enabledScopes.size).toBe(0);
+  });
+
+  it('keeps metrics live when an overlapping view owner unmounts', async () => {
+    const first = await renderView();
+    const second = await renderView();
+    await first.unmount();
+    const remaining = [...mocks.enabledScopes].sort();
+    await second.unmount();
+    expect(remaining).toEqual(['cluster-a|', 'cluster-b|']);
+    expect(mocks.enabledScopes.size).toBe(0);
+  });
+
   it('retains its Global table owner when cluster membership changes', async () => {
     const { rerender, unmount } = await renderView();
     const initialPersistenceIdentity = getPersistenceParams().clusterIdentity;

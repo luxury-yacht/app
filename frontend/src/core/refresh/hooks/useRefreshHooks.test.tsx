@@ -89,6 +89,14 @@ const renderHook = async <TProps extends object, TResult>(
   };
 };
 
+const pendingRefresh = () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+};
+
 describe('useRefreshWatcher', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -170,6 +178,71 @@ describe('useRefreshWatcher', () => {
 
     expect(subscribeMock).toHaveBeenCalledTimes(2);
 
+    await hook.unmount();
+  });
+
+  it('keeps a replacement refresh busy when an older subscription finishes', async () => {
+    const first = pendingRefresh();
+    const second = pendingRefresh();
+    const onRefresh = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const hook = await renderHook(useRefreshWatcher, {
+      refresherName: REFRESHER_NAME,
+      onRefresh,
+      dependencies: ['cluster-a'],
+    });
+    let oldRefresh!: void | Promise<void>;
+    await act(async () => {
+      oldRefresh = subscriptions.get(REFRESHER_NAME)!(false, new AbortController().signal);
+    });
+    expect(hook.current.isRefreshing).toBe(true);
+    await hook.rerender({ refresherName: REFRESHER_NAME, onRefresh, dependencies: ['cluster-b'] });
+    let newRefresh!: void | Promise<void>;
+    await act(async () => {
+      newRefresh = subscriptions.get(REFRESHER_NAME)!(false, new AbortController().signal);
+      first.resolve();
+      await oldRefresh;
+    });
+    expect(hook.current.isRefreshing).toBe(true);
+    await act(async () => {
+      second.resolve();
+      await newRefresh;
+    });
+    expect(hook.current.isRefreshing).toBe(false);
+    await hook.unmount();
+  });
+
+  it('tracks overlapping callbacks until both finish and clears busy state on disable', async () => {
+    const first = pendingRefresh();
+    const second = pendingRefresh();
+    const onRefresh = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const hook = await renderHook(useRefreshWatcher, {
+      refresherName: REFRESHER_NAME,
+      onRefresh,
+      enabled: true,
+    });
+    let firstRefresh!: void | Promise<void>;
+    let secondRefresh!: void | Promise<void>;
+    await act(async () => {
+      const callback = subscriptions.get(REFRESHER_NAME)!;
+      firstRefresh = callback(false, new AbortController().signal);
+      secondRefresh = callback(true, new AbortController().signal);
+      first.resolve();
+      await firstRefresh;
+    });
+    expect(hook.current.isRefreshing).toBe(true);
+    await hook.rerender({ refresherName: REFRESHER_NAME, onRefresh, enabled: false });
+    expect(hook.current.isRefreshing).toBe(false);
+    await act(async () => {
+      second.resolve();
+      await secondRefresh;
+    });
+    expect(hook.current.isRefreshing).toBe(false);
     await hook.unmount();
   });
 

@@ -179,6 +179,23 @@ afterEach(() => {
 });
 
 describe('MapTab', () => {
+  it.each(['version', 'group'] as const)(
+    'rejects map navigation with missing %s',
+    async (field) => {
+      snapshotState.current = { status: 'ready', data: mapPayload, error: null };
+      const { unmount } = await renderMapTab();
+      const partialRef = { ...mapPayload.seed, [field]: undefined };
+      for (const action of ['onOpenPanel', 'onOpenObjectMap', 'onNavigateView']) {
+        const handler = objectMapProps.current?.[action] as (ref: unknown) => void;
+        handler(partialRef);
+      }
+      await unmount();
+      expect(objectPanelMocks.openWithObject).not.toHaveBeenCalled();
+      expect(navigateMocks.navigateToView).not.toHaveBeenCalled();
+      expect(errorHandlerMocks.handle).toHaveBeenCalledTimes(3);
+    }
+  );
+
   it('renders the loading state while the object-map snapshot is initialising', async () => {
     snapshotState.current = {
       status: 'initialising',

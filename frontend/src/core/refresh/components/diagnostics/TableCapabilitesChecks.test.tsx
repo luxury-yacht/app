@@ -101,39 +101,43 @@ describe('CapabilityChecksTable', () => {
     host.remove();
   });
 
-  it('renders feature display labels for keyed descriptor groups', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const root = ReactDOM.createRoot(host);
-    const row = {
-      ...createBatchRow(1),
-      descriptorsByFeature: [
-        {
-          feature: PERMISSION_FEATURES.namespaceWorkloads,
-          resources: ['Deployment (list)'],
-        },
-      ],
-    };
+  it.each(['row', 'button'])(
+    'expands descriptor groups through the %s control',
+    async (control) => {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const root = ReactDOM.createRoot(host);
+      const row = {
+        ...createBatchRow(1),
+        descriptorsByFeature: [
+          {
+            feature: PERMISSION_FEATURES.namespaceWorkloads,
+            resources: ['Deployment (list)'],
+          },
+        ],
+      };
 
-    await act(async () => {
-      root.render(
-        <CapabilityChecksTable currentRows={[row]} previousRows={[]} summary="1 BATCH" />
-      );
-      await Promise.resolve();
-    });
+      await act(async () => {
+        root.render(
+          <CapabilityChecksTable currentRows={[row]} previousRows={[]} summary="1 BATCH" />
+        );
+        await Promise.resolve();
+      });
 
-    const dataRows = host.querySelectorAll('tbody tr');
-    await act(async () => {
-      dataRows[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
+      const dataRows = host.querySelectorAll('tbody tr');
+      await act(async () => {
+        const target = control === 'row' ? dataRows[1] : dataRows[1].querySelector('button')!;
+        target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
 
-    expect(host.textContent).toContain('Namespace workloads');
-    expect(host.textContent).not.toContain(PERMISSION_FEATURES.namespaceWorkloads);
+      expect(host.textContent).toContain('Namespace workloads');
+      expect(host.textContent).not.toContain(PERMISSION_FEATURES.namespaceWorkloads);
 
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
-  });
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    }
+  );
 });

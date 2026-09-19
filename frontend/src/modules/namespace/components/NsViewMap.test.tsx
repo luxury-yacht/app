@@ -12,6 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const dataAccessMocks = vi.hoisted(() => ({
   requestRefreshDomain: vi.fn(() => Promise.resolve()),
   setRefreshDomainEnabled: vi.fn(),
+  leases: new Map<string, number>(),
+  enabled: new Set<string>(),
 }));
 
 const refreshMocks = vi.hoisted(() => ({
@@ -27,9 +29,18 @@ const namespaceMocks = vi.hoisted(() => ({
   selectedNamespaceClusterId: 'cluster-a',
 }));
 
-vi.mock('@/core/data-access', () => ({
+vi.mock('@/core/data-access/dataAccess', () => ({
   requestRefreshDomain: dataAccessMocks.requestRefreshDomain,
   setRefreshDomainEnabled: dataAccessMocks.setRefreshDomainEnabled,
+  acquireRefreshDomainLease: ({ scope }: { scope: string }) => {
+    dataAccessMocks.leases.set(scope, (dataAccessMocks.leases.get(scope) ?? 0) + 1);
+    dataAccessMocks.enabled.add(scope);
+  },
+  releaseRefreshDomainLease: ({ scope }: { scope: string }) => {
+    const count = (dataAccessMocks.leases.get(scope) ?? 1) - 1;
+    dataAccessMocks.leases.set(scope, count);
+    if (!count) dataAccessMocks.enabled.delete(scope);
+  },
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -69,14 +80,14 @@ const snapshotState = {
 
 refreshMocks.useRefreshScopedDomain.mockImplementation(() => snapshotState.current);
 
-const renderNsViewMap = async () => {
+const renderNsViewMap = async (namespace = 'default') => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
 
   await act(async () => {
     const { default: NsViewMap } = await import('./NsViewMap');
-    root.render(<NsViewMap namespace="default" />);
+    root.render(<NsViewMap namespace={namespace} />);
     await Promise.resolve();
   });
 
@@ -97,6 +108,12 @@ beforeEach(() => {
     data: null,
     error: null,
   };
+  dataAccessMocks.leases.clear();
+  dataAccessMocks.enabled.clear();
+  dataAccessMocks.setRefreshDomainEnabled.mockImplementation(({ scope, enabled }) => {
+    if (enabled) dataAccessMocks.enabled.add(scope);
+    else dataAccessMocks.enabled.delete(scope);
+  });
   dataAccessMocks.requestRefreshDomain.mockClear();
   dataAccessMocks.setRefreshDomainEnabled.mockClear();
   refreshMocks.setScopedDomainEnabled.mockClear();
@@ -108,6 +125,24 @@ afterEach(() => {
 });
 
 describe('NsViewMap', () => {
+  it('retains polling until the last namespace map owner unmounts', async () => {
+    const first = await renderNsViewMap();
+    const second = await renderNsViewMap();
+    const scope = [...dataAccessMocks.enabled][0];
+    await first.unmount();
+    const enabledAfterFirstRelease = dataAccessMocks.enabled.has(scope);
+    await second.unmount();
+    expect(enabledAfterFirstRelease).toBe(true);
+    expect(dataAccessMocks.enabled.has(scope)).toBe(false);
+  });
+
+  it('does not acquire or fetch an invalid empty namespace scope', async () => {
+    const view = await renderNsViewMap('');
+    await view.unmount();
+    expect(dataAccessMocks.enabled.size).toBe(0);
+    expect(dataAccessMocks.requestRefreshDomain).not.toHaveBeenCalled();
+  });
+
   it('shows a loading notice while an idle namespace map startup fetch is pending', async () => {
     const { container, unmount } = await renderNsViewMap();
 

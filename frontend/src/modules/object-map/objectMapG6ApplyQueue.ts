@@ -261,11 +261,59 @@ export const applySelectionState = async (
   await graph.setElementState(states, false);
 };
 
-interface ApplySlot<T> {
-  version: number;
-  applying: boolean;
-  latest: T | null;
-}
+// Each run owns its completion. Clearing a slot releases that ownership before
+// a replacement graph starts, even if the old G6 promise is still settling.
+const createGraphApplySlot = <T>(
+  getGraph: () => Graph | null,
+  isReady: () => boolean,
+  apply: (graph: Graph, value: T, isCurrent: () => boolean) => Promise<void>,
+  onError?: (error: unknown) => void
+) => {
+  let latest: T | null = null;
+  let activeRun: object | null = null;
+
+  const flush = () => {
+    const graph = getGraph();
+    if (!graph || graph.destroyed || !isReady() || activeRun || !latest) {
+      return;
+    }
+    const run = {};
+    activeRun = run;
+    const isCurrent = () => activeRun === run && getGraph() === graph && !graph.destroyed;
+    const applyPending = async () => {
+      while (latest && isCurrent() && isReady()) {
+        const value = latest;
+        latest = null;
+        await apply(graph, value, isCurrent);
+      }
+    };
+    void applyPending()
+      .catch((error) => {
+        if (isCurrent()) onError?.(error);
+      })
+      .finally(() => {
+        if (activeRun === run) {
+          activeRun = null;
+          flush();
+        }
+      });
+  };
+
+  return {
+    flush,
+    hasPending: () => latest !== null,
+    schedule: (value: T) => {
+      const graph = getGraph();
+      if (!graph || graph.destroyed) return;
+      latest = value;
+      flush();
+    },
+    clear: () => {
+      latest = null;
+      activeRun = null;
+    },
+  };
+};
 
 const objectMapApplyTimingNow = (): number =>
   typeof performance === 'undefined' ? Date.now() : performance.now();
@@ -327,173 +375,76 @@ export const createObjectMapG6ApplyQueue = ({
 }: ObjectMapG6ApplyQueueOptions): ObjectMapG6ApplyQueue => {
   let graphReady = false;
   let renderedData: GraphData | null = null;
-  const selectionApply: ApplySlot<{
+  const selectionApply = createGraphApplySlot<{
     layout: ObjectMapLayout;
     selectionState: ObjectMapSelectionState;
-  }> = {
-    version: 0,
-    applying: false,
-    latest: null,
-  };
-  // The dragged node id is captured when the payload is scheduled, not when it
-  // is applied: applies settle asynchronously, so a drag can end before its
-  // final payload applies and an apply-time read would wrongly re-enable
-  // viewport preservation against that payload.
-  const dataApply: ApplySlot<{ data: GraphData; draggedNodeId: string | null }> = {
-    version: 0,
-    applying: false,
-    latest: null,
-  };
+  }>(
+    getGraph,
+    () => graphReady,
+    async (graph, latest, isCurrent) => {
+      const startedAt = objectMapApplyTimingNow();
+      await applySelectionStateFn(graph, latest.layout, latest.selectionState, getHoveredEdgeId());
+      if (isCurrent()) {
+        onSelectionStateTiming?.({
+          durationMs: objectMapApplyTimingNow() - startedAt,
+          nodes: latest.layout.nodes.length,
+          edges: latest.layout.edges.length,
+        });
+      }
+    },
+    onSelectionStateError
+  );
 
   const scheduleSelectionState = (
-    nextLayout: ObjectMapLayout,
-    nextSelectionState: ObjectMapSelectionState
-  ) => {
-    const graph = getGraph();
-    if (!graph || graph.destroyed) {
-      return;
-    }
-    if (!graphReady) {
-      selectionApply.latest = {
-        layout: nextLayout,
-        selectionState: nextSelectionState,
-      };
-      return;
-    }
+    layout: ObjectMapLayout,
+    selectionState: ObjectMapSelectionState
+  ) => selectionApply.schedule({ layout, selectionState });
 
-    selectionApply.version += 1;
-    selectionApply.latest = { layout: nextLayout, selectionState: nextSelectionState };
-    if (selectionApply.applying) {
-      return;
-    }
-    selectionApply.applying = true;
-
-    const run = async () => {
-      try {
-        while (selectionApply.latest && !graph.destroyed) {
-          const requestedVersion = selectionApply.version;
-          const latest = selectionApply.latest;
-          selectionApply.latest = null;
-          const startedAt = objectMapApplyTimingNow();
-          await applySelectionStateFn(
-            graph,
-            latest.layout,
-            latest.selectionState,
-            getHoveredEdgeId()
-          );
-          onSelectionStateTiming?.({
-            durationMs: objectMapApplyTimingNow() - startedAt,
-            nodes: latest.layout.nodes.length,
-            edges: latest.layout.edges.length,
-          });
-          if (selectionApply.version === requestedVersion) {
-            break;
-          }
-        }
-      } catch (error) {
-        if (getGraph() === graph && !graph.destroyed) {
-          onSelectionStateError?.(error);
-        }
-      } finally {
-        selectionApply.applying = false;
-        if (selectionApply.latest && graphReady && !graph.destroyed) {
-          scheduleSelectionState(
-            selectionApply.latest.layout,
-            selectionApply.latest.selectionState
-          );
-        }
+  const dataApply = createGraphApplySlot<{ data: GraphData; draggedNodeId: string | null }>(
+    getGraph,
+    () => graphReady,
+    async (graph, latest, isCurrent) => {
+      const startedAt = objectMapApplyTimingNow();
+      const mode = renderedData ? 'update' : 'initial-render';
+      if (renderedData) {
+        await applyGraphDataFn(graph, renderedData, latest.data, {
+          preserveViewportNodeId: getPreserveViewportNodeId(),
+          draggedNodeId: latest.draggedNodeId,
+        });
+      } else {
+        graph.setData(latest.data);
+        await graph.render();
       }
-    };
-    void run();
-  };
+      if (!isCurrent()) return;
+      onGraphDataTiming?.({
+        durationMs: objectMapApplyTimingNow() - startedAt,
+        mode,
+        nodes: latest.data.nodes?.length ?? 0,
+        edges: latest.data.edges?.length ?? 0,
+      });
+      renderedData = latest.data;
+      scheduleSelectionState(getCurrentLayout(), getCurrentSelectionState());
+    },
+    onGraphDataError
+  );
 
-  const scheduleGraphDataRecord = (record: { data: GraphData; draggedNodeId: string | null }) => {
-    const graph = getGraph();
-    if (!graph || graph.destroyed) {
-      return;
-    }
-    dataApply.version += 1;
-    dataApply.latest = record;
-    if (!graphReady) {
-      return;
-    }
-    if (dataApply.applying) {
-      return;
-    }
-    dataApply.applying = true;
-
-    const run = async () => {
-      try {
-        while (dataApply.latest && !graph.destroyed) {
-          const requestedVersion = dataApply.version;
-          const latest = dataApply.latest;
-          dataApply.latest = null;
-          const startedAt = objectMapApplyTimingNow();
-          let mode: ObjectMapG6GraphDataTiming['mode'] = 'update';
-          if (renderedData) {
-            await applyGraphDataFn(graph, renderedData, latest.data, {
-              preserveViewportNodeId: getPreserveViewportNodeId(),
-              draggedNodeId: latest.draggedNodeId,
-            });
-          } else {
-            mode = 'initial-render';
-            graph.setData(latest.data);
-            await graph.render();
-          }
-          onGraphDataTiming?.({
-            durationMs: objectMapApplyTimingNow() - startedAt,
-            mode,
-            nodes: latest.data.nodes?.length ?? 0,
-            edges: latest.data.edges?.length ?? 0,
-          });
-          if (graph.destroyed) {
-            return;
-          }
-          renderedData = latest.data;
-          scheduleSelectionState(getCurrentLayout(), getCurrentSelectionState());
-          if (dataApply.version === requestedVersion) {
-            break;
-          }
-        }
-      } catch (error) {
-        if (getGraph() === graph && !graph.destroyed) {
-          onGraphDataError?.(error);
-        }
-      } finally {
-        dataApply.applying = false;
-        if (dataApply.latest && graphReady && !graph.destroyed) {
-          scheduleGraphDataRecord(dataApply.latest);
-        }
-      }
-    };
-    void run();
-  };
-
-  const scheduleGraphData = (nextData: GraphData) => {
-    scheduleGraphDataRecord({ data: nextData, draggedNodeId: getDraggedNodeId?.() ?? null });
+  // Capture the drag with its payload: the gesture can end before this update
+  // applies, and reading it then would wrongly restore viewport preservation.
+  const scheduleGraphData = (data: GraphData) => {
+    dataApply.schedule({ data, draggedNodeId: getDraggedNodeId?.() ?? null });
   };
 
   const setReady = (ready: boolean) => {
     graphReady = ready;
-    if (!graphReady) {
-      return;
-    }
-    if (dataApply.latest) {
-      scheduleGraphDataRecord(dataApply.latest);
-      return;
-    }
-    if (selectionApply.latest) {
-      scheduleSelectionState(selectionApply.latest.layout, selectionApply.latest.selectionState);
-    }
+    if (dataApply.hasPending()) dataApply.flush();
+    else selectionApply.flush();
   };
 
   const clear = () => {
     graphReady = false;
     renderedData = null;
-    selectionApply.latest = null;
-    selectionApply.applying = false;
-    dataApply.latest = null;
-    dataApply.applying = false;
+    selectionApply.clear();
+    dataApply.clear();
   };
 
   return {

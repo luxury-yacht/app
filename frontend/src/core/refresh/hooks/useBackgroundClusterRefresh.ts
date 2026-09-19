@@ -29,8 +29,6 @@ export function useBackgroundClusterRefresh({
   const { enabled } = useBackgroundRefresh();
   const { selectedClusterId, selectedClusterIds } = useKubeconfig();
 
-  const refresherRef = useRef<BackgroundClusterRefresher | null>(null);
-
   // Keep callback refs up to date without recreating the refresher.
   const getNavStateRef = useRef(getClusterNavigationState);
   getNavStateRef.current = getClusterNavigationState;
@@ -38,38 +36,14 @@ export function useBackgroundClusterRefresh({
   getNamespaceRef.current = getClusterNamespace;
 
   useEffect(() => {
-    // Only run background refresh when enabled and multiple clusters are connected.
-    const shouldRun = enabled && selectedClusterIds.length > 1;
+    if (!enabled || selectedClusterIds.length <= 1) return;
 
-    if (!shouldRun) {
-      // Tear down if running.
-      if (refresherRef.current) {
-        refresherRef.current.stop();
-        refresherRef.current = null;
-      }
-      return;
-    }
-
-    // Lazily create the refresher with stable callback wrappers.
-    if (!refresherRef.current) {
-      refresherRef.current = new BackgroundClusterRefresher(
-        (clusterId) => getNavStateRef.current(clusterId),
-        (clusterId) => getNamespaceRef.current(clusterId)
-      );
-    }
-
-    // Push latest cluster state.
-    refresherRef.current.updateClusters(selectedClusterId, selectedClusterIds);
-
-    // Start if not already running.
-    if (!refresherRef.current.running) {
-      refresherRef.current.start();
-    }
-
-    return () => {
-      // Cleanup on unmount or when deps change.
-      refresherRef.current?.stop();
-      refresherRef.current = null;
-    };
+    const refresher = new BackgroundClusterRefresher(
+      (clusterId) => getNavStateRef.current(clusterId),
+      (clusterId) => getNamespaceRef.current(clusterId)
+    );
+    refresher.updateClusters(selectedClusterId, selectedClusterIds);
+    refresher.start();
+    return () => refresher.stop();
   }, [enabled, selectedClusterId, selectedClusterIds]);
 }

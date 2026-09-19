@@ -317,23 +317,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     selectionStateApplyMs: null,
   });
   const publishRendererDebugSnapshotRef = useRef<() => void>(() => undefined);
-  const handlersRef = useRef<ObjectMapG6EventHandlers>({
-    onHoverEdge,
-    onClearHoverEdge,
-    onSelectNode,
-    onClearSelection,
-    onOpenPanel,
-    onOpenObjectMap,
-    onNavigateView,
-    onNodeContextMenu,
-    onCanvasContextMenu,
-    onNodeDragStart,
-    onNodeDragMove,
-    onNodeDragEnd,
-    onToggleGroup,
-    badgeForNode,
-  });
-  handlersRef.current = {
+  const handlers: ObjectMapG6EventHandlers = {
     onHoverEdge,
     onClearHoverEdge,
     onSelectNode,
@@ -349,6 +333,8 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     onToggleGroup,
     badgeForNode,
   };
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
   const edgeDetailLevel = useMemo<ObjectMapG6EdgeDetailLevel>(
     () =>
       layout.nodes.length >= OBJECT_MAP_SIMPLE_EDGE_NODE_THRESHOLD ||
@@ -546,19 +532,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     }
   }, [graphReady]);
 
-  const scheduleSelectionState = useCallback(
-    (nextLayout: ObjectMapLayout, nextSelectionState: ObjectMapSelectionState) => {
-      applyQueue.scheduleSelectionState(nextLayout, nextSelectionState);
-    },
-    [applyQueue]
-  );
-
-  const scheduleGraphData = useCallback(
-    (nextData: GraphData) => {
-      applyQueue.scheduleGraphData(nextData);
-    },
-    [applyQueue]
-  );
+  const { scheduleSelectionState, scheduleGraphData } = applyQueue;
 
   useObjectMapG6GraphLifecycle({
     applyQueue,
@@ -601,64 +575,40 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   }, [publishRendererDebugSnapshot]);
 
   useEffect(() => {
-    if (!debugMapId || !graphReady) {
-      return;
-    }
     const graph = graphRef.current;
-    if (!graph || graph.destroyed) {
-      return;
-    }
-    graph.on(GraphEvent.AFTER_TRANSFORM, publishRendererDebugSnapshot);
-    graph.on(GraphEvent.AFTER_SIZE_CHANGE, publishRendererDebugSnapshot);
+    if (!graphReady || !graph || graph.destroyed) return;
+    const subscriptions: Array<[GraphEvent, () => void]> = [];
+    if (debugMapId)
+      subscriptions.push(
+        [GraphEvent.AFTER_TRANSFORM, publishRendererDebugSnapshot],
+        [GraphEvent.AFTER_SIZE_CHANGE, publishRendererDebugSnapshot]
+      );
+    subscriptions.push([GraphEvent.AFTER_TRANSFORM, updateCardDetailLevel]);
+    if (showDebugGrid)
+      subscriptions.push(
+        [GraphEvent.AFTER_TRANSFORM, updateDebugGrid],
+        [GraphEvent.AFTER_SIZE_CHANGE, updateDebugGrid]
+      );
+    subscriptions.forEach(([event, handler]) => graph.on(event, handler));
     return () => {
-      if (!graph.destroyed) {
-        graph.off(GraphEvent.AFTER_TRANSFORM, publishRendererDebugSnapshot);
-        graph.off(GraphEvent.AFTER_SIZE_CHANGE, publishRendererDebugSnapshot);
-      }
+      if (!graph.destroyed) subscriptions.forEach(([event, handler]) => graph.off(event, handler));
     };
-  }, [debugMapId, graphReady, publishRendererDebugSnapshot]);
+  }, [
+    debugMapId,
+    graphReady,
+    showDebugGrid,
+    publishRendererDebugSnapshot,
+    updateCardDetailLevel,
+    updateDebugGrid,
+  ]);
 
   useEffect(() => {
     updateCardDetailLevel();
   }, [updateCardDetailLevel]);
 
   useEffect(() => {
-    if (!graphReady) {
-      return;
-    }
-    const graph = graphRef.current;
-    if (!graph || graph.destroyed) {
-      return;
-    }
-    graph.on(GraphEvent.AFTER_TRANSFORM, updateCardDetailLevel);
-    return () => {
-      if (!graph.destroyed) {
-        graph.off(GraphEvent.AFTER_TRANSFORM, updateCardDetailLevel);
-      }
-    };
-  }, [graphReady, updateCardDetailLevel]);
-
-  useEffect(() => {
     updateDebugGrid();
   }, [updateDebugGrid]);
-
-  useEffect(() => {
-    if (!showDebugGrid || !graphReady) {
-      return;
-    }
-    const graph = graphRef.current;
-    if (!graph || graph.destroyed) {
-      return;
-    }
-    graph.on(GraphEvent.AFTER_TRANSFORM, updateDebugGrid);
-    graph.on(GraphEvent.AFTER_SIZE_CHANGE, updateDebugGrid);
-    return () => {
-      if (!graph.destroyed) {
-        graph.off(GraphEvent.AFTER_TRANSFORM, updateDebugGrid);
-        graph.off(GraphEvent.AFTER_SIZE_CHANGE, updateDebugGrid);
-      }
-    };
-  }, [graphReady, showDebugGrid, updateDebugGrid]);
 
   useEffect(() => {
     void data;

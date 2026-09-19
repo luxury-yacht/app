@@ -16,8 +16,8 @@ import {
 import { joinNamespaceMetrics } from '@modules/namespace/contexts/namespaceMetrics';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import { requestGridTableFilters } from '@shared/components/tables/hooks/useGridTableExternalFilters';
-import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef } from 'react';
-import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import React, { useCallback, useMemo } from 'react';
+import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import type {
   NamespaceMetricsSnapshotPayload,
@@ -35,6 +35,17 @@ const attentionKindsBySignal = {
   unhealthy: ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'CronJob'],
   warnings: ['Event'],
 } as const;
+
+const NamespaceMetricsOwner = ({ scope }: { scope: string }) => {
+  useScopedRefreshDomainLifecycle({
+    domain: 'namespace-metrics',
+    scope,
+    enabled: true,
+    preserveState: true,
+    fetchOnEnable: 'foreground',
+  });
+  return null;
+};
 
 const GlobalViewNamespaces: React.FC = () => {
   const { selectedKubeconfigs, getClusterMeta, setActiveKubeconfig } = useKubeconfig();
@@ -74,46 +85,6 @@ const GlobalViewNamespaces: React.FC = () => {
   );
   useStreamSignalRefetch('namespace-metrics', metricScopes);
 
-  const leasedMetricScopesRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const nextScopes = new Set(metricScopes);
-    leasedMetricScopesRef.current.forEach((scope) => {
-      if (!nextScopes.has(scope)) {
-        setRefreshDomainEnabled({
-          domain: 'namespace-metrics',
-          scope,
-          enabled: false,
-          preserveState: true,
-        });
-      }
-    });
-    metricScopes.forEach((scope) => {
-      if (leasedMetricScopesRef.current.has(scope)) {
-        return;
-      }
-      setRefreshDomainEnabled({
-        domain: 'namespace-metrics',
-        scope,
-        enabled: true,
-        preserveState: true,
-      });
-      void requestRefreshDomain({ domain: 'namespace-metrics', scope, reason: 'foreground' });
-    });
-    leasedMetricScopesRef.current = nextScopes;
-  }, [metricScopes]);
-
-  const releaseMetricScopes = useEffectEvent(() => () => {
-    leasedMetricScopesRef.current.forEach((scope) => {
-      setRefreshDomainEnabled({
-        domain: 'namespace-metrics',
-        scope,
-        enabled: false,
-        preserveState: true,
-      });
-    });
-  });
-  useEffect(() => releaseMetricScopes(), []);
-
   const resolvedTargets = useMemo(
     () =>
       targets.flatMap((target) => {
@@ -129,23 +100,15 @@ const GlobalViewNamespaces: React.FC = () => {
 
   const rows = useMemo<NamespaceTableRow[]>(
     () =>
-      resolvedTargets.flatMap(({ target, data }) =>
-        joinNamespaceMetrics(
-          data.namespaces ?? [],
-          (
-            namespaceMetricStatesByScope[buildClusterScope(target.clusterId, '')]?.data as
-              | NamespaceMetricsSnapshotPayload
-              | null
-              | undefined
-          )?.namespaces
-        )
+      resolvedTargets.flatMap(({ target, data }) => {
+        const metrics = namespaceMetricStatesByScope[buildClusterScope(target.clusterId, '')]
+          ?.data as NamespaceMetricsSnapshotPayload | null | undefined;
+        return joinNamespaceMetrics(data.namespaces ?? [], metrics?.namespaces)
           .filter((namespace) => namespace.ref.clusterId === target.clusterId)
-          .map((namespace) => {
-            const metrics = namespaceMetricStatesByScope[buildClusterScope(target.clusterId, '')]
-              ?.data as NamespaceMetricsSnapshotPayload | null | undefined;
-            return projectNamespaceSummary(namespace, metrics?.metricsState ?? 'unavailable');
-          })
-      ),
+          .map((namespace) =>
+            projectNamespaceSummary(namespace, metrics?.metricsState ?? 'unavailable')
+          );
+      }),
     [namespaceMetricStatesByScope, resolvedTargets]
   );
 
@@ -267,6 +230,9 @@ const GlobalViewNamespaces: React.FC = () => {
 
   return (
     <div className="global-namespaces">
+      {metricScopes.map((scope) => (
+        <NamespaceMetricsOwner key={scope} scope={scope} />
+      ))}
       <NamespaceSummaryTable
         rows={rows}
         navigate={navigate}

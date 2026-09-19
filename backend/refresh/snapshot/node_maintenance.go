@@ -18,20 +18,19 @@ func RegisterNodeMaintenanceDomain(reg *domain.Registry, store *nodemaintenance.
 		Name: "object-maintenance",
 		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 			meta := ClusterMetaFromContext(ctx)
+			if err := meta.Validate(); err != nil {
+				return nil, err
+			}
 			clusterID, trimmed := refresh.SplitClusterScope(scope)
+			if clusterID != "" && clusterID != meta.ClusterID {
+				return nil, fmt.Errorf("node maintenance scope does not match cluster %s", meta.ClusterID)
+			}
 			nodeName := nodemaintenance.ParseScope(trimmed)
-
-			// Get snapshot filtered by node name.
-			payload, version := store.Snapshot(nodeName)
+			payload, version := store.Snapshot(meta.ClusterID, nodeName)
 
 			// Set cluster metadata on the payload itself.
 			payload.ClusterID = meta.ClusterID
 			payload.ClusterName = meta.ClusterName
-
-			// Filter drain jobs by cluster ID to ensure proper isolation.
-			// This prevents drain jobs from other clusters from bleeding through
-			// when nodes in different clusters share the same name.
-			payload.Drains = filterDrainJobsByCluster(payload.Drains, meta.ClusterID)
 
 			return &refresh.Snapshot{
 				Domain:  "object-maintenance",
@@ -44,20 +43,4 @@ func RegisterNodeMaintenanceDomain(reg *domain.Registry, store *nodemaintenance.
 			}, nil
 		},
 	})
-}
-
-// filterDrainJobsByCluster returns only drain jobs that belong to the specified cluster.
-// Jobs without a cluster ID (legacy jobs) are excluded to prevent cross-cluster pollution.
-func filterDrainJobsByCluster(jobs []nodemaintenance.DrainJob, clusterID string) []nodemaintenance.DrainJob {
-	if clusterID == "" {
-		return jobs
-	}
-
-	var result []nodemaintenance.DrainJob
-	for _, job := range jobs {
-		if job.ClusterID == clusterID {
-			result = append(result, job)
-		}
-	}
-	return result
 }

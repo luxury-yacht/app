@@ -512,8 +512,6 @@ func (r *Registry) WindowDescriptor(name string) (NativeWindowDescriptor, error)
 	return NativeWindowDescriptor{}, fmt.Errorf("native window %q is not registered", name)
 }
 
-// of one workspace.
-
 // AcknowledgePanelWindowReady commits an opening transfer and reveals the
 // hidden native target. A stale acknowledgement leaves the source transfer pending.
 func (r *Registry) AcknowledgePanelWindowReady(name, transferID string) (PanelWindowDescriptor, error) {
@@ -908,16 +906,7 @@ func cascadedCoordinate(position, size, limit int) int {
 
 // FocusMostRecent shows and focuses the most recently active live peer.
 func (r *Registry) FocusMostRecent() {
-	name := r.lifecycle.MostRecent()
-	window, ok := r.application.Window.GetByName(name)
-	if !ok {
-		return
-	}
-	window.Show()
-	if window.IsMinimised() {
-		window.Restore()
-	}
-	window.Focus()
+	focusApplicationWindow(r.application, r.lifecycle.MostRecent())
 }
 
 func (r *Registry) readyWorkspaceNames() []string {

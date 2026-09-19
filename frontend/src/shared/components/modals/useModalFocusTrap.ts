@@ -146,7 +146,6 @@ export const useModalFocusTrap = ({
   onEscape,
 }: UseModalFocusTrapOptions) => {
   const modalIdRef = useRef(Symbol('modal-focus-trap'));
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   useKeyboardSurface({
     kind: 'modal',
@@ -182,7 +181,7 @@ export const useModalFocusTrap = ({
     const modalId = modalIdRef.current;
 
     const activeElement = document.activeElement;
-    previouslyFocusedRef.current =
+    const previous =
       activeElement instanceof HTMLElement && !root.contains(activeElement) ? activeElement : null;
 
     const surface = root.closest<HTMLElement>('[data-modal-surface="true"]') ?? root;
@@ -191,8 +190,6 @@ export const useModalFocusTrap = ({
     return () => {
       unregisterOpenModal(modalId);
 
-      const previous = previouslyFocusedRef.current;
-      previouslyFocusedRef.current = null;
       if (!previous?.isConnected) {
         return;
       }

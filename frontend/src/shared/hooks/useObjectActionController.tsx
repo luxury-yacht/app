@@ -42,7 +42,7 @@ import {
   type ObjectActionData,
   type ObjectActionHandlers,
 } from '@shared/hooks/useObjectActions';
-import { useCallback, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   getPermissionKey,
   type PermissionMap,
@@ -50,7 +50,7 @@ import {
   useUserPermissions,
 } from '@/core/capabilities';
 import { usePanelWindowRole } from '@/core/panel-windows/PanelWindowRoleContext';
-import { usePanelLifecycleGuard } from '@/core/panel-windows/panelLifecycleGuards';
+import { usePanelMutationGuard } from '@/core/panel-windows/usePanelMutationGuard';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { errorHandler } from '@/utils/errorHandler';
 
@@ -457,39 +457,10 @@ export const useObjectActionController = ({
     loading: false,
     error: null,
   });
-  const mutationCountRef = useRef(0);
-  const [, advanceMutationRevision] = useReducer((revision: number) => revision + 1, 0);
-  const executeMutation = useCallback(async <T,>(execute: () => Promise<T>): Promise<T> => {
-    mutationCountRef.current += 1;
-    advanceMutationRevision();
-    try {
-      return await execute();
-    } finally {
-      mutationCountRef.current = Math.max(0, mutationCountRef.current - 1);
-      advanceMutationRevision();
-    }
-  }, []);
-  const setNestedMutationInFlight = useCallback((inFlight: boolean) => {
-    mutationCountRef.current = Math.max(0, mutationCountRef.current + (inFlight ? 1 : -1));
-    advanceMutationRevision();
-  }, []);
-  usePanelLifecycleGuard(panelId, () => {
-    if (!actionLoading && mutationCountRef.current === 0) {
-      return null;
-    }
-    return {
-      reason: 'mutation-in-flight',
-      focus: () => {
-        if (!panelId || typeof document === 'undefined') {
-          return;
-        }
-        const panel = Array.from(document.querySelectorAll<HTMLElement>('[data-panel-id]')).find(
-          (element) => element.dataset.panelId === panelId
-        );
-        panel?.focus();
-      },
-    };
-  });
+  const { executeMutation, onMutationChange: setNestedMutationInFlight } = usePanelMutationGuard(
+    panelId,
+    actionLoading
+  );
 
   const closeScale = useCallback(() => {
     if (scaleState.loading) {

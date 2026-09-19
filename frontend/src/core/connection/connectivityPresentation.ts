@@ -195,17 +195,8 @@ const buildSettledPresentation = (
     };
   }
 
-  if (isRefreshing) {
-    return {
-      status: 'refreshing',
-      summary: 'Ready',
-      detail: `${clusterLabel} is connected is ready to use.`,
-      actionLabel: 'Refresh Now',
-    };
-  }
-
   return {
-    status: 'healthy',
+    status: isRefreshing ? 'refreshing' : 'healthy',
     summary: 'Ready',
     detail: `${clusterLabel} is connected is ready to use.`,
     actionLabel: 'Refresh Now',

@@ -22,7 +22,7 @@ import { resolveNodeDrainOperationPermissions } from '@shared/hooks/nodeActionPe
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
-import { usePanelLifecycleGuard } from '@/core/panel-windows/panelLifecycleGuards';
+import { usePanelMutationGuard } from '@/core/panel-windows/usePanelMutationGuard';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { type DomainSnapshotState, useRefreshScopedDomainEntries } from '@/core/refresh/store';
 import type { NodeMaintenanceDrainJob, NodeMaintenanceSnapshotPayload } from '@/core/refresh/types';
@@ -82,9 +82,6 @@ export interface UseNodeMaintenanceActionsOptions {
   onAfterAction?: (action: 'cordon' | 'uncordon' | 'drain', target: NodeActionTarget) => void;
 }
 
-export const applyNestedMutationChange = (count: number, inFlight: boolean): number =>
-  Math.max(0, count + (inFlight ? 1 : -1));
-
 export const useNodeMaintenanceActions = ({
   watchClusterIds,
   panelId,
@@ -93,29 +90,8 @@ export const useNodeMaintenanceActions = ({
   const [cordonTarget, setCordonTarget] = useState<NodeActionTarget | null>(null);
   const [drainTarget, setDrainTarget] = useState<NodeActionTarget | null>(null);
   const [cordonPending, setCordonPending] = useState(false);
-  const [nestedMutationCount, setNestedMutationCount] = useState(0);
   const permissionMap = useUserPermissions();
-
-  const handleNestedMutationChange = useCallback((inFlight: boolean) => {
-    setNestedMutationCount((count) => applyNestedMutationChange(count, inFlight));
-  }, []);
-
-  usePanelLifecycleGuard(panelId ?? null, () => {
-    if (!cordonPending && nestedMutationCount === 0) {
-      return null;
-    }
-    return {
-      reason: 'mutation-in-flight',
-      focus: () => {
-        if (!panelId || typeof document === 'undefined') {
-          return;
-        }
-        Array.from(document.querySelectorAll<HTMLElement>('[data-panel-id]'))
-          .find((element) => element.dataset.panelId === panelId)
-          ?.focus();
-      },
-    };
-  });
+  const { executeMutation, onMutationChange } = usePanelMutationGuard(panelId ?? null);
 
   const watchedClusterIds = useMemo(
     () => normalizeWatchClusterIds(watchClusterIds),
@@ -210,11 +186,13 @@ export const useNodeMaintenanceActions = ({
     setCordonPending(true);
     const action: 'cordon' | 'uncordon' = target.unschedulable ? 'uncordon' : 'cordon';
     try {
-      if (action === 'cordon') {
-        await runNodeCordon(buildObjectActionTarget({ ...target, kind: 'Node' }, action));
-      } else {
-        await runNodeUncordon(buildObjectActionTarget({ ...target, kind: 'Node' }, action));
-      }
+      await executeMutation(() => {
+        const ref = buildObjectActionTarget(
+          { ...target, group: '', version: 'v1', kind: 'Node' },
+          action
+        );
+        return action === 'cordon' ? runNodeCordon(ref) : runNodeUncordon(ref);
+      });
       onAfterAction?.(action, target);
     } catch (error) {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
@@ -226,7 +204,7 @@ export const useNodeMaintenanceActions = ({
       setCordonPending(false);
       setCordonTarget(null);
     }
-  }, [cordonPending, cordonTarget, onAfterAction]);
+  }, [cordonPending, cordonTarget, executeMutation, onAfterAction]);
 
   const cordonConfirmation = useMemo(() => {
     if (!cordonTarget) {
@@ -273,7 +251,7 @@ export const useNodeMaintenanceActions = ({
           nodeName={drainTarget.name}
           permissions={getDrainPermissions(drainTarget.clusterId)}
           onClose={() => setDrainTarget(null)}
-          onMutationChange={handleNestedMutationChange}
+          onMutationChange={onMutationChange}
         />
       )}
     </>

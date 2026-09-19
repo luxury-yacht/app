@@ -9,5 +9,5 @@ import (
 // ObjectMapStatus projects the shared RBAC rule status into a map node.
 func ObjectMapStatus(clusterID string, role rbacv1.Role) *objectmap.Status {
 	status := resourcemodel.RBACRuleCountStatus(role.ObjectMeta, len(role.Rules), false)
-	return objectmap.FromResourceModel(resourcemodel.KubernetesResourceModel(clusterID, Identity, role.ObjectMeta, status, resourcemodel.ResourceFacts{}))
+	return objectmap.FromResourceModel(resourcemodel.KubernetesResourceModel(clusterID, Identity, role.ObjectMeta, status))
 }

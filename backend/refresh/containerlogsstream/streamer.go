@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -130,7 +131,7 @@ func applyGlobalTargetLimit(selection *logTargetSelection, session *TargetSessio
 
 func targetSessionGlobalLimit(session *TargetSession) int {
 	if session != nil && session.limiter != nil {
-		return session.limiter.total
+		return session.limiter.limit()
 	}
 	return config.ContainerLogsStreamGlobalTargetLimit
 }
@@ -473,7 +474,7 @@ func emitWarningsIfChanged(ch chan<- []string, current *[]string, next []string)
 		*current = append((*current)[:0], next...)
 		return
 	}
-	if stringSlicesEqual(*current, next) {
+	if slices.Equal(*current, next) {
 		return
 	}
 	copied := append([]string(nil), next...)
@@ -1004,18 +1005,6 @@ func filterTargetsByKeys(targets []containerTarget, allowedKeys map[string]struc
 		}
 	}
 	return filtered
-}
-
-func stringSlicesEqual(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		if left[i] != right[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func (s *Streamer) fetchContainerTail(ctx context.Context, target containerTarget, tailLines int, lineFilter containerlogs.LineFilter) ([]Entry, error) {

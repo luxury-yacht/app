@@ -67,6 +67,7 @@ describe('useBackgroundRefresh', () => {
 
     // Emit the setting change to confirm the hook stays in sync with the bus.
     act(() => {
+      setAppPreferencesForTesting({ refreshBackgroundClustersEnabled: true });
       eventBus.emit('settings:refresh-background', true);
     });
 

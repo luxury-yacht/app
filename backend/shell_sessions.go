@@ -126,8 +126,9 @@ func (s *shellSession) Close() {
 }
 
 type terminalSizeQueue struct {
-	ch   chan remotecommand.TerminalSize
-	once sync.Once
+	ch     chan remotecommand.TerminalSize
+	mu     sync.Mutex
+	closed bool
 }
 
 func newTerminalSizeQueue() *terminalSizeQueue {
@@ -148,6 +149,11 @@ func (q *terminalSizeQueue) Set(width, height uint16) {
 	if width == 0 || height == 0 {
 		return
 	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.closed {
+		return
+	}
 	select {
 	case q.ch <- remotecommand.TerminalSize{Width: width, Height: height}:
 	default:
@@ -155,9 +161,12 @@ func (q *terminalSizeQueue) Set(width, height uint16) {
 }
 
 func (q *terminalSizeQueue) Close() {
-	q.once.Do(func() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if !q.closed {
+		q.closed = true
 		close(q.ch)
-	})
+	}
 }
 
 type shellEventWriter struct {
@@ -548,5 +557,5 @@ func (o *OperationsCoordinator) monitorShellTimeout(ctx context.Context, sess *s
 
 // terminateShellWithReason closes a shell session and emits a status with the given reason.
 func (o *OperationsCoordinator) terminateShellWithReason(sessionID, status, reason string) {
-	o.shellSessionLifecycle().terminate(sessionID, status, reason)
+	o.shellSessionLifecycle().finishStream(sessionID, status, reason)
 }

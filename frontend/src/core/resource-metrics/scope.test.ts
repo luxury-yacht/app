@@ -3,6 +3,48 @@ import { describe, expect, it } from 'vitest';
 import { resolveResourceMetricsScope } from './scope';
 
 describe('resolveResourceMetricsScope', () => {
+  it.each(['Pod', 'Node', 'Deployment', 'DaemonSet', 'StatefulSet', 'ReplicaSet'])(
+    'does not route a custom %s into built-in metrics',
+    (kind) => {
+      expect(
+        resolveResourceMetricsScope({
+          clusterId: 'cluster-a',
+          group: 'example.io',
+          version: 'v1',
+          kind,
+          namespace: 'team-a',
+          name: 'example',
+        })
+      ).toEqual({ kind: 'unsupported', reason: 'unsupported-kind' });
+    }
+  );
+  it.each([
+    { group: '', version: undefined },
+    { group: undefined, version: 'v1' },
+  ])('rejects an incomplete GVK before leasing metrics', (identity) => {
+    expect(
+      resolveResourceMetricsScope({
+        clusterId: 'cluster-a',
+        kind: 'Pod',
+        namespace: 'team-a',
+        name: 'example',
+        ...identity,
+      })
+    ).toMatchObject({ kind: 'invalid' });
+  });
+  it('does not route an unsupported API version into built-in metrics', () => {
+    expect(
+      resolveResourceMetricsScope({
+        clusterId: 'cluster-a',
+        group: 'apps',
+        version: 'v1beta1',
+        kind: 'Deployment',
+        namespace: 'team-a',
+        name: 'example',
+      })
+    ).toEqual({ kind: 'unsupported', reason: 'unsupported-kind' });
+  });
+
   it('routes Pod metrics to the pods base domain in the cluster-prefixed namespace scope', () => {
     expect(
       resolveResourceMetricsScope({
@@ -15,6 +57,14 @@ describe('resolveResourceMetricsScope', () => {
       })
     ).toEqual({
       kind: 'domain',
+      ref: expect.objectContaining({
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'team-a',
+        name: 'api-7c9d',
+      }),
       source: 'pods',
       domain: 'pods',
       scope: 'cluster-a|namespace:team-a',
@@ -33,6 +83,14 @@ describe('resolveResourceMetricsScope', () => {
       })
     ).toEqual({
       kind: 'domain',
+      ref: expect.objectContaining({
+        clusterId: 'cluster-b',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'team-b',
+        name: 'api',
+      }),
       source: 'namespace-workloads',
       domain: 'namespace-workloads',
       scope: 'cluster-b|namespace:team-b',
@@ -50,6 +108,13 @@ describe('resolveResourceMetricsScope', () => {
       })
     ).toEqual({
       kind: 'domain',
+      ref: expect.objectContaining({
+        clusterId: 'cluster-c',
+        group: '',
+        version: 'v1',
+        kind: 'Node',
+        name: 'ip-10-0-0-1',
+      }),
       source: 'nodes',
       domain: 'nodes',
       scope: 'cluster-c|',

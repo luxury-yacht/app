@@ -125,11 +125,6 @@ func NewStore(maxHistory int) *Store {
 	}
 }
 
-// StartDrain records the beginning of a drain job.
-func (s *Store) StartDrain(nodeName string, opts restypes.DrainNodeOptions) *DrainJob {
-	return s.StartDrainForCluster(nodeName, opts, "", "")
-}
-
 // StartDrainForCluster records the beginning of a drain job scoped to a cluster.
 func (s *Store) StartDrainForCluster(nodeName string, opts restypes.DrainNodeOptions, clusterID, clusterName string) *DrainJob {
 	s.mu.Lock()
@@ -395,41 +390,30 @@ func (j *DrainJob) addEvent(kind DrainEventKind, phase DrainEventPhase, message,
 	j.store.version++
 }
 
-// Snapshot returns a stable copy of jobs scoped to a node (or all nodes when empty).
-func (s *Store) Snapshot(nodeName string) (Snapshot, uint64) {
+// Snapshot returns copied drain history for one cluster and an optional node.
+func (s *Store) Snapshot(clusterID, nodeName string) (Snapshot, uint64) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var jobs []*DrainJob
-	if nodeName == "" {
-		for _, entries := range s.byNode {
-			jobs = append(jobs, entries...)
-		}
-		sort.Slice(jobs, func(i, j2 int) bool {
-			return jobs[i].StartedAt > jobs[j2].StartedAt
-		})
-	} else {
-		normalizedNode := normalizeNodeName(nodeName)
-		for key, entries := range s.byNode {
-			if key.nodeName == normalizedNode {
-				jobs = append(jobs, entries...)
-			}
-		}
-		sort.Slice(jobs, func(i, j2 int) bool {
-			return jobs[i].StartedAt > jobs[j2].StartedAt
-		})
+	clusterID = strings.TrimSpace(clusterID)
+	normalizedNode := normalizeNodeName(nodeName)
+	result := Snapshot{ClusterID: clusterID, Drains: []DrainJob{}}
+	if clusterID == "" {
+		return result, s.version
 	}
-
-	result := Snapshot{
-		Drains: make([]DrainJob, 0, len(jobs)),
-	}
-	for _, job := range jobs {
-		if job == nil {
+	for key, entries := range s.byNode {
+		if key.clusterID != clusterID || (nodeName != "" && key.nodeName != normalizedNode) {
 			continue
 		}
-		result.Drains = append(result.Drains, cloneJob(job))
+		for _, job := range entries {
+			if job != nil {
+				result.Drains = append(result.Drains, cloneJob(job))
+			}
+		}
 	}
-
+	sort.Slice(result.Drains, func(i, j int) bool {
+		return result.Drains[i].StartedAt > result.Drains[j].StartedAt
+	})
 	return result, s.version
 }
 
@@ -462,27 +446,6 @@ func (s *Store) addJobToHistoryLocked(job *DrainJob) {
 	existing := s.byNode[key]
 	s.byNode[key] = append([]*DrainJob{job}, existing...)
 	s.enforceHistoryLimitLocked(key)
-}
-
-func (s *Store) removeJobFromAllHistoryLocked(jobID string) {
-	for key := range s.byNode {
-		s.removeJobFromHistoryKeyLocked(key, jobID)
-	}
-}
-
-func (s *Store) removeJobFromHistoryKeyLocked(key drainHistoryKey, jobID string) {
-	entries := s.byNode[key]
-	for i, candidate := range entries {
-		if candidate != nil && candidate.ID == jobID {
-			entries = append(entries[:i], entries[i+1:]...)
-			break
-		}
-	}
-	if len(entries) == 0 {
-		delete(s.byNode, key)
-		return
-	}
-	s.byNode[key] = entries
 }
 
 func (s *Store) enforceHistoryLimitLocked(key drainHistoryKey) {
@@ -528,38 +491,6 @@ func ParseScope(scope string) string {
 		return strings.TrimPrefix(trimmed, "node:")
 	}
 	return trimmed
-}
-
-// SetJobCluster sets the cluster ID and name for a drain job.
-// This allows associating a drain job with a specific cluster for isolation purposes.
-func (s *Store) SetJobCluster(jobID, clusterID, clusterName string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	job := s.jobs[jobID]
-	if job == nil {
-		return
-	}
-	s.removeJobFromAllHistoryLocked(job.ID)
-	job.ClusterID = strings.TrimSpace(clusterID)
-	job.ClusterName = strings.TrimSpace(clusterName)
-	s.addJobToHistoryLocked(job)
-	s.version++
-}
-
-// GetJobsForCluster returns all drain jobs that belong to a specific cluster.
-// This enables cluster isolation by filtering jobs by their ClusterID.
-func (s *Store) GetJobsForCluster(clusterID string) []*DrainJob {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var result []*DrainJob
-	for _, job := range s.jobs {
-		if job.ClusterID == clusterID {
-			result = append(result, job)
-		}
-	}
-	return result
 }
 
 func (s *Store) JobForCluster(jobID, clusterID string) (DrainJob, bool) {

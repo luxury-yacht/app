@@ -142,7 +142,7 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 			detailKey := objectDetailCacheKey(tc.kind, "default", "demo")
 			gateway.responseCacheStore(workloadClusterID, detailKey, "stale")
 
-			err := gateway.restartWorkloadInternal(workloadClusterID, "default", "apps", "v1", tc.kind, "demo")
+			err := gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: tc.kind, Name: "demo"})
 			require.NoError(t, err)
 			_, cached := gateway.responseCacheLookup(workloadClusterID, detailKey)
 			require.False(t, cached, "expected workload detail cache to be evicted after restart")
@@ -167,11 +167,11 @@ func TestRestartWorkloadErrors(t *testing.T) {
 	allowSelfSubjectAccessReviews(fakeClient)
 	gateway := newWorkloadResourceGateway(fakeClient)
 
-	err := gateway.restartWorkloadInternal(workloadClusterID, "default", "batch", "v1", "Job", "demo")
+	err := gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "Job", Name: "demo"})
 	require.EqualError(t, err, `restart not supported for workload kind "Job"`)
 
 	nilClientGateway := newWorkloadResourceGateway(nil)
-	err = nilClientGateway.restartWorkloadInternal(workloadClusterID, "default", "apps", "v1", "Deployment", "demo")
+	err = nilClientGateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"})
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }
 
@@ -179,29 +179,29 @@ func TestWorkloadActionsRequireNamespacedObjectIdentity(t *testing.T) {
 	gateway := newResourceGatewayFixture().gateway
 
 	require.EqualError(t,
-		gateway.restartWorkloadInternal("", "", "apps", "v1", "Deployment", "demo"),
+		gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: "", Namespace: "", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"}),
 		"namespace is required",
 	)
 	require.EqualError(t,
-		gateway.restartWorkloadInternal("", "default", "apps", "v1", "Deployment", ""),
+		gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: "", Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: ""}),
 		"name is required",
 	)
 	require.EqualError(t,
-		gateway.scaleWorkloadInternal("", "", "apps", "v1", "Deployment", "demo", 1),
+		gateway.scaleWorkloadAction(ObjectActionTargetRef{ClusterID: "", Namespace: "", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"}, 1),
 		"namespace is required",
 	)
 	require.EqualError(t,
-		gateway.scaleWorkloadInternal("", "default", "apps", "v1", "Deployment", "", 1),
+		gateway.scaleWorkloadAction(ObjectActionTargetRef{ClusterID: "", Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: ""}, 1),
 		"name is required",
 	)
 
-	_, err := gateway.triggerCronJobInternal("", "", "backup")
+	_, err := gateway.triggerCronJobAction(ObjectActionTargetRef{ClusterID: "", Namespace: "", Group: "batch", Version: "v1", Kind: "CronJob", Name: "backup"})
 	require.EqualError(t, err, "namespace is required")
-	_, err = gateway.triggerCronJobInternal("", "default", "")
+	_, err = gateway.triggerCronJobAction(ObjectActionTargetRef{ClusterID: "", Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: ""})
 	require.EqualError(t, err, "name is required")
 
-	require.EqualError(t, gateway.suspendCronJobInternal("", "", "backup", true), "namespace is required")
-	require.EqualError(t, gateway.suspendCronJobInternal("", "default", "", true), "name is required")
+	require.EqualError(t, gateway.suspendCronJobAction(ObjectActionTargetRef{ClusterID: "", Namespace: "", Group: "batch", Version: "v1", Kind: "CronJob", Name: "backup"}, true), "namespace is required")
+	require.EqualError(t, gateway.suspendCronJobAction(ObjectActionTargetRef{ClusterID: "", Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: ""}, true), "name is required")
 }
 
 func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
@@ -255,7 +255,7 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 			detailKey := objectDetailCacheKey(tc.kind, "default", "demo")
 			gateway.responseCacheStore(workloadClusterID, detailKey, "stale")
 
-			err := gateway.scaleWorkloadInternal(workloadClusterID, "default", "apps", "v1", tc.kind, "demo", 3)
+			err := gateway.scaleWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: tc.kind, Name: "demo"}, 3)
 			require.NoError(t, err)
 			_, cached := gateway.responseCacheLookup(workloadClusterID, detailKey)
 			require.False(t, cached, "expected workload detail cache to be evicted after scale")
@@ -337,7 +337,7 @@ func TestScaleWorkloadRestrictsHPAManagedWorkloads(t *testing.T) {
 
 			gateway := newWorkloadResourceGateway(client)
 
-			err := gateway.scaleWorkloadInternal(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", tc.requestReplicas)
+			err := gateway.scaleWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"}, tc.requestReplicas)
 			if tc.wantErr != "" {
 				require.EqualError(t, err, tc.wantErr)
 				require.Equal(t, 0, updateCount, "HPA-managed arbitrary scale must not reach UpdateScale")
@@ -356,19 +356,19 @@ func TestScaleWorkloadErrors(t *testing.T) {
 	allowSelfSubjectAccessReviews(client)
 	gateway := newWorkloadResourceGateway(client)
 
-	err := gateway.scaleWorkloadInternal(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", -1)
+	err := gateway.scaleWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"}, -1)
 	require.EqualError(t, err, "replicas must be non-negative")
 
 	if strconv.IntSize > 32 {
-		err = gateway.scaleWorkloadInternal(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", maxScaleReplicas+1)
+		err = gateway.scaleWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"}, maxScaleReplicas+1)
 		require.EqualError(t, err, "replicas must be less than or equal to 2147483647")
 	}
 
-	err = gateway.scaleWorkloadInternal(workloadClusterID, "default", "batch", "v1", "CronJob", "demo", 1)
+	err = gateway.scaleWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "demo"}, 1)
 	require.EqualError(t, err, `scaling not supported for workload kind "CronJob"`)
 
 	nilClientGateway := newWorkloadResourceGateway(nil)
-	err = nilClientGateway.scaleWorkloadInternal(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", 1)
+	err = nilClientGateway.scaleWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"}, 1)
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }
 
@@ -408,7 +408,7 @@ func TestTriggerCronJobCreatesJob(t *testing.T) {
 	detailKey := objectDetailCacheKey("CronJob", "default", "backup")
 	gateway.responseCacheStore(workloadClusterID, detailKey, "stale")
 
-	jobName, err := gateway.triggerCronJobInternal(workloadClusterID, "default", "backup")
+	jobName, err := gateway.triggerCronJobAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "backup"})
 	require.NoError(t, err)
 	_, cached := gateway.responseCacheLookup(workloadClusterID, detailKey)
 	require.False(t, cached, "expected cronjob detail cache to be evicted after manual trigger")
@@ -458,7 +458,7 @@ func TestTriggerCronJobRejectsSuspendedCronJob(t *testing.T) {
 	allowSelfSubjectAccessReviews(client)
 	gateway := newWorkloadResourceGateway(client)
 
-	_, err := gateway.triggerCronJobInternal(workloadClusterID, "default", "backup")
+	_, err := gateway.triggerCronJobAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "backup"})
 	require.EqualError(t, err, "cannot trigger suspended cronjob default/backup")
 	jobs, listErr := client.BatchV1().Jobs("default").List(context.Background(), metav1.ListOptions{})
 	require.NoError(t, listErr)
@@ -473,13 +473,13 @@ func TestTriggerCronJobErrors(t *testing.T) {
 	allowSelfSubjectAccessReviews(client)
 	gateway := newWorkloadResourceGateway(client)
 
-	_, err := gateway.triggerCronJobInternal(workloadClusterID, "default", "nonexistent")
+	_, err := gateway.triggerCronJobAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "nonexistent"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to get cronjob")
 
 	// Test with nil client
 	nilClientGateway := newWorkloadResourceGateway(nil)
-	_, err = nilClientGateway.triggerCronJobInternal(workloadClusterID, "default", "backup")
+	_, err = nilClientGateway.triggerCronJobAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "backup"})
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }
 
@@ -528,7 +528,7 @@ func TestSuspendCronJobTogglesSuspendField(t *testing.T) {
 			detailKey := objectDetailCacheKey("CronJob", "default", "backup")
 			gateway.responseCacheStore(workloadClusterID, detailKey, "stale")
 
-			err := gateway.suspendCronJobInternal(workloadClusterID, "default", "backup", tc.setSuspend)
+			err := gateway.suspendCronJobAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "backup"}, tc.setSuspend)
 			require.NoError(t, err)
 			_, cached := gateway.responseCacheLookup(workloadClusterID, detailKey)
 			require.False(t, cached, "expected cronjob detail cache to be evicted after suspend update")
@@ -550,12 +550,12 @@ func TestSuspendCronJobErrors(t *testing.T) {
 	allowSelfSubjectAccessReviews(client)
 	gateway := newWorkloadResourceGateway(client)
 
-	err := gateway.suspendCronJobInternal(workloadClusterID, "default", "nonexistent", true)
+	err := gateway.suspendCronJobAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "nonexistent"}, true)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to update cronjob")
 
 	// Test with nil client
 	nilClientGateway := newWorkloadResourceGateway(nil)
-	err = nilClientGateway.suspendCronJobInternal(workloadClusterID, "default", "backup", true)
+	err = nilClientGateway.suspendCronJobAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "backup"}, true)
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }

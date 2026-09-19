@@ -746,9 +746,6 @@ func TestWaitForFactorySyncHandlesNilFactory(t *testing.T) {
 	if !waitForFactorySync(context.Background(), nil) {
 		t.Fatal("nil factory should return true")
 	}
-	if !waitForAPIExtensionsFactorySync(context.Background(), nil) {
-		t.Fatal("nil apiextensions factory should return true")
-	}
 }
 
 func TestWaitForFactoriesRespectContextCancellation(t *testing.T) {
@@ -766,7 +763,7 @@ func TestWaitForFactoriesRespectContextCancellation(t *testing.T) {
 	apiExtFactory := apiextinformers.NewSharedInformerFactory(apiextensionsfake.NewClientset(), 0)
 	apiExtFactory.Apiextensions().V1().CustomResourceDefinitions()
 
-	if waitForAPIExtensionsFactorySync(ctx, apiExtFactory) {
+	if waitForFactorySync(ctx, apiExtFactory) {
 		t.Fatal("expected apiextensions factory sync to stop when context is canceled")
 	}
 }

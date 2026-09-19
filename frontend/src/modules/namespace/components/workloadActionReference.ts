@@ -25,10 +25,7 @@ export const buildWorkloadActionReference = (
 ) =>
   buildRequiredObjectReference(
     {
-      kind: row.ref.kind,
-      name: row.ref.name,
-      namespace: row.ref.namespace,
-      clusterId: row.ref.clusterId,
+      ...row.ref,
       clusterName: clusterName || undefined,
     },
     { fallbackClusterId },

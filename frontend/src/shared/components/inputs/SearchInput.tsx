@@ -5,7 +5,6 @@
  */
 
 import type React from 'react';
-import { useCallback, useState } from 'react';
 
 export interface SearchInputProps {
   /** Current input value (controlled). */
@@ -39,25 +38,8 @@ const SearchInput: React.FC<SearchInputProps> = ({
   inputRef,
   onKeyDown,
 }) => {
-  const [focused, setFocused] = useState(false);
-
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      onChange(e.target.value);
-    },
-    [onChange]
-  );
-
-  const handleFocus = useCallback(() => setFocused(true), []);
-  const handleBlur = useCallback(() => setFocused(false), []);
-
   // Build wrapper class list.
-  const wrapperClasses = [
-    'search-input-wrapper',
-    focused && 'focused',
-    disabled && 'disabled',
-    className,
-  ]
+  const wrapperClasses = ['search-input-wrapper', disabled && 'disabled', className]
     .filter(Boolean)
     .join(' ');
 
@@ -71,9 +53,7 @@ const SearchInput: React.FC<SearchInputProps> = ({
         type="search"
         placeholder={placeholder}
         value={value}
-        onChange={handleChange}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
+        onChange={(event) => onChange(event.target.value)}
         onKeyDown={onKeyDown}
         disabled={disabled}
       />

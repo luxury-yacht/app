@@ -23,7 +23,7 @@ import (
 func BuildResourceModel(clusterID string, slice *discoveryv1.EndpointSlice) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, slice)
 	status := statusPresentation(slice, facts)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, slice.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, slice.ObjectMeta, status)
 }
 
 // BuildFacts extracts the EndpointSlice facts from the raw object.

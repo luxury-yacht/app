@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"sort"
 	"sync"
 	"time"
 
@@ -17,9 +16,8 @@ import (
 
 // aggregateSnapshotService routes cluster-scoped snapshot builds to per-cluster services.
 type aggregateSnapshotService struct {
-	clusterOrder []string
-	services     map[string]refresh.SnapshotBuilder
-	mu           sync.RWMutex
+	services map[string]refresh.SnapshotBuilder
+	mu       sync.RWMutex
 
 	// onNamespaceSnapshot is called when a namespace snapshot reaches a settled workload state.
 	// Used by the lifecycle module to transition loading -> degraded -> ready.
@@ -27,10 +25,7 @@ type aggregateSnapshotService struct {
 }
 
 // newAggregateSnapshotService builds an aggregator for the provided cluster snapshot services.
-func newAggregateSnapshotService(
-	clusterOrder []string,
-	subsystems map[string]*system.Subsystem,
-) *aggregateSnapshotService {
+func newAggregateSnapshotService(subsystems map[string]*system.Subsystem) *aggregateSnapshotService {
 	services := make(map[string]refresh.SnapshotBuilder)
 	for id, subsystem := range subsystems {
 		if subsystem == nil || subsystem.SnapshotService == nil {
@@ -39,24 +34,7 @@ func newAggregateSnapshotService(
 		services[id] = subsystem.SnapshotService
 	}
 
-	ordered := make([]string, 0, len(clusterOrder))
-	for _, id := range clusterOrder {
-		if _, ok := services[id]; ok {
-			ordered = append(ordered, id)
-		}
-	}
-
-	if len(ordered) == 0 {
-		for id := range services {
-			ordered = append(ordered, id)
-		}
-		sort.Strings(ordered)
-	}
-
-	return &aggregateSnapshotService{
-		clusterOrder: ordered,
-		services:     services,
-	}
+	return &aggregateSnapshotService{services: services}
 }
 
 // Build routes one cluster-scoped snapshot request to the owning per-cluster service.
@@ -142,13 +120,12 @@ func (s *aggregateSnapshotService) snapshotConfig() map[string]refresh.SnapshotB
 }
 
 // Update refreshes the aggregate snapshot configuration after selection changes.
-func (s *aggregateSnapshotService) Update(clusterOrder []string, subsystems map[string]*system.Subsystem) {
+func (s *aggregateSnapshotService) Update(subsystems map[string]*system.Subsystem) {
 	if s == nil {
 		return
 	}
-	next := newAggregateSnapshotService(clusterOrder, subsystems)
+	next := newAggregateSnapshotService(subsystems)
 	s.mu.Lock()
-	s.clusterOrder = next.clusterOrder
 	s.services = next.services
 	s.mu.Unlock()
 }

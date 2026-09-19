@@ -266,17 +266,17 @@ func TestManagerSubscribeWithResumeReplaysAndSubscribes(t *testing.T) {
 	}
 
 	buffer := newEventBuffer(2)
-	buffer.Add(bufferedEvent{
-		sequence: 1,
-		entry: Entry{
+	buffer.Add(StreamEvent{
+		Sequence: 1,
+		Entry: Entry{
 			Kind:    "Event",
 			Name:    "first",
 			Message: "first message",
 		},
 	})
-	buffer.Add(bufferedEvent{
-		sequence: 2,
-		entry: Entry{
+	buffer.Add(StreamEvent{
+		Sequence: 2,
+		Entry: Entry{
 			Kind:    "Event",
 			Name:    "second",
 			Message: "second message",
@@ -319,9 +319,9 @@ func TestManagerSubscribeWithResumeReplaysAndSubscribes(t *testing.T) {
 
 func TestEventBufferDetectsExpiredResumeAfterOverflow(t *testing.T) {
 	buffer := newEventBuffer(2)
-	buffer.Add(bufferedEvent{sequence: 1, entry: Entry{Name: "one"}})
-	buffer.Add(bufferedEvent{sequence: 2, entry: Entry{Name: "two"}})
-	buffer.Add(bufferedEvent{sequence: 3, entry: Entry{Name: "three"}})
+	buffer.Add(StreamEvent{Sequence: 1, Entry: Entry{Name: "one"}})
+	buffer.Add(StreamEvent{Sequence: 2, Entry: Entry{Name: "two"}})
+	buffer.Add(StreamEvent{Sequence: 3, Entry: Entry{Name: "three"}})
 
 	if _, ok := buffer.Since(1); ok {
 		t.Fatal("expected resume before oldest buffered event to fail")
@@ -331,7 +331,7 @@ func TestEventBufferDetectsExpiredResumeAfterOverflow(t *testing.T) {
 	if !ok {
 		t.Fatal("expected resume from retained sequence to succeed")
 	}
-	if len(events) != 1 || events[0].sequence != 3 || events[0].entry.Name != "three" {
+	if len(events) != 1 || events[0].Sequence != 3 || events[0].Entry.Name != "three" {
 		t.Fatalf("unexpected resume events: %+v", events)
 	}
 }

@@ -18,7 +18,7 @@ import (
 // this package (serviceaccount.Facts); callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, sa *corev1.ServiceAccount) resourcemodel.ResourceModel {
 	status := resourcemodel.ServiceAccountStatus(sa.ObjectMeta, namedSecretCount(sa))
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, sa.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, sa.ObjectMeta, status)
 }
 
 // BuildFacts extracts the ServiceAccount facts. Reverse links materialize only when

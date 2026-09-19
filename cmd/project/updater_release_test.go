@@ -13,6 +13,7 @@ import (
 	"testing"
 	"testing/iotest"
 
+	"github.com/luxury-yacht/app/internal/updateconformance"
 	"github.com/stretchr/testify/require"
 )
 
@@ -288,7 +289,7 @@ func TestValidateMacOSUpdaterArchiveUsesWailsExtractedPayload(t *testing.T) {
 	writeMacAppArchive(t, artifact, false)
 	var validatedPath string
 
-	err := validateMacOSUpdaterArchive(context.Background(), artifact, "2.0.0", "arm64", func(path string) error {
+	err := updateconformance.ValidateMacOSArchive(context.Background(), artifact, "2.0.0", "arm64", func(path string) error {
 		validatedPath = path
 		require.Equal(t, "Luxury Yacht.app", filepath.Base(path))
 		require.FileExists(t, filepath.Join(path, "Contents", "MacOS", "luxury-yacht"))
@@ -304,7 +305,7 @@ func TestValidateMacOSUpdaterArchiveRejectsMultipleTopLevelEntries(t *testing.T)
 	artifact := filepath.Join(t.TempDir(), "luxury-yacht-v2.0.0-darwin-arm64.zip")
 	writeMacAppArchive(t, artifact, true)
 
-	err := validateMacOSUpdaterArchive(context.Background(), artifact, "2.0.0", "arm64", func(string) error {
+	err := updateconformance.ValidateMacOSArchive(context.Background(), artifact, "2.0.0", "arm64", func(string) error {
 		t.Fatal("invalid archive reached bundle validation")
 		return nil
 	})
@@ -507,4 +508,25 @@ func writeLinuxUpdaterArchive(t *testing.T, path, name string, mode int64) {
 	require.NoError(t, tarWriter.Close())
 	require.NoError(t, gzipWriter.Close())
 	require.NoError(t, file.Close())
+}
+
+func TestUpdaterTargetSelectionPreservesCanonicalOrderAndInput(t *testing.T) {
+	input := []updaterTarget{
+		{Platform: "linux", Architecture: "arm64"},
+		{Platform: "windows", Architecture: "amd64"},
+		{Platform: "darwin", Architecture: "arm64"},
+	}
+	original := slices.Clone(input)
+	want := []updaterTarget{input[2], input[1], input[0]}
+	ordered, err := orderAndValidateUpdaterTargets(input)
+	require.NoError(t, err)
+	require.Equal(t, want, ordered)
+	require.Equal(t, original, input)
+	parsed, err := parseUpdaterTargets(" LINUX / ARM64 , windows/amd64,darwin/arm64")
+	require.NoError(t, err)
+	require.Equal(t, want, parsed)
+	_, err = parseUpdaterTargets("linux/386,malformed")
+	require.ErrorContains(t, err, "unsupported updater target linux/386")
+	_, err = orderAndValidateUpdaterTargets(append(input, input[0]))
+	require.ErrorContains(t, err, "duplicate updater target linux/arm64")
 }

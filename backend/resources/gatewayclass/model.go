@@ -17,7 +17,7 @@ import (
 // are produced separately via BuildFacts (the model carries an empty facts union).
 func BuildResourceModel(clusterID string, gatewayClass *gatewayv1.GatewayClass) resourcemodel.ResourceModel {
 	status := buildStatusPresentation(gatewayClass)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, gatewayClass.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, gatewayClass.ObjectMeta, status)
 }
 
 // BuildFacts projects a GatewayClass into its semantic facts.

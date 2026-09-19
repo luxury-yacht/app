@@ -14,7 +14,7 @@ import (
 // BuildResourceModel builds the shared resource model for a BackendTLSPolicy.
 func BuildResourceModel(clusterID string, policy *gatewayv1.BackendTLSPolicy) resourcemodel.ResourceModel {
 	status := buildStatusPresentation(policy)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, policy.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, policy.ObjectMeta, status)
 }
 
 // BuildFacts projects a BackendTLSPolicy into its semantic facts.

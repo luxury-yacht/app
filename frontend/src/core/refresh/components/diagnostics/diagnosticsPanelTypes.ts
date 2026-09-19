@@ -27,7 +27,6 @@ export interface DiagnosticsRow {
   interval: string;
   lastUpdated: string;
   lastUpdatedTooltip: string;
-  telemetryStatus?: string;
   telemetryTooltip?: string;
   duration?: string;
   // Formatted peak informer-sync-gate wait (initial-LIST gating cost) for this
@@ -37,20 +36,12 @@ export interface DiagnosticsRow {
   telemetryFailure?: number;
   metricsStatus: string;
   metricsTooltip: string;
-  metricsSuccess?: number;
-  metricsFailure?: number;
-  metricsStale?: boolean;
   dropped: number;
   stale: boolean;
   error: string;
-  hasMetrics: boolean;
-  count: number;
   countDisplay: string;
   countTooltip?: string;
   countClassName?: string;
-  warnings?: string[];
-  truncated?: boolean;
-  totalItems?: number;
   namespace: string;
   // Scope/mode/health/polling describe how data is retrieved for this row.
   scope: string;

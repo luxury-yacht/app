@@ -64,7 +64,6 @@ func permissionReviewRetryPolicy() k8sretry.Policy {
 
 type ssrrCacheEntry struct {
 	status    *authorizationv1.SubjectRulesReviewStatus
-	cachedAt  time.Time
 	expiresAt time.Time
 }
 
@@ -136,7 +135,6 @@ func (c *SSRRCache) fetchAndStore(ctx context.Context, namespace string) (*autho
 	c.mu.Lock()
 	c.entries[namespace] = ssrrCacheEntry{
 		status:    status,
-		cachedAt:  now,
 		expiresAt: now.Add(c.ttl),
 	}
 	c.mu.Unlock()
@@ -193,10 +191,10 @@ func MatchRules(rules []authorizationv1.ResourceRule, apiGroup, resource, verb, 
 	}
 
 	for _, rule := range rules {
-		if !matchesVerb(rule.Verbs, verb) {
+		if !matchesWildcard(rule.Verbs, verb) {
 			continue
 		}
-		if !matchesAPIGroup(rule.APIGroups, apiGroup) {
+		if !matchesWildcard(rule.APIGroups, apiGroup) {
 			continue
 		}
 		if !matchesResource(rule.Resources, combinedResource, subresource) {
@@ -210,22 +208,8 @@ func MatchRules(rules []authorizationv1.ResourceRule, apiGroup, resource, verb, 
 	return false
 }
 
-func matchesVerb(ruleVerbs []string, verb string) bool {
-	for _, v := range ruleVerbs {
-		if v == "*" || v == verb {
-			return true
-		}
-	}
-	return false
-}
-
-func matchesAPIGroup(ruleGroups []string, group string) bool {
-	for _, g := range ruleGroups {
-		if g == "*" || g == group {
-			return true
-		}
-	}
-	return false
+func matchesWildcard(values []string, value string) bool {
+	return slices.Contains(values, "*") || slices.Contains(values, value)
 }
 
 // matchesResource implements K8s RBAC ResourceMatches:

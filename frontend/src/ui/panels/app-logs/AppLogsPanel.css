@@ -119,11 +119,15 @@
   -webkit-user-select: text;
 }
 
-.app-logs-header {
+.app-logs-header,
+.log-entry {
   display: grid;
   grid-template-columns:
     var(--app-log-timestamp-width, 90px) var(--app-log-level-width, 60px)
     var(--app-log-source-width, 120px) var(--app-log-cluster-width, 140px) minmax(0, 1fr);
+}
+
+.app-logs-header {
   flex-shrink: 0;
   padding: 5px 10px;
   background: var(--color-bg-secondary);
@@ -198,10 +202,6 @@
 
 /* Log entries */
 .log-entry {
-  display: grid;
-  grid-template-columns:
-    var(--app-log-timestamp-width, 90px) var(--app-log-level-width, 60px)
-    var(--app-log-source-width, 120px) var(--app-log-cluster-width, 140px) minmax(0, 1fr);
   padding: 2px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }

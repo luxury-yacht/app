@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { eventBus } from '@/core/events';
-import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { useAutoRefreshEnabled } from './useRefreshPreferences';
 
 export interface AutoRefreshLoadingState {
   isPaused: boolean;
@@ -9,15 +9,10 @@ export interface AutoRefreshLoadingState {
 }
 
 export function useAutoRefreshLoadingState(): AutoRefreshLoadingState {
-  const [isPaused, setIsPaused] = useState(() => !getAutoRefreshEnabled());
+  const isPaused = !useAutoRefreshEnabled();
   const [manualRefreshCount, setManualRefreshCount] = useState(0);
 
   useEffect(() => {
-    setIsPaused(!getAutoRefreshEnabled());
-
-    const unsubAutoRefresh = eventBus.on('settings:auto-refresh', (enabled) => {
-      setIsPaused(!enabled);
-    });
     const unsubRefreshStart = eventBus.on('refresh:start', ({ isManual }) => {
       if (!isManual) {
         return;
@@ -32,7 +27,6 @@ export function useAutoRefreshLoadingState(): AutoRefreshLoadingState {
     });
 
     return () => {
-      unsubAutoRefresh();
       unsubRefreshStart();
       unsubRefreshComplete();
     };

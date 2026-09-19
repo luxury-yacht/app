@@ -21,7 +21,7 @@ import (
 func BuildResourceModel(clusterID string, crd *apiextensionsv1.CustomResourceDefinition) resourcemodel.ResourceModel {
 	facts := BuildFacts(crd)
 	status := statusPresentation(crd, facts)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, crd.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, crd.ObjectMeta, status)
 }
 
 // BuildFacts extracts the CustomResourceDefinition facts from the raw object.

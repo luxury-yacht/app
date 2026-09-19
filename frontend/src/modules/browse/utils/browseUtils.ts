@@ -166,48 +166,35 @@ export const buildCatalogScope = (params: BuildCatalogScopeParams): string => {
 
   // Sort multi-value params to keep the scope string stable across renders/hydration.
   // This avoids accidental refresh loops caused by reordered equivalent arrays.
-  params.kinds
-    .map((kind) => kind.trim())
-    .filter(Boolean)
-    .sort(compareUtf16Strings)
-    .forEach((kind) => {
-      query.append('kind', kind);
-    });
+  const facets = [
+    ['kind', params.kinds],
+    ['apiGroup', params.apiGroups ?? []],
+    ['namespace', params.namespaces],
+    ['scopeNamespace', params.scopeNamespaces ?? []],
+  ] as const;
+  for (const [key, values] of facets) {
+    values
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .sort(compareUtf16Strings)
+      .forEach((value) => query.append(key, value));
+  }
 
-  (params.apiGroups ?? [])
-    .map((group) => group.trim())
-    .filter(Boolean)
-    .sort(compareUtf16Strings)
-    .forEach((group) => {
-      query.append('apiGroup', group);
-    });
+  appendCatalogPageAddress(query, params);
 
-  params.namespaces
-    .map((namespace) => namespace.trim())
-    .filter(Boolean)
-    .sort(compareUtf16Strings)
-    .forEach((namespace) => {
-      // GridTable uses '' as the synthetic "cluster-scoped" namespace option.
-      // The backend catalog already understands cluster scope when namespace is omitted.
-      query.append('namespace', namespace);
-    });
+  return query.toString();
+};
 
-  (params.scopeNamespaces ?? [])
-    .map((namespace) => namespace.trim())
-    .filter(Boolean)
-    .sort(compareUtf16Strings)
-    .forEach((namespace) => {
-      query.append('scopeNamespace', namespace);
-    });
-
+const appendCatalogPageAddress = (
+  query: URLSearchParams,
+  params: BuildCatalogScopeParams
+): void => {
   const continueToken = params.continueToken?.trim();
   if (continueToken) {
     query.set('continue', continueToken);
   } else if (typeof params.startRank === 'number' && params.startRank >= 0) {
     query.set('startRank', String(params.startRank));
   }
-
-  return query.toString();
 };
 
 /**

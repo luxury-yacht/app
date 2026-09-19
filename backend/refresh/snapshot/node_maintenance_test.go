@@ -48,6 +48,23 @@ func TestNodeMaintenanceDomainFiltersDrainsByClusterAndScope(t *testing.T) {
 	requireNodeMaintenancePayload(t, aggregateSnapshot, clusterA, "Phase8 A", jobA.ID)
 }
 
+func TestNodeMaintenanceDomainRejectsMissingOrMismatchedClusterOwnership(t *testing.T) {
+	store := nodemaintenance.NewStore(5)
+	store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
+	store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-b", "Cluster B")
+	reg := domain.New()
+	if err := RegisterNodeMaintenanceDomain(reg, store); err != nil {
+		t.Fatal(err)
+	}
+	for _, meta := range []ClusterMeta{{}, {ClusterID: "cluster-b"}} {
+		ctx := WithClusterMeta(context.Background(), meta)
+		result, err := reg.Build(ctx, "object-maintenance", "cluster-a|node:worker-1")
+		if err == nil || result != nil {
+			t.Fatalf("invalid owner %+v returned a drain snapshot: %+v, %v", meta, result, err)
+		}
+	}
+}
+
 func requireNodeMaintenancePayload(t *testing.T, snapshot *refresh.Snapshot, clusterID, clusterName, jobID string) {
 	t.Helper()
 	payload, ok := snapshot.Payload.(nodemaintenance.Snapshot)

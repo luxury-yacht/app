@@ -15,12 +15,12 @@ import { useCallback } from 'react';
 import './MapTab.css';
 import { isMapSnapshotLoading } from '@modules/object-map/mapSnapshotStatus';
 import ObjectMap from '@modules/object-map/ObjectMap';
-import { buildResolvedFromMapRef } from '@modules/object-map/objectMapNavigation';
+import { useObjectMapNavigation } from '@modules/object-map/objectMapNavigation';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useRefreshDomainHandle } from '@/core/data-access';
-import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@/core/refresh/types';
+import type { ObjectMapSnapshotPayload } from '@/core/refresh/types';
 import { errorHandler } from '@/utils/errorHandler';
 import type { PanelObjectData } from '../types';
 
@@ -55,34 +55,9 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
     Boolean(isActive && objectData && mapScope && isMapSnapshotLoading(snapshot.status)) &&
     !payload;
 
-  const handleOpenPanel = useCallback(
-    (ref: ObjectMapReference) => {
-      const resolved = buildResolvedFromMapRef(ref);
-      if (resolved) {
-        openWithObject(resolved);
-      }
-    },
-    [openWithObject]
-  );
-
-  const handleNavigateView = useCallback(
-    (ref: ObjectMapReference) => {
-      const resolved = buildResolvedFromMapRef(ref);
-      if (resolved) {
-        navigateToView(resolved);
-      }
-    },
-    [navigateToView]
-  );
-
-  const handleOpenObjectMap = useCallback(
-    (ref: ObjectMapReference) => {
-      const resolved = buildResolvedFromMapRef(ref);
-      if (resolved) {
-        openWithObject(resolved, { initialTab: 'map' });
-      }
-    },
-    [openWithObject]
+  const { handleOpenPanel, handleNavigateView, handleOpenObjectMap } = useObjectMapNavigation(
+    openWithObject,
+    navigateToView
   );
 
   return (

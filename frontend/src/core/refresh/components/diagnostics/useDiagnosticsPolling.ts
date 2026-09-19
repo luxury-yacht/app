@@ -47,6 +47,7 @@ export const useDiagnosticsPolling = (isOpen: boolean) => {
     }
 
     let cancelled = false;
+    let polling = false;
 
     const applyResult = <T>(result: PromiseSettledResult<T>, target: DiagnosticsTarget<T>) => {
       if (result.status === 'fulfilled') {
@@ -70,12 +71,15 @@ export const useDiagnosticsPolling = (isOpen: boolean) => {
     };
 
     const loadDiagnostics = async () => {
+      if (cancelled || polling) return;
+      polling = true;
       const [telemetryResult, selectionResult, kubernetesAPIResult] = await Promise.allSettled([
         fetchTelemetrySummary(),
         fetchSelectionDiagnostics(),
         fetchKubernetesAPIClientDiagnostics(),
       ]);
 
+      polling = false;
       if (cancelled) {
         return;
       }

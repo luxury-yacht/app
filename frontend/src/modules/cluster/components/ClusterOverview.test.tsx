@@ -577,6 +577,7 @@ describe('ClusterOverview', () => {
     expect(container.textContent).toContain('Ready');
 
     await act(async () => {
+      mockAutoRefreshEnabled = false;
       eventBus.emit('settings:auto-refresh', false);
     });
 

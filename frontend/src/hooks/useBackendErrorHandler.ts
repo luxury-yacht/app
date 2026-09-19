@@ -16,6 +16,9 @@ import {
   isBackendErrorPayload,
 } from '@/types/backend-events';
 
+const isAuthOverlayError = (message: string): boolean =>
+  message.includes('no active clusters available') || message.includes('Error loading SSO Token');
+
 /**
  * Subscribes to backend error events from Wails runtime and forwards them
  * to the error handler with deduplication.
@@ -33,10 +36,7 @@ export function useBackendErrorHandler(): void {
 
       // Suppress auth-related errors that are already shown in the AuthFailureOverlay.
       // These errors occur when requesting data for clusters with auth failures.
-      if (
-        message.includes('no active clusters available') ||
-        message.includes('Error loading SSO Token')
-      ) {
+      if (isAuthOverlayError(message)) {
         return;
       }
 
@@ -57,6 +57,7 @@ export function useBackendErrorHandler(): void {
 
       errorHandler.handle(new Error(message), {
         source: 'backend-fetch',
+        clusterId: payload.clusterId,
         resourceKind: payload.resourceKind,
         identifier: payload.identifier,
       });

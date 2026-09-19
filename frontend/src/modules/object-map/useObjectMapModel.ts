@@ -27,7 +27,6 @@ import type {
   ObjectMapNodeBadge,
   ObjectMapPointer,
 } from './objectMapRendererTypes';
-import { computeObjectMapSelectionState } from './objectMapSelection';
 
 type NodePositionOverrides = Map<string, { x: number; y: number }>;
 
@@ -50,11 +49,11 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
     return (
       payload.nodes.find((node) => {
         const r = node.ref;
+        if (r.clusterId !== ref.clusterId) return false;
         if (r.uid && ref.uid) {
           return r.uid === ref.uid;
         }
         return (
-          r.clusterId === ref.clusterId &&
           r.kind === ref.kind &&
           r.name === ref.name &&
           (r.namespace ?? '') === namespace &&
@@ -128,12 +127,16 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
   );
   const nodeDragRef = useRef<NodeDragState | null>(null);
 
+  const resetLayout = useCallback(() => {
+    setNodePositionOverrides(new Map());
+    nodeDragRef.current = null;
+  }, []);
+
   useEffect(() => {
     void filtered.nodes;
     void filtered.edges;
-    setNodePositionOverrides(new Map());
-    nodeDragRef.current = null;
-  }, [filtered.nodes, filtered.edges]);
+    resetLayout();
+  }, [filtered.nodes, filtered.edges, resetLayout]);
 
   const layout: ObjectMapLayout = useMemo(() => {
     if (nodePositionOverrides.size === 0) {
@@ -181,11 +184,6 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
       setActiveNodeId(null);
     }
   }, [layout.nodes, activeNodeId]);
-
-  const selectionState = useMemo(
-    () => computeObjectMapSelectionState(layout.edges, activeNodeId),
-    [layout.edges, activeNodeId]
-  );
 
   const selectNode = useCallback((id: string) => {
     setActiveNodeId((prev) => (prev === id ? null : id));
@@ -259,11 +257,6 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
     nodeDragRef.current = null;
   }, []);
 
-  const resetLayout = useCallback(() => {
-    setNodePositionOverrides(new Map());
-    nodeDragRef.current = null;
-  }, []);
-
   const clearHoverEdge = useCallback(() => {
     setHoverEdge(null);
   }, []);
@@ -281,7 +274,6 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
     hoverEdge,
     setHoverEdge,
     clearHoverEdge,
-    selectionState,
     activeNodeId,
     selectNode,
     focusNode,

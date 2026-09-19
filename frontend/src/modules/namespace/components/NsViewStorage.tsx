@@ -7,6 +7,7 @@
 
 import {
   type AggregatedResourceGridViewSpec,
+  createAggregatedIdentityColumns,
   NamespaceAggregatedResourceGridView,
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
@@ -16,7 +17,6 @@ import type {
   NamespaceStorageSnapshotPayload,
   NamespaceStorageSummary,
 } from '@/core/refresh/types';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 export type StorageData = NamespaceStorageSummary & { kindAlias?: string };
 
@@ -56,19 +56,7 @@ const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
         : null;
 
     return [
-      cf.createKindColumn<StorageData>({
-        key: 'kind',
-        getKind: (resource) => resource.ref.kind,
-        getAlias: (resource) => resource.kindAlias,
-        getDisplayText: (resource) => getDisplayKind(resource.ref.kind, useShortResourceNames),
-        onClick: identity.open,
-        onAltClick: identity.navigate,
-      }),
-      cf.createResourceNameColumn<StorageData>((resource) => resource.ref.name, {
-        onClick: identity.open,
-        onAltClick: identity.navigate,
-        getClassName: () => 'object-panel-link',
-      }),
+      ...createAggregatedIdentityColumns<StorageData>({ identity, useShortResourceNames }),
       cf.createTextColumn<StorageData>(
         'status',
         'Status',

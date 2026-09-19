@@ -10,6 +10,7 @@ import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespa
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { formatRestartCount } from '@shared/components/tables/restartCount';
+import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { useMemo } from 'react';
 import { workloadRowCpuValue, workloadRowMemoryValue } from '@/core/resource-metrics';
@@ -78,9 +79,7 @@ const useWorkloadTableColumns = ({
     const metricsStale = Boolean(metrics?.stale);
     const metricsError = metrics?.lastError ?? undefined;
 
-    const columns: GridColumnDefinition<WorkloadData>[] = [];
-
-    columns.push(
+    const columns: GridColumnDefinition<WorkloadData>[] = [
       cf.createKindColumn<WorkloadData>({
         getKind: (row) => row.ref.kind,
         getDisplayText: (row) => getDisplayKind(row.ref.kind, useShortResourceNames),
@@ -95,46 +94,28 @@ const useWorkloadTableColumns = ({
         // Match object panel link styling for clickable names.
         getClassName: () => 'object-panel-link',
         isInteractive: () => true,
-      })
-    );
-
-    const statusColumn = cf.createTextColumn<WorkloadData>(
-      'status',
-      'Status',
-      (row) => row.status,
-      {
+      }),
+      cf.createTextColumn<WorkloadData>('status', 'Status', (row) => row.status, {
         getClassName: (row) => backendStatusTextClass(row.statusPresentation),
-      }
-    );
-    statusColumn.sortValue = (row) => row.status.toLowerCase();
-    columns.push(statusColumn);
-
-    const readyColumn = cf.createTextColumn<WorkloadData>(
-      'ready',
-      'Ready',
-      (row) => row.ready ?? '—',
-      {
+        sortValue: (row) => row.status.toLowerCase(),
+      }),
+      cf.createTextColumn<WorkloadData>('ready', 'Ready', (row) => row.ready ?? '—', {
         alignHeader: 'center',
         alignData: 'center',
-        getClassName: (row) => getReadyClassName(row),
-      }
-    );
-    readyColumn.sortValue = (row) => getReadySortValue(row.ready);
-    columns.push(readyColumn);
-
-    const restartsColumn = cf.createTextColumn<WorkloadData>(
-      'restarts',
-      'Restarts',
-      (row) => formatRestartCount(row.restarts),
-      {
-        alignHeader: 'center',
-        alignData: 'center',
-        getClassName: (row) => getRestartsClassName(row),
-      }
-    );
-    restartsColumn.sortValue = (row) => row.restarts ?? 0;
-    columns.push(
-      restartsColumn,
+        getClassName: getReadyClassName,
+        sortValue: (row) => getReadySortValue(row.ready),
+      }),
+      cf.createTextColumn<WorkloadData>(
+        'restarts',
+        'Restarts',
+        (row) => formatRestartCount(row.restarts),
+        {
+          alignHeader: 'center',
+          alignData: 'center',
+          getClassName: getRestartsClassName,
+          sortValue: (row) => row.restarts ?? 0,
+        }
+      ),
       cf.createResourceBarColumn<WorkloadData>({
         key: 'cpu',
         header: 'CPU',
@@ -145,7 +126,7 @@ const useWorkloadTableColumns = ({
         getVariant: () => 'compact',
         getMetricsStale: () => metricsStale,
         getMetricsError: () => metricsError,
-        getAnimationKey: (row) => `workload:${row.ref.namespace}/${row.ref.name}:cpu`,
+        getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:cpu`,
         getShowEmptyState: () => true,
         sortable: true,
         sortValue: (row) =>
@@ -163,7 +144,7 @@ const useWorkloadTableColumns = ({
         getVariant: () => 'compact',
         getMetricsStale: () => metricsStale,
         getMetricsError: () => metricsError,
-        getAnimationKey: (row) => `workload:${row.ref.namespace}/${row.ref.name}:memory`,
+        getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:memory`,
         getShowEmptyState: () => true,
         sortable: true,
         sortValue: (row) =>
@@ -173,8 +154,8 @@ const useWorkloadTableColumns = ({
       }),
       cf.createAgeColumn<WorkloadData & { age?: string }>('age', 'Age', (row) => {
         return row.age ?? '—';
-      }) as GridColumnDefinition<WorkloadData>
-    );
+      }) as GridColumnDefinition<WorkloadData>,
+    ];
 
     const sizing: cf.ColumnSizingMap = {
       kind: { autoWidth: true },

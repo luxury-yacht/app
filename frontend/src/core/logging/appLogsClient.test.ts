@@ -8,6 +8,7 @@ import {
 } from './appLogsClient';
 
 const backendMocks = vi.hoisted(() => ({
+  failure: null as Error | null,
   log: vi.fn<(level: string, message: string, source: string) => void>(),
   logWithCluster:
     vi.fn<
@@ -28,15 +29,20 @@ const desktopMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@core/backend-api', () => ({
-  LogAppLogsFromFrontend: (level: string, message: string, source: string) =>
-    backendMocks.log(level, message, source),
+  LogAppLogsFromFrontend: (level: string, message: string, source: string) => {
+    backendMocks.log(level, message, source);
+    if (backendMocks.failure) return Promise.reject(backendMocks.failure);
+  },
   LogAppLogsFromFrontendWithCluster: (
     level: string,
     message: string,
     source: string,
     clusterId: string,
     clusterName: string
-  ) => backendMocks.logWithCluster(level, message, source, clusterId, clusterName),
+  ) => {
+    backendMocks.logWithCluster(level, message, source, clusterId, clusterName);
+    if (backendMocks.failure) return Promise.reject(backendMocks.failure);
+  },
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
@@ -52,6 +58,7 @@ describe('appLogsClient', () => {
   beforeEach(() => {
     logAppLogsFromFrontendMock.mockReset();
     logAppLogsFromFrontendWithClusterMock.mockReset();
+    backendMocks.failure = null;
     desktopMocks.available = true;
     desktopMocks.onEvent.mockReset();
   });
@@ -123,6 +130,23 @@ describe('appLogsClient', () => {
 
     expect(() => logAppLogsError('backend failure', 'Frontend')).not.toThrow();
   });
+
+  it.each([false, true])(
+    'contains asynchronous logging failure (cluster=%s)',
+    async (clusterScoped) => {
+      const backendLog = clusterScoped ? backendMocks.logWithCluster : backendMocks.log;
+      backendMocks.failure = new Error('logging transport closed');
+      const cluster = clusterScoped ? { clusterId: 'cluster-a' } : undefined;
+
+      logAppLogsError('first message', 'Frontend', cluster);
+      // Allow an unhandled rejection to reach the host, just as a rejected Wails call would.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      backendMocks.failure = null;
+      logAppLogsInfo('later message', 'Frontend', cluster);
+
+      expect(backendLog).toHaveBeenCalledTimes(2);
+    }
+  );
 
   it('subscribes to app-logs events and returns the Wails disposer', () => {
     const dispose = vi.fn();

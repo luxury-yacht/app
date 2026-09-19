@@ -15,7 +15,7 @@ import (
 // BuildResourceModel builds the shared resource model for a ListenerSet.
 func BuildResourceModel(clusterID string, listenerSet *gatewayv1.ListenerSet) resourcemodel.ResourceModel {
 	status := buildStatusPresentation(listenerSet)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, listenerSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, listenerSet.ObjectMeta, status)
 }
 
 // BuildFacts projects a ListenerSet into its semantic facts.

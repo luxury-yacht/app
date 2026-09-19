@@ -21,7 +21,7 @@ import (
 // status, and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, deployment *appsv1.Deployment) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(deployment)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, deployment.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, deployment.ObjectMeta, status)
 }
 
 // BuildFacts extracts the Deployment facts from the raw object.

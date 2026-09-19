@@ -7,6 +7,7 @@
 
 import {
   type AggregatedResourceGridViewSpec,
+  createAggregatedIdentityColumns,
   NamespaceAggregatedResourceGridView,
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
@@ -16,7 +17,6 @@ import type {
   NamespaceNetworkSnapshotPayload,
   NamespaceNetworkSummary,
 } from '@/core/refresh/types';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 export type NetworkData = NamespaceNetworkSummary & { kindAlias?: string };
 
@@ -46,19 +46,7 @@ const networkSpec: AggregatedResourceGridViewSpec<NetworkData> = {
     fallbackClusterName,
     useShortResourceNames,
   }) => [
-    cf.createKindColumn<NetworkData>({
-      key: 'kind',
-      getKind: (resource) => resource.ref.kind,
-      getAlias: (resource) => resource.kindAlias,
-      getDisplayText: (resource) => getDisplayKind(resource.ref.kind, useShortResourceNames),
-      onClick: identity.open,
-      onAltClick: identity.navigate,
-    }),
-    cf.createResourceNameColumn<NetworkData>((resource) => resource.ref.name, {
-      onClick: identity.open,
-      onAltClick: identity.navigate,
-      getClassName: () => 'object-panel-link',
-    }),
+    ...createAggregatedIdentityColumns<NetworkData>({ identity, useShortResourceNames }),
     // Stable concepts keep the mixed-kind table scannable. Each row's segment
     // label supplies the kind-specific meaning (Class, Parent, Type, Ports...).
     createDetailSegmentsColumn<NetworkData>({

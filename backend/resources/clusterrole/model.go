@@ -18,7 +18,7 @@ import (
 // this package (clusterrole.Facts); callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, role *rbacv1.ClusterRole) resourcemodel.ResourceModel {
 	status := resourcemodel.RBACRuleCountStatus(role.ObjectMeta, len(role.Rules), role.AggregationRule != nil)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, role.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, role.ObjectMeta, status)
 }
 
 // BuildFacts extracts the ClusterRole facts. Reverse links materialize only when

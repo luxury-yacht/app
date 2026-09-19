@@ -25,7 +25,7 @@ import (
 // owned by this package (hpa.Facts); callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, h *autoscalingv2.HorizontalPodAutoscaler) resourcemodel.ResourceModel {
 	status := statusPresentation(h.ObjectMeta, h.Status)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, h.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, h.ObjectMeta, status)
 }
 
 // BuildFacts extracts the HPA facts from a v2 object.

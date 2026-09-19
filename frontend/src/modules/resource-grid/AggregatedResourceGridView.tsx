@@ -41,6 +41,7 @@ import { useShortNames } from '@/hooks/useShortNames';
 import type { NamespaceViewType } from '@/types/navigation/views';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 
 /** The row fields the shared skeleton itself reads. */
 export interface AggregatedRowBase {
@@ -65,6 +66,30 @@ export interface AggregatedColumnHelpers<D> {
   fallbackClusterName: string | null | undefined;
   useShortResourceNames: boolean;
 }
+
+export const createAggregatedIdentityColumns = <
+  D extends AggregatedRowBase & { kindAlias?: string },
+>({
+  identity,
+  useShortResourceNames,
+}: Pick<
+  AggregatedColumnHelpers<D>,
+  'identity' | 'useShortResourceNames'
+>): GridColumnDefinition<D>[] => [
+  cf.createKindColumn<D>({
+    key: 'kind',
+    getKind: (row) => row.ref.kind,
+    getAlias: (row) => row.kindAlias,
+    getDisplayText: (row) => getDisplayKind(row.ref.kind, useShortResourceNames),
+    onClick: identity.open,
+    onAltClick: identity.navigate,
+  }),
+  cf.createResourceNameColumn<D>((row) => row.ref.name, {
+    onClick: identity.open,
+    onAltClick: identity.navigate,
+    getClassName: () => 'object-panel-link',
+  }),
+];
 
 export interface AggregatedResourceGridViewSpec<D extends AggregatedRowBase> {
   domain: RefreshDomain;

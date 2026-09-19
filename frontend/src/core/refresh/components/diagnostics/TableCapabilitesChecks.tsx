@@ -7,21 +7,21 @@
 
 import { TABLE_NO_VALUE_TEXT, TableCellValue } from '@shared/components/tables/tableNoValue';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { permissionFeatureLabel } from '@/core/capabilities';
 import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
+
+import {
+  DIAGNOSTICS_ROW_INCREMENT,
+  useDiagnosticsTableControls,
+} from './useDiagnosticsTableControls';
+import { displayInFlightCount } from './diagnosticsPanelUtils';
 
 interface CapabilityChecksTableProps {
   currentRows: CapabilityBatchRow[];
   previousRows: CapabilityBatchRow[];
   summary: string;
 }
-
-const INITIAL_VISIBLE_ROWS = 250;
-const ROW_INCREMENT = 250;
-
-const displayInFlightCount = (count: number | null | undefined): number | string =>
-  count !== null && count !== undefined && count > 0 ? count : TABLE_NO_VALUE_TEXT;
 
 const displayIncomplete = (incomplete: boolean | null | undefined): string => {
   if (incomplete === null || incomplete === undefined) {
@@ -68,9 +68,8 @@ const CapabilityRow: React.FC<{
 }> = ({ row, isCollapsed, onToggle }) => (
   <tr
     key={row.key}
-    className={row.consecutiveFailureCount > 1 ? 'diagnostics-permission-denied' : undefined}
+    className={`diagnostics-row-interactive${row.consecutiveFailureCount > 1 ? ' diagnostics-permission-denied' : ''}`}
     onClick={() => onToggle(row.key)}
-    style={{ cursor: 'pointer' }}
   >
     <td>{row.scope}</td>
     <td>
@@ -111,7 +110,7 @@ const CapabilityRow: React.FC<{
             'diagnostics-table-descriptor' +
             (!isCollapsed ? ' diagnostics-table-cell-expanded' : '')
           }
-          onClick={() => onToggle(row.key)}
+          aria-expanded={!isCollapsed}
         >
           {!isCollapsed
             ? row.descriptorsByFeature.map(({ feature, resources }) => (
@@ -145,23 +144,16 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
   summary,
 }) => {
   // Track which rows are expanded (collapsed by default).
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_ROWS);
-  const [searchTerm, setSearchTerm] = useState('');
+  const {
+    searchTerm,
+    setSearchTerm,
+    normalizedSearch,
+    visibleLimit,
+    expandedRows,
+    toggleRow,
+    showMoreRows,
+  } = useDiagnosticsTableControls();
 
-  const toggleRowExpanded = useCallback((key: string) => {
-    setExpandedRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  }, []);
-
-  const normalizedSearch = searchTerm.trim().toLowerCase();
   const filteredCurrentRows = useMemo(
     () => currentRows.filter((row) => matchesSearch(row, normalizedSearch)),
     [currentRows, normalizedSearch]
@@ -183,15 +175,6 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
     };
   }, [filteredCurrentRows, filteredPreviousRows, visibleLimit]);
   const hiddenRowCount = Math.max(filteredTotalRows - visibleRowsCount, 0);
-  const showMoreRows = useCallback(() => {
-    setVisibleLimit((current) => Math.min(current + ROW_INCREMENT, filteredTotalRows));
-  }, [filteredTotalRows]);
-
-  useEffect(() => {
-    void normalizedSearch;
-    setVisibleLimit(INITIAL_VISIBLE_ROWS);
-    setExpandedRows(new Set());
-  }, [normalizedSearch]);
 
   return (
     <div className="diagnostics-section">
@@ -214,8 +197,12 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
             />
           </label>
           {hiddenRowCount > 0 && (
-            <button className="diagnostics-section-toggle" onClick={showMoreRows} type="button">
-              Show {Math.min(ROW_INCREMENT, hiddenRowCount)} More
+            <button
+              className="diagnostics-section-toggle"
+              onClick={() => showMoreRows(filteredTotalRows)}
+              type="button"
+            >
+              Show {Math.min(DIAGNOSTICS_ROW_INCREMENT, hiddenRowCount)} More
             </button>
           )}
         </div>
@@ -271,7 +258,7 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
                       key={row.key}
                       row={row}
                       isCollapsed={!expandedRows.has(row.key)}
-                      onToggle={toggleRowExpanded}
+                      onToggle={toggleRow}
                     />
                   ))
                 )}
@@ -287,7 +274,7 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
                       key={row.key}
                       row={row}
                       isCollapsed={!expandedRows.has(row.key)}
-                      onToggle={toggleRowExpanded}
+                      onToggle={toggleRow}
                     />
                   ))}
                 </tbody>

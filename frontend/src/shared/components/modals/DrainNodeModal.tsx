@@ -102,20 +102,14 @@ const DrainNodeModal = ({
       return;
     }
     setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: true });
-    return () => {
-      setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: false });
-    };
-  }, [scope, isOpen]);
-
-  useEffect(() => {
-    if (!scope || !isOpen) {
-      return;
-    }
     void requestRefreshDomain({
       domain: 'object-maintenance',
       scope,
       reason: 'startup',
     });
+    return () => {
+      setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: false });
+    };
   }, [scope, isOpen]);
 
   const refreshMaintenance = useCallback(async () => {

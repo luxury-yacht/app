@@ -28,6 +28,7 @@ import {
   publishDockedPanels,
 } from './index';
 import { workspacePanelPublication } from './publicationQueue';
+import { useRemoveWorkspacePanels } from './useRemoveWorkspacePanels';
 
 interface WorkspaceSync {
   flush: () => Promise<void>;
@@ -85,9 +86,9 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
   const windowName = getWindowIdentity();
   const { selectedClusterIds, selectedClusterId, kubeconfigsLoading } = useKubeconfig();
   const local = useLocalPanelSnapshots();
-  const { getClusterTabGroups, tabGroups, dockPanelGroup, detachPanelGroup, discardPanelLayouts } =
-    useDockablePanelContext();
-  const { upsertOwnedPanel, removeOwnedPanel } = useObjectPanelState();
+  const { getClusterTabGroups, tabGroups, dockPanelGroup } = useDockablePanelContext();
+  const { upsertOwnedPanel } = useObjectPanelState();
+  const removeWorkspacePanels = useRemoveWorkspacePanels();
   const queue = useRef(workspacePanelPublication);
   const lastPublication = useRef('');
   const provisional = useRef(new Map<string, panelwindow.WorkspaceGroup[]>());
@@ -191,14 +192,12 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
       if (!moved.length) {
         return;
       }
-      const ids = moved.map((panel) => panel.tab.panelId);
-      detachPanelGroup(clusterId, ids);
-      discardPanelLayouts(clusterId, ids);
-      for (const id of ids) {
-        removeOwnedPanel(clusterId, id);
-      }
+      removeWorkspacePanels(
+        clusterId,
+        moved.map((panel) => panel.tab.panelId)
+      );
     },
-    [windowName, isProvisional, detachPanelGroup, discardPanelLayouts, removeOwnedPanel]
+    [windowName, isProvisional, removeWorkspacePanels]
   );
 
   const mountRetained = useCallback(

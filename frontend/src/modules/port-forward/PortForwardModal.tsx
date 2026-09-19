@@ -12,6 +12,7 @@ import { PortForwardIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import { buildVersionedNamespacedRowKey } from '@shared/utils/resourceRowIdentity';
 import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { readTargetPortsForRef, requestData } from '@/core/data-access';
@@ -70,32 +71,33 @@ function getDefaultLocalPort(containerPort: number): number {
  * Supports both predefined container ports (via radio selection) and
  * custom port input when no ports are available.
  */
-const PortForwardModal = ({
+const PortForwardModalContent = ({
   target,
   onClose,
   onStarted,
   onMutationChange,
-}: PortForwardModalProps) => {
+}: Omit<PortForwardModalProps, 'target'> & { target: PortForwardTarget }) => {
   const elementIdPrefix = useId();
+  // An open draft belongs to this object, not to later discovery updates.
+  const [initialTarget] = useState(target);
+  const initialPort = initialTarget.ports[0]?.port ?? 0;
   // Selected container port (either from predefined list or manual input)
-  const [containerPort, setContainerPort] = useState<number>(0);
+  const [containerPort, setContainerPort] = useState(initialPort);
   // Local port to forward to
-  const [localPort, setLocalPort] = useState<number>(0);
+  const [localPort, setLocalPort] = useState(
+    initialPort > 0 ? getDefaultLocalPort(initialPort) : 0
+  );
   // Loading state during submit
   const [isLoading, setIsLoading] = useState(false);
   // Loading state for fetching ports from backend
   const [isLoadingPorts, setIsLoadingPorts] = useState(false);
   // Error message to display
   const [error, setError] = useState<string | null>(null);
-  // Fetched ports stored in local state (not mutating the target prop)
-  const [fetchedPorts, setFetchedPorts] = useState<ContainerPort[]>([]);
-  // Keep latest target available for effects keyed by targetKey.
-  const targetRef = useRef<PortForwardTarget | null>(target);
+  const [availablePorts, setAvailablePorts] = useState(initialTarget.ports);
   const modalRef = useRef<HTMLDivElement>(null);
 
   useModalFocusTrap({
     ref: modalRef,
-    disabled: !target,
     onEscape: () => {
       if (!isLoading) {
         onClose();
@@ -105,50 +107,15 @@ const PortForwardModal = ({
   });
 
   useEffect(() => {
-    targetRef.current = target;
-  }, [target]);
-
-  // Create stable keys so same-value re-renders do not reinitialize/fetch.
-  const portsKey = target
-    ? target.ports.map((port) => `${port.port}:${port.name || ''}:${port.protocol || ''}`).join('|')
-    : '';
-  const targetKey = target
-    ? `${target.clusterId}:${target.namespace}:${target.group}:${target.version}:${target.kind}:${target.name}:${portsKey}`
-    : '';
-
-  // Reset form state when target changes, fetch ports if not provided
-  useEffect(() => {
-    void targetKey;
-    const currentTarget = targetRef.current;
-    if (!currentTarget) {
+    if (initialTarget.ports.length > 0 || !initialTarget.clusterId) {
       return;
     }
-
-    setError(null);
-    setFetchedPorts([]);
     let cancelled = false;
-
-    // If ports provided in target, use them directly
-    if (currentTarget.ports.length > 0) {
-      const initialContainerPort = currentTarget.ports[0].port;
-      setContainerPort(initialContainerPort);
-      setLocalPort(initialContainerPort > 0 ? getDefaultLocalPort(initialContainerPort) : 0);
-      return;
-    }
-
-    // Otherwise fetch from backend (if we have a cluster ID)
-    if (!currentTarget.clusterId) {
-      // No cluster ID - allow manual entry without fetching
-      setContainerPort(0);
-      setLocalPort(0);
-      return;
-    }
-
     setIsLoadingPorts(true);
     requestData({
       resource: 'target-ports',
       reason: 'user',
-      read: () => readTargetPortsForRef(currentTarget),
+      read: () => readTargetPortsForRef(initialTarget),
     })
       .then((ports) => {
         if (cancelled) {
@@ -156,13 +123,7 @@ const PortForwardModal = ({
         }
         const resolvedPorts = ports.status === 'executed' ? (ports.data ?? []) : [];
         if (resolvedPorts.length > 0) {
-          // Store fetched ports in local state
-          const mappedPorts = resolvedPorts.map((p) => ({
-            port: p.port,
-            name: p.name,
-            protocol: p.protocol,
-          }));
-          setFetchedPorts(mappedPorts);
+          setAvailablePorts(resolvedPorts);
           const firstPort = resolvedPorts[0].port;
           setContainerPort(firstPort);
           setLocalPort(getDefaultLocalPort(firstPort));
@@ -190,7 +151,7 @@ const PortForwardModal = ({
     return () => {
       cancelled = true;
     };
-  }, [targetKey]);
+  }, [initialTarget]);
 
   // Update local port when container port changes
   const handleContainerPortChange = useCallback((port: number) => {
@@ -219,10 +180,6 @@ const PortForwardModal = ({
 
   // Handle form submission
   const handleSubmit = useCallback(async () => {
-    if (!target) {
-      return;
-    }
-
     // Validate ports
     if (!isValidPort(containerPort)) {
       setError('Container port must be between 1 and 65535');
@@ -266,13 +223,6 @@ const PortForwardModal = ({
     }
   }, [target, containerPort, localPort, onStarted, onClose, onMutationChange]);
 
-  // Don't render if no target
-  if (!target) {
-    return null;
-  }
-
-  // Use fetched ports if available, otherwise use ports from target
-  const availablePorts = fetchedPorts.length > 0 ? fetchedPorts : target.ports;
   const hasPredefinedPorts = availablePorts.length > 0;
 
   return (
@@ -417,5 +367,18 @@ const PortForwardModal = ({
     </ModalSurface>
   );
 };
+
+function PortForwardModal({ target, ...props }: PortForwardModalProps) {
+  if (!target) return null;
+  const key = buildVersionedNamespacedRowKey(
+    target.clusterId,
+    target.namespace,
+    target.group,
+    target.version,
+    target.kind,
+    target.name
+  );
+  return <PortForwardModalContent key={key} target={target} {...props} />;
+}
 
 export default PortForwardModal;

@@ -1222,3 +1222,92 @@ describe('ContainerLogsStreamManager', () => {
     expect(state.stats?.truncated).toBe(true);
   });
 });
+
+describe('log connection ownership', () => {
+  class Source {
+    static instances: Source[] = [];
+    listeners: Record<string, (event?: unknown) => void> = {};
+    closed = false;
+    constructor() {
+      Source.instances.push(this);
+    }
+    addEventListener(type: string, handler: (event?: unknown) => void) {
+      this.listeners[type] = handler;
+    }
+    removeEventListener(type: string) {
+      delete this.listeners[type];
+    }
+    close() {
+      this.closed = true;
+    }
+    complete() {
+      this.listeners.message?.({
+        data: {
+          domain: 'container-logs',
+          scope: SCOPE,
+          sequence: 1,
+          generatedAt: 123,
+          reset: true,
+          warnings: ['retained warning'],
+          entries: [
+            { timestamp: 't1', pod: 'pod-1', container: 'app', line: 'retained', isInit: false },
+          ],
+        },
+      });
+    }
+  }
+  beforeEach(() => {
+    Source.instances = [];
+    installJSONStreamSource(Source);
+  });
+  test('stopping a pending manual refresh settles it without logging a transport failure', async () => {
+    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
+    const manager = new ContainerLogsStreamManager();
+    let settled = false;
+    const pending = manager.refreshOnce(SCOPE).then(() => {
+      settled = true;
+    });
+    manager.stop(SCOPE);
+    // Flush the refresh wrapper and its finally handler without a timeout race.
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+    expect(settled).toBe(true);
+    await pending;
+    expect(Source.instances[0].closed).toBe(true);
+    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+  });
+  test('an old manual completion cannot remove a new live connection', async () => {
+    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
+    const manager = new ContainerLogsStreamManager();
+    const pending = manager.refreshOnce(SCOPE);
+    Source.instances[0].complete();
+    await manager.startStream(SCOPE);
+    await pending;
+    manager.stop(SCOPE);
+    expect(Source.instances[1].closed).toBe(true);
+  });
+  test('reset clears retained manual data and warnings after its connection has completed', async () => {
+    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
+    const manager = new ContainerLogsStreamManager();
+    const pending = manager.refreshOnce(SCOPE);
+    Source.instances[0].complete();
+    await pending;
+    manager.stopAll(true);
+    expect(getScopedDomainState('container-logs', SCOPE).data).toBeNull();
+    await manager.startStream(SCOPE);
+    expect(getScopedDomainState('container-logs', SCOPE).stats?.warnings).toBeUndefined();
+    manager.stopAll(true);
+  });
+  test('stopped or reset hidden scopes do not restart when the window becomes visible', async () => {
+    const { eventBus } = await import('@/core/events');
+    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
+    const manager = new ContainerLogsStreamManager();
+    await manager.startStream(SCOPE);
+    eventBus.emit('app:visibility-hidden');
+    manager.stop(SCOPE);
+    const before = Source.instances.length;
+    eventBus.emit('app:visibility-visible');
+    await Promise.resolve();
+    expect(Source.instances.length).toBe(before);
+    manager.stopAll(true);
+  });
+});

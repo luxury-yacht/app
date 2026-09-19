@@ -5,6 +5,8 @@
  * Covers key behaviors and edge cases for store.
  */
 
+import { act, createElement } from 'react';
+import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   makeClusterConfigSnapshotPayload,
@@ -21,6 +23,7 @@ import {
   resetScopedDomainState,
   setScopedDomainState,
   subscribe,
+  useRefreshState,
 } from './store';
 
 describe('refresh store helpers', () => {
@@ -30,6 +33,26 @@ describe('refresh store helpers', () => {
     const { pendingRequests } = getRefreshState();
     if (pendingRequests !== 0) {
       markPendingRequest(-pendingRequests);
+    }
+  });
+
+  it('updates diagnostic subscribers as requests start and finish without a polling render', async () => {
+    function PendingRequests() {
+      return createElement('span', null, useRefreshState().pendingRequests);
+    }
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(createElement(PendingRequests)));
+      expect(container.textContent).toBe('0');
+
+      act(() => markPendingRequest(1));
+      expect(container.textContent).toBe('1');
+
+      act(() => markPendingRequest(-1));
+      expect(container.textContent).toBe('0');
+    } finally {
+      await act(async () => root.unmount());
     }
   });
 

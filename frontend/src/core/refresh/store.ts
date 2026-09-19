@@ -82,7 +82,7 @@ const EMPTY_SCOPED_ENTRIES: ReadonlyArray<[string, DomainSnapshotState<unknown>]
   []
 );
 
-const state: RefreshStoreState = {
+let state: RefreshStoreState = {
   scopedDomains: {},
   scopedDomainEntries: {},
   pendingRequests: 0,
@@ -90,7 +90,8 @@ const state: RefreshStoreState = {
 
 const listeners = new Set<() => void>();
 
-const notify = () => {
+const publishState = (nextState: RefreshStoreState) => {
+  state = nextState;
   for (const listener of listeners) {
     listener();
   }
@@ -150,21 +151,22 @@ const publishScopedDomainStates = <K extends RefreshDomain>(
   const entries = Object.entries(nextMap);
   if (entries.length === 0) {
     const { [domain]: _, ...rest } = state.scopedDomains;
-    state.scopedDomains = rest as ScopedDomainStateMap;
     const { [domain]: __, ...restEntries } = state.scopedDomainEntries;
-    state.scopedDomainEntries = restEntries as ScopedDomainEntriesMap;
+    publishState({
+      ...state,
+      scopedDomains: rest as ScopedDomainStateMap,
+      scopedDomainEntries: restEntries as ScopedDomainEntriesMap,
+    });
   } else {
-    state.scopedDomains = {
-      ...state.scopedDomains,
-      [domain]: nextMap,
-    } as ScopedDomainStateMap;
-    state.scopedDomainEntries = {
-      ...state.scopedDomainEntries,
-      [domain]: entries,
-    } as ScopedDomainEntriesMap;
+    publishState({
+      ...state,
+      scopedDomains: { ...state.scopedDomains, [domain]: nextMap } as ScopedDomainStateMap,
+      scopedDomainEntries: {
+        ...state.scopedDomainEntries,
+        [domain]: entries,
+      } as ScopedDomainEntriesMap,
+    });
   }
-
-  notify();
 };
 
 export const setScopedDomainState = <K extends RefreshDomain>(
@@ -237,8 +239,7 @@ export const resetPermissionDeniedScopedDomainStates = (clusterId: string): void
 };
 
 export const markPendingRequest = (delta: number): void => {
-  state.pendingRequests = Math.max(0, state.pendingRequests + delta);
-  notify();
+  publishState({ ...state, pendingRequests: Math.max(0, state.pendingRequests + delta) });
 };
 
 export const useRefreshScopedDomain = <K extends RefreshDomain>(

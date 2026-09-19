@@ -19,7 +19,7 @@ import (
 // this package; the shared ResourceModel carries identity + status.
 func BuildResourceModel(clusterID string, limitRange *corev1.LimitRange) resourcemodel.ResourceModel {
 	status := statusPresentation(limitRange)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, limitRange.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, limitRange.ObjectMeta, status)
 }
 
 // BuildFacts extracts the LimitRange facts from the raw object.

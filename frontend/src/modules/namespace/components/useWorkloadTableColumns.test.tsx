@@ -84,6 +84,38 @@ describe('useWorkloadTableColumns', () => {
     portForwardAvailable: false,
   };
 
+  it('keeps metric animation scopes distinct across clusters and workload kinds', () => {
+    const hook = renderHook(() =>
+      useWorkloadTableColumns({
+        handleWorkloadClick: vi.fn(),
+        showNamespaceColumn: false,
+        useShortResourceNames: false,
+      })
+    );
+    try {
+      for (const key of ['cpu', 'memory']) {
+        const column = requireValue(
+          hook.get().find((item) => item.key === key),
+          'expected metric column'
+        );
+        const keys = [
+          workload.ref,
+          { ...workload.ref, clusterId: 'other' },
+          { ...workload.ref, kind: 'StatefulSet' },
+        ].map(
+          (ref) =>
+            requireReactElement<{ animationScopeKey: string }>(
+              column.render({ ...workload, ref }),
+              'expected metric cell'
+            ).props.animationScopeKey
+        );
+        expect(new Set(keys).size).toBe(3);
+      }
+    } finally {
+      hook.cleanup();
+    }
+  });
+
   it('returns columns with interactive kind and name handlers', () => {
     const handleWorkloadClick = vi.fn();
     const hook = renderHook(() =>

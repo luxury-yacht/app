@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -22,13 +23,11 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/argocd"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
-	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	informers "k8s.io/client-go/informers"
 )
 
 // CatalogDiagnostics summarizes the catalog feature state for manual inspection.
@@ -319,7 +318,7 @@ func (a *RefreshCoordinator) waitForCatalogInformerCaches(ctx context.Context, f
 	if !waitForFactorySync(ctx, factory.SharedInformerFactory()) {
 		return fmt.Errorf("shared informer cache sync failed")
 	}
-	if !waitForAPIExtensionsFactorySync(ctx, factory.APIExtensionsInformerFactory()) {
+	if !waitForFactorySync(ctx, factory.APIExtensionsInformerFactory()) {
 		return fmt.Errorf("apiextensions informer cache sync failed")
 	}
 	return nil
@@ -453,23 +452,11 @@ func (a *RefreshCoordinator) catalogNamespaceGroups() []snapshot.CatalogNamespac
 	return groups
 }
 
-func waitForFactorySync(ctx context.Context, factory informers.SharedInformerFactory) bool {
-	if factory == nil {
-		return true
-	}
-	synced := factory.WaitForCacheSync(ctx.Done())
-	if ctx.Err() != nil {
-		return false
-	}
-	for _, ok := range synced {
-		if !ok {
-			return false
-		}
-	}
-	return true
+type catalogInformerSync interface {
+	WaitForCacheSync(<-chan struct{}) map[reflect.Type]bool
 }
 
-func waitForAPIExtensionsFactorySync(ctx context.Context, factory apiextinformers.SharedInformerFactory) bool {
+func waitForFactorySync(ctx context.Context, factory catalogInformerSync) bool {
 	if factory == nil {
 		return true
 	}

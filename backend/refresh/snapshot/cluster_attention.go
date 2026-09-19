@@ -126,15 +126,11 @@ func (b *ClusterAttentionBuilder) Build(ctx context.Context, scope string) (*ref
 	if strings.TrimSpace(baseScope) != "" {
 		return nil, fmt.Errorf("%s scope must be cluster-wide", clusterAttentionDomainName)
 	}
-	rows := b.index.Snapshot()
+	rows, queryScope := b.visibleRows(ctx)
 	severityCounts := countAttentionSeverities(rows)
-	availableKinds := make(map[string]bool)
-	for _, row := range rows {
-		availableKinds[row.Ref.Kind] = true
-	}
 	capabilities := clusterAttentionQueryCapabilities()
-	capabilities.KindVocabulary = make([]string, 0, len(availableKinds))
-	for kind := range availableKinds {
+	capabilities.KindVocabulary = make([]string, 0, len(queryScope.availableKinds))
+	for kind := range queryScope.availableKinds {
 		capabilities.KindVocabulary = append(capabilities.KindVocabulary, kind)
 	}
 	sort.Strings(capabilities.KindVocabulary)
@@ -157,7 +153,7 @@ func (b *ClusterAttentionBuilder) Build(ctx context.Context, scope string) (*ref
 	resolved := resolveMaintainedDirect(
 		b.index.maintained.store,
 		query,
-		maintainedQueryScope{availableKinds: availableKinds, namespace: ""},
+		queryScope,
 		attentionTableQueryAdapter(),
 		attentionQuerypageSchema(),
 		windowRows,
@@ -188,6 +184,35 @@ func (b *ClusterAttentionBuilder) Build(ctx context.Context, scope string) (*ref
 		},
 		Stats: resolved.Stats,
 	}, nil
+}
+
+func (b *ClusterAttentionBuilder) visibleRows(ctx context.Context) ([]AttentionFinding, maintainedQueryScope) {
+	unavailable := make(map[schema.GroupResource]bool)
+	for _, source := range withTypedTableResourceReadiness(ctx, clusterAttentionDomainName, b.sources) {
+		unavailable[schema.GroupResource{Group: source.Group, Resource: source.Resource}] = !source.State.servesRows()
+	}
+	rows := b.index.Snapshot()
+	visible := rows[:0]
+	kinds := make(map[string]bool)
+	resources := make(map[string]bool)
+	for _, row := range rows {
+		// Catalog-owned kinds have their own permission checks. Match the complete
+		// group/resource so a revoked built-in kind cannot hide an unrelated CRD.
+		if unavailable[schema.GroupResource{Group: row.Ref.Group, Resource: row.Ref.Resource}] {
+			continue
+		}
+		visible = append(visible, row)
+		kinds[row.Ref.Kind] = true
+		resources[attentionResourceKey(row)] = true
+	}
+	allowed := make([]string, 0, len(resources))
+	for resource := range resources {
+		allowed = append(allowed, resource)
+	}
+	return visible, maintainedQueryScope{
+		availableKinds: kinds,
+		filters:        map[string][]string{"resource": allowed},
+	}
 }
 
 func countAttentionSeverities(rows []AttentionFinding) AttentionSeverityCounts {
@@ -1096,10 +1121,16 @@ func attentionRefKey(ref resourcemodel.ResourceRef) string {
 }
 
 func attentionQuerypageSchema() querypage.Schema[AttentionFinding] {
-	return querypageSchemaFromAdapter(
+	schema := querypageSchemaFromAdapter(
 		attentionTableQueryAdapter(),
 		clusterAttentionQueryCapabilities().SortableFields,
 	)
+	schema.Facets["resource"] = attentionResourceKey
+	return schema
+}
+
+func attentionResourceKey(row AttentionFinding) string {
+	return row.Ref.Group + "\x00" + row.Ref.Resource
 }
 
 func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {

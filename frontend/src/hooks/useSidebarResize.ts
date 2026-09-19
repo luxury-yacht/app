@@ -4,7 +4,7 @@
  * Hook for useSidebarResize.
  * Handles sidebar resize drag behavior with document-level mouse tracking.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 
 export const SIDEBAR_MIN_WIDTH = 200;
 export const SIDEBAR_MAX_WIDTH = 500;
@@ -44,14 +44,12 @@ interface SidebarResizeOptions {
  * Handles sidebar resize drag behavior with document-level mouse tracking.
  */
 export function useSidebarResize({
-  isResizing: externalIsResizing,
+  isResizing,
   onWidthChange,
   onResizeEnd,
   minWidth = SIDEBAR_MIN_WIDTH,
   maxWidth = SIDEBAR_MAX_WIDTH,
 }: SidebarResizeOptions): void {
-  const [isResizing, setIsResizing] = useState(false);
-
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
       const newWidth = Math.max(minWidth, Math.min(maxWidth, e.clientX));
@@ -61,16 +59,8 @@ export function useSidebarResize({
   );
 
   const handleMouseUp = useCallback(() => {
-    setIsResizing(false);
     onResizeEnd();
   }, [onResizeEnd]);
-
-  // Sync with external isResizing state
-  useEffect(() => {
-    if (externalIsResizing && !isResizing) {
-      setIsResizing(true);
-    }
-  }, [externalIsResizing, isResizing]);
 
   // Handle document-level mouse events during resize
   useEffect(() => {

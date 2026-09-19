@@ -41,7 +41,6 @@ export const useRefreshWatcher = (options: UseRefreshWatcherOptions) => {
   const { manager } = useRefreshManagerContext();
   const [state, setState] = useState<RefresherState | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const dependenciesSignature = useMemo(() => JSON.stringify(dependencies), [dependencies]);
 
@@ -49,79 +48,56 @@ export const useRefreshWatcher = (options: UseRefreshWatcherOptions) => {
   const callbackRef = useRef(onRefresh);
   callbackRef.current = onRefresh;
 
-  // Wrapped callback that manages refreshing state
-  const handleRefresh = useCallback(async (isManual: boolean, signal: AbortSignal) => {
-    setIsRefreshing(true);
-    try {
-      await callbackRef.current(isManual, signal);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, []);
-
-  // Subscribe to refresh events
   useEffect(() => {
     void dependenciesSignature;
-    // Unsubscribe previous subscription
-    if (unsubscribeRef.current) {
-      unsubscribeRef.current();
-      unsubscribeRef.current = null;
-    }
-
-    // Only subscribe if enabled
+    setIsRefreshing(false);
     if (!enabled || !refresherName) {
       setState(null);
       return;
     }
 
-    // Function to subscribe
+    let unsubscribe = () => {};
     const subscribe = () => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-      }
-      if (!refresherName) {
-        return;
-      }
-      unsubscribeRef.current = manager.subscribe(refresherName, handleRefresh);
+      unsubscribe();
+      setIsRefreshing(false);
+      let active = true;
+      let pending = 0;
+      const dispose = manager.subscribe(refresherName, async (isManual, signal) => {
+        if (!active) return;
+        pending++;
+        setIsRefreshing(true);
+        try {
+          await callbackRef.current(isManual, signal);
+        } finally {
+          pending--;
+          // A timeout or scope change can detach a callback before it settles.
+          if (active) setIsRefreshing(pending > 0);
+        }
+      });
+      unsubscribe = () => {
+        active = false;
+        dispose();
+      };
     };
-
-    // Subscribe initially
+    const updateState = () => setState(manager.getState(refresherName));
     subscribe();
-
-    const updateState = () => {
-      if (!refresherName) {
-        setState(null);
-        return;
-      }
-      const newState = manager.getState(refresherName);
-      setState(newState);
-    };
-
     updateState();
 
-    // Re-subscribe when the refresher is registered
     const unsubRegistered = eventBus.on('refresh:registered', ({ name }) => {
-      if (refresherName && name === refresherName) {
+      if (name === refresherName) {
         subscribe();
         updateState();
       }
     });
-
     const unsubStateChange = eventBus.on('refresh:state-change', ({ name, state: newState }) => {
-      if (name === refresherName) {
-        setState(newState ?? null);
-      }
+      if (name === refresherName) setState(newState ?? null);
     });
-
     return () => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-        unsubscribeRef.current = null;
-      }
+      unsubscribe();
       unsubRegistered();
       unsubStateChange();
     };
-  }, [manager, refresherName, enabled, handleRefresh, dependenciesSignature]);
+  }, [manager, refresherName, enabled, dependenciesSignature]);
 
   // Manual refresh trigger
   const triggerRefresh = useCallback(async () => {

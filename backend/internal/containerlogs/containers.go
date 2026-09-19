@@ -57,10 +57,7 @@ func MatchContainerFilter(container ContainerRef, filter string) bool {
 	if filter == "" {
 		return true
 	}
-	if container.IsInit {
-		return filter == container.Name || filter == container.DisplayName()
-	}
-	if container.IsEphemeral {
+	if container.IsInit || container.IsEphemeral {
 		return filter == container.Name || filter == container.DisplayName()
 	}
 	return filter == container.Name

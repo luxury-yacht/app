@@ -16,6 +16,7 @@ import {
   type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -510,6 +511,20 @@ export function Tabs({
     }
   };
 
+  const measureOverflow = useCallback(() => {
+    const el = scrollRef.current;
+    if (overflow !== 'scroll' || !el) {
+      setHasOverflow(false);
+      setAtStart(true);
+      setAtEnd(false);
+      return;
+    }
+    const max = el.scrollWidth - el.clientWidth;
+    setHasOverflow(max > 1);
+    setAtStart(el.scrollLeft <= 0);
+    setAtEnd(el.scrollLeft >= max - 1);
+  }, [overflow]);
+
   // Attach the scroll listener + ResizeObserver exactly once per `overflow`
   // transition. The listener reads the latest DOM state on every scroll
   // event, so it never needs to be re-created when the tab list changes.
@@ -523,33 +538,18 @@ export function Tabs({
   // live app while working in Storybook (Storybook parents re-render far
   // less frequently). See also the unmount-only rAF cleanup effect below.
   useEffect(() => {
-    if (overflow !== 'scroll' || !scrollRef.current) {
-      setHasOverflow(false);
-      setAtStart(true);
-      setAtEnd(false);
-      return;
-    }
-
+    measureOverflow();
     const el = scrollRef.current;
-    const measure = () => {
-      const max = el.scrollWidth - el.clientWidth;
-      setHasOverflow(max > 1);
-      setAtStart(el.scrollLeft <= 0);
-      setAtEnd(el.scrollLeft >= max - 1);
-    };
-
-    measure();
-    // ResizeObserver is a global in browsers; in environments without it
-    // (e.g. jsdom without a mock) fall back to a one-shot measurement.
+    if (overflow !== 'scroll' || !el) return;
     const RO: typeof ResizeObserver | undefined = globalThis.ResizeObserver;
-    const observer = RO ? new RO(measure) : null;
+    const observer = RO ? new RO(measureOverflow) : null;
     observer?.observe(el);
-    el.addEventListener('scroll', measure);
+    el.addEventListener('scroll', measureOverflow);
     return () => {
       observer?.disconnect();
-      el.removeEventListener('scroll', measure);
+      el.removeEventListener('scroll', measureOverflow);
     };
-  }, [overflow]);
+  }, [overflow, measureOverflow]);
 
   // Re-measure when the tab list changes so hasOverflow / atStart / atEnd
   // catch newly-added or newly-removed tabs. ResizeObserver observes the
@@ -562,18 +562,8 @@ export function Tabs({
   // already true), so repeat invocations are free.
   useEffect(() => {
     void tabs;
-    if (overflow !== 'scroll') {
-      return;
-    }
-    const el = scrollRef.current;
-    if (!el) {
-      return;
-    }
-    const max = el.scrollWidth - el.clientWidth;
-    setHasOverflow(max > 1);
-    setAtStart(el.scrollLeft <= 0);
-    setAtEnd(el.scrollLeft >= max - 1);
-  }, [overflow, tabs]);
+    if (overflow === 'scroll') measureOverflow();
+  }, [overflow, tabs, measureOverflow]);
 
   // Cancel any in-flight rAF scroll animation on unmount. Kept as a
   // separate unmount-only effect so it doesn't run on every overflow or

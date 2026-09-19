@@ -2,7 +2,6 @@ package eventstream
 
 import (
 	"sync"
-	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -57,13 +56,57 @@ type Payload struct {
 
 // subscription represents a single consumer of streaming events.
 type subscription struct {
-	ch        chan StreamEvent
-	created   time.Time
-	closeOnce sync.Once
+	ch     chan StreamEvent
+	mu     sync.Mutex
+	closed bool
 }
 
 func (s *subscription) Close() {
-	s.closeOnce.Do(func() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.closed {
+		s.closed = true
 		close(s.ch)
-	})
+	}
+}
+
+type eventDeliveryResult uint8
+
+const (
+	eventDelivered eventDeliveryResult = iota
+	eventDeliveredAfterDrop
+	eventSubscriptionClosed
+	eventBacklogFull
+)
+
+func (s *subscription) trySend(entry StreamEvent) eventDeliveryResult {
+	if s == nil {
+		return eventSubscriptionClosed
+	}
+	// Broadcast retains subscriber references after releasing the manager lock.
+	// Serialize channel writes with cancellation on the subscription itself.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return eventSubscriptionClosed
+	}
+	select {
+	case s.ch <- entry:
+		return eventDelivered
+	default:
+	}
+
+	result := eventDelivered
+	// Keep the most recent event when a slow subscriber fills its backlog.
+	select {
+	case <-s.ch:
+		result = eventDeliveredAfterDrop
+	default:
+	}
+	select {
+	case s.ch <- entry:
+		return result
+	default:
+		return eventBacklogFull
+	}
 }

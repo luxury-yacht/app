@@ -29,7 +29,7 @@ func (g *ResourceGateway) deleteHelmReleaseAction(target ObjectActionTargetRef) 
 		return err
 	}
 	ctx := g.CtxOrBackground()
-	if err := g.requireAnyResourcePermission(ctx, deps,
+	if err := requireAnyResourcePermission(ctx, deps,
 		resourcePermissionCheck{
 			Version:   "v1",
 			Kind:      secretpkg.Identity.Kind,

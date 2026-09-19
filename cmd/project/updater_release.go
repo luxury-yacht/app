@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/luxury-yacht/app/internal/updateconformance"
@@ -30,41 +30,48 @@ var orderedUpdaterTargets = []updaterTarget{
 	{Platform: "linux", Architecture: "arm64"},
 }
 
+type updaterTargetSelection map[updaterTarget]struct{}
+
+func (selection updaterTargetSelection) add(target updaterTarget) error {
+	if !slices.Contains(orderedUpdaterTargets, target) {
+		return fmt.Errorf("unsupported updater target %s/%s", target.Platform, target.Architecture)
+	}
+	if _, duplicate := selection[target]; duplicate {
+		return fmt.Errorf("duplicate updater target %s/%s", target.Platform, target.Architecture)
+	}
+	selection[target] = struct{}{}
+	return nil
+}
+
+func (selection updaterTargetSelection) ordered() []updaterTarget {
+	var targets []updaterTarget
+	for _, target := range orderedUpdaterTargets {
+		if _, selected := selection[target]; selected {
+			targets = append(targets, target)
+		}
+	}
+	return targets
+}
+
 func parseUpdaterTargets(raw string) ([]updaterTarget, error) {
 	items := strings.Split(strings.TrimSpace(raw), ",")
 	if len(items) == 1 && strings.TrimSpace(items[0]) == "" {
 		return nil, fmt.Errorf("updater targets are required")
 	}
-	known := make(map[updaterTarget]int, len(orderedUpdaterTargets))
-	for index, target := range orderedUpdaterTargets {
-		known[target] = index
-	}
-	seen := make(map[updaterTarget]struct{}, len(items))
-	targets := make([]updaterTarget, 0, len(items))
+	selection := make(updaterTargetSelection, len(items))
 	for _, item := range items {
 		parts := strings.Split(strings.TrimSpace(item), "/")
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("invalid updater target %q; require platform/architecture", item)
 		}
-		target := updaterTarget{
+		if err := selection.add(updaterTarget{
 			Platform:     strings.ToLower(strings.TrimSpace(parts[0])),
 			Architecture: strings.ToLower(strings.TrimSpace(parts[1])),
+		}); err != nil {
+			return nil, err
 		}
-		rank, supported := known[target]
-		if !supported {
-			return nil, fmt.Errorf("unsupported updater target %s/%s", target.Platform, target.Architecture)
-		}
-		if _, duplicate := seen[target]; duplicate {
-			return nil, fmt.Errorf("duplicate updater target %s/%s", target.Platform, target.Architecture)
-		}
-		seen[target] = struct{}{}
-		targets = append(targets, target)
-		_ = rank
 	}
-	sort.Slice(targets, func(left, right int) bool {
-		return known[targets[left]] < known[targets[right]]
-	})
-	return targets, nil
+	return selection.ordered(), nil
 }
 
 func configuredUpdaterTargets(metadata projectMetadata) ([]updaterTarget, error) {
@@ -108,21 +115,21 @@ func collectUpdaterArtifactsForTargets(
 func expectedUpdaterArtifacts(
 	metadata projectMetadata,
 	targets []updaterTarget,
-) (map[string]updaterTarget, error) {
-	expected := make(map[string]updaterTarget, len(targets))
+) (map[string]struct{}, error) {
+	expected := make(map[string]struct{}, len(targets))
 	for _, target := range targets {
 		name, nameErr := updaterArtifactName(metadata, target.Platform, target.Architecture)
 		if nameErr != nil {
 			return nil, nameErr
 		}
-		expected[name] = target
+		expected[name] = struct{}{}
 	}
 	return expected, nil
 }
 
 func findUpdaterArtifacts(
 	root string,
-	expected map[string]updaterTarget,
+	expected map[string]struct{},
 ) (map[string]string, error) {
 	found := make(map[string]string, len(expected))
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
@@ -139,7 +146,7 @@ func collectUpdaterArtifact(
 	root string,
 	entry os.DirEntry,
 	walkErr error,
-	expected map[string]updaterTarget,
+	expected map[string]struct{},
 	found map[string]string,
 ) error {
 	if walkErr != nil {
@@ -183,25 +190,13 @@ func requireUpdaterArtifacts(
 }
 
 func orderAndValidateUpdaterTargets(targets []updaterTarget) ([]updaterTarget, error) {
-	known := make(map[updaterTarget]int, len(orderedUpdaterTargets))
-	for index, target := range orderedUpdaterTargets {
-		known[target] = index
-	}
-	ordered := append([]updaterTarget(nil), targets...)
-	seen := make(map[updaterTarget]struct{}, len(ordered))
-	for _, target := range ordered {
-		if _, supported := known[target]; !supported {
-			return nil, fmt.Errorf("unsupported updater target %s/%s", target.Platform, target.Architecture)
+	selection := make(updaterTargetSelection, len(targets))
+	for _, target := range targets {
+		if err := selection.add(target); err != nil {
+			return nil, err
 		}
-		if _, duplicate := seen[target]; duplicate {
-			return nil, fmt.Errorf("duplicate updater target %s/%s", target.Platform, target.Architecture)
-		}
-		seen[target] = struct{}{}
 	}
-	sort.Slice(ordered, func(left, right int) bool {
-		return known[ordered[left]] < known[ordered[right]]
-	})
-	return ordered, nil
+	return selection.ordered(), nil
 }
 
 type updaterManifestConfig struct {
@@ -348,29 +343,11 @@ func copyAndCloseUpdaterArtifact(input io.Reader, output io.WriteCloser, source,
 	closeErr := output.Close()
 	if copyErr != nil {
 		copyErr = fmt.Errorf("copy updater artifact %s: %w", source, copyErr)
-		if closeErr != nil {
-			return errors.Join(copyErr, fmt.Errorf("close staged updater artifact %s: %w", target, closeErr))
-		}
-		return copyErr
 	}
 	if closeErr != nil {
-		return fmt.Errorf("close staged updater artifact %s: %w", target, closeErr)
+		closeErr = fmt.Errorf("close staged updater artifact %s: %w", target, closeErr)
 	}
-	return nil
-}
-
-func validateMacOSUpdaterArchive(
-	ctx context.Context,
-	artifactPath, version, architecture string,
-	validateBundle func(string) error,
-) error {
-	return updateconformance.ValidateMacOSArchive(
-		ctx,
-		artifactPath,
-		version,
-		architecture,
-		validateBundle,
-	)
+	return errors.Join(copyErr, closeErr)
 }
 
 func validateConfiguredMacOSUpdaterArchive(
@@ -392,7 +369,7 @@ func validateConfiguredMacOSUpdaterArchive(
 	if err != nil {
 		return err
 	}
-	return validateMacOSUpdaterArchive(
+	return updateconformance.ValidateMacOSArchive(
 		ctx, artifactPath, release.Version, architecture,
 		func(bundle string) error {
 			if err := run("codesign", "--verify", "--deep", "--strict", bundle); err != nil {

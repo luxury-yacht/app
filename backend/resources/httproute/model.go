@@ -18,7 +18,7 @@ import (
 func BuildResourceModel(clusterID string, route *gatewayv1.HTTPRoute) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, route)
 	status := resourcemodel.BuildGatewayRouteStatusPresentation(route.ObjectMeta, facts.RouteCommonFacts)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, route.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, route.ObjectMeta, status)
 }
 
 // BuildFacts projects an HTTPRoute into its semantic facts.

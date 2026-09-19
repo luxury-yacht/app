@@ -10388,26 +10388,3385 @@
       "checks": [
         "Three backend and three frontend red failures: /tmp/luxury-yacht-favorites-backend-d055-red.log and /tmp/luxury-yacht-favorites-d055-red.log. Backend focused race pass /tmp/luxury-yacht-favorites-backend-d055-green.log. Four handoff/cluster-match red failures /tmp/luxury-yacht-favorites-handoff-d055-red.log; green /tmp/luxury-yacht-favorites-handoff-d055-green.log. Menu clusterId-only red /tmp/luxury-yacht-favorites-menu-d055-red.log.",
         "124 tests/9 files pass before final optional-provider extraction (/tmp/luxury-yacht-favorites-d055-coverage.log); final consumer-expanded coverage /tmp/luxury-yacht-favorites-d055-coverage-final.log. Typecheck passed before extraction (/tmp/luxury-yacht-favorites-d055-typecheck.log).",
-        "Repository backend coverage task passes (/tmp/luxury-yacht-backend-coverage-d055.log): favorites persistence191/216 statements88.43%, all backend33314/42151=79.03%. Local audits:472 changed/new Go functions <=12 (/tmp/luxury-yacht-deep-go-audit-d055.log),532 changed/new TS functions <=12 after extracting optional-provider setup (/tmp/luxury-yacht-deep-complexity-audit-d055-final.log). Combined gate/native checks pending."
+        "Repository backend coverage task passes (/tmp/luxury-yacht-backend-coverage-d055.log): favorites persistence191/216 statements88.43%, all backend33314/42151=79.03%. Local audits:472 changed/new Go functions <=12 (/tmp/luxury-yacht-deep-go-audit-d055.log),532 changed/new TS functions <=12 after extracting optional-provider setup (/tmp/luxury-yacht-deep-complexity-audit-d055-final.log). Combined gate/native checks pending.",
+        "D055 combined gate now passed: /tmp/luxury-yacht-deep-prerelease-d055-final.log, backend race plus4978 frontend tests/516files, docs/bindings/lint/typecheck/Knip/Trivy. User committed accumulated work at1a73f747; native gaps remain open. Historical source hashes predate final formatter and need reconciliation."
+      ]
+    },
+    {
+      "id": "D056-shared-action-and-navigation-hooks",
+      "inspection": "Fully read all sixteen remaining app/shared hooks, controller and action menu implementations, permission combinators, age/staleness clocks, sorting/selection reuse, SidebarStateContext and refresh store. Traced panel close registry, node modals, menu callers, sidebar App owner and preference event producers. This visit includes explicit retention decisions rather than edits only.",
+      "files": [
+        {
+          "path": "frontend/src/hooks/useBackendErrorHandler.ts",
+          "sha256": "ba52b4147335862db0644f9e65345df041d67bda446faf8631c8f5f125d7f509"
+        },
+        {
+          "path": "frontend/src/hooks/useDefaultTablePageSize.ts",
+          "sha256": "d3693530c453758ceafdfae8068765702f96c14005b8badeba9ccc29a3845814"
+        },
+        {
+          "path": "frontend/src/hooks/useDimInactiveNamespaces.ts",
+          "sha256": "e218ad1aa19445f4f341fb9f4fab368a15e8418020bb57887432bda621eaad8d"
+        },
+        {
+          "path": "frontend/src/hooks/useExclusiveNamespaces.ts",
+          "sha256": "cf61e38b61767740ec6f35d2bbde6d99b09db82c1834cb86a4e012366f444104"
+        },
+        {
+          "path": "frontend/src/hooks/useShortNames.ts",
+          "sha256": "1e49d37e1e448fd780249a091c6f06da5f1d194032099532ccd07b41837c5544"
+        },
+        {
+          "path": "frontend/src/hooks/useSidebarResize.ts",
+          "sha256": "d1f7abb88f5e2049610122ec7b728165e2cd1cbf757e5233f4fcfa4d2e081640"
+        },
+        {
+          "path": "frontend/src/hooks/useTableSort.ts",
+          "sha256": "53a3cd1ca220c0e510a7fe74cc2bef3989937c3364913f345931f2168ec14aae"
+        },
+        {
+          "path": "frontend/src/hooks/useWailsRuntimeEvents.ts",
+          "sha256": "6747fd501146eb30fd191d7421334628a2b62f0c692c95c0b728ebde7d5a1bd8"
+        },
+        {
+          "path": "frontend/src/shared/hooks/nodeActionPermissions.ts",
+          "sha256": "b054eee5905e5dce96b7116da942d317473509ea5e2752dc1c2644afb96b6a6d"
+        },
+        {
+          "path": "frontend/src/shared/hooks/useAgeClock.ts",
+          "sha256": "c689bd82d4e4ce6973abe6b1dd16fd44e4f4449b4a130b60c5cf6254f4584733"
+        },
+        {
+          "path": "frontend/src/shared/hooks/useMetricsBannerInfo.ts",
+          "sha256": "0f498b38a438fd3c04538f99d3333605eea9366126a726b5680ba67df6f43a1a"
+        },
+        {
+          "path": "frontend/src/shared/hooks/useNavigateToView.ts",
+          "sha256": "9164fcab86138a1c70b5c6ace8c70a785fb94632ffdd4b2940f96843ae5992e3"
+        },
+        {
+          "path": "frontend/src/shared/hooks/useNodeMaintenanceActions.tsx",
+          "sha256": "e5722ca813452a22c61162db3ce955465f93d00c01ae11a6469a74bd5948e0c5"
+        },
+        {
+          "path": "frontend/src/shared/hooks/useObjectActionController.tsx",
+          "sha256": "31fd698dcc3f14147d6ce8d211e8b8b4677d4371d1fbebd47741556fd8f1bc7f"
+        },
+        {
+          "path": "frontend/src/shared/hooks/useObjectActions.tsx",
+          "sha256": "5328eb210a0de5d29c8c36247ff911eaefb97ee88a008170569542768b07544d"
+        },
+        {
+          "path": "frontend/src/shared/hooks/useStableSelectedValue.ts",
+          "sha256": "ab2a0831b5f3e9a4e966ac7a0bc526c5ace0c87bbd66828b7d09119f63c95a00"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/usePanelMutationGuard.ts",
+          "sha256": "6df3e6ff3bcc2a8ebb4fe9cafd5b48e508ebe97c156f03a2bd3a502bb950017a"
+        },
+        {
+          "path": "frontend/src/core/contexts/SidebarStateContext.tsx",
+          "sha256": "b21913a6e100c39d3c3df556c8e540de9dd383369acc5c1ed3bc909b6821713b"
+        },
+        {
+          "path": "frontend/src/core/refresh/store.ts",
+          "sha256": "54380cf6918ba7a2e3b38a8107ab8a508f42d5f590fc7f51cd52c86675e93161"
+        }
+      ],
+      "candidates": [
+        {
+          "id": "D056-C01",
+          "disposition": "implemented",
+          "decision": "Shared usePanelMutationGuard owns synchronous operation counts, nested admissions, settlement and panel focus for node maintenance and object actions. Three red lifecycle cases prove the node guard was unavailable before React committed. Replaced the arithmetic-only nested-count test with real hook/registry cases; rejection, overlap and unmount are exercised. Node mutation target carries explicit core/v1 GVK."
+        },
+        {
+          "id": "D056-C02",
+          "disposition": "implemented",
+          "decision": "Removed sidebar hook local resize state and synchronization effect. App/SidebarStateContext is the sole drag owner. Red test proved updates continued after owner cancellation; preserved clamping, release notification and listener cleanup."
+        },
+        {
+          "id": "D056-C03",
+          "disposition": "retained",
+          "decision": "Keep explicit action-policy builders and modal priority, node eviction/delete permissions, cluster-scoped maintenance subscriptions, age shared-clock versus metrics stale-boundary timer, stable selector array identity and sort cache. Four preference hooks intentionally consume typed event payloads; replacing their event contract solely to remove small repeated effects is not warranted."
+        },
+        {
+          "id": "D056-C04",
+          "disposition": "investigate",
+          "decision": "Refresh store useRefreshState returns the same mutable root object to useSyncExternalStore. Sole production consumer DiagnosticsPanel reads pendingRequests; inspect whether its independent clock masks missed immediate notifications, then reproduce before deciding a change."
+        }
+      ],
+      "consumers": [
+        "Object actions -> shared guard -> existing panel close/transfer registry; helper imports only lifecycle registration and React, so no view/provider cycle. Node hook -> action client, drain modal and scoped refresh store. Sidebar App -> context -> resize hook."
+      ],
+      "contracts": [
+        "Mutation guard is visible at admission and remains until every operation settles; other panels remain unblocked. Rejection and unmount release guard. Sidebar tracking follows the owning context. Navigation still checks complete identity before changing views."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d056-guard-red.log: three failures before fix. /tmp/luxury-yacht-d056-sidebar-red.log: owner cancellation fails before removal of local state. /tmp/luxury-yacht-d056-coverage.log:120 tests/20 files pass; node hook96.25%, sidebar100%, shared guard80%. One arithmetic-only test removed, replaced by real lifecycle coverage.",
+        "Typecheck initially rejected Promise.withResolvers (target library) and inferred drain status; fixed fixture typing/deferred helper; /tmp/luxury-yacht-d056-typecheck-final.log passes. /tmp/luxury-yacht-deep-complexity-audit.json:13 changed/new TypeScript functions <=12, unchanged controller confirmation19 retained. Native sidebar/panel checks and final combined gate pending."
+      ]
+    },
+    {
+      "id": "D057-backend-internal-contracts",
+      "inspection": "Fully inspected all35 remaining backend/internal files: logging scopes/reporting/capture, cancellation/retry, clocks/scanner, log target/filter selection, runtime config, updater coordinator/scheduler, and remaining binding/action/refresh contract generator sources. Followed regex consumers in fetch and streaming paths and updater reset/stop/publication tests.",
+      "files": [
+        {
+          "path": "backend/internal/applog/log.go",
+          "sha256": "461a0aff6dc547c86ee891d2b3bf43d7f5a38dac465ad39234fd7b04fc700b62"
+        },
+        {
+          "path": "backend/internal/applog/noop.go",
+          "sha256": "86668b39504d7d1f38a3d38db9493ad7670c89983948b0409ee3414be53c2efa"
+        },
+        {
+          "path": "backend/internal/applog/operation_scope.go",
+          "sha256": "609b84ea61c6a20655085a1a3ae57df40c9103b6f4f49795740a5a5c6c009921"
+        },
+        {
+          "path": "backend/internal/applog/report_error.go",
+          "sha256": "ddbe70d7229d6370591ffa79bec4a5497030664910f2c69a75dafaf8a06a730b"
+        },
+        {
+          "path": "backend/internal/applog/report_panic.go",
+          "sha256": "396fd78f824d72f16d1e34e6f16053248874e050a6242172311ae5656b6550ff"
+        },
+        {
+          "path": "backend/internal/applog/scoped_logger.go",
+          "sha256": "0aae4acfe7935eb65618b51c70bcb5c8be6b92416a6c8e98296cb3613ed0a887"
+        },
+        {
+          "path": "backend/internal/appupdates/coordinator.go",
+          "sha256": "d65a2789f57557e39dc0c4b88df678a14e77f21ebe226912f5ecefe8c144597a"
+        },
+        {
+          "path": "backend/internal/appupdates/scheduler.go",
+          "sha256": "245b7a5656c76d9831fc48c0fd69fb1969aebb72d648cdffc11a9bef11026888"
+        },
+        {
+          "path": "backend/internal/cachekeys/cachekeys.go",
+          "sha256": "3bc3c2b641c02719feef836e038f94265b1ec0c9e47da30d3d16ee57aff2e665"
+        },
+        {
+          "path": "backend/internal/config/config.go",
+          "sha256": "bfeb476748df06cba3b7ae0357b085e33debd51157ec01781aaa4347a3ec02d0"
+        },
+        {
+          "path": "backend/internal/containerlogs/containers.go",
+          "sha256": "c062b4031779e348e3e520661a836331624e0d00484164c9fd0a4476ea71a0a5"
+        },
+        {
+          "path": "backend/internal/containerlogs/errors.go",
+          "sha256": "7235be4106f517bdee8eafb07df1d77b8d9a6da675b273b40919041d1c0bd5f1"
+        },
+        {
+          "path": "backend/internal/containerlogs/linefilters.go",
+          "sha256": "44cf3531d8c21002e4d4de9a036669718b846d865839b48f8963ed7395e86988"
+        },
+        {
+          "path": "backend/internal/containerlogs/podnamefilter.go",
+          "sha256": "2cb7c65bb74fba15a4be5ee096a9abab9ca1edb1186515e6c12fc8fcea8ce749"
+        },
+        {
+          "path": "backend/internal/containerlogs/selection.go",
+          "sha256": "454f46fbfbadcca0fb72dacceaa167c16d8313fb7be44e7c0f7e86160b957e64"
+        },
+        {
+          "path": "backend/internal/containerlogs/targets.go",
+          "sha256": "aa7ee2f2ddd3f820732e6aa677c2b63f122be364189bcadc806a895cdb38b9d0"
+        },
+        {
+          "path": "backend/internal/errorcapture/error_capture.go",
+          "sha256": "30a33b85f72916f42f1265e2332e82de71cd88b6bc3261f70b259d7358a38625"
+        },
+        {
+          "path": "backend/internal/errorcapture/handled.go",
+          "sha256": "d7caaec80e0861c12f9b9e3c6ea32296da8b63336f76402edf348d55b9d63728"
+        },
+        {
+          "path": "backend/internal/errorcapture/reporting.go",
+          "sha256": "e2023d38b983bcf2c709694545fdd22ba638d850fd09097b83da7cb54ac915b7"
+        },
+        {
+          "path": "backend/internal/errorcapture/unhandled_errors.go",
+          "sha256": "1266e8f479319f14a5821287dadccab7eb3b233b9a3402503db87775ce49c086"
+        },
+        {
+          "path": "backend/internal/genappbindings/cmd/main.go",
+          "sha256": "1eb088f4ae36d9d2498a94325d59eb460872421b71a074c62c4e1a66f98ac9bc"
+        },
+        {
+          "path": "backend/internal/genappbindings/render.go",
+          "sha256": "105756e952a8c0374634b6f169b907c65bc00805286203bc2f0e23be1aff146d"
+        },
+        {
+          "path": "backend/internal/genobjectactions/cmd/main.go",
+          "sha256": "686bfe418f2fc29269364d2db997733d33cd55554abb50d39a6917c023ff598c"
+        },
+        {
+          "path": "backend/internal/genrefreshcontracts/canonical_rows.go",
+          "sha256": "073842c83baede03b73fd8a55e3ad62d43db7eb43772179e858caaa0c12327e0"
+        },
+        {
+          "path": "backend/internal/genrefreshcontracts/cmd/main.go",
+          "sha256": "d7e3346e60bc74ef2c717f99411d4615ef44d4a7a2b26ffaf223e9700b69a56f"
+        },
+        {
+          "path": "backend/internal/genrefreshcontracts/domain_contract.go",
+          "sha256": "09bf3894eb5930b95a32b943eb37997817755c9663f0e8fc7f94154645da1c98"
+        },
+        {
+          "path": "backend/internal/genrefreshcontracts/enum_values.go",
+          "sha256": "4d51d9d86f5fdc2aa30bc9696c5b7a7bd9ba718798a4bdfdc85f015a86b33487"
+        },
+        {
+          "path": "backend/internal/genrefreshcontracts/registry.go",
+          "sha256": "2b5e27f5d9d866a59a375255906b98d0a768f29290b6b4059a9c541f2c499f5d"
+        },
+        {
+          "path": "backend/internal/k8sretry/retry.go",
+          "sha256": "c82bfdb92c1a5fc0bc819e866c8d5017a6db43d5102ebd97c06dd391a74165d3"
+        },
+        {
+          "path": "backend/internal/lifecycle/context.go",
+          "sha256": "c714c5dbfa88b8d022108b6ba1f802f1d0597d80ac6e0cc050c37184cd05d78a"
+        },
+        {
+          "path": "backend/internal/linescanner/scanner.go",
+          "sha256": "b4576e153fb3cddee715b91d6d53ef999d68584553ac92a05c16b0b71775d598"
+        },
+        {
+          "path": "backend/internal/logclassify/classify.go",
+          "sha256": "07c48a38bb85028567a1324ba51a5a498d2aabf54ee4acc3b4db744ab0f71fb3"
+        },
+        {
+          "path": "backend/internal/logsources/sources.go",
+          "sha256": "2b5abbdf449b58b7d20e62b714455865e2643398f6f019491fb6ffaecd5b8a5b"
+        },
+        {
+          "path": "backend/internal/timeutil/age.go",
+          "sha256": "34199dd09346dfa2db49245aed3827bd265ee0dc141b1d7e3175e5d6ef728c65"
+        },
+        {
+          "path": "backend/internal/timeutil/events.go",
+          "sha256": "65249168ce5396414b120082319157fcc1b56dddd62b17a556386e9b3a2e1352"
+        }
+      ],
+      "candidates": [
+        {
+          "id": "D057-C01",
+          "disposition": "implemented",
+          "decision": "Pod-name regex filter keeps its distinct type/API but reuses line-filter compilation/matching; merge identical init/ephemeral display-name matching. Existing tests preserve regex errors/include/exclude behavior."
+        },
+        {
+          "id": "D057-C02",
+          "disposition": "implemented",
+          "decision": "Remove error-capture forwarding wrappers and call the shared logclassify owner directly. Strict stderr line assembly, expected-error suppression, retained error chains and dedup remain unchanged."
+        },
+        {
+          "id": "D057-C03",
+          "disposition": "implemented",
+          "decision": "Refresh payload-type decoding reuses the same required/null/nonempty-string decoder as diagnostics stream policy; frontend-owned null remains distinct from missing/invalid payload."
+        },
+        {
+          "id": "D057-C04",
+          "disposition": "implemented",
+          "decision": "Updater operation lifetime has one context owner. Removed nested context/goroutine wrappers; active operation is one kind/cancel/done record. Every operation cancels/closes itself even when publication admits another operation. Reset uses the same record to cancel/wait, then clears release projection only after durable reset succeeds. Red registration tests expose both ordinary and reentrant completion leaks."
+        },
+        {
+          "id": "D057-C05",
+          "disposition": "retained",
+          "decision": "Preserve separate log/pod filter public types, ranked target cap ordering and selection semantics, request-local cache keys under cluster-scoped cache owners, context adapter without values, retryable error classification, expected telemetry marker, auth stderr classification, scheduler locking, signed release validation and generator allowlists/order. No generalized logging or registry schema introduced."
+        }
+      ],
+      "consumers": [
+        "Line/pod filters -> containerlogsstream option parsing/following and pods log fetch plans. Error capture -> logclassify. Contract generator -> generated refresh types and domain policy. Updater public Check/Download/Restart/Reset -> Wails Client and durable update state; publication runs outside coordinator mutex; no new dependencies."
+      ],
+      "contracts": [
+        "Preserve public filters/error categories/order; keep distinct optional/null semantics in generated contracts. Active updater cancellation/readiness/reset gates preserve restart recovery state and user consent. Each operation owns cancellation through settlement; newer operation identity is not cleared by older completion."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d057-baseline.log and -generator-baseline.log passed before refactors. /tmp/luxury-yacht-d057-filter-green.log passes. /tmp/luxury-yacht-d057-update-red.log and -update-overlap-red.log reproduce retained cancellation registrations.",
+        "/tmp/luxury-yacht-d057-green-final.log race/coverage passes: updater85.0%, errorcapture87.2%, generator86.3%, containerlogs61.2% package-wide (changed matcher83.3%, regex compilation/match100%; unselected target consumers explain package gap). Later cancel-and-wait extraction passes /tmp/luxury-yacht-d057-updater-final.log84.7%; final release-clearing helper pending focused rerun. /tmp/luxury-yacht-d057-go-audit.log16 changed/new Go functions <=12. Final combined gate pending.",
+        "/tmp/luxury-yacht-d057-updater-final.log: final clearReleaseLocked revision passes race tests at 84.8% statement coverage; supersedes earlier pending rerun note."
+      ]
+    },
+    {
+      "id": "D058-platform-update-and-reporting-boundaries",
+      "inspection": "Fully inspected all30 remaining startup/state/telemetry/update identity/staging/conformance files. Followed updater coordinator consumers to durable record validation, restart preparation, staged-path cleanup, installation evidence and disabled-at-startup reporting. These files were not closed merely from prior broad labels.",
+      "files": [
+        {
+          "path": "internal/appstate/manifest.go",
+          "sha256": "6bf1d0e8c946e0238e8236f94525729f11de26eaad481885b36c0dc9c5a4fe58"
+        },
+        {
+          "path": "internal/bootstrap/composition.go",
+          "sha256": "9a72cee9e109c95db0037e72116e7add821af1f9e578c5b80440ec227c466025"
+        },
+        {
+          "path": "internal/bootstrap/run.go",
+          "sha256": "a52370a040361a3b90eb9f62503f3fc92ccdaf7bf2bd2198ce602d0c45c998b8"
+        },
+        {
+          "path": "internal/sentry/build_mode_dev.go",
+          "sha256": "76cad3b6039148af875cbcf8f76f5cb830c3e9906a78ad2f536e40f6b9c7131f"
+        },
+        {
+          "path": "internal/sentry/build_mode_production.go",
+          "sha256": "3b123a9e79a24e03be69f11146f888c6b172bb62833ea03c74d38c5d6d43b756"
+        },
+        {
+          "path": "internal/sentry/operation.go",
+          "sha256": "c0b161f5c9300475c7a350a5d12a4c96b0fde86e74705a560e4079a0d1a9a421"
+        },
+        {
+          "path": "internal/sentry/privacy.go",
+          "sha256": "8e2767db642d2bdda50dcbd01673da46c22f542abdd0109fdf65ece3ae58e133"
+        },
+        {
+          "path": "internal/sentry/reporter.go",
+          "sha256": "91d97dd275d9d8fde063ad2dd14badcb5e2939b3f2b539096598e833512b824c"
+        },
+        {
+          "path": "internal/sentry/startup.go",
+          "sha256": "eedaeedee9f670431c4190dd7a0689775c4d5bb8f3a6fdb68775aba0d4450c99"
+        },
+        {
+          "path": "internal/updateconformance/linux.go",
+          "sha256": "0f73311ea1f67305c102357eb984d2d281ce25dd8aeee9cf2034a938b824f104"
+        },
+        {
+          "path": "internal/updateconformance/local.go",
+          "sha256": "36b46305460580b19d91fd809c927466dc0e4990007a88af4fd542c1554563c3"
+        },
+        {
+          "path": "internal/updateconformance/macos.go",
+          "sha256": "66dbf42e040eda75211cdd21289956204325453256f092e72a63364fea9b427d"
+        },
+        {
+          "path": "internal/updateidentity/build.go",
+          "sha256": "8016719f9da89b8516b8c4b86f97c1086607ff6d3de7f50a0666d514c2b4708d"
+        },
+        {
+          "path": "internal/updateidentity/eligibility.go",
+          "sha256": "b3fda0d2dc6e5789911eba614437cf8dd210a5a256c82dbb0cd8922395c6f5dd"
+        },
+        {
+          "path": "internal/updateidentity/mode_desktop.go",
+          "sha256": "6024ce8aa8208e7670979879fd4f4daf80750be6fa2c36de8d0b55ee9ba62b5a"
+        },
+        {
+          "path": "internal/updateidentity/mode_server.go",
+          "sha256": "b668d05c2d636d09d543a3be2d2f9991e6cd9bf7a4fc31661bcfc5c77ae6910c"
+        },
+        {
+          "path": "internal/updateidentity/probe.go",
+          "sha256": "bbc12e32a36815f958e17b4c2627d70d743c7478e6ed8d5e70750ea6c2c2017d"
+        },
+        {
+          "path": "internal/updateidentity/version.go",
+          "sha256": "c91055a91d83d7f56fe8fbc59271a3b14bd61b36c60a683c2eee4fbc0efd489d"
+        },
+        {
+          "path": "internal/updateidentity/volume_darwin.go",
+          "sha256": "26ea48c674034d13525a6172d493fc87492cf3c24cf5046516912b0b7e17fa63"
+        },
+        {
+          "path": "internal/updateidentity/volume_other.go",
+          "sha256": "b21e355d463c8b70743701b8030fab22b606e65b472e19e092e53cab2bd24d54"
+        },
+        {
+          "path": "internal/updatestate/replace_unix.go",
+          "sha256": "5f4f8bb50b17ab82cd50730eb7ee1266ebf757a7b7e6a788bf653cfc2a6bea0f"
+        },
+        {
+          "path": "internal/updatestate/replace_windows.go",
+          "sha256": "6c9f5620ab6ecaedc33c361bb799ca1e0c3a084d964cdea9c673e2244ae7d019"
+        },
+        {
+          "path": "internal/updatestate/state.go",
+          "sha256": "1ad40548ab71a9f7292018ed23a2d7f51f0b77f9fe50796afc20e8dbe700d829"
+        },
+        {
+          "path": "internal/updatetemp/ownership_unix.go",
+          "sha256": "f0cca1b93c3caaf88178a172f19ae38ead3fac5d9fc5c1bb9022922b6492b4d5"
+        },
+        {
+          "path": "internal/updatetemp/ownership_windows.go",
+          "sha256": "901f604a408030cc1a43d17a266442de3d61b013c8592bf52ac4491f0262799f"
+        },
+        {
+          "path": "internal/updatetemp/root.go",
+          "sha256": "7ff79552c7110da2c397313711698a7ea810e26b117bd44a4a6f2bf6c5886692"
+        },
+        {
+          "path": "internal/updatetemp/sweep.go",
+          "sha256": "be363765ef45ffa7c8b63cc33f0c7fd9e5f9a5cdf86045386712550df1106ea9"
+        },
+        {
+          "path": "internal/windowsinstall/identity.go",
+          "sha256": "0d8b05911815e74524f6519ebb5284b0fee178d3be5857b225bb46edd9ee8717"
+        },
+        {
+          "path": "internal/windowsinstall/registry_other.go",
+          "sha256": "bda60afc4f25776c4f7b65dfcadeb8f44c0eb0948778cfbfd1a16261a45362dc"
+        },
+        {
+          "path": "internal/windowsinstall/registry_windows.go",
+          "sha256": "0ea292032913818d1ec62d0ad779efc89641e3152768020c665512ddac011387"
+        }
+      ],
+      "candidates": [
+        {
+          "id": "D058-C01",
+          "disposition": "retained",
+          "decision": "Keep explicit platform eligibility and evidence probes: Mac bundle/volume, Windows adjacent marker plus registry, Linux package/portable identity intentionally differ. No generalized installer-policy abstraction. State store validates path ownership before cleanup and preserves durable transitions and failure aggregation; common removeStagingPaths/replaceFile owners already consolidate repetition."
+        },
+        {
+          "id": "D058-C02",
+          "disposition": "retained",
+          "decision": "Keep startup composition and bridge binding order, fail-closed reporting consent, operation-correlated breadcrumbs, closed telemetry schema, exact replacement before generic redaction and per-field exception handling. Combining privacy walkers would obscure the special operation and field-path policy. No production edit warranted by this full read."
+        },
+        {
+          "id": "D058-C03",
+          "disposition": "retained",
+          "decision": "Preserve conformance artifact streaming with context checks, short-write handling and cleanup; platform payload validation remains separate after shared staging. Windows security descriptor keepalive/handle disposal and Unix ownership modes are deliberate platform boundaries."
+        }
+      ],
+      "consumers": [
+        "Bootstrap configures validated updater temp before Wails/child dispatch; backend update coordinator uses identity/state/conformance contracts. Reporter receives structured applog/errors and feeds SDK privacy boundary. Release tools share identity and archive validation."
+      ],
+      "contracts": [
+        "Source inspection only: no new platform behavior claim, no external update/telemetry/network mutation performed. Retain explicit download/restart consent, signed payload boundaries, protected helper state, rollback and opt-out ordering."
+      ],
+      "checks": [
+        "No production edits in this review; rely on targeted existing regression coverage for adjacent D057 operation changes, with combined gate still pending. Windows/Linux runtime evidence is not inferred from macOS source inspection."
+      ]
+    },
+    {
+      "id": "D059-native-panel-workspace-lifecycle",
+      "inspection": "Fully inspected all 27 remaining native window/directory/bridge/platform files, including the complete registry and workspace coordinators.",
+      "files": [
+        {
+          "path": "internal/appwindow/bridge.go",
+          "sha256": "94d9c8e9dc377ddfac13e93b0b96d8dd62e70bf30bee309bb57645ccada71402"
+        },
+        {
+          "path": "internal/appwindow/bridge_workspace.go",
+          "sha256": "9b48905f8fa7816cc5b5c9369bc90ea10ab220aa4335ca8cdb51e22d871b5d36"
+        },
+        {
+          "path": "internal/appwindow/cluster_panel_close.go",
+          "sha256": "f06781bfe2bc2eb94ca2a775045e0ef244fa16f6d16205f0fae781a53fcdbbb3"
+        },
+        {
+          "path": "internal/appwindow/cluster_removal.go",
+          "sha256": "8e7d2c833789ac089769f5c4518d2e247360f33f8b1d6fdb7ac1d816846e9f99"
+        },
+        {
+          "path": "internal/appwindow/cluster_tab_transfer.go",
+          "sha256": "7c5fe6774b4b88ec9af0581f0979dc30d8d56b04b9d2ec3074e62ffd797d0701"
+        },
+        {
+          "path": "internal/appwindow/cluster_window_open.go",
+          "sha256": "fc38f818fe392fd92198361ce02ec65988fe3649b3652d0a884702f2796ea43f"
+        },
+        {
+          "path": "internal/appwindow/inspector_darwin.go",
+          "sha256": "5b2cb7b81f04cd1e55a485bbfe11c434657fd8a2f66db1a3641abbcc220a364f"
+        },
+        {
+          "path": "internal/appwindow/inspector_other.go",
+          "sha256": "1d6bb07ae5e3b6e0bbeb1f5ce8b23092695e3bb5ec5f6ecdba80d5100a35d261"
+        },
+        {
+          "path": "internal/appwindow/lifecycle.go",
+          "sha256": "b0d7a00d264a4ce96ab4a7b2cc4f91a33ee9a977484d2e1e8154445d1b474c73"
+        },
+        {
+          "path": "internal/appwindow/panel.go",
+          "sha256": "5fe96d32e3bed2f763eb6e169cc76f40e8fb72690f41e1d4b87bf706fbce6085"
+        },
+        {
+          "path": "internal/appwindow/panel_chrome.go",
+          "sha256": "ef0b55f9dc29ceec4fa618ff900c327ed66c973c9848641e02721ce20112f4ee"
+        },
+        {
+          "path": "internal/appwindow/panel_publication.go",
+          "sha256": "5e87e06204809670d0b7ceb59cfc6b859f70cccb25028a43879c66d62d96c7aa"
+        },
+        {
+          "path": "internal/appwindow/panel_tab_transfer.go",
+          "sha256": "e03dd2cda1448e591e07d32440ccbc6169e4a2c517f4d3686c9c9cd96c8f70e3"
+        },
+        {
+          "path": "internal/appwindow/panel_transfer.go",
+          "sha256": "837275f09137ebaa2b4c61837bc66d30b83bbf372b75f546cc2df6237b5cf49d"
+        },
+        {
+          "path": "internal/appwindow/registry.go",
+          "sha256": "533105b53c1e592c51a96b8b57491fe918d03e9aa09b471e93917e922ef7a498"
+        },
+        {
+          "path": "internal/appwindow/role.go",
+          "sha256": "3f57c3d3c8316c758095d1a8c820aa5fbd570f1f49a05213486a55efc792a0cf"
+        },
+        {
+          "path": "internal/appwindow/tab_drag_animation_darwin.go",
+          "sha256": "99496751fdfdd9f709a883c670c3a4723d873b7689ae6725d805e9ff70a9c2b7"
+        },
+        {
+          "path": "internal/appwindow/tab_drag_animation_other.go",
+          "sha256": "1f759cecbf948b41d4d52631ca61962a931a98909a71d792abcdaf696021c96d"
+        },
+        {
+          "path": "internal/appwindow/workspace.go",
+          "sha256": "16d6123a621ea84f7ba4fc2689a3cd970ef2369cf81d5a8bd4272bf4ae9e1d08"
+        },
+        {
+          "path": "internal/panelwindow/cluster_close.go",
+          "sha256": "2cc1385452e77852680244ca447208daec129f3524f1a5830394829ccd185475"
+        },
+        {
+          "path": "internal/panelwindow/cluster_transfer.go",
+          "sha256": "f0f9605034d54be348509c8480b3803528fa607f3056a229619358e562ee8a4b"
+        },
+        {
+          "path": "internal/panelwindow/tab_transfer.go",
+          "sha256": "76f60711aa1f82e3a5193b69da20266f3b13da5d9c1e4de0b120e5de1b3356dd"
+        },
+        {
+          "path": "internal/panelwindow/types.go",
+          "sha256": "fadb5e6eb74ba37f6199b3c493872f3a99b5e6a874b30cb227abe86c8dfe0686"
+        },
+        {
+          "path": "internal/panelwindow/workspace.go",
+          "sha256": "d5f8873c628de46ef4034531ad9a674040b1dc3ccaae5972cc95615e30826f6f"
+        },
+        {
+          "path": "internal/panelwindow/workspace_cluster_transfer.go",
+          "sha256": "c107f4d871cf0efc43f34b32f2a5ef80542b07b0b69ec83763842399fb242832"
+        },
+        {
+          "path": "internal/panelwindow/workspace_command.go",
+          "sha256": "2d0b3b85d85cd39afafe31b145fdf2e40b6326b68d33e64703588b61c33dfc8b"
+        },
+        {
+          "path": "internal/panelwindow/workspace_reservation.go",
+          "sha256": "91f772f25e961d6c1a22c8026cfecf71899d7367e36aca56ed6a81908df159dd"
+        }
+      ],
+      "candidates": [
+        {
+          "id": "D059-C01",
+          "disposition": "implemented",
+          "decision": "All three transfer event callers include both participants. Remove that flag and the temporary target slice/set; emit source then distinct nonempty target. Reuse the existing native focus operation in FocusMostRecent."
+        },
+        {
+          "id": "D059-C02",
+          "disposition": "retained",
+          "decision": "Keep transaction-specific close, quit, cluster-transfer, tab-transfer and group-transfer paths: their participants, acknowledgement phases, native destruction, publication and rollback boundaries differ. Preserve locks, reservation revalidation after backend waits, clone-before-publication and provisional tabs."
+        },
+        {
+          "id": "D059-C03",
+          "disposition": "retained",
+          "decision": "Keep platform-native WebKit drag policy and fallback, startup bridge binding, typed event adapter surface, identity directory and separate native presentation index. No generic transfer engine: it would hide different teardown/rollback guarantees."
+        }
+      ],
+      "consumers": [
+        "Backend desktop service and window bridge drive registry; frontend panel-windows subscribers consume ordered committed/failed notifications. Workspace membership and backend panel references retain cluster ownership."
+      ],
+      "contracts": [
+        "No lock/order/readiness changes. Full identity validation precedes placement commits. Final source notification remains first; identical source/target receives one event. Native focus uses the same Show/Restore/Focus helper already bound for other callers. No new dependency edges."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d059-baseline.log: both package tests pass before edits. /tmp/luxury-yacht-d059-green.log: race tests pass, appwindow 88.9%, panelwindow 84.9%. Linker deployment-target warnings remain.",
+        "/tmp/luxury-yacht-d059-go-audit.log: all 21 changed/new Go functions across this continuation score <=12 locally. Native interaction and combined prerelease gate pending."
+      ]
+    },
+    {
+      "id": "D060-refresh-root-publication",
+      "inspection": "Revisited complete store and traced every root-state/pending-request production consumer (orchestrator and DiagnosticsPanel).",
+      "files": [
+        {
+          "path": "frontend/src/core/refresh/store.ts",
+          "sha256": "99674297b163f3b0a630266592b5dd69bc69eab24a6b22ade1aa04a314e841fe"
+        }
+      ],
+      "candidates": [
+        {
+          "id": "D056-C04",
+          "disposition": "implemented",
+          "decision": "Confirmed pending count React subscriber remained at zero when a request started. Consolidate root replacement and notification in publishState; domain map/entry views are published together in the same fresh root snapshot. Existing scoped reference stability and reset behavior remain."
+        }
+      ],
+      "consumers": [
+        "orchestrator begin/finish fetch increments/decrements; cluster prune captures entries then resets scopes. DiagnosticsPanel is the sole production useRefreshState consumer and displays pendingRequests."
+      ],
+      "contracts": [
+        "Fresh root snapshot reaches listeners only after both scoped views are ready. Other domain references remain stable. Synchronous getRefreshState reads unchanged in shape; no import/dependency/order changes."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d060-store-red.log: failing rendered pending count 0 vs 1, 10 existing tests pass. /tmp/luxury-yacht-d060-store-green.log: store/orchestrator 146 tests pass.",
+        "/tmp/luxury-yacht-d060-coverage.log: store/DiagnosticsPanel 38 tests pass; store statement coverage 90.78%. Latest typecheck/local complexity/full gate still pending."
+      ]
+    },
+    {
+      "id": "D061-renderer-panel-workspace-coordination",
+      "inspection": "Fully inspected every remaining panel-windows renderer source, including cluster and object transfer coordinators, lifecycle/input guards, queued publication, retained placement claims and snapshot codecs.",
+      "files": [
+        {
+          "path": "frontend/src/core/panel-windows/ClusterPanelsMenu.tsx",
+          "sha256": "72304b02a9f596f9473152ea98f3ae4d546a2752e219d9f254cc5a997a78a24b"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/ClusterTabTransferCoordinator.tsx",
+          "sha256": "f853eb7d257a35c8099c2bc3dca59d6a1033dce45e78ff8c6295d67313ae706f"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/PanelWindowRoleContext.tsx",
+          "sha256": "d59426d073e057946ed0fd125018075ff397e2e3e4b6caadfcd38fd7e6e7877b"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/WorkspacePanelCoordinator.tsx",
+          "sha256": "46b6bdd8182febceb5286f1d2568646e3f15316e81fcca745fe99a618310bd33"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/WorkspacePanelLifecycle.tsx",
+          "sha256": "e69632cc71d52598673cbd635dc227412382fadd5387a27629a23cb6a9c79cf1"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/WorkspacePanelSync.tsx",
+          "sha256": "56d8f365eddba1d5482f25d1dbd642274e7debb7bf86e874eba1fbd33a16109d"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/clusterPanelActivity.ts",
+          "sha256": "b188dd2b8306e5ef9b3b79e462c3ea87f387f9df91370db3a5065c11d07eed23"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/clusterTabTransferPolicy.ts",
+          "sha256": "0a10cd6265315c9da9a41aa5625abc6896061cab4d72d072596f0406dcd9dd24"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/clusterViewState.ts",
+          "sha256": "0dab9fec27327c16a1cb9350682c92222b57aee304d4259d09207b9d19fde583"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/index.ts",
+          "sha256": "9b90beddd783b1b6f2add5495ca6315aa143d3fc8203fbfc05dba5d7129bc28b"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/panelLifecycleGuards.css",
+          "sha256": "32042605812a202c1ccaab34f731359899fad24d6b8aacc7d2792a11729cc0af"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/panelLifecycleGuards.tsx",
+          "sha256": "82219a8014434b0dca4e8684a5fbb217f1543bd65317b31f7a346f68cd7e78ec"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/panelTabActions.ts",
+          "sha256": "d7d13922c7224c18269f00decb42d04e40af95c49a7120018dbd598a0bb005aa"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/panelWindowClusterName.ts",
+          "sha256": "3d5ea811b22cd5a906613b2964a32b7510c8f8b0a1df303095b56536db37d1a0"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/publicationQueue.ts",
+          "sha256": "08880305afec9c601bcf933adaf72c61239d6c1de653f03718851cdb9c18f5fc"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/tabTransfer.ts",
+          "sha256": "658f7de24d09c5fb88d96610ff0c6e83241942de506312ea82badc61da07a5ac"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/useApplicationQuitPreflight.ts",
+          "sha256": "1e791b631e529bbf094265493d9414a394bd99357500332d15cd38716d0ae275"
+        },
+        {
+          "path": "frontend/src/core/panel-windows/useRemoveWorkspacePanels.ts",
+          "sha256": "0232bcd83846e99051165b5a1c826bea915ad85c693e3ac34a23825e4dc8a8e2"
+        }
+      ],
+      "candidates": [
+        {
+          "id": "D061-C01",
+          "disposition": "implemented",
+          "decision": "Centralize identical detach-group, discard-layout, remove-owned-object sequence used by three coordinators in useRemoveWorkspacePanels. Preserve removal order, cluster identity and existing partial layout-only handoffs."
+        },
+        {
+          "id": "D061-C02",
+          "disposition": "implemented",
+          "decision": "Pending float-group map already records source group. Derive admission from it and remove the separate Set plus all synchronized cleanup. Simplify OwnedPanel type to the existing getOwnedPanel return type without a conditional infer/Parameters round trip."
+        },
+        {
+          "id": "D061-C03",
+          "disposition": "retained",
+          "decision": "Keep staged target markers, revision-triggered reconstruction, render readiness before acknowledgement, cancelled-transfer IDs, cluster-vs-window input freezing, and publication queue failure retention. Empty cluster snapshots must still stage a marker; latest publication retry must not erase a failed close boundary."
+        }
+      ],
+      "consumers": [
+        "Shared removal hook reads existing object/dockable providers; those providers do not import the new helper, so the dependency direction is unchanged. Cluster transfers, native tab commits/failures and foreign-placement reconciliation retain their existing triggers."
+      ],
+      "contracts": [
+        "Source ownership remains until native commit. Target publication excludes provisional tabs until acknowledgement. Close drains admitted cluster operations and prevents new ones while preserving unrelated clusters. No behavior change intended by D061."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d061-baseline.log and /tmp/luxury-yacht-d061-green.log: all 120 panel-window tests pass before/after. /tmp/luxury-yacht-d061-coverage.log: same tests pass with new helper 100% statement coverage.",
+        "/tmp/luxury-yacht-continuation-typecheck.log: pass. /tmp/luxury-yacht-deep-complexity-audit.json: all 30 changed/new TS functions locally <=12; unchanged object action controller function remains 19. /tmp/luxury-yacht-continuation-format.log: Biome/gofmt pass. Combined gate and native checks pending."
+      ]
+    },
+    {
+      "id": "D062-application-composition-and-desktop-services",
+      "inspection": "Fully read the remaining application composition, startup lifecycle, logging, update owners, native desktop boundary, menu dispatch, CSV export and data-management sources. Traced real menu callers and existing logging/reset tests.",
+      "files": [
+        {
+          "path": "backend/app.go",
+          "sha256": "2fd2c7c58cf6bbc6cf8a686adbc9e60732144d966bf791cc2f9cbe84fadec800"
+        },
+        {
+          "path": "backend/application_lifecycle.go",
+          "sha256": "bd707528b459e3e48056e81801e9a9206953dd621fa893c25078fb0d820158d5"
+        },
+        {
+          "path": "backend/application_lifecycle_diagnostic_dump.go",
+          "sha256": "fec9f93742c73fdb166c34b0abb2a9d4ca4980bbbf486712f04d52cfb6934f96"
+        },
+        {
+          "path": "backend/application_lifecycle_diagnostic_dump_windows.go",
+          "sha256": "cb444a494b32545c200caf5776298345a1d69f972a6072cb28a06f137c8f2136"
+        },
+        {
+          "path": "backend/application_lifecycle_signals.go",
+          "sha256": "2a6920bd626b5f1d5d54b536578bcf7149e7efe0d6b592b75c1541a7151ad25d"
+        },
+        {
+          "path": "backend/application_lifecycle_version.go",
+          "sha256": "3cf516c62d670377b992eec0eed823d1745bd5a18a2197de5e89940d3b058996"
+        },
+        {
+          "path": "backend/devmode.go",
+          "sha256": "9d280a7518d6ab11aa67f3c1af1667af635c1c70c32f51198c81e576866b77b0"
+        },
+        {
+          "path": "backend/devmode_dev.go",
+          "sha256": "07d43425afb41f25805cecfa18bf491d71343e1f38555f2865ee2c483da3d016"
+        },
+        {
+          "path": "backend/logger.go",
+          "sha256": "fc067911f6c57467220685ded3caa297e38aa8a5c1e875c442c859bfae35e43c"
+        },
+        {
+          "path": "backend/app_log_service.go",
+          "sha256": "0a2f2677a95c801998902c1fbe4f6f90b46d09d23a30aa64a3dc5f3dc2bc97e0"
+        },
+        {
+          "path": "backend/app_log_service_commands.go",
+          "sha256": "4af956cc72120c4e077715dd0feef472552b5929e453b59d62792beec0720605"
+        },
+        {
+          "path": "backend/error_reporting_service.go",
+          "sha256": "e63e9718f063b1df671de48f8c7a58a0655993afb1063727c6af920ca2be8be0"
+        },
+        {
+          "path": "backend/error_reporting_installation_telemetry.go",
+          "sha256": "37df2771b534324e21ceb28767450330e31c15d4b0725c4b566e34cb6ad47d59"
+        },
+        {
+          "path": "backend/events.go",
+          "sha256": "a93d1131fdf7f2d5c6ae9dfb840423fd3bcb6d6bec6a4f858a65b77b455cbd83"
+        },
+        {
+          "path": "backend/update_coordinator.go",
+          "sha256": "54657988c573e9977a9049c0ca2a7066dd1a58a9aab46396deb03c2b8d8e66ae"
+        },
+        {
+          "path": "backend/update_coordinator_commands.go",
+          "sha256": "7df659f90f4bcc22193dcb3aaca9d198d8f52bc2820f77ba12befdf1d958b45b"
+        },
+        {
+          "path": "backend/update_coordinator_config.go",
+          "sha256": "ee3aa44f7b5f7466850ac2db507d887bfda6ca65bae182a7ee8c1a0a44f08f53"
+        },
+        {
+          "path": "backend/update_coordinator_version.go",
+          "sha256": "163b449bdb9691af5197df86bf9a73b90ed02da995d94ee5504a14171f1f1c5b"
+        },
+        {
+          "path": "backend/update_provider.go",
+          "sha256": "7907d15037d38d0e93def23d64e61e5f54c7d2eea37c076fffa7a15560957570"
+        },
+        {
+          "path": "backend/update_registry.go",
+          "sha256": "839a44edc744f9424084b685b0d2a968bf13ce3f37295d33aac2dfda56dc89e5"
+        },
+        {
+          "path": "backend/update_registry_other.go",
+          "sha256": "44dccb1b322765a4d242cea490c5e920e1cc6a0328ee25c72f3d3860ed07712e"
+        },
+        {
+          "path": "backend/update_registry_windows.go",
+          "sha256": "9a0e9198ec1f3e986ed6c65d85fb84f9597972a3676f47e09c373ea7c0377acc"
+        },
+        {
+          "path": "backend/window_restore.go",
+          "sha256": "56686ac68ebe8b6b30d88b109f5407d27558bd2ef2883d747cb6cd8b842950f5"
+        },
+        {
+          "path": "backend/desktop_shell.go",
+          "sha256": "1045663a50b97c010d9c8a766cef85a2646859896981a8418f789eea9bf64ba1"
+        },
+        {
+          "path": "backend/desktop_shell_runtime.go",
+          "sha256": "4384bfd799ed6b92074d903283b3b855e63e519b5b5bc7653fd648fccc513b12"
+        },
+        {
+          "path": "backend/desktop_shell_beta_prompt.go",
+          "sha256": "b6040fb21c18036e3d2fa9e4d89341b4c591e6187b823ae793407da3d2044aba"
+        },
+        {
+          "path": "backend/desktop_shell_kubeconfig_dialog.go",
+          "sha256": "7d6e64b5090938b2fe8295b514a3746e7d64b140fccb0b86b5f7139a68854571"
+        },
+        {
+          "path": "backend/desktop_shell_csv_export.go",
+          "sha256": "686efb36d8f3ac99aaa7a83a5c65118b04cd2fc2981621bfdfb8db5604a09eef"
+        },
+        {
+          "path": "backend/application_menu_commands.go",
+          "sha256": "858a65dc92fa148ca0fd6b649c190ea82457077c9ccea61713d78d118b3ec178"
+        },
+        {
+          "path": "backend/menu.go",
+          "sha256": "dd409e3f61dfefd9b141aa560dea0709fc7c7f5a71ec47556d9f7f51e9e4d0e2"
+        },
+        {
+          "path": "backend/desktop_shell_panel_workspace.go",
+          "sha256": "b46aad814e9789a34973b5758ad1b13eec28c9992513fc997efa72c3f57eca45"
+        },
+        {
+          "path": "backend/desktop_shell_panel_window.go",
+          "sha256": "5efd6854a7510a56225afb22c51d82f8d6f44c0c8678656b80184df352010fd8"
+        },
+        {
+          "path": "backend/desktop_service_panel_workspace.go",
+          "sha256": "d9c07dcf65677b05f287ce459130cb670a4c605f138055e8ebd2cedc0fc6c3bd"
+        },
+        {
+          "path": "backend/desktop_service.go",
+          "sha256": "d09ea1d525cb2ada529e33145240a4e524e9cdc44da2e76857a8ac9e9a7c503a"
+        },
+        {
+          "path": "backend/data_management_coordinator.go",
+          "sha256": "0a30819df77838e7998e50aa7ad065daff7854559d1bce439540b2237880ddf7"
+        },
+        {
+          "path": "backend/data_management_import_export.go",
+          "sha256": "b4405c94d2f0746652c5f385fb720fd54dd51810e313e70a5e3eab1a3c8dd5d2"
+        },
+        {
+          "path": "backend/static_app_state_cleaner.go",
+          "sha256": "ee0b8c68c4bc51a4051332f6e4644deffcc319cfb133c78d30d9d15928eb571b"
+        },
+        {
+          "path": "backend/runtime_setting_policies.go",
+          "sha256": "cd4da5df3f61bb705dae8898c9cebe330c1db5d38df3dd22717e2029f3bb796f"
+        }
+      ],
+      "candidates": [
+        {
+          "id": "D062-C01",
+          "disposition": "implemented",
+          "decision": "Centralize severity-to-LogLevel conversion shared by process log capture, structured error logging and frontend logging. Preserve warning alias normalization and source/cluster metadata."
+        },
+        {
+          "id": "D062-C02",
+          "disposition": "implemented",
+          "decision": "Remove obsolete updater-side menu method and its private ShowAbout interface requirement after repository search found only a test caller. Retarget the ordering regression to the real DesktopShell menu command before removing the duplicate path."
+        },
+        {
+          "id": "D062-C03",
+          "disposition": "implemented",
+          "decision": "Reset uses the existing runWorkspaceMutation boundary instead of duplicating its nil fallback."
+        },
+        {
+          "id": "D062-C04",
+          "disposition": "retained",
+          "decision": "Retain explicit composition ports and startup order, child-descriptor bootstrap exemption from the runtime-ready gate, cancellation ownership, native caller-role checks and window shutdown order. Typed DesktopService forwarders are the Wails allowlist boundary. CSV export has fsync/close/chmod/stat/rename ordering beyond generic atomic writes. Reset attempts independent owners before static cleanup. Favorites JSON copying preserves serialized omission/nil and alias semantics."
+        }
+      ],
+      "consumers": [
+        "Native menu dispatch to About and updater, frontend diagnostic logs and process log bridge, startup/service readiness and child-panel bootstrap, preferences/update client initialization and data reset owners."
+      ],
+      "contracts": [
+        "Menu opens About before starting its update check. Logging keeps existing privacy/error-capture paths. Runtime reset retains workspace mutation admission. No new dependency or behavioral change intended."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d062-baseline.log: selected logging/startup/update tests passed. /tmp/luxury-yacht-d062-menu-baseline.log: real menu ordering regression passed before obsolete path removal. /tmp/luxury-yacht-d062-log-parity.log: expanded log-level characterization passed before shared conversion.",
+        "/tmp/luxury-yacht-d062-green.log: focused race pass; /tmp/luxury-yacht-d062-final.log: latest logging/menu/reset/import-export race pass (filtered backend package coverage 14.8%). /tmp/luxury-yacht-d062-go-audit.log: 26 changed/new Go functions locally <=12. Full gate and required native checks remain pending."
+      ]
+    },
+    {
+      "id": "D063-attention-runtime-permission-and-query-scope",
+      "inspection": "Revisited the open D032-C05 finding through runtime permission injection/cache keys, registration/readiness, retained rows, catalog-owned findings, cold restoration and shared maintained paging. Earlier full-file inspections remain the inventory basis.",
+      "files": [
+        {
+          "path": "backend/refresh/domainpermissions/access.go",
+          "sha256": "811d763400316acdb8c29d33f478ef6b484be3d729ec942eff284160533a59de"
+        },
+        {
+          "path": "backend/refresh/snapshot/cluster_attention.go",
+          "sha256": "ced361923310fa8b178a6769c0b23a93ed5486b4c9e07f4e740f4fdbaef6d497"
+        },
+        {
+          "path": "backend/refresh/snapshot/querypage_typed.go",
+          "sha256": "4ed337fed96a789d1c83f41637376a0f6c9a8140d758ec46d7c018aa0f4737fb"
+        },
+        {
+          "path": "backend/refresh/snapshot/resource_readiness.go",
+          "sha256": "3874af493b944e7ff5ca05041a13d4d44ca4dfa2f02ef59be90d84fa1976cd6c"
+        },
+        {
+          "path": "backend/refresh/snapshot/runtime_permissions.go",
+          "sha256": "bd4ae100e2edca83241133d8419f797b0237731fb2cb713d08f7a58efabe7467"
+        },
+        {
+          "path": "backend/refresh/snapshot/table_query_issues.go",
+          "sha256": "f25477c571672f0d04f58d1a25cfc7bd303b01bf85dabb863cd7f235870c6bcd"
+        }
+      ],
+      "candidates": [
+        {
+          "id": "D063-C01",
+          "disposition": "implemented",
+          "decision": "Filter Attention retained rows and counts by current source group/resource permissions and readiness. Add server-owned resource facet constraints to maintained queries; preserve catalog-owned kinds with colliding kind names and retained data for permission recovery."
+        },
+        {
+          "id": "D063-C02",
+          "disposition": "implemented",
+          "decision": "The empty allowed-kind/namespace intersection was passed to an engine where empty filters mean all. Convert empty required scopes to MatchNone and zero scoped counts; preserve optional UI facet semantics and unfiltered counts for nonempty authorization scopes."
+        }
+      ],
+      "contracts": [
+        "Permission producer is snapshot service ensurePermissions; optional Attention stays registered. Failed generation rebuild may leave old rows routed, so serving must enforce current decisions. Catalog owns permissions for open kinds. Scope filters are server-owned, include counts and do not mutate retained store. Private schema facet adds no wire DTO field."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d063-attention-red-corrected.log: revoked rows and unavailable source failures against original builder. /tmp/luxury-yacht-d063-scope-red.log: all-access-revoked, disjoint kind and disjoint namespace leak reproduced.",
+        "/tmp/luxury-yacht-d063-scope-green.log: focused Attention and maintained paging pass, including cold restoration, same-kind CRD, all-denied and readiness recovery. Earlier broad run exposed missing fixture causes and empty-scope bug; corrected combined race/coverage run pending in /tmp/luxury-yacht-d063-d064-green.log.",
+        "/tmp/luxury-yacht-d063-d064-green.log: snapshot race/coverage passed (83.0%), querypage 86.3%, domainpermissions 54.4%. The combined command failed only because a D064 identity test retained the removed converter; the corrected identity suite passed in /tmp/luxury-yacht-d064-identity-green.log (81.8%)."
+      ]
+    },
+    {
+      "id": "D064-resource-model-identity-permissions-and-cache",
+      "inspection": "Fully inspected the remaining resource identity/model primitives, capability evaluation and rules cache, gateway/cache/fetch and object detail owners. Traced all shared model constructor callers and the generated resource-model wire shape; prior per-kind full inspections cover these callers.",
+      "files": [
+        {
+          "path": "backend/autoscaling_details.go",
+          "sha256": "13f2e911865bed0de41f9b23b48417bc3d05f92dd5a38ecfa8af914f8cc4b236"
+        },
+        {
+          "path": "backend/capabilities/query.go",
+          "sha256": "babf1566969c458a8831f4b01358e1d39d7264d10813f7f1a0210da16d41f842"
+        },
+        {
+          "path": "backend/capabilities/rules.go",
+          "sha256": "4723dd7848904e9a17d82b352b9d7372fcdb8cc7274d7e6114eedf626c01db6c"
+        },
+        {
+          "path": "backend/capabilities/service.go",
+          "sha256": "10e1a1dadcf6878de1cce6ae211d494f51c2349f90eba71278e3a82f2b42e5c7"
+        },
+        {
+          "path": "backend/capabilities/types.go",
+          "sha256": "65e75a433403befa81da214091e19065c60d0b4f1aa323867719f8d99da7a984"
+        },
+        {
+          "path": "backend/crd_details.go",
+          "sha256": "862bb0578f2cc382d236b250e959c28ffb34e8c928f761534176963dd0c67863"
+        },
+        {
+          "path": "backend/fetch_helpers.go",
+          "sha256": "d68f5df3e34031c76accd30d86cfd6ebdd53009217216044cb3819ae2432aed3"
+        },
+        {
+          "path": "backend/generate.go",
+          "sha256": "d5dac1db770c7884ccf27e195dbffb13642f4ae650faa953393ef43c18687217"
+        },
+        {
+          "path": "backend/helm_details.go",
+          "sha256": "2e2b62242443b1f4722da49ca2dd1c74d16d591365c1b3976d2b9b163220b370"
+        },
+        {
+          "path": "backend/kubernetes_rate_limiter.go",
+          "sha256": "9595402e7a90dfe41df7268e01255bc15429894e9ca08413e00f6b25acae8139"
+        },
+        {
+          "path": "backend/node_action_contract.go",
+          "sha256": "369a621b4562a514e954efa03261c8aa9846285349d0b9afd546ea92381d14dc"
+        },
+        {
+          "path": "backend/object_detail_custom.go",
+          "sha256": "92606db8e163a9f12564cc2cfff689bc1e79f9abea2a90e949b6b1c6c2e9ad15"
+        },
+        {
+          "path": "backend/object_detail_provider.go",
+          "sha256": "67035478a6663538bf2d422d110d9b8fead36db0b2e1a606f200ea6eb0915c42"
+        },
+        {
+          "path": "backend/object_identity_validation.go",
+          "sha256": "4b22dd7cd1125db320e6c2a1ac726c7d296a9a14fb01c88805585343e17d631b"
+        },
+        {
+          "path": "backend/objectaction/catalog.go",
+          "sha256": "59949a0101ec981e05033784ff0f9cee7fd0ebc17b1cc48c708be48827a0b982"
+        },
+        {
+          "path": "backend/pod_details.go",
+          "sha256": "ba0121aaefabecb4988e8f64b33cb8744e01dca2dd2bf132571d467c024d2ef6"
+        },
+        {
+          "path": "backend/resource_gateway.go",
+          "sha256": "aa0e5958a6e6e2c29ecf4d6b2cb2dc9d448033a17efcd3c167c546c544f5ace2"
+        },
+        {
+          "path": "backend/resource_gateway_catalog.go",
+          "sha256": "9b390110ea0f2cdbbc66a6f02fe5929c19163c87ab5137bae5d83b3193112d45"
+        },
+        {
+          "path": "backend/resource_gateway_permissions.go",
+          "sha256": "3252833cfaf6a270758d03cb37e0dddbb270a4800d795fd1bb37ac17f69a1f3b"
+        },
+        {
+          "path": "backend/resource_permission.go",
+          "sha256": "8005f7f03279023349b33bed89953f9bf6ee73934266d7bd20d1aaeed999003d"
+        },
+        {
+          "path": "backend/resourcecontract/builtin_resources.go",
+          "sha256": "c29078aaf307a1932458aa465a41d9eb1ad87fc53f95f0ca3f83a2807d0a84ff"
+        },
+        {
+          "path": "backend/resourcekind/family.go",
+          "sha256": "993d5079e35577e97db2be0f5d6537cbd4edb5db185d870531c234911a8c399d"
+        },
+        {
+          "path": "backend/resourcekind/identity.go",
+          "sha256": "9723b10945e857b758c13e960d8ddd1feb3072af8a618950a230d5c9de019886"
+        },
+        {
+          "path": "backend/resourcemodel/helm_name.go",
+          "sha256": "6c9a4e0ad4261d09c7595d99e0517d50ad56dc66b59f0940985cd4d6b7f6be00"
+        },
+        {
+          "path": "backend/resourcemodel/object_helpers.go",
+          "sha256": "da4a71535316ab4e592adfb595fe48d0200e3ab2fbfa56e723e6aa9b09f04d40"
+        },
+        {
+          "path": "backend/resourcemodel/relationship_index.go",
+          "sha256": "1bc0058084836e1e88489c11b739720b6f98e39513539640bd7ef26f2c81355d"
+        },
+        {
+          "path": "backend/resourcemodel/types.go",
+          "sha256": "153818faabb70926d9cb74af8224a03a0962db64ff5f78bfc3bd6b35522dcf69"
+        },
+        {
+          "path": "backend/resources/admission/model.go",
+          "sha256": "bce906d4719da0891eec1d750156407d409e0165c6358fcd156090e30660f95f"
+        },
+        {
+          "path": "backend/resources/apiextensions/model.go",
+          "sha256": "a649279620362b8b667ebe8bd8b61ec9ca06802efdc73d5b22734ea9e761166a"
+        },
+        {
+          "path": "backend/resources/backendtlspolicy/model.go",
+          "sha256": "aec4a6751f63b33471e7913b7a0ced3de6a1872f31b84743dfeffa7b407eb8f5"
+        },
+        {
+          "path": "backend/resources/clusterrole/model.go",
+          "sha256": "cfdfcc07b2701120998f23988fea44975a7ee0ac1b0ceb5c7bcde0b4bf0b3f68"
+        },
+        {
+          "path": "backend/resources/clusterrolebinding/model.go",
+          "sha256": "63617a02c1ccbee4af51859c2439adafdbec6cb4af322013646d3f5119417764"
+        },
+        {
+          "path": "backend/resources/configmap/model.go",
+          "sha256": "f68b0f8c178d2d40268d997465a77c50aadf983437b05ccf7c813c71820d5434"
+        },
+        {
+          "path": "backend/resources/cronjob/model.go",
+          "sha256": "d910cc1094c2ce6ec839e769888a820fca34a2c8b13e6ecb38fcfd8d8ea5a57d"
+        },
+        {
+          "path": "backend/resources/customresource/model.go",
+          "sha256": "537832994d4ff5407afba02e9719d641066325c9f2acff36105efac330f3ac2a"
+        },
+        {
+          "path": "backend/resources/daemonset/model.go",
+          "sha256": "328997ef03edd49797aedb576da3e45020037d330bd042b2eecffb0940f10ac1"
+        },
+        {
+          "path": "backend/resources/deployment/model.go",
+          "sha256": "26b121de7021b5003d81f643cdcd7e79c356a3dbf2efae63f8bf6ce5a95960e8"
+        },
+        {
+          "path": "backend/resources/endpointslice/model.go",
+          "sha256": "e8a0c681673d6f036d17ca58cc7ea5d69e4db6d1b3dd566f8ae6393f02082274"
+        },
+        {
+          "path": "backend/resources/events/model.go",
+          "sha256": "af2d9684b19367ffff223daa9a92418eeb5f4c01a67921d3e8da110844d01a60"
+        },
+        {
+          "path": "backend/resources/gateway/model.go",
+          "sha256": "55f5591947bf48af0867262b929aebfe447c036a6bab91594b1e1b4cf5a5d655"
+        },
+        {
+          "path": "backend/resources/gatewayclass/model.go",
+          "sha256": "21fcdc21969e088628219c15ec13ccabe16b3b55710309019be605010fa9d990"
+        },
+        {
+          "path": "backend/resources/grpcroute/model.go",
+          "sha256": "ba5ba06297cfe83c1e9b71532a5dcb0d2ff6b815261a6578873e8fe0174d2402"
+        },
+        {
+          "path": "backend/resources/hpa/model.go",
+          "sha256": "ab22a75b7e934930c36a3947c29a1677e44bec07eef8a76a617f19510e5efb22"
+        },
+        {
+          "path": "backend/resources/httproute/model.go",
+          "sha256": "fb0115b99a7ce071481698b36bafee229031acb4a227e7e165df42d995f0ac60"
+        },
+        {
+          "path": "backend/resources/ingress/model.go",
+          "sha256": "a64df96942afd0fa48a19d13d4594b945897dff2acb01ec427bddd7c59d0f87e"
+        },
+        {
+          "path": "backend/resources/ingressclass/model.go",
+          "sha256": "d6fb34092cf55ccdc4d51738b6c10e07098229c229ed05e95fc62ed9eaf5e732"
+        },
+        {
+          "path": "backend/resources/job/model.go",
+          "sha256": "44d8650353f410037135560b7b2edda22257540d37902a3c974575148983d374"
+        },
+        {
+          "path": "backend/resources/limitrange/model.go",
+          "sha256": "ffd314cda4a7582dafcf94b21161767b1f35b230a3fa974f05483117231bdd26"
+        },
+        {
+          "path": "backend/resources/listenerset/model.go",
+          "sha256": "0c95e8ab5d97988fc541676a4b12948604bc4c40565262000b276fc30e97bb36"
+        },
+        {
+          "path": "backend/resources/namespaces/model.go",
+          "sha256": "c1d2b1af50402c8be5b425974bd341ec4d03fbcd2e2f0c83e0974edd5c6333f2"
+        },
+        {
+          "path": "backend/resources/networkpolicy/model.go",
+          "sha256": "99f61dbdf27d732279613a328725b87391da2c1a252cacaa71da23cc4f958cf8"
+        },
+        {
+          "path": "backend/resources/nodes/model.go",
+          "sha256": "45511dc23d7b0c6911f5a7eb57954c91c9c73a7f5c860b7bf7f591e8a8838e34"
+        },
+        {
+          "path": "backend/resources/persistentvolume/model.go",
+          "sha256": "4c938331f386febb6a8520034693d9139bb424d6980b849fad591191a4e5f940"
+        },
+        {
+          "path": "backend/resources/persistentvolumeclaim/model.go",
+          "sha256": "80ca3219657328fb29af2ef9c2a5ad8cee88c2d98ada79a86603339673ed603b"
+        },
+        {
+          "path": "backend/resources/poddisruptionbudget/model.go",
+          "sha256": "2b7c908c1adf3774fbc2d8760d2a8b4835d264107fabe2413f81d0bec88cffd0"
+        },
+        {
+          "path": "backend/resources/pods/model.go",
+          "sha256": "5040e07eaaf175c2638119d94c42f5881edc7a0f7dceae34587fbb5c89658456"
+        },
+        {
+          "path": "backend/resources/referencegrant/model.go",
+          "sha256": "d78742674311ca536da6769116ef0f59d20f6613313bf21bb7213a4c1f223c01"
+        },
+        {
+          "path": "backend/resources/replicaset/model.go",
+          "sha256": "09705bdd66b0948235229ddb1b87ab1030f9e21030a68e28d1bbe94890cbf6b1"
+        },
+        {
+          "path": "backend/resources/resourcequota/model.go",
+          "sha256": "ee5c1fbdc82fafd89d5ed61206214e53dea2968a5e07baeddd2d56fce6d98ad5"
+        },
+        {
+          "path": "backend/resources/role/objectmap.go",
+          "sha256": "5368d14bbe87b37ec3efb06a3043ac02d5fc7774bdf60d173b58631eefa2affe"
+        },
+        {
+          "path": "backend/resources/rolebinding/objectmap.go",
+          "sha256": "44a18fe3cad8ce3cf191ce1a82aa10237908eaef6f0d4ecbf7bd9ca169920e81"
+        },
+        {
+          "path": "backend/resources/secret/model.go",
+          "sha256": "47b27a45efb374c434a266e92008d7fd47faaf03b036c6639c86649f7ef36250"
+        },
+        {
+          "path": "backend/resources/service/model.go",
+          "sha256": "14d88b38f93f7d685b487eab4695377239e76317ffd22285f275f91f33d93575"
+        },
+        {
+          "path": "backend/resources/serviceaccount/model.go",
+          "sha256": "88a7b73eb2a9f97e0fdce62c973c6cda2d3c69f7df7d8741dec97d8fb33f20f0"
+        },
+        {
+          "path": "backend/resources/statefulset/model.go",
+          "sha256": "277b2d75316c10f1a4c12cfaa72c99a6aef980441e1a20fd1166a4ef5b3e6d83"
+        },
+        {
+          "path": "backend/resources/storageclass/model.go",
+          "sha256": "12c3114f5c2283aebd313caf7c72827ba70aecb9493f24d8f094cf56c3f09181"
+        },
+        {
+          "path": "backend/resources/tlsroute/model.go",
+          "sha256": "c5d0303a7e9ddb1961f2a784f68a868f139bc0de8e31e15b1d81ae50fb02afe7"
+        },
+        {
+          "path": "backend/response_cache.go",
+          "sha256": "cfc1792eb8d92f315ecf87dfd5e5b199db4c559f6bfcebdda83b476923b7f2dc"
+        },
+        {
+          "path": "backend/response_cache_invalidation.go",
+          "sha256": "b895e07926f98c753562fe2beec30687abf11b545694c831489b8c90ab3cc269"
+        },
+        {
+          "path": "backend/response_cache_permissions.go",
+          "sha256": "865ed147047163a089178653caea1e5680013b23f8da3ac95b87b15ffd9167fc"
+        }
+      ],
+      "candidates": [
+        {
+          "id": "D064-C01",
+          "disposition": "implemented",
+          "decision": "BuiltinResource now aliases the existing canonical resourcekind.Identity, removing duplicated fields, GVK/GVR methods and forty-plus conversion calls while retaining table order and JSON contract."
+        },
+        {
+          "id": "D064-C02",
+          "disposition": "implemented",
+          "decision": "Remove the empty ResourceFacts constructor argument from all 40 caller files. Preserve the ResourceModel facts wire field as its existing zero value; typed kind-specific facts retain their owners."
+        },
+        {
+          "id": "D064-C03",
+          "disposition": "implemented",
+          "decision": "Unify identical wildcard verb/group matching and remove write-only SSRR cachedAt state. Reuse common.WithDefaultTimeout for bounded permission contexts without changing caller-owned deadline behavior."
+        },
+        {
+          "id": "D064-C04",
+          "disposition": "retained",
+          "decision": "Keep explicit cluster client injection, leaf refresh projections and operation ports, permission-aware cached detail reads, typed and discovered GVK gates, registry-driven informer eviction and separate typed Helm storage invalidation. Built-in detail cache and custom live GET paths have different freshness/permission contracts. Preserve bounded SSRR stale grace, per-namespace singleflight and cluster-owned cache maps, SSAR fallback, privacy-preserving diagnostics, request-shaped method boundaries, and retry event/error ordering."
+        },
+        {
+          "id": "D064-C05",
+          "disposition": "retained",
+          "decision": "Resource relationship index keeps distinct typed ConfigMap/Secret sources, role-binding scope semantics and copied link collections. Empty facts wire shape is an existing DTO contract, not a reason to reconstruct rich per-kind facts. No reflection-based dynamic dispatch or generic action framework added."
+        }
+      ],
+      "contracts": [
+        "Identity definition stays in a leaf package; contract aggregation depends on per-kind identities. Constructor copies metadata and preserves status/scope/ref and output JSON fields. Authorization data remains scoped by gateway cluster cache and namespace. No runtime behavior change intended by D064."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d064-baseline.log: capability, identity and resource-model suites pass before edits. /tmp/luxury-yacht-d064-complexity.log: all 79 changed/new Go functions <=12. Combined consumer race/coverage and final gate pending.",
+        "/tmp/luxury-yacht-d063-d064-green.log: capabilities 86.1%, resource model 42.3%, all resource consumer packages passed. Corrected identity test preserves its original conformance assertion and passed race at81.8% in /tmp/luxury-yacht-d064-identity-green.log. Broader latest-worktree gate pending."
+      ]
+    },
+    {
+      "id": "D065-object-actions-and-operation-lifetimes",
+      "inspection": "Fully read action dispatch, workload mutations, node actions, operation coordinator, shell/port-forward lifecycle, drain store and fetch/follow log paths including complete handler, streamer and target limiter; traced gateway, stream aggregate, snapshot builder and tests.",
+      "files": [
+        {
+          "path": "backend/generic_resource_actions.go",
+          "sha256": "e81e62228f4b4cf4e79157b61ad3c34a54d2c3b4264e5604b168d5368654c09e"
+        },
+        {
+          "path": "backend/helm_actions.go",
+          "sha256": "f34c65ba528ac5b5b9f7d3b378965e95deb40e2611a4d7fa11a102829ddab843"
+        },
+        {
+          "path": "backend/node_helpers.go",
+          "sha256": "db48971dd311077fdf9720837e261ff16b89d19015356260be6a92f1ab7552a7"
+        },
+        {
+          "path": "backend/nodemaintenance/store.go",
+          "sha256": "085ca1113ef65cef60350e493249ff856a05f1fc3f542eaa73f0cb92554adbb1"
+        },
+        {
+          "path": "backend/object_actions.go",
+          "sha256": "ebf330591143945fdc7392ee1e8523acde8b275efa6133e544f73f4480b31b81"
+        },
+        {
+          "path": "backend/object_finalizer_actions.go",
+          "sha256": "8ea931325fd370f119934e0d87490e02263f183c28c97ea25cb80b397d338a32"
+        },
+        {
+          "path": "backend/operations_coordinator.go",
+          "sha256": "055c8e303c45b00a6674ddbff7d3feb8a9a21e8087b91717504a67112f7e143a"
+        },
+        {
+          "path": "backend/operations_drain_registration.go",
+          "sha256": "79790ce9accfae86e696748c327a901cd2b044ea2062a0d8113b182f2693035e"
+        },
+        {
+          "path": "backend/pod_actions.go",
+          "sha256": "4b39ed5158839a6ce63fd057421700c6132d4b6d555faea712f0abd8f53d7bf5"
+        },
+        {
+          "path": "backend/pod_logs.go",
+          "sha256": "e1a52e2694c60461ed94183c708d7ead4212503f84bf6389ef9ca3dbf1bee8da"
+        },
+        {
+          "path": "backend/portforward_lifecycle.go",
+          "sha256": "b618f1f46a4038089c42c17bf0b555a29e68fe8cf2bb90f6eba881d93438aabb"
+        },
+        {
+          "path": "backend/portforward_types.go",
+          "sha256": "0c631f76a020c3f4d0b9fda43cc87e908c270d6ecb3913848013dc121e1f2b6c"
+        },
+        {
+          "path": "backend/refresh/containerlogsstream/types.go",
+          "sha256": "060c6bad13775d295c0b94cf361d0d1106c5e3229d3a6f5b87850374093b929f"
+        },
+        {
+          "path": "backend/resource_gateway_node_actions.go",
+          "sha256": "aca35e27161e4b6736727953bb3ca1051da7584066c67fa274504e0efd08c789"
+        },
+        {
+          "path": "backend/resources/pods/debug.go",
+          "sha256": "b124c6fa830ac6688372a3d19085ad3385666348fb0d2b1d3c694d9f565d409c"
+        },
+        {
+          "path": "backend/resources/pods/logs.go",
+          "sha256": "9d8ab65ec9abf83e7fd7d36eb57df4768a29e0918f9935bb83a6dc7cc73ccfa8"
+        },
+        {
+          "path": "backend/shell_sessions.go",
+          "sha256": "e0044d001811f32e1b721a8faedd7a505c3829f304b0c753547419b8e4f7f113"
+        },
+        {
+          "path": "backend/shell_sessions_lifecycle.go",
+          "sha256": "e0089d8406311a511c777b2a2d547a9fb9b8c0ec5da790ea501fa0991e01d604"
+        },
+        {
+          "path": "backend/workload_actions.go",
+          "sha256": "7c13a6509dae81dc820f113ba758afb021ad8273306285b4c81d9508b0b771aa"
+        },
+        {
+          "path": "backend/workload_rollback.go",
+          "sha256": "85a5c96b9f29cc07c9bea18226028fb63b4cffdb1fa57a34e732789c5fdb0e01"
+        },
+        {
+          "path": "backend/refresh/containerlogsstream/handler.go",
+          "sha256": "fc44b882f3ba4a5886f34407bc7c63509eb18638ec8649319e04e62ff2291033"
+        },
+        {
+          "path": "backend/refresh/containerlogsstream/streamer.go",
+          "sha256": "4d2b201b7f6f707ea6c38711f2b49417aa2f2e77f09f3e521f0f96d65aaca94a"
+        },
+        {
+          "path": "backend/refresh/containerlogsstream/limiter.go",
+          "sha256": "0f77f4550d38990b6840d31a12dbd624176400ad67310e648d7f6211f5f13cb2"
+        },
+        {
+          "path": "backend/internal/containerlogs/target_identity.go",
+          "sha256": "3feca32cc1cb1056929e25754bf330c6a540913e3ae8d78adc215865f84e011e"
+        },
+        {
+          "path": "backend/refresh/snapshot/node_maintenance.go",
+          "sha256": "e1a23ac1397224bf5e90741f8438c5c2bc5f58ad17b352d12586363b416c2736"
+        },
+        {
+          "path": "backend/resource_permission.go",
+          "sha256": "90b149406d9c90869eafcf234b0eb99484b255fe337ce9ce104f0ccf01d1ab83"
+        },
+        {
+          "path": "backend/portforward.go",
+          "sha256": "63d78426df943d32edb0bb8fccf48ca6f8f89072129182911a5b8a4849fa7bc4"
+        },
+        {
+          "path": "backend/node_logs.go",
+          "sha256": "2a578a0c57ab16b5f0ac28d8885782502664d1d808bc0a1d67f389985ee3073b"
+        },
+        {
+          "path": "backend/object_yaml_mutation.go",
+          "sha256": "39246cf8aff9e8b2079461086a003015226104a8de5ca4d46b6b3df0635f8703"
+        }
+      ],
+      "candidates": [
+        {
+          "id": "D065-C01",
+          "disposition": "implemented",
+          "decision": "Workload action helpers carry ObjectActionTargetRef directly; remove five flat-argument forwarding chains and three gateway permission forwarding methods. Existing tests target the same action methods, preserving assertions and normalization/error order; rollback uses slices.IndexFunc for revision selection."
+        },
+        {
+          "id": "D065-C02",
+          "disposition": "implemented",
+          "decision": "Cleanup no longer takes boolean flag combinations: user/stream completion publishes removal, runtime-owned cleanup lets the runtime registry own removal. Preserve status/list/unregister order and duplicate close behavior. Serialize terminal resize with queue close after reproducing send-on-closed panic; preserve already queued size. Port-forward awaitStart owns initial success/failure/timeout result."
+        },
+        {
+          "id": "D065-C03",
+          "disposition": "implemented",
+          "decision": "One leaf ValidateTargetGVK gate protects fetch and stream before any typed read, including empty selections. It validates the closed typed-client surface using Kubernetes API group/version constants; importing the app kind registry here would cycle through pods. Preserve supported case-insensitive kind input. Remove redundant stream cluster IIFE and manual slice equality. Fix limiter total read under the owner lock after race reproduction."
+        },
+        {
+          "id": "D065-C04",
+          "disposition": "implemented",
+          "decision": "Drain snapshots now select cluster/node inside the store and return clones. Remove test-only unscoped creation, reassignment/reindexing and raw-pointer reads; retain cluster identity assertions on production APIs. Snapshot domain rejects missing/mismatched ownership. History, cancellation callbacks outside locks and version ordering remain covered."
+        }
+      ],
+      "contracts": [
+        "Retain node get+patch gating, eviction/delete fallback, late drain registration rejection, monotonic per-cluster epochs, maximum/idle shell deadlines, close idempotence and outside-lock cancellation. Preserve restart/scale validation errors and HPA zero/resume restrictions. Native operation checks remain separate from fake Kubernetes tests."
+      ],
+      "checks": [
+        "Action baseline and green: /tmp/luxury-yacht-d065-baseline.log and /tmp/luxury-yacht-d065-actions-green.log. Resize panic red /tmp/luxury-yacht-d065-resize-red.log; lifecycle race green /tmp/luxury-yacht-d065-lifecycle-green.log.",
+        "Log identity/API-read and limiter race red /tmp/luxury-yacht-d065-logs-red.log; full log race suites green /tmp/luxury-yacht-d065-logs-green.log (pods82.1%, stream82.3%, shared helper package58.3% under package-only instrumentation; cross-package coverage pending).",
+        "Drain missing-owner leakage red /tmp/luxury-yacht-d065-drain-red.log. Initial green attempt found an unused test fixture variable; corrected operation race run passed /tmp/luxury-yacht-d065-operation-green.log. Drain store82.1% in filtered run (89.2% full pre-change baseline), changed Snapshot100%, maintenance domain92.9%, terminal queue100%, shell close/finish100%. Full-suite coverage still pending; filtered operation names did not include all public Start/Stop methods.",
+        "/tmp/luxury-yacht-d065-complexity.log:116 changed/new Go functions <=12 after revision lookup and startup-result extraction. D066 baseline reran rollback after that extraction. Native operation checks and prerelease remain pending.",
+        "Startup failure red /tmp/luxury-yacht-d065-port-start-red.log exposed retained live context. finishTerminal now closes removed sessions for both failure and timeout; /tmp/luxury-yacht-d066-final-focused.log passes all selected public port-forward/shell and event lifetime cases under race. awaitStart100%, finishTerminal88.9% in full backend coverage.",
+        "/tmp/luxury-yacht-continuation-backend-coverage.log: required full backend coverage task passes; backend81%, drain88.4%, eventstream75.9% package overall (changed delivery91.7%, close100%, send85.7%), log stream82.3%. Snapshot/register node maintenance92.9%. Cross-package helper instrumentation and changed-function aggregate pending. /tmp/luxury-yacht-d067-go-complexity.log reruns latest Go audit."
+      ]
+    },
+    {
+      "id": "D066-refresh-publication-catalog-and-event-delivery",
+      "inspection": "Fully inspected all remaining backend refresh coordinator/generation/governor/catalog/transport/aggregate files and event stream manager/types. Traced publication, retained serving, permission replacement, catalog bridges, MRU/window demand, spill/mmap lifetime and event cancellation/replay. Owning refresh setup was inspected earlier; current changed call sites reviewed.",
+      "files": [
+        {
+          "path": "backend/refresh_coordinator.go",
+          "sha256": "ff68a83da3e03ef4caf89afefab018363bfc40d47b64a384d7b1e394f1c65732"
+        },
+        {
+          "path": "backend/refresh_subsystems.go",
+          "sha256": "e51cbb600b45baae6d4abc96cb683835d9689c06b49a5884506297ccabceb3a9"
+        },
+        {
+          "path": "backend/refresh_generation.go",
+          "sha256": "0a0c0e8d6844d927d7754d02bca00451b44c0398bf3e394bbe4fbd0a414eafb4"
+        },
+        {
+          "path": "backend/refresh_recovery.go",
+          "sha256": "f8e25cd5227128285fe43ec22125be8cf56e3dc81e422ee2a3f9fbd5718b06b6"
+        },
+        {
+          "path": "backend/refresh_auth.go",
+          "sha256": "a0a10d0b0e10dca1fda1d9d03dd055152b01b272ef9484ce95a3de1afdfda0a4"
+        },
+        {
+          "path": "backend/refresh_governor.go",
+          "sha256": "1822882b8af5101f66a0462117d8fb097be0b7517188241b0778afdc25a4471b"
+        },
+        {
+          "path": "backend/refresh_object_catalog.go",
+          "sha256": "d10594b3125154e05f60d50f1a7c42b1a80da96354554177e17aae473159e03c"
+        },
+        {
+          "path": "backend/refresh_settings.go",
+          "sha256": "ac71082b7e18f2d2726a6764da2062c70078224c55dde0bcb3855fe4feaa62fd"
+        },
+        {
+          "path": "backend/refresh_transport.go",
+          "sha256": "46bd8e1853f5f61bdc029a27fbe50731931abc019bfcad1dbc6ef04177364746"
+        },
+        {
+          "path": "backend/refresh_update.go",
+          "sha256": "0297b16657cdaf604f90d6501bd271dfdf0f1a2439981621c010b54c7a88c3f2"
+        },
+        {
+          "path": "backend/refresh_spill.go",
+          "sha256": "12cc9d31a7f5b83df896c7ac2536c702c88a5e63c8003ef02520875253af46b0"
+        },
+        {
+          "path": "backend/refresh_aggregate_container_logs_stream.go",
+          "sha256": "765026a1cf2e26c573ef437bd274f0d7070d8056d2bb799570e8bd9b7aef2908"
+        },
+        {
+          "path": "backend/refresh_aggregate_metrics.go",
+          "sha256": "0f9b79573a055f8e92702f90c3781654f35d50bd0c33204104dc3526fa6ace37"
+        },
+        {
+          "path": "backend/refresh_aggregate_resourcestream.go",
+          "sha256": "5eb325dd3ae55cb5b65f156b58cd693b47c363e398f592df8051f6da193627c2"
+        },
+        {
+          "path": "backend/refresh_aggregate_snapshot.go",
+          "sha256": "7c1fbb4b38a952dae3a7c41e9fff3b4fd0093085e094c2b7f7892242902ac4cc"
+        },
+        {
+          "path": "backend/refresh_aggregate_telemetry.go",
+          "sha256": "cce1e896df27972f42b9f48319ebea034534f11237679a2fa3bbc57c6d4e2f81"
+        },
+        {
+          "path": "backend/refresh/eventstream/manager.go",
+          "sha256": "73c1e39c29e62357dbdf52aebbc05300db082a6bfe5b2ca9142262e0752a44ed"
+        },
+        {
+          "path": "backend/refresh/eventstream/types.go",
+          "sha256": "891e5477236adc51618a06858447255806a7fcdde87c92f367284a1bf942a536"
+        },
+        {
+          "path": "backend/refresh/ringbuffer/ringbuffer.go",
+          "sha256": "fb63886ff466f0a0c16842bc7d91a8b06fba3b96a45de171037eb11e85de8a95"
+        }
+      ],
+      "candidates": [
+        {
+          "id": "D066-C01",
+          "disposition": "implemented",
+          "decision": "Remove write-only snapshot clusterOrder and resource-stream logger/recorder fields. Routing requires an explicit single cluster; telemetry alone retains ordering. Simplify metrics construction/update around the existing copied subsystem owner, retaining lease demand under its lock."
+        },
+        {
+          "id": "D066-C02",
+          "disposition": "implemented",
+          "decision": "Unify catalog cache-sync checks behind the narrow shared WaitForCacheSync contract. Both installed v0.37.0 Kubernetes factories return map[reflect.Type]bool; preserve core then extensions ordering, nil handling and cancellation. This revises the prior retention decision after inspecting the actual dependency interfaces."
+        },
+        {
+          "id": "D066-C03",
+          "disposition": "implemented",
+          "decision": "Event subscriptions own channel send/close locking and explicit delivery outcomes, removing panic/recover control flow and contradictory return booleans. Race regression covers admitted delivery plus cancellation and replacement subscriber survival. Ring buffer stores the existing StreamEvent directly, eliminating duplicate buffered representation and two replay conversion loops; Since owns copied non-nil successful results. Remove write-only informer/subscription-created fields and atomic increment already guarded by manager lock."
+        },
+        {
+          "id": "D066-C04",
+          "disposition": "retained",
+          "decision": "Keep generation-specific manager/revalidator ownership, commit/rollback, reverse stop order, live topology callbacks, planned-versus-applied governor state, cold-preparation grace, generation-owned mmap closers and retained warm paint. Catalog hydration keeps typed namespace/cluster summary paths, bounded parallelism and permission/error fallback; telemetry merge retains field-specific policy. These represent distinct contracts, not parallel redundant state."
+        }
+      ],
+      "contracts": [
+        "No producer ordering changes in aggregate simplification. Event producer is informer callback; manager snapshots subscribers under its lock and delivers outside it, so subscription lifetime must coordinate cancellation independently. Replay and registration remain atomic under manager lock; replacement IDs remain monotonic. Event wire DTO is unchanged."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d066-baseline.log passed including rollback and refresh ownership before edits. /tmp/luxury-yacht-d066-events-red.log reproduced concurrent send/close race. /tmp/luxury-yacht-d066-green.log passed backend focused race22.9% but failed event test compilation due to fixture field rename; corrected full event/ringbuffer run is in /tmp/luxury-yacht-d066-events-green.log.",
+        "/tmp/luxury-yacht-d066-complexity.log:134 changed/new Go functions <=12. Latest full backend coverage, native checks and prerelease pending.",
+        "/tmp/luxury-yacht-continuation-backend-coverage.log: required full backend coverage task passes; backend81%, drain88.4%, eventstream75.9% package overall (changed delivery91.7%, close100%, send85.7%), log stream82.3%. Snapshot/register node maintenance92.9%. Cross-package helper instrumentation and changed-function aggregate pending. /tmp/luxury-yacht-d067-go-complexity.log reruns latest Go audit."
+      ]
+    },
+    {
+      "id": "D067-frontend-refresh-hooks-and-log-boundary",
+      "files": [
+        {
+          "path": "frontend/src/core/capabilities/index.ts",
+          "sha256": "b69b1e241e9d87c867cfebd9fc6d9ee6bf91beaf86693f5a82d3215045df9142"
+        },
+        {
+          "path": "frontend/src/core/capabilities/permissionFeatures.ts",
+          "sha256": "c806d21c3603b017d61723cdd68765b4bb73db38d4f232516360f1f4a640bb66"
+        },
+        {
+          "path": "frontend/src/core/capabilities/permissionSpecs.ts",
+          "sha256": "21a708e259d5e501817c6f601878c7550036311a7d01d2137247e2af0020280a"
+        },
+        {
+          "path": "frontend/src/core/capabilities/permissionTypes.ts",
+          "sha256": "15751395e4550cdad72ba4e9e8d8ae2d3c19dd00baa0e63f5ff04880c02222be"
+        },
+        {
+          "path": "frontend/src/core/capabilities/transientPermissionErrors.ts",
+          "sha256": "bda266f0e576df6c2d2255d821378e0262ef1c94a8add6831d58159547b02699"
+        },
+        {
+          "path": "frontend/src/core/connection/connectivityPresentation.ts",
+          "sha256": "59001d59de5e41ba5bfeeb29d5342af822819359dec3cbc36e3f47935eb08ced"
+        },
+        {
+          "path": "frontend/src/core/contexts/KubernetesProvider.tsx",
+          "sha256": "4a5e923bb1fbfb7b72dcd0a68481bff16efc66321e23a90cace72f17a3b476b4"
+        },
+        {
+          "path": "frontend/src/core/events/index.ts",
+          "sha256": "46539dfaac3f1854c4cf8b6d16b01ee1c740ec81462c674b30de964d87efb506"
+        },
+        {
+          "path": "frontend/src/core/events/useEventBus.ts",
+          "sha256": "bb5cca4cee90be6c3220cb40a6bbf988073370ab7b0397d1d0f3e5f151ee4426"
+        },
+        {
+          "path": "frontend/src/core/logging/appLogsClient.ts",
+          "sha256": "5c4f112f5e3a967e5c985ed55fef9c2bb3f58add4da2e10f98582a360f59a28c"
+        },
+        {
+          "path": "frontend/src/core/refresh/backgroundClusterRefresher.ts",
+          "sha256": "f92b6a7e2a34ef8fe4b8fe65ef33fbab44e27acbe38ee74013501288178f1674"
+        },
+        {
+          "path": "frontend/src/core/refresh/clusterOverviewLifecycle.ts",
+          "sha256": "8d7d817fd5bedffb4366d2a95d6b12987ef79d39412b57acb01f1b27bc4a63ea"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useAutoRefresh.ts",
+          "sha256": "c147f05c86b3e5b12dc5ef4c99eeb80ed4bf6f873db1e91e09951153f272f566"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useAutoRefreshLoadingState.ts",
+          "sha256": "6096e26fec9b38c06fe66dec6a51afc543689a6240070894984933407db1b5b0"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useBackgroundClusterRefresh.ts",
+          "sha256": "b2bb9c1831c9568a2e9e136f5b33dd01771c1b5d31d7f0a1f7cc1e3938a96775"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useBackgroundRefresh.ts",
+          "sha256": "c65b104cb3f18d751f6eea7e97b3ab315e395c1b2bab7e03eed95d7c2bbc808c"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useMetricsAvailability.ts",
+          "sha256": "6119e80102226186577acca69573ab96565259270bcbf3bcfeb179b3e56c68b9"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useRefreshWatcher.ts",
+          "sha256": "1713de385441ccf97e05f67620adcbd1b60c036dc407df4ae4db9d4480aee96b"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useStreamSignalRefetch.ts",
+          "sha256": "5154789078b5889d4750bc300c54b3e6ca5ed46e48f55407b92dc20d919fa260"
+        },
+        {
+          "path": "frontend/src/core/refresh/contexts/RefreshManagerContext.tsx",
+          "sha256": "16ea43302f51ff43bdce67592fa5a61ccd2c2288809e7e84cebe1d8d15db8238"
+        },
+        {
+          "path": "frontend/src/core/refresh/loadingPolicy.ts",
+          "sha256": "db1eff21ace5a2602df7baa54d367388019e1dc21a05fd77f80fe16e110af51a"
+        },
+        {
+          "path": "frontend/src/core/refresh/refreshErrorNotifier.ts",
+          "sha256": "a5fd893c770ce78d47ef07b71421ca7ca758790fb2a3da3989660617e5b1f3cc"
+        },
+        {
+          "path": "frontend/src/core/refresh/snapshotMerge.ts",
+          "sha256": "e71143d727b9de8bd5ae93474d34af4164fa054e3797c38ecee6c8bf8b6040a8"
+        }
+      ],
+      "inspection": "Fully inspected capability metadata and transient errors, connectivity priority stages, provider nesting, event callback ownership, application logging, background refresh class/hooks, preference consumers, loading policy, error notifier, snapshot sharing and stream-clock refetch. Traced RefreshManager callback admission/timeouts/unsubscribe and both object-panel watcher consumers.",
+      "candidates": [
+        {
+          "id": "D067-C01",
+          "disposition": "implemented",
+          "decision": "Replace cross-effect subscription ref and repeated teardown guards with effect-local ownership. Callback counts belong to each subscription; detached callbacks cannot clear a replacement subscription busy state and overlapping callbacks keep busy until the final completion. Background refresher likewise belongs to one effect, retaining latest callback refs. Remove unused running/updateCallbacks class API after all-source consumer search."
+        },
+        {
+          "id": "D067-C02",
+          "disposition": "implemented",
+          "decision": "Await backend logging inside its existing containment boundary; public log functions remain void and invoke the bridge immediately. Remove no-op normalizeLevel. Native rejected-promise regression uses a plain fake bridge because Vitest mock promise observation masked the first attempted red test."
+        },
+        {
+          "id": "D067-C03",
+          "disposition": "implemented",
+          "decision": "Collapse identical settled connectivity payloads to one return with conditional status, preserving every string and priority stage."
+        },
+        {
+          "id": "D067-C04",
+          "disposition": "implemented",
+          "decision": "Resolved by D069: owner-backed useSyncExternalStore subscriptions for the three preference consumers, with hydration-gap red/green test."
+        },
+        {
+          "id": "D067-C05",
+          "disposition": "retained",
+          "decision": "Keep declarative permission features/specs, Kubernetes provider ordering, latest-callback event refs, explicit refresh/background domain policy, scope-keyed source clocks, and per-domain error deduplication/grace. Snapshot merge retains stable row references and distinct pod identity matching; no generic merge rewrite justified."
+        }
+      ],
+      "contracts": [
+        "RefreshManager snapshots callbacks and races their promises with timeout; unsubscribe does not join in-flight callbacks. Object events and details consumers may finish after re-registration. Background ticks remain independent per-cluster snapshot requests with namespace support before content; catalog Browse/custom stays passive. Log failures cannot recursively log their own failure."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d067-red.log: two refresh lifetime failures; /tmp/luxury-yacht-d067-logging-red.log: two unhandled bridge rejections. /tmp/luxury-yacht-d067-background-baseline.log: existing class and new hook characterization pass. /tmp/luxury-yacht-d067-green.log:75 tests/11 files pass including object-panel consumers. Coverage/typecheck/complexity and final gate pending."
+      ]
+    },
+    {
+      "id": "D068-resource-metrics-identity-and-adapters",
+      "files": [
+        {
+          "path": "frontend/src/core/resource-metrics/index.ts",
+          "sha256": "50866e20a5ff2344a1bfdc106ba8d4589fddea98c6c9d465892baf023fd2c91e"
+        },
+        {
+          "path": "frontend/src/core/resource-metrics/scope.ts",
+          "sha256": "c35d0cac4ed93d22025f142a2dd4c5c13bce534d1d3356a1275b9ca14c1a45a5"
+        },
+        {
+          "path": "frontend/src/core/resource-metrics/selectors.ts",
+          "sha256": "8db9b32f871c62d9b8e46f26184422337dc4a5d77525ecd3d29edcf212fff5d2"
+        },
+        {
+          "path": "frontend/src/core/resource-metrics/types.ts",
+          "sha256": "30e621789437411cfe9dd47a9d128cb71f0015d1c4281d28aa1809c54ae2241b"
+        },
+        {
+          "path": "frontend/src/core/resource-metrics/useResourceMetrics.ts",
+          "sha256": "6b4c6d8b297519c0a3d431c76cb84052e4790e475234ee0e51819fdc8c946b17"
+        },
+        {
+          "path": "frontend/src/core/resource-metrics/valueAdapters.ts",
+          "sha256": "d5f99bb0efa81e82d96d560da48dc0379be9bbc3b538564e287e87891edecbe7"
+        }
+      ],
+      "inspection": "Fully inspected resource metrics scope, selectors, domain lease, DTO adapters and exports with producer/consumer docs, shared identity validator and canonical row types. Traced panel hook and table adapters.",
+      "candidates": [
+        {
+          "id": "D068-C01",
+          "disposition": "implemented",
+          "decision": "Carry validated full reference in domain resolution instead of building it twice. Validate required GVK at entry and match the built-in group/version before selecting typed metrics; custom kinds colliding with built-in names stay unsupported. Replace three partial comparisons with one full cluster/GVK/namespace/name predicate."
+        },
+        {
+          "id": "D068-C02",
+          "disposition": "implemented",
+          "decision": "Pod and workload CPU/memory field adapters are identical on their local table row shape; export the existing workload adapters for both consumers. Preserve public names and direct field access rather than introduce allocation-heavy generic metric projection."
+        },
+        {
+          "id": "D068-C03",
+          "disposition": "retained",
+          "decision": "Keep ReplicaSet detail exception until direct/resolved owner identity exists in pod rows, base-domain leases plus source-clock refetch, and distinct node/overview field adapters. These preserve producer data shapes and metrics timing."
+        }
+      ],
+      "contracts": [
+        "Metrics selection must not cross cluster, group, version, kind, namespace or name. The same validated reference now owns both scope and row selection. Canonical backend identity lookup determines supported built-in API group/version; no new identity registry."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d068-metrics-red.log:13 failures for custom/wrong-version/missing-GVK routing and selector mismatch. Focused green running; coverage and native checks pending.",
+        "/tmp/luxury-yacht-d068-metrics-green.log passes135tests/11files, including metric selectors, table adapters and panel consumers. Typecheck final passes after restricting selector row input to its actual identity fields."
+      ]
+    },
+    {
+      "id": "D069-refresh-preference-read-ownership",
+      "files": [
+        {
+          "path": "frontend/src/core/refresh/hooks/useAutoRefresh.ts",
+          "sha256": "596d82560bb0b0c2aa9657cb0243e5604fe327913a7c0dbbe6dd151880f9a3bf"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useBackgroundRefresh.ts",
+          "sha256": "ac6df41895c3c5250c3d6f57e2ec2a035d4ce3d4c49103917ce92a1fb8179288"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useAutoRefreshLoadingState.ts",
+          "sha256": "330edb20b293a91589f05ffaf75658d9fae26640e54f266a2a96f1115b6b48ec"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useRefreshPreferences.ts",
+          "sha256": "bd631c1625d4318a20ee00bd5d7cf9c9b340752b7bcd52eb0bda4cf0cde210d4"
+        }
+      ],
+      "inspection": "Follow-up on D067-C04; traced preference publication before event dispatch and actual cache getters plus all three consumers and visibility pause initialization.",
+      "candidates": [
+        {
+          "id": "D069-C01",
+          "disposition": "implemented",
+          "decision": "Replace local copies plus effect subscriptions with two cache-backed useSyncExternalStore value hooks. Preserve setters, toggle behavior, visibility pause and manual loading-count ownership. Existing event tests now update the fake cache before notifying, matching the inspected producer contract."
+        }
+      ],
+      "contracts": [
+        "PublishPreferences sets the cache before emitting changes; subscriptions read the same cache and React checks render-to-subscription changes. No provider or dependency cycle introduced."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d069-preferences-red.log reproduces missed hydration in auto/background hooks. /tmp/luxury-yacht-d069-preferences-green.log passes79tests/8files including persisted preference rollback. Latest typecheck passes after ES2020 promise compatibility correction."
+      ]
+    },
+    {
+      "id": "D070-container-log-connection-lifetime",
+      "files": [
+        {
+          "path": "frontend/src/core/refresh/streaming/containerLogsStreamManager.ts",
+          "sha256": "88fa137767950e330ed2a8fd2be01868e681cc22ce680bfcda48f4570db5b8d2"
+        },
+        {
+          "path": "frontend/src/core/refresh/streaming/streamVisibilityController.ts",
+          "sha256": "9bdeee7d6e14017ecdbab874b366ed09ee3b2dce359f073ee3fd321691b8287b"
+        }
+      ],
+      "inspection": "Fully read 658-line log manager, validators, connection callbacks, buffer projection, stats, preferences and visibility ownership. Traced streaming orchestrator and shared resource-stream visibility usage and existing log tests.",
+      "candidates": [
+        {
+          "id": "D070-C01",
+          "disposition": "implemented",
+          "decision": "The connection owns its manual completion promise rather than receiving optional callback pairs. Closing settles a canceled refresh; failures reject before transport teardown. Manager alone publishes idle state; remove duplicate error publication. Completed manual cleanup checks current connection identity before deleting it."
+        },
+        {
+          "id": "D070-C02",
+          "disposition": "implemented",
+          "decision": "Retain stopped connections in the demand map during visibility suspension and use the existing resumeItems callback to resume current ownership, as resource streams already do. An explicit hidden stop removes demand. Reset iterates connections plus retained buffers/warnings so disconnected manual data is also reset."
+        }
+      ],
+      "contracts": [
+        "No change to buffer replacement/empty-handshake retention, sequence identity, backlog trimming, warning propagation or stream reconnection delays. Mode is derived from presence of owned manual completion. Cancelled work resolves quietly; rejected transport operations remain rejected."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d070-logs-red.log:four failures (unsettled cancellation, replacement deletion, retained reset, hidden resurrection). /tmp/luxury-yacht-d070-logs-green.log:399tests/18files pass including orchestrator/resource streams/log consumers. Initial typecheck found Promise.withResolvers unavailable in ES2020 and a structural index signature mismatch; replaced with a local compatible deferred and selected identity fields. /tmp/luxury-yacht-d070-typecheck-final.log passes. Focused rerun after this correction, coverage and final gate pending."
+      ]
+    },
+    {
+      "id": "D071-diagnostics-projection-and-polling",
+      "files": [
+        {
+          "path": "frontend/src/core/refresh/components/DiagnosticsPanel.css",
+          "sha256": "e477a90ed847c93faca4459cb97ddcb03734d79028cf82c841321b2b109cd7d4"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/DiagnosticsPanel.tsx",
+          "sha256": "f3e662aaa6c468f3ae3867f41b41807f8c8cd3d72c67b806078e41ead618772b"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/GridTablePerformance.tsx",
+          "sha256": "280732793f03cf2d035d7b6913e8133786a1a188f9d3c75e95b7b567d7c4695c"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/SummaryCards.tsx",
+          "sha256": "a36045ce590d5c568d2607bf5c6269c07066ccc773383ef1866cdb8603b4de1b"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/TableCapabilitesChecks.tsx",
+          "sha256": "e0cc4063bcb34e663d38405daca7b2e8fd0863d49d3030e9588d9a686058cc15"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/TableClusterData.tsx",
+          "sha256": "21cd967725f9f2fe5ed35d72d9f8e629ddd04fdf03bc101ad15ae40b16794e18"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/TableConnections.tsx",
+          "sha256": "730f5ccb1bc426203d09c1315ac13f2d8ea581009702b54d9f33d3fdaaf6cb3b"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/TableEffectivePermissions.tsx",
+          "sha256": "62dac15bb1df4e1bf80c0393526db8f7cb0945570a6665894348a2f8581e66a9"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/TableKubernetesAPIClients.tsx",
+          "sha256": "4a4a9756c0e91e9ba54c79755b9f6fbe85056319fb1d77189a79207abf5ab678"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/clusterDataRowModel.ts",
+          "sha256": "fbd29685606e035bd082bf210ff83ef12ac9aee187289e4ac7945e0868739885"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts",
+          "sha256": "51d5288c427df87d10551dace77bf24b0c52e45f1ea4ccc3ef3d2c709a7217fd"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/diagnosticsPanelTypes.ts",
+          "sha256": "0edd083cd9f851dbe4ea4ab185353eaf5a8499c6e9587aa8ac6d15b763b77c60"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/diagnosticsPanelUtils.ts",
+          "sha256": "cda0c6fd439e7736c00b3e97513f11418807abcb831c9f95d4f168609414d0c4"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/diagnosticsRowModel.ts",
+          "sha256": "049cf80485110f93a36c81def07765cf30dc4ab484853937ba7a4670b2af75d9"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/index.ts",
+          "sha256": "3801b32b888ec476adbb7bc5e9ce3333fa2cb2b7c3bf12036e84f9e19c0be77d"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/modeDetails.ts",
+          "sha256": "9ad8cb3f6942a189468207d877d025872f123202be2a2cf017b5f393b49f3e74"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/useDiagnosticsPolling.ts",
+          "sha256": "e289944f5fe4ba081cf53933a7d71a2396777236d066f502c5d36077c4b4c03c"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/useDiagnosticsTableControls.ts",
+          "sha256": "f8f09c2c949d6ba0f500349b91b0944dda9fe5ba3d31abc7909eb3c89414093a"
+        },
+        {
+          "path": "frontend/src/core/refresh/diagnostics/useCatalogDiagnostics.ts",
+          "sha256": "f1cb30909f338b22dbb46e2a894ab7c9552188f7daed0c8a0bcb6834b586cdb0"
+        }
+      ],
+      "inspection": "Fully read every diagnostics implementation and its stylesheet, including all table consumers, row projections and polling. Traced refresh root publication, permission row ownership, performance signal derivation and actual async backend clients.",
+      "candidates": [
+        {
+          "id": "D071-C01",
+          "disposition": "implemented",
+          "decision": "Replace 29 duplicate scoped subscriptions with the existing root subscription and static domain metadata. Remove row fields and status projections absent from all inspected consumers; retain rendered warning/count and timing contracts."
+        },
+        {
+          "id": "D071-C02",
+          "disposition": "implemented",
+          "decision": "Include clusterId in row identity so identically named clusters keep separate diagnostics rows."
+        },
+        {
+          "id": "D071-C03",
+          "disposition": "implemented",
+          "decision": "Share search, expansion and pagination controls between capability tables; use the row handler for button bubbling to remove the double toggle."
+        },
+        {
+          "id": "D071-C04",
+          "disposition": "implemented",
+          "decision": "Project performance signals/counts once for sorting, overview, filtering and rendering; extract timing/churn cells without changing thresholds."
+        },
+        {
+          "id": "D071-C05",
+          "disposition": "implemented",
+          "decision": "Skip a polling tick while the previous allSettled cycle is pending; retain per-source errors, recovery and cancellation."
+        },
+        {
+          "id": "D071-C06",
+          "disposition": "implemented",
+          "decision": "Remove nine CSS selectors found only in this stylesheet by a repository frontend search."
+        }
+      ],
+      "contracts": [
+        "Publish-before-notify root store remains the owner; all table consumers use its scoped entries. Expansion remains accessible through button click and keyboard bubbling. Pending polling cannot overwrite a newer cycle because cycles no longer overlap.",
+        "Retain custom diagnostics tables: this batch does not replace their hierarchical and detail views with a different table implementation."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d071-diagnostics-red.log reproduces cross-cluster deduplication; expansion-red.log reproduces button double toggle; polling-red.log reproduces overlapping polls.",
+        "/tmp/luxury-yacht-d071-focused-green.log:168 tests/20 files. /tmp/luxury-yacht-d071-final-green.log:115 tests/12 files after complexity extraction. /tmp/luxury-yacht-d071-polling-green.log:28 tests. /tmp/luxury-yacht-d071-typecheck-final.log passes.",
+        "/tmp/luxury-yacht-d071-complexity-final.log:133 changed/new TS functions have no >12 findings, with two unchanged findings separately retained. Full frontend coverage and native/final checks pending."
+      ]
+    },
+    {
+      "id": "D072-project-and-packaging-tooling",
+      "files": [
+        {
+          "path": ".claude/hooks/impact-gate.sh",
+          "sha256": "9868fa28fa9b9e45ad350de9c05b2a6af83ee17860264534860e61a5d2863ba8"
+        },
+        {
+          "path": ".github/actions/install-nsis/install-nsis.ps1",
+          "sha256": "d133fd6e2d3336873100c4cb827656735b2079f3bd97a1386a23bcb27a9c3af9"
+        },
+        {
+          "path": "build/linux/appimage/build.sh",
+          "sha256": "5de30454be5d53cc8554137e9d719ff2244e5418454e864e44c4378686b176d0"
+        },
+        {
+          "path": "build/linux/nfpm/scripts/postinstall.sh",
+          "sha256": "e96f133554a8d1f0a0b25ac5ebc0ccab6494bf0bec194e32ae0b4b62f8170375"
+        },
+        {
+          "path": "build/linux/nfpm/scripts/postremove.sh",
+          "sha256": "b875f928546aee7855cb1db9afc8ab3f1a8a34d43de5bbd62f7076d7ba9f3917"
+        },
+        {
+          "path": "build/linux/nfpm/scripts/preinstall.sh",
+          "sha256": "b875f928546aee7855cb1db9afc8ab3f1a8a34d43de5bbd62f7076d7ba9f3917"
+        },
+        {
+          "path": "build/linux/nfpm/scripts/preremove.sh",
+          "sha256": "b875f928546aee7855cb1db9afc8ab3f1a8a34d43de5bbd62f7076d7ba9f3917"
+        },
+        {
+          "path": "build/linux/package-manager-drill.sh",
+          "sha256": "4a598b2b66d8881f02410ce9270461fb3cea4840113ae75cd57ebba5eaa06a31"
+        },
+        {
+          "path": "build/linux/portable/install.sh",
+          "sha256": "e37ef099502c10d61be005a982e4b17a0e3d42a75e72634bbd8be1dd08c31628"
+        },
+        {
+          "path": "build/windows/nsis/project.nsi",
+          "sha256": "e758963f1403b2aaab2e60e2b9c4a2f70023676e3724c6bf66e7f6543072b041"
+        },
+        {
+          "path": "build/windows/nsis/project_metadata.nsh",
+          "sha256": "42ce1b3feb8b282c1a07bd9ccff46a33b59bb9064fcf92807c39e65507325924"
+        },
+        {
+          "path": "build/windows/nsis/wails_tools.nsh",
+          "sha256": "6d3073b9807a3a589c3646a01265d8d0f217fa75ba189270d0e2e574c9ab7e65"
+        },
+        {
+          "path": "build/windows/package-drill.ps1",
+          "sha256": "3ea3ceecf0970e80f815a67d3951e6d431881e91e3faba5015de13093099c3f6"
+        },
+        {
+          "path": "cmd/project/app_state.go",
+          "sha256": "cdbba93a73307be3dbcea4069d8e8dd1881eca40fb45514933f1c10e8ba75a6d"
+        },
+        {
+          "path": "cmd/project/build_metadata.go",
+          "sha256": "e52cefc60e85bb3491bf295ae62d93bf79a6efb18e16cf3d3f514991b90d6400"
+        },
+        {
+          "path": "cmd/project/clean.go",
+          "sha256": "dc8acd86a1edadbca701e61ad4d511290d5e8e6b471b61a41b204078f1625920"
+        },
+        {
+          "path": "cmd/project/command.go",
+          "sha256": "7babcf42840d8a6231a7295b517384ef5ca3a44356e2d4d60517e3ebd1c130fe"
+        },
+        {
+          "path": "cmd/project/go_modules.go",
+          "sha256": "b63f316337fc69b1031e4d5474d1810a4c280aa56dd0fafc8025d50c6d68b9fa"
+        },
+        {
+          "path": "cmd/project/install_unsigned.go",
+          "sha256": "3b0d8fafa0234c91ea04d3b6a756b9fffc7fc458bfa28ee8ae29bee225f18d3d"
+        },
+        {
+          "path": "cmd/project/linux_portable.go",
+          "sha256": "77eabfac613d913426b4e1d10383e6cacbe7eda2b3747e2c8a3695ffe294f060"
+        },
+        {
+          "path": "cmd/project/main.go",
+          "sha256": "d213be11da53b9880d8992edc65bc027051822be8029a898c4aa8169f80bb9c1"
+        },
+        {
+          "path": "cmd/project/platform_manifests.go",
+          "sha256": "bc34a551953c3ba1078a19a33cbd4ae645fcc54aa840de2a671b6f2570d73e14"
+        },
+        {
+          "path": "cmd/project/project_config.go",
+          "sha256": "9c3de95f953f097ca39d71f8ccab0192dee323a6b63083b67056a061a5447877"
+        },
+        {
+          "path": "cmd/project/quality.go",
+          "sha256": "e09ba5d08707a98657d2f472b35a5574e3ae215112842180a94a2f744981e800"
+        },
+        {
+          "path": "cmd/project/release.go",
+          "sha256": "c77671ca8add8289319da8f70211e231ff5f90caa69517a948686c3e102f0c54"
+        },
+        {
+          "path": "cmd/project/release_draft_drill.go",
+          "sha256": "919f7cfaa8014f71ad2da09cf01d401d7a5a563709d5ad43b75e16b8316fa83b"
+        },
+        {
+          "path": "cmd/project/site.go",
+          "sha256": "24c0f9bbb61c977af91d6eac3b7b8dab43e8970b7257361518162d1dbbb4225a"
+        },
+        {
+          "path": "cmd/project/tool_versions.go",
+          "sha256": "4cd83108bbee70112680f413c4c3fddef561651edad8630c7b74c551f4d5c7c7"
+        },
+        {
+          "path": "cmd/project/updater_release.go",
+          "sha256": "69effce02e62a0df75d9566e96819f30dd0ea0f660bbb6969c519b59cdb66270"
+        },
+        {
+          "path": "cmd/project/updater_release_entry.go",
+          "sha256": "dc5d5ac309d4eb21f7c8f0ea32fecd64098827da5654d8e4f76269e8f05ba0d5"
+        },
+        {
+          "path": "cmd/project/windows_updater.go",
+          "sha256": "9f61ded07a78f8a1ddf32be0fa05cee8e3c277fb80211556b7220de97ea51301"
+        },
+        {
+          "path": "cmd/project/windows_version.go",
+          "sha256": "92ff8698963ec52a81d3cdffbe5f6d53a3b9800723948085a3f5597ac01d7a00"
+        },
+        {
+          "path": "main.go",
+          "sha256": "e557de00cc1d07fcc286cf2b091576c4697fe2a8e495dc217ca2e5b01abb25e5"
+        }
+      ],
+      "inspection": "Fully read every remaining project command implementation, Linux/Windows installer and package drill, NSIS macros, install action and Claude impact hook. Traced Taskfile and release workflow call sites. Inspected updater tests and ran the complete project package before changes.",
+      "candidates": [
+        {
+          "id": "D072-C01",
+          "disposition": "implemented",
+          "decision": "Unify parsed and typed updater target validation/ordering with one selection owner; preserve first invalid input, duplicate rejection, canonical platform order and caller input immutability. Remove rank maps and repeated sort policies."
+        },
+        {
+          "id": "D072-C02",
+          "disposition": "implemented",
+          "decision": "Expected artifact names use a set because collection consumes membership only. Remove the pass-through macOS archive validator and call updateconformance directly in production and existing tests. Format copy/close errors independently and join them at one return."
+        },
+        {
+          "id": "D072-C03",
+          "disposition": "retained",
+          "decision": "Keep platform-specific install identity, path/symlink checks, NSIS scope and registration ownership, portable temporary-file commit order and updater close-error checks explicit. Do not combine these into generic file or platform wrappers."
+        },
+        {
+          "id": "D072-C04",
+          "disposition": "retained",
+          "decision": "Keep release staging, signature verification, draft publication and disposable draft recovery separate. Grit/installer and script entry points remain in their owning toolchain; the generated-header NSIS helper was inspected but not edited."
+        }
+      ],
+      "contracts": [
+        "Preserve side-effect ordering and existing validation boundaries. No release, installation, Git mutation or external publication was executed by this review."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d072-tooling-baseline.log passes complete project tests. Target ordering/immutability/error precedence characterization passes before changes in targets-baseline.log. /tmp/luxury-yacht-d072-tooling-green.log passes project and updateconformance packages. /tmp/luxury-yacht-d072-go-complexity.log:144 changed/new Go functions <=12. Latest prerelease gate pending."
+      ]
+    },
+    {
+      "id": "D073-frontend-tooling-and-boundary-exports",
+      "files": [
+        {
+          "path": "frontend/.storybook/decorators/AppearanceModeProviderDecorator.tsx",
+          "sha256": "a99783b843258315a0419f64f25c7f9f7cab6b6654969b9ad548b80a9fe12988"
+        },
+        {
+          "path": "frontend/.storybook/decorators/KeyboardProviderDecorator.tsx",
+          "sha256": "476d9d046e58a35810053c819d31b5feaf20bc927d5c2c061624ffd6b6e8a17c"
+        },
+        {
+          "path": "frontend/.storybook/decorators/KubeconfigProviderDecorator.tsx",
+          "sha256": "3be6010d4eac1d8fc8c692ed84562dfc095e60f744ea18fc124bd59ea3bce92d"
+        },
+        {
+          "path": "frontend/.storybook/decorators/SidebarProvidersDecorator.tsx",
+          "sha256": "442e122c2a32ef0cee08e4a269719e3c2ea16f1368237dbcc81842de909fe51b"
+        },
+        {
+          "path": "frontend/.storybook/decorators/ZoomProviderDecorator.tsx",
+          "sha256": "34664d2b064a45418b1071d7b697ef438e2b3d0ba8c12bc6e6db15876efdae23"
+        },
+        {
+          "path": "frontend/.storybook/main.ts",
+          "sha256": "6e43b227d87d51e1ba2a3ca79820dfa4b790c5a307a2dd9a2d23fba0e9e86236"
+        },
+        {
+          "path": "frontend/.storybook/mocks/wailsBackendApp.ts",
+          "sha256": "1b7c2d161fb0313f04f8058b914b9a3eaeca698bebcaf8a095f2ddfda96e8e80"
+        },
+        {
+          "path": "frontend/.storybook/mocks/wailsBackendSettings.ts",
+          "sha256": "15b6107d13ad3b7383a9d0137a27ed00d116f936ccf61e2c99742cf9e11df05d"
+        },
+        {
+          "path": "frontend/.storybook/preview.ts",
+          "sha256": "3420f46e5cd63a0600e5f75cb4f854e6f369535d249c71c5055ade65ed18f3f1"
+        },
+        {
+          "path": "frontend/.storybook/wailsTransport.ts",
+          "sha256": "5f02e753ecd5210818ae7bfb524d568d542ca4757a984a39c300d0dce4a4ad51"
+        },
+        {
+          "path": "frontend/biome-plugins/no-direct-cluster-workspace.grit",
+          "sha256": "ede277c64cfe9d00651588082765a1e89b2b9f18042d6ec71a0b97ebeb87fead"
+        },
+        {
+          "path": "frontend/biome-plugins/no-direct-console-error.grit",
+          "sha256": "0bbcc6a4d489e2fc31d571f4eaf35e5dd0dde3b29bc9ffccb1c4d09ce2f858fd"
+        },
+        {
+          "path": "frontend/biome-plugins/no-direct-fetch.grit",
+          "sha256": "6ad95a69e1ad1b4448fd48c92eed18b1eafb0255740c3aaa6b17ace1e5d69a51"
+        },
+        {
+          "path": "frontend/biome-plugins/no-direct-permission-read.grit",
+          "sha256": "310169efc2b8e755f9f1d6fcb146f7f56dd0329c3da2bdb3971cd39d199870e3"
+        },
+        {
+          "path": "frontend/biome-plugins/no-direct-refresh-orchestrator.grit",
+          "sha256": "0738f9718f2d695c5ef8c73aa25cd874cd36110ef8e8b4c3b782afba2054b521"
+        },
+        {
+          "path": "frontend/biome-plugins/no-inline-error-text.grit",
+          "sha256": "51caf835e7df455e295c9d09908a66b4c4e11af0c8b4a7757e221fbc7f0b424b"
+        },
+        {
+          "path": "frontend/index.html",
+          "sha256": "b38494bb9f3ae2c73351a3b706f16ba1a1583335192405c49bf2427ae62e3e6e"
+        },
+        {
+          "path": "frontend/scripts/check-biome-suppressions.mjs",
+          "sha256": "fb7f98a598d403c5e7bff8211f668051a69aa83bd5e1c61816fc7fee44b89814"
+        },
+        {
+          "path": "frontend/scripts/check-error-reporting-boundaries.mjs",
+          "sha256": "70fdef31eeb26e29dbec5d95756c9ec344dad0f8e377e53949aeb8328be56de5"
+        },
+        {
+          "path": "frontend/scripts/check-typescript-s3776.mjs",
+          "sha256": "b40a76f9109e04792dac8326d9e698c20f5975066a87faf79503e43d7e76b594"
+        },
+        {
+          "path": "frontend/src/core/backend-api/index.ts",
+          "sha256": "27e179e3f94813d8f5eba4c03edfdf1ab8d84aacbcca67ed10e08d66ccd13de3"
+        },
+        {
+          "path": "frontend/src/core/backend-api/models.ts",
+          "sha256": "8d0df64f2203cae1d54907d5e492cb9ff47008e9895b7bcda388cf6262444ee9"
+        },
+        {
+          "path": "frontend/src/core/refresh/index.ts",
+          "sha256": "787e07b209824090aebccaad89c5e400f3bf75475aaae5f8150fd2b42733ac50"
+        },
+        {
+          "path": "frontend/src/core/window-identity/index.ts",
+          "sha256": "c51fc96d40504ccb420e0ad6510f5a658bede9c32e813fe97020d5d14805db54"
+        },
+        {
+          "path": "frontend/src/types/global.d.ts",
+          "sha256": "0420466c6777e6eb81aa10be88eabb26efde949b86a7c9c32b5979d396bf2d51"
+        },
+        {
+          "path": "frontend/src/types/storybook.d.ts",
+          "sha256": "23e303b4d1083f4a9611c1aa8dbae8d4fa3464a08b7c8d3ea8dd2b181443e0f4"
+        },
+        {
+          "path": "frontend/src/vite-env.d.ts",
+          "sha256": "ee9a45d862f80295fda8e5009b32ea7fb8a0b32c2a8361e38944a061a756658b"
+        },
+        {
+          "path": "frontend/vite.config.ts",
+          "sha256": "6237768feccdfe7c15ea899f4f02f9bb513ba0f88bb1fe84db8dcca9a82f86c4"
+        }
+      ],
+      "inspection": "Fully read Storybook setup/decorators/transport/mocks, Biome boundary patterns, the 814-line typed error taint checker, suppression scanner, Sonar API/baseline checker, Vite configuration, startup HTML and explicit backend/model/refresh exports.",
+      "candidates": [
+        {
+          "id": "D073-C01",
+          "disposition": "retained",
+          "decision": "Preserve symbol-aware taint propagation to a fixed point, independent source seeding, branch-specific rendering checks, scoped TypeScript snapshots and dispose ordering. These are distinct analysis responsibilities, not duplicate application state."
+        },
+        {
+          "id": "D073-C02",
+          "disposition": "retained",
+          "decision": "Preserve Sonar pagination/network retry, monotonic baseline checks and PR issue reporting. Do not substitute local scores or loosen thresholds."
+        },
+        {
+          "id": "D073-C03",
+          "disposition": "retained",
+          "decision": "Keep explicit generated-binding exports and provider-specific Storybook decorators, shared override transport, CSS bootstrap and Sentry build-mode gating. Similar mock defaults serve independent story scopes; merging them would couple those scopes without reducing production ownership."
+        }
+      ],
+      "contracts": [
+        "Preserve side-effect ordering and existing validation boundaries. No release, installation, Git mutation or external publication was executed by this review."
+      ],
+      "checks": [
+        "Read-only inspection: no source changes or new validation claims. The existing full frontend task covers Storybook transport and Vite tests; script checks remain part of the final gate."
+      ]
+    },
+    {
+      "id": "D074-shared-controls-and-tooltip-lifetime",
+      "files": [
+        {
+          "path": "frontend/src/core/codemirror/nativeActions.ts",
+          "sha256": "f52d27a586d265bf5a55c070a59d3073c868bfb09e36e702af077efd79b76520"
+        },
+        {
+          "path": "frontend/src/core/codemirror/search.ts",
+          "sha256": "6568a12e6409e39384581d5bf0f65a62fec8a3870307b208ed28eededebe6e60"
+        },
+        {
+          "path": "frontend/src/core/codemirror/theme.ts",
+          "sha256": "4d9a5af0c4d93c5b48c62c7295e045aa9f819f24ce85e2b3aa08499bf1073e2d"
+        },
+        {
+          "path": "frontend/src/shared/components/ActiveFilterChips.tsx",
+          "sha256": "cc410ed168fe8ac4a144f962650565ed437bacc6dee727907dfb4348d73628b4"
+        },
+        {
+          "path": "frontend/src/shared/components/ClusterDataPausedState.tsx",
+          "sha256": "85e41774ad022d66f705fd287d06db5bc51886bf8b5f4e31d9334efed30b7d4e"
+        },
+        {
+          "path": "frontend/src/shared/components/ContextMenu.css",
+          "sha256": "91dffcacf761fc12aec6de22fcbe4ea6560970e646693320b01ecd6293a198aa"
+        },
+        {
+          "path": "frontend/src/shared/components/ContextMenu.tsx",
+          "sha256": "11925b520cb019bfa6abb6fda56f84728ba163d4fa1a0da8002e60e4d446f57b"
+        },
+        {
+          "path": "frontend/src/shared/components/LiveAgeText.tsx",
+          "sha256": "c7b128c85244675ff72d4a0c1126381e6d3ddd46fd1b463ae617a15fb7227d18"
+        },
+        {
+          "path": "frontend/src/shared/components/LoadingSpinner.css",
+          "sha256": "c7b0877b17f3ec6596159211ccf8d4858572265909bef44607494f40fc2e40c6"
+        },
+        {
+          "path": "frontend/src/shared/components/LoadingSpinner.tsx",
+          "sha256": "2379c369ff0caa1240bbe716c4a3bfed23ea6e1ae0e065a37f826eb342cda717"
+        },
+        {
+          "path": "frontend/src/shared/components/ResourceBar.css",
+          "sha256": "9913a60da8535295ca6c03c51e190aaedb87d97b8ecf36712490b28533baee0f"
+        },
+        {
+          "path": "frontend/src/shared/components/ResourceBar.tsx",
+          "sha256": "ba5cecd6418590c637204e320cd65d9d9dadaea09ea091c85f7a881438182475"
+        },
+        {
+          "path": "frontend/src/shared/components/ResourceLoadingBoundary.css",
+          "sha256": "754a03d17f1c28ad05f62bdfb69e44e99035ea2f01f1485b7a012e577dee1ca4"
+        },
+        {
+          "path": "frontend/src/shared/components/ResourceLoadingBoundary.tsx",
+          "sha256": "4b14a2ded81ec6e858ee0d937579682fc4dc2d9538e33d84dbbc255b12b00bbc"
+        },
+        {
+          "path": "frontend/src/shared/components/ScrollableRegion.tsx",
+          "sha256": "b92509ee4846a78ef16a13577ea9523bf25088260327096817e599e39232768a"
+        },
+        {
+          "path": "frontend/src/shared/components/SegmentedButton.css",
+          "sha256": "f2e4d92cee4edde3ac23075eb4c891ea8266fdf7cf4edfc01b9b33d6ad305f52"
+        },
+        {
+          "path": "frontend/src/shared/components/SegmentedButton.tsx",
+          "sha256": "34e30495d5516d558fe9240c55006c9ddf1535e4248d69423fb3a8476e9b7c31"
+        },
+        {
+          "path": "frontend/src/shared/components/StatusChip.css",
+          "sha256": "c53b4ec0e46c8b0757f6926b7e28f56d628d472d493b311b29da5d1d832e705d"
+        },
+        {
+          "path": "frontend/src/shared/components/StatusChip.tsx",
+          "sha256": "8c5525220d05f80b29f0f9d25588720dcf207901e6d314428f881549a59b58da"
+        },
+        {
+          "path": "frontend/src/shared/components/ToggleSwitch.css",
+          "sha256": "d3e35f30eacf486e8af8153a40714e19ff8a795968f68543116e41a7e1ed0638"
+        },
+        {
+          "path": "frontend/src/shared/components/Tooltip.css",
+          "sha256": "e182d13c77e7b4e1c3e0677f5edd67cf8a05e86ce936bc7ddefa303058a230c3"
+        },
+        {
+          "path": "frontend/src/shared/components/Tooltip.tsx",
+          "sha256": "1ab08a2cff5abb069d84ac10aa4064759ee6728124269692e49ffb5b08f1daaa"
+        },
+        {
+          "path": "frontend/src/shared/components/aria/ListboxOptionButton.tsx",
+          "sha256": "a0b294b013b246b2dc57fee7c7c39e4888b0aa2bc2a4f2f4b51ed89941a9c9bb"
+        },
+        {
+          "path": "frontend/src/shared/components/dragReorder.ts",
+          "sha256": "2fe32480e77697411bd34455cf4b3c48599ea4c8400e88301c7e53eef060b4b9"
+        },
+        {
+          "path": "frontend/src/shared/components/dropdowns/dropdownValue.ts",
+          "sha256": "307d351e4d73a11d4866958eb4a83e401825b0f48896b59d877f7acb3e69de01"
+        },
+        {
+          "path": "frontend/src/shared/components/inputs/SearchInput.tsx",
+          "sha256": "2bb6ae831676dd6276f523ea21c12189873025bff96d1e181f36545302042df7"
+        },
+        {
+          "path": "frontend/src/shared/components/kubernetes/ActionsMenu.css",
+          "sha256": "02965ef74ec878baffe4dff4bdde2abd05bbc91475a5136432bc2f690bcf3bfc"
+        },
+        {
+          "path": "frontend/src/shared/components/kubernetes/ActionsMenu.tsx",
+          "sha256": "fcea6773b6fec4b4f5cacc6298f82b5c3dd9d15218f808ab9c6383a9b94b945a"
+        },
+        {
+          "path": "frontend/src/shared/components/kubernetes/ResourceHeader.tsx",
+          "sha256": "873532dcfbaf16846861e9c211387945b4072e8c2d7e60d5c3262b676c6205d1"
+        },
+        {
+          "path": "frontend/src/shared/components/kubernetes/ResourceMetadata.tsx",
+          "sha256": "d4b559a1a406a7593cd702ee6f4a68b518b39fa65525cba7ca5399b4454d9dfd"
+        },
+        {
+          "path": "frontend/src/shared/components/kubernetes/ResourceStatus.tsx",
+          "sha256": "2cd9eeed5da1fce4cf002f33254bae05c2987abfa1393642f072219247d378b4"
+        },
+        {
+          "path": "frontend/src/shared/components/resourceBarModel.ts",
+          "sha256": "fb8152fd1c5f3e40c7e60b9c899ffed1cbd392dea2f7b6d459aaed32e1834719"
+        },
+        {
+          "path": "frontend/src/shared/components/resourceBarThresholds.ts",
+          "sha256": "03d52ac894a040e6eab58fce978b7a5372f1538a209c11e39b3b5bbb8a35034c"
+        },
+        {
+          "path": "frontend/src/shared/components/status/StatusIndicator.css",
+          "sha256": "a15603c302e60642a043cf9c10fe65e2ac0d0d88ee59c46bcccafb068ecac417"
+        },
+        {
+          "path": "frontend/src/shared/components/status/StatusIndicator.tsx",
+          "sha256": "6f14775c2a5557bb52626d52494e1b75b1b51dec372220bb30afed4612f797e2"
+        },
+        {
+          "path": "frontend/src/shared/components/useTooltipKeyboard.ts",
+          "sha256": "4ebdebbc20904f85c13a30f540a15bce0cc670d035ff2e05938c34e9686db5f5"
+        },
+        {
+          "path": "frontend/src/shared/constants/errorCategories.ts",
+          "sha256": "d19e469cab79a8df7261964903c989bdf33328954233b03d6e1e63eae71d2b44"
+        },
+        {
+          "path": "frontend/styles/components/search-input.css",
+          "sha256": "eb1d82b8f7e29a3f9d8a70ded5267f0e07834d806a1d846828d4a82a198140d4"
+        }
+      ],
+      "inspection": "Read the full shared control implementations and styles, CodeMirror adapters and theme/search extensions, row dragging and Kubernetes metadata/status presentation. Traced search focus styling and resource-bar selector consumers before removing their duplicate bookkeeping.",
+      "candidates": [
+        {
+          "id": "D074-C01",
+          "disposition": "implemented",
+          "decision": "Search focus styling uses :focus-within instead of React focus state and handlers; resource bar drops an unread container ref and selectors with no JSX/story/test consumers."
+        },
+        {
+          "id": "D074-C02",
+          "disposition": "implemented",
+          "decision": "Tooltip timer cancellation has one owner per timer; pointer, touch and outside-scroll dismissal share the same containment policy."
+        },
+        {
+          "id": "D074-C03",
+          "disposition": "retained",
+          "decision": "Keep focus-return, interactive tooltip grace period, zoom coordinates, paused/loading ownership, resource warning thresholds, selected metadata values and native CodeMirror actions as separate contracts."
+        }
+      ],
+      "contracts": [
+        "Maintain keyboard focus, portal containment, timer cancellation and appearance. Resource thresholds and metadata filtering remain unchanged."
+      ],
+      "checks": [
+        "145 tests in 17 files passed: /tmp/luxury-yacht-d074-shared-green.log. Native focus/tooltip checks and final gate remain open."
+      ]
+    },
+    {
+      "id": "D075-modal-draft-request-and-mutation-ownership",
+      "files": [
+        {
+          "path": "frontend/src/modules/port-forward/PortForwardModal.css",
+          "sha256": "9f99b8ffd6e949b49d9070451f71b733bbdb39b084741b37858a1eea03053dac"
+        },
+        {
+          "path": "frontend/src/modules/port-forward/PortForwardModal.tsx",
+          "sha256": "8d000cb241e5f2f8fdb7f242096665940cf0fd64d68c928b89ab352d43852e20"
+        },
+        {
+          "path": "frontend/src/shared/actions/objectActionCapabilities.ts",
+          "sha256": "004c294cb498d9b3b55700e693499bf9237ab845b0ddce18e4898e8deed3a2dd"
+        },
+        {
+          "path": "frontend/src/shared/actions/objectActionClient.ts",
+          "sha256": "d2e55e766a107a866465923f9099ebfaf69f228e411c7be255c535b9cf408d39"
+        },
+        {
+          "path": "frontend/src/shared/components/diff/diffBudgets.ts",
+          "sha256": "73cbb0fb0975943bc6a2d540c23aca4c9bc8f5226bc576bba8a801148a7ed62a"
+        },
+        {
+          "path": "frontend/src/shared/components/diff/diffUtils.ts",
+          "sha256": "5b2b1880f0998dccea913f5e04142f82a75b53212a8d849a56a13f909fd474f3"
+        },
+        {
+          "path": "frontend/src/shared/components/drain/DrainProgressCard.css",
+          "sha256": "edbd615d285b077182fd71422ba5c7b007eb7fc9b67d177fc16d460db9c44a8c"
+        },
+        {
+          "path": "frontend/src/shared/components/drain/DrainProgressCard.tsx",
+          "sha256": "bd20c9ce11c368197f02fb6b8c3bd03371c0776d407c0c00ac8c6fb2517e80d9"
+        },
+        {
+          "path": "frontend/src/shared/components/drain/drainProgress.ts",
+          "sha256": "50047cc120dfa483e61b43898478b14646b09eebd28540c94ca3ac8f72508cc8"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/ConfirmationModal.css",
+          "sha256": "5ad2a100f1355d4a7d4663175324389d8423707708fc64923a59958a375fc774"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/ConfirmationModal.tsx",
+          "sha256": "2630fa74fc980381a2b19411bc26133439e66d8401dfaa64bdf2be0c96fc09e4"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/DrainNodeModal.css",
+          "sha256": "d05599e51d3461eb101a8f7a662f1e587767e7d7b826499dd55e7f71337cb33b"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/DrainNodeModal.tsx",
+          "sha256": "d69e522a5f663affad2562c3a1fbaed76fa1291ee446a3d533904c9d2f00962b"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/DrainNodeModalView.tsx",
+          "sha256": "91e16b8dfbaed3a29cae3188a5f50ea22be24d3009dbb1e5f7ef6693ce82dd85"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/ModalHeader.tsx",
+          "sha256": "dc662fb515d5a39e21770686ae3d688e6ea8ade70593b98dc23b662041de320d"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/ModalSurface.tsx",
+          "sha256": "ea6c8ab085e1fabc926d15ed4214f51bed1b967cd9ca2103745aef8e5e0d5a1f"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/RollbackModal.css",
+          "sha256": "d8b3535c7a90fe7c2d98ba336797049cbbaf629ba9d3a5bbe20c431da5920f6a"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/RollbackModal.tsx",
+          "sha256": "229fa0c5aa56f12bc241ed501d099ec443aceeb405ffde7030e5060d4d584d15"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/ScaleModal.css",
+          "sha256": "15ad7dafa8ec9e8bc9ac7c1e1ca4961d6ff83757c376d01ed755d60c54d3ffab"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/ScaleModal.tsx",
+          "sha256": "2930d93597747e87340c3582d904c56eeefa151d112619ec543072e50724defa"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/drainNodeModalModel.ts",
+          "sha256": "83bf594c34641bdf995e585b36c403e974facb475f52dcc6cae958bc5e9f32db"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/getTabbableElements.ts",
+          "sha256": "b2d804fe1aaf3b7c008b55b1b621631bc269912fa481393045e46e9dccb5c88c"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/useModalFocusTrap.ts",
+          "sha256": "45f6cdeaa8c17d01d03794bdfc67696a0d4528bd4f2cf26143cd279749464888"
+        }
+      ],
+      "inspection": "Read shared modal roots, focus stack, drain form/view/model/event presentation and rollback/port-forward workflows. Traced the object action builder, parent mutation counter, revision/port reads, full row identity helper and the modal draft contract.",
+      "candidates": [
+        {
+          "id": "D075-C01",
+          "disposition": "implemented",
+          "decision": "Port-forward uses the existing conditional content pattern keyed by complete object identity. One opening target initializes the draft and owns discovery. Background port updates no longer reset input; a new identity resets loading and cancels the old read."
+        },
+        {
+          "id": "D075-C02",
+          "disposition": "implemented",
+          "decision": "Rollback request cleanup discards obsolete cluster/history results. Sort revisions once when accepted. Count visible diff rows once. async try/catch/finally includes target construction so validation failures release the parent mutation counter."
+        },
+        {
+          "id": "D075-C03",
+          "disposition": "implemented",
+          "decision": "Confirmation defaults live with the content; wrapper forwards props once. Focus restoration captures its own prior element inside the registration effect. Drain enabling, startup refresh and disabling share one effect without changing their order."
+        },
+        {
+          "id": "D075-C04",
+          "disposition": "retained",
+          "decision": "Drain grace/timeout semantics, event rollup ordering, bounded plan scanning, phase/status labels, portal focus ownership, Scale controlled numeric draft and optional permission gates remain explicit."
+        }
+      ],
+      "contracts": [
+        "Reads retain cluster/GVK identity; obsolete read callbacks cannot publish into a new target. Modal draft is initialized once per open object. Action completion and validation failure balance the parent panel mutation guard. Enabling precedes startup refresh; cleanup disables the same scope."
+      ],
+      "checks": [
+        "Four new modal regressions failed before production edits: /tmp/luxury-yacht-d075-modal-red.log. Final focused suite: 89 tests /11 files passed in /tmp/luxury-yacht-d075-modal-green.log. Includes manual-refresh overlap/paused policy coverage. Native checks and final gate remain open."
+      ]
+    },
+    {
+      "id": "D076-dropdown-accessibility-ownership",
+      "files": [
+        {
+          "path": "frontend/src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
+          "sha256": "53e10ff66b9a1c7526df4051f5c767f4c8cbbf68befada8e21b155d071cde44d"
+        },
+        {
+          "path": "frontend/src/shared/components/dropdowns/Dropdown/DropdownFilterOption.tsx",
+          "sha256": "a4fd761d63303b29ddfdbffee5e05f083780cdf7af84774d19d90509ca8de04d"
+        },
+        {
+          "path": "frontend/src/shared/components/dropdowns/Dropdown/hooks/useAriaAnnouncements.ts",
+          "sha256": "04d8ae3f63754883cf66ff4d9281649e35905241dedf176f46826d8073952153"
+        },
+        {
+          "path": "frontend/src/shared/components/dropdowns/Dropdown/hooks/useDropdownState.ts",
+          "sha256": "b595ec516b9fee18d93290502c9019def2978ff021ca188add1a55b174a0214d"
+        },
+        {
+          "path": "frontend/src/shared/components/dropdowns/Dropdown/hooks/useKeyboardNavigation.ts",
+          "sha256": "d568a78b389716c1ad0d4ba34f8e252ab2c2664cd8996cc036105f7e47aa474c"
+        },
+        {
+          "path": "frontend/src/shared/components/dropdowns/Dropdown/index.ts",
+          "sha256": "6a51c4592c445b09ff8d0d79b66918e7ea9050dfa496d67bd33c841d40d46a5e"
+        },
+        {
+          "path": "frontend/src/shared/components/dropdowns/Dropdown/types.ts",
+          "sha256": "7b8850e1bd53662a4dbae7a07268670c191b84072f5b6bda629073b547a044cd"
+        }
+      ],
+      "inspection": "Read all 1,561 lines of Dropdown and its state, navigation, announcement and option helpers. Traced listbox/dialog/combobox semantics, focus portals, tab order, bulk/only actions, search ownership, placement and existing accessibility assertions.",
+      "candidates": [
+        {
+          "id": "D076-C01",
+          "disposition": "implemented",
+          "decision": "One trigger renders shared attributes, with explicit combobox and dialog/listbox differences instead of three duplicated button trees."
+        },
+        {
+          "id": "D076-C02",
+          "disposition": "implemented",
+          "decision": "One announcement timer owns the live region. New announcements cancel old clearing callbacks and unmount clears the timer; a stale collapsed-state timer cannot erase a newer selection announcement early."
+        },
+        {
+          "id": "D076-C03",
+          "disposition": "retained",
+          "decision": "Keep native dialog and listbox shells distinct, explicit virtual versus DOM focus, row-action keyboard exemptions, remote search, required/disabled choices, Only behavior, menu scroll restoration and zoom-aware placement."
+        }
+      ],
+      "contracts": [
+        "Retain ARIA roles and active-descendant relationships in all three modes. Preserve ordering among selection, highlight and open announcements while allowing the latest announcement its full interval."
+      ],
+      "checks": [
+        "New announcement interval regression failed before implementation: /tmp/luxury-yacht-d076-announcement-red.log. 81 tests /7 files passed: /tmp/luxury-yacht-d076-dropdown-green.log."
+      ]
+    },
+    {
+      "id": "D077-diff-and-yaml-surfaces",
+      "files": [
+        {
+          "path": "frontend/src/shared/components/diff/DiffViewer.css",
+          "sha256": "0b10ddace16c394e58f8802dd82efc7da208ab2d34177ff4f2bd5d1a54685055"
+        },
+        {
+          "path": "frontend/src/shared/components/diff/DiffViewer.tsx",
+          "sha256": "a471e37f0d926f1f2474721eae26eaead370bf44492a1942b0dd10eba6ffde12"
+        },
+        {
+          "path": "frontend/src/shared/components/diff/lineDiff.ts",
+          "sha256": "9b53dbd7bd317cf65fe96b197b9542d404256775e9dd4101000edbd479cc7dd5"
+        },
+        {
+          "path": "frontend/src/shared/components/diff/objectDiffSelection.ts",
+          "sha256": "f449300f5e23b158c0495d54c035b889971a8ecc64480eb8f0a8c710269c97d3"
+        },
+        {
+          "path": "frontend/src/shared/components/yaml/YamlEditor.tsx",
+          "sha256": "3444d3fb5dee9ce7d57982dd9561963ddd160eb5a05f257e877555103c7cb8c5"
+        },
+        {
+          "path": "frontend/src/shared/components/yaml/index.ts",
+          "sha256": "fbe61f52be3aab50f6eee9c3d6e13247bdf58ad8f6c2164307d4b63f9775d8a0"
+        },
+        {
+          "path": "frontend/src/ui/modals/ObjectDiffModal.css",
+          "sha256": "732512e3c473a50b3337155052a989502f58a41bff0465ef77e0c284761133e2"
+        },
+        {
+          "path": "frontend/src/ui/modals/ObjectDiffModal.tsx",
+          "sha256": "336b939650fe2079db91f929749ee692d84194b9da10d5f6d3f329ca94d219dd"
+        },
+        {
+          "path": "frontend/src/ui/modals/objectDiffUtils.ts",
+          "sha256": "9df85b0a888fe8b8ecd19be024e11aed7497ef4b92480577ae790510b8faca3e"
+        },
+        {
+          "path": "frontend/src/ui/modals/useObjectDiffYaml.ts",
+          "sha256": "2acb4e0da61e7e8ccd16ae012ea35f1a0b6f6549bc9695104ddc572684cc6775"
+        }
+      ],
+      "inspection": "Read the full diff viewer, Myers budgets/backtracking, YAML editor protection/search/native actions, 1,604-line diff modal and YAML metadata masking. Traced scoped snapshot registration, cascade controls, initial match requests, retained YAML, and complete selection identity.",
+      "candidates": [
+        {
+          "id": "D077-C01",
+          "disposition": "implemented",
+          "decision": "A shared useObjectDiffYaml owns both sides' identical scoped YAML lifecycle, retention, checksum notification, normalization and masking. Retention is keyed by cluster/GVK/namespace/name/UID and gated during render; equal UIDs in different clusters cannot carry old text."
+        },
+        {
+          "id": "D077-C02",
+          "disposition": "implemented",
+          "decision": "Initial and interactive left-side match lookups share the same request generation. Selection changes, close and teardown invalidate pending matches. Both lookup routes use one catalog read/validation boundary."
+        },
+        {
+          "id": "D077-C03",
+          "disposition": "implemented",
+          "decision": "Metadata indentation already expresses block activity; removed duplicate active flags and the repeated mark operation. Shared indentation-exit and field-name predicates retain YAML line-count/masking semantics. Removed three CSS selectors with no non-CSS consumers."
+        },
+        {
+          "id": "D077-C04",
+          "disposition": "retained",
+          "decision": "Preserve budgeted Myers traversal/backtracking, measured row virtualization and full-render selection escape, protected transaction filtering, native clipboard integration and search key ordering. Left/right selection state remains independently editable; catalog-stage and selection-handler policies already share helpers."
+        }
+      ],
+      "contracts": [
+        "Enabling precedes scoped user reads; release/reset affects the same scope. Retained YAML survives temporary refresh/error gaps only within full object identity. Initial request resolution must not override later selection or reopen a cancelled match. Visual line positions, muted values, budgets and protected editor fields remain unchanged."
+      ],
+      "checks": [
+        "Cluster/UID regression failed: /tmp/luxury-yacht-d077-diff-red.log. Every-render guard failed: /tmp/luxury-yacht-d077-render-identity-red.log. Obsolete selection and close failed: /tmp/luxury-yacht-d077-lookup-red.log and /tmp/luxury-yacht-d077-close-red.log. Diff/Browse combined 123 tests /14 files passed in /tmp/luxury-yacht-d078-browse-green.log. Local complexity and typecheck passed after final extraction: /tmp/luxury-yacht-d078-complexity.log, /tmp/luxury-yacht-d078-typecheck.log. Coverage and native verification remain open."
+      ]
+    },
+    {
+      "id": "D078-browse-catalog-query-and-presentation",
+      "files": [
+        {
+          "path": "frontend/src/modules/browse/components/BrowseView.css",
+          "sha256": "b42af3b59be0b862b050068e4b354d4bcf3e79edea4eb4c79491a05ccde2ce63",
+          "removed": true,
+          "status": "Deleted after full inspection; hash is committed source."
+        },
+        {
+          "path": "frontend/src/modules/browse/components/BrowseView.tsx",
+          "sha256": "3a09adbce7ab0990d64b6736cf4447893e754ea3ba1687d21966cd437053970b"
+        },
+        {
+          "path": "frontend/src/modules/browse/components/BrowseView.types.ts",
+          "sha256": "16bd24e56e285b942f2cf249b1e56a93b1af18983c0b2318175f322a1f55f387"
+        },
+        {
+          "path": "frontend/src/modules/browse/components/CatalogPaginationFooter.tsx",
+          "sha256": "44d3864a54a0b7bcb1e40a515b38a7aecdd49170f2b7549d28c5151c9f1d048b"
+        },
+        {
+          "path": "frontend/src/modules/browse/components/operatorColumns.tsx",
+          "sha256": "d813846d2ed46cffa4b42a8e2266b026af0de1055416184933e27e16e5ce9553"
+        },
+        {
+          "path": "frontend/src/modules/browse/hooks/browseCatalogData.ts",
+          "sha256": "a2a654d2783d232d23b3bda808e183e0670cacf2ce43f528484e10080366d091"
+        },
+        {
+          "path": "frontend/src/modules/browse/hooks/useBrowseCatalog.ts",
+          "sha256": "37cc51c3908fff55775f6958adbe3742019b3dfddb1c3a90958fb0cf2ed591cf"
+        },
+        {
+          "path": "frontend/src/modules/browse/hooks/useBrowseColumns.tsx",
+          "sha256": "856ee10cc49bd5021f35348b1012ae5a2e18e0ce4eee996d2c25a309d37d5040"
+        },
+        {
+          "path": "frontend/src/modules/browse/hooks/useCatalogBackedCustomResourceRows.ts",
+          "sha256": "528f515ad7488165928ce83ea9ecedb62f4b5593407a92574f24008dcf923da3"
+        },
+        {
+          "path": "frontend/src/modules/browse/hooks/useHydratedCustomCatalogRows.ts",
+          "sha256": "5086a2d2a64f5e850dc354e53fa5dafe7df3bdbf01f9d3c4d9cf838a7c2a0ff4"
+        },
+        {
+          "path": "frontend/src/modules/browse/utils/browseUtils.ts",
+          "sha256": "8f1dd08a2a82d544007b9614b2e12add1b88d7df71e23052c67918be3e54ede9"
+        }
+      ],
+      "inspection": "Read complete Browse view, catalog/page coordinator, scope utilities, hydration/export hooks, table columns, operator facts, footer and legacy styles. Traced action reference builder, tests for cursor replacement/scope/sort and repository selector consumers; inspected blame for the old toolbar styles and duplicated sort policy.",
+      "candidates": [
+        {
+          "id": "D078-C01",
+          "disposition": "implemented",
+          "decision": "Catalog scope building and the query descriptor share one sort normalization policy. Page and baseline application share token/count/exactness projection, then baseline reconciliation adds structural sharing. Canonical facet normalization iterates the four named facets in unchanged parameter order."
+        },
+        {
+          "id": "D078-C02",
+          "disposition": "implemented",
+          "decision": "Browse scope presentation is one exhaustive mapping of persistence id, labels and empty/loading messages. Action callbacks pass their complete input to the existing identity boundary instead of reconstructing it twice."
+        },
+        {
+          "id": "D078-C03",
+          "disposition": "implemented",
+          "decision": "Removed the legacy Browse stylesheet and both imports after searching every selector: its old toolbar, alert, spinner and column classes have no JSX/story consumers; Browse renders the shared inventory/GridTable controls."
+        },
+        {
+          "id": "D078-C04",
+          "disposition": "retained",
+          "decision": "Keep synchronous page-request admission and generation guards, separate quiet/user request gates, doorbell versus payload version tracking, cursor landing policy, initial/metadata query scopes, persisted hydration gating, scope-keyed facet retention and cross-page export drift checks. Hydration remains a batched read joined by full identity, with catalog membership authoritative."
+        }
+      ],
+      "contracts": [
+        "Canonical scope parameter ordering, sort defaults, explicit-none filters, namespace pins, same-scope row sharing, superseded page guards, approximate totals and cursor/offset exclusivity are preserved. Export and displayed hydration share their existing adapter."
+      ],
+      "checks": [
+        "123 tests /14 files passed before final complexity-oriented presentation extraction: /tmp/luxury-yacht-d078-browse-green.log. Final source typecheck passed and all 209 changed/new TS functions are <=12 locally: /tmp/luxury-yacht-d078-typecheck.log and /tmp/luxury-yacht-d078-complexity.log. Full frontend coverage on latest source is running: /tmp/luxury-yacht-d078-frontend-coverage.log."
+      ]
+    },
+    {
+      "id": "D079-frontend-foundation-and-backend-errors",
+      "files": [
+        {
+          "path": "frontend/src/hooks/useBackendErrorHandler.ts",
+          "sha256": "e9281a659a6f866dc725278820db57aee5b0202a67e5ad8bfb18e276af3dc8ef"
+        },
+        {
+          "path": "frontend/src/shared/actions/objectActionPolicy.ts",
+          "sha256": "b862774fc56b666081bdbefc1bc4d046e4c364dd24bcc1c6ca0564da9f83a1be"
+        },
+        {
+          "path": "frontend/src/shared/events/EventsGridView.tsx",
+          "sha256": "0f09d57622daf5ce52cf4502ff60dca41cbd2eca69e0dbe2d0781497465f205b"
+        },
+        {
+          "path": "frontend/src/shared/events/eventPresentation.ts",
+          "sha256": "d9bba84b6aa1bd7b44ee01cac7c24e7cd89d239ba6336342d9b56530d962fbd4"
+        },
+        {
+          "path": "frontend/src/shared/resources/resourceDescriptorSelectors.ts",
+          "sha256": "b307050dd378335a058fd5cb1decc9d09aefd56bd950c85fb99bce7bcaaf5fc6"
+        },
+        {
+          "path": "frontend/src/shared/terminal/terminalTheme.ts",
+          "sha256": "8b0edd96fd89a58703c6e725c7de7530d9de2bca11c27bc6f6f1afa0686808fe"
+        },
+        {
+          "path": "frontend/src/types/backend-events.ts",
+          "sha256": "03d30058ae408ede17ae0b49229b85e6dbcea36683b9706ea30a217a5cee072c"
+        },
+        {
+          "path": "frontend/src/types/navigation/views.ts",
+          "sha256": "b92801ad65c6c84cfa05ea1d33d8b4b022a2366121d4e46fbc6ba5734cf664e4"
+        },
+        {
+          "path": "frontend/src/types/shortcuts/index.ts",
+          "sha256": "d575c715f3adacd329f3f1885ba438b70f696000d5f260425a2ced4347452cd0"
+        },
+        {
+          "path": "frontend/src/types/view-state.ts",
+          "sha256": "91e144e7d2a5def358217ac23193d9a0a47dbea9fec9a0418ecb7d537fc4edde"
+        }
+      ],
+      "inspection": "Read full remaining foundational contracts, terminal palette observer, action policy, event presentation and descriptor selectors. Traced backend-error producers in fetch_helpers.go and application_lifecycle.go, generated event schema, App subscription and ErrorHandler context consumers.",
+      "candidates": [
+        {
+          "id": "D079-C01",
+          "disposition": "implemented",
+          "decision": "Backend-error deduplication now includes clusterId in an unambiguous tuple; reports retain that same clusterId, including empty identity for explicitly global stderr errors. Auth-overlay suppression remains its own predicate."
+        },
+        {
+          "id": "D079-C02",
+          "disposition": "retained",
+          "decision": "Preserve terminal observer sharing and token resolution, typed navigation/action vocabularies, pending permissions and HPA unknown/true/false policy. Existing event grid owns shared action and column behavior. Descriptor selectors keep their domain-specific parsing rather than introducing a generic metadata interpreter."
+        }
+      ],
+      "contracts": [
+        "Backend fetch events publish selectionKey as clusterId; startup stderr errors explicitly have no cluster. Equal failures in different clusters must be independently reported; repeats within a cluster remain bounded and deduplicated. No event-schema or dependency-order changes."
+      ],
+      "checks": [
+        "Two regressions failed and the error-handler suite passed: /tmp/luxury-yacht-d079-error-red.log, /tmp/luxury-yacht-d079-error-green.log. Included in D081 364-test run. Coverage/native/final gate remain open."
+      ]
+    },
+    {
+      "id": "D080-global-namespace-metric-ownership",
+      "files": [
+        {
+          "path": "frontend/src/modules/global/components/GlobalViewClusters.css",
+          "sha256": "0dce71fc84b86236ce9535de6119aee4880937646be16614ce6da51ea15d3148"
+        },
+        {
+          "path": "frontend/src/modules/global/components/GlobalViewClusters.tsx",
+          "sha256": "b7b1e00d3512ca86ab4ae87eca8191af219a2957c7da831f1480298f4043f879"
+        },
+        {
+          "path": "frontend/src/modules/global/components/GlobalViewNamespaces.tsx",
+          "sha256": "ed85996baaf7277eea3a4f5949e05063179431c8aae10648175e44ec744f2697"
+        },
+        {
+          "path": "frontend/src/modules/global/components/GlobalViews.tsx",
+          "sha256": "1839627f2e1b0ef10f34599d609dcb9e4e1a97bfef4a29eed6353416d63b655f"
+        },
+        {
+          "path": "frontend/src/modules/global/globalTableOwner.ts",
+          "sha256": "0d0ef3194c158a474e762d73e1aa83b799dc6a0808eb9bd1bd94ab18ced2042e"
+        },
+        {
+          "path": "frontend/src/modules/namespace/constants.ts",
+          "sha256": "4c8a0b4a3f1785328b1e9ec2449f726f1e55c9c75f489ff4e36a9aab05d8741f"
+        },
+        {
+          "path": "frontend/src/modules/namespace/contexts/namespaceMetrics.ts",
+          "sha256": "395936b5b27a7f47238d4cf329759a2c16d9ab5afd5e94882f04bf4fd818d799"
+        }
+      ],
+      "inspection": "Read full global views, cluster overview owners, global table identities, namespace metric join and namespace constants. Traced all namespace-metrics owners through NamespaceProvider, useScopedRefreshDomainLifecycle, data-access leases and orchestrator reference counts, including direct-disable suppression.",
+      "candidates": [
+        {
+          "id": "D080-C01",
+          "disposition": "implemented",
+          "decision": "Global namespace metric scopes use keyed owners and the shared lifecycle hook, replacing manual set reconciliation and unmount bookkeeping. NamespaceProvider also holds the same reference-counted lease. Enabling precedes startup/foreground reads; last release alone disables the scope."
+        },
+        {
+          "id": "D080-C02",
+          "disposition": "implemented",
+          "decision": "Global namespace metric payload lookup occurs once per cluster before joining and projecting its rows."
+        },
+        {
+          "id": "D080-C03",
+          "disposition": "retained",
+          "decision": "Global cluster overview already uses shared lifecycle owners. Preserve explicit lifecycle/snapshot readiness gates, complete identity joins, global persistence identity independent of membership, unavailable-cluster partial status and stage-before-activate navigation."
+        }
+      ],
+      "contracts": [
+        "The two namespace-metrics owners can overlap on the foreground cluster. Strict Mode teardown/replay and one owner unmounting must leave remaining demand enabled. Global metrics begin only after matching namespace membership exists; NamespaceProvider retains startup versus foreground reason ordering."
+      ],
+      "checks": [
+        "Strict Mode and overlapping owner regressions failed before the change: /tmp/luxury-yacht-d080-metrics-red.log, /tmp/luxury-yacht-d080-provider-red.log. 55 tests /4 files passed: /tmp/luxury-yacht-d080-metrics-green.log. Latest combined D081 364 tests passed."
+      ]
+    },
+    {
+      "id": "D081-cluster-and-namespace-view-construction",
+      "files": [
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterOverview.css",
+          "sha256": "e388b3a54fd46854424b7b4b1cc2e817d33b5dcf95d4f5fc538beda4dd478edc"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterOverviewRestrictionNotice.tsx",
+          "sha256": "99fc09da94923a65528019fae696a8405d2d770b0684170923537128ba2b0fff"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterOverviewView.tsx",
+          "sha256": "e49ab1cf7647486c46eea16d9f1b445d270c96424c5ce6060031eb8e675696ae"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterResourcesManager.tsx",
+          "sha256": "0fc3832f1f501193384ff212f9b08c5a3e55b51b4367ebadb9e10db4a9a7f92c"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterResourcesViews.tsx",
+          "sha256": "121c5ecb9a10ba2a2b3793d3e8a1fa74fc88da87bd4930eb827feb2fadf52deb"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterViewCRDs.tsx",
+          "sha256": "390bf14d0da6e1ad82835bd4d1bf08f31fd276c8209e9c8ff8463213e86ccee6"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterViewConfig.tsx",
+          "sha256": "de03bd240c711a6c296d6aace5a42f4faabea330fa454828f4c9c971eec1cdf2"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterViewCustom.css",
+          "sha256": "43e1e0afd3c892c3eaa7c502c6e3f7716f857dfbbce5e3a67890166938d84467"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterViewCustom.tsx",
+          "sha256": "2162f3607735b11c01666fe0c438b5434b7ceebabf022786866d5fd4f3fbcf9b"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterViewEvents.tsx",
+          "sha256": "ca81329250058fd9aa91071ae24c5d260d452d25d31b5a812da4e5bc922fc5c0"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterViewNamespaces.tsx",
+          "sha256": "b19a6de4c4e05757ee06561d5951f0049eac8ac3cbfce90e45ceda70a91269be"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterViewNodes.css",
+          "sha256": "d24ea7a007360add2ba46e7ed9174821793c93f5230e259bf17db8150380cce4"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterViewNodes.tsx",
+          "sha256": "ff2856f0e955841dfad02e5643a56c915034e909adad3b8224d717ad9efdb24a"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterViewRBAC.tsx",
+          "sha256": "949828d40c31e937256a390d933cdb95d0a03acc5c1497443d45997995870f51"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterViewStorage.tsx",
+          "sha256": "c6a346934642c8d54f48067b766b8577e5eab62c25f5a2f007cd5b5b876182d8"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/NamespaceSummaryTable.tsx",
+          "sha256": "d8dfcea85182ba5e6ecf86b4da7fad08d465c59209022ca5283e348ee60a1e34"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/clusterOverviewModel.ts",
+          "sha256": "c579fa25076ccfa20f73082a3102bee40bcf2a0a3cfdea23f0c776f26743697d"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/karpenterColumns.tsx",
+          "sha256": "eb6d6b0ed7008e9c68be1b6fb5398cbfedae73f757d94f1bb693f6598ba0255e"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/useClusterOverviewNavigation.ts",
+          "sha256": "0a64afc1a7990b01263fa09400087a1b07a061274cb88b515fca76966200ecfb"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/useRecentClusterOverviewEvents.ts",
+          "sha256": "3bf9d55af23a1f97e1a05bc40f7ef07482a0da8b6a873c5af528ea78e6853e2c"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/AllNamespacesView.tsx",
+          "sha256": "646961ee1c0b72f8e18e83ca5cac765e90b842ca6508377a8105a7520a796189"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsResourcesViews.tsx",
+          "sha256": "eee994989509c6b98f316d0a88b29294eef7a04293a10142bb1105e238ffcec1"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewAutoscaling.tsx",
+          "sha256": "a7bf6c84281a4fe6bf892d5a20fa70d4bed2645a508b4dfcc41eba76495c2833"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewConfig.tsx",
+          "sha256": "2c8877aeae2748e28421ac726ff349473d7b88de8801aa6be896f5cc84dee0e0"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewCustom.tsx",
+          "sha256": "6c8d3c3d7afe40c1b01d0a5a48b2921d580ba05082a69ff731ec377e2b6d5d72"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewEvents.tsx",
+          "sha256": "c203746958d7d6664860f0f2d90939725127046fde491f16884740565d946520"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewHelm.tsx",
+          "sha256": "0c1de7256d9aa9bfe3f20cc105d9a33ee2f384b0378b724a4290dfef25b411eb"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewNetwork.tsx",
+          "sha256": "f551c683a289873225fdfd640d97b9d55116addea34395120142ae2b06193b56"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewQuotas.tsx",
+          "sha256": "d3ba1046fd2300a14b9fbd9c42b1ba861557a457483fa9f4e7ecfd63c20d6ba8"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewRBAC.tsx",
+          "sha256": "78088568a5bce5bd5be374b025d8e0a6957f5b5e10ab944ba7180fb9b54821d5"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewStorage.tsx",
+          "sha256": "21811db32f8750aa5da51b13356fe86b2a8eda25e8ccf0346de3673253999574"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewWorkloads.css",
+          "sha256": "c47300c45c74bfe6c7380482a7d90cb730200fc17114ae96d11c09c9197bc54e"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewWorkloads.helpers.ts",
+          "sha256": "328c60d471013fd82d37413b7d77dd97260d76b94cb49eb705424de3110f6688"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewWorkloads.tsx",
+          "sha256": "1d42f9d35a0b9d3ba5a3f2de3b965a89508377bb14339aab837205283f7ee5d7"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/WorkloadsPodsSplit.css",
+          "sha256": "73742b68aefab5ea236c21437cfe8c343b5162acca6fdd2e414d64d673f697b5"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/WorkloadsPodsSplit.tsx",
+          "sha256": "17f434ec33702ed869e79c1ccc436097c2bba5c5304c7f6948703e65fc1de072"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/argoCDColumns.tsx",
+          "sha256": "2cfda5010d4f6cb9701bd74e27dddd3bd09cfbe598d2d046d0474ae83ebf4cde"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/namespaceResourceViews.ts",
+          "sha256": "8baa796017671bcec4d74540429f841408d797e58fc242ba711b7166c88a7a16"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/podOwnerFilter.ts",
+          "sha256": "f49916018f0f4f9a2a1efd295f0111f221ba0ecf8c988c82c18478f7dcecb3ef"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/useNamespaceColumnLink.ts",
+          "sha256": "f73b1dce63a585f2343f073ac38313ed050dd4ff884e6e3652ede13caa1a6684"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/useWorkloadTableColumns.tsx",
+          "sha256": "9481be0786b972aa115e7bb70b403a4e2b6f73f150605e606940d69d4cc0b048"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/workloadActionReference.ts",
+          "sha256": "b5342997613cff1deec4632c3afb7fd5dcf4a55c854cadaa04a776ac96669226"
+        },
+        {
+          "path": "frontend/src/modules/namespace/contexts/NsResourcesContext.tsx",
+          "sha256": "e17a1da3e0771d11f781a766d9819c5b56fbd9ef9cbe4e05ed8fe76d764e6cde"
+        },
+        {
+          "path": "frontend/src/modules/namespace/hooks/useNamespaceFilterOptions.ts",
+          "sha256": "692d58d544400a2e9d816057b6800754996751942c72c05849590e587f69f592"
+        },
+        {
+          "path": "frontend/src/modules/namespace/hooks/useNamespaceGridTablePersistence.ts",
+          "sha256": "937137677007add352f329bc24b431fd0d5c2d1faab1370ab9477f12dfbda654"
+        },
+        {
+          "path": "frontend/src/modules/resource-grid/AggregatedResourceGridView.tsx",
+          "sha256": "2d96d4dd996f84aae5b2855a3d52219881478d9322c0b52be610c6957d83c03d"
+        }
+      ],
+      "inspection": "Read every remaining cluster presentation and namespace table/column/routing/helper source listed here, including complete overview JSX/CSS, node actions, namespace summary, Helm compatibility formats, workload/pod split and scoped filter persistence. Traced query/persistence column inputs, resource-bar animation consumer and action-reference builder. Searched selectors and all workload-helper consumers before pruning.",
+      "candidates": [
+        {
+          "id": "D081-C01",
+          "disposition": "implemented",
+          "decision": "Seven aggregated tables share kind/name identity columns at the existing aggregated-grid boundary. Node/CRD/workload sorting is declared in column factory options; workload columns form one list rather than mutation sequences."
+        },
+        {
+          "id": "D081-C02",
+          "disposition": "implemented",
+          "decision": "Concrete and all-namespace view routing share one registry. Preserve concrete-view error boundaries and all-namespace unsupported-map/fallback presentation."
+        },
+        {
+          "id": "D081-C03",
+          "disposition": "implemented",
+          "decision": "Node and workload resource-bar transition keys now use canonical cluster/GVK/object identity. Workload action projection forwards the full row reference, preserving API version, group, resource and UID instead of guessing from kind."
+        },
+        {
+          "id": "D081-C04",
+          "disposition": "implemented",
+          "decision": "Removed five workload helper exports with only test consumers, their obsolete tests, and unused overview/node/workload placeholder styles after full repository selector/import searches. Surviving search-token tests remain."
+        },
+        {
+          "id": "D081-C05",
+          "disposition": "retained",
+          "decision": "Keep custom-resource family adapters, canonical owner-filter facet values, namespace permission priming, scoped persistence defaults, cross-object PV/PVC/class validation, historical Helm display formats and keyboard/pointer split-resizing contracts. Metrics metadata mirrors are retained because query hooks consume columns before returning their current payload; removing that state requires changing the query/column ownership contract."
+        },
+        {
+          "id": "D081-C06",
+          "disposition": "deferred",
+          "decision": "Unused onTabChange forwarding in cluster and namespace view wrappers will be removed with the AppLayout caller during shell review. Namespace map lifecycle is resolved in D083."
+        }
+      ],
+      "contracts": [
+        "Kind/name actions still delegate to the existing identity adapter; short names, alias badges, ordering, namespace column placement and numeric sort keys remain the same. Animation identity does not alter backend row identity. Workload action capability matching must use the supplied GVK."
+      ],
+      "checks": [
+        "Three identity regressions failed: /tmp/luxury-yacht-d081-identity-red.log. 364 tests /44 files passed and typecheck passed: /tmp/luxury-yacht-d081-views-green.log, /tmp/luxury-yacht-d081-typecheck.log. Test pruning coverage impact is pending the full coverage rerun."
+      ]
+    },
+    {
+      "id": "D082-cluster-owned-retained-state",
+      "files": [
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterOverview.tsx",
+          "sha256": "3cfc6e569a891ef493e380e01a63b467f3a1ead04adff97745c33c402fff7744"
+        },
+        {
+          "path": "frontend/src/modules/namespace/contexts/NamespaceContext.tsx",
+          "sha256": "26f9fcfded3d09a6d4424b9e6129d35b72501cc1fe14094d3ec202feaf057a81"
+        }
+      ],
+      "inspection": "Read complete retained-list/overview ownership, kubeconfig/reset handlers, cluster transitions, selection validation and shared display-state consumers. Checked every render for retained namespace exposure after a cold cluster switch.",
+      "candidates": [
+        {
+          "id": "D082-C01",
+          "disposition": "implemented",
+          "decision": "Namespace list state contains its owning cluster and is gated during render. Selection validation reads the current scoped snapshot, removing the duplicate mutable list ref while preserving warmed selections and same-cluster refresh retention."
+        },
+        {
+          "id": "D082-C02",
+          "disposition": "implemented",
+          "decision": "Namespace load/refresh names share one operation; removed the unused spinner argument and forwarding callback. Namespace teardown clears its owned request bookkeeping for replay."
+        },
+        {
+          "id": "D082-C03",
+          "disposition": "implemented",
+          "decision": "Cluster overview data and hydration ownership are one snapshot value; hydration is derived from presence. Explicit kubeconfig switching remains independent, and legacy unscoped-payload rejection keeps the prior owner. Removed duplicate switching update."
+        }
+      ],
+      "contracts": [
+        "List membership is informer-owned and permission-gated; no catalog fallback. Cold cluster switching must never publish previous-cluster names. Same-cluster loading retains names/selection, warmed selection validates against current rows, reset clears locally, and valid startup reads remain allowed. Overview legacy payload checks and lifecycle suppression are preserved."
+      ],
+      "checks": [
+        "New every-render cluster isolation regression failed: /tmp/luxury-yacht-d082-namespace-red.log. 65 retention/overview tests passed: /tmp/luxury-yacht-d082-retention-green.log. Typecheck passed: /tmp/luxury-yacht-d082-typecheck.log. Final small selection-effect simplification is included in the pending coverage rerun."
+      ]
+    },
+    {
+      "id": "D083-object-map-model-renderer-and-lifecycle",
+      "files": [
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewMap.css",
+          "sha256": "65e0f5944afe1f5358282809c65cbb8cf38615fe081911cf4146a4efa0166583"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewMap.tsx",
+          "sha256": "5d92236dd13a9608ca2b543beea22e1dd29aa58a5d142cd761756f3b853c9ae9"
+        },
+        {
+          "path": "frontend/src/modules/object-map/ObjectMap.css",
+          "sha256": "202954fd8b08518c92638f5abc1697db6d63ac2dfd5f7482c4cb8f6e967b3ce8"
+        },
+        {
+          "path": "frontend/src/modules/object-map/ObjectMap.tsx",
+          "sha256": "3231d3726d3c8ddc37a456d13ec77cbc7d79ed9dba3d4113198d13e569f87609"
+        },
+        {
+          "path": "frontend/src/modules/object-map/ObjectMapG6Renderer.tsx",
+          "sha256": "dda373370c6ec77abb7346ff95e70222a3d6d848ac53ca0e18b0604cfb90ed49"
+        },
+        {
+          "path": "frontend/src/modules/object-map/ObjectMapG6TooltipOverlay.tsx",
+          "sha256": "e04bd8ebf0cb051fbcae32d4163d7148c6d30a0a95d69feb7b56f56305eddeb7"
+        },
+        {
+          "path": "frontend/src/modules/object-map/mapSnapshotStatus.ts",
+          "sha256": "2760391a5222d54da4fab59f0799216a946fc0df20ef09e8a5a031bbe226fcbf"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapCardStyle.ts",
+          "sha256": "c1fef3bf331093b74f213b979af9f0fa646a06f14517f448728f1e098d551db2"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapCollapse.ts",
+          "sha256": "145d0fece1895defd96d5abca50a7e688019392782e60241dc9fe0affd2e41a9"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapDebugStore.ts",
+          "sha256": "b512762c9184649520ec69f02295be3e97de5e996557f3002a808ed9cbb201c1"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapDedupe.ts",
+          "sha256": "22b0517b346c68ea8390d91779a8f42a996c889befdd292e129aca9fe474f8b5"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapDirectionalFilter.ts",
+          "sha256": "34df415281ec3ee14f890c28775aff059f26c1f9556539d2bf7b32e6a16df13b"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapEdgeStyle.ts",
+          "sha256": "faf9762b6ad1f5183828acb7f4892b016b8ebc063d6c199674747b070779de82"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapG6ApplyQueue.ts",
+          "sha256": "6124ea8a676b5fe2da487c3957938959e5f1171471abffa3de8243818e146ef4"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapG6Behaviors.ts",
+          "sha256": "89f1bb83b9f7edba4b1a82320405aa675f286da42f4e79d1edbbc79c8dba84dc"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapG6CardNode.ts",
+          "sha256": "5f362160d79956e976ada5d553ff2687af93f3c2f093d73be96e2b79b1cb6fbf"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapG6Constants.ts",
+          "sha256": "e8b8dde2971c19830bae04138c4faf794e85ee1945013c8012fcf400bcd206d8"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapG6Data.ts",
+          "sha256": "50e8edba57e3652649c7b38967dbfab0393e21b7049841c3c710f8e433d8cc31"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapG6EventBindings.ts",
+          "sha256": "6494b7a4403bd72b381a8e91e1932f663ceee69ff06b953d7f6bfa0237b39bbb"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapG6Interactions.ts",
+          "sha256": "4e0dacc7294de40727a706d259246f7e9ec93ac71afe6b8ea2777e82a8cab337"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapG6Palette.ts",
+          "sha256": "0b15c516c443fbf79bf38aa36ba457648e48a37f6e2e50c90b533e1e3e4dd393"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapG6PathEdge.ts",
+          "sha256": "330b3f529f600b09f19bb6e272760eb46d66483442535cb50afdf1afbffce786"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapG6RendererOptions.ts",
+          "sha256": "9175339efaabcd4dca5f2665adf6879b0740f10c64fb8e81aee24f3f6ec5b1db"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapG6Tooltip.ts",
+          "sha256": "7cdc7da73acabc6f8b110f98ad7fb6056a00834f5164d725e45423b1269876f3"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapG6Viewport.ts",
+          "sha256": "e212c754f46f4e8308b9d18d494188e7e8c70be7eb2d9a847c55934e2672c1bd"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapKindFilter.ts",
+          "sha256": "52d48627233dddb8aa7b9ea92473a23f847d51031982207bb93213e7509ad70c"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapLayout.ts",
+          "sha256": "e137b9b1166700df2f89395d8cf965377dbecfbcb124d438c3bc59253000e172"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapNavigation.ts",
+          "sha256": "2db0b4bfba1d7a9ee7a0ad036d66f388771ce629868e988cf9bb0fea7fe538a6"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapNodeGesture.ts",
+          "sha256": "b189081968c8829abb33081b97518a6dedd466fe5100ae215f73902653f7b86e"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapPayload.ts",
+          "sha256": "a7b6d909bc4fbe4da0248f1bf63a856be4756912d94693ca574ec8806366c0f0"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapPerformanceFixtures.ts",
+          "sha256": "1541c250ebe9358167e545fd0ee1236d4a349b9b6056eaaac1951b826556b944"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapRendererTypes.ts",
+          "sha256": "4a550be1d5c826e5507aa9149e18000f7fd40c5a60e1a62673229fc8579aa8fb"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapScope.ts",
+          "sha256": "49517442b0ca46cac4c58d8d15b23ac793691cd44f42f9e41e937735a41b1014"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapSelection.ts",
+          "sha256": "3fd39084015687cfe32e873886b24a2f33351d87800cdce09d9c8042f750cfe3"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapTraversal.ts",
+          "sha256": "41c6ea281160378d698f0399f24d9a08803b4eca494038cf03bfc9589c464772"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapVisibleState.ts",
+          "sha256": "52ab71ef30a2ac11a1dea66101de9f63ead280e3eade680898510312fbed3c6a"
+        },
+        {
+          "path": "frontend/src/modules/object-map/useObjectMapG6GraphLifecycle.ts",
+          "sha256": "adee70b601e8454cf55589730b04c93dc9cf70b18b1642deca49b9f4e651c611"
+        },
+        {
+          "path": "frontend/src/modules/object-map/useObjectMapG6Palette.ts",
+          "sha256": "1e9c7e15f079eebd4099a34a7d91793af3a233b0653555cb088196acd726124f"
+        },
+        {
+          "path": "frontend/src/modules/object-map/useObjectMapG6Viewport.ts",
+          "sha256": "0b08aa81037dd8c1a2badabd52746b3ff2e5855be216c0ae8027fdc462cd5cec"
+        },
+        {
+          "path": "frontend/src/modules/object-map/useObjectMapLegendDrag.ts",
+          "sha256": "7817596772356d124e2fea128dc36408f75673a64b06f8d3a911185f4d04dea8"
+        },
+        {
+          "path": "frontend/src/modules/object-map/useObjectMapModel.ts",
+          "sha256": "6a324f9144ed7bc52182b5299554873e9a0a11bd1b46404c620007496c1a984c"
+        },
+        {
+          "path": "frontend/src/modules/object-panel/components/ObjectPanel/Map/MapTab.tsx",
+          "sha256": "37a7f8012158c408c3abf30cfcde5619f44adf364764eebaa3779c454f029c17"
+        }
+      ],
+      "inspection": "Read every object-map implementation file in full: shell menus/search/filter state, directional traversal/collapse/deduplication, hidden-kind path accounting, layered layout/lane geometry, G6 rendering/projection/palette/cards/tooltips/viewport, async apply and lifecycle/event binding, debug store and performance fixture. Traced namespace/panel map consumers, strict object identity assertion, reference-counted data-access leases, non-streaming orchestrator preserveState semantics and current renderer lifecycle cleanup.",
+      "candidates": [
+        {
+          "id": "D083-C01",
+          "disposition": "implemented",
+          "decision": "Data and selection updates share one local latest-work slot. Run ownership replaces version counters and duplicated pump/finally logic; clearing a queue invalidates old async completions before a replacement graph starts. Drag identity remains captured with the scheduled payload and selection follows data publication."
+        },
+        {
+          "id": "D083-C02",
+          "disposition": "implemented",
+          "decision": "Namespace maps use the same scoped refresh handle as panel maps. Shared navigation handlers validate complete supplied cluster/GVK/object identity before the reference builder; partial map references cannot be completed by guessing built-in metadata. Callbacks are injected to avoid introducing a runtime dependency from the map helper into panel or navigation providers."
+        },
+        {
+          "id": "D083-C03",
+          "disposition": "implemented",
+          "decision": "Seed matching checks cluster before UID. Removed model selection computation after tracing its sole production consumer, which computes selection after visible-node/edge filtering. Manual layout reset has one implementation. Service owner-edge deduplication reuses its existing endpoint index instead of building a second pair/type representation."
+        },
+        {
+          "id": "D083-C04",
+          "disposition": "implemented",
+          "decision": "Renderer viewport event subscriptions share setup/cleanup, handler refs have one object construction, stable queue methods are used directly and map debug IDs initialize once. Tooltip row construction is separated from text measurement/layout, eliminating a forwarding helper."
+        },
+        {
+          "id": "D083-C05",
+          "disposition": "retained",
+          "decision": "Keep directed reachability separate from undirected visual adjacency, cycle/seed-aware collapse, hidden-kind path enumeration/counts, deterministic barycenter/lane passes and edge rerouting. They implement distinct graph contracts. Keep graph creation/initial render disposal, schedule-time drag capture, manual positioning versus click suppression, app-zoom resize suppression, palette probing, low-detail thresholds, live ages, fallback node drawing and operational error reporting. CSS legend classes are dynamically generated; static-only searches cannot justify removal."
+        },
+        {
+          "id": "D083-C06",
+          "disposition": "retained",
+          "decision": "Existing renderer debug snapshot, service endpoint-index collection and drag-move callbacks retain local complexity findings (14, 13 and 13); their bodies were not changed. All changed/new functions pass the local <=12 check. Preserve synthetic performance fixture constraints and debug-store subscriber semantics."
+        }
+      ],
+      "contracts": [
+        "Consumers are NsViewMap and MapTab; renderer graph recreation reuses its apply queue. A cleared run cannot publish data, consume pending work or release the replacement run. Scoped domain lease acquisition precedes startup requests; invalid scopes acquire/fetch nothing and the last overlapping owner alone disables demand. Full map reference identity reaches panel/navigation without inference. No backend graph contract or graph layout budget changes."
+      ],
+      "checks": [
+        "Queue replacement regressions failed twice: /tmp/luxury-yacht-d083-queue-red.log. Four namespace-owner/seed-identity/partial-GVK regressions failed: /tmp/luxury-yacht-d083-navigation-red.log. 199 tests /26 files passed after implementation and renderer subscription consolidation: /tmp/luxury-yacht-d083-map-green.log. Typecheck passed /tmp/luxury-yacht-d083-typecheck.log. Final tooltip row extraction passes local complexity: /tmp/luxury-yacht-d083-complexity.log (306 changed/new functions <=12); its tests will be repeated with the next frontend batch. Coverage/native/final prerelease remain open."
       ]
     }
   ],
-  "reviewedAt": "2026-09-18",
+  "reviewedAt": "2026-09-19T03:27:50.025159+00:00",
   "progress": {
-    "fullyInspectedFiles": 1180,
-    "pendingFiles": 665,
+    "fullyInspectedFiles": 1713,
+    "pendingFiles": 132,
     "overallStatus": "in-progress",
     "pendingCandidates": [
-      "D032-C05: optional-kind runtime permission loss and retained Attention rows"
+      "Remaining frontend implementation inventory requires full inspection.",
+      "D081 unused tab-change forwarding: remove with AppLayout caller during shell review.",
+      "Affected coverage, native checks, final diff review and latest prerelease gate remain open."
     ],
     "note": "Passing tests validate changed paths; they do not count as review of uninspected source. Higher unchanged local complexity findings are retained evidence, not claimed resolved.",
     "additionalNewFilesInspected": [
-      "frontend/src/modules/object-panel/components/ObjectPanel/Logs/logOverlap.ts",
-      "frontend/src/shared/hooks/useResourceLinkReference.ts",
-      "frontend/src/shared/utils/podTableModel.ts",
+      "backend/internal/containerlogs/target_identity.go",
       "backend/resources/common/context.go",
       "backend/resources/common/finalizers.go",
-      "frontend/src/shared/hooks/useAppInfo.ts"
+      "frontend/src/core/panel-windows/usePanelMutationGuard.ts",
+      "frontend/src/core/panel-windows/useRemoveWorkspacePanels.ts",
+      "frontend/src/core/refresh/components/diagnostics/useDiagnosticsTableControls.ts",
+      "frontend/src/core/refresh/hooks/useRefreshPreferences.ts",
+      "frontend/src/modules/namespace/components/namespaceResourceViews.ts",
+      "frontend/src/modules/object-panel/components/ObjectPanel/Logs/logOverlap.ts",
+      "frontend/src/shared/hooks/useAppInfo.ts",
+      "frontend/src/shared/hooks/useResourceLinkReference.ts",
+      "frontend/src/shared/utils/podTableModel.ts",
+      "frontend/src/ui/modals/useObjectDiffYaml.ts"
     ]
-  }
+  },
+  "continuationRevision": "1a73f747"
 }

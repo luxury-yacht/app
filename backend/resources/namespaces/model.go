@@ -25,7 +25,7 @@ func BuildResourceModel(clusterID string, namespace *corev1.Namespace, hasWorklo
 	if namespace != nil {
 		meta = namespace.ObjectMeta
 	}
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, meta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, meta, status)
 }
 
 // BuildFacts extracts the Namespace facts. Quota/limit links materialize only when

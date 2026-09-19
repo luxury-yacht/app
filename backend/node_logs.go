@@ -20,7 +20,7 @@ func (g *ResourceGateway) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDi
 		return NodeLogDiscoveryResponse{Reason: err.Error()}
 	}
 	ctx := g.CtxOrBackground()
-	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Version:     "v1",
 		Kind:        nodes.Identity.Kind,
 		Name:        nodeName,
@@ -40,7 +40,7 @@ func (g *ResourceGateway) FetchNodeLogs(clusterID, nodeName string, req NodeLogF
 		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
 	}
 	ctx := g.CtxOrBackground()
-	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Version:     "v1",
 		Kind:        nodes.Identity.Kind,
 		Name:        nodeName,

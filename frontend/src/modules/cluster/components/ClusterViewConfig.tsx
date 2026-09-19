@@ -7,12 +7,12 @@
 
 import {
   type AggregatedResourceGridViewSpec,
+  createAggregatedIdentityColumns,
   ClusterAggregatedResourceGridView,
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
 import type { ClusterConfigEntry, ClusterConfigSnapshotPayload } from '@/core/refresh/types';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 type ConfigData = ClusterConfigEntry & { kindAlias?: string };
 
@@ -31,20 +31,7 @@ const configSpec: AggregatedResourceGridViewSpec<ConfigData> = {
   tableClassName: 'gridtable-config',
   showKindDropdown: true,
   buildColumns: ({ identity, useShortResourceNames }) => [
-    cf.createKindColumn<ConfigData>({
-      key: 'kind',
-      getKind: (resource) => resource.ref.kind,
-      getAlias: (resource) => resource.kindAlias,
-      getDisplayText: (resource) => getDisplayKind(resource.ref.kind, useShortResourceNames),
-      onClick: identity.open,
-      onAltClick: identity.navigate,
-    }),
-    cf.createResourceNameColumn<ConfigData>((resource) => resource.ref.name, {
-      sortable: true,
-      onClick: identity.open,
-      onAltClick: identity.navigate,
-      getClassName: () => 'object-panel-link',
-    }),
+    ...createAggregatedIdentityColumns<ConfigData>({ identity, useShortResourceNames }),
     cf.createAgeColumn(),
   ],
 };

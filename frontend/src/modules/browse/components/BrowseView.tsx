@@ -12,14 +12,13 @@
  * Instead, this view:
  * - Drives the backend catalog snapshot via the refresh orchestrator scope, and uses
  *   explicit manual refreshes for query changes.
- * - Keeps pagination state locally and only appends on explicit "load more" requests.
+ * - Keeps the current cursor page locally and replaces it on page navigation.
  *
- * This keeps Browse stable without modifying the shared GridTable component.
+ * The shared catalog hook owns query, pagination and metadata refresh policy.
  */
 
 import type React from 'react';
 import { useCallback, useEffect, useMemo } from 'react';
-import './BrowseView.css';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
 import {
@@ -71,21 +70,39 @@ const deriveBrowseScope = (namespace: string | null | undefined): BrowseScope =>
   return 'namespace';
 };
 
-const BROWSE_PERSISTENCE_VIEW_IDS = {
-  cluster: { viewId: 'browse' },
-  allNamespaces: { viewId: 'all-namespaces-browse' },
-  namespace: { viewId: 'namespace-browse' },
-} as const;
+const BROWSE_SCOPE_PRESENTATION = {
+  cluster: {
+    viewId: 'browse',
+    diagnosticsLabel: 'Cluster Browse',
+    tableClassName: 'gridtable-browse',
+    emptyMessage: 'No cluster-scoped objects found',
+    loadingMessage: 'Loading browse catalog...',
+  },
+  'all-namespaces': {
+    viewId: 'all-namespaces-browse',
+    diagnosticsLabel: 'All Namespaces Browse',
+    tableClassName: 'gridtable-browse',
+    emptyMessage: 'No objects found in any namespaces',
+    loadingMessage: 'Loading browse catalog...',
+  },
+  namespace: {
+    viewId: 'namespace-browse',
+    diagnosticsLabel: 'Namespace Browse',
+    tableClassName: 'gridtable-namespace-browse',
+    emptyMessage: 'No objects found in this namespace',
+    loadingMessage: 'Loading resources...',
+  },
+} satisfies Record<BrowseScope, object>;
 
-const getBrowsePersistenceViewId = (scope: BrowseScope): string => {
-  switch (scope) {
-    case 'namespace':
-      return BROWSE_PERSISTENCE_VIEW_IDS.namespace.viewId;
-    case 'all-namespaces':
-      return BROWSE_PERSISTENCE_VIEW_IDS.allNamespaces.viewId;
-    default:
-      return BROWSE_PERSISTENCE_VIEW_IDS.cluster.viewId;
-  }
+const browsePresentation = (scope: BrowseScope, overrides: BrowseViewProps) => {
+  const defaults = BROWSE_SCOPE_PRESENTATION[scope];
+  return {
+    ...defaults,
+    viewId: overrides.viewId ?? defaults.viewId,
+    tableClassName: overrides.tableClassName ?? defaults.tableClassName,
+    emptyMessage: overrides.emptyMessage ?? defaults.emptyMessage,
+    loadingMessage: overrides.loadingMessage ?? defaults.loadingMessage,
+  };
 };
 
 /**
@@ -117,15 +134,13 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   const showNamespaceColumn = scope === 'all-namespaces';
   // For cluster scope, only show cluster-scoped objects (not namespace-scoped)
   const clusterScopedOnly = isClusterScoped;
-  let diagnosticsLabel: string;
-
-  if (scope === 'namespace') {
-    diagnosticsLabel = 'Namespace Browse';
-  } else if (isClusterScoped) {
-    diagnosticsLabel = 'Cluster Browse';
-  } else {
-    diagnosticsLabel = 'All Namespaces Browse';
-  }
+  const presentation = browsePresentation(scope, {
+    viewId,
+    tableClassName,
+    emptyMessage,
+    loadingMessage,
+  });
+  const { diagnosticsLabel, viewId: resolvedViewId } = presentation;
 
   // Build pinned namespaces array: empty for cluster/all-namespaces, single item for namespace scope
   const pinnedNamespaces = useMemo(() => {
@@ -137,7 +152,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
 
   // Keep persistence isolated per Browse scope so cluster and
   // all-namespaces views do not share filters/state.
-  const resolvedViewId = viewId ?? getBrowsePersistenceViewId(scope);
 
   // Virtualization options - kept stable to avoid retrigger effects
   const virtualizationOptions = useMemo(
@@ -175,35 +189,10 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     context: 'gridtable',
     queryMissingPermissions: true,
     onOpen: (object) => {
-      openWithObject(
-        buildRequiredObjectReference({
-          kind: object.kind,
-          name: object.name,
-          namespace: object.namespace,
-          group: object.group,
-          version: object.version,
-          resource: object.resource,
-          uid: object.uid,
-          clusterId: object.clusterId,
-          clusterName: object.clusterName,
-        })
-      );
+      openWithObject(buildRequiredObjectReference(object));
     },
     onOpenObjectMap: (object) => {
-      openWithObject(
-        buildRequiredObjectReference({
-          kind: object.kind,
-          name: object.name,
-          namespace: object.namespace,
-          group: object.group,
-          version: object.version,
-          resource: object.resource,
-          uid: object.uid,
-          clusterId: object.clusterId,
-          clusterName: object.clusterName,
-        }),
-        { initialTab: 'map' }
-      );
+      openWithObject(buildRequiredObjectReference(object), { initialTab: 'map' });
     },
   });
 
@@ -429,18 +418,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     cacheKey: `${resolvedViewId}|${selectedClusterId ?? ''}|${namespace ?? ''}`,
   });
 
-  // Resolve class names and messages
-  const resolvedTableClassName =
-    tableClassName ?? (isNamespaceScoped ? 'gridtable-namespace-browse' : 'gridtable-browse');
-  const browseScopeDescription = isNamespaceScoped ? 'in this namespace' : 'in any namespaces';
-  const resolvedEmptyMessage =
-    emptyMessage ??
-    (isClusterScoped
-      ? 'No cluster-scoped objects found'
-      : `No objects found ${browseScopeDescription}`);
-  const resolvedLoadingMessage =
-    loadingMessage ?? (isNamespaceScoped ? 'Loading resources...' : 'Loading browse catalog...');
-
   return (
     <>
       <ResourceInventoryTable
@@ -450,7 +427,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
           fetchAllRows: fetchAllTableRows,
           exportFilename: 'browse',
         }}
-        spinnerMessage={resolvedLoadingMessage}
+        spinnerMessage={presentation.loadingMessage}
         allowPartial
         suppressEmptyWarning
         favModal={favModal}
@@ -458,11 +435,11 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         diagnosticsLabel={diagnosticsLabel}
         diagnosticsMode="query"
         onRowClick={handleOpen}
-        tableClassName={resolvedTableClassName}
+        tableClassName={presentation.tableClassName}
         useShortNames={useShortResourceNames}
         enableContextMenu
         getCustomContextMenuItems={getContextMenuItems}
-        emptyMessage={resolvedEmptyMessage}
+        emptyMessage={presentation.emptyMessage}
         paginationControls={paginationControls}
         {...catalogPaginationPageKeyProps(pagination)}
       />

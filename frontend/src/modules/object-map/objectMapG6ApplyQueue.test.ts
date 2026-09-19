@@ -70,6 +70,64 @@ const deferred = () => {
 };
 
 describe('createObjectMapG6ApplyQueue', () => {
+  it.each(['data', 'selection'] as const)(
+    'keeps replacement graph %s updates serialized when an old apply settles',
+    async (kind) => {
+      const oldGraph = graph();
+      const replacement = graph();
+      let currentGraph = oldGraph;
+      const oldApply = deferred();
+      const replacementApply = deferred();
+      const apply = vi
+        .fn()
+        .mockImplementationOnce(() => oldApply.promise)
+        .mockImplementationOnce(() => replacementApply.promise)
+        .mockResolvedValue(undefined);
+      const queue = createObjectMapG6ApplyQueue({
+        getGraph: () => currentGraph,
+        getCurrentLayout: () => layout(),
+        getCurrentSelectionState: () => selectionState(),
+        getHoveredEdgeId: () => null,
+        getPreserveViewportNodeId: () => null,
+        applyGraphDataFn: kind === 'data' ? apply : undefined,
+        applySelectionStateFn: kind === 'selection' ? apply : undefined,
+      });
+      const schedule = (id: string) => {
+        if (kind === 'data') queue.scheduleGraphData({ nodes: [{ id }] });
+        else queue.scheduleSelectionState(layout([id]), selectionState(id));
+      };
+      queue.setRenderedData({ nodes: [] });
+      queue.setReady(true);
+      schedule('old');
+      queue.clear();
+      currentGraph = replacement;
+      const replacementBase = { nodes: [{ id: 'replacement-base' }] };
+      queue.setRenderedData(replacementBase);
+      queue.setReady(true);
+      schedule('replacement-first');
+      schedule('replacement-latest');
+
+      // Cleanup can precede destruction while G6 is finishing its old render.
+      oldApply.resolve();
+      await flushPromises();
+      expect(apply).toHaveBeenCalledTimes(2);
+      expect(queue.getRenderedData()).toBe(replacementBase);
+
+      replacementApply.resolve();
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(3));
+      expect(apply.mock.calls.map(([target]) => target)).toEqual([
+        oldGraph,
+        replacement,
+        replacement,
+      ]);
+      if (kind === 'data') {
+        await vi.waitFor(() =>
+          expect(queue.getRenderedData()?.nodes?.[0]?.id).toBe('replacement-latest')
+        );
+      }
+    }
+  );
+
   it('keeps only the latest graph data queued before the graph is ready', async () => {
     const g = graph();
     const first: GraphData = { nodes: [{ id: 'first' }] };

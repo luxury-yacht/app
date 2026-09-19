@@ -9,5 +9,5 @@ import (
 // ObjectMapStatus projects the shared RBAC binding status into a map node.
 func ObjectMapStatus(clusterID string, binding rbacv1.RoleBinding) *objectmap.Status {
 	status := resourcemodel.RBACBindingStatus(binding.ObjectMeta, binding.RoleRef.Name, len(binding.Subjects))
-	return objectmap.FromResourceModel(resourcemodel.KubernetesResourceModel(clusterID, Identity, binding.ObjectMeta, status, resourcemodel.ResourceFacts{}))
+	return objectmap.FromResourceModel(resourcemodel.KubernetesResourceModel(clusterID, Identity, binding.ObjectMeta, status))
 }

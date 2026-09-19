@@ -56,50 +56,6 @@
   pointer-events: auto;
 }
 
-.resource-bar-warning-inline {
-  font-size: 0.7rem;
-}
-
-.resource-bar-value .usage-percentage {
-  color: var(--color-text-secondary);
-  font-weight: 400;
-}
-
-.resource-bar-value .usage-percentage.warning {
-  color: var(--color-warning);
-  font-weight: 500;
-}
-
-/* Metrics shown below bar in standard view */
-.resource-bar-metrics {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 6px;
-  font-size: 0.75rem;
-}
-
-.metrics-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.metrics-row span:first-child {
-  color: var(--color-text-secondary);
-  font-size: 0.7rem;
-}
-
-.metrics-value {
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.metrics-value.warning {
-  color: var(--color-warning, #f59e0b);
-}
-
 /* Empty state */
 .resource-bar-empty {
   display: flex;
@@ -168,10 +124,6 @@
 .resource-bar-usage.unbounded {
   background: var(--resourcebar-usage-unbounded);
   box-shadow: var(--resourcebar-usage-shadow-unbounded);
-}
-
-/* Unbounded state shows full width with subtle animation */
-.resource-bar-usage.unbounded {
   animation: unbounded-pulse 4s ease-in-out infinite;
 }
 
@@ -233,27 +185,6 @@
 .resource-bar-marker.limit {
   background-color: var(--resourcebar-marker-limit);
   box-shadow: var(--resourcebar-marker-limit-shadow);
-}
-
-/* Percentage label */
-.resource-bar-label {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: white;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  white-space: nowrap;
-  padding: 0 4px;
-}
-
-/* Configuration warning indicator */
-.resource-bar-warning {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  font-size: 0.8rem;
-  z-index: 10;
-  cursor: help;
 }
 
 /* Status classes for container */

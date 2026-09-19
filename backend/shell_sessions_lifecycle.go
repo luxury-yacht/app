@@ -46,7 +46,7 @@ func (l shellSessionLifecycle) registerRuntimeOperation(sess *shellSession) bool
 }
 
 func (l shellSessionLifecycle) closeByUser(sessionID string) error {
-	if !l.close(sessionID, "closed", "terminated", true, true, true) {
+	if !l.finishStream(sessionID, "closed", "terminated") {
 		return fmt.Errorf("shell session %q not found", sessionID)
 	}
 	return nil
@@ -57,63 +57,27 @@ func (l shellSessionLifecycle) closeForRuntime(sessionID, reason string) error {
 	if reason == "" {
 		reason = "cluster disconnected"
 	}
-	l.close(sessionID, "closed", reason, false, false, false)
+	l.close(sessionID, "closed", reason)
 	return nil
 }
 
-func (l shellSessionLifecycle) terminate(sessionID, status, reason string) bool {
-	return l.close(sessionID, status, reason, true, true, false)
-}
-
 func (l shellSessionLifecycle) finishStream(sessionID, status, reason string) bool {
-	if l.coordinator == nil {
+	if !l.close(sessionID, status, reason) {
 		return false
 	}
-	sess, removed := l.remove(sessionID)
-	if !removed {
-		return false
-	}
-	l.closeRemoved(sess, status, reason, true, true)
+	l.emitList()
+	l.coordinator.unregisterRuntimeOperation(sessionID)
 	return true
 }
 
-func (l shellSessionLifecycle) close(
-	sessionID string,
-	status string,
-	reason string,
-	unregisterRuntime bool,
-	emitList bool,
-	notFoundIsError bool,
-) bool {
-	if l.coordinator == nil {
-		return false
-	}
+func (l shellSessionLifecycle) close(sessionID, status, reason string) bool {
 	sess, removed := l.remove(sessionID)
 	if !removed {
-		return !notFoundIsError
-	}
-	l.closeRemoved(sess, status, reason, unregisterRuntime, emitList)
-	return true
-}
-
-func (l shellSessionLifecycle) closeRemoved(
-	sess *shellSession,
-	status string,
-	reason string,
-	unregisterRuntime bool,
-	emitList bool,
-) {
-	if l.coordinator == nil || sess == nil {
-		return
+		return false
 	}
 	sess.Close()
 	l.emitStatus(sess.id, sess.clusterID, status, reason)
-	if emitList {
-		l.emitList()
-	}
-	if unregisterRuntime {
-		l.coordinator.unregisterRuntimeOperation(sess.id)
-	}
+	return true
 }
 
 func (l shellSessionLifecycle) get(sessionID string) *shellSession {

@@ -39,5 +39,5 @@ export function getBackendErrorKey(payload: BackendErrorPayload): string {
   const identifier = payload.identifier || payload.source || 'global';
   const message = getBackendErrorMessage(payload);
 
-  return `${resourceKind}:${identifier}:${message}`;
+  return JSON.stringify([payload.clusterId, resourceKind, identifier, message]);
 }

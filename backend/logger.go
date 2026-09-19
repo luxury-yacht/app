@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
+	"github.com/luxury-yacht/app/backend/internal/logclassify"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/internal/sentry"
 )
@@ -19,6 +20,19 @@ const (
 	LogLevelWarn
 	LogLevelError
 )
+
+func classifiedLogLevel(level string) LogLevel {
+	switch level {
+	case logclassify.LevelError:
+		return LogLevelError
+	case logclassify.LevelWarn:
+		return LogLevelWarn
+	case logclassify.LevelDebug:
+		return LogLevelDebug
+	default:
+		return LogLevelInfo
+	}
+}
 
 // String returns the string representation of LogLevel
 func (l LogLevel) String() string {

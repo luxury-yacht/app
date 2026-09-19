@@ -26,7 +26,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StopPortForward } from '@/core/backend-api';
 import { type ShellSessionInfo, useRuntimeOperationStatus } from './runtimeOperationStatus';
 import type { PortForwardSession } from './runtimeOperationStatusAdapter';
-import '@modules/port-forward/PortForwardsPanel.css';
 import './SessionsStatus.css';
 
 function renderPortForwardStatusIcon(status: string) {

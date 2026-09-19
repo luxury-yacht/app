@@ -22,7 +22,7 @@ import (
 // status, and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, policy *networkingv1.NetworkPolicy) resourcemodel.ResourceModel {
 	status := statusPresentation(policy)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, policy.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, policy.ObjectMeta, status)
 }
 
 // BuildFacts extracts the NetworkPolicy facts from the raw object.

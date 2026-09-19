@@ -22,7 +22,7 @@ func (g *ResourceGateway) deletePodAction(target ObjectActionTargetRef) error {
 		return err
 	}
 	ctx := g.CtxOrBackground()
-	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:     target.Group,
 		Version:   target.Version,
 		Kind:      target.Kind,
@@ -51,7 +51,7 @@ func (g *ResourceGateway) createDebugContainerAction(target ObjectActionTargetRe
 		return nil, err
 	}
 	ctx := g.CtxOrBackground()
-	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:       target.Group,
 		Version:     target.Version,
 		Kind:        target.Kind,

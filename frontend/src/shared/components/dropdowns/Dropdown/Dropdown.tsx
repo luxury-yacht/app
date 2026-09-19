@@ -283,62 +283,21 @@ const DropdownTrigger = ({
   toggleDropdown,
   children,
 }: DropdownTriggerProps) => {
-  if (hasOptionActions) {
-    return (
-      <button
-        type="button"
-        ref={triggerRef}
-        className="dropdown-trigger"
-        onClick={toggleDropdown}
-        aria-expanded={isOpen}
-        aria-haspopup="dialog"
-        aria-label={ariaLabel}
-        aria-describedby={ariaDescribedBy}
-        aria-labelledby={ariaLabelledBy}
-        aria-controls={menuId}
-        tabIndex={disabled ? -1 : 0}
-        id={id}
-        disabled={disabled}
-      >
-        {children}
-      </button>
-    );
-  }
-  if (searchable) {
-    return (
-      <button
-        type="button"
-        ref={triggerRef}
-        className="dropdown-trigger"
-        onClick={toggleDropdown}
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
-        aria-label={ariaLabel}
-        aria-describedby={ariaDescribedBy}
-        aria-labelledby={ariaLabelledBy}
-        aria-controls={menuId}
-        tabIndex={disabled ? -1 : 0}
-        id={id}
-        disabled={disabled}
-      >
-        {children}
-      </button>
-    );
-  }
+  const usesTriggerCombobox = !hasOptionActions && !searchable;
   return (
     <button
       type="button"
       ref={triggerRef}
       className="dropdown-trigger"
       onClick={toggleDropdown}
-      role="combobox"
+      role={usesTriggerCombobox ? 'combobox' : undefined}
       aria-expanded={isOpen}
-      aria-haspopup="listbox"
+      aria-haspopup={hasOptionActions ? 'dialog' : 'listbox'}
       aria-label={ariaLabel}
       aria-describedby={ariaDescribedBy}
       aria-labelledby={ariaLabelledBy}
       aria-controls={menuId}
-      aria-activedescendant={activeOptionId}
+      aria-activedescendant={usesTriggerCombobox ? activeOptionId : undefined}
       tabIndex={disabled ? -1 : 0}
       id={id}
       disabled={disabled}

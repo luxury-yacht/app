@@ -19,7 +19,7 @@ import (
 // and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, cronJob *batchv1.CronJob) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(cronJob)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, cronJob.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, cronJob.ObjectMeta, status)
 }
 
 // BuildFacts extracts the CronJob facts from the raw object.

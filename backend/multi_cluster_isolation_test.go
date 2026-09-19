@@ -271,19 +271,19 @@ func TestIsolation_DrainStoreByCluster(t *testing.T) {
 	// Add drain jobs for different clusters with the same node name
 	// This simulates the real-world scenario where the same node name
 	// might exist across different clusters
-	jobA := store.StartDrain("worker-1", restypes.DrainNodeOptions{Force: true})
-	store.SetJobCluster(jobA.ID, "cluster-a", "Cluster A")
+	jobA := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{Force: true}, "cluster-a", "Cluster A")
 
-	jobB := store.StartDrain("worker-1", restypes.DrainNodeOptions{Force: false})
-	store.SetJobCluster(jobB.ID, "cluster-b", "Cluster B")
+	store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{Force: false}, "cluster-b", "Cluster B")
 
-	jobC := store.StartDrain("worker-2", restypes.DrainNodeOptions{})
-	store.SetJobCluster(jobC.ID, "cluster-a", "Cluster A")
+	store.StartDrainForCluster("worker-2", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
 
-	// GetJobsForCluster returns only jobs for that cluster
-	jobsA := store.GetJobsForCluster("cluster-a")
-	jobsB := store.GetJobsForCluster("cluster-b")
-	jobsNonExistent := store.GetJobsForCluster("cluster-c")
+	// Snapshot returns copied jobs for the requested cluster.
+	jobsASnapshot, _ := store.Snapshot("cluster-a", "")
+	jobsA := jobsASnapshot.Drains
+	jobsBSnapshot, _ := store.Snapshot("cluster-b", "")
+	jobsB := jobsBSnapshot.Drains
+	jobsNonExistentSnapshot, _ := store.Snapshot("cluster-c", "")
+	jobsNonExistent := jobsNonExistentSnapshot.Drains
 
 	// Verify cluster A has 2 jobs (worker-1 and worker-2)
 	require.Len(t, jobsA, 2, "cluster A should have 2 jobs")
@@ -299,9 +299,10 @@ func TestIsolation_DrainStoreByCluster(t *testing.T) {
 	// Verify non-existent cluster returns empty
 	require.Len(t, jobsNonExistent, 0, "non-existent cluster should have 0 jobs")
 
-	// Verify Snapshot by node still sees all jobs across clusters
-	snapshot, _ := store.Snapshot("worker-1")
-	require.Len(t, snapshot.Drains, 2, "worker-1 should have 2 drain jobs across clusters")
+	// Node filtering must preserve the cluster boundary.
+	snapshot, _ := store.Snapshot("cluster-a", "worker-1")
+	require.Len(t, snapshot.Drains, 1)
+	require.Equal(t, jobA.ID, snapshot.Drains[0].ID)
 }
 
 // TestIsolation_NoGlobalClientFields verifies that global client fields

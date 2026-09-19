@@ -21,7 +21,7 @@ import (
 // (pods.Facts); callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, pod *corev1.Pod) resourcemodel.ResourceModel {
 	status := statusPresentation(pod)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, pod.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, pod.ObjectMeta, status)
 }
 
 // BuildFacts derives shared pod facts that table, detail, and map projections can

@@ -349,19 +349,11 @@ func decodeNullableString(raw json.RawMessage) (string, error) {
 }
 
 func decodePayloadType(raw json.RawMessage) (payload string, frontendOwned bool, err error) {
-	if len(raw) == 0 {
-		return "", false, fmt.Errorf("value is missing")
-	}
-	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return "", true, nil
-	}
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	payload, err = decodeNullableString(raw)
+	if err != nil {
 		return "", false, err
 	}
-	if payload == "" {
-		return "", false, fmt.Errorf("value is empty")
-	}
-	return payload, false, nil
+	return payload, payload == "", nil
 }
 
 func validateDomainPayloadTypes(domains []domainSpec, typesByName map[string]reflect.Type) error {

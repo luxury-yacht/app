@@ -48,25 +48,6 @@ export const readScrollbarFadeDurationMs = (
   return parseScrollbarDurationMs(styles.getPropertyValue(directionalToken), fallback);
 };
 
-export const readScrollbarOpacityToken = (
-  tokenName: string,
-  fallback: number,
-  element?: Element | null
-): number => {
-  const parsed = Number.parseFloat(readScrollbarTokenStyles(element).getPropertyValue(tokenName));
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-export const readScrollbarPxToken = (
-  tokenName: string,
-  fallback: number,
-  element?: Element | null
-): number => {
-  const value = readScrollbarTokenStyles(element).getPropertyValue(tokenName).trim();
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
 export const readScrollbarNumberToken = (
   tokenName: string,
   fallback: number,
@@ -75,3 +56,6 @@ export const readScrollbarNumberToken = (
   const parsed = Number.parseFloat(readScrollbarTokenStyles(element).getPropertyValue(tokenName));
   return Number.isFinite(parsed) ? parsed : fallback;
 };
+
+export const readScrollbarOpacityToken = readScrollbarNumberToken;
+export const readScrollbarPxToken = readScrollbarNumberToken;

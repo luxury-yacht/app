@@ -1,92 +1,62 @@
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import {
+  assertObjectRefHasRequiredIdentity,
   buildRequiredObjectReference,
   type ClusterObjectReference,
 } from '@shared/utils/objectIdentity';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import type { ResourceMetricsResolution } from './types';
-import { resourceMetricsSourceFromKind } from './valueAdapters';
 
-const workloadMetricKinds = new Set(['deployment', 'daemonset', 'statefulset']);
-
-const namespaceScope = (clusterId: string | undefined, namespace: string | undefined): string =>
-  buildClusterScope(clusterId, `namespace:${namespace ?? ''}`);
-
-export const buildResourceMetricsReference = (
-  objectData: KubernetesObjectReference | null | undefined
-): ClusterObjectReference | null => {
-  if (!objectData) {
-    return null;
-  }
-  return buildRequiredObjectReference(objectData);
-};
-
-export const resolveResourceMetricsScope = (
-  objectData: KubernetesObjectReference | null | undefined
-): ResourceMetricsResolution => {
-  let ref: ClusterObjectReference | null = null;
-  try {
-    ref = buildResourceMetricsReference(objectData);
-  } catch (error) {
-    return {
-      kind: 'invalid',
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-
-  if (!ref) {
+const resolveMetricsReference = (ref: ClusterObjectReference): ResourceMetricsResolution => {
+  const builtin = resolveBuiltinGroupVersion(ref.kind);
+  if (ref.group !== builtin.group || ref.version !== builtin.version) {
     return { kind: 'unsupported', reason: 'unsupported-kind' };
   }
-
-  const source = resourceMetricsSourceFromKind(ref.kind);
   const kind = ref.kind.toLowerCase();
-  if (!source) {
-    return { kind: 'unsupported', reason: 'unsupported-kind' };
-  }
-
-  if (source === 'detail-replicaset') {
+  if (kind === 'replicaset') {
     return {
       kind: 'detail-exception',
       source: 'detail-replicaset',
       reason: 'replicaset-owner-collapse',
     };
   }
-
-  if (kind === 'pod') {
-    if (!ref.namespace) {
-      return { kind: 'invalid', error: `Object identity for Pod/${ref.name} is missing namespace` };
-    }
-    return {
-      kind: 'domain',
-      source: 'pods',
-      domain: 'pods',
-      scope: namespaceScope(ref.clusterId, ref.namespace),
-    };
-  }
-
-  if (workloadMetricKinds.has(kind)) {
-    if (!ref.namespace) {
-      return {
-        kind: 'invalid',
-        error: `Object identity for ${ref.kind}/${ref.name} is missing namespace`,
-      };
-    }
-    return {
-      kind: 'domain',
-      source: 'namespace-workloads',
-      domain: 'namespace-workloads',
-      scope: namespaceScope(ref.clusterId, ref.namespace),
-    };
-  }
-
   if (kind === 'node') {
     return {
       kind: 'domain',
+      ref,
       source: 'nodes',
       domain: 'nodes',
       scope: buildClusterScope(ref.clusterId, ''),
     };
   }
+  if (!['pod', 'deployment', 'daemonset', 'statefulset'].includes(kind)) {
+    return { kind: 'unsupported', reason: 'unsupported-kind' };
+  }
+  if (!ref.namespace) {
+    return {
+      kind: 'invalid',
+      error: `Object identity for ${ref.kind}/${ref.name} is missing namespace`,
+    };
+  }
+  const domain = kind === 'pod' ? 'pods' : 'namespace-workloads';
+  return {
+    kind: 'domain',
+    ref,
+    source: domain,
+    domain,
+    scope: buildClusterScope(ref.clusterId, `namespace:${ref.namespace}`),
+  };
+};
 
-  return { kind: 'unsupported', reason: 'unsupported-kind' };
+export const resolveResourceMetricsScope = (
+  objectData: KubernetesObjectReference | null | undefined
+): ResourceMetricsResolution => {
+  if (!objectData) return { kind: 'unsupported', reason: 'unsupported-kind' };
+  try {
+    assertObjectRefHasRequiredIdentity(objectData);
+    return resolveMetricsReference(buildRequiredObjectReference(objectData));
+  } catch (error) {
+    return { kind: 'invalid', error: error instanceof Error ? error.message : String(error) };
+  }
 };

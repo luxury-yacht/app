@@ -190,16 +190,24 @@ const Tooltip: React.FC<TooltipProps> = ({
   // ------------------------------------------------------------------
   // Cleanup timer on unmount
   // ------------------------------------------------------------------
-  const clearTimers = useCallback(() => {
+  const cancelShow = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
+  }, []);
+
+  const cancelHide = useCallback(() => {
     if (hideTimerRef.current) {
       clearTimeout(hideTimerRef.current);
       hideTimerRef.current = null;
     }
   }, []);
+
+  const clearTimers = useCallback(() => {
+    cancelShow();
+    cancelHide();
+  }, [cancelShow, cancelHide]);
 
   const { close, onKeyDown, keyboardOpen } = useTooltipKeyboard({
     triggerRef,
@@ -251,14 +259,6 @@ const Tooltip: React.FC<TooltipProps> = ({
   // Event handlers
   // ------------------------------------------------------------------
 
-  /** Cancel any pending hide (used in interactive mode). */
-  const cancelHide = useCallback(() => {
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
-    }
-  }, []);
-
   const isWithinInteractiveRegion = useCallback((node: EventTarget | null) => {
     if (!(node instanceof Node)) {
       return false;
@@ -296,18 +296,12 @@ const Tooltip: React.FC<TooltipProps> = ({
     }
 
     const hide = close;
-    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
-      if (interactive && isWithinInteractiveRegion(event.target)) {
-        return;
-      }
-      hide();
-    };
     // Page/container scrolls detach the fixed-positioned tooltip from its
     // trigger, so they dismiss it — but a scroll originating INSIDE an
     // interactive tooltip (scrollable content, e.g. capped release notes)
     // must not, or that content is unreachable. Capture-phase listeners see
     // non-bubbling scroll events from every descendant, including our own.
-    const handleScroll = (event: Event) => {
+    const dismissOutside = (event: Event) => {
       if (interactive && isWithinInteractiveRegion(event.target)) {
         return;
       }
@@ -319,17 +313,17 @@ const Tooltip: React.FC<TooltipProps> = ({
       }
     };
 
-    document.addEventListener('mousedown', handlePointerDown, true);
-    document.addEventListener('touchstart', handlePointerDown, true);
-    document.addEventListener('scroll', handleScroll, true);
+    document.addEventListener('mousedown', dismissOutside, true);
+    document.addEventListener('touchstart', dismissOutside, true);
+    document.addEventListener('scroll', dismissOutside, true);
     document.addEventListener('keydown', handleKeyDown);
     window.addEventListener('resize', hide);
     window.addEventListener('blur', hide);
 
     return () => {
-      document.removeEventListener('mousedown', handlePointerDown, true);
-      document.removeEventListener('touchstart', handlePointerDown, true);
-      document.removeEventListener('scroll', handleScroll, true);
+      document.removeEventListener('mousedown', dismissOutside, true);
+      document.removeEventListener('touchstart', dismissOutside, true);
+      document.removeEventListener('scroll', dismissOutside, true);
       document.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', hide);
       window.removeEventListener('blur', hide);
@@ -342,16 +336,13 @@ const Tooltip: React.FC<TooltipProps> = ({
     if (keyboardOpen.current) {
       return;
     }
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
+    cancelShow();
     if (interactive) {
       hideTimerRef.current = setTimeout(close, INTERACTIVE_GRACE);
     } else {
       close();
     }
-  }, [close, interactive, keyboardOpen]);
+  }, [cancelShow, close, interactive, keyboardOpen]);
 
   const handleMouseEnter = useCallback(() => {
     if (disabled || trigger !== 'hover') {
@@ -366,16 +357,13 @@ const Tooltip: React.FC<TooltipProps> = ({
       if (trigger !== 'hover') {
         return;
       }
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
+      cancelShow();
       if (interactive && isWithinInteractiveRegion(event.relatedTarget)) {
         return;
       }
       scheduleHide();
     },
-    [interactive, isWithinInteractiveRegion, trigger, scheduleHide]
+    [cancelShow, interactive, isWithinInteractiveRegion, trigger, scheduleHide]
   );
 
   /** When the mouse enters the tooltip popup (interactive mode). */

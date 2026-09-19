@@ -71,47 +71,47 @@ export const maskMutedMetadataLines = (raw: string, mutedLines: Set<number>): st
   return masked.join('\n');
 };
 
+const leavesIndentedBlock = (
+  parentIndent: number | null,
+  indent: number,
+  content: string
+): boolean => parentIndent !== null && content.length > 0 && indent <= parentIndent;
+
+const isMutedMetadataField = (line: string): boolean => {
+  const key = /^([A-Za-z0-9_-]+):/.exec(line)?.[1];
+  return key !== undefined && MUTED_METADATA_FIELDS.has(key);
+};
+
 // Track which YAML line numbers fall under muted metadata fields for rendering.
 export const buildIgnoredMetadataLineSet = (raw: string): Set<number> => {
   const lines = raw.split('\n');
   const muted = new Set<number>();
   let metadataIndent: number | null = null;
   let ignoredIndent: number | null = null;
-  let metadataActive = false;
-  let ignoredActive = false;
 
   lines.forEach((line, index) => {
     const lineNumber = index + 1;
     const trimmed = line.trim();
     const indent = getIndentDepth(line);
 
-    if (metadataActive && trimmed && metadataIndent !== null && indent <= metadataIndent) {
-      metadataActive = false;
+    if (leavesIndentedBlock(metadataIndent, indent, trimmed)) {
       metadataIndent = null;
-      ignoredActive = false;
       ignoredIndent = null;
     }
 
-    if (ignoredActive && trimmed && ignoredIndent !== null && indent <= ignoredIndent) {
-      ignoredActive = false;
+    if (leavesIndentedBlock(ignoredIndent, indent, trimmed)) {
       ignoredIndent = null;
     }
 
-    if (!metadataActive && trimmed.startsWith('metadata:')) {
-      metadataActive = true;
+    if (metadataIndent === null && trimmed.startsWith('metadata:')) {
       metadataIndent = indent;
     }
 
-    if (metadataActive && !trimmed.startsWith('-')) {
-      const keyMatch = /^([A-Za-z0-9_-]+):/.exec(trimmed);
-      if (keyMatch && MUTED_METADATA_FIELDS.has(keyMatch[1])) {
-        muted.add(lineNumber);
-        ignoredActive = true;
-        ignoredIndent = indent;
-      }
+    if (metadataIndent !== null && isMutedMetadataField(trimmed)) {
+      ignoredIndent = indent;
     }
 
-    if (ignoredActive) {
+    if (ignoredIndent !== null) {
       muted.add(lineNumber);
     }
   });

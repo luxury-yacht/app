@@ -23,8 +23,6 @@ const scopeRow = (over: Partial<DiagnosticsRow> & Pick<DiagnosticsRow, 'domain' 
     dropped: 0,
     stale: false,
     error: '',
-    hasMetrics: false,
-    count: 0,
     countDisplay: '0',
     namespace: '—',
     scope: '',

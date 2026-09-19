@@ -2,6 +2,7 @@ package backend
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -105,19 +106,15 @@ func (g *ResourceGateway) GetRevisionHistory(clusterID, namespace, group, versio
 }
 
 func (g *ResourceGateway) rollbackWorkloadAction(target ObjectActionTargetRef, toRevision int64) error {
-	return g.rollbackWorkloadInternal(target.ClusterID, target.Namespace, target.Group, target.Version, target.Kind, target.Name, toRevision)
-}
-
-func (g *ResourceGateway) rollbackWorkloadInternal(clusterID, namespace, group, version, workloadKind, name string, toRevision int64) error {
-	if err := requireNamespacedObject(namespace, name); err != nil {
+	if err := requireNamespacedObject(target.Namespace, target.Name); err != nil {
 		return err
 	}
-	workloadKind, err := normalizeAppsV1WorkloadKind(group, version, workloadKind, revisionHistoryWorkloadKinds)
+	workloadKind, err := normalizeAppsV1WorkloadKind(target.Group, target.Version, target.Kind, revisionHistoryWorkloadKinds)
 	if err != nil {
 		return fmt.Errorf("rollback not supported: %w", err)
 	}
 
-	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
@@ -128,28 +125,24 @@ func (g *ResourceGateway) rollbackWorkloadInternal(clusterID, namespace, group, 
 	ctx := g.CtxOrBackground()
 
 	// Fetch the full revision history to locate the target revision's pod template.
-	entries, err := g.GetRevisionHistory(clusterID, namespace, group, version, workloadKind, name)
+	entries, err := g.GetRevisionHistory(target.ClusterID, target.Namespace, target.Group, target.Version, workloadKind, target.Name)
 	if err != nil {
-		return fmt.Errorf("failed to get revision history for %s %s/%s: %w", workloadKind, namespace, name, err)
+		return fmt.Errorf("failed to get revision history for %s %s/%s: %w", workloadKind, target.Namespace, target.Name, err)
 	}
 
 	// Find the entry matching the requested revision number.
-	var targetEntry *RevisionEntry
-	for i := range entries {
-		if entries[i].Revision == toRevision {
-			targetEntry = &entries[i]
-			break
-		}
+	revisionIndex := slices.IndexFunc(entries, func(entry RevisionEntry) bool {
+		return entry.Revision == toRevision
+	})
+	if revisionIndex < 0 {
+		return fmt.Errorf("revision %d not found for %s %s/%s", toRevision, workloadKind, target.Namespace, target.Name)
 	}
-	if targetEntry == nil {
-		return fmt.Errorf("revision %d not found for %s %s/%s", toRevision, workloadKind, namespace, name)
-	}
-	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
-		Group:     group,
-		Version:   version,
+	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
+		Group:     target.Group,
+		Version:   target.Version,
 		Kind:      workloadKind,
-		Namespace: namespace,
-		Name:      name,
+		Namespace: target.Namespace,
+		Name:      target.Name,
 		Verb:      "update",
 	}); err != nil {
 		return err
@@ -157,7 +150,7 @@ func (g *ResourceGateway) rollbackWorkloadInternal(clusterID, namespace, group, 
 
 	// Unmarshal the stored YAML pod template back into a typed PodTemplateSpec.
 	var podTemplate corev1.PodTemplateSpec
-	if err := sigsyaml.Unmarshal([]byte(targetEntry.PodTemplate), &podTemplate); err != nil {
+	if err := sigsyaml.Unmarshal([]byte(entries[revisionIndex].PodTemplate), &podTemplate); err != nil {
 		return fmt.Errorf("failed to unmarshal pod template for revision %d: %w", toRevision, err)
 	}
 
@@ -167,15 +160,15 @@ func (g *ResourceGateway) rollbackWorkloadInternal(clusterID, namespace, group, 
 	if ops == nil || ops.ApplyPodTemplate == nil {
 		return fmt.Errorf("rollback not supported for workload kind %q", workloadKind)
 	}
-	if err := ops.ApplyPodTemplate(ctx, deps.KubernetesClient, namespace, name, podTemplate); err != nil {
+	if err := ops.ApplyPodTemplate(ctx, deps.KubernetesClient, target.Namespace, target.Name, podTemplate); err != nil {
 		return err
 	}
 
 	applog.Info(
 		deps.Logger,
-		fmt.Sprintf("Rolled back %s %s/%s to revision %d", workloadKind, namespace, name, toRevision),
+		fmt.Sprintf("Rolled back %s %s/%s to revision %d", workloadKind, target.Namespace, target.Name, toRevision),
 		"rollbackWorkload",
 	)
-	g.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
+	g.invalidateResponseCache(selectionKey, workloadKind, target.Namespace, target.Name)
 	return nil
 }

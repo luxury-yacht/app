@@ -95,13 +95,5 @@ func cachedPermissionAttributes(ctx context.Context, deps common.Dependencies, g
 
 // permissionCheckContext ensures SSAR calls have a bounded timeout.
 func permissionCheckContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if _, hasDeadline := ctx.Deadline(); hasDeadline {
-		return ctx, func() {
-			// The caller owns the existing deadline; no derived context needs cancellation.
-		}
-	}
-	return context.WithTimeout(ctx, config.PermissionCheckTimeout)
+	return common.WithDefaultTimeout(ctx, config.PermissionCheckTimeout)
 }

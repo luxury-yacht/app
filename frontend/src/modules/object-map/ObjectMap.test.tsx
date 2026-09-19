@@ -616,6 +616,25 @@ afterEach(() => {
 });
 
 describe('ObjectMap', () => {
+  it('matches the seed cluster before accepting a shared UID', async () => {
+    const node = requireValue(payload.nodes?.[0], 'deployment');
+    const { container, cleanup } = await renderObjectMap({
+      testPayload: {
+        ...payload,
+        nodes: [
+          { ...node, id: 'other-cluster', ref: { ...node.ref, clusterId: 'cluster-b' } },
+          node,
+        ],
+        edges: [],
+      },
+    });
+    const shownSeed = container.querySelector('[data-testid="mock-node-deploy"]');
+    const shownOther = container.querySelector('[data-testid="mock-node-other-cluster"]');
+    await cleanup();
+    expect(shownSeed).not.toBeNull();
+    expect(shownOther).toBeNull();
+  });
+
   it('renders the existing toolbar without an extra object chooser or actions row', async () => {
     const { container, cleanup } = await renderObjectMap();
     expect(container.querySelector('.object-map__header')).not.toBeNull();

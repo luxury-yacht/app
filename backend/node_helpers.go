@@ -26,7 +26,7 @@ func requireNodeActionTarget(action string, target ObjectActionTargetRef) error 
 	return requireObjectName(target.Name)
 }
 func (g *ResourceGateway) requireNodeMaintenancePermission(ctx context.Context, deps common.Dependencies, nodeName string) error {
-	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Version: "v1",
 		Kind:    nodes.Identity.Kind,
 		Name:    nodeName,
@@ -34,7 +34,7 @@ func (g *ResourceGateway) requireNodeMaintenancePermission(ctx context.Context, 
 	}); err != nil {
 		return err
 	}
-	return g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	return requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Version: "v1",
 		Kind:    nodes.Identity.Kind,
 		Name:    nodeName,
@@ -59,7 +59,7 @@ func (g *ResourceGateway) requireDrainPodPermission(ctx context.Context, deps co
 			podCheck = resourcePermissionCheck{Version: "v1", Kind: pods.Identity.Kind, Verb: "delete"}
 		}
 	}
-	return g.requireResourcePermission(ctx, deps, podCheck)
+	return requireResourcePermission(ctx, deps, podCheck)
 }
 func runtimeOperationFromDrainJob(job *nodemaintenance.DrainJob) RuntimeOperation {
 	if job == nil {

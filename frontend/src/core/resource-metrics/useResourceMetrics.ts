@@ -10,13 +10,27 @@ import type {
   RefreshDomain,
 } from '@/core/refresh/types';
 import type { KubernetesObjectReference } from '@/types/view-state';
-import { buildResourceMetricsReference, resolveResourceMetricsScope } from './scope';
+import { resolveResourceMetricsScope } from './scope';
 import { selectNodeMetrics, selectPodMetrics, selectWorkloadMetrics } from './selectors';
 import type {
   ResourceMetricsData,
   ResourceMetricsResolution,
   ResourceMetricsResult,
 } from './types';
+
+const selectDomainMetrics = (
+  resolution: Extract<ResourceMetricsResolution, { kind: 'domain' }>,
+  data: unknown
+): ResourceMetricsData | null => {
+  switch (resolution.domain) {
+    case 'pods':
+      return selectPodMetrics(data as PodSnapshotPayload | null, resolution.ref);
+    case 'namespace-workloads':
+      return selectWorkloadMetrics(data as NamespaceWorkloadSnapshotPayload | null, resolution.ref);
+    case 'nodes':
+      return selectNodeMetrics(data as ClusterNodeSnapshotPayload | null, resolution.ref);
+  }
+};
 
 const disabledDomain: RefreshDomain = 'pods';
 const disabledScope = '__resource_metrics_disabled__';
@@ -49,14 +63,6 @@ export const useResourceMetrics = (
   enabled = true
 ): ResourceMetricsResult => {
   const resolution = useMemo(() => resolveResourceMetricsScope(objectData), [objectData]);
-  const ref = useMemo(() => {
-    try {
-      return buildResourceMetricsReference(objectData);
-    } catch {
-      return null;
-    }
-  }, [objectData]);
-
   // One lease on the base table domain: its scoped payload carries object state,
   // the live usage joined at serve, and the poller freshness block.
   const domain = resolution.kind === 'domain' ? resolution.domain : disabledDomain;
@@ -82,7 +88,7 @@ export const useResourceMetrics = (
   useStreamSignalRefetch(domain, signalScopes);
 
   return useMemo((): ResourceMetricsResult => {
-    if (resolution.kind !== 'domain' || !ref) {
+    if (resolution.kind !== 'domain') {
       return {
         status: stateStatusToResult(resolution, state.status, state.error),
         metrics: null,
@@ -91,14 +97,7 @@ export const useResourceMetrics = (
       };
     }
 
-    let metrics: ResourceMetricsData | null = null;
-    if (resolution.domain === 'pods') {
-      metrics = selectPodMetrics(state.data as PodSnapshotPayload | null, ref);
-    } else if (resolution.domain === 'namespace-workloads') {
-      metrics = selectWorkloadMetrics(state.data as NamespaceWorkloadSnapshotPayload | null, ref);
-    } else if (resolution.domain === 'nodes') {
-      metrics = selectNodeMetrics(state.data as ClusterNodeSnapshotPayload | null, ref);
-    }
+    const metrics = selectDomainMetrics(resolution, state.data);
 
     return {
       status: metrics ? 'available' : stateStatusToResult(resolution, state.status, state.error),
@@ -106,5 +105,5 @@ export const useResourceMetrics = (
       resolution,
       error: state.error ?? null,
     };
-  }, [ref, resolution, state.data, state.error, state.status]);
+  }, [resolution, state.data, state.error, state.status]);
 };

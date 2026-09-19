@@ -10,7 +10,6 @@ import (
 
 type applicationUpdateShell interface {
 	Application() *application.App
-	ShowAbout()
 	UpdateClient() appupdates.Client
 }
 

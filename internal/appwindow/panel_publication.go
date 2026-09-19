@@ -24,7 +24,7 @@ func (r *Registry) publishPanelGroups(windowName string, kind panelwindow.PanelL
 	}
 	r.tabTransferMu.Unlock()
 	for _, request := range requests {
-		r.emitPanelTabTransferEvent(request, panelwindow.TabTransferCommittedEventName, panelwindow.TabTransferCommittedEvent{Request: request}, true)
+		r.emitPanelTabTransferEvent(request, panelwindow.TabTransferCommittedEventName, panelwindow.TabTransferCommittedEvent{Request: request})
 	}
 	return nil
 }

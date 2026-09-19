@@ -146,12 +146,16 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       selectedClusterName,
     ]
   );
-  const [overviewData, setOverviewData] = useState<ClusterOverviewPayload>(EMPTY_OVERVIEW);
+  const [overviewSnapshot, setOverviewSnapshot] = useState<{
+    clusterId: string | null;
+    data: ClusterOverviewPayload | null;
+  }>({ clusterId: null, data: null });
+  const overviewData = overviewSnapshot.data ?? EMPTY_OVERVIEW;
+  const isHydrated = overviewSnapshot.data !== null;
+  const hydratedClusterId = overviewSnapshot.clusterId;
   // Disclosure for the Resource Utilization legend; collapsed by default so
   // the card stays compact.
   const [legendExpanded, setLegendExpanded] = useState(false);
-  const [isHydrated, setIsHydrated] = useState(false);
-  const [hydratedClusterId, setHydratedClusterId] = useState<string | null>(null);
   const [isSwitching, setIsSwitching] = useState(false);
   const metricsInfo = useMemo(
     () =>
@@ -193,38 +197,30 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
   useEffect(() => {
     if (selectedOverview) {
-      setOverviewData(selectedOverview);
-      setIsHydrated(true);
-      setHydratedClusterId(selectedClusterId ?? null);
+      setOverviewSnapshot({ clusterId: selectedClusterId ?? null, data: selectedOverview });
       setIsSwitching(false);
       return;
     }
 
     if (overviewDomain.status === 'idle') {
-      setOverviewData(EMPTY_OVERVIEW);
-      setIsHydrated(false);
-      setHydratedClusterId(null);
+      setOverviewSnapshot({ clusterId: null, data: null });
       return;
     }
 
     if (overviewDomain.status === 'error' && !isHydrated) {
-      setOverviewData(EMPTY_OVERVIEW);
       setIsSwitching(false);
     }
   }, [selectedClusterId, selectedOverview, overviewDomain.status, isHydrated]);
 
   useEffect(() => {
     if (!selectedClusterId) {
-      setOverviewData(EMPTY_OVERVIEW);
-      setIsHydrated(false);
-      setHydratedClusterId(null);
+      setOverviewSnapshot({ clusterId: null, data: null });
       setIsSwitching(false);
       return;
     }
     if (hydratedClusterId && hydratedClusterId !== selectedClusterId && !selectedOverview) {
       // Clear cached data when switching tabs so the new cluster shows loading placeholders.
-      setOverviewData(EMPTY_OVERVIEW);
-      setIsHydrated(false);
+      setOverviewSnapshot((previous) => ({ ...previous, data: null }));
       setIsSwitching(true);
     }
   }, [hydratedClusterId, selectedClusterId, selectedOverview]);
@@ -264,24 +260,19 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     // The domain is kept running by useClusterMetricsAvailability so it
     // remains active across view switches.
     const clearLocalState = () => {
-      setOverviewData(EMPTY_OVERVIEW);
-      setIsHydrated(false);
+      setOverviewSnapshot((previous) => ({ ...previous, data: null }));
       setIsSwitching(true);
     };
 
     enableOverview();
 
     if (typeof window !== 'undefined') {
-      const handleKubeconfigChanging = () => {
-        setIsSwitching(true);
-        clearLocalState();
-      };
       const handleKubeconfigChanged = () => {
         setIsSwitching(true);
         enableOverview();
       };
 
-      const unsubChanging = eventBus.on('kubeconfig:changing', handleKubeconfigChanging);
+      const unsubChanging = eventBus.on('kubeconfig:changing', clearLocalState);
       const unsubChanged = eventBus.on('kubeconfig:changed', handleKubeconfigChanged);
 
       return () => {

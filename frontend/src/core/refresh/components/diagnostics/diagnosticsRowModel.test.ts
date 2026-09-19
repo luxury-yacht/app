@@ -49,8 +49,6 @@ describe('diagnosticsRowModel', () => {
     dropped: overrides.dropped ?? 0,
     stale: overrides.stale ?? false,
     error: overrides.error ?? '—',
-    hasMetrics: overrides.hasMetrics ?? false,
-    count: overrides.count ?? 1,
     countDisplay: overrides.countDisplay ?? '1',
     namespace: overrides.namespace ?? '-',
     scope: overrides.scope ?? 'cluster-a (active)',
@@ -82,6 +80,20 @@ describe('diagnosticsRowModel', () => {
       healthyCanonical,
       queryRow,
     ]);
+  });
+
+  test('keeps same-named clusters separate even when their displayed scopes match', () => {
+    const first = diagnosticsRow({
+      clusterId: 'cluster-a',
+      scope: 'Production',
+      rowKey: 'nodes:cluster-a|',
+    });
+    const second = diagnosticsRow({
+      clusterId: 'cluster-b',
+      scope: 'Production',
+      rowKey: 'nodes:cluster-b|',
+    });
+    expect(dedupeDiagnosticsRows([first, second])).toEqual([first, second]);
   });
 
   test('selects the matching resource-domain telemetry instead of the socket aggregate', () => {

@@ -5,10 +5,10 @@
  * Encapsulates state and side effects for the core layer.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { eventBus } from '@/core/events';
+import { useCallback, useEffect } from 'react';
 import { getAutoRefreshEnabled, setAutoRefreshEnabled } from '@/core/settings/appPreferences';
 import { refreshManager } from '../RefreshManager';
+import { useAutoRefreshEnabled } from './useRefreshPreferences';
 
 /**
  * Hook for managing auto-refresh state.
@@ -16,15 +16,7 @@ import { refreshManager } from '../RefreshManager';
  * syncing the backend preference cache, refreshManager, and eventBus.
  */
 export function useAutoRefresh() {
-  const [enabled, setEnabled] = useState(() => {
-    return getAutoRefreshEnabled();
-  });
-
-  // Listen for changes from other sources (e.g., command palette, other components)
-  useEffect(() => {
-    const unsub = eventBus.on('settings:auto-refresh', setEnabled);
-    return unsub;
-  }, []);
+  const enabled = useAutoRefreshEnabled();
 
   // Sync refreshManager when enabled changes without overriding the window's
   // visibility pause.

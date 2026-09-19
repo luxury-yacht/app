@@ -5,20 +5,16 @@
  * Keeps the backend preference cache, eventBus, and callers in sync.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { eventBus } from '@/core/events';
+import { useCallback } from 'react';
 import {
   getBackgroundRefreshEnabled,
   setBackgroundRefreshEnabled,
 } from '@/core/settings/appPreferences';
 
-export function useBackgroundRefresh() {
-  const [enabled, setEnabled] = useState(() => getBackgroundRefreshEnabled());
+import { useBackgroundRefreshEnabled } from './useRefreshPreferences';
 
-  useEffect(() => {
-    const unsub = eventBus.on('settings:refresh-background', setEnabled);
-    return unsub;
-  }, []);
+export function useBackgroundRefresh() {
+  const enabled = useBackgroundRefreshEnabled();
 
   const setBackgroundRefresh = useCallback((value: boolean) => {
     setBackgroundRefreshEnabled(value);

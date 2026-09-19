@@ -20,7 +20,7 @@ import (
 // this package; the shared ResourceModel carries identity + status.
 func BuildResourceModel(clusterID string, quota *corev1.ResourceQuota) resourcemodel.ResourceModel {
 	status := statusPresentation(quota)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, quota.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, quota.ObjectMeta, status)
 }
 
 // BuildFacts extracts the ResourceQuota facts from the raw object.

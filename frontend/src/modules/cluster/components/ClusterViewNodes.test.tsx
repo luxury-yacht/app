@@ -399,6 +399,25 @@ describe('ClusterViewNodes', () => {
     );
   });
 
+  it('keeps node metric animation history separate for equal names in different clusters', async () => {
+    await renderNodes([baseNode]);
+    for (const key of ['cpu', 'memory']) {
+      const column = requireValue(
+        gridTablePropsRef.current.columns.find((item) => item.key === key),
+        'expected metric column'
+      );
+      const first = requireReactElement<{ animationScopeKey: string }>(
+        column.render(baseNode),
+        'expected node metric'
+      );
+      const second = requireReactElement<{ animationScopeKey: string }>(
+        column.render({ ...baseNode, ref: { ...baseNode.ref, clusterId: 'other:context' } }),
+        'expected other node metric'
+      );
+      expect(first.props.animationScopeKey).not.toBe(second.props.animationScopeKey);
+    }
+  });
+
   it('passes numeric Pods, CPU, memory, and age sort values into useTableSort', async () => {
     await renderNodes([baseNode]);
 

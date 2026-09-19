@@ -111,6 +111,7 @@ const RollbackModal = ({
       return;
     }
 
+    let cancelled = false;
     setLoading(true);
     setFetchError(null);
     setRevisions([]);
@@ -124,18 +125,14 @@ const RollbackModal = ({
       read: () => readRevisionHistoryForRef({ clusterId, namespace, group, version, kind, name }),
     })
       .then((result) => {
+        if (cancelled) return;
         const entries = result.status === 'executed' ? (result.data ?? []) : [];
-        setRevisions(entries ?? []);
-
-        // Auto-select the most recent non-current revision.
-        const sortedNonCurrent = (entries ?? [])
-          .filter((e) => !e.current)
-          .sort((a, b) => b.revision - a.revision);
-        if (sortedNonCurrent.length > 0) {
-          setSelectedRevision(sortedNonCurrent[0].revision);
-        }
+        const sorted = [...entries].sort((a, b) => b.revision - a.revision);
+        setRevisions(sorted);
+        setSelectedRevision(sorted.find((entry) => !entry.current)?.revision ?? null);
       })
       .catch((err) => {
+        if (cancelled) return;
         const details = errorHandler.handleInline(err, {
           action: 'loadRevisionHistory',
           source: 'RollbackModal',
@@ -144,8 +141,11 @@ const RollbackModal = ({
         setFetchError(details.message);
       })
       .finally(() => {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen, clusterId, namespace, group, version, name, kind]);
 
   useModalFocusTrap({
@@ -189,28 +189,20 @@ const RollbackModal = ({
     } satisfies RollbackDiffState;
   }, [currentEntry, selectedEntry]);
 
-  const renderTooLarge = useMemo(() => {
-    if (!diffResult || diffResult.tooLarge) {
-      return false;
-    }
-    return (
-      countVisibleDiffRows(diffResult.lines, diffOnly) > ROLLBACK_DIFF_BUDGETS.maxRenderableRows
-    );
-  }, [diffOnly, diffResult]);
-
-  const diffTooLargeMessage = useMemo(
-    () =>
-      getDiffTooLargeMessage(
-        diffResult,
-        renderTooLarge && diffResult ? countVisibleDiffRows(diffResult.lines, diffOnly) : 0,
-        ROLLBACK_DIFF_BUDGETS,
-        ROLLBACK_DIFF_TOO_LARGE_MESSAGE
-      ),
-    [diffOnly, diffResult, renderTooLarge]
+  const visibleDiffRows = useMemo(
+    () => (diffResult ? countVisibleDiffRows(diffResult.lines, diffOnly) : 0),
+    [diffOnly, diffResult]
+  );
+  const renderTooLarge = visibleDiffRows > ROLLBACK_DIFF_BUDGETS.maxRenderableRows;
+  const diffTooLargeMessage = getDiffTooLargeMessage(
+    diffResult,
+    visibleDiffRows,
+    ROLLBACK_DIFF_BUDGETS,
+    ROLLBACK_DIFF_TOO_LARGE_MESSAGE
   );
 
   // Handle rollback confirmation.
-  const handleRollback = useCallback(() => {
+  const handleRollback = useCallback(async () => {
     if (selectedRevision === null) {
       return;
     }
@@ -218,27 +210,25 @@ const RollbackModal = ({
     onMutationChange?.(true);
     setRollbackError(null);
 
-    runObjectRollback(
-      buildObjectActionTarget({ clusterId, namespace, group, version, kind, name }, 'rollback'),
-      selectedRevision
-    )
-      .then(() => {
-        setConfirmOpen(false);
-        onClose();
-      })
-      .catch((err) => {
-        const details = errorHandler.handleInline(err, {
-          action: 'rollbackWorkload',
-          source: 'RollbackModal',
-          clusterId,
-        });
-        setRollbackError(details.message);
-        setConfirmOpen(false);
-      })
-      .finally(() => {
-        setRollbackLoading(false);
-        onMutationChange?.(false);
+    try {
+      await runObjectRollback(
+        buildObjectActionTarget({ clusterId, namespace, group, version, kind, name }, 'rollback'),
+        selectedRevision
+      );
+      setConfirmOpen(false);
+      onClose();
+    } catch (err) {
+      const details = errorHandler.handleInline(err, {
+        action: 'rollbackWorkload',
+        source: 'RollbackModal',
+        clusterId,
       });
+      setRollbackError(details.message);
+      setConfirmOpen(false);
+    } finally {
+      setRollbackLoading(false);
+      onMutationChange?.(false);
+    }
   }, [
     clusterId,
     namespace,
@@ -255,9 +245,6 @@ const RollbackModal = ({
   if (!isOpen) {
     return null;
   }
-
-  // Sort revisions by revision number descending for display.
-  const sortedRevisions = [...revisions].sort((a, b) => b.revision - a.revision);
 
   return (
     <ModalSurface
@@ -300,7 +287,7 @@ const RollbackModal = ({
         <div className="rollback-body">
           {/* Left panel: revision list */}
           <div className="rollback-revision-list" data-testid="rollback-revision-list">
-            {sortedRevisions.map((entry) => {
+            {revisions.map((entry) => {
               const isCurrent = entry.current;
               const isSelected = entry.revision === selectedRevision;
               const classNames = [

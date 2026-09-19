@@ -319,7 +319,6 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
   showEmptyState = true,
   'data-gridtable-export-text': exportText,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const transitionsEnabled = useResourceBarTransitions(animationScopeKey);
   const metricsState = getMetricsState(metricsError, metricsStale);
   const model = createResourceBarModel({ usage, request, limit, allocatable, type });
@@ -354,7 +353,7 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
       disabled={!enableTooltip || variant !== 'compact'}
       inline={false}
     >
-      <div ref={containerRef} className={containerClasses} data-gridtable-export-text={exportText}>
+      <div className={containerClasses} data-gridtable-export-text={exportText}>
         {variant === 'compact' && (
           <div className="resource-bar-value">
             <span className="resource-bar-leading">{displayUsage}</span>

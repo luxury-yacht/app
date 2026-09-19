@@ -9,7 +9,7 @@
   overflow: hidden;
 }
 
-.search-input-wrapper.focused {
+.search-input-wrapper:focus-within {
   border-color: var(--color-accent);
   box-shadow: var(--dropdown-trigger-focus-shadow);
 }

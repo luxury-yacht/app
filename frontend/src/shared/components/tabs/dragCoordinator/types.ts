@@ -70,3 +70,11 @@ export const tabDragKindFromDataTypes = (
   }
   return null;
 };
+
+export interface TabDragEndEvent {
+  clientX: number;
+  clientY: number;
+  screenX: number;
+  screenY: number;
+  dataTransfer: DataTransfer | null;
+}

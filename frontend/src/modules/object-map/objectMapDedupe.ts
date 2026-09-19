@@ -39,10 +39,7 @@ export const dedupeServiceEdges = (
   nodes: ObjectMapNode[],
   edges: ObjectMapEdge[]
 ): ObjectMapEdge[] => {
-  const nodesById = new Map<string, ObjectMapNode>();
-  nodes.forEach((node) => {
-    nodesById.set(node.id, node);
-  });
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
 
   const kindOf = (id: string): string | undefined => nodesById.get(id)?.ref.kind;
 
@@ -95,19 +92,6 @@ export const dedupeServiceEdges = (
     endpointChainTargets.set(serviceId, reachable);
   });
 
-  // Pre-build the "for this (source, target) pair, what edge types
-  // exist?" lookup so the owner-vs-endpoint check is O(1).
-  const typesByPair = new Map<string, Set<string>>();
-  edges.forEach((edge) => {
-    const key = `${edge.source}|${edge.target}`;
-    let types = typesByPair.get(key);
-    if (!types) {
-      types = new Set();
-      typesByPair.set(key, types);
-    }
-    types.add(edge.type);
-  });
-
   return edges.filter((edge) => {
     if (edge.type === 'selector') {
       // Drop only when source is a Service and the target is also
@@ -118,11 +102,7 @@ export const dedupeServiceEdges = (
       if (kindOf(edge.source) !== SERVICE_KIND) {
         return true;
       }
-      const reachable = endpointChainTargets.get(edge.source);
-      if (reachable?.has(edge.target)) {
-        return false;
-      }
-      return true;
+      return !endpointChainTargets.get(edge.source)?.has(edge.target);
     }
 
     if (
@@ -130,11 +110,7 @@ export const dedupeServiceEdges = (
       kindOf(edge.source) === SERVICE_KIND &&
       kindOf(edge.target) === ENDPOINTSLICE_KIND
     ) {
-      const types = typesByPair.get(`${edge.source}|${edge.target}`);
-      if (types?.has('endpoint')) {
-        return false;
-      }
-      return true;
+      return !slicesByService.get(edge.source)?.has(edge.target);
     }
 
     return true;

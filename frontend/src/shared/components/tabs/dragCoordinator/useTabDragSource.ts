@@ -21,6 +21,7 @@ import { type DragEventHandler, useContext } from 'react';
 import { TabDragContext } from './TabDragProvider';
 import {
   TAB_DRAG_DATA_TYPE,
+  type TabDragEndEvent,
   type TabDragPayload,
   tabDragKindDataType,
   tabDragScopeDataType,
@@ -55,13 +56,7 @@ export interface TabDragSourceProps {
 function createTabDragSourceProps(
   payload: TabDragPayload | null,
   beginDrag: (payload: TabDragPayload) => void,
-  endDrag: (event?: {
-    clientX: number;
-    clientY: number;
-    screenX: number;
-    screenY: number;
-    dataTransfer: DataTransfer | null;
-  }) => void,
+  endDrag: (event?: TabDragEndEvent) => void,
   options?: UseTabDragSourceOptions
 ): TabDragSourceProps {
   if (!payload) {

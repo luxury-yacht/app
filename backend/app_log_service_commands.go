@@ -62,16 +62,11 @@ func (s *AppLogService) logAppLogsFromFrontend(level, message, source, clusterID
 	}
 	clusterMeta := []string{origin, strings.TrimSpace(clusterID), strings.TrimSpace(clusterName)}
 
-	switch strings.ToLower(strings.TrimSpace(level)) {
-	case "debug":
-		s.logger.Debug(trimmed, clusterMeta...)
-	case "warn", "warning":
-		s.logger.Warn(trimmed, clusterMeta...)
-	case "error":
-		s.logger.Error(trimmed, clusterMeta...)
-	default:
-		s.logger.Info(trimmed, clusterMeta...)
+	normalizedLevel := strings.ToLower(strings.TrimSpace(level))
+	if normalizedLevel == "warning" {
+		normalizedLevel = "warn"
 	}
+	s.logger.Log(classifiedLogLevel(normalizedLevel), trimmed, clusterMeta...)
 
 	return nil
 }

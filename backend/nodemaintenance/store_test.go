@@ -31,7 +31,7 @@ func TestStoreStartAndSnapshot(t *testing.T) {
 	store := NewStore(2)
 	opts := restypes.DrainNodeOptions{Force: true}
 
-	job := store.StartDrain("NodeA", opts)
+	job := store.StartDrainForCluster("NodeA", opts, "cluster-a", "Cluster A")
 	if job.NodeName != "nodea" {
 		t.Fatalf("expected normalized node name, got %q", job.NodeName)
 	}
@@ -43,7 +43,7 @@ func TestStoreStartAndSnapshot(t *testing.T) {
 	}
 
 	// Snapshot all nodes
-	snap, version := store.Snapshot("")
+	snap, version := store.Snapshot("cluster-a", "")
 	if version == 0 {
 		t.Fatalf("expected version to be incremented")
 	}
@@ -55,7 +55,7 @@ func TestStoreStartAndSnapshot(t *testing.T) {
 	}
 
 	// Snapshot specific node
-	snapNode, _ := store.Snapshot("NODEA")
+	snapNode, _ := store.Snapshot("cluster-a", "NODEA")
 	if len(snapNode.Drains) != 1 {
 		t.Fatalf("expected single drain for node")
 	}
@@ -63,14 +63,14 @@ func TestStoreStartAndSnapshot(t *testing.T) {
 
 func TestDrainJobEventsAndCompletion(t *testing.T) {
 	store := NewStore(3)
-	job := store.StartDrain("node-b", restypes.DrainNodeOptions{})
+	job := store.StartDrainForCluster("node-b", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
 
 	job.AddInfo("cordon", "cordon succeeded")
 	job.AddPodEvent("evicting", "ns1", "pod-a", "evicting pod", false)
 	job.AddPodEvent("failed", "ns1", "pod-b", "eviction failed", true)
 
 	job.Complete(DrainStatusSucceeded, "drain complete")
-	snap, _ := store.Snapshot("node-b")
+	snap, _ := store.Snapshot("cluster-a", "node-b")
 	if len(snap.Drains) != 1 {
 		t.Fatalf("expected one drain entry, got %d", len(snap.Drains))
 	}
@@ -91,12 +91,12 @@ func TestDrainJobEventsAndCompletion(t *testing.T) {
 
 func TestHistoryBounded(t *testing.T) {
 	store := NewStore(1)
-	store.StartDrain("node-c", restypes.DrainNodeOptions{})
+	store.StartDrainForCluster("node-c", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
 	// Second job should evict the first due to maxHistory=1
 	time.Sleep(1 * time.Millisecond)
-	store.StartDrain("node-c", restypes.DrainNodeOptions{})
+	store.StartDrainForCluster("node-c", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
 
-	snap, _ := store.Snapshot("node-c")
+	snap, _ := store.Snapshot("cluster-a", "node-c")
 	if len(snap.Drains) != 1 {
 		t.Fatalf("expected bounded history of 1, got %d", len(snap.Drains))
 	}
@@ -113,11 +113,13 @@ func TestHistoryBoundedPerClusterAndNode(t *testing.T) {
 	secondA := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
 	jobB := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-b", "Cluster B")
 
-	jobsA := store.GetJobsForCluster("cluster-a")
+	jobsASnapshot, _ := store.Snapshot("cluster-a", "")
+	jobsA := jobsASnapshot.Drains
 	if len(jobsA) != 1 || jobsA[0].ID != secondA.ID {
 		t.Fatalf("expected only newest cluster-a job, got %+v", jobsA)
 	}
-	jobsB := store.GetJobsForCluster("cluster-b")
+	jobsBSnapshot, _ := store.Snapshot("cluster-b", "")
+	jobsB := jobsBSnapshot.Drains
 	if len(jobsB) != 1 || jobsB[0].ID != jobB.ID {
 		t.Fatalf("expected cluster-b job to be retained independently, got %+v", jobsB)
 	}
@@ -125,22 +127,23 @@ func TestHistoryBoundedPerClusterAndNode(t *testing.T) {
 		t.Fatalf("expected oldest cluster-a job to be evicted")
 	}
 
-	snap, _ := store.Snapshot("worker-1")
-	if len(snap.Drains) != 2 {
-		t.Fatalf("expected one drain per cluster for worker-1, got %+v", snap.Drains)
+	snap, _ := store.Snapshot("cluster-a", "worker-1")
+	if len(snap.Drains) != 1 || snap.Drains[0].ID != secondA.ID {
+		t.Fatalf("expected only cluster-a history for worker-1, got %+v", snap.Drains)
 	}
 }
 
-func TestSetJobClusterReindexesHistory(t *testing.T) {
+func TestStartDrainPreservesIndependentClusterHistories(t *testing.T) {
 	store := NewStore(1)
-	jobA := store.StartDrain("worker-1", restypes.DrainNodeOptions{})
-	store.SetJobCluster(jobA.ID, "cluster-a", "Cluster A")
+	jobA := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
 	jobB := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-b", "Cluster B")
 
-	jobsA := store.GetJobsForCluster("cluster-a")
-	jobsB := store.GetJobsForCluster("cluster-b")
+	jobsASnapshot, _ := store.Snapshot("cluster-a", "")
+	jobsA := jobsASnapshot.Drains
+	jobsBSnapshot, _ := store.Snapshot("cluster-b", "")
+	jobsB := jobsBSnapshot.Drains
 	if len(jobsA) != 1 || jobsA[0].ID != jobA.ID {
-		t.Fatalf("expected reindexed cluster-a job, got %+v", jobsA)
+		t.Fatalf("expected cluster-a job, got %+v", jobsA)
 	}
 	if len(jobsB) != 1 || jobsB[0].ID != jobB.ID {
 		t.Fatalf("expected cluster-b job, got %+v", jobsB)
@@ -180,7 +183,7 @@ func TestCancelDrainForClusterMarksJobAndCallsCancel(t *testing.T) {
 		t.Fatalf("expected cancel function to be invoked")
 	}
 
-	snap, _ := store.Snapshot("worker-1")
+	snap, _ := store.Snapshot("cluster-a", "worker-1")
 	if len(snap.Drains) != 1 {
 		t.Fatalf("expected one drain, got %d", len(snap.Drains))
 	}
@@ -228,13 +231,13 @@ func TestClusterLifecycleCancellationPublishesAllJobsBeforeCallbacks(t *testing.
 	other := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-b", "Cluster B")
 	finished := store.StartDrainForCluster("worker-3", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
 	finished.Complete(DrainStatusSucceeded, "done")
-	_, before := store.Snapshot("")
+	_, before := store.Snapshot("cluster-a", "")
 
 	callbacks := make(chan Snapshot, 2)
 	for _, job := range []*DrainJob{first, second} {
 		store.RegisterCancel(job.ID, func() {
 			// Reading from cleanup must not deadlock on the store's write lock.
-			snapshot, _ := store.Snapshot("")
+			snapshot, _ := store.Snapshot("cluster-a", "")
 			callbacks <- snapshot
 		})
 	}
@@ -258,10 +261,6 @@ func TestClusterLifecycleCancellationPublishesAllJobsBeforeCallbacks(t *testing.
 				if job.Status != DrainStatusCancelled || job.CompletedAt == 0 || len(job.Events) != 2 || job.Events[1].Phase != DrainPhaseCancelled {
 					t.Fatalf("callback observed incomplete cancellation: %+v", job)
 				}
-			case other.ID:
-				if job.Status != DrainStatusRunning {
-					t.Fatalf("other cluster changed: %+v", job)
-				}
 			case finished.ID:
 				if job.Status != DrainStatusSucceeded || len(job.Events) != 2 {
 					t.Fatalf("completed history changed: %+v", job)
@@ -269,14 +268,17 @@ func TestClusterLifecycleCancellationPublishesAllJobsBeforeCallbacks(t *testing.
 			}
 		}
 	}
-	_, after := store.Snapshot("")
+	if peer, ok := store.JobForCluster(other.ID, "cluster-b"); !ok || peer.Status != DrainStatusRunning {
+		t.Fatalf("other cluster changed: %+v", peer)
+	}
+	_, after := store.Snapshot("cluster-a", "")
 	if after != before+1 {
 		t.Fatalf("expected one batch version advance: before %d, after %d", before, after)
 	}
 	if count := store.CancelActiveDrainsForClusterLifecycle("cluster-a", "again"); count != 0 {
 		t.Fatalf("expected repeated cleanup to be a no-op, got %d", count)
 	}
-	_, repeated := store.Snapshot("")
+	_, repeated := store.Snapshot("cluster-a", "")
 	if repeated != after || len(callbacks) != 0 {
 		t.Fatal("repeated cleanup published another version or invoked callbacks")
 	}
@@ -329,7 +331,7 @@ func TestNilJobGuards(t *testing.T) {
 
 func TestSnapshotUnknownNodeEmpty(t *testing.T) {
 	store := NewStore(-1)
-	snap, version := store.Snapshot("missing")
+	snap, version := store.Snapshot("cluster-a", "missing")
 	if version != 0 {
 		t.Fatalf("expected version 0 for empty store")
 	}
@@ -344,21 +346,16 @@ func TestDrainStoreClusterIsolation(t *testing.T) {
 	store := NewStore(5)
 
 	// Start a drain job for cluster A on worker-1
-	jobA := store.StartDrain("worker-1", restypes.DrainNodeOptions{})
-	jobA.ClusterID = "cluster-a"
-	jobA.ClusterName = "Cluster A"
-	// Update the job in the store with the cluster info
-	store.SetJobCluster(jobA.ID, "cluster-a", "Cluster A")
+	jobA := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
 
 	// Start a drain job for cluster B on the SAME node name (worker-1)
-	jobB := store.StartDrain("worker-1", restypes.DrainNodeOptions{})
-	jobB.ClusterID = "cluster-b"
-	jobB.ClusterName = "Cluster B"
-	store.SetJobCluster(jobB.ID, "cluster-b", "Cluster B")
+	jobB := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-b", "Cluster B")
 
-	// GetJobsForCluster should return only jobs for the matching cluster
-	jobsA := store.GetJobsForCluster("cluster-a")
-	jobsB := store.GetJobsForCluster("cluster-b")
+	// Snapshot should return only jobs for the matching cluster.
+	jobsASnapshot, _ := store.Snapshot("cluster-a", "")
+	jobsA := jobsASnapshot.Drains
+	jobsBSnapshot, _ := store.Snapshot("cluster-b", "")
+	jobsB := jobsBSnapshot.Drains
 
 	if len(jobsA) != 1 {
 		t.Fatalf("expected 1 job for cluster-a, got %d", len(jobsA))
@@ -372,16 +369,24 @@ func TestDrainStoreClusterIsolation(t *testing.T) {
 	if jobsB[0].ClusterID != "cluster-b" {
 		t.Fatalf("expected cluster-b job, got cluster ID %q", jobsB[0].ClusterID)
 	}
+	if jobsB[0].ID != jobB.ID {
+		t.Fatalf("expected the cluster-b job, got %+v", jobsB[0])
+	}
+	missingOwner, _ := store.Snapshot("", "worker-1")
+	if len(missingOwner.Drains) != 0 {
+		t.Fatalf("missing cluster must not expose global history: %+v", missingOwner.Drains)
+	}
 
 	// Verify that querying a non-existent cluster returns empty
-	jobsC := store.GetJobsForCluster("cluster-c")
+	jobsCSnapshot, _ := store.Snapshot("cluster-c", "")
+	jobsC := jobsCSnapshot.Drains
 	if len(jobsC) != 0 {
 		t.Fatalf("expected 0 jobs for cluster-c, got %d", len(jobsC))
 	}
 
-	// Verify Snapshot still sees all jobs for the node
-	snap, _ := store.Snapshot("worker-1")
-	if len(snap.Drains) != 2 {
-		t.Fatalf("expected 2 total drains for worker-1 node, got %d", len(snap.Drains))
+	// Node snapshots retain the requested cluster boundary.
+	snap, _ := store.Snapshot("cluster-a", "worker-1")
+	if len(snap.Drains) != 1 || snap.Drains[0].ID != jobA.ID {
+		t.Fatalf("expected only cluster-a drain for worker-1, got %+v", snap.Drains)
 	}
 }

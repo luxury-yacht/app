@@ -508,7 +508,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const [searchIndex, setSearchIndex] = useState(0);
   const [contextMenu, setContextMenu] = useState<ObjectMapMenuState | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const debugMapIdRef = useRef(createObjectMapDebugId());
+  const [debugMapId] = useState(createObjectMapDebugId);
   const isMapDebugOverlayVisible = useObjectMapDebugOverlayVisible();
   const { legendPosition, legendPointerHandlers } = useObjectMapLegendDrag(canvasRef);
   const [g6ViewportControls, setG6ViewportControls] = useState<ObjectMapViewportControls | null>(
@@ -677,12 +677,12 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   });
 
   useEffect(() => {
-    const debugId = debugMapIdRef.current;
+    const debugId = debugMapId;
     return () => removeObjectMapDebugSnapshot(debugId);
-  }, []);
+  }, [debugMapId]);
 
   useEffect(() => {
-    const debugId = debugMapIdRef.current;
+    const debugId = debugMapId;
     publishObjectMapDebugSnapshot({
       id: debugId,
       clusterId: payload.clusterId,
@@ -727,6 +727,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       updatedAt: Date.now(),
     });
   }, [
+    debugMapId,
     enabledEdgeTypes,
     focusMode,
     model.activeNodeId,
@@ -918,7 +919,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onCanvasContextMenu={handleCanvasContextMenu}
             autoFit={model.autoFit}
             preserveViewportNodeId={preserveViewportNodeId}
-            debugMapId={debugMapIdRef.current}
+            debugMapId={debugMapId}
             showDebugGrid={isMapDebugOverlayVisible}
             onUserViewportChange={disableAutoFitForManualViewport}
             onViewportControlsChange={setG6ViewportControls}

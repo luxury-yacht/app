@@ -20,7 +20,7 @@ import (
 // status, and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, replicaSet *appsv1.ReplicaSet) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(replicaSet)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, replicaSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, replicaSet.ObjectMeta, status)
 }
 
 // BuildFacts extracts the ReplicaSet facts from the raw object.

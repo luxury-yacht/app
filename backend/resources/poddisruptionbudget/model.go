@@ -21,7 +21,7 @@ import (
 func BuildResourceModel(clusterID string, pdb *policyv1.PodDisruptionBudget) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, pdb)
 	status := statusPresentation(pdb, facts)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, pdb.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, pdb.ObjectMeta, status)
 }
 
 // BuildFacts extracts the PodDisruptionBudget facts from the raw object.

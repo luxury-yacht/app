@@ -15,7 +15,6 @@ interface GridTablePerformanceProps {
   rows: GridTablePerformanceEntry[];
   emptyMessage?: string;
   onReset?: () => void;
-  summary: string;
 }
 
 type TablePerformanceOverview = {
@@ -70,12 +69,6 @@ const isTimingSignal = (averageMs: number, maxMs: number, averageThresholdMs: nu
 
 const isSustainedTimingSignal = (averageMs: number, averageThresholdMs: number) =>
   averageMs >= averageThresholdMs;
-
-const getWarningSignals = (signals: GridTablePerformanceSignal[]) =>
-  signals.filter((signal) => signal.severity === 'warning');
-
-const getWarningSignalCount = (row: GridTablePerformanceEntry) =>
-  getWarningSignals(buildTablePerformanceSignals(row)).length;
 
 export const buildTablePerformanceSignals = (
   row: GridTablePerformanceEntry
@@ -147,39 +140,39 @@ export const buildTablePerformanceSignals = (
   return signals;
 };
 
-const sortRowsBySeverity = (rows: GridTablePerformanceEntry[]) =>
-  [...rows].sort((a, b) => {
-    const aSignals = buildTablePerformanceSignals(a);
-    const bSignals = buildTablePerformanceSignals(b);
-    const aWarningCount = getWarningSignals(aSignals).length;
-    const bWarningCount = getWarningSignals(bSignals).length;
-    if (bWarningCount !== aWarningCount) {
-      return bWarningCount - aWarningCount;
-    }
-    if (bSignals.length !== aSignals.length) {
-      return bSignals.length - aSignals.length;
-    }
-    if (b.inputRows !== a.inputRows) {
-      return b.inputRows - a.inputRows;
-    }
-    return a.label.localeCompare(b.label);
-  });
+const buildPerformanceRows = (rows: GridTablePerformanceEntry[]) =>
+  rows
+    .map((row) => {
+      const signals = buildTablePerformanceSignals(row);
+      return {
+        row,
+        signals,
+        warningCount: signals.filter((signal) => signal.severity === 'warning').length,
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.warningCount - left.warningCount ||
+        right.signals.length - left.signals.length ||
+        right.row.inputRows - left.row.inputRows ||
+        left.row.label.localeCompare(right.row.label)
+    );
+
+const summarizePerformanceRows = (
+  rows: ReturnType<typeof buildPerformanceRows>
+): TablePerformanceOverview => {
+  const flagged = rows.filter(({ warningCount }) => warningCount > 0);
+  return {
+    instrumentedTables: rows.length,
+    flaggedTables: flagged.length,
+    worstOffenderLabel: flagged[0]?.row.label ?? null,
+    worstOffenderSignals: flagged[0]?.warningCount ?? 0,
+  };
+};
 
 export const buildTablePerformanceOverview = (
   rows: GridTablePerformanceEntry[]
-): TablePerformanceOverview => {
-  const sortedRows = sortRowsBySeverity(rows);
-  const flaggedTables = rows.filter((row) => getWarningSignalCount(row) > 0).length;
-  const worstRow = sortedRows.find((row) => getWarningSignalCount(row) > 0) ?? null;
-  const worstSignals = worstRow ? getWarningSignals(buildTablePerformanceSignals(worstRow)) : [];
-
-  return {
-    instrumentedTables: rows.length,
-    flaggedTables,
-    worstOffenderLabel: worstSignals.length > 0 ? (worstRow?.label ?? null) : null,
-    worstOffenderSignals: worstSignals.length,
-  };
-};
+): TablePerformanceOverview => summarizePerformanceRows(buildPerformanceRows(rows));
 
 export const buildDominantTimingMetric = (
   row: GridTablePerformanceEntry
@@ -224,20 +217,49 @@ export const buildDominantTimingMetric = (
   };
 };
 
+const TimingCell: React.FC<{ stats: GridTablePerformanceEntry['sort'] }> = ({ stats }) => (
+  <td>
+    <TableCellValue>
+      {formatTiming(stats.samples, stats.averageMs, stats.maxMs, stats.latestMs)}
+    </TableCellValue>
+  </td>
+);
+
+const ReferenceChurnCell: React.FC<{
+  row: GridTablePerformanceEntry;
+  signals: GridTablePerformanceSignal[];
+}> = ({ row, signals }) => (
+  <td
+    className={
+      signals.some(
+        (signal) => signal.severity === 'warning' && signal.label === 'Broad replacement'
+      )
+        ? 'diagnostics-count-warning'
+        : undefined
+    }
+    title={
+      row.updates > 0
+        ? `Input rows changed reference on ${row.inputReferenceChanges} of ${row.updates} updates.`
+        : undefined
+    }
+  >
+    <TableCellValue>{formatReferenceChurn(row.inputReferenceChanges, row.updates)}</TableCellValue>
+  </td>
+);
+
 export const GridTablePerformance: React.FC<GridTablePerformanceProps> = ({
   rows,
   emptyMessage,
   onReset,
-  summary: _summary,
 }) => {
   const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
   const resolvedEmptyMessage =
     emptyMessage || 'No instrumented GridTable performance diagnostics have been recorded yet.';
-  const sortedRows = sortRowsBySeverity(rows);
-  const overview = buildTablePerformanceOverview(rows);
+  const sortedRows = useMemo(() => buildPerformanceRows(rows), [rows]);
+  const overview = summarizePerformanceRows(sortedRows);
   const visibleRows = useMemo(
     () =>
-      showFlaggedOnly ? sortedRows.filter((row) => getWarningSignalCount(row) > 0) : sortedRows,
+      showFlaggedOnly ? sortedRows.filter(({ warningCount }) => warningCount > 0) : sortedRows,
     [showFlaggedOnly, sortedRows]
   );
   const visibleEmptyMessage = showFlaggedOnly
@@ -313,8 +335,7 @@ export const GridTablePerformance: React.FC<GridTablePerformanceProps> = ({
                 <td colSpan={15}>{visibleEmptyMessage}</td>
               </tr>
             ) : (
-              visibleRows.map((row) => {
-                const signals = buildTablePerformanceSignals(row);
+              visibleRows.map(({ row, signals }) => {
                 const signalsTitle = signals.map((signal) => signal.title).join('\n');
                 const dominantTiming = buildDominantTimingMetric(row);
 
@@ -336,25 +357,7 @@ export const GridTablePerformance: React.FC<GridTablePerformanceProps> = ({
                       {row.displayedRows}
                     </td>
                     <td>{row.updates}</td>
-                    <td
-                      className={
-                        signals.some(
-                          (signal) =>
-                            signal.severity === 'warning' && signal.label === 'Broad replacement'
-                        )
-                          ? 'diagnostics-count-warning'
-                          : undefined
-                      }
-                      title={
-                        row.updates > 0
-                          ? `Input rows changed reference on ${row.inputReferenceChanges} of ${row.updates} updates.`
-                          : undefined
-                      }
-                    >
-                      <TableCellValue>
-                        {formatReferenceChurn(row.inputReferenceChanges, row.updates)}
-                      </TableCellValue>
-                    </td>
+                    <ReferenceChurnCell row={row} signals={signals} />
                     <td title={dominantTiming?.title ?? undefined}>
                       <TableCellValue>
                         {dominantTiming?.label ?? TABLE_NO_VALUE_TEXT}
@@ -377,46 +380,10 @@ export const GridTablePerformance: React.FC<GridTablePerformanceProps> = ({
                         <TableCellValue>{TABLE_NO_VALUE_TEXT}</TableCellValue>
                       )}
                     </td>
-                    <td>
-                      <TableCellValue>
-                        {formatTiming(
-                          row.filterOptions.samples,
-                          row.filterOptions.averageMs,
-                          row.filterOptions.maxMs,
-                          row.filterOptions.latestMs
-                        )}
-                      </TableCellValue>
-                    </td>
-                    <td>
-                      <TableCellValue>
-                        {formatTiming(
-                          row.filterPass.samples,
-                          row.filterPass.averageMs,
-                          row.filterPass.maxMs,
-                          row.filterPass.latestMs
-                        )}
-                      </TableCellValue>
-                    </td>
-                    <td>
-                      <TableCellValue>
-                        {formatTiming(
-                          row.sort.samples,
-                          row.sort.averageMs,
-                          row.sort.maxMs,
-                          row.sort.latestMs
-                        )}
-                      </TableCellValue>
-                    </td>
-                    <td>
-                      <TableCellValue>
-                        {formatTiming(
-                          row.render.samples,
-                          row.render.averageMs,
-                          row.render.maxMs,
-                          row.render.latestMs
-                        )}
-                      </TableCellValue>
-                    </td>
+                    <TimingCell stats={row.filterOptions} />
+                    <TimingCell stats={row.filterPass} />
+                    <TimingCell stats={row.sort} />
+                    <TimingCell stats={row.render} />
                     <td
                       title={
                         row.scrollFrame

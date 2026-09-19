@@ -123,7 +123,7 @@ func TestEveryPackagedKindIsSourcedFromItsPackage(t *testing.T) {
 	for _, id := range packagedKindIdentities() {
 		got, ok := FindBuiltin(id.Group, id.Version, id.Kind)
 		require.Truef(t, ok, "packaged kind %s/%s/%s missing from the contract", id.Group, id.Version, id.Kind)
-		require.Equalf(t, fromIdentity(id), got, "contract row for %s drifted from its package identity", id.Kind)
+		require.Equalf(t, id, got, "contract row for %s drifted from its package identity", id.Kind)
 	}
 }
 

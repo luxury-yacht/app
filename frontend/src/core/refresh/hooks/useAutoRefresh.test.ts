@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/core/settings/appPreferences', () => ({
   getAutoRefreshEnabled: () => mocks.enabled,
+  getBackgroundRefreshEnabled: () => true,
   setAutoRefreshEnabled: (...args: unknown[]) => mocks.setEnabled(...args),
 }));
 
@@ -87,7 +88,10 @@ describe('useAutoRefresh', () => {
     act(() => root.render(React.createElement(Harness)));
     expect(mocks.resume).toHaveBeenCalledOnce();
 
-    act(() => eventBus.emit('settings:auto-refresh', false));
+    act(() => {
+      mocks.enabled = false;
+      eventBus.emit('settings:auto-refresh', false);
+    });
     expect(hookResult.enabled).toBe(false);
     expect(mocks.pause).toHaveBeenCalledOnce();
 

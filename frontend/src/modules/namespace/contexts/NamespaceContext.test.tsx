@@ -104,6 +104,8 @@ const {
       resetDomain: vi.fn(),
       fetchScopedDomain: vi.fn(() => Promise.resolve()),
       setScopedDomainEnabled: vi.fn(),
+      acquireScopedDomainLease: vi.fn(),
+      releaseScopedDomainLease: vi.fn(),
       updateContext: vi.fn(),
     },
     namespaceDomainRef: { current: createNamespaceDomain('ready', ['alpha', 'beta']) },
@@ -167,8 +169,10 @@ const SelectedNamespace: React.FC = () => {
 
 const namespaceRef: { current: ReturnType<typeof useNamespace> | null } = { current: null };
 
+const namespaceRenders: string[][] = [];
 const Harness: React.FC = () => {
   namespaceRef.current = useNamespace();
+  namespaceRenders.push(namespaceRef.current.namespaces.map((item) => item.name));
   return null;
 };
 
@@ -188,6 +192,13 @@ describe('NamespaceProvider selection behaviour', () => {
     resetAllScopedDomainStates('namespaces');
     resetAllScopedDomainStates('namespace-metrics');
     vi.clearAllMocks();
+    mockRefreshOrchestrator.setScopedDomainEnabled.mockReset();
+    mockRefreshOrchestrator.acquireScopedDomainLease.mockImplementation((domain, scope, options) =>
+      mockRefreshOrchestrator.setScopedDomainEnabled(domain, scope, true, options)
+    );
+    mockRefreshOrchestrator.releaseScopedDomainLease.mockImplementation((domain, scope, options) =>
+      mockRefreshOrchestrator.setScopedDomainEnabled(domain, scope, false, options)
+    );
   });
 
   afterEach(() => {
@@ -227,6 +238,18 @@ describe('NamespaceProvider selection behaviour', () => {
 
     return { container, rerender, cleanup };
   };
+
+  it('never exposes retained namespaces from the previous cluster while the next cluster loads', () => {
+    const { rerender, cleanup } = renderWithProvider();
+    namespaceRenders.length = 0;
+    mockClusterId = 'cluster-b';
+    namespaceDomainRef.current = { status: 'loading', data: null, error: null };
+    rerender();
+    const renders = [...namespaceRenders];
+    cleanup();
+    expect(renders.length).toBeGreaterThan(0);
+    expect(renders.every((names) => names.length === 0)).toBe(true);
+  });
 
   it('keeps the selected namespace while refresh is in progress', () => {
     const { rerender, cleanup } = renderWithProvider();
@@ -670,6 +693,32 @@ describe('NamespaceProvider selection behaviour', () => {
     cleanup();
   });
 
+  it('shares namespace metrics with another mounted owner until both release it', () => {
+    const leases = new Map<string, number>();
+    const enabled = new Set<string>();
+    mockRefreshOrchestrator.setScopedDomainEnabled.mockImplementation((domain, scope, active) => {
+      if (domain !== 'namespace-metrics') return;
+      if (active) enabled.add(scope);
+      else if (!(leases.get(scope) ?? 0)) enabled.delete(scope);
+    });
+    mockRefreshOrchestrator.acquireScopedDomainLease.mockImplementation((_domain, scope) => {
+      leases.set(scope, (leases.get(scope) ?? 0) + 1);
+      enabled.add(scope);
+    });
+    mockRefreshOrchestrator.releaseScopedDomainLease.mockImplementation((_domain, scope) => {
+      const remaining = Math.max(0, (leases.get(scope) ?? 0) - 1);
+      leases.set(scope, remaining);
+      if (!remaining) enabled.delete(scope);
+    });
+    const first = renderWithProvider();
+    const second = renderWithProvider();
+    first.cleanup();
+    const remaining = [...enabled];
+    second.cleanup();
+    expect(remaining).toEqual(['cluster-a|']);
+    expect(enabled.size).toBe(0);
+  });
+
   it('renders warmed namespace data immediately when switching open cluster tabs', () => {
     namespaceDomainsByScopeRef.current = {
       'cluster-a|': createNamespaceDomainWithCluster('ready', ['alpha'], 'cluster-a', 'alpha'),
@@ -932,7 +981,7 @@ describe('NamespaceProvider selection behaviour', () => {
     });
 
     await act(async () => {
-      await namespaceRef.current?.loadNamespaces(false);
+      await namespaceRef.current?.loadNamespaces();
     });
 
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(

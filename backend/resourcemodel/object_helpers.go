@@ -8,14 +8,13 @@ import (
 )
 
 // KubernetesResourceModel builds the canonical ResourceModel for a Kubernetes
-// object: full Ref identity, copied metadata, and the supplied status/facts.
+// object: full Ref identity, copied metadata, and the supplied status.
 // Every kind package builds its model through this constructor and its Identity.
 func KubernetesResourceModel(
 	clusterID string,
 	identity resourcekind.Identity,
 	meta metav1.ObjectMeta,
 	status ResourceStatusPresentation,
-	facts ResourceFacts,
 ) ResourceModel {
 	scope := ResourceScopeCluster
 	if identity.Namespaced {
@@ -42,7 +41,6 @@ func KubernetesResourceModel(
 			Finalizers:        append([]string(nil), meta.Finalizers...),
 		},
 		Status: status,
-		Facts:  facts,
 	}
 }
 

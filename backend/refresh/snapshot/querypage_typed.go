@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -584,6 +585,26 @@ func maintainedQueryFacetValues[T any](counts map[string]map[string]int, facets 
 type maintainedQueryScope struct {
 	availableKinds map[string]bool
 	namespace      string
+	// Server-owned constraints apply to both visible rows and unfiltered totals.
+	filters map[string][]string
+}
+
+// Required scope filters differ from optional UI filters: an empty allowed
+// set means no rows are authorized, rather than an unrestricted query.
+func maintainedScopeEmpty(filters map[string][]string) bool {
+	for _, values := range filters {
+		if len(values) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func maintainedScopeCounts[T any](store *querypage.Store[T], filters map[string][]string, search string, matchNone bool) (map[string]map[string]int, int) {
+	if matchNone {
+		return nil, 0
+	}
+	return store.Scope(filters, search)
 }
 
 type typedSnapshotPageConfig[T any] struct {
@@ -619,27 +640,27 @@ func resolveMaintainedDirect[T any](store *querypage.Store[T], query typedTableQ
 	// matched-only store queried with no filters. Cursor decode/validate is owned by
 	// the engine: an invalid token restarts at page 1 on page.CursorInvalid.
 	pageBase := maintainedScopeBase(scope.availableKinds, scope.namespace, query.Request.Kinds, query.Request.Namespaces, true)
+	matchNone := query.Request.MatchNone || maintainedScopeEmpty(pageBase) || maintainedScopeEmpty(scope.filters)
 	for key, selected := range query.Request.Facets {
 		pageBase[key] = stableFacetSelection(selected)
 	}
+	// User facets cannot replace server-owned constraints.
+	maps.Copy(pageBase, scope.filters)
 	engineQuery := typedEngineQuery(query, schema)
 	// This store retains all rows, so the engine applies the request filters
 	// and owns the found/filtered/not-found anchor result.
 	engineQuery.Search = query.Request.Search
 	engineQuery.Filters = pageBase
-	engineQuery.MatchNone = query.Request.MatchNone
+	engineQuery.MatchNone = matchNone
 	page, anchorResult := executeTypedEngineQuery(store, engineQuery, query.Request, typedAnchorKey(adapter, query.Request.Anchor))
 
 	// Facets + Total are over the user-matched set (page query's scope). UnfilteredTotal
 	// is over the scope-only set (available kinds + namespace, NO user filters/search) —
 	// the count of in-scope rows the list path passed in as `items`.
-	matchedFacets, matchedTotal := store.Scope(pageBase, strings.ToLower(strings.TrimSpace(query.Request.Search)))
+	matchedFacets, matchedTotal := maintainedScopeCounts(store, pageBase, strings.ToLower(strings.TrimSpace(query.Request.Search)), matchNone)
 	scopeOnlyBase := maintainedScopeBase(scope.availableKinds, scope.namespace, nil, nil, false)
-	scopeOnlyFacets, unfilteredTotal := store.Scope(scopeOnlyBase, "")
-	if query.Request.MatchNone {
-		matchedFacets = map[string]map[string]int{}
-		matchedTotal = 0
-	}
+	maps.Copy(scopeOnlyBase, scope.filters)
+	scopeOnlyFacets, unfilteredTotal := maintainedScopeCounts(store, scopeOnlyBase, "", maintainedScopeEmpty(scopeOnlyBase))
 
 	// availableKinds keys are the original-cased Kind the rows carry (the descriptor
 	// identity), so lowered facet value -> original casing for the kind facet list.

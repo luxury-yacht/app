@@ -52,11 +52,11 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
   detailsTable,
   notice,
   warning,
-  confirmText,
-  cancelText,
-  confirmButtonClass,
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
+  confirmButtonClass = 'danger',
   secondaryActionText,
-  secondaryActionButtonClass,
+  secondaryActionButtonClass = 'secondary',
   onSecondaryAction,
   onConfirm,
   onCancel,
@@ -142,43 +142,8 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
   );
 };
 
-function ConfirmationModal({
-  isOpen,
-  title,
-  message,
-  detailsTable,
-  notice,
-  warning,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
-  confirmButtonClass = 'danger',
-  secondaryActionText,
-  secondaryActionButtonClass = 'secondary',
-  onSecondaryAction,
-  onConfirm,
-  onCancel,
-}: Readonly<ConfirmationModalProps>) {
-  if (!isOpen) {
-    return null;
-  }
-
-  return (
-    <ConfirmationModalContent
-      title={title}
-      message={message}
-      detailsTable={detailsTable}
-      notice={notice}
-      warning={warning}
-      secondaryActionText={secondaryActionText}
-      secondaryActionButtonClass={secondaryActionButtonClass}
-      onSecondaryAction={onSecondaryAction}
-      confirmText={confirmText}
-      cancelText={cancelText}
-      confirmButtonClass={confirmButtonClass}
-      onConfirm={onConfirm}
-      onCancel={onCancel}
-    />
-  );
+function ConfirmationModal({ isOpen, ...props }: Readonly<ConfirmationModalProps>) {
+  return isOpen ? <ConfirmationModalContent {...props} /> : null;
 }
 
 export default ConfirmationModal;

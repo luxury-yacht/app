@@ -62,13 +62,7 @@ import (
 const builtinStorageAPIGroup = "storage.k8s.io"
 
 // BuiltinResource describes one built-in Kubernetes resource identity.
-type BuiltinResource struct {
-	Group      string
-	Version    string
-	Kind       string
-	Resource   string
-	Namespaced bool
-}
+type BuiltinResource = resourcekind.Identity
 
 // BuiltinResources is the authoritative in-repo resource identity table for
 // built-ins that Luxury Yacht handles without dynamic discovery. Every row is
@@ -76,75 +70,64 @@ type BuiltinResource struct {
 // exceptions are catalog-only kinds with no resource package (Endpoints,
 // CSIDriver, CSINode, VolumeAttachment, Lease), declared inline here.
 var BuiltinResources = []BuiltinResource{
-	fromIdentity(pods.Identity),
-	fromIdentity(service.Identity),
-	fromIdentity(configmap.Identity),
-	fromIdentity(secretpkg.Identity),
-	fromIdentity(serviceaccount.Identity),
-	fromIdentity(events.Identity),
-	fromIdentity(limitrange.Identity),
-	fromIdentity(resourcequota.Identity),
+	pods.Identity,
+	service.Identity,
+	configmap.Identity,
+	secretpkg.Identity,
+	serviceaccount.Identity,
+	events.Identity,
+	limitrange.Identity,
+	resourcequota.Identity,
 	builtin("", "v1", "Endpoints", "endpoints", true), // catalog-only: no resource package
-	fromIdentity(persistentvolumeclaim.Identity),
-	fromIdentity(namespaces.Identity),
-	fromIdentity(nodes.Identity),
-	fromIdentity(persistentvolume.Identity),
+	persistentvolumeclaim.Identity,
+	namespaces.Identity,
+	nodes.Identity,
+	persistentvolume.Identity,
 
-	fromIdentity(deployment.Identity),
-	fromIdentity(statefulset.Identity),
-	fromIdentity(daemonset.Identity),
-	fromIdentity(replicaset.Identity),
+	deployment.Identity,
+	statefulset.Identity,
+	daemonset.Identity,
+	replicaset.Identity,
 
-	fromIdentity(jobres.Identity),
-	fromIdentity(cronjob.Identity),
+	jobres.Identity,
+	cronjob.Identity,
 
-	fromIdentity(hpa.IdentityV1),
-	fromIdentity(hpa.Identity),
+	hpa.IdentityV1,
+	hpa.Identity,
 
-	fromIdentity(ingress.Identity),
-	fromIdentity(networkpolicy.Identity),
-	fromIdentity(ingressclass.Identity),
+	ingress.Identity,
+	networkpolicy.Identity,
+	ingressclass.Identity,
 
-	fromIdentity(endpointslice.Identity),
+	endpointslice.Identity,
 
-	fromIdentity(gateway.Identity),
-	fromIdentity(httproute.Identity),
-	fromIdentity(grpcroute.Identity),
-	fromIdentity(tlsroute.Identity),
-	fromIdentity(listenerset.Identity),
-	fromIdentity(backendtlspolicy.Identity),
-	fromIdentity(referencegrant.Identity),
-	fromIdentity(gatewayclass.Identity),
+	gateway.Identity,
+	httproute.Identity,
+	grpcroute.Identity,
+	tlsroute.Identity,
+	listenerset.Identity,
+	backendtlspolicy.Identity,
+	referencegrant.Identity,
+	gatewayclass.Identity,
 
-	fromIdentity(role.Identity),
-	fromIdentity(rolebinding.Identity),
-	fromIdentity(clusterrole.Identity),
-	fromIdentity(clusterrolebinding.Identity),
+	role.Identity,
+	rolebinding.Identity,
+	clusterrole.Identity,
+	clusterrolebinding.Identity,
 
-	fromIdentity(poddisruptionbudget.Identity),
+	poddisruptionbudget.Identity,
 
-	fromIdentity(storageclass.Identity),
+	storageclass.Identity,
 	builtin(builtinStorageAPIGroup, "v1", "CSIDriver", "csidrivers", false),               // catalog-only: no resource package
 	builtin(builtinStorageAPIGroup, "v1", "CSINode", "csinodes", false),                   // catalog-only: no resource package
 	builtin(builtinStorageAPIGroup, "v1", "VolumeAttachment", "volumeattachments", false), // catalog-only: no resource package
 
-	fromIdentity(admission.MutatingIdentity),
-	fromIdentity(admission.ValidatingIdentity),
+	admission.MutatingIdentity,
+	admission.ValidatingIdentity,
 
 	builtin("coordination.k8s.io", "v1", "Lease", "leases", true), // catalog-only: no resource package
 
-	fromIdentity(apiextensions.Identity),
-}
-
-// fromIdentity converts a kind package's declared identity into a contract row.
-func fromIdentity(id resourcekind.Identity) BuiltinResource {
-	return BuiltinResource{
-		Group:      id.Group,
-		Version:    id.Version,
-		Kind:       id.Kind,
-		Resource:   id.Resource,
-		Namespaced: id.Namespaced,
-	}
+	apiextensions.Identity,
 }
 
 // builtin declares a contract row inline, for catalog-only kinds that have no
@@ -181,16 +164,6 @@ func MustBuiltin(group, version, kind string) BuiltinResource {
 		}.String())
 	}
 	return resource
-}
-
-// GVK returns the resource's group/version/kind identity.
-func (r BuiltinResource) GVK() schema.GroupVersionKind {
-	return schema.GroupVersionKind{Group: r.Group, Version: r.Version, Kind: r.Kind}
-}
-
-// GVR returns the resource's group/version/resource identity.
-func (r BuiltinResource) GVR() schema.GroupVersionResource {
-	return schema.GroupVersionResource{Group: r.Group, Version: r.Version, Resource: r.Resource}
 }
 
 func resourceKey(group, version, kind string) string {

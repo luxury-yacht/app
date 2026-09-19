@@ -7,18 +7,18 @@
 
 import { TABLE_NO_VALUE_TEXT, TableCellValue } from '@shared/components/tables/tableNoValue';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { PermissionRow } from './diagnosticsPanelTypes';
+
+import {
+  DIAGNOSTICS_ROW_INCREMENT,
+  useDiagnosticsTableControls,
+} from './useDiagnosticsTableControls';
+import { displayInFlightCount } from './diagnosticsPanelUtils';
 
 interface PermissionsTableProps {
   rows: PermissionRow[];
 }
-
-const INITIAL_VISIBLE_ROWS = 250;
-const ROW_INCREMENT = 250;
-
-const displayInFlightCount = (count: number | null | undefined): number | string =>
-  count !== null && count !== undefined && count > 0 ? count : TABLE_NO_VALUE_TEXT;
 
 const matchesSearch = (row: PermissionRow, query: string): boolean => {
   if (!query) {
@@ -41,23 +41,16 @@ const matchesSearch = (row: PermissionRow, query: string): boolean => {
 };
 
 export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({ rows }) => {
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_ROWS);
-  const [searchTerm, setSearchTerm] = useState('');
+  const {
+    searchTerm,
+    setSearchTerm,
+    normalizedSearch,
+    visibleLimit,
+    expandedRows,
+    toggleRow,
+    showMoreRows,
+  } = useDiagnosticsTableControls();
 
-  const toggleRow = useCallback((id: string) => {
-    setExpandedRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
-
-  const normalizedSearch = searchTerm.trim().toLowerCase();
   const filteredRows = useMemo(
     () => rows.filter((row) => matchesSearch(row, normalizedSearch)),
     [normalizedSearch, rows]
@@ -67,15 +60,6 @@ export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({ row
     [filteredRows, visibleLimit]
   );
   const hiddenRowCount = Math.max(filteredRows.length - visibleRows.length, 0);
-  const showMoreRows = useCallback(() => {
-    setVisibleLimit((current) => Math.min(current + ROW_INCREMENT, filteredRows.length));
-  }, [filteredRows.length]);
-
-  useEffect(() => {
-    void normalizedSearch;
-    setVisibleLimit(INITIAL_VISIBLE_ROWS);
-    setExpandedRows(new Set());
-  }, [normalizedSearch]);
 
   return (
     <div className="diagnostics-section">
@@ -98,8 +82,12 @@ export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({ row
             />
           </label>
           {hiddenRowCount > 0 && (
-            <button className="diagnostics-section-toggle" onClick={showMoreRows} type="button">
-              Show {Math.min(ROW_INCREMENT, hiddenRowCount)} More
+            <button
+              className="diagnostics-section-toggle"
+              onClick={() => showMoreRows(filteredRows.length)}
+              type="button"
+            >
+              Show {Math.min(DIAGNOSTICS_ROW_INCREMENT, hiddenRowCount)} More
             </button>
           )}
         </div>
@@ -137,6 +125,7 @@ export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({ row
                   key={row.id}
                   className={
                     [
+                      'diagnostics-row-interactive',
                       row.isDenied ? 'diagnostics-permission-denied' : '',
                       expandedRows.has(row.id) ? 'diagnostics-row-expanded' : '',
                     ]
@@ -144,7 +133,6 @@ export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({ row
                       .join(' ') || undefined
                   }
                   onClick={() => toggleRow(row.id)}
-                  style={{ cursor: 'pointer' }}
                 >
                   <td>{row.scope}</td>
                   <td>{row.descriptorLabel}</td>

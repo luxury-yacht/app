@@ -187,8 +187,7 @@ vi.mock('../store', async () => {
   const actual = await vi.importActual<typeof import('../store')>('../store');
   return {
     ...actual,
-    useRefreshScopedDomainEntries: (domain: string) => scopedEntriesMap[domain] ?? [],
-    useRefreshState: () => refreshState,
+    useRefreshState: () => ({ ...refreshState, scopedDomainEntries: scopedEntriesMap }),
   };
 });
 
@@ -1905,6 +1904,40 @@ describe('DiagnosticsPanel component', () => {
     expect(metricsPrimary?.textContent).toBe('Idle');
 
     await rendered.unmount();
+  });
+
+  test('keeps one diagnostics cycle in flight so slow reads cannot overtake newer results', async () => {
+    vi.useFakeTimers();
+    let finish!: (summary: TelemetrySummary) => void;
+    fetchTelemetrySummaryMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+    );
+    const latest = makeTelemetrySummary();
+    latest.metrics.successCount = 23;
+    fetchTelemetrySummaryMock.mockResolvedValue(latest);
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel);
+    try {
+      await selectClusterDataTab(rendered.container);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(fetchTelemetrySummaryMock).toHaveBeenCalledTimes(1);
+      expect(fetchSelectionDiagnosticsMock).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        finish(makeTelemetrySummary());
+        await Promise.resolve();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+      expect(fetchTelemetrySummaryMock).toHaveBeenCalledTimes(2);
+      expect(rendered.container.textContent).toContain('23 polls');
+    } finally {
+      await rendered.unmount();
+    }
   });
 
   test('retains successful diagnostics and reports each failure only until that source recovers', async () => {

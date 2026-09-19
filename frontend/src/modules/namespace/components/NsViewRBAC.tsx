@@ -7,12 +7,12 @@
 
 import {
   type AggregatedResourceGridViewSpec,
+  createAggregatedIdentityColumns,
   NamespaceAggregatedResourceGridView,
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
 import type { NamespaceRBACSnapshotPayload, NamespaceRBACSummary } from '@/core/refresh/types';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 export type RBACData = NamespaceRBACSummary & { kindAlias?: string };
 
@@ -36,19 +36,7 @@ const rbacSpec: AggregatedResourceGridViewSpec<RBACData> = {
   showKindDropdown: true,
   namespaceLinkTab: 'rbac',
   buildColumns: ({ identity, useShortResourceNames }) => [
-    cf.createKindColumn<RBACData>({
-      key: 'kind',
-      getKind: (resource) => resource.ref.kind,
-      getAlias: (resource) => resource.kindAlias,
-      getDisplayText: (resource) => getDisplayKind(resource.ref.kind, useShortResourceNames),
-      onClick: identity.open,
-      onAltClick: identity.navigate,
-    }),
-    cf.createResourceNameColumn<RBACData>((resource) => resource.ref.name, {
-      onClick: identity.open,
-      onAltClick: identity.navigate,
-      getClassName: () => 'object-panel-link',
-    }),
+    ...createAggregatedIdentityColumns<RBACData>({ identity, useShortResourceNames }),
     cf.createAgeColumn(),
   ],
 };

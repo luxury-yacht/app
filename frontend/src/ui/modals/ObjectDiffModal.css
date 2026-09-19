@@ -138,25 +138,6 @@
   font-size: var(--font-size-sm);
 }
 
-.object-diff-viewer-subtitle {
-  margin-top: var(--spacing-xs);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
-.object-diff-change-indicator {
-  margin-top: var(--spacing-xs);
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
-.object-diff-change-item {
-  font-weight: var(--font-weight-medium);
-}
-
 .object-diff-column-headers {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

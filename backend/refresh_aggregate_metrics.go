@@ -17,9 +17,10 @@ type aggregateMetricsController struct {
 }
 
 func newAggregateMetricsController(subsystems map[string]*system.Subsystem) *aggregateMetricsController {
-	controller := &aggregateMetricsController{demanded: make(map[string]struct{})}
-	controller.updateConfig(subsystems)
-	return controller
+	return &aggregateMetricsController{
+		demanded:   make(map[string]struct{}),
+		subsystems: copyRefreshSubsystems(subsystems),
+	}
 }
 
 func (c *aggregateMetricsController) SetMetricsActiveForClusters(clusterIDs []string) {
@@ -43,27 +44,9 @@ func (c *aggregateMetricsController) Update(subsystems map[string]*system.Subsys
 		return
 	}
 	c.mu.Lock()
-	c.updateConfigLocked(subsystems)
+	c.subsystems = copyRefreshSubsystems(subsystems)
 	applyMetricsDemand(c.subsystems, c.demanded)
 	c.mu.Unlock()
-}
-
-func (c *aggregateMetricsController) updateConfig(subsystems map[string]*system.Subsystem) {
-	c.mu.Lock()
-	c.updateConfigLocked(subsystems)
-	c.mu.Unlock()
-}
-
-func (c *aggregateMetricsController) updateConfigLocked(subsystems map[string]*system.Subsystem) {
-	c.subsystems = copyMetricsSubsystems(subsystems)
-}
-
-func copyMetricsSubsystems(source map[string]*system.Subsystem) map[string]*system.Subsystem {
-	copy := make(map[string]*system.Subsystem, len(source))
-	for clusterID, subsystem := range source {
-		copy[clusterID] = subsystem
-	}
-	return copy
 }
 
 func applyMetricsDemand(subsystems map[string]*system.Subsystem, demanded map[string]struct{}) {

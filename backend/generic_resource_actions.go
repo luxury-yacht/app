@@ -20,7 +20,7 @@ func (g *ResourceGateway) deleteGenericResourceAction(target ObjectActionTargetR
 		return err
 	}
 	ctx := g.CtxOrBackground()
-	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:     target.Group,
 		Version:   target.Version,
 		Kind:      target.Kind,

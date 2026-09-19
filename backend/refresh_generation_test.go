@@ -348,7 +348,7 @@ func TestPermissionReplacementConstructionOutcomesPreserveOwnership(t *testing.T
 			next := &system.Subsystem{Manager: refresh.NewManager(nil, nil, nil, nil, nil), SnapshotService: newService}
 			app.Refresh.setRefreshSubsystem(clusterID, previous)
 			setRefreshServiceReadyForTest(app.Refresh)
-			aggregate := newAggregateSnapshotService([]string{clusterID}, map[string]*system.Subsystem{clusterID: previous})
+			aggregate := newAggregateSnapshotService(map[string]*system.Subsystem{clusterID: previous})
 			app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
 			oldClients := &clusterClients{meta: ClusterMeta{ID: clusterID}, kubeconfigPath: "/test/config"}
 			newClients := &clusterClients{meta: oldClients.meta, kubeconfigPath: oldClients.kubeconfigPath}

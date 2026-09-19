@@ -64,7 +64,7 @@ func buildResourceModel(clusterID string, resource *unstructured.Unstructured, d
 	return resourcemodel.KubernetesResourceModel(clusterID, resourcekind.Identity{
 		Group: gvr.Group, Version: gvr.Version, Kind: kind, Resource: gvr.Resource,
 		Namespaced: scope == resourcemodel.ResourceScopeNamespaced,
-	}, meta, status, resourcemodel.ResourceFacts{})
+	}, meta, status)
 }
 
 // BuildFacts extracts the status shared by custom-resource details and table rows.

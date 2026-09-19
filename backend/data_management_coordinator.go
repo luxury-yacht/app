@@ -149,10 +149,7 @@ func (c *DataManagementCoordinator) resetClusterRuntime() error {
 	if c.resetRuntime == nil {
 		return nil
 	}
-	if c.workspaceMutation != nil {
-		return c.workspaceMutation("clear-app-state", c.resetRuntime)
-	}
-	return c.resetRuntime()
+	return c.runWorkspaceMutation("clear-app-state", c.resetRuntime)
 }
 
 func (c *DataManagementCoordinator) resetKubeconfigSearchPaths() error {

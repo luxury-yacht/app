@@ -6,7 +6,7 @@
  */
 
 import { KeyboardProvider } from '@ui/shortcuts/context';
-import { act } from 'react';
+import { act, type ComponentProps } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RollbackModal from './RollbackModal';
@@ -85,7 +85,7 @@ describe('RollbackModal', () => {
   });
 
   /** Render the modal and wait for async effects. */
-  const renderModal = async (props?: Partial<typeof defaultProps>) => {
+  const renderModal = async (props?: Partial<ComponentProps<typeof RollbackModal>>) => {
     await act(async () => {
       root.render(
         <KeyboardProvider>
@@ -275,5 +275,46 @@ describe('RollbackModal', () => {
     const warning = document.querySelector('[data-testid="rollback-diff-warning"]');
     expect(warning).not.toBeNull();
     expect(document.querySelector('.object-diff-table')).toBeNull();
+  });
+  it('keeps the new cluster history when an earlier request finishes late', async () => {
+    let finishOld!: (value: ReturnType<typeof makeRevision>[]) => void;
+    backendMocks.GetRevisionHistory.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishOld = resolve;
+      })
+    );
+    await renderModal();
+    backendMocks.GetRevisionHistory.mockResolvedValueOnce([
+      makeRevision(8, true),
+      makeRevision(7, false),
+    ]);
+    await renderModal({ clusterId: 'cluster-2' });
+    await act(async () => {
+      finishOld([makeRevision(3, true), makeRevision(2, false)]);
+    });
+    expect(document.querySelector('[data-testid="revision-item-7"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="revision-item-2"]')).toBeNull();
+  });
+
+  it('releases the mutation boundary and reports invalid action identity', async () => {
+    backendMocks.GetRevisionHistory.mockResolvedValue([
+      makeRevision(3, true),
+      makeRevision(2, false),
+    ]);
+    const onMutationChange = vi.fn();
+    await renderModal({ version: 'v99', onMutationChange });
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('.rollback-modal-footer .button.warning')?.click();
+    });
+    await act(async () => {
+      document
+        .querySelector<HTMLButtonElement>('.confirmation-modal-footer .button.warning')
+        ?.click();
+    });
+    expect(onMutationChange.mock.calls).toEqual([[true], [false]]);
+    expect(document.querySelector('.rollback-modal-footer-error')?.textContent).toContain(
+      'unsupported group/version'
+    );
+    expect(backendMocks.RunObjectAction).not.toHaveBeenCalled();
   });
 });

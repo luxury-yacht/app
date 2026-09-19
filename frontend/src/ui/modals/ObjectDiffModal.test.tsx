@@ -727,6 +727,138 @@ describe('ObjectDiffModal', () => {
     expect(leftObjectSelect?.value).toBe('alpha-uid');
   });
 
+  it('retains YAML during refresh but never carries it to another cluster with the same UID', async () => {
+    let refreshing = false;
+    refreshMocks.useRefreshScopedDomain.mockImplementation((domain: string, scope: string) => {
+      if (domain !== 'object-yaml' || scope === '__inactive__')
+        return getRefreshState(domain, scope);
+      if (scope.startsWith('cluster-b|') || (refreshing && scope.endsWith(':source'))) {
+        return makeState({ status: 'loading' });
+      }
+      return makeState({
+        data: { yaml: scope.endsWith(':source') ? 'value: first-cluster' : 'value: comparison' },
+        checksum: scope,
+      });
+    });
+    const renderSelection = async (clusterId: string, requestId: number) => {
+      await act(async () =>
+        root.render(
+          <KeyboardProvider>
+            <ObjectDiffModal
+              isOpen
+              onClose={vi.fn()}
+              initialRequest={{
+                requestId,
+                left: {
+                  clusterId,
+                  namespace: 'apps',
+                  group: 'apps',
+                  version: 'v1',
+                  kind: 'Deployment',
+                  name: 'source',
+                  uid: 'shared-uid',
+                  resource: 'deployments',
+                },
+              }}
+            />
+          </KeyboardProvider>
+        )
+      );
+    };
+    await renderSelection('cluster-a', 91);
+    for (const [label, value] of [
+      ['Right cluster', 'cluster-a'],
+      ['Right namespace', 'apps'],
+      ['Right kind', 'Deployment'],
+      ['Right object', 'delta-uid'],
+    ]) {
+      const select = requireValue(
+        document.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`),
+        label
+      );
+      await act(async () => {
+        select.value = value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+    expect(document.body.textContent).toContain('first-cluster');
+    refreshing = true;
+    await renderSelection('cluster-a', 91);
+    expect(document.body.textContent).toContain('first-cluster');
+    await renderSelection('cluster-b', 92);
+    expect(document.body.textContent).not.toContain('first-cluster');
+    expect(document.body.textContent).toContain('Loading YAML');
+  });
+
+  it.each(['cluster', 'close'])(
+    'discards an initial object lookup after changing %s',
+    async (change) => {
+      let resolve!: (value: unknown) => void;
+      appMocks.FindCatalogObjectMatch.mockReturnValue(
+        new Promise((complete) => {
+          resolve = complete;
+        })
+      );
+      await act(async () =>
+        root.render(
+          <KeyboardProvider>
+            <ObjectDiffModal
+              isOpen
+              onClose={vi.fn()}
+              initialRequest={{
+                requestId: 93,
+                left: {
+                  clusterId: 'cluster-a',
+                  namespace: 'apps',
+                  group: 'apps',
+                  version: 'v1',
+                  kind: 'Deployment',
+                  name: 'alpha',
+                },
+              }}
+            />
+          </KeyboardProvider>
+        )
+      );
+      const select = requireValue(
+        document.querySelector<HTMLSelectElement>('select[aria-label="Left cluster"]'),
+        'Left cluster'
+      );
+      if (change === 'cluster') {
+        await act(async () => {
+          select.value = 'cluster-b';
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+      } else {
+        await act(async () =>
+          root.render(
+            <KeyboardProvider>
+              <ObjectDiffModal isOpen={false} onClose={vi.fn()} />
+            </KeyboardProvider>
+          )
+        );
+      }
+      await act(async () => resolve(catalogItemFixture('alpha', 'alpha-uid')));
+      if (change === 'close') {
+        await act(async () =>
+          root.render(
+            <KeyboardProvider>
+              <ObjectDiffModal isOpen onClose={vi.fn()} />
+            </KeyboardProvider>
+          )
+        );
+      } else {
+        expect(select.value).toBe('cluster-b');
+      }
+      expect(
+        document.querySelector<HTMLSelectElement>('select[aria-label="Left object"]')?.value
+      ).toBe('');
+      expect(
+        document.querySelector<HTMLSelectElement>('select[aria-label="Left namespace"]')?.value
+      ).toBe(change === 'cluster' ? '' : 'apps');
+    }
+  );
+
   it('uses catalog-backed identity from the initial request without re-matching', async () => {
     await act(async () => {
       root.render(

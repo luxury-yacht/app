@@ -242,16 +242,7 @@ func (a *ApplicationLifecycle) configureStartupErrorCapture() {
 		if containsAuthPattern(lower) {
 			return
 		}
-		switch level {
-		case logclassify.LevelError:
-			a.logger.Error(message, logsources.ErrorCapture)
-		case logclassify.LevelWarn:
-			a.logger.Warn(message, logsources.ErrorCapture)
-		case logclassify.LevelDebug:
-			a.logger.Debug(message, logsources.ErrorCapture)
-		default:
-			a.logger.Info(message, logsources.ErrorCapture)
-		}
+		a.logger.Log(classifiedLogLevel(level), message, logsources.ErrorCapture)
 	})
 }
 
@@ -356,16 +347,7 @@ func (b *stdLogBridge) Write(p []byte) (int, error) {
 			continue
 		}
 
-		switch logclassify.Classify(msg) {
-		case logclassify.LevelError:
-			b.logger.Error(msg, logsources.StandardLog)
-		case logclassify.LevelWarn:
-			b.logger.Warn(msg, logsources.StandardLog)
-		case logclassify.LevelDebug:
-			b.logger.Debug(msg, logsources.StandardLog)
-		default:
-			b.logger.Info(msg, logsources.StandardLog)
-		}
+		b.logger.Log(classifiedLogLevel(logclassify.Classify(msg)), msg, logsources.StandardLog)
 	}
 
 	return len(p), nil

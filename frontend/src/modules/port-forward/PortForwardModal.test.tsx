@@ -525,4 +525,44 @@ describe('PortForwardModal', () => {
 
     vi.useRealTimers();
   });
+  it('preserves the edited port draft across source updates and resets it after reopening', async () => {
+    await renderModal();
+    const localPort = document.querySelector<HTMLInputElement>('[id$="-port-forward-local-port"]');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        localPort,
+        '9999'
+      );
+      localPort?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const updated = { ...mockTarget, ports: [{ port: 8080, name: 'new' }] };
+    await renderModal({ target: updated });
+    expect(
+      document.querySelector<HTMLInputElement>('[id$="-port-forward-local-port"]')?.value
+    ).toBe('9999');
+    await renderModal({ target: null });
+    await renderModal({ target: updated });
+    expect(
+      document.querySelector<HTMLInputElement>('[id$="-port-forward-local-port"]')?.value
+    ).toBe('8080');
+  });
+
+  it('shows provided ports on a new target while the previous target lookup is pending', async () => {
+    let finishOld!: (ports: { port: number }[]) => void;
+    getTargetPortsMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishOld = resolve;
+      })
+    );
+    await renderModal({ target: { ...mockTarget, ports: [] } });
+    await renderModal({
+      target: { ...mockTarget, clusterId: 'cluster-2', ports: [{ port: 8080 }] },
+    });
+    expect(document.querySelector('.port-forward-loading')).toBeNull();
+    expect(document.querySelector<HTMLInputElement>('input[type="radio"]')?.value).toBe('8080');
+    await act(async () => {
+      finishOld([{ port: 1234 }]);
+    });
+    expect(document.querySelector<HTMLInputElement>('input[type="radio"]')?.value).toBe('8080');
+  });
 });

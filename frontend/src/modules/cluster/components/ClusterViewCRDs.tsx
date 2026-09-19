@@ -61,20 +61,10 @@ const crdsSpec: AggregatedResourceGridViewSpec<CRDsData> = {
       getClassName: () => 'object-panel-link',
     }),
     cf.createTextColumn('group', 'Group', (crd) => crd.group || '-'),
-    (() => {
-      // Version column renders storage version with `(+N)` suffix for
-      // multi-version CRDs. Sort uses bare storageVersion so that
-      // sibling CRDs with the same storage version cluster together
-      // regardless of whether they have additional served versions.
-      //
-      const versionColumn = cf.createTextColumn<CRDsData>(
-        'version',
-        'Version',
-        formatCRDVersionCell
-      );
-      versionColumn.sortValue = (crd) => crd.storageVersion ?? '';
-      return versionColumn;
-    })(),
+    // Sort by the storage version, independently of the additional-version count.
+    cf.createTextColumn<CRDsData>('version', 'Version', formatCRDVersionCell, {
+      sortValue: (crd) => crd.storageVersion ?? '',
+    }),
     cf.createTextColumn('scope', 'Scope', (crd) => crd.scope || '-'),
     cf.createAgeColumn(),
   ],

@@ -429,3 +429,35 @@ func TestMaintainedDirectStartRankServesOffsetPage(t *testing.T) {
 		t.Fatal("maintained offset landing minted no self cursor")
 	}
 }
+
+// Retained rows must stay behind the server's scope even when its intersection
+// with a user filter is empty; the query engine treats empty UI filters as all.
+func TestMaintainedDirectEmptyScopeCannotExposeRetainedRows(t *testing.T) {
+	adapter := configTableQueryAdapter()
+	schema := configQuerypageSchema()
+	store := querypage.NewStore(schema)
+	store.Upsert(ConfigSummary{Ref: testCanonicalRowRef("ConfigMap", "default", "cached")})
+	for _, tc := range []struct {
+		name       string
+		available  map[string]bool
+		kinds      []string
+		namespaces []string
+		unfiltered int
+	}{
+		{name: "all access revoked", available: map[string]bool{}},
+		{name: "requested kind unavailable", available: map[string]bool{"ConfigMap": true}, kinds: []string{"Secret"}, unfiltered: 1},
+		{name: "requested namespace outside scope", available: map[string]bool{"ConfigMap": true}, namespaces: []string{"other"}, unfiltered: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			query := typedTableQuery{Enabled: true, Request: ResourceQueryRequest{
+				ClusterID: "c", Table: "namespace-config", SortField: "name", SortDirection: "asc", Limit: 10,
+				Kinds: tc.kinds, Namespaces: tc.namespaces,
+			}}
+			page := resolveMaintainedDirect(store, query, maintainedQueryScope{availableKinds: tc.available, namespace: "default"}, adapter, schema, nil,
+				newTypedSnapshotPageConfig(ResourceQueryCapabilities{}, 10, "objects", adapter.Kind, nil))
+			if len(page.Rows) != 0 || page.Envelope.Total != 0 || page.Envelope.UnfilteredTotal != tc.unfiltered || len(page.Envelope.Namespaces) != 0 {
+				t.Fatalf("empty scope exposed retained data: rows=%v envelope=%+v", page.Rows, page.Envelope)
+			}
+		})
+	}
+}

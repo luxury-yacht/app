@@ -43,6 +43,7 @@ import {
   tabTransferRequestFromDragPayload,
   tornOffTabSnapshot,
 } from './tabTransfer';
+import { useRemoveWorkspacePanels } from './useRemoveWorkspacePanels';
 
 const newIdentity = (prefix: string): string =>
   `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
@@ -60,15 +61,9 @@ const initialWindowBounds = (panelIds: readonly string[]): panelwindow.WindowBou
   };
 };
 
-const sameTransferredTab = (
-  owned: ReturnType<typeof useObjectPanelState>['getOwnedPanel'] extends (
-    clusterId: string,
-    panelId: string
-  ) => infer Owned
-    ? NonNullable<Owned>
-    : never,
-  tab: panelwindow.TabSnapshot
-): boolean =>
+type OwnedPanel = NonNullable<ReturnType<ReturnType<typeof useObjectPanelState>['getOwnedPanel']>>;
+
+const sameTransferredTab = (owned: OwnedPanel, tab: panelwindow.TabSnapshot): boolean =>
   owned.objectRef.clusterId === tab.objectRef.clusterId &&
   owned.objectRef.group === tab.objectRef.group &&
   owned.objectRef.version === tab.objectRef.version &&
@@ -76,8 +71,6 @@ const sameTransferredTab = (
   (owned.objectRef.namespace ?? '') === tab.objectRef.namespace &&
   owned.objectRef.name === tab.objectRef.name &&
   owned.activeView === tab.activeView;
-
-type OwnedPanel = Parameters<typeof sameTransferredTab>[0];
 
 const isAuthoritativeTransferSource = (
   request: panelwindow.TabTransferRequest,
@@ -108,7 +101,6 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
   const guards = usePanelLifecycleGuardRegistry();
   const [pendingDockRequest, setPendingDockRequest] =
     useState<panelwindow.WindowDockRequestedEvent | null>(null);
-  const pendingFloatGroupsRef = useRef(new Set<GroupKey>());
   const pendingFloatGroupIdsRef = useRef(
     new Map<
       string,
@@ -133,7 +125,11 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       if (targetPosition !== 'floating') {
         return false;
       }
-      if (pendingFloatGroupsRef.current.has(group.groupKey)) {
+      if (
+        Array.from(pendingFloatGroupIdsRef.current.values()).some(
+          (pending) => pending.sourceGroup === group.groupKey
+        )
+      ) {
         return true;
       }
       const blocker = guards.firstBlocker(group.tabs);
@@ -165,7 +161,6 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       const autoFloat =
         group.tabs.length > 0 &&
         group.tabs.every((panelId) => pendingNativeOpenPanelIds.has(panelId));
-      pendingFloatGroupsRef.current.add(group.groupKey);
       pendingFloatGroupIdsRef.current.set(groupId, {
         sourceGroup: group.groupKey,
         snapshot,
@@ -178,7 +173,6 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         .catch((error) => {
           guards.releaseTransfer(snapshot.transferId);
           const pending = pendingFloatGroupIdsRef.current.get(groupId);
-          pendingFloatGroupsRef.current.delete(pending?.sourceGroup ?? group.groupKey);
           pendingFloatGroupIdsRef.current.delete(groupId);
           if (pending?.autoFloat) {
             queueAutoFloatRollback(pending.snapshot);
@@ -273,11 +267,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
 
   const handlePanelWindowOpened = useCallback(
     (event: panelwindow.WindowOpenedEvent) => {
-      const pending = pendingFloatGroupIdsRef.current.get(event.groupId);
-      if (pending) {
-        pendingFloatGroupsRef.current.delete(pending.sourceGroup);
-        pendingFloatGroupIdsRef.current.delete(event.groupId);
-      }
+      pendingFloatGroupIdsRef.current.delete(event.groupId);
       for (const tab of event.snapshot.tabs ?? []) {
         removeOwnedPanel(event.clusterId, tab.panelId);
       }
@@ -292,7 +282,6 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         return;
       }
       guards.releaseTransfer(pending.snapshot.transferId);
-      pendingFloatGroupsRef.current.delete(pending.sourceGroup);
       pendingFloatGroupIdsRef.current.delete(groupId);
       if (pending.autoFloat) {
         queueAutoFloatRollback(pending.snapshot);
@@ -408,7 +397,7 @@ function WorkspaceObjectRouteCoordinator({
   onAutoFloatRollbackSettled: (transferId: string) => void;
   children: React.ReactNode;
 }>) {
-  const { dockPanelWindow, getOwnedPanel, removeOwnedPanel } = useObjectPanelState();
+  const { dockPanelWindow, getOwnedPanel } = useObjectPanelState();
   const {
     selectedClusterIds,
     selectedKubeconfigs,
@@ -419,6 +408,7 @@ function WorkspaceObjectRouteCoordinator({
   const { tabGroups, focusPanel, dockPanelGroup, detachPanelGroup, discardPanelLayouts } =
     useDockablePanelContext();
   const guards = usePanelLifecycleGuardRegistry();
+  const removeLocalTabs = useRemoveWorkspacePanels();
   const pendingTargets = useRef(new Map<string, panelwindow.TabTransferRequest>());
   const sync = usePanelWorkspaceSync();
   const flushPublication = sync.flush;
@@ -436,17 +426,6 @@ function WorkspaceObjectRouteCoordinator({
     },
     [selectedKubeconfigs, getClusterMeta, setActiveKubeconfig]
   );
-  const removeLocalTabs = useCallback(
-    (clusterId: string, ids: string[]) => {
-      detachPanelGroup(clusterId, ids);
-      discardPanelLayouts(clusterId, ids);
-      for (const id of ids) {
-        removeOwnedPanel(clusterId, id);
-      }
-    },
-    [detachPanelGroup, discardPanelLayouts, removeOwnedPanel]
-  );
-
   useEffect(() => {
     for (const snapshot of pendingAutoFloatRollbacks) {
       dockPanelGroup(

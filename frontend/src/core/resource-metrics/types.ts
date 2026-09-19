@@ -1,3 +1,4 @@
+import type { ClusterObjectReference } from '@shared/utils/objectIdentity';
 import type {
   ClusterOverviewMetrics,
   NodeMetricsInfo,
@@ -62,6 +63,7 @@ export interface ResourceMetricsData {
 // object state, the usage joined at serve, and the poller freshness block.
 export interface DomainResourceMetricsResolution {
   kind: 'domain';
+  ref: ClusterObjectReference;
   source: Extract<ResourceMetricsSource, 'pods' | 'namespace-workloads' | 'nodes'>;
   domain: Extract<ResourceMetricsDomain, 'pods' | 'namespace-workloads' | 'nodes'>;
   scope: string;

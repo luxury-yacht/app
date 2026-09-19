@@ -10,13 +10,6 @@
   box-sizing: border-box;
 }
 
-.overview-hero {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 1rem;
-}
-
 .overview-top {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -53,14 +46,6 @@
   -webkit-user-select: none;
 }
 
-.overview-header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  text-align: center;
-}
-
 .captain-k8s-small {
   height: 120px;
   width: auto;
@@ -69,14 +54,6 @@
 .logo-small {
   height: 100px;
   width: auto;
-}
-
-.overview-header h1 {
-  font-size: 1.2rem;
-  font-weight: 600;
-  margin: 0;
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
 }
 
 .cluster-info {
@@ -107,10 +84,7 @@
   font-size: 0.8rem;
 }
 
-.cluster-info-value--healthy {
-  color: var(--color-text);
-}
-
+.cluster-info-value--healthy,
 .cluster-info-value--refreshing {
   color: var(--color-text);
 }
@@ -127,10 +101,6 @@
   color: var(--color-warning);
 }
 
-.cluster-info-separator {
-  color: var(--color-text-tertiary);
-}
-
 .overview-grid {
   display: grid;
   gap: 1.5rem;
@@ -143,14 +113,6 @@
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-lg);
   padding: 1.2rem;
-}
-
-.overview-section.cluster-header {
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  padding: 0;
-  margin-bottom: 1rem;
 }
 
 .overview-section h2 {
@@ -217,49 +179,6 @@
   color: var(--color-text-secondary);
   user-select: none;
   -webkit-user-select: none;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
-  gap: 1rem;
-}
-
-.stat-card {
-  background: var(--color-bg-tertiary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  padding: 0.5rem;
-  text-align: center;
-}
-
-.stat-card--clickable {
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.stat-card--clickable:hover,
-.stat-card--clickable:focus-visible {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent);
-}
-
-.stat-card--clickable:focus-visible {
-  outline: none;
-}
-
-.stat-value {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin-bottom: 0.5rem;
-}
-
-.stat-label {
-  font-size: 0.85rem;
-  color: var(--color-text-secondary);
 }
 
 .pod-status,
@@ -601,13 +520,6 @@
 
 .resource-utilization-tooltip__percent--warning {
   color: var(--color-warning);
-}
-
-.overview-loading-banner {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 2rem 0;
 }
 
 /* Permission-gated data (issue #244): every affected card explains its own gap

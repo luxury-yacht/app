@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -22,7 +21,6 @@ import (
 
 // Manager fan-outs informer updates to subscribed streaming clients.
 type Manager struct {
-	informer  coreinformers.EventInformer
 	clusterID string
 	logger    Logger
 
@@ -35,11 +33,6 @@ type Manager struct {
 	signalObserver func(scope string, sequence uint64)
 }
 
-type bufferedEvent struct {
-	sequence uint64
-	entry    Entry
-}
-
 type eventDeliveryTarget struct {
 	id  uint64
 	sub *subscription
@@ -47,10 +40,10 @@ type eventDeliveryTarget struct {
 
 // eventBuffer is the per-scope resume buffer; the ring + replay logic is shared
 // via ringbuffer.Buffer.
-type eventBuffer = ringbuffer.Buffer[bufferedEvent]
+type eventBuffer = ringbuffer.Buffer[StreamEvent]
 
 func newEventBuffer(max int) *eventBuffer {
-	return ringbuffer.New(max, func(e bufferedEvent) uint64 { return e.sequence })
+	return ringbuffer.New(max, func(e StreamEvent) uint64 { return e.Sequence })
 }
 
 // NewManager wires the event informer into a streaming manager.
@@ -64,7 +57,6 @@ func NewManager(
 		logger = applog.Noop
 	}
 	m := &Manager{
-		informer:    informer,
 		clusterID:   clusterID,
 		logger:      logger,
 		subscribers: make(map[string]map[uint64]*subscription),
@@ -148,15 +140,7 @@ func (m *Manager) SubscribeWithResume(
 		}, false, true
 	}
 
-	events := make([]StreamEvent, 0, len(items))
-	for _, item := range items {
-		events = append(events, StreamEvent{
-			Entry:    item.entry,
-			Sequence: item.sequence,
-		})
-	}
-
-	return events, sub.ch, func() { m.dropSubscriber(scope, id, sub) }, true, false
+	return items, sub.ch, func() { m.dropSubscriber(scope, id, sub) }, true, false
 }
 
 // Resume returns buffered events after the provided sequence for the scope.
@@ -176,14 +160,7 @@ func (m *Manager) Resume(scope string, since uint64) ([]StreamEvent, bool) {
 	if !ok {
 		return nil, false
 	}
-	events := make([]StreamEvent, 0, len(items))
-	for _, item := range items {
-		events = append(events, StreamEvent{
-			Entry:    item.entry,
-			Sequence: item.sequence,
-		})
-	}
-	return events, true
+	return items, true
 }
 
 func (m *Manager) logWarn(message string) {
@@ -223,8 +200,9 @@ func (m *Manager) addSubscriberLocked(scope string) (uint64, *subscription, bool
 	}
 
 	ch := make(chan StreamEvent, config.EventStreamSubscriberBufferSize)
-	id := atomic.AddUint64(&m.nextID, 1)
-	sub := &subscription{ch: ch, created: time.Now()}
+	m.nextID++
+	id := m.nextID
+	sub := &subscription{ch: ch}
 	m.subscribers[scope][id] = sub
 	return id, sub, true
 }
@@ -298,7 +276,7 @@ func (m *Manager) prepareBroadcast(scope string, entry Entry) (func(string, uint
 			buffer = newEventBuffer(config.EventStreamResumeBufferSize)
 			m.buffers[scope] = buffer
 		}
-		buffer.Add(bufferedEvent{sequence: sequence, entry: entry})
+		buffer.Add(StreamEvent{Sequence: sequence, Entry: entry})
 	}
 	targets := make([]eventDeliveryTarget, 0, len(subscribers))
 	for id, sub := range subscribers {
@@ -311,21 +289,19 @@ func (m *Manager) deliverBroadcast(scope string, targets []eventDeliveryTarget, 
 	delivered := 0
 	backlogDrops := 0
 	for _, item := range targets {
-		sub := item.sub
-		sent, closed, dropped := m.trySend(sub, streamEvent)
-		if closed {
-			go m.dropSubscriber(scope, item.id, sub)
-			continue
-		}
-		if sent {
+		result := item.sub.trySend(streamEvent)
+		switch result {
+		case eventDelivered:
 			delivered++
-			if dropped {
-				backlogDrops++
+		case eventDeliveredAfterDrop:
+			delivered++
+			backlogDrops++
+		case eventSubscriptionClosed, eventBacklogFull:
+			if result == eventBacklogFull {
+				m.logWarn("eventstream: subscriber channel full after drop attempt; closing")
 			}
-			continue
+			go m.dropSubscriber(scope, item.id, item.sub)
 		}
-		m.logWarn("eventstream: subscriber channel full after drop attempt; closing")
-		go m.dropSubscriber(scope, item.id, sub)
 	}
 	return delivered, backlogDrops
 }
@@ -384,32 +360,5 @@ func (m *Manager) clearScopeStateLocked(scope string) {
 	}
 	if m.sequences != nil {
 		delete(m.sequences, scope)
-	}
-}
-
-func (m *Manager) trySend(sub *subscription, entry StreamEvent) (sent bool, closed bool, dropped bool) {
-	defer func() {
-		if recover() != nil {
-			closed = true
-			sent = false
-			dropped = false
-		}
-	}()
-	select {
-	case sub.ch <- entry:
-		return true, false, false
-	default:
-		// Drop the oldest pending event so slow subscribers keep the stream open.
-		select {
-		case <-sub.ch:
-			dropped = true
-		default:
-		}
-		select {
-		case sub.ch <- entry:
-			return true, false, dropped
-		default:
-			return false, false, dropped
-		}
 	}
 }

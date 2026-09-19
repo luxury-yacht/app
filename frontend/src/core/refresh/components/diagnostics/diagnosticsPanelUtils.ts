@@ -1,3 +1,4 @@
+import { TABLE_NO_VALUE_TEXT } from '@shared/components/tables/tableNoValue';
 /**
  * frontend/src/core/refresh/components/diagnostics/diagnosticsPanelUtils.ts
  *
@@ -88,3 +89,6 @@ export const formatDurationMs = (durationMs?: number | null): string => {
   const minutes = durationMs / 60_000;
   return `${minutes.toFixed(minutes < 10 ? 1 : 0)}m`;
 };
+
+export const displayInFlightCount = (count: number | null | undefined): number | string =>
+  count !== null && count !== undefined && count > 0 ? count : TABLE_NO_VALUE_TEXT;

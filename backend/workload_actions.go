@@ -63,19 +63,15 @@ func validateAppsV1WorkloadAction(action, group, version, kind string, supported
 }
 
 func (g *ResourceGateway) restartWorkloadAction(target ObjectActionTargetRef) error {
-	return g.restartWorkloadInternal(target.ClusterID, target.Namespace, target.Group, target.Version, target.Kind, target.Name)
-}
-
-func (g *ResourceGateway) restartWorkloadInternal(clusterID, namespace, group, version, workloadKind, name string) error {
-	if err := requireNamespacedObject(namespace, name); err != nil {
+	if err := requireNamespacedObject(target.Namespace, target.Name); err != nil {
 		return err
 	}
-	workloadKind, err := validateAppsV1WorkloadAction("restart", group, version, workloadKind, actionRestartableWorkloadKinds)
+	workloadKind, err := validateAppsV1WorkloadAction("restart", target.Group, target.Version, target.Kind, actionRestartableWorkloadKinds)
 	if err != nil {
 		return err
 	}
 
-	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
@@ -107,31 +103,27 @@ func (g *ResourceGateway) restartWorkloadInternal(clusterID, namespace, group, v
 	if ops == nil || ops.Restart == nil {
 		return fmt.Errorf("restart not supported for workload kind %q", workloadKind)
 	}
-	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
-		Group:     group,
-		Version:   version,
+	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
+		Group:     target.Group,
+		Version:   target.Version,
 		Kind:      workloadKind,
-		Namespace: namespace,
-		Name:      name,
+		Namespace: target.Namespace,
+		Name:      target.Name,
 		Verb:      "patch",
 	}); err != nil {
 		return err
 	}
-	if err = ops.Restart(ctx, deps.KubernetesClient, namespace, name, patchBytes); err != nil {
-		return fmt.Errorf("failed to restart %s/%s (%s): %w", namespace, name, workloadKind, err)
+	if err = ops.Restart(ctx, deps.KubernetesClient, target.Namespace, target.Name, patchBytes); err != nil {
+		return fmt.Errorf("failed to restart %s/%s (%s): %w", target.Namespace, target.Name, workloadKind, err)
 	}
 
-	applog.Info(deps.Logger, fmt.Sprintf("Restarted %s %s/%s", workloadKind, namespace, name), "restartWorkload")
-	g.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
+	applog.Info(deps.Logger, fmt.Sprintf("Restarted %s %s/%s", workloadKind, target.Namespace, target.Name), "restartWorkload")
+	g.invalidateResponseCache(selectionKey, workloadKind, target.Namespace, target.Name)
 	return nil
 }
 
 func (g *ResourceGateway) scaleWorkloadAction(target ObjectActionTargetRef, replicas int) error {
-	return g.scaleWorkloadInternal(target.ClusterID, target.Namespace, target.Group, target.Version, target.Kind, target.Name, replicas)
-}
-
-func (g *ResourceGateway) scaleWorkloadInternal(clusterID, namespace, group, version, workloadKind, name string, replicas int) error {
-	if err := requireNamespacedObject(namespace, name); err != nil {
+	if err := requireNamespacedObject(target.Namespace, target.Name); err != nil {
 		return err
 	}
 	if replicas < 0 {
@@ -140,12 +132,14 @@ func (g *ResourceGateway) scaleWorkloadInternal(clusterID, namespace, group, ver
 	if replicas > maxScaleReplicas {
 		return fmt.Errorf("replicas must be less than or equal to %d", maxScaleReplicas)
 	}
-	workloadKind, err := validateAppsV1WorkloadAction("scaling", group, version, workloadKind, actionScalableWorkloadKinds)
+	workloadKind, err := validateAppsV1WorkloadAction("scaling", target.Group, target.Version, target.Kind, actionScalableWorkloadKinds)
 	if err != nil {
 		return err
 	}
 
-	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
+	target.Kind = workloadKind
+
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
@@ -155,14 +149,7 @@ func (g *ResourceGateway) scaleWorkloadInternal(clusterID, namespace, group, ver
 
 	ctx := g.CtxOrBackground()
 
-	if err := ensureHPAManagedScaleAllowed(ctx, deps, ObjectActionTargetRef{
-		ClusterID: clusterID,
-		Group:     group,
-		Version:   version,
-		Kind:      workloadKind,
-		Namespace: namespace,
-		Name:      name,
-	}, replicas); err != nil {
+	if err := ensureHPAManagedScaleAllowed(ctx, deps, target, replicas); err != nil {
 		return err
 	}
 
@@ -170,27 +157,27 @@ func (g *ResourceGateway) scaleWorkloadInternal(clusterID, namespace, group, ver
 	if ops == nil || ops.Scale == nil {
 		return fmt.Errorf("scaling not supported for workload kind %q", workloadKind)
 	}
-	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
-		Group:       group,
-		Version:     version,
+	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
+		Group:       target.Group,
+		Version:     target.Version,
 		Kind:        workloadKind,
-		Namespace:   namespace,
-		Name:        name,
+		Namespace:   target.Namespace,
+		Name:        target.Name,
 		Verb:        "update",
 		Subresource: "scale",
 	}); err != nil {
 		return err
 	}
-	if err := ops.Scale(ctx, deps.KubernetesClient, namespace, name, int32(replicas)); err != nil {
-		return fmt.Errorf("failed to scale %s %s/%s: %w", strings.ToLower(workloadKind), namespace, name, err)
+	if err := ops.Scale(ctx, deps.KubernetesClient, target.Namespace, target.Name, int32(replicas)); err != nil {
+		return fmt.Errorf("failed to scale %s %s/%s: %w", strings.ToLower(workloadKind), target.Namespace, target.Name, err)
 	}
 
 	applog.Info(
 		deps.Logger,
-		fmt.Sprintf("Scaled %s %s/%s to %d replicas", workloadKind, namespace, name, replicas),
+		fmt.Sprintf("Scaled %s %s/%s to %d replicas", workloadKind, target.Namespace, target.Name, replicas),
 		"scaleWorkload",
 	)
-	g.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
+	g.invalidateResponseCache(selectionKey, workloadKind, target.Namespace, target.Name)
 	return nil
 }
 
@@ -232,14 +219,10 @@ func (g *ResourceGateway) triggerCronJobAction(target ObjectActionTargetRef) (st
 	if target.Group != cronjob.Identity.Group || target.Version != cronjob.Identity.Version || target.Kind != cronjob.Identity.Kind {
 		return "", errUnsupportedActionTarget(ObjectActionTrigger, target, cronjob.Identity.Group+"/"+cronjob.Identity.Version, cronjob.Identity.Kind)
 	}
-	return g.triggerCronJobInternal(target.ClusterID, target.Namespace, target.Name)
-}
-
-func (g *ResourceGateway) triggerCronJobInternal(clusterID, namespace, name string) (string, error) {
-	if err := requireNamespacedObject(namespace, name); err != nil {
+	if err := requireNamespacedObject(target.Namespace, target.Name); err != nil {
 		return "", err
 	}
-	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return "", err
 	}
@@ -251,23 +234,23 @@ func (g *ResourceGateway) triggerCronJobInternal(clusterID, namespace, name stri
 
 	// Permission to create the Job is checked here; the CronJob fetch, suspended
 	// guard, and Job creation live in the cronjob package.
-	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:     job.Identity.Group,
 		Version:   job.Identity.Version,
 		Kind:      job.Identity.Kind,
-		Namespace: namespace,
+		Namespace: target.Namespace,
 		Verb:      "create",
 	}); err != nil {
 		return "", err
 	}
 
-	jobName, err := cronjob.TriggerManualJob(ctx, deps.KubernetesClient, namespace, name)
+	jobName, err := cronjob.TriggerManualJob(ctx, deps.KubernetesClient, target.Namespace, target.Name)
 	if err != nil {
 		return "", err
 	}
 
-	applog.Info(deps.Logger, fmt.Sprintf("Triggered CronJob %s/%s, created Job %s", namespace, name, jobName), "triggerCronJob")
-	g.invalidateResponseCache(selectionKey, cronjob.Identity.Kind, namespace, name)
+	applog.Info(deps.Logger, fmt.Sprintf("Triggered CronJob %s/%s, created Job %s", target.Namespace, target.Name, jobName), "triggerCronJob")
+	g.invalidateResponseCache(selectionKey, cronjob.Identity.Kind, target.Namespace, target.Name)
 	return jobName, nil
 }
 
@@ -275,14 +258,10 @@ func (g *ResourceGateway) suspendCronJobAction(target ObjectActionTargetRef, sus
 	if target.Group != cronjob.Identity.Group || target.Version != cronjob.Identity.Version || target.Kind != cronjob.Identity.Kind {
 		return errUnsupportedActionTarget(ObjectActionSuspend, target, cronjob.Identity.Group+"/"+cronjob.Identity.Version, cronjob.Identity.Kind)
 	}
-	return g.suspendCronJobInternal(target.ClusterID, target.Namespace, target.Name, suspend)
-}
-
-func (g *ResourceGateway) suspendCronJobInternal(clusterID, namespace, name string, suspend bool) error {
-	if err := requireNamespacedObject(namespace, name); err != nil {
+	if err := requireNamespacedObject(target.Namespace, target.Name); err != nil {
 		return err
 	}
-	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
@@ -291,18 +270,18 @@ func (g *ResourceGateway) suspendCronJobInternal(clusterID, namespace, name stri
 	}
 
 	ctx := g.CtxOrBackground()
-	if err := g.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:     cronjob.Identity.Group,
 		Version:   cronjob.Identity.Version,
 		Kind:      cronjob.Identity.Kind,
-		Namespace: namespace,
-		Name:      name,
+		Namespace: target.Namespace,
+		Name:      target.Name,
 		Verb:      "patch",
 	}); err != nil {
 		return err
 	}
 
-	if err := cronjob.SetSuspend(ctx, deps.KubernetesClient, namespace, name, suspend); err != nil {
+	if err := cronjob.SetSuspend(ctx, deps.KubernetesClient, target.Namespace, target.Name, suspend); err != nil {
 		return err
 	}
 
@@ -310,8 +289,8 @@ func (g *ResourceGateway) suspendCronJobInternal(clusterID, namespace, name stri
 	if !suspend {
 		action = "Resumed"
 	}
-	applog.Info(deps.Logger, fmt.Sprintf("%s CronJob %s/%s", action, namespace, name), "suspendCronJob")
-	g.invalidateResponseCache(selectionKey, cronjob.Identity.Kind, namespace, name)
+	applog.Info(deps.Logger, fmt.Sprintf("%s CronJob %s/%s", action, target.Namespace, target.Name), "suspendCronJob")
+	g.invalidateResponseCache(selectionKey, cronjob.Identity.Kind, target.Namespace, target.Name)
 	return nil
 }
 

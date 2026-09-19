@@ -171,6 +171,7 @@ export const buildBrowseCatalogPageScope = (
   continueToken: string,
   startRank?: number
 ): string => {
+  const sortScope = catalogSortScope(input.sort);
   const pageScope = buildCatalogScope({
     limit: input.pageLimit,
     resourceScope: plan.resourceScope,
@@ -180,8 +181,8 @@ export const buildBrowseCatalogPageScope = (
     kinds: input.filters.kinds ?? [],
     apiGroups: input.filters.apiGroups ?? [],
     namespaces: plan.namespacesToQuery,
-    sort: catalogSortScope(input.sort).sort,
-    sortDirection: catalogSortScope(input.sort).sortDirection,
+    sort: sortScope.sort,
+    sortDirection: sortScope.sortDirection,
     continueToken,
     startRank,
     customOnly: input.customOnly ?? false,
@@ -193,7 +194,7 @@ export const buildBrowseCatalogPageScope = (
   );
 };
 
-const catalogSortScope = (
+export const catalogSortScope = (
   sort?: { key: string; direction: 'asc' | 'desc' | null } | null
 ): { sort?: string; sortDirection?: string } => {
   const key = sort?.key?.trim();
@@ -227,15 +228,12 @@ export const applyCatalogBaseline = (
   currentItems: CatalogItem[],
   payload: CatalogSnapshotPayload
 ): BrowseCatalogApplyResult => {
-  const { nextItems, changed } = reconcileByUID(currentItems, payload.items ?? []);
+  const page = applyCatalogPage(payload);
+  const { nextItems, changed } = reconcileByUID(currentItems, page.items);
   return {
+    ...page,
     items: changed || currentItems.length === 0 ? nextItems : currentItems,
     changed,
-    continueToken: parseContinueToken(payload.continue),
-    previousToken: parseContinueToken(payload.previous),
-    totalCount: payload.total ?? 0,
-    unfilteredTotal: payload.unfilteredTotal ?? payload.total ?? 0,
-    totalIsExact: payload.totalIsExact !== false,
   };
 };
 

@@ -21,7 +21,7 @@ import (
 // callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, job *batchv1.Job) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(job)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, job.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, job.ObjectMeta, status)
 }
 
 // BuildFacts extracts the Job facts from the raw object.

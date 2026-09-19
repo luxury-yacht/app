@@ -372,7 +372,7 @@ func (a *RefreshCoordinator) buildRefreshMux(
 	}
 
 	// Wrap the base refresh API with aggregate services for multi-cluster domains.
-	aggregateService := newAggregateSnapshotService(clusterOrder, subsystems)
+	aggregateService := newAggregateSnapshotService(subsystems)
 
 	// Wire the workload lifecycle transition: deadline-settled data becomes
 	// operational-but-degraded; a later authoritative sync becomes ready.
@@ -460,7 +460,7 @@ func (h *refreshAggregateHandlers) Update(clusterOrder []string, subsystems map[
 		}
 	}
 	if h.snapshot != nil {
-		h.snapshot.Update(clusterOrder, subsystems)
+		h.snapshot.Update(subsystems)
 	}
 	if h.manual != nil {
 		h.manual.UpdateConfig(subsystems)

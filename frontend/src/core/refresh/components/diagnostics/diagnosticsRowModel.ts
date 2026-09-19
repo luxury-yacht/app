@@ -36,7 +36,7 @@ import type {
 import { formatDurationMs, formatLastUpdated } from './diagnosticsPanelUtils';
 
 const diagnosticsRowIdentity = (row: DiagnosticsRow): string =>
-  [row.domain, row.label, row.namespace, row.scope, row.role].join('\u0000');
+  [row.clusterId, row.domain, row.label, row.namespace, row.scope, row.role].join('\u0000');
 
 const rowHealthRank = (row: DiagnosticsRow): number => {
   const normalized = row.healthStatus.toLowerCase();
@@ -540,12 +540,10 @@ const buildPermissionRow = (
   status: PermissionStatus,
   capabilityDescriptorIndex: Map<string, CapabilityDescriptorActivityDetails>
 ): PermissionRow => {
-  const scope = status.descriptor.namespace ? status.descriptor.namespace : 'Cluster';
   const activity = capabilityDescriptorIndex.get(status.id);
   return {
     clusterId: status.descriptor.clusterId,
-    scope:
-      activity?.scope ?? status.descriptor.namespace ?? (scope === 'Cluster' ? 'Cluster' : scope),
+    scope: activity?.scope ?? status.descriptor.namespace ?? 'Cluster',
     descriptorLabel: permissionDescriptorLabel(status, activity),
     resource: status.descriptor.resourceKind,
     verb: status.descriptor.verb,
@@ -831,16 +829,6 @@ export const buildEventStreamSummary = (params: {
   if (eventStreamTelemetry) {
     const updatedInfo = formatLastUpdated(eventStreamTelemetry.lastConnect);
     const newestInfo = formatLastUpdated(eventStreamTelemetry.lastEvent);
-    let className: string | undefined;
-
-    if (eventStreamTelemetry.errorCount > 0) {
-      className = 'diagnostics-summary-error';
-    } else if (eventStreamTelemetry.droppedMessages > 0) {
-      className = 'diagnostics-summary-warning';
-    } else {
-      className = undefined;
-    }
-
     const tooltipParts: string[] = [];
     if (eventStreamTelemetry.lastError) {
       tooltipParts.push(eventStreamTelemetry.lastError);
@@ -857,7 +845,7 @@ export const buildEventStreamSummary = (params: {
     return {
       primary: `${eventStreamTelemetry.totalMessages} delivered`,
       secondary: `${eventStreamTelemetry.activeSessions} active · ${updatedInfo.display}`,
-      className,
+      className: streamSummaryClassName(eventStreamTelemetry),
       title: tooltipParts.join(' | '),
     };
   }

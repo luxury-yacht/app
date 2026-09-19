@@ -1,3 +1,81 @@
+/* Status icon */
+.pf-status-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+
+.pf-status-active {
+  color: var(--color-success);
+}
+
+.pf-status-reconnecting {
+  color: var(--color-warning);
+  animation: pf-spin 1s linear infinite;
+}
+
+.pf-status-error {
+  color: var(--color-error);
+}
+
+.pf-status-unknown {
+  color: var(--color-text-tertiary);
+}
+
+/* Spinning animation for reconnecting icon */
+@keyframes pf-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pf-port-arrow {
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.pf-local-port {
+  color: var(--color-accent);
+}
+
+/* Clickable link style for local port */
+.pf-local-port-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s;
+}
+
+.pf-local-port-link:hover:not(:disabled) {
+  text-decoration-color: var(--color-accent);
+}
+
+.pf-local-port-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  text-decoration: none;
+}
+
+/* Status reason message (for errors/reconnecting) */
+.pf-session-reason {
+  margin-top: 6px;
+  padding-left: 24px;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /**
  * frontend/src/ui/status/SessionsStatus.css
  *

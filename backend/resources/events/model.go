@@ -22,7 +22,7 @@ import (
 // package (events.Facts); callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, event *corev1.Event) resourcemodel.ResourceModel {
 	status := statusPresentation(event)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, event.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, event.ObjectMeta, status)
 }
 
 // BuildFacts extracts the Event facts from the raw object.

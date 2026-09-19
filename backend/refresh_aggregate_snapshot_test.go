@@ -45,8 +45,7 @@ func TestAggregateSnapshotServiceBuildRequiresClusterScope(t *testing.T) {
 		},
 	}
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a", "cluster-b"},
-		services:     services,
+		services: services,
 	}
 
 	snap, err := aggregate.Build(context.Background(), "namespaces", "")
@@ -70,8 +69,7 @@ func TestAggregateSnapshotServiceBuildRejectsMultiClusterScope(t *testing.T) {
 		},
 	}
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a", "cluster-b"},
-		services:     services,
+		services: services,
 	}
 
 	snap, err := aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a,cluster-b|")
@@ -98,8 +96,7 @@ func TestAggregateSnapshotServiceNamespaceSnapshotTriggersLifecycleCallback(t *t
 
 	var called []string
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
-		services:     services,
+		services: services,
 		onNamespaceSnapshot: func(clusterID string, _ snapshot.NamespaceWorkloadReadiness) {
 			called = append(called, clusterID)
 		},
@@ -139,8 +136,7 @@ func TestAggregateSnapshotServiceNamespaceSnapshotSkipsCallbackWhileWorkloadsPen
 
 	var called []string
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
-		services:     services,
+		services: services,
 		onNamespaceSnapshot: func(clusterID string, _ snapshot.NamespaceWorkloadReadiness) {
 			called = append(called, clusterID)
 		},
@@ -161,7 +157,6 @@ func TestAggregateSnapshotServiceNamespaceSnapshotReportsDegradedReadiness(t *te
 	}
 	var got snapshot.NamespaceWorkloadReadiness
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
 		services: map[string]refresh.SnapshotBuilder{
 			"cluster-a": stubSnapshotService{build: func(context.Context, string, string) (*refresh.Snapshot, error) {
 				return degraded, nil
@@ -200,7 +195,6 @@ func TestNamespacesReadinessSelfBuildRecoversDegradedCluster(t *testing.T) {
 	lifecycle := newClusterLifecycle(nil)
 	lifecycle.SetState("cluster-a", ClusterStateDegraded)
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
 		services: map[string]refresh.SnapshotBuilder{
 			"cluster-a": stubSnapshotService{build: func(context.Context, string, string) (*refresh.Snapshot, error) {
 				return &refresh.Snapshot{
@@ -239,8 +233,7 @@ func TestAggregateSnapshotServiceNonNamespaceDomainDoesNotTriggerCallback(t *tes
 
 	callbackFired := false
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
-		services:     services,
+		services: services,
 		onNamespaceSnapshot: func(clusterID string, _ snapshot.NamespaceWorkloadReadiness) {
 			callbackFired = true
 		},
@@ -269,8 +262,7 @@ func TestAggregateSnapshotServicePermissionDeniedNamespacesStillSignalsReadiness
 
 	var called []string
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
-		services:     services,
+		services: services,
 		onNamespaceSnapshot: func(clusterID string, _ snapshot.NamespaceWorkloadReadiness) {
 			called = append(called, clusterID)
 		},
@@ -310,8 +302,7 @@ func TestNamespacesReadinessSelfBuildFlipsReady(t *testing.T) {
 		},
 	}
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
-		services:     services,
+		services: services,
 	}
 	// The production wiring: a successful workload-ready namespaces build
 	// moves loading/loading_slow to ready.
@@ -346,7 +337,6 @@ func TestWireNamespacesReadinessObserverFlipsReadyForLateSubsystems(t *testing.T
 
 	builds := 0
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-b"},
 		services: map[string]refresh.SnapshotBuilder{
 			"cluster-b": stubSnapshotService{
 				build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
@@ -394,7 +384,6 @@ func TestPublishedNamespacesReadinessHealsDroppedSettleRing(t *testing.T) {
 	lifecycle.SetState("cluster-a", ClusterStateLoading)
 
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
 		services: map[string]refresh.SnapshotBuilder{
 			"cluster-a": stubSnapshotService{
 				build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
@@ -475,8 +464,7 @@ func TestAggregateSnapshotServiceFailedBuildDoesNotTriggerCallback(t *testing.T)
 
 	callbackFired := false
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
-		services:     services,
+		services: services,
 		onNamespaceSnapshot: func(clusterID string, _ snapshot.NamespaceWorkloadReadiness) {
 			callbackFired = true
 		},
@@ -500,7 +488,6 @@ func TestAggregateSnapshotServiceLifecycleTransitionsReadyAfterInPlaceRebuild(t 
 	}
 
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
 		services: map[string]refresh.SnapshotBuilder{
 			"cluster-a": stubSnapshotService{
 				build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
@@ -525,7 +512,7 @@ func TestAggregateSnapshotServiceLifecycleTransitionsReadyAfterInPlaceRebuild(t 
 	// lifecycle back to loading and aggregate Update replaces the service while
 	// keeping the cluster present.
 	lifecycle.SetState("cluster-a", ClusterStateLoading)
-	aggregate.Update([]string{"cluster-a"}, map[string]*system.Subsystem{
+	aggregate.Update(map[string]*system.Subsystem{
 		"cluster-a": &system.Subsystem{
 			SnapshotService: stubSnapshotService{
 				build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
@@ -561,7 +548,6 @@ func TestAggregateSnapshotServiceLifecycleIntegration(t *testing.T) {
 		},
 	}
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
 		services: map[string]refresh.SnapshotBuilder{
 			"cluster-a": stubSnapshotService{
 				build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
@@ -602,7 +588,6 @@ func TestAggregateSnapshotServiceLifecycleNoTransitionIfAlreadyReady(t *testing.
 		},
 	}
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
 		services: map[string]refresh.SnapshotBuilder{
 			"cluster-a": stubSnapshotService{
 				build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
@@ -636,8 +621,7 @@ func TestAggregateSnapshotServiceBuildReturnsErrorWhenClusterFails(t *testing.T)
 		},
 	}
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
-		services:     services,
+		services: services,
 	}
 
 	snap, err := aggregate.Build(context.Background(), "namespaces", "cluster-a|")
@@ -655,8 +639,7 @@ func TestAggregateSnapshotServiceBuildReturnsErrorWhenClusterUnavailable(t *test
 		},
 	}
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a"},
-		services:     services,
+		services: services,
 	}
 
 	snap, err := aggregate.Build(context.Background(), "namespaces", "cluster-b|")

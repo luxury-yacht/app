@@ -16,7 +16,7 @@ import (
 // BuildResourceModel builds the shared resource model for a Gateway.
 func BuildResourceModel(clusterID string, gateway *gatewayv1.Gateway) resourcemodel.ResourceModel {
 	status := buildStatusPresentation(gateway)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, gateway.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, gateway.ObjectMeta, status)
 }
 
 // BuildFacts projects a Gateway into its semantic facts.

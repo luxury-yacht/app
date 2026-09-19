@@ -16,7 +16,7 @@ import (
 func BuildResourceModel(clusterID string, node *corev1.Node) resourcemodel.ResourceModel {
 	meta := node.ObjectMeta
 	meta.Namespace = ""
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, meta, buildStatus(node), resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, meta, buildStatus(node))
 }
 
 func buildStatus(node *corev1.Node) resourcemodel.ResourceStatusPresentation {

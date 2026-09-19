@@ -1,4 +1,4 @@
-import type { ResolvedObjectReference } from '@shared/utils/objectIdentity';
+import type { ClusterObjectReference } from '@shared/utils/objectIdentity';
 import type {
   ClusterNodeSnapshotPayload,
   NamespaceWorkloadSnapshotPayload,
@@ -12,25 +12,28 @@ import {
   workloadRowResourceMetrics,
 } from './valueAdapters';
 
-const sameText = (left: string | null | undefined, right: string | null | undefined): boolean =>
-  (left ?? '') === (right ?? '');
-
-const sameKind = (left: string | null | undefined, right: string | null | undefined): boolean =>
-  (left ?? '').toLowerCase() === (right ?? '').toLowerCase();
+const matchesMetricsReference = (
+  row: Pick<
+    ClusterObjectReference,
+    'clusterId' | 'group' | 'version' | 'kind' | 'namespace' | 'name'
+  >,
+  ref: ClusterObjectReference
+): boolean =>
+  row.clusterId === ref.clusterId &&
+  row.group === ref.group &&
+  row.version === ref.version &&
+  row.kind.toLowerCase() === ref.kind.toLowerCase() &&
+  (row.namespace ?? '') === (ref.namespace ?? '') &&
+  row.name === ref.name;
 
 // One payload carries both halves: base rows arrive with live usage joined at
 // serve, and payload.metrics carries the poller freshness/error metadata.
 
 export const selectPodMetrics = (
   payload: PodSnapshotPayload | null | undefined,
-  ref: ResolvedObjectReference
+  ref: ClusterObjectReference
 ): ResourceMetricsData | null => {
-  const row = (payload?.rows ?? []).find(
-    (candidate) =>
-      sameText(candidate.ref.clusterId, ref.clusterId) &&
-      sameText(candidate.ref.namespace, ref.namespace) &&
-      sameText(candidate.ref.name, ref.name)
-  );
+  const row = payload?.rows?.find((candidate) => matchesMetricsReference(candidate.ref, ref));
   if (!row) {
     return null;
   }
@@ -40,15 +43,9 @@ export const selectPodMetrics = (
 
 export const selectWorkloadMetrics = (
   payload: NamespaceWorkloadSnapshotPayload | null | undefined,
-  ref: ResolvedObjectReference
+  ref: ClusterObjectReference
 ): ResourceMetricsData | null => {
-  const row = (payload?.rows ?? []).find(
-    (candidate) =>
-      sameText(candidate.ref.clusterId, ref.clusterId) &&
-      sameText(candidate.ref.namespace, ref.namespace) &&
-      sameKind(candidate.ref.kind, ref.kind) &&
-      sameText(candidate.ref.name, ref.name)
-  );
+  const row = payload?.rows?.find((candidate) => matchesMetricsReference(candidate.ref, ref));
   if (!row) {
     return null;
   }
@@ -58,12 +55,9 @@ export const selectWorkloadMetrics = (
 
 export const selectNodeMetrics = (
   payload: ClusterNodeSnapshotPayload | null | undefined,
-  ref: ResolvedObjectReference
+  ref: ClusterObjectReference
 ): ResourceMetricsData | null => {
-  const row = (payload?.rows ?? []).find(
-    (candidate) =>
-      sameText(candidate.ref.clusterId, ref.clusterId) && sameText(candidate.ref.name, ref.name)
-  );
+  const row = payload?.rows?.find((candidate) => matchesMetricsReference(candidate.ref, ref));
   if (!row) {
     return null;
   }

@@ -13,6 +13,29 @@ import {
 } from './workloadActionReference';
 
 describe('workloadActionReference', () => {
+  it('preserves the API identity supplied by a workload row instead of guessing from kind', () => {
+    const ref = makeResourceRef({
+      clusterId: 'a',
+      group: 'extensions',
+      version: 'v1beta1',
+      kind: 'Deployment',
+      resource: 'deployments',
+      namespace: 'team',
+      name: 'web',
+      uid: 'web-uid',
+    });
+    expect(
+      buildWorkloadActionReference({
+        ref,
+        status: 'Running',
+        ready: '1/1',
+        restarts: 0,
+        age: '1m',
+        portForwardAvailable: false,
+      })
+    ).toMatchObject(ref);
+  });
+
   it('builds a required object reference with workload action facts', () => {
     expect(
       buildWorkloadActionReference(

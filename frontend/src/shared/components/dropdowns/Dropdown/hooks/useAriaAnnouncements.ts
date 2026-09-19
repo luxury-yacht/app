@@ -5,7 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { DropdownOption } from '../types';
 
 interface UseAriaAnnouncementsProps {
@@ -24,6 +24,19 @@ export function useAriaAnnouncements({
   const announcementRef = useRef<HTMLDivElement>(null);
   const previousValueRef = useRef<string | string[]>(value);
 
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const announce = useCallback((message: string, duration: number) => {
+    clearTimeout(timerRef.current);
+    const region = announcementRef.current;
+    if (!region) return;
+    region.textContent = message;
+    timerRef.current = setTimeout(() => {
+      region.textContent = '';
+    }, duration);
+  }, []);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
   // Announce selection changes
   useEffect(() => {
     if (announcementRef.current && value !== previousValueRef.current) {
@@ -39,17 +52,10 @@ export function useAriaAnnouncements({
           ? `Selected: ${selectedOptions.map((opt) => opt.label).join(', ')}`
           : 'No selection';
 
-      announcementRef.current.textContent = announcement;
       previousValueRef.current = value;
-
-      // Clear announcement after a delay to allow screen readers to read it
-      setTimeout(() => {
-        if (announcementRef.current) {
-          announcementRef.current.textContent = '';
-        }
-      }, 1000);
+      announce(announcement, 1000);
     }
-  }, [value, options]);
+  }, [value, options, announce]);
 
   // Announce highlighted option
   useEffect(() => {
@@ -59,16 +65,10 @@ export function useAriaAnnouncements({
         const announcement = highlightedOption.disabled
           ? `${highlightedOption.label}, disabled`
           : highlightedOption.label;
-        announcementRef.current.textContent = announcement;
-
-        setTimeout(() => {
-          if (announcementRef.current) {
-            announcementRef.current.textContent = '';
-          }
-        }, 500);
+        announce(announcement, 500);
       }
     }
-  }, [highlightedIndex, isOpen, options]);
+  }, [highlightedIndex, isOpen, options, announce]);
 
   // Announce dropdown state changes
   useEffect(() => {
@@ -76,15 +76,9 @@ export function useAriaAnnouncements({
       const announcement = isOpen
         ? `Dropdown expanded, ${options.length} options available`
         : 'Dropdown collapsed';
-      announcementRef.current.textContent = announcement;
-
-      setTimeout(() => {
-        if (announcementRef.current) {
-          announcementRef.current.textContent = '';
-        }
-      }, 500);
+      announce(announcement, 500);
     }
-  }, [isOpen, options.length]);
+  }, [isOpen, options.length, announce]);
 
   return { announcementRef };
 }

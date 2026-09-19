@@ -7,12 +7,12 @@
 
 import {
   type AggregatedResourceGridViewSpec,
+  createAggregatedIdentityColumns,
   NamespaceAggregatedResourceGridView,
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
 import type { NamespaceConfigSnapshotPayload, NamespaceConfigSummary } from '@/core/refresh/types';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 export type ConfigData = NamespaceConfigSummary & { kindAlias?: string };
 
@@ -36,19 +36,7 @@ const configSpec: AggregatedResourceGridViewSpec<ConfigData> = {
   showKindDropdown: true,
   namespaceLinkTab: 'config',
   buildColumns: ({ identity, useShortResourceNames }) => [
-    cf.createKindColumn<ConfigData>({
-      key: 'kind',
-      getKind: (resource) => resource.ref.kind,
-      getAlias: (resource) => resource.kindAlias,
-      getDisplayText: (resource) => getDisplayKind(resource.ref.kind, useShortResourceNames),
-      onClick: identity.open,
-      onAltClick: identity.navigate,
-    }),
-    cf.createResourceNameColumn<ConfigData>((resource) => resource.ref.name, {
-      onClick: identity.open,
-      onAltClick: identity.navigate,
-      getClassName: () => 'object-panel-link',
-    }),
+    ...createAggregatedIdentityColumns<ConfigData>({ identity, useShortResourceNames }),
     cf.createTextColumn<ConfigData>(
       'data',
       'Data Items',

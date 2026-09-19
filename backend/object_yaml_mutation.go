@@ -195,7 +195,7 @@ func (g *ResourceGateway) prepareAuthorizedYAMLMutation(
 		return nil, err
 	}
 
-	if err := g.requireResolvedResourcePermission(ctx, deps, gvr, isNamespaced, resourcePermissionCheck{
+	if err := requireResolvedResourcePermission(ctx, deps, gvr, isNamespaced, resourcePermissionCheck{
 		Kind: req.Kind, Namespace: req.Namespace, Name: req.Name, Verb: "patch",
 	}); err != nil {
 		return nil, err

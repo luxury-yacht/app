@@ -30,7 +30,7 @@ func (g *ResourceGateway) removeObjectFinalizerAction(target ObjectActionTargetR
 	switch path {
 	case objectFinalizerPathMetadata:
 		permission.Verb = "patch"
-		if err := g.requireResourcePermission(ctx, deps, permission); err != nil {
+		if err := requireResourcePermission(ctx, deps, permission); err != nil {
 			return err
 		}
 		if err := generic.NewService(deps).RemoveMetadataFinalizerByGVK(
@@ -44,7 +44,7 @@ func (g *ResourceGateway) removeObjectFinalizerAction(target ObjectActionTargetR
 		}
 		permission.Verb = "update"
 		permission.Subresource = "finalize"
-		if err := g.requireResourcePermission(ctx, deps, permission); err != nil {
+		if err := requireResourcePermission(ctx, deps, permission); err != nil {
 			return err
 		}
 		if err := namespaces.NewService(deps).RemoveSpecFinalizer(ctx, target.Name, finalizer); err != nil {

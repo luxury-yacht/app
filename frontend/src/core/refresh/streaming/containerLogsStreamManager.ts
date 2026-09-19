@@ -108,47 +108,46 @@ type ProjectedLogBuffer = {
   truncated: boolean;
 };
 
+const createManualLogRefresh = () => {
+  let resolve!: () => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<void>((onResolve, onReject) => {
+    resolve = onResolve;
+    reject = onReject;
+  });
+  return { promise, resolve, reject };
+};
+
 class ContainerLogsStreamConnection {
   private readonly scope: string;
-  private readonly mode: StreamMode;
   private readonly manager: ContainerLogsStreamManager;
-  private readonly resolve?: () => void;
-  private readonly reject?: (error: Error) => void;
+  private readonly completion: ReturnType<typeof createManualLogRefresh> | null;
   private socket: JSONSocket | null = null;
   private retryTimer: number | null = null;
   private closed = false;
   private attempt = 0;
 
-  constructor(
-    scope: string,
-    mode: StreamMode,
-    manager: ContainerLogsStreamManager,
-    resolve?: () => void,
-    reject?: (error: Error) => void
-  ) {
+  constructor(scope: string, mode: StreamMode, manager: ContainerLogsStreamManager) {
     this.scope = scope;
-    this.mode = mode;
     this.manager = manager;
-    this.resolve = resolve;
-    this.reject = reject;
+    this.completion = mode === 'manual' ? createManualLogRefresh() : null;
   }
 
-  async start(): Promise<void> {
+  start(): Promise<void> {
     this.closed = false;
     this.attempt = 0;
-    await this.openStream();
+    this.openStream();
+    return this.completion?.promise ?? Promise.resolve();
   }
 
-  stop(intentional = true): void {
+  stop(): void {
     this.closed = true;
     if (this.retryTimer !== null) {
       window.clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
     this.closeStream();
-    if (intentional) {
-      this.manager.markIdle(this.scope);
-    }
+    this.completion?.resolve();
   }
 
   private closeStream(): void {
@@ -163,7 +162,7 @@ class ContainerLogsStreamConnection {
     this.socket = null;
   }
 
-  private async openStream(): Promise<void> {
+  private openStream(): void {
     try {
       const socket = JSONStream(CONTAINER_LOGS_STREAM_NAME);
       if (this.closed) {
@@ -179,9 +178,9 @@ class ContainerLogsStreamConnection {
       const message =
         error instanceof Error ? error.message : 'Failed to open container logs stream';
       this.manager.handleStreamError(this.scope, message);
-      if (this.mode === 'manual') {
-        this.reject?.(new Error(message));
-        this.stop(false);
+      if (this.completion !== null) {
+        this.completion?.reject(new Error(message));
+        this.stop();
         return;
       }
       this.scheduleReconnect();
@@ -189,7 +188,7 @@ class ContainerLogsStreamConnection {
   }
 
   private scheduleReconnect(): void {
-    if (this.closed || this.mode === 'manual' || this.retryTimer !== null) {
+    if (this.closed || this.completion !== null || this.retryTimer !== null) {
       return;
     }
     this.closeStream();
@@ -201,7 +200,7 @@ class ContainerLogsStreamConnection {
     );
     this.retryTimer = window.setTimeout(() => {
       this.retryTimer = null;
-      void this.openStream();
+      this.openStream();
     }, delay);
   }
 
@@ -235,11 +234,10 @@ class ContainerLogsStreamConnection {
       if (parsed.scope !== this.scope || parsed.domain !== DOMAIN_NAME) {
         return;
       }
-      this.manager.applyPayload(this.scope, parsed, this.mode);
+      this.manager.applyPayload(this.scope, parsed, this.completion ? 'manual' : 'stream');
 
-      if (this.mode === 'manual' && parsed.reset) {
-        this.resolve?.();
-        this.stop(false);
+      if (this.completion !== null && parsed.reset) {
+        this.stop();
       }
     } catch (error) {
       this.handleProtocolError('Failed to process container logs stream payload', error);
@@ -248,9 +246,9 @@ class ContainerLogsStreamConnection {
 
   private handleProtocolError(message: string, error?: unknown): void {
     this.manager.handleStreamError(this.scope, message, error);
-    if (this.mode === 'manual') {
-      this.reject?.(new Error(message));
-      this.stop(false);
+    if (this.completion !== null) {
+      this.completion?.reject(new Error(message));
+      this.stop();
     }
   }
 
@@ -262,9 +260,9 @@ class ContainerLogsStreamConnection {
     const message = 'Container logs stream connection lost';
     this.manager.handleStreamError(this.scope, message);
 
-    if (this.mode === 'manual') {
-      this.reject?.(new Error(message));
-      this.stop(false);
+    if (this.completion !== null) {
+      this.completion?.reject(new Error(message));
+      this.stop();
       return;
     }
 
@@ -282,11 +280,13 @@ export class ContainerLogsStreamManager {
   private readonly visibility = new StreamVisibilityController<string>({
     captureActive: () => Array.from(this.connections.keys()),
     suspendActive: () => {
-      for (const connection of this.connections.values()) {
-        connection.stop(true);
+      for (const [scope, connection] of this.connections) {
+        connection.stop();
+        this.markIdle(scope);
       }
-      this.connections.clear();
     },
+    // Closed connections retain demand while hidden; explicit stop removes it.
+    resumeItems: () => Array.from(this.connections.keys()),
     resumeItem: (scope) => {
       void this.startStream(scope);
     },
@@ -362,7 +362,7 @@ export class ContainerLogsStreamManager {
   stop(scope: string, reset = false): void {
     const connection = this.connections.get(scope);
     if (connection) {
-      connection.stop(true);
+      connection.stop();
       this.connections.delete(scope);
     }
     if (reset) {
@@ -377,35 +377,23 @@ export class ContainerLogsStreamManager {
   async refreshOnce(scope: string): Promise<void> {
     this.stop(scope, false);
     this.setLoading(scope, true);
-    return new Promise<void>((resolve, reject) => {
-      const connection = new ContainerLogsStreamConnection(
-        scope,
-        'manual',
-        this,
-        () => {
-          this.markManualCompleted(scope);
-          resolve();
-        },
-        (error) => {
-          this.handleStreamError(scope, error.message);
-          reject(error);
-        }
-      );
-      this.connections.set(scope, connection);
-      void connection.start();
-    }).finally(() => {
-      this.connections.delete(scope);
-    });
+    const connection = new ContainerLogsStreamConnection(scope, 'manual', this);
+    this.connections.set(scope, connection);
+    try {
+      await connection.start();
+      if (this.connections.get(scope) === connection) this.markManualCompleted(scope);
+    } finally {
+      if (this.connections.get(scope) === connection) this.connections.delete(scope);
+    }
   }
 
   stopAll(reset = false): void {
-    const scopes = Array.from(this.connections.keys());
-    scopes.forEach((scope) => {
-      this.stop(scope, reset);
-    });
+    const scopes = new Set(this.connections.keys());
     if (reset) {
-      this.buffers.clear();
+      for (const scope of this.buffers.keys()) scopes.add(scope);
+      for (const scope of this.backendWarnings.keys()) scopes.add(scope);
     }
+    for (const scope of scopes) this.stop(scope, reset);
   }
 
   private createIncomingEntries(payload: StreamEventPayload): ContainerLogsEntry[] {

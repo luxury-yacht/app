@@ -5,14 +5,14 @@
  * a namespace scope instead of an object seed scope.
  */
 import type React from 'react';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import './NsViewMap.css';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { ALL_NAMESPACES_SCOPE, isAllNamespaces } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { isMapSnapshotLoading } from '@modules/object-map/mapSnapshotStatus';
 import ObjectMap from '@modules/object-map/ObjectMap';
-import { buildResolvedFromMapRef } from '@modules/object-map/objectMapNavigation';
+import { useObjectMapNavigation } from '@modules/object-map/objectMapNavigation';
 import {
   buildNamespaceObjectMapScope,
   OBJECT_MAP_MAX_NODES,
@@ -20,9 +20,8 @@ import {
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
-import { useRefreshScopedDomain } from '@/core/refresh';
-import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@/core/refresh/types';
+import { useRefreshDomainHandle } from '@/core/data-access';
+import type { ObjectMapSnapshotPayload } from '@/core/refresh/types';
 import { errorHandler } from '@/utils/errorHandler';
 
 interface NsViewMapProps {
@@ -42,72 +41,23 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
     }
     return buildNamespaceObjectMapScope(clusterId, namespace, { maxNodes: OBJECT_MAP_MAX_NODES });
   }, [clusterId, namespace]);
-  const snapshot = useRefreshScopedDomain('object-map', mapScope ?? '__inactive__');
-
-  useEffect(() => {
-    if (!mapScope) {
-      return;
-    }
-    setRefreshDomainEnabled({ domain: 'object-map', scope: mapScope, enabled: true });
-    return () => {
-      setRefreshDomainEnabled({
-        domain: 'object-map',
-        scope: mapScope,
-        enabled: false,
-        preserveState: true,
-      });
-    };
-  }, [mapScope]);
-
-  const fetchMap = useCallback(() => {
-    if (!mapScope) {
-      return;
-    }
-    void requestRefreshDomain({
-      domain: 'object-map',
-      scope: mapScope,
-      reason: 'startup',
-    }).catch((error) => {
-      errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
-        source: 'namespace-map-fetch',
-      });
+  const handleFetchError = useCallback((error: unknown) => {
+    errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
+      source: 'namespace-map-fetch',
     });
-  }, [mapScope]);
+  }, []);
+  const { state: snapshot } = useRefreshDomainHandle({
+    domain: 'object-map',
+    scope: mapScope,
+    enabled: Boolean(mapScope),
+    preserveState: true,
+    fetchOnEnable: 'startup',
+    onFetchError: handleFetchError,
+  });
 
-  useEffect(() => {
-    if (mapScope) {
-      fetchMap();
-    }
-  }, [fetchMap, mapScope]);
-
-  const handleOpenPanel = useCallback(
-    (ref: ObjectMapReference) => {
-      const resolved = buildResolvedFromMapRef(ref);
-      if (resolved) {
-        openWithObject(resolved);
-      }
-    },
-    [openWithObject]
-  );
-
-  const handleNavigateView = useCallback(
-    (ref: ObjectMapReference) => {
-      const resolved = buildResolvedFromMapRef(ref);
-      if (resolved) {
-        navigateToView(resolved);
-      }
-    },
-    [navigateToView]
-  );
-
-  const handleOpenObjectMap = useCallback(
-    (ref: ObjectMapReference) => {
-      const resolved = buildResolvedFromMapRef(ref);
-      if (resolved) {
-        openWithObject(resolved, { initialTab: 'map' });
-      }
-    },
-    [openWithObject]
+  const { handleOpenPanel, handleNavigateView, handleOpenObjectMap } = useObjectMapNavigation(
+    openWithObject,
+    navigateToView
   );
 
   const payload = snapshot.data as ObjectMapSnapshotPayload | null;

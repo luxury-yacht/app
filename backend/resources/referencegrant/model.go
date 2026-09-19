@@ -17,7 +17,7 @@ import (
 // BuildResourceModel builds the shared resource model for a ReferenceGrant.
 func BuildResourceModel(clusterID string, grant *gatewayv1.ReferenceGrant) resourcemodel.ResourceModel {
 	status := buildStatusPresentation(grant)
-	return resourcemodel.KubernetesResourceModel(clusterID, Identity, grant.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, grant.ObjectMeta, status)
 }
 
 // BuildFacts projects a ReferenceGrant into its semantic facts.

@@ -42,15 +42,7 @@
  */
 
 import { getHorizontalDropInsertIndex, hasDragDataType } from '@shared/components/dragReorder';
-import {
-  type RefCallback,
-  useCallback,
-  useContext,
-  useEffect,
-  useEffectEvent,
-  useRef,
-  useState,
-} from 'react';
+import { type RefCallback, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { TabDragContext } from './TabDragProvider';
 import {
   TAB_DRAG_DATA_TYPE,
@@ -125,24 +117,14 @@ function readPayloadFromDataTransfer(event: DragEvent): TabDragPayload | null {
 export function useTabDropTarget<K extends TabDragPayload['kind']>(
   opts: UseTabDropTargetOptions<K>
 ): UseTabDropTargetResult {
-  const { accepts, scope, allowExternal = false, onDrop, onDragEnter, onDragLeave } = opts;
   const { getCurrentDrag } = useContext(TabDragContext);
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropInsertIndex, setDropInsertIndex] = useState<number | null>(null);
   const elementRef = useRef<HTMLElement | null>(null);
 
-  const acceptsRef = useRef(accepts);
-  const scopeRef = useRef(scope);
-  const allowExternalRef = useRef(allowExternal);
-  const onDropRef = useRef(onDrop);
-  const onDragEnterRef = useRef(onDragEnter);
-  const onDragLeaveRef = useRef(onDragLeave);
-  acceptsRef.current = accepts;
-  scopeRef.current = scope;
-  allowExternalRef.current = allowExternal;
-  onDropRef.current = onDrop;
-  onDragEnterRef.current = onDragEnter;
-  onDragLeaveRef.current = onDragLeave;
+  const optionsRef = useRef(opts);
+  optionsRef.current = opts;
+  const detachListenersRef = useRef<(() => void) | null>(null);
 
   const acceptsDrag = useCallback(
     (event: DragEvent) => {
@@ -151,16 +133,16 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
       }
       const drag = getCurrentDrag();
       const kind = drag?.kind ?? tabDragKindFromDataTypes(event.dataTransfer?.types);
-      if (!kind || !acceptsRef.current.includes(kind as K)) {
+      if (!kind || !optionsRef.current.accepts.includes(kind as K)) {
         return false;
       }
-      const targetScope = scopeRef.current;
+      const targetScope = optionsRef.current.scope;
       if (drag) {
         return !targetScope || tabDragMatchesScope(drag, targetScope);
       }
       return targetScope
         ? hasDragDataType(event.dataTransfer, tabDragScopeDataType(targetScope))
-        : allowExternalRef.current;
+        : (optionsRef.current.allowExternal ?? false);
     },
     [getCurrentDrag]
   );
@@ -183,7 +165,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
       event.preventDefault();
       setIsDragOver(true);
       if (drag) {
-        onDragEnterRef.current?.(drag as Extract<TabDragPayload, { kind: K }>);
+        optionsRef.current.onDragEnter?.(drag as Extract<TabDragPayload, { kind: K }>);
       }
     },
     [acceptsDrag, getCurrentDrag, rejectDrag]
@@ -220,7 +202,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     }
     setIsDragOver(false);
     setDropInsertIndex(null);
-    onDragLeaveRef.current?.();
+    optionsRef.current.onDragLeave?.();
   }, []);
 
   const handleDrop = useCallback(
@@ -235,9 +217,9 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
       const payload = readPayloadFromDataTransfer(event) ?? localDrag;
       if (
         !payload ||
-        !acceptsRef.current.includes(payload.kind as K) ||
-        (!scopeRef.current && !localDrag && !allowExternalRef.current) ||
-        (scopeRef.current && !tabDragMatchesScope(payload, scopeRef.current))
+        !optionsRef.current.accepts.includes(payload.kind as K) ||
+        (!optionsRef.current.scope && !localDrag && !optionsRef.current.allowExternal) ||
+        (optionsRef.current.scope && !tabDragMatchesScope(payload, optionsRef.current.scope))
       ) {
         rejectDrag(event);
         return;
@@ -253,46 +235,42 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
         : 0;
       setIsDragOver(false);
       setDropInsertIndex(null);
-      onDropRef.current(payload as Extract<TabDragPayload, { kind: K }>, event, insertIndex);
+      optionsRef.current.onDrop(
+        payload as Extract<TabDragPayload, { kind: K }>,
+        event,
+        insertIndex
+      );
     },
     [getCurrentDrag, rejectDrag]
   );
 
   const ref = useCallback<RefCallback<HTMLElement>>(
-    (el) => {
-      // Detach from old element
-      const previous = elementRef.current;
-      if (previous) {
-        previous.removeEventListener('dragenter', handleDragEnter);
-        previous.removeEventListener('dragover', handleDragOver);
-        previous.removeEventListener('dragleave', handleDragLeave);
-        previous.removeEventListener('drop', handleDrop);
-      }
-
-      elementRef.current = el;
-      if (el) {
-        el.addEventListener('dragenter', handleDragEnter);
-        el.addEventListener('dragover', handleDragOver);
-        el.addEventListener('dragleave', handleDragLeave);
-        el.addEventListener('drop', handleDrop);
-      }
+    (element) => {
+      detachListenersRef.current?.();
+      detachListenersRef.current = null;
+      elementRef.current = element;
+      if (!element) return;
+      const handlers = {
+        dragenter: handleDragEnter,
+        dragover: handleDragOver,
+        dragleave: handleDragLeave,
+        drop: handleDrop,
+      };
+      Object.entries(handlers).forEach(([event, handler]) =>
+        element.addEventListener(event, handler as EventListener)
+      );
+      // Some consumers compose this ref without forwarding a React ref cleanup.
+      // Own the captured element/listeners here for both ref changes and unmount.
+      detachListenersRef.current = () => {
+        Object.entries(handlers).forEach(([event, handler]) =>
+          element.removeEventListener(event, handler as EventListener)
+        );
+      };
     },
     [handleDragEnter, handleDragLeave, handleDragOver, handleDrop]
   );
 
-  // Cleanup on unmount.
-  const cleanUpDropTarget = useEffectEvent(() => {
-    return () => {
-      const el = elementRef.current;
-      if (el) {
-        el.removeEventListener('dragenter', handleDragEnter);
-        el.removeEventListener('dragover', handleDragOver);
-        el.removeEventListener('dragleave', handleDragLeave);
-        el.removeEventListener('drop', handleDrop);
-      }
-    };
-  });
-  useEffect(() => cleanUpDropTarget(), []);
+  useEffect(() => () => detachListenersRef.current?.(), []);
 
   return { ref, isDragOver, dropInsertIndex };
 }

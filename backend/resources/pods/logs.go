@@ -217,6 +217,9 @@ func (s *Service) resolveLogTarget(req types.ContainerLogsFetchRequest) (resolve
 	if identity.Namespace == "" {
 		return resolvedLogTarget{}, fmt.Errorf("logs require a namespaced object scope")
 	}
+	if err := containerlogs.ValidateTargetGVK(identity.GVK); err != nil {
+		return resolvedLogTarget{}, err
+	}
 	kind := strings.ToLower(strings.TrimSpace(identity.GVK.Kind))
 	if kind == "" {
 		return resolvedLogTarget{}, fmt.Errorf("object kind missing in scope %q", req.Scope)
