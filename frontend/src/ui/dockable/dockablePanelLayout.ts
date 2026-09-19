@@ -12,14 +12,6 @@
  */
 
 export const LAYOUT = {
-  /** Minimum distance panels should maintain from content edges */
-  MIN_EDGE_DISTANCE: 0,
-  /** Margin to leave when constraining panel size to content area */
-  WINDOW_MARGIN: 100,
-  /** Size of the resize detection zone on panel edges */
-  RESIZE_EDGE_SIZE: 8,
-  /** Size of the resize detection zone on top edge (smaller to avoid header conflict) */
-  RESIZE_TOP_EDGE_SIZE: 4,
   /** Debounce delay for resize handling */
   RESIZE_DEBOUNCE_MS: 100,
 } as const;

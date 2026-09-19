@@ -11,7 +11,9 @@ export const useDiagnosticsTableControls = () => {
   const toggleRow = useCallback((key: string) => {
     setExpandedRows((previous) => {
       const next = new Set(previous);
-      if (!next.delete(key)) next.add(key);
+      if (!next.delete(key)) {
+        next.add(key);
+      }
       return next;
     });
   }, []);

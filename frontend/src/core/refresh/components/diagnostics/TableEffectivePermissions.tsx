@@ -9,12 +9,11 @@ import { TABLE_NO_VALUE_TEXT, TableCellValue } from '@shared/components/tables/t
 import type React from 'react';
 import { useMemo } from 'react';
 import type { PermissionRow } from './diagnosticsPanelTypes';
-
+import { displayInFlightCount } from './diagnosticsPanelUtils';
 import {
   DIAGNOSTICS_ROW_INCREMENT,
   useDiagnosticsTableControls,
 } from './useDiagnosticsTableControls';
-import { displayInFlightCount } from './diagnosticsPanelUtils';
 
 interface PermissionsTableProps {
   rows: PermissionRow[];

@@ -58,16 +58,6 @@
     color 150ms ease;
 }
 
-.shortcut-key {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-family: "SF Mono", "Monaco", "Cascadia Code", "Roboto Mono", monospace;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--shortcut-key-text);
-}
-
 /* Shortcut description */
 .shortcut-description {
   color: var(--color-text-secondary);

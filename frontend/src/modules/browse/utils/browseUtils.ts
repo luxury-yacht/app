@@ -177,7 +177,9 @@ export const buildCatalogScope = (params: BuildCatalogScopeParams): string => {
       .map((value) => value.trim())
       .filter(Boolean)
       .sort(compareUtf16Strings)
-      .forEach((value) => query.append(key, value));
+      .forEach((value) => {
+        query.append(key, value);
+      });
   }
 
   appendCatalogPageAddress(query, params);

@@ -289,7 +289,9 @@ const createGraphApplySlot = <T>(
     };
     void applyPending()
       .catch((error) => {
-        if (isCurrent()) onError?.(error);
+        if (isCurrent()) {
+          onError?.(error);
+        }
       })
       .finally(() => {
         if (activeRun === run) {
@@ -304,7 +306,9 @@ const createGraphApplySlot = <T>(
     hasPending: () => latest !== null,
     schedule: (value: T) => {
       const graph = getGraph();
-      if (!graph || graph.destroyed) return;
+      if (!graph || graph.destroyed) {
+        return;
+      }
       latest = value;
       flush();
     },
@@ -415,7 +419,9 @@ export const createObjectMapG6ApplyQueue = ({
         graph.setData(latest.data);
         await graph.render();
       }
-      if (!isCurrent()) return;
+      if (!isCurrent()) {
+        return;
+      }
       onGraphDataTiming?.({
         durationMs: objectMapApplyTimingNow() - startedAt,
         mode,
@@ -436,8 +442,11 @@ export const createObjectMapG6ApplyQueue = ({
 
   const setReady = (ready: boolean) => {
     graphReady = ready;
-    if (dataApply.hasPending()) dataApply.flush();
-    else selectionApply.flush();
+    if (dataApply.hasPending()) {
+      dataApply.flush();
+    } else {
+      selectionApply.flush();
+    }
   };
 
   const clear = () => {

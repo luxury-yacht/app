@@ -9,6 +9,7 @@ import { CategoryIcon, ShortcutArrowIcon } from '@shared/components/icons/Shared
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import { useModalPresence } from '@shared/components/modals/useModalPresence';
 import React, { useEffect, useRef, useState } from 'react';
 import type { ShortcutGroup, ShortcutModifiers } from '@/types/shortcuts';
 import { useKeyboardContext } from '../context';
@@ -105,25 +106,9 @@ const ShortcutGroupSection = ({ group, isMac }: { group: ShortcutGroup; isMac: b
 export function ShortcutHelpModal({ isOpen, onClose }: Readonly<ShortcutHelpModalProps>) {
   const { getAvailableShortcuts } = useKeyboardContext();
   const [shortcuts, setShortcuts] = useState(getAvailableShortcuts());
-  const [isClosing, setIsClosing] = useState(false);
-  const [shouldRender, setShouldRender] = useState(false);
+  const { isClosing, shouldRender } = useModalPresence(isOpen);
   const modalRef = useRef<HTMLDivElement>(null);
   const isMac = navigator.userAgent.includes('Mac');
-
-  // Handle open/close animation states
-  useEffect(() => {
-    if (isOpen) {
-      setShouldRender(true);
-      setIsClosing(false);
-    } else if (shouldRender) {
-      setIsClosing(true);
-      const timer = setTimeout(() => {
-        setShouldRender(false);
-        setIsClosing(false);
-      }, 200); // Match the animation duration
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen, shouldRender]);
 
   // Update shortcuts when context changes
   useEffect(() => {

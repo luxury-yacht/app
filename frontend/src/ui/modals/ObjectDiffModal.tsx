@@ -37,6 +37,7 @@ import { DiffIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import { useModalPresence } from '@shared/components/modals/useModalPresence';
 
 import {
   readCatalogObjectMatchForRef,
@@ -997,8 +998,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
 }) => {
   const elementIdPrefix = useId();
   const { selectedKubeconfigs, getClusterMeta } = useKubeconfig();
-  const [isClosing, setIsClosing] = useState(false);
-  const [shouldRender, setShouldRender] = useState(false);
+  const { isClosing, shouldRender } = useModalPresence(isOpen);
   const [leftClusterId, setLeftClusterId] = useState('');
   const [rightClusterId, setRightClusterId] = useState('');
   const [leftNamespace, setLeftNamespace] = useState('');
@@ -1032,20 +1032,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     () => buildClusterOptions(selectedKubeconfigs, getClusterMeta),
     [getClusterMeta, selectedKubeconfigs]
   );
-
-  useEffect(() => {
-    if (isOpen) {
-      setShouldRender(true);
-      setIsClosing(false);
-    } else if (shouldRender) {
-      setIsClosing(true);
-      const timer = setTimeout(() => {
-        setShouldRender(false);
-        setIsClosing(false);
-      }, 200);
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen, shouldRender]);
 
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : '';
@@ -1148,7 +1134,9 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
   }, [invalidatePendingMatches]);
 
   useEffect(() => {
-    if (!isOpen) cancelPendingMatches();
+    if (!isOpen) {
+      cancelPendingMatches();
+    }
     return invalidatePendingMatches;
   }, [isOpen, cancelPendingMatches, invalidatePendingMatches]);
 

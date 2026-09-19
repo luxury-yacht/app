@@ -24,6 +24,7 @@ import { InfoIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import { useModalPresence } from '@shared/components/modals/useModalPresence';
 import { useAppInfo } from '@shared/hooks/useAppInfo';
 import { reportOperationalError } from '@/utils/errorHandler';
 import {
@@ -256,23 +257,8 @@ const ApplicationUpdateSection: React.FC<ApplicationUpdateSectionProps> = ({
 };
 
 const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) => {
-  const [isClosing, setIsClosing] = useState(false);
-  const [shouldRender, setShouldRender] = useState(false);
+  const { isClosing, shouldRender } = useModalPresence(isOpen);
   const { appInfo, update, setUpdate } = useAppInfo(isOpen);
-
-  useEffect(() => {
-    if (isOpen) {
-      setShouldRender(true);
-      setIsClosing(false);
-    } else if (shouldRender) {
-      setIsClosing(true);
-      const timer = setTimeout(() => {
-        setShouldRender(false);
-        setIsClosing(false);
-      }, 200); // Match the animation duration
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen, shouldRender]);
 
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : '';

@@ -54,14 +54,15 @@ const AppMenuBar = () => {
     [sections]
   );
 
-  const closeSection = useCallback((restoreTrigger = false) => {
-    setOpenSectionIndex((current) => {
-      if (restoreTrigger && current !== null) {
-        triggerRefs.current[current]?.focus();
+  const closeSection = useCallback(
+    (restoreTrigger = false) => {
+      if (restoreTrigger && openSectionIndex !== null) {
+        triggerRefs.current[openSectionIndex]?.focus();
       }
-      return null;
-    });
-  }, []);
+      setOpenSectionIndex(null);
+    },
+    [openSectionIndex]
+  );
 
   const executeCommand = useCallback(
     (menuCommand: backend.ApplicationMenuCommand) => {
@@ -107,27 +108,26 @@ const AppMenuBar = () => {
       if (!activeSection) {
         return false;
       }
-      if (event.key === 'ArrowDown') {
-        setFocusedItemIndex((current) => nextCommandIndex(activeSection, current, 1));
-        return true;
+      switch (event.key) {
+        case 'ArrowDown':
+          setFocusedItemIndex((current) => nextCommandIndex(activeSection, current, 1));
+          return true;
+        case 'ArrowUp':
+          setFocusedItemIndex((current) => nextCommandIndex(activeSection, current, -1));
+          return true;
+        case 'ArrowRight':
+          switchSection(1);
+          return true;
+        case 'ArrowLeft':
+          switchSection(-1);
+          return true;
+        case 'Enter':
+        case ' ':
+          activateFocusedItem();
+          return true;
+        default:
+          return false;
       }
-      if (event.key === 'ArrowUp') {
-        setFocusedItemIndex((current) => nextCommandIndex(activeSection, current, -1));
-        return true;
-      }
-      if (event.key === 'ArrowRight') {
-        switchSection(1);
-        return true;
-      }
-      if (event.key === 'ArrowLeft') {
-        switchSection(-1);
-        return true;
-      }
-      if (event.key === 'Enter' || event.key === ' ') {
-        activateFocusedItem();
-        return true;
-      }
-      return false;
     },
   });
 

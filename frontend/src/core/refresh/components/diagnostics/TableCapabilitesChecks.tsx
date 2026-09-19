@@ -10,12 +10,11 @@ import type React from 'react';
 import { useMemo } from 'react';
 import { permissionFeatureLabel } from '@/core/capabilities';
 import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
-
+import { displayInFlightCount } from './diagnosticsPanelUtils';
 import {
   DIAGNOSTICS_ROW_INCREMENT,
   useDiagnosticsTableControls,
 } from './useDiagnosticsTableControls';
-import { displayInFlightCount } from './diagnosticsPanelUtils';
 
 interface CapabilityChecksTableProps {
   currentRows: CapabilityBatchRow[];

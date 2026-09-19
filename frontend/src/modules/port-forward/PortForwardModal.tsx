@@ -368,8 +368,10 @@ const PortForwardModalContent = ({
   );
 };
 
-function PortForwardModal({ target, ...props }: PortForwardModalProps) {
-  if (!target) return null;
+function PortForwardModal({ target, ...props }: Readonly<PortForwardModalProps>) {
+  if (!target) {
+    return null;
+  }
   const key = buildVersionedNamespacedRowKey(
     target.clusterId,
     target.namespace,

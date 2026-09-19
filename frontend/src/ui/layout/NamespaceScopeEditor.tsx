@@ -10,7 +10,7 @@
 
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { PlusIcon } from '@shared/components/icons/SharedIcons';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addNamespaceToScope,
   loadNamespaceScope,
@@ -35,99 +35,113 @@ type NamespaceScopeError =
   | { kind: 'validation'; message: string }
   | { kind: 'operational'; error: unknown; context: Record<string, unknown> };
 
+type ScopeSnapshot = Pick<NamespaceScopeState, 'scope' | 'loaded' | 'saving' | 'error'>;
+
 export function useNamespaceScope(clusterId: string | undefined): NamespaceScopeState {
-  const [scope, setScope] = useState<string[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<NamespaceScopeError | null>(null);
+  // A new owner also distinguishes A -> B -> A from the first visit to A.
+  const owner = useMemo(() => ({ clusterId }), [clusterId]);
+  const emptySnapshot: ScopeSnapshot = {
+    scope: [],
+    loaded: !clusterId,
+    saving: false,
+    error: null,
+  };
+  const [state, setState] = useState(() => ({ owner, ...emptySnapshot }));
+  const snapshot = state.owner === owner ? state : emptySnapshot;
+  const { scope } = snapshot;
+  const update = useCallback(
+    (changes: Partial<ScopeSnapshot>) => {
+      setState((current) => (current.owner === owner ? { ...current, ...changes } : current));
+    },
+    [owner]
+  );
 
   useEffect(() => {
     let cancelled = false;
-    setScope([]);
-    setError(null);
-    setLoaded(false);
-    if (!clusterId) {
-      setLoaded(true);
-      return;
+    setState({ owner, scope: [], loaded: !clusterId, saving: false, error: null });
+    if (clusterId) {
+      void loadNamespaceScope(clusterId).then(
+        (names) => {
+          if (!cancelled) {
+            update({ scope: names, loaded: true });
+          }
+        },
+        () => {
+          // Unreadable settings degrade to "no scope" — same as the backend.
+          if (!cancelled) {
+            update({ loaded: true });
+          }
+        }
+      );
     }
-    void loadNamespaceScope(clusterId).then(
-      (names) => {
-        if (!cancelled) {
-          setScope(names);
-          setLoaded(true);
-        }
-      },
-      () => {
-        // Unreadable settings degrade to "no scope" — same as the backend.
-        if (!cancelled) {
-          setLoaded(true);
-        }
-      }
-    );
     return () => {
       cancelled = true;
     };
-  }, [clusterId]);
+  }, [clusterId, owner, update]);
 
   const apply = useCallback(
     async (next: string[]) => {
       if (!clusterId) {
-        // Never swallow an edit: without a cluster id the save cannot be
-        // attributed, and a silent no-op looks like the bug it masks.
-        setError({
-          kind: 'operational',
-          error: new Error('No active cluster selected — cannot save the namespace scope.'),
-          context: {
-            action: 'saveNamespaceScope',
-            source: 'NamespaceScopeEditor',
+        // A save without an owner must surface an error instead of silently dropping an edit.
+        update({
+          error: {
+            kind: 'operational',
+            error: new Error('No active cluster selected — cannot save the namespace scope.'),
+            context: { action: 'saveNamespaceScope', source: 'NamespaceScopeEditor' },
           },
         });
         return;
       }
-      setSaving(true);
-      setError(null);
+      update({ saving: true, error: null });
       try {
-        setScope(await saveNamespaceScope(clusterId, next));
-      } catch (err) {
-        setError({
-          kind: 'operational',
-          error: err,
-          context: {
-            action: 'saveNamespaceScope',
-            source: 'NamespaceScopeEditor',
-            clusterId,
+        update({ scope: await saveNamespaceScope(clusterId, next) });
+      } catch (error) {
+        update({
+          error: {
+            kind: 'operational',
+            error,
+            context: {
+              action: 'saveNamespaceScope',
+              source: 'NamespaceScopeEditor',
+              clusterId,
+            },
           },
         });
       } finally {
-        setSaving(false);
+        update({ saving: false });
       }
     },
-    [clusterId]
+    [clusterId, update]
   );
 
   const addNamespace = useCallback(
     (name: string): boolean => {
       const result = addNamespaceToScope(scope, name);
       if (result.error) {
-        setError({ kind: 'validation', message: result.error });
+        update({ error: { kind: 'validation', message: result.error } });
         return false;
       }
       void apply(result.next ?? scope);
       return true;
     },
-    [scope, apply]
+    [scope, apply, update]
   );
-
   const removeNamespace = useCallback(
     (name: string) => {
       void apply(removeNamespaceFromScope(scope, name));
     },
     [scope, apply]
   );
-
-  const clearError = useCallback(() => setError(null), []);
-
-  return { scope, loaded, saving, error, addNamespace, removeNamespace, clearError };
+  const clearError = useCallback(() => update({ error: null }), [update]);
+  return {
+    scope,
+    loaded: snapshot.loaded,
+    saving: snapshot.saving,
+    error: snapshot.error,
+    addNamespace,
+    removeNamespace,
+    clearError,
+  };
 }
 
 interface NamespaceScopeAddRowProps {

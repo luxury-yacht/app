@@ -125,14 +125,18 @@ const RollbackModal = ({
       read: () => readRevisionHistoryForRef({ clusterId, namespace, group, version, kind, name }),
     })
       .then((result) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         const entries = result.status === 'executed' ? (result.data ?? []) : [];
         const sorted = [...entries].sort((a, b) => b.revision - a.revision);
         setRevisions(sorted);
         setSelectedRevision(sorted.find((entry) => !entry.current)?.revision ?? null);
       })
       .catch((err) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         const details = errorHandler.handleInline(err, {
           action: 'loadRevisionHistory',
           source: 'RollbackModal',
@@ -141,7 +145,9 @@ const RollbackModal = ({
         setFetchError(details.message);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       });
     return () => {
       cancelled = true;

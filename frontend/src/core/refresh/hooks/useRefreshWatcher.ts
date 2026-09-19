@@ -56,14 +56,16 @@ export const useRefreshWatcher = (options: UseRefreshWatcherOptions) => {
       return;
     }
 
-    let unsubscribe = () => {};
+    let unsubscribe: (() => void) | undefined;
     const subscribe = () => {
-      unsubscribe();
+      unsubscribe?.();
       setIsRefreshing(false);
       let active = true;
       let pending = 0;
       const dispose = manager.subscribe(refresherName, async (isManual, signal) => {
-        if (!active) return;
+        if (!active) {
+          return;
+        }
         pending++;
         setIsRefreshing(true);
         try {
@@ -71,7 +73,9 @@ export const useRefreshWatcher = (options: UseRefreshWatcherOptions) => {
         } finally {
           pending--;
           // A timeout or scope change can detach a callback before it settles.
-          if (active) setIsRefreshing(pending > 0);
+          if (active) {
+            setIsRefreshing(pending > 0);
+          }
         }
       });
       unsubscribe = () => {
@@ -90,10 +94,12 @@ export const useRefreshWatcher = (options: UseRefreshWatcherOptions) => {
       }
     });
     const unsubStateChange = eventBus.on('refresh:state-change', ({ name, state: newState }) => {
-      if (name === refresherName) setState(newState ?? null);
+      if (name === refresherName) {
+        setState(newState ?? null);
+      }
     });
     return () => {
-      unsubscribe();
+      unsubscribe?.();
       unsubRegistered();
       unsubStateChange();
     };

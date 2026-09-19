@@ -1,4 +1,5 @@
 import { ZoomProvider } from '@core/contexts/ZoomContext';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import type React from 'react';
 import { act } from 'react';
@@ -9,7 +10,7 @@ import {
   usePanelLifecycleGuard,
 } from '@/core/panel-windows/panelLifecycleGuards';
 import DockablePanel from './DockablePanel';
-import { DockablePanelProvider } from './DockablePanelProvider';
+import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
 import { getAllPanelStates } from './useDockablePanelState';
 
@@ -93,6 +94,70 @@ describe('DockablePanel docked behaviour', () => {
     document.body.replaceChildren();
     document.body.className = '';
     setActivePanelLayoutStore(createPanelLayoutStore());
+  });
+
+  it('retains a reordered group leader and its geometry across a cluster round trip', async () => {
+    ensureContentElement();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = ReactDOM.createRoot(host);
+    let context: ReturnType<typeof useDockablePanelContext> | undefined;
+    const Capture = () => {
+      context = useDockablePanelContext();
+      return null;
+    };
+    const renderCluster = async (clusterId: string) => {
+      vi.mocked(useKubeconfig).mockReturnValue({
+        selectedClusterId: clusterId,
+        selectedClusterIds: ['cluster-a', 'cluster-b'],
+      } as ReturnType<typeof useKubeconfig>);
+      await act(async () =>
+        root.render(
+          <KeyboardProvider>
+            <PanelLifecycleGuardProvider>
+              <DockablePanelProvider>
+                <ZoomProvider>
+                  <Capture />
+                  {clusterId === 'cluster-a' ? (
+                    <>
+                      <DockablePanel key="a1" panelId="a1" defaultSize={{ width: 540 }} isOpen>
+                        <div>A1</div>
+                      </DockablePanel>
+                      <DockablePanel key="a2" panelId="a2" defaultSize={{ width: 680 }} isOpen>
+                        <div>A2</div>
+                      </DockablePanel>
+                    </>
+                  ) : (
+                    <DockablePanel key="b1" panelId="b1" defaultSize={{ width: 900 }} isOpen>
+                      <div>B1</div>
+                    </DockablePanel>
+                  )}
+                </ZoomProvider>
+              </DockablePanelProvider>
+            </PanelLifecycleGuardProvider>
+          </KeyboardProvider>
+        )
+      );
+    };
+    const leaderWidth = () =>
+      document.querySelector<HTMLElement>('.dockable-panel:has(.dockable-panel__header)')?.style
+        .width;
+    try {
+      await renderCluster('cluster-a');
+      expect(leaderWidth()).toBe('540px');
+      await act(async () => context?.reorderTabInGroup('right', 'a2', 0));
+      expect(leaderWidth()).toBe('540px');
+      await renderCluster('cluster-b');
+      await renderCluster('cluster-a');
+      expect(leaderWidth()).toBe('540px');
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      vi.mocked(useKubeconfig).mockReturnValue({
+        selectedClusterId: 'cluster-a',
+        selectedClusterIds: ['cluster-a'],
+      } as ReturnType<typeof useKubeconfig>);
+    }
   });
 
   it('initializes bottom-docked geometry from the provided size', async () => {

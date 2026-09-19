@@ -7,7 +7,7 @@ import { readAppInfo, requestAppState } from '@/core/app-state-access';
 // metadata read must not replace an update event or an explicit action result.
 export const useAppInfo = (enabled = true) => {
   const [appInfo, setAppInfo] = useState<Omit<backend.AppInfo, 'update'> | null>(null);
-  const [update, setUpdateState] = useState<backend.UpdateInfo | null>(null);
+  const [updateState, setUpdateState] = useState<backend.UpdateInfo | null>(null);
   const updateRevision = useRef(0);
 
   const setUpdate = useCallback((next: backend.UpdateInfo | null) => {
@@ -46,5 +46,5 @@ export const useAppInfo = (enabled = true) => {
     };
   }, [enabled, setUpdate]);
 
-  return { appInfo, update, setUpdate };
+  return { appInfo, update: updateState, setUpdate };
 };

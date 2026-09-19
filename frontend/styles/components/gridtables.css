@@ -369,7 +369,9 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
   border: 0;
 }
 
-.resize-handle::before {
+.resize-handle::before,
+.gridtable-trailing-boundary::before,
+.column-separator::before {
   content: "";
   position: absolute;
   top: 8px;
@@ -378,9 +380,11 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
   width: 2px;
   transform: translateX(-50%);
   border-radius: 1px;
-  /* Allow theme-level overrides without depending on import order. */
   background-color: var(--grid-resize-handle-color, var(--grid-border-color));
   opacity: var(--grid-resize-handle-opacity, 0.65);
+}
+
+.resize-handle::before {
   transition:
     background-color 0.2s,
     opacity 0.2s;
@@ -405,19 +409,6 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
   z-index: var(--z-index-grid-resize-handle);
 }
 
-.gridtable-trailing-boundary::before {
-  content: "";
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 50%;
-  width: 2px;
-  transform: translateX(-50%);
-  border-radius: 1px;
-  background-color: var(--grid-resize-handle-color, var(--grid-border-color));
-  opacity: var(--grid-resize-handle-opacity, 0.65);
-}
-
 .column-separator {
   position: absolute;
   right: 0;
@@ -426,19 +417,6 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
   width: 6px;
   pointer-events: none;
   z-index: var(--z-index-grid-resize-handle);
-}
-
-.column-separator::before {
-  content: "";
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 50%;
-  width: 2px;
-  transform: translateX(-50%);
-  border-radius: 1px;
-  background-color: var(--grid-resize-handle-color, var(--grid-border-color));
-  opacity: var(--grid-resize-handle-opacity, 0.65);
 }
 
 /* ============================================

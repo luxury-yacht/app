@@ -45,7 +45,7 @@ import {
 import { eventBus } from '@/core/events';
 import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
 import type { PodMetricsInfo, PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
-import { podRowCpuValue, podRowMemoryValue } from '@/core/resource-metrics';
+import { workloadRowCpuValue, workloadRowMemoryValue } from '@/core/resource-metrics';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 
 interface PodsViewProps {
@@ -269,9 +269,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           header: 'CPU',
           key: 'cpu',
           type: 'cpu',
-          getUsage: (pod) => podRowCpuValue(pod, 'usage'),
-          getRequest: (pod) => podRowCpuValue(pod, 'request'),
-          getLimit: (pod) => podRowCpuValue(pod, 'limit'),
+          getUsage: (pod) => workloadRowCpuValue(pod, 'usage'),
+          getRequest: (pod) => workloadRowCpuValue(pod, 'request'),
+          getLimit: (pod) => workloadRowCpuValue(pod, 'limit'),
           getMetricsStale: () => metricsStateRef.current.stale,
           getMetricsError: () => metricsStateRef.current.lastError,
           getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:cpu`,
@@ -282,9 +282,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           header: 'Memory',
           key: 'memory',
           type: 'memory',
-          getUsage: (pod) => podRowMemoryValue(pod, 'usage'),
-          getRequest: (pod) => podRowMemoryValue(pod, 'request'),
-          getLimit: (pod) => podRowMemoryValue(pod, 'limit'),
+          getUsage: (pod) => workloadRowMemoryValue(pod, 'usage'),
+          getRequest: (pod) => workloadRowMemoryValue(pod, 'request'),
+          getLimit: (pod) => workloadRowMemoryValue(pod, 'limit'),
           getMetricsStale: () => metricsStateRef.current.stale,
           getMetricsError: () => metricsStateRef.current.lastError,
           getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:memory`,

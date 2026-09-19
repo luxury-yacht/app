@@ -436,10 +436,6 @@ const routeKeyboardEvent = (event: KeyboardEvent, context: KeyboardEventRoutingC
 };
 
 export function KeyboardProvider({ children, disabled = false }: Readonly<KeyboardProviderProps>) {
-  return <KeyboardProviderInner disabled={disabled}>{children}</KeyboardProviderInner>;
-}
-
-const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disabled = false }) => {
   useKeyboardFocusIndicator();
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(new Map());
   const [isEnabled, setIsEnabled] = useState(!disabled);
@@ -722,4 +718,4 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
   };
 
   return <KeyboardContext.Provider value={value}>{children}</KeyboardContext.Provider>;
-};
+}

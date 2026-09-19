@@ -38,8 +38,6 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
     position: DockPosition;
     size: { width: number; height: number };
   } | null>(null);
-  const maximizeTargetRef = useRef<HTMLElement | null>(null);
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   const resolveMaximizeTarget = useCallback((): HTMLElement | null => {
     if (typeof document === 'undefined') {
@@ -55,23 +53,19 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
 
   useEffect(() => {
     if (!isMaximized) {
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
-      }
-      maximizeTargetRef.current = null;
       setMaximizedRect(null);
       return;
     }
 
+    let maximizeTarget = resolveMaximizeTarget();
     const updateRect = () => {
       if (typeof window === 'undefined') {
         return;
       }
 
-      const target = maximizeTargetRef.current ?? resolveMaximizeTarget();
+      const target = maximizeTarget ?? resolveMaximizeTarget();
       if (target) {
-        maximizeTargetRef.current = target;
+        maximizeTarget = target;
         // Convert target's viewport rect to content-relative coordinates
         const targetRect = target.getBoundingClientRect();
         const contentEl = document.querySelector('.content');
@@ -96,29 +90,21 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
       setMaximizedRect(new DOMRect(0, 0, content.width, content.height));
     };
 
-    maximizeTargetRef.current = resolveMaximizeTarget();
     updateRect();
 
-    const handleResize = () => updateRect();
+    window.addEventListener('resize', updateRect);
+    window.addEventListener('scroll', updateRect, true);
 
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('scroll', handleResize, true);
-
-    if (maximizeTargetRef.current && typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(() => updateRect());
-      observer.observe(maximizeTargetRef.current);
-      resizeObserverRef.current = observer;
-    } else {
-      resizeObserverRef.current = null;
+    let observer: ResizeObserver | undefined;
+    if (maximizeTarget && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(updateRect);
+      observer.observe(maximizeTarget);
     }
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('scroll', handleResize, true);
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
-      }
+      window.removeEventListener('resize', updateRect);
+      window.removeEventListener('scroll', updateRect, true);
+      observer?.disconnect();
     };
   }, [isMaximized, resolveMaximizeTarget]);
 

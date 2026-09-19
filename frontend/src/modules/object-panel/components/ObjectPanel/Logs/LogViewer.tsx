@@ -34,6 +34,7 @@ import { CaseSensitiveIcon, SettingsIcon } from '@shared/components/icons/Shared
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { compareUtf16Strings } from '@shared/utils/sort';
 import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import {
   readContainerLogs,
@@ -527,7 +528,7 @@ const getWorkloadPodNames = (
 ): string[] =>
   (activePods ?? Array.from(new Set(entries.map((entry) => entry.pod).filter(Boolean))))
     .slice()
-    .sort();
+    .sort(compareUtf16Strings);
 
 const filterEntriesForActivePods = (
   entries: ContainerLogsEntry[],

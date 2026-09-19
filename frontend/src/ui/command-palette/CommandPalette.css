@@ -229,15 +229,6 @@
   white-space: nowrap;
 }
 
-.command-palette-item-description {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  margin-top: 0.125rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .command-palette-footer {
   display: flex;
   align-items: center;

@@ -6,10 +6,7 @@
  */
 
 import { useCallback } from 'react';
-import {
-  getBackgroundRefreshEnabled,
-  setBackgroundRefreshEnabled,
-} from '@/core/settings/appPreferences';
+import { setBackgroundRefreshEnabled } from '@/core/settings/appPreferences';
 
 import { useBackgroundRefreshEnabled } from './useRefreshPreferences';
 
@@ -27,4 +24,4 @@ export function useBackgroundRefresh() {
   return { enabled, setBackgroundRefresh, toggle };
 }
 
-export { getBackgroundRefreshEnabled };
+export { getBackgroundRefreshEnabled } from '@/core/settings/appPreferences';

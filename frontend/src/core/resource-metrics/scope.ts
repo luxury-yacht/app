@@ -52,7 +52,9 @@ const resolveMetricsReference = (ref: ClusterObjectReference): ResourceMetricsRe
 export const resolveResourceMetricsScope = (
   objectData: KubernetesObjectReference | null | undefined
 ): ResourceMetricsResolution => {
-  if (!objectData) return { kind: 'unsupported', reason: 'unsupported-kind' };
+  if (!objectData) {
+    return { kind: 'unsupported', reason: 'unsupported-kind' };
+  }
   try {
     assertObjectRefHasRequiredIdentity(objectData);
     return resolveMetricsReference(buildRequiredObjectReference(objectData));

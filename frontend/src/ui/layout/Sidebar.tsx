@@ -853,7 +853,7 @@ function Sidebar() {
   // The namespaces domain is the ONLY membership source. It is
   // permission-gated backend-side: without list permission it fails fast and
   // the sidebar renders the permission message — no catalog inference (manual
-  // namespace entry is future work, docs/todo.md).
+  // namespace entry is managed by the inline scope editor).
   const viewState = useViewState();
   const showGlobalViews = selectedClusterIds.length > 1 && viewState.viewType === 'global';
   const [expandedNamespaceKeys, setExpandedNamespaceKeys] = useState<Set<string>>(() => new Set());
@@ -873,16 +873,6 @@ function Sidebar() {
   const sidebarSelection = viewState.sidebarSelection;
   const selectedNamespaceRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const keyboardCursorIndexRef = useRef<number | null>(null);
-  const [cursorPreview, setCursorPreview] = useState<SidebarCursorTarget | null>(null);
-  const [pendingSelection, setPendingSelection] = useState<SidebarCursorTarget | null>(null);
-  const pendingCommitRef = useRef<SidebarCursorTarget | null>(null);
-  const keyboardActivationRef = useRef(false);
-  const clearKeyboardPreview = useCallback(() => {
-    setCursorPreview(null);
-    pendingCommitRef.current = null;
-    keyboardCursorIndexRef.current = null;
-  }, []);
 
   const hasNamespaceData = !namespaceLoading && namespaces.some((item) => !item.isSynthetic);
 
@@ -926,20 +916,14 @@ function Sidebar() {
     selectedNamespaceKey,
   ]);
 
-  const { buildSidebarItemClassName, isTargetSelected, isKeyboardNavActive } =
-    useSidebarKeyboardControls({
-      sidebarRef,
-      isCollapsed,
-      cursorPreview,
-      setCursorPreview,
-      pendingSelection,
-      setPendingSelection,
-      keyboardCursorIndexRef,
-      pendingCommitRef,
-      keyboardActivationRef,
-      clearKeyboardPreview,
-      getCurrentSelectionTarget,
-    });
+  const {
+    buildSidebarItemClassName,
+    isTargetSelected,
+    isKeyboardNavActive,
+    setPendingSelection,
+    keyboardActivationRef,
+    clearKeyboardPreview,
+  } = useSidebarKeyboardControls({ sidebarRef, isCollapsed, getCurrentSelectionTarget });
 
   // Cluster views include optional families discovered in the active cluster.
   const attentionView = CLUSTER_VIEW_DESCRIPTORS.find((view) => view.id === 'attention');
@@ -1006,16 +990,12 @@ function Sidebar() {
     viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
   };
 
-  const handleGlobalViewSelect = (view: GlobalViewType) => {
-    setPendingSelection({ kind: 'global-view', view });
-    viewState.navigateToGlobal(view);
-  };
-
   const handleGlobalItemSelect = (view: GlobalViewType) => {
     if (!keyboardActivationRef.current) {
       clearKeyboardPreview();
     }
-    handleGlobalViewSelect(view);
+    setPendingSelection({ kind: 'global-view', view });
+    viewState.navigateToGlobal(view);
   };
 
   const handleOverviewSelect = () => {
@@ -1053,13 +1033,7 @@ function Sidebar() {
         return next;
       }
 
-      if (exclusiveNamespaces) {
-        return new Set([namespaceKey]);
-      }
-
-      const next = new Set(previous);
-      next.add(namespaceKey);
-      return next;
+      return expandSelectedNamespace(previous, namespaceKey, exclusiveNamespaces);
     });
   };
 

@@ -116,61 +116,9 @@
   border-top: none;
 }
 
-/* ==========================================================================
-   Tooltip Trigger States
-   ========================================================================== */
-
-/* For elements that should show a tooltip */
-[data-tooltip] {
-  position: relative;
-}
-
-/* Simple CSS-only tooltip using data attribute (optional) */
-[data-tooltip]::before {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%) translateY(-8px);
-  padding: 0.4rem 0.6rem;
-  font-size: 0.7rem;
-  font-weight: 500;
-  white-space: nowrap;
-  color: var(--tooltip-text);
-  background-color: var(--tooltip-bg);
-  border: 1px solid var(--tooltip-border);
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity 0.15s ease,
-    visibility 0.15s ease;
-  pointer-events: none;
-  z-index: var(--z-index-tooltip, 2000);
-}
-
-[data-tooltip]:hover::before,
-[data-tooltip]:focus::before {
-  opacity: 1;
-  visibility: visible;
-}
-
-/* Disable CSS tooltip if JS tooltip is active */
-[data-tooltip].tooltip-active::before {
-  display: none;
-}
-
-/* ==========================================================================
-   Reduced Motion Support
-   ========================================================================== */
-
+/* Respect reduced motion for the shared React tooltip. */
 @media (prefers-reduced-motion: reduce) {
   .tooltip {
     animation: none;
-  }
-
-  [data-tooltip]::before {
-    transition: none;
   }
 }

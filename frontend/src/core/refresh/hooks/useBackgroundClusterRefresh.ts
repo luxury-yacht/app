@@ -36,7 +36,9 @@ export function useBackgroundClusterRefresh({
   getNamespaceRef.current = getClusterNamespace;
 
   useEffect(() => {
-    if (!enabled || selectedClusterIds.length <= 1) return;
+    if (!enabled || selectedClusterIds.length <= 1) {
+      return;
+    }
 
     const refresher = new BackgroundClusterRefresher(
       (clusterId) => getNavStateRef.current(clusterId),

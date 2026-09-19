@@ -42,7 +42,6 @@ import {
 } from './tabGroupState';
 import type { GroupKey, PanelRegistration, TabGroupState } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
-import { focusPanelById, setPanelOpenById, setPanelPositionById } from './useDockablePanelState';
 
 interface DockablePanelContextValue {
   // Tab group state
@@ -80,7 +79,10 @@ interface DockablePanelContextValue {
     targetGroupId: string,
     insertIndex: number
   ) => void;
-  createDockableTabDragPayload: (panelId: string, sourceGroupId: string) => TabDragPayload;
+  createDockableTabDragPayload: (
+    panelId: string,
+    sourceGroupId: string
+  ) => Extract<TabDragPayload, { kind: 'dockable-tab' }>;
   dropDockableTab: (
     payload: Extract<TabDragPayload, { kind: 'dockable-tab' }>,
     targetGroupId: string,
@@ -92,8 +94,6 @@ interface DockablePanelContextValue {
   panelContentRefsMap: React.MutableRefObject<Map<string, React.MutableRefObject<React.ReactNode>>>;
   notifyContentChange: (groupKey: GroupKey) => void;
   subscribeContentChange: (groupKey: GroupKey, fn: () => void) => () => void;
-  // Runtime refs currently shared across panels in this provider.
-  groupLeaderByKeyRef: React.MutableRefObject<Map<string, string>>;
 
   // Last-focused group -- tracks which panel group was most recently interacted with,
   // so new panels (e.g. object tabs) can open in the same group.
@@ -374,16 +374,11 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   // store changes (cluster switch), the subscribe function identity
   // changes via [activeStore], so useSyncExternalStore re-subscribes to
   // the new store automatically.
-  const subscribeTabGroups = useCallback(
-    (listener: () => void) => activeStore.subscribeTabGroups(listener),
-    [activeStore]
-  );
-  const getTabGroupsSnapshot = useCallback(() => activeStore.getTabGroups(), [activeStore]);
   const getClusterTabGroups = useCallback(
     (clusterId: string) => getOrCreateStoreForCluster(clusterId).getTabGroups(),
     [getOrCreateStoreForCluster]
   );
-  const tabGroups = useSyncExternalStore(subscribeTabGroups, getTabGroupsSnapshot);
+  const tabGroups = useSyncExternalStore(activeStore.subscribeTabGroups, activeStore.getTabGroups);
 
   // Panel registrations are stored in a ref for callback access and mirrored
   // into snapshot state to notify context consumers when metadata changes.
@@ -411,12 +406,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
     lastFocusedGroupKeyRef.current = key;
     setLastFocusedGroupKeyState(key);
   }, []);
-  const setLastFocusedGroupKey = useCallback(
-    (key: GroupKey) => {
-      setLastFocusedGroupKeyValue(key);
-    },
-    [setLastFocusedGroupKeyValue]
-  );
+  const setLastFocusedGroupKey = setLastFocusedGroupKeyValue;
 
   const reconcileLastFocusedGroup = useCallback(
     (nextTabGroups: TabGroupState) => {
@@ -527,7 +517,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       activeStore.setTabGroups((prev) => setActiveTab(prev, panelId, groupKey));
       return;
     }
-    focusPanelById(panelId);
+    activeStore.focusPanelById(panelId);
     const timer = window.setTimeout(() => {
       focusDockableTab(panelId);
       setPendingFocus(null);
@@ -616,7 +606,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
         reconcileLastFocusedGroup(nextTabGroups);
         if (nextActivePanelId) {
           window.setTimeout(() => {
-            focusPanelById(nextActivePanelId);
+            activeStore.focusPanelById(nextActivePanelId);
             focusDockableTab(nextActivePanelId);
           }, 0);
         }
@@ -634,7 +624,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
         registration.onClose();
         return;
       }
-      setPanelOpenById(panelId, false);
+      activeStore.setPanelOpenById(panelId, false);
     },
     [activeStore, reconcileLastFocusedGroup]
   );
@@ -681,7 +671,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
         // Keep panel-state position aligned with tab-group destination.
         const targetPosition: DockPosition =
           targetGroupKey === 'right' || targetGroupKey === 'bottom' ? targetGroupKey : 'floating';
-        setPanelPositionById(panelId, targetPosition);
+        activeStore.setPanelPositionById(panelId, targetPosition);
         return;
       }
       if (!onGroupMoveRequest) {
@@ -738,7 +728,10 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   );
 
   const createDockableTabDragPayload = useCallback(
-    (panelId: string, sourceGroupId: string): TabDragPayload => ({
+    (
+      panelId: string,
+      sourceGroupId: string
+    ): Extract<TabDragPayload, { kind: 'dockable-tab' }> => ({
       kind: 'dockable-tab',
       panelId,
       sourceGroupId,
@@ -825,7 +818,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   // -----------------------------------------------------------------------
   // Shared runtime refs for panel-level coordination inside this provider.
   // -----------------------------------------------------------------------
-  const groupLeaderByKeyRef = useRef(new Map<string, string>());
 
   // Fan out applyObjectPanelLayoutDefaults to every cluster's store.
   // Called by Settings.tsx when the user changes the default object
@@ -895,13 +887,13 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
 
   const moveDockedPanels = useCallback(
     (panelIds: readonly string[], activePanelId: string, targetPosition: 'right' | 'bottom') => {
-      const targetLeader = groupLeaderByKeyRef.current.get(targetPosition) ?? activePanelId;
+      const targetLeader = activeStore.getGroupLeader(targetPosition) ?? activePanelId;
       dockPanelGroup(selectedClusterId, panelIds, activePanelId, targetPosition);
       setLastFocusedGroupKey(targetPosition);
-      focusPanelById(targetLeader);
+      activeStore.focusPanelById(targetLeader);
       window.setTimeout(() => focusDockableTab(activePanelId), 0);
     },
-    [dockPanelGroup, selectedClusterId, setLastFocusedGroupKey]
+    [activeStore, dockPanelGroup, selectedClusterId, setLastFocusedGroupKey]
   );
 
   const requestGroupMove = useCallback(
@@ -948,10 +940,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
         moveDockedPanels([panelId], panelId, targetPosition);
         return;
       }
-      const payload = createDockableTabDragPayload(panelId, groupKey);
-      if (payload.kind === 'dockable-tab') {
-        onTabMoveRequest?.(payload, targetPosition);
-      }
+      onTabMoveRequest?.(createDockableTabDragPayload(panelId, groupKey), targetPosition);
     },
     [
       activeStore,
@@ -985,7 +974,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       panelContentRefsMap,
       notifyContentChange,
       subscribeContentChange,
-      groupLeaderByKeyRef,
       lastFocusedGroupKey,
       setLastFocusedGroupKey,
       getPreferredOpenGroupKey,

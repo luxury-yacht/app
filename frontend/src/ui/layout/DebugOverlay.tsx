@@ -9,7 +9,7 @@
 
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import './DebugOverlay.css';
 
@@ -80,21 +80,13 @@ const getDefaultLayout = (testId?: string): OverlayLayout => {
   };
 };
 
-type PointerInteraction =
-  | {
-      kind: 'drag';
-      pointerId: number;
-      startX: number;
-      startY: number;
-      layout: OverlayLayout;
-    }
-  | {
-      kind: 'resize';
-      pointerId: number;
-      startX: number;
-      startY: number;
-      layout: OverlayLayout;
-    };
+type PointerInteraction = {
+  kind: 'drag' | 'resize';
+  pointerId: number;
+  startX: number;
+  startY: number;
+  layout: OverlayLayout;
+};
 
 export const DebugOverlay: React.FC<DebugOverlayProps> = ({
   title,
@@ -224,10 +216,7 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
     onClose?.();
   };
 
-  const overlayClassName = useMemo(
-    () => (className ? `debug-overlay-window ${className}` : 'debug-overlay-window'),
-    [className]
-  );
+  const overlayClassName = className ? `debug-overlay-window ${className}` : 'debug-overlay-window';
   const resolvedBodyClassName = bodyClassName
     ? `debug-overlay__body ${bodyClassName}`
     : 'debug-overlay__body';
@@ -239,13 +228,7 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
   return createPortal(
     <div className="debug-overlay-layer">
       <div
-        ref={(node) => {
-          if (typeof overlayRef === 'function') {
-            overlayRef(node);
-          } else if (overlayRef && 'current' in overlayRef) {
-            (overlayRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
-          }
-        }}
+        ref={overlayRef}
         className={overlayClassName}
         data-testid={testId}
         style={{

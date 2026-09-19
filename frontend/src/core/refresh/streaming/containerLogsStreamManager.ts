@@ -381,19 +381,29 @@ export class ContainerLogsStreamManager {
     this.connections.set(scope, connection);
     try {
       await connection.start();
-      if (this.connections.get(scope) === connection) this.markManualCompleted(scope);
+      if (this.connections.get(scope) === connection) {
+        this.markManualCompleted(scope);
+      }
     } finally {
-      if (this.connections.get(scope) === connection) this.connections.delete(scope);
+      if (this.connections.get(scope) === connection) {
+        this.connections.delete(scope);
+      }
     }
   }
 
   stopAll(reset = false): void {
     const scopes = new Set(this.connections.keys());
     if (reset) {
-      for (const scope of this.buffers.keys()) scopes.add(scope);
-      for (const scope of this.backendWarnings.keys()) scopes.add(scope);
+      for (const scope of this.buffers.keys()) {
+        scopes.add(scope);
+      }
+      for (const scope of this.backendWarnings.keys()) {
+        scopes.add(scope);
+      }
     }
-    for (const scope of scopes) this.stop(scope, reset);
+    for (const scope of scopes) {
+      this.stop(scope, reset);
+    }
   }
 
   private createIncomingEntries(payload: StreamEventPayload): ContainerLogsEntry[] {

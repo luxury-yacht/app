@@ -653,7 +653,7 @@ function FavoriteSaveFooter({
   onDelete,
   onClose,
   onSave,
-}: FavoriteSaveFooterProps) {
+}: Readonly<FavoriteSaveFooterProps>) {
   return (
     <div className="modal-footer">
       {!!isEditing && (

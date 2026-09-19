@@ -31,7 +31,9 @@ const desktopMocks = vi.hoisted(() => ({
 vi.mock('@core/backend-api', () => ({
   LogAppLogsFromFrontend: (level: string, message: string, source: string) => {
     backendMocks.log(level, message, source);
-    if (backendMocks.failure) return Promise.reject(backendMocks.failure);
+    if (backendMocks.failure) {
+      return Promise.reject(backendMocks.failure);
+    }
   },
   LogAppLogsFromFrontendWithCluster: (
     level: string,
@@ -41,7 +43,9 @@ vi.mock('@core/backend-api', () => ({
     clusterName: string
   ) => {
     backendMocks.logWithCluster(level, message, source, clusterId, clusterName);
-    if (backendMocks.failure) return Promise.reject(backendMocks.failure);
+    if (backendMocks.failure) {
+      return Promise.reject(backendMocks.failure);
+    }
   },
 }));
 

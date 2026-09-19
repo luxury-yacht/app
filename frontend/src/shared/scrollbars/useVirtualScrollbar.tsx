@@ -7,7 +7,7 @@ import {
   type WheelEvent,
 } from 'react';
 
-import { readScrollbarActiveTimeoutMs, readScrollbarPxToken } from './tokens';
+import { readScrollbarActiveTimeoutMs, readScrollbarNumberToken } from './tokens';
 
 type ScrollbarAxis = 'horizontal' | 'vertical';
 type PointerCoordinates = Pick<globalThis.PointerEvent, 'clientX' | 'clientY'>;
@@ -67,7 +67,7 @@ const isPointerInHoverZone = (
   event: PointerCoordinates
 ): boolean => {
   const rect = host.getBoundingClientRect();
-  const hoverZoneSize = readScrollbarPxToken('--scrollbar-hover-zone-size', 16, host);
+  const hoverZoneSize = readScrollbarNumberToken('--scrollbar-hover-zone-size', 16, host);
 
   if (axis === 'vertical') {
     return (
@@ -136,7 +136,7 @@ export const useVirtualScrollbar = ({
         return;
       }
 
-      const minThumbSize = readScrollbarPxToken('--scrollbar-min-thumb-size', 32, host);
+      const minThumbSize = readScrollbarNumberToken('--scrollbar-min-thumb-size', 32, host);
       const thumbSize = Math.max(
         Math.min(trackSize, minThumbSize),
         Math.min(trackSize, (metrics.viewportSize / metrics.contentSize) * trackSize)

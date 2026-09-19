@@ -17,6 +17,7 @@ import {
 import { CategoryIcon, CloseIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import { useModalPresence } from '@shared/components/modals/useModalPresence';
 import AdvancedSection from '@ui/settings/sections/AdvancedSection';
 import AppearanceSection from '@ui/settings/sections/AppearanceSection';
 import DataManagementSection from '@ui/settings/sections/DataManagementSection';
@@ -95,8 +96,7 @@ const handleCategoryKeyDown = (event: KeyboardEvent) => {
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialTab }) => {
   const elementIdPrefix = useId();
-  const [isClosing, setIsClosing] = useState(false);
-  const [shouldRender, setShouldRender] = useState(false);
+  const { isClosing, shouldRender } = useModalPresence(isOpen);
   const [activeTab, setActiveTab] = useState<SettingsTabId>(() =>
     resolveTab(initialTab ?? getLastSettingsTab())
   );
@@ -104,25 +104,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
   const [appInfo, setAppInfo] = useState<backend.AppInfo | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Open/close animation gating.
+  // Restore the selected section whenever the modal opens or its override changes.
   useEffect(() => {
     if (isOpen) {
-      setShouldRender(true);
-      setIsClosing(false);
-      // When opening, honor an explicit initialTab override; otherwise restore
-      // the last-used tab (falling back to default).
       const openingTab = resolveTab(initialTab ?? getLastSettingsTab());
       setActiveTab(openingTab);
       setFocusedTab(openingTab);
-    } else if (shouldRender) {
-      setIsClosing(true);
-      const timer = setTimeout(() => {
-        setShouldRender(false);
-        setIsClosing(false);
-      }, 200);
-      return () => clearTimeout(timer);
     }
-  }, [isOpen, initialTab, shouldRender]);
+  }, [isOpen, initialTab]);
 
   // Lock body scroll while open.
   useEffect(() => {
@@ -175,7 +164,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
   return (
     <ModalSurface
       modalRef={modalRef}
-      labelledBy="settings-modal-title"
+      labelledBy={`${elementIdPrefix}-settings-modal-title`}
       onClose={onClose}
       overlayClassName="settings-modal-overlay"
       containerClassName="settings-modal"

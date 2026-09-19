@@ -1,27 +1,27 @@
 # Repository simplification ledger
 
-Baseline: `6d93acb773ab245e79b9e5c932fc2e87e9d5a8c0` (2026-09-16).
+Original ledger baseline: `6d93acb773ab245e79b9e5c932fc2e87e9d5a8c0` (2026-09-16).
+Reopened file-inventory baseline: `616adb20abc55707f28ad41b7a4d3c1d8f48f025`.
 Scope: the repository, including quiet code; recency does not restrict selection.
 Follow the [systematic workflow](../workflows/code-simplification.md).
 
-## Current status: reopened for thorough review
+## Current status: local work validated; remote Sonar pending
 
-The earlier domain dispositions do not establish exhaustive implementation-file
-coverage. The user's correction reopens this effort. The [file review manifest](code-simplification-review.json)
-now records the implementation inventory separately from inspected source hashes,
-candidate decisions, consumer traces, and validation. An inventory path absent
-from its review records is pending; historical domain labels below do not close it.
-Review records and passing tests establish different things. No repository-wide
-completion claim is warranted until the pending inventory and required checks
-are resolved.
+The corrected [file review manifest](code-simplification-review.json) records
+**1,848 baseline implementation files** and **1,859 current implementation files**
+(16 additions and five documented removals). Every current source path has an
+inspection record and candidate disposition. D095 adds three authored generators
+that the original inventory incorrectly excluded because their templates contained
+generation headers. D096 reconciles historical hashes using inspected source and
+diffs; the post-gate audit reports zero stale hashes and zero missing paths.
 
-Continuation after the user's `1a73f747` check-in: the manifest now records
-1,713 of 1,845 baseline implementation files fully inspected, with 132 still
-pending. The remaining inventory is frontend source; all
-baseline backend implementation paths have an inspection record. Inspection
-does not close the outstanding candidates or runtime and final validation.
-The D055 prerelease result predates this continuation and is not evidence for
-the current worktree.
+The remaining implementation batches D085–D095 are applied. Final frontend and
+backend coverage passed; native checks, including the user's tab drag check,
+are recorded below. The latest prerelease gate passed; its formatter made no
+source changes. No implementation candidates remain queued.
+Remote Sonar analysis remains a separate pending item: PR355 describes committed
+revision `23263799`, not this worktree. Historical “pending” notes below describe
+those batches at the time; the D097 acceptance record is the current status.
 
 ## Target and non-goals
 
@@ -52,8 +52,10 @@ Inventory recipe:
   `.go/.ts/.tsx/.js/.jsx/.mjs/.cjs/.css/.sh/.ps1/.grit/.html/.nsi/.nsh` source.
   Include C/C++/Objective-C source if introduced later.
 - Identify generated source from `frontend/bindings/`, generated filename
-  markers, and generation headers in the first 1,000 characters. Review its
-  generator instead. Verify ambiguous classifications while reviewing a unit.
+  markers, and actual generation-header comments in the first 1,000 characters. A
+  generation marker inside an authored template string is not a generated-file
+  header. Review each generated file’s generator instead. Verify ambiguous
+  classifications while reviewing a unit.
 - Separate `_test.go`, `.test/.spec/.stories/.bench` files, test/support/fixture
   directories, Vitest setup, and refresh test builders. Inspect their meaningful
   coverage with the owning implementation; they are not simplification targets
@@ -3397,3 +3399,151 @@ Evidence: `/tmp/luxury-yacht-d082-frontend-coverage.log`; summary copied to
 the retained workload search helper is 95.83% statements (23/24). The D078
 aggregate was 89.32%; the denominator changed with pruning/refactoring and this
 comparison does not imply additional scenario coverage.
+
+
+## D084 — tabs, scrollbars and shell primitives
+
+The user committed this batch in `23263799`. Full inspection and retained-contract
+records are now reconciled in the manifest. Tab overflow measurement, drag listener
+cleanup, scrollbar token/geometry calculations and hover ownership are consolidated.
+Session styles retain the port-forward rules they actually use; obsolete panel
+styles were removed. The combined map/tab/scrollbar/status/shell selection passed
+444 tests in 39 files, typecheck passed and 336 changed/new TypeScript functions
+meet the local complexity limit. Logs: `/tmp/luxury-yacht-d084-shell-primitives-green.log`,
+`/tmp/luxury-yacht-d084-typecheck.log`, `/tmp/luxury-yacht-d084-complexity.log`.
+Native validation and the final prerelease gate remain outstanding.
+
+
+## D085–D086 — shell/debug ownership and sidebar state
+
+Debug tooling now owns its state and presentation outside AppLayout; repeated
+focus/group projection and event registration share their existing policies.
+Unused tab-change forwarding is removed through the route wrappers. Sidebar
+keyboard state now belongs to its keyboard hook. The namespace editor projects
+state through a unique cluster-visit owner, so a previous cluster's save cannot
+replace the current editor's scope or error. The two new stale-save regressions
+failed before the fix; the shell selection passes 232 tests in 23 files
+(`/tmp/luxury-yacht-d086-shell-green.log`). Typecheck and local complexity evidence
+are recorded in the manifest. Coverage, native validation and final gate remain open.
+
+
+## D087–D092 — remaining shell and style inventory
+
+The manifest records complete scope, candidates and contracts for the final six
+review domains. Panel snapshots and geometry leadership are store-owned; command
+catalog search has one request owner; duplicated shortcut registration state and
+modal animation lifetimes are consolidated. Settings dialog labeling has a
+red/green accessibility regression. Shared badge paint/boundary geometry and
+obsolete style removal finish the stylesheet pass. The combined shell validation
+passes 770 tests in 72 files; later style/catch cleanup awaits final coverage and
+gate. All required runtime checks remain explicit until exercised.
+
+
+## D093–D096 — gate findings, generators and final reconciliation
+
+D093 excludes generated coverage HTML from Biome, restores required block syntax
+and pairs the Dropdown combobox role with its active-descendant property. D094
+removes unused exports and duplicate metric/scrollbar aliases after tracing their
+consumers; scrollbar hover geometry has a separate responsibility from candidate
+selection and cleanup. The D094 prerelease gate passed, including 5,041 frontend
+tests (`/tmp/luxury-yacht-d094-prerelease.log`).
+
+D095 fully inspects the three previously misclassified generator sources. Their
+explicit wire representations, nullability rules, discovery and validation passes
+are retained with reasons in the manifest. Generator package tests pass. This
+corrects the baseline count from 1,845 to 1,848; current additions/removals are
+counted separately (`/tmp/luxury-yacht-final-inventory.json`).
+
+PR355's all-rule Sonar audit reports 11 findings on `23263799`
+(`/tmp/luxury-yacht-d094-sonar-pr355.log`). Ten have local follow-ups: interface
+names, readonly props, an explanation inside the no-op cancellation callback,
+one API-version constant, nullish promise initialization, the existing UTF-16
+sort comparator, state/setter naming and a direct re-export. The custom Dropdown
+combobox is retained: converting it to native select would change its appearance,
+rendered values and modes. Its keyboard/active-descendant and option-action
+contracts are exercised in `Dropdown.test.tsx`. No finding was suppressed or
+marked resolved remotely. A new pushed-revision analysis is still required;
+no commit or push is included in this task.
+
+D096 appends reconciled hashes after reading the actual old-to-current diffs and
+rereading the ten complete preference/favorite/settings/status sources whose old
+hashes could not be matched to commits. Historical hashes and failed checks remain
+in the manifest. Pre-gate reconciliation reports zero stale current hashes.
+
+## D097 — final acceptance evidence
+
+This record supersedes historical pending-validation notes. The detailed criteria,
+source hashes, consumer traces and candidate decisions are in the JSON manifest.
+
+| Criterion | Status | Evidence |
+| --- | --- | --- |
+| Source inventory and candidate decisions | Passed | 1,848 baseline and 1,859 current sources accounted for; 16 additions/five removals; no missing current review paths. D095–D096 and `/tmp/luxury-yacht-final-inventory.json`. |
+| Focused final consumers | Passed | 270 frontend tests/13 files and six Go packages: `/tmp/luxury-yacht-d095-frontend-green.log`, `/tmp/luxury-yacht-d095-backend-green.log`. |
+| Full frontend coverage | Passed | 5,041 tests/523 files; statements 89.59% (36,920/41,207), branches 79.95%, functions 88.91%, lines 89.56%. `/tmp/luxury-yacht-d095-frontend-coverage.log`. |
+| Full backend coverage | Passed with measured gaps | Task passed; aggregate 79.6%, backend 81.0%, snapshot 83.0%, Pod resources 82.1%, tooling cmd/project 70.8%. `/tmp/luxury-yacht-d095-backend-coverage.log` and `-backend-functions.txt`. |
+| Changed-function complexity | Passed locally | 275 changed/new TS functions have no finding above 12; seven D095 Go functions score 1–9. D072 records 144 earlier changed Go functions at or below 12. `/tmp/luxury-yacht-d095-complexity.log`, `-go-complexity.json`. Unchanged findings are retained separately. |
+| CSS parity | Passed | Standalone Playwright compared 104 light/dark computed-style cases, zero mismatches. This is browser CSS evidence, not native interaction evidence. |
+| Native interaction | Passed for listed scenarios | Native CUA observations and user-performed drag confirmation, detailed below. Automated race/identity cases remain separate evidence. |
+| Final prerelease and post-format audit | Passed | `/tmp/luxury-yacht-d096-prerelease.log` exit 0: docs, formatting, bindings, vet/staticcheck, backend race, frontend lint/typecheck, 5,041 tests/523 files, Knip and Trivy. Zero formatter source changes; `/tmp/luxury-yacht-d096-final-audit.json` has zero missing/stale paths. |
+| Remote Sonar of delivered source | Pending | Current PR analysis covers `23263799`; local changes await a future explicitly authorized commit/push and completed analysis. |
+
+The final coverage includes NamespaceScopeEditor 93.82%, shared modal presence
+100%, palette search 97.43%, panel layout store 90.32%, dockable state hook 95.12%,
+scrollbar activity 81.48%, preferences 95.82%, app-info hook 100%, port-forward modal
+81.6%, favorite-save modal 83.88% and LogViewer 83.01%
+(`frontend/coverage/coverage-summary.json`). D095's Go name/constant/comment edits
+retain existing lower function coverage: cache sync 77.8%, Pod owner resolution
+73.3% and ReplicaSet map construction 75.0%. Their control flow is unchanged;
+no low-value tests were added to inflate these percentages. Timeout and watermark
+helpers measure 100% (`/tmp/luxury-yacht-d095-backend-functions.txt`).
+
+### Native scenarios and cleanup
+
+All Kubernetes mutations used the disposable `codex-simplification` kind cluster
+and its `simplification` namespace. CUA observed the actual Wails application,
+including separate native floating windows. These observations establish:
+
+- YAML loaded, saved and read back through kubectl. Concurrent server changes
+  rebased with the local draft and displayed the retained-field diff. Invalid
+  data retained the draft and validation error; Cancel restored live content.
+  Deleting a fixture while its panel was open produced Object not found without
+  an editable stale document.
+- Floating, bottom and right placement preserved YAML state. Switching clusters
+  hid/restored the correct panel. Closing fixture panels removed their tabs.
+  The user confirmed that dragging changes tab order; a subsequent AX snapshot
+  showed `review-failure` before `review-config`. Menu reordering also worked.
+  Earlier automated drags without an observable drop are not passing evidence.
+- Native sidebar dragging widened the sidebar and a reverse drag restored its
+  visual width. Favorite dialog selection changed Any/Cluster scope; cancellation
+  returned focus to the opener without saving a favorite. D055's real-provider,
+  real-table-hook and backend persistence tests establish favorite navigation and
+  disk contracts; this native dialog check does not stand in for those tests.
+- Attention showed fixture failures, ignored one object-specific error rule,
+  and restored it; the finding returned. Existing global rules were preserved.
+  A synthetic Helm release secret displayed populated Overrides/Merged values,
+  release details and history. Defaults were empty in that fixture; this was
+  not a Helm installation test.
+- The namespace object map rendered 12 objects/eight links. Opening a Pod from
+  its context menu reached the corresponding detail panel. Live logs populated,
+  filtered to an empty result and returned after clearing the filter. Log
+  settings opened and returned focus on close.
+- A shell session printed `native-shell-ok` and exited. A local forward from
+  18088 to 8080 returned `review` through curl and stopped. Native session counts
+  returned to zero. Diagnostics capability rows expanded and filtered; AppLogs
+  showed 1,000 rows, zero filter matches, then restored rows. About opened.
+
+CUA restored the original `~/.kube` path, `fusionauth-sandbox` Overview and Object
+Panel Settings section, and closed verification panels. Both owned development
+sessions exited successfully. The kind cluster was deleted
+(`/tmp/luxury-yacht-native-d092/cleanup.log`); no user-cluster resources were
+modified. Local fixture and dev logs remain under `/tmp` as validation evidence.
+Native checks do not establish every asynchronous race permutation; those remain
+covered by the real-owner regression harnesses recorded with each batch.
+
+
+Final repository state: `git diff --check` passed and the post-gate source audit
+found no changes from the frozen inputs. Documentation-only finalization is
+checked by `qc:docs` (`/tmp/luxury-yacht-d097-docs.log`). PR355 still points to
+`23263799` (`/tmp/luxury-yacht-d096-pr-head.json`). Implementation and local
+validation are closed; remote Sonar verification remains pending. No claim of
+remote issue closure or merge readiness is made, and no commit/push was performed.

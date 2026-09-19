@@ -249,22 +249,24 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
       detachListenersRef.current?.();
       detachListenersRef.current = null;
       elementRef.current = element;
-      if (!element) return;
+      if (!element) {
+        return;
+      }
       const handlers = {
         dragenter: handleDragEnter,
         dragover: handleDragOver,
         dragleave: handleDragLeave,
         drop: handleDrop,
       };
-      Object.entries(handlers).forEach(([event, handler]) =>
-        element.addEventListener(event, handler as EventListener)
-      );
+      Object.entries(handlers).forEach(([event, handler]) => {
+        element.addEventListener(event, handler as EventListener);
+      });
       // Some consumers compose this ref without forwarding a React ref cleanup.
       // Own the captured element/listeners here for both ref changes and unmount.
       detachListenersRef.current = () => {
-        Object.entries(handlers).forEach(([event, handler]) =>
-          element.removeEventListener(event, handler as EventListener)
-        );
+        Object.entries(handlers).forEach(([event, handler]) => {
+          element.removeEventListener(event, handler as EventListener);
+        });
       };
     },
     [handleDragEnter, handleDragLeave, handleDragOver, handleDrop]

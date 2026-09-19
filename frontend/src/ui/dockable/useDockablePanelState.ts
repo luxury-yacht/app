@@ -5,7 +5,7 @@
  * Runtime storage is delegated to the active panel layout store.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import {
   type DockPosition,
   getActivePanelLayoutStore,
@@ -30,27 +30,6 @@ export function focusPanelById(panelId: string) {
 }
 
 /**
- * Set a panel's dock position by ID.
- */
-export function setPanelPositionById(panelId: string, position: DockPosition) {
-  getActivePanelLayoutStore().setPanelPositionById(panelId, position);
-}
-
-/**
- * Set a panel's open state by ID.
- */
-export function setPanelOpenById(panelId: string, isOpen: boolean) {
-  getActivePanelLayoutStore().setPanelOpenById(panelId, isOpen);
-}
-
-/**
- * Copy layout-related fields from one panel to another.
- */
-export function copyPanelLayoutState(sourcePanelId: string, targetPanelId: string) {
-  getActivePanelLayoutStore().copyPanelLayoutState(sourcePanelId, targetPanelId);
-}
-
-/**
  * Remove a panel's stored state entirely.
  */
 export function clearPanelState(panelId: string) {
@@ -61,49 +40,14 @@ export function handoffLayoutBeforeClose(panelId: string) {
   getActivePanelLayoutStore().handoffLayoutBeforeClose(panelId);
 }
 
-export function setGroupLeader(groupKey: string, panelId: string) {
-  getActivePanelLayoutStore().setGroupLeader(groupKey, panelId);
-}
-
-export function clearGroupLeader(groupKey: string) {
-  getActivePanelLayoutStore().clearGroupLeader(groupKey);
-}
-
 export function useDockablePanelState(panelId: string) {
   const store = usePanelLayoutStoreContext();
-  const [localState, setLocalState] = useState<PanelLayoutState>(() =>
-    store.getInitialState(panelId)
+  const subscribe = useCallback(
+    (listener: () => void) => store.subscribe(panelId, listener),
+    [panelId, store]
   );
-
-  useEffect(() => {
-    setLocalState(store.getInitialState(panelId));
-
-    const unsubscribe = store.subscribe(panelId, () => {
-      const newState = store.getState(panelId);
-      if (!newState) {
-        return;
-      }
-      setLocalState((prevState) => {
-        const hasChanged =
-          prevState.position !== newState.position ||
-          prevState.isMaximized !== newState.isMaximized ||
-          prevState.isOpen !== newState.isOpen ||
-          prevState.rightSize.width !== newState.rightSize.width ||
-          prevState.rightSize.height !== newState.rightSize.height ||
-          prevState.bottomSize.width !== newState.bottomSize.width ||
-          prevState.bottomSize.height !== newState.bottomSize.height ||
-          prevState.isInitialized !== newState.isInitialized ||
-          prevState.zIndex !== newState.zIndex;
-
-        if (hasChanged) {
-          return { ...newState };
-        }
-        return prevState;
-      });
-    });
-
-    return unsubscribe;
-  }, [panelId, store]);
+  const getSnapshot = useCallback(() => store.getInitialState(panelId), [panelId, store]);
+  const localState = useSyncExternalStore(subscribe, getSnapshot);
 
   const initialize = useCallback(
     (options: InitializeOptions) => {

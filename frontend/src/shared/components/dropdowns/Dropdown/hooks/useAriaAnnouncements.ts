@@ -28,7 +28,9 @@ export function useAriaAnnouncements({
   const announce = useCallback((message: string, duration: number) => {
     clearTimeout(timerRef.current);
     const region = announcementRef.current;
-    if (!region) return;
+    if (!region) {
+      return;
+    }
     region.textContent = message;
     timerRef.current = setTimeout(() => {
       region.textContent = '';

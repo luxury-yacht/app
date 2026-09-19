@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useState } from 'react';
 import { useRefreshScopedDomain } from '@core/refresh';
 import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
 import type { CatalogItem } from '@core/refresh/types';
@@ -7,6 +6,7 @@ import {
   INACTIVE_SCOPE,
 } from '@modules/object-panel/components/ObjectPanel/constants';
 import { buildVersionedNamespacedRowKey } from '@shared/utils/resourceRowIdentity';
+import { useEffect, useMemo, useState } from 'react';
 import {
   requestRefreshDomain,
   resetRefreshDomain,

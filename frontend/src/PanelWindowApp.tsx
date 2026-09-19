@@ -126,44 +126,6 @@ function PanelWindowSurface({
     void acknowledgeReady();
   }, [descriptor]);
 
-  const handleGroupMove = useCallback(
-    (
-      group: { tabs: string[]; activeTab: string | null },
-      targetPosition: 'right' | 'bottom' | 'floating'
-    ): undefined => {
-      if (targetPosition !== 'floating') {
-        const blocker = guards.firstBlocker(group.tabs);
-        if (blocker) {
-          blocker.focus();
-        } else {
-          const snapshot: panelwindow.GroupSnapshot = {
-            schemaVersion: 1,
-            transferId: createTransferId(),
-            sourceWindowName: descriptor.windowName,
-            clusterId: descriptor.clusterId,
-            groupId: descriptor.groupId,
-            tabs: group.tabs.flatMap((panelId) => {
-              const objectRef = openPanels.get(panelId);
-              return objectRef
-                ? [objectPanelTabSnapshot(panelId, objectRef, activeTabs.get(panelId) ?? 'details')]
-                : [];
-            }),
-            activePanelId: group.activeTab ?? group.tabs[0] ?? '',
-          };
-          guards.freeze(snapshot.transferId, group.tabs);
-          void nativePanelPublication
-            .flush()
-            .then(() => beginPanelWindowDock(descriptor.windowName, targetPosition, snapshot))
-            .catch((error) => {
-              guards.releaseTransfer(snapshot.transferId);
-              reportOperationalError(error, { source: 'PanelWindowApp', action: 'dock-group' });
-            });
-        }
-      }
-    },
-    [activeTabs, descriptor, guards, openPanels]
-  );
-
   const getTabSnapshot = useCallback(
     (panelId: string) => {
       const objectRef = openPanels.get(panelId);
@@ -172,6 +134,43 @@ function PanelWindowSurface({
         : undefined;
     },
     [activeTabs, openPanels]
+  );
+
+  const handleGroupMove = useCallback(
+    (
+      group: { tabs: string[]; activeTab: string | null },
+      targetPosition: 'right' | 'bottom' | 'floating'
+    ): undefined => {
+      if (targetPosition === 'floating') {
+        return;
+      }
+      const blocker = guards.firstBlocker(group.tabs);
+      if (blocker) {
+        blocker.focus();
+        return;
+      }
+      const snapshot: panelwindow.GroupSnapshot = {
+        schemaVersion: 1,
+        transferId: createTransferId(),
+        sourceWindowName: descriptor.windowName,
+        clusterId: descriptor.clusterId,
+        groupId: descriptor.groupId,
+        tabs: group.tabs.flatMap((panelId) => {
+          const tab = getTabSnapshot(panelId);
+          return tab ? [tab] : [];
+        }),
+        activePanelId: group.activeTab ?? group.tabs[0] ?? '',
+      };
+      guards.freeze(snapshot.transferId, group.tabs);
+      void nativePanelPublication
+        .flush()
+        .then(() => beginPanelWindowDock(descriptor.windowName, targetPosition, snapshot))
+        .catch((error) => {
+          guards.releaseTransfer(snapshot.transferId);
+          reportOperationalError(error, { source: 'PanelWindowApp', action: 'dock-group' });
+        });
+    },
+    [descriptor, guards, getTabSnapshot]
   );
 
   const tabDragIdentity = useMemo(

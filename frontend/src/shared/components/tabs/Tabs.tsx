@@ -540,7 +540,9 @@ export function Tabs({
   useEffect(() => {
     measureOverflow();
     const el = scrollRef.current;
-    if (overflow !== 'scroll' || !el) return;
+    if (overflow !== 'scroll' || !el) {
+      return;
+    }
     const RO: typeof ResizeObserver | undefined = globalThis.ResizeObserver;
     const observer = RO ? new RO(measureOverflow) : null;
     observer?.observe(el);
@@ -562,7 +564,9 @@ export function Tabs({
   // already true), so repeat invocations are free.
   useEffect(() => {
     void tabs;
-    if (overflow === 'scroll') measureOverflow();
+    if (overflow === 'scroll') {
+      measureOverflow();
+    }
   }, [overflow, tabs, measureOverflow]);
 
   // Cancel any in-flight rAF scroll animation on unmount. Kept as a

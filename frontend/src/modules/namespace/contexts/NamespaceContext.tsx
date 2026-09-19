@@ -584,7 +584,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     const activeScopes = namespaceDomain.data
       ? scopedNamespaces.map((item) => item.ref.name)
       : namespaces.map((item) => item.scope);
-    if (activeScopes.length > 0) activeScopes.push(ALL_NAMESPACES_SCOPE);
+    if (activeScopes.length > 0) {
+      activeScopes.push(ALL_NAMESPACES_SCOPE);
+    }
     if (!activeScopes.length) {
       if (namespaceDomain.status === 'ready') {
         clearSelection();

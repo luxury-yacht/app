@@ -126,7 +126,10 @@ describe('CapabilityChecksTable', () => {
 
       const dataRows = host.querySelectorAll('tbody tr');
       await act(async () => {
-        const target = control === 'row' ? dataRows[1] : dataRows[1].querySelector('button')!;
+        const target =
+          control === 'row'
+            ? dataRows[1]
+            : requireValue(dataRows[1].querySelector('button'), 'capability row button');
         target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         await Promise.resolve();
       });

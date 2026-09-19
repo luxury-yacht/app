@@ -13,9 +13,7 @@ import { useMemo } from 'react';
 import type { ObjectMapReference } from '@/core/refresh/types';
 import { errorHandler } from '@/utils/errorHandler';
 
-export const buildResolvedFromMapRef = (
-  ref: ObjectMapReference
-): ResolvedObjectReference | null => {
+const buildResolvedFromMapRef = (ref: ObjectMapReference): ResolvedObjectReference | null => {
   try {
     assertObjectRefHasRequiredIdentity({ ...ref });
     return buildRequiredObjectReference({
@@ -45,15 +43,21 @@ export const useObjectMapNavigation = (
     () => ({
       handleOpenPanel: (ref: ObjectMapReference) => {
         const resolved = buildResolvedFromMapRef(ref);
-        if (resolved) openWithObject(resolved);
+        if (resolved) {
+          openWithObject(resolved);
+        }
       },
       handleNavigateView: (ref: ObjectMapReference) => {
         const resolved = buildResolvedFromMapRef(ref);
-        if (resolved) navigateToView(resolved);
+        if (resolved) {
+          navigateToView(resolved);
+        }
       },
       handleOpenObjectMap: (ref: ObjectMapReference) => {
         const resolved = buildResolvedFromMapRef(ref);
-        if (resolved) openWithObject(resolved, { initialTab: 'map' });
+        if (resolved) {
+          openWithObject(resolved, { initialTab: 'map' });
+        }
       },
     }),
     [openWithObject, navigateToView]

@@ -31,7 +31,7 @@ import {
   queryNamespacesPermissions,
 } from '@/core/capabilities';
 import type { PodMetricsInfo, PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
-import { podRowCpuValue, podRowMemoryValue } from '@/core/resource-metrics';
+import { workloadRowCpuValue, workloadRowMemoryValue } from '@/core/resource-metrics';
 import '../shared.css';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import {
@@ -205,9 +205,9 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         key: 'cpu',
         header: 'CPU',
         type: 'cpu',
-        getUsage: (pod) => podRowCpuValue(pod, 'usage'),
-        getRequest: (pod) => podRowCpuValue(pod, 'request'),
-        getLimit: (pod) => podRowCpuValue(pod, 'limit'),
+        getUsage: (pod) => workloadRowCpuValue(pod, 'usage'),
+        getRequest: (pod) => workloadRowCpuValue(pod, 'request'),
+        getLimit: (pod) => workloadRowCpuValue(pod, 'limit'),
         getVariant: () => 'compact',
         getMetricsStale: () => Boolean(metricsRef.current?.stale),
         getMetricsError: () => metricsRef.current?.lastError || undefined,
@@ -218,9 +218,9 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         key: 'memory',
         header: 'Memory',
         type: 'memory',
-        getUsage: (pod) => podRowMemoryValue(pod, 'usage'),
-        getRequest: (pod) => podRowMemoryValue(pod, 'request'),
-        getLimit: (pod) => podRowMemoryValue(pod, 'limit'),
+        getUsage: (pod) => workloadRowMemoryValue(pod, 'usage'),
+        getRequest: (pod) => workloadRowMemoryValue(pod, 'request'),
+        getLimit: (pod) => workloadRowMemoryValue(pod, 'limit'),
         getVariant: () => 'compact',
         getMetricsStale: () => Boolean(metricsRef.current?.stale),
         getMetricsError: () => metricsRef.current?.lastError || undefined,

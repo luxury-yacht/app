@@ -185,6 +185,14 @@ describe('SettingsModal', () => {
     expect(document.activeElement).toBe(category('Display'));
   });
 
+  it('exposes the visible settings title as the dialog accessible name', () => {
+    const dialog = requireValue(document.querySelector('[role="dialog"]'), 'settings dialog');
+    const titleId = requireValue(dialog.getAttribute('aria-labelledby'), 'dialog label reference');
+    const title = requireValue(document.getElementById(titleId), 'referenced dialog title');
+    expect(dialog.contains(title)).toBe(true);
+    expect(title.textContent).toContain('Settings');
+  });
+
   it('closes on Escape through the shared modal surface', () => {
     const onClose = vi.fn();
     act(() => {

@@ -124,10 +124,10 @@ const IconDebugPreview: React.FC<{
 };
 
 const getAriaSort = (
-  sort: IconDebugSortState | null,
+  sort: IconDebugSortState,
   column: IconDebugSortColumn
 ): 'none' | 'ascending' | 'descending' => {
-  if (sort?.column !== column) {
+  if (sort.column !== column) {
     return 'none';
   } else if (sort.direction === 'asc') {
     return 'ascending';
@@ -164,10 +164,6 @@ export const IconDebugOverlay: React.FC<IconDebugOverlayProps> = ({ onClose }) =
   }, []);
 
   const sortedEntries = React.useMemo(() => {
-    if (!sort) {
-      return iconDebugEntries;
-    }
-
     return [...iconDebugEntries].sort((left, right) => {
       const result = compareIconDebugEntries(left, right, sort.column, metrics);
       return sort.direction === 'asc' ? result : -result;
@@ -176,7 +172,7 @@ export const IconDebugOverlay: React.FC<IconDebugOverlayProps> = ({ onClose }) =
 
   const toggleSort = (column: IconDebugSortColumn) => {
     setSort((current) => {
-      if (current?.column === column) {
+      if (current.column === column) {
         return { column, direction: current.direction === 'asc' ? 'desc' : 'asc' };
       }
       return { column, direction: 'asc' };
@@ -184,7 +180,7 @@ export const IconDebugOverlay: React.FC<IconDebugOverlayProps> = ({ onClose }) =
   };
 
   const renderSortHeader = (column: IconDebugSortColumn, label: string) => {
-    const direction = sort?.column === column ? sort.direction : null;
+    const direction = sort.column === column ? sort.direction : null;
     let sortIndicator = '';
     if (direction === 'asc') {
       sortIndicator = '▲';

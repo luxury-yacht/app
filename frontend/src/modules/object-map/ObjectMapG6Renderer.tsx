@@ -576,22 +576,32 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
 
   useEffect(() => {
     const graph = graphRef.current;
-    if (!graphReady || !graph || graph.destroyed) return;
+    if (!graphReady || !graph || graph.destroyed) {
+      return;
+    }
     const subscriptions: Array<[GraphEvent, () => void]> = [];
-    if (debugMapId)
+    if (debugMapId) {
       subscriptions.push(
         [GraphEvent.AFTER_TRANSFORM, publishRendererDebugSnapshot],
         [GraphEvent.AFTER_SIZE_CHANGE, publishRendererDebugSnapshot]
       );
+    }
     subscriptions.push([GraphEvent.AFTER_TRANSFORM, updateCardDetailLevel]);
-    if (showDebugGrid)
+    if (showDebugGrid) {
       subscriptions.push(
         [GraphEvent.AFTER_TRANSFORM, updateDebugGrid],
         [GraphEvent.AFTER_SIZE_CHANGE, updateDebugGrid]
       );
-    subscriptions.forEach(([event, handler]) => graph.on(event, handler));
+    }
+    subscriptions.forEach(([event, handler]) => {
+      graph.on(event, handler);
+    });
     return () => {
-      if (!graph.destroyed) subscriptions.forEach(([event, handler]) => graph.off(event, handler));
+      if (!graph.destroyed) {
+        subscriptions.forEach(([event, handler]) => {
+          graph.off(event, handler);
+        });
+      }
     };
   }, [
     debugMapId,

@@ -9,7 +9,7 @@ import { SIDEBAR_VIEW_GROUPS, type SidebarViewGroupId } from '@core/navigation/v
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import { isInputElement, resolveEventElement } from '@ui/shortcuts/utils';
-import { type RefObject, useCallback, useEffect, useState } from 'react';
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import {
   type ClusterViewType,
   type GlobalViewType,
@@ -117,24 +117,7 @@ export const getFocusableSidebarItems = (sidebar: HTMLElement): HTMLElement[] =>
 interface SidebarKeyboardParams {
   sidebarRef: RefObject<HTMLDivElement | null>;
   isCollapsed: boolean;
-  cursorPreview: SidebarCursorTarget | null;
-  setCursorPreview: (target: SidebarCursorTarget | null) => void;
-  pendingSelection: SidebarCursorTarget | null;
-  setPendingSelection: (target: SidebarCursorTarget | null) => void;
-  keyboardCursorIndexRef: RefObject<number | null>;
-  pendingCommitRef: RefObject<SidebarCursorTarget | null>;
-  keyboardActivationRef: RefObject<boolean>;
-  clearKeyboardPreview: () => void;
   getCurrentSelectionTarget: () => SidebarCursorTarget | null;
-}
-
-interface SidebarKeyboardApi {
-  buildSidebarItemClassName: (baseClasses: string[], target?: SidebarCursorTarget | null) => string;
-  isTargetSelected: (target: SidebarCursorTarget) => boolean;
-  focusSelectedSidebarItem: () => void;
-  getDisplaySelectionTarget: () => SidebarCursorTarget | null;
-  describeTarget: (element: HTMLElement | null) => SidebarCursorTarget | null;
-  isKeyboardNavActive: boolean;
 }
 
 interface SidebarNavigationContext {
@@ -298,16 +281,18 @@ const handleSidebarNavigationKey = (
 export const useSidebarKeyboardControls = ({
   sidebarRef,
   isCollapsed,
-  cursorPreview,
-  setCursorPreview,
-  pendingSelection,
-  setPendingSelection,
-  keyboardCursorIndexRef,
-  pendingCommitRef,
-  keyboardActivationRef,
-  clearKeyboardPreview,
   getCurrentSelectionTarget,
-}: SidebarKeyboardParams): SidebarKeyboardApi => {
+}: SidebarKeyboardParams) => {
+  const keyboardCursorIndexRef = useRef<number | null>(null);
+  const [cursorPreview, setCursorPreview] = useState<SidebarCursorTarget | null>(null);
+  const [pendingSelection, setPendingSelection] = useState<SidebarCursorTarget | null>(null);
+  const pendingCommitRef = useRef<SidebarCursorTarget | null>(null);
+  const keyboardActivationRef = useRef(false);
+  const clearKeyboardPreview = useCallback(() => {
+    setCursorPreview(null);
+    pendingCommitRef.current = null;
+    keyboardCursorIndexRef.current = null;
+  }, []);
   const [isKeyboardNavActive, setIsKeyboardNavActive] = useState(false);
 
   const getFocusableItems = useCallback((): HTMLElement[] => {
@@ -349,7 +334,7 @@ export const useSidebarKeyboardControls = ({
       }
       return element;
     },
-    [findElementIndexForTarget, keyboardCursorIndexRef]
+    [findElementIndexForTarget]
   );
 
   const focusSelectedSidebarItem = useCallback(() => {
@@ -370,7 +355,7 @@ export const useSidebarKeyboardControls = ({
       keyboardCursorIndexRef.current = index;
       return element;
     },
-    [getFocusableItems, keyboardCursorIndexRef]
+    [getFocusableItems]
   );
 
   const getDisplaySelectionTarget = useCallback(
@@ -410,13 +395,7 @@ export const useSidebarKeyboardControls = ({
       focusSelectedSidebarItem();
     }
     keyboardCursorIndexRef.current = getSelectionIndex();
-  }, [
-    focusSelectedSidebarItem,
-    getSelectionIndex,
-    isCollapsed,
-    keyboardCursorIndexRef,
-    sidebarRef,
-  ]);
+  }, [focusSelectedSidebarItem, getSelectionIndex, isCollapsed, sidebarRef]);
 
   useKeyboardSurface({
     kind: 'region',
@@ -500,7 +479,7 @@ export const useSidebarKeyboardControls = ({
       container.removeEventListener('pointermove', handlePointerActivity);
       container.removeEventListener('pointerdown', handlePointerActivity);
     };
-  }, [isKeyboardNavActive, keyboardActivationRef, sidebarRef]);
+  }, [isKeyboardNavActive, sidebarRef]);
 
   useEffect(() => {
     const current = getCurrentSelectionTarget();
@@ -511,21 +490,16 @@ export const useSidebarKeyboardControls = ({
     if (pendingSelection && targetsAreEqual(pendingSelection, current)) {
       setPendingSelection(null);
     }
-  }, [
-    getCurrentSelectionTarget,
-    getSelectionIndex,
-    keyboardCursorIndexRef,
-    pendingCommitRef,
-    pendingSelection,
-    setPendingSelection,
-  ]);
+  }, [getCurrentSelectionTarget, getSelectionIndex, pendingSelection]);
 
   return {
     buildSidebarItemClassName,
     isTargetSelected,
     focusSelectedSidebarItem,
     getDisplaySelectionTarget,
-    describeTarget: describeElementTarget,
     isKeyboardNavActive,
+    setPendingSelection,
+    keyboardActivationRef,
+    clearKeyboardPreview,
   };
 };

@@ -36,7 +36,7 @@ describe('resource metrics contracts', () => {
       },
       {
         file: 'frontend/src/modules/namespace/components/NsViewPods.tsx',
-        helpers: ['podRowCpuValue', 'podRowMemoryValue'],
+        helpers: ['workloadRowCpuValue', 'workloadRowMemoryValue'],
       },
       {
         file: 'frontend/src/modules/namespace/components/useWorkloadTableColumns.tsx',
@@ -44,7 +44,7 @@ describe('resource metrics contracts', () => {
       },
       {
         file: 'frontend/src/modules/object-panel/components/ObjectPanel/Pods/PodsTab.tsx',
-        helpers: ['podRowCpuValue', 'podRowMemoryValue'],
+        helpers: ['workloadRowCpuValue', 'workloadRowMemoryValue'],
       },
     ];
 

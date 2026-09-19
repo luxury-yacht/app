@@ -20,14 +20,16 @@ import type React from 'react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEventBus } from '@/core/events';
-import { fetchSnapshot } from '@/core/refresh/client';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
-import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import type { CatalogItem } from '@/core/refresh/types';
 import { useShortNames } from '@/hooks/useShortNames';
-import { reportOperationalError } from '@/utils/errorHandler';
 import { aliasToKindMap, canonicalKinds, getDisplayKind } from '@/utils/kindAliasMap';
 import { isMacPlatform } from '@/utils/platform';
 import type { Command } from './CommandPaletteCommands';
+import {
+  CATALOG_RESULT_LIMIT,
+  type CatalogStats,
+  usePaletteCatalogSearch,
+} from './usePaletteCatalogSearch';
 import './CommandPalette.css';
 
 interface CommandPaletteProps {
@@ -45,9 +47,6 @@ const CATEGORY_ORDER = [
   'Kubeconfigs',
   'General', // Fallback for any uncategorized commands
 ];
-
-const CATALOG_RESULT_LIMIT = 20;
-const CATALOG_SEARCH_DEBOUNCE_MS = 200;
 
 type PaletteNavigationKey = 'ArrowDown' | 'ArrowUp' | 'PageDown' | 'PageUp' | 'Home' | 'End';
 
@@ -72,8 +71,6 @@ const getPaletteSelectionIndex = (
       return lastIndex;
   }
 };
-
-const normalizeKindClass = (value: string) => getKindColorClass(value);
 
 export interface ParsedQueryTokens {
   kindTokens: string[];
@@ -153,7 +150,6 @@ type CatalogDisplayEntry = {
 };
 
 type ScoredCatalogEntry = CatalogDisplayEntry & { score: number };
-type CatalogStats = { total: number; truncated: boolean } | null;
 
 interface CatalogSearchFields {
   namespace: string;
@@ -220,7 +216,7 @@ const scoreCatalogEntry = (
   return {
     item,
     kindLabel: getDisplayKind(item.ref.kind, useShortResourceNames),
-    kindClass: normalizeKindClass(item.ref.kind),
+    kindClass: getKindColorClass(item.ref.kind),
     displayName: item.ref.namespace ? `${item.ref.namespace}/${item.ref.name}` : item.ref.name,
     score:
       kindScore + otherScore + (tokens.kindTokens.length + tokens.otherTokens.length === 0 ? 5 : 0),
@@ -478,11 +474,6 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   const [selectMode, setSelectMode] = useState<PaletteSelectMode>('none');
   const [hideCursor, setHideCursor] = useState(false);
   const [mouseSelectionArmed, setMouseSelectionArmed] = useState(false);
-  const [catalogResults, setCatalogResults] = useState<CatalogItem[]>([]);
-  const [catalogStats, setCatalogStats] = useState<CatalogStats>(null);
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const catalogAbortRef = useRef<AbortController | null>(null);
-  const catalogDebounceRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDialogElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -545,7 +536,8 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     filteredCommands.forEach((command) => {
       const category = command.category || 'General';
       const existing = groups.get(category) || [];
-      groups.set(category, [...existing, command]);
+      existing.push(command);
+      groups.set(category, existing);
     });
 
     // Sort categories according to CATEGORY_ORDER
@@ -571,115 +563,17 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     });
   }, [filteredCommands]);
 
-  const showCatalogSearch = useMemo(
-    () => isOpen && selectMode === 'none' && searchQuery.trim().length > 0,
-    [isOpen, selectMode, searchQuery]
-  );
-
-  useEffect(() => {
-    if (catalogDebounceRef.current !== null) {
-      window.clearTimeout(catalogDebounceRef.current);
-      catalogDebounceRef.current = null;
-    }
-    if (catalogAbortRef.current) {
-      catalogAbortRef.current.abort();
-      catalogAbortRef.current = null;
-    }
-
-    if (!showCatalogSearch) {
-      setCatalogResults([]);
-      setCatalogStats(null);
-      setCatalogLoading(false);
-      return;
-    }
-
-    const query = searchQuery.trim();
-    if (query.length === 0) {
-      setCatalogResults([]);
-      setCatalogStats(null);
-      setCatalogLoading(false);
-      return;
-    }
-
-    const activeClusterId = (selectedClusterId ?? '').trim();
-    if (!activeClusterId) {
-      setCatalogResults([]);
-      setCatalogStats(null);
-      setCatalogLoading(false);
-      return;
-    }
-
-    setCatalogResults([]);
-    setCatalogStats(null);
-
-    setCatalogLoading(true);
-
-    const timeoutId = window.setTimeout(() => {
-      const controller = new AbortController();
-      catalogAbortRef.current = controller;
-
-      const params = new URLSearchParams();
-      params.set('limit', String(CATALOG_RESULT_LIMIT));
-      parsedTokens.kindTokens.forEach((kind) => {
-        params.append('kind', kind);
-      });
-      const primarySearchTerm = parsedTokens.otherTokens[0];
-      if (primarySearchTerm) {
-        params.set('search', primarySearchTerm);
-      } else if (!parsedTokens.kindTokens.length) {
-        params.set('search', query);
-      }
-
-      const scope = buildClusterScope(activeClusterId, params.toString());
-
-      fetchSnapshot<CatalogSnapshotPayload>('catalog', {
-        scope,
-        signal: controller.signal,
-      })
-        .then((result) => {
-          if (!result.snapshot) {
-            setCatalogResults([]);
-            setCatalogStats(null);
-            return;
-          }
-          const payload = result.snapshot.payload;
-          const items = payload.items ?? [];
-          setCatalogResults(items);
-          setCatalogStats({
-            total: payload.total,
-            truncated: payload.total > items.length,
-          });
-        })
-        .catch((error) => {
-          if (error?.name === 'AbortError') {
-            return;
-          }
-          reportOperationalError(error, { source: 'CommandPalette', action: 'searchCatalog' });
-          setCatalogResults([]);
-          setCatalogStats(null);
-        })
-        .finally(() => {
-          if (catalogAbortRef.current === controller) {
-            catalogAbortRef.current = null;
-          }
-          setCatalogLoading(false);
-        });
-    }, CATALOG_SEARCH_DEBOUNCE_MS);
-
-    catalogDebounceRef.current = timeoutId;
-
-    return () => {
-      if (catalogDebounceRef.current !== null) {
-        window.clearTimeout(catalogDebounceRef.current);
-        catalogDebounceRef.current = null;
-      }
-      if (catalogAbortRef.current) {
-        catalogAbortRef.current.abort();
-        catalogAbortRef.current = null;
-      }
-      setCatalogLoading(false);
-    };
-  }, [showCatalogSearch, searchQuery, parsedTokens, selectedClusterId]);
+  const showCatalogSearch = isOpen && selectMode === 'none' && searchQuery.trim().length > 0;
+  const {
+    items: catalogResults,
+    stats: catalogStats,
+    loading: catalogLoading,
+  } = usePaletteCatalogSearch({
+    enabled: showCatalogSearch,
+    clusterId: selectedClusterId,
+    query: searchQuery,
+    tokens: parsedTokens,
+  });
 
   const catalogDisplayItems = useMemo<CatalogDisplayEntry[]>(() => {
     if (!showCatalogSearch) {
@@ -739,9 +633,6 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     setSelectMode('none');
     openedDirectlyRef.current = false;
     setHideCursor(false);
-    setCatalogResults([]);
-    setCatalogStats(null);
-    setCatalogLoading(false);
   }, []);
 
   const open = useCallback(() => {

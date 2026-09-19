@@ -283,21 +283,23 @@ const DropdownTrigger = ({
   toggleDropdown,
   children,
 }: DropdownTriggerProps) => {
-  const usesTriggerCombobox = !hasOptionActions && !searchable;
+  const comboboxProps =
+    !hasOptionActions && !searchable
+      ? { role: 'combobox' as const, 'aria-activedescendant': activeOptionId }
+      : {};
   return (
     <button
       type="button"
       ref={triggerRef}
       className="dropdown-trigger"
       onClick={toggleDropdown}
-      role={usesTriggerCombobox ? 'combobox' : undefined}
+      {...comboboxProps}
       aria-expanded={isOpen}
       aria-haspopup={hasOptionActions ? 'dialog' : 'listbox'}
       aria-label={ariaLabel}
       aria-describedby={ariaDescribedBy}
       aria-labelledby={ariaLabelledBy}
       aria-controls={menuId}
-      aria-activedescendant={usesTriggerCombobox ? activeOptionId : undefined}
       tabIndex={disabled ? -1 : 0}
       id={id}
       disabled={disabled}

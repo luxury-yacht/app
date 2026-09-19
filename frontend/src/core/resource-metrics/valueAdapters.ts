@@ -153,10 +153,6 @@ export const workloadRowMemoryValue = (
   }
 };
 
-// Pod and workload rows share the same usage/reservation fields.
-export const podRowCpuValue = workloadRowCpuValue;
-export const podRowMemoryValue = workloadRowMemoryValue;
-
 export const nodeRowResourceMetrics = (
   row: ClusterNodeSnapshotEntry,
   freshness?: ResourceMetricsFreshnessInput

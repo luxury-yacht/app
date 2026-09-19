@@ -195,13 +195,19 @@ describe('useRefreshWatcher', () => {
     });
     let oldRefresh!: void | Promise<void>;
     await act(async () => {
-      oldRefresh = subscriptions.get(REFRESHER_NAME)!(false, new AbortController().signal);
+      oldRefresh = requireValue(subscriptions.get(REFRESHER_NAME), 'refresh subscription')(
+        false,
+        new AbortController().signal
+      );
     });
     expect(hook.current.isRefreshing).toBe(true);
     await hook.rerender({ refresherName: REFRESHER_NAME, onRefresh, dependencies: ['cluster-b'] });
     let newRefresh!: void | Promise<void>;
     await act(async () => {
-      newRefresh = subscriptions.get(REFRESHER_NAME)!(false, new AbortController().signal);
+      newRefresh = requireValue(subscriptions.get(REFRESHER_NAME), 'refresh subscription')(
+        false,
+        new AbortController().signal
+      );
       first.resolve();
       await oldRefresh;
     });
@@ -229,7 +235,7 @@ describe('useRefreshWatcher', () => {
     let firstRefresh!: void | Promise<void>;
     let secondRefresh!: void | Promise<void>;
     await act(async () => {
-      const callback = subscriptions.get(REFRESHER_NAME)!;
+      const callback = requireValue(subscriptions.get(REFRESHER_NAME), 'refresh subscription');
       firstRefresh = callback(false, new AbortController().signal);
       secondRefresh = callback(true, new AbortController().signal);
       first.resolve();

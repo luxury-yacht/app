@@ -1269,7 +1269,9 @@ describe('log connection ownership', () => {
     });
     manager.stop(SCOPE);
     // Flush the refresh wrapper and its finally handler without a timeout race.
-    for (let i = 0; i < 8; i++) await Promise.resolve();
+    for (let i = 0; i < 8; i++) {
+      await Promise.resolve();
+    }
     expect(settled).toBe(true);
     await pending;
     expect(Source.instances[0].closed).toBe(true);

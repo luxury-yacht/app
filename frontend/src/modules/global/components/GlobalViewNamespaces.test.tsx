@@ -1,5 +1,5 @@
 import type * as React from 'react';
-import { act, isValidElement, StrictMode, type ReactNode } from 'react';
+import { act, isValidElement, type ReactNode, StrictMode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -39,7 +39,9 @@ vi.mock('@/core/data-access/dataAccess', () => ({
   }) => {
     const count = mocks.leases.get(scope) ?? 0;
     mocks.leases.set(scope, count + 1);
-    if (!count) mocks.setRefreshDomainEnabled({ domain, scope, enabled: true, preserveState });
+    if (!count) {
+      mocks.setRefreshDomainEnabled({ domain, scope, enabled: true, preserveState });
+    }
   },
   releaseRefreshDomainLease: ({
     domain,
@@ -52,7 +54,9 @@ vi.mock('@/core/data-access/dataAccess', () => ({
   }) => {
     const count = Math.max(0, (mocks.leases.get(scope) ?? 0) - 1);
     mocks.leases.set(scope, count);
-    if (!count) mocks.setRefreshDomainEnabled({ domain, scope, enabled: false, preserveState });
+    if (!count) {
+      mocks.setRefreshDomainEnabled({ domain, scope, enabled: false, preserveState });
+    }
   },
 }));
 
@@ -319,8 +323,11 @@ beforeEach(() => {
   mocks.enabledScopes.clear();
   mocks.leases.clear();
   mocks.setRefreshDomainEnabled.mockImplementation(({ scope, enabled }) => {
-    if (enabled) mocks.enabledScopes.add(scope);
-    else if (!(mocks.leases.get(scope) ?? 0)) mocks.enabledScopes.delete(scope);
+    if (enabled) {
+      mocks.enabledScopes.add(scope);
+    } else if (!(mocks.leases.get(scope) ?? 0)) {
+      mocks.enabledScopes.delete(scope);
+    }
   });
   mocks.selectedKubeconfigs = ['/kube/config:alpha', '/kube/config:beta', '/kube/config:gamma'];
   mocks.tableProps = null;

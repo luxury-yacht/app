@@ -49,7 +49,9 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
     return (
       payload.nodes.find((node) => {
         const r = node.ref;
-        if (r.clusterId !== ref.clusterId) return false;
+        if (r.clusterId !== ref.clusterId) {
+          return false;
+        }
         if (r.uid && ref.uid) {
           return r.uid === ref.uid;
         }

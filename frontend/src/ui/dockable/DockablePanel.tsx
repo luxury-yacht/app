@@ -27,17 +27,13 @@ import { useDockablePanelContext, useDockablePanelHost } from './DockablePanelPr
 import type { TabInfo } from './DockableTabBar';
 import type { PanelSizeConstraints } from './dockablePanelLayout';
 import { getContentBounds, getPanelSizeConstraints, PANEL_DEFAULTS } from './dockablePanelLayout';
+import type { PanelLayoutStore } from './panelLayoutStore';
+import { usePanelLayoutStoreContext } from './panelLayoutStoreContext';
 import { getGroupForPanel, getGroupTabs } from './tabGroupState';
 import type { GroupKey, PanelRegistration, TabGroupState } from './tabGroupTypes';
 import { useDockablePanelDragResize } from './useDockablePanelDragResize';
 import { useDockablePanelMaximize } from './useDockablePanelMaximize';
-import {
-  clearGroupLeader,
-  copyPanelLayoutState,
-  type DockPosition,
-  setGroupLeader,
-  useDockablePanelState,
-} from './useDockablePanelState';
+import { type DockPosition, useDockablePanelState } from './useDockablePanelState';
 import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
 import './DockablePanel.css';
 
@@ -189,13 +185,13 @@ interface PanelGroupView {
 const resolvePanelGroupView = (
   tabGroups: TabGroupState,
   panelId: string,
-  groupLeaders: Map<string, string>
+  getGroupLeader: PanelLayoutStore['getGroupLeader']
 ): PanelGroupView => {
   const groupKey = getGroupForPanel(tabGroups, panelId);
   const groupInfo = groupKey ? getGroupTabs(tabGroups, groupKey) : null;
   let leaderPanelId = panelId;
   if (groupKey && groupInfo && groupInfo.tabs.length > 0) {
-    const rememberedLeader = groupLeaders.get(groupKey);
+    const rememberedLeader = getGroupLeader(groupKey);
     leaderPanelId =
       rememberedLeader && groupInfo.tabs.includes(rememberedLeader)
         ? rememberedLeader
@@ -466,6 +462,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     getPanelSizeConstraints(null)
   );
   const panelState = useDockablePanelState(panelId);
+  const layoutStore = usePanelLayoutStoreContext();
   const lifecycleGuards = useOptionalPanelLifecycleGuardRegistry();
   const {
     registerPanel,
@@ -479,7 +476,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     panelContentRefsMap,
     notifyContentChange,
     subscribeContentChange,
-    groupLeaderByKeyRef,
     lastFocusedGroupKey,
     setLastFocusedGroupKey,
     requestGroupMove,
@@ -558,20 +554,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   // Store registration props in a ref so the effect below can read current
   // values without re-running on every prop change. We only want to
   // re-register when panelId, isOpen, or position changes.
-  const registrationPropsRef = useRef({
-    title,
-    defaultSize,
-    allowMaximize,
-    maximizeTargetSelector,
-    className,
-    contentClassName,
-    tabKindClass,
-    onClose,
-    onPositionChange,
-    onMaximizeChange,
-    panelRef: forwardedPanelRef,
-  });
-  registrationPropsRef.current = {
+  const registrationProps = {
     title,
     defaultSize,
     allowMaximize,
@@ -584,28 +567,15 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     onMaximizeChange,
     panelRef: forwardedPanelRef,
   };
+  const registrationPropsRef = useRef(registrationProps);
+  registrationPropsRef.current = registrationProps;
 
   useEffect(() => {
     if (!panelState.isOpen) {
       unregisterPanel(panelId);
       return;
     }
-    const rp = registrationPropsRef.current;
-    registerPanel({
-      panelId,
-      title: rp.title,
-      position: panelState.position,
-      defaultSize: rp.defaultSize,
-      allowMaximize: rp.allowMaximize,
-      maximizeTargetSelector: rp.maximizeTargetSelector,
-      className: rp.className,
-      contentClassName: rp.contentClassName,
-      tabKindClass: rp.tabKindClass,
-      onClose: rp.onClose,
-      onPositionChange: rp.onPositionChange,
-      onMaximizeChange: rp.onMaximizeChange,
-      panelRef: rp.panelRef,
-    });
+    registerPanel({ ...registrationPropsRef.current, panelId, position: panelState.position });
     return () => {
       unregisterPanel(panelId);
     };
@@ -645,8 +615,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   // Tab group membership
   // -----------------------------------------------------------------------
   const groupView = useMemo(
-    () => resolvePanelGroupView(tabGroups, panelId, groupLeaderByKeyRef.current),
-    [tabGroups, panelId, groupLeaderByKeyRef]
+    () => resolvePanelGroupView(tabGroups, panelId, layoutStore.getGroupLeader),
+    [tabGroups, panelId, layoutStore]
   );
   const {
     groupKey,
@@ -662,21 +632,19 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   useLayoutEffect(() => {
     if (!groupKey || !groupInfo || groupInfo.tabs.length === 0) {
       if (groupKey) {
-        groupLeaderByKeyRef.current.delete(groupKey);
-        clearGroupLeader(groupKey);
+        layoutStore.clearGroupLeader(groupKey);
       }
       return;
     }
     if (!isGroupLeader) {
       return;
     }
-    const previousLeader = groupLeaderByKeyRef.current.get(groupKey);
+    const previousLeader = layoutStore.getGroupLeader(groupKey);
     if (previousLeader && previousLeader !== panelId) {
-      copyPanelLayoutState(previousLeader, panelId);
+      layoutStore.copyPanelLayoutState(previousLeader, panelId);
     }
-    groupLeaderByKeyRef.current.set(groupKey, panelId);
-    setGroupLeader(groupKey, panelId);
-  }, [groupKey, groupInfo, isGroupLeader, panelId, groupLeaderByKeyRef]);
+    layoutStore.setGroupLeader(groupKey, panelId);
+  }, [groupKey, groupInfo, isGroupLeader, panelId, layoutStore]);
 
   // Set CSS variables on the shared content container so both the route layout
   // and the portal-mounted dock layer can read the same dock geometry.

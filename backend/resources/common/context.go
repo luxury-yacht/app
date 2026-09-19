@@ -12,7 +12,9 @@ func WithDefaultTimeout(ctx context.Context, timeout time.Duration) (context.Con
 		ctx = context.Background()
 	}
 	if _, hasDeadline := ctx.Deadline(); hasDeadline {
-		return ctx, func() {}
+		return ctx, func() {
+			// The caller owns this deadline; lookup cleanup must not cancel it.
+		}
 	}
 	return context.WithTimeout(ctx, timeout)
 }

@@ -16,6 +16,7 @@
     "includes": [
       "**/*.{js,jsx,ts,tsx,mjs,cjs,css,json,jsonc,html}",
       "!!dist",
+      "!!coverage",
       "!!bindings",
       "!!package-lock.json"
     ]

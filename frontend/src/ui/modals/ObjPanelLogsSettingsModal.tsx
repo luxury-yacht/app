@@ -3,8 +3,9 @@ import { LogsIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import { useModalPresence } from '@shared/components/modals/useModalPresence';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import './ObjPanelLogsSettingsModal.css';
 
 interface ObjPanelLogsSettingsModalProps {
@@ -16,23 +17,8 @@ const ObjPanelLogsSettingsModal: React.FC<ObjPanelLogsSettingsModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const [isClosing, setIsClosing] = useState(false);
-  const [shouldRender, setShouldRender] = useState(false);
+  const { isClosing, shouldRender } = useModalPresence(isOpen);
   const modalRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (isOpen) {
-      setShouldRender(true);
-      setIsClosing(false);
-    } else if (shouldRender) {
-      setIsClosing(true);
-      const timer = setTimeout(() => {
-        setShouldRender(false);
-        setIsClosing(false);
-      }, 200);
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen, shouldRender]);
 
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : '';

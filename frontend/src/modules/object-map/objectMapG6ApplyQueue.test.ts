@@ -93,8 +93,11 @@ describe('createObjectMapG6ApplyQueue', () => {
         applySelectionStateFn: kind === 'selection' ? apply : undefined,
       });
       const schedule = (id: string) => {
-        if (kind === 'data') queue.scheduleGraphData({ nodes: [{ id }] });
-        else queue.scheduleSelectionState(layout([id]), selectionState(id));
+        if (kind === 'data') {
+          queue.scheduleGraphData({ nodes: [{ id }] });
+        } else {
+          queue.scheduleSelectionState(layout([id]), selectionState(id));
+        }
       };
       queue.setRenderedData({ nodes: [] });
       queue.setReady(true);

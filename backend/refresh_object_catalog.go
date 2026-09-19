@@ -452,11 +452,11 @@ func (a *RefreshCoordinator) catalogNamespaceGroups() []snapshot.CatalogNamespac
 	return groups
 }
 
-type catalogInformerSync interface {
+type cacheSyncWaiter interface {
 	WaitForCacheSync(<-chan struct{}) map[reflect.Type]bool
 }
 
-func waitForFactorySync(ctx context.Context, factory catalogInformerSync) bool {
+func waitForFactorySync(ctx context.Context, factory cacheSyncWaiter) bool {
 	if factory == nil {
 		return true
 	}

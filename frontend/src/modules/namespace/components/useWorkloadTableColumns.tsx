@@ -10,8 +10,8 @@ import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespa
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { formatRestartCount } from '@shared/components/tables/restartCount';
-import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useMemo } from 'react';
 import { workloadRowCpuValue, workloadRowMemoryValue } from '@/core/resource-metrics';
 import { getDisplayKind } from '@/utils/kindAliasMap';

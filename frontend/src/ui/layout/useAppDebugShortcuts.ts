@@ -27,76 +27,35 @@ export const useAppDebugShortcuts = ({
   onToggleIconDebug,
 }: AppDebugShortcutHandlers) => {
   useEffect(() => {
+    const toggles = [
+      { event: 'debug:toggle-panel-overlay', key: 'p', handler: onTogglePanelDebug },
+      { event: 'debug:toggle-focus-overlay', key: 'k', handler: onToggleFocusDebug },
+      { event: 'debug:toggle-error-overlay', key: 'e', handler: onToggleErrorDebug },
+      { event: 'debug:toggle-map-overlay', key: 'm', handler: onToggleMapDebug },
+      { event: 'debug:toggle-icon-overlay', key: 'i', handler: onToggleIconDebug },
+    ] as const;
     const disposers = [
       onEvent('debug:open-inspector', openWailsInspector),
-      onEvent('debug:toggle-panel-overlay', onTogglePanelDebug),
-      onEvent('debug:toggle-focus-overlay', onToggleFocusDebug),
-      onEvent('debug:toggle-error-overlay', onToggleErrorDebug),
-      onEvent('debug:toggle-map-overlay', onToggleMapDebug),
-      onEvent('debug:toggle-icon-overlay', onToggleIconDebug),
+      ...toggles.map(({ event, handler }) => onEvent(event, handler)),
+      ...toggles.map(({ event, handler }) => eventBus.on(event, handler)),
     ];
-
+    const handleDebugShortcut = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || !event.altKey) {
+        return;
+      }
+      const toggle = toggles.find(({ key }) => key === event.key.toLowerCase());
+      if (toggle) {
+        event.preventDefault();
+        toggle.handler();
+      }
+    };
+    window.addEventListener('keydown', handleDebugShortcut);
     return () => {
       disposers.forEach((dispose) => {
         dispose();
       });
+      window.removeEventListener('keydown', handleDebugShortcut);
     };
-  }, [
-    onToggleErrorDebug,
-    onToggleFocusDebug,
-    onToggleIconDebug,
-    onToggleMapDebug,
-    onTogglePanelDebug,
-  ]);
-
-  useEffect(() => {
-    const disposers = [
-      eventBus.on('debug:toggle-panel-overlay', onTogglePanelDebug),
-      eventBus.on('debug:toggle-focus-overlay', onToggleFocusDebug),
-      eventBus.on('debug:toggle-error-overlay', onToggleErrorDebug),
-      eventBus.on('debug:toggle-map-overlay', onToggleMapDebug),
-      eventBus.on('debug:toggle-icon-overlay', onToggleIconDebug),
-    ];
-    return () =>
-      disposers.forEach((dispose) => {
-        dispose();
-      });
-  }, [
-    onToggleErrorDebug,
-    onToggleFocusDebug,
-    onToggleIconDebug,
-    onToggleMapDebug,
-    onTogglePanelDebug,
-  ]);
-
-  useEffect(() => {
-    const handleDebugShortcut = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase();
-      const isCtrlAlt = event.ctrlKey && event.altKey;
-      if (!isCtrlAlt) {
-        return;
-      }
-
-      if (key === 'p') {
-        event.preventDefault();
-        onTogglePanelDebug();
-      } else if (key === 'k') {
-        event.preventDefault();
-        onToggleFocusDebug();
-      } else if (key === 'e') {
-        event.preventDefault();
-        onToggleErrorDebug();
-      } else if (key === 'm') {
-        event.preventDefault();
-        onToggleMapDebug();
-      } else if (key === 'i') {
-        event.preventDefault();
-        onToggleIconDebug();
-      }
-    };
-
-    window.addEventListener('keydown', handleDebugShortcut);
-    return () => window.removeEventListener('keydown', handleDebugShortcut);
   }, [
     onToggleErrorDebug,
     onToggleFocusDebug,

@@ -43,6 +43,9 @@ const Probe = ({ clusterId }: { clusterId: string | undefined }) => {
       <button type="button" onClick={() => state.addNamespace('Bad!')}>
         invalid
       </button>
+      <output data-testid="scope">
+        {JSON.stringify({ scope: state.scope, loaded: state.loaded, saving: state.saving })}
+      </output>
       <NamespaceScopeAddRow state={state} />
     </>
   );
@@ -102,6 +105,43 @@ describe('useNamespaceScope telemetry', () => {
     );
     expect(document.activeElement).toBe(container.querySelector('.namespace-scope-add'));
   });
+
+  it.each(['success', 'failure'] as const)(
+    'keeps a previous cluster save %s out of the current editor',
+    async (outcome) => {
+      let resolveSave!: (names: string[]) => void;
+      let rejectSave!: (error: Error) => void;
+      namespaceScopeMocks.saveNamespaceScope.mockReturnValue(
+        new Promise<string[]>((resolve, reject) => {
+          resolveSave = resolve;
+          rejectSave = reject;
+        })
+      );
+      namespaceScopeMocks.loadNamespaceScope.mockImplementation(async (clusterId) =>
+        clusterId === 'cluster-a' ? ['alpha'] : ['beta']
+      );
+      await act(async () => root.render(<Probe clusterId="cluster-a" />));
+      await act(async () => container.querySelector<HTMLButtonElement>('button')?.click());
+      expect(namespaceScopeMocks.saveNamespaceScope).toHaveBeenCalledWith('cluster-a', [
+        'alpha',
+        'production',
+      ]);
+      await act(async () => root.render(<Probe clusterId="cluster-b" />));
+      await act(async () => {
+        if (outcome === 'success') {
+          resolveSave(['alpha', 'production']);
+        } else {
+          rejectSave(new Error('old cluster save failed'));
+        }
+      });
+      expect(JSON.parse(container.querySelector('output')?.textContent ?? 'null')).toEqual({
+        scope: ['beta'],
+        loaded: true,
+        saving: false,
+      });
+      expect(container.querySelector('.namespace-scope-error')).toBeNull();
+    }
+  );
 
   it('reports a persistence failure displayed by the namespace editor', async () => {
     const error = new Error('settings database is read-only');

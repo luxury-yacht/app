@@ -44,9 +44,6 @@ interface ClusterResourcesViewsProps {
 
   // Tab control from parent
   activeTab?: ClusterViewType | null;
-  onTabChange?: (tab: ClusterViewType) => void;
-
-  // Object panel element to render
 }
 
 function ClusterResourcesViews({
@@ -60,7 +57,6 @@ function ClusterResourcesViews({
   rbacError = null,
   storageError = null,
   activeTab: controlledActiveTab,
-  onTabChange: _onTabChangeCallback,
 }: Readonly<ClusterResourcesViewsProps>) {
   const activeTab = controlledActiveTab ?? null;
 

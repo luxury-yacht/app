@@ -8,10 +8,10 @@
  * so there is no shared resource context to read here.
  */
 
-import { NAMESPACE_RESOURCE_VIEWS } from './namespaceResourceViews';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type React from 'react';
 import type { NamespaceViewType } from '@/types/navigation/views';
+import { NAMESPACE_RESOURCE_VIEWS } from './namespaceResourceViews';
 
 interface AllNamespacesViewProps {
   activeTab: NamespaceViewType;

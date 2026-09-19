@@ -38,6 +38,7 @@ export interface PanelLayoutStore {
   copyPanelLayoutState: (sourcePanelId: string, targetPanelId: string) => void;
   clearPanelState: (panelId: string) => void;
   handoffLayoutBeforeClose: (panelId: string) => void;
+  getGroupLeader: (groupKey: string) => string | undefined;
   setGroupLeader: (groupKey: string, panelId: string) => void;
   clearGroupLeader: (groupKey: string) => void;
   getAllPanelStates: () => Record<string, PanelLayoutState>;
@@ -72,6 +73,17 @@ export interface PanelLayoutStore {
    */
   subscribeTabGroups(listener: () => void): () => void;
 }
+
+const layoutsEqual = (left: PanelLayoutState, right: PanelLayoutState) =>
+  left.position === right.position &&
+  left.isMaximized === right.isMaximized &&
+  left.isOpen === right.isOpen &&
+  left.rightSize.width === right.rightSize.width &&
+  left.rightSize.height === right.rightSize.height &&
+  left.bottomSize.width === right.bottomSize.width &&
+  left.bottomSize.height === right.bottomSize.height &&
+  left.isInitialized === right.isInitialized &&
+  left.zIndex === right.zIndex;
 
 export function createPanelLayoutStore(initialTabGroups?: TabGroupState): PanelLayoutStore {
   const panelStates = new Map<string, PanelLayoutState>();
@@ -132,10 +144,15 @@ export function createPanelLayoutStore(initialTabGroups?: TabGroupState): PanelL
     });
   };
 
-  const updateState = (panelId: string, updates: Partial<PanelLayoutState>) => {
-    const currentState = getInitialState(panelId);
-    panelStates.set(panelId, { ...currentState, ...updates });
+  const publishState = (panelId: string, next: PanelLayoutState) => {
+    const current = panelStates.get(panelId);
+    // Preserve the hook's no-op render bailout while retaining store notifications.
+    panelStates.set(panelId, current && layoutsEqual(current, next) ? current : next);
     notifyListeners(panelId);
+  };
+
+  const updateState = (panelId: string, updates: Partial<PanelLayoutState>) => {
+    publishState(panelId, { ...getInitialState(panelId), ...updates });
   };
 
   const setPanelOpenState = (panelId: string, isOpen: boolean) => {
@@ -186,9 +203,7 @@ export function createPanelLayoutStore(initialTabGroups?: TabGroupState): PanelL
     setPanelPositionById: (panelId: string, position: DockPosition) => {
       updateState(panelId, { position });
     },
-    setPanelOpenById: (panelId: string, isOpen: boolean) => {
-      setPanelOpenState(panelId, isOpen);
-    },
+    setPanelOpenById: setPanelOpenState,
     copyPanelLayoutState,
     handoffLayoutBeforeClose: (panelId: string) => {
       const currentGroupKey = getGroupForPanel(tabGroups, panelId);
@@ -206,6 +221,7 @@ export function createPanelLayoutStore(initialTabGroups?: TabGroupState): PanelL
         copyPanelLayoutState(panelId, nextLeader);
       }
     },
+    getGroupLeader: (groupKey) => groupLeaders.get(groupKey),
     setGroupLeader: (groupKey: string, panelId: string) => {
       groupLeaders.set(groupKey, panelId);
     },
@@ -226,8 +242,7 @@ export function createPanelLayoutStore(initialTabGroups?: TabGroupState): PanelL
     },
     restorePanelStates: (states: Record<string, PanelLayoutState>) => {
       Object.entries(states).forEach(([panelId, state]) => {
-        panelStates.set(panelId, { ...state });
-        notifyListeners(panelId);
+        publishState(panelId, { ...state });
       });
     },
     applyObjectPanelLayoutDefaults: () => {

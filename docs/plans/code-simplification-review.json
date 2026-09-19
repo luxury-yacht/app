@@ -99,11 +99,14 @@
     "backend/internal/genappbindings/cmd/main.go",
     "backend/internal/genappbindings/render.go",
     "backend/internal/genobjectactions/cmd/main.go",
+    "backend/internal/genobjectactions/render.go",
     "backend/internal/genrefreshcontracts/canonical_rows.go",
     "backend/internal/genrefreshcontracts/cmd/main.go",
     "backend/internal/genrefreshcontracts/domain_contract.go",
     "backend/internal/genrefreshcontracts/enum_values.go",
+    "backend/internal/genrefreshcontracts/policy_render.go",
     "backend/internal/genrefreshcontracts/registry.go",
+    "backend/internal/genrefreshcontracts/render.go",
     "backend/internal/k8sretry/retry.go",
     "backend/internal/lifecycle/context.go",
     "backend/internal/linescanner/scanner.go",
@@ -1067,6 +1070,7 @@
     "frontend/src/core/refresh/components/diagnostics/diagnosticsRowModel.ts",
     "frontend/src/core/refresh/components/diagnostics/index.ts",
     "frontend/src/core/refresh/components/diagnostics/modeDetails.ts",
+    "frontend/src/core/refresh/components/diagnostics/useDiagnosticsPolling.ts",
     "frontend/src/core/refresh/contexts/RefreshManagerContext.tsx",
     "frontend/src/core/refresh/diagnostics/useCatalogDiagnostics.ts",
     "frontend/src/core/refresh/domainRegistrations.ts",
@@ -1845,8 +1849,7 @@
     "internal/windowsinstall/identity.go",
     "internal/windowsinstall/registry_other.go",
     "internal/windowsinstall/registry_windows.go",
-    "main.go",
-    "frontend/src/core/refresh/components/diagnostics/useDiagnosticsPolling.ts"
+    "main.go"
   ],
   "reviews": [
     {
@@ -6686,8 +6689,8 @@
         },
         {
           "id": "D032-C05",
-          "disposition": "investigate",
-          "decision": "Trace runtime optional-kind permission loss versus retained attention rows: Build reports issues but does not itself filter rows. Determine whether registration rebuild and reconciliation guarantee removal before serving; no defect established yet."
+          "disposition": "implemented",
+          "decision": "Trace runtime optional-kind permission loss versus retained attention rows: Build reports issues but does not itself filter rows. Determine whether registration rebuild and reconciliation guarantee removal before serving; no defect established yet. Resolved by D063: permission reconciliation and explicit match-none namespace admission; see its producer trace and red/green evidence."
         }
       ],
       "consumers": [
@@ -10491,8 +10494,8 @@
         },
         {
           "id": "D056-C04",
-          "disposition": "investigate",
-          "decision": "Refresh store useRefreshState returns the same mutable root object to useSyncExternalStore. Sole production consumer DiagnosticsPanel reads pendingRequests; inspect whether its independent clock masks missed immediate notifications, then reproduce before deciding a change."
+          "disposition": "implemented",
+          "decision": "Refresh store useRefreshState returns the same mutable root object to useSyncExternalStore. Sole production consumer DiagnosticsPanel reads pendingRequests; inspect whether its independent clock masks missed immediate notifications, then reproduce before deciding a change. Resolved by D060: refresh store publishes its immutable snapshot before notifying, with immediate subscription regressions."
         }
       ],
       "consumers": [
@@ -10996,7 +10999,7 @@
         {
           "id": "D056-C04",
           "disposition": "implemented",
-          "decision": "Confirmed pending count React subscriber remained at zero when a request started. Consolidate root replacement and notification in publishState; domain map/entry views are published together in the same fresh root snapshot. Existing scoped reference stability and reset behavior remain."
+          "decision": "Confirmed pending count React subscriber remained at zero when a request started. Consolidate root replacement and notification in publishState; domain map/entry views are published together in the same fresh root snapshot. Existing scoped reference stability and reset behavior remain. Resolved by D060: refresh store publishes its immutable snapshot before notifying, with immediate subscription regressions."
         }
       ],
       "consumers": [
@@ -13480,8 +13483,8 @@
         },
         {
           "id": "D081-C06",
-          "disposition": "deferred",
-          "decision": "Unused onTabChange forwarding in cluster and namespace view wrappers will be removed with the AppLayout caller during shell review. Namespace map lifecycle is resolved in D083."
+          "disposition": "implemented",
+          "decision": "Unused onTabChange forwarding in cluster and namespace view wrappers will be removed with the AppLayout caller during shell review. Namespace map lifecycle is resolved in D083. Unused tab forwarding resolved in D085."
         }
       ],
       "contracts": [
@@ -13739,18 +13742,1277 @@
       "checks": [
         "Queue replacement regressions failed twice: /tmp/luxury-yacht-d083-queue-red.log. Four namespace-owner/seed-identity/partial-GVK regressions failed: /tmp/luxury-yacht-d083-navigation-red.log. 199 tests /26 files passed after implementation and renderer subscription consolidation: /tmp/luxury-yacht-d083-map-green.log. Typecheck passed /tmp/luxury-yacht-d083-typecheck.log. Final tooltip row extraction passes local complexity: /tmp/luxury-yacht-d083-complexity.log (306 changed/new functions <=12); its tests will be repeated with the next frontend batch. Coverage/native/final prerelease remain open."
       ]
+    },
+    {
+      "id": "D084-tabs-scrollbars-and-shell-primitives",
+      "files": [
+        {
+          "path": "frontend/src/modules/port-forward/PortForwardsPanel.css",
+          "sha256": "c0a4b074d4d14c2be860ee69701280c46483f64d1db718b194efb6ab3c16d14d",
+          "removed": true,
+          "status": "Deleted after full inspection; hash is committed source."
+        },
+        {
+          "path": "frontend/src/modules/port-forward/index.ts",
+          "sha256": "60e79afb66dce1c3f0d75826fcd99ed864559c83f67c0630f5c53b83913305f8"
+        },
+        {
+          "path": "frontend/src/shared/components/icons/DockableIcons.tsx",
+          "sha256": "7a48a8d2e40d8e8641f48e6e3fbe1649be6b66135808f12ea64cae2bd6eeae0d"
+        },
+        {
+          "path": "frontend/src/shared/components/icons/DropdownIcons.tsx",
+          "sha256": "48a72b23a87a65571a54088dec3e7a68cc2fc350b29e4e891568728fd01fafa0"
+        },
+        {
+          "path": "frontend/src/shared/components/icons/FavoriteIcons.tsx",
+          "sha256": "7c11778fdf171a0437599c80f6ba316982991ee02921e116c62c96b5e82aa260"
+        },
+        {
+          "path": "frontend/src/shared/components/icons/LogIcons.tsx",
+          "sha256": "26fc1d52f8fb7af523655b17243c4f25e8ae2e4aa0e5c34d1aae36a3556cdea8"
+        },
+        {
+          "path": "frontend/src/shared/components/icons/ObjectMapIcons.tsx",
+          "sha256": "ead76bad4346f17efad95bdb5616d9172aab535cb29f15d7447f757977a82585"
+        },
+        {
+          "path": "frontend/src/shared/components/icons/SettingsIcons.tsx",
+          "sha256": "4890b6236d402ff62e3291a8cc72084f81044b10fa6196b5d2c89c609f2ec6f1"
+        },
+        {
+          "path": "frontend/src/shared/components/icons/SharedIcons.tsx",
+          "sha256": "0b9295415545f4ca058849c2950d70a733f590679217a86cc90ef937c619564a"
+        },
+        {
+          "path": "frontend/src/shared/components/icons/YamlIcons.tsx",
+          "sha256": "e890f40fccb27ee22c4514637e8d53416bd9ea6d4eb95183b4b2d142ab8423f9"
+        },
+        {
+          "path": "frontend/src/shared/components/icons/iconDebugDiscovery.ts",
+          "sha256": "3082fe1952f1a7f826f839e2e20f9f8c117d5a908068c49c3f4e8215a7d2127d"
+        },
+        {
+          "path": "frontend/src/shared/components/tabs/Tabs.tsx",
+          "sha256": "1a9d46ec8e54621b06cba95aa9b231ddf5671238d556b4573583d2a658ea331d"
+        },
+        {
+          "path": "frontend/src/shared/components/tabs/dragCoordinator/TabDragProvider.tsx",
+          "sha256": "d1dc9d7e84aa1327c2e8465e2c0cc61ba266716a190506a83e4091e8885ff928"
+        },
+        {
+          "path": "frontend/src/shared/components/tabs/dragCoordinator/index.ts",
+          "sha256": "387e9a9880e47e8a095817364da86d77a24d1a1ee6e6736eba731ae2f3fe7b1d"
+        },
+        {
+          "path": "frontend/src/shared/components/tabs/dragCoordinator/types.ts",
+          "sha256": "2824cc39b548d54c5f1049f8d4987f3e6233cac959d361c18d280a62aadf85e3"
+        },
+        {
+          "path": "frontend/src/shared/components/tabs/dragCoordinator/useTabDragSource.ts",
+          "sha256": "3a3042c092421ccd40e5254dce9f9953041565c4b93e73ea5721e2bc71b39078"
+        },
+        {
+          "path": "frontend/src/shared/components/tabs/dragCoordinator/useTabDropTarget.ts",
+          "sha256": "0c71cb78eb5ffa3ecb5f8fef379640e681890343efbe804c47a8be389e0198bf"
+        },
+        {
+          "path": "frontend/src/shared/components/tabs/index.ts",
+          "sha256": "bba7808dd2c1750214c2909114addd38fe5d5ff25640fc8229a72f43a8dacdeb"
+        },
+        {
+          "path": "frontend/src/shared/components/tabs/stories.css",
+          "sha256": "9ff86f031696ed5fa6aa5f089f17a2fc3e92a0bb6fa7c965c345d99ea5d07cb8"
+        },
+        {
+          "path": "frontend/src/shared/components/tabs/tabReorderMenuItems.tsx",
+          "sha256": "5ec28e16a1de85f63d0ee07d8ea79868d8fe7a2f94bf170af609e17081b7d62d"
+        },
+        {
+          "path": "frontend/src/shared/scrollbars/scrollbarActivity.ts",
+          "sha256": "97cbd61f100d4f8aae44887d474778c3a49c51096fc53433eb9f6f40ce64cbe2"
+        },
+        {
+          "path": "frontend/src/shared/scrollbars/tokens.ts",
+          "sha256": "32aa019c2b85e803a34dca5b1b596db66c959ba7e2c99dc1a5cb81fa13a98097"
+        },
+        {
+          "path": "frontend/src/shared/scrollbars/useVirtualScrollbar.tsx",
+          "sha256": "148f00a1684f62486bd2801d7bb4bbe71fe8de604b1a2e53a356b780c9f24770"
+        },
+        {
+          "path": "frontend/src/ui/layout/windowResizeCursor.css",
+          "sha256": "b69fdf78a188e7d0b8ebf14bc819dd8afde0c71529d231dee82de035853b24cc"
+        },
+        {
+          "path": "frontend/src/ui/layout/windowResizeCursor.ts",
+          "sha256": "4feb3ca99074e3fa908f6f26b25a4469d341d14bd1f97ba2aba5e89448e57a69"
+        },
+        {
+          "path": "frontend/src/ui/panels/app-logs/AppLogsPanel.css",
+          "sha256": "f8f13c2147b8ebe6d835cfae3912312b91745a3a563dbb45c4bdf139a688caa6"
+        },
+        {
+          "path": "frontend/src/ui/status/SessionsStatus.css",
+          "sha256": "0f4961da920c741ed12c860212de992af9080ef7799e3a3da55eaf0f1ab96cbc"
+        },
+        {
+          "path": "frontend/src/ui/status/SessionsStatus.tsx",
+          "sha256": "f6ed72211385318101a1081eaabd88c6c67c4c8c094c749372c028a463ee62a2"
+        }
+      ],
+      "inspection": "Read full Tabs, drag source/target/provider/types, reorder menu, styles and exports; full scrollbar activity, tokens and virtual scrollbar; named icon modules and discovery; native window resize cursor, AppLogs styles and legacy port-forward styles. Traced ShellTab teardown/reset and every port-forward selector consumer. Changes and tests were committed by the user as 23263799 before this record was added.",
+      "candidates": [
+        {
+          "id": "D084-C01",
+          "disposition": "implemented",
+          "decision": "Tab overflow measurement has one callback with primitive-state bailouts. Drag target listener attachment has one captured cleanup; latest options share one ref. Shared drag-end event shape replaces three copies."
+        },
+        {
+          "id": "D084-C02",
+          "disposition": "implemented",
+          "decision": "Scrollbar number token parsing has one implementation. One iterable hover-state Map replaces the Map/Set pair, redundant observed-element tracking is removed and thumb geometry is shared by render, paging and drag while preserving coordinate-system differences."
+        },
+        {
+          "id": "D084-C03",
+          "disposition": "implemented",
+          "decision": "Moved the selectors still used by SessionsStatus into its stylesheet in original cascade order; removed obsolete port-forward panel selectors and the old import/file after repository-wide selector searches. App log header and entry grid layout share one CSS rule."
+        },
+        {
+          "id": "D084-C04",
+          "disposition": "retained",
+          "decision": "Keep tabs manual activation, ARIA ownership and focus restoration, scheduled scroll targets, protected drag MIME admission, local drag fallback and scope validation. Void drop refs remain compatible with ClusterTabs forwarding. Drag ref/state intentionally serve synchronous events and React rendering."
+        },
+        {
+          "id": "D084-C05",
+          "disposition": "retained",
+          "decision": "Preserve scrollbar owner/clipping ancestor order, portal coordinate conversion, wheel units, fade/reduced-motion/hover/drag ownership and global abort/reset. Virtual xterm scrolling retains its distinct narrow-track clamping and existing ShellTab reset/disposal. Native resize capture ordering, app zoom and body cursor ownership stay unchanged."
+        },
+        {
+          "id": "D084-C06",
+          "disposition": "retained",
+          "decision": "Named SVG components preserve geometry/viewbox/default/fill/stroke APIs. Dynamic icon discovery prevents inferring unused exports from static imports; a generic icon-frame abstraction adds configuration without removing shared policy."
+        }
+      ],
+      "contracts": [
+        "Acquisition and cleanup stay paired to the same element and listener functions. Geometry inputs preserve clipped versus local bounds and page/drag/render track limits. No routing, native drag, scroll lifetime or visual policy change is intended."
+      ],
+      "checks": [
+        "444 tests in 39 files passed, including final D083 tooltip extraction: /tmp/luxury-yacht-d084-shell-primitives-green.log. Typecheck passed: /tmp/luxury-yacht-d084-typecheck.log. All 336 changed/new TS functions <=12 locally: /tmp/luxury-yacht-d084-complexity.log. Native and final prerelease checks remain open."
+      ]
+    },
+    {
+      "id": "D085-layout-debug-owner",
+      "files": [
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterResourcesManager.tsx",
+          "sha256": "244175943b74af1203d304ccac830bb4f50eea0f8bbc559ce3bcfb0c1c40dc20"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterResourcesViews.tsx",
+          "sha256": "673fb76f9b3072a2707ba8c27c3b1823e7637e4228ba4eb6d79f178cb56e0d83"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsResourcesViews.tsx",
+          "sha256": "9cdbbf4bac90e853593cee159b23f291deef646b042f2d4fca03040c69c73031"
+        },
+        {
+          "path": "frontend/src/ui/layout/AppDebugOverlays.tsx",
+          "sha256": "0d174e0abae3602251d3a8dec704703dbb9f52a74d8f711a267db70f399cd19a"
+        },
+        {
+          "path": "frontend/src/ui/layout/AppLayout.tsx",
+          "sha256": "e0615f94e32ebe3c8f82701229ff892da9d52a4b9bb573af1d79c9cc1d603ba2"
+        },
+        {
+          "path": "frontend/src/ui/layout/DebugOverlay.tsx",
+          "sha256": "865ae6b1810704956a3179faee6fe454b6a806aec5d6ceca296ede4fdc7460dc"
+        },
+        {
+          "path": "frontend/src/ui/layout/IconDebugOverlay.tsx",
+          "sha256": "a31a7aae6751e3c50220113c7a64a41553af21aa0cd7c4e087adfca1b0d6a158"
+        },
+        {
+          "path": "frontend/src/ui/layout/objectPanelMountTarget.ts",
+          "sha256": "b656c0a2fad2e7d9bf5fafad0decd6b0f12ee1b46ec5eb8d897f029f36218ab1"
+        },
+        {
+          "path": "frontend/src/ui/layout/useAppDebugShortcuts.ts",
+          "sha256": "ec788b6153b0a10d1cdde2e4da3ceeba923c4c359cb98e430cf8155bb493369d"
+        }
+      ],
+      "inspection": "Read full layout and all debug implementation, lazy-boundary contract tests, consumers, panel-store subscription API and resource route wrappers. Automated the >500-line responsibility extraction; debug visibility, shortcut registration and snapshot subscriptions are owned together.",
+      "candidates": [
+        {
+          "id": "D085-C01",
+          "disposition": "implemented",
+          "decision": "AppDebugOverlays owns its visibility and rendering instead of requiring ten shell props. Focus display/export share row projection; panel integrity checks and presentation share group projection. Shared DebugOverlay uses the forwarded ref directly, one pointer-state shape and plain class calculation."
+        },
+        {
+          "id": "D085-C02",
+          "disposition": "implemented",
+          "decision": "One debug shortcut descriptor list drives native events, renderer events and raw debug keys with common cleanup. Removed impossible null-sort branches from the always-selected icon sort state."
+        },
+        {
+          "id": "D085-C03",
+          "disposition": "implemented",
+          "decision": "Removed unused onTabChange forwarding across AppLayout and cluster/namespace resource wrappers after tracing all consumers. Sidebar/ViewState retain the actual navigation ownership."
+        },
+        {
+          "id": "D085-C04",
+          "disposition": "retained",
+          "decision": "Keep lazy portal fallback and route boundaries, prewarm/cancellation, panel mount isolation and cluster auth gating. Debug panel polling remains because the existing store has only per-panel and tab-group subscriptions, not a stable all-panel snapshot channel; adding one solely for debug display would expand lifecycle scope. Keep independent visibility flags, live map snapshots and debug controls available through blocking surfaces."
+        }
+      ],
+      "contracts": [
+        "No runtime import cycle: the extracted owner imports debug store/dockable APIs, never AppLayout. Debug shortcut event order, focus inspection exclusion, copied rows, group integrity counts, pointer bounds and native pending mount isolation are retained."
+      ],
+      "checks": [
+        "230 tests /23 files and typecheck passed: /tmp/luxury-yacht-d085-shell-final.log, /tmp/luxury-yacht-d085-typecheck-final.log. 92 changed/new TS functions <=12: /tmp/luxury-yacht-d085-complexity-final.log. Later D086 shell tests include the final cleanup callback lint correction."
+      ]
+    },
+    {
+      "id": "D086-sidebar-state-and-namespace-editor",
+      "files": [
+        {
+          "path": "frontend/src/ui/layout/NamespaceScopeEditor.tsx",
+          "sha256": "9e4d4f5ddd5ae3a11dfb74a62efbe513f6a6a0553cdc3f57bc270b0c5d45a82c"
+        },
+        {
+          "path": "frontend/src/ui/layout/Sidebar.tsx",
+          "sha256": "7b5df37c3a3145a45604e64c177aa7c457b7d83bebd86b499034ee437d1a468e"
+        },
+        {
+          "path": "frontend/src/ui/layout/SidebarKeys.ts",
+          "sha256": "1a9cfbf27cdbdb5c0a7985c1ec82b9f05e6d9dd5e2120b3aa2eeae68b720ee48"
+        },
+        {
+          "path": "frontend/src/ui/layout/namespaceScope.ts",
+          "sha256": "c04f291266e04bee7aea4082c370d5091fc155b706e61c748a455cb69197f64c"
+        },
+        {
+          "path": "frontend/src/ui/layout/useSidebarGroupExpansion.ts",
+          "sha256": "4a16cdde2788904aba80fb46155bb5d040ac4ef7150055f277d0b25954a1ce2d"
+        }
+      ],
+      "inspection": "Read all sidebar rendering, disclosure, scoped identity, attention demand, navigation ordering and keyboard controls. Traced the inline editor through clusterAllowedNamespaces, namespaceScope and documented persist/rebuild/read sequencing. Inspected keyboard harness and retained workflow assertions.",
+      "candidates": [
+        {
+          "id": "D086-C01",
+          "disposition": "implemented",
+          "decision": "The keyboard hook owns cursor preview, pending selection, activation and commit refs. Sidebar consumes the actual action API instead of constructing and passing eight pieces of hook state. Harness now exercises real keyboard navigation rather than setting the internal preview directly."
+        },
+        {
+          "id": "D086-C02",
+          "disposition": "implemented",
+          "decision": "Namespace scope editor state has one cluster-visit owner and one guarded update boundary. Old saves cannot overwrite the next cluster scope, error or saving state; render projection gates stale state immediately. Existing load cancellation and backend persist-before-rebuild ownership remain."
+        },
+        {
+          "id": "D086-C03",
+          "disposition": "implemented",
+          "decision": "Namespace toggle and selected-namespace disclosure reuse the existing exclusive/additive expansion policy; removed the global selection forwarding function."
+        },
+        {
+          "id": "D086-C04",
+          "disposition": "retained",
+          "decision": "Keep namespace parents separate from persisted category expansion, fresh navigation distinct from restored selection, discovery-gated reveal, post-animation scrolling and actual view update order. Shared markup for global/cluster/namespace items would need conditionals for their distinct scope, badge, disclosure and focus contracts; existing group renderer already owns common category behavior."
+        }
+      ],
+      "contracts": [
+        "Arrow preview does not navigate; activation publishes pending target before clicking and restores activation ref in finally. Pointer/focus cleanup, native inputs, modifiers and Tab ownership remain. Backend saves retain the initiating cluster; async UI settlement uses unique cluster-visit identity, including A-B-A revisits. No post-save refresh races the subsystem rebuild."
+      ],
+      "checks": [
+        "Two stale-cluster save success/failure regressions failed before the owner change: /tmp/luxury-yacht-d086-scope-red.log. 232 tests /23 files passed: /tmp/luxury-yacht-d086-shell-green.log. Final typecheck: /tmp/luxury-yacht-d086-typecheck-final.log. Local complexity 108 changed/new functions <=12: /tmp/luxury-yacht-d086-complexity.log. Affected coverage and native interactions remain open."
+      ]
+    },
+    {
+      "id": "D087-panel-layout-ownership",
+      "files": [
+        {
+          "path": "frontend/src/ui/dockable/DockablePanel.css",
+          "sha256": "8a7f1e09a8f20be04af8326aa172b10608fd8f0646556776026dd914fa68ec49"
+        },
+        {
+          "path": "frontend/src/ui/dockable/DockablePanel.tsx",
+          "sha256": "bfac316b222af723e76fa2d166dcf2da6577bf299a6fc6100aa3ec95b0f5db5e"
+        },
+        {
+          "path": "frontend/src/ui/dockable/DockablePanelControls.tsx",
+          "sha256": "147fbc7d92c4f7a1343536b03b5bf2f24f6d4a2ab2ce7757d96ab3af7acd2c35"
+        },
+        {
+          "path": "frontend/src/ui/dockable/DockablePanelHeader.tsx",
+          "sha256": "6dd0a47dd2cc89e9c1208d5b2a8d31418f43253059ab7d22f75be3dbfa36f7da"
+        },
+        {
+          "path": "frontend/src/ui/dockable/DockablePanelProvider.tsx",
+          "sha256": "07115fca07ec0be0308d31161e8ef9a3ee23adfe018f769fd3700ae59928dd24"
+        },
+        {
+          "path": "frontend/src/ui/dockable/DockableTabBar.tsx",
+          "sha256": "1a4a523791b8ef96f172c4610bdf2236cf38a08eeb59916b81a61b0e2ba6e88b"
+        },
+        {
+          "path": "frontend/src/ui/dockable/DockableTabMenu.tsx",
+          "sha256": "c25d36184d99140b71375d2b0b64de067b3423be841b1cdc8be10aa1b57c65a0"
+        },
+        {
+          "path": "frontend/src/ui/dockable/dockablePanelLayout.ts",
+          "sha256": "563fdc4fe4ce99379898ae7bbc21eb15cfaf76c5752cc0705dce74e56167aabc"
+        },
+        {
+          "path": "frontend/src/ui/dockable/index.ts",
+          "sha256": "f5e048749574ce8cb67b69cc2c2119315aa5232333a4517632c87c5faa985f29"
+        },
+        {
+          "path": "frontend/src/ui/dockable/panelLayoutStore.ts",
+          "sha256": "cc6146f3b49ed451fdfd2806f36594b72e38cc6cbfab8adc89c39b89949aab56"
+        },
+        {
+          "path": "frontend/src/ui/dockable/panelLayoutStoreContext.tsx",
+          "sha256": "0cceec7e3ce7fb5d85446c4622d7a06fd3b4e68d2dfad73f485522e0157d617f"
+        },
+        {
+          "path": "frontend/src/ui/dockable/tabGroupState.ts",
+          "sha256": "436559beddc6e8a6033aa379fa958a03a05af0c6f2a2c07a87bca5d19e3bc357"
+        },
+        {
+          "path": "frontend/src/ui/dockable/tabGroupTypes.ts",
+          "sha256": "3f8aebb218370f4cf254666171cc06119ef3dbad2de6bae1c17bea05a54b20cb"
+        },
+        {
+          "path": "frontend/src/ui/dockable/useDockablePanelDragResize.ts",
+          "sha256": "6d1aeaf5c7912c1aa17e256bc48c1908e032b56dcf439d92595f6cb6821755e6"
+        },
+        {
+          "path": "frontend/src/ui/dockable/useDockablePanelMaximize.ts",
+          "sha256": "42268c3dd5b030b4a21706afea8b6f4601200bd15e7fb014af359dbba8337569"
+        },
+        {
+          "path": "frontend/src/ui/dockable/useDockablePanelState.ts",
+          "sha256": "f69c0cc0f038105d9d389fc6597db748c67aa6df6b827cbaae1580a716dc90dc"
+        },
+        {
+          "path": "frontend/src/ui/dockable/useDockablePanelWindowBounds.ts",
+          "sha256": "0d3aa439571072dcc02f9a8c2904716fc77ee21c37f690cc358b4a8fb969cc1e"
+        }
+      ],
+      "inspection": "Read every dockable production file and stylesheet, then trace active store publication, subscriptions, tab groups, geometry leadership, pointer resizing, native transfer callbacks and retained hidden content. Exercised store and panel-id replacement and stable leadership across cluster round trips.",
+      "candidates": [
+        {
+          "id": "D087-C01",
+          "disposition": "implemented",
+          "decision": "useDockablePanelState reads its scoped store with useSyncExternalStore instead of mirroring nine layout fields. The store preserves equal snapshot identity and still notifies listeners. Geometry leaders belong solely to each layout store; component and provider actions address their captured store, eliminating the provider-wide leader mirror and render/commit active-store mismatch."
+        },
+        {
+          "id": "D087-C02",
+          "disposition": "implemented",
+          "decision": "Resize activity derives from direction; maximize observation uses effect-owned target/observer cleanup; registration shares its options shape; native drag payload has its exact discriminant. Tab insertion/removal reuse their respective per-group policies. Removed four unused layout constants after whole-tree identifier and LAYOUT-consumer searches."
+        },
+        {
+          "id": "D087-C03",
+          "disposition": "retained",
+          "decision": "Keep content registry refs and reactive snapshots, leader distinct from active tab, mounted hidden panel contents, cluster-specific pruning, full-identity transfer admission/freeze/flush/ack, focus timers and native-vs-renderer drag paths. These represent different ownership/timing guarantees."
+        }
+      ],
+      "contracts": [
+        "Two render-time store/panel identity regressions and reordered-group cluster roundtrip regression failed before implementation: /tmp/luxury-yacht-d087-panel-state-red.log and /tmp/luxury-yacht-d087-leader-red.log. Final panel batch 481 tests /42 files and typecheck pass: /tmp/luxury-yacht-d087-panel-green2.log, /tmp/luxury-yacht-d087-typecheck2.log."
+      ],
+      "checks": [
+        "Combined shell/panel/shortcut/modal/command suite passed 770 tests /72 files; typecheck passed and 183 changed/new TS functions <=12: /tmp/luxury-yacht-d091-shell-green.log, /tmp/luxury-yacht-d091-typecheck.log, /tmp/luxury-yacht-d091-complexity.log. Later cosmetic/style/catch cleanup awaits final coverage and prerelease gate."
+      ]
+    },
+    {
+      "id": "D088-command-palette-search",
+      "files": [
+        {
+          "path": "frontend/src/ui/command-palette/CommandPalette.css",
+          "sha256": "988e52bf33e3e6625b6f71fa9ddc4b2bace30f58408ce06c1374221c967723ef"
+        },
+        {
+          "path": "frontend/src/ui/command-palette/CommandPalette.tsx",
+          "sha256": "2a822ca9bb564ac871030c4893ed13bb42914e1cc46b24dc5af7c6a5eea5b113"
+        },
+        {
+          "path": "frontend/src/ui/command-palette/CommandPaletteCommands.tsx",
+          "sha256": "be26dd22cafc145bbf06de8c30a0a9c925d5435cf2683f711d62c4152ada36a1"
+        },
+        {
+          "path": "frontend/src/ui/command-palette/usePaletteCatalogSearch.ts",
+          "sha256": "839eb3d09ad7a1d155169d7c740865d7a8d17d61c1603c86c94c61b12ae268ae"
+        }
+      ],
+      "inspection": "Read full command palette and command construction, query parser/ranking, picker transitions, native and local entry events, keyboard/mouse selection, deferred action execution, catalog identity and styles. Traced catalog request and cancellation contract.",
+      "candidates": [
+        {
+          "id": "D088-C01",
+          "disposition": "implemented",
+          "decision": "One scoped request owner replaces three independent catalog states and shared timer/controller refs. Effect-local cleanup invalidates old responses and errors, and render projection hides previous request state immediately. One settlement publishes results/stats/loading; reset derives from disabled search. Removed the kind-class forwarder and repeated array copies while grouping commands."
+        },
+        {
+          "id": "D088-C02",
+          "disposition": "implemented",
+          "decision": "Removed command description styling after repository search found no renderer using it."
+        },
+        {
+          "id": "D088-C03",
+          "disposition": "retained",
+          "decision": "Keep command category order, kind/name/namespace ranking, first-term backend search plus full-query client scoring, direct-picker Escape semantics, delayed action execution after close, and synchronous selection refs. Declarative command definitions already centralize menu/settings error policy; unrelated workflows should not become one generalized action interpreter."
+        }
+      ],
+      "contracts": [
+        "Old cluster success/failure both failed the new pending-search workflow assertions: /tmp/luxury-yacht-d088-search-red.log. Then all 62 palette tests /3 files and typecheck passed: /tmp/luxury-yacht-d088-green.log, /tmp/luxury-yacht-d088-typecheck.log. No runtime import cycle; hook imports refresh/types/error boundary only."
+      ],
+      "checks": [
+        "Combined shell/panel/shortcut/modal/command suite passed 770 tests /72 files; typecheck passed and 183 changed/new TS functions <=12: /tmp/luxury-yacht-d091-shell-green.log, /tmp/luxury-yacht-d091-typecheck.log, /tmp/luxury-yacht-d091-complexity.log. Later cosmetic/style/catch cleanup awaits final coverage and prerelease gate."
+      ]
+    },
+    {
+      "id": "D089-application-shell-and-native-menus",
+      "files": [
+        {
+          "path": "frontend/src/App.css",
+          "sha256": "2c7aee93b2599d2d9ccea5ef89624c48f5a207f42940f2c5f8a3099d187e1f82"
+        },
+        {
+          "path": "frontend/src/App.tsx",
+          "sha256": "0d8aed2e6213f9a9c37097228cc202a6e724f1f7cbec8da5232426e3a3b229af"
+        },
+        {
+          "path": "frontend/src/PanelWindowApp.css",
+          "sha256": "914d0467ae5b726bcd2a2444472750c1f2ebd4d9717a315164d49af0b26ce975"
+        },
+        {
+          "path": "frontend/src/PanelWindowApp.tsx",
+          "sha256": "08ba3c9801d6bfc227c5d7086bea1b936da13e0fb3311a8ea2097e8c24062a7e"
+        },
+        {
+          "path": "frontend/src/WorkspaceApp.tsx",
+          "sha256": "7b8deb8798166ca4d9965858a7cadb98aece7a12c3ec30d65d512afc63251340"
+        },
+        {
+          "path": "frontend/src/main.ts",
+          "sha256": "b255c9e22788fab91877f2625969438f9ef326fc700cf3a6ee9c9ffb74ddfaf7"
+        },
+        {
+          "path": "frontend/src/ui/layout/AppHeader.tsx",
+          "sha256": "e1777de8ce3ca3745028ff6feeb4391e01ae07b7a6d5dab3a5f7e5a2bcc8a388"
+        },
+        {
+          "path": "frontend/src/ui/layout/AppMenuBar.tsx",
+          "sha256": "a8e635c521db59b597de2efeea51f489b1d9cbbd7308771028300adfafddaf37"
+        },
+        {
+          "path": "frontend/src/ui/layout/AppRegionNavigation.tsx",
+          "sha256": "d368919ebb9677c414fdd0d2a6d8927f497aef6b00671b96062618536cb53530"
+        },
+        {
+          "path": "frontend/src/ui/layout/ApplicationMenuCommandContext.tsx",
+          "sha256": "a1fe4ba8139374a3dee3385282435bc0ea7c3b489e85dc424cc04e384a5617d2"
+        },
+        {
+          "path": "frontend/src/ui/layout/ClusterTabs.tsx",
+          "sha256": "5b45dc1beb3564fafc9a5b56b76fcf6dd8444522de8a05636a4b4336ed749ff9"
+        },
+        {
+          "path": "frontend/src/ui/layout/appFocusRegions.ts",
+          "sha256": "737b46f0e1d483dc733c63536478ec9c1c50b5af79a040a651514d258bbb143f"
+        },
+        {
+          "path": "frontend/src/ui/layout/applicationMenuCommands.ts",
+          "sha256": "2ed70aede8247e1764320418d945e81a0402cce82c898cd27b0222b9fc27f2ce"
+        },
+        {
+          "path": "frontend/src/ui/layout/workspaceApplicationMenuCommands.ts",
+          "sha256": "eaf4cdb4b8b08c23217ce9b85a1860789a834a0da515f33f8e7e507c580e0aa0"
+        },
+        {
+          "path": "frontend/src/ui/navigation/closeActiveClusterOrWindow.ts",
+          "sha256": "17ed715b73ad6199dd56dc493970b0135474fb2f3d42874c0e7b1d80dcf5b3a1"
+        },
+        {
+          "path": "frontend/src/ui/navigation/types.ts",
+          "sha256": "64d66b68e3ec2d30e8e6fdf63fa13721b7d58d7a4805d55640b8da20974a4927"
+        },
+        {
+          "path": "frontend/src/ui/overlays/AuthFailureOverlay.css",
+          "sha256": "03571e4d11cbac6b65766d7bcc0f48db8da01001ef15100cb952bef7cdc2bd9c"
+        },
+        {
+          "path": "frontend/src/ui/overlays/AuthFailureOverlay.tsx",
+          "sha256": "2af86919020f4f24fa9940ec67660baaa560cfa3884f50c3f0d4ad1348e10f80"
+        }
+      ],
+      "inspection": "Read shell bootstrap, provider nesting, native descriptor readiness, application menu definitions and executors, platform header operations, cluster-tab persistence/transfers, region focus discovery/navigation, auth overlay and close policy. Traced real panel transfer producer and consumers.",
+      "candidates": [
+        {
+          "id": "D089-C01",
+          "disposition": "implemented",
+          "decision": "Panel-window group docking uses guard clauses and its existing tab-snapshot builder, preserving blocker/freeze/publication/dock order. Menu closing restores focus outside a React state updater; key dispatch is an explicit switch."
+        },
+        {
+          "id": "D089-C02",
+          "disposition": "retained",
+          "decision": "Keep startup dependency order, role-aware native renderer initialization, cluster-operation permission gates, hydration-before-tab-order persistence, Global-tab exclusion, multi-root focus regions and platform-specific frame ownership. Header bounds and maximize state are asynchronous operations with independent cancellation/ordering; auth failure excludes transient network failures."
+        }
+      ],
+      "contracts": [
+        "Snapshot identity retains cluster/GVK/namespace/name/UID; native transfers still flush before admission and release only their transaction on failure. AppMenuBar keyboard and panel-window suites are included in combined validation."
+      ],
+      "checks": [
+        "Combined shell/panel/shortcut/modal/command suite passed 770 tests /72 files; typecheck passed and 183 changed/new TS functions <=12: /tmp/luxury-yacht-d091-shell-green.log, /tmp/luxury-yacht-d091-typecheck.log, /tmp/luxury-yacht-d091-complexity.log. Later cosmetic/style/catch cleanup awaits final coverage and prerelease gate."
+      ]
+    },
+    {
+      "id": "D090-shortcuts-focus-and-editing",
+      "files": [
+        {
+          "path": "frontend/src/ui/shortcuts/components/ApplicationMenuShortcuts.tsx",
+          "sha256": "6ded8dcf393f574398a279bb0ed9306b3212ad32b3f5100c734a7f0c590fcf0d"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/components/GlobalShortcuts.tsx",
+          "sha256": "d2efbf9e5487bd78bd76bc672300b5318bf6d5a739847f2cff216bd3cdeed38d"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/components/PanelWindowShortcuts.tsx",
+          "sha256": "ee36a8bf7565881e8fa32f22add1333b1cdd49ed0584e1a920746e14cebcf0d1"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/components/ShortcutHelpModal.tsx",
+          "sha256": "16e6fc29f5821cbb43e20f0b766f3acf5d62f1f6149b99c6710394b2117113da"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/components/TextContextMenu.tsx",
+          "sha256": "838b8bc214debf96acfae1fb1775fb8901c770340373e9fa382751bdc170f66c"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/components/panelApplicationMenuCommands.ts",
+          "sha256": "d9fe600f701a1937a76818e0dd01daed131c07a497266d18d694d80d62196b30"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/constants.ts",
+          "sha256": "4a752835196051a8e064789321f12021f1e0a6812ae9cb2228e314d752af9432"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/context.tsx",
+          "sha256": "96b6b3234c7806099c465d470d1258c36bec90c370eaa6b2c0a9a9e143872fc1"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/focusRegions.ts",
+          "sha256": "746d18a42bfb8e342106b95d50ec4b989b23b2ba405dc0f2850caa315f5842c6"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/hooks.ts",
+          "sha256": "3e42d094324f637fdbe883a45dd80d3837236a39bcbf6d9cb34c27a74d67f378"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/index.ts",
+          "sha256": "81052fb9825020dbc0336d08aa7106b6bc7af7905702481dc68aa30ac3455d4d"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/priorities.ts",
+          "sha256": "87aa735e5f1014b302aecd7b2641f42267d546737e27ab617701362690f361c4"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/regionFocusIndicator.ts",
+          "sha256": "fda4a70dba750a9feff0615331625988b2c512e1167e6ac94b04604d55b3c461"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/searchShortcutRegistry.ts",
+          "sha256": "c3393468c025971affbec84c57088ac14b851409652e306169ee0bcadf568e26"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/shortcutHelp.ts",
+          "sha256": "f3edee99a6ce0372f91982a72da62ae5780be0dba49a4ef20e6af198e1361c81"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/surfaces.ts",
+          "sha256": "ad550ea831b45d8b75575d19fe0bebb97458a9f4ded91ce33a9cae4de8875d70"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/useKeyboardFocusIndicator.ts",
+          "sha256": "406d5eb7f7218abc10947a8e04c9eec6a4093ab85df29f3159d25cdbdf20576c"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/useSearchShortcutTarget.ts",
+          "sha256": "b64de3eac1554a8f294b171a4161399e358478176e6cff44ed34c0ee6b9b5dbe"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/utils.ts",
+          "sha256": "4bdc7f3d997a6a63a0a19500ad0f89d4d2082109d6d9525c8f9af3d380606618"
+        }
+      ],
+      "inspection": "Read all keyboard registration, dispatch, surface arbitration, focus-region indicators, search-target registry, help grouping, native menu bridge, text context menu and panel-window lifecycle consumers. Traced shortcut priority/modifier policies and contained-vs-blocking surface ordering.",
+      "candidates": [
+        {
+          "id": "D090-C01",
+          "disposition": "implemented",
+          "decision": "Search target snapshots update in one effect and cleanup captures its own registration. Keyboard surface cleanup always unregisters before rerunning, so removed its unreachable update branch and redundant registration ref. Removed the KeyboardProvider forwarding component."
+        },
+        {
+          "id": "D090-C02",
+          "disposition": "retained",
+          "decision": "Keep native edit fallbacks separate from context-menu selection capture, native menu accelerators distinct from ordinary shortcut suppression, capture-phase Tab handling and nested Escape propagation, provider state versus immediate surface registry, structural shortcut signatures and callback refs. Panel-window transfer receive/commit/failure and close preflight each have distinct authorization and publication responsibilities; retain those explicit handlers."
+        }
+      ],
+      "contracts": [
+        "Registration order, ref update before subscription, handler availability, partial modifier matching, typing/native editor exclusions, modal blocking, focus restoration, late transfer failure cleanup and panel publication remain covered by existing workflow tests."
+      ],
+      "checks": [
+        "Combined shell/panel/shortcut/modal/command suite passed 770 tests /72 files; typecheck passed and 183 changed/new TS functions <=12: /tmp/luxury-yacht-d091-shell-green.log, /tmp/luxury-yacht-d091-typecheck.log, /tmp/luxury-yacht-d091-complexity.log. Later cosmetic/style/catch cleanup awaits final coverage and prerelease gate."
+      ]
+    },
+    {
+      "id": "D091-modal-presence-and-settings-shell",
+      "files": [
+        {
+          "path": "frontend/src/shared/components/modals/useModalPresence.ts",
+          "sha256": "83871039dac3ec2ffa9872b17cdb1953a526c3bf79d92dcd80a0b4609b7e59e8"
+        },
+        {
+          "path": "frontend/src/ui/modals/AboutModal.tsx",
+          "sha256": "ad7ab603ec56bd42a1bed1f5ed2e25868739bf9e7842f60080fa82bebda8e1d3"
+        },
+        {
+          "path": "frontend/src/ui/modals/ObjPanelLogsSettingsModal.css",
+          "sha256": "9e32bdb60611c4b93a415ccdadbce1a76c270bcecb250bfae91e8efd89ff7d44"
+        },
+        {
+          "path": "frontend/src/ui/modals/ObjPanelLogsSettingsModal.tsx",
+          "sha256": "5cd0ce33c86294f85a41b8d0dbedfe7ccc60902154a4eda1543d964171fdb994"
+        },
+        {
+          "path": "frontend/src/ui/modals/ObjectDiffModal.tsx",
+          "sha256": "c2b2b35026d3ac531350163752e98771543b3d9ca3ce4f1469626e798f37d43f"
+        },
+        {
+          "path": "frontend/src/ui/modals/SettingsModal.css",
+          "sha256": "870d535609460159856c97cfd93ef875b685136c760aad71f29d5fd797beb2b3"
+        },
+        {
+          "path": "frontend/src/ui/modals/SettingsModal.tsx",
+          "sha256": "790b39e89515754abbdd80e7573cea6b0999a4d4c489bb617b010b60823ffe24"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/components/ShortcutHelpModal.css",
+          "sha256": "d4da11aa2e176c468549eb324f0b85c6203f4f6eabbf37060752b73bfc5ad5d5"
+        },
+        {
+          "path": "frontend/src/ui/shortcuts/components/ShortcutHelpModal.tsx",
+          "sha256": "16e6fc29f5821cbb43e20f0b766f3acf5d62f1f6149b99c6710394b2117113da"
+        }
+      ],
+      "inspection": "Read remaining modal settings shells and styles; traced the identical animation lifecycle through About, ObjectDiff and shortcut help. Inspected focus stack and shared surface, app-info read, persisted section restoration and all animation tests.",
+      "candidates": [
+        {
+          "id": "D091-C01",
+          "disposition": "implemented",
+          "decision": "Five modals share one useModalPresence lifetime, preserving exit delay, retained focus trap and reopen cancellation. Settings section initialization remains with the settings workflow. Corrected the settings aria-labelledby reference to the actual generated title id after the new accessibility regression failed."
+        },
+        {
+          "id": "D091-C02",
+          "disposition": "implemented",
+          "decision": "Removed shortcut-key styling after repository search showed only its obsolete CSS declaration; the renderer uses shared keycap markup."
+        },
+        {
+          "id": "D091-C03",
+          "disposition": "retained",
+          "decision": "Keep separate focused and active settings sections for roving keyboard navigation and persisted tab selection. Keep scroll-lock timing and app-info silent fallback separate from presence; their open/close lifetime differs from the retained exit surface."
+        }
+      ],
+      "contracts": [
+        "Settings accessible-name regression failed: /tmp/luxury-yacht-d091-label-red.log. All modal focus/keyboard/close-animation checks pass within the combined 770-test run. New hook has no dependency on consumers."
+      ],
+      "checks": [
+        "Combined shell/panel/shortcut/modal/command suite passed 770 tests /72 files; typecheck passed and 183 changed/new TS functions <=12: /tmp/luxury-yacht-d091-shell-green.log, /tmp/luxury-yacht-d091-typecheck.log, /tmp/luxury-yacht-d091-complexity.log. Later cosmetic/style/catch cleanup awaits final coverage and prerelease gate."
+      ]
+    },
+    {
+      "id": "D092-shared-styles-and-theme-cascade",
+      "files": [
+        {
+          "path": "frontend/src/shared/components/KubeconfigSelector.css",
+          "sha256": "c2b33e77b8f38f36b339b2bfdde7bb0cb9931d86c80e420d3e24641ec49b5959"
+        },
+        {
+          "path": "frontend/src/ui/layout/AppHeader.css",
+          "sha256": "694dc9958e7cb87a317a3be8142ed799888e9c5ba327ee6ed2eda19abd584692"
+        },
+        {
+          "path": "frontend/src/ui/layout/AppMenuBar.css",
+          "sha256": "de61be37eac70656ef99a8b51a6ce2d5ec2c94456489c81e32b31f420658cde8"
+        },
+        {
+          "path": "frontend/src/ui/layout/ClusterTabs.css",
+          "sha256": "3c1a36fd2c5f1be3cb827ca22ebe38c431a604333902ef654f601ca30efd11a9"
+        },
+        {
+          "path": "frontend/src/ui/layout/DebugOverlay.css",
+          "sha256": "e8475efee9b3f3aa0651c6257e08cf5bf5060ab9ed51c6d9d54f507bbae55751"
+        },
+        {
+          "path": "frontend/src/ui/layout/Sidebar.css",
+          "sha256": "2192977af51d89ad395db9b6cc9caf2542503429139936011803c3fea7fb1ac5"
+        },
+        {
+          "path": "frontend/styles/appearance-modes/dark.css",
+          "sha256": "31f1a385668bc92be6473e14746293325a1da9accd89ce7be46bda5e6b765033"
+        },
+        {
+          "path": "frontend/styles/appearance-modes/light.css",
+          "sha256": "188a9af16390d11fa33ede52c31a4d88eb21ef3e662e94208582d86565f30cca"
+        },
+        {
+          "path": "frontend/styles/base/globals.css",
+          "sha256": "e37f55e5521f851bc8ed5a6500b5b0d826970e7857c64f39efe8e318e2ad6310"
+        },
+        {
+          "path": "frontend/styles/base/layout.css",
+          "sha256": "4203173c70e44bd102f52483588228286888e9e5dae931f1a9c509485f883d44"
+        },
+        {
+          "path": "frontend/styles/base/reset.css",
+          "sha256": "944a83296cf77e6611a54e1b20841e0e8f67446ee382b2c3bd0de58a90dad56a"
+        },
+        {
+          "path": "frontend/styles/base/scrollbars.css",
+          "sha256": "a33bf751ac211d169575faebe3fda5051692dc9713cf3c09ed57f870562df92c"
+        },
+        {
+          "path": "frontend/styles/components/active-filter-chips.css",
+          "sha256": "74933e806d058954c9ae461ab06b8a0afa048f55fb50edd6e8f6a67699970eff"
+        },
+        {
+          "path": "frontend/styles/components/badges.css",
+          "sha256": "3c41eb3522fdf3cfa0077f958d85ef8ac1a1627858bceb09ce03ea6880e50c2a"
+        },
+        {
+          "path": "frontend/styles/components/buttons.css",
+          "sha256": "cba7ac1f7a21ee941de158e128274bbefe1416ebc6020edb317393b2707e2dc2"
+        },
+        {
+          "path": "frontend/styles/components/dropdowns.css",
+          "sha256": "de3239ef8752e36486f7f38330eee35d81cbd30ad4b34c995f8d2451ae8f0999"
+        },
+        {
+          "path": "frontend/styles/components/gridtables.css",
+          "sha256": "c65582f11b8660c408dd84c31c0075098e115859a6f7ef8de83ee6dddfbd34b9"
+        },
+        {
+          "path": "frontend/styles/components/icon-bar.css",
+          "sha256": "0c3e784241dab14dbc737ed3d5a14126c331c767d2fa960e8434139ad31850f8"
+        },
+        {
+          "path": "frontend/styles/components/inputs.css",
+          "sha256": "740c73bf08c8406558df4f931875a79a983bf0ca4f025b150f21f1cc505f2476"
+        },
+        {
+          "path": "frontend/styles/components/metricsBanner.css",
+          "sha256": "6c7fa359bf0be25095bf3326d040426f3e745bce3e166e6eb8c044222436aed6"
+        },
+        {
+          "path": "frontend/styles/components/modals.css",
+          "sha256": "f5771428bae84c050993fea6466b5b8cc22df4ec9c8b5f1b8e76fada5e200100"
+        },
+        {
+          "path": "frontend/styles/components/tabs.css",
+          "sha256": "80b8dba041823687d7b7df930eb63882d90cf36daccc3b75341c21935f6a9a3a"
+        },
+        {
+          "path": "frontend/styles/components/tooltips.css",
+          "sha256": "08fb12c9917af87374ff2a6f71fc6cac9df80c9ded4e0dccf6e28d2e261e02de"
+        },
+        {
+          "path": "frontend/styles/index.css",
+          "sha256": "004d2a1baf16707106a96eeb32a587fb30e975de166575841aedfa555aa15eba"
+        },
+        {
+          "path": "frontend/styles/overrides/codemirror.css",
+          "sha256": "c61aa238ec39f321f83e5116fb1ceb65d41ede43c0a7c0d1d942879576a99aaf"
+        },
+        {
+          "path": "frontend/styles/overrides/legacy-modals.css",
+          "sha256": "ae7905ee98c0e788213ffbe5d080f2011e6aaf3fd367e88f6522c3b68e750a4f"
+        },
+        {
+          "path": "frontend/styles/tokens/colors.css",
+          "sha256": "a2ad516d15af25568ae510a35102940d4d7c509ed32ece73569e65a753d6d8d8"
+        },
+        {
+          "path": "frontend/styles/tokens/elevation.css",
+          "sha256": "87a2aa09d9ece5a1b7c52f2929f63e4762ff17f3a02265b6a4edf8fcc33080cc"
+        },
+        {
+          "path": "frontend/styles/tokens/scrollbars.css",
+          "sha256": "b8c342d9c84b07d56220156512d074d3634403255a416c5ef21e88b688e7fd81"
+        },
+        {
+          "path": "frontend/styles/tokens/spacing.css",
+          "sha256": "d6792f8c589aee2d474cbf979aa700e8fec74ebcd26f841070887a0c4143470d"
+        },
+        {
+          "path": "frontend/styles/tokens/typography.css",
+          "sha256": "2994d2c42424d47a59ba887fca5fca4ceeb6fc3969928e2066d691f7300bce91"
+        },
+        {
+          "path": "frontend/styles/utilities/display.css",
+          "sha256": "94cf28d2b8013b99a1cb2bb4fe8b72ca15f9bcd6ed8cff9c7dcb2b7d25b6b033"
+        },
+        {
+          "path": "frontend/styles/utilities/focus.css",
+          "sha256": "5191e282d5b98514e168594ca001f4f5081339d255968781eba04f8e860a657b"
+        },
+        {
+          "path": "frontend/styles/utilities/motion.css",
+          "sha256": "3200016ec397b7ac55399f9dd31d51512c86845bd64c4f358c8cb874b203b8c1"
+        }
+      ],
+      "inspection": "Read all remaining global styles, light/dark palettes, tokens, resets/layout/import ordering, widgets, tabs, GridTable, native scrollbar overlays and component shell styles. Traced candidate selector/keyframe names across the repository; inspected the kind color class producer and canvas computed-style consumer.",
+      "candidates": [
+        {
+          "id": "D092-C01",
+          "disposition": "implemented",
+          "decision": "Badge slot rules select one palette variable and share one equal-specificity paint formula across all 24 admitted classes. Three table boundary indicators share geometry and paint while the interactive resize handle retains its transition."
+        },
+        {
+          "id": "D092-C02",
+          "disposition": "implemented",
+          "decision": "Removed unreferenced motion utilities and keyframes, the duplicate dropdownSlide keyframe, CSS-only data-tooltip implementation, unused captain-k8s selector and palette description rule. React Tooltip, loading animations, sidebar motion, reduced-motion handling and actual welcome/overview image classes remain."
+        },
+        {
+          "id": "D092-C03",
+          "disposition": "retained",
+          "decision": "Preserve explicit light/dark theme token APIs and values, dynamic hash/status class families, native scrollbar geometry and prefixed browser rules, focus-selector specificity, reduced-motion/forced-colors rules, modal zoom bounds, lazy style import ordering and legacy responsive settings rules that still have consumers. Similar declarations with different specificity or timing are not merged speculatively."
+        }
+      ],
+      "contracts": [
+        "Consumer traces: /tmp/luxury-yacht-d092-style-consumers.log, /tmp/luxury-yacht-d092-animation-consumers.log and /tmp/luxury-yacht-d092-repository-consumers.log. Biome accepts final CSS and touched TS: /tmp/luxury-yacht-d092-format.log. Browser computed-style parity, coverage and final gate remain open."
+      ],
+      "checks": []
+    },
+    {
+      "id": "D093-final-lint-and-coverage-output",
+      "files": [
+        {
+          "path": "frontend/biome.jsonc",
+          "sha256": "7f39fee4b41eeb540922b7166a5a48e91490a9a64e1182bf8cc5aed3b65a3068"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useRefreshWatcher.ts",
+          "sha256": "211050cb8eddb4890cfd4dcd5eff426c38631b25167032a361c63179f066c825"
+        },
+        {
+          "path": "frontend/src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
+          "sha256": "0e862b4b8c143777f62483b183704e86a5c811e37e476bdda8b2d7e38d3b4f59"
+        }
+      ],
+      "inspection": "Inspected the failed gate diagnostics, all affected brace/import/assertion diffs, and the generated coverage directory classification. Traced Dropdown trigger ARIA modes and refresh subscription acquisition/cleanup.",
+      "candidates": [
+        {
+          "id": "D093-C01",
+          "disposition": "implemented",
+          "decision": "Exclude generated coverage output explicitly from Biome alongside dist/bindings; restore required block statements, void callback bodies and typed requireValue assertions without weakening assertions. Pair conditional combobox role and active descendant in one props value so Biome recognizes their dependency."
+        },
+        {
+          "id": "D093-C02",
+          "disposition": "implemented",
+          "decision": "Represent the not-yet-acquired refresh subscription with undefined instead of an empty function; optional cleanup retains unsubscribe-before-replacement and teardown ordering."
+        }
+      ],
+      "consumers": [
+        "Biome input includes -> frontend source and generated report; refresh manager registration -> useRefreshWatcher consumers; DropdownTrigger -> custom listbox/dialog/search modes and keyboard tests."
+      ],
+      "contracts": [
+        "Coverage HTML is generated validation output, not authored source. ARIA attributes retain their existing mode-dependent values. All existing operational assertions remain."
+      ],
+      "checks": [
+        "D092 gate failed on 3188 generated-report diagnostics; D093 diagnostics/fixes recorded in /tmp/luxury-yacht-d093-diagnostics.log and -braces.log. D093 final gate passed 5041 frontend tests, then found unused exports: /tmp/luxury-yacht-d093-prerelease-final.log. D094 gate passed after export cleanup."
+      ]
+    },
+    {
+      "id": "D094-export-ownership-and-scrollbar-hover",
+      "files": [
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts",
+          "sha256": "890bac195622413b9c8d17aa1e4a3814fca5bed822819b12b3f06c1778a37d25"
+        },
+        {
+          "path": "frontend/src/core/resource-metrics/valueAdapters.ts",
+          "sha256": "f23d0fdb4996603edefb7dfd0b0a06adec69311a12b3afe3a958c97d530bde04"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/NsViewPods.tsx",
+          "sha256": "39c0fba4dfd2c65d9488d2c56e86745324f60594cfc86dc856eacfee02f3cea0"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapNavigation.ts",
+          "sha256": "85fe17c2dd6d6b198931221effb68aa8f735b36d0e3be3b0606b486364e29d2b"
+        },
+        {
+          "path": "frontend/src/modules/object-panel/components/ObjectPanel/Pods/PodsTab.tsx",
+          "sha256": "1a95b8d703308702189f75b7d0ecf2e6da03e40f0175bb55d3227f2ccc691a67"
+        },
+        {
+          "path": "frontend/src/shared/scrollbars/scrollbarActivity.ts",
+          "sha256": "adbeeb3287b3c7433c596b034ae7e5dcc3b1ef205934539fa846724681dbbb25"
+        },
+        {
+          "path": "frontend/src/shared/scrollbars/tokens.ts",
+          "sha256": "db1e615f6762474dca503e2cf2194f6755126b0af9f47a938a7616d3356555a6"
+        },
+        {
+          "path": "frontend/src/shared/scrollbars/useVirtualScrollbar.tsx",
+          "sha256": "eb8ab8bcd3744f1bffd59cf3d8b018e68f25600218488629df031f7775f2bf0e"
+        },
+        {
+          "path": "frontend/src/ui/dockable/useDockablePanelState.ts",
+          "sha256": "1f156017efd596744d2959303fcf477d7d151f07184c602722756d492fa25d93"
+        }
+      ],
+      "inspection": "Read Knip findings and traced all identifier imports before removing wrapper exports and duplicate metric/token names. Compared scrollbar corner selection and ordered candidate cleanup before and after the geometry extraction.",
+      "candidates": [
+        {
+          "id": "D094-C01",
+          "disposition": "implemented",
+          "decision": "Remove unconsumed diagnostics re-export, private map-reference builder export and global panel-position/open wrappers. Keep original domain registry export and store methods where callers remain. Pod tables directly use shared workload metric adapters; scrollbar consumers directly use readScrollbarNumberToken instead of aliases."
+        },
+        {
+          "id": "D094-C02",
+          "disposition": "implemented",
+          "decision": "Separate one-element hover geometry from candidate ownership/publication. Preserve active-drag suppression, vertical corner ties, first eligible candidate selection and clear-other ordering."
+        }
+      ],
+      "consumers": [
+        "Namespace/panel Pod rows -> workload metric adapters; overlay and virtual scrollbars -> number-token reader; scrollbar event listeners -> resolveOverlayHover -> existing set/clear owners."
+      ],
+      "contracts": [
+        "No metric units, object identity, group ownership, pointer bounds, scroll timing or sort policy changes. Existing tests retain their assertions while importing canonical adapters."
+      ],
+      "checks": [
+        "247 tests /16 files passed: /tmp/luxury-yacht-d094-green.log. Knip, typecheck and Biome passed: -knip.log, -typecheck.log, -check.log. Full prerelease passed: /tmp/luxury-yacht-d094-prerelease.log. Full frontend coverage passed 5041 tests /523 files, 89.59% statements: /tmp/luxury-yacht-d094-frontend-coverage.log."
+      ]
+    },
+    {
+      "id": "D095-generator-inventory-correction",
+      "files": [
+        {
+          "path": "backend/internal/genobjectactions/render.go",
+          "sha256": "df87e8ff7629dfcc257747d29648a2a1061c0ff685688c04a4a75b052adf8e2c"
+        },
+        {
+          "path": "backend/internal/genrefreshcontracts/policy_render.go",
+          "sha256": "4302fa64fbfbe837a5ecf9b7bc71857816aa0d1760db78ad7c5e99657b0c2353"
+        },
+        {
+          "path": "backend/internal/genrefreshcontracts/render.go",
+          "sha256": "2e92ee202ede587efbde6d67e3e39b05a2bd4e973aa82411b6a9e237f67e7a11"
+        }
+      ],
+      "inspection": "Read all 1412 lines of these three authored generators, backend generation directives, action catalog tests, generated contract/Go policy tests and optionality/nullability/enum tests. Original classification matched Code generated inside template strings; corrected classification requires an actual header comment. These files existed at the baseline and are now explicitly included, increasing the baseline inventory from1845 to1848.",
+      "candidates": [
+        {
+          "id": "D095-C01",
+          "disposition": "retained",
+          "decision": "Keep explicit action permission/capability projections: JSON omission, nil-versus-empty payload fields and backend-owned identity are wire contracts, not interchangeable mapping boilerplate."
+        },
+        {
+          "id": "D095-C02",
+          "disposition": "retained",
+          "decision": "Keep Go policy and TypeScript policy renderers separate: they emit different syntax and nullability/immutability APIs. Shared input validation already belongs to loadContractDomains."
+        },
+        {
+          "id": "D095-C03",
+          "disposition": "retained",
+          "decision": "Keep definition discovery, TypeScript field rendering and runtime validation-schema construction distinct. The reflection passes share jsonField/indirect/type helpers, while inherited optionality, nullable outer pointers, canonical ref overrides and unsupported-type error context differ. A generic renderer would obscure these contracts."
+        }
+      ],
+      "consumers": [
+        "backend/generate.go -> generator cmd entrypoints -> Render/RenderGoPolicy -> frontend shared actions, refresh DTO consumers and backend refresh/domain policy APIs."
+      ],
+      "contracts": [
+        "Contract registry -> generators -> generated action catalog, refresh types/assertions and backend policy table. Deterministic name ordering, source-clock cloning, payload type validation and complete canonical object identity retained. No generation output edited."
+      ],
+      "checks": [
+        "Both generator package suites passed in /tmp/luxury-yacht-d095-backend-green.log. Final bindings/contract gate passed in /tmp/luxury-yacht-d096-prerelease.log. Fresh current-worktree inventory: /tmp/luxury-yacht-final-inventory.json, 1859 authored implementation files, 107 generated files, 1144 validation files."
+      ]
+    },
+    {
+      "id": "D095-sonar-follow-up",
+      "files": [
+        {
+          "path": "backend/refresh/snapshot/namespace_workloads.go",
+          "sha256": "f03180b160d143f7089b1f97d89d2dfe5b96d7ba36eaf06f41f1d0bd56e79b3e"
+        },
+        {
+          "path": "backend/refresh/snapshot/workload_ingest_source.go",
+          "sha256": "d9275bb36e359ab5795b706c4c69508acb03b20f69caecf1ae529d2c35d74811"
+        },
+        {
+          "path": "backend/refresh_object_catalog.go",
+          "sha256": "ae875b10dc4c3d41639ed8a829f9a7fc716434db24661c648d8ea481d3347794"
+        },
+        {
+          "path": "backend/resources/common/context.go",
+          "sha256": "78e5431e5800b39e24c0e4a883a8e467780e3114a59e849a69cf42be6a5d82ea"
+        },
+        {
+          "path": "backend/resources/pods/streamsummary.go",
+          "sha256": "8a3584b0bca4ff1c3dc307740f088bbdb43847c330a9280d3d874e10883876c9"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useBackgroundRefresh.ts",
+          "sha256": "4509e2c2b5ba4b7bace7cb65affaeb7b077f89e4d8cc93f3716fa3d590f892b9"
+        },
+        {
+          "path": "frontend/src/core/settings/appPreferences.ts",
+          "sha256": "369301b5d483439c79f42abb9e74dd0d89818a642a64ff4a94178689f1bf259f"
+        },
+        {
+          "path": "frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx",
+          "sha256": "81b739936e3ad3e2b00c9cbe937dc3910b444c31b2d7f6aa5a706d079a3c1318"
+        },
+        {
+          "path": "frontend/src/modules/port-forward/PortForwardModal.tsx",
+          "sha256": "1228ddad706bb9865f3d3a24d75e2d4efd253ade430a961ac4c564b191bd72ae"
+        },
+        {
+          "path": "frontend/src/shared/hooks/useAppInfo.ts",
+          "sha256": "a6849d94c372be2c251c375be806b44f61825007672ebbaf97be2583fb477bed"
+        },
+        {
+          "path": "frontend/src/ui/favorites/FavSaveModal.tsx",
+          "sha256": "28825748512ec5364de611a3a67a3c035f5c74a5315bc4d84974d5954e2a3ee2"
+        }
+      ],
+      "inspection": "Read all eleven open/confirmed new-code findings for PR355, whose head is23263799. Inspected each producer/caller before local remediation; analysis does not include the uncommitted worktree.",
+      "candidates": [
+        {
+          "id": "D095-C01",
+          "disposition": "implemented",
+          "decision": "Address ten mechanical findings: single-method interface names, readonly props, a nested no-op cancellation explanation, one apps API version constant, nullish promise initialization, explicit existing UTF-16 comparator, conventional state/setter names and direct re-export."
+        },
+        {
+          "id": "D095-C02",
+          "disposition": "retained",
+          "decision": "S6819 on the custom dropdown remains a remote finding requiring disposition after analysis. Retain the established custom select-only combobox, rendered labels, multi-selection, search and option-action modes; converting it to native select changes behavior and appearance. No rule suppression, threshold change or remote issue mutation. Dropdown.test.tsx:529 and:877 assert keyboard selection and active-descendant contracts; dialog option actions have separate tests."
+        }
+      ],
+      "consumers": [
+        "Cache sync waiter -> factory startup; resource version interface -> namespace workload builder; timeout helper -> resource lookup callers; Pod controller ancestry -> stream rows; app-info hook -> About/UpdateStatus; preferences -> hydration subscribers; log names -> source selector; readonly footer/modal -> existing form consumers."
+      ],
+      "contracts": [
+        "Promise object/null admission unchanged; deadline cancellation remains caller-owned; owner GVK checks preserve apps/v1; sorting keeps UTF-16 code-unit order rather than adopting locale-sensitive order; hook return API and update revision guards remain."
+      ],
+      "checks": [
+        "270 frontend tests /13 files and six Go packages passed: /tmp/luxury-yacht-d095-frontend-green.log, -backend-green.log. Typecheck and Biome passed: -typecheck.log, -format.log. 275 changed/new TS functions have no local finding above12: -complexity.log. Seven changed Go functions score1\u20139: -go-complexity.json. Earlier 144-function Go audit remains evidence for committed changes. Remote all-rule audit: /tmp/luxury-yacht-d094-sonar-pr355.log; eleven findings on23263799, not a closure claim for this worktree."
+      ]
+    },
+    {
+      "id": "D096-final-source-reconciliation",
+      "files": [
+        {
+          "path": "backend/portforward_lifecycle.go",
+          "sha256": "06f4f6d9614d8e49fade4c70b58c978142cd4e365fd1646e3b3e0c27ec002890"
+        },
+        {
+          "path": "backend/refresh/eventstream/manager.go",
+          "sha256": "871b9082c52b85a3d0008b7edbd4c801b1011e7f147e4990c1aad0ef39462425"
+        },
+        {
+          "path": "backend/refresh/eventstream/types.go",
+          "sha256": "0a58580345d646bbdd771ac8d0b23dfba727759484d56a4eb8f1ee8482a8e9da"
+        },
+        {
+          "path": "backend/refresh/snapshot/cluster_attention.go",
+          "sha256": "87255869e4dd9410c1a3197046ca5d5b9694ef32f27de9bd388a15ed0b9ccb3e"
+        },
+        {
+          "path": "backend/refresh/snapshot/querypage_typed.go",
+          "sha256": "de653cc28d07a0ad1f063a5059b85c4fbf52984e578c599172b9a8c8b180a25c"
+        },
+        {
+          "path": "backend/refresh_aggregate_metrics.go",
+          "sha256": "ef768783751b46e835ab484a08dc8c6def520419c1278f95caaee9f7d5ef1c01"
+        },
+        {
+          "path": "backend/refresh_aggregate_snapshot.go",
+          "sha256": "e8b2d12080d1d4858f8429dccb1eabddd439d43ab22a57fb3d02b3c942ddeb88"
+        },
+        {
+          "path": "backend/refresh_setup.go",
+          "sha256": "2c893903857f82d998180408573450e27e7c9302ec83a53f9e59e007932d89c8"
+        },
+        {
+          "path": "frontend/src/core/connection/connectivityPresentation.ts",
+          "sha256": "e81e6d77d6bea2d451b1bcd10614ab8a58388fdfe68663b8be13ad47e6a8e7b7"
+        },
+        {
+          "path": "frontend/src/core/contexts/FavoritesContext.tsx",
+          "sha256": "9cce883146a5885470e5b47bb586387e39ade565407aa7a24676d790390eb1e0"
+        },
+        {
+          "path": "frontend/src/core/logging/appLogsClient.ts",
+          "sha256": "f0c238aa852718d7b16cea9764dc8932a5d6ddc24bb72d66c1d2a6b387b0125a"
+        },
+        {
+          "path": "frontend/src/core/navigation/favoriteRoute.ts",
+          "sha256": "721c546b770cb96429bafae2e04f8ee695dca0edcb1f0268b31362227a413fb2"
+        },
+        {
+          "path": "frontend/src/core/persistence/favorites.ts",
+          "sha256": "9f2ff375f78b975ae5fe2b82460b05d716e953ea4e999b30b0315af807392d5c"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/TableCapabilitesChecks.tsx",
+          "sha256": "27bb51373954adc1cddbd8c1251bb3bc55dc42c382f06c208d4cc53218259952"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/TableEffectivePermissions.tsx",
+          "sha256": "ca12d7e3eec61907c116afb0a9429883ef30f30066eb57fe0dbb324e7260b122"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/useDiagnosticsPolling.ts",
+          "sha256": "844cd06b3767c08aaba8752563274941c47d080f6bc4cbbc77b16391e0e3a01d"
+        },
+        {
+          "path": "frontend/src/core/refresh/components/diagnostics/useDiagnosticsTableControls.ts",
+          "sha256": "05ee408bdfc04c9ee2dc831a1ba9d38cf80b02671644f413d1bd78567c308173"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useBackgroundClusterRefresh.ts",
+          "sha256": "e7403e807c78172f4d47cb11b10929f5336a33bcd67d29135085274307b3e1ea"
+        },
+        {
+          "path": "frontend/src/core/refresh/hooks/useRefreshPreferences.ts",
+          "sha256": "8ff102e9d75f19b4cd31ee363608307f86af5efb1d8a3ac13192e9441d1b05ab"
+        },
+        {
+          "path": "frontend/src/core/refresh/streaming/containerLogsStreamManager.ts",
+          "sha256": "7e759eee23505458529cb321115e64c86bd2d06e09814f59e68e5874e116bf79"
+        },
+        {
+          "path": "frontend/src/core/resource-metrics/scope.ts",
+          "sha256": "b831e9b67d3992d18487cfde05be0dbf270cc6977702075172ed2b30d9771a69"
+        },
+        {
+          "path": "frontend/src/core/resource-metrics/selectors.ts",
+          "sha256": "ff4ec6021ddb1e3ec838aaf6f2db04de30e447c411e8dddccf4fd3fc39ae182a"
+        },
+        {
+          "path": "frontend/src/core/resource-metrics/useResourceMetrics.ts",
+          "sha256": "96a01e8ae3e2975de268e1308f30f0dc6b26ab9b5c4adeba99d5bab1bc7194b1"
+        },
+        {
+          "path": "frontend/src/modules/browse/components/BrowseView.tsx",
+          "sha256": "9516efd378ceb12f8c9276c8b6f3453e540c02701c713d24f667e728d9fba263"
+        },
+        {
+          "path": "frontend/src/modules/browse/utils/browseUtils.ts",
+          "sha256": "73326129f03095157a8fede61250ec8bb197c2e7682266528a79a6785372e4c1"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterViewConfig.tsx",
+          "sha256": "238ff106434252c7aac3d77e3c671b5e2370159722875e929aa52154288d26a3"
+        },
+        {
+          "path": "frontend/src/modules/cluster/components/ClusterViewRBAC.tsx",
+          "sha256": "d554c99c89d497916a122a6813f8a91340f92e3385b6ff658d1da171169a1638"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/AllNamespacesView.tsx",
+          "sha256": "8a02ae61c77d769b02c54aa352081ed45de7989593158e6ff13b2aec76a83f30"
+        },
+        {
+          "path": "frontend/src/modules/namespace/components/useWorkloadTableColumns.tsx",
+          "sha256": "5a9f73e2c54d60fbf1c9cd351ef41b344f8c76aa37afce13fede511599d7ce08"
+        },
+        {
+          "path": "frontend/src/modules/namespace/contexts/NamespaceContext.tsx",
+          "sha256": "d6c4c0113c65f909673dff28dce1c8469b88af9649fa2d23931859ac70e1692d"
+        },
+        {
+          "path": "frontend/src/modules/object-map/ObjectMapG6Renderer.tsx",
+          "sha256": "298c871cb4ba52b926e5271465265e5fc2ae7db2bcf581d0c391733e8a7abf5a"
+        },
+        {
+          "path": "frontend/src/modules/object-map/objectMapG6ApplyQueue.ts",
+          "sha256": "c8faf105fd820d663dd6ad546bed9aee60ea111e57029c02df6ffd261c2c49b5"
+        },
+        {
+          "path": "frontend/src/modules/object-map/useObjectMapModel.ts",
+          "sha256": "0ecaafb17631c1269cb34c23e30eff77a9359a01f2f9712fd5bd9bb489073a0f"
+        },
+        {
+          "path": "frontend/src/shared/components/dropdowns/Dropdown/hooks/useAriaAnnouncements.ts",
+          "sha256": "2e586e04d800037b2dfa1e519c4cf3bb4f40d5250f9f86556d73a7c047416c6d"
+        },
+        {
+          "path": "frontend/src/shared/components/modals/RollbackModal.tsx",
+          "sha256": "f10535e7ff5345469ec576cfa9f82e8b852b08b56c6593a64166f6f80d6f0e65"
+        },
+        {
+          "path": "frontend/src/shared/components/tabs/Tabs.tsx",
+          "sha256": "f6916fa18a0179ed61831de9c504aab9f8432ac91f82e7ce187f567a5513c176"
+        },
+        {
+          "path": "frontend/src/shared/components/tabs/dragCoordinator/useTabDropTarget.ts",
+          "sha256": "68611e3cd4a62d0ef7f8232dfe68c3d30b3ab4ce6407b203fbbed072679c6454"
+        },
+        {
+          "path": "frontend/src/ui/favorites/FavMenuDropdown.tsx",
+          "sha256": "ec24a7b9b3e85c1af51b6803c07e6e02088a29d3fcae8890fe2af84fd2265a8b"
+        },
+        {
+          "path": "frontend/src/ui/favorites/FavToggle.tsx",
+          "sha256": "a42cbf62a4b1f45fc7dae3ce048eea99d0effbaf5fca0725e04887a92c1dae7e"
+        },
+        {
+          "path": "frontend/src/ui/favorites/navigateToFavorite.ts",
+          "sha256": "f602c7833d5e78f9f027eb56784fedb7e27ebf6f36e5fe64c7bfe01c1843e0a1"
+        },
+        {
+          "path": "frontend/src/ui/modals/useObjectDiffYaml.ts",
+          "sha256": "0cb016827e577391fd0dcd529a0b350c5868b3cbcdcf4b02077fa7ab7556db1c"
+        },
+        {
+          "path": "frontend/src/ui/settings/sections/DisplaySection.tsx",
+          "sha256": "c7032d0459e15ddd421e9564bbced0601c5aeae2e7bf0879cc2a51fd1b02e4ec"
+        },
+        {
+          "path": "frontend/src/ui/settings/sections/SettingsControls.tsx",
+          "sha256": "ed4038282a4158f5d6cdd036fac7d28508efe3fb53abd70269f5e78c43022f02"
+        },
+        {
+          "path": "frontend/src/ui/status/UpdateStatus.tsx",
+          "sha256": "d03b873ff8ac5ada2b94ef6065e85eb6a8f75e2ce7c39a9321c7703d8b114678"
+        }
+      ],
+      "inspection": "Reconciled the remaining old source hashes by inspecting the actual source or diff, not by rewriting historical hashes. Read nine backend diffs in full (729lines), eight core/frontend diffs in full (616lines plus connectivity/appLogs), and reread ten complete preference/favorite/settings/status sources. Inspected subsequent D093 brace/import changes. Appended current hashes here, retaining the historical records.",
+      "candidates": [
+        {
+          "id": "D096-C01",
+          "disposition": "retained",
+          "decision": "Preserve the reviewed D053\u2013D071 identity, favorite readiness, preference write/hydration order, scoped metrics, log connection settlement, permission filtering and publication/teardown policies. Final formatting and wrapper changes introduce no new lifecycle owner."
+        }
+      ],
+      "consumers": [
+        "Retains all prior producer/consumer traces; this record closes stale-source evidence, not a second implementation change."
+      ],
+      "contracts": [
+        "Comparison evidence: /tmp/luxury-yacht-final-backend-reconciliation.diff, /tmp/luxury-yacht-final-frontend-reconciliation.diff, /tmp/luxury-yacht-final-core-reconciliation.diff. Favorites/context/persistence/routes,1757-line preferences,settings controls/display,UpdateStatus,FavMenuDropdown,FavToggle,navigateToFavorite fully reread when previous hashes could not be matched to a commit."
+      ],
+      "checks": [
+        "/tmp/luxury-yacht-d096-prerelease.log passed exit0. Post-gate source changes:none. /tmp/luxury-yacht-d096-final-audit.json:1848 baseline files,1859 current files,zero pending/omitted/stale paths. git diff --check passed."
+      ]
     }
   ],
-  "reviewedAt": "2026-09-19T03:27:50.025159+00:00",
+  "reviewedAt": "2026-09-19T04:51:46.284593+00:00",
   "progress": {
-    "fullyInspectedFiles": 1713,
-    "pendingFiles": 132,
-    "overallStatus": "in-progress",
-    "pendingCandidates": [
-      "Remaining frontend implementation inventory requires full inspection.",
-      "D081 unused tab-change forwarding: remove with AppLayout caller during shell review.",
-      "Affected coverage, native checks, final diff review and latest prerelease gate remain open."
-    ],
+    "fullyInspectedFiles": 1848,
+    "pendingFiles": 0,
+    "overallStatus": "local-work-and-validation-complete; remote-sonar-pending",
+    "pendingCandidates": [],
     "note": "Passing tests validate changed paths; they do not count as review of uninspected source. Higher unchanged local complexity findings are retained evidence, not claimed resolved.",
     "additionalNewFilesInspected": [
       "backend/internal/containerlogs/target_identity.go",
@@ -13762,11 +15024,106 @@
       "frontend/src/core/refresh/hooks/useRefreshPreferences.ts",
       "frontend/src/modules/namespace/components/namespaceResourceViews.ts",
       "frontend/src/modules/object-panel/components/ObjectPanel/Logs/logOverlap.ts",
+      "frontend/src/shared/components/modals/useModalPresence.ts",
       "frontend/src/shared/hooks/useAppInfo.ts",
       "frontend/src/shared/hooks/useResourceLinkReference.ts",
       "frontend/src/shared/utils/podTableModel.ts",
+      "frontend/src/ui/command-palette/usePaletteCatalogSearch.ts",
+      "frontend/src/ui/layout/AppDebugOverlays.tsx",
       "frontend/src/ui/modals/useObjectDiffYaml.ts"
+    ],
+    "currentImplementationFiles": 1859,
+    "generatedFiles": 107,
+    "validationFiles": 1144,
+    "pendingVerification": [
+      "Remote Sonar analysis and all-rule audit after an explicitly authorized commit/push; current PR355 head23263799 predates this worktree."
     ]
   },
-  "continuationRevision": "1a73f747"
+  "continuationRevision": "23263799",
+  "completionEvidence": {
+    "revision": "23263799 with uncommitted worktree changes",
+    "status": "local-validation-passed; remote-sonar-pending",
+    "criteria": [
+      {
+        "criterion": "Full authored-source inspection and candidate disposition",
+        "status": "passed",
+        "evidence": "D001\u2013D096:1848 corrected baseline files;1859 current implementation files;16 additions and5 documented removals. /tmp/luxury-yacht-final-inventory.json; zero missing review paths and zero stale current hashes before final gate."
+      },
+      {
+        "criterion": "Meaningful regressions and final focused consumers",
+        "status": "passed",
+        "evidence": "Per-batch red/green records retained. D095:270 frontend tests/13 files and6 Go packages passed. No new behavior tests added for mechanical naming/comment/readonly edits."
+      },
+      {
+        "criterion": "Final coverage",
+        "status": "passed",
+        "evidence": "/tmp/luxury-yacht-d095-frontend-coverage.log:5041 tests/523 files,89.59% statements(36920/41207). /tmp/luxury-yacht-d095-backend-coverage.log and -backend-functions.txt:full task passed,79.6% aggregate;backend81.0%,snapshot83.0%,pods82.1%. Existing package/function gaps remain measured, not hidden; D095 only changes names/constants/comments on Go paths."
+      },
+      {
+        "criterion": "Changed-function local cognitive complexity",
+        "status": "passed",
+        "evidence": "D095:275 changed/new TS functions have no score>12. Seven changed Go functions score1\u20139. D072 earlier committed Go audit:144 functions<=12. Unchanged findings in touched files are listed in local logs; no suppression or threshold change."
+      },
+      {
+        "criterion": "Actual native YAML success, conflict/rebase, failed save and unavailable object",
+        "status": "passed",
+        "evidence": "CUA native Wails + disposable kind fixture:save original\u2192native-saved verified by kubectl; concurrent server retained-field change merged with local-draft and displayed diff; invalid ConfigMap value retained draft/error and Cancel restored live data; deleted fixture produced Object not found without editable stale YAML."
+      },
+      {
+        "criterion": "Native panels, placement, focus, teardown and cluster isolation",
+        "status": "passed",
+        "evidence": "CUA observed actual separate floating window, bottom/right redocking and retained YAML; cluster switch hid/restored cluster-owned panel; close-all removed fixture tabs. Modal Escape/cancel returned focus to opener. Shell/forward sessions stopped and native session counters returned0/0."
+      },
+      {
+        "criterion": "Native tab drag and menu reorder",
+        "status": "passed",
+        "evidence": "User directly confirmed Dragging changes the tab order. Subsequent CUA AX showed review-failure before review-config. Native menu Move Tab Left also changed AppLogs/Diagnostics order. Earlier automated drags produced no observable drop and are not counted as passing."
+      },
+      {
+        "criterion": "Native sidebar resize and modal/favorites controls",
+        "status": "passed",
+        "evidence": "CUA native pointer drag widened sidebar from approximately165px to241px in the screenshot and a reverse drag restored the visual width. Native Nodes loaded; favorite dialog selected cluster identity and Nodes view; Any disabled cluster selector; Cancel restored focus to Save as favorite. Empty favorite menu observed. Navigation-before-restoration and disk persistence are established by D055 real-provider/real-table-hook/backend tests, not this native cancel check."
+      },
+      {
+        "criterion": "Native Attention, Helm Values and object-map navigation",
+        "status": "passed",
+        "evidence": "CUA local fixture:populated Attention\u2192ignore object Error status\u2192Manage\u2192Restore\u2192finding returned; pre-existing global rules retained. Synthetic Helm secret produced populated Overrides/Merged values and deployment/history; Defaults{} was a fixture limitation. Namespace map rendered12objects/8links; Pod context menu opened correct detail identity."
+      },
+      {
+        "criterion": "Native operational workflows and diagnostics",
+        "status": "passed",
+        "evidence": "CUA:live Pod logs\u2192unmatched filter empty\u2192clear restored; settings opened/closed with focus return. Shell connected/printed native-shell-ok/exited. Forward18088\u21928080 served review via curl, then Stop removed session. Diagnostics capability row expanded; filter empty/clear restored. AppLogs1000rows\u2192unmatched filter0\u2192clear restored. About opened with dev updater disabled."
+      },
+      {
+        "criterion": "Style cascade parity",
+        "status": "passed",
+        "evidence": "Standalone Playwright computed-style comparison of HEAD/current CSS:104 cases(light/dark badge classes and boundary pseudo-elements),0 mismatches. Browser evidence is separate from actual native placement/focus/drag observations."
+      },
+      {
+        "criterion": "Validation environment cleanup",
+        "status": "passed",
+        "evidence": "CUA restored only~/.kube search path, fusionauth-sandbox Overview, Settings Object Panel section and zero operation sessions. No favorite saved. Owned development sessions64755 and27034 exited0. /tmp/luxury-yacht-native-d092/cleanup.log confirms kind-codex-simplification node deletion. No user cluster resources changed."
+      },
+      {
+        "criterion": "Final prerelease gate and post-format hash reconciliation",
+        "status": "passed",
+        "evidence": "/tmp/luxury-yacht-d096-prerelease.log exit0:docs,formatting,generated bindings,vet/staticcheck,backend race,frontend lint/typecheck,5041 tests/523 files,Knip and Trivy passed. Post-gate comparison found zero source changes; /tmp/luxury-yacht-d096-final-audit.json has zero pending baseline paths,zero missing current paths and zero stale hashes. git diff --check passed. Final documentation-only checks recorded in /tmp/luxury-yacht-d097-docs.log."
+      },
+      {
+        "criterion": "Remote Sonar analysis of delivered worktree",
+        "status": "pending",
+        "evidence": "PR355 currently points to23263799. /tmp/luxury-yacht-d094-sonar-pr355.log reports11issues there. Ten have local mechanical follow-ups; S6819 custom-combobox replacement retained with contract/test rationale. No commit/push or remote disposition is authorized. A new pushed-revision analysis is required before claiming Sonar closure."
+      }
+    ],
+    "coverageLimits": {
+      "backendAggregate": "79.6%; includes unexercised platform/tooling code. cmd/project70.8%. No aggregate80% claim.",
+      "D095MechanicalGo": "waitForFactorySync77.8%,resolvePodOwner73.3%,buildReplicaSetDeploymentMapForPod75.0%;WithDefaultTimeout,ingestStoreVersion,maxIngestStoreVersion,deploymentControllerName100%. These edits preserve control flow.",
+      "D085ToD095Frontend": "NamespaceScopeEditor93.82%,modalPresence100%,paletteSearch97.43%,panelLayoutStore90.32%,dockableHook95.12%,scrollbarActivity81.48%,appPreferences95.82%,useAppInfo100%,PortForwardModal81.6%,FavSaveModal83.88%,LogViewer83.01%."
+    },
+    "limitations": [
+      "Native race/error permutations use the real-owner automated harnesses recorded in each batch; not every permutation was reproduced by manual interaction.",
+      "Synthetic Helm fixture validates displayed values, not chart installation.",
+      "Remote Sonar closure requires an explicitly authorized push and completed analysis; local gates do not prove it."
+    ]
+  }
 }

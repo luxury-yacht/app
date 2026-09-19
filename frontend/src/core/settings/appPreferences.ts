@@ -1303,11 +1303,9 @@ export const hydrateAppPreferences = async (options?: {
   if (options?.force) {
     preferenceRevision++;
   }
-  if (!hydrationPromise) {
-    hydrationPromise = hydrateLatestPreferences().finally(() => {
-      hydrationPromise = null;
-    });
-  }
+  hydrationPromise ??= hydrateLatestPreferences().finally(() => {
+    hydrationPromise = null;
+  });
   return hydrationPromise;
 };
 

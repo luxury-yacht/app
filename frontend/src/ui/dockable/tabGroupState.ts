@@ -65,6 +65,29 @@ function stripPanelFromGroup(
   return { tabs, activeTab };
 }
 
+function insertPanelIntoGroup(
+  group: TabGroupState['right'],
+  panelId: string,
+  insertIndex?: number
+) {
+  const tabs = [...group.tabs];
+  tabs.splice(insertIndex ?? tabs.length, 0, panelId);
+  return { tabs, activeTab: panelId };
+}
+
+function removePanelWithAdjacentActivation(
+  group: TabGroupState['right'],
+  panelId: string,
+  preference: AdjacentTabActivationPreference
+) {
+  const removedIndex = group.tabs.indexOf(panelId);
+  const tabs = group.tabs.filter((id) => id !== panelId);
+  return {
+    tabs,
+    activeTab: activateAdjacentTab(tabs, removedIndex, group.activeTab, panelId, preference),
+  };
+}
+
 /**
  * Remove a panel from all groups, returning the new state.
  * This is the internal version that does NOT do adjacent-tab activation;
@@ -132,15 +155,9 @@ export function addPanelToGroup(
   const cleaned = stripPanelFromAllGroups(state, panelId);
 
   if (position === 'right' || position === 'bottom') {
-    const tabs = [...cleaned[position].tabs];
-    if (insertIndex !== undefined) {
-      tabs.splice(insertIndex, 0, panelId);
-    } else {
-      tabs.push(panelId);
-    }
     return {
       ...cleaned,
-      [position]: { tabs, activeTab: panelId },
+      [position]: insertPanelIntoGroup(cleaned[position], panelId, insertIndex),
     };
   }
 
@@ -179,19 +196,9 @@ export function removePanelFromGroup(
   }
 
   if (groupKey === 'right' || groupKey === 'bottom') {
-    const group = state[groupKey];
-    const removedIndex = group.tabs.indexOf(panelId);
-    const newTabs = group.tabs.filter((id) => id !== panelId);
-    const newActive = activateAdjacentTab(
-      newTabs,
-      removedIndex,
-      group.activeTab,
-      panelId,
-      activationPreference
-    );
     return {
       ...state,
-      [groupKey]: { tabs: newTabs, activeTab: newActive },
+      [groupKey]: removePanelWithAdjacentActivation(state[groupKey], panelId, activationPreference),
     };
   }
 
@@ -202,20 +209,10 @@ export function removePanelFromGroup(
       floating.push(group);
       continue;
     }
-    const removedIndex = group.tabs.indexOf(panelId);
-    const newTabs = group.tabs.filter((id) => id !== panelId);
-    if (newTabs.length === 0) {
-      // Destroy empty floating group.
-      continue;
+    const remaining = removePanelWithAdjacentActivation(group, panelId, activationPreference);
+    if (remaining.tabs.length > 0) {
+      floating.push({ ...group, ...remaining });
     }
-    const newActive = activateAdjacentTab(
-      newTabs,
-      removedIndex,
-      group.activeTab,
-      panelId,
-      activationPreference
-    );
-    floating.push({ ...group, tabs: newTabs, activeTab: newActive });
   }
 
   return { ...state, floating };
@@ -368,13 +365,7 @@ export function addPanelToFloatingGroup(
         return group;
       }
       foundTargetGroup = true;
-      const newTabs = [...group.tabs];
-      if (insertIndex !== undefined) {
-        newTabs.splice(insertIndex, 0, panelId);
-      } else {
-        newTabs.push(panelId);
-      }
-      return { ...group, tabs: newTabs, activeTab: panelId };
+      return { ...group, ...insertPanelIntoGroup(group, panelId, insertIndex) };
     }),
   };
 

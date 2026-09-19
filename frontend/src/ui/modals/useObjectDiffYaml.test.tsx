@@ -1,7 +1,7 @@
+import type { CatalogItem } from '@core/refresh/types';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
-import type { CatalogItem } from '@core/refresh/types';
 import { useObjectDiffYaml } from './useObjectDiffYaml';
 
 const mocks = vi.hoisted(() => ({

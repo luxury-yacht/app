@@ -8,7 +8,6 @@ const forwardSurfaceHandler = <Args extends unknown[], Result>(
 
 export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
   const keyboardContext = useOptionalKeyboardContext();
-  const surfaceIdRef = useRef<string | null>(null);
   const onKeyDownRef = useRef(options.onKeyDown);
   const onEscapeRef = useRef(options.onEscape);
   const onNativeActionRef = useRef(options.onNativeAction);
@@ -52,15 +51,10 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
       return;
     }
 
-    const { registerSurface, unregisterSurface, updateSurface } = keyboardContext;
-
     if (active === false) {
-      if (surfaceIdRef.current) {
-        unregisterSurface(surfaceIdRef.current);
-        surfaceIdRef.current = null;
-      }
       return;
     }
+    const { registerSurface, unregisterSurface } = keyboardContext;
 
     const surfaceOptions: KeyboardSurfaceOptions = {
       kind,
@@ -79,18 +73,8 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
       ),
     };
 
-    if (!surfaceIdRef.current) {
-      surfaceIdRef.current = registerSurface(surfaceOptions);
-    } else {
-      updateSurface(surfaceIdRef.current, surfaceOptions);
-    }
-
-    return () => {
-      if (surfaceIdRef.current) {
-        unregisterSurface(surfaceIdRef.current);
-        surfaceIdRef.current = null;
-      }
-    };
+    const surfaceId = registerSurface(surfaceOptions);
+    return () => unregisterSurface(surfaceId);
   }, [
     active,
     blocking,

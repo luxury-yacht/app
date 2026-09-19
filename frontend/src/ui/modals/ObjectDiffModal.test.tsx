@@ -730,8 +730,9 @@ describe('ObjectDiffModal', () => {
   it('retains YAML during refresh but never carries it to another cluster with the same UID', async () => {
     let refreshing = false;
     refreshMocks.useRefreshScopedDomain.mockImplementation((domain: string, scope: string) => {
-      if (domain !== 'object-yaml' || scope === '__inactive__')
+      if (domain !== 'object-yaml' || scope === '__inactive__') {
         return getRefreshState(domain, scope);
+      }
       if (scope.startsWith('cluster-b|') || (refreshing && scope.endsWith(':source'))) {
         return makeState({ status: 'loading' });
       }

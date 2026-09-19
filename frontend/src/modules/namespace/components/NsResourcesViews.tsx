@@ -12,8 +12,8 @@
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import React from 'react';
-import { NAMESPACE_RESOURCE_VIEWS } from './namespaceResourceViews';
 import type { NamespaceViewType } from '@/types/navigation/views';
+import { NAMESPACE_RESOURCE_VIEWS } from './namespaceResourceViews';
 
 const ViewErrorFallback = ({ viewName, reset }: { viewName: string; reset: () => void }) => (
   <div className="namespace-view-error">
@@ -30,9 +30,6 @@ const ViewErrorFallback = ({ viewName, reset }: { viewName: string; reset: () =>
 interface NamespaceResourcesViewsProps {
   namespace: string;
   activeTab: NamespaceViewType;
-  onTabChange?: (tab: NamespaceViewType) => void;
-
-  // Object panel element to render
 }
 
 /**
@@ -42,7 +39,6 @@ interface NamespaceResourcesViewsProps {
 const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
   namespace,
   activeTab,
-  onTabChange: _onTabChange,
 }) => {
   const view = NAMESPACE_RESOURCE_VIEWS[activeTab];
 

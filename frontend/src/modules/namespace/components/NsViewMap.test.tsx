@@ -39,7 +39,9 @@ vi.mock('@/core/data-access/dataAccess', () => ({
   releaseRefreshDomainLease: ({ scope }: { scope: string }) => {
     const count = (dataAccessMocks.leases.get(scope) ?? 1) - 1;
     dataAccessMocks.leases.set(scope, count);
-    if (!count) dataAccessMocks.enabled.delete(scope);
+    if (!count) {
+      dataAccessMocks.enabled.delete(scope);
+    }
   },
 }));
 
@@ -111,8 +113,11 @@ beforeEach(() => {
   dataAccessMocks.leases.clear();
   dataAccessMocks.enabled.clear();
   dataAccessMocks.setRefreshDomainEnabled.mockImplementation(({ scope, enabled }) => {
-    if (enabled) dataAccessMocks.enabled.add(scope);
-    else dataAccessMocks.enabled.delete(scope);
+    if (enabled) {
+      dataAccessMocks.enabled.add(scope);
+    } else {
+      dataAccessMocks.enabled.delete(scope);
+    }
   });
   dataAccessMocks.requestRefreshDomain.mockClear();
   dataAccessMocks.setRefreshDomainEnabled.mockClear();

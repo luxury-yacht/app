@@ -17,8 +17,6 @@
  * The shared catalog hook owns query, pagination and metadata refresh policy.
  */
 
-import type React from 'react';
-import { useCallback, useEffect, useMemo } from 'react';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
 import {
@@ -48,6 +46,8 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import type React from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useShortNames } from '@/hooks/useShortNames';
 import type { BrowseScope, BrowseViewProps } from './BrowseView.types';
 import CatalogPaginationFooter, {

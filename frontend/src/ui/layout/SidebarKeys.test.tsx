@@ -186,16 +186,12 @@ describe('Sidebar keyboard helpers', () => {
 
 type HarnessHandle = ReturnType<typeof useSidebarKeyboardControls> & {
   sidebarRef: React.RefObject<HTMLDivElement | null>;
-  setCursorPreview: (target: SidebarCursorTarget | null) => void;
-  setPendingSelection: (target: SidebarCursorTarget | null) => void;
-  setSelectionTarget: (target: SidebarCursorTarget | null) => void;
 };
 
 interface TestHarnessProps {
   collapsed?: boolean;
   selectionTarget?: SidebarCursorTarget | null;
   pendingSelection?: SidebarCursorTarget | null;
-  onClearPreview?: () => void;
   onNamespaceViewClick?: () => void;
   ref?: React.Ref<HarnessHandle>;
 }
@@ -204,50 +200,27 @@ const TestHarness = ({
   collapsed = false,
   selectionTarget = null,
   pendingSelection = null,
-  onClearPreview,
   onNamespaceViewClick,
   ref,
 }: TestHarnessProps) => {
   const sidebarRef = React.useRef<HTMLDivElement | null>(null);
-  const keyboardCursorIndexRef = React.useRef<number | null>(null);
-  const pendingCommitRef = React.useRef<SidebarCursorTarget | null>(null);
-  const keyboardActivationRef = React.useRef(false);
-  const [cursorPreview, setCursorPreview] = React.useState<SidebarCursorTarget | null>(null);
-  const [pendingSelectionState, setPendingSelection] = React.useState<SidebarCursorTarget | null>(
-    pendingSelection
-  );
   const selectionTargetRef = React.useRef<SidebarCursorTarget | null>(selectionTarget);
   React.useEffect(() => {
     selectionTargetRef.current = selectionTarget;
   }, [selectionTarget]);
 
-  const clearKeyboardPreview = React.useCallback(() => {
-    setCursorPreview(null);
-    onClearPreview?.();
-  }, [onClearPreview]);
-
   const api = useSidebarKeyboardControls({
     sidebarRef,
     isCollapsed: collapsed,
-    cursorPreview,
-    setCursorPreview,
-    pendingSelection: pendingSelectionState,
-    setPendingSelection,
-    keyboardCursorIndexRef,
-    pendingCommitRef,
-    keyboardActivationRef,
-    clearKeyboardPreview,
     getCurrentSelectionTarget: () => selectionTargetRef.current,
   });
+  React.useEffect(() => {
+    api.setPendingSelection(pendingSelection);
+  }, [pendingSelection, api.setPendingSelection]);
 
   React.useImperativeHandle(ref, () => ({
     ...api,
     sidebarRef,
-    setCursorPreview,
-    setPendingSelection,
-    setSelectionTarget: (target: SidebarCursorTarget | null) => {
-      selectionTargetRef.current = target;
-    },
   }));
 
   const buildItem = (
@@ -388,16 +361,17 @@ describe('useSidebarKeyboardControls', () => {
   });
 
   it('marks active/preview items', () => {
-    const { ref, container, cleanup } = renderHarness({
+    const { container, cleanup } = renderHarness({
       selectionTarget: { kind: 'overview' },
     });
     const overview = requireValue(
-      container.querySelector('[data-sidebar-target-kind="overview"]'),
+      container.querySelector<HTMLElement>('[data-sidebar-target-kind="overview"]'),
       'expected test value in SidebarKeys.test.tsx'
     );
     expect(overview.className).toContain('active');
     act(() => {
-      ref.current?.setCursorPreview({ kind: 'cluster-view', view: 'nodes' });
+      overview.focus();
+      overview.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     });
     const nodes = requireValue(
       container.querySelector('[data-sidebar-target-view="nodes"]'),
@@ -564,10 +538,8 @@ describe('useSidebarKeyboardControls', () => {
   });
 
   it('handles pointer movement and focus transitions', async () => {
-    const onClearPreview = vi.fn();
     const { ref, container, cleanup } = renderHarness({
       selectionTarget: { kind: 'overview' },
-      onClearPreview,
     });
     const sidebar = requireValue(
       container.querySelector('[data-testid="sidebar"]'),
@@ -598,7 +570,7 @@ describe('useSidebarKeyboardControls', () => {
       sidebar.dispatchEvent(focusOut);
       await Promise.resolve();
     });
-    expect(onClearPreview).toHaveBeenCalled();
+    expect(container.querySelector('.keyboard-preview')).toBeNull();
     await act(async () => {
       sidebar.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })

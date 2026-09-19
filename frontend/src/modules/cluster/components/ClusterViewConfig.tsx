@@ -7,8 +7,8 @@
 
 import {
   type AggregatedResourceGridViewSpec,
-  createAggregatedIdentityColumns,
   ClusterAggregatedResourceGridView,
+  createAggregatedIdentityColumns,
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';

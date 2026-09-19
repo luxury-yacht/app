@@ -29,6 +29,8 @@ import (
 // CronJob from a generated Job name.
 type JobControllerOwnerLookup func(namespace, jobName string) (apiVersion, kind, name string, ok bool)
 
+const appsAPIVersion = "apps/v1"
+
 // BuildStreamSummary builds the pod row, resolving controller ancestry from the
 // supplied ReplicaSet lister and Job lookup. cpuUsageMilli/memUsageBytes are the
 // pod's current usage.
@@ -102,11 +104,11 @@ func resolvePodOwner(pod *corev1.Pod, rsMap map[string]string, jobOwnerLookup Jo
 		directName:       owner.Name,
 		directAPIVersion: owner.APIVersion,
 	}
-	if owner.APIVersion == "apps/v1" && owner.Kind == "ReplicaSet" {
+	if owner.APIVersion == appsAPIVersion && owner.Kind == "ReplicaSet" {
 		if deployment, ok := rsMap[owner.Name]; ok {
 			resolved.kind = "Deployment"
 			resolved.name = deployment
-			resolved.apiVersion = "apps/v1"
+			resolved.apiVersion = appsAPIVersion
 		}
 	}
 	if owner.APIVersion == "batch/v1" && owner.Kind == "Job" && jobOwnerLookup != nil {
@@ -146,7 +148,7 @@ func buildReplicaSetDeploymentMapForPod(pod *corev1.Pod, rsLister appslisters.Re
 		return result
 	}
 	for _, owner := range pod.OwnerReferences {
-		if !isControllerKind(owner, "apps/v1", "ReplicaSet") {
+		if !isControllerKind(owner, appsAPIVersion, "ReplicaSet") {
 			continue
 		}
 		rs, err := rsLister.ReplicaSets(pod.Namespace).Get(owner.Name)
@@ -162,7 +164,7 @@ func buildReplicaSetDeploymentMapForPod(pod *corev1.Pod, rsLister appslisters.Re
 
 func deploymentControllerName(owners []metav1.OwnerReference) (string, bool) {
 	for _, owner := range owners {
-		if isControllerKind(owner, "apps/v1", "Deployment") {
+		if isControllerKind(owner, appsAPIVersion, "Deployment") {
 			return owner.Name, true
 		}
 	}

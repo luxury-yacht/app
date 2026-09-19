@@ -56,6 +56,3 @@ export const readScrollbarNumberToken = (
   const parsed = Number.parseFloat(readScrollbarTokenStyles(element).getPropertyValue(tokenName));
   return Number.isFinite(parsed) ? parsed : fallback;
 };
-
-export const readScrollbarOpacityToken = readScrollbarNumberToken;
-export const readScrollbarPxToken = readScrollbarNumberToken;

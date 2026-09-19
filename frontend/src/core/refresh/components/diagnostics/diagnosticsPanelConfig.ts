@@ -19,7 +19,7 @@ import {
 } from '../../domainRegistry';
 import type { RefreshDomain } from '../../types';
 
-export { DOMAIN_REFRESHER_MAP, DOMAIN_STREAM_MAP, PRIORITY_DOMAINS } from '../../domainRegistry';
+export { DOMAIN_REFRESHER_MAP, DOMAIN_STREAM_MAP } from '../../domainRegistry';
 
 export const STALE_THRESHOLD_MS = 45_000;
 export const CLUSTER_SCOPE = '__cluster__';

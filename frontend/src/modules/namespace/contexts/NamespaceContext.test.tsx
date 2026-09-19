@@ -697,9 +697,14 @@ describe('NamespaceProvider selection behaviour', () => {
     const leases = new Map<string, number>();
     const enabled = new Set<string>();
     mockRefreshOrchestrator.setScopedDomainEnabled.mockImplementation((domain, scope, active) => {
-      if (domain !== 'namespace-metrics') return;
-      if (active) enabled.add(scope);
-      else if (!(leases.get(scope) ?? 0)) enabled.delete(scope);
+      if (domain !== 'namespace-metrics') {
+        return;
+      }
+      if (active) {
+        enabled.add(scope);
+      } else if (!(leases.get(scope) ?? 0)) {
+        enabled.delete(scope);
+      }
     });
     mockRefreshOrchestrator.acquireScopedDomainLease.mockImplementation((_domain, scope) => {
       leases.set(scope, (leases.get(scope) ?? 0) + 1);
@@ -708,7 +713,9 @@ describe('NamespaceProvider selection behaviour', () => {
     mockRefreshOrchestrator.releaseScopedDomainLease.mockImplementation((_domain, scope) => {
       const remaining = Math.max(0, (leases.get(scope) ?? 0) - 1);
       leases.set(scope, remaining);
-      if (!remaining) enabled.delete(scope);
+      if (!remaining) {
+        enabled.delete(scope);
+      }
     });
     const first = renderWithProvider();
     const second = renderWithProvider();
