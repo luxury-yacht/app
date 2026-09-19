@@ -76,7 +76,7 @@ retirement passed before the refactor.
 
 | Remediation evidence | Status | Evidence |
 | --- | --- | --- |
-| Focused tests after ownership refactor | pending | Rerun the existing characterization cases |
-| Affected coverage and local complexity | pending | Measure the changed production functions |
-| Final repository gate | pending | Run `qc:prerelease` and inspect the worktree |
-| Sonar closure on the corrected revision | pending | Requires an explicitly authorized push and a completed analysis of that revision; the current remote analysis still describes `61e44b3d` |
+| Focused tests after ownership refactor | passed | Existing catalog update/startup-race, parent-cancellation, blocked-registration and source-retirement cases pass in backend, objectcatalog and resourcestream |
+| Affected coverage and local complexity | passed | `test:backend-coverage` passed; `runLoop`, `startWatchNotifier`, `subscribeCustomResources` and `SubscribeCustomResourceChanges` each have 100% statement coverage. Pinned gocognit 1.2.1 reports scores 3, 1, 4 and 3 respectively |
+| Final repository gate | passed | `mise exec -- wails3 task qc:prerelease` exited 0, including backend race tests and 524 frontend files / 5,049 tests. The subsequent worktree inspection showed only this evidence record modified; `git diff --check` passed |
+| Sonar closure on the corrected revision | passed | PR #356's Sonar analysis completed successfully for `6a47f58ab7f182a945b2a3a5985f93ee502b0d38` at 2026-09-19 19:12:25 UTC. The subsequent `npm run sonar:audit --prefix frontend -- --pull-request 356` reports zero open/confirmed new-code issues across all rules |
