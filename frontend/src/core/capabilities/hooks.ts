@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useOptionalClusterLifecycle } from '@/core/contexts/ClusterLifecycleContext';
 import { isClusterOperationalState } from '@/core/contexts/clusterLifecycleState';
 import { eventBus } from '@/core/events';
+import { useStableSelectedValue } from '@/shared/hooks/useStableSelectedValue';
 import {
   capabilityStateFromError,
   capabilityStateFromPermission,
@@ -155,7 +156,7 @@ export const useCapabilities = (
     [normalizedDescriptors]
   );
 
-  const { waitingForReadyNamedDescriptors, queryableNamedDescriptors } = useMemo(() => {
+  const namedAdmission = useMemo(() => {
     const waiting: NormalizedCapabilityDescriptor[] = [];
     const queryable: NormalizedCapabilityDescriptor[] = [];
     for (const descriptor of namedDescriptors) {
@@ -165,8 +166,12 @@ export const useCapabilities = (
         !isClusterOperationalState(clusterLifecycle.getClusterState(descriptor.clusterId));
       (isWaiting ? waiting : queryable).push(descriptor);
     }
-    return { waitingForReadyNamedDescriptors: waiting, queryableNamedDescriptors: queryable };
+    return { waiting, queryable };
   }, [clusterLifecycle, namedDescriptors]);
+  // Auth progress republishes lifecycle context without changing request admission.
+  // Keep each query alive until its descriptor membership or readiness changes.
+  const waitingForReadyNamedDescriptors = useStableSelectedValue(namedAdmission.waiting);
+  const queryableNamedDescriptors = useStableSelectedValue(namedAdmission.queryable);
 
   const updateNamedResults = useCallback(
     (update: (results: Map<string, CapabilityState>) => void) => {

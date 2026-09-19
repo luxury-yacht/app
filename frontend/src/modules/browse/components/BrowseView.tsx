@@ -233,8 +233,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     namespace: null,
     isNamespaceScoped: false,
     columns,
-    data: [], // We'll populate this after we have catalog data
-    keyExtractor,
+    // We'll populate this after we have catalog data
+
     filterOptions: {
       kinds: [],
       namespaces: [],
@@ -250,8 +250,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     namespace: namespace ?? '',
     defaultSort: { key: 'kind', direction: 'asc' },
     columns,
-    data: [], // We'll populate this after we have catalog data
-    keyExtractor,
+    // We'll populate this after we have catalog data
+
     filterOptions: {
       kinds: [],
       namespaces: [],

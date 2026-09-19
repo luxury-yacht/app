@@ -619,8 +619,7 @@ export function useQueryBackedNamespaceResourceGridTable<
     namespace,
     isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
     columns: tableParams.columns,
-    data: tableParams.persistenceData ?? [],
-    keyExtractor: resolvedKeyExtractor,
+
     filterOptions: {
       ...tableParams.filterOptions,
       isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
@@ -733,8 +732,7 @@ export function useQueryBackedClusterResourceGridTable<
     namespace: null,
     isNamespaceScoped: false,
     columns: tableParams.columns,
-    data: tableParams.persistenceData ?? [],
-    keyExtractor: resolvedKeyExtractor,
+
     filterOptions: { ...tableParams.filterOptions, isNamespaceScoped: false },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
   });

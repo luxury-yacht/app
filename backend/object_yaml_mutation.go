@@ -78,13 +78,7 @@ type mutationContext struct {
 }
 
 func (g *ResourceGateway) mutationContext() (context.Context, context.CancelFunc) {
-	base := g.CtxOrBackground()
-	if _, hasDeadline := base.Deadline(); hasDeadline {
-		return base, func() {
-			// The caller owns the existing deadline; no derived context needs cancellation.
-		}
-	}
-	return context.WithTimeout(base, config.ObjectYAMLMutationRequestTimeout)
+	return common.WithDefaultTimeout(g.CtxOrBackground(), config.ObjectYAMLMutationRequestTimeout)
 }
 
 // ValidateObjectYaml performs a dry-run kubectl-edit-style patch to ensure the YAML is valid and safe to apply.

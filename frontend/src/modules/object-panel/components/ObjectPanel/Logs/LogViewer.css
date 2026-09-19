@@ -310,6 +310,30 @@
   height: 100%;
 }
 
+/* GridTable renders separate header/body tables; keep log-specific paint on both. */
+.gridtable-parsed-logs {
+  font-size: var(--font-size-small);
+  width: 100%;
+  border-collapse: collapse;
+  background-color: transparent;
+}
+
+.gridtable-parsed-logs .grid-cell-header {
+  background-color: var(--log-table-header-bg);
+  border-bottom: 1px solid var(--log-table-header-border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.gridtable-parsed-logs .gridtable-row {
+  border-bottom: 1px solid var(--log-table-row-border);
+}
+
+.gridtable-parsed-logs .gridtable-row:hover {
+  background-color: var(--log-table-row-hover-bg);
+}
+
 .gridtable-parsed-logs .grid-cell {
   padding: var(--spacing-xs) var(--spacing-sm);
   font-family: var(--font-family-mono);

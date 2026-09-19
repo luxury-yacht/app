@@ -74,6 +74,30 @@ describe('refresh store helpers', () => {
     expect(state.data).toMatchObject({ rows: [], clusterId: 'test-cluster' });
   });
 
+  it('pauses hidden diagnostics renders and reads current requests on reopening', async () => {
+    let renders = 0;
+    function PendingRequests({ visible }: { visible: boolean }) {
+      renders++;
+      return createElement('span', null, useRefreshState(visible).pendingRequests);
+    }
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(createElement(PendingRequests, { visible: false })));
+      const initialRenders = renders;
+      for (let i = 0; i < 100; i++) {
+        act(() => markPendingRequest(1));
+      }
+      expect(renders).toBe(initialRenders);
+      await act(async () => root.render(createElement(PendingRequests, { visible: true })));
+      expect(container.textContent).toBe('100');
+      act(() => markPendingRequest(-1));
+      expect(container.textContent).toBe('99');
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
   it('skips notifications when domain state updater returns the existing reference', () => {
     const listener = vi.fn();
     const unsubscribe = subscribe(listener);

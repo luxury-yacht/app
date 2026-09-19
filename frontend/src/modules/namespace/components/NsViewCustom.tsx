@@ -114,9 +114,9 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       viewId: config.viewId,
       namespace,
       columns,
-      keyExtractor,
+
       defaultSort: { key: 'name', direction: 'asc' },
-      data: [],
+
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
       pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     });

@@ -279,49 +279,57 @@ func TestResolvePodForTarget_PodNotFound(t *testing.T) {
 
 // TestResolvePodForTarget_Service verifies that a service resolves to a ready pod from its endpoint slices.
 func TestResolvePodForTarget_Service(t *testing.T) {
-	client := fake.NewClientset(
-		&discoveryv1.EndpointSlice{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "my-service-abc12",
-				Namespace: "default",
-				Labels: map[string]string{
-					discoveryv1.LabelServiceName: "my-service",
-				},
-			},
-			Endpoints: []discoveryv1.Endpoint{
-				{
-					Addresses: []string{"10.0.0.1"},
-					Conditions: discoveryv1.EndpointConditions{
-						Ready: ptr.To(true),
+	// The EndpointSlice controller omits APIVersion from its Pod targetRef.
+	for _, apiVersion := range []string{"", "v1"} {
+		t.Run("target version "+apiVersion, func(t *testing.T) {
+			client := fake.NewClientset(
+				&discoveryv1.EndpointSlice{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-service-abc12",
+						Namespace: "default",
+						Labels: map[string]string{
+							discoveryv1.LabelServiceName: "my-service",
+						},
 					},
-					TargetRef: &corev1.ObjectReference{
-						APIVersion: "v1",
-						Kind:       "Pod",
-						Name:       "backend-pod",
+					Endpoints: []discoveryv1.Endpoint{
+						{
+							Addresses: []string{"10.0.0.1"},
+							Conditions: discoveryv1.EndpointConditions{
+								Ready: ptr.To(true),
+							},
+							TargetRef: &corev1.ObjectReference{
+								APIVersion: apiVersion,
+								Namespace:  "default",
+								UID:        types.UID("backend-pod-uid"),
+								Kind:       "Pod",
+								Name:       "backend-pod",
+							},
+						},
 					},
 				},
-			},
-		},
-		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "backend-pod",
-				Namespace: "default",
-			},
-			Status: corev1.PodStatus{
-				Phase: corev1.PodRunning,
-				Conditions: []corev1.PodCondition{
-					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "backend-pod",
+						Namespace: "default",
+						UID:       types.UID("backend-pod-uid"),
+					},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						Conditions: []corev1.PodCondition{
+							{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+						},
+					},
 				},
-			},
-		},
-	)
+			)
 
-	podName, err := resolvePodForTarget(context.Background(), client, testPortForwardTarget("Service", "default", "my-service"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if podName != "backend-pod" {
-		t.Errorf("expected pod name 'backend-pod', got '%s'", podName)
+			podName, err := resolvePodForTarget(context.Background(), client, testPortForwardTarget("Service", "default", "my-service"))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if podName != "backend-pod" {
+				t.Errorf("expected pod name 'backend-pod', got '%s'", podName)
+			}
+		})
 	}
 }
 
@@ -557,7 +565,8 @@ func TestServiceForwardingRejectsUnresolvedOrDifferentPodIdentity(t *testing.T) 
 		target *corev1.ObjectReference
 	}{
 		{"missing target", nil},
-		{"missing version", &corev1.ObjectReference{Kind: "Pod", Namespace: "team", Name: "collision"}},
+		{"unsupported core version", &corev1.ObjectReference{APIVersion: "v2", Kind: "Pod", Namespace: "team", Name: "collision"}},
+		{"unversioned foreign namespace", &corev1.ObjectReference{Kind: "Pod", Namespace: "other-team", Name: "collision"}},
 		{"custom Pod kind", &corev1.ObjectReference{APIVersion: "custom.example.com/v1", Kind: "Pod", Namespace: "team", Name: "collision"}},
 		{"different namespace", &corev1.ObjectReference{APIVersion: "v1", Kind: "Pod", Namespace: "other-team", Name: "collision"}},
 		{"different kind", &corev1.ObjectReference{APIVersion: "v1", Kind: "Service", Namespace: "team", Name: "collision"}},

@@ -42,11 +42,17 @@ export function handoffLayoutBeforeClose(panelId: string) {
 
 export function useDockablePanelState(panelId: string) {
   const store = usePanelLayoutStoreContext();
+  const initialState = useMemo(() => store.getInitialState(panelId), [panelId, store]);
   const subscribe = useCallback(
     (listener: () => void) => store.subscribe(panelId, listener),
     [panelId, store]
   );
-  const getSnapshot = useCallback(() => store.getInitialState(panelId), [panelId, store]);
+  // Closing can evict the layout before React unmounts this observer. Snapshot
+  // consistency checks must not recreate that entry during the closing render.
+  const getSnapshot = useCallback(
+    () => store.getState(panelId) ?? initialState,
+    [initialState, panelId, store]
+  );
   const localState = useSyncExternalStore(subscribe, getSnapshot);
 
   const initialize = useCallback(

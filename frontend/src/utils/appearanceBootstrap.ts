@@ -73,22 +73,3 @@ export function buildAppearanceBootstrapPayload(
     dark: buildAppearanceBootstrapVariables('dark', settings.dark),
   };
 }
-
-export function saveAppearanceBootstrapToLocalStorage(settings: AppearanceBootstrapSettings): void {
-  try {
-    localStorage.setItem(
-      APPEARANCE_BOOTSTRAP_STORAGE_KEY,
-      JSON.stringify(buildAppearanceBootstrapPayload(settings))
-    );
-  } catch {
-    // Storage can be unavailable in tests, private browsing, or locked-down environments.
-  }
-}
-
-export function clearAppearanceBootstrapFromLocalStorage(): void {
-  try {
-    localStorage.removeItem(APPEARANCE_BOOTSTRAP_STORAGE_KEY);
-  } catch {
-    // Silently ignore storage errors.
-  }
-}

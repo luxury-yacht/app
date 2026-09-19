@@ -9,6 +9,8 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useCapabilities } from '@/core/capabilities/hooks';
+import type { QueryPermissionsResponse } from '@/core/capabilities/permissionRead';
 import type { DesktopEventHandler, DesktopEventName } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import {
@@ -22,6 +24,11 @@ const runtimeHarnessRef = vi.hoisted(() => ({
 }));
 const backendMocks = vi.hoisted(() => ({
   getAllStates: vi.fn<() => Promise<Record<string, string> | null>>(),
+  queryPermissions: vi.fn<() => Promise<QueryPermissionsResponse>>(),
+}));
+
+vi.mock('@/core/capabilities/permissionRead', () => ({
+  queryPermissions: backendMocks.queryPermissions,
 }));
 
 vi.mock('@/core/desktop-runtime', () => ({
@@ -78,6 +85,7 @@ describe('ClusterLifecycleContext', () => {
     mockSelectedClusterIds.current = ['cluster-a', 'cluster-b'];
     backendMocks.getAllStates.mockReset().mockResolvedValue(null);
     mockGetAllStates = backendMocks.getAllStates;
+    backendMocks.queryPermissions.mockReset();
 
     runtimeHarness = createWailsRuntimeHarness();
     runtimeHarnessRef.current = runtimeHarness;
@@ -108,6 +116,71 @@ describe('ClusterLifecycleContext', () => {
       await Promise.resolve();
     });
   };
+
+  it('enables a pending object action despite auth-progress writes for another cluster', async () => {
+    backendMocks.getAllStates.mockResolvedValue({
+      'cluster-a': 'ready',
+      'cluster-b': 'connecting',
+    });
+    const descriptor = {
+      id: 'edit',
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      resourceKind: 'Pod',
+      namespace: 'default',
+      name: 'api',
+      verb: 'patch',
+      subresource: '',
+    };
+    const descriptors = [descriptor];
+    const pendingQueries: Array<(response: QueryPermissionsResponse) => void> = [];
+    backendMocks.queryPermissions.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pendingQueries.push(resolve);
+        })
+    );
+    const NamedAction = () => {
+      const permissions = useCapabilities(descriptors);
+      return (
+        <button type="button" disabled={permissions.loading || !permissions.isAllowed('edit')}>
+          Edit YAML
+        </button>
+      );
+    };
+    await act(async () => {
+      root.render(
+        <ClusterLifecycleProvider>
+          <NamedAction />
+        </ClusterLifecycleProvider>
+      );
+    });
+    expect(container.querySelector('button')?.disabled).toBe(true);
+    await act(async () => {
+      runtimeHarness.emit('cluster:auth:failed', {
+        clusterId: 'cluster-b',
+        clusterName: 'B',
+        reason: 'expired',
+      });
+    });
+    for (const secondsUntilRetry of [3, 2, 1]) {
+      await act(async () => {
+        runtimeHarness.emit('cluster:auth:progress', { clusterId: 'cluster-b', secondsUntilRetry });
+      });
+    }
+    await act(async () => {
+      const resolveQuery = pendingQueries[0];
+      if (!resolveQuery) {
+        throw new Error('Expected a pending permission query');
+      }
+      resolveQuery({
+        results: [{ ...descriptor, allowed: true, source: 'ssar', reason: '', error: '' }],
+      });
+    });
+    expect(container.querySelector('button')?.disabled).toBe(false);
+    expect(backendMocks.queryPermissions).toHaveBeenCalledOnce();
+  });
 
   it('useClusterLifecycle() throws outside provider', () => {
     // Suppress React error boundary logging for the expected throw.

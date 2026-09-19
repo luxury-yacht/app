@@ -82,11 +82,14 @@ const EMPTY_SCOPED_ENTRIES: ReadonlyArray<[string, DomainSnapshotState<unknown>]
   []
 );
 
-let state: RefreshStoreState = {
+const EMPTY_REFRESH_STATE: RefreshStoreState = {
   scopedDomains: {},
   scopedDomainEntries: {},
   pendingRequests: 0,
 };
+let state = EMPTY_REFRESH_STATE;
+const subscribeInactive = () => () => undefined;
+const getInactiveSnapshot = () => EMPTY_REFRESH_STATE;
 
 const listeners = new Set<() => void>();
 
@@ -254,4 +257,8 @@ export const useRefreshScopedDomainStates = <K extends RefreshDomain>(domain: K)
 export const useRefreshScopedDomainEntries = <K extends RefreshDomain>(domain: K) =>
   useSyncExternalStore(subscribe, () => getScopedDomainEntries(domain));
 
-export const useRefreshState = () => useSyncExternalStore(subscribe, () => state);
+export const useRefreshState = (enabled = true) =>
+  useSyncExternalStore(
+    enabled ? subscribe : subscribeInactive,
+    enabled ? getRefreshState : getInactiveSnapshot
+  );

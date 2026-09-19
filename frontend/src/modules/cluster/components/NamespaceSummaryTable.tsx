@@ -293,8 +293,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
     clusterIdentity,
     isNamespaceScoped: false,
     columns,
-    data: rows,
-    keyExtractor,
+
     enabled: persistenceEnabled,
     filterOptions: showClusterColumn
       ? { clusters: clusterOptions.map(({ value }) => value) }

@@ -197,8 +197,7 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
     namespace: null,
     isNamespaceScoped: false,
     columns,
-    data,
-    keyExtractor: resolvedKeyExtractor,
+
     filterOptions: { ...filterOptions, isNamespaceScoped: false },
     pageSizeOptions,
   });

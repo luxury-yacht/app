@@ -54,8 +54,6 @@ describe('useNamespaceGridTablePersistence', () => {
   const columns: GridColumnDefinition<Row>[] = [
     { key: 'name', header: 'Name', render: (row) => row.name },
   ];
-  const data = [{ name: 'a' }];
-  const keyExtractor = (row: { name: string }) => row.name;
 
   beforeEach(() => {
     capturedParams.length = 0;
@@ -69,8 +67,7 @@ describe('useNamespaceGridTablePersistence', () => {
       viewId: 'test-view',
       namespace,
       columns,
-      data,
-      keyExtractor,
+
       filterOptions,
     });
     return null;

@@ -28,8 +28,6 @@ const columns: GridColumnDefinition<Row>[] = [
   { key: 'owner', header: 'Owner', render: (row) => row.id },
 ];
 
-const data: Row[] = [{ id: 'a' }];
-const keyExtractor = (row: Row) => row.id;
 type PersistenceState = ReturnType<typeof useGridTablePersistence<Row>>;
 let latestState: PersistenceState | null = null;
 const getLatestState = () => requireValue(latestState, 'expected latest grid persistence state');
@@ -54,8 +52,6 @@ describe('useGridTablePersistence integration', () => {
       namespace,
       isNamespaceScoped: namespace !== 'all-namespaces',
       columns,
-      data,
-      keyExtractor,
     });
 
     useEffect(() => {

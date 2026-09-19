@@ -76,14 +76,14 @@ export const useObjectDiffYaml = (selection: CatalogItem | null, enabled: boolea
   }, [enabled, scope]);
 
   const selectionKey = selection
-    ? buildVersionedNamespacedRowKey(
+    ? `${buildVersionedNamespacedRowKey(
         selection.ref.clusterId,
         selection.ref.namespace,
         selection.ref.group,
         selection.ref.version,
         selection.ref.kind,
         selection.ref.name
-      ) + `::${selection.ref.uid ?? ''}`
+      )}::${selection.ref.uid ?? ''}`
     : '';
   const [retained, setRetained] = useState(() => emptyDiffYaml(''));
   const rawYaml = state.data?.yaml ?? '';

@@ -13,6 +13,7 @@ import * as ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
+import { buildPersistedStateForSave, savePersistedState } from './gridTablePersistence';
 import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
 import { useGridTablePersistence } from './useGridTablePersistence';
 
@@ -60,7 +61,6 @@ describe('useGridTablePersistence', () => {
     { key: 'age', header: 'Age', render: (row) => row.id },
   ];
 
-  const data: { id: string }[] = [{ id: 'a' }];
   const keyExtractor = (row: { id: string }) => row.id;
 
   const Harness: React.FC<{ namespace: string }> = ({ namespace }) => {
@@ -70,8 +70,7 @@ describe('useGridTablePersistence', () => {
       namespace,
       isNamespaceScoped: namespace !== 'all-namespaces',
       columns,
-      data,
-      keyExtractor,
+
       filterOptions: { isNamespaceScoped: namespace !== 'all-namespaces' },
     });
 
@@ -122,6 +121,46 @@ describe('useGridTablePersistence', () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it('saves a column choice while fresh rows keep arriving', async () => {
+    const actual =
+      await vi.importActual<typeof import('./gridTablePersistence')>('./gridTablePersistence');
+    vi.mocked(buildPersistedStateForSave).mockImplementation(actual.buildPersistedStateForSave);
+    vi.mocked(savePersistedState).mockClear();
+    vi.useFakeTimers();
+    const root = ReactDOM.createRoot(document.createElement('div'));
+    const Probe = ({ rows }: { rows: { id: string }[] }) => {
+      // A live table republishes rows and inline filter options on every refresh.
+      const params = {
+        viewId: 'live-table',
+        clusterIdentity: 'cluster-a',
+        isNamespaceScoped: false,
+        columns,
+        data: rows,
+        keyExtractor,
+        filterOptions: { isNamespaceScoped: false },
+      };
+      latestState = useGridTablePersistence(params);
+      return null;
+    };
+    try {
+      await act(async () => root.render(<Probe rows={[{ id: 'a' }]} />));
+      expect(getLatestState().hydrated).toBe(true);
+      await act(async () => getLatestState().setColumnVisibility({ age: false }));
+      for (let tick = 0; tick < 3; tick++) {
+        await act(async () => vi.advanceTimersByTimeAsync(100));
+        await act(async () => root.render(<Probe rows={[{ id: `row-${tick}` }]} />));
+      }
+      expect(savePersistedState).toHaveBeenCalledWith(
+        'key:clusterhash:live-table:',
+        expect.objectContaining({ columnVisibility: { age: false } })
+      );
+    } finally {
+      await act(async () => root.unmount());
+      vi.useRealTimers();
+      vi.mocked(buildPersistedStateForSave).mockImplementation(() => null);
+    }
   });
 
   it('persists and scopes column visibility per namespace', async () => {

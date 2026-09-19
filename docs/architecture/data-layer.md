@@ -77,8 +77,8 @@ the completed `v2` rewrite plan.
 
 ## Ingestion (owned-reflector LIST+WATCH + projection-at-intake)
 
-- **Project at intake, discard the typed object.** `ingest.ProjectingReflector` borrows
-  client-go's List/Watch/relist/RV machinery and feeds a `ProjectingStore` that keeps
+- **Project at intake, discard the typed object.** `ingest.Manager` creates
+  client-go reflectors for List/Watch/relist/RV handling and feeds a `ProjectingStore` that keeps
   only the projected bundle. `informer.StripManagedFields` (a `WithTransform` on every
   factory) drops `managedFields` before any cache — the core memory lever. Starting
   points: `ingest/manager.go`, `ingest/projecting_store.go`, `informer/projection.go`.

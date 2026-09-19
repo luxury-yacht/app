@@ -1288,10 +1288,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const [activeTab, setActiveTab] = useState<DiagnosticsTabId>('k8s-api');
   const gridTablePerformanceRows = useGridTablePerformanceDiagnostics();
   const brokerReadDiagnostics = useBrokerReadDiagnostics();
-  const refreshState = useRefreshState();
+  const refreshState = useRefreshState(isOpen);
   const { scopedDomainEntries } = refreshState;
-  const catalogScopeEntries = scopedDomainEntries['catalog'] ?? EMPTY_SCOPE_ENTRIES;
-  const podScopeEntries = scopedDomainEntries['pods'] ?? EMPTY_SCOPE_ENTRIES;
+  const catalogScopeEntries = scopedDomainEntries.catalog ?? EMPTY_SCOPE_ENTRIES;
+  const podScopeEntries = scopedDomainEntries.pods ?? EMPTY_SCOPE_ENTRIES;
   const containerLogsScopeEntries = scopedDomainEntries['container-logs'] ?? EMPTY_SCOPE_ENTRIES;
   const objectDetailsScopeEntries = scopedDomainEntries['object-details'] ?? EMPTY_SCOPE_ENTRIES;
   const objectEventsScopeEntries = scopedDomainEntries['object-events'] ?? EMPTY_SCOPE_ENTRIES;
@@ -1346,10 +1346,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     [scopedDomainEntries]
   );
 
-  const resourceStreamStats = resourceStreamManager.getTelemetrySummary();
+  const resourceStreamStats = isOpen
+    ? resourceStreamManager.getTelemetrySummary()
+    : { resyncCount: 0, fallbackCount: 0 };
   // Per-(cluster, domain) resync/fallback stats for the per-domain Streams rows.
-  const resourceStreamStatsByClusterDomain =
-    resourceStreamManager.getTelemetrySummaryByClusterDomain();
+  const resourceStreamStatsByClusterDomain = isOpen
+    ? resourceStreamManager.getTelemetrySummaryByClusterDomain()
+    : {};
   const rows = useMemo<DiagnosticsRow[]>(() => {
     const baseRows = domainScopedStates
       .filter(({ domain, state }) => !isTransientResourceTableQueryScope(domain, state.scope))

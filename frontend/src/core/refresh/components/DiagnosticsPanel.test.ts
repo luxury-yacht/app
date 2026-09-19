@@ -2007,6 +2007,25 @@ describe('DiagnosticsPanel component', () => {
     await rendered.unmount();
   });
 
+  test('does not scan resource streams while diagnostics is closed', async () => {
+    const summarySpy = vi.spyOn(resourceStreamManager, 'getTelemetrySummary');
+    const domainSpy = vi.spyOn(resourceStreamManager, 'getTelemetrySummaryByClusterDomain');
+    fetchTelemetrySummaryMock.mockResolvedValue(makeTelemetrySummary());
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: false });
+    try {
+      expect(summarySpy).not.toHaveBeenCalled();
+      expect(domainSpy).not.toHaveBeenCalled();
+      await rendered.rerender({ isOpen: true });
+      expect(summarySpy).toHaveBeenCalled();
+      expect(domainSpy).toHaveBeenCalled();
+    } finally {
+      await rendered.unmount();
+      summarySpy.mockRestore();
+      domainSpy.mockRestore();
+    }
+  });
+
   test('shows warning summaries when telemetry fetch fails', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));

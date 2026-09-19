@@ -61,9 +61,6 @@ describe('useGridTablePersistence multi-cluster', () => {
     { key: 'age', header: 'Age', render: (row) => row.id },
   ];
 
-  const data: { id: string }[] = [{ id: 'a' }];
-  const keyExtractor = (row: { id: string }) => row.id;
-
   const Harness: React.FC<{ clusterIdentity: string; namespace?: string }> = ({
     clusterIdentity,
     namespace = 'default',
@@ -74,8 +71,6 @@ describe('useGridTablePersistence multi-cluster', () => {
       namespace,
       isNamespaceScoped: true,
       columns,
-      data,
-      keyExtractor,
     });
 
     useEffect(() => {

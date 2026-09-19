@@ -124,8 +124,7 @@ const renderNamespaceGrid = (
       namespace: null,
       isNamespaceScoped: false,
       columns,
-      data: [row],
-      keyExtractor: (item) => item.name,
+
       filterOptions: { isNamespaceScoped: false },
     });
     result.current = useNamespaceResourceGridTable<TestRow>({

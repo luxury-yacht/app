@@ -359,8 +359,7 @@ const GlobalViewClusters: React.FC = () => {
     clusterIdentity: tableOwner.identity,
     isNamespaceScoped: false,
     columns,
-    data: rows,
-    keyExtractor,
+
     enabled: selectedKubeconfigs.length > 0,
   });
   const { gridTableProps, favModal } = useClusterResourceGridTable({

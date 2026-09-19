@@ -94,8 +94,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       namespace: null,
       isNamespaceScoped: false,
       columns,
-      keyExtractor,
-      data: [],
+
       filterOptions: { isNamespaceScoped: false },
       pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     });

@@ -30,8 +30,6 @@ export interface NamespaceGridTablePersistenceParams<T> {
   viewId: string;
   namespace: string;
   columns: GridColumnDefinition<T>[];
-  data: T[];
-  keyExtractor: (item: T, index: number) => string;
   defaultSort?: SortConfig;
   filterOptions?: GridTableFilterPersistenceOptions;
   pageSizeOptions?: readonly number[];
@@ -66,8 +64,6 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
   viewId,
   namespace,
   columns,
-  data,
-  keyExtractor,
   defaultSort = { key: '', direction: null },
   filterOptions,
   pageSizeOptions,
@@ -100,8 +96,7 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
     namespace,
     isNamespaceScoped,
     columns,
-    data,
-    keyExtractor,
+
     // isNamespaceScoped is passed as a top-level param; useGridTablePersistence
     // merges it into filterOptions internally, so we don't duplicate it here.
     filterOptions,

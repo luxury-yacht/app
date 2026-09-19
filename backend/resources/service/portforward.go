@@ -37,7 +37,11 @@ func readyPodNameForEndpoint(ctx context.Context, client kubernetes.Interface, n
 		return "", false
 	}
 	target := endpoint.TargetRef
-	if target == nil || target.APIVersion != corev1.SchemeGroupVersion.String() || target.Kind != "Pod" || target.Name == "" {
+	if target == nil || target.Kind != "Pod" || target.Name == "" {
+		return "", false
+	}
+	// Controller-managed EndpointSlices omit apiVersion for core Pod references.
+	if target.APIVersion != "" && target.APIVersion != corev1.SchemeGroupVersion.String() {
 		return "", false
 	}
 	// The forwarding destination and permission check both use the service namespace.
