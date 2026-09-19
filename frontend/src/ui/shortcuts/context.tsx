@@ -37,7 +37,6 @@ interface KeyboardProviderValue {
   // Surface registration
   registerSurface: (surface: KeyboardSurfaceOptions) => string;
   unregisterSurface: (id: string) => void;
-  updateSurface: (id: string, surface: Partial<KeyboardSurfaceOptions>) => void;
   hasActiveBlockingSurface: () => boolean;
 
   // Native action bridge
@@ -556,22 +555,6 @@ export function KeyboardProvider({ children, disabled = false }: Readonly<Keyboa
     surfacesRef.current.delete(id);
   }, []);
 
-  const updateSurface = useCallback((id: string, surface: Partial<KeyboardSurfaceOptions>) => {
-    const existing = surfacesRef.current.get(id);
-    if (!existing) {
-      return;
-    }
-    surfacesRef.current.set(id, {
-      ...existing,
-      ...surface,
-      active: surface.active ?? existing.active,
-      priority: surface.priority ?? existing.priority,
-      blocking: surface.blocking ?? existing.blocking,
-      captureWhenActive: surface.captureWhenActive ?? existing.captureWhenActive,
-      suppressShortcuts: surface.suppressShortcuts ?? existing.suppressShortcuts,
-    });
-  }, []);
-
   const hasActiveBlockingSurface = useCallback(
     () => getOrderedSurfaces().some((surface) => surface.blocking),
     [getOrderedSurfaces]
@@ -712,7 +695,6 @@ export function KeyboardProvider({ children, disabled = false }: Readonly<Keyboa
     isEnabled: isEnabled && !disabled,
     registerSurface,
     unregisterSurface,
-    updateSurface,
     hasActiveBlockingSurface,
     dispatchNativeAction,
   };

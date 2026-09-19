@@ -57,16 +57,28 @@ describe('useStableSelectedValue', () => {
     hook.cleanup();
   });
 
-  it('reuses a previous shallow object reference when the next object has the same fields', () => {
-    let nextValue: { kinds: string[] } = { kinds: ['ConfigMap', 'Secret'] };
+  it('retains equivalent filter options and publishes changed nested selections', () => {
+    let nextValue = {
+      kinds: ['ConfigMap', 'Secret'],
+      queryFacets: { apiGroups: ['apps', 'batch'] },
+    };
 
     const hook = renderHook(() => useStableSelectedValue(nextValue));
     const first = hook.get();
 
-    nextValue = { kinds: first.kinds };
+    nextValue = {
+      kinds: ['ConfigMap', 'Secret'],
+      queryFacets: { apiGroups: ['apps', 'batch'] },
+    };
     hook.rerender();
 
     expect(hook.get()).toBe(first);
+    for (const apiGroups of [['batch', 'apps'], ['batch'], ['networking.k8s.io'], []]) {
+      nextValue = { ...nextValue, queryFacets: { apiGroups } };
+      hook.rerender();
+      expect(hook.get()).toBe(nextValue);
+      expect(hook.get().queryFacets.apiGroups).toEqual(apiGroups);
+    }
     hook.cleanup();
   });
 

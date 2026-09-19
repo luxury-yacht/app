@@ -16,6 +16,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
+import type { PanelLayoutStore } from './panelLayoutStore';
+import { usePanelLayoutStoreContext } from './panelLayoutStoreContext';
 
 vi.mock('@core/backend-api', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),
@@ -90,6 +92,51 @@ describe('DockablePanel', () => {
     document.querySelectorAll('.dockable-panel-layer').forEach((node) => {
       node.remove();
     });
+  });
+
+  it('does not reinitialize an evicted layout before the initialized panel unmounts', async () => {
+    let store: PanelLayoutStore | undefined;
+    let setVisit: React.Dispatch<React.SetStateAction<number>> | undefined;
+    const Flow = () => {
+      store = usePanelLayoutStoreContext();
+      const [visit, updateVisit] = React.useState(0);
+      setVisit = updateVisit;
+      return visit === 2 ? null : (
+        <DockablePanel
+          panelId="closing"
+          title={`Visit ${visit}`}
+          defaultPosition={visit === 3 ? 'right' : 'bottom'}
+          isOpen
+        >
+          <button type="button">Panel action</button>
+        </DockablePanel>
+      );
+    };
+    const { unmount } = await renderPanel(<Flow />);
+    const layoutStore = requireValue(store, 'layout store');
+    const updateVisit = requireValue(setVisit, 'visit setter');
+    try {
+      expect(layoutStore.getState('closing')).toMatchObject({
+        isInitialized: true,
+        isOpen: true,
+        position: 'bottom',
+      });
+      await act(async () => {
+        layoutStore.clearPanelState('closing');
+        updateVisit(1);
+      });
+      expect(layoutStore.getState('closing')).toBeUndefined();
+      await act(async () => updateVisit(2));
+      await act(async () => updateVisit(3));
+      expect(layoutStore.getState('closing')).toMatchObject({
+        isInitialized: true,
+        isOpen: true,
+        position: 'right',
+      });
+      expect(document.querySelector('[role="tab"][data-panel-id="closing"]')).not.toBeNull();
+    } finally {
+      unmount();
+    }
   });
 
   it('keeps a new-panel focus request when its initiating content unmounts before registration', async () => {

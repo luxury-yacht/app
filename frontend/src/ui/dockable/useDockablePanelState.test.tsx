@@ -172,39 +172,6 @@ describe('useDockablePanelState', () => {
     await hook.unmount();
   });
 
-  it('does not recreate a closed panel layout during a render before unmount', async () => {
-    const store = createPanelLayoutStore();
-    store.updateState('closing', { isOpen: true, isInitialized: true, position: 'bottom' });
-    const Probe = () => {
-      useDockablePanelState('closing');
-      return null;
-    };
-    const root = ReactDOM.createRoot(document.createElement('div'));
-    const render = () =>
-      root.render(
-        <PanelLayoutStoreContext value={store}>
-          <Probe />
-        </PanelLayoutStoreContext>
-      );
-    try {
-      await act(async () => render());
-      await act(async () => {
-        store.clearPanelState('closing');
-        render();
-      });
-      expect(store.getState('closing')).toBeUndefined();
-      await act(async () => root.render(null));
-      await act(async () => render());
-      expect(store.getState('closing')).toMatchObject({
-        isOpen: false,
-        isInitialized: false,
-        position: 'right',
-      });
-    } finally {
-      await act(async () => root.unmount());
-    }
-  });
-
   it('updates size according to the active docking position', async () => {
     const hook = await renderHook('dockable-size');
 

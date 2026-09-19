@@ -69,7 +69,6 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
       isEnabled: true,
       registerSurface: () => 'mock-surface-id',
       unregisterSurface: () => undefined,
-      updateSurface: () => undefined,
       dispatchNativeAction: () => false,
       hasActiveBlockingSurface: () => false,
     }),

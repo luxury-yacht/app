@@ -19,7 +19,6 @@ vi.mock('../context', () => ({
     getAvailableShortcuts: getAvailableShortcutsMock,
     registerSurface: vi.fn(),
     unregisterSurface: vi.fn(),
-    updateSurface: vi.fn(),
     dispatchNativeAction: vi.fn().mockReturnValue(false),
   }),
   useOptionalKeyboardContext: () => null,

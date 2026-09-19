@@ -33,6 +33,7 @@ import type React from 'react';
 import { useCallback, useMemo } from 'react';
 import { useShortNames } from '@/hooks/useShortNames';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
+import { errorHandler } from '@/utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
 export type CustomResourceGridRow = CatalogBackedCustomResourceRow;
@@ -197,12 +198,22 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
 
   const getContextMenuItems = useCallback(
     (resource: CustomResourceGridRow): ContextMenuItem[] => {
-      return objectActions.getMenuItems(
-        customCatalogObjectReference(resource, selectedClusterId, {
-          requiresExplicitVersion: true,
-          fallbackClusterName: selectedClusterName,
-        })
-      );
+      try {
+        return objectActions.getMenuItems(
+          customCatalogObjectReference(resource, selectedClusterId, {
+            requiresExplicitVersion: true,
+            fallbackClusterName: selectedClusterName,
+          })
+        );
+      } catch (error) {
+        errorHandler.handle(error, {
+          source: 'CustomResourceGrid',
+          action: 'getContextMenuItems',
+          clusterId: resource.ref.clusterId,
+          ref: resource.ref,
+        });
+        return [];
+      }
     },
     [objectActions, selectedClusterId, selectedClusterName]
   );

@@ -311,7 +311,7 @@
 }
 
 /* GridTable renders separate header/body tables; keep log-specific paint on both. */
-.gridtable-parsed-logs {
+.gridtable.gridtable-parsed-logs {
   font-size: var(--font-size-small);
   width: 100%;
   border-collapse: collapse;
@@ -328,6 +328,7 @@
 
 .gridtable-parsed-logs .gridtable-row {
   border-bottom: 1px solid var(--log-table-row-border);
+  cursor: pointer;
 }
 
 .gridtable-parsed-logs .gridtable-row:hover {
@@ -393,11 +394,6 @@
   word-break: normal;
   overflow: visible;
   text-overflow: clip;
-}
-
-/* All parsed rows show pointer to indicate clickability */
-.gridtable-parsed-logs .gridtable-row {
-  cursor: pointer;
 }
 
 /* Dynamic pod color applied via --pod-color CSS custom property. */

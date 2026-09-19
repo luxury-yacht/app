@@ -1,7 +1,8 @@
 import { useMemo, useRef } from 'react';
 
 const hasSameArrayItems = <T>(previous: T[], next: T[]): boolean =>
-  previous.length === next.length && previous.every((item, index) => Object.is(item, next[index]));
+  previous.length === next.length &&
+  previous.every((item, index) => areEquivalentValues(item, next[index]));
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -10,13 +11,16 @@ const areEquivalentValues = (previous: unknown, next: unknown): boolean => {
   if (Object.is(previous, next)) {
     return true;
   }
+  if (Array.isArray(previous) && Array.isArray(next)) {
+    return hasSameArrayItems(previous, next);
+  }
   if (isPlainObject(previous) && isPlainObject(next)) {
-    return hasSameShallowObjectShape(previous, next);
+    return hasSameObjectFields(previous, next);
   }
   return false;
 };
 
-const hasSameShallowObjectShape = (
+const hasSameObjectFields = (
   previous: Record<string, unknown>,
   next: Record<string, unknown>
 ): boolean => {
@@ -33,22 +37,13 @@ const hasSameShallowObjectShape = (
 };
 
 const reusePreviousSelectionReference = <T>(previous: T | undefined, next: T): T => {
-  if (previous === undefined || Object.is(previous, next)) {
-    return previous ?? next;
-  }
-  if (Array.isArray(previous) && Array.isArray(next) && hasSameArrayItems(previous, next)) {
-    return previous as T;
-  }
-  if (isPlainObject(previous) && isPlainObject(next) && hasSameShallowObjectShape(previous, next)) {
-    return previous as T;
-  }
-  return next;
+  return previous !== undefined && areEquivalentValues(previous, next) ? previous : next;
 };
 
 /**
  * Preserve a previous selected value reference when the next value is
- * shallowly identical. This keeps typed table feeds from manufacturing
- * fresh arrays/metadata objects on every provider render.
+ * equivalent, including nested arrays and objects. This keeps typed table feeds
+ * from manufacturing fresh arrays/metadata objects on every provider render.
  */
 export const useStableSelectedValue = <T>(value: T): T => {
   const previousRef = useRef<T | undefined>(undefined);

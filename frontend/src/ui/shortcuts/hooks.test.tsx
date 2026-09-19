@@ -37,7 +37,6 @@ const buildKeyboardContext = (
   isEnabled: true,
   registerSurface: vi.fn(),
   unregisterSurface: vi.fn(),
-  updateSurface: vi.fn(),
   hasActiveBlockingSurface: vi.fn().mockReturnValue(false),
   dispatchNativeAction: vi.fn().mockReturnValue(false),
   ...overrides,

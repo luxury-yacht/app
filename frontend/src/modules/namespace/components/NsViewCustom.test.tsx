@@ -800,8 +800,14 @@ describe('NsViewCustom', () => {
     await renderComponent({ showNamespaceColumn: true });
     const gridProps = gridTableMock.mock.calls[0][0];
 
-    expect(() => gridProps.getCustomContextMenuItems(missingGVK, 'kind')).toThrow(
-      /missing version/
+    expect(gridProps.getCustomContextMenuItems(missingGVK, 'kind')).toEqual([]);
+    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringMatching(/missing version/) }),
+      expect.objectContaining({
+        source: 'CustomResourceGrid',
+        action: 'getContextMenuItems',
+        clusterId: missingGVK.ref.clusterId,
+      })
     );
     expect(runObjectActionMock).not.toHaveBeenCalled();
     expect(modalProps.current?.isOpen).toBe(false);

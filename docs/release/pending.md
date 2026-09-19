@@ -12,5 +12,6 @@
 - Error reporting deduplicates independently for each cluster.
 - Object-panel permission checks finish even while another cluster reports authentication recovery progress.
 - Table preferences save while resource rows continue refreshing.
+- Custom-resource menus report invalid resource data without interrupting the table.
 - Closing an object panel no longer lets a pending render recreate its removed layout.
 - Closed diagnostics panels stop observing refresh writes and scanning resource-stream telemetry.

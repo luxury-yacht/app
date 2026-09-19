@@ -147,7 +147,6 @@ const contextMocks = vi.hoisted(() => ({
   isEnabled: true,
   registerSurface: vi.fn(),
   unregisterSurface: vi.fn(),
-  updateSurface: vi.fn(),
   dispatchNativeAction: vi.fn(() => false),
   hasActiveBlockingSurface: vi.fn(() => false),
 }));
