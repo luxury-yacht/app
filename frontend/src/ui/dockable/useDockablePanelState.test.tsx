@@ -21,11 +21,8 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 import { DockablePanelProvider } from './DockablePanelProvider';
 import { createPanelLayoutStore } from './panelLayoutStore';
 import { PanelLayoutStoreContext } from './panelLayoutStoreContext';
-import {
-  getAllPanelStates,
-  restorePanelStates,
-  useDockablePanelState,
-} from './useDockablePanelState';
+import { addPanelToGroup } from './tabGroupState';
+import { useDockablePanelState } from './useDockablePanelState';
 
 type HookResult = ReturnType<typeof useDockablePanelState>;
 
@@ -36,7 +33,10 @@ interface HookHarness {
   unmount: () => Promise<void>;
 }
 
-const renderHook = async (panelId: string): Promise<HookHarness> => {
+const renderHook = async (
+  panelId: string,
+  defaultPosition: 'right' | 'bottom' = 'right'
+): Promise<HookHarness> => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
@@ -44,7 +44,7 @@ const renderHook = async (panelId: string): Promise<HookHarness> => {
   const result: { current?: HookResult } = {};
 
   const HookConsumer: React.FC<{ id: string }> = ({ id }) => {
-    result.current = useDockablePanelState(id);
+    result.current = useDockablePanelState(id, defaultPosition);
     return null;
   };
 
@@ -92,6 +92,41 @@ const renderHook = async (panelId: string): Promise<HookHarness> => {
 };
 
 describe('useDockablePanelState', () => {
+  it('uses restored group membership for sizing and observes group moves without a second position write', async () => {
+    const store = createPanelLayoutStore();
+    store.setTabGroups((groups) => addPanelToGroup(groups, 'restored', 'bottom'));
+    store.updateState('restored', {
+      isOpen: true,
+      bottomSize: { width: 400, height: 540 },
+      rightSize: { width: 620, height: 300 },
+    });
+    let panel: HookResult | undefined;
+    const Probe = () => {
+      panel = useDockablePanelState('restored');
+      return null;
+    };
+    const container = document.createElement('div');
+    const root = ReactDOM.createRoot(container);
+    try {
+      await act(async () =>
+        root.render(
+          <PanelLayoutStoreContext value={store}>
+            <Probe />
+          </PanelLayoutStoreContext>
+        )
+      );
+      expect(panel?.position).toBe('bottom');
+      expect(panel?.size.height).toBe(540);
+      await act(async () =>
+        store.setTabGroups((groups) => addPanelToGroup(groups, 'restored', 'right'))
+      );
+      expect(panel?.position).toBe('right');
+      expect(panel?.size.width).toBe(620);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
   const originalInnerWidth = window.innerWidth;
   const originalInnerHeight = window.innerHeight;
 
@@ -111,9 +146,12 @@ describe('useDockablePanelState', () => {
     async (change) => {
       const first = createPanelLayoutStore();
       const second = createPanelLayoutStore();
-      first.updateState('first', { position: 'right', isOpen: true });
-      first.updateState('second', { position: 'bottom', isOpen: false });
-      second.updateState('first', { position: 'bottom', isOpen: false });
+      first.updateState('first', { isOpen: true });
+      first.setTabGroups((groups) => addPanelToGroup(groups, 'first', 'right'));
+      first.updateState('second', { isOpen: false });
+      first.setTabGroups((groups) => addPanelToGroup(groups, 'second', 'bottom'));
+      second.updateState('first', { isOpen: false });
+      second.setTabGroups((groups) => addPanelToGroup(groups, 'first', 'bottom'));
       const snapshots: Array<{ visit: string; position: string; isOpen: boolean }> = [];
       const Probe = ({ visit, panelId }: { visit: string; panelId: string }) => {
         const state = useDockablePanelState(panelId);
@@ -150,15 +188,14 @@ describe('useDockablePanelState', () => {
   );
 
   it('initializes panel state with provided defaults', async () => {
-    const hook = await renderHook('dockable-init');
+    const hook = await renderHook('dockable-init', 'bottom');
 
     expect(hook.current.isInitialized).toBe(false);
-    expect(hook.current.position).toBe('right');
+    expect(hook.current.position).toBe('bottom');
     expect(hook.current.isOpen).toBe(false);
 
     await hook.update((state) =>
       state.initialize({
-        position: 'bottom',
         size: { width: 420, height: 260 },
         isOpen: false,
       })
@@ -221,31 +258,6 @@ describe('useDockablePanelState', () => {
 
     expect(hook.current.position).toBe('right');
     expect(hook.current.isOpen).toBe(false);
-
-    await hook.unmount();
-  });
-
-  it('tracks panel states globally via getAllPanelStates and restorePanelStates', async () => {
-    const hook = await renderHook('dockable-global');
-
-    await hook.update((state) => state.setPosition('bottom'));
-    await hook.update((state) => state.setSize({ width: 420, height: 260 }));
-
-    const snapshot = getAllPanelStates();
-    expect(snapshot['dockable-global'].position).toBe('bottom');
-    expect(snapshot['dockable-global'].bottomSize.height).toBe(260);
-
-    await act(async () => {
-      restorePanelStates({
-        'dockable-global': {
-          ...snapshot['dockable-global'],
-          position: 'right',
-        },
-      });
-    });
-
-    await hook.rerender();
-    expect(hook.current.position).toBe('right');
 
     await hook.unmount();
   });

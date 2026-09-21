@@ -1,3 +1,4 @@
+import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 /**
  * frontend/src/shared/components/tabs/Tabs.test.tsx
  */
@@ -124,20 +125,22 @@ describe('Tabs', () => {
     const onActivate = vi.fn();
     await act(async () =>
       root.render(
-        <KeyboardProvider>
-          <AppRegionNavigation />
-          <header data-app-region="header">
-            <Tabs
-              tabs={[
-                { id: 'a', label: 'Alpha', onClose: vi.fn() },
-                { id: 'b', label: 'Beta', onClose: vi.fn() },
-              ]}
-              activeId="a"
-              onActivate={onActivate}
-              aria-label="Tabs"
-            />
-          </header>
-        </KeyboardProvider>
+        <PanelLayoutTestProvider>
+          <KeyboardProvider>
+            <AppRegionNavigation />
+            <header data-app-region="header">
+              <Tabs
+                tabs={[
+                  { id: 'a', label: 'Alpha', onClose: vi.fn() },
+                  { id: 'b', label: 'Beta', onClose: vi.fn() },
+                ]}
+                activeId="a"
+                onActivate={onActivate}
+                aria-label="Tabs"
+              />
+            </header>
+          </KeyboardProvider>
+        </PanelLayoutTestProvider>
       )
     );
     const tabs = container.querySelectorAll<HTMLElement>('[role="tab"]');

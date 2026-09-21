@@ -44,6 +44,7 @@ import {
   tornOffTabSnapshot,
 } from './tabTransfer';
 import { useRemoveWorkspacePanels } from './useRemoveWorkspacePanels';
+import { useRestoreWorkspacePanels } from './useRestoreWorkspacePanels';
 
 const newIdentity = (prefix: string): string =>
   `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
@@ -81,21 +82,14 @@ const isAuthoritativeTransferSource = (
   if (!owned || !sameTransferredTab(owned, request.tab)) {
     return false;
   }
-  if (request.sourceWindowName === windowName) {
-    return !owned.nativeLocation && sourceGroup === request.sourceGroupId;
-  }
-  return (
-    owned.nativeLocation?.windowName === request.sourceWindowName &&
-    owned.nativeLocation.groupId === request.sourceGroupId
-  );
+  return request.sourceWindowName === windowName && sourceGroup === request.sourceGroupId;
 };
 
 import { WorkspacePanelLifecycle } from './WorkspacePanelLifecycle';
 import { usePanelWorkspaceSync, WorkspacePanelSync } from './WorkspacePanelSync';
 export function WorkspacePanelCoordinator({ children }: Readonly<{ children: React.ReactNode }>) {
   const windowName = getWindowIdentity();
-  const { openPanels, pendingNativeOpenPanelIds, dockPanelWindow, removeOwnedPanel } =
-    useObjectPanelState();
+  const { openPanels, pendingNativeOpenPanelIds, removeOwnedPanel } = useObjectPanelState();
   const activeTabs = useObjectPanelActiveTabs();
   const { selectedClusterId, selectedClusterIds } = useKubeconfig();
   const guards = usePanelLifecycleGuardRegistry();
@@ -110,13 +104,9 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
   const [pendingAutoFloatRollbacks, setPendingAutoFloatRollbacks] = useState<
     panelwindow.GroupSnapshot[]
   >([]);
-  const queueAutoFloatRollback = useCallback(
-    (snapshot: panelwindow.GroupSnapshot) => {
-      dockPanelWindow(snapshot, 'right');
-      setPendingAutoFloatRollbacks((current) => [...current, snapshot]);
-    },
-    [dockPanelWindow]
-  );
+  const queueAutoFloatRollback = useCallback((snapshot: panelwindow.GroupSnapshot) => {
+    setPendingAutoFloatRollbacks((current) => [...current, snapshot]);
+  }, []);
   const handleGroupMove = useCallback(
     (
       group: { groupKey: GroupKey; tabs: string[]; activeTab: string | null },
@@ -289,13 +279,9 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     },
     [queueAutoFloatRollback, guards.releaseTransfer]
   );
-  const handleDockRequest = useCallback(
-    (request: panelwindow.WindowDockRequestedEvent, edge: 'right' | 'bottom') => {
-      dockPanelWindow(request.snapshot, edge);
-      setPendingDockRequest(request);
-    },
-    [dockPanelWindow]
-  );
+  const handleDockRequest = useCallback((request: panelwindow.WindowDockRequestedEvent) => {
+    setPendingDockRequest(request);
+  }, []);
   const handleDockRequestSettled = useCallback(
     (request: panelwindow.WindowDockRequestedEvent, committed: boolean) => {
       if (!committed) {
@@ -397,7 +383,8 @@ function WorkspaceObjectRouteCoordinator({
   onAutoFloatRollbackSettled: (transferId: string) => void;
   children: React.ReactNode;
 }>) {
-  const { dockPanelWindow, getOwnedPanel } = useObjectPanelState();
+  const { getOwnedPanel } = useObjectPanelState();
+  const restoreWorkspacePanels = useRestoreWorkspacePanels();
   const {
     selectedClusterIds,
     selectedKubeconfigs,
@@ -405,7 +392,7 @@ function WorkspaceObjectRouteCoordinator({
     setActiveKubeconfig,
     selectedClusterId,
   } = useKubeconfig();
-  const { tabGroups, focusPanel, dockPanelGroup, detachPanelGroup, discardPanelLayouts } =
+  const { tabGroups, focusPanel, detachPanelGroup, discardPanelLayouts } =
     useDockablePanelContext();
   const guards = usePanelLifecycleGuardRegistry();
   const removeLocalTabs = useRemoveWorkspacePanels();
@@ -428,15 +415,10 @@ function WorkspaceObjectRouteCoordinator({
   );
   useEffect(() => {
     for (const snapshot of pendingAutoFloatRollbacks) {
-      dockPanelGroup(
-        snapshot.clusterId,
-        (snapshot.tabs ?? []).map((tab) => tab.panelId),
-        snapshot.activePanelId,
-        'right'
-      );
+      restoreWorkspacePanels(snapshot, 'right');
       onAutoFloatRollbackSettled(snapshot.transferId);
     }
-  }, [pendingAutoFloatRollbacks, dockPanelGroup, onAutoFloatRollbackSettled]);
+  }, [pendingAutoFloatRollbacks, restoreWorkspacePanels, onAutoFloatRollbackSettled]);
 
   useEffect(
     () =>
@@ -505,11 +487,8 @@ function WorkspaceObjectRouteCoordinator({
         ]);
         pendingTargets.current.set(request.transferId, request);
         activateCluster(request.clusterId);
-        dockPanelWindow(singleTabGroupSnapshot(request), request.targetGroupId);
-        dockPanelGroup(
-          request.clusterId,
-          [request.tab.panelId],
-          request.tab.panelId,
+        restoreWorkspacePanels(
+          singleTabGroupSnapshot(request),
           request.targetGroupId,
           request.targetIndex
         );
@@ -519,8 +498,7 @@ function WorkspaceObjectRouteCoordinator({
       selectedClusterIds,
       getOwnedPanel,
       activateCluster,
-      dockPanelWindow,
-      dockPanelGroup,
+      restoreWorkspacePanels,
       guards,
       sync.stage,
     ]
@@ -595,15 +573,10 @@ function WorkspaceObjectRouteCoordinator({
             activePanelId: event.snapshot.activePanelId,
           },
         ]);
-        dockPanelGroup(
-          event.snapshot.clusterId,
-          (event.snapshot.tabs ?? []).map((tab) => tab.panelId),
-          event.snapshot.activePanelId,
-          event.targetPosition
-        );
+        restoreWorkspacePanels(event.snapshot, event.targetPosition);
         onDockRequest(event, event.targetPosition);
       }),
-    [selectedClusterIds, dockPanelGroup, onDockRequest, sync.stage, guards, windowName]
+    [selectedClusterIds, restoreWorkspacePanels, onDockRequest, sync.stage, guards, windowName]
   );
   useEffect(
     () =>

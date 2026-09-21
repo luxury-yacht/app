@@ -14,8 +14,9 @@
 
 export type { DockPosition } from './DockablePanel';
 export { default as DockablePanel } from './DockablePanel';
-export { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 export {
-  getAllPanelStates,
-  useDockablePanelState,
-} from './useDockablePanelState';
+  DockablePanelLayer,
+  DockablePanelProvider,
+  useDockablePanelContext,
+} from './DockablePanelProvider';
+export { useDockablePanelState } from './useDockablePanelState';

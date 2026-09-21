@@ -576,11 +576,7 @@ describe('PanelWindowShortcuts', () => {
 
     await act(async () => mocks.handlers.tabTransferInsert?.({ request } as never));
 
-    expect(mocks.upsertOwnedPanel).toHaveBeenCalledWith(request.tab.objectRef, 'details', {
-      kind: 'panel-window',
-      windowName: 'panel-1',
-      groupId: 'group-1',
-    });
+    expect(mocks.upsertOwnedPanel).toHaveBeenCalledWith(request.tab.objectRef, 'details');
     expect(mocks.movePanelBetweenGroups).toHaveBeenCalledWith('panel-c', 'right', 1);
     expect(mocks.failTabTransfer).not.toHaveBeenCalled();
   });

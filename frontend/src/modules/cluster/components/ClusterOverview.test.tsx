@@ -1,3 +1,4 @@
+import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 /**
  * frontend/src/modules/cluster/components/ClusterOverview.test.tsx
  *
@@ -1395,15 +1396,17 @@ function renderClusterOverview(keyboard = false) {
       const overview = <ClusterOverview clusterContext="Default" />;
       root.render(
         keyboard ? (
-          <KeyboardProvider>
-            <AppRegionNavigation />
-            <main data-app-region="content">
-              {overview}
-              <button type="button" data-testid="after-overview">
-                After overview
-              </button>
-            </main>
-          </KeyboardProvider>
+          <PanelLayoutTestProvider>
+            <KeyboardProvider>
+              <AppRegionNavigation />
+              <main data-app-region="content">
+                {overview}
+                <button type="button" data-testid="after-overview">
+                  After overview
+                </button>
+              </main>
+            </KeyboardProvider>
+          </PanelLayoutTestProvider>
         ) : (
           overview
         )

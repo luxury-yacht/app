@@ -6,8 +6,6 @@ import { getWindowIdentity } from '@/core/desktop-runtime';
 import { getClusterTabOrder, setClusterTabOrder } from '@/core/persistence/clusterTabOrder';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
-import type { ViewType } from '@/modules/object-panel/components/ObjectPanel/types';
-import { useObjectPanelState } from '@/modules/object-panel/contexts/ObjectPanelStateContext';
 import {
   captureClusterTableState,
   restoreClusterTableState,
@@ -27,6 +25,7 @@ import {
 import { usePanelLifecycleGuardRegistry } from './panelLifecycleGuards';
 import { samePanelTab } from './tabTransfer';
 import { useRemoveWorkspacePanels } from './useRemoveWorkspacePanels';
+import { useRestoreWorkspacePanels } from './useRestoreWorkspacePanels';
 import { usePanelWorkspaceSync } from './WorkspacePanelSync';
 
 type PendingTarget = {
@@ -53,8 +52,8 @@ export function ClusterTabTransferCoordinator() {
   const { getClusterNavigationState, restoreClusterNavigationState } = useViewState();
   const { getClusterSidebarSelection, setSidebarSelectionForCluster } = useSidebarState();
   const { getClusterNamespace, setSelectedNamespace } = useNamespace();
-  const { upsertOwnedPanel } = useObjectPanelState();
-  const { tabGroups, dockPanelGroup } = useDockablePanelContext();
+  const restoreWorkspacePanels = useRestoreWorkspacePanels();
+  const { tabGroups } = useDockablePanelContext();
   const removeWorkspacePanels = useRemoveWorkspacePanels();
   const pending = useRef(new Map<string, PendingTarget>());
   const cancelled = useRef(new Set<string>());
@@ -193,24 +192,18 @@ export function ClusterTabTransferCoordinator() {
 
   const mountTarget = useCallback(
     (target: PendingTarget) => {
-      const { request, snapshot, targetAlreadyOpen } = target.event;
+      const { snapshot, targetAlreadyOpen } = target.event;
       if (!targetAlreadyOpen) {
         restoreTargetView(target);
       }
       for (const group of snapshot.groups ?? []) {
         const edge = group.groupId === 'bottom' ? 'bottom' : 'right';
-        for (const tab of group.tabs ?? []) {
-          upsertOwnedPanel({ ...tab.objectRef }, tab.activeView as ViewType, {
-            kind: 'docked',
-            edge,
-          });
-        }
-        dockPanelGroup(request.clusterId, panelIds([group]), group.activePanelId, edge);
+        restoreWorkspacePanels(group, edge);
       }
       target.mounted = true;
       setRevision((value) => value + 1);
     },
-    [upsertOwnedPanel, dockPanelGroup, restoreTargetView]
+    [restoreWorkspacePanels, restoreTargetView]
   );
 
   const activateTargetCluster = useCallback(

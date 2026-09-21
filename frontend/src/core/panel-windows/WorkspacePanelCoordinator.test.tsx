@@ -175,7 +175,7 @@ vi.mock('@/modules/object-panel/contexts/ObjectPanelStateContext', () => ({
     nativeLocations: mocks.nativeLocations,
     pendingNativeOpenPanelIds: mocks.pendingNativeOpenPanelIds,
     commitPanelWindow: mocks.commitWindow,
-    dockPanelWindow: mocks.dockWindow,
+    restorePanelTabs: mocks.dockWindow,
     removePanelWindow: mocks.removeWindow,
     getOwnedPanel: mocks.getOwnedPanel,
     panelIdsForCluster: mocks.panelIdsForCluster,
@@ -704,10 +704,7 @@ describe('WorkspacePanelCoordinator', () => {
       await Promise.resolve();
     });
 
-    expect(mocks.dockWindow).toHaveBeenCalledWith(
-      expect.objectContaining({ tabs: [tab] }),
-      'right'
-    );
+    expect(mocks.dockWindow).toHaveBeenCalledWith(expect.objectContaining({ tabs: [tab] }));
     expect(mocks.dockPanelGroup).toHaveBeenCalledWith(
       'cluster-1',
       ['panel-a'],
@@ -756,7 +753,7 @@ describe('WorkspacePanelCoordinator', () => {
 
     await act(async () => mocks.eventHandlers.tabTransferCommitted?.({ request } as never));
     expect(mocks.detachPanelGroup).toHaveBeenCalledWith('cluster-1', ['panel-a']);
-    expect(mocks.discardPanelLayouts).toHaveBeenCalledWith('cluster-1', ['panel-a']);
+    expect(mocks.removeOwnedPanel).toHaveBeenCalledWith('cluster-1', 'panel-a');
   });
 
   it('rejects a tab transfer whose claimed source group is not authoritative', async () => {
@@ -949,8 +946,14 @@ describe('WorkspacePanelCoordinator', () => {
     });
 
     const snapshot = mocks.beginOpen.mock.calls[0]?.[1];
-    expect(mocks.dockWindow).toHaveBeenCalledWith(snapshot, 'right');
-    expect(mocks.dockPanelGroup).toHaveBeenCalledWith('cluster-1', ['panel-a'], 'panel-a', 'right');
+    expect(mocks.dockWindow).toHaveBeenCalledWith(snapshot);
+    expect(mocks.dockPanelGroup).toHaveBeenCalledWith(
+      'cluster-1',
+      ['panel-a'],
+      'panel-a',
+      'right',
+      undefined
+    );
     expect(mocks.reportError).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({ action: 'float-group' })
@@ -985,8 +988,14 @@ describe('WorkspacePanelCoordinator', () => {
       await Promise.resolve();
     });
 
-    expect(mocks.dockWindow).toHaveBeenCalledWith(snapshot, 'right');
-    expect(mocks.dockPanelGroup).toHaveBeenCalledWith('cluster-1', ['panel-a'], 'panel-a', 'right');
+    expect(mocks.dockWindow).toHaveBeenCalledWith(snapshot);
+    expect(mocks.dockPanelGroup).toHaveBeenCalledWith(
+      'cluster-1',
+      ['panel-a'],
+      'panel-a',
+      'right',
+      undefined
+    );
   });
 
   it('acknowledges a dock handoff once after the owner target is mounted', async () => {
@@ -1018,9 +1027,10 @@ describe('WorkspacePanelCoordinator', () => {
       'cluster-1',
       ['panel-a'],
       'panel-a',
-      'bottom'
+      'bottom',
+      undefined
     );
-    expect(mocks.dockWindow).toHaveBeenCalledWith(snapshot, 'bottom');
+    expect(mocks.dockWindow).toHaveBeenCalledWith(snapshot);
     expect(mocks.dockPanelGroup.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.dockWindow.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
     );

@@ -16,7 +16,7 @@ import { usePanelWorkspaceSync } from './WorkspacePanelSync';
 export function WorkspacePanelLifecycle() {
   const windowName = getWindowIdentity();
   const { selectedClusterIds, registerClusterClosePreflight } = useKubeconfig();
-  const { panelIdsForCluster, getOwnedPanel } = useObjectPanelState();
+  const { panelIdsForCluster } = useObjectPanelState();
   const { focusPanel } = useDockablePanelContext();
   const guards = usePanelLifecycleGuardRegistry();
   const { flush, quiesceCluster } = usePanelWorkspaceSync();
@@ -28,9 +28,7 @@ export function WorkspacePanelLifecycle() {
       clusterId?: string,
       prepare = flush
     ) => {
-      const panelIds = clusterIds.flatMap((id) =>
-        panelIdsForCluster(id).filter((panelId) => !getOwnedPanel(id, panelId)?.nativeLocation)
-      );
+      const panelIds = clusterIds.flatMap(panelIdsForCluster);
       return preparePanelClose({
         guards,
         transactionId,
@@ -52,7 +50,7 @@ export function WorkspacePanelLifecycle() {
         },
       });
     },
-    [panelIdsForCluster, getOwnedPanel, guards, focusPanel, windowName, flush]
+    [panelIdsForCluster, guards, focusPanel, windowName, flush]
   );
 
   const closeCluster = useCallback(

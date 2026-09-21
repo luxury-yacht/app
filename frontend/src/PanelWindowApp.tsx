@@ -13,7 +13,7 @@ import {
   useObjectPanelState,
 } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotificationSystem';
-import { DockablePanelProvider } from '@ui/dockable';
+import { DockablePanelLayer, DockablePanelProvider } from '@ui/dockable';
 import type { TabGroupState } from '@ui/dockable/tabGroupTypes';
 import { AppErrorBoundary, PanelErrorBoundary } from '@ui/errors';
 import AppHeader from '@ui/layout/AppHeader';
@@ -32,6 +32,7 @@ import {
   requestPanelTabClose,
   requestPanelTabTransfer,
 } from '@/core/panel-windows';
+import { PanelLayoutLifecycle } from '@/core/panel-windows/PanelLayoutLifecycle';
 import { PanelWindowRoleProvider } from '@/core/panel-windows/PanelWindowRoleContext';
 import {
   PanelLifecycleGuardProvider,
@@ -262,12 +263,14 @@ function PanelWindowSurface({
       onTabTearOff={handleTabTearOff}
       canStartTabDrag={canStartTabDrag}
     >
+      <PanelLayoutLifecycle />
       <PanelWindowShortcuts descriptor={descriptor} ready={ready} />
       <AppRegionNavigation />
       <TextContextMenu />
       <AppHeader mode="panel" clusterName={clusterName} />
       <ErrorNotificationSystem />
       <div className="panel-window-content content">
+        <DockablePanelLayer />
         {Array.from(openPanels.entries()).map(([panelId, objectRef]) => (
           <PanelErrorBoundary
             key={panelId}

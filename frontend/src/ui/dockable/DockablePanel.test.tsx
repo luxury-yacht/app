@@ -1,3 +1,4 @@
+import { DockablePanelTestHost } from '@/test-utils/DockablePanelTestHost';
 /**
  * frontend/src/components/dockable/DockablePanel.test.tsx
  *
@@ -47,7 +48,7 @@ const ensureContentElement = () => {
   }
 };
 
-const renderPanel = async (ui: React.ReactElement) => {
+const renderPanel = async (ui: React.ReactElement<{ children?: React.ReactNode }>) => {
   ensureContentElement();
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -57,11 +58,21 @@ const renderPanel = async (ui: React.ReactElement) => {
     const wrapped =
       ui.type === DockablePanelProvider ? (
         <KeyboardProvider>
-          <ZoomProvider>{ui}</ZoomProvider>
+          <ZoomProvider>
+            {React.cloneElement(
+              ui,
+              undefined,
+              <>
+                <DockablePanelTestHost />
+                {ui.props.children}
+              </>
+            )}
+          </ZoomProvider>
         </KeyboardProvider>
       ) : (
         <KeyboardProvider>
           <DockablePanelProvider>
+            <DockablePanelTestHost />
             <ZoomProvider>{ui}</ZoomProvider>
           </DockablePanelProvider>
         </KeyboardProvider>
@@ -119,8 +130,8 @@ describe('DockablePanel', () => {
       expect(layoutStore.getState('closing')).toMatchObject({
         isInitialized: true,
         isOpen: true,
-        position: 'bottom',
       });
+      expect(layoutStore.getTabGroups().bottom.tabs).toContain('closing');
       await act(async () => {
         layoutStore.clearPanelState('closing');
         updateVisit(1);
@@ -131,8 +142,8 @@ describe('DockablePanel', () => {
       expect(layoutStore.getState('closing')).toMatchObject({
         isInitialized: true,
         isOpen: true,
-        position: 'right',
       });
+      expect(layoutStore.getTabGroups().right.tabs).toContain('closing');
       expect(document.querySelector('[role="tab"][data-panel-id="closing"]')).not.toBeNull();
     } finally {
       unmount();

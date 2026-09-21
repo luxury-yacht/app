@@ -218,3 +218,158 @@ both temporary kubeconfigs were deleted. The saved cluster selections and active
 state captured before this phase were restored and read back successfully.
 The [query contract](../architecture/large-data-query.md) now records the shared
 mechanics and adapter-owned policies. Panel placement remains a separate phase.
+
+## Follow-up: panel placement consolidation
+
+### Ownership and ordering
+
+The shared Go directory remains the cross-window owner. Within a renderer,
+tab-group membership will be the only writable placement projection. Object
+state will own local object references, active views, and pending native opens;
+layout state will own geometry/open/maximize state. Remove the separate object
+dock-edge/native-location indexes and per-panel geometry position field.
+
+The app and native layouts also own a declarative panel portal layer. Its ref
+publishes the live DOM destination to the provider; panel rendering and geometry
+consume that same destination. This removes the one-time DOM lookup that could
+retain a detached host after reconstruction. React owns host replacement and
+cleanup; the layer introduces no dependency on object state or transfer owners.
+
+Producers include object opens, retained-directory reconstruction, group docking,
+panel-tab insertion, and cluster-view insertion. Consumers include AppLayout,
+DockablePanel, workspace publication, close preflight, native shortcuts, focus,
+and cache/layout cleanup. Reuse one reconstruction boundary across transfers.
+
+Preserve group/tab ordering, active views, isolated pending float groups,
+cluster identity, provisional-source retention, readiness acknowledgement,
+publication flushing, and rollback. Intra-renderer moves retain their current
+local behavior; cross-window protocols still own acknowledgements and guards.
+Object state must not reach into a globally selected layout store. Cleanup uses
+the owning cluster's layout and runs outside React state updater callbacks.
+
+This renderer consolidation precedes merging the three Go transfer lifecycles.
+Their platform-specific preparation and settlement contracts require separate
+analysis; do not replace them with a generic transaction before identifying all
+participants, reservation, rollback, and empty-source close guarantees.
+
+### Acceptance and evidence
+
+- [x] Establish baseline panel, object-state, shortcut, and protocol suites.
+- [x] Remove duplicate renderer placement writes and global layout selection.
+- [x] Share reconstruction and preserve source/target publication ordering.
+- [x] Verify automated contracts for local moves/reorders, focus, cluster switches,
+      geometry handoff, close eviction, transient-unmount retention, and rollback.
+- [x] Measure changed-function complexity and affected coverage.
+- [ ] Exercise actual macOS panel moves, dock-back, close guards, and drops.
+- [ ] Record Windows native validation availability and outstanding checks.
+- [x] Run prerelease gate and inspect the final worktree.
+- [ ] Assess and consolidate transfer lifecycle ownership.
+
+
+### Renderer validation record — 2026-09-20
+
+- Baseline: 356 tests across 28 frontend suites passed before edits; Go
+  `internal/appwindow` and `internal/panelwindow` protocol suites also passed.
+- Focused after edits: 358 tests across 29 suites passed. Coverage includes
+  source retention/rollback, readiness, group moves, geometry handoff, cluster
+  switching, true-close cache eviction, active views, and keyboard focus.
+  Native transport is mocked in coordinator tests.
+- New provider integration uses real object and layout providers to restore
+  placement before object content and remove an inactive cluster's panel without
+  clearing the active cluster's geometry. It mocks kubeconfig selection and
+  refresh-domain eviction. It does not replace native transfer validation.
+- Red/green: restored membership initially reported the default right position
+  in `useDockablePanelState`; the hook now derives placement from groups.
+- Native validation found an additional initialization regression: newly mounted
+  controlled panels removed preinstalled bottom membership while geometry was
+  still in its initial closed state. `DockablePanel.behavior.test.tsx` reproduced
+  the empty bottom group before the fix and passed afterward. Synchronization
+  now waits for initialization; the real component test includes the dynamic
+  mount-position projection used by AppLayout.
+- Keyboard fixtures now provide their own layout context instead of depending
+  on the removed global singleton; 212 tests in those nine suites passed.
+- Local Biome complexity analysis used a temporary maximum of 12 across all
+  20 changed/new production files and reported no violations. Repository
+  thresholds and suppressions were unchanged. No pushed Sonar analysis exists.
+- A second native check found transferred content rendered into a detached portal
+  host. The source snapshot and destination object/group state contained both
+  panels. A real-component regression reproduced disappearance when the content
+  surface was replaced. `DockablePanelLayer` now belongs to each layout, and its
+  ref updates the destination consumed by panel portals and geometry. That
+  regression and the other 40 tests in the two component suites passed.
+- Temporary diagnostics for both native findings were removed.
+- A subsequent native trace found a separate stale directory response: after
+  workspace-2 reconstructed both tabs, a response still placing them in
+  workspace-1 removed the destination's local copies. The new
+  `WorkspacePanelSync.test.tsx` regression failed with that removal, then passed
+  after cluster-scoped read invalidation was added around staging and settlement.
+  It also proves that a later authoritative move still removes the old copy.
+  All 16 sync tests passed. The temporary trace was removed.
+- The final native recheck of that race fix is **blocked**: computer-use reported
+  that the Mac was locked and could not be unlocked automatically. The
+  development app/server were stopped before rerunning coverage.
+- Final frontend coverage: 5,054 tests in 525 files passed. The instrumented
+  changed production files covered 1,854 of 2,023 statements (91.65%).
+  `AppLayout.tsx` and `AppDebugOverlays.tsx` were not instrumented by this suite;
+  the percentage does not claim coverage for them. Whole-suite statement
+  coverage was 89.71%.
+- Final local complexity: all 20 changed/new production files passed Biome's
+  cognitive-complexity check with a temporary maximum of 12 after the race fix.
+- Final `mise exec -- wails3 task qc:prerelease` exited 0 after the stale-read
+  fix, including backend race tests, vet/staticcheck, binding checks, frontend
+  lint/types and 5,054 tests, Knip, documentation checks, and the configured
+  vulnerability scan. The gate reported no frontend formatting changes.
+  Final worktree inspection found the panel production changes, supporting test
+  fixtures/regressions, and the two owning documentation files. `git diff --check`
+  passed. No Go protocol implementation changed in this step.
+
+### Native evidence and remaining checks
+
+Using disposable Kind cluster `codex-panel-check`, namespace
+`panel-refactor-check`, and ConfigMaps `panel-alpha`/`panel-beta`, the native macOS
+development app exercised the following before the final stale-read fix:
+
+- Whole-group Float and Dock to bottom preserved two tabs, their order, the
+  selected beta YAML view, namespace, and ConfigMap UID.
+- Menu-based tab reorder and single-tab Float retained source content. Focusing
+  beta from its table row brought back the existing native panel. Docking that
+  tab into the occupied bottom group selected beta and closed the empty native
+  source.
+- An unsaved YAML draft blocked dock-back, window close, and Quit. Cancelling
+  the edit discarded the draft; it was not saved to Kubernetes.
+- Cluster Move to new window restored navigation/table state but lost the
+  panels. This is the **failed** native case traced to the stale directory read;
+  automated red/green evidence does not count as its native recheck.
+- Automated drag attempts did not change tab order or deliver a destination
+  drop. A real manual destination drop, tear-off/phantom-animation check, and
+  full native transfer matrix remain **pending**.
+- Windows validation remains **pending**. A Windows environment was requested;
+  none has been provided in this task.
+
+This phase is unfinished while the native regression recheck and required
+platform/drop checks remain outstanding. The backend consolidation below is
+also still pending.
+
+The native app/server were stopped. The original selected/active kubeconfig
+preferences were restored from the pre-test snapshot and read back successfully.
+The disposable Kind cluster and both temporary kubeconfigs were removed.
+
+### Remaining backend transfer boundary
+
+No Go protocol changes are included in this renderer step. The three existing
+protocols still need consolidation. Inspection identified distinct commitments:
+
+- Whole-group open/dock combines `panelIndex` state with cluster reservations,
+  runtime retention, hidden-window creation, readiness, and directory placement
+  (`internal/appwindow/registry.go`, `internal/appwindow/panel.go`).
+- Panel-tab transfer tracks requested/inserting/opening phases. Existing targets
+  commit on exact snapshot publication; a new target delegates to the whole-group
+  opening protocol (`internal/appwindow/panel_tab_transfer.go`).
+- Cluster-view transfer stages backend view membership and navigation, preserves
+  an existing target's navigation, and closes empty source/provisional windows
+  after releasing transfer locks (`internal/appwindow/cluster_tab_transfer.go`).
+
+The next backend change must unify transaction ownership and settlement while
+preserving those preparation policies, authenticated callers, replay rejection,
+source retention, timeout rollback, and synchronous native-close lock ordering.
+It remains pending; removing renderer copies does not complete that change.

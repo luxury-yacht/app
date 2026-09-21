@@ -4,7 +4,8 @@ import {
   useObjectMapDebugSnapshots,
 } from '@modules/object-map/objectMapDebugStore';
 import { CopyIcon } from '@shared/components/icons/LogIcons';
-import { getAllPanelStates, useDockablePanelContext } from '@ui/dockable';
+import { useDockablePanelContext } from '@ui/dockable';
+import { usePanelLayoutStoreContext } from '@ui/dockable/panelLayoutStoreContext';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DebugOverlay } from './DebugOverlay';
 import { IconDebugOverlay } from './IconDebugOverlay';
@@ -319,12 +320,13 @@ const KeyboardFocusOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
 };
 
 const PanelDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
+  const layoutStore = usePanelLayoutStoreContext();
   const { tabGroups, panelRegistrations } = useDockablePanelContext();
   const [focusedPanelId, setFocusedPanelId] = useState<string | null>(null);
 
   useEffect(() => {
     const resolveFocusedPanelId = () => {
-      const states = getAllPanelStates();
+      const states = layoutStore.getAllPanelStates();
       let nextFocusedPanelId: string | null = null;
       let highestZIndex = Number.NEGATIVE_INFINITY;
 
@@ -361,7 +363,7 @@ const PanelDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
       document.removeEventListener('click', scheduleResolve, true);
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [layoutStore]);
 
   const groups = [
     {

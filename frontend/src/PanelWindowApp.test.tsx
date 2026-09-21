@@ -54,6 +54,7 @@ vi.mock('@modules/object-panel/components/ObjectPanel/ObjectPanel', () => ({
 vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
   ObjectPanelStateProvider: PassThrough,
   useObjectPanelActiveTabs: () => new Map([['panel-pod', 'events']]),
+  useLocalPanelSnapshots: () => ({}),
   useObjectPanelState: () => ({
     openPanels: mocks.openPanels,
     onRowClick: mocks.onRowClick,
@@ -62,6 +63,8 @@ vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
 }));
 vi.mock('@shared/components/tabs/dragCoordinator', () => ({ TabDragProvider: PassThrough }));
 vi.mock('@ui/dockable', () => ({
+  DockablePanelLayer: () => null,
+  useDockablePanelContext: () => ({ discardPanelLayouts: vi.fn() }),
   DockablePanelProvider: ({ children, ...props }: { children: ReactNode }) => {
     mocks.dockProviderProps = props;
     return <>{children}</>;

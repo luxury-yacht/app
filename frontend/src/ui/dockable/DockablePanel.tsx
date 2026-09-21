@@ -461,7 +461,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   const [constraints, setConstraints] = useState<PanelSizeConstraints>(() =>
     getPanelSizeConstraints(null)
   );
-  const panelState = useDockablePanelState(panelId);
+  const panelState = useDockablePanelState(panelId, defaultPosition);
   const layoutStore = usePanelLayoutStoreContext();
   const lifecycleGuards = useOptionalPanelLifecycleGuardRegistry();
   const {
@@ -530,12 +530,11 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   useEffect(() => {
     if (!panelState.isInitialized) {
       panelState.initialize({
-        position: defaultPosition,
         size: defaultSize,
         isOpen: resolvedIsOpen,
       });
     }
-  }, [panelState, defaultPosition, defaultSize, resolvedIsOpen]);
+  }, [panelState, defaultSize, resolvedIsOpen]);
 
   // Update open state for controlled panels
   useEffect(() => {
@@ -583,6 +582,11 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
 
   // Keep tab-group membership in sync with open/close and dock position.
   useEffect(() => {
+    // Geometry starts closed until initialization. Preserve any reconstructed
+    // membership while that first state update is still waiting to render.
+    if (!panelState.isInitialized) {
+      return;
+    }
     if (!panelState.isOpen) {
       removePanelFromGroups(panelId);
       return;
@@ -590,6 +594,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     syncPanelGroup(panelId, panelState.position, defaultGroupKey);
   }, [
     panelId,
+    panelState.isInitialized,
     panelState.isOpen,
     panelState.position,
     defaultGroupKey,
@@ -652,8 +657,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     if (!panelState.isOpen || suppressSurface || isMaximized || !isGroupLeader) {
       return;
     }
-    const target = document.querySelector('.content');
-    if (!(target instanceof HTMLElement)) {
+    const target = panelHostNode?.parentElement;
+    if (!target) {
       return;
     }
 
@@ -675,6 +680,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       };
     }
   }, [
+    panelHostNode,
     panelState.isOpen,
     panelState.position,
     panelState.size.width,

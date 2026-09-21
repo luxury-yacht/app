@@ -27,7 +27,7 @@ import {
 } from 'react';
 import { useOptionalPanelLifecycleGuardRegistry } from '@/core/panel-windows/panelLifecycleGuards';
 import type { PanelLayoutStore } from './panelLayoutStore';
-import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
+import { createPanelLayoutStore } from './panelLayoutStore';
 import { PanelLayoutStoreContext } from './panelLayoutStoreContext';
 import type { AdjacentTabActivationPreference } from './tabGroupState';
 import {
@@ -127,7 +127,10 @@ interface DockablePanelContextValue {
 }
 
 const DockablePanelContext = createContext<DockablePanelContextValue | null>(null);
-const DockablePanelHostContext = createContext<HTMLElement | null | undefined>(undefined);
+const DockablePanelHostContext = createContext<{
+  node: HTMLElement | null;
+  setNode: (node: HTMLDivElement | null) => void;
+} | null>(null);
 
 export const useDockablePanelContext = () => {
   const context = useContext(DockablePanelContext);
@@ -136,15 +139,6 @@ export const useDockablePanelContext = () => {
   }
   return context;
 };
-
-/** Resolve the `.content` element that panels are mounted inside. */
-function getContentContainer(): HTMLElement | null {
-  if (typeof document === 'undefined') {
-    return null;
-  }
-  const el = document.querySelector('.content');
-  return el instanceof HTMLElement ? el : null;
-}
 
 function focusDockableTab(panelId: string): void {
   if (typeof document === 'undefined') {
@@ -246,11 +240,21 @@ const syncPanelGroupState = (
 
 export const useDockablePanelHost = (): HTMLElement | null => {
   const contextHost = useContext(DockablePanelHostContext);
-  if (contextHost === undefined) {
+  if (contextHost === null) {
     throw new Error('useDockablePanelHost must be used within DockablePanelProvider');
   }
-  return contextHost;
+  return contextHost.node;
 };
+
+// The layout owns this node so reconstruction and Suspense replace the portal
+// destination together with the content surface, instead of leaving detached DOM.
+export function DockablePanelLayer() {
+  const host = useContext(DockablePanelHostContext);
+  if (!host) {
+    throw new Error('DockablePanelLayer requires DockablePanelProvider');
+  }
+  return <div className="dockable-panel-layer" ref={host.setNode} />;
+}
 
 interface DockablePanelProviderProps {
   children: React.ReactNode;
@@ -333,27 +337,10 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   // re-sync against the wrong store on the lag render and the right
   // store on the following render, sometimes producing two separate
   // floating groups instead of one.
-  //
-  // useMemo is computed during render, so activeStore is always in
-  // sync with selectedClusterId — children always see the correct
-  // store on the same render that the cluster id changed. The
-  // useLayoutEffect below is only for the imperative global mirror
-  // (`setActivePanelLayoutStore`) used by Settings.tsx and similar
-  // imperative call sites; it does NOT participate in React rendering.
   const activeStore = useMemo(
     () => getOrCreateStoreForCluster(selectedClusterId || '__default__'),
     [selectedClusterId, getOrCreateStoreForCluster]
   );
-
-  // Bridge the imperative `getActivePanelLayoutStore()` global to the
-  // currently-active store. This runs after the React tree commits with
-  // the new activeStore, so any imperative call site that fires AFTER
-  // the cluster switch (event handlers, async callbacks) sees the
-  // correct store. Render-phase consumers don't go through this path —
-  // they read activeStore from context.
-  useLayoutEffect(() => {
-    setActivePanelLayoutStore(activeStore);
-  }, [activeStore]);
 
   // Prune stores for clusters that have been closed. Mirrors the
   // identical pattern in ObjectPanelStateContext.tsx (which keeps
@@ -424,7 +411,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   );
 
   // Some close paths mutate tabGroups through the layout store directly
-  // (for example ObjectPanelStateContext.clearPanelState). Reconcile here
+  // (for example committed object-panel removal). Reconcile here
   // so the visual focus group never points at a group that no longer exists.
   useLayoutEffect(() => {
     reconcileLastFocusedGroup(tabGroups);
@@ -668,10 +655,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
           movePanelToGroup(prev, panelId, targetGroupKey, insertIndex)
         );
         setLastFocusedGroupKey(targetGroupKey);
-        // Keep panel-state position aligned with tab-group destination.
-        const targetPosition: DockPosition =
-          targetGroupKey === 'right' || targetGroupKey === 'bottom' ? targetGroupKey : 'floating';
-        activeStore.setPanelPositionById(panelId, targetPosition);
         return;
       }
       if (!onGroupMoveRequest) {
@@ -850,9 +833,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
     ) => {
       const store = getOrCreateStoreForCluster(clusterId);
       const uniquePanelIds = Array.from(new Set(panelIds));
-      for (const panelId of uniquePanelIds) {
-        store.setPanelPositionById(panelId, targetPosition);
-      }
       store.setTabGroups((previous) => {
         const next = uniquePanelIds.reduce(
           (current, panelId, panelIndex) =>
@@ -1028,52 +1008,13 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   // -----------------------------------------------------------------------
   const [hostNode, setHostNode] = useState<HTMLElement | null>(null);
 
-  useLayoutEffect(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    const container = getContentContainer();
-    if (!container) {
-      return;
-    }
-    const node = document.createElement('div');
-    node.className = 'dockable-panel-layer';
-    container.appendChild(node);
-    setHostNode(node);
-
-    return () => {
-      if (container.contains(node)) {
-        container.removeChild(node);
-      }
-      setHostNode(null);
-    };
-  }, []);
-
-  // Clean up CSS variables on unmount.
-  useLayoutEffect(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    const target = document.querySelector('.content');
-    if (!(target instanceof HTMLElement)) {
-      return;
-    }
-    return () => {
-      target.style.removeProperty('--dock-right-offset');
-      target.style.removeProperty('--dock-bottom-offset');
-      document.body.classList.remove('dock-right-open', 'dock-bottom-open');
-    };
-  }, []);
-
-  // CSS variables --dock-right-offset and --dock-bottom-offset are set by
-  // individual DockablePanel instances based on their actual docked size.
-  // The cleanup effect above removes them when the provider unmounts.
+  const host = useMemo(() => ({ node: hostNode, setNode: setHostNode }), [hostNode]);
 
   return (
     <PanelLayoutStoreContext.Provider value={activeStore}>
       <DockablePanelContext.Provider value={value}>
         <TabDragProvider onTearOff={handleTabTearOff}>
-          <DockablePanelHostContext.Provider value={hostNode}>
+          <DockablePanelHostContext.Provider value={host}>
             {children}
             {/* Permanently mounted drag preview. The browser screenshots
               this element via setDragImage at dragstart; DockableTabBar's

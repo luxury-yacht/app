@@ -17,8 +17,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { panelwindow } from '@/core/backend-api/models';
 import { requireValue } from '@/test-utils/requireValue';
 
-const clearPanelStateMock = vi.fn();
-const handoffLayoutBeforeCloseMock = vi.fn();
 const clearLogViewerPrefsMock = vi.fn();
 
 let mockClusterId = 'cluster-a';
@@ -38,11 +36,6 @@ vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: {
     resetScopedDomain: (...args: unknown[]) => resetScopedDomainMock(...args),
   },
-}));
-
-vi.mock('@ui/dockable/useDockablePanelState', () => ({
-  clearPanelState: (...args: unknown[]) => clearPanelStateMock(...args),
-  handoffLayoutBeforeClose: (...args: unknown[]) => handoffLayoutBeforeCloseMock(...args),
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache', () => ({
@@ -83,8 +76,6 @@ describe('ObjectPanelStateContext', () => {
     stateRef.current = null;
     activeTabProbeRef.current = undefined;
     resetScopedDomainMock.mockReset();
-    clearPanelStateMock.mockClear();
-    handoffLayoutBeforeCloseMock.mockClear();
     clearLogViewerPrefsMock.mockClear();
   });
 
@@ -211,7 +202,7 @@ describe('ObjectPanelStateContext', () => {
     } as panelwindow.GroupSnapshot;
 
     act(() => {
-      stateRef.current?.dockPanelWindow(snapshot, 'right');
+      stateRef.current?.restorePanelTabs(snapshot);
     });
 
     expect(stateRef.current?.pendingNativeOpenPanelIds.has(panelId)).toBe(false);
@@ -231,10 +222,7 @@ describe('ObjectPanelStateContext', () => {
     let existingId = '';
     let incomingId = '';
     act(() => {
-      existingId = currentState().upsertOwnedPanel(ref, 'events', {
-        kind: 'docked',
-        edge: 'right',
-      });
+      existingId = currentState().upsertOwnedPanel(ref, 'events');
       incomingId = currentState().onRowClick(
         { ...ref, name: 'incoming' },
         { pendingNativeOpen: true }
@@ -242,28 +230,22 @@ describe('ObjectPanelStateContext', () => {
     });
     const previous = currentState();
     act(() => {
-      currentState().dockPanelWindow(
-        {
-          clusterId: 'cluster-a',
-          tabs: [
-            { panelId: incomingId, objectRef: { ...ref, name: 'incoming' }, activeView: 'yaml' },
-          ],
-        } as panelwindow.GroupSnapshot,
-        'bottom'
-      );
+      currentState().restorePanelTabs({
+        clusterId: 'cluster-a',
+        tabs: [
+          { panelId: incomingId, objectRef: { ...ref, name: 'incoming' }, activeView: 'yaml' },
+        ],
+      } as panelwindow.GroupSnapshot);
     });
     expect(currentState().panelIdsForCluster('cluster-a')).toEqual([existingId, incomingId]);
     expect(currentState().getOwnedPanel('cluster-a', existingId)).toMatchObject({
       activeView: 'events',
-      dockedEdge: 'right',
     });
     expect(currentState().getOwnedPanel('cluster-a', incomingId)).toMatchObject({
       activeView: 'yaml',
-      dockedEdge: 'bottom',
     });
     expect(currentState().pendingNativeOpenPanelIds.has(incomingId)).toBe(false);
     expect(previous.pendingNativeOpenPanelIds.has(incomingId)).toBe(true);
-    expect(previous.dockedEdges.has(incomingId)).toBe(false);
     expect(resetScopedDomainMock).not.toHaveBeenCalled();
   });
 
@@ -383,8 +365,6 @@ describe('ObjectPanelStateContext', () => {
     });
     expect(stateRef.current?.openPanels.has(panelId)).toBe(false);
     expect(activeTabProbeRef.current).toBeUndefined();
-    expect(handoffLayoutBeforeCloseMock).toHaveBeenCalledWith(panelId);
-    expect(clearPanelStateMock).toHaveBeenCalledWith(panelId);
   });
 
   it('clears object panel state when a tab is closed', async () => {
@@ -585,7 +565,7 @@ describe('ObjectPanelStateContext', () => {
     expect(resetScopedDomainMock.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('indexes owned panels across native and docked locations', async () => {
+  it('retains complete local object identity while updating the active view', async () => {
     await renderProvider();
     const objectRef = {
       clusterId: 'cluster-a',
@@ -598,33 +578,22 @@ describe('ObjectPanelStateContext', () => {
 
     let panelId = '';
     act(() => {
-      panelId =
-        stateRef.current?.upsertOwnedPanel(objectRef, 'events', {
-          kind: 'panel-window',
-          windowName: 'panel-1',
-          groupId: 'group-1',
-        }) ?? '';
+      panelId = stateRef.current?.upsertOwnedPanel(objectRef, 'events') ?? '';
     });
 
     expect(stateRef.current?.getOwnedPanel('cluster-a', panelId)).toMatchObject({
       objectRef,
       activeView: 'events',
-      nativeLocation: { windowName: 'panel-1', groupId: 'group-1' },
     });
     expect(stateRef.current?.panelIdsForCluster('cluster-a')).toEqual([panelId]);
 
     act(() => {
-      stateRef.current?.upsertOwnedPanel(objectRef, 'yaml', {
-        kind: 'docked',
-        edge: 'bottom',
-      });
+      stateRef.current?.upsertOwnedPanel(objectRef, 'yaml');
     });
 
     expect(stateRef.current?.getOwnedPanel('cluster-a', panelId)).toMatchObject({
       activeView: 'yaml',
-      dockedEdge: 'bottom',
     });
-    expect(stateRef.current?.getOwnedPanel('cluster-a', panelId)?.nativeLocation).toBeUndefined();
 
     act(() => {
       stateRef.current?.removeOwnedPanel('cluster-a', panelId);

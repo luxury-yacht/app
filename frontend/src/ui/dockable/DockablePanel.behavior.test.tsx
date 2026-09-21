@@ -9,10 +9,29 @@ import {
   PanelLifecycleGuardProvider,
   usePanelLifecycleGuard,
 } from '@/core/panel-windows/panelLifecycleGuards';
+import { DockablePanelTestHost } from '@/test-utils/DockablePanelTestHost';
 import DockablePanel from './DockablePanel';
-import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
-import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
-import { getAllPanelStates } from './useDockablePanelState';
+import {
+  DockablePanelLayer,
+  DockablePanelProvider,
+  useDockablePanelContext,
+} from './DockablePanelProvider';
+import { createPanelLayoutStore } from './panelLayoutStore';
+import { usePanelLayoutStoreContext } from './panelLayoutStoreContext';
+import { getGroupForPanel, getPanelPosition } from './tabGroupState';
+
+let layoutStore = createPanelLayoutStore();
+const LayoutProbe = () => {
+  layoutStore = usePanelLayoutStoreContext();
+  return null;
+};
+const getAllPanelStates = () =>
+  Object.fromEntries(
+    Object.entries(layoutStore.getAllPanelStates()).map(([id, state]) => [
+      id,
+      { ...state, position: getPanelPosition(layoutStore.getTabGroups(), id) },
+    ])
+  );
 
 vi.mock('@core/backend-api', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),
@@ -63,6 +82,8 @@ const renderPanel = async (
       <KeyboardProvider>
         <PanelLifecycleGuardProvider>
           <DockablePanelProvider {...providerProps}>
+            <DockablePanelTestHost />
+            <LayoutProbe />
             <ZoomProvider>{element}</ZoomProvider>
           </DockablePanelProvider>
         </PanelLifecycleGuardProvider>
@@ -87,13 +108,79 @@ const panelState = (panelId: string) => {
 
 describe('DockablePanel docked behaviour', () => {
   beforeEach(() => {
-    setActivePanelLayoutStore(createPanelLayoutStore());
+    layoutStore = createPanelLayoutStore();
   });
 
   afterEach(() => {
     document.body.replaceChildren();
     document.body.className = '';
-    setActivePanelLayoutStore(createPanelLayoutStore());
+    layoutStore = createPanelLayoutStore();
+  });
+
+  it('keeps panels visible when workspace content is replaced during reconstruction', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = ReactDOM.createRoot(host);
+    const renderContent = async (generation: string) =>
+      act(async () =>
+        root.render(
+          <KeyboardProvider>
+            <DockablePanelProvider>
+              <ZoomProvider>
+                <div key={generation} className="content">
+                  <DockablePanelLayer />
+                  <div className="content-body" />
+                </div>
+                <DockablePanel panelId="restored-panel" isOpen title="Restored panel">
+                  <div data-testid="restored-panel-body">Restored object content</div>
+                </DockablePanel>
+              </ZoomProvider>
+            </DockablePanelProvider>
+          </KeyboardProvider>
+        )
+      );
+    try {
+      await renderContent('loading');
+      expect(document.querySelector('[data-testid="restored-panel-body"]')).not.toBeNull();
+      await renderContent('ready');
+      expect(document.querySelector('[data-testid="restored-panel-body"]')).not.toBeNull();
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+    }
+  });
+
+  it('keeps restored bottom membership while controlled panels initialize', async () => {
+    const Projection = () => {
+      const { tabGroups } = useDockablePanelContext();
+      return ['restored-a', 'restored-b'].map((panelId) => (
+        <DockablePanel
+          key={panelId}
+          panelId={panelId}
+          isOpen
+          defaultPosition={getPanelPosition(tabGroups, panelId) ?? 'right'}
+          defaultGroupKey={getGroupForPanel(tabGroups, panelId) ?? undefined}
+        >
+          <div>{panelId}</div>
+        </DockablePanel>
+      ));
+    };
+    const rendered = await renderPanel(<Projection />, {
+      initialTabGroups: {
+        right: { tabs: [], activeTab: null },
+        bottom: { tabs: ['restored-a', 'restored-b'], activeTab: 'restored-b' },
+        floating: [],
+      },
+    });
+    try {
+      expect(layoutStore.getTabGroups().bottom).toEqual({
+        tabs: ['restored-a', 'restored-b'],
+        activeTab: 'restored-b',
+      });
+      expect(layoutStore.getTabGroups().right.tabs).toEqual([]);
+    } finally {
+      await rendered();
+    }
   });
 
   it('retains a reordered group leader and its geometry across a cluster round trip', async () => {
@@ -117,6 +204,7 @@ describe('DockablePanel docked behaviour', () => {
             <PanelLifecycleGuardProvider>
               <DockablePanelProvider>
                 <ZoomProvider>
+                  <DockablePanelTestHost />
                   <Capture />
                   {clusterId === 'cluster-a' ? (
                     <>

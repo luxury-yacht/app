@@ -1,3 +1,4 @@
+import { DockablePanelTestHost } from '@/test-utils/DockablePanelTestHost';
 /**
  * frontend/src/ui/dockable/DockablePanelProvider.test.tsx
  *
@@ -15,7 +16,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 import { resolveObjectPanelMountTarget } from '@/ui/layout/objectPanelMountTarget';
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
-import { clearPanelState } from './useDockablePanelState';
 
 type DockablePanelContextValue = ReturnType<typeof useDockablePanelContext>;
 
@@ -101,6 +101,7 @@ describe('DockablePanelProvider', () => {
   it('creates a shared host layer inside .content', async () => {
     const { unmount } = await render(
       <DockablePanelProvider>
+        <DockablePanelTestHost />
         <div data-testid="child">content</div>
       </DockablePanelProvider>
     );
@@ -802,7 +803,9 @@ describe('DockablePanelProvider', () => {
         contextRef.current,
         'expected test value in DockablePanelProvider.test.tsx'
       ).setLastFocusedGroupKey('floating-1');
-      clearPanelState('floating-panel');
+      requireDockableContext(contextRef.current).discardPanelLayouts('cluster-a', [
+        'floating-panel',
+      ]);
       await Promise.resolve();
     });
 

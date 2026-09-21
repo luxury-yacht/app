@@ -12,11 +12,7 @@ import { readPanelWorkspace } from '@/core/app-state-access';
 import type { panelwindow } from '@/core/backend-api/models';
 import { getWindowIdentity } from '@/core/desktop-runtime';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
-import type { ViewType } from '@/modules/object-panel/components/ObjectPanel/types';
-import {
-  useLocalPanelSnapshots,
-  useObjectPanelState,
-} from '@/modules/object-panel/contexts/ObjectPanelStateContext';
+import { useLocalPanelSnapshots } from '@/modules/object-panel/contexts/ObjectPanelStateContext';
 import { useDockablePanelContext } from '@/ui/dockable';
 import type { TabGroupState } from '@/ui/dockable/tabGroupTypes';
 import { reportOperationalError } from '@/utils/errorHandler';
@@ -27,8 +23,10 @@ import {
   openPanelWorkspaceObject,
   publishDockedPanels,
 } from './index';
+import { PanelLayoutLifecycle } from './PanelLayoutLifecycle';
 import { workspacePanelPublication } from './publicationQueue';
 import { useRemoveWorkspacePanels } from './useRemoveWorkspacePanels';
+import { useRestoreWorkspacePanels } from './useRestoreWorkspacePanels';
 
 interface WorkspaceSync {
   flush: () => Promise<void>;
@@ -86,12 +84,18 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
   const windowName = getWindowIdentity();
   const { selectedClusterIds, selectedClusterId, kubeconfigsLoading } = useKubeconfig();
   const local = useLocalPanelSnapshots();
-  const { getClusterTabGroups, tabGroups, dockPanelGroup } = useDockablePanelContext();
-  const { upsertOwnedPanel } = useObjectPanelState();
+  const { getClusterTabGroups, tabGroups } = useDockablePanelContext();
+  const restoreWorkspacePanels = useRestoreWorkspacePanels();
   const removeWorkspacePanels = useRemoveWorkspacePanels();
   const queue = useRef(workspacePanelPublication);
   const lastPublication = useRef('');
   const provisional = useRef(new Map<string, panelwindow.WorkspaceGroup[]>());
+  const transferRevision = useRef(new Map<string, number>());
+  const invalidateDirectoryReads = useCallback((pending: panelwindow.WorkspaceGroup[]) => {
+    for (const { clusterId } of pending) {
+      transferRevision.current.set(clusterId, (transferRevision.current.get(clusterId) ?? 0) + 1);
+    }
+  }, []);
   const activity = useMemo(() => new ClusterPanelActivity(), []);
   const closingClusters = useSyncExternalStore(activity.subscribe, activity.getSnapshot);
   const groups = useMemo(
@@ -118,9 +122,11 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
     () => ({
       flush: () => queue.current.flush(),
       stage: (id, pending) => {
+        invalidateDirectoryReads(pending);
         provisional.current.set(id, pending);
       },
       settle: (id) => {
+        invalidateDirectoryReads(provisional.current.get(id) ?? []);
         provisional.current.delete(id);
       },
       groupsForCluster: (clusterId) =>
@@ -152,7 +158,7 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
         }
       },
     }),
-    [activity, windowName]
+    [activity, windowName, invalidateDirectoryReads]
   );
 
   useEffect(() => {
@@ -209,23 +215,19 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
         if (!group.length) {
           continue;
         }
-        for (const panel of group) {
-          upsertOwnedPanel({ ...panel.tab.objectRef }, panel.tab.activeView as ViewType, {
-            kind: 'docked',
-            edge,
-          });
-        }
         const active =
           group.find((panel) => panel.location.active)?.tab.panelId ?? group[0].tab.panelId;
-        dockPanelGroup(
-          clusterId,
-          group.map((panel) => panel.tab.panelId),
-          active,
+        restoreWorkspacePanels(
+          {
+            clusterId,
+            tabs: group.map((panel) => panel.tab),
+            activePanelId: active,
+          },
           edge
         );
       }
     },
-    [upsertOwnedPanel, dockPanelGroup]
+    [restoreWorkspacePanels]
   );
 
   const claimRetainedPanel = useCallback(
@@ -292,8 +294,15 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
       }
     };
     const refreshSnapshot = async (clusterId: string) => {
+      const revisionAtRead = transferRevision.current.get(clusterId);
       try {
         const snapshot = await sync.readCluster(clusterId);
+        // A transfer may commit while this read still describes its source.
+        // Re-read after staging/settlement instead of evicting the new target.
+        if (revisionAtRead !== transferRevision.current.get(clusterId)) {
+          pending.add(clusterId);
+          return;
+        }
         if (!snapshot || !shouldApply(clusterId, snapshot.revision)) {
           return;
         }
@@ -357,7 +366,12 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
       })
     );
   }, [windowName, kubeconfigsLoading]);
-  return <PublicationContext.Provider value={sync}>{children}</PublicationContext.Provider>;
+  return (
+    <PublicationContext.Provider value={sync}>
+      <PanelLayoutLifecycle />
+      {children}
+    </PublicationContext.Provider>
+  );
 }
 
 function retainedPanelOrder(panels: panelwindow.WorkspacePanel[]): panelwindow.WorkspacePanel[] {

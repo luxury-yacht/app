@@ -5,6 +5,7 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 import { requireValue } from '@/test-utils/requireValue';
 import { createKindColumn, createResourceNameColumn, createTextColumn } from './columnFactories';
 import GridTable from './GridTable';
@@ -67,21 +68,23 @@ describe('GridTable keyboard integration', () => {
       const render = async (hasRowAction: boolean, kindColumn = resourceColumns[0]) =>
         act(async () => {
           root.render(
-            <KeyboardProvider>
-              <ZoomProvider>
-                <AppRegionNavigation />
-                <main data-app-region="content">
-                  <GridTable
-                    data={data}
-                    columns={[kindColumn, ...resourceColumns.slice(1)]}
-                    keyExtractor={(item) => item.id}
-                    onRowClick={hasRowAction ? openObject : undefined}
-                    virtualization={{ enabled: virtualized, threshold: 1 }}
-                  />
-                  <button type="button">After table</button>
-                </main>
-              </ZoomProvider>
-            </KeyboardProvider>
+            <PanelLayoutTestProvider>
+              <KeyboardProvider>
+                <ZoomProvider>
+                  <AppRegionNavigation />
+                  <main data-app-region="content">
+                    <GridTable
+                      data={data}
+                      columns={[kindColumn, ...resourceColumns.slice(1)]}
+                      keyExtractor={(item) => item.id}
+                      onRowClick={hasRowAction ? openObject : undefined}
+                      virtualization={{ enabled: virtualized, threshold: 1 }}
+                    />
+                    <button type="button">After table</button>
+                  </main>
+                </ZoomProvider>
+              </KeyboardProvider>
+            </PanelLayoutTestProvider>
           );
         });
       const press = async (key: string, shiftKey = false) =>
@@ -164,38 +167,40 @@ describe('GridTable keyboard integration', () => {
     const data = [...rows, { id: 'cluster-a|two', name: 'Two' }];
     await act(async () =>
       root.render(
-        <KeyboardProvider>
-          <ZoomProvider>
-            <AppRegionNavigation />
-            <main data-app-region="content">
-              <GridTable
-                data={data}
-                keyExtractor={(item) => item.id}
-                onRowClick={onRowClick}
-                virtualization={{ enabled: false }}
-                columns={[
-                  ...columns,
-                  {
-                    key: 'actions',
-                    header: 'Actions',
-                    render: (row) => (
-                      <>
-                        <button type="button" onClick={action}>
-                          {row.name} action
-                        </button>
-                        <button type="button" disabled>
-                          Unavailable
-                        </button>
-                        <a href="#details">{row.name} details</a>
-                      </>
-                    ),
-                  },
-                ]}
-              />
-              <button type="button">After table</button>
-            </main>
-          </ZoomProvider>
-        </KeyboardProvider>
+        <PanelLayoutTestProvider>
+          <KeyboardProvider>
+            <ZoomProvider>
+              <AppRegionNavigation />
+              <main data-app-region="content">
+                <GridTable
+                  data={data}
+                  keyExtractor={(item) => item.id}
+                  onRowClick={onRowClick}
+                  virtualization={{ enabled: false }}
+                  columns={[
+                    ...columns,
+                    {
+                      key: 'actions',
+                      header: 'Actions',
+                      render: (row) => (
+                        <>
+                          <button type="button" onClick={action}>
+                            {row.name} action
+                          </button>
+                          <button type="button" disabled>
+                            Unavailable
+                          </button>
+                          <a href="#details">{row.name} details</a>
+                        </>
+                      ),
+                    },
+                  ]}
+                />
+                <button type="button">After table</button>
+              </main>
+            </ZoomProvider>
+          </KeyboardProvider>
+        </PanelLayoutTestProvider>
       )
     );
     const table = requireValue(
@@ -246,36 +251,38 @@ describe('GridTable keyboard integration', () => {
       const filterLogs = vi.fn();
       await act(async () =>
         root.render(
-          <KeyboardProvider>
-            <ZoomProvider>
-              <AppRegionNavigation />
-              <main data-app-region="content">
-                <GridTable
-                  data={[...rows, { id: 'cluster-a|two', name: 'Two' }]}
-                  columns={[
-                    ...columns,
-                    {
-                      key: 'metadata',
-                      header: 'Pod',
-                      render: (row) => (
-                        <button
-                          type="button"
-                          tabIndex={-1}
-                          data-focus-trap-ignore="true"
-                          onClick={() => filterLogs(row.name)}
-                        >
-                          {row.name} pod
-                        </button>
-                      ),
-                    },
-                  ]}
-                  keyExtractor={(row) => row.id}
-                  virtualization={{ enabled: virtualized, threshold: 1 }}
-                />
-                <button type="button">After logs</button>
-              </main>
-            </ZoomProvider>
-          </KeyboardProvider>
+          <PanelLayoutTestProvider>
+            <KeyboardProvider>
+              <ZoomProvider>
+                <AppRegionNavigation />
+                <main data-app-region="content">
+                  <GridTable
+                    data={[...rows, { id: 'cluster-a|two', name: 'Two' }]}
+                    columns={[
+                      ...columns,
+                      {
+                        key: 'metadata',
+                        header: 'Pod',
+                        render: (row) => (
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            data-focus-trap-ignore="true"
+                            onClick={() => filterLogs(row.name)}
+                          >
+                            {row.name} pod
+                          </button>
+                        ),
+                      },
+                    ]}
+                    keyExtractor={(row) => row.id}
+                    virtualization={{ enabled: virtualized, threshold: 1 }}
+                  />
+                  <button type="button">After logs</button>
+                </main>
+              </ZoomProvider>
+            </KeyboardProvider>
+          </PanelLayoutTestProvider>
         )
       );
       const table = requireValue(
@@ -324,26 +331,28 @@ describe('GridTable keyboard integration', () => {
       const onRowClick = vi.fn();
       await act(async () =>
         root.render(
-          <KeyboardProvider>
-            <ZoomProvider>
-              <GridTable
-                data={rows}
-                columns={[
-                  {
-                    key: 'action',
-                    header: 'Action',
-                    render: () => (
-                      <button type="button" aria-label="Row action">
-                        Action
-                      </button>
-                    ),
-                  },
-                ]}
-                keyExtractor={(item) => item.id}
-                onRowClick={onRowClick}
-              />
-            </ZoomProvider>
-          </KeyboardProvider>
+          <PanelLayoutTestProvider>
+            <KeyboardProvider>
+              <ZoomProvider>
+                <GridTable
+                  data={rows}
+                  columns={[
+                    {
+                      key: 'action',
+                      header: 'Action',
+                      render: () => (
+                        <button type="button" aria-label="Row action">
+                          Action
+                        </button>
+                      ),
+                    },
+                  ]}
+                  keyExtractor={(item) => item.id}
+                  onRowClick={onRowClick}
+                />
+              </ZoomProvider>
+            </KeyboardProvider>
+          </PanelLayoutTestProvider>
         )
       );
       const button = requireValue(
@@ -364,22 +373,24 @@ describe('GridTable keyboard integration', () => {
     const render = async (data: typeof rows) =>
       act(async () =>
         root.render(
-          <KeyboardProvider>
-            <ZoomProvider>
-              <GridTable
-                data={data}
-                keyExtractor={(item) => item.id}
-                virtualization={{ enabled: false }}
-                columns={[
-                  {
-                    key: 'action',
-                    header: 'Action',
-                    render: () => <button type="button">Open</button>,
-                  },
-                ]}
-              />
-            </ZoomProvider>
-          </KeyboardProvider>
+          <PanelLayoutTestProvider>
+            <KeyboardProvider>
+              <ZoomProvider>
+                <GridTable
+                  data={data}
+                  keyExtractor={(item) => item.id}
+                  virtualization={{ enabled: false }}
+                  columns={[
+                    {
+                      key: 'action',
+                      header: 'Action',
+                      render: () => <button type="button">Open</button>,
+                    },
+                  ]}
+                />
+              </ZoomProvider>
+            </KeyboardProvider>
+          </PanelLayoutTestProvider>
         )
       );
     await render(rows);
@@ -403,28 +414,30 @@ describe('GridTable keyboard integration', () => {
       const onRowClick = vi.fn();
       await act(async () =>
         root.render(
-          <KeyboardProvider>
-            <ZoomProvider>
-              <GridTable
-                data={empty ? [] : rows}
-                columns={[
-                  ...columns,
-                  {
-                    key: 'action',
-                    header: 'Action',
-                    render: () => (
-                      <button type="button" aria-label="Row action">
-                        Action
-                      </button>
-                    ),
-                  },
-                ]}
-                keyExtractor={(item) => item.id}
-                onRowClick={onRowClick}
-                virtualization={{ enabled: false }}
-              />
-            </ZoomProvider>
-          </KeyboardProvider>
+          <PanelLayoutTestProvider>
+            <KeyboardProvider>
+              <ZoomProvider>
+                <GridTable
+                  data={empty ? [] : rows}
+                  columns={[
+                    ...columns,
+                    {
+                      key: 'action',
+                      header: 'Action',
+                      render: () => (
+                        <button type="button" aria-label="Row action">
+                          Action
+                        </button>
+                      ),
+                    },
+                  ]}
+                  keyExtractor={(item) => item.id}
+                  onRowClick={onRowClick}
+                  virtualization={{ enabled: false }}
+                />
+              </ZoomProvider>
+            </KeyboardProvider>
+          </PanelLayoutTestProvider>
         )
       );
       const table = requireValue(
@@ -474,20 +487,22 @@ describe('GridTable keyboard integration', () => {
     async (empty) => {
       await act(async () => {
         root.render(
-          <KeyboardProvider>
-            <ZoomProvider>
-              <AppRegionNavigation />
-              <main data-app-region="content" tabIndex={-1}>
-                <GridTable
-                  data={empty ? [] : rows}
-                  columns={columns.map((column) => ({ ...column, sortable: true }))}
-                  keyExtractor={(item) => item.id}
-                  filters={{ enabled: true }}
-                  onSort={vi.fn()}
-                />
-              </main>
-            </ZoomProvider>
-          </KeyboardProvider>
+          <PanelLayoutTestProvider>
+            <KeyboardProvider>
+              <ZoomProvider>
+                <AppRegionNavigation />
+                <main data-app-region="content" tabIndex={-1}>
+                  <GridTable
+                    data={empty ? [] : rows}
+                    columns={columns.map((column) => ({ ...column, sortable: true }))}
+                    keyExtractor={(item) => item.id}
+                    filters={{ enabled: true }}
+                    onSort={vi.fn()}
+                  />
+                </main>
+              </ZoomProvider>
+            </KeyboardProvider>
+          </PanelLayoutTestProvider>
         );
       });
       const sortButton = requireValue(
@@ -528,20 +543,22 @@ describe('GridTable keyboard integration', () => {
     const nextPage = vi.fn();
     await act(async () => {
       root.render(
-        <KeyboardProvider>
-          <ZoomProvider>
-            <GridTable
-              data={rows}
-              columns={columns}
-              keyExtractor={(item) => item.id}
-              enableContextMenu
-              getCustomContextMenuItems={() => [{ label: 'Inspect row', onClick: vi.fn() }]}
-              onPageNext={nextPage}
-              canPageNext
-            />
-            <input aria-label="Outside table" />
-          </ZoomProvider>
-        </KeyboardProvider>
+        <PanelLayoutTestProvider>
+          <KeyboardProvider>
+            <ZoomProvider>
+              <GridTable
+                data={rows}
+                columns={columns}
+                keyExtractor={(item) => item.id}
+                enableContextMenu
+                getCustomContextMenuItems={() => [{ label: 'Inspect row', onClick: vi.fn() }]}
+                onPageNext={nextPage}
+                canPageNext
+              />
+              <input aria-label="Outside table" />
+            </ZoomProvider>
+          </KeyboardProvider>
+        </PanelLayoutTestProvider>
       );
     });
 

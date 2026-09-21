@@ -16,7 +16,6 @@ import type { TabGroupState } from './tabGroupTypes';
 export type DockPosition = 'right' | 'bottom' | 'floating';
 
 export interface PanelLayoutState {
-  position: DockPosition;
   rightSize: { width: number; height: number };
   bottomSize: { width: number; height: number };
   isMaximized: boolean;
@@ -33,7 +32,6 @@ export interface PanelLayoutStore {
   updateState: (panelId: string, updates: Partial<PanelLayoutState>) => void;
   subscribe: (panelId: string, listener: PanelListener) => () => void;
   focusPanelById: (panelId: string) => void;
-  setPanelPositionById: (panelId: string, position: DockPosition) => void;
   setPanelOpenById: (panelId: string, isOpen: boolean) => void;
   copyPanelLayoutState: (sourcePanelId: string, targetPanelId: string) => void;
   clearPanelState: (panelId: string) => void;
@@ -75,7 +73,6 @@ export interface PanelLayoutStore {
 }
 
 const layoutsEqual = (left: PanelLayoutState, right: PanelLayoutState) =>
-  left.position === right.position &&
   left.isMaximized === right.isMaximized &&
   left.isOpen === right.isOpen &&
   left.rightSize.width === right.rightSize.width &&
@@ -122,7 +119,6 @@ export function createPanelLayoutStore(initialTabGroups?: TabGroupState): PanelL
     }
     const layout = getObjectPanelLayoutDefaults();
     const initialState: PanelLayoutState = {
-      position: 'right',
       rightSize: { width: layout.dockedRightWidth, height: 300 },
       bottomSize: { width: 400, height: layout.dockedBottomHeight },
       isMaximized: false,
@@ -200,9 +196,6 @@ export function createPanelLayoutStore(initialTabGroups?: TabGroupState): PanelL
     focusPanelById: (panelId: string) => {
       updateState(panelId, { zIndex: ++zIndexCounter });
     },
-    setPanelPositionById: (panelId: string, position: DockPosition) => {
-      updateState(panelId, { position });
-    },
     setPanelOpenById: setPanelOpenState,
     copyPanelLayoutState,
     handoffLayoutBeforeClose: (panelId: string) => {
@@ -266,15 +259,4 @@ export function createPanelLayoutStore(initialTabGroups?: TabGroupState): PanelL
       };
     },
   };
-}
-
-// Compatibility singleton for imperative call sites that are not hook-based.
-let activePanelLayoutStore: PanelLayoutStore = createPanelLayoutStore();
-
-export function getActivePanelLayoutStore(): PanelLayoutStore {
-  return activePanelLayoutStore;
-}
-
-export function setActivePanelLayoutStore(store: PanelLayoutStore) {
-  activePanelLayoutStore = store;
 }

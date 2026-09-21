@@ -1,3 +1,4 @@
+import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 /**
  * frontend/src/ui/layout/Sidebar.test.tsx
  *
@@ -204,10 +205,12 @@ describe('Sidebar', () => {
     }
     act(() => {
       requireValue(root, 'expected test value in Sidebar.test.tsx').render(
-        <KeyboardProvider>
-          {regionNavigation ? <AppRegionNavigation /> : null}
-          <Sidebar />
-        </KeyboardProvider>
+        <PanelLayoutTestProvider>
+          <KeyboardProvider>
+            {regionNavigation ? <AppRegionNavigation /> : null}
+            <Sidebar />
+          </KeyboardProvider>
+        </PanelLayoutTestProvider>
       );
     });
   };

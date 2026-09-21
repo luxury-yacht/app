@@ -9,6 +9,18 @@ import type { FloatingTabGroup, GroupKey, TabGroupState } from './tabGroupTypes'
 
 export type AdjacentTabActivationPreference = 'left' | 'right';
 
+/** Render placement is derived from membership, never copied into panel geometry. */
+export function getPanelPosition(
+  state: TabGroupState,
+  panelId: string
+): 'right' | 'bottom' | 'floating' | undefined {
+  const group = getGroupForPanel(state, panelId);
+  if (group === null) {
+    return undefined;
+  }
+  return group === 'right' || group === 'bottom' ? group : 'floating';
+}
+
 /**
  * Generate a deterministic floating group ID from the current state.
  * This stays pure so React StrictMode double-invocations cannot consume IDs.

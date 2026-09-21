@@ -56,6 +56,21 @@ maximize and restore.
 
 ## Placement and Uniqueness
 
+- Within each renderer, its cluster-scoped tab groups are the single writable
+  placement projection. Geometry stores contain size, maximize, open, and focus
+  state; object state contains local references, active views, and pending native
+  opens. Neither keeps a second dock edge or native-window location index.
+- `useRestoreWorkspacePanels` installs group membership before restoring object
+  content for retained panels, dock-back, panel-tab insertion, and cluster-view
+  insertion. A mounting `DockablePanel` preserves that membership while its
+  geometry initializes; the initial closed geometry must not remove the group.
+- `PanelLayoutLifecycle` releases the owning cluster's geometry after committed
+  object removal in both renderer roles. Focus and debug readers use their
+  provider's layout context; there is no globally selected layout store.
+- Each renderer mounts `DockablePanelLayer` inside its content surface. React
+  owns the portal destination and its replacement during reconstruction or
+  suspension. Panel geometry and offset cleanup follow that connected host;
+  the provider must not discover and append a one-time DOM container.
 - Prefer the active compatible docked group when opening a new object.
 - A new panel whose default is Floating creates a uniquely isolated, transient,
   hidden one-tab source group, then asks the native coordinator to transfer it.
@@ -96,6 +111,10 @@ maximize and restore.
 
 Float, dock-back, panel-tab moves, and cluster-tab moves are acknowledged
 transactions. Check source guards and flush its latest snapshot before transfer.
+Directory reads started before a target stages or settles a transfer must not
+remove the target's reconstructed panels. Invalidate those reads per cluster and
+fetch a current snapshot; once settled, later authoritative moves still evict
+the old renderer's copy.
 The source stays mounted while the target reconstructs the panels. The shared
 backend directory commits physical placement only after destination readiness.
 Opening an already-open object focuses the existing placement. Every app window

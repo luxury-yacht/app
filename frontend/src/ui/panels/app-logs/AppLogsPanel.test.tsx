@@ -1,3 +1,4 @@
+import { DockablePanelTestHost } from '@/test-utils/DockablePanelTestHost';
 /**
  * frontend/src/components/content/AppLogsPanel/AppLogsPanel.test.tsx
  *
@@ -114,7 +115,10 @@ const renderPanel = async (initialIsOpen = true) => {
       realNavigation.enabled ? (
         <KeyboardProvider>
           <ZoomProvider>
-            <DockablePanelProvider>{panel}</DockablePanelProvider>
+            <DockablePanelProvider>
+              <DockablePanelTestHost />
+              {panel}
+            </DockablePanelProvider>
           </ZoomProvider>
         </KeyboardProvider>
       ) : (

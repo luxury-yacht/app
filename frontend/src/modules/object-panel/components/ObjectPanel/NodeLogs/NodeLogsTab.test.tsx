@@ -3,6 +3,7 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 import { requireValue } from '@/test-utils/requireValue';
 import { resetLogViewerPrefsCacheForTesting } from '../Logs/logViewerPrefsCache';
 import NodeLogsTab from './NodeLogsTab';
@@ -80,20 +81,22 @@ describe('NodeLogsTab', () => {
   ): Promise<void> => {
     await act(async () => {
       root.render(
-        <KeyboardProvider>
-          <AppRegionNavigation />
-          <main data-app-region="content">
-            <NodeLogsTab
-              panelId="panel-1"
-              nodeName="node-a"
-              clusterId="alpha:ctx"
-              isActive
-              availability={{ allowed: true, pending: false }}
-              sources={sources}
-              {...props}
-            />
-          </main>
-        </KeyboardProvider>
+        <PanelLayoutTestProvider>
+          <KeyboardProvider>
+            <AppRegionNavigation />
+            <main data-app-region="content">
+              <NodeLogsTab
+                panelId="panel-1"
+                nodeName="node-a"
+                clusterId="alpha:ctx"
+                isActive
+                availability={{ allowed: true, pending: false }}
+                sources={sources}
+                {...props}
+              />
+            </main>
+          </KeyboardProvider>
+        </PanelLayoutTestProvider>
       );
       await Promise.resolve();
       await Promise.resolve();

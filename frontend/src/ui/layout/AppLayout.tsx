@@ -10,6 +10,8 @@ import captainK8s from '@assets/captain-k8s-color.png';
 import logo from '@assets/luxury-yacht-logo.png';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
+import { DockablePanelLayer, useDockablePanelContext } from '@/ui/dockable';
+import { getGroupForPanel } from '@/ui/dockable/tabGroupState';
 // App Stuff
 import '@/App.css';
 import { useViewState } from '@core/contexts/ViewStateContext';
@@ -228,11 +230,11 @@ const ActiveClusterAuthOverlay = ({
   shouldShowActiveClusterAuthFailure(hasActiveClusters, viewType) ? <AuthFailureOverlay /> : null;
 
 export const AppLayout: React.FC = () => {
+  const { tabGroups } = useDockablePanelContext();
   const namespace = useNamespace();
   const viewState = useViewState();
   const kubeconfig = useKubeconfig();
-  const { openPanels, nativeLocations, dockedEdges, pendingNativeOpenPanelIds, closePanel } =
-    useObjectPanelState();
+  const { openPanels, pendingNativeOpenPanelIds, closePanel } = useObjectPanelState();
   const commands = useCommandPaletteCommands();
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const hasActiveClusters = kubeconfig.selectedClusterIds.length > 0;
@@ -298,6 +300,7 @@ export const AppLayout: React.FC = () => {
         <SidebarResizer viewState={viewState} />
 
         <div className="content">
+          <DockablePanelLayer />
           <div className="content-body" data-app-region="content" tabIndex={-1}>
             <div className="content-body__main">
               <PanelLifecycleClusterSurface
@@ -331,30 +334,28 @@ export const AppLayout: React.FC = () => {
         <DiagnosticsPanel isOpen={showDiagnostics} onClose={() => setShowDiagnostics(false)} />
       </PanelErrorBoundary>
 
-      {Array.from(openPanels.entries())
-        .filter(([panelId]) => !nativeLocations.has(panelId))
-        .map(([panelId, objectRef]) => {
-          const mountTarget = resolveObjectPanelMountTarget(
-            dockedEdges.get(panelId),
-            getDefaultObjectPanelPosition(),
-            pendingNativeOpenPanelIds.has(panelId) ? panelId : undefined
-          );
-          return (
-            <PanelErrorBoundary
-              key={panelId}
-              onClose={() => closePanel(objectRef.clusterId, panelId)}
-              panelName="object-details"
-            >
-              <ObjectPanel
-                panelId={panelId}
-                objectRef={objectRef}
-                defaultPosition={mountTarget.position}
-                defaultGroupKey={mountTarget.groupKey}
-                suppressWorkspaceSurface={pendingNativeOpenPanelIds.has(panelId)}
-              />
-            </PanelErrorBoundary>
-          );
-        })}
+      {Array.from(openPanels.entries()).map(([panelId, objectRef]) => {
+        const mountTarget = resolveObjectPanelMountTarget(
+          getGroupForPanel(tabGroups, panelId),
+          getDefaultObjectPanelPosition(),
+          pendingNativeOpenPanelIds.has(panelId) ? panelId : undefined
+        );
+        return (
+          <PanelErrorBoundary
+            key={panelId}
+            onClose={() => closePanel(objectRef.clusterId, panelId)}
+            panelName="object-details"
+          >
+            <ObjectPanel
+              panelId={panelId}
+              objectRef={objectRef}
+              defaultPosition={mountTarget.position}
+              defaultGroupKey={mountTarget.groupKey}
+              suppressWorkspaceSurface={pendingNativeOpenPanelIds.has(panelId)}
+            />
+          </PanelErrorBoundary>
+        );
+      })}
 
       <PanelErrorBoundary onClose={() => viewState.setIsSettingsOpen(false)} panelName="settings">
         <SettingsModal

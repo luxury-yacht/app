@@ -3,6 +3,7 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOMClient from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 import { requireValue } from '@/test-utils/requireValue';
 import StatusIndicator from './StatusIndicator';
 
@@ -19,22 +20,24 @@ const renderStatusIndicator = async (
 
   await act(async () => {
     root.render(
-      <KeyboardProvider>
-        <AppRegionNavigation />
-        <header data-app-region="header">
-          <StatusIndicator
-            status="healthy"
-            title="Connectivity"
-            message="Connected"
-            ariaLabel="Connectivity status"
-            {...props}
-          />
-          <button type="button">Next header control</button>
-        </header>
-        <aside data-app-region="sidebar">
-          <button type="button">Sidebar control</button>
-        </aside>
-      </KeyboardProvider>
+      <PanelLayoutTestProvider>
+        <KeyboardProvider>
+          <AppRegionNavigation />
+          <header data-app-region="header">
+            <StatusIndicator
+              status="healthy"
+              title="Connectivity"
+              message="Connected"
+              ariaLabel="Connectivity status"
+              {...props}
+            />
+            <button type="button">Next header control</button>
+          </header>
+          <aside data-app-region="sidebar">
+            <button type="button">Sidebar control</button>
+          </aside>
+        </KeyboardProvider>
+      </PanelLayoutTestProvider>
     );
     await Promise.resolve();
   });

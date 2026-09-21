@@ -1,6 +1,6 @@
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { getFocusPortalOwner } from '@shared/utils/focusOwnership';
-import { focusPanelById } from '@ui/dockable/useDockablePanelState';
+import { usePanelLayoutStoreContext } from '@ui/dockable/panelLayoutStoreContext';
 import { useShortcuts } from '@ui/shortcuts';
 import {
   type AppRegion,
@@ -29,7 +29,11 @@ const getEntryTarget = (region: AppRegion): HTMLElement => {
   return getRegionControls(region)[0] ?? root;
 };
 
-const focusRegion = (region: AppRegion, saved: HTMLElement | undefined) => {
+const focusRegion = (
+  region: AppRegion,
+  saved: HTMLElement | undefined,
+  focusPanelById: (panelId: string) => void
+) => {
   const root = region.roots[0];
   if (root.dataset.activePanelId) {
     focusPanelById(root.dataset.activePanelId);
@@ -80,6 +84,7 @@ const navigateLocally = (event: KeyboardEvent | undefined): boolean => {
 };
 
 export function useAppRegionNavigation() {
+  const { focusPanelById } = usePanelLayoutStoreContext();
   const savedFocus = useRef(new WeakMap<HTMLElement, HTMLElement>());
   useEffect(() => {
     const rememberFocus = () => {
@@ -110,7 +115,7 @@ export function useAppRegionNavigation() {
     const index =
       current < 0 ? entryIndex : (current + direction + regions.length) % regions.length;
     const region = regions[index];
-    return focusRegion(region, savedFocus.current.get(region.roots[0]));
+    return focusRegion(region, savedFocus.current.get(region.roots[0]), focusPanelById);
   };
 
   useShortcuts(

@@ -4,6 +4,7 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 import AppHeader from './AppHeader';
 import { useAppRegionNavigation } from './appFocusRegions';
 
@@ -91,9 +92,11 @@ describe('AppHeader', () => {
   const renderHeader = () => {
     root.render(
       <ModalStateProvider>
-        <KeyboardProvider>
-          <HeaderNavigation />
-        </KeyboardProvider>
+        <PanelLayoutTestProvider>
+          <KeyboardProvider>
+            <HeaderNavigation />
+          </KeyboardProvider>
+        </PanelLayoutTestProvider>
       </ModalStateProvider>
     );
   };

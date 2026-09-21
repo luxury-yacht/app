@@ -60,7 +60,7 @@ vi.mock('@/modules/object-panel/contexts/ObjectPanelStateContext', () => ({
   useLocalPanelSnapshots: () => mocks.local,
   useObjectPanelState: () => ({
     removeOwnedPanel: mocks.remove,
-    upsertOwnedPanel: mocks.upsert,
+    restorePanelTabs: mocks.upsert,
     panelIdsForCluster: () => ['api'],
     getOwnedPanel: () => ({ nativeLocation: null }),
   }),
@@ -274,6 +274,63 @@ it('returns the latest source groups for a cluster-view handoff', async () => {
   expect(sync.groupsForCluster('staging')).toEqual([]);
 });
 
+it('keeps transferred panels when a pre-commit directory read returns after settlement', async () => {
+  sync.stage('move-1', [
+    {
+      clusterId: 'production',
+      groupId: 'right',
+      tabs: mocks.local.production,
+      activePanelId: 'api',
+    },
+  ] as never);
+  let finishRead: (value: unknown) => void = () => undefined;
+  mocks.read.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finishRead = resolve;
+      })
+  );
+  await act(async () => mocks.changed?.({ clusterId: 'production' }));
+  mocks.read.mockClear();
+  mocks.read.mockResolvedValue({
+    revision: 3,
+    panels: [
+      {
+        tab: mocks.local.production[0],
+        location: { kind: 'docked', windowName: 'app-a', groupId: 'right' },
+      },
+    ],
+  });
+  await act(async () => {
+    sync.settle('move-1');
+    finishRead({
+      revision: 2,
+      panels: [
+        {
+          tab: mocks.local.production[0],
+          location: { kind: 'docked', windowName: 'app-b', groupId: 'right' },
+        },
+      ],
+    });
+  });
+  expect(mocks.remove).not.toHaveBeenCalled();
+  expect(mocks.detach).not.toHaveBeenCalled();
+  expect(mocks.read).toHaveBeenCalledWith('app-a', 'production');
+
+  // A later authoritative move must still remove the old renderer's copy.
+  mocks.read.mockResolvedValue({
+    revision: 4,
+    panels: [
+      {
+        tab: mocks.local.production[0],
+        location: { kind: 'docked', windowName: 'app-c', groupId: 'right' },
+      },
+    ],
+  });
+  await act(async () => mocks.changed?.({ clusterId: 'production' }));
+  expect(mocks.remove).toHaveBeenCalledWith('production', 'api');
+});
+
 it('does not read a revoked cluster while the frontend still displays its closing tab', async () => {
   await act(async () =>
     root.render(
@@ -380,7 +437,7 @@ it('restores newly retained panels after an earlier empty read, and again after 
   mocks.open.mockResolvedValue({ render: true, panel: retained });
   await act(async () => mocks.changed?.({ clusterId: 'production' }));
   expect(mocks.open).toHaveBeenCalledTimes(2);
-  expect(mocks.dock).toHaveBeenCalledWith('production', ['api'], 'api', 'bottom');
+  expect(mocks.dock).toHaveBeenCalledWith('production', ['api'], 'api', 'bottom', undefined);
 });
 
 it('mounts an accepted retained panel even if the next claim fails', async () => {
@@ -398,7 +455,7 @@ it('mounts an accepted retained panel even if the next claim fails', async () =>
     .mockResolvedValueOnce({ render: true, panel: first })
     .mockRejectedValueOnce(new Error('claim failed'));
   await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  expect(mocks.dock).toHaveBeenCalledWith('production', ['api'], 'api', 'bottom');
+  expect(mocks.dock).toHaveBeenCalledWith('production', ['api'], 'api', 'bottom', undefined);
 });
 
 it('processes a retained-panel notification received while an earlier claim is pending', async () => {
@@ -422,5 +479,5 @@ it('processes a retained-panel notification received while an earlier claim is p
   await act(async () => mocks.changed?.({ clusterId: 'production' }));
   await act(async () => mocks.changed?.({ clusterId: 'production' }));
   await act(async () => finish({ render: true, panel: first }));
-  expect(mocks.dock).toHaveBeenCalledWith('production', ['second'], 'second', 'bottom');
+  expect(mocks.dock).toHaveBeenCalledWith('production', ['second'], 'second', 'bottom', undefined);
 });

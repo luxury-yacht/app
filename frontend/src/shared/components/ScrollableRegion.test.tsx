@@ -4,6 +4,7 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { act, createRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
+import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 import { requireValue } from '@/test-utils/requireValue';
 import ScrollableRegion from './ScrollableRegion';
 
@@ -15,21 +16,23 @@ it('tabs into the viewport, leaves scrolling keys native, and skips excluded lin
   try {
     await act(async () => {
       root.render(
-        <KeyboardProvider>
-          <ZoomProvider>
-            <AppRegionNavigation />
-            <main data-app-region="content">
-              <button type="button">Before logs</button>
-              <ScrollableRegion ref={viewportRef} aria-label="Log output">
-                <a href="#pod" tabIndex={-1} data-focus-trap-ignore="true">
-                  Pod
-                </a>
-                Log content
-              </ScrollableRegion>
-              <button type="button">After logs</button>
-            </main>
-          </ZoomProvider>
-        </KeyboardProvider>
+        <PanelLayoutTestProvider>
+          <KeyboardProvider>
+            <ZoomProvider>
+              <AppRegionNavigation />
+              <main data-app-region="content">
+                <button type="button">Before logs</button>
+                <ScrollableRegion ref={viewportRef} aria-label="Log output">
+                  <a href="#pod" tabIndex={-1} data-focus-trap-ignore="true">
+                    Pod
+                  </a>
+                  Log content
+                </ScrollableRegion>
+                <button type="button">After logs</button>
+              </main>
+            </ZoomProvider>
+          </KeyboardProvider>
+        </PanelLayoutTestProvider>
       );
     });
     const viewport = requireValue(viewportRef.current, 'log viewport');

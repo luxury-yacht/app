@@ -11,7 +11,9 @@ vi.mock('@core/desktop-runtime', () => ({
 }));
 
 const focusPanel = vi.hoisted(() => vi.fn());
-vi.mock('@ui/dockable/useDockablePanelState', () => ({ focusPanelById: focusPanel }));
+vi.mock('@ui/dockable/panelLayoutStoreContext', () => ({
+  usePanelLayoutStoreContext: () => ({ focusPanelById: focusPanel }),
+}));
 let shortcuts: ReturnType<ReturnType<typeof useKeyboardContext>['getAvailableShortcuts']>;
 
 function Harness({ blocking = false, hiddenSidebar = false, panel = true } = {}) {

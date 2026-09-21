@@ -133,10 +133,9 @@ describe('createPanelLayoutStore — tabGroups slice', () => {
 
     expect(store.getState('panel-b')?.rightSize.width).toBe(640);
   });
-  it('hands off geometry without replacing the next tab’s placement or open state', () => {
+  it('hands off geometry without replacing group membership or the next tab’s open state', () => {
     const store = createPanelLayoutStore();
     store.updateState('leader', {
-      position: 'right',
       rightSize: { width: 640, height: 310 },
       bottomSize: { width: 420, height: 520 },
       isMaximized: true,
@@ -144,7 +143,6 @@ describe('createPanelLayoutStore — tabGroups slice', () => {
       zIndex: 1010,
     });
     store.updateState('next', {
-      position: 'bottom',
       isOpen: true,
       isInitialized: true,
       zIndex: 1020,
@@ -160,7 +158,6 @@ describe('createPanelLayoutStore — tabGroups slice', () => {
     store.handoffLayoutBeforeClose('leader');
 
     expect(store.getState('next')).toEqual({
-      position: 'bottom',
       rightSize: { width: 640, height: 310 },
       bottomSize: { width: 420, height: 520 },
       isMaximized: true,

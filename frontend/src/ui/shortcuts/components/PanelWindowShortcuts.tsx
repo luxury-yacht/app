@@ -316,12 +316,7 @@ export function PanelWindowShortcuts({
         guards.freeze(request.transferId, [request.tab.panelId]);
         const panelId = upsertOwnedPanel(
           { ...request.tab.objectRef } as KubernetesObjectReference,
-          request.tab.activeView as ViewType,
-          {
-            kind: 'panel-window',
-            windowName: descriptor.windowName,
-            groupId: descriptor.groupId,
-          }
+          request.tab.activeView as ViewType
         );
         if (panelId !== request.tab.panelId) {
           void failPanelTabTransfer(descriptor.windowName, request.transferId);

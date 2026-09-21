@@ -73,7 +73,7 @@ vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
   }),
 }));
 vi.mock('@/modules/object-panel/contexts/ObjectPanelStateContext', () => ({
-  useObjectPanelState: () => ({ upsertOwnedPanel: mocks.upsert, removeOwnedPanel: mocks.remove }),
+  useObjectPanelState: () => ({ restorePanelTabs: mocks.upsert, removeOwnedPanel: mocks.remove }),
 }));
 vi.mock('@/ui/dockable', () => ({
   useDockablePanelContext: () => ({
@@ -241,11 +241,16 @@ it('waits for exact panel reconstruction and removes the provisional copy on rol
     targetAlreadyOpen: true,
   };
   await act(async () => mocks.handlers.insert(event as never));
-  expect(mocks.upsert).toHaveBeenCalledWith(tab.objectRef, 'yaml', {
-    kind: 'docked',
-    edge: 'bottom',
-  });
-  expect(mocks.dock).toHaveBeenCalledWith('production', ['pod-api'], 'pod-api', 'bottom');
+  expect(mocks.upsert).toHaveBeenCalledWith(
+    expect.objectContaining({ clusterId: 'production', tabs: [tab], activePanelId: tab.panelId })
+  );
+  expect(mocks.dock).toHaveBeenCalledWith(
+    'production',
+    ['pod-api'],
+    'pod-api',
+    'bottom',
+    undefined
+  );
   expect(mocks.ack).not.toHaveBeenCalled();
   mocks.groups = [{ ...group, tabs: [{ ...tab, activeView: 'details' }] }];
   await act(async () => root.render(<ClusterTabTransferCoordinator />));
