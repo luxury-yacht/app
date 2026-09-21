@@ -458,3 +458,84 @@ This record supersedes the pending native/backend statuses above.
 
 The requested implementation and recorded acceptance work are complete. Changes
 remain uncommitted; no Git state-changing commands or PR creation were performed.
+
+### Windows floating-window latency investigation — 2026-09-21
+
+The user reports approximately one second of visible “Moving panels…” status
+before a new window appears, using `wails3 dev` on a separate Windows machine.
+The agent host is macOS. Windows latency has not been reproduced or attributed.
+
+Prepare opt-in timing capture before attempting an optimization. Producers are
+source float/tear-off, frontend bootstrap/readiness, and backend panel creation
+and acknowledgement. The existing Application Logs are the consumer. Correlate
+by transfer ID and cluster, record local monotonic elapsed times, and emit batched
+samples after each measured phase. Keep source retention, guard decisions,
+publication ordering, and native show timing unchanged. The frontend recorder
+must not import the logging/module graph on startup; load its existing logger
+only when emitting. The backend accepts a logging callback from composition;
+it does not import backend implementations. Recorder tests cover clock units,
+interleaved transfer isolation, opt-in behavior, and destination deduplication;
+existing transfer/bootstrap suites cover the surrounding operational contract.
+
+The recorder is implemented. Remaining work is to capture the reported behavior
+on the user's Windows development build, identify the dominant interval, then
+reproduce and verify an appropriate fix. Local passing tests cannot establish
+Windows latency or improvement.
+
+Recorder validation:
+
+- New recorder tests first failed because the implementation did not exist, then
+  passed. Interleaved frontend samples exposed a concurrent lazy-import issue
+  during validation; sharing one logger import promise made both samples arrive.
+- Focused existing transfer/bootstrap suites passed. The backend opt-in test
+  exercises the real registry with native show stubbed and proves showing still
+  waits for acknowledgement with tracing enabled and disabled.
+- Both required coverage tasks passed: 5,057 frontend tests in 526 files;
+  directly changed frontend files 589/653 statements (90.20%), backend files
+  561/641 (87.52%). Each new recorder measured 100% statement coverage; every
+  changed file exceeded 80%.
+- Local Go complexity maximum 11. The six changed TypeScript production files
+  passed Biome's cognitive-complexity rule with an explicit maximum of 12.
+  No remote Sonar analysis of this uncommitted instrumentation is available.
+- Tracing-enabled frontend validation passed: 56 transfer/bootstrap workflow
+  tests in four files with `VITE_PANEL_OPEN_TIMING=1`.
+- Final `mise exec -- wails3 task qc:prerelease` passed, including the backend
+  race suite, 5,057 frontend tests, typechecking, lint, documentation checks,
+  dependency checks, and vulnerability scan. The gate formatted one frontend
+  file; post-gate worktree inspection found only the intended diagnostic code,
+  tests, and this completion record. Windows performance capture remains pending.
+
+Capture on Windows after bringing the diagnostic changes into that checkout:
+
+```powershell
+$env:VITE_PANEL_OPEN_TIMING = "1"
+mise exec -- wails3 dev
+```
+
+Stop an existing dev session first so both the native executable and Vite inherit
+the flag. Float and dock back three times, then perform one drag-out. In the
+workspace, open View → Application Logs, include Info messages, filter for
+`[DEBUG-panel-open]`, and copy the filtered logs with “Copy logs to clipboard.”
+All four phases use the existing app log buffer: `source`, `backend-create`,
+`destination`, and `backend-ready`. Transfer IDs join the samples; cluster metadata
+remains scoped. No object contents are included. These diagnostics are local
+Application Logs, with the same existing logging/reporting policy as other app
+logs; they do not add a reporting endpoint.
+
+`elapsedMs` is cumulative within its phase; subtract adjacent marks to obtain
+individual stage costs. Destination elapsed time begins at the browser's
+navigation time origin, so `entry-module-evaluated` includes time before the
+entry module starts. `startedUnixMs` is for approximate cross-process alignment;
+use local monotonic elapsed times for durations. Backend creation measures the
+Wails creation call's return, not a promise that the webview has finished loading.
+Source `settled` includes either completion or cancellation. Compare repeated
+samples to distinguish first-use costs from costs on every float.
+
+After capture, stop the dev session and remove the flag before restarting:
+
+```powershell
+Remove-Item Env:VITE_PANEL_OPEN_TIMING
+```
+
+The `[DEBUG-panel-open]` instrumentation is temporary investigation work. Remove
+it when the Windows measurement and any resulting fix have been verified.

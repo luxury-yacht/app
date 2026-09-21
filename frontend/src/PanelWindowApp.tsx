@@ -38,6 +38,10 @@ import {
   PanelLifecycleGuardProvider,
   usePanelLifecycleGuardRegistry,
 } from '@/core/panel-windows/panelLifecycleGuards';
+import {
+  markPanelBootstrapTiming,
+  reportPanelBootstrapTiming,
+} from '@/core/panel-windows/panelOpenTiming';
 import { requestPanelTabMove } from '@/core/panel-windows/panelTabActions';
 import { resolvePanelWindowClusterName } from '@/core/panel-windows/panelWindowClusterName';
 import { nativePanelPublication } from '@/core/panel-windows/publicationQueue';
@@ -103,6 +107,7 @@ function PanelWindowSurface({
       return;
     }
     acknowledgedTransfers.add(descriptor.snapshot.transferId);
+    markPanelBootstrapTiming('panel-surface-mounted');
     const acknowledgeReady = async () => {
       try {
         await acknowledgePanelWindowReady(descriptor.windowName, descriptor.snapshot.transferId);
@@ -122,6 +127,13 @@ function PanelWindowSurface({
           });
         }
         reportOperationalError(error, { source: 'PanelWindowApp', action: 'acknowledge-ready' });
+      } finally {
+        markPanelBootstrapTiming('ready-call-returned');
+        reportPanelBootstrapTiming(
+          descriptor.snapshot.transferId,
+          descriptor.clusterId,
+          descriptor.windowName
+        );
       }
     };
     void acknowledgeReady();

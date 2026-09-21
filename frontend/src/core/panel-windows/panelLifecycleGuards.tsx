@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { errorHandler } from '@/utils/errorHandler';
+import { finishPanelOpenTiming } from './panelOpenTiming';
 
 export type PanelBlockReason = 'unsaved-yaml' | 'mutation-in-flight' | 'transfer-in-flight';
 
@@ -62,6 +63,7 @@ export class PanelLifecycleGuardRegistry {
     }
   }
   releaseTransfer(transferId: string): void {
+    finishPanelOpenTiming(transferId);
     if (!this.#transfers.delete(transferId)) {
       return;
     }
