@@ -28,7 +28,7 @@ export function WorkspacePanelLifecycle() {
       clusterId?: string,
       prepare = flush
     ) => {
-      const panelIds = clusterIds.flatMap(panelIdsForCluster);
+      const panelIds = clusterIds.flatMap((id) => panelIdsForCluster(id));
       return preparePanelClose({
         guards,
         transactionId,

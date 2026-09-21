@@ -60,14 +60,13 @@ export function useCursorPageSession() {
       const next = { ...tokens, pageIndex };
       const previous = currentPageRef.current;
       if (
-        previous.pageIndex === pageIndex &&
-        previous.continueToken === next.continueToken &&
-        previous.previousToken === next.previousToken
+        previous.pageIndex !== pageIndex ||
+        previous.continueToken !== next.continueToken ||
+        previous.previousToken !== next.previousToken
       ) {
-        return pageIndex;
+        currentPageRef.current = next;
+        setPage(next);
       }
-      currentPageRef.current = next;
-      setPage(next);
       return pageIndex;
     },
     []

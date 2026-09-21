@@ -10,15 +10,17 @@ export const resolveObjectPanelMountTarget = (
   groupKey: GroupKey | null | undefined,
   defaultPosition: DockPosition,
   pendingNativePanelId?: string
-): ObjectPanelMountTarget => ({
-  position: groupKey
-    ? groupKey === 'right' || groupKey === 'bottom'
-      ? groupKey
-      : 'floating'
-    : defaultPosition,
-  groupKey:
-    groupKey ??
-    (defaultPosition === 'floating' && pendingNativePanelId
-      ? `pending-native:${pendingNativePanelId}`
-      : undefined),
-});
+): ObjectPanelMountTarget => {
+  let position = defaultPosition;
+  if (groupKey) {
+    position = groupKey === 'right' || groupKey === 'bottom' ? groupKey : 'floating';
+  }
+  return {
+    position,
+    groupKey:
+      groupKey ??
+      (defaultPosition === 'floating' && pendingNativePanelId
+        ? `pending-native:${pendingNativePanelId}`
+        : undefined),
+  };
+};
