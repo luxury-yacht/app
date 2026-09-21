@@ -28,11 +28,12 @@ type catalogIndex struct {
 	cachedNamespaces  []string
 	cachedDescriptors []Descriptor
 	cachesReady       bool
+	kindCounts        map[KindInfo]int
+	namespaceCounts   map[string]int
 
 	// queryEngineStore is the shared querypage engine view of the catalog. It is the
-	// authoritative query state: rebuilt wholesale from the published summaries in
-	// publishRows and maintained for Browse/object-catalog queries via
-	// queryViaEngine. (Named distinctly from the Service.queryStore Querier
+	// authoritative query state: replaced at full publication and updated in place
+	// for live changes. (Named distinctly from the Service.queryStore Querier
 	// to avoid an embedded-field ambiguity.)
 	queryEngineStore *querypage.Store[Summary]
 
@@ -199,7 +200,12 @@ func (idx *catalogIndex) findUID(uid string) (Summary, bool) {
 	return item, ok
 }
 
-func (idx *catalogIndex) setItem(key string, summary Summary, seen time.Time) {
+func (idx *catalogIndex) setItem(key string, summary Summary, seen time.Time) catalogChange {
+	change := catalogChange{next: &summary}
+	if previous, ok := idx.items[key]; ok {
+		change.previous = &previous
+		idx.unindexItem(key, previous)
+	}
 	if idx.items == nil {
 		idx.items = make(map[string]Summary)
 	}
@@ -209,16 +215,18 @@ func (idx *catalogIndex) setItem(key string, summary Summary, seen time.Time) {
 	idx.items[key] = summary
 	idx.lastSeen[key] = seen
 	idx.indexItem(key, summary)
+	return change
 }
 
-func (idx *catalogIndex) deleteItem(key string) bool {
-	if _, exists := idx.items[key]; !exists {
-		return false
+func (idx *catalogIndex) deleteItem(key string) (catalogChange, bool) {
+	previous, exists := idx.items[key]
+	if !exists {
+		return catalogChange{}, false
 	}
 	delete(idx.items, key)
 	delete(idx.lastSeen, key)
-	idx.rebuildLookupIndexes()
-	return true
+	idx.unindexItem(key, previous)
+	return catalogChange{previous: &previous}, true
 }
 
 func (idx *catalogIndex) publishRows(
@@ -229,6 +237,11 @@ func (idx *catalogIndex) publishRows(
 	ready bool,
 ) {
 	idx.queryEngineStore = catalogQueryStoreFromRows(rows)
+	idx.kindCounts = make(map[KindInfo]int)
+	idx.namespaceCounts = make(map[string]int)
+	for _, row := range rows {
+		idx.countFacets(row, 1)
+	}
 	idx.cachedKinds = snapshotSortedKindInfos(kindSet)
 	idx.cachedNamespaces = snapshotSortedKeys(namespaceSet)
 	if descriptors != nil {
@@ -295,6 +308,16 @@ func (idx *catalogIndex) indexItem(key string, item Summary) {
 	idx.exact[catalogIdentityForSummary(item)] = key
 	if item.Ref.UID != "" {
 		idx.uid[item.Ref.UID] = key
+	}
+}
+
+func (idx *catalogIndex) unindexItem(key string, item Summary) {
+	identity := catalogIdentityForSummary(item)
+	if idx.exact[identity] == key {
+		delete(idx.exact, identity)
+	}
+	if idx.uid[item.Ref.UID] == key {
+		delete(idx.uid, item.Ref.UID)
 	}
 }
 

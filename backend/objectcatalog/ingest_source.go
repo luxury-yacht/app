@@ -18,7 +18,6 @@ package objectcatalog
 
 import (
 	"fmt"
-	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -134,9 +133,8 @@ func requestedNamespaceSet(desc Descriptor, namespaces []string) map[string]stru
 }
 
 // applyIngestCatalogSummary applies one incremental Catalog-half update from the
-// ingest sink to the live catalog index, set or delete, then rebuilds the published
-// cache and broadcasts — the same effect the shared-informer watch handler had for
-// this kind. It serializes against full syncs the same way watchNotifier.flush does.
+// ingest sink to the published catalog indexes before broadcasting. It serializes
+// against full syncs the same way watchNotifier.flush does.
 func (s *Service) applyIngestCatalogSummary(gvr schema.GroupVersionResource, summary Summary, deleted bool) {
 	if !s.syncMu.TryLock() {
 		s.queueIngestReconciliation(gvr)
@@ -154,28 +152,22 @@ func (s *Service) applyIngestCatalogSummary(gvr schema.GroupVersionResource, sum
 	key := catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)
 
 	s.mu.Lock()
-	changed := false
+	var change catalogChange
+	changed := true
 	if deleted {
-		changed = s.catalogIndex.deleteItem(key)
+		change, changed = s.catalogIndex.deleteItem(key)
 	} else {
-		s.catalogIndex.setItem(key, summary, s.now())
-		changed = true
+		change = s.catalogIndex.setItem(key, summary, s.now())
 	}
 	if !changed {
 		s.mu.Unlock()
 		return
 	}
-	itemsCopy := cloneSummaryMap(s.items)
+	published := s.publishCatalogChangesLocked([]catalogChange{change})
 	s.mu.Unlock()
-
-	// Batched sink registration rebuilds once for all kinds (see
-	// registerIngestCatalogSinks); the index mutation above is still visible to it.
-	if s.suspendCacheRebuilds.Load() {
-		return
+	if published {
+		s.broadcastStreaming(true)
 	}
-	descriptors := s.Descriptors()
-	s.rebuildCacheFromItems(itemsCopy, descriptors)
-	s.broadcastStreaming(true)
 }
 
 func (s *Service) replaceIngestCatalogSummaries(gvr schema.GroupVersionResource, rows []Summary) {
@@ -195,44 +187,27 @@ func (s *Service) replaceIngestCatalogSummariesLocked(gvr schema.GroupVersionRes
 	now := s.now()
 
 	s.mu.Lock()
-	if s.catalogIndex.items == nil {
-		s.catalogIndex.items = make(map[string]Summary)
-	}
-	if s.catalogIndex.lastSeen == nil {
-		s.catalogIndex.lastSeen = make(map[string]time.Time)
-	}
-	changed := false
+	changes := make([]catalogChange, 0, len(rows))
 	for key, existing := range s.catalogIndex.items {
 		if !summaryMatchesDescriptor(existing, desc) {
 			continue
 		}
-		delete(s.catalogIndex.items, key)
-		delete(s.catalogIndex.lastSeen, key)
-		changed = true
+		change, _ := s.catalogIndex.deleteItem(key)
+		changes = append(changes, change)
 	}
 	for _, summary := range rows {
 		key := catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)
-		s.catalogIndex.items[key] = summary
-		s.catalogIndex.lastSeen[key] = now
-		changed = true
+		changes = append(changes, s.catalogIndex.setItem(key, summary, now))
 	}
-	if changed {
-		s.catalogIndex.rebuildLookupIndexes()
+	if len(changes) == 0 {
+		s.mu.Unlock()
+		return
 	}
-	itemsCopy := cloneSummaryMap(s.items)
+	published := s.publishCatalogChangesLocked(changes)
 	s.mu.Unlock()
-
-	if !changed {
-		return
+	if published {
+		s.broadcastStreaming(true)
 	}
-	// Batched sink registration rebuilds once for all kinds (see
-	// registerIngestCatalogSinks); the index mutation above is still visible to it.
-	if s.suspendCacheRebuilds.Load() {
-		return
-	}
-	descriptors := s.Descriptors()
-	s.rebuildCacheFromItems(itemsCopy, descriptors)
-	s.broadcastStreaming(true)
 }
 
 func summaryMatchesDescriptor(summary Summary, desc Descriptor) bool {

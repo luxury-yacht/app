@@ -21,7 +21,8 @@ import (
 // synchronously replays the store's current rows through the sink's Replace, exactly
 // as the ingest manager does for an already-populated store.
 type replayIngestSource struct {
-	rows map[schema.GroupVersionResource][]interface{}
+	rows        map[schema.GroupVersionResource][]interface{}
+	afterReplay func()
 }
 
 func (r replayIngestSource) CatalogRows(gvr schema.GroupVersionResource) []interface{} {
@@ -30,6 +31,9 @@ func (r replayIngestSource) CatalogRows(gvr schema.GroupVersionResource) []inter
 func (r replayIngestSource) AddCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) bool {
 	if bulk, ok := sink.(ingest.Replacer); ok {
 		bulk.Replace(r.rows[gvr])
+	}
+	if r.afterReplay != nil {
+		r.afterReplay()
 	}
 	return true
 }

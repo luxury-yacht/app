@@ -75,6 +75,57 @@ func (s *Service) replaceFinalizerBlockers(items map[string]Summary) {
 		return
 	}
 	s.finalizerBlockers = next
+	s.publishFinalizerBlockersLocked()
+	s.finalizerMu.Unlock()
+}
+
+// Coalesce only the affected identities so a batch that restores the same
+// finding does not emit a revision, and unrelated catalog rows are not scanned.
+func (s *Service) updateFinalizerBlockers(changes []catalogChange) {
+	next := make(map[string]*FinalizerBlocker)
+	for _, change := range changes {
+		if change.previous != nil {
+			if blocker, blocked := change.previous.FinalizerBlocker(); blocked {
+				next[finalizerBlockerKey(blocker)] = nil
+			}
+		}
+		if change.next != nil {
+			if blocker, blocked := change.next.FinalizerBlocker(); blocked {
+				next[finalizerBlockerKey(blocker)] = &blocker
+			}
+		}
+	}
+	s.finalizerMu.Lock()
+	defer s.finalizerMu.Unlock()
+	if s.applyFinalizerChangesLocked(next) {
+		s.publishFinalizerBlockersLocked()
+	}
+}
+
+func (s *Service) applyFinalizerChangesLocked(next map[string]*FinalizerBlocker) bool {
+	changed := false
+	for key, blocker := range next {
+		previous, exists := s.finalizerBlockers[key]
+		if blocker == nil {
+			if exists {
+				delete(s.finalizerBlockers, key)
+				changed = true
+			}
+			continue
+		}
+		if exists && reflect.DeepEqual(previous, *blocker) {
+			continue
+		}
+		if s.finalizerBlockers == nil {
+			s.finalizerBlockers = make(map[string]FinalizerBlocker)
+		}
+		s.finalizerBlockers[key] = *blocker
+		changed = true
+	}
+	return changed
+}
+
+func (s *Service) publishFinalizerBlockersLocked() {
 	s.finalizerRevision++
 	update := FinalizerBlockerUpdate{Revision: s.finalizerRevision}
 	for _, subscriber := range s.finalizerSubscribers {
@@ -87,7 +138,6 @@ func (s *Service) replaceFinalizerBlockers(items map[string]Summary) {
 		default:
 		}
 	}
-	s.finalizerMu.Unlock()
 }
 
 func finalizerBlockerKey(blocker FinalizerBlocker) string {

@@ -60,6 +60,18 @@ Keep `catalog-first`. Do not turn that into `catalog-only`.
 
 ## Ingest callback ordering
 
+Watch batches and ingest sinks share one incremental publication boundary. Under
+`syncMu`, then the catalog write lock, apply the affected query rows, UID/identity
+entries, namespace/kind counts, and finalizer findings before broadcasting.
+Recreation removes the prior UID. Only full collection and initial source replay
+replace the complete query baseline; individual changes do not rebuild it.
+Source replay defers query publication and signals until every kind has replayed.
+
+Query stores are mutable between full collections. Hold the catalog read lock
+across a query's page, counts, and facets so they describe one publication. Source
+callbacks and query-engine operations must not acquire these locks in reverse
+order. This consistency boundary can make a publisher wait for a running query.
+
 An ingest callback may run while its source store is write-locked. It cannot block
 on the catalog's full-sync lock, because full sync reads those same source stores.
 If the catalog lock is busy, coalesce a pending reconciliation by GVR and reread

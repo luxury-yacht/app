@@ -162,9 +162,8 @@ func BenchmarkCatalogQueryChurnDuringPagination(b *testing.B) {
 	}
 }
 
-// BenchmarkCatalogPublish measures the cost of a single watch-flush publish
-// (full cache rebuild from items) — this runs on every coalesced watch flush
-// (200ms under churn) whether or not anything queries the catalog.
+// BenchmarkCatalogPublish measures replacing the full query baseline after
+// collection. Live-change publication has its own incremental benchmark.
 func BenchmarkCatalogPublish(b *testing.B) {
 	for _, size := range []int{10000, 100000} {
 		b.Run(fmt.Sprintf("rebuild-%d", size), func(b *testing.B) {

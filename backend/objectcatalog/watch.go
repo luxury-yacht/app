@@ -110,46 +110,41 @@ func (n *watchNotifier) flush(events []watchEvent) {
 		return
 	}
 
-	changed := false
-
 	events = n.resolveCustomResourceEvents(events)
 	s.mu.Lock()
+	changes := make([]catalogChange, 0, len(events))
 	for _, evt := range events {
-		if s.applyWatchEvent(evt) {
-			changed = true
+		if change, changed := s.applyWatchEvent(evt); changed {
+			changes = append(changes, change)
 		}
 	}
-	if !changed {
+	if len(changes) == 0 {
 		s.mu.Unlock()
 		return
 	}
-	itemsCopy := cloneSummaryMap(s.items)
+	published := s.publishCatalogChangesLocked(changes)
 	s.mu.Unlock()
-
-	// Descriptors() acquires s.mu.RLock — must call after Unlock.
-	descriptors := s.Descriptors()
-	// rebuildCacheFromItems acquires s.mu.Lock.
-	s.rebuildCacheFromItems(itemsCopy, descriptors)
-	s.broadcastStreaming(true)
+	if published {
+		s.broadcastStreaming(true)
+	}
 }
 
 // applyWatchEvent runs under the catalog publication lock.
-func (s *Service) applyWatchEvent(event watchEvent) bool {
+func (s *Service) applyWatchEvent(event watchEvent) (catalogChange, bool) {
 	desc, ok := s.catalogIndex.resource(event.gvr)
 	if !ok {
-		return false
+		return catalogChange{}, false
 	}
 	switch event.eventType {
 	case watchEventAdd, watchEventUpdate:
 		if event.obj == nil {
-			return false
+			return catalogChange{}, false
 		}
-		s.catalogIndex.setItem(event.key, s.buildSummary(desc, event.obj), s.now())
-		return true
+		return s.catalogIndex.setItem(event.key, s.buildSummary(desc, event.obj), s.now()), true
 	case watchEventDelete:
 		return s.catalogIndex.deleteItem(event.key)
 	default:
-		return false
+		return catalogChange{}, false
 	}
 }
 
@@ -409,24 +404,20 @@ func (s *Service) registerIngestCatalogSinks() {
 	if source == nil {
 		return
 	}
-	// Each AddCatalogSink synchronously replays the store's current rows through the
-	// sink, and the incremental apply normally ends in a FULL published-cache rebuild
-	// — one per cut kind (27 at last count), back-to-back, right in the startup
-	// window. Suspend the per-apply rebuild for the loop and publish once at the end;
-	// every replay still mutates the index (s.items) under s.mu, so the single
-	// rebuild sees all of them.
-	s.suspendCacheRebuilds.Store(true)
+	// Registering a sink replays the source under its store lock. Defer publication
+	// until every kind is registered, then replace the query baseline once.
+	s.suspendPublication.Store(true)
 	for gvr := range catalogIngestOwnedGVRs {
 		source.AddCatalogSink(gvr, ingestCatalogSink{service: s, gvr: gvr})
 	}
-	s.suspendCacheRebuilds.Store(false)
-
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
 	s.mu.Lock()
-	itemsCopy := cloneSummaryMap(s.items)
+	s.cacheRebuilds.Add(1)
+	s.catalogIndex.rebuildCacheFromItems(s.items, s.catalogIndex.descriptors())
+	s.replaceFinalizerBlockers(s.items)
+	s.suspendPublication.Store(false)
 	s.mu.Unlock()
-	// Same publish sequence the appliers use; rebuildCacheFromItems takes s.mu itself,
-	// so it must be called without the lock held.
-	s.rebuildCacheFromItems(itemsCopy, s.Descriptors())
 	s.broadcastStreaming(true)
 }
 

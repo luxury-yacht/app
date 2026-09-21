@@ -21,8 +21,8 @@ func (store inMemoryCatalogQueryStore) QueryCatalog(opts QueryOptions) (QueryRes
 		return QueryResult{}, false
 	}
 	// Serve through the shared querypage engine (queryViaEngine). It reads the
-	// maintained store that publishRows keeps equal to the published
-	// summaries; when no summaries have been published it serves the items-map
+	// store maintained by full and incremental publication; when no summaries
+	// have been published it serves the items-map
 	// snapshot on the same engine. Either way it returns a result (ok=true), so
 	// the catalog has one query implementation.
 	return store.service.queryViaEngine(opts)

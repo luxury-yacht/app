@@ -341,22 +341,23 @@ func catalogEngineNamespaceFilterValues(namespaces []string) []string {
 // queryViaEngine serves a catalog query through the maintained querypage store — the
 // catalog's single query implementation. Fed the published state, it returns the
 // QueryResult (items/order, totals, facets, pagination). It is read-only over the store
-// snapshot taken under the service read lock, so it never blocks ingestion for longer
-// than a snapshot copy.
+// under the service read lock: incremental publication cannot interleave between
+// row selection, totals, and facet reads.
 func (s *Service) queryViaEngine(opts QueryOptions) (QueryResult, bool) {
 	s.mu.RLock()
 	store := s.catalogIndex.queryEngineStore
 	descriptors := append([]Descriptor(nil), s.catalogIndex.cachedDescriptors...)
 	cachedKinds := append([]KindInfo(nil), s.catalogIndex.cachedKinds...)
 	cachedNamespaces := append([]string(nil), s.catalogIndex.cachedNamespaces...)
-	s.mu.RUnlock()
 
 	// An empty engine store means no chunks have been published (or the catalog was
 	// reset). queryViaEngineFromSnapshot serves that case on the same engine from the
 	// items-map snapshot, so the catalog has ONE query implementation.
 	if store == nil || store.Len() == 0 {
+		s.mu.RUnlock()
 		return s.queryViaEngineFromSnapshot(opts, descriptors)
 	}
+	defer s.mu.RUnlock()
 	// Maintained-store path: facets resolve from the publish-time cached kinds/namespaces
 	// lists (catalogEngineFacets).
 	rows := store.Snapshot()
