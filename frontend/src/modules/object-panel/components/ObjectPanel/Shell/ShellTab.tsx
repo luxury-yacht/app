@@ -25,7 +25,6 @@ import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { useVirtualScrollbar } from '@shared/scrollbars/useVirtualScrollbar';
 import { resolveTerminalTheme, toXtermThemeDefinition } from '@shared/terminal/terminalTheme';
-import { useDockablePanelState } from '@ui/dockable';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
 import {
@@ -202,7 +201,6 @@ const ShellTab: React.FC<ShellTabProps> = ({
   availableContainers,
   clusterId,
 }) => {
-  const panelState = useDockablePanelState('object-panel');
   const [session, setSession] = useState<types.ShellSession | null>(null);
   const [startDebugContainer, setStartDebugContainer] = useState(false);
   const [status, setStatus] = useState<ShellStatus>('idle');
@@ -545,14 +543,11 @@ const ShellTab: React.FC<ShellTabProps> = ({
   }, [applyTerminalTheme]);
 
   useEffect(() => {
-    void panelState.position;
-    void panelState.size.width;
-    void panelState.size.height;
     if (!terminalReady || !isActive) {
       return;
     }
     terminalRef.current?.focus();
-  }, [terminalReady, isActive, panelState.position, panelState.size.width, panelState.size.height]);
+  }, [terminalReady, isActive]);
 
   const activeContainer = containerOverride ?? session?.container ?? '';
 

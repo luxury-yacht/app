@@ -57,20 +57,27 @@ maximize and restore.
 ## Placement and Uniqueness
 
 - Within each renderer, its cluster-scoped tab groups are the single writable
-  placement projection. Geometry stores contain size, maximize, open, and focus
-  state; object state contains local references, active views, and pending native
-  opens. Neither keeps a second dock edge or native-window location index.
+  placement projection. Each group owns its size, maximize, and stacking order;
+  tabs own open state. Object state contains local references, active views, and
+  pending native opens. Neither keeps a second dock edge or native-window location index.
 - `useRestoreWorkspacePanels` installs group membership before restoring object
   content for retained panels, dock-back, panel-tab insertion, and cluster-view
   insertion. A mounting `DockablePanel` preserves that membership while its
-  geometry initializes; the initial closed geometry must not remove the group.
-- `PanelLayoutLifecycle` releases the owning cluster's geometry after committed
-  object removal in both renderer roles. Focus and debug readers use their
-  provider's layout context; there is no globally selected layout store.
-- Each renderer mounts `DockablePanelLayer` inside its content surface. React
-  owns the portal destination and its replacement during reconstruction or
-  suspension. Panel geometry and offset cleanup follow that connected host;
-  the provider must not discover and append a one-time DOM container.
+  open state initializes; the initial closed state must not remove the group.
+- `PanelLayoutLifecycle` releases tab state and membership after committed
+  object removal in both renderer roles. Dock geometry stays with its group
+  through sibling closes, reorders, and cluster switches. An empty dock retains
+  its size but releases maximize. Focus and debug readers use their provider's
+  group state; there is no globally selected layout store.
+- Each renderer mounts `DockablePanelLayer` inside its content surface. It
+  renders one `DockablePanelGroup` per visible group, owning chrome, geometry,
+  and a keyed DOM slot per tab. `DockablePanel` portals its own children into
+  that slot, retaining its originating context and error boundary. There is no
+  tab leader, captured-children registry, or content-change notification channel.
+  Sibling opens/closes and reorders retain existing slots and editing state.
+  Moving the tab itself between groups may remount its content and must respect
+  lifecycle guards. React owns host replacement during reconstruction or
+  suspension; the provider must not append a one-time DOM container.
 - Prefer the active compatible docked group when opening a new object.
 - A new panel whose default is Floating creates a uniquely isolated, transient,
   hidden one-tab source group, then asks the native coordinator to transfer it.

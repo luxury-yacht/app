@@ -92,14 +92,10 @@ const renderHook = async (
 };
 
 describe('useDockablePanelState', () => {
-  it('uses restored group membership for sizing and observes group moves without a second position write', async () => {
+  it('observes restored and moved placement without a second position write', async () => {
     const store = createPanelLayoutStore();
     store.setTabGroups((groups) => addPanelToGroup(groups, 'restored', 'bottom'));
-    store.updateState('restored', {
-      isOpen: true,
-      bottomSize: { width: 400, height: 540 },
-      rightSize: { width: 620, height: 300 },
-    });
+    store.updateState('restored', { isOpen: true });
     let panel: HookResult | undefined;
     const Probe = () => {
       panel = useDockablePanelState('restored');
@@ -116,12 +112,10 @@ describe('useDockablePanelState', () => {
         )
       );
       expect(panel?.position).toBe('bottom');
-      expect(panel?.size.height).toBe(540);
       await act(async () =>
         store.setTabGroups((groups) => addPanelToGroup(groups, 'restored', 'right'))
       );
       expect(panel?.position).toBe('right');
-      expect(panel?.size.width).toBe(620);
     } finally {
       await act(async () => root.unmount());
     }
@@ -196,33 +190,13 @@ describe('useDockablePanelState', () => {
 
     await hook.update((state) =>
       state.initialize({
-        size: { width: 420, height: 260 },
         isOpen: false,
       })
     );
 
     expect(hook.current.isInitialized).toBe(true);
     expect(hook.current.position).toBe('bottom');
-    expect(hook.current.size.height).toBe(260);
     expect(hook.current.isOpen).toBe(false);
-
-    await hook.unmount();
-  });
-
-  it('updates size according to the active docking position', async () => {
-    const hook = await renderHook('dockable-size');
-
-    await hook.update((state) => state.setPosition('right'));
-    await hook.update((state) => state.setSize({ width: 420, height: 999 }));
-
-    expect(hook.current.rightSize).toEqual({ width: 420, height: 300 });
-    expect(hook.current.size.width).toBe(420);
-
-    await hook.update((state) => state.setPosition('bottom'));
-    await hook.update((state) => state.setSize({ width: 999, height: 310 }));
-
-    expect(hook.current.bottomSize).toEqual({ width: 400, height: 310 });
-    expect(hook.current.size.height).toBe(310);
 
     await hook.unmount();
   });
@@ -237,26 +211,9 @@ describe('useDockablePanelState', () => {
     expect(hook.current.isOpen).toBe(true);
 
     await hook.update(async (state) => {
-      state.toggle();
+      state.setOpen(false);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect(hook.current.isOpen).toBe(false);
-
-    await hook.unmount();
-  });
-
-  it('raises z-index on focus and resets to defaults', async () => {
-    const hook = await renderHook('dockable-focus');
-
-    const initialZ = hook.current.zIndex;
-    await hook.update((state) => state.focus());
-    expect(hook.current.zIndex).toBeGreaterThan(initialZ);
-
-    await hook.update((state) => state.setPosition('bottom'));
-    await hook.update((state) => state.setOpen(true));
-    await hook.update((state) => state.reset());
-
-    expect(hook.current.position).toBe('right');
     expect(hook.current.isOpen).toBe(false);
 
     await hook.unmount();

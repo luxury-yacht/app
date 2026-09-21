@@ -15,7 +15,6 @@ interface DockablePanelState {
   isMaximized: boolean;
   isOpen: boolean;
   focus: () => void;
-  setPosition: (position: DockPosition) => void;
   setSize: (size: { width: number; height: number }) => void;
   setMaximized: (isMaximized: boolean) => void;
 }
@@ -131,9 +130,6 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
       restoreStateRef.current = null;
 
       if (restore) {
-        if (panelState.position !== restore.position) {
-          panelState.setPosition(restore.position);
-        }
         panelState.setSize({ ...restore.size });
       }
       return;

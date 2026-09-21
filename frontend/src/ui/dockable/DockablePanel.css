@@ -342,3 +342,12 @@ body.dockable-panel-resizing-w::after {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Slots keep one stable portal destination per tab through sibling changes. */
+.dockable-panel__tab-content {
+  flex: 1;
+  min-height: 0;
+}
+.dockable-panel__tab-content[hidden] {
+  display: none;
+}

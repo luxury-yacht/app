@@ -81,9 +81,8 @@ it('restores groups before content and cleans an inactive cluster without touchi
     await render();
     await act(async () => restore(first, 'bottom'));
     const firstStore = requireValue(stores.get('cluster-a'), 'cluster-a layout exists');
-    firstStore.updateState(first.activePanelId, {
+    firstStore.updateGroupLayout('bottom', {
       bottomSize: { width: 400, height: 540 },
-      isOpen: true,
     });
     expect(
       requireValue(objects, 'object state is mounted').getOwnedPanel(
@@ -100,11 +99,10 @@ it('restores groups before content and cleans an inactive cluster without touchi
     await render();
     await act(async () => restore(second, 'bottom'));
     const secondStore = requireValue(stores.get('cluster-b'), 'cluster-b layout exists');
-    secondStore.updateState(second.activePanelId, {
+    secondStore.updateGroupLayout('bottom', {
       bottomSize: { width: 400, height: 360 },
-      isOpen: true,
     });
-    expect(firstStore.getState(first.activePanelId)?.bottomSize.height).toBe(540);
+    expect(firstStore.getGroupLayout('bottom').bottomSize.height).toBe(540);
     await act(async () =>
       requireValue(objects, 'object state is mounted').closePanel('cluster-a', first.activePanelId)
     );
@@ -113,7 +111,7 @@ it('restores groups before content and cleans an inactive cluster without touchi
       requireValue(dockable, 'layout context is mounted').getClusterTabGroups('cluster-a').bottom
         .tabs
     ).toEqual([]);
-    expect(secondStore.getState(second.activePanelId)?.bottomSize.height).toBe(360);
+    expect(secondStore.getGroupLayout('bottom').bottomSize.height).toBe(360);
     expect(requireValue(dockable, 'layout context is mounted').tabGroups.bottom.tabs).toEqual([
       second.activePanelId,
     ]);

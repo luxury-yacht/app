@@ -19,4 +19,3 @@ export {
   DockablePanelProvider,
   useDockablePanelContext,
 } from './DockablePanelProvider';
-export { useDockablePanelState } from './useDockablePanelState';

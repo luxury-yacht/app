@@ -25,6 +25,9 @@ export interface PanelRegistration {
   onMaximizeChange?: (isMaximized: boolean) => void;
   /** Ref forwarded from the consumer for keyboard scoping etc. */
   panelRef?: React.Ref<HTMLDivElement>;
+  contentHostRef?: React.RefCallback<HTMLDivElement>;
+  suppressSurface?: boolean;
+  closeActiveTabOnEscape?: boolean;
 }
 
 /** A floating tab group with its own position/size identity. */

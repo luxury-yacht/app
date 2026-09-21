@@ -100,73 +100,29 @@ describe('createPanelLayoutStore — tabGroups slice', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
-  it('restores persisted maximized state with the rest of panel layout state', () => {
+  it('retains group geometry and maximize when any sibling closes', () => {
     const store = createPanelLayoutStore();
-
-    store.updateState('panel-a', { isOpen: true, isMaximized: true });
-    const snapshot = store.getAllPanelStates();
-
-    const restoredStore = createPanelLayoutStore();
-    restoredStore.restorePanelStates(snapshot);
-
-    expect(restoredStore.getState('panel-a')?.isMaximized).toBe(true);
-    expect(restoredStore.getState('panel-a')?.isOpen).toBe(true);
-  });
-
-  it('hands off leader geometry to the next tab before the leader is cleared', () => {
-    const store = createPanelLayoutStore();
-
-    store.updateState('panel-a', {
-      isOpen: true,
-      rightSize: { width: 640, height: 300 },
-    });
-    store.updateState('panel-b', {
-      isOpen: true,
-      rightSize: { width: 400, height: 300 },
-    });
-    store.setTabGroups((prev) => addPanelToGroup(prev, 'panel-a', 'right'));
-    store.setTabGroups((prev) => addPanelToGroup(prev, 'panel-b', 'right'));
-    store.setGroupLeader('right', 'panel-a');
-
-    store.handoffLayoutBeforeClose('panel-a');
-    store.clearPanelState('panel-a');
-
-    expect(store.getState('panel-b')?.rightSize.width).toBe(640);
-  });
-  it('hands off geometry without replacing group membership or the next tab’s open state', () => {
-    const store = createPanelLayoutStore();
-    store.updateState('leader', {
-      rightSize: { width: 640, height: 310 },
-      bottomSize: { width: 420, height: 520 },
+    store.setTabGroups((prev) =>
+      addPanelToGroup(addPanelToGroup(prev, 'a', 'right'), 'b', 'right')
+    );
+    store.updateGroupLayout('right', { rightSize: { width: 640, height: 300 }, isMaximized: true });
+    store.clearPanelState('a');
+    expect(store.getTabGroups().right.tabs).toEqual(['b']);
+    expect(store.getGroupLayout('right')).toMatchObject({
+      rightSize: { width: 640 },
       isMaximized: true,
-      isOpen: false,
-      zIndex: 1010,
     });
-    store.updateState('next', {
-      isOpen: true,
-      isInitialized: true,
-      zIndex: 1020,
+  });
+  it('retains dock size but releases maximize when the last tab closes', () => {
+    const store = createPanelLayoutStore();
+    store.setTabGroups((prev) => addPanelToGroup(prev, 'a', 'right'));
+    store.updateGroupLayout('right', { rightSize: { width: 640, height: 300 }, isMaximized: true });
+    store.clearPanelState('a');
+    expect(store.getGroupLayout('right')).toMatchObject({
+      rightSize: { width: 640 },
+      isMaximized: false,
     });
-    store.setTabGroups(() => ({
-      right: { tabs: ['leader', 'next'], activeTab: 'next' },
-      bottom: { tabs: [], activeTab: null },
-      floating: [],
-    }));
-    const listener = vi.fn();
-    store.subscribe('next', listener);
-
-    store.handoffLayoutBeforeClose('leader');
-
-    expect(store.getState('next')).toEqual({
-      rightSize: { width: 640, height: 310 },
-      bottomSize: { width: 420, height: 520 },
-      isMaximized: true,
-      isOpen: true,
-      isInitialized: true,
-      zIndex: 1020,
-    });
-    expect(store.getState('next')?.rightSize).not.toBe(store.getState('leader')?.rightSize);
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(store.getTabGroups().right.tabs).toEqual(['leader', 'next']);
+    store.setTabGroups((prev) => addPanelToGroup(prev, 'b', 'right'));
+    expect(store.getGroupLayout('right').rightSize.width).toBe(640);
   });
 });

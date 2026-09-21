@@ -72,8 +72,10 @@ const renderPanel = async (ui: React.ReactElement<{ children?: React.ReactNode }
       ) : (
         <KeyboardProvider>
           <DockablePanelProvider>
-            <DockablePanelTestHost />
-            <ZoomProvider>{ui}</ZoomProvider>
+            <ZoomProvider>
+              <DockablePanelTestHost />
+              {ui}
+            </ZoomProvider>
           </DockablePanelProvider>
         </KeyboardProvider>
       );

@@ -25,14 +25,6 @@ const LayoutProbe = () => {
   layoutStore = usePanelLayoutStoreContext();
   return null;
 };
-const getAllPanelStates = () =>
-  Object.fromEntries(
-    Object.entries(layoutStore.getAllPanelStates()).map(([id, state]) => [
-      id,
-      { ...state, position: getPanelPosition(layoutStore.getTabGroups(), id) },
-    ])
-  );
-
 vi.mock('@core/backend-api', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),
   SetZoomLevel: vi.fn().mockResolvedValue(undefined),
@@ -82,9 +74,11 @@ const renderPanel = async (
       <KeyboardProvider>
         <PanelLifecycleGuardProvider>
           <DockablePanelProvider {...providerProps}>
-            <DockablePanelTestHost />
-            <LayoutProbe />
-            <ZoomProvider>{element}</ZoomProvider>
+            <ZoomProvider>
+              <DockablePanelTestHost />
+              <LayoutProbe />
+              {element}
+            </ZoomProvider>
           </DockablePanelProvider>
         </PanelLifecycleGuardProvider>
       </KeyboardProvider>
@@ -99,11 +93,16 @@ const renderPanel = async (
 };
 
 const panelState = (panelId: string) => {
-  const state = getAllPanelStates()[panelId];
+  const state = layoutStore.getState(panelId);
   if (!state) {
     throw new Error(`missing panel state for ${panelId}`);
   }
-  return state;
+  const group = getGroupForPanel(layoutStore.getTabGroups(), panelId);
+  return {
+    ...state,
+    ...layoutStore.getGroupLayout(group ?? 'right'),
+    position: getPanelPosition(layoutStore.getTabGroups(), panelId),
+  };
 };
 
 describe('DockablePanel docked behaviour', () => {
@@ -183,7 +182,7 @@ describe('DockablePanel docked behaviour', () => {
     }
   });
 
-  it('retains a reordered group leader and its geometry across a cluster round trip', async () => {
+  it('retains group geometry after reordering across a cluster round trip', async () => {
     ensureContentElement();
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -426,19 +425,15 @@ describe('DockablePanel docked behaviour', () => {
         </DockablePanel>
       </>
     );
-    const before = getAllPanelStates();
-    expect(before['panel-target-bottom']?.zIndex).toBeLessThan(
-      before['panel-source-a']?.zIndex ?? Number.NEGATIVE_INFINITY
-    );
+    const beforeTargetZ = layoutStore.getGroupLayout('bottom').zIndex;
 
     const dockBottom = document.querySelector<HTMLButtonElement>(
       '.dockable-panel--right [aria-label="Dock panel to bottom"]'
     );
     await act(async () => dockBottom?.click());
 
-    const after = getAllPanelStates();
-    expect(after['panel-source-a']?.position).toBe('bottom');
-    expect(after['panel-source-b']?.position).toBe('bottom');
+    expect(panelState('panel-source-a').position).toBe('bottom');
+    expect(panelState('panel-source-b').position).toBe('bottom');
     expect(document.querySelector('.dockable-panel--right')).toBeNull();
     expect(
       Array.from(document.querySelectorAll('.dockable-panel--bottom [role="tab"]')).map((tab) =>
@@ -450,9 +445,7 @@ describe('DockablePanel docked behaviour', () => {
         .querySelector('.dockable-panel--bottom [aria-selected="true"]')
         ?.getAttribute('data-panel-id')
     ).toBe('panel-source-b');
-    expect(after['panel-target-bottom']?.zIndex).toBeGreaterThan(
-      after['panel-source-a']?.zIndex ?? Number.POSITIVE_INFINITY
-    );
+    expect(layoutStore.getGroupLayout('bottom').zIndex).toBeGreaterThan(beforeTargetZ);
     await unmount();
   });
 

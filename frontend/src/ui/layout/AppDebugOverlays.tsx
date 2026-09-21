@@ -5,7 +5,7 @@ import {
 } from '@modules/object-map/objectMapDebugStore';
 import { CopyIcon } from '@shared/components/icons/LogIcons';
 import { useDockablePanelContext } from '@ui/dockable';
-import { usePanelLayoutStoreContext } from '@ui/dockable/panelLayoutStoreContext';
+import { getGroupTabs } from '@ui/dockable/tabGroupState';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DebugOverlay } from './DebugOverlay';
 import { IconDebugOverlay } from './IconDebugOverlay';
@@ -320,50 +320,10 @@ const KeyboardFocusOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
 };
 
 const PanelDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
-  const layoutStore = usePanelLayoutStoreContext();
-  const { tabGroups, panelRegistrations } = useDockablePanelContext();
-  const [focusedPanelId, setFocusedPanelId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const resolveFocusedPanelId = () => {
-      const states = layoutStore.getAllPanelStates();
-      let nextFocusedPanelId: string | null = null;
-      let highestZIndex = Number.NEGATIVE_INFINITY;
-
-      Object.entries(states).forEach(([panelId, state]) => {
-        if (!state.isOpen) {
-          return;
-        }
-        if (state.zIndex > highestZIndex) {
-          highestZIndex = state.zIndex;
-          nextFocusedPanelId = panelId;
-        }
-      });
-
-      setFocusedPanelId((previous) =>
-        previous === nextFocusedPanelId ? previous : nextFocusedPanelId
-      );
-    };
-
-    const scheduleResolve = () => {
-      window.setTimeout(resolveFocusedPanelId, 0);
-    };
-
-    resolveFocusedPanelId();
-    window.addEventListener('focusin', scheduleResolve);
-    window.addEventListener('keydown', scheduleResolve);
-    document.addEventListener('mousedown', scheduleResolve, true);
-    document.addEventListener('click', scheduleResolve, true);
-    const intervalId = window.setInterval(resolveFocusedPanelId, 250);
-
-    return () => {
-      window.removeEventListener('focusin', scheduleResolve);
-      window.removeEventListener('keydown', scheduleResolve);
-      document.removeEventListener('mousedown', scheduleResolve, true);
-      document.removeEventListener('click', scheduleResolve, true);
-      window.clearInterval(intervalId);
-    };
-  }, [layoutStore]);
+  const { tabGroups, panelRegistrations, lastFocusedGroupKey } = useDockablePanelContext();
+  const focusedPanelId = lastFocusedGroupKey
+    ? (getGroupTabs(tabGroups, lastFocusedGroupKey)?.activeTab ?? null)
+    : null;
 
   const groups = [
     {

@@ -1,36 +1,23 @@
-/**
- * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.groupLeaderContext.test.tsx
- *
- * Regression test for tab-grouped object panels. The dockable tab-group
- * LEADER renders every tab's content inside its own React subtree
- * (DockablePanel captures non-leader children and the leader mounts them),
- * so React context resolves against the leader's tree. ObjectPanel must
- * therefore ship its CurrentObjectPanelContext.Provider INSIDE the children
- * it hands to DockablePanel — otherwise a pod tab grouped under a workload
- * leader reads the WORKLOAD's objectData (wrong group/version → wrong
- * permission keys → gated actions vanish from the pod's actions menu).
- */
-
+import { ZoomProvider } from '@core/contexts/ZoomContext';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import { DockablePanelLayer, DockablePanelProvider } from '@ui/dockable';
 import { act, createContext, useContext, useSyncExternalStore } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { capturedChildrenRef, probedObjectDataRef, mockUseCapabilities, mockRefreshOrchestrator } =
-  vi.hoisted(() => ({
-    capturedChildrenRef: { current: null as React.ReactNode },
-    probedObjectDataRef: { current: undefined as unknown },
-    mockUseCapabilities: vi.fn(() => ({
-      getState: () => ({ allowed: true, pending: false }),
-    })),
-    mockRefreshOrchestrator: {
-      setScopedDomainEnabled: vi.fn(),
-      resetScopedDomain: vi.fn(),
-      stopStreamingDomain: vi.fn(),
-      fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
-      updateContext: vi.fn(),
-    },
-  }));
+const { probedObjectDataRef, mockUseCapabilities, mockRefreshOrchestrator } = vi.hoisted(() => ({
+  probedObjectDataRef: { current: undefined as unknown },
+  mockUseCapabilities: vi.fn(() => ({
+    getState: () => ({ allowed: true, pending: false }),
+  })),
+  mockRefreshOrchestrator: {
+    setScopedDomainEnabled: vi.fn(),
+    resetScopedDomain: vi.fn(),
+    stopStreamingDomain: vi.fn(),
+    fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
+    updateContext: vi.fn(),
+  },
+}));
 
 // Shared, reactive active-tab store mirroring the real two-context split:
 // setObjectPanelActiveTab writes, useObjectPanelActiveTab reads reactively.
@@ -81,29 +68,8 @@ vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
     useSyncExternalStore(tabStore.subscribe, tabStore.getSnapshot).get(panelId),
 }));
 
-// Teleporting DockablePanel: capture children (exactly what the real panel
-// does for the group-content registry) and render NOTHING in this subtree —
-// the test mounts the captured children under a different panel's provider,
-// simulating the group-leader render path.
-vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({ children }: { children: React.ReactNode }) => {
-    capturedChildrenRef.current = children;
-    return null;
-  },
-  useDockablePanelContext: () => ({
-    tabGroups: {
-      right: { tabs: [], activeTab: null },
-      bottom: { tabs: [], activeTab: null },
-      floating: [],
-    },
-    switchTab: vi.fn(),
-    getPreferredOpenGroupKey: () => 'right',
-  }),
-}));
-
-vi.mock('@ui/dockable/tabGroupState', () => ({
-  getGroupForPanel: () => null,
-  getGroupTabs: () => null,
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({ selectedClusterId: 'cluster-1', selectedClusterIds: ['cluster-1'] }),
 }));
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
@@ -115,8 +81,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Details/DetailsTab', () => ({
-  // The probe stands in for any content (Overview/ActionsMenu/PodsTab) that
-  // reads the per-panel context while mounted in the leader's subtree.
+  // Exercise the context read made by object-specific content and actions.
   default: () => <ContextProbe />,
 }));
 
@@ -169,6 +134,8 @@ vi.mock('@ui/shortcuts', () => ({
 
 vi.mock('@core/backend-api', () => ({
   RunObjectAction: vi.fn().mockResolvedValue({}),
+  GetZoomLevel: vi.fn().mockResolvedValue(100),
+  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('@core/backend-api/models', () => ({ types: {} }));
 vi.mock('@utils/errorHandler', () => ({ errorHandler: { handle: vi.fn() } }));
@@ -200,15 +167,11 @@ const WORKLOAD_REF: ObjectPanelRef = {
   version: 'v1',
 };
 
-// Renders the captured (teleported) children, the way a group leader does.
-const LeaderHost = () => <>{capturedChildrenRef.current}</>;
-
-describe('ObjectPanel content under a tab-group leader', () => {
+describe('ObjectPanel content in a group-owned slot', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
   beforeEach(() => {
-    capturedChildrenRef.current = null;
     probedObjectDataRef.current = undefined;
     tabStore.reset();
     container = document.createElement('div');
@@ -224,39 +187,25 @@ describe('ObjectPanel content under a tab-group leader', () => {
     vi.clearAllMocks();
   });
 
-  it("provides the panel's OWN objectData to content rendered by another panel's leader", async () => {
-    // Mount the pod panel: its DockablePanel captures the children without
-    // rendering them (non-leader tab).
+  it('keeps object identity from the tab owner when the group has different context', async () => {
     await act(async () => {
       root.render(
-        <ObjectPanel panelId="obj:cluster-1:/v1/pod:argo-sandbox:api-123" objectRef={POD_REF} />
+        <ZoomProvider>
+          <DockablePanelProvider>
+            <CurrentObjectPanelContext.Provider
+              value={{ objectData: WORKLOAD_REF, panelId: 'workload' }}
+            >
+              <div className="content">
+                <DockablePanelLayer />
+              </div>
+            </CurrentObjectPanelContext.Provider>
+            <ObjectPanel panelId="obj:cluster-1:/v1/pod:argo-sandbox:api-123" objectRef={POD_REF} />
+          </DockablePanelProvider>
+        </ZoomProvider>
       );
-      await Promise.resolve();
     });
-    expect(capturedChildrenRef.current).toBeTruthy();
-
-    // Now mount the captured content under the LEADER's provider — exactly
-    // what DockablePanel's group leader does for non-leader tabs.
-    await act(async () => {
-      root.render(
-        <>
-          <ObjectPanel panelId="obj:cluster-1:/v1/pod:argo-sandbox:api-123" objectRef={POD_REF} />
-          <CurrentObjectPanelContext.Provider
-            value={{
-              objectData: WORKLOAD_REF,
-              panelId: 'obj:cluster-1:apps/v1/deployment:argo-sandbox:api',
-            }}
-          >
-            <LeaderHost />
-          </CurrentObjectPanelContext.Provider>
-        </>
-      );
-      await Promise.resolve();
-    });
-
-    // The probe lives inside the pod panel's Details content. It must see
-    // the POD's objectData — not the workload leader's.
     expect(probedObjectDataRef.current).toMatchObject({
+      clusterId: 'cluster-1',
       kind: 'Pod',
       name: 'api-123',
       group: '',

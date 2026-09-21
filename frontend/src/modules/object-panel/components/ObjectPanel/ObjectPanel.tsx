@@ -315,52 +315,43 @@ function ObjectPanel({
         onClose={close}
         contentClassName="object-panel-body"
       >
-        {/* The provider must wrap the CHILDREN handed to DockablePanel, not
-            just this component's subtree: in a tab group, the group LEADER
-            renders every tab's captured children inside the leader's own
-            React tree, and context resolves at the render site. Without this
-            inner provider, a tab's content would read the leader panel's
-            objectData (wrong GVK → wrong permission keys → gated actions
-            silently disappear from grouped panels). */}
-        <CurrentObjectPanelContext.Provider value={currentObjectPanelValue}>
-          <PanelLifecycleClusterSurface clusterId={objectRef.clusterId}>
-            {/* Kind badge + name toolbar */}
-            <div>
-              <ObjectPanelHeader
-                kind={objectData?.kind ?? null}
-                kindAlias={objectData?.kindAlias ?? null}
-                name={objectData?.name ?? null}
-              />
-            </div>
-
-            <ObjectPanelTabs
-              tabs={availableTabs}
-              activeTab={visibleActiveTab}
-              onSelect={setActiveTab}
+        <PanelLifecycleClusterSurface clusterId={objectRef.clusterId}>
+          {/* Kind badge + name toolbar */}
+          <div>
+            <ObjectPanelHeader
+              kind={objectData?.kind ?? null}
+              kindAlias={objectData?.kindAlias ?? null}
+              name={objectData?.name ?? null}
             />
+          </div>
 
-            <ObjectPanelContent
-              activeTab={visibleActiveTab}
-              detailTabProps={detailTabProps}
-              isPanelOpen={isActiveTab}
-              capabilities={capabilities}
-              capabilityReasons={capabilityReasons}
-              nodeLogsState={nodeLogsState}
-              nodeLogSources={nodeLogSources}
-              detailScope={detailScope}
-              eventsScope={eventsScope}
-              containerLogsScope={containerLogsScope}
-              mapScope={mapScope}
-              helmScope={helmScope}
-              objectData={objectData}
-              objectKind={objectKind}
-              resourceDeleted={resourceDeleted}
-              deletedResourceName={deletedResourceName}
-              onClosePanel={close}
-              panelId={panelId}
-            />
-          </PanelLifecycleClusterSurface>
-        </CurrentObjectPanelContext.Provider>
+          <ObjectPanelTabs
+            tabs={availableTabs}
+            activeTab={visibleActiveTab}
+            onSelect={setActiveTab}
+          />
+
+          <ObjectPanelContent
+            activeTab={visibleActiveTab}
+            detailTabProps={detailTabProps}
+            isPanelOpen={isActiveTab}
+            capabilities={capabilities}
+            capabilityReasons={capabilityReasons}
+            nodeLogsState={nodeLogsState}
+            nodeLogSources={nodeLogSources}
+            detailScope={detailScope}
+            eventsScope={eventsScope}
+            containerLogsScope={containerLogsScope}
+            mapScope={mapScope}
+            helmScope={helmScope}
+            objectData={objectData}
+            objectKind={objectKind}
+            resourceDeleted={resourceDeleted}
+            deletedResourceName={deletedResourceName}
+            onClosePanel={close}
+            panelId={panelId}
+          />
+        </PanelLifecycleClusterSurface>
       </DockablePanel>
     </CurrentObjectPanelContext.Provider>
   );
