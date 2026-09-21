@@ -86,9 +86,9 @@ Native accessibility observations during external `kubectl` mutations:
 
 The temporary column was removed, the cluster tab closed, the development
 processes stopped, and the Kind cluster and its two kubeconfig files deleted.
-Restoring the pre-test saved cluster selection remains pending explicit user
-approval after automatic approval review rejected the preference restoration.
-The active cluster is empty.
+After the user's follow-up authorization, the two pre-test saved cluster
+selections were restored and read back on 2026-09-20. The active cluster remains
+empty; other preferences were preserved.
 
 ### Publication microbenchmark
 
@@ -105,3 +105,116 @@ rebuild the small kind/namespace vocabulary, and whole-kind replacement scans th
 membership map. Queries hold the publication read lock for consistent rows,
 counts, and facets; long queries can delay a publisher. Full resync, source
 adapters, retry policy, and recovery remain in place.
+
+
+## Follow-up: shared query-page mechanics
+
+### Scope, ownership, and constraints
+
+Consolidate search debounce, applied cursor/page state, request delivery, and
+query stream identities across typed tables and Browse. Preserve their distinct
+payload interpretation, warm-up retry, navigation rollback, quiet-request
+coalescing, metadata scopes, and reset timing. No new source mode or UI behavior.
+
+- Producers remain typed refresh query snapshots and catalog query snapshots.
+  Data access owns temporary query leases and acquire/fetch/read/release.
+- Typed queries remain declarative. Browse keeps its imperative cursor requests
+  and separately subscribed base and metadata scopes. The shared session owns
+  only applied cursor/footer state, not requested-cursor or payload policy.
+- Query readiness must still permit acquisition/acknowledgement needed to become
+  ready. Discard results after scope changes or supersession; preserve the
+  existing adapter-specific error delivery and loading cleanup.
+- Reset rows before commit on hard scope changes. Publish landed cursors and
+  position together; payload writes must not look like new stream signals.
+- Core stream helpers depend only on core refresh/data access. Shared query-page
+  helpers depend on data access, never on Browse, preventing a dependency cycle.
+- Existing contract tests cover cluster/namespace isolation, readiness,
+  cancellation, warm-up, rollback, cursor expiry, anchors, numbered jumps,
+  structural sharing, live signals, and exports. Add gaps at consumer boundaries.
+
+### Resource-table inventory
+
+The production classification remains enforced by
+`gridTableViewRegistry.contract.test.ts`, including direct GridTable exceptions.
+
+| Surface | Source and mode | Affected path |
+| --- | --- | --- |
+| Browse and custom resources | Catalog query, static page | Browse adapter |
+| Aggregated config/RBAC/storage/network/CRD/quota/autoscaling views | Typed query, static page | Typed adapter |
+| Namespace Pods/Workloads and cluster Nodes | Typed query, dynamic metrics page | Typed adapter |
+| Namespace Events/Helm, cluster Events/Attention | Typed query, static page | Typed adapter |
+| Object-panel Pods | Typed query with owner predicates | Typed adapter |
+| Global clusters and namespace summary | Bounded inventory | Unchanged |
+| Object-panel related-resource tables and Events | Bounded/explicit partial | Unchanged |
+| Parsed logs and diagnostics | Explicit non-inventory exceptions | Unchanged |
+
+Backend queries continue to own global search, sort, facets, and counts. Page
+limits remain bounded by the existing options; exports retain the shared full
+cursor walk. Visible-row actions retain complete object identity and cluster
+scope. No frontend loaded-prefix inference is introduced.
+
+### Work and evidence
+
+- [x] Baseline: 86 tests in five query/signal suites passed before edits.
+- [x] Consolidate mechanics and migrate both adapters.
+- [x] Run focused adapter, freshness, table-classification, and request tests.
+- [x] Measure affected coverage and changed-function complexity.
+- [x] Exercise representative typed and Browse query interactions in Wails.
+- [x] Run prerelease gate and inspect final worktree.
+- [x] Document the shared boundary and record cleanup/remaining verification.
+
+### Query validation record — 2026-09-20
+
+- Focused suites: 210 tests across 21 files passed, covering query adapters,
+  Browse/custom-resource consumers, stream signals, table classification, and
+  data access. Added numbered-jump/self-cursor reconciliation and overlapping
+  quiet-refresh/user-navigation coverage. Adapter tests mock the data-access
+  response boundary; native checks below exercise the actual backend.
+- Full frontend coverage suite: 5,050 tests across 524 files passed. The six
+  changed production files covered 597/644 statements (92.70%). File coverage:
+  Browse 94.73%, typed query 91.63%, query wrapper 86.17%, page session 97.36%,
+  request delivery 100%, and stream hooks 97.36%.
+- Local complexity: Biome with a temporary maximum of 12 reported no changed
+  function or new helper above 12. Its only finding was the unchanged focus
+  request effect in `useAnchorOnUnmatchedFocusRequest` (14); the full-file
+  command therefore exited 1. The diff changes only signal consumption in
+  that file, outside the flagged function. No repository thresholds or
+  suppressions changed. No pushed Sonar analysis was requested.
+- Final gate: `mise exec -- wails3 task qc:prerelease` exited 0, including Go
+  race tests, vet/staticcheck, bindings, frontend lint/types, 5,050 tests in 524
+  files, Knip, documentation links, and the configured vulnerability scan.
+  The gate reported no frontend formatting changes. Final worktree inspection
+  found only the intended query code, tests, and documentation changes.
+
+### Native query checks and cleanup
+
+Used the native Wails development build with disposable Kind cluster
+`codex-query-check`, namespace `query-refactor-check`, and 260 test ConfigMaps.
+The existing 250-row preference was preserved.
+
+1. Browse displayed its loading state, then 262 catalog objects. Next/previous
+   navigation and the numbered page control moved between pages one and two.
+2. On Browse page two, external deletion of `query-check-260` removed its row,
+   changed the footer from 251–262 of 262 to 251–261 of 261, and retained page two.
+3. Typed Config displayed 260 rows after that deletion. Next/previous and the
+   numbered control moved between pages one and two.
+4. On typed page two, externally adding a data key to `query-check-259`
+   changed its visible Data Items cell from 1 item to 2 items without navigation.
+5. Both tables retained keyboard focus while searching for that object,
+   displayed one matching row, displayed an empty result after adding a
+   nonmatching suffix, and returned to page one after clearing the filter.
+6. Switching to namespace `default` replaced the test namespace's rows:
+   typed Config showed only its root CA ConfigMap; Browse showed the root CA,
+   Kubernetes Service/EndpointSlice, and default ServiceAccount.
+
+The direct Playwright navigation to the emitted Vite URL again reported
+`/wails/runtime` 404s because native bindings are unavailable there. Native
+interaction supplied the runtime evidence. Error, warm-up retry, cancellation,
+and permission cases are covered by automated adapter tests, not native error
+injection. This cluster had no metrics-server; no live metric-sort claim is made.
+
+The development app and its processes were stopped. The disposable cluster and
+both temporary kubeconfigs were deleted. The saved cluster selections and active
+state captured before this phase were restored and read back successfully.
+The [query contract](../architecture/large-data-query.md) now records the shared
+mechanics and adapter-owned policies. Panel placement remains a separate phase.

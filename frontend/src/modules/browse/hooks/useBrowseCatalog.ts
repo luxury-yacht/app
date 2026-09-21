@@ -8,6 +8,16 @@
 
 import { walkQueryCursorPages } from '@modules/resource-grid/cursorPageWalk';
 import {
+  executeQueryPageRequest,
+  type QueryPageRequestResult,
+} from '@modules/resource-grid/queryPageRequest';
+import {
+  type CursorPageDirection,
+  queryPageStartRank,
+  useCursorPageSession,
+  useQuerySearch,
+} from '@modules/resource-grid/useCursorPageSession';
+import {
   TABLE_PAGE_SIZE_OPTIONS,
   type TablePageSize,
 } from '@shared/components/tables/pageSizeOptions';
@@ -22,6 +32,7 @@ import {
 } from '@/core/data-access';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { useQueryStreamSignal } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
@@ -41,8 +52,6 @@ import {
 
 export type { BrowseFilterOptions, BrowseFilters } from './browseCatalogData';
 
-const BROWSE_SEARCH_DEBOUNCE_MS = 250;
-
 const normalizeInitialPageLimit = (value: number, fallback: TablePageSize): number => {
   if (!Number.isFinite(value)) {
     return fallback;
@@ -53,43 +62,7 @@ const normalizeInitialPageLimit = (value: number, fallback: TablePageSize): numb
 const isRenderableCatalogPayload = (payload: CatalogSnapshotPayload): boolean =>
   payload.isFinal !== false || (payload.items?.length ?? 0) > 0;
 
-type BrowsePageDirection = 'next' | 'previous' | 'current' | 'jump';
-
-interface BrowsePageLanding {
-  pageIndex: number;
-  currentPageToken: string | null;
-}
-
-const resolveBrowsePageLanding = (
-  payload: CatalogSnapshotPayload,
-  direction: BrowsePageDirection,
-  pageLimit: number,
-  currentPageIndex: number,
-  requestToken: string | null
-): BrowsePageLanding => {
-  if (direction === 'jump') {
-    const pageIndex =
-      typeof payload.pageStartRank === 'number'
-        ? Math.floor(payload.pageStartRank / pageLimit) + 1
-        : 1;
-    return { pageIndex, currentPageToken: payload.self || null };
-  }
-  if (direction === 'next') {
-    return { pageIndex: currentPageIndex + 1, currentPageToken: requestToken };
-  }
-  if (direction === 'previous') {
-    const pageIndex = Math.max(1, currentPageIndex - 1);
-    return { pageIndex, currentPageToken: pageIndex > 1 ? requestToken : null };
-  }
-  return {
-    pageIndex: currentPageIndex,
-    currentPageToken: currentPageIndex > 1 ? requestToken : null,
-  };
-};
-
-type CatalogPageRequestResult = Awaited<ReturnType<typeof requestRefreshDomainState>>;
-
-const getCatalogPagePayload = (result: CatalogPageRequestResult): CatalogSnapshotPayload | null => {
+const getCatalogPagePayload = (result: QueryPageRequestResult): CatalogSnapshotPayload | null => {
   if (result.status !== 'executed' || !result.data) {
     return null;
   }
@@ -99,35 +72,18 @@ const getCatalogPagePayload = (result: CatalogPageRequestResult): CatalogSnapsho
   return (result.data.data as CatalogSnapshotPayload | null) ?? null;
 };
 
-interface CatalogPageRequestCallbacks {
-  isCurrent: () => boolean;
-  isSameScope: () => boolean;
-  onPayload: (payload: CatalogSnapshotPayload) => void;
-  onError: (error: unknown) => void;
-  onSettled: () => void;
-}
-
-const executeCatalogPageRequest = async (
-  scope: string,
-  reason: DataRequestReason,
-  callbacks: CatalogPageRequestCallbacks
-): Promise<void> => {
-  try {
-    const result = await requestRefreshDomainState({ domain: 'catalog', scope, reason });
-    if (!callbacks.isCurrent()) {
-      return;
-    }
-    const payload = getCatalogPagePayload(result);
-    if (payload) {
-      callbacks.onPayload(payload);
-    }
-  } catch (error) {
-    if (callbacks.isSameScope()) {
-      callbacks.onError(error);
-    }
-  } finally {
-    callbacks.onSettled();
+// A numbered jump adopts the backend's self cursor. Walking back to page one
+// resumes the subscribed base scope instead of retaining a cursor request.
+const currentCatalogPageToken = (
+  direction: CursorPageDirection,
+  pageIndex: number,
+  requestToken: string | null,
+  selfToken?: string
+): string | null => {
+  if (direction === 'jump') {
+    return selfToken || null;
   }
+  return pageIndex > 1 ? requestToken : null;
 };
 
 const shouldBlockPageRequest = (
@@ -309,10 +265,9 @@ export function useBrowseCatalog({
 }: UseBrowseCatalogOptions): UseBrowseCatalogResult {
   const search = filters.search ?? '';
   const [items, setItems] = useState<CatalogItem[]>([]);
-  const [continueToken, setContinueToken] = useState<string | null>(null);
-  const [previousToken, setPreviousToken] = useState<string | null>(null);
+  const { continueToken, previousToken, pageIndex, resetPage, publishPage } =
+    useCursorPageSession();
   const [isRequestingMore, setIsRequestingMore] = useState(false);
-  const [pageIndex, setPageIndex] = useState(1);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [unfilteredTotal, setUnfilteredTotal] = useState(0);
@@ -333,14 +288,12 @@ export function useBrowseCatalog({
     () => normalizeInitialPageLimit(pageLimitProp ?? defaultTablePageSize, defaultTablePageSize),
     [defaultTablePageSize, pageLimitProp]
   );
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [debouncedSearch, setDebouncedSearch] = useQuerySearch(search);
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
 
   const itemsRef = useRef<CatalogItem[]>([]);
   const hasLoadedOnceRef = useRef(false);
-  const pageIndexRef = useRef(1);
   const currentPageTokenRef = useRef<string | null>(null);
-  pageIndexRef.current = pageIndex;
   // Page-request coordination (see requestPage): a SYNC in-flight gate (state
   // is async and can double-fire), a user-only gate (quiet doorbell refetches
   // must not block user clicks), and a sequence so a user request supersedes
@@ -349,19 +302,6 @@ export function useBrowseCatalog({
   const pageRequestInFlightRef = useRef(false);
   const userPageRequestInFlightRef = useRef(false);
   const pageRequestSeqRef = useRef(0);
-
-  useEffect(() => {
-    const nextSearch = filters.search ?? '';
-    if (nextSearch === debouncedSearch) {
-      return undefined;
-    }
-    const timer = window.setTimeout(() => {
-      setDebouncedSearch(nextSearch);
-    }, BROWSE_SEARCH_DEBOUNCE_MS);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [debouncedSearch, filters.search]);
 
   const queryFilters = useMemo<BrowseFilters>(
     () => ({
@@ -476,11 +416,8 @@ export function useBrowseCatalog({
 
     // Reset pagination state on query change.
     setIsRequestingMore(false);
-    setPageIndex(1);
-    pageIndexRef.current = 1;
+    resetPage();
     currentPageTokenRef.current = null;
-    setContinueToken(null);
-    setPreviousToken(null);
     setPageError(null);
     // Preserve the current dataset while filter-only queries refresh so the
     // filter bar/dropdowns stay mounted and open menus don't lose their scroll
@@ -506,6 +443,7 @@ export function useBrowseCatalog({
     plan.scopeIdentityKey,
     refreshCatalogScope,
     refreshMetadataScope,
+    resetPage,
   ]);
 
   // Apply incoming snapshots to local pagination state
@@ -544,15 +482,14 @@ export function useBrowseCatalog({
       setItems(next.items);
     }
 
-    setContinueToken(next.continueToken);
-    setPreviousToken(next.previousToken);
+    publishPage({ continueToken: next.continueToken, previousToken: next.previousToken });
     setTotalCount(next.totalCount);
     setUnfilteredTotal(next.unfilteredTotal);
     setTotalIsExact(next.totalIsExact);
     setIsRequestingMore(false);
 
     markCatalogLoaded(payload, hasLoadedOnceRef, setHasLoadedOnce);
-  }, [domain.data, domain.scope, domain.status, catalogScope, pinnedNamespaces]);
+  }, [domain.data, domain.scope, domain.status, catalogScope, pinnedNamespaces, publishPage]);
 
   // Cursor-page handler. Fetches a cursor page using a paginated scope and
   // replaces the current row window. The refresh store remains scoped by the
@@ -611,62 +548,68 @@ export function useBrowseCatalog({
         address.startRank
       );
       const baseScopeAtRequest = catalogScopeRef.current;
-      void executeCatalogPageRequest(normalizedScope, reason, {
-        isCurrent: () =>
-          pageRequestSeqRef.current === seq && catalogScopeRef.current === baseScopeAtRequest,
-        isSameScope: () => catalogScopeRef.current === baseScopeAtRequest,
-        onPayload: (payload) => {
-          if (payload.cursorInvalid) {
-            itemsRef.current = [];
-            setItems([]);
-            setContinueToken(null);
-            setPreviousToken(null);
-            currentPageTokenRef.current = null;
-            pageIndexRef.current = 1;
-            setPageIndex(1);
-            void refreshCatalogScope('user');
-            return;
-          }
-          const next = applyCatalogPage(payload);
-          itemsRef.current = next.items;
-          setPageError(null);
-          setItems(next.items);
-          setContinueToken(next.continueToken);
-          setPreviousToken(next.previousToken);
-          setTotalCount(next.totalCount);
-          setUnfilteredTotal(next.unfilteredTotal);
-          setTotalIsExact(next.totalIsExact);
-          const landing = resolveBrowsePageLanding(
-            payload,
-            direction,
-            pageLimit,
-            pageIndexRef.current,
-            token
-          );
-          currentPageTokenRef.current = landing.currentPageToken;
-          pageIndexRef.current = landing.pageIndex;
-          setPageIndex(landing.pageIndex);
-          markCatalogLoaded(payload, hasLoadedOnceRef, setHasLoadedOnce);
-        },
-        onError: (error) => {
-          const details = errorHandler.handleInline(error, {
-            action: 'loadBrowseCatalogPage',
-            source: 'useBrowseCatalog',
-            clusterId,
-          });
-          setPageError(details.message);
-        },
-        onSettled: () => {
-          // A superseded request must not clear its successor's gates.
-          if (pageRequestSeqRef.current === seq) {
-            pageRequestInFlightRef.current = false;
-            if (!quiet) {
-              userPageRequestInFlightRef.current = false;
-              setIsRequestingMore(false);
+      void executeQueryPageRequest(
+        { domain: 'catalog', scope: normalizedScope, reason },
+        {
+          isCurrent: () =>
+            pageRequestSeqRef.current === seq && catalogScopeRef.current === baseScopeAtRequest,
+          acceptsError: () => catalogScopeRef.current === baseScopeAtRequest,
+          onResult: (result) => {
+            const payload = getCatalogPagePayload(result);
+            if (!payload) {
+              return;
             }
-          }
-        },
-      });
+            if (payload.cursorInvalid) {
+              itemsRef.current = [];
+              setItems([]);
+              resetPage();
+              currentPageTokenRef.current = null;
+              void refreshCatalogScope('user');
+              return;
+            }
+            const next = applyCatalogPage(payload);
+            itemsRef.current = next.items;
+            setPageError(null);
+            setItems(next.items);
+            setTotalCount(next.totalCount);
+            setUnfilteredTotal(next.unfilteredTotal);
+            setTotalIsExact(next.totalIsExact);
+            const landedPage = publishPage(
+              { continueToken: next.continueToken, previousToken: next.previousToken },
+              {
+                direction,
+                pageSize: pageLimit,
+                startRank: direction === 'jump' ? payload.pageStartRank : undefined,
+              }
+            );
+            currentPageTokenRef.current = currentCatalogPageToken(
+              direction,
+              landedPage,
+              token,
+              payload.self
+            );
+            markCatalogLoaded(payload, hasLoadedOnceRef, setHasLoadedOnce);
+          },
+          onError: (error) => {
+            const details = errorHandler.handleInline(error, {
+              action: 'loadBrowseCatalogPage',
+              source: 'useBrowseCatalog',
+              clusterId,
+            });
+            setPageError(details.message);
+          },
+          onSettled: () => {
+            // A superseded request must not clear its successor's gates.
+            if (pageRequestSeqRef.current === seq) {
+              pageRequestInFlightRef.current = false;
+              if (!quiet) {
+                userPageRequestInFlightRef.current = false;
+                setIsRequestingMore(false);
+              }
+            }
+          },
+        }
+      );
     },
     [
       pageLimit,
@@ -677,62 +620,30 @@ export function useBrowseCatalog({
       clusterId,
       customOnly,
       refreshCatalogScope,
+      resetPage,
+      publishPage,
     ]
   );
 
-  // Doorbell values live in signalVersions, which payload applies never touch
-  // — so this only moves when the catalog doorbell rings. (Keying on the
-  // folded sourceVersion turned every content-changing fetch response into
-  // another "signal": an echo refetch per doorbell.)
-  const liveDataVersion = domain.signalVersions?.catalog ?? '';
-  const catalogAcknowledgedVersion = domain.streamAcknowledgedVersion;
-  const catalogQueryReconcileVersion = domain.queryReconcileVersion;
-  const catalogLiveIdentity = `${liveDataVersion}|ack:${catalogAcknowledgedVersion ?? ''}|query-reconcile:${catalogQueryReconcileVersion ?? ''}`;
-  // has-observed flag, not an empty-string sentinel: before the first doorbell
-  // the value IS empty, and a falsiness check would swallow the first ring.
-  const lastCatalogLiveVersionRef = useRef<{ observed: boolean; value: string }>({
-    observed: false,
-    value: '',
-  });
-  useEffect(() => {
-    const previous = lastCatalogLiveVersionRef.current;
-    lastCatalogLiveVersionRef.current = { observed: true, value: catalogLiveIdentity };
-    if (
-      !enabled ||
-      (!liveDataVersion &&
-        catalogAcknowledgedVersion === undefined &&
-        catalogQueryReconcileVersion === undefined) ||
-      !previous.observed ||
-      previous.value === catalogLiveIdentity ||
-      !hasLoadedOnceRef.current
-    ) {
-      return;
-    }
-
-    const currentPageToken = currentPageTokenRef.current;
-    // These fetches are triggered BY the catalog doorbell: 'stream-signal' is
-    // the one non-manual reason the skip-while-stream-healthy gate never
-    // swallows. With 'background' the refetch was skipped for a loaded scope
-    // while the stream was healthy — the doorbell silently did nothing.
-    if (currentPageToken) {
-      requestPage({ token: currentPageToken }, 'current', 'stream-signal');
-    } else {
-      void refreshCatalogScope('stream-signal');
-    }
-    if (!metadataUsesActiveScope) {
-      void refreshMetadataScope('stream-signal');
-    }
-  }, [
-    catalogAcknowledgedVersion,
-    catalogQueryReconcileVersion,
-    catalogLiveIdentity,
-    liveDataVersion,
-    enabled,
-    metadataUsesActiveScope,
-    refreshCatalogScope,
-    refreshMetadataScope,
-    requestPage,
-  ]);
+  useQueryStreamSignal(
+    'catalog',
+    domain,
+    () => {
+      if (!hasLoadedOnceRef.current) {
+        return;
+      }
+      const currentPageToken = currentPageTokenRef.current;
+      if (currentPageToken) {
+        requestPage({ token: currentPageToken }, 'current', 'stream-signal');
+      } else {
+        void refreshCatalogScope('stream-signal');
+      }
+      if (!metadataUsesActiveScope) {
+        void refreshMetadataScope('stream-signal');
+      }
+    },
+    enabled
+  );
 
   const handleLoadMore = useCallback(() => {
     requestPage({ token: continueToken }, 'next');
@@ -750,8 +661,7 @@ export function useBrowseCatalog({
       if (!totalIsExact) {
         return;
       }
-      const target = Math.max(1, Math.floor(page));
-      requestPage({ startRank: (target - 1) * pageLimit }, 'jump');
+      requestPage({ startRank: queryPageStartRank(page, pageLimit) }, 'jump');
     },
     [pageLimit, requestPage, totalIsExact]
   );

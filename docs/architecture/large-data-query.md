@@ -104,6 +104,30 @@ object-panel table becomes namespace or cluster scale.
 
 ## Liveness Contract for Query-Backed Tables (Track A acceptance A1)
 
+### Shared frontend mechanics
+
+`useCursorPageSession` owns the applied next/previous cursors and footer page
+position for both typed and Browse queries. It publishes these together and
+retains the current state when a repeated snapshot has the same page address.
+The colocated `useQuerySearch` owns the shared 250ms search debounce; Browse can
+reseed it when a structural scope change must clear rows before commit.
+
+`executeQueryPageRequest` delivers results only to the current request owner.
+Data access still owns query acquisition, fetch, read, and release. Typed
+queries keep declarative scopes, warm-up retry, anchors, and failed-navigation
+rollback. Browse keeps imperative cursor requests, separate metadata scopes,
+quiet-request coalescing, and its existing blocked-result/error policies.
+These policies belong to the adapters, not the shared page-state helper.
+
+`useQueryStreamSignal` in the core refresh hooks owns query signal identity.
+Typed tables use its identity to invalidate their declarative query; Browse
+supplies its current-page reconciliation callback. Snapshot readers continue
+using `useStreamSignalRefetch`. Both mechanisms read the declared doorbell
+clocks from the same helper; query consumers additionally include subscription
+acknowledgements and fallback reconciliation ticks.
+
+### Liveness guarantees
+
 A query-backed table renders one-shot query pages, so its liveness comes from
 refetching — never from mutating displayed rows in place. The contract:
 

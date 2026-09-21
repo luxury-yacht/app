@@ -10,7 +10,6 @@ import {
   structuralShareResourceRows,
 } from '@shared/utils/structuralShareResourceRows';
 import { errorHandler } from '@utils/errorHandler';
-import type { SetStateAction } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestRefreshDomainState } from '@/core/data-access';
 import type {
@@ -21,12 +20,14 @@ import type {
   ResourceQueryDynamicRef,
 } from '@/core/refresh/types';
 import { walkQueryCursorPages } from './cursorPageWalk';
+import { executeQueryPageRequest, type QueryPageRequestResult } from './queryPageRequest';
 import {
   buildTypedResourceQueryScope,
   filterOptionsFromTypedPayload,
   type TypedQueryPayload,
   typedResourceQueryLifecycleIdentity,
 } from './typedResourceQueryScope';
+import { queryPageStartRank, useCursorPageSession, useQuerySearch } from './useCursorPageSession';
 
 export type { TypedQueryPayload } from './typedResourceQueryScope';
 
@@ -102,9 +103,6 @@ export interface UseTypedResourceQueryResult<TRow, TPayload = unknown> {
 
 // Each export page requests the backend's max page size to minimise round-trips.
 const EXPORT_PAGE_LIMIT = 1000;
-// Matches Browse: a full backend page build per keystroke is pure waste (the
-// out-of-order identity guard already prevents wrong rows).
-const SEARCH_DEBOUNCE_MS = 250;
 // A warm-up (the backend executed but its caches were not ready, so the scoped
 // state carried no payload yet) is transient. The identity-driven retry only
 // fires when `liveDataVersion` changes — which it never does for an EMPTY domain
@@ -174,68 +172,16 @@ const resolveAppliedRows = <TRow>(
   return sharedRows;
 };
 
-interface PayloadNavigationPlan {
-  pageIndex: number | null;
-  pageDelta: number;
-  clearPendingNavigation: boolean;
-  consumeStartRank: boolean;
-  adoptSelfCursor: boolean;
-}
-
-const buildPayloadNavigationPlan = (
-  payload: TypedQueryPayload,
-  pendingNavigation: PendingNavigation | null,
-  pageLimit: number
-): PayloadNavigationPlan => {
-  if (typeof payload.pageStartRank === 'number') {
-    return {
-      pageIndex: Math.floor(payload.pageStartRank / pageLimit) + 1,
-      pageDelta: 0,
-      clearPendingNavigation: true,
-      consumeStartRank: !payload.anchor,
-      adoptSelfCursor: !payload.anchor,
-    };
-  }
-  if (!pendingNavigation) {
-    return {
-      pageIndex: null,
-      pageDelta: 0,
-      clearPendingNavigation: false,
-      consumeStartRank: false,
-      adoptSelfCursor: false,
-    };
-  }
-  return {
-    pageIndex: null,
-    pageDelta: pendingNavigation.direction === 'next' ? 1 : -1,
-    clearPendingNavigation: true,
-    consumeStartRank: false,
-    adoptSelfCursor: false,
-  };
-};
-
 interface TypedQueryRequestCallbacks<TPayload> {
-  isActive: () => boolean;
-  isCurrent: () => boolean;
   onWarmup: () => void;
   onPermissionDenied: (message: string) => void;
   onCursorInvalid: () => void;
   onPayload: (payload: TPayload) => void;
   onError: (error: unknown) => void;
-  onSettled: () => void;
 }
-
-interface TypedQueryRequestOptions<TPayload> {
-  domain: RefreshDomain;
-  scope: string;
-  label: string;
-  callbacks: TypedQueryRequestCallbacks<TPayload>;
-}
-
-type TypedQueryRequestResult = Awaited<ReturnType<typeof requestRefreshDomainState>>;
 
 const dispatchTypedQueryResult = <TPayload extends TypedQueryPayload>(
-  result: TypedQueryRequestResult,
+  result: QueryPageRequestResult,
   callbacks: TypedQueryRequestCallbacks<TPayload>
 ): void => {
   if (result.status !== 'executed') {
@@ -260,60 +206,6 @@ const dispatchTypedQueryResult = <TPayload extends TypedQueryPayload>(
     return;
   }
   callbacks.onPayload(payload);
-};
-
-const executeTypedQueryRequest = async <TPayload extends TypedQueryPayload>({
-  domain,
-  scope,
-  label,
-  callbacks,
-}: TypedQueryRequestOptions<TPayload>): Promise<void> => {
-  try {
-    const result = await requestRefreshDomainState({
-      domain,
-      scope,
-      reason: 'user',
-      label,
-      cleanup: true,
-      preserveState: false,
-    });
-    if (!callbacks.isCurrent()) {
-      return;
-    }
-    dispatchTypedQueryResult(result, callbacks);
-  } catch (error) {
-    if (callbacks.isCurrent()) {
-      callbacks.onError(error);
-    }
-  } finally {
-    if (callbacks.isActive()) {
-      callbacks.onSettled();
-    }
-  }
-};
-
-interface NavigationActions {
-  setPageIndex: (value: SetStateAction<number>) => void;
-  clearPendingNavigation: () => void;
-  consumeStartRank: () => void;
-  adoptSelfCursor: () => void;
-}
-
-const applyPayloadNavigation = (plan: PayloadNavigationPlan, actions: NavigationActions): void => {
-  if (plan.pageIndex !== null) {
-    actions.setPageIndex(plan.pageIndex);
-  } else if (plan.pageDelta !== 0) {
-    actions.setPageIndex((current) => Math.max(1, current + plan.pageDelta));
-  }
-  if (plan.clearPendingNavigation) {
-    actions.clearPendingNavigation();
-  }
-  if (plan.consumeStartRank) {
-    actions.consumeStartRank();
-  }
-  if (plan.adoptSelfCursor) {
-    actions.adoptSelfCursor();
-  }
 };
 
 interface AnchorLandingActions {
@@ -383,20 +275,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   liveDataVersion,
   selectRows,
 }: UseTypedResourceQueryParams<TPayload, TRow>): UseTypedResourceQueryResult<TRow, TPayload> {
-  // Debounce ONLY the search string (sort/kind/namespace changes apply
-  // immediately). Seeded from the live value so a persisted search fires
-  // without delay on mount.
-  const [debouncedSearch, setDebouncedSearch] = useState(filters.search ?? '');
-  useEffect(() => {
-    const nextSearch = filters.search ?? '';
-    if (nextSearch === debouncedSearch) {
-      return undefined;
-    }
-    const timer = window.setTimeout(() => {
-      setDebouncedSearch(nextSearch);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [debouncedSearch, filters.search]);
+  const [debouncedSearch] = useQuerySearch(filters.search ?? '');
   const effectiveFilters = useMemo(
     () =>
       (filters.search ?? '') === debouncedSearch
@@ -410,10 +289,9 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [continueToken, setContinueToken] = useState<string | null>(null);
+  const { continueToken, previousToken, pageIndex, resetPage, publishPage } =
+    useCursorPageSession();
   const [requestToken, setRequestToken] = useState<string | null>(null);
-  // Backend-minted prev cursor from the applied page (F5) — no client stack.
-  const [previousToken, setPreviousToken] = useState<string | null>(null);
   // The anchor jump intent: `anchorIntent` persists across soft resets so a
   // sort/filter change re-anchors; `anchorArmed` marks the NEXT fetch as the
   // anchored one (disarmed after a landing so live refetches stay page-stable
@@ -428,7 +306,6 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   // does NOT survive soft resets — page N under a different sort is a
   // different page. The landing adopts the self cursor exactly like anchors.
   const [startRankIntent, setStartRankIntent] = useState<number | null>(null);
-  const [pageIndex, setPageIndex] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [totalIsExact, setTotalIsExact] = useState(true);
   const [isRequestingMore, setIsRequestingMore] = useState(false);
@@ -548,16 +425,13 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   useEffect(() => {
     queryResetIdentityRef.current = queryResetIdentity;
     setRequestToken(null);
-    setContinueToken(null);
-    setPreviousToken(null);
+    resetPage(Boolean(anchorIntentRef.current));
     pendingNavigationRef.current = null;
     setStartRankIntent(null);
     if (anchorIntentRef.current) {
       setAnchorArmed(true);
-    } else {
-      setPageIndex(1);
     }
-  }, [queryResetIdentity]);
+  }, [queryResetIdentity, resetPage]);
 
   const scope = useMemo(() => {
     if (!enabled) {
@@ -602,8 +476,6 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       sharedPageRef.current = { identity: pageIdentity, rows: nextRows };
       setRows(nextRows);
       setPayload(incomingPayload);
-      setContinueToken(incomingPayload.continue ?? null);
-      setPreviousToken(incomingPayload.previous || null);
       const hasTotal = typeof incomingPayload.total === 'number';
       // A missing total must never render as an exact 0 while rows are visible.
       // Fall back to the visible row count and mark the total approximate so the
@@ -612,19 +484,22 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       setTotalIsExact(hasTotal ? incomingPayload.totalIsExact !== false : false);
       setFilterOptions(filterOptionsFromTypedPayload(incomingPayload));
       setDynamic(incomingPayload.dynamic ?? null);
-      const navigation = buildPayloadNavigationPlan(
-        incomingPayload,
-        pendingNavigationRef.current,
-        pageLimitRef.current
-      );
-      applyPayloadNavigation(navigation, {
-        setPageIndex,
-        clearPendingNavigation: () => {
-          pendingNavigationRef.current = null;
+      publishPage(
+        {
+          continueToken: incomingPayload.continue ?? null,
+          previousToken: incomingPayload.previous || null,
         },
-        consumeStartRank: () => setStartRankIntent(null),
-        adoptSelfCursor: () => setRequestToken(incomingPayload.self || null),
-      });
+        {
+          direction: pendingNavigationRef.current?.direction ?? 'current',
+          pageSize: pageLimitRef.current,
+          startRank: incomingPayload.pageStartRank,
+        }
+      );
+      pendingNavigationRef.current = null;
+      if (typeof incomingPayload.pageStartRank === 'number' && !incomingPayload.anchor) {
+        setStartRankIntent(null);
+        setRequestToken(incomingPayload.self || null);
+      }
       applyAnchorLanding(incomingPayload.anchor, {
         setAnchorResult,
         disarmAnchor: () => setAnchorArmed(false),
@@ -633,7 +508,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       });
       setLoaded(true);
     },
-    [domain]
+    [domain, publishPage]
   );
 
   // A failed navigation fetch must restore the pre-navigation cursor. Leaving
@@ -675,48 +550,49 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     setLoading(true);
     setError(null);
 
-    void executeTypedQueryRequest<TPayload>({
-      domain,
-      scope,
-      label,
-      callbacks: {
-        isActive: () => !cancelled,
+    const handleError = (caught: unknown) => {
+      revertFailedNavigation();
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setLoaded(true);
+    };
+    void executeQueryPageRequest(
+      { domain, scope, label, reason: 'user', cleanup: true, preserveState: false },
+      {
         isCurrent: () => !cancelled && queryIdentityRef.current === identityAtRequest,
-        onWarmup: () => {
-          revertFailedNavigation();
-          scheduleWarmupRetry();
-        },
-        onPermissionDenied: (message) => {
-          revertFailedNavigation();
-          setError(message);
-          setLoaded(true);
-        },
-        onCursorInvalid: () => {
-          setRequestToken(null);
-          setContinueToken(null);
-          setPreviousToken(null);
-          setStartRankIntent(null);
-          pendingNavigationRef.current = null;
-          if (anchorIntentRef.current) {
-            setAnchorArmed(true);
-          } else {
-            setPageIndex(1);
+        onResult: (result) =>
+          dispatchTypedQueryResult<TPayload>(result, {
+            onWarmup: () => {
+              revertFailedNavigation();
+              scheduleWarmupRetry();
+            },
+            onPermissionDenied: (message) => {
+              revertFailedNavigation();
+              setError(message);
+              setLoaded(true);
+            },
+            onCursorInvalid: () => {
+              setRequestToken(null);
+              resetPage(Boolean(anchorIntentRef.current));
+              setStartRankIntent(null);
+              pendingNavigationRef.current = null;
+              if (anchorIntentRef.current) {
+                setAnchorArmed(true);
+              }
+            },
+            onPayload: (responsePayload) => {
+              applyPayload(responsePayload, scope);
+            },
+            onError: handleError,
+          }),
+        onError: handleError,
+        onSettled: () => {
+          if (!cancelled) {
+            setLoading(false);
+            setIsRequestingMore(false);
           }
         },
-        onPayload: (responsePayload) => {
-          applyPayload(responsePayload, scope);
-        },
-        onError: (caught) => {
-          revertFailedNavigation();
-          setError(caught instanceof Error ? caught.message : String(caught));
-          setLoaded(true);
-        },
-        onSettled: () => {
-          setLoading(false);
-          setIsRequestingMore(false);
-        },
-      },
-    });
+      }
+    );
 
     return () => {
       cancelled = true;
@@ -731,6 +607,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     enabled,
     label,
     revertFailedNavigation,
+    resetPage,
     scheduleWarmupRetry,
     scope,
     queryIdentity,
@@ -763,16 +640,18 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     setRequestToken(previousToken);
   }, [isRequestingMore, previousToken, requestToken]);
 
-  const anchorTo = useCallback((anchor: ResourceQueryAnchor) => {
-    setAnchorIntent(anchor);
-    setAnchorArmed(true);
-    setAnchorResult(null);
-    setStartRankIntent(null);
-    setRequestToken(null);
-    setContinueToken(null);
-    setPreviousToken(null);
-    pendingNavigationRef.current = null;
-  }, []);
+  const anchorTo = useCallback(
+    (anchor: ResourceQueryAnchor) => {
+      setAnchorIntent(anchor);
+      setAnchorArmed(true);
+      setAnchorResult(null);
+      setStartRankIntent(null);
+      setRequestToken(null);
+      resetPage(true);
+      pendingNavigationRef.current = null;
+    },
+    [resetPage]
+  );
 
   const jumpToPage = useCallback(
     (page: number) => {
@@ -781,17 +660,15 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       if (!totalIsExact || isRequestingMore) {
         return;
       }
-      const target = Math.max(1, Math.floor(page));
-      setStartRankIntent((target - 1) * pageLimitRef.current);
+      setStartRankIntent(queryPageStartRank(page, pageLimitRef.current));
       setAnchorIntent(null);
       setAnchorArmed(false);
       setAnchorResult(null);
       setRequestToken(null);
-      setContinueToken(null);
-      setPreviousToken(null);
+      resetPage(true);
       pendingNavigationRef.current = null;
     },
-    [isRequestingMore, totalIsExact]
+    [isRequestingMore, totalIsExact, resetPage]
   );
 
   const fetchAllRows = useCallback(

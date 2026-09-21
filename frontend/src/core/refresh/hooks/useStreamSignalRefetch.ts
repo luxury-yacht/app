@@ -31,6 +31,75 @@ import { useRefreshScopedDomainStates } from '../store';
 import { doorbellSourceClocks } from '../streaming/resourceStreamDomains';
 import type { RefreshDomain } from '../types';
 
+interface StreamSignalState {
+  sourceVersion?: string;
+  signalVersions?: Partial<Record<string, string>>;
+  version?: number | string;
+  checksum?: string;
+  etag?: string;
+  streamRevision?: number;
+  streamAcknowledgedVersion?: number;
+  queryReconcileVersion?: number;
+  lastUpdated?: number;
+  lastAutoRefresh?: number;
+  lastManualRefresh?: number;
+}
+
+const readDoorbellSignal = (domain: RefreshDomain, state: StreamSignalState) => {
+  const clocks = doorbellSourceClocks(domain);
+  return {
+    key: clocks.map((clock) => `${clock}:${state.signalVersions?.[clock] ?? ''}`).join(' '),
+    present: clocks.some((clock) => Boolean(state.signalVersions?.[clock])),
+  };
+};
+
+// Query demand also reconciles subscription acknowledgements and stream-down
+// fallback ticks. Payload validators never invalidate a doorbell-backed page.
+export const liveDomainVersion = (domain: RefreshDomain, state: StreamSignalState): string => {
+  const queryReconcileIdentity =
+    state.queryReconcileVersion === undefined
+      ? ''
+      : `query-reconcile:${state.queryReconcileVersion}`;
+  if (doorbellSourceClocks(domain).length === 0) {
+    return [state.sourceVersion ?? state.etag ?? '', queryReconcileIdentity]
+      .filter(Boolean)
+      .join(' ');
+  }
+  return [
+    readDoorbellSignal(domain, state).key,
+    state.streamAcknowledgedVersion === undefined
+      ? ''
+      : `stream-ack:${state.streamAcknowledgedVersion}`,
+    queryReconcileIdentity,
+  ]
+    .filter(Boolean)
+    .join(' ');
+};
+
+// Declarative queries use the returned identity in their request effect.
+// Imperative queries supply their current-page reconciliation callback instead.
+export function useQueryStreamSignal(
+  domain: RefreshDomain,
+  state: StreamSignalState,
+  onSignal?: () => void,
+  enabled = true
+): string {
+  const identity = liveDomainVersion(domain, state);
+  const observedRef = useRef<string | null>(null);
+  const hasSignal =
+    readDoorbellSignal(domain, state).present ||
+    state.streamAcknowledgedVersion !== undefined ||
+    state.queryReconcileVersion !== undefined;
+  useEffect(() => {
+    const previous = observedRef.current;
+    observedRef.current = identity;
+    if (enabled && hasSignal && previous !== null && previous !== identity) {
+      onSignal?.();
+    }
+  }, [enabled, hasSignal, identity, onSignal]);
+  return identity;
+}
+
 export const useStreamSignalRefetch = (domain: RefreshDomain, scopes: readonly string[]): void => {
   const domainStates = useRefreshScopedDomainStates(domain);
   const dispatchedKeysRef = useRef<Map<string, string>>(new Map());
@@ -48,9 +117,7 @@ export const useStreamSignalRefetch = (domain: RefreshDomain, scopes: readonly s
       // payload applies never touch it. Keying on it (never sourceVersions,
       // which the backend back-fills with an object clock on EVERY snapshot)
       // is what makes a fetch response invisible here — no echo refetch.
-      const signalVersions = domainStates[scope]?.signalVersions;
-      const key = clocks.map((clock) => `${clock}:${signalVersions?.[clock] ?? ''}`).join(' ');
-      const hasSignal = clocks.some((clock) => Boolean(signalVersions?.[clock]));
+      const { key, present: hasSignal } = readDoorbellSignal(domain, domainStates[scope] ?? {});
       const dispatched = dispatchedKeysRef.current;
       if (!dispatched.has(scope)) {
         // First observation: whatever doorbell values exist arrived before

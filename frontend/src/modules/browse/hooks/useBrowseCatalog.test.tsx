@@ -699,6 +699,62 @@ describe('useBrowseCatalog', () => {
     expect(result?.pageIndex).toBe(2);
   });
 
+  it('lands a numbered jump and reconciles its self cursor without moving the page', async () => {
+    const baseScope =
+      'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default';
+    let signal = 'catalog:1';
+    const basePayload = makePayload({
+      items: [makeItem({ ref: { name: 'first', uid: 'first' } })],
+      total: 6,
+      totalIsExact: true,
+      continue: 'next',
+    });
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => ({
+      status: 'ready',
+      scope,
+      data: basePayload,
+      signalVersions: { catalog: signal },
+    }));
+    const landedPayload = makePayload({
+      items: [makeItem({ ref: { name: 'fifth', uid: 'fifth' } })],
+      total: 6,
+      pageStartRank: 4,
+      self: 'page-three',
+      previous: 'page-two',
+    });
+    mocks.requestRefreshDomainState.mockResolvedValue({
+      status: 'executed',
+      data: { status: 'ready', data: landedPayload },
+    });
+    await act(async () => root.render(<Harness />));
+    await act(async () => result?.pagination.onJumpToPage(3));
+    expect(mocks.requestRefreshDomainState).toHaveBeenLastCalledWith({
+      domain: 'catalog',
+      scope: `${baseScope}&startRank=4`,
+      reason: 'user',
+    });
+    expect(result?.pageIndex).toBe(3);
+    expect(container.textContent).toBe('fifth');
+
+    signal = 'catalog:2';
+    mocks.requestRefreshDomainState.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: { ...landedPayload, items: [makeItem({ ref: { name: 'updated', uid: 'updated' } })] },
+      },
+    });
+    await act(async () => root.render(<Harness />));
+    expect(mocks.requestRefreshDomainState).toHaveBeenLastCalledWith({
+      domain: 'catalog',
+      scope: `${baseScope}&continue=page-three`,
+      reason: 'stream-signal',
+    });
+    expect(result?.pageIndex).toBe(3);
+    expect(result?.pagination.isRequestingMore).toBe(false);
+    expect(container.textContent).toBe('updated');
+  });
+
   it('reports a failed page navigation displayed by Browse', async () => {
     const baseScope =
       'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default';
@@ -1614,5 +1670,30 @@ describe('doorbell refetch quietness on a paged catalog', () => {
     });
     expect(result?.pagination.isRequestingMore).toBe(false);
     expect(result?.items.map((item) => item.ref.name)).toEqual(['c', 'd']);
+    expect(result?.pageIndex).toBe(2);
+
+    // A user can navigate while a quiet refresh is outstanding. Its late
+    // response must not replace the user's newly selected page.
+    mocks.requestRefreshDomainState.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveQuietFetch = resolve;
+        })
+    );
+    baseState = { ...baseState, signalVersions: { catalog: 'catalog:3' } };
+    await act(async () => root.render(<Harness />));
+    mocks.requestRefreshDomainState.mockResolvedValueOnce({
+      status: 'executed',
+      data: { status: 'ready', data: baseState.data },
+    });
+    await act(async () => result?.pagination.onRequestPrevious?.());
+    expect(result?.pageIndex).toBe(1);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['a', 'b']);
+    await act(async () => {
+      resolveQuietFetch({ status: 'executed', data: { status: 'ready', data: pageTwo } });
+    });
+    expect(result?.pageIndex).toBe(1);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['a', 'b']);
+    expect(result?.pagination.isRequestingMore).toBe(false);
   });
 });
