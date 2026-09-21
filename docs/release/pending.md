@@ -16,5 +16,7 @@ This is a code refactoring and bug-fix release. No new features.
 - Table preferences save while resource rows continue refreshing.
 - Custom-resource menus report invalid resource data without interrupting the table.
 - Browse and custom-resource views now update promptly after resource changes. CRD version migrations and large startup replays no longer trigger unnecessary full catalog refreshes.
+- Live catalog updates no longer rebuild the entire query store for each object change.
+- Moving a cluster tab to a new window preserves its docked panels, tab order, and selected views.
 - Closing an object panel no longer lets a pending render recreate its removed layout.
 - Closed diagnostics panels stop observing refresh writes and scanning resource-stream telemetry.

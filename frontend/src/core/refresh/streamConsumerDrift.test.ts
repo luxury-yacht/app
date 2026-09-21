@@ -11,7 +11,8 @@
  * The guard scans every non-test source file that calls
  * useRefreshScopedDomain with a LITERAL stream-class domain and requires the
  * same file to wire one of the known refetch mechanisms:
- *   - useStreamSignalRefetch (the shared hook), or
+ *   - useStreamSignalRefetch (snapshot readers), or
+ *   - useQueryStreamSignal (query-backed readers), or
  *   - liveDomainVersion / liveDataVersion (the query-backed tables' refetch
  *     identity).
  * Domain-variable call sites (generic helpers) can't be checked textually;
@@ -37,7 +38,12 @@ const streamClassDomains = refreshDomainContract.domains
   .filter((entry) => STREAM_CLASS_ORCHESTRATORS.has(entry.frontend.orchestrator))
   .map((entry) => entry.domain);
 
-const REFETCH_MARKERS = ['useStreamSignalRefetch', 'liveDomainVersion', 'liveDataVersion'];
+const REFETCH_MARKERS = [
+  'useStreamSignalRefetch',
+  'useQueryStreamSignal',
+  'liveDomainVersion',
+  'liveDataVersion',
+];
 
 // The refresh infrastructure itself (store, orchestrator, streaming managers,
 // diagnostics) reads domain state to IMPLEMENT the mechanisms, not to consume
@@ -119,7 +125,7 @@ describe('stream-consumer drift guard', () => {
     expect(violations).toEqual([{ path: 'src/modules/example/Frozen.tsx', domains: ['pods'] }]);
   });
 
-  it('accepts a reader wired to useStreamSignalRefetch or the query refetch identity', () => {
+  it('accepts readers wired to snapshot or query signals and query refetch identities', () => {
     expect(
       findUnguardedStreamReaders(
         [
@@ -132,6 +138,11 @@ describe('stream-consumer drift guard', () => {
             path: 'src/modules/example/QueryBacked.tsx',
             content:
               "const liveDataVersion = liveDomainVersion(useRefreshScopedDomain('pods', scope));",
+          },
+          {
+            path: 'src/modules/example/QuerySignal.tsx',
+            content:
+              "useQueryStreamSignal('pods', useRefreshScopedDomain('pods', scope), refetchCurrentPage);",
           },
         ],
         ['pods']
