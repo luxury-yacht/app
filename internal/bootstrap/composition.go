@@ -141,9 +141,6 @@ func newApplicationComposition(assets fs.FS, reporter sentryreporting.Reporter, 
 	})
 
 	windows = appwindow.NewRegistry(wailsApp, backendRuntime.Lifecycle)
-	windows.ConfigurePanelOpenTiming(func(message, clusterID string) {
-		backendRuntime.AppLogs.Logger().Info(message, "PanelOpenTiming", clusterID)
-	})
 	windowBridge.Bind(windows)
 	windows.Create(true)
 

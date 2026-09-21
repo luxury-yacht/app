@@ -34,7 +34,6 @@ import {
   requestPanelTabTransfer,
 } from './index';
 import { usePanelLifecycleGuardRegistry } from './panelLifecycleGuards';
-import { startPanelOpenTiming } from './panelOpenTiming';
 import { requestPanelTabMove } from './panelTabActions';
 import { workspacePanelPublication } from './publicationQueue';
 import {
@@ -157,7 +156,6 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         snapshot,
         autoFloat,
       });
-      startPanelOpenTiming(snapshot.transferId, snapshot.clusterId, windowName);
       guards.freeze(snapshot.transferId, group.tabs);
       void workspacePanelPublication
         .flush()

@@ -10,7 +10,6 @@ import React from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { initializeWindowIdentity, onBroadcastEvent } from '@/core/desktop-runtime';
 import { failPanelWindowTransfer, resolveNativeWindowDescriptor } from '@/core/panel-windows';
-import { markPanelBootstrapTiming } from '@/core/panel-windows/panelOpenTiming';
 import { initializeAutoRefresh } from '@/core/refresh';
 import { hydrateAppPreferences } from '@/core/settings/appPreferences';
 import {
@@ -26,7 +25,6 @@ const sentryRuntimeConfig = {
   release: __SENTRY_RELEASE__,
 };
 
-markPanelBootstrapTiming('entry-module-evaluated');
 const appElement = document.getElementById('app');
 if (appElement) {
   const bootstrap = async () => {
@@ -43,11 +41,8 @@ if (appElement) {
         sentryRuntimeConfig,
         hydrateAppPreferences
       );
-      markPanelBootstrapTiming('preferences-ready');
       const windowName = await initializeWindowIdentity();
-      markPanelBootstrapTiming('window-identity-ready');
       const descriptor = await resolveNativeWindowDescriptor(windowName);
-      markPanelBootstrapTiming('descriptor-ready');
       if (descriptor.role === 'panel' && descriptor.panel) {
         if (descriptor.panel.state === 'opening') {
           openingPanel = {
@@ -77,7 +72,6 @@ if (appElement) {
       let rootElement: React.ReactElement;
       if (descriptor.role === 'panel' && descriptor.panel) {
         const PanelWindowRoot = (await import('./PanelWindowApp.tsx')).default;
-        markPanelBootstrapTiming('panel-module-imported');
         rootElement = React.createElement(PanelWindowRoot, { descriptor: descriptor.panel });
       } else {
         const WorkspaceRoot = (await import('./WorkspaceApp.tsx')).default;
@@ -89,7 +83,6 @@ if (appElement) {
         createReactRootErrorHandlers(errorReportingAvailable)
       );
       root.render(React.createElement(React.StrictMode, null, rootElement));
-      markPanelBootstrapTiming('react-render-requested');
     } catch (error) {
       await abortOpeningPanel(openingPanel);
       const message = document.createElement('p');

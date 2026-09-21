@@ -461,139 +461,87 @@ remain uncommitted; no Git state-changing commands or PR creation were performed
 
 ### Windows floating-window latency investigation — 2026-09-21
 
-The user reports approximately one second of visible “Moving panels…” status
-before a new window appears, using `wails3 dev` on a separate Windows machine.
-The agent host is macOS; the first remote Windows capture is analyzed below.
+The user reported roughly one second before a floating panel appeared while
+running `wails3 dev` on a separate Windows machine. Temporary frontend/backend
+recorders measured source handoff, native creation, frontend bootstrap, and
+readiness. The agent host is macOS; Windows measurements came from the user.
 
-Prepare opt-in timing capture before attempting an optimization. Producers are
-source float/tear-off, frontend bootstrap/readiness, and backend panel creation
-and acknowledgement. The existing Application Logs are the consumer. Correlate
-by transfer ID and cluster, record local monotonic elapsed times, and emit batched
-samples after each measured phase. Keep source retention, guard decisions,
-publication ordering, and native show timing unchanged. The frontend recorder
-must not import the logging/module graph on startup; load its existing logger
-only when emitting. The backend accepts a logging callback from composition;
-it does not import backend implementations. Recorder tests cover clock units,
-interleaved transfer isolation, opt-in behavior, and destination deduplication;
-existing transfer/bootstrap suites cover the surrounding operational contract.
+The first Windows source transfer took 1,093.1 ms. Its destination spent 370.4 ms
+before entry-module evaluation and 477 ms importing the panel app. A later capture
+after the header import split contained four complete transfers:
 
-The recorder is implemented. The first remote capture identifies frontend startup
-as the dominant measured interval. Remaining work is to establish repeated-float
-behavior and verify latency improvements on the user's Windows development build.
-Local passing tests cannot establish Windows latency or improvement.
+| Window | Source transfer | Backend creation | Before entry module | Panel app import | React render to mount | Backend ready/show |
+| --- | --- | --- | --- | --- | --- | --- |
+| panel-1 | 983.5 ms | 43.24 ms | 320.6 ms | 434.0 ms | 80.0 ms | 5.33 ms |
+| panel-2 | 915.0 ms | 43.27 ms | 343.3 ms | 353.2 ms | 78.1 ms | 5.26 ms |
+| panel-3 | 894.0 ms | 42.81 ms | 317.8 ms | 339.1 ms | 88.4 ms | 5.38 ms |
+| panel-4 | 890.4 ms | 41.75 ms | 319.6 ms | 348.3 ms | 85.1 ms | 5.94 ms |
 
-Recorder validation:
+Durations are local to each phase, not additive across source and destination.
+The creation measurement covers the Wails creation call's return, not completion
+of webview loading. Retention operations and transfer lock acquisition had no
+measurable delay in these samples. The wait persists across newly created windows;
+frontend startup dominates the measured path.
 
-- New recorder tests first failed because the implementation did not exist, then
-  passed. Interleaved frontend samples exposed a concurrent lazy-import issue
-  during validation; sharing one logger import promise made both samples arrive.
-- Focused existing transfer/bootstrap suites passed. The backend opt-in test
-  exercises the real registry with native show stubbed and proves showing still
-  waits for acknowledgement with tracing enabled and disabled.
-- Both required coverage tasks passed: 5,057 frontend tests in 526 files;
-  directly changed frontend files 589/653 statements (90.20%), backend files
-  561/641 (87.52%). Each new recorder measured 100% statement coverage; every
-  changed file exceeded 80%.
-- Local Go complexity maximum 11. The six changed TypeScript production files
-  passed Biome's cognitive-complexity rule with an explicit maximum of 12.
-  No remote Sonar analysis of this uncommitted instrumentation is available.
-- Tracing-enabled frontend validation passed: 56 transfer/bootstrap workflow
-  tests in four files with `VITE_PANEL_OPEN_TIMING=1`.
-- Final `mise exec -- wails3 task qc:prerelease` passed, including the backend
-  race suite, 5,057 frontend tests, typechecking, lint, documentation checks,
-  dependency checks, and vulnerability scan. The gate formatted one frontend
-  file; post-gate worktree inspection found only the intended diagnostic code,
-  tests, and this completion record. Windows performance capture remains pending.
+The user then confirmed that a production build performs acceptably on Windows.
+This identifies the reported symptom as specific to the development run and
+supports development-mode frontend loading as the dominant contributor. It does
+not quantify production latency or isolate network, parsing, and evaluation costs.
+Further startup changes are not justified by the accepted production result.
 
-Capture on Windows after bringing the diagnostic changes into that checkout:
+The retained simplification extracts shared native chrome into `WindowHeader`.
+Workspace `AppHeader` composes its application menu, status indicators, favorites,
+and command palette into that chrome; panel renderers import the shared header
+directly. A local static graph fell from 361 to 329 eagerly reachable modules and
+an import-only Chromium probe from 346 to 314 requests. The same probe's bundled
+version loaded 26 resources in 20.1–21.3 ms versus 118.5–130.9 ms in development;
+these are local module-import measurements, not Windows native timings. The
+initial development count hit the browser's 250-entry buffer limit; the corrected
+probe expanded the buffer. Before/after development duration samples overlapped,
+so no substantial latency improvement is attributed to the header split.
 
-```powershell
-$env:VITE_PANEL_OPEN_TIMING = "1"
-mise exec -- wails3 dev
-```
+The header import regression failed before the split and passed afterward. Its
+34 focused tests passed; directly changed production coverage was 125/140 statements
+(89.28%), including both header components at 100%. Browser comparison of the real
+panel header with Windows platform signals produced identical DOM and geometry,
+and keyboard focus reached Minimise then Maximise. The workspace header opened
+and focused the real command palette. Native calls were mocked in unit tests and
+unavailable in the browser preview; the user's production check is the native
+performance acceptance evidence. The header prerelease gate passed 5,059 frontend
+tests plus backend race, lint, type, dependency, and vulnerability checks.
 
-Stop an existing dev session first so both the native executable and Vite inherit
-the flag. Float and dock back three times, then perform one drag-out. In the
-workspace, open View → Application Logs, include Info messages, filter for
-`[DEBUG-panel-open]`, and copy the filtered logs with “Copy logs to clipboard.”
-All four phases use the existing app log buffer: `source`, `backend-create`,
-`destination`, and `backend-ready`. Transfer IDs join the samples; cluster metadata
-remains scoped. No object contents are included. These diagnostics are local
-Application Logs, with the same existing logging/reporting policy as other app
-logs; they do not add a reporting endpoint.
+Temporary timing recorders, their frontend/backend call sites, the opt-in flag,
+and recorder-only tests are removed after the production confirmation. Cleanup
+changes no admission, guard, publication, source-retention, or readiness decisions;
+the surviving panel transfer/bootstrap suites cover those owners. No new transport,
+provider, dependency, window-pool lifetime, or early-show path is introduced.
+The shared-header import regression remains in the suite.
 
-`elapsedMs` is cumulative within its phase; subtract adjacent marks to obtain
-individual stage costs. Destination elapsed time begins at the browser's
-navigation time origin, so `entry-module-evaluated` includes time before the
-entry module starts. `startedUnixMs` is for approximate cross-process alignment;
-use local monotonic elapsed times for durations. Backend creation measures the
-Wails creation call's return, not a promise that the webview has finished loading.
-Source `settled` includes either completion or cancellation. Compare repeated
-samples to distinguish first-use costs from costs on every float.
+Cleanup acceptance record:
 
-After capture, stop the dev session and remove the flag before restarting:
+- Passed: the user accepts production floating-window performance on Windows.
+- Passed: source search finds no remaining recorder symbols, environment flag,
+  or diagnostic prefix in frontend/backend implementation or tests.
+- Passed: 57 focused frontend tests and both `internal/appwindow` and
+  `internal/bootstrap` Go suites after cleanup. The full frontend coverage run
+  passed 5,056 tests in 526 files; the three removed frontend tests exercised
+  the deleted recorder. The three removed Go tests exercised recorder behavior
+  and its opt-in variant; existing hidden-window, readiness, cancellation, and
+  transfer tests remain.
+- Passed: backend coverage task; affected files now cover 531/610 statements
+  (87.05%), versus 561/641 (87.52%) including the recorder before cleanup.
+- Passed: frontend affected-file coverage is 549/610 statements (90.00%), versus
+  589/653 (90.20%) including the recorder before cleanup. Each remaining touched
+  production file exceeds 80%; no replacement diagnostic tests were added.
+- Passed: all five touched TypeScript files pass Biome with maximum complexity
+  12. The pinned Go checker reports a file-wide maximum of 11; changed open,
+  creation, acknowledgement, and composition functions score 7, 7, 2, and 1.
+- Passed: final `mise exec -- wails3 task qc:prerelease` (exit 0), including
+  backend race tests, 5,056 frontend tests in 526 files, lint, typechecking,
+  binding checks, dependency checks, and vulnerability scan. The gate made no
+  formatting changes. Post-gate inspection found only removal of timing code,
+  recorder-only tests, and this completion record.
 
-```powershell
-Remove-Item Env:VITE_PANEL_OPEN_TIMING
-```
-
-The `[DEBUG-panel-open]` instrumentation is temporary investigation work. Remove
-it when the Windows measurement and any resulting fix have been verified.
-
-#### First Windows capture and header import isolation
-
-The user's first Windows trace reports destination entry evaluation at 370.4 ms,
-panel module import from 405 to 882 ms (477 ms), render request at 885.7 ms,
-surface mount at 960 ms, and ready-call return at 1,037.1 ms. The source open
-request returns after 111.2 ms, and the transfer settles at 1,093.1 ms. Backend
-phase samples were not included. This identifies frontend bootstrap as the
-largest measured interval; it does not separate network, parsing, and evaluation
-costs or establish repeated-float behavior. Additional Windows samples requested.
-
-A temporary local Chromium import-only probe, without rendering or a native
-window, took 118.5–130.9 ms in three fresh contexts against a warm Vite development
-server. The equivalent bundled probe fetched 26 resources and took 20.1–21.3 ms.
-The initial development resource count hit the browser's 250-entry timing-buffer
-limit. With an expanded buffer, a paired baseline/current-code probe measured
-346 development requests before the header split and 314 after it. These
-measurements support development module-loading overhead, not a Windows native
-latency estimate. Local before/after duration samples overlap; no substantial
-latency improvement has been established.
-
-The static panel import graph also reaches workspace-only header features through
-`AppHeader`, although panel mode never renders those controls. Extract the shared
-window chrome into `WindowHeader`; the workspace `AppHeader` composes its menu,
-status, favorites, and command-palette controls into that same chrome. Producers
-are `AppLayout` and `PanelWindowApp`; consumers include their header interaction
-tests and Storybook stories. Keep DOM order, styling, platform controls, and native
-operations unchanged. No readiness, provider ordering, or backend boundary
-changes are needed. Dependency direction is workspace header → shared window
-header; the shared header must not import workspace features.
-
-Acceptance record:
-
-- Passed: the real-panel-import regression first failed after loading favorites,
-  sessions, and application-menu modules, then passed after the header split.
-- Passed: 34 focused header/import/panel tests, including keyboard, window-control,
-  resize, readiness, and command-palette dispatch workflows. Native calls remain
-  mocked in these tests. The full coverage task passed 5,058 tests before adding
-  the final command-palette dispatch case; the focused final coverage run includes it.
-- Passed: the static eager panel graph dropped from 361 to 329 modules and the
-  browser import probe from 346 to 314 requests. Neither is native latency proof.
-- Passed: final focused statement coverage is 125/140 (89.28%): `AppHeader`
-  3/3, `WindowHeader` 55/55, `PanelWindowApp` 67/82. All changed production files
-  pass the local Biome cognitive-complexity rule with maximum 12. Remote Sonar
-  analysis of these uncommitted changes is unavailable.
-- Passed, browser-only: the emitted Wails dev URL rendered the workspace header;
-  clicking Command Palette opened the real palette and focused its search input.
-  A temporary real-component probe with Windows browser platform signals produced
-  identical before/after header DOM and control geometry, and Tab focused Minimise
-  then Maximise. Native calls on the browser URL return 404, so these checks do not
-  establish native window behavior. Probe sources and servers were removed/stopped.
-- Passed: final `mise exec -- wails3 task qc:prerelease` (exit 0), including the
-  backend race suite, 5,059 frontend tests in 527 files, typechecking, lint,
-  dependency checks, and vulnerability scan. Post-gate inspection found only the
-  intended header composition, regression tests, stories, and owning docs.
-- Pending: user repeats the Windows float/dock capture after the change to verify
-  native behavior and any latency improvement. Retain timing instrumentation
-  until this evidence is available.
+Investigation closed on the user's production-performance acceptance. No further
+Windows capture or startup optimization is pending. Changes remain uncommitted;
+no commits or pushes were performed.

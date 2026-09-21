@@ -53,7 +53,6 @@ type Registry struct {
 	panelWorkspaceReady    map[string]struct{}
 	queuedWorkspaceEvents  map[string][]workspaceWindowEvent
 	panelOpenTimeout       time.Duration
-	panelOpenTimingLog     func(message, clusterID string)
 	panelDockTimeout       time.Duration
 	clusterTransferTimeout time.Duration
 	clusterCloseTimeout    time.Duration
@@ -236,22 +235,17 @@ func (r *Registry) BeginPanelWindowOpen(
 			snapshot.SourceWindowName,
 		)
 	}
-	timing := newPanelOpenTiming(snapshot.TransferID, snapshot.ClusterID, "backend-create", r.panelOpenTimingLog)
-	defer timing.report()
 	reservation := r.workspace.ReserveCluster(snapshot.ClusterID)
 	defer r.releasePanelReservation(reservation, snapshot.ClusterID)
 	if err := r.validateGroupSource(snapshot.SourceWindowName, snapshot); err != nil {
 		return PanelWindowDescriptor{}, err
 	}
-	timing.mark("source-validated")
 	if err := r.retainPanelWorkspace(snapshot.ClusterID); err != nil {
 		return PanelWindowDescriptor{}, err
 	}
-	timing.mark("workspace-retained")
 	r.panelTransferMu.Lock()
 	descriptor, err := r.beginPanelWindowOpenTransfer(snapshot)
 	r.panelTransferMu.Unlock()
-	timing.mark("transfer-reserved")
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
@@ -259,8 +253,7 @@ func (r *Registry) BeginPanelWindowOpen(
 		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
 		return PanelWindowDescriptor{}, err
 	}
-	timing.mark("cluster-retained")
-	if err := r.createRetainedPanelWindow(descriptor, reservation, timing); err != nil {
+	if err := r.createRetainedPanelWindow(descriptor, reservation); err != nil {
 		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
 		return PanelWindowDescriptor{}, errors.Join(err, r.releaseNativePanelReference(descriptor.WindowName))
 	}
@@ -269,10 +262,9 @@ func (r *Registry) BeginPanelWindowOpen(
 
 // Backend retention may wait behind a connection. Revalidate the handoff after
 // that wait, then serialize native creation with cancellation and readiness.
-func (r *Registry) createRetainedPanelWindow(descriptor PanelWindowDescriptor, reservation *panelwindow.WorkspaceReservation, timing *panelOpenTiming) error {
+func (r *Registry) createRetainedPanelWindow(descriptor PanelWindowDescriptor, reservation *panelwindow.WorkspaceReservation) error {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
-	timing.mark("creation-lock-acquired")
 	snapshot := descriptor.Snapshot
 	pending, err := r.panels.Descriptor(descriptor.WindowName)
 	if err != nil || pending.State != PanelWindowStateOpening {
@@ -285,11 +277,8 @@ func (r *Registry) createRetainedPanelWindow(descriptor PanelWindowDescriptor, r
 	if !valid || sourceErr != nil {
 		return errors.Join(fmt.Errorf("panel source changed during open"), sourceErr)
 	}
-	timing.mark("source-revalidated")
 	options := r.transferredPanelWindowOptions(descriptor.WindowName, snapshot)
-	timing.mark("bounds-resolved")
 	window := r.newWindow(options)
-	timing.mark("native-window-created")
 	if window == nil {
 		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
 		r.failPanelTabTransfer(snapshot.TransferID, "new panel target could not be created")
@@ -299,7 +288,6 @@ func (r *Registry) createRetainedPanelWindow(descriptor PanelWindowDescriptor, r
 		r.configurePanelWindow(window)
 	}
 	r.registerPanelLifecycleHooks(window, descriptor.WindowName)
-	timing.mark("native-window-configured")
 	r.panels.setTransferTimeout(descriptor.WindowName, snapshot.TransferID, r.panelOpenTimeout, func() {
 		r.expirePanelOpen(descriptor.WindowName, snapshot.TransferID)
 	})
@@ -521,22 +509,15 @@ func (r *Registry) WindowDescriptor(name string) (NativeWindowDescriptor, error)
 // AcknowledgePanelWindowReady commits an opening transfer and reveals the
 // hidden native target. A stale acknowledgement leaves the source transfer pending.
 func (r *Registry) AcknowledgePanelWindowReady(name, transferID string) (PanelWindowDescriptor, error) {
-	timing := newPanelOpenTiming(transferID, "", "backend-ready", r.panelOpenTimingLog)
-	defer timing.report()
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
-	timing.mark("acknowledgement-lock-acquired")
 	descriptor, err := r.panels.AcknowledgeOpen(name, transferID)
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
-	if timing != nil {
-		timing.clusterID = descriptor.ClusterID
-	}
 	if err := r.commitReadyPanelPlacement(descriptor); err != nil {
 		return PanelWindowDescriptor{}, errors.Join(err, r.abortReadyPanelWindow(descriptor))
 	}
-	timing.mark("placement-committed-and-window-shown")
 	snapshot := descriptor.Snapshot
 	r.emitWindowEvent(snapshot.SourceWindowName, panelwindow.WindowOpenedEventName, panelwindow.WindowOpenedEvent{
 		WindowName: name, TransferID: snapshot.TransferID, ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Snapshot: snapshot,

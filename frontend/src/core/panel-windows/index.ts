@@ -26,11 +26,6 @@ import {
 } from '@/core/backend-api';
 import type { panelwindow } from '@/core/backend-api/models';
 import { desktopRuntimeAvailable, onEvent } from '@/core/desktop-runtime';
-import {
-  finishPanelOpenTiming,
-  markPanelOpenTiming,
-  startPanelOpenTiming,
-} from './panelOpenTiming';
 
 export type NativeWindowDescriptor = panelwindow.NativeDescriptor;
 export type PanelWindowDescriptor = panelwindow.WindowDescriptor;
@@ -77,12 +72,7 @@ export const resolveNativeWindowDescriptor = async (
 export const beginPanelWindowOpen = (
   callerWindowName: string,
   snapshot: panelwindow.GroupSnapshot
-): Promise<PanelWindowDescriptor> => {
-  markPanelOpenTiming(snapshot.transferId, 'open-request-sent');
-  return BeginPanelWindowOpen(callerWindowName, snapshot).finally(() =>
-    markPanelOpenTiming(snapshot.transferId, 'open-request-returned')
-  );
-};
+): Promise<PanelWindowDescriptor> => BeginPanelWindowOpen(callerWindowName, snapshot);
 
 export const acknowledgePanelWindowReady = (
   windowName: string,
@@ -130,23 +120,12 @@ export const requestPanelTabClose = (windowName: string, panelId: string): Promi
 export const requestPanelTabTransfer = (
   callerWindowName: string,
   request: panelwindow.TabTransferRequest
-): Promise<void> => {
-  if (request.targetKind === 'new-window') {
-    startPanelOpenTiming(request.transferId, request.clusterId, callerWindowName);
-  }
-  return RequestPanelTabTransfer(callerWindowName, request).catch((error) => {
-    finishPanelOpenTiming(request.transferId);
-    throw error;
-  });
-};
+): Promise<void> => RequestPanelTabTransfer(callerWindowName, request);
 
 export const acceptPanelTabTransfer = (
   callerWindowName: string,
   transferId: string
-): Promise<void> => {
-  markPanelOpenTiming(transferId, 'publication-flushed');
-  return AcceptPanelTabTransfer(callerWindowName, transferId);
-};
+): Promise<void> => AcceptPanelTabTransfer(callerWindowName, transferId);
 
 export const failPanelTabTransfer = (callerWindowName: string, transferId: string): Promise<void> =>
   FailPanelTabTransfer(callerWindowName, transferId);
