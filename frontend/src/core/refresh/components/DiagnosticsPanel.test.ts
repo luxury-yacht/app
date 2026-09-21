@@ -125,13 +125,8 @@ const mockNamespaceState: { selectedNamespace: string | null } = {
 };
 
 vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({
-    children,
-    panelRef,
-  }: {
-    children: React.ReactNode;
-    panelRef?: React.Ref<HTMLDivElement>;
-  }) => React.createElement('div', { ref: panelRef }, children),
+  DockablePanel: ({ children }: { children: React.ReactNode }) =>
+    React.createElement('div', null, children),
 }));
 
 const scopedEntriesMap: Record<string, Array<[string, DomainSnapshotState<unknown>]>> = {};

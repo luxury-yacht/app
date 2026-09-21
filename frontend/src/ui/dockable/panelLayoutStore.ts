@@ -128,7 +128,10 @@ export function createPanelLayoutStore(initialTabGroups?: TabGroupState): PanelL
     // Geometry belongs to the dock, even after its last tab closes. Maximize
     // applies only to the current group and must not survive an empty dock.
     layouts.forEach((layout, key) => {
-      if (layout.isMaximized && !getGroupTabs(next, key)?.tabs.length) {
+      const group = getGroupTabs(next, key);
+      if (!group) {
+        layouts.delete(key);
+      } else if (layout.isMaximized && group.tabs.length === 0) {
         updateGroupLayout(key, { isMaximized: false });
       }
     });
@@ -168,7 +171,8 @@ export function createPanelLayoutStore(initialTabGroups?: TabGroupState): PanelL
     applyObjectPanelLayoutDefaults: () => {
       const defaults = getObjectPanelLayoutDefaults();
       layouts.forEach((layout, key) => {
-        if (!getGroupTabs(tabGroups, key)?.tabs.some((id) => id.startsWith('obj:'))) {
+        const tabs = getGroupTabs(tabGroups, key)?.tabs ?? [];
+        if (tabs.length > 0 && !tabs.some((id) => id.startsWith('obj:'))) {
           return;
         }
         updateGroupLayout(key, {

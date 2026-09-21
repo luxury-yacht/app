@@ -67,17 +67,21 @@ maximize and restore.
 - `PanelLayoutLifecycle` releases tab state and membership after committed
   object removal in both renderer roles. Dock geometry stays with its group
   through sibling closes, reorders, and cluster switches. An empty dock retains
-  its size but releases maximize. Focus and debug readers use their provider's
-  group state; there is no globally selected layout store.
+  its size but releases maximize. Applying object-panel size settings updates
+  empty docks and groups containing object tabs; occupied utility-only groups
+  retain their size. Removed floating groups release their layout state.
+  Focus and debug readers use their provider's group state; there is no globally
+  selected layout store.
 - Each renderer mounts `DockablePanelLayer` inside its content surface. It
   renders one `DockablePanelGroup` per visible group, owning chrome, geometry,
   and a keyed DOM slot per tab. `DockablePanel` portals its own children into
   that slot, retaining its originating context and error boundary. There is no
   tab leader, captured-children registry, or content-change notification channel.
   Sibling opens/closes and reorders retain existing slots and editing state.
-  Moving the tab itself between groups may remount its content and must respect
-  lifecycle guards. React owns host replacement during reconstruction or
-  suspension; the provider must not append a one-time DOM container.
+  Moving a tab or a whole group to another dock remounts the moved content,
+  including shell and log views, and must respect lifecycle guards.
+  React owns host replacement during reconstruction or suspension; the provider
+  must not append a one-time DOM container.
 - Prefer the active compatible docked group when opening a new object.
 - A new panel whose default is Floating creates a uniquely isolated, transient,
   hidden one-tab source group, then asks the native coordinator to transfer it.

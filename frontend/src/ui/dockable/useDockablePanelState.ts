@@ -36,5 +36,8 @@ export function useDockablePanelState(panelId: string, defaultPosition: DockPosi
     (isOpen: boolean) => store.setPanelOpenById(panelId, isOpen),
     [store, panelId]
   );
-  return { ...tab, position, initialize, setOpen };
+  return useMemo(
+    () => ({ ...tab, position, initialize, setOpen }),
+    [tab, position, initialize, setOpen]
+  );
 }

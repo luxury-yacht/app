@@ -151,14 +151,8 @@ vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
 
 // Mock dockable to provide both DockablePanel and useDockablePanelContext
 vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({
-    children,
-    panelRef,
-  }: {
-    children: React.ReactNode;
-    panelRef?: React.Ref<HTMLDivElement>;
-  }) => (
-    <div ref={panelRef}>
+  DockablePanel: ({ children }: { children: React.ReactNode }) => (
+    <div>
       <div data-testid="dockable-body">{children}</div>
     </div>
   ),

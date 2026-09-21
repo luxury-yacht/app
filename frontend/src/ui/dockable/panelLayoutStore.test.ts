@@ -5,11 +5,97 @@
  * holds dock-group memberships per store instance (which becomes per
  * cluster once the provider wires up cluster-keyed stores).
  */
-import { describe, expect, it, vi } from 'vitest';
+import * as appPreferences from '@core/settings/appPreferences';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPanelLayoutStore } from './panelLayoutStore';
 import { addPanelToGroup, createInitialTabGroupState } from './tabGroupState';
 
 describe('createPanelLayoutStore — tabGroups slice', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each(['right', 'bottom'] as const)(
+    'uses changed size defaults when an emptied %s dock reopens',
+    (position) => {
+      const defaults = vi.spyOn(appPreferences, 'getObjectPanelLayoutDefaults');
+      defaults.mockReturnValue({
+        dockedRightWidth: 500,
+        dockedBottomHeight: 300,
+        floatingWidth: 700,
+        floatingHeight: 600,
+      });
+      const store = createPanelLayoutStore();
+      store.setTabGroups((groups) => addPanelToGroup(groups, 'obj:a', position));
+      store.initializeGroupLayout(position);
+      store.clearPanelState('obj:a');
+
+      defaults.mockReturnValue({
+        dockedRightWidth: 900,
+        dockedBottomHeight: 600,
+        floatingWidth: 700,
+        floatingHeight: 600,
+      });
+      store.applyObjectPanelLayoutDefaults();
+      store.setTabGroups((groups) => addPanelToGroup(groups, 'obj:b', position));
+      store.initializeGroupLayout(position);
+
+      expect(store.getGroupLayout(position)).toMatchObject({
+        rightSize: { width: 900 },
+        bottomSize: { height: 600 },
+      });
+    }
+  );
+
+  it('applies defaults to occupied object groups while retaining occupied utility geometry', () => {
+    const store = createPanelLayoutStore();
+    store.setTabGroups((groups) =>
+      addPanelToGroup(addPanelToGroup(groups, 'obj:a', 'right'), 'app-logs', 'bottom')
+    );
+    store.initializeGroupLayout('right', { width: 500 });
+    store.initializeGroupLayout('bottom', { height: 450 });
+    vi.spyOn(appPreferences, 'getObjectPanelLayoutDefaults').mockReturnValue({
+      dockedRightWidth: 900,
+      dockedBottomHeight: 600,
+      floatingWidth: 700,
+      floatingHeight: 600,
+    });
+
+    store.applyObjectPanelLayoutDefaults();
+
+    expect(store.getGroupLayout('right').rightSize.width).toBe(900);
+    expect(store.getGroupLayout('bottom').bottomSize.height).toBe(450);
+  });
+
+  it.each(['close', 'move'] as const)(
+    'releases a floating group layout after its final tab leaves by %s',
+    (action) => {
+      const store = createPanelLayoutStore({
+        ...createInitialTabGroupState(),
+        floating: [
+          { groupId: 'retired', tabs: ['obj:a'], activeTab: 'obj:a' },
+          { groupId: 'retained', tabs: ['obj:b'], activeTab: 'obj:b' },
+        ],
+      });
+      store.initializeGroupLayout('retired', { width: 777 });
+      store.initializeGroupLayout('retained', { width: 888 });
+      store.initializeGroupLayout('right', { width: 640 });
+      if (action === 'close') {
+        store.clearPanelState('obj:a');
+      } else {
+        store.setTabGroups((groups) => addPanelToGroup(groups, 'obj:a', 'right'));
+      }
+
+      expect(store.getGroupLayout('retained').rightSize.width).toBe(888);
+      expect(store.getGroupLayout('right').rightSize.width).toBe(640);
+      // Reconstructed membership with this key must not recover a retired layout.
+      store.setTabGroups((groups) => ({
+        ...groups,
+        floating: [...groups.floating, { groupId: 'retired', tabs: ['obj:c'], activeTab: 'obj:c' }],
+      }));
+      store.initializeGroupLayout('retired', { width: 550 });
+      expect(store.getGroupLayout('retired').rightSize.width).toBe(550);
+    }
+  );
+
   it('starts with an empty tabGroups state', () => {
     const store = createPanelLayoutStore();
     expect(store.getTabGroups()).toEqual(createInitialTabGroupState());

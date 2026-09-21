@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import type { DockPosition } from './panelLayoutStore';
 import { usePanelLayoutStoreContext } from './panelLayoutStoreContext';
 
@@ -29,13 +29,16 @@ export function useDockableGroupState(groupKey: string, isOpen: boolean) {
     [store, groupKey]
   );
   const focus = useCallback(() => store.focusGroup(groupKey), [store, groupKey]);
-  return {
-    ...layout,
-    position,
-    isOpen,
-    size: position === 'bottom' ? layout.bottomSize : layout.rightSize,
-    setSize,
-    setMaximized,
-    focus,
-  };
+  return useMemo(
+    () => ({
+      ...layout,
+      position,
+      isOpen,
+      size: position === 'bottom' ? layout.bottomSize : layout.rightSize,
+      setSize,
+      setMaximized,
+      focus,
+    }),
+    [layout, position, isOpen, setSize, setMaximized, focus]
+  );
 }

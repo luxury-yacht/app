@@ -49,7 +49,7 @@ vi.mock('@ui/dockable', async (importOriginal) => {
       realNavigation.enabled ? (
         <actual.DockablePanel {...props} />
       ) : (
-        <div data-testid="dockable-panel" ref={props.panelRef}>
+        <div data-testid="dockable-panel">
           <div data-testid="body">{props.children}</div>
         </div>
       ),

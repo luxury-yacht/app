@@ -19,7 +19,7 @@ without a visible surface. Committed removal retains existing cache eviction
 ordering. Use a separate context module to avoid a provider/group-renderer import
 cycle. No React children registry or content-change notification channel.
 
-Read-only line counts against `HEAD` for the 14 changed/new production TS, TSX,
+The initial refactor's read-only line counts for the 14 changed/new production TS, TSX,
 and CSS files (excluding tests) total 5,300 before and 4,821 after: 479 fewer
 lines, including the new group renderer, context module, and group-state hook.
 
@@ -100,3 +100,46 @@ This work does not unify the complete workspace state model or add cross-window
 draft transfer. Cluster-switch cache retention and native handoff policies retain
 their existing owners. Native validation is separate from component and protocol
 tests and must be reported explicitly if unavailable.
+
+## Branch-review follow-up
+
+Review base: `e36f9dd7`. The size-setting regression and floating-layout lifetime
+are corrected at the cluster-local store. Settings still publish the preference
+cache before the provider fans out defaults to every cluster store. Empty docks
+now accept those defaults; occupied utility-only groups retain their geometry.
+Membership is committed before layouts without a surviving group are pruned;
+right and bottom groups remain present even when empty. No new provider or
+dependency edge was introduced.
+
+| Review item | Status | Evidence |
+| --- | --- | --- |
+| Empty docks ignore changed settings | Passed (focused) | Added right and bottom close/change-default/reopen regressions to `panelLayoutStore.test.ts`; both failed with 500/300 instead of 900/600 before the fix. |
+| Retired floating layouts survive | Passed (focused) | Added final-tab close and move regressions; both recovered a stale width of 777 before the fix. Surviving floating and docked groups retain their sizes. |
+| Hook-result identity churn | Implemented; focused suites passed | Both state hooks memoize their returned objects using their state and callback dependencies. |
+| Unused forwarded refs and registration fields | Implemented; typecheck passed | Removed `DockablePanel.panelRef`, ObjectPanel's write-only ref, registration `panelRef`/`onPositionChange`, and obsolete mock forwarding. |
+| Whole-group move remounting documentation | Updated | Durable dockable-panel guidance now covers single-tab and whole-group moves, including shell/log content. |
+| Actual native drop/reorder, including cross-window drops | Blocked | The prior native validation gap remains. The review supplied no successful manual-drop evidence. |
+
+The red store run had four failures and twelve passes; after the fix all sixteen
+passed. The wider focused run passed 118 files / 1,140 tests, including dockable,
+panel-window, object-panel, utility-panel, and settings suites. Logs:
+`/private/tmp/tab-ownership-review-red.log`,
+`/private/tmp/tab-ownership-review-green.log`, and
+`/private/tmp/tab-ownership-review-focused.log`.
+Typecheck passed (`/private/tmp/tab-ownership-review-types.log`). Local complexity
+passed at limit 12 for all six changed production TypeScript files
+(`/private/tmp/tab-ownership-review-complexity.log`). Full frontend coverage passed
+527 files / 5,065 tests with 89.73% overall statement coverage. The changed store,
+both state hooks, and DockablePanel measured 100%; ObjectPanel measured 92.77%.
+The changed registration type has no executable statements. Coverage log and
+report: `/private/tmp/tab-ownership-review-coverage.log` and
+`/private/tmp/tab-ownership-review-coverage/coverage-summary.json`.
+The follow-up `qc:prerelease` gate exited 0, including backend race tests and all
+5,065 frontend tests (`/private/tmp/tab-ownership-review-prerelease.log`). Inspected
+the final worktree; the formatter reported no fixes, and `git diff --check`
+passed. The only subsequent edit records these results in this plan.
+
+Retain this temporary record while native validation remains unresolved. Durable
+ownership, default-setting, cleanup, and remounting guidance lives in
+`docs/frontend/dockable-panels.md`; delete this plan before merge once the native
+checks pass and the remaining evidence is recorded in the task or PR.

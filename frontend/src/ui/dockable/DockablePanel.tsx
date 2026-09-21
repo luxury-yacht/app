@@ -2,7 +2,6 @@
 import type React from 'react';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { reportOperationalError } from '@/utils/errorHandler';
 import { useDockablePanelContext } from './DockablePanelContext';
 import type { GroupKey } from './tabGroupTypes';
 import { type DockPosition, useDockablePanelState } from './useDockablePanelState';
@@ -49,22 +48,6 @@ interface DockablePanelProps {
   allowMaximize?: boolean;
   onMaximizeChange?: (isMaximized: boolean) => void;
   maximizeTargetSelector?: string;
-  panelRef?: React.Ref<HTMLDivElement>;
-}
-
-function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
-  if (!ref) {
-    return;
-  }
-  if (typeof ref === 'function') {
-    ref(value);
-    return;
-  }
-  try {
-    (ref as React.RefObject<T | null>).current = value;
-  } catch (error) {
-    reportOperationalError(error, { source: 'DockablePanel', action: 'assignRef' });
-  }
 }
 
 const DockablePanelInner: React.FC<DockablePanelProps> = ({
@@ -85,7 +68,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = ({
   allowMaximize = false,
   onMaximizeChange,
   maximizeTargetSelector = '.content-body',
-  panelRef,
 }) => {
   const panel = useDockablePanelState(panelId, defaultPosition);
   const { registerPanel, unregisterPanel, syncPanelGroup, removePanelFromGroups } =
@@ -175,10 +157,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = ({
     removePanelFromGroups,
   ]);
   useEffect(() => onPositionChange?.(panel.position), [panel.position, onPositionChange]);
-  useLayoutEffect(() => {
-    assignRef(panelRef, contentHost);
-    return () => assignRef(panelRef, null);
-  }, [panelRef, contentHost]);
   return panel.isOpen && !suppressSurface && contentHost
     ? createPortal(children, contentHost)
     : null;

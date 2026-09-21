@@ -286,8 +286,6 @@ function ObjectPanel({
     onAfterAction: handleAfterAction,
   };
 
-  const panelScopeRef = useRef<HTMLDivElement>(null);
-
   // Memoize the per-instance context value so child components get the correct objectData.
   // creationTimestamp (→ Age) and lastModified ride along so the shared
   // ResourceHeader can render both for every kind without each per-kind overview
@@ -300,7 +298,6 @@ function ObjectPanel({
   return (
     <CurrentObjectPanelContext.Provider value={currentObjectPanelValue}>
       <DockablePanel
-        panelRef={panelScopeRef}
         panelId={panelId}
         title={tabTitle}
         isOpen
