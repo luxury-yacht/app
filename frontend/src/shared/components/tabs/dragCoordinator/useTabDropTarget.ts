@@ -41,24 +41,14 @@
  * production with no errors or warnings.
  */
 
-import { getHorizontalDropInsertIndex, hasDragDataType } from '@shared/components/dragReorder';
+import { getHorizontalDropInsertIndex } from '@shared/components/dragReorder';
 import { type RefCallback, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { TabDragContext } from './TabDragProvider';
-import {
-  TAB_DRAG_DATA_TYPE,
-  type TabDragPayload,
-  type TabDragScope,
-  tabDragKindFromDataTypes,
-  tabDragMatchesScope,
-  tabDragScopeDataType,
-} from './types';
+import { TAB_DRAG_DATA_TYPE, type TabDragPayload, tabDragMatchesScope } from './types';
+import { type TabDragAcceptance, useTabDragAcceptance } from './useTabDragAcceptance';
 
-export interface UseTabDropTargetOptions<K extends TabDragPayload['kind']> {
-  accepts: K[];
-  /** Restricts cross-document panel drops to the same cluster. */
-  scope?: TabDragScope;
-  /** Cluster strips can accept cluster tabs from any app window. */
-  allowExternal?: boolean;
+export interface UseTabDropTargetOptions<K extends TabDragPayload['kind']>
+  extends TabDragAcceptance<K> {
   /**
    * Fires when a drag of an accepted kind is dropped on the target. The
    * third argument is the computed insert index in `[0, tabCount]` — use
@@ -126,26 +116,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
   optionsRef.current = opts;
   const detachListenersRef = useRef<(() => void) | null>(null);
 
-  const acceptsDrag = useCallback(
-    (event: DragEvent) => {
-      if (!hasDragDataType(event.dataTransfer, TAB_DRAG_DATA_TYPE)) {
-        return false;
-      }
-      const drag = getCurrentDrag();
-      const kind = drag?.kind ?? tabDragKindFromDataTypes(event.dataTransfer?.types);
-      if (!kind || !optionsRef.current.accepts.includes(kind as K)) {
-        return false;
-      }
-      const targetScope = optionsRef.current.scope;
-      if (drag) {
-        return !targetScope || tabDragMatchesScope(drag, targetScope);
-      }
-      return targetScope
-        ? hasDragDataType(event.dataTransfer, tabDragScopeDataType(targetScope))
-        : (optionsRef.current.allowExternal ?? false);
-    },
-    [getCurrentDrag]
-  );
+  const acceptsDrag = useTabDragAcceptance(opts);
 
   const rejectDrag = useCallback((event: DragEvent) => {
     if (event.dataTransfer) {

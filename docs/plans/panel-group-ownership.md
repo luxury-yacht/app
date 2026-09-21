@@ -143,3 +143,113 @@ Retain this temporary record while native validation remains unresolved. Durable
 ownership, default-setting, cleanup, and remounting guidance lives in
 `docs/frontend/dockable-panels.md`; delete this plan before merge once the native
 checks pass and the remaining evidence is recorded in the task or PR.
+
+## Empty dock drop targets
+
+Requested behavior: a compatible tab drag offers right and bottom destinations
+in a workspace even when those docks have no visible panels. Occupied docks keep
+their tab-strip targets; native panel windows keep their existing group target.
+
+The shared tab source produces MIME kind/cluster markers before publishing its
+local drag. Shared acceptance logic must drive both document-wide target
+visibility and target admission without reading protected payload values. The
+layer consumes that presence and visible membership, and each edge target calls
+`dropDockableTab`, preserving local membership updates and the existing
+acknowledged external transfer protocol. Sources remain until the destination
+acknowledges reconstruction. New renderers import the separate dock context to
+avoid a provider/renderer cycle. No backend contract or provider ordering changes.
+
+| Criterion | Status | Evidence |
+| --- | --- | --- |
+| Local drops into either empty dock move the tab and render its content | Passed (component and browser) | `DockablePanelDropTargets.test.tsx` drives the real provider/layer. The initial run failed eight missing-target cases. Playwright pointer drops moved the actual renderer right → bottom → right with content present afterward. |
+| External same-cluster protected drag reveals targets; wrong kinds/clusters do not | Passed (component) | Complete object snapshot reaches the existing external-transfer callback at index zero; membership stays unchanged pending acknowledgement. Protected events never read payload values; drop rechecks cluster identity. |
+| Drop, cancellation, and leaving the window clear targets; occupied docks and native windows retain existing targets | Passed (component) | Fourteen new cases cover target visibility, source guards, cancellation, external admission, and native drop propagation. Existing native panel mode does not mount edge targets. |
+| Existing reorder, guards, and transfer protocol remain covered | Passed (automated) | Final focused dockable/shared-tab/panel-window run: 28 files, 351 tests. |
+| Targets stay reachable above a focused panel | Passed (browser) | Rendered hit-testing originally found panel content covering the right target. A sibling overlay layer now isolates target stacking from group focus z-indices. Hit-testing and pointer drop passed afterward; screenshot `/private/tmp/empty-dock-right-final.png`. |
+| Actual native drops into empty right/bottom docks, including another workspace | Blocked | The existing Wails app was inspected and a Namespace detail tab opened, but both native drag attempts returned `noWindowsAvailable`. Manual right, bottom, and cross-workspace destination drops were requested; no result received yet. |
+
+The browser fixture uses the actual dock components with fixed cluster identity
+and static content because the browser cannot load the Wails backend runtime.
+A synthetic dragstart reveals the destination before Playwright resolves it;
+Playwright then performs a pointer drag and destination drop. This caught a real
+event-order bug: a document capture listener removed the target before its drop
+listener ran. A regression that flushes React between capture and target phases
+failed before deferring cleanup until after event dispatch, then passed. Logs:
+`/private/tmp/empty-dock-red.log`,
+`/private/tmp/empty-dock-native-order-red.log`, and
+`/private/tmp/empty-dock-green.log` (38 drag-related tests passed).
+
+Full frontend coverage passed 528 files / 5,079 tests with 89.74% statement
+coverage after the event-order fix. The subsequent stacking adjustment received
+a fresh focused coverage run. Reports and logs:
+`/private/tmp/empty-dock-coverage-final/coverage-summary.json`,
+`/private/tmp/empty-dock-coverage-final.log`,
+`/private/tmp/empty-dock-affected-coverage/coverage-summary.json`, and
+`/private/tmp/empty-dock-affected-coverage.log`.
+Final affected statement coverage: new target component and both new drag hooks
+100%, shared drop target 96.34%, dock provider 89.38%.
+Local complexity at limit 12 passed for all five changed/new production modules
+with executable logic (`/private/tmp/empty-dock-complexity.log`). No new pushed
+revision exists for remote Sonar analysis.
+
+An earlier prerelease gate reached the event-order regression while its test was
+red and failed that one test. The corrected worktree's `qc:prerelease` gate exited
+0, including backend race tests, all 5,079 frontend tests, lint/typecheck, docs,
+bindings, knip, and Trivy (`/private/tmp/empty-dock-prerelease-final.log`). The
+formatter reported no fixes. Post-gate inspection found only the intended files;
+`git diff --check` passed. The only subsequent edit records these results.
+No new development server was started: the listener on port 9245 (PID 32425, beneath
+Wails launcher PID 31812) already belonged to an existing shell before this work.
+
+## Selected design: placement preview
+
+The user selected option C. During a compatible drag, empty docks show subtle
+edge rails. Hovering a rail reveals the destination panel footprint; leaving the
+edge restores the rail. The preview remains pointer-transparent and the edge
+hit area stays fixed, so it cannot take over the other dock's target or tab bar.
+
+Geometry comes from the cluster-local group layout store. The existing group
+initializer, renderer, and preview share size-default/clamping logic.
+The preview reads that state without initializing or resizing a dock. A right
+preview reserves the bottom dock's height only if visible tabs will remain after
+the move and that dock is not maximized. Local metadata comes from the existing
+drop hook's drag-enter callback;
+external protected drags use destination geometry and a generic label. Native
+transfer admission, source guards, and acknowledgement ordering remain owned by
+the existing drop handler. There is no new provider or runtime dependency cycle.
+
+Acceptance: compare preview dimensions with the resulting dock for both edges,
+including remembered sizes and first-use utility defaults; check the final-tab
+versus sibling-retained bottom offset; exercise fixed hit areas, hover/leave,
+edge switching, and both themes in the rendered UI. Existing drag cancellation,
+cluster rejection, guards, and external transfer tests remain required. Actual
+native drops retain their existing unresolved validation requirement.
+
+### Selected-design validation
+
+| Outcome | Status | Evidence |
+| --- | --- | --- |
+| Remembered sizes and first-use utility sizes match the resulting dock without changing layout during hover | Passed | Five new geometry cases failed before implementation (`/private/tmp/dock-preview-red.log`). The focused suite now passes 28 files / 357 tests (`/private/tmp/dock-preview-focused-final.log`). |
+| Right preview matches bottom occupancy, including a maximized sibling dock | Passed | The added maximized case first failed with an incorrect 600px offset (`/private/tmp/dock-preview-maximized-red.log`); the focused suite now passes and compares the preview offset with the resulting workspace offset. |
+| Rendered preview matches actual destination bounds | Passed in browser | Playwright dragged the actual dock components right → bottom → right. Bottom preview and resulting panel both measured x=0, y=400, width=1440, height=600; right preview and panel both measured x=740, y=0, width=700, height=1000. Content remained present after each drop; targets and previews cleared. |
+| Rails, preview styles, stable hit areas, switching edges, and leaving an edge | Passed in browser | Inspected light bottom and dark right previews (`/private/tmp/dock-preview-bottom-light.png`, `/private/tmp/dock-preview-right-dark.png`) and the dark rail. Hit-testing reached content through the preview and each edge through its own target. A protected incoming drag switched from right preview to bottom preview, then leaving the edge cleared the preview while both rails remained available. |
+| Actual native destination drop | Blocked | After opening the Namespace `test` tab in the running Wails app, `dockApp.drag([762,54], [650,746])` returned `Computer Use server error -10005: noWindowsAvailable`. No successful native drop or manual result has been observed; cross-window native acceptance remains unverified. |
+
+These browser checks used actual React dock components in an ephemeral fixture
+with a fixed cluster identity. They do not exercise the Wails transfer handshake.
+No production fixture was added. The local complexity check passed all seven
+changed production files containing executable logic at the limit of 12
+(`/private/tmp/dock-preview-complexity.log`). Sonar analysis of a pushed revision
+has not been checked for this change.
+
+The full frontend coverage task passed 528 files / 5,085 tests
+(`/private/tmp/dock-preview-coverage-final.log`). Statement coverage in the
+affected files: preview targets 97.61%, group renderer 93.47%, layout helpers
+86.95%, provider 89.38%, shared drop target 96.34%, and drag admission/presence
+hooks 100% (`/private/tmp/dock-preview-coverage-final/coverage-summary.json`).
+
+The final prerelease gate exited 0 after removing the sizing constant's unused
+export. It passed documentation, formatting, generated bindings, vet/staticcheck,
+backend race tests, frontend lint/typecheck, all 5,085 frontend tests, knip, and
+Trivy (`/private/tmp/dock-preview-prerelease-final.log`). Native drop verification
+remains blocked as recorded above; this is not a full completion claim.

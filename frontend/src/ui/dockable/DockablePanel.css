@@ -7,6 +7,12 @@
   z-index: 999;
 }
 
+.dockable-panel,
+.dockable-panel-drop-targets {
+  --dockable-panel-right-min-width: 500;
+  --dockable-panel-bottom-min-height: 200;
+}
+
 .dockable-panel {
   position: absolute;
   background: var(--color-bg);
@@ -14,10 +20,6 @@
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  /* Docked right: only width matters */
-  --dockable-panel-right-min-width: 500;
-  /* Docked bottom: only height matters */
-  --dockable-panel-bottom-min-height: 200;
   transition: filter 150ms ease;
   pointer-events: auto;
 }
@@ -350,4 +352,122 @@ body.dockable-panel-resizing-w::after {
 }
 .dockable-panel__tab-content[hidden] {
   display: none;
+}
+
+/* Empty destinations only mount during a compatible tab drag. */
+.dockable-panel-drop-targets {
+  --dock-drop-hit-size: calc(var(--spacing-xxl) * 2);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* A sibling layer stays above panels regardless of their focus ordering. */
+  z-index: 1000;
+}
+
+.dockable-panel-drop-target {
+  position: absolute;
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.dockable-panel-drop-target--right {
+  top: 0;
+  right: 0;
+  bottom: var(--dock-drop-hit-size);
+  width: var(--dock-drop-hit-size);
+}
+
+.dockable-panel-drop-target--bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--dock-drop-hit-size);
+}
+
+.dockable-panel-drop-target__rail {
+  position: absolute;
+  border-radius: var(--border-radius-pill);
+  background: var(--color-accent);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.dockable-panel-drop-target--right .dockable-panel-drop-target__rail {
+  top: 15%;
+  bottom: 15%;
+  right: var(--spacing-xs);
+  width: calc(var(--border-width) * 3);
+}
+
+.dockable-panel-drop-target--bottom .dockable-panel-drop-target__rail {
+  left: 25%;
+  right: 25%;
+  bottom: var(--spacing-xs);
+  height: calc(var(--border-width) * 3);
+}
+
+.dockable-panel-drop-target--over .dockable-panel-drop-target__rail {
+  opacity: 0;
+}
+
+.dockable-panel-drop-preview {
+  position: absolute;
+  border: var(--border-width) solid var(--color-accent);
+  color: var(--color-text);
+  pointer-events: none;
+}
+
+.dockable-panel-drop-preview::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--color-accent-bg);
+  opacity: 0.4;
+}
+
+.dockable-panel-drop-preview--right {
+  top: 0;
+  right: 0;
+  bottom: var(--dock-preview-bottom-offset);
+  width: var(--dock-preview-size);
+}
+
+.dockable-panel-drop-preview--bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--dock-preview-size);
+}
+
+.dockable-panel-drop-preview__header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border-bottom: var(--border-width) solid var(--color-border);
+  font-size: var(--font-size-normal);
+}
+
+.dockable-panel-drop-preview__header svg {
+  flex-shrink: 0;
+}
+
+.dockable-panel-drop-preview__header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dockable-panel-drop-preview__label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-bg-secondary);
+  font-size: var(--font-size-normal);
+  white-space: nowrap;
 }

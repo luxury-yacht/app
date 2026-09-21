@@ -17,7 +17,12 @@ import { DockablePanelControls } from './DockablePanelControls';
 import { DockablePanelHeader } from './DockablePanelHeader';
 import type { TabInfo } from './DockableTabBar';
 import type { PanelSizeConstraints } from './dockablePanelLayout';
-import { getContentBounds, getPanelSizeConstraints, PANEL_DEFAULTS } from './dockablePanelLayout';
+import {
+  getContentBounds,
+  getDockedPanelExtent,
+  getPanelGroupInitialSize,
+  getPanelSizeConstraints,
+} from './dockablePanelLayout';
 import type { DockPosition } from './panelLayoutStore';
 import { usePanelLayoutStoreContext } from './panelLayoutStoreContext';
 import type { GroupKey } from './tabGroupTypes';
@@ -254,15 +259,7 @@ export function DockablePanelGroup({
   const lifecycleGuards = useOptionalPanelLifecycleGuardRegistry();
   const suppressedTabbablesRef = useRef<Map<HTMLElement, string | null>>(new Map());
   useLayoutEffect(() => {
-    layoutStore.initializeGroupLayout(
-      groupKey,
-      initial?.panelId.startsWith('obj:')
-        ? undefined
-        : {
-            width: initial?.defaultSize?.width ?? PANEL_DEFAULTS.DEFAULT_WIDTH,
-            height: initial?.defaultSize?.height ?? PANEL_DEFAULTS.DEFAULT_HEIGHT,
-          }
-    );
+    layoutStore.initializeGroupLayout(groupKey, getPanelGroupInitialSize(initial));
   }, [layoutStore, groupKey, initial]);
   const { isMaximized, maximizedRect, toggleMaximize } = useDockablePanelMaximize({
     panelState,
@@ -504,14 +501,17 @@ export function DockablePanelGroup({
     }
 
     // Clamp dimensions and position to keep the panel within the visible content area.
-    const content = getContentBounds();
+    const extent = getDockedPanelExtent(
+      panelState.position,
+      panelState.size,
+      constraints,
+      getContentBounds()
+    );
 
     if (panelState.position === 'right' || panelState.position === 'floating') {
-      const maxW = Math.max(constraints.right.minWidth, content.width);
-      style.width = `${Math.min(panelState.size.width, maxW)}px`;
+      style.width = `${extent}px`;
     } else if (panelState.position === 'bottom') {
-      const maxH = Math.max(constraints.bottom.minHeight, content.height);
-      style.height = `${Math.min(panelState.size.height, maxH)}px`;
+      style.height = `${extent}px`;
       style.width = '100%';
     }
     return style;

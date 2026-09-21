@@ -11,13 +11,38 @@
  * Shared layout constants and helpers for dockable panel sizing/positioning.
  */
 
+import type { PanelRegistration } from './tabGroupTypes';
+
+/** Utility tabs supply first-use sizes; object tabs use the destination's settings. */
+export function getPanelGroupInitialSize(panel?: PanelRegistration) {
+  if (panel?.panelId.startsWith('obj:')) {
+    return undefined;
+  }
+  return {
+    width: panel?.defaultSize?.width ?? PANEL_DEFAULTS.DEFAULT_WIDTH,
+    height: panel?.defaultSize?.height ?? PANEL_DEFAULTS.DEFAULT_HEIGHT,
+  };
+}
+
+/** Shared by the actual dock and its drag placement preview. */
+export function getDockedPanelExtent(
+  position: 'right' | 'bottom' | 'floating',
+  size: { width: number; height: number },
+  constraints: PanelSizeConstraints,
+  content: ContentBounds
+): number {
+  return position === 'bottom'
+    ? Math.min(size.height, Math.max(constraints.bottom.minHeight, content.height))
+    : Math.min(size.width, Math.max(constraints.right.minWidth, content.width));
+}
+
 export const LAYOUT = {
   /** Debounce delay for resize handling */
   RESIZE_DEBOUNCE_MS: 100,
 } as const;
 
 /** Default panel size and per-dock-mode min constraints. */
-export const PANEL_DEFAULTS = {
+const PANEL_DEFAULTS = {
   DEFAULT_WIDTH: 700,
   DEFAULT_HEIGHT: 600,
   RIGHT_MIN_WIDTH: 450,

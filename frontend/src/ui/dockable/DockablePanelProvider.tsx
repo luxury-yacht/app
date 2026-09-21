@@ -25,6 +25,7 @@ import {
   type DockablePanelContextValue,
   useDockablePanelContext,
 } from './DockablePanelContext';
+import { DockablePanelDropTargets } from './DockablePanelDropTargets';
 import { DockablePanelGroup } from './DockablePanelGroup';
 import type { PanelLayoutStore } from './panelLayoutStore';
 import { createPanelLayoutStore } from './panelLayoutStore';
@@ -146,30 +147,42 @@ const syncPanelGroupState = (
 // The layout owns group roots and their content slots; tab content portals retain
 // their original React ancestry while the group owns presentation.
 export function DockablePanelLayer() {
-  const { tabGroups, panelRegistrations } = useDockablePanelContext();
+  const { tabGroups, panelRegistrations, nativeWindowMode } = useDockablePanelContext();
   const { selectedClusterId } = useKubeconfig();
   const groups = [
     { groupKey: 'right', ...tabGroups.right },
     { groupKey: 'bottom', ...tabGroups.bottom },
     ...tabGroups.floating.map(({ groupId, ...group }) => ({ groupKey: groupId, ...group })),
-  ];
+  ].map((group) => ({
+    ...group,
+    tabs: group.tabs.filter((id) => {
+      const registration = panelRegistrations.get(id);
+      return registration && !registration.suppressSurface;
+    }),
+  }));
   return (
-    <div className="dockable-panel-layer">
-      {groups.map((group) => {
-        const visibleTabs = group.tabs.filter((id) => {
-          const registration = panelRegistrations.get(id);
-          return registration && !registration.suppressSurface;
-        });
-        return visibleTabs.length > 0 ? (
-          <DockablePanelGroup
-            key={`${selectedClusterId}:${group.groupKey}`}
-            groupKey={group.groupKey}
-            tabs={visibleTabs}
-            activeTab={group.activeTab}
-          />
-        ) : null;
-      })}
-    </div>
+    <>
+      <div className="dockable-panel-layer">
+        {groups.map((group) =>
+          group.tabs.length > 0 ? (
+            <DockablePanelGroup
+              key={`${selectedClusterId}:${group.groupKey}`}
+              groupKey={group.groupKey}
+              tabs={group.tabs}
+              activeTab={group.activeTab}
+            />
+          ) : null
+        )}
+      </div>
+      {!nativeWindowMode && (
+        <DockablePanelDropTargets
+          key={selectedClusterId}
+          emptyEdges={groups.flatMap(({ groupKey, tabs }) =>
+            (groupKey === 'right' || groupKey === 'bottom') && tabs.length === 0 ? [groupKey] : []
+          )}
+        />
+      )}
+    </>
   );
 }
 

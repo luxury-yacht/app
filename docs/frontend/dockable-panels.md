@@ -102,6 +102,16 @@ maximize and restore.
 - Dragging within a tab bar reorders one tab. Dragging between compatible tab
   bars moves that one tab, including workspace-to-native, native-to-workspace,
   and native-to-native moves within the same cluster. Cross-cluster drops are rejected.
+- An empty workspace dock offers a right or bottom edge target during a compatible
+  tab drag, including an incoming drag from another window. Only docks without
+  visible tabs offer edge targets; occupied docks use their tab strips. Subtle
+  edge rails reveal a placement preview when hovered. The preview uses the
+  destination's saved size (or the incoming local utility tab's first-use size),
+  with the same size clamp as the dock renderer. It does not initialize or resize
+  the dock. The preview is pointer-transparent; the drop hit area stays at the
+  edge so the preview cannot intercept other tabs or destinations. These
+  targets use the same local move and acknowledged native transfer path as tab
+  strips, and disappear when the drag leaves the window, ends, or drops.
 - Rejected cluster combinations show no insertion indicator. Panel drag
   scope is available during protected dragover; drop-time and backend checks
   still authorize the actual transfer.
