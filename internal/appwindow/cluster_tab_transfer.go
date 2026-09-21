@@ -6,13 +6,10 @@ import (
 	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"slices"
-	"time"
 )
 
 type clusterViewTransfer struct {
 	event         panelwindow.ClusterTabTransferEvent
-	mounting      bool
-	timeout       *time.Timer
 	createdTarget bool
 }
 
@@ -28,9 +25,9 @@ func (r *Registry) RequestClusterTabTransfer(caller string, request panelwindow.
 	if err != nil {
 		return err
 	}
-	if r.clusterTransferTimeout > 0 {
-		transfer.timeout = time.AfterFunc(r.clusterTransferTimeout, func() { _ = r.FailClusterTabTransfer(request.SourceWindowName, request.TransferID) })
-	}
+	r.clusterTransfers.setTimeout(request.TransferID, r.clusterTransferTimeout, func() {
+		_ = r.FailClusterTabTransfer(request.SourceWindowName, request.TransferID)
+	})
 	if !r.emitWindowEvent(request.SourceWindowName, panelwindow.ClusterTabTransferRequestedEventName, transfer.event) {
 		r.removeClusterTransferLocked(request.TransferID)
 		return fmt.Errorf("cluster transfer source is not available")
@@ -39,22 +36,19 @@ func (r *Registry) RequestClusterTabTransfer(caller string, request panelwindow.
 }
 
 func (r *Registry) reserveClusterTransferLocked(request panelwindow.ClusterTabTransferRequest) (*clusterViewTransfer, error) {
-	if r.clusterTransfers == nil {
-		r.clusterTransfers = make(map[string]*clusterViewTransfer)
-		r.usedClusterTransferIDs = make(map[string]struct{})
-	}
-	if _, used := r.usedClusterTransferIDs[request.TransferID]; used {
+	if r.clusterTransfers.wasUsed(request.TransferID) {
 		return nil, fmt.Errorf("cluster transfer ID was already used")
 	}
-	for _, pending := range r.clusterTransfers {
+	for _, pending := range r.clusterTransfers.all() {
 		previous := pending.event.Request
 		if previous.ClusterID == request.ClusterID {
 			return nil, fmt.Errorf("cluster already has a pending view transfer")
 		}
 	}
 	transfer := &clusterViewTransfer{event: panelwindow.ClusterTabTransferEvent{Request: request}}
-	r.clusterTransfers[request.TransferID] = transfer
-	r.usedClusterTransferIDs[request.TransferID] = struct{}{}
+	if err := r.clusterTransfers.begin(request.TransferID, transfer, transferAwaitingSource); err != nil {
+		return nil, err
+	}
 	return transfer, nil
 }
 
@@ -80,8 +74,8 @@ func (r *Registry) AcceptClusterTabTransfer(source, id string, snapshot panelwin
 	r.clusterTransferMu.Lock()
 	r.workspaceMu.Lock()
 	defer r.finishClusterTransferMutation(&closeWindows, "")
-	transfer := r.clusterTransfers[id]
-	if transfer == nil || transfer.mounting || transfer.event.Request.SourceWindowName != source {
+	transfer := r.clusterTransfers.get(id)
+	if transfer == nil || !r.clusterTransfers.awaiting(id, transferAwaitingSource) || transfer.event.Request.SourceWindowName != source {
 		return fmt.Errorf("cluster transfer source or state is stale")
 	}
 	request := transfer.event.Request
@@ -98,7 +92,7 @@ func (r *Registry) AcceptClusterTabTransfer(source, id string, snapshot panelwin
 		snapshot.Groups[i].Tabs = slices.Clone(snapshot.Groups[i].Tabs)
 	}
 	transfer.event = panelwindow.ClusterTabTransferEvent{Request: request, Snapshot: snapshot, TargetAlreadyOpen: alreadyOpen}
-	transfer.mounting = true
+	r.clusterTransfers.accept(id)
 	if !r.queueWorkspaceEvent(request.TargetWindowName, panelwindow.ClusterTabTransferInsertEventName, transfer.event) {
 		return errors.Join(fmt.Errorf("cluster transfer target is unavailable"), r.cancelClusterTransferLocked(id, &closeWindows))
 	}
@@ -110,8 +104,8 @@ func (r *Registry) AcknowledgeClusterTabTransfer(target, id string) error {
 	r.clusterTransferMu.Lock()
 	r.workspaceMu.Lock()
 	defer r.finishClusterTransferMutation(&closeWindows, "")
-	transfer := r.clusterTransfers[id]
-	if transfer == nil || !transfer.mounting || transfer.event.Request.TargetWindowName != target {
+	transfer := r.clusterTransfers.get(id)
+	if transfer == nil || !r.clusterTransfers.awaiting(id, transferAwaitingTarget) || transfer.event.Request.TargetWindowName != target {
 		return fmt.Errorf("cluster transfer acknowledgement is stale")
 	}
 	event := transfer.event
@@ -134,7 +128,7 @@ func (r *Registry) FailClusterTabTransfer(caller, id string) error {
 	r.clusterTransferMu.Lock()
 	r.workspaceMu.Lock()
 	defer r.finishClusterTransferMutation(&closeWindows, "")
-	transfer := r.clusterTransfers[id]
+	transfer := r.clusterTransfers.get(id)
 	if transfer == nil {
 		return fmt.Errorf("cluster transfer is no longer pending")
 	}
@@ -146,12 +140,12 @@ func (r *Registry) FailClusterTabTransfer(caller, id string) error {
 }
 
 func (r *Registry) cancelClusterTransferLocked(id string, closeWindows *[]string) error {
-	transfer := r.clusterTransfers[id]
+	transfer := r.clusterTransfers.get(id)
 	if transfer == nil {
 		return nil
 	}
 	event := transfer.event
-	if transfer.mounting && !event.TargetAlreadyOpen {
+	if r.clusterTransfers.awaiting(id, transferAwaitingTarget) && !event.TargetAlreadyOpen {
 		r.workspaceMu.Unlock()
 		err := r.backend.CancelClusterViewTransfer(event.Request.TargetWindowName, event.Request.ClusterID)
 		r.workspaceMu.Lock()
@@ -169,10 +163,7 @@ func (r *Registry) cancelClusterTransferLocked(id string, closeWindows *[]string
 }
 
 func (r *Registry) removeClusterTransferLocked(id string) {
-	if transfer := r.clusterTransfers[id]; transfer != nil && transfer.timeout != nil {
-		transfer.timeout.Stop()
-	}
-	delete(r.clusterTransfers, id)
+	r.clusterTransfers.finish(id)
 }
 
 func (r *Registry) emitClusterTransfer(event panelwindow.ClusterTabTransferEvent, name string) {
@@ -263,7 +254,7 @@ func (r *Registry) failClusterTransfersForWindow(windowName string) error {
 	r.clusterTransferMu.Lock()
 	r.workspaceMu.Lock()
 	defer r.finishClusterTransferMutation(&closeWindows, windowName)
-	for id, transfer := range r.clusterTransfers {
+	for id, transfer := range r.clusterTransfers.all() {
 		request := transfer.event.Request
 		if request.SourceWindowName != windowName && request.TargetWindowName != windowName {
 			continue

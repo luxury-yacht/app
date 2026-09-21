@@ -5,9 +5,9 @@ import "github.com/luxury-yacht/app/internal/panelwindow"
 func (r *Registry) publishPanelGroups(windowName string, kind panelwindow.PanelLocationKind, groups []panelwindow.WorkspaceGroup, reservations ...*panelwindow.WorkspaceReservation) error {
 	r.tabTransferMu.Lock()
 	approvals := make([]panelwindow.PlacementTransfer, 0)
-	for id, transfer := range r.pendingTabTransfers {
+	for id, transfer := range r.tabTransfers.all() {
 		request := transfer.request
-		if transfer.stage != panelTabTransferInserting || request.TargetWindowName != windowName {
+		if !r.tabTransfers.awaiting(id, transferAwaitingTarget) || request.TargetKind == panelwindow.TabTransferTargetNewWindow || request.TargetWindowName != windowName {
 			continue
 		}
 		approvals = append(approvals, panelwindow.PlacementTransfer{TransferID: id, Tab: request.Tab, SourceWindowName: request.SourceWindowName, SourceGroupID: request.SourceGroupID, TargetGroupID: request.TargetGroupID})

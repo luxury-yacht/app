@@ -171,6 +171,32 @@ func TestPanelTransferUpdatesOnlyLiveSnapshotState(t *testing.T) {
 	require.ErrorContains(t, panels.UpdateSnapshot(descriptor.WindowName, updated), "cannot change")
 }
 
+func TestLivePanelSnapshotCannotAdoptAnotherWindowsTransfer(t *testing.T) {
+	panels := newPanelIndex()
+	firstSnapshot := validPanelGroupSnapshot()
+	first, err := panels.BeginOpen(firstSnapshot)
+	require.NoError(t, err)
+	_, err = panels.AcknowledgeOpen(first.WindowName, firstSnapshot.TransferID)
+	require.NoError(t, err)
+
+	secondSnapshot := validPanelGroupSnapshot()
+	secondSnapshot.TransferID = "second-open"
+	secondSnapshot.GroupID = "second-group"
+	secondSnapshot.SourceWindowName = "second-source"
+	second, err := panels.BeginOpen(secondSnapshot)
+	require.NoError(t, err)
+
+	firstSnapshot.TransferID = secondSnapshot.TransferID
+	require.NoError(t, panels.UpdateSnapshot(first.WindowName, firstSnapshot))
+	require.Equal(t, PanelWindowStateLive, panels.State(first.WindowName))
+	require.False(t, panels.IsTransferParticipant(first.WindowName, secondSnapshot.SourceWindowName))
+	require.Error(t, panels.FailTransfer(first.WindowName, secondSnapshot.TransferID))
+	require.True(t, panels.Remove(first.WindowName))
+	_, err = panels.AcknowledgeOpen(second.WindowName, secondSnapshot.TransferID)
+	require.NoError(t, err)
+	require.Equal(t, PanelWindowStateLive, panels.State(second.WindowName))
+}
+
 func TestPanelTransferStateRejectsIdentityChangesAndInvalidTransitions(t *testing.T) {
 	panels := newPanelIndex()
 	snapshot := validPanelGroupSnapshot()

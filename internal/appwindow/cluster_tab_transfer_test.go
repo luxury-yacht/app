@@ -94,7 +94,7 @@ func TestClusterTransferReportsUnavailableDestination(t *testing.T) {
 	request := panelwindow.ClusterTabTransferRequest{TransferID: "target-unavailable", ClusterID: "cluster-1", SourceWindowName: source, TargetWindowName: target}
 	require.NoError(t, registry.RequestClusterTabTransfer(target, request))
 	require.Error(t, registry.AcceptClusterTabTransfer(source, request.TransferID, panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}"}))
-	require.Empty(t, registry.clusterTransfers)
+	require.Empty(t, registry.clusterTransfers.pending)
 }
 
 func TestNewClusterTransferWindowIsSeededBeforeRendererCreation(t *testing.T) {
@@ -183,7 +183,7 @@ func TestClusterTabTransferClosesOnlyEmptySourceAfterAcknowledgement(t *testing.
 				backend.windowClusters[source] = []string{"cluster-1"}
 			}
 			require.NoError(t, registry.AcceptClusterTabTransfer(source, request.TransferID, panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}", Groups: groups}))
-			target = registry.clusterTransfers[request.TransferID].event.Request.TargetWindowName
+			target = registry.clusterTransfers.get(request.TransferID).event.Request.TargetWindowName
 			require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
 			require.NoError(t, registry.PublishDockedPanels(target, groups))
 			require.Empty(t, closed, "source must survive destination reconstruction")
@@ -245,7 +245,7 @@ func TestFailedLastClusterTabTransferKeepsSourceWindow(t *testing.T) {
 			require.NoError(t, registry.RequestClusterTabTransfer(source, request))
 			t.Cleanup(func() { _ = registry.FailClusterTabTransfer(source, request.TransferID) })
 			require.NoError(t, registry.AcceptClusterTabTransfer(source, request.TransferID, panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}"}))
-			target = registry.clusterTransfers[request.TransferID].event.Request.TargetWindowName
+			target = registry.clusterTransfers.get(request.TransferID).event.Request.TargetWindowName
 			if test.rejectCommit {
 				backend.commitClusterTransferError = errors.New("destination placement rejected")
 				require.ErrorIs(t, registry.AcknowledgeClusterTabTransfer(target, request.TransferID), backend.commitClusterTransferError)

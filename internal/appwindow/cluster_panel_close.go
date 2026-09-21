@@ -44,7 +44,7 @@ func (r *Registry) validateClusterPanelClose(caller, clusterID string) error {
 	if !r.lifecycle.Contains(caller) || !r.windowHasCluster(caller, clusterID) {
 		return fmt.Errorf("cluster close source is not live")
 	}
-	for _, transfer := range r.clusterTransfers {
+	for _, transfer := range r.clusterTransfers.all() {
 		if transfer.event.Request.ClusterID == clusterID {
 			return fmt.Errorf("cluster has a pending view transfer")
 		}

@@ -2,24 +2,13 @@ package appwindow
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
 )
 
-type panelTabTransferStage string
-
-const (
-	panelTabTransferRequested panelTabTransferStage = "requested"
-	panelTabTransferInserting panelTabTransferStage = "inserting"
-	panelTabTransferOpening   panelTabTransferStage = "opening"
-)
-
 type panelTabTransfer struct {
 	request          panelwindow.TabTransferRequest
-	stage            panelTabTransferStage
 	targetWindowName string
-	timeout          *time.Timer
 }
 
 func samePanelTab(left, right panelwindow.TabSnapshot) bool {
@@ -74,26 +63,11 @@ func (r *Registry) validatePanelTabTransferTarget(request panelwindow.TabTransfe
 	return nil
 }
 
-func (r *Registry) ensurePanelTabTransferState() {
-	if r.pendingTabTransfers == nil {
-		r.pendingTabTransfers = make(map[string]*panelTabTransfer)
-	}
-	if r.usedTabTransferIDs == nil {
-		r.usedTabTransferIDs = make(map[string]struct{})
-	}
-}
-
 func (r *Registry) resetPanelTabTransferTimeoutLocked(transfer *panelTabTransfer) {
-	if transfer.timeout != nil {
-		transfer.timeout.Stop()
-		transfer.timeout = nil
-	}
-	if r.tabTransferTimeout > 0 {
-		transferID := transfer.request.TransferID
-		transfer.timeout = time.AfterFunc(r.tabTransferTimeout, func() {
-			r.failPanelTabTransfer(transferID, "panel tab transfer timed out")
-		})
-	}
+	transferID := transfer.request.TransferID
+	r.tabTransfers.setTimeout(transferID, r.tabTransferTimeout, func() {
+		r.failPanelTabTransfer(transferID, "panel tab transfer timed out")
+	})
 }
 
 func (r *Registry) RequestPanelTabTransfer(
@@ -123,27 +97,14 @@ func (r *Registry) RequestPanelTabTransfer(
 	}
 
 	r.tabTransferMu.Lock()
-	r.ensurePanelTabTransferState()
-	if _, exists := r.usedTabTransferIDs[request.TransferID]; exists {
-		r.tabTransferMu.Unlock()
-		return fmt.Errorf("panel tab transfer %q already exists", request.TransferID)
+	transfer, err := r.reservePanelTabTransferLocked(request)
+	if err == nil {
+		r.resetPanelTabTransferTimeoutLocked(transfer)
 	}
-	for _, pending := range r.pendingTabTransfers {
-		if pending.request.ClusterID == request.ClusterID &&
-			pending.request.SourceWindowName == request.SourceWindowName &&
-			pending.request.Tab.PanelID == request.Tab.PanelID {
-			r.tabTransferMu.Unlock()
-			return fmt.Errorf(
-				"panel tab %q already has a pending transfer",
-				request.Tab.PanelID,
-			)
-		}
-	}
-	transfer := &panelTabTransfer{request: request, stage: panelTabTransferRequested}
-	r.resetPanelTabTransferTimeoutLocked(transfer)
-	r.usedTabTransferIDs[request.TransferID] = struct{}{}
-	r.pendingTabTransfers[request.TransferID] = transfer
 	r.tabTransferMu.Unlock()
+	if err != nil {
+		return err
+	}
 
 	if r.emitWindowEvent(
 		request.SourceWindowName,
@@ -156,10 +117,28 @@ func (r *Registry) RequestPanelTabTransfer(
 	return fmt.Errorf("source app window %q is not available", request.SourceWindowName)
 }
 
+func (r *Registry) reservePanelTabTransferLocked(request panelwindow.TabTransferRequest) (*panelTabTransfer, error) {
+	if r.tabTransfers.wasUsed(request.TransferID) {
+		return nil, fmt.Errorf("panel tab transfer %q already exists", request.TransferID)
+	}
+	for _, pending := range r.tabTransfers.all() {
+		if pending.request.ClusterID == request.ClusterID &&
+			pending.request.SourceWindowName == request.SourceWindowName &&
+			pending.request.Tab.PanelID == request.Tab.PanelID {
+			return nil, fmt.Errorf("panel tab %q already has a pending transfer", request.Tab.PanelID)
+		}
+	}
+	transfer := &panelTabTransfer{request: request}
+	if err := r.tabTransfers.begin(request.TransferID, transfer, transferAwaitingSource); err != nil {
+		return nil, err
+	}
+	return transfer, nil
+}
+
 func (r *Registry) AcceptPanelTabTransfer(callerWindowName, transferID string) error {
 	r.tabTransferMu.Lock()
-	transfer, exists := r.pendingTabTransfers[transferID]
-	if !exists || transfer.stage != panelTabTransferRequested {
+	transfer := r.tabTransfers.get(transferID)
+	if !r.tabTransfers.awaiting(transferID, transferAwaitingSource) {
 		r.tabTransferMu.Unlock()
 		return fmt.Errorf("stale panel tab transfer %q", transferID)
 	}
@@ -168,14 +147,8 @@ func (r *Registry) AcceptPanelTabTransfer(callerWindowName, transferID string) e
 		r.tabTransferMu.Unlock()
 		return fmt.Errorf("panel tab transfer %q is not owned by %q", transferID, callerWindowName)
 	}
-	switch request.TargetKind {
-	case panelwindow.TabTransferTargetWorkspace, panelwindow.TabTransferTargetPanelWindow:
-		transfer.stage = panelTabTransferInserting
-		r.resetPanelTabTransferTimeoutLocked(transfer)
-	case panelwindow.TabTransferTargetNewWindow:
-		transfer.stage = panelTabTransferOpening
-		r.resetPanelTabTransferTimeoutLocked(transfer)
-	}
+	r.tabTransfers.accept(transferID)
+	r.resetPanelTabTransferTimeoutLocked(transfer)
 	r.tabTransferMu.Unlock()
 
 	if request.TargetKind == panelwindow.TabTransferTargetNewWindow {
@@ -217,14 +190,14 @@ func (r *Registry) resolvePanelTabDockTarget(request panelwindow.TabTransferRequ
 func (r *Registry) panelTabInsertionPending(request panelwindow.TabTransferRequest) bool {
 	r.tabTransferMu.Lock()
 	defer r.tabTransferMu.Unlock()
-	transfer := r.pendingTabTransfers[request.TransferID]
-	return transfer != nil && transfer.stage == panelTabTransferInserting && transfer.request == request
+	transfer := r.tabTransfers.get(request.TransferID)
+	return transfer != nil && r.tabTransfers.awaiting(request.TransferID, transferAwaitingTarget) && request.TargetKind != panelwindow.TabTransferTargetNewWindow && transfer.request == request
 }
 
 func (r *Registry) FailPanelTabTransfer(callerWindowName, transferID string) error {
 	r.tabTransferMu.Lock()
-	transfer, exists := r.pendingTabTransfers[transferID]
-	if !exists {
+	transfer := r.tabTransfers.get(transferID)
+	if transfer == nil {
 		r.tabTransferMu.Unlock()
 		return fmt.Errorf("stale panel tab transfer %q", transferID)
 	}
@@ -246,27 +219,19 @@ func (r *Registry) removePanelTabTransfer(transferID string) *panelTabTransfer {
 }
 
 func (r *Registry) removePanelTabTransferLocked(transferID string) *panelTabTransfer {
-	transfer := r.pendingTabTransfers[transferID]
-	if transfer == nil {
-		return nil
-	}
-	delete(r.pendingTabTransfers, transferID)
-	if transfer.timeout != nil {
-		transfer.timeout.Stop()
-	}
-	return transfer
+	return r.tabTransfers.finish(transferID)
 }
 
 func (r *Registry) commitPanelTabTransfer(transferID string) {
 	r.tabTransferMu.Lock()
-	transfer := r.pendingTabTransfers[transferID]
+	transfer := r.tabTransfers.get(transferID)
 	if transfer == nil {
 		r.tabTransferMu.Unlock()
 		return
 	}
 	request := transfer.request
 	targetName := request.TargetWindowName
-	if transfer.stage == panelTabTransferOpening {
+	if request.TargetKind == panelwindow.TabTransferTargetNewWindow {
 		targetName = transfer.targetWindowName
 	}
 	if err := r.moveTransferredPanel(request, targetName); err != nil {
@@ -319,10 +284,9 @@ func (r *Registry) beginPanelWindowOpenTransfer(
 ) (PanelWindowDescriptor, error) {
 	r.tabTransferMu.Lock()
 	defer r.tabTransferMu.Unlock()
-	r.ensurePanelTabTransferState()
-	transfer := r.pendingTabTransfers[snapshot.TransferID]
+	transfer := r.tabTransfers.get(snapshot.TransferID)
 	if transfer == nil {
-		if _, used := r.usedTabTransferIDs[snapshot.TransferID]; used {
+		if r.tabTransfers.wasUsed(snapshot.TransferID) {
 			return PanelWindowDescriptor{}, fmt.Errorf(
 				"panel tab transfer %q is no longer pending",
 				snapshot.TransferID,
@@ -331,7 +295,7 @@ func (r *Registry) beginPanelWindowOpenTransfer(
 	}
 	if transfer != nil {
 		request := transfer.request
-		if transfer.stage != panelTabTransferOpening ||
+		if !r.tabTransfers.awaiting(snapshot.TransferID, transferAwaitingTarget) ||
 			request.TargetKind != panelwindow.TabTransferTargetNewWindow ||
 			request.SourceWindowName != snapshot.SourceWindowName ||
 			request.ClusterID != snapshot.ClusterID ||
@@ -351,16 +315,13 @@ func (r *Registry) beginPanelWindowOpenTransfer(
 	}
 	if transfer != nil {
 		transfer.targetWindowName = descriptor.WindowName
-		if transfer.timeout != nil {
-			transfer.timeout.Stop()
-			transfer.timeout = nil
-		}
+		r.tabTransfers.setTimeout(snapshot.TransferID, 0, nil)
 	}
 	return descriptor, nil
 }
 
 func (r *Registry) abortOpeningPanelTabTarget(transfer *panelTabTransfer) {
-	if transfer == nil || transfer.stage != panelTabTransferOpening ||
+	if transfer == nil || transfer.request.TargetKind != panelwindow.TabTransferTargetNewWindow ||
 		transfer.targetWindowName == "" || r.panels == nil {
 		return
 	}
@@ -383,7 +344,7 @@ func (r *Registry) abortOpeningPanelTabTarget(transfer *panelTabTransfer) {
 func (r *Registry) failPanelTabTransfersForWindow(windowName, reason string) {
 	r.tabTransferMu.Lock()
 	transferIDs := make([]string, 0)
-	for transferID, transfer := range r.pendingTabTransfers {
+	for transferID, transfer := range r.tabTransfers.all() {
 		request := transfer.request
 		if request.SourceWindowName == windowName ||
 			request.TargetWindowName == windowName {
@@ -409,9 +370,10 @@ func (r *Registry) emitPanelTabTransferEvent(
 
 func (r *Registry) completePanelTabTransferForOpenedWindow(descriptor PanelWindowDescriptor) {
 	r.tabTransferMu.Lock()
-	transfer := r.pendingTabTransfers[descriptor.Snapshot.TransferID]
+	transfer := r.tabTransfers.get(descriptor.Snapshot.TransferID)
 	canCommit := transfer != nil &&
-		transfer.stage == panelTabTransferOpening &&
+		r.tabTransfers.awaiting(descriptor.Snapshot.TransferID, transferAwaitingTarget) &&
+		transfer.request.TargetKind == panelwindow.TabTransferTargetNewWindow &&
 		transfer.request.SourceWindowName == descriptor.Snapshot.SourceWindowName &&
 		transfer.request.ClusterID == descriptor.ClusterID &&
 		transfer.request.TargetGroupID == descriptor.GroupID &&

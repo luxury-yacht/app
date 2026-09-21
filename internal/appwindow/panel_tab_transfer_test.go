@@ -49,11 +49,10 @@ func TestPanelTabTransferPopulatesNativeTargetBeforeCommittingSourceRemoval(t *t
 
 	events := make([]capturedPanelWindowEvent, 0, 4)
 	registry := &Registry{
-		lifecycle:           lifecycle,
-		panels:              panels,
-		panelOpenTimeout:    0,
-		tabTransferTimeout:  0,
-		pendingTabTransfers: make(map[string]*panelTabTransfer),
+		lifecycle:          lifecycle,
+		panels:             panels,
+		panelOpenTimeout:   0,
+		tabTransferTimeout: 0,
 		emitWindowEvent: func(target, name string, payload any) bool {
 			events = append(events, capturedPanelWindowEvent{target: target, name: name, payload: payload})
 			return true
@@ -98,7 +97,7 @@ func TestPanelTabTransferPopulatesNativeTargetBeforeCommittingSourceRemoval(t *t
 			Request: request,
 		},
 	})
-	_, pending := registry.pendingTabTransfers[request.TransferID]
+	_, pending := registry.tabTransfers.pending[request.TransferID]
 	require.False(t, pending)
 }
 
@@ -123,10 +122,9 @@ func TestPanelTabTransferRejectsCrossClusterNativeTargets(t *testing.T) {
 	target := livePanelWindowForTabTransfer(t, panels, targetSnapshot)
 
 	registry := &Registry{
-		lifecycle:           lifecycle,
-		panels:              panels,
-		pendingTabTransfers: make(map[string]*panelTabTransfer),
-		emitWindowEvent:     func(string, string, any) bool { return true },
+		lifecycle:       lifecycle,
+		panels:          panels,
+		emitWindowEvent: func(string, string, any) bool { return true },
 	}
 	request := panelwindow.TabTransferRequest{
 		TransferID:       "tab-transfer-1",
@@ -142,7 +140,7 @@ func TestPanelTabTransferRejectsCrossClusterNativeTargets(t *testing.T) {
 	prepareRegistryTransferSource(t, registry, request)
 	err := registry.RequestPanelTabTransfer(target.WindowName, request)
 	require.ErrorContains(t, err, "owner and cluster")
-	require.Empty(t, registry.pendingTabTransfers)
+	require.Empty(t, registry.tabTransfers.pending)
 }
 
 func TestNewPanelWindowTabTransferCommitsOnlyAfterTargetReadiness(t *testing.T) {
@@ -183,7 +181,7 @@ func TestNewPanelWindowTabTransferCommitsOnlyAfterTargetReadiness(t *testing.T) 
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	time.Sleep(40 * time.Millisecond)
-	require.Contains(t, registry.pendingTabTransfers, request.TransferID)
+	require.Contains(t, registry.tabTransfers.pending, request.TransferID)
 
 	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, request.TransferID)
 	require.NoError(t, err)
@@ -194,7 +192,7 @@ func TestNewPanelWindowTabTransferCommitsOnlyAfterTargetReadiness(t *testing.T) 
 	}, []string{events[0].name, events[1].name, events[2].name})
 	require.Equal(t, owner.Name(), events[2].target)
 	require.Equal(t, panelwindow.TabTransferCommittedEvent{Request: request}, events[2].payload)
-	require.Empty(t, registry.pendingTabTransfers)
+	require.Empty(t, registry.tabTransfers.pending)
 }
 
 func TestPanelTabTransferReservesOneSourceTab(t *testing.T) {
@@ -214,10 +212,9 @@ func TestPanelTabTransferReservesOneSourceTab(t *testing.T) {
 	targetSnapshot.ActivePanelID = "target-tab"
 	target := livePanelWindowForTabTransfer(t, panels, targetSnapshot)
 	registry := &Registry{
-		lifecycle:           lifecycle,
-		panels:              panels,
-		pendingTabTransfers: make(map[string]*panelTabTransfer),
-		emitWindowEvent:     func(string, string, any) bool { return true },
+		lifecycle:       lifecycle,
+		panels:          panels,
+		emitWindowEvent: func(string, string, any) bool { return true },
 	}
 	request := panelwindow.TabTransferRequest{
 		TransferID:       "tab-transfer-1",
@@ -237,7 +234,7 @@ func TestPanelTabTransferReservesOneSourceTab(t *testing.T) {
 	err := registry.RequestPanelTabTransfer(target.WindowName, request)
 
 	require.ErrorContains(t, err, "already has a pending transfer")
-	require.Len(t, registry.pendingTabTransfers, 1)
+	require.Len(t, registry.tabTransfers.pending, 1)
 }
 
 func TestWorkspacePanelTabTransferCommitsAfterTargetPublication(t *testing.T) {
@@ -250,9 +247,8 @@ func TestWorkspacePanelTabTransferCommitsAfterTargetPublication(t *testing.T) {
 	source := livePanelWindowForTabTransfer(t, panels, sourceSnapshot)
 	events := make([]capturedPanelWindowEvent, 0, 3)
 	registry := &Registry{
-		lifecycle:           lifecycle,
-		panels:              panels,
-		pendingTabTransfers: make(map[string]*panelTabTransfer),
+		lifecycle: lifecycle,
+		panels:    panels,
 		emitWindowEvent: func(target, name string, payload any) bool {
 			events = append(events, capturedPanelWindowEvent{target: target, name: name, payload: payload})
 			return true
@@ -272,7 +268,7 @@ func TestWorkspacePanelTabTransferCommitsAfterTargetPublication(t *testing.T) {
 	prepareRegistryTransferSource(t, registry, request)
 	require.NoError(t, registry.RequestPanelTabTransfer(ownerWindowName, request))
 	require.NoError(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
-	require.Contains(t, registry.pendingTabTransfers, request.TransferID)
+	require.Contains(t, registry.tabTransfers.pending, request.TransferID)
 	require.NoError(t, registry.PublishDockedPanels(ownerWindowName, []panelwindow.WorkspaceGroup{{ClusterID: request.ClusterID, GroupID: "bottom", Tabs: []panelwindow.TabSnapshot{request.Tab}, ActivePanelID: request.Tab.PanelID}}))
 
 	require.Equal(t, sourceSnapshot, requirePanelDescriptor(t, panels, source.WindowName).Snapshot)
@@ -283,7 +279,7 @@ func TestWorkspacePanelTabTransferCommitsAfterTargetPublication(t *testing.T) {
 			Request: request,
 		},
 	})
-	require.Empty(t, registry.pendingTabTransfers)
+	require.Empty(t, registry.tabTransfers.pending)
 }
 
 func TestFailNewPanelWindowTabTransferClosesItsOpeningTarget(t *testing.T) {
@@ -324,7 +320,7 @@ func TestFailNewPanelWindowTabTransferClosesItsOpeningTarget(t *testing.T) {
 
 	require.Equal(t, descriptor.WindowName, closedWindowName)
 	require.Equal(t, PanelWindowStateMissing, registry.panels.State(descriptor.WindowName))
-	require.Empty(t, registry.pendingTabTransfers)
+	require.Empty(t, registry.tabTransfers.pending)
 }
 
 func TestExpiredNewWindowTabTransferRejectsLateTargetOpen(t *testing.T) {
@@ -360,7 +356,7 @@ func TestExpiredNewWindowTabTransferRejectsLateTargetOpen(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for expired panel tab transfer")
 	}
-	require.Empty(t, registry.pendingTabTransfers)
+	require.Empty(t, registry.tabTransfers.pending)
 
 	snapshot := validPanelGroupSnapshot()
 	snapshot.TransferID = request.TransferID
@@ -393,10 +389,9 @@ func TestPanelTabTransferTimeoutFailsAllParticipantsWithoutChangingSource(t *tes
 	target := livePanelWindowForTabTransfer(t, panels, targetSnapshot)
 	failedEvents := make(chan capturedPanelWindowEvent, 3)
 	registry := &Registry{
-		lifecycle:           lifecycle,
-		panels:              panels,
-		tabTransferTimeout:  20 * time.Millisecond,
-		pendingTabTransfers: make(map[string]*panelTabTransfer),
+		lifecycle:          lifecycle,
+		panels:             panels,
+		tabTransferTimeout: 20 * time.Millisecond,
 		emitWindowEvent: func(target, name string, payload any) bool {
 			if name == panelwindow.TabTransferFailedEventName {
 				failedEvents <- capturedPanelWindowEvent{target: target, name: name, payload: payload}
@@ -432,7 +427,53 @@ func TestPanelTabTransferTimeoutFailsAllParticipantsWithoutChangingSource(t *tes
 	}
 	require.ElementsMatch(t, []string{source.WindowName, target.WindowName}, targets)
 	require.Equal(t, sourceSnapshot, requirePanelDescriptor(t, panels, source.WindowName).Snapshot)
-	require.Empty(t, registry.pendingTabTransfers)
+	require.Empty(t, registry.tabTransfers.pending)
+}
+
+func TestClosingTransferTargetPreservesSourceAndIgnoresUnrelatedWindowClosure(t *testing.T) {
+	registry := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{})
+	registry.tabTransferTimeout = 0
+	registry.closeWindow = func(string) bool { return true }
+	var failures []capturedPanelWindowEvent
+	registry.emitWindowEvent = func(target, name string, payload any) bool {
+		if name == panelwindow.TabTransferFailedEventName {
+			failures = append(failures, capturedPanelWindowEvent{target: target, name: name, payload: payload})
+		}
+		return true
+	}
+	open := func(name string) PanelWindowDescriptor {
+		snapshot := validPanelGroupSnapshot()
+		snapshot.TransferID = name + "-open"
+		snapshot.GroupID = name + "-group"
+		snapshot.Tabs[0].PanelID = name
+		snapshot.Tabs[0].ObjectRef.Name = name
+		snapshot.ActivePanelID = name
+		return livePanelWindowForTabTransfer(t, registry.panels, snapshot)
+	}
+	source, target, unrelated := open("source"), open("target"), open("unrelated")
+	request := panelwindow.TabTransferRequest{
+		TransferID: "close-target", SourceWindowName: source.WindowName, TargetWindowName: target.WindowName,
+		ClusterID: source.ClusterID, SourceGroupID: source.GroupID, TargetGroupID: target.GroupID,
+		TargetKind: panelwindow.TabTransferTargetPanelWindow, Tab: source.Snapshot.Tabs[0],
+	}
+	prepareRegistryTransferSource(t, registry, request)
+	require.NoError(t, registry.RequestPanelTabTransfer(target.WindowName, request))
+	require.NoError(t, registry.AcknowledgePanelWindowClose(unrelated.WindowName))
+	require.Empty(t, failures)
+	require.NoError(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
+	require.NoError(t, registry.AcknowledgePanelWindowClose(target.WindowName))
+	require.Len(t, failures, 2)
+	require.ElementsMatch(t, []string{source.WindowName, target.WindowName}, []string{failures[0].target, failures[1].target})
+	for _, failure := range failures {
+		require.Equal(t, request, failure.payload.(panelwindow.TabTransferFailedEvent).Request)
+	}
+	require.Equal(t, source.Snapshot, requirePanelDescriptor(t, registry.panels, source.WindowName).Snapshot)
+	require.Equal(t, PanelWindowStateMissing, registry.panels.State(target.WindowName))
+	require.Error(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
+	panels := registry.workspace.Snapshot(source.ClusterID).Panels
+	require.Len(t, panels, 1)
+	require.Equal(t, request.Tab, panels[0].Tab)
+	require.Equal(t, source.WindowName, panels[0].Location.WindowName)
 }
 
 func requirePanelDescriptor(

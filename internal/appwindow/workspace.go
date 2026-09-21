@@ -339,8 +339,8 @@ func (r *Registry) reportPanelLifecycleError(err error, action string) {
 }
 
 func (r *Registry) addClusterTransferTabs(windowName string, tabs map[string]provisionalDockTab) {
-	for _, transfer := range r.clusterTransfers {
-		if !transfer.mounting || transfer.event.Request.TargetWindowName != windowName {
+	for id, transfer := range r.clusterTransfers.all() {
+		if !r.clusterTransfers.awaiting(id, transferAwaitingTarget) || transfer.event.Request.TargetWindowName != windowName {
 			continue
 		}
 		for _, group := range transfer.event.Snapshot.Groups {

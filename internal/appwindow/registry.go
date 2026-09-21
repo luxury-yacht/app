@@ -30,8 +30,7 @@ type Registry struct {
 	clusterCloseMu         sync.Mutex
 	nextClusterClose       uint64
 	clusterPanelCloses     map[string]*clusterPanelClose
-	clusterTransfers       map[string]*clusterViewTransfer
-	usedClusterTransferIDs map[string]struct{}
+	clusterTransfers       transferLifecycle[clusterViewTransfer]
 	application            *application.App
 	backend                lifecycleBackend
 	lifecycle              *lifecycle
@@ -63,8 +62,7 @@ type Registry struct {
 	quitPreflightTimeout   time.Duration
 	panelTransferMu        sync.Mutex
 	tabTransferMu          sync.Mutex
-	pendingTabTransfers    map[string]*panelTabTransfer
-	usedTabTransferIDs     map[string]struct{}
+	tabTransfers           transferLifecycle[panelTabTransfer]
 	tabTransferTimeout     time.Duration
 }
 
@@ -202,8 +200,6 @@ func NewRegistry(
 		clusterTransferTimeout: 15 * time.Second,
 		clusterCloseTimeout:    15 * time.Second,
 		quitPreflightTimeout:   20 * time.Second,
-		pendingTabTransfers:    make(map[string]*panelTabTransfer),
-		usedTabTransferIDs:     make(map[string]struct{}),
 		tabTransferTimeout:     15 * time.Second,
 		configurePanelWindow:   configureNativePanelWindow,
 	}
@@ -292,11 +288,9 @@ func (r *Registry) createRetainedPanelWindow(descriptor PanelWindowDescriptor, r
 		r.configurePanelWindow(window)
 	}
 	r.registerPanelLifecycleHooks(window, descriptor.WindowName)
-	if r.panelOpenTimeout > 0 {
-		time.AfterFunc(r.panelOpenTimeout, func() {
-			r.expirePanelOpen(descriptor.WindowName, snapshot.TransferID)
-		})
-	}
+	r.panels.setTransferTimeout(descriptor.WindowName, snapshot.TransferID, r.panelOpenTimeout, func() {
+		r.expirePanelOpen(descriptor.WindowName, snapshot.TransferID)
+	})
 	return nil
 }
 
@@ -582,14 +576,12 @@ func (r *Registry) BeginPanelWindowDock(windowName, targetPosition string, snaps
 	if err := r.panels.BeginDock(windowName, snapshot, target, targetPosition); err != nil {
 		return err
 	}
-	if r.panelDockTimeout > 0 {
-		time.AfterFunc(r.panelDockTimeout, func() {
-			current, err := r.panels.Descriptor(windowName)
-			if err == nil && current.State == PanelWindowStateDocking && current.Snapshot.TransferID == snapshot.TransferID {
-				_ = r.FailPanelWindowTransfer(windowName, windowName, snapshot.TransferID)
-			}
-		})
-	}
+	r.panels.setTransferTimeout(windowName, snapshot.TransferID, r.panelDockTimeout, func() {
+		current, err := r.panels.Descriptor(windowName)
+		if err == nil && current.State == PanelWindowStateDocking && current.Snapshot.TransferID == snapshot.TransferID {
+			_ = r.FailPanelWindowTransfer(windowName, windowName, snapshot.TransferID)
+		}
+	})
 	if !r.queueWorkspaceEvent(target, panelwindow.WindowDockRequestedEventName, panelwindow.WindowDockRequestedEvent{WindowName: windowName, TransferID: snapshot.TransferID, TargetPosition: targetPosition, Snapshot: snapshot}) {
 		_ = r.panels.FailTransfer(windowName, snapshot.TransferID)
 		descriptor, _ := r.panels.Descriptor(windowName)

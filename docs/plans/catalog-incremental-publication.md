@@ -260,10 +260,10 @@ participants, reservation, rollback, and empty-source close guarantees.
 - [x] Verify automated contracts for local moves/reorders, focus, cluster switches,
       geometry handoff, close eviction, transient-unmount retention, and rollback.
 - [x] Measure changed-function complexity and affected coverage.
-- [ ] Exercise actual macOS panel moves, dock-back, close guards, and drops.
-- [ ] Record Windows native validation availability and outstanding checks.
+- [x] Exercise actual macOS panel moves, dock-back, close guards, and drops.
+- [x] Record Windows native validation availability and outstanding checks.
 - [x] Run prerelease gate and inspect the final worktree.
-- [ ] Assess and consolidate transfer lifecycle ownership.
+- [x] Assess and consolidate transfer lifecycle ownership.
 
 
 ### Renderer validation record — 2026-09-20
@@ -373,3 +373,88 @@ The next backend change must unify transaction ownership and settlement while
 preserving those preparation policies, authenticated callers, replay rejection,
 source retention, timeout rollback, and synchronous native-close lock ordering.
 It remains pending; removing renderer copies does not complete that change.
+
+### Backend continuation — 2026-09-21
+
+Consolidate the three lifecycle implementations into one typed transfer owner
+for admission/replay rejection, awaiting-source/awaiting-target phases, timeout
+replacement, and terminal removal. Keep protocol payloads and preparation
+policies typed: group transfers own native-role snapshots, tab transfers commit
+exact publication, and cluster transfers stage backend view membership. Separate
+typed instances preserve the existing ID namespaces, including the deliberate
+same-ID handoff from a tab transfer to new-window opening.
+
+Producers are the group open/dock, tab request/accept, and cluster request/accept
+entry points. Consumers are readiness acknowledgements, panel publication,
+provisional publication filtering, cluster-close preflight, window-close cleanup,
+and timeout handlers. Existing adapter locks continue to serialize the actual
+directory/backend mutation. The shared owner adds no mutex; callbacks acquire
+the existing adapter locks through protocol failure entry points. Cluster
+transfers release the workspace lock around backend selection and release both
+transfer/workspace locks before native closure.
+
+The shared owner depends only on the standard library. It must not import the
+registry or backend, avoiding reverse dependencies. Preserve the existing
+protocol characterization suites for caller checks, replay, retained sources,
+exact publication, timeout rollback, and reentrant native closure. Re-run native
+checks after integrating all adapters.
+
+Native renderer recheck on 2026-09-21 passed before the backend rebuild:
+cluster-tab “Move to new window” retained alpha/beta, bottom placement, order,
+beta's selected YAML view, and the disposable ConfigMap's namespace/UID in the
+destination (native accessibility and screenshot inspection). The user then
+confirmed that actual beta tear-off and return drops preserved YAML and closed
+the empty floating window: “Both drops worked.”
+
+### Final continuation evidence — 2026-09-21
+
+This record supersedes the pending native/backend statuses above.
+
+- Backend implementation: group, panel-tab, and cluster-view adapters now use
+  `transferLifecycle[T]` for replay admission, acknowledgement phases, timeout
+  replacement, and settlement. Preparation and commit policies remain in their
+  adapters. The durable contract is in
+  [acknowledged handoffs](../frontend/dockable-panels.md#acknowledged-handoffs).
+- Regression: `TestLivePanelSnapshotCannotAdoptAnotherWindowsTransfer` first
+  failed because a live snapshot adopted another window's opening state. It
+  passed after binding pending group operations to their native window. The
+  test also proves closing that live window cannot cancel the other opening.
+- Characterization: closing an unrelated native window leaves a pending tab
+  transfer usable; closing its actual destination reports failure to both
+  participants, preserves source identity/placement, and rejects late acceptance.
+  `TestClosingTransferTargetPreservesSourceAndIgnoresUnrelatedWindowClosure`
+  passed. Its native-close callback is a stub; the separate native checks below
+  establish actual window behavior.
+- macOS final backend build: native accessibility and screenshot checks passed
+  for two-tab group Float/dock-bottom, beta-only context-menu Float/dock-bottom,
+  and cluster-tab Move to new window. The destination retained alpha/beta order,
+  bottom placement, beta's selected YAML view, namespace, and ConfigMap UID
+  `add6d075-d060-4528-9f7d-6c303aed4552`. The empty floating source closed on return.
+  An unsaved beta YAML draft blocked Quit; canceling the disposable draft allowed
+  clean quit. Actual drag/drop evidence is the user's manual check above; the
+  final rebuild used native menu/button transfers, not synthesized drops.
+- Windows: the user reported, “I ran the windows check. It looks good.” Recorded
+  as user-performed acceptance, not agent-observed Windows execution; no build
+  identifier was supplied.
+- Cleanup: the native app and development server stopped. Original selected and
+  active kubeconfig preferences were restored from the pre-test snapshot and
+  read back. Kind deletion reported removal of `codex-panel-final-control-plane`;
+  both temporary kubeconfig files were removed. Other settings were preserved.
+- Local complexity: pinned `gocognit@v1.2.1` measured 138 functions across the
+  eight changed production files; maximum score 11. This is local evidence;
+  no pushed revision or current Sonar PR analysis is available for these edits.
+- Final backend coverage: `wails3 task test:backend-coverage` exited 0 after the
+  destination-close test was added. The eight changed production files measured
+  1,292/1,470 statements (87.89%); every file exceeded 80%. The shared lifecycle
+  measured 34/37 (91.89%), tab transfer 161/195 (82.56%), and the appwindow package
+  89.1%. Coverage measures automated contracts; it does not replace native checks.
+- Final automated gate: `wails3 task qc:prerelease` exited 0 after the added
+  destination-close characterization test. Go race tests, vet/staticcheck,
+  bindings, frontend lint/types, 5,054 tests across 525 frontend files, Knip,
+  Markdown links, and the configured vulnerability scan passed. The first run
+  stopped on Go formatting in the mechanically updated test fixture; it was
+  corrected before the passing final run. Worktree inspection found only the
+  intended transfer code, tests, and these owning-contract/completion docs.
+
+The requested implementation and recorded acceptance work are complete. Changes
+remain uncommitted; no Git state-changing commands or PR creation were performed.

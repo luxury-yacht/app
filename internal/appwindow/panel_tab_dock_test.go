@@ -68,7 +68,7 @@ func TestPanelTabMenuDockCreatesAnAppViewWithoutAnExistingAppWindow(t *testing.T
 		return create(options)
 	}
 	require.NoError(t, registry.RequestPanelTabTransfer(source.WindowName, request))
-	target := registry.pendingTabTransfers[request.TransferID].request.TargetWindowName
+	target := registry.tabTransfers.get(request.TransferID).request.TargetWindowName
 	require.Equal(t, []string{target}, registry.lifecycle.Names())
 	require.Equal(t, PanelWindowStateLive, registry.panels.State(source.WindowName))
 	require.NoError(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))

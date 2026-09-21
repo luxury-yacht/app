@@ -41,7 +41,7 @@ func TestOpenClusterWindowPreservesSourceAndSharedPanels(t *testing.T) {
 			require.ElementsMatch(t, []string{source, target}, registry.lifecycle.Names())
 			require.Equal(t, clusters, backend.WindowClusterIDs(source))
 			require.Equal(t, before, registry.workspace.Snapshot("cluster-1"))
-			require.Empty(t, registry.clusterTransfers, "opening another view must not leave a pending transfer")
+			require.Empty(t, registry.clusterTransfers.pending, "opening another view must not leave a pending transfer")
 		})
 	}
 }
@@ -98,7 +98,7 @@ func TestOpenClusterWindowCreationFailureReleasesTargetAndAllowsRetry(t *testing
 	require.Empty(t, backend.WindowClusterIDs(failedTarget))
 	require.Equal(t, []string{source}, registry.lifecycle.Names())
 	require.Equal(t, []string{"cluster-1"}, backend.WindowClusterIDs(source))
-	require.Empty(t, registry.clusterTransfers)
+	require.Empty(t, registry.clusterTransfers.pending)
 	registry.newWindow = create
 	require.NoError(t, registry.OpenClusterWindow(source, "cluster-1"))
 }
@@ -119,7 +119,7 @@ func TestOpenClusterWindowRevalidatesSourceAtSelectionAdmission(t *testing.T) {
 	}
 	require.ErrorContains(t, registry.OpenClusterWindow(source, "cluster-1"), "source selection changed")
 	require.Equal(t, []string{source}, registry.lifecycle.Names())
-	require.Empty(t, registry.clusterTransfers)
+	require.Empty(t, registry.clusterTransfers.pending)
 }
 
 func TestOpenClusterWindowRejectsAnExistingTransferAndAllowsRetry(t *testing.T) {
@@ -140,7 +140,7 @@ func TestClusterWindowActionsPreserveMoveAdmissionAndFailureCleanup(t *testing.T
 	request := panelwindow.ClusterTabTransferRequest{TransferID: "unavailable", SourceWindowName: source, ClusterID: "cluster-1"}
 	registry.emitWindowEvent = func(string, string, any) bool { return false }
 	require.ErrorContains(t, registry.RequestClusterTabTransfer(source, request), "source is not available")
-	require.Empty(t, registry.clusterTransfers)
+	require.Empty(t, registry.clusterTransfers.pending)
 	require.True(t, registry.windowHasCluster(source, "cluster-1"))
 	registry.emitWindowEvent = func(string, string, any) bool { return true }
 	request.TransferID = "pending"

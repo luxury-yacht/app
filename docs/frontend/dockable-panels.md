@@ -109,6 +109,18 @@ maximize and restore.
 
 ## Acknowledged Handoffs
 
+`internal/appwindow/transfer_lifecycle.go` owns admission/replay rejection,
+source/target acknowledgement phases, deadline replacement, and terminal cleanup
+for group, panel-tab, and cluster-view transfers. Each protocol uses a typed
+instance and retains its existing ID namespace: a tab opening a native window
+deliberately shares its ID with the group opening acknowledgement. Protocol
+adapters own preparation, authenticated callers, placement commits, and rollback.
+Their existing locks cover lifecycle and directory changes; the lifecycle adds
+no mutex or backend dependency. Timeout callbacks re-enter the adapter's failure
+path. Cluster transfers release their locks before native window closure.
+Live native snapshots are separate from pending group operations; the registry
+binds each pending operation to its window independently of published content.
+
 Float, dock-back, panel-tab moves, and cluster-tab moves are acknowledged
 transactions. Check source guards and flush its latest snapshot before transfer.
 Directory reads started before a target stages or settles a transfer must not
