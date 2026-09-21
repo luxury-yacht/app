@@ -60,7 +60,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/coverage-v8": "^5.0.1",
     "jsdom": "^30.0.1",
-    "knip": "^6.36.0",
+    "knip": "^6.37.0",
     "storybook": "^10.6.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
