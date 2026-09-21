@@ -59,7 +59,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/coverage-v8": "^5.0.1",
-    "jsdom": "^30.0.1",
+    "jsdom": "^30.1.0",
     "knip": "^6.36.0",
     "storybook": "^10.6.0",
     "typescript": "^7.0.2",
