@@ -4,9 +4,11 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eventBus } from '@/core/events';
 import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 import AppHeader from './AppHeader';
 import { useAppRegionNavigation } from './appFocusRegions';
+import WindowHeader from './WindowHeader';
 
 const runtimeMock = vi.hoisted(() => ({
   closeWindow: vi.fn(),
@@ -101,11 +103,25 @@ describe('AppHeader', () => {
     );
   };
 
+  it('dispatches the command-palette request from the composed workspace controls', () => {
+    const openPalette = vi.fn();
+    const unsubscribe = eventBus.on('command-palette:open', openPalette);
+    try {
+      act(() => renderHeader());
+      act(() =>
+        container.querySelector<HTMLButtonElement>('[aria-label="Command Palette"]')?.click()
+      );
+      expect(openPalette).toHaveBeenCalledOnce();
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it.each([false, true])(
     'identifies the panel cluster in the visible header (mac=%s)',
     async (isMac) => {
       platformMock.isMacPlatform.mockReturnValue(isMac);
-      await act(async () => root.render(<AppHeader mode="panel" clusterName="Production" />));
+      await act(async () => root.render(<WindowHeader clusterName="Production" />));
       expect(container.querySelector('header')?.textContent).toContain('Production');
       expect(container.querySelector('.app-header-cluster-name')?.getAttribute('title')).toBe(
         'Production'
@@ -142,7 +158,7 @@ describe('AppHeader', () => {
     const error = new Error('Window operation failed');
     runtimeMock[operation].mockRejectedValueOnce(error);
     await act(async () => {
-      root.render(<AppHeader mode="panel" />);
+      root.render(<WindowHeader />);
     });
     await act(async () => {
       container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.click();
@@ -216,7 +232,7 @@ describe('AppHeader', () => {
 
   it('renders custom window controls for a non-mac panel window', () => {
     act(() => {
-      root.render(<AppHeader mode="panel" />);
+      root.render(<WindowHeader />);
     });
 
     expect(container.querySelector('.app-header-drag-control')).not.toBeNull();
@@ -237,7 +253,7 @@ describe('AppHeader', () => {
     platformMock.isWindowsPlatform.mockReturnValue(false);
 
     act(() => {
-      root.render(<AppHeader mode="panel" />);
+      root.render(<WindowHeader />);
     });
 
     expect(container.querySelector('.app-header--linux')).not.toBeNull();
@@ -245,7 +261,7 @@ describe('AppHeader', () => {
 
   it('projects Wails edge detection to a directional cursor for custom frames', () => {
     act(() => {
-      root.render(<AppHeader mode="panel" />);
+      root.render(<WindowHeader />);
     });
     document.body.style.cursor = 'ns-resize';
 
@@ -259,7 +275,7 @@ describe('AppHeader', () => {
 
   it('routes custom panel controls through the desktop runtime', () => {
     act(() => {
-      root.render(<AppHeader mode="panel" />);
+      root.render(<WindowHeader />);
     });
 
     act(() => {
@@ -277,7 +293,7 @@ describe('AppHeader', () => {
     runtimeMock.isWindowMaximised.mockResolvedValue(true);
 
     await act(async () => {
-      root.render(<AppHeader mode="panel" />);
+      root.render(<WindowHeader />);
       await Promise.resolve();
     });
 
@@ -295,7 +311,7 @@ describe('AppHeader', () => {
     runtimeMock.isWindowMaximised.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
 
     await act(async () => {
-      root.render(<AppHeader mode="panel" />);
+      root.render(<WindowHeader />);
       await Promise.resolve();
     });
 
@@ -314,7 +330,7 @@ describe('AppHeader', () => {
     vi.useFakeTimers();
     try {
       await act(async () => {
-        root.render(<AppHeader mode="panel" />);
+        root.render(<WindowHeader />);
         await Promise.resolve();
       });
       runtimeMock.isWindowMaximised.mockResolvedValue(true);
@@ -334,7 +350,7 @@ describe('AppHeader', () => {
     platformMock.isMacPlatform.mockReturnValue(true);
 
     act(() => {
-      root.render(<AppHeader mode="panel" />);
+      root.render(<WindowHeader />);
     });
 
     expect(container.querySelector('.app-header--mac')).not.toBeNull();
@@ -346,7 +362,7 @@ describe('AppHeader', () => {
   it('does not override native macOS edge cursors', () => {
     platformMock.isMacPlatform.mockReturnValue(true);
     act(() => {
-      root.render(<AppHeader mode="panel" />);
+      root.render(<WindowHeader />);
     });
     document.body.style.cursor = 'ns-resize';
 

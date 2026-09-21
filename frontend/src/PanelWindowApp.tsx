@@ -16,8 +16,8 @@ import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotifica
 import { DockablePanelLayer, DockablePanelProvider } from '@ui/dockable';
 import type { TabGroupState } from '@ui/dockable/tabGroupTypes';
 import { AppErrorBoundary, PanelErrorBoundary } from '@ui/errors';
-import AppHeader from '@ui/layout/AppHeader';
 import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
+import WindowHeader from '@ui/layout/WindowHeader';
 import { KeyboardProvider } from '@ui/shortcuts';
 import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -279,7 +279,7 @@ function PanelWindowSurface({
       <PanelWindowShortcuts descriptor={descriptor} ready={ready} />
       <AppRegionNavigation />
       <TextContextMenu />
-      <AppHeader mode="panel" clusterName={clusterName} />
+      <WindowHeader clusterName={clusterName} />
       <ErrorNotificationSystem />
       <div className="panel-window-content content">
         <DockablePanelLayer />

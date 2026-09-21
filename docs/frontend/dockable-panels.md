@@ -23,9 +23,9 @@ maximize and restore.
 - Native panel windows reuse the workspace window chrome: macOS uses the
   transparent full-size titlebar with native traffic-light controls. Windows
   and Linux use a frameless window with minimize, maximize/restore, and close
-  controls in the outer `AppHeader`; Windows also enables WebView2 non-client
-  drag regions while retaining Wails' standard frameless decorations. Linux
-  clears the framework's initial internal-name title. The outer `AppHeader`
+  controls in the shared `WindowHeader`. Windows keeps WebView2 non-client
+  regions disabled so Wails can handle DOM resizing before dragging. Linux
+  clears the framework's initial internal-name title. The shared `WindowHeader`
   remains the drag/maximize surface, while the inner
   `DockablePanelHeader` remains tab and panel controls only. Workspace status,
   favorites, and command-palette controls do not render in the panel window.

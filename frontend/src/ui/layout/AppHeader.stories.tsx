@@ -1,14 +1,7 @@
-/**
- * frontend/src/ui/layout/AppHeader.stories.tsx
- *
- * Storybook stories for the AppHeader component.
- * Note: The FavMenuDropdown is now embedded directly in AppHeader and uses the
- * FavoritesContext. Full Storybook integration is tracked in Tasks 7 & 8.
- */
-
 import type { Meta, StoryObj } from '@storybook/react';
 import { SidebarProvidersDecorator } from '../../../.storybook/decorators/SidebarProvidersDecorator';
 import AppHeader from './AppHeader';
+import WindowHeader from './WindowHeader';
 
 const meta: Meta<typeof AppHeader> = {
   title: 'Layout/AppHeader',
@@ -27,9 +20,9 @@ export const Default: Story = {};
 
 /** Native panel header — shared drag surface without workspace controls. */
 export const PanelWindow: Story = {
-  args: { mode: 'panel', clusterName: 'Production' },
+  render: () => <WindowHeader clusterName="Production" />,
 };
 
 export const PanelWindowLongClusterName: Story = {
-  args: { mode: 'panel', clusterName: 'Production · customer-platform-us-east-1:production' },
+  render: () => <WindowHeader clusterName="Production · customer-platform-us-east-1:production" />,
 };
