@@ -10,6 +10,7 @@ import {
   usePanelLifecycleGuard,
 } from '@/core/panel-windows/panelLifecycleGuards';
 import { DockablePanelTestHost } from '@/test-utils/DockablePanelTestHost';
+import { requireValue } from '@/test-utils/requireValue';
 import DockablePanel from './DockablePanel';
 import {
   DockablePanelLayer,
@@ -268,7 +269,39 @@ describe('DockablePanel docked behaviour', () => {
     await unmount();
   });
 
-  it('resizes a right-docked panel from its separator', async () => {
+  it.each(['right', 'bottom'] as const)(
+    'accepts an accessible size-control change for a %s dock',
+    async (position) => {
+      const unmount = await renderPanel(
+        <DockablePanel panelId="sized" defaultPosition={position} isOpen>
+          <div>panel</div>
+        </DockablePanel>
+      );
+      try {
+        const dimension = position === 'right' ? 'width' : 'height';
+        const control = requireValue(
+          document.querySelector<HTMLInputElement>(`input[aria-label="Resize panel ${dimension}"]`),
+          'accessible panel size control'
+        );
+        const initial = Number(control.value);
+        const next = initial - 20;
+        await act(async () => {
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+            control,
+            String(next)
+          );
+          control.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        const state = panelState('sized');
+        expect(position === 'right' ? state.rightSize.width : state.bottomSize.height).toBe(next);
+        expect(control.value).toBe(String(next));
+      } finally {
+        await unmount();
+      }
+    }
+  );
+
+  it('resizes a right-docked panel from its resize control', async () => {
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
       value: 1200,
@@ -310,7 +343,7 @@ describe('DockablePanel docked behaviour', () => {
     await unmount();
   });
 
-  it('supports keyboard resizing for a bottom-docked separator', async () => {
+  it('supports keyboard resizing for a bottom-docked control', async () => {
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
       value: 1000,

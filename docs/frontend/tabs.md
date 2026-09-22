@@ -71,6 +71,9 @@ also use the shared drag coordinator.
   cross-window moves carrying stable cluster ID, selection, and source window.
   The destination validates the complete payload again at drop time. MIME
   markers control the preview, not native transfer authorization.
+- Document-level drag observers must keep a drop destination mounted until its
+  own drop handler consumes the event. Defer drop cleanup until event dispatch
+  finishes; React can flush updates between capture and target listeners.
 - On macOS, the shared native drag callback suppresses AppKit's failed-drop
   return animation for both cluster-tab and dockable-tab MIME markers, whether
   exposed as pasteboard types or wrapped in WebKit custom data. An outside drop

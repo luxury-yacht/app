@@ -45,7 +45,13 @@ const renderStatusIndicator = async (
   return {
     container,
     cleanup: () => {
-      act(() => root.unmount());
+      act(() => {
+        // Release focus before removing its owner so later tests start unfocused.
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+        root.unmount();
+      });
       container.remove();
     },
   };

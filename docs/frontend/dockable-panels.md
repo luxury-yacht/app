@@ -108,7 +108,9 @@ maximize and restore.
   edge rails reveal a placement preview when hovered. The preview uses the
   destination's saved size (or the incoming local utility tab's first-use size),
   with the same size clamp as the dock renderer. It does not initialize or resize
-  the dock. The preview is pointer-transparent; the drop hit area stays at the
+  the dock. A right preview reserves bottom space only when visible tabs will
+  remain in the bottom dock after the move and that dock is not maximized.
+  The preview is pointer-transparent; the drop hit area stays at the
   edge so the preview cannot intercept other tabs or destinations. These
   targets use the same local move and acknowledged native transfer path as tab
   strips, and disappear when the drag leaves the window, ends, or drops.
@@ -266,6 +268,12 @@ and empty-source closure, following the
 [completion evidence gate](../workflows/completion.md).
 
 ### Programmatic keyboard focus
+
+Group roots are open, nonmodal dialogs; opening a panel must leave the rest of
+the workspace interactive. Dock resize handles use native range inputs for the
+panel dimension, retain arrow-key and Home/End resizing, and expose their size
+bounds. Object-panel Tab order reaches the resize control after the header
+controls, then wraps to the first tab. Reset native dialog geometry in panel CSS.
 
 `DockablePanelProvider.focusPanel(panelId, clusterId)` owns deferred focus for
 new and existing panels. Callers pass the owning cluster when activating another

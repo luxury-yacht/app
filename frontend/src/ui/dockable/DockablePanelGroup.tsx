@@ -95,6 +95,7 @@ function getOrderedObjectPanelTabbables(panelRoot: HTMLElement): HTMLElement[] {
     )
   ).filter(isKeyboardVisibleElement);
   addAll(panelControls);
+  addAll(getTabbableElements(panelRoot.querySelector('.dockable-panel__resize-handle')));
 
   return ordered;
 }
@@ -169,6 +170,7 @@ interface DockableResizeHandlesProps {
   isMaximized: boolean;
   onMouseDown: DragResizeControls['handleMouseDownResize'];
   onKeyboardResize: DragResizeControls['handleDockedKeyboardResize'];
+  onSizeChange: (size: { width: number; height: number }) => void;
 }
 
 const DockableResizeHandles = ({
@@ -178,41 +180,33 @@ const DockableResizeHandles = ({
   isMaximized,
   onMouseDown,
   onKeyboardResize,
+  onSizeChange,
 }: DockableResizeHandlesProps) => {
-  if (isMaximized) {
+  if (isMaximized || position === 'floating') {
     return null;
   }
-  if (position === 'right') {
-    return (
-      <hr
-        className="dockable-panel__resize-handle dockable-panel__resize-handle--left"
-        onMouseDown={(event) => onMouseDown(event, 'w')}
-        onKeyDown={(event) => onKeyboardResize(event, 'right')}
-        aria-orientation="vertical"
-        aria-label="Resize panel width"
-        aria-valuemin={constraints.right.minWidth}
-        aria-valuemax={Math.max(constraints.right.minWidth, getContentBounds().width)}
-        aria-valuenow={size.width}
-        tabIndex={0}
+  const right = position === 'right';
+  const dimension = right ? 'width' : 'height';
+  const minimum = right ? constraints.right.minWidth : constraints.bottom.minHeight;
+  return (
+    <div
+      className={`dockable-panel__resize-handle dockable-panel__resize-handle--${right ? 'left' : 'top'}`}
+    >
+      <input
+        type="range"
+        aria-label={`Resize panel ${dimension}`}
+        aria-orientation={right ? 'horizontal' : 'vertical'}
+        min={minimum}
+        max={Math.max(minimum, getContentBounds()[dimension])}
+        value={size[dimension]}
+        onChange={(event) =>
+          onSizeChange({ ...size, [dimension]: event.currentTarget.valueAsNumber })
+        }
+        onMouseDown={(event) => onMouseDown(event, right ? 'w' : 'n')}
+        onKeyDown={(event) => onKeyboardResize(event, position)}
       />
-    );
-  }
-  if (position === 'bottom') {
-    return (
-      <hr
-        className="dockable-panel__resize-handle dockable-panel__resize-handle--top"
-        onMouseDown={(event) => onMouseDown(event, 'n')}
-        onKeyDown={(event) => onKeyboardResize(event, 'bottom')}
-        aria-orientation="horizontal"
-        aria-label="Resize panel height"
-        aria-valuemin={constraints.bottom.minHeight}
-        aria-valuemax={Math.max(constraints.bottom.minHeight, getContentBounds().height)}
-        aria-valuenow={size.height}
-        tabIndex={0}
-      />
-    );
-  }
-  return null;
+    </div>
+  );
 };
 
 export function DockablePanelGroup({
@@ -246,11 +240,11 @@ export function DockablePanelGroup({
     closeActiveTabOnEscape = false,
   } = active ?? {};
   const activeTitle = active?.title ?? activePanelId;
-  const panelRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDialogElement>(null);
   const [constraints, setConstraints] = useState<PanelSizeConstraints>(() =>
     getPanelSizeConstraints(null)
   );
-  const setPanelRef = useCallback((node: HTMLDivElement | null) => {
+  const setPanelRef = useCallback((node: HTMLDialogElement | null) => {
     panelRef.current = node;
     if (node) {
       setConstraints(getPanelSizeConstraints(node));
@@ -526,14 +520,14 @@ export function DockablePanelGroup({
   ]);
 
   return (
-    <div
+    <dialog
+      open
       ref={setPanelRef}
       className={panelClassName}
       style={panelStyle}
       data-dockable-group-key={groupKey}
       data-group-key={groupKey}
       data-active-panel-id={activePanelId}
-      role="dialog"
       aria-label={activeTitle}
       aria-modal={false}
     >
@@ -578,8 +572,9 @@ export function DockablePanelGroup({
           isMaximized={isMaximized}
           onMouseDown={handleMouseDownResize}
           onKeyboardResize={handleDockedKeyboardResize}
+          onSizeChange={panelState.setSize}
         />
       )}
-    </div>
+    </dialog>
   );
 }
